@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<h3 align="center">A modern chart editor for Phigros fanmade Charts.</h3>
+<h3 align="center">A modern chart editor for Phigros fanmade charts.</h3>
 
 <p align="center">
   <img alt="Platform: Windows 10/11, Linux x64" src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20%7C%20Linux%20x64-4fd0df?style=flat-square">
