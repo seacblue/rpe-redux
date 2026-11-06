@@ -1,17 +1,7 @@
 /** Stage a pinned Cloudflare Tunnel client for the desktop build. */
-import { createHash } from "node:crypto";
-import {
-  createReadStream,
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  copyFileSync,
-  chmodSync,
-  rmSync,
-} from "node:fs";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
 
 const VERSION = "2026.10.7";
 const TARGET = process.env.CARGO_BUILD_TARGET ?? process.platform;
@@ -76,32 +66,19 @@ rmSync(
 );
 const URL = `https://github.com/cloudflare/cloudflared/releases/download/${VERSION}/${variant.file}`;
 
-/** Stream a file through SHA-256 and return the lowercase hex digest. */
-async function hash(path) {
-  const digest = createHash("sha256");
-  for await (const chunk of createReadStream(path)) {
-    digest.update(chunk);
-  }
-  return digest.digest("hex");
-}
-
-if (existsSync(target) && (await hash(target)) === variant.hash) {
+if (existsSync(target) && (await hashFile(target)) === variant.hash) {
   process.exit(0);
 }
 mkdirSync(join(root, "src-tauri", "resources", "cloudflared"), { recursive: true });
 mkdirSync(cacheDirectory, { recursive: true });
-if (!existsSync(cache) || (await hash(cache)) !== variant.hash) {
+if (!existsSync(cache) || (await hashFile(cache)) !== variant.hash) {
   console.log(`Downloading cloudflared ${VERSION} for ${PLATFORM}/${ARCHITECTURE}...`);
-  const response = await fetch(URL);
-  if (!response.ok || !response.body) {
-    throw new Error(`cloudflared download failed: ${response.status}`);
-  }
-  const partial = `${cache}.partial`;
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(partial));
-  if ((await hash(partial)) !== variant.hash) {
-    throw new Error("cloudflared download checksum mismatch");
-  }
-  copyFileSync(partial, cache);
+  await downloadVerifiedFile({
+    url: URL,
+    destination: cache,
+    expectedHash: variant.hash,
+    label: "cloudflared",
+  });
 }
 copyFileSync(cache, target);
 if (PLATFORM !== "windows") {

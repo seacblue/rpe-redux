@@ -1,22 +1,18 @@
 /** Stages a verified Windows or Linux FFmpeg distribution for desktop builds. */
-import { createHash } from "node:crypto";
 import {
   chmodSync,
-  createReadStream,
-  createWriteStream,
+  copyFileSync,
   existsSync,
-  readFileSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
-  copyFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, dirname, basename } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const targetTriple = process.env.CARGO_BUILD_TARGET ?? process.platform;
@@ -102,16 +98,7 @@ rmSync(join(target, platform === "windows" ? "ffmpeg" : "ffmpeg.exe"), { force: 
 const suppliedArchive = process.env.REDUX_FFMPEG_ARCHIVE?.trim();
 const cache = suppliedArchive ? resolve(suppliedArchive) : plan.cache;
 
-/** Stream a file through SHA-256 and return the lowercase hex digest. */
-async function hash(path) {
-  const digest = createHash("sha256");
-  for await (const chunk of createReadStream(path)) {
-    digest.update(chunk);
-  }
-  return digest.digest("hex");
-}
-
-if (suppliedArchive && (!existsSync(cache) || (await hash(cache)) !== plan.archiveHash)) {
+if (suppliedArchive && (!existsSync(cache) || (await hashFile(cache)) !== plan.archiveHash)) {
   throw new Error("The supplied FFmpeg archive is missing or its checksum does not match.");
 }
 const versionMarker = join(target, "VERSION.txt");
@@ -121,23 +108,18 @@ if (
   existsSync(targetBinary) &&
   existsSync(join(target, "LICENSE")) &&
   existsSync(join(target, "README.txt")) &&
-  (await hash(targetBinary)) === plan.binaryHash
+  (await hashFile(targetBinary)) === plan.binaryHash
 ) {
   process.exit(0);
 }
 mkdirSync(dirname(cache), { recursive: true });
-if (!existsSync(cache) || (await hash(cache)) !== plan.archiveHash) {
-  const response = await fetch(plan.url);
-  if (!response.ok || !response.body) {
-    throw new Error(`FFmpeg download failed: ${response.status}`);
-  }
-  const partial = `${cache}.partial`;
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(partial));
-  if ((await hash(partial)) !== plan.archiveHash) {
-    throw new Error("FFmpeg archive checksum mismatch.");
-  }
-  copyFileSync(partial, cache);
-  rmSync(partial, { force: true });
+if (!existsSync(cache) || (await hashFile(cache)) !== plan.archiveHash) {
+  await downloadVerifiedFile({
+    url: plan.url,
+    destination: cache,
+    expectedHash: plan.archiveHash,
+    label: "FFmpeg",
+  });
 }
 const tempRoot = resolve(tmpdir());
 const staging = mkdtempSync(join(tempRoot, "redux-ffmpeg-"));
@@ -168,7 +150,7 @@ try {
     throw new Error("FFmpeg archive extraction failed.");
   }
   const source = join(staging, plan.directory);
-  if ((await hash(join(source, "bin", plan.binary))) !== plan.binaryHash) {
+  if ((await hashFile(join(source, "bin", plan.binary))) !== plan.binaryHash) {
     throw new Error("FFmpeg binary checksum mismatch.");
   }
   mkdirSync(target, { recursive: true });

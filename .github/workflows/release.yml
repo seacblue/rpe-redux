@@ -281,10 +281,15 @@ jobs:
       - name: Build Go sidecar
         run: npm run build:server
 
-      - name: Stage desktop media helpers
-        run: |
-          node scripts/prepareFfmpeg.mjs
-          node scripts/prepareCloudflared.mjs
+      # Each helper stages in its own step so a failed download stops the job
+      # here, instead of surfacing minutes later as a Rust build-script panic.
+      # Bundling several downloads in one step would mask the first failure:
+      # PowerShell returns the exit code of the last command only.
+      - name: Stage bundled FFmpeg
+        run: node scripts/prepareFfmpeg.mjs
+
+      - name: Stage bundled Cloudflared
+        run: node scripts/prepareCloudflared.mjs
 
       - name: Build and upload signed release assets
         if: env.TAURI_SIGNING_ENABLED == 'true'
