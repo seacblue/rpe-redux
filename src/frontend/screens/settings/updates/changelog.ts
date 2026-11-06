@@ -34,10 +34,9 @@ export function openChangelog(): boolean {
   const close = () => dismissModal(CHANGELOG_ID);
   presentModal(CHANGELOG_ID, {
     label: t("chrome.menu.help.changelog"),
-    description: t("chrome.changelog.description"),
     className: "redux-changelog-dialog",
     onClose: close,
-    children: createElement(ChangelogContent, { onClose: close }),
+    children: createElement(ChangelogContent),
   });
   return true;
 }

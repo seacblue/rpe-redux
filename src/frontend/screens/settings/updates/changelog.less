@@ -1,5 +1,5 @@
-/* The queued changelog modal: a version list with a sticky action footer. The
-   release rows, notices, and actions are shared with the Updates page. */
+/* The changelog modal: the running release's notes rendered as blocks. The
+   modal chrome owns the title and close button; the body scrolls. */
 
 dialog.redux-changelog-dialog {
   width: min(760px, calc(100vw - 32px));
@@ -12,35 +12,12 @@ dialog.redux-changelog-dialog {
 }
 
 .redux-changelog {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-height: 0;
   max-height: min(72vh, 720px);
-}
-
-.redux-changelog-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
-}
-
-.redux-changelog-source {
-  color: var(--foreground);
-}
-
-.redux-changelog-notices {
-  display: grid;
-  gap: var(--space-2);
-
-  &:not(:empty) {
-    padding: var(--space-3) var(--space-5) 0;
-  }
+  padding: var(--space-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .redux-changelog-hint {
@@ -50,44 +27,30 @@ dialog.redux-changelog-dialog {
   line-height: var(--line-label);
 }
 
-.redux-changelog-entries {
+/* The rendered release body: section headings, bullet lists, and paragraphs. */
+.redux-release-notes {
   display: grid;
-  align-content: start;
-  gap: var(--space-3);
-  min-height: 0;
-  padding: var(--space-3) var(--space-5) var(--space-4);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.redux-changelog-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--surface-raised);
+  color: var(--foreground);
+  font-size: var(--type-body);
+  line-height: var(--line-body);
+  overflow-wrap: anywhere;
 
-  .redux-update-actions {
-    margin-left: auto;
-  }
-}
-
-.redux-changelog-status {
-  min-width: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
-}
-
-@media (max-width: 620px) {
-  .redux-changelog-actions {
-    align-items: stretch;
+  h4 {
+    margin: var(--space-2) 0 0;
+    color: var(--foreground);
+    font-size: var(--type-body);
+    font-weight: 600;
   }
 
-  .redux-changelog-actions .redux-update-actions {
-    justify-content: flex-end;
+  p {
+    margin: 0;
+  }
+
+  ul {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+    padding-inline-start: var(--space-4);
   }
 }

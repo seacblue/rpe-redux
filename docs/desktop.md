@@ -173,14 +173,14 @@ Two consequences matter when publishing the first signed release:
 - The release repository must stay public: the host fetches
   `releases/latest/download/<manifest>` without credentials.
 
-Help → Changelog opens a modal with the published GitHub release notes. The
-release workflow publishes the matching section of `CHANGELOG.md`, which holds
-only the current release's notes, as the GitHub release body; that file lists
-Chinese first and English second, and the modal shows the section that matches
-the interface language. Opening the surface fetches the notes when the store has
-not loaded them yet. A check runs when the user presses Verify on Settings →
-Help, or at startup when **Settings → Help → Automatic updates** is enabled. The
-manual result is reported as a toast.
+Help → Changelog opens a modal with the running version's published GitHub
+release notes, rendered in the interface language. The release workflow publishes
+the matching section of `CHANGELOG.md`, which holds only the current release's
+notes, as the GitHub release body; that file lists Chinese first and English
+second. Opening the surface fetches the notes when the store has not loaded them
+yet. A check runs when the user presses Verify on Settings → Help, or at startup
+when **Settings → Help → Automatic updates** is enabled. The manual result is
+reported as a toast.
 
 On Windows, a signed release installs through a portable update payload rather
 than the NSIS installer. The host fetches `redux-latest.json` from the release,
