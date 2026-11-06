@@ -252,6 +252,7 @@ export function initializeUpdates(): Promise<void> {
     }
     if (state.updated) {
       // Defer the changelog request so the shell can mount its modal host first.
+      // Opening the surface refreshes the external notes it shows.
       window.setTimeout(requestChangelog, 900);
     }
     // Automatic checks are opt-in; the default is off so opening the editor

@@ -13,7 +13,9 @@ import { Disclosure } from "../../../../design/components/disclosure/Disclosure.
 import { Progress } from "../../../../design/components/progress/Progress.tsx";
 import { openExternalUrl } from "../../../../core/platform/desktop/openExternal.ts";
 import { useTranslation } from "../../../../i18n/react.ts";
+import type { Language } from "../../../../i18n/index.ts";
 import type { GithubRelease } from "../../../../core/platform/desktop/githubReleases.ts";
+import { parseReleaseNoteBlocks, selectLanguageNotes } from "./releaseNotes.ts";
 import {
   checkForUpdates,
   installBlockReason,
@@ -33,14 +35,17 @@ export interface ReleaseNote {
   url: string;
 }
 
-/** GitHub releases in the shared release shape. */
-export function releaseNotesFromRemote(releases: readonly GithubRelease[]): ReleaseNote[] {
+/** GitHub releases in the shared release shape, with notes in `language`. */
+export function releaseNotesFromRemote(
+  releases: readonly GithubRelease[],
+  language: Language,
+): ReleaseNote[] {
   return releases.map((release) => ({
     version: release.version,
     name: release.name,
     date: release.publishedAt,
     prerelease: release.prerelease,
-    notes: release.notes,
+    notes: selectLanguageNotes(release.notes, language),
     url: release.url,
   }));
 }
@@ -164,6 +169,30 @@ export function UpdateActionBar({
   );
 }
 
+/** One release body as headings, bullet lists, and paragraphs. */
+export function ReleaseNotesBody({ notes }: { notes: string }) {
+  const blocks = parseReleaseNoteBlocks(notes);
+  return (
+    <div className="redux-release-notes">
+      {blocks.map((block, index) => {
+        if (block.kind === "heading") {
+          return <h4 key={index}>{block.text}</h4>;
+        }
+        if (block.kind === "list") {
+          return (
+            <ul key={index}>
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>
+  );
+}
+
 /** The release history, as one collapsible entry per version. */
 export function ReleaseNotesList({
   releases,
@@ -204,9 +233,11 @@ export function ReleaseNotesList({
               </>
             }
           >
-            <pre className="redux-release-notes">
-              {release.notes || t("settings.updates.noNotes")}
-            </pre>
+            {release.notes ? (
+              <ReleaseNotesBody notes={release.notes} />
+            ) : (
+              <p className="redux-release-notes-empty">{t("settings.updates.noNotes")}</p>
+            )}
             {release.url && (
               <Button variant="link" onClick={() => void openExternalUrl(release.url)}>
                 {t("settings.updates.releaseLink")}

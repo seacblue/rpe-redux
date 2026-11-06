@@ -1,10 +1,11 @@
 /**
  * The changelog modal body.
  *
- * Release notes come from the configured GitHub Releases source. The surface is
- * opened only when that source has returned at least one release; there is no
- * bundled changelog in this build. Status, actions, and release rows are the
- * same shared components the Help page uses.
+ * Release notes are the published GitHub Releases, so one external source feeds
+ * the GitHub release page and this modal. Each body lists Chinese first and
+ * English second under `### 中文` / `### English`; the modal shows the section
+ * for the active interface language. The store opens this surface on the first
+ * launch after an update and refreshes the notes it shows.
  */
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
@@ -21,10 +22,10 @@ import { isPrereleaseVersion } from "../../../../core/utils/version.ts";
 
 /** The changelog modal body with release notes and the shared update actions. */
 export function ChangelogContent({ onClose }: { onClose(): void }): React.JSX.Element {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const state = useUpdateState();
   const remote = state.releases.length > 0;
-  const releases = releaseNotesFromRemote(state.releases);
+  const releases = releaseNotesFromRemote(state.releases, language);
 
   return (
     <div className="redux-changelog">

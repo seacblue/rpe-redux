@@ -150,16 +150,19 @@ Appearance owns visuals, and Editor owns editing interaction.
 
 - **Help → Open tutorial** starts the anchored walkthrough for the current
   workspace; the onboarding card explains each surface the first time.
-- **Help → Changelog** opens release notes and the update status.
+- **Help → Changelog** opens the published release notes in the interface
+  language and the update status. The first launch after an update opens it
+  automatically.
 - **Help → Developer docs** opens the Extension SDK site in the browser.
 - **Help → About** shows the version, acknowledgements, and licence.
 
-Update checking only exists in builds compiled with an update source. This
-repository currently builds without one, so **Settings → Help → Verify** reports
-that updates are not configured: upgrade by installing a newer package from the
-Releases page. A configured build checks GitHub Releases, supports a **Beta
-channel** for pre-releases, replaces a Windows install in place with a rollback
-copy until the new build starts healthy, and on Linux replaces only the AppImage.
+Update checking only exists in builds compiled with an update source. Release
+builds configure the `seacblue/rpe-redux` repository and its signing key; a build
+without either reports that updates are not configured, so upgrade by installing
+a newer package from the Releases page. A configured build checks GitHub
+Releases, supports a **Beta channel** for pre-releases, replaces a Windows
+install in place with a rollback copy until the new build starts healthy, and on
+Linux replaces only the AppImage.
 
 Extensions are installed and enabled from **Settings → Extensions**. Start with
 the [Extension quickstart](extensions-quickstart.md) if you want to write one.

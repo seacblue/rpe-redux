@@ -97,13 +97,37 @@
 }
 
 .redux-release-notes {
+  display: grid;
+  gap: var(--space-1);
   max-height: 220px;
-  margin: 0;
   overflow: auto;
   color: var(--foreground-muted);
-  font: inherit;
   font-size: var(--type-caption);
   line-height: var(--line-label);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+
+  h4 {
+    margin: 0;
+    color: var(--foreground);
+    font-size: var(--type-caption);
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  ul {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+    padding-inline-start: var(--space-3);
+  }
+}
+
+.redux-release-notes-empty {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: var(--line-label);
 }
