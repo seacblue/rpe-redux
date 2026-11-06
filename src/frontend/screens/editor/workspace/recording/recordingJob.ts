@@ -176,7 +176,7 @@ export async function runRecording(
   surface: RecordingSurface,
   options: RecordingJobOptions,
   signal: AbortSignal,
-  progress: (stage: RecordingStage, fraction: number) => void,
+  progress: (stage: RecordingStage, fraction: number | null) => void,
   partialReady: (path: string) => void,
 ): Promise<void> {
   const { chart, tempo, timeline, reference, music } = snapshot;
@@ -300,7 +300,7 @@ export async function runRecording(
       }
     }
     checkCancelled(signal);
-    progress("encoding", 0);
+    progress("encoding", null);
     await native.finish();
     native = null;
   } finally {

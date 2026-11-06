@@ -112,8 +112,9 @@ export function RecordingPanel() {
   const [musicVolume, setMusicVolume] = useState("100");
   const [effectsVolume, setEffectsVolume] = useState("100");
   const [rangeMode, setRangeMode] = useState<RecordingRangeMode>("beats");
-  const [start, setStart] = useState<Beat>(() => [0, 0, 1]);
-  const [end, setEnd] = useState<Beat>(() => [0, 0, 1]);
+  // Keep each endpoint in the unit it was entered in.
+  const [start, setStart] = useState<number | Beat>(0);
+  const [end, setEnd] = useState<number | Beat>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -122,16 +123,11 @@ export function RecordingPanel() {
     () =>
       bindInspectorLifecycle("recording", {
         onOpen: () => {
-          const tempo = runtime?.providers.session.tempo.get();
-          const offset = Number(runtime?.session.chart.META.offset ?? 0) / 1000;
           const duration = runtime?.audio.buffer?.duration ?? 0;
           // The default is always the whole song: the first sample through the
           // last one, with no remembered or partially selected interval.
-          const nextStart = tempo ? fromNumber(tempo.beat(-offset)) : ([0, 0, 1] as Beat);
-          const nextEnd =
-            tempo && duration > 0 ? fromNumber(tempo.beat(duration - offset)) : ([0, 0, 1] as Beat);
-          setStart(nextStart);
-          setEnd(nextEnd);
+          setStart(0);
+          setEnd(duration);
           setError("");
         },
       }),
@@ -166,17 +162,23 @@ export function RecordingPanel() {
   const audioDuration = runtime?.audio.buffer?.duration ?? 0;
   const chartOffset = Number(runtime?.session.chart.META.offset ?? 0) / 1000;
   const tempo = runtime?.providers.session.tempo.get() ?? null;
-  /** Song time for a chart beat; zero when the tempo map is unavailable. */
-  const secondsOf = (beat: Beat): number => {
+  /** Resolve a beat endpoint on the song clock; time endpoints are already exact. */
+  const secondsOf = (endpoint: number | Beat): number => {
+    if (typeof endpoint === "number") {
+      return endpoint;
+    }
     if (!tempo) {
       return 0;
     }
     try {
-      return tempo.seconds(beatValue(beat)) + chartOffset;
+      return tempo.seconds(beatValue(endpoint)) + chartOffset;
     } catch {
       return 0;
     }
   };
+  /** Display a time endpoint in beat mode without changing the stored range. */
+  const beatOf = (endpoint: number | Beat): Beat =>
+    typeof endpoint === "number" ? fromNumber(tempo?.beat(endpoint - chartOffset) ?? 0) : endpoint;
   const startSeconds = secondsOf(start);
   const endSeconds = secondsOf(end);
   const estimatedSeconds = Math.max(0, endSeconds - startSeconds);
@@ -195,7 +197,7 @@ export function RecordingPanel() {
     if (!tempo || !Number.isFinite(seconds) || seconds < 0 || seconds >= endSeconds) {
       return false;
     }
-    setStart(fromNumber(tempo.beat(seconds - chartOffset)));
+    setStart(seconds);
     return true;
   };
   /** Accept an end inside the song and after the current start. */
@@ -208,7 +210,7 @@ export function RecordingPanel() {
     ) {
       return false;
     }
-    setEnd(fromNumber(tempo.beat(Math.min(seconds, audioDuration) - chartOffset)));
+    setEnd(Math.min(seconds, audioDuration));
     return true;
   };
   /** Keep an exact beat when the range is edited in beat mode. */
@@ -578,7 +580,7 @@ export function RecordingPanel() {
             rangeMode === "beats" ? (
               <BeatField
                 id={id}
-                value={start}
+                value={beatOf(start)}
                 disabled={busy}
                 dataField="recording-start"
                 onCommit={commitStartBeat}
@@ -602,7 +604,7 @@ export function RecordingPanel() {
             rangeMode === "beats" ? (
               <BeatField
                 id={id}
-                value={end}
+                value={beatOf(end)}
                 disabled={busy}
                 dataField="recording-end"
                 onCommit={commitEndBeat}

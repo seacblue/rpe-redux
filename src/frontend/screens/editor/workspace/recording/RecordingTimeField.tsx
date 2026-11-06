@@ -64,7 +64,6 @@ export function RecordingTimeField({
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      commit();
       event.currentTarget.blur();
     } else if (event.key === "Escape") {
       event.preventDefault();

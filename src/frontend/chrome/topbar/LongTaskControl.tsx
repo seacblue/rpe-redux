@@ -9,11 +9,16 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { Progress } from "../../../design/components/progress/Progress.tsx";
 import { useAnchoredPopover } from "../../../design/patterns/useAnchoredPopover.ts";
-import { getLongTasks, subscribeLongTasks } from "../../../core/state/longTasks.ts";
+import {
+  dismissLongTask,
+  getLongTasks,
+  subscribeLongTasks,
+} from "../../../core/state/longTasks.ts";
 import { playTaskCompletionChime } from "../../platform/taskCompletionSound.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 
 const PANEL_GAP = 6;
+const COMPLETED_VISIBLE_MS = 5000;
 
 /** Shows all long-running operations without blocking the editor. */
 export function LongTaskControl() {
@@ -26,6 +31,17 @@ export function LongTaskControl() {
     (task) => task.status === "running" || task.status === "cancelling",
   ).length;
   const lastStatuses = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const task of tasks) {
+      if (task.status === "completed" && task.finishedAt !== null) {
+        const remaining = task.finishedAt + COMPLETED_VISIBLE_MS - Date.now();
+        timers.push(setTimeout(() => dismissLongTask(task.id), Math.max(0, remaining)));
+      }
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [tasks]);
 
   // A finished task is the only event that rings the chime and pops the
   // trigger. Statuses are compared here so a panel reopened on an old task
@@ -110,32 +126,41 @@ export function LongTaskControl() {
         data-placement={popover.side}
         style={popover.style}
       >
-        <IconButton
-          icon="close"
-          label={t("common.action.close")}
-          className="redux-long-task-close"
-          onClick={() => close(true)}
-        />
+        <div className="long-task-popover-header">
+          <strong>{t("chrome.tasks.title")}</strong>
+          <IconButton
+            icon="close"
+            size="small"
+            label={t("common.action.close")}
+            onClick={() => close(true)}
+          />
+        </div>
         <div className="long-task-popover-list">
-          {tasks.map((task) => (
-            <article className="long-task-row" key={task.id} data-status={task.status}>
-              <strong className="long-task-row-title">{tRaw(task.label)}</strong>
-              <p className="long-task-progress-line">
-                {task.progress === null
-                  ? task.stage
-                    ? tRaw(task.stage)
-                    : tRaw(`chrome.tasks.status.${task.status}`)
-                  : `${Math.round(task.progress * 100)}%${task.stage ? ` · ${tRaw(task.stage)}` : ""}`}
-              </p>
-              <Progress
-                max={1}
-                value={task.progress ?? undefined}
-                label={tRaw(task.label)}
-                size="compact"
-                className="long-task-progress"
-              />
-            </article>
-          ))}
+          {tasks.length === 0 && <p className="long-task-empty">{t("chrome.tasks.empty")}</p>}
+          {tasks.map((task) => {
+            const working = task.status === "running" || task.status === "cancelling";
+            const status = tRaw(`chrome.tasks.status.${task.status}`);
+            const stage = working && task.stage ? tRaw(task.stage) : status;
+            return (
+              <article className="long-task-row" key={task.id} data-status={task.status}>
+                <strong className="long-task-row-title">{tRaw(task.label)}</strong>
+                <p className="long-task-progress-line">
+                  {working && task.progress !== null
+                    ? `${Math.round(task.progress * 100)}% · ${stage}`
+                    : stage}
+                </p>
+                {working && (
+                  <Progress
+                    max={1}
+                    value={task.progress ?? undefined}
+                    label={tRaw(task.label)}
+                    size="compact"
+                    className="long-task-progress"
+                  />
+                )}
+              </article>
+            );
+          })}
         </div>
       </section>
     </div>
