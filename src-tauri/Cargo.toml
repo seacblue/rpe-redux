@@ -1,6 +1,6 @@
 [package]
 name = "rpe-redux"
-version = "1.0.0"
+version = "1.0.1"
 description = "RPE Redux desktop document host"
 edition = "2021"
 license = "PolyForm-Noncommercial-1.0.0"

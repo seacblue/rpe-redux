@@ -324,8 +324,10 @@ updates.
 
 Keep comments in English. Document the purpose and contract of a feature, not
 its historical detours. Update the relevant README or ownership document when a
-public contract or directory changes, and record user-visible changes in the
-release notes when publishing.
+public contract or directory changes. When publishing, replace the section in `CHANGELOG.md`;
+the release workflow publishes that section as the GitHub release body, and the
+desktop changelog fetches that body and shows the section for the interface
+language.
 
 The recurring frontend ownership and shared-primitive review is covered by
 [Repository rules](../AGENTS.md).

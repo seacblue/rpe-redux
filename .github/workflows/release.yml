@@ -95,6 +95,32 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Published notes come from the matching CHANGELOG.md section, so the
+          # GitHub release body and the bundled in-app changelog stay identical.
+          # The section lists Chinese first and English second.
+          release_notes_file() {
+            local version="$1"
+            local heading="## $version"
+            local file
+            file="$(mktemp)"
+            awk -v heading="$heading" '
+              index($0, heading) == 1 {
+                if (length($0) > length(heading) && substr($0, length(heading) + 1, 1) != " ") {
+                  next
+                }
+                found = 1
+                next
+              }
+              found && /^## / { exit }
+              found { print }
+            ' CHANGELOG.md > "$file"
+            if [[ ! -s "$file" ]]; then
+              echo "CHANGELOG.md has no section for version $version; add one before releasing." >&2
+              return 1
+            fi
+            printf '%s\n' "$file"
+          }
+
           case "$EVENT_NAME" in
             release)
               tag="$EVENT_TAG"
@@ -109,7 +135,12 @@ jobs:
               else
                 # GITHUB_TOKEN-created releases do not trigger this workflow
                 # again, so this run owns the build for the release it creates.
-                release_args=(--title "RPE Redux $version" --target "$COMMIT_SHA" --generate-notes)
+                notes_file="$(release_notes_file "$version")"
+                release_args=(
+                  --title "RPE Redux $version"
+                  --target "$COMMIT_SHA"
+                  --notes-file "$notes_file"
+                )
                 if [[ "$version" == *-* ]]; then
                   release_args+=(--prerelease)
                 fi
@@ -130,7 +161,8 @@ jobs:
                 release_id="$(jq -r '.id' <<<"$release_json")"
                 echo "Reusing existing GitHub Release for $tag"
               else
-                release_args=(--title "RPE Redux $version" --generate-notes)
+                notes_file="$(release_notes_file "$version")"
+                release_args=(--title "RPE Redux $version" --notes-file "$notes_file")
                 if [[ "$version" == *-* ]]; then
                   release_args+=(--prerelease)
                 fi
