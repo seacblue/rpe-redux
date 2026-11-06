@@ -34,8 +34,9 @@ interface MediaStart {
 /**
  * How the transport handles pitch while the rate changes.
  *
- * A decoded buffer plays through the time-stretcher whenever pitch should be
- * preserved, including at 1×, so a rate change never swaps clock paths.
+ * A decoded buffer uses the worklet whenever pitch should be preserved. The
+ * worklet copies the samples directly at 1× and stretches them at other rates,
+ * so a rate change keeps the same clock and crossfade path.
  * `resample` instead lets pitch follow speed through the buffer source. The media
  * element is the fallback for formats the decoder cannot handle, where `auto`
  * uses the platform time-stretcher only when the WebView exposes the pitch flag.
@@ -69,9 +70,8 @@ function supportsPitchPreservation(media: HTMLAudioElement): boolean {
  * Decoded audio plus the transport clock for one song.
  *
  * Loads are revisioned so a later load or clear cancels an earlier one. A decoded
- * buffer owns playback at any rate: 1x uses the buffer clock, other rates use the
- * time-stretcher or resampling. The media element is the fallback for formats the
- * decoder cannot handle.
+ * buffer owns playback at any rate, using the worklet or a buffer source. The
+ * media element is the fallback for formats the decoder cannot handle.
  */
 export class AudioTransport {
   contextFactory: () => AudioContext;
@@ -94,6 +94,7 @@ export class AudioTransport {
   private backgroundVolume = 1;
   mediaSource: MediaElementAudioSourceNode | null;
   mediaUrl: string | null;
+  private ownsMediaUrl = false;
   cancelLoad: (() => void) | null;
   lastError: unknown;
   /** Reports a worklet failure once so the UI can explain the resample fallback. */
@@ -195,87 +196,74 @@ export class AudioTransport {
     this.buffer = null;
     this.loadedSource = null;
     const context = this.ensureContext();
-    if (hasAudioElement()) {
-      const media = this.media ?? createAudioElement();
-      if (!this.media) {
-        media.preload = "auto";
-        // Desktop document assets use the `redux.localhost` origin. CORS must be
-        // enabled before assigning src because Web Audio silences cross-origin
-        // media connected through MediaElementAudioSourceNode otherwise.
-        media.crossOrigin = "anonymous";
-        this.media = media;
+    let decoded: AudioBuffer;
+    try {
+      decoded = await context.decodeAudioData(await this.readSource(bytes));
+    } catch (error) {
+      if (revision !== this.loadRevision) {
+        return false;
       }
-      const external = typeof bytes === "string";
-      const url = external
-        ? bytes
-        : objectUrlFor(new Blob([toBlobPart(asBytes(bytes))], { type: mediaType(name) }));
-      try {
-        await this.waitForMetadata(media, url, name);
-        if (revision !== this.loadRevision) {
-          if (!external) {
-            releaseObjectUrl(url);
-          }
-          return false;
-        }
-        // Decode once: a decoded buffer owns normal and pitch-preserved playback.
-        // Resource-backed songs arrive as URLs rather than bytes, so fetch them
-        // before decoding; otherwise the media element would silently keep the
-        // platform time-stretcher and bypass the time-stretch path.
-        let decoded: AudioBuffer | null = null;
-        try {
-          const input = await this.readSource(external ? url : bytes);
-          decoded = await context.decodeAudioData(input);
-        } catch {
-          decoded = null;
-        }
-        if (revision !== this.loadRevision) {
-          if (!external) {
-            releaseObjectUrl(url);
-          }
-          return false;
-        }
-        this.mediaUrl = url;
-        this.mediaSource ??= context.createMediaElementSource(media);
-        const gain = this.gain;
-        if (gain) {
-          this.mediaSource.connect(gain);
-        }
-        this.applyPitchStrategy();
-        media.playbackRate = this.rate;
-        this.buffer = decoded;
-        this.loadedSource = decoded ? bytes : null;
-        this.position = 0;
-        if (decoded) {
-          await this.prepareStretcher(decoded, revision);
-        }
-        return revision === this.loadRevision;
-      } catch (error) {
-        // A cancelled load may already have been superseded on the shared
-        // element. Only clear the element when this revision still owns it.
-        if (revision === this.loadRevision) {
-          media.removeAttribute("src");
-          media.load();
-        }
-        if (!external) {
-          releaseObjectUrl(url);
-        }
-        if (
-          revision !== this.loadRevision ||
-          (error instanceof Error && error.name === "AbortError")
-        ) {
-          return false;
-        }
+      if (hasAudioElement()) {
+        return this.loadMedia(bytes, name, revision, context);
       }
+      throw error;
     }
-    const decoded = await context.decodeAudioData(await this.readSource(bytes));
     if (revision !== this.loadRevision) {
       return false;
     }
     this.buffer = decoded;
     this.loadedSource = bytes;
     this.position = 0;
+    this.applyPitchStrategy();
     await this.prepareStretcher(decoded, revision);
     return revision === this.loadRevision;
+  }
+
+  /** Open a media element only when Web Audio decoding fails. */
+  private async loadMedia(
+    bytes: AudioSource,
+    name: string,
+    revision: number,
+    context: AudioContext,
+  ): Promise<boolean> {
+    const media = this.media ?? createAudioElement();
+    if (!this.media) {
+      media.preload = "auto";
+      // Web Audio needs CORS enabled before assigning a desktop asset URL.
+      media.crossOrigin = "anonymous";
+      this.media = media;
+    }
+    const ownsUrl = typeof bytes !== "string";
+    const url =
+      typeof bytes === "string"
+        ? bytes
+        : objectUrlFor(new Blob([toBlobPart(asBytes(bytes))], { type: mediaType(name) }));
+    try {
+      await this.waitForMetadata(media, url, name);
+      if (revision !== this.loadRevision) {
+        return false;
+      }
+      this.mediaSource ??= context.createMediaElementSource(media);
+      if (this.gain) {
+        this.mediaSource.connect(this.gain);
+      }
+      this.applyPitchStrategy(media);
+      media.playbackRate = this.rate;
+      this.mediaUrl = url;
+      this.ownsMediaUrl = ownsUrl;
+      this.position = 0;
+      return true;
+    } catch (error) {
+      if (revision !== this.loadRevision) {
+        return false;
+      }
+      this.releaseMedia();
+      throw error;
+    } finally {
+      if (ownsUrl && this.mediaUrl !== url) {
+        releaseObjectUrl(url);
+      }
+    }
   }
 
   /** Load one URL into the shared element and wait for its metadata. */
@@ -322,11 +310,12 @@ export class AudioTransport {
       this.media.removeAttribute("src");
       this.media.load();
       this.mediaSource?.disconnect();
-      if (this.mediaUrl) {
+      if (this.ownsMediaUrl && this.mediaUrl) {
         releaseObjectUrl(this.mediaUrl);
       }
     }
     this.mediaUrl = null;
+    this.ownsMediaUrl = false;
   }
   /** Cancel the current load, stop playback, and drop decoded state. */
   clear(): void {
@@ -343,7 +332,7 @@ export class AudioTransport {
   get duration(): number {
     return this.buffer?.duration || this.media?.duration || 600;
   }
-  /** Whether playback currently runs through the pitch-preserving stretcher. */
+  /** Whether decoded playback uses the pitch-preserving worklet. */
   get usesStretcher(): boolean {
     return Boolean(this.stretcher && this.buffer && this.preservePitch);
   }
@@ -386,9 +375,6 @@ export class AudioTransport {
   }
   /** Whether the media element is the fallback clock because decoding failed. */
   get usesMedia(): boolean {
-    // A decoded buffer always owns playback: pitch-preserved rates use WSOLA
-    // (including 1x) and resample uses the buffer source. The media element is
-    // a fallback for formats the decoder cannot handle.
     return Boolean(this.media && this.mediaUrl && !this.buffer);
   }
   /** Whether the clock source has advanced enough to report playback time. */
@@ -580,6 +566,9 @@ export class AudioTransport {
       this.disposeStretcher();
       this.stretcher = stretcher;
     } catch (error) {
+      if (revision !== this.loadRevision) {
+        return;
+      }
       this.lastError = error;
       this.stretcher = null;
       if (!this.stretcherFailureReported) {
@@ -683,14 +672,14 @@ export class AudioTransport {
     }
   }
 
-  /** Resolve the strategy against the current rate and write the media flag. */
-  private applyPitchStrategy(): void {
-    const supported = this.media ? supportsPitchPreservation(this.media) : true;
+  /** Resolve the pitch strategy for decoded or fallback playback. */
+  private applyPitchStrategy(media = this.usesMedia ? this.media : null): void {
+    const supported = media ? supportsPitchPreservation(media) : true;
     const preserve =
       this.pitchStrategy !== "resample" && (this.pitchStrategy === "preserve" || supported);
     this.preservePitch = preserve;
-    if (this.media) {
-      writePreservesPitch(this.media, preserve);
+    if (media) {
+      writePreservesPitch(media, preserve);
     }
   }
 
@@ -707,7 +696,7 @@ export class AudioTransport {
     const wasStretcher = this.usesStretcher;
     this.rate = rate;
     this.applyPitchStrategy();
-    const media = this.media;
+    const media = wasMedia ? this.media : null;
     if (media) {
       media.playbackRate = rate;
     }

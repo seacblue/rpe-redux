@@ -10,6 +10,7 @@ single case, and where a new test belongs.
 - [Source gate](#source-gate)
 - [Unit suite](#unit-suite)
 - [Desktop smoke suite](#desktop-smoke-suite)
+- [Quick audio check](#quick-audio-check)
 - [Platform checks](#platform-checks)
 - [Fixtures](#fixtures)
 - [Adding a test](#adding-a-test)
@@ -126,6 +127,28 @@ for product API calls, `runner.evaluate` for DOM probes, `runner.waitFor` instea
 of fixed sleeps, and `runner.assert` for checks. Feature-specific journeys are
 not part of the default run: unit-test the extracted rule, and add a journey only
 for a P0 path that must be proven end to end.
+
+## Quick audio check
+
+```powershell
+node --test src/test/timeStretch.test.mjs
+npm run desktop
+```
+
+The unit suite checks that 1× preserves decoded samples through a transient
+and that slower rates preserve pitch, duration, and stereo phase. In the
+desktop app, open a chart with a section containing clear drum attacks and a
+sustained sound. Set the four hit-sound levels to zero under **Settings →
+Audio**. At 1×, play the same five to ten seconds with **Keep pitch when
+changing speed** on and off at the same music level. Listen to the attacks and
+the sound between them. On v1.0.0 the two settings can produce different audio
+around attacks.
+With unity-rate passthrough they should sound alike once playback settles.
+
+Enable pitch preservation, switch between 1×, 0.75×, and 0.5× while playing,
+then seek and resume. Check that the pitch stays steady and that the playhead
+and audio agree. Restore the hit-sound levels and replay the section to isolate
+artifacts that only occur when hit sounds are mixed in.
 
 ## Platform checks
 

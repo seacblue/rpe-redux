@@ -185,25 +185,41 @@ test("the first batch keeps an onset at sample zero", () => {
   }
 });
 
-test("1x reconstructs the input without a search offset", () => {
+test("1x preserves decoded samples across render quanta even with detected transients", () => {
   const channel = new Float32Array(SAMPLE_RATE);
   for (let index = 0; index < channel.length; index += 1) {
-    channel[index] = Math.sin(index * 0.13) * 0.5 + Math.sin(index * 0.017) * 0.2;
+    channel[index] = Math.sin(index * 0.13) * 0.06 + Math.sin(index * 0.017) * 0.02;
   }
+  const attack = Math.round(SAMPLE_RATE * 0.4);
+  for (let index = 0; index < 480; index += 1) {
+    channel[attack + index] += 0.8 * Math.exp(-index / 60) * (index % 2 ? -1 : 1);
+  }
+  const channels = [channel, channel.map((sample) => -sample / 2)];
+  const transients = detectTransients(channels, SAMPLE_RATE);
+  assert.ok(transients.some((sample) => Math.abs(sample - attack) < 128));
+  const seekFrame = 207;
   const stretch = new TimeStretch({
-    channels: [channel],
+    channels,
     sampleRate: SAMPLE_RATE,
     rate: 1,
-    positionSeconds: 0,
+    positionSeconds: seekFrame / SAMPLE_RATE,
+    transients,
   });
   stretch.prime();
-  const output = render(stretch, 1);
-  assert.equal(output.length, channel.length);
-  let difference = 0;
-  for (let index = 0; index < output.length; index += 1) {
-    difference = Math.max(difference, Math.abs(output[index] - channel[index]));
+  const offset = 9;
+  const quantum = channels.map(() => new Float32Array(128));
+  let frame = seekFrame;
+  let written;
+  while ((written = stretch.render(quantum, 128 - offset, offset)) > 0) {
+    for (let channel = 0; channel < channels.length; channel += 1) {
+      assert.deepEqual(
+        quantum[channel].subarray(offset, offset + written),
+        channels[channel].subarray(frame, frame + written),
+      );
+    }
+    frame += written;
   }
-  assert.equal(difference, 0);
+  assert.equal(frame, channel.length);
 });
 
 test("slow rates keep a transient near its expected output time", () => {

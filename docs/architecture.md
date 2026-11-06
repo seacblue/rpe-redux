@@ -220,9 +220,12 @@ handles it receives.
   adapter in `core/platform/desktop/recording.ts`, and `src-tauri/src/io/recording.rs`.
   `recordingVideoEncoder.ts` selects the platform H.264 encoder through WebCodecs
   when it accepts the output geometry and otherwise keeps the PNG fallback.
-- Media and audio: `core/media/` for decoding, analysis, WSOLA time
-  stretching, and asset loading. The editor routes music and hit sounds through
-  one background gain; the home library owns its cross-fading preview player.
+- Media and audio: `core/media/` decodes music once for playback and analysis,
+  with a media element as the fallback. When pitch preservation is enabled,
+  the worklet copies decoded PCM at 1× and uses WSOLA at other speeds. Both
+  paths share the worklet clock and restart crossfade. The editor routes music
+  and hit sounds through one background gain; the home library owns its
+  cross-fading preview player.
   Window focus applies the Audio setting's background multiplier through
   audio-thread gain ramps, and an editor worker keeps hit-sound scheduling alive
   while the window is in the background. `core/media/beatDetection.ts` owns fixed-tempo

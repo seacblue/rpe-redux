@@ -125,7 +125,7 @@ function tuningForRate(rate: number): StretchTuning {
 }
 
 /**
- * One decoded track prepared for WSOLA playback.
+ * One decoded track prepared for direct playback or WSOLA.
  *
  * `prime()` generates the first output batch. `render()` then feeds arbitrary
  * render quanta from a small ready ring while the correlation search and
@@ -206,7 +206,7 @@ export class TimeStretch {
       this.rate === 1
         ? 0
         : Math.min(this.targetFrames, Math.max(1, Math.round((sampleRate * TAIL_FADE_MS) / 1000)));
-    this.transients = transients ?? new Int32Array(0);
+    this.transients = this.rate === 1 ? [] : (transients ?? []);
     this.transientKept = new Uint8Array(this.transients.length);
     this.transientKeptAt = new Float64Array(this.transients.length);
     this.suppressionLength = Math.max(2, Math.floor(this.batchLength * 0.45));
@@ -244,7 +244,7 @@ export class TimeStretch {
 
   /** Generate the first output batch so playback can start without a CPU spike. */
   prime(): void {
-    if (this.readyCount === 0 && !this.finished) {
+    if (this.rate !== 1 && this.readyCount === 0 && !this.finished) {
       this.processBatch();
     }
   }
@@ -253,6 +253,9 @@ export class TimeStretch {
   render(output: Float32Array[], frames: number, offset = 0): number {
     const remaining = Math.max(0, this.targetFrames - this.emittedFrames);
     const limit = Math.min(frames, remaining);
+    if (this.rate === 1) {
+      return this.renderUnity(output, limit, offset);
+    }
     const fadeStart = this.targetFrames - this.tailFadeFrames;
     let written = 0;
     while (written < limit) {
@@ -297,18 +300,31 @@ export class TimeStretch {
     return written;
   }
 
+  /** Copy decoded PCM at unity rate, bypassing grain joins and onset processing. */
+  private renderUnity(output: Float32Array[], frames: number, offset: number): number {
+    const start = this.startFrame + this.emittedFrames;
+    for (let channel = 0; channel < this.channelCount; channel += 1) {
+      const source = this.channels[channel];
+      const target = output[channel] ?? output[0];
+      const end = Math.min(frames, target.length - offset);
+      for (let index = 0; index < end; index += 1) {
+        target[offset + index] = this.read(source, start + index);
+      }
+    }
+    this.emittedFrames += frames;
+    return frames;
+  }
+
   /** Produce one output batch and advance the input by the nominal skip. */
   private processBatch(): void {
     if (this.finished) {
       return;
     }
     const position = this.inputPosition;
-    // At 1x the input advance equals the batch length, so offset zero is the
-    // continuous waveform. Searching there could only add a phase jump.
-    const offset = this.firstBatch || this.rate === 1 ? 0 : this.seekBestOffset(position);
+    const offset = this.firstBatch ? 0 : this.seekBestOffset(position);
     const batchStart = this.generatedFrames;
     let base = position + offset;
-    let correlation = this.firstBatch || this.rate === 1 ? 1 : this.lastSearchCorrelation;
+    let correlation = this.firstBatch ? 1 : this.lastSearchCorrelation;
     if (!this.firstBatch) {
       const keepWindow = Math.min(this.nominalSkip * 2, this.batchLength * 0.55);
       for (let index = this.transientCursor; index < this.transients.length; index += 1) {
