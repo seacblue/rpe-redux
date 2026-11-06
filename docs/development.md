@@ -327,7 +327,8 @@ its historical detours. Update the relevant README or ownership document when a
 public contract or directory changes. When publishing, replace the section in `CHANGELOG.md`;
 the release workflow publishes that section as the GitHub release body, and the
 desktop changelog fetches that body and shows the section for the interface
-language.
+language. Release notes support `@name` credits (bold and underlined) and
+`<red>text</red>` theme colour spans; the names are listed in `CHANGELOG.md`.
 
 The recurring frontend ownership and shared-primitive review is covered by
 [Repository rules](../AGENTS.md).

@@ -110,6 +110,7 @@ export default {
   "chrome.changelog.github": "GitHub Releases",
   "chrome.changelog.unconfigured": "尚未配置更新仓库；没有可用的版本说明。",
   "chrome.changelog.empty": "没有可用的版本说明。",
+  "chrome.changelog.titleMeta": "({version}, {date})",
   "chrome.changelog.settings": "更新设置",
 
   "chrome.pane.notes": "音符编辑",

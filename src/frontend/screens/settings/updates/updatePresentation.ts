@@ -1,8 +1,8 @@
 /**
- * Presentation helpers shared by the changelog modal and the Help page.
+ * Presentation helpers for the update state.
  *
- * Both surfaces describe the same update state. Keeping labels and error text
- * here prevents the two views from drifting.
+ * The Help page and any update surface label the same update state through this
+ * module, so status text and failure text cannot drift between views.
  */
 import type { MessageKey, MessageParams } from "../../../../i18n/index.ts";
 import type { UpdateErrorCode, UpdateState } from "./updateStore.ts";
@@ -81,16 +81,4 @@ export function updateStatusText(t: UpdateTranslate, state: UpdateState): string
     default:
       return "";
   }
-}
-
-/** Format an ISO date as year/month/day; other values use the reader's locale. */
-export function formatReleaseDate(value: string): string {
-  if (!value) {
-    return "";
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
-    return value.replaceAll("-", "/");
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 }

@@ -1,35 +1,23 @@
 /**
- * The changelog modal body: the running version's notes, rendered.
+ * The changelog modal: its rendered body and the version/date title fact.
  *
  * Notes are the published GitHub release body, the same external source the
  * release page shows. The body already lists Chinese first and English second,
- * so the caller selects the section for the active language. This surface shows
- * nothing else: no version facts, update controls, or release history.
+ * so this surface selects the section for the active language. It shows nothing
+ * else: no version cards, update controls, or release history.
  */
 import { useTranslation } from "../../../../i18n/react.ts";
-import { compareVersions } from "../../../../core/utils/version.ts";
 import { ReleaseNotesBody } from "./ReleaseNotesBody.tsx";
-import { selectLanguageNotes } from "./releaseNotes.ts";
+import { formatReleaseDate, selectChangelogRelease } from "./releaseNotes.ts";
 import { useUpdateState } from "./useUpdateState.ts";
 
 /** The changelog modal body. */
 export function ChangelogContent(): React.JSX.Element {
   const { t, language } = useTranslation();
   const state = useUpdateState();
-  const published = state.releases
-    .map((release) => ({
-      version: release.version,
-      notes: selectLanguageNotes(release.notes, language),
-    }))
-    .filter((entry) => entry.notes.length > 0);
-  // Prefer the running version's notes; a build that predates its own release
-  // falls back to the newest published notes.
-  const current = published.find(
-    (entry) => compareVersions(entry.version, state.currentVersion) === 0,
-  );
-  const notes = current?.notes ?? published[0]?.notes ?? "";
+  const release = selectChangelogRelease(state.releases, state.currentVersion, language);
 
-  if (!notes) {
+  if (!release) {
     return (
       <div className="redux-changelog">
         <p className="redux-changelog-hint">
@@ -42,7 +30,28 @@ export function ChangelogContent(): React.JSX.Element {
   }
   return (
     <div className="redux-changelog">
-      <ReleaseNotesBody notes={notes} />
+      <ReleaseNotesBody notes={release.notes} />
     </div>
+  );
+}
+
+/**
+ * The version and date the modal title shows, e.g. `(1.0.1, 2026-11-6)`.
+ *
+ * It subscribes to the update store because the notes are fetched after the
+ * modal opens, so the heading gains its facts as soon as the release arrives.
+ */
+export function ChangelogTitleMeta(): React.JSX.Element | null {
+  const { t, language } = useTranslation();
+  const state = useUpdateState();
+  const release = selectChangelogRelease(state.releases, state.currentVersion, language);
+  if (!release) {
+    return null;
+  }
+  const date = formatReleaseDate(release.publishedAt);
+  return (
+    <span className="redux-changelog-title-meta">
+      {date ? t("chrome.changelog.titleMeta", { version: release.version, date }) : release.version}
+    </span>
   );
 }

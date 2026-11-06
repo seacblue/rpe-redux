@@ -54,3 +54,51 @@ dialog.redux-changelog-dialog {
     padding-inline-start: var(--space-4);
   }
 }
+
+/* The title carries the shown release's version and date after the localized
+   title text. It is inline content of the modal heading, not a separate row. */
+.redux-changelog-title-meta {
+  margin-inline-start: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A mention is the credit form: bold, underlined, and never a link, so a thanks
+   line reads as an acknowledgement instead of navigation. */
+.redux-release-note-mention {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+/* The colour palette resolves to theme tokens that already adapt to the light
+   and dark themes; notes name a role, never a hex value. */
+.redux-release-note-color-accent {
+  color: var(--accent);
+}
+
+.redux-release-note-color-red {
+  color: var(--danger);
+}
+
+.redux-release-note-color-yellow {
+  color: var(--warning);
+}
+
+.redux-release-note-color-green {
+  color: var(--playing-indicator);
+}
+
+.redux-release-note-color-blue {
+  color: var(--canvas-note-tap);
+}
+
+.redux-release-note-color-purple {
+  color: var(--canvas-event-shader-fill);
+}
+
+.redux-release-note-color-gray {
+  color: var(--foreground-muted);
+}

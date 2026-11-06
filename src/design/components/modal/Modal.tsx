@@ -405,6 +405,8 @@ export interface ModalProps {
   priority?: number;
   /** Draws the title row. Left out, `children` arranges its own heading. */
   label?: string;
+  /** Inline content rendered after the title text, inside the heading. */
+  titleMeta?: ReactNode;
   /** Draws the top-right close button. Independent of `label`. */
   closeButton?: boolean;
   /** `id` of the caller's own heading, used by the layout that has no `label`. */
@@ -441,6 +443,7 @@ export function Modal({
   instanceKey,
   priority = 0,
   label,
+  titleMeta,
   closeButton = true,
   labelledBy,
   description,
@@ -488,7 +491,10 @@ export function Modal({
     >
       {label && (
         <div className="modal-heading">
-          <h2 id={titleId}>{label}</h2>
+          <h2 id={titleId}>
+            {label}
+            {titleMeta}
+          </h2>
           {closeButton && (
             <IconButton icon="close" label={t("common.action.close")} onClick={onClose} />
           )}

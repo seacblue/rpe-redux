@@ -177,7 +177,9 @@ Help → Changelog opens a modal with the running version's published GitHub
 release notes, rendered in the interface language. The release workflow publishes
 the matching section of `CHANGELOG.md`, which holds only the current release's
 notes, as the GitHub release body; that file lists Chinese first and English
-second. Opening the surface fetches the notes when the store has not loaded them
+second. The modal title names the shown release's version and date, and the notes
+may credit `@name` contributors and colour text (see `CHANGELOG.md`). Opening the
+surface fetches the notes when the store has not loaded them
 yet. A check runs when the user presses Verify on Settings → Help, or at startup
 when **Settings → Help → Automatic updates** is enabled. The manual result is
 reported as a toast.

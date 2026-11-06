@@ -10,7 +10,7 @@ import { createElement } from "react";
 import { t } from "../../../../i18n/index.ts";
 import { dismissModal, presentModal } from "../../../overlays/modals/modalQueue.ts";
 import { bindChangelogLauncher } from "./changelogLauncher.ts";
-import { ChangelogContent } from "./ChangelogContent.tsx";
+import { ChangelogContent, ChangelogTitleMeta } from "./ChangelogContent.tsx";
 import { checkForUpdates, getUpdateState, refreshUpdateSettings } from "./updateStore.ts";
 
 const CHANGELOG_ID = "help.changelog";
@@ -34,6 +34,7 @@ export function openChangelog(): boolean {
   const close = () => dismissModal(CHANGELOG_ID);
   presentModal(CHANGELOG_ID, {
     label: t("chrome.menu.help.changelog"),
+    titleMeta: createElement(ChangelogTitleMeta),
     className: "redux-changelog-dialog",
     onClose: close,
     children: createElement(ChangelogContent),

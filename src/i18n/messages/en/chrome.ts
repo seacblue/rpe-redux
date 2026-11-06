@@ -127,6 +127,7 @@ export default {
   "chrome.changelog.unconfigured":
     "No update repository is configured; no release notes are available.",
   "chrome.changelog.empty": "No release notes are available.",
+  "chrome.changelog.titleMeta": "({version}, {date})",
   "chrome.changelog.settings": "Update settings",
 
   "chrome.pane.notes": "Note editing",
