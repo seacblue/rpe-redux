@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
+import { EmptyState } from "../../../design/components/empty-state/EmptyState.tsx";
 import { Progress } from "../../../design/components/progress/Progress.tsx";
 import { useAnchoredPopover } from "../../../design/patterns/useAnchoredPopover.ts";
 import {
@@ -121,6 +122,7 @@ export function LongTaskControl() {
         style={popover.style}
       >
         <div className="long-task-popover-list">
+          {tasks.length === 0 && <EmptyState icon="list" title={t("chrome.tasks.empty")} />}
           {tasks.map((task) => {
             const working = task.status === "running" || task.status === "cancelling";
             const status = tRaw(`chrome.tasks.status.${task.status}`);
