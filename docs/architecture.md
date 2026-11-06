@@ -265,7 +265,11 @@ handles it receives.
 - Updates: `frontend/screens/settings/updates/` owns update state and release
   data; `src-tauri/src/update/updater.rs` owns the signed manifest flow,
   `update/local_update_worker.rs` the post-exit handoff, and
-  `update/portable_update.rs` the in-place payload swap.
+  `update/portable_update.rs` the in-place payload swap. The frontend's
+  automatic package-download policy uses the cost-aware host network status in
+  `src-tauri/src/network.rs`; Linux prefers NetworkManager/portal metering and
+  only falls back to connection type. The frontend never inspects adapter
+  names or addresses.
 - Sessions: `frontend/screens/editor/workspace/session/` for last-workspace
   sampling and restore; `core/edit/session/workspaceSession.ts` for the stored
   shape.

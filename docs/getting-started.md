@@ -164,6 +164,10 @@ Releases, supports a **Beta channel** for pre-releases, replaces a Windows
 install in place with a rollback copy until the new build starts healthy, and on
 Linux replaces only the AppImage.
 
+In **Settings → Help**, **Update package download policy** can stage a detected
+package automatically on Wi-Fi and metered networks, on Wi-Fi only, or never.
+Staging does not install or restart the application.
+
 Extensions are installed and enabled from **Settings → Extensions**. Start with
 the [Extension quickstart](extensions-quickstart.md) if you want to write one.
 

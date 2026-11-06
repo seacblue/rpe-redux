@@ -8,10 +8,12 @@
  */
 import { createElement } from "react";
 import { t } from "../../../../i18n/index.ts";
-import { dismissModal, presentModal } from "../../../overlays/modals/modalQueue.ts";
+import { dismissModal, MODAL_PRIORITY, presentModal } from "../../../overlays/modals/modalQueue.ts";
+import { requestConfirm } from "../../../overlays/modals/prompts.ts";
 import { bindChangelogLauncher } from "./changelogLauncher.ts";
 import { ChangelogContent, ChangelogTitleMeta } from "./ChangelogContent.tsx";
 import { checkForUpdates, getUpdateState, refreshUpdateSettings } from "./updateStore.ts";
+import { bindUpdatePromptLauncher } from "./updatePromptLauncher.ts";
 
 const CHANGELOG_ID = "help.changelog";
 
@@ -43,3 +45,13 @@ export function openChangelog(): boolean {
 }
 
 bindChangelogLauncher(openChangelog);
+
+bindUpdatePromptLauncher((version) =>
+  requestConfirm({
+    title: t("settings.updates.restartPrompt.title"),
+    description: t("settings.updates.restartPrompt.description", { version }),
+    cancelLabel: t("settings.updates.restartPrompt.defer"),
+    label: t("settings.updates.restartPrompt.restartNow"),
+    priority: MODAL_PRIORITY.consent,
+  }),
+);

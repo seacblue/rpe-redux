@@ -30,6 +30,9 @@ enum HelperMode {
 struct HelperRequest {
     nonce: String,
     parent_pid: u32,
+    /// Whether the helper should relaunch the editor after applying the update.
+    #[serde(default = "default_restart")]
+    restart: bool,
     #[serde(default)]
     mode: HelperMode,
     source_version: String,
@@ -39,6 +42,11 @@ struct HelperRequest {
     args: Vec<String>,
     roots: Vec<PathBuf>,
     resources: crate::update::update_guard::ResourceSnapshot,
+}
+
+/// Preserve the historical immediate-restart behavior for older staged requests.
+fn default_restart() -> bool {
+    true
 }
 
 /// Result of a background handoff that failed after the editor exited.
@@ -196,7 +204,10 @@ enum HelperPayload {
     Portable,
 }
 
-/// Start a helper copy, wait for its process-handle handshake, and close the editor.
+/// Start a helper copy and wait for its process-handle handshake.
+///
+/// Immediate installs close the editor here; deferred installs leave it running
+/// while the helper waits for the normal application exit.
 #[cfg(windows)]
 pub fn handoff(
     app: &AppHandle,
@@ -205,6 +216,7 @@ pub fn handoff(
     resources: crate::update::update_guard::ResourceSnapshot,
     bytes: Vec<u8>,
     signature: Vec<u8>,
+    restart: bool,
 ) -> Result<(), String> {
     spawn_handoff(
         app,
@@ -212,6 +224,7 @@ pub fn handoff(
         backup,
         resources,
         StagedPayload::Installer { bytes, signature },
+        restart,
     )
 }
 
@@ -224,6 +237,7 @@ pub fn handoff_portable(
     resources: crate::update::update_guard::ResourceSnapshot,
     bytes: Vec<u8>,
     signature: String,
+    restart: bool,
 ) -> Result<(), String> {
     spawn_handoff(
         app,
@@ -231,6 +245,7 @@ pub fn handoff_portable(
         backup,
         resources,
         StagedPayload::Portable { bytes, signature },
+        restart,
     )
 }
 
@@ -242,6 +257,7 @@ fn spawn_handoff(
     _backup: &str,
     resources: crate::update::update_guard::ResourceSnapshot,
     payload: StagedPayload,
+    restart: bool,
 ) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let (mode, installer, installer_signature, portable, portable_signature) = match payload {
@@ -283,6 +299,7 @@ fn spawn_handoff(
     let spec = HelperRequest {
         nonce: nonce.clone(),
         parent_pid: std::process::id(),
+        restart,
         mode,
         source_version: app.package_info().version.to_string(),
         target_version: version.to_owned(),
@@ -345,11 +362,13 @@ fn spawn_handoff(
         return Err(error);
     }
     let _ = staging.keep();
-    crate::services::server::stop(app);
-    if let Some(window) = app.get_webview_window("main") {
-        crate::app::window_state::save(app, &window);
+    if restart {
+        crate::services::server::stop(app);
+        if let Some(window) = app.get_webview_window("main") {
+            crate::app::window_state::save(app, &window);
+        }
+        app.exit(0);
     }
-    app.exit(0);
     Ok(())
 }
 
@@ -362,6 +381,7 @@ pub fn handoff_portable(
     _: crate::update::update_guard::ResourceSnapshot,
     _: Vec<u8>,
     _: String,
+    _: bool,
 ) -> Result<(), String> {
     Err("portable_update_platform_invalid".into())
 }
@@ -375,6 +395,7 @@ pub fn handoff(
     _: crate::update::update_guard::ResourceSnapshot,
     _: Vec<u8>,
     _: Vec<u8>,
+    _: bool,
 ) -> Result<(), String> {
     Err("local_update_platform_invalid".into())
 }
@@ -528,8 +549,12 @@ fn run_helper(stage: &Path, nonce: &str) -> Result<(), String> {
         crate::update::update_guard::verify(&spec.resources, &spec.roots)?;
         match payload {
             HelperPayload::Installer => {
-                let status = Command::new(root.join("installer.exe"))
-                    .args(["/S", "/UPDATE", "/R"])
+                let mut installer = Command::new(root.join("installer.exe"));
+                installer.args(["/S", "/UPDATE"]);
+                if spec.restart {
+                    installer.arg("/R");
+                }
+                let status = installer
                     .creation_flags(0x08000000)
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
@@ -551,26 +576,33 @@ fn run_helper(stage: &Path, nonce: &str) -> Result<(), String> {
                     &root.join("rollback"),
                     exe_name,
                 )?;
-                let mut candidate = match Command::new(&original)
-                    .args(&spec.args)
-                    .creation_flags(0x08000000)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                {
-                    Ok(child) => child,
-                    Err(error) => {
-                        let failure =
-                            candidate_failure(CandidateOutcome::LaunchFailed, &error.to_string());
-                        return Err(crate::update::portable_update::with_rollback(
-                            failure,
-                            applied.rollback(),
-                        ));
-                    }
-                };
-                let (outcome, detail) =
-                    match wait_for_health(&mut candidate, &root, nonce, PORTABLE_HEALTH_TIMEOUT) {
+                if spec.restart {
+                    let mut candidate = match Command::new(&original)
+                        .args(&spec.args)
+                        .creation_flags(0x08000000)
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn()
+                    {
+                        Ok(child) => child,
+                        Err(error) => {
+                            let failure = candidate_failure(
+                                CandidateOutcome::LaunchFailed,
+                                &error.to_string(),
+                            );
+                            return Err(crate::update::portable_update::with_rollback(
+                                failure,
+                                applied.rollback(),
+                            ));
+                        }
+                    };
+                    let (outcome, detail) = match wait_for_health(
+                        &mut candidate,
+                        &root,
+                        nonce,
+                        PORTABLE_HEALTH_TIMEOUT,
+                    ) {
                         Ok(()) => (CandidateOutcome::Healthy, String::new()),
                         Err(failure) => {
                             let mut detail = failure.detail;
@@ -580,28 +612,34 @@ fn run_helper(stage: &Path, nonce: &str) -> Result<(), String> {
                             (failure.outcome, detail)
                         }
                     };
-                match rollback_action(outcome) {
-                    RollbackAction::Commit => {
-                        // The new build is running. A leftover rollback tree is
-                        // cleanup, not a failed update; the next launch removes
-                        // it after the helper exits.
-                        if let Err(error) = applied.commit() {
-                            let detail = format!("rollback cleanup failed: {error}");
-                            if let Err(write) = fs::write(root.join("helper-warning"), &detail) {
-                                eprintln!("Could not write update warning: {write}");
-                            }
-                            if let Err(log) = record_update_log(&spec.data_dir, &detail) {
-                                eprintln!("Could not record update warning: {log}");
+                    match rollback_action(outcome) {
+                        RollbackAction::Commit => {
+                            // The new build is running. A leftover rollback tree is
+                            // cleanup, not a failed update; the next launch removes
+                            // it after the helper exits.
+                            if let Err(error) = applied.commit() {
+                                let detail = format!("rollback cleanup failed: {error}");
+                                if let Err(write) = fs::write(root.join("helper-warning"), &detail)
+                                {
+                                    eprintln!("Could not write update warning: {write}");
+                                }
+                                if let Err(log) = record_update_log(&spec.data_dir, &detail) {
+                                    eprintln!("Could not record update warning: {log}");
+                                }
                             }
                         }
+                        RollbackAction::Restore => {
+                            let failure = candidate_failure(outcome, &detail);
+                            return Err(crate::update::portable_update::with_rollback(
+                                failure,
+                                applied.rollback(),
+                            ));
+                        }
                     }
-                    RollbackAction::Restore => {
-                        let failure = candidate_failure(outcome, &detail);
-                        return Err(crate::update::portable_update::with_rollback(
-                            failure,
-                            applied.rollback(),
-                        ));
-                    }
+                } else {
+                    // With deferred installation there is no candidate process to
+                    // probe: the next launch will be the first execution of the new build.
+                    applied.commit()?;
                 }
             }
         }
@@ -634,9 +672,10 @@ fn run_helper(stage: &Path, nonce: &str) -> Result<(), String> {
             eprintln!("Could not write update failure record: {write}");
         }
         // Refuse to relaunch a different or partially replaced executable.
-        if fs::read(&original)
-            .ok()
-            .is_some_and(|content| Sha256::digest(content) == helper_hash)
+        if spec.restart
+            && fs::read(&original)
+                .ok()
+                .is_some_and(|content| Sha256::digest(content) == helper_hash)
         {
             if let Err(restart) = Command::new(original)
                 .args(&spec.args)

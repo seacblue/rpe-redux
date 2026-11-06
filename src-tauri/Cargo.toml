@@ -29,7 +29,7 @@ sha2 = "0.10"
 base64 = "0.23"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_Security", "Win32_System_Threading"] }
 windows-core = "0.62"
 webview2-com = "0.39"
 winreg = "0.55"

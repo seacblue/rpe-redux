@@ -51,13 +51,13 @@ The Go service creates the v1 library schema on first open; the native host
 runs the file-format and post-update handoff before starting the service.
 
 Video export uses the bundled FFmpeg distribution for the target architecture to
-mux MP4 files. The platform H.264 encoder handles the frames through WebCodecs
-with explicit variable-bitrate control, using the configured bitrate as its
-average target, when the platform supports it; otherwise the same renderer
-sends PNG
-frames and FFmpeg encodes them. The platform save dialog chooses the destination
+mux MP4 files. The Render chart settings offer a standard rate-control mode and
+an optional VBR 2x peak mode. Standard mode uses the platform H.264 encoder
+through WebCodecs with the configured bitrate as its average target when the
+platform supports it; VBR 2x mode uses PNG frames and FFmpeg with a peak target
+twice the configured average. The platform save dialog chooses the destination
 and confirms replacement of an existing file. Resolution, frame rate, video
-bitrate, music volume, and hit-sound volume are configurable. The range defaults
+bitrate, rate-control mode, music volume, and hit-sound volume are configurable. The range defaults
 to the whole song and accepts beats or song time. A bitrate of `-1` selects a
 target from the output geometry, and the inspector estimates the output size
 before the export starts. Rendering uses a snapshot captured at export and
@@ -181,8 +181,18 @@ second. The modal title names the shown release's version and date, and the note
 may credit `@name` contributors and colour text (see `CHANGELOG.md`). Opening the
 surface fetches the notes when the store has not loaded them
 yet. A check runs when the user presses Verify on Settings → Help, or at startup
-when **Settings → Help → Automatic updates** is enabled. The manual result is
+when **Settings → Help → Automatic updates** is enabled. Selecting an automatic
+package-download policy also enables the startup check. The manual result is
 reported as a toast.
+
+**Settings → Help → Update package download policy** controls only background
+package staging: **Wi-Fi and metered networks**, **Wi-Fi only**, or **Never
+download automatically**. A staged package is
+signature-verified and held by the host; installation still requires an
+explicit restart choice. The Wi-Fi-only policy accepts only the active Wi-Fi
+class and rejects a known metered connection. Windows uses active adapter
+classification; Linux prefers NetworkManager's `Metered` and active
+connection properties, then the XDG NetworkMonitor portal, then `nmcli`.
 
 On Windows, a signed release installs through a portable update payload rather
 than the NSIS installer. The host fetches `redux-latest.json` from the release,

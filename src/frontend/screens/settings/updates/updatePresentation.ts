@@ -55,6 +55,12 @@ export function updateStatusText(t: UpdateTranslate, state: UpdateState): string
   switch (state.phase) {
     case "available":
       return state.latest ? t("settings.updates.available", { version: state.latest.version }) : "";
+    case "downloaded":
+      return state.latest
+        ? t("settings.updates.downloaded", { version: state.latest.version })
+        : "";
+    case "scheduled":
+      return state.latest ? t("settings.updates.scheduled", { version: state.latest.version }) : "";
     case "verifying":
       return t("settings.updates.verifying");
     case "preparing":

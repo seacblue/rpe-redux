@@ -194,13 +194,14 @@ pub async fn update_download(
     let endpoint = endpoint_for(&repo, tag.as_deref())?;
     let (update, bytes) = download_release(&app, endpoint, key).await?;
     let version = update.version.clone();
+    let signature = update.signature.as_bytes().to_vec();
     *host.prepared.lock().map_err(|error| error.to_string())? = Some(PreparedUpdate {
         id: uuid::Uuid::new_v4(),
         kind: PreparedKind::Installer,
         update: Some(update),
         version: version.clone(),
         bytes,
-        signature: None,
+        signature: Some(signature),
         backup: None,
         resources: None,
     });
@@ -307,6 +308,7 @@ pub async fn update_install(
     app: AppHandle,
     host: State<'_, UpdateHost>,
     version: String,
+    restart: bool,
 ) -> Result<(), String> {
     let store = host.prepared.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -354,6 +356,7 @@ pub async fn update_install(
                 resources,
                 prepared.bytes,
                 signature,
+                restart,
             );
             if result.is_err() {
                 crate::app::migration::clear_pending_update(&app, &version);
@@ -369,17 +372,31 @@ pub async fn update_install(
                 resources,
                 prepared.bytes,
                 signature,
+                restart,
             );
             if result.is_err() {
                 crate::app::migration::clear_pending_update(&app, &version);
             }
             return result;
         }
-        match prepared
-            .update
-            .ok_or("No verified remote update.")?
-            .install(prepared.bytes)
-        {
+        let update = prepared.update.ok_or("No verified remote update.")?;
+        if !restart {
+            let signature = prepared.signature.ok_or("Missing remote signature.")?;
+            let result = crate::update::local_update_worker::handoff(
+                &app,
+                &version,
+                &backup,
+                resources,
+                prepared.bytes,
+                signature,
+                false,
+            );
+            if result.is_err() {
+                crate::app::migration::clear_pending_update(&app, &version);
+            }
+            return result;
+        }
+        match update.install(prepared.bytes) {
             Ok(()) => Ok(()),
             Err(error) => {
                 crate::app::migration::clear_pending_update(&app, &version);

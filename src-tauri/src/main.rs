@@ -11,6 +11,7 @@ mod chart;
 mod diagnostics;
 mod documents;
 mod io;
+mod network;
 mod services;
 mod storage;
 mod update;
@@ -112,6 +113,7 @@ fn main() {
             diagnostics::developer::developer_mode,
             diagnostics::developer::developer_toggle_devtools,
             diagnostics::developer::host_platform,
+            network::network_connection_status,
             diagnostics::performance_hud::open_performance_hud_window,
             diagnostics::performance_hud::close_performance_hud_window,
             diagnostics::performance_hud::performance_hud_window_state,

@@ -9,6 +9,10 @@
  */
 import { getDocumentApi } from "../../../../core/edit/document/api.ts";
 import { acquireLongTaskFence, getLongTasks } from "../../../../core/state/longTasks.ts";
+import {
+  startDownloadTask,
+  type DownloadTaskOutcome,
+} from "../../../../core/state/downloadTask.ts";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { appVersion } from "../../../../core/platform/appInfo.ts";
@@ -23,26 +27,36 @@ import {
 import { localService } from "../../../../core/global/library/service.ts";
 import { preferences } from "../../../../core/state/preferences.ts";
 import { declarePersistedValue } from "../../../../core/settings/settings.ts";
-import { UPDATE_SETTING_KEYS } from "../../../../core/settings/updateKeys.ts";
+import {
+  UPDATE_SETTING_KEYS,
+  type UpdateDownloadPolicy,
+} from "../../../../core/settings/updateKeys.ts";
+import { networkStatus } from "../../../../core/platform/desktop/network.ts";
+import { allowsAutomaticDownload } from "../../../../core/platform/desktop/updatePolicy.ts";
 import {
   UPDATE_PUBLIC_KEY,
   UPDATE_REPOSITORY,
 } from "../../../../core/platform/desktop/updateConfig.ts";
 import { values } from "../../../../core/state/values.ts";
 import { compareVersions, isVersion } from "../../../../core/utils/version.ts";
+import { t } from "../../../../i18n/index.ts";
 import { openSettings } from "../settingsWindowController.ts";
 import { requestChangelog } from "./changelogLauncher.ts";
+import { requestUpdatePrompt } from "./updatePromptLauncher.ts";
 
 export { UPDATE_SETTING_KEYS };
 
 declarePersistedValue(UPDATE_SETTING_KEYS.autoCheck, false);
 declarePersistedValue(UPDATE_SETTING_KEYS.prereleases, false);
+declarePersistedValue(UPDATE_SETTING_KEYS.downloadPolicy, "never");
 
 /** Every phase the update flow can publish. */
 export type UpdatePhase =
   | "idle"
   | "checking"
   | "available"
+  | "downloaded"
+  | "scheduled"
   | "up-to-date"
   | "unconfigured"
   | "preparing"
@@ -121,6 +135,8 @@ export interface UpdateState {
   publicKey: string;
   autoCheck: boolean;
   includePrereleases: boolean;
+  downloadPolicy: UpdateDownloadPolicy;
+  preparedVersion: string | null;
 }
 
 /** Subscribers notified after each snapshot replacement. */
@@ -143,12 +159,23 @@ let state: UpdateState = {
   publicKey: UPDATE_PUBLIC_KEY,
   autoCheck: false,
   includePrereleases: false,
+  downloadPolicy: "never",
+  preparedVersion: null,
 };
 
 /** Shared initialization promise so concurrent callers join one load. */
 let initialization: Promise<void> | null = null;
 /** Whether the host progress listener is attached. */
 let progressListening = false;
+/** Receives native byte progress while the current download task is active. */
+let activeDownloadReporter: ((downloaded: number, total: number | null) => void) | null = null;
+/** Prevent concurrent restart-choice prompts for one prepared package. */
+let preparedPromptInFlight: Promise<void> | null = null;
+
+/** Format native byte counts for the long-task detail line. */
+function formatMegabytes(value: number): string {
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** The current update snapshot. */
 export function getUpdateState(): UpdateState {
@@ -173,6 +200,12 @@ function set(patch: Partial<UpdateState>): void {
 const settingFlag = (key: string, fallback: boolean): boolean =>
   values.byId.get<boolean | undefined>(key) ?? fallback;
 
+/** Read the persisted package-download policy, rejecting stale values safely. */
+function settingDownloadPolicy(): UpdateDownloadPolicy {
+  const value = values.byId.get<string | undefined>(UPDATE_SETTING_KEYS.downloadPolicy);
+  return value === "all" || value === "wifi" || value === "never" ? value : "never";
+}
+
 /** Re-read the cached update configuration from the value store. */
 function refreshSettings(): void {
   set({
@@ -180,6 +213,7 @@ function refreshSettings(): void {
     publicKey: UPDATE_PUBLIC_KEY.trim(),
     autoCheck: settingFlag(UPDATE_SETTING_KEYS.autoCheck, false),
     includePrereleases: settingFlag(UPDATE_SETTING_KEYS.prereleases, false),
+    downloadPolicy: settingDownloadPolicy(),
   });
 }
 
@@ -202,6 +236,7 @@ async function ensureProgressListener(): Promise<void> {
         downloaded: progress.downloaded,
         total: progress.total,
       });
+      activeDownloadReporter?.(progress.downloaded, progress.total);
     } else if (progress.phase === "installing") {
       set({ phase: "installing" });
     } else if (progress.phase === "installed") {
@@ -222,8 +257,26 @@ export function initializeUpdates(): Promise<void> {
   }
   initialization = (async () => {
     refreshSettings();
-    values.byId.subscribe(UPDATE_SETTING_KEYS.autoCheck, refreshSettings);
-    values.byId.subscribe(UPDATE_SETTING_KEYS.prereleases, refreshSettings);
+    const refreshAndMaybeCheck = () => {
+      const before = state;
+      refreshSettings();
+      const becameAutomatic =
+        (state.autoCheck || state.downloadPolicy !== "never") &&
+        !(before.autoCheck || before.downloadPolicy !== "never");
+      if (becameAutomatic && state.repo) {
+        void checkForUpdates();
+      } else if (
+        state.downloadPolicy !== before.downloadPolicy &&
+        state.available &&
+        state.latest &&
+        state.downloadPolicy !== "never"
+      ) {
+        void autoDownload(state.latest);
+      }
+    };
+    values.byId.subscribe(UPDATE_SETTING_KEYS.autoCheck, refreshAndMaybeCheck);
+    values.byId.subscribe(UPDATE_SETTING_KEYS.prereleases, refreshAndMaybeCheck);
+    values.byId.subscribe(UPDATE_SETTING_KEYS.downloadPolicy, refreshAndMaybeCheck);
     const version = await appVersion().catch(() => BUILD_APP_VERSION);
     set({ currentVersion: version });
     if (isDesktop()) {
@@ -257,7 +310,7 @@ export function initializeUpdates(): Promise<void> {
     }
     // Automatic checks are opt-in; the default is off so opening the editor
     // never waits on the network.
-    if (state.autoCheck && state.repo) {
+    if ((state.autoCheck || state.downloadPolicy !== "never") && state.repo) {
       void checkForUpdates();
     }
   })();
@@ -312,7 +365,12 @@ export async function checkForUpdates(): Promise<void> {
       releases,
       latest,
       available,
+      preparedVersion:
+        latest && state.preparedVersion === latest.version ? state.preparedVersion : null,
     });
+    if (available && latest) {
+      void autoDownload(latest);
+    }
   } catch (error) {
     const code = error instanceof GithubReleaseError ? error.code : "network";
     set({
@@ -337,7 +395,7 @@ export function updateSafetyBlock(): "save-first" | "tasks-active" | null {
 
 /** Download a selected release, then share the guarded installation handoff. */
 export async function installUpdate(): Promise<void> {
-  if (isUpdateBusy(state.phase)) {
+  if (isUpdateBusy(state.phase) || state.phase === "scheduled") {
     return;
   }
   refreshSettings();
@@ -350,13 +408,145 @@ export async function installUpdate(): Promise<void> {
     set({ phase: "error", errorCode: blocked, errorDetail: "" });
     return;
   }
-  await installPrepared(release.version, () =>
-    invoke<string>("update_download", {
-      repo: state.repo,
-      publicKey: state.publicKey,
-      tag: release.tag,
-    }),
-  );
+  if (state.preparedVersion === release.version) {
+    await promptForPreparedUpdate(release);
+    return;
+  }
+  await downloadUpdate(release);
+  if (state.preparedVersion !== release.version) {
+    return;
+  }
+  await promptForPreparedUpdate(release);
+}
+
+/** A single in-flight package download shared by automatic and manual callers. */
+let downloadInFlight: Promise<void> | null = null;
+
+/** Download and hold a selected release without preparing the installation. */
+async function downloadUpdate(release: GithubRelease): Promise<void> {
+  if (state.preparedVersion === release.version || isUpdateBusy(state.phase)) {
+    return;
+  }
+  if (downloadInFlight) {
+    await downloadInFlight;
+    return;
+  }
+  refreshSettings();
+  if (!state.publicKey) {
+    set({ phase: "error", errorCode: "public-key", errorDetail: "" });
+    return;
+  }
+  const operation = (async () => {
+    set({ phase: "downloading", errorCode: null, errorDetail: "", downloaded: 0, total: null });
+    await ensureProgressListener();
+    const task = startDownloadTask({
+      label: "settings.updates.task.label",
+      stage: t("settings.updates.verifying"),
+      run: async (signal, report) => {
+        const reportProgress = (downloaded: number, total: number | null) => {
+          report(
+            total
+              ? t("settings.updates.downloading", {
+                  downloaded: formatMegabytes(downloaded),
+                  total: formatMegabytes(total),
+                })
+              : t("settings.updates.downloadingUnknown", {
+                  downloaded: formatMegabytes(downloaded),
+                }),
+            total && total > 0 ? downloaded / total : null,
+          );
+        };
+        activeDownloadReporter = reportProgress;
+        try {
+          let version: string;
+          try {
+            version = await invoke<string>("update_download", {
+              repo: state.repo,
+              publicKey: state.publicKey,
+              tag: release.tag,
+            });
+          } catch (error) {
+            if (signal.aborted) {
+              await invoke("update_discard").catch(() => undefined);
+            }
+            throw error;
+          }
+          if (signal.aborted) {
+            await invoke("update_discard").catch(() => undefined);
+            throw new Error("Update download cancelled.");
+          }
+          return version;
+        } finally {
+          if (activeDownloadReporter === reportProgress) {
+            activeDownloadReporter = null;
+          }
+        }
+      },
+    });
+    const outcome: DownloadTaskOutcome = await task.done;
+    if (outcome.status === "completed") {
+      if (compareVersions(outcome.version, release.version) !== 0) {
+        const failure = new Error("The verified update does not match the selected release.");
+        set({ phase: "error", errorCode: "install", errorDetail: failure.message });
+        return;
+      }
+      set({ phase: "downloaded", preparedVersion: outcome.version });
+      void promptForPreparedUpdate(release);
+    } else if (outcome.status === "cancelled") {
+      set({ phase: "available", preparedVersion: null, errorCode: null, errorDetail: "" });
+    } else {
+      const failure = classifyUpdateFailure(outcome.error);
+      set({ phase: "error", errorCode: failure.code, errorDetail: failure.detail });
+    }
+  })();
+  downloadInFlight = operation;
+  try {
+    await operation;
+  } finally {
+    downloadInFlight = null;
+  }
+}
+
+/** Download automatically only when the selected connection policy allows it. */
+async function autoDownload(release: GithubRelease): Promise<void> {
+  const connection = await networkStatus();
+  if (!allowsAutomaticDownload(state.downloadPolicy, connection)) {
+    return;
+  }
+  await ensureProgressListener();
+  await downloadUpdate(release);
+}
+
+/** Ask whether a verified package should restart now or install on the next close. */
+async function promptForPreparedUpdate(release: GithubRelease): Promise<void> {
+  if (
+    state.preparedVersion !== release.version ||
+    state.phase === "scheduled" ||
+    preparedPromptInFlight
+  ) {
+    return preparedPromptInFlight ?? Promise.resolve();
+  }
+  const operation = (async () => {
+    const restartNow = await requestUpdatePrompt(release.version);
+    if (state.preparedVersion !== release.version) {
+      return;
+    }
+    await installPrepared(
+      release.version,
+      () => Promise.resolve(release.version),
+      false,
+      true,
+      restartNow,
+    );
+  })();
+  preparedPromptInFlight = operation;
+  try {
+    await operation;
+  } finally {
+    if (preparedPromptInFlight === operation) {
+      preparedPromptInFlight = null;
+    }
+  }
 }
 
 /** Translate a failed install or local verification into the shared error vocabulary. */
@@ -400,6 +590,8 @@ async function installPrepared(
   expectedVersion: string,
   load: () => Promise<string>,
   local = false,
+  alreadyDownloaded = false,
+  restart = true,
 ): Promise<void> {
   const safety = updateSafetyBlock();
   if (safety) {
@@ -423,7 +615,7 @@ async function installPrepared(
   let previouslyInert = false;
   try {
     await ensureProgressListener();
-    set({ phase: local ? "verifying" : "downloading" });
+    set({ phase: alreadyDownloaded ? "preparing" : local ? "verifying" : "downloading" });
     const version = await load();
     if (compareVersions(version, expectedVersion) !== 0) {
       throw new Error("The verified update does not match the selected release.");
@@ -448,18 +640,20 @@ async function installPrepared(
     }
     await found.library.checkpoint();
     await invoke("update_prepare", { toVersion: version });
-    previouslyInert = document.body.inert;
-    document.body.inert = true;
-    shellFrozen = true;
+    if (restart) {
+      previouslyInert = document.body.inert;
+      document.body.inert = true;
+      shellFrozen = true;
+    }
     const finalBlock = updateSafetyBlock();
     if (finalBlock) {
       await invoke("update_discard");
       set({ phase: "error", errorCode: finalBlock, errorDetail: "" });
       return;
     }
-    await invoke("update_install", { version });
+    await invoke("update_install", { version, restart });
     handedOff = true;
-    set({ phase: "installed" });
+    set({ phase: restart ? "installed" : "scheduled" });
   } catch (error) {
     await invoke("update_discard").catch(() => {});
     const failure = classifyUpdateFailure(error);
@@ -473,7 +667,9 @@ async function installPrepared(
       if (shellFrozen) {
         document.body.inert = previouslyInert;
       }
-      releaseFence?.();
+      if (!handedOff || !restart) {
+        releaseFence?.();
+      }
     }
   }
 }
