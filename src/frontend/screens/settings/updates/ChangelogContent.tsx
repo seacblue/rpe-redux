@@ -46,6 +46,8 @@ export function ChangelogContent({ onClose }: { onClose(): void }): React.JSX.El
       <div className="redux-changelog-entries">
         {releases.length > 0 ? (
           <ReleaseNotesList releases={releases} currentVersion={state.currentVersion} />
+        ) : state.phase === "checking" ? (
+          <p className="redux-changelog-hint">{t("settings.updates.checking")}</p>
         ) : (
           <p className="redux-changelog-hint">{t("chrome.changelog.empty")}</p>
         )}
