@@ -15,45 +15,45 @@ export type ExpressionScope = Record<string, number>;
 /** A compiled expression. Throws on unknown variables and non-finite results. */
 export type CompiledExpression = (scope: ExpressionScope) => number;
 
-const functions: Record<string, (...values: number[]) => number> = Object.freeze({
-  abs: Math.abs,
-  min: Math.min,
-  max: Math.max,
-  floor: Math.floor,
-  ceil: Math.ceil,
-  round: Math.round,
-  trunc: Math.trunc,
-  sign: Math.sign,
-  sgn: Math.sign,
-  sin: Math.sin,
-  cos: Math.cos,
-  tan: Math.tan,
-  asin: Math.asin,
-  acos: Math.acos,
-  atan: Math.atan,
-  atan2: Math.atan2,
-  arcsin: Math.asin,
-  arccos: Math.acos,
-  arctan: Math.atan,
-  sinh: Math.sinh,
-  cosh: Math.cosh,
-  tanh: Math.tanh,
-  sqrt: Math.sqrt,
-  cbrt: Math.cbrt,
-  pow: Math.pow,
-  hypot: Math.hypot,
-  exp: Math.exp,
-  ln: Math.log,
-  log10: Math.log10,
-  log: (value, base = 10) => Math.log(value) / Math.log(base),
-  mod: (left, right) => left % right,
-  clamp,
-  lerp: (lower: number, upper: number, progress: number) => lower + (upper - lower) * progress,
-  ease: (progress: number, type = 1) => easing(progress, type),
-});
+const functions = new Map<string, (...values: number[]) => number>([
+  ["abs", Math.abs],
+  ["min", Math.min],
+  ["max", Math.max],
+  ["floor", Math.floor],
+  ["ceil", Math.ceil],
+  ["round", Math.round],
+  ["trunc", Math.trunc],
+  ["sign", Math.sign],
+  ["sgn", Math.sign],
+  ["sin", Math.sin],
+  ["cos", Math.cos],
+  ["tan", Math.tan],
+  ["asin", Math.asin],
+  ["acos", Math.acos],
+  ["atan", Math.atan],
+  ["atan2", Math.atan2],
+  ["arcsin", Math.asin],
+  ["arccos", Math.acos],
+  ["arctan", Math.atan],
+  ["sinh", Math.sinh],
+  ["cosh", Math.cosh],
+  ["tanh", Math.tanh],
+  ["sqrt", Math.sqrt],
+  ["cbrt", Math.cbrt],
+  ["pow", Math.pow],
+  ["hypot", Math.hypot],
+  ["exp", Math.exp],
+  ["ln", Math.log],
+  ["log10", Math.log10],
+  ["log", (value, base = 10) => Math.log(value) / Math.log(base)],
+  ["mod", (left, right) => left % right],
+  ["clamp", clamp],
+  ["lerp", (lower: number, upper: number, progress: number) => lower + (upper - lower) * progress],
+  ["ease", (progress: number, type = 1) => easing(progress, type)],
+]);
 
 /** Names exposed by the expression compiler for editor legends. */
-export const BATCH_EXPRESSION_FUNCTION_NAMES = Object.freeze(Object.keys(functions));
+export const BATCH_EXPRESSION_FUNCTION_NAMES = Object.freeze([...functions.keys()]);
 
 /** Constants the expression compiler resolves without a scope entry. */
 export const BATCH_EXPRESSION_CONSTANT_NAMES = Object.freeze([
@@ -149,7 +149,8 @@ export function compileExpression(source: string): CompiledExpression {
     }
     const name = token;
     const keyword = name.toLowerCase();
-    if (tokens[cursor] === "(" && Object.hasOwn(functions, keyword)) {
+    const callable = functions.get(keyword);
+    if (tokens[cursor] === "(" && callable) {
       cursor++;
       const args: CompiledExpression[] = [];
       if (tokens[cursor] !== ")") {
@@ -162,7 +163,7 @@ export function compileExpression(source: string): CompiledExpression {
         } while (true);
       }
       requireToken(")");
-      return (scope) => functions[keyword](...args.map((arg) => arg(scope)));
+      return (scope) => callable(...args.map((arg) => arg(scope)));
     }
     return (scope) => {
       if (keyword === "pi") {
