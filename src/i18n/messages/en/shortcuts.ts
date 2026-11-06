@@ -85,11 +85,6 @@ export default {
   "shortcuts.editor.toggleMultiLine": "Open multi-line editing",
   "shortcuts.editor.switchMultiLineMode": "Switch multi-line notes / events",
 
-  "shortcuts.resetAll": "Restore all defaults",
-  "shortcuts.resetAllConfirm.title": "Restore all shortcuts?",
-  "shortcuts.resetAllConfirm.description":
-    "Every custom binding will be removed and the defaults restored.",
-  "shortcuts.resetAllDone": "Every shortcut is back to its default.",
   "shortcuts.resetCommand": "Restore the default for this shortcut",
   "shortcuts.resetCommandShort": "Reset",
   "shortcuts.addBinding": "Add key",

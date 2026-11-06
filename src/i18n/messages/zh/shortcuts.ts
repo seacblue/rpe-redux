@@ -83,10 +83,6 @@ export default {
   "shortcuts.editor.toggleMultiLine": "打开多线编辑",
   "shortcuts.editor.switchMultiLineMode": "切换多线音符 / 事件",
 
-  "shortcuts.resetAll": "恢复全部默认",
-  "shortcuts.resetAllConfirm.title": "恢复全部快捷键？",
-  "shortcuts.resetAllConfirm.description": "所有自定义绑定都会被移除，并恢复默认绑定。",
-  "shortcuts.resetAllDone": "所有快捷键已恢复默认。",
   "shortcuts.resetCommand": "恢复此快捷键的默认值",
   "shortcuts.resetCommandShort": "恢复默认",
   "shortcuts.addBinding": "添加按键",

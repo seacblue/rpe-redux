@@ -17,7 +17,6 @@ import { Button } from "../../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../../design/components/button/IconButton.tsx";
 import { KeyboardCaptureModal } from "../../../../design/components/modal/KeyboardCaptureModal.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
-import { requestConfirm } from "../../../overlays/modals/prompts.ts";
 import { registerSettingsPage } from "../settingsContributions.ts";
 import { canonicalText, displayText } from "../../../../core/shortcuts/keys.ts";
 import { shortcutRegistry as shortcuts } from "../../../../core/shortcuts/registry.ts";
@@ -413,7 +412,20 @@ export function ShortcutsSettings() {
         commit(transition.commit);
       }
     };
-    const onWindowBlur = () => stopRecording();
+    /**
+     * End capture only when the window itself loses focus.
+     *
+     * A capture-phase `blur` listener also receives the blur of an element
+     * inside the dialog, so pressing Save or Cancel would stop recording before
+     * the click's handler ran and the captured key would be dropped. Element
+     * blurs target the element; only the window's own blur has `window` as its
+     * target.
+     */
+    const onWindowBlur = (event: FocusEvent) => {
+      if (event.target === window) {
+        stopRecording();
+      }
+    };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         stopRecording();
@@ -467,33 +479,6 @@ export function ShortcutsSettings() {
 
   return (
     <div className="redux-setting-group redux-shortcuts">
-      {shortcuts.hasOverrides() && (
-        <div className="redux-footer-bar">
-          <div className="redux-footer-actions">
-            <Button
-              variant="danger"
-              className="redux-shortcut-reset-all"
-              onClick={() => {
-                void requestConfirm({
-                  title: t("shortcuts.resetAllConfirm.title"),
-                  description: t("shortcuts.resetAllConfirm.description"),
-                  label: t("shortcuts.resetAll"),
-                  destructive: true,
-                }).then((accepted) => {
-                  if (!accepted) {
-                    return;
-                  }
-                  shortcuts.resetAll();
-                  stopRecording();
-                  setMessage(t("shortcuts.resetAllDone"));
-                });
-              }}
-            >
-              {t("shortcuts.resetAll")}
-            </Button>
-          </div>
-        </div>
-      )}
       {message && (
         <p className="redux-shortcut-message" role="status">
           {message}

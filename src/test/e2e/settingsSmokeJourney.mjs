@@ -29,6 +29,66 @@ export async function settingsSmoke(runner) {
     );
   }
 
+  // Rebinding through the real pointer path: pressing Save moves focus off the
+  // capture body, and that element blur must not end the recording session
+  // before the click handler writes the new binding.
+  const captured = await runner.evaluate(`(() => {
+    const row = document.querySelector('.redux-shortcut-row');
+    const chip = row?.querySelector('.redux-shortcut-capture');
+    if (!chip) return null;
+    const before = chip.textContent;
+    chip.click();
+    return { command: row.dataset.command, before };
+  })()`);
+  runner.assert(Boolean(captured), "settings has no shortcut binding to capture");
+  await runner.waitFor("shortcut capture open", () =>
+    runner.evaluate("Boolean(document.querySelector('dialog.redux-keyboard-capture[open]'))"),
+  );
+  const key = { key: "F9", code: "F9", windowsVirtualKeyCode: 120, nativeVirtualKeyCode: 120 };
+  await runner.command("Input.dispatchKeyEvent", { type: "keyDown", ...key });
+  await runner.command("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+  const savePoint = await runner.evaluate(`(() => {
+    const button = [
+      ...document.querySelectorAll('dialog.redux-keyboard-capture[open] .modal-actions button'),
+    ].at(-1);
+    if (!button) return null;
+    const box = button.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  })()`);
+  runner.assert(Boolean(savePoint), "shortcut capture dialog has no Save button");
+  await runner.command("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: savePoint.x,
+    y: savePoint.y,
+  });
+  await runner.command("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: savePoint.x,
+    y: savePoint.y,
+    button: "left",
+    buttons: 1,
+    clickCount: 1,
+  });
+  await runner.command("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: savePoint.x,
+    y: savePoint.y,
+    button: "left",
+    buttons: 0,
+    clickCount: 1,
+  });
+  await runner.waitFor("shortcut capture closed", () =>
+    runner.evaluate("!document.querySelector('dialog.redux-keyboard-capture[open]')"),
+  );
+  const bindingWritten = await runner.evaluate(`(() => {
+    const row = document.querySelector('.redux-shortcut-row[data-command=${JSON.stringify(captured.command)}]');
+    return row?.querySelector('.redux-shortcut-capture')?.textContent ?? '';
+  })()`);
+  runner.assert(
+    bindingWritten !== captured.before,
+    `saving a shortcut with a pointer click did not write the binding (still ${JSON.stringify(bindingWritten)})`,
+  );
+
   const target = await runner.evaluate(`(() => {
     const sections = new Set(
       [...document.querySelectorAll('[data-settings-section]')]
