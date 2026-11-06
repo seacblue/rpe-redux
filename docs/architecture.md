@@ -223,9 +223,10 @@ handles it receives.
 - Media and audio: `core/media/` decodes music once for playback and analysis,
   with a media element as the fallback. When pitch preservation is enabled,
   the worklet copies decoded PCM at 1× and uses WSOLA at other speeds. Both
-  paths share the worklet clock and restart crossfade. The editor routes music
-  and hit sounds through one background gain; the home library owns its
-  cross-fading preview player.
+  paths share the worklet clock and restart crossfade. Slow playback aligns
+  detected attacks to source time and fades displaced copies into nearby audio.
+  The editor routes music and hit sounds through one background gain. The home
+  library owns its cross-fading preview player.
   Window focus applies the Audio setting's background multiplier through
   audio-thread gain ramps, and an editor worker keeps hit-sound scheduling alive
   while the window is in the background. `core/media/beatDetection.ts` owns fixed-tempo

@@ -40,9 +40,9 @@ export interface TimeStretchOptions {
   rate: number;
   positionSeconds: number;
   /**
-   * Input frames of strong onsets, as returned by `detectTransients`. When
-   * present, duplicate attacks from successive grains are replaced by their
-   * own decay so an onset is heard once.
+   * Input frames of strong onsets in ascending order, as returned by
+   * `detectTransients`. Grains place these attacks on the output clock and
+   * replace displaced copies with surrounding audio.
    */
   transients?: ArrayLike<number>;
 }
@@ -149,9 +149,9 @@ export class TimeStretch {
   private readonly fadeOut: Float32Array;
   private readonly correlationWindow: Float32Array;
   private readonly transients: ArrayLike<number>;
-  private readonly transientKept: Uint8Array;
-  private readonly transientKeptAt: Float64Array;
+  private readonly transientReplacementOffsets: Int32Array;
   private readonly suppressionPositions = new Float64Array(MAX_SUPPRESSIONS);
+  private readonly suppressionOffsets = new Int32Array(MAX_SUPPRESSIONS);
   private readonly suppressionLength: number;
   private readonly suppressionPre: number;
   private readonly ready: Float32Array[];
@@ -160,11 +160,9 @@ export class TimeStretch {
   private readonly tailFadeFrames: number;
 
   private inputPosition: number;
-  private previousMidStart = -1;
   private lastSearchCorrelation = 0;
   private probeLong = 0;
   private probeOverlap = 0;
-  private transientCursor = 0;
   private suppressionCount = 0;
   private generatedFrames = 0;
   private skipFraction = 0;
@@ -207,13 +205,12 @@ export class TimeStretch {
         ? 0
         : Math.min(this.targetFrames, Math.max(1, Math.round((sampleRate * TAIL_FADE_MS) / 1000)));
     this.transients = this.rate === 1 ? [] : (transients ?? []);
-    this.transientKept = new Uint8Array(this.transients.length);
-    this.transientKeptAt = new Float64Array(this.transients.length);
+    this.transientReplacementOffsets = new Int32Array(this.transients.length);
     this.suppressionLength = Math.max(2, Math.floor(this.batchLength * 0.45));
     this.suppressionPre = Math.max(1, Math.floor(this.suppressionLength / 2));
 
     this.inputPosition = this.startFrame;
-    this.midBuffers = channels.map(() => new Float32Array(this.overlapLength));
+    this.midBuffers = channels.map(() => new Float32Array(this.referenceLength));
     this.fadeIn = new Float32Array(this.overlapLength);
     this.fadeOut = new Float32Array(this.overlapLength);
     const fadeDenominator = Math.max(1, this.overlapLength - 1);
@@ -320,36 +317,25 @@ export class TimeStretch {
     if (this.finished) {
       return;
     }
-    const position = this.inputPosition;
-    const offset = this.firstBatch ? 0 : this.seekBestOffset(position);
     const batchStart = this.generatedFrames;
-    let base = position + offset;
-    let correlation = this.firstBatch ? 1 : this.lastSearchCorrelation;
+    let base = this.inputPosition;
+    let correlation = 1;
     if (!this.firstBatch) {
-      const keepWindow = Math.min(this.nominalSkip * 2, this.batchLength * 0.55);
-      for (let index = this.transientCursor; index < this.transients.length; index += 1) {
-        if (this.transientKept[index] !== 0) {
-          continue;
-        }
-        const transient = this.transients[index];
-        if (transient > this.inputPosition + this.batchLength) {
-          break;
-        }
-        const due =
-          this.inputPosition >= transient - keepWindow ||
-          this.inputPosition + this.nominalSkip >= transient;
-        if (!due || transient < this.inputPosition - this.batchLength) {
-          continue;
-        }
-        // Place the kept attack at the start of the body, clear of the
-        // crossfade, so it keeps its full amplitude instead of being faded
-        // into the previous grain.
-        base = Math.max(0, transient - this.overlapLength);
+      // Leave enough source frames for the remaining output at the tail.
+      const remaining = Math.min(
+        this.batchLength + this.referenceLength,
+        this.targetFrames - batchStart,
+      );
+      const lastBase = Math.max(this.startFrame, this.length - remaining);
+      const aligned = this.alignedBase(batchStart);
+      if (aligned === null) {
+        const position = Math.min(base, lastBase);
+        base = position + this.seekBestOffset(position, lastBase);
+        correlation = this.lastSearchCorrelation;
+      } else {
+        base = aligned;
         this.probe(base);
         correlation = this.probeOverlap;
-        this.transientKept[index] = 1;
-        this.transientKeptAt[index] = batchStart + (transient - base);
-        break;
       }
     }
     const overlap = this.overlapLength;
@@ -373,15 +359,16 @@ export class TimeStretch {
           index += 1;
         }
       } else {
-        const rho = clamp(correlation, -1, 1);
+        const rho = clamp(correlation, 0, 1);
         for (let sample = 0; sample < overlap; sample += 1) {
           const fadeIn = this.fadeIn[sample];
           const fadeOut = this.fadeOut[sample];
           // Raised-cosine windows with a power normalization: correlated
           // joins stay at unity gain, uncorrelated joins avoid the mid-fade
-          // level dip of a plain linear crossfade.
+          // level dip of a plain linear crossfade. Negative correlations use
+          // the same bounded gain as uncorrelated joins.
           const power = fadeIn * fadeIn + fadeOut * fadeOut + 2 * rho * fadeIn * fadeOut;
-          const gain = power > 1e-12 ? 1 / Math.sqrt(power) : 1;
+          const gain = 1 / Math.sqrt(power);
           const mixed =
             (this.renderSample(source, base + sample, batchStart + sample) * fadeIn +
               mid[sample] * fadeOut) *
@@ -398,7 +385,7 @@ export class TimeStretch {
         );
         index += 1;
       }
-      for (let sample = 0; sample < overlap; sample += 1) {
+      for (let sample = 0; sample < this.referenceLength; sample += 1) {
         mid[sample] = this.renderSample(
           source,
           base + overlap + body + sample,
@@ -407,7 +394,6 @@ export class TimeStretch {
       }
     }
 
-    this.previousMidStart = base + overlap + body;
     this.readyWrite = (write + this.batchLength) % capacity;
     this.readyCount += this.batchLength;
     this.generatedFrames += this.batchLength;
@@ -432,14 +418,14 @@ export class TimeStretch {
    * step keeps the search cheap; the small center bias discourages pulling the
    * join to the window edge on ambiguous material.
    */
-  private seekBestOffset(position: number): number {
+  private seekBestOffset(position: number, lastBase: number): number {
     const seekLength = this.seekLength;
     let bestOffset = 0;
     let bestScore = -Infinity;
     let bestCorrelation = 0;
     const step = Math.max(1, Math.floor(seekLength / 10));
     for (let candidate = -seekLength; candidate <= seekLength; candidate += step) {
-      if (position + candidate < 0) {
+      if (position + candidate < this.startFrame || position + candidate > lastBase) {
         continue;
       }
       const score = this.probe(position + candidate);
@@ -461,7 +447,7 @@ export class TimeStretch {
     while (refinementStep >= 1) {
       for (let direction = -1; direction <= 1; direction += 2) {
         const candidate = bestOffset + direction * refinementStep;
-        if (position + candidate < 0) {
+        if (position + candidate < this.startFrame || position + candidate > lastBase) {
           continue;
         }
         const score = this.probe(position + candidate);
@@ -489,12 +475,6 @@ export class TimeStretch {
    * what the crossfade will mix.
    */
   private probe(position: number): number {
-    const referenceStart = this.previousMidStart;
-    if (referenceStart < 0) {
-      this.probeLong = 0;
-      this.probeOverlap = 0;
-      return 0;
-    }
     const overlap = this.overlapLength;
     let correlation = 0;
     let referenceEnergy = 0;
@@ -504,9 +484,10 @@ export class TimeStretch {
     let overlapCandidateEnergy = 0;
     for (let channel = 0; channel < this.channelCount; channel += 1) {
       const source = this.channels[channel];
+      const mid = this.midBuffers[channel];
       for (let sample = 0; sample < this.referenceLength; sample += 1) {
         const window = this.correlationWindow[sample];
-        const reference = this.read(source, referenceStart + sample) * window;
+        const reference = mid[sample] * window;
         const candidate = this.read(source, position + sample) * window;
         const product = reference * candidate;
         correlation += product;
@@ -529,46 +510,114 @@ export class TimeStretch {
   }
 
   /**
-   * Decide which copies of an onset belong to the output and which are early
-   * or late repeats. The first body copy within roughly two grains of the
-   * expected output time keeps its attack; other copies are replaced by their
-   * own decay so the onset is heard once instead of as a stutter.
+   * Find the first onset at or after an input frame. Each grain searches its
+   * own input range because correlation can move a grain backward.
    */
+  private firstTransientAt(frame: number): number {
+    let low = 0;
+    let high = this.transients.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (this.transients[middle] < frame) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
+  /** Translate an input onset to its frame on the output clock. */
+  private transientOutputFrame(transient: number): number {
+    return Math.round((transient - this.startFrame) / this.rate);
+  }
+
+  /** Align the next onset when it fits in this grain or the overlap it saves. */
+  private alignedBase(batchStart: number): number | null {
+    const index = this.firstTransientAt(this.startFrame + (batchStart - 0.5) * this.rate);
+    if (index === this.transients.length) {
+      return null;
+    }
+    const transient = this.transients[index];
+    const target = this.transientOutputFrame(transient);
+    const base = transient - (target - batchStart);
+    return target < batchStart + this.batchLength + this.overlapLength && base >= this.startFrame
+      ? base
+      : null;
+  }
+
+  /** Replace onset copies that would play away from their intended output frame. */
   private prepareSuppressions(base: number, batchStart: number): void {
     this.suppressionCount = 0;
     const transients = this.transients;
-    while (this.transientCursor < transients.length) {
-      const transient = transients[this.transientCursor];
-      if (
-        transient >= base ||
-        (this.transientKept[this.transientCursor] === 0 &&
-          transient >= this.inputPosition - this.batchLength)
-      ) {
-        break;
-      }
-      this.transientCursor += 1;
-    }
-    const emittedEnd = base + this.batchLength + this.overlapLength;
-    for (let index = this.transientCursor; index < transients.length; index += 1) {
+    const emittedEnd = base + this.batchLength + this.referenceLength;
+    for (
+      let index = this.firstTransientAt(base - (this.suppressionLength - this.suppressionPre));
+      index < transients.length && this.suppressionCount < MAX_SUPPRESSIONS;
+      index += 1
+    ) {
       const transient = transients[index];
       if (transient >= emittedEnd) {
         break;
       }
       const outputPosition = batchStart + (transient - base);
+      const target = this.transientOutputFrame(transient);
+      // The first grain starts at the requested seek frame and can play an
+      // imminent attack directly before later grains take over its timing.
       if (
-        this.transientKept[index] !== 0 &&
-        Math.abs(outputPosition - this.transientKeptAt[index]) <= 1
+        outputPosition === target ||
+        (this.firstBatch && target >= 0 && target < this.batchLength)
       ) {
         continue;
       }
-      if (this.suppressionCount < MAX_SUPPRESSIONS) {
-        this.suppressionPositions[this.suppressionCount] = outputPosition;
-        this.suppressionCount += 1;
-      }
+      this.suppressionPositions[this.suppressionCount] = outputPosition;
+      this.suppressionOffsets[this.suppressionCount] = this.replacementOffset(index);
+      this.suppressionCount += 1;
     }
   }
 
-  /** Read one source sample, replacing suppressed onset copies with their decay. */
+  /** Find a nearby continuation in phase with the lead-in to a displaced onset. */
+  private replacementOffset(onset: number): number {
+    const cached = this.transientReplacementOffsets[onset];
+    if (cached) {
+      return cached;
+    }
+    const start = this.transients[onset] - this.suppressionPre;
+    const referenceFrames = Math.max(8, Math.floor(this.overlapLength / 3));
+    const first = this.suppressionLength + referenceFrames;
+    const next = this.transients[onset + 1];
+    const nextStart = next === undefined ? this.length : next - this.suppressionPre;
+    const last = Math.min(first + this.overlapLength, nextStart - start - this.suppressionLength);
+    const previous = this.transients[onset - 1] ?? -this.suppressionLength;
+    const previousEnd = Math.max(this.startFrame, previous + this.suppressionLength);
+    const previousRoom = start - previousEnd;
+    // Use the earlier clean region when the onset has no usable decay ahead.
+    let best =
+      last < this.suppressionPre && previousRoom >= this.suppressionLength
+        ? -this.suppressionLength
+        : Math.max(1, Math.min(first, last));
+    let bestScore = -Infinity;
+    for (let offset = first; offset <= last; offset += 4) {
+      let dot = 0;
+      let power = 0;
+      for (const source of this.channels) {
+        for (let frame = start - referenceFrames; frame < start; frame += 4) {
+          const sample = this.read(source, frame + offset);
+          dot += this.read(source, frame) * sample;
+          power += sample * sample;
+        }
+      }
+      const score = power > 1e-12 ? dot / Math.sqrt(power) : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        best = offset;
+      }
+    }
+    this.transientReplacementOffsets[onset] = best;
+    return best;
+  }
+
+  /** Read one source sample, fading displaced onset copies into surrounding audio. */
   private renderSample(source: Float32Array, index: number, outputPosition: number): number {
     const value = this.read(source, index);
     for (let position = 0; position < this.suppressionCount; position += 1) {
@@ -579,7 +628,7 @@ export class TimeStretch {
       }
       const mix = Math.sin((Math.PI * (outputPosition - start)) / this.suppressionLength);
       const weight = mix * mix;
-      const shifted = this.read(source, index + this.suppressionLength);
+      const shifted = this.read(source, index + this.suppressionOffsets[position]);
       return value * (1 - weight) + shifted * weight;
     }
     return value;

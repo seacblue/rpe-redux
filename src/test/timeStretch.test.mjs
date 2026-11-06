@@ -457,6 +457,70 @@ test("transient copies are replaced by a single attack", () => {
   }
 });
 
+test("slow playback keeps successive attacks on time and the tone between them steady", () => {
+  const input = Float32Array.from(
+    { length: SAMPLE_RATE * 4 },
+    (_, index) => 0.1 * Math.sin((2 * Math.PI * 440 * index) / SAMPLE_RATE),
+  );
+  const attacks = Array.from({ length: 9 }, (_, index) =>
+    Math.round((0.37 + index * 0.4) * SAMPLE_RATE),
+  );
+  for (const attack of attacks) {
+    for (let index = 0; index < 300; index += 1) {
+      const time = index / SAMPLE_RATE;
+      input[attack + index] += 0.82 * Math.exp(-time * 1000) * Math.cos(2 * Math.PI * 6500 * time);
+    }
+  }
+  const transients = detectTransients([input], SAMPLE_RATE);
+  assert.equal(transients.length, attacks.length);
+  for (const rate of [...RATES, 0.67]) {
+    const stretch = new TimeStretch({
+      channels: [input],
+      sampleRate: SAMPLE_RATE,
+      rate,
+      positionSeconds: 0,
+      transients,
+    });
+    const [output] = renderChannels(stretch, 4 / rate, 1);
+    const peaks = [];
+    let lastAttack = -Infinity;
+    for (let index = 1; index < output.length; index += 1) {
+      const edge = Math.abs(output[index] - output[index - 1]);
+      if (edge < 0.55) {
+        continue;
+      }
+      if (index - lastAttack > SAMPLE_RATE * 0.008) {
+        peaks.push({ index, edge });
+      } else if (edge > peaks.at(-1).edge) {
+        peaks[peaks.length - 1] = { index, edge };
+      }
+      lastAttack = index;
+    }
+    assert.equal(peaks.length, attacks.length, `rate ${rate} produced ${peaks.length} attacks`);
+    for (let index = 0; index < attacks.length; index += 1) {
+      const driftMs = (1000 * (peaks[index].index - attacks[index] / rate)) / SAMPLE_RATE;
+      assert.ok(Math.abs(driftMs) <= 5, `rate ${rate} attack ${index} drifted ${driftMs} ms`);
+    }
+    const windowFrames = SAMPLE_RATE * 0.01;
+    const margin = SAMPLE_RATE * 0.1;
+    for (
+      let start = margin;
+      start + windowFrames < output.length - margin;
+      start += windowFrames / 2
+    ) {
+      if (attacks.some((attack) => Math.abs(start - attack / rate) < SAMPLE_RATE * 0.05)) {
+        continue;
+      }
+      let energy = 0;
+      for (let frame = start; frame < start + windowFrames; frame += 1) {
+        energy += output[frame] ** 2;
+      }
+      const rms = Math.sqrt(energy / windowFrames);
+      assert.ok(rms > 0.058 && rms < 0.09, `rate ${rate} changed the sustained tone to RMS ${rms}`);
+    }
+  }
+});
+
 test("one 128-frame quantum stays inside the realtime budget", () => {
   const input = new Float32Array(SAMPLE_RATE * 2);
   for (let index = 0; index < input.length; index += 1) {
