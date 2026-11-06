@@ -3120,7 +3120,7 @@ dependencies = [
 name = "rpe-redux"
 version = "1.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "mime_guess",
  "minisign-verify",
  "notify",
