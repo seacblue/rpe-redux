@@ -28,6 +28,16 @@ export interface TimelinePanelLayout {
   gapMinimum?: number;
 }
 
+/** The authored note size represents a timeline occupying half the workspace. */
+export const TIMELINE_NOTE_REFERENCE_RATIO = 0.5;
+
+/** Scale an authored note size by the timeline width relative to its 50% reference. */
+export function noteScaleForTimelineRatio(noteScale: number, timelineRatio: number): number {
+  const safeScale = Number.isFinite(noteScale) ? Math.max(0, noteScale) : 0;
+  const safeRatio = Number.isFinite(timelineRatio) ? Math.max(0, timelineRatio) : 0;
+  return (safeScale * safeRatio) / TIMELINE_NOTE_REFERENCE_RATIO;
+}
+
 /** Width of one panel, configured or fitted to the visible viewport. */
 export function panelWidth(width: number, layout: TimelinePanelLayout): number {
   const safeWidth = Math.max(0, Number(width) || 0);

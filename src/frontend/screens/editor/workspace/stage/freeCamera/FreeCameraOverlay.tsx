@@ -7,11 +7,13 @@
  * that view inside the fixed preview clip; only the camera state lives here.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { IconButton } from "../../../../../../design/components/button/IconButton.tsx";
 import { Input } from "../../../../../../design/components/input/Input.tsx";
 import { useTranslation } from "../../../../../../i18n/react.ts";
 import {
   freeCameraState,
   isFreeCameraDragButton,
+  resetFreeCamera,
   setFreeCameraView,
   wheelZoomDelta,
   zoomFreeCameraAt,
@@ -237,6 +239,13 @@ export function FreeCameraOverlay({ allowDragging = true }: FreeCameraOverlayPro
             }}
           />
         </label>
+        <IconButton
+          className="free-camera-reset"
+          icon="refresh"
+          size="small"
+          label={t("chrome.toolbar.freeCameraReset")}
+          onClick={resetFreeCamera}
+        />
       </div>
     </div>
   );

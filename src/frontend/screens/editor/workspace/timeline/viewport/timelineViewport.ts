@@ -11,6 +11,10 @@ import type {
   TimelinePanelLayout,
   TimelineScale,
 } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
+import {
+  noteScaleForTimelineRatio,
+  TIMELINE_NOTE_REFERENCE_RATIO,
+} from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type {
   MultiLineScroll,
   MultiLineZoom,
@@ -27,6 +31,7 @@ import { multiLineScale } from "../multiLine/multiLinePresentation.ts";
 type ViewportSettings = Pick<
   ReturnType<typeof readEditorDisplaySettings>["timeline"],
   | "cameraX"
+  | "exclusiveRatio"
   | "gridCount"
   | "scale"
   | "division"
@@ -48,6 +53,7 @@ export class TimelineViewport {
   snapX = true;
   gridCount = 11;
   originalPanelWidth = 0;
+  exclusiveRatio = 0.75;
   multiLineEventWindowCount = 3;
   multiLineZoom: MultiLineZoom = { notes: 1, events: 1 };
   multiLineScroll: number | MultiLineScroll = { notes: 0, events: 0 };
@@ -133,6 +139,7 @@ export class TimelineViewport {
   apply(config: ViewportSettings): void {
     const {
       cameraX,
+      exclusiveRatio,
       gridCount,
       scale,
       division,
@@ -143,6 +150,7 @@ export class TimelineViewport {
     } = config;
     Object.assign(this, {
       cameraX,
+      exclusiveRatio,
       gridCount,
       scale,
       division,
@@ -237,19 +245,16 @@ export class TimelineViewport {
     return minimum === -Infinity ? 0 : minimum;
   }
 
-  /** Note scale adapted to the width the note field actually owns. */
+  /** Note scale adapted to the timeline width, with 50% as the authored reference. */
   get renderNoteScale(): number {
-    const canvasWidth = this.notesCanvas.clientWidth;
-    const width = this.panelWidth(canvasWidth, "notes");
-    // Note width is authored for the split layout, where the note field owns
-    // roughly half the stage. When the event field is hidden the same field
-    // owns the whole stage, so its notes (and hit boxes) must grow with it:
-    // exactly 2× at the same workspace width. Using the live canvas width keeps
-    // the ratio correct across region toggles and resizes; `originalPanelWidth`
-    // only records the last measured split width for diagnostics/cache keys.
+    const session = this.getSession();
     const eventsVisible = this.eventsCanvas.clientWidth > 0;
-    const baseWidth = eventsVisible ? canvasWidth : canvasWidth / 2;
-    return this.noteScale * (width / Math.max(1, baseWidth));
+    const timelineRatio = eventsVisible
+      ? TIMELINE_NOTE_REFERENCE_RATIO
+      : session.multiLineActive && session.multiLineMode === "notes" && !session.multiLineMerge
+        ? 1
+        : this.exclusiveRatio;
+    return noteScaleForTimelineRatio(this.noteScale, timelineRatio);
   }
 
   /**
