@@ -6,30 +6,28 @@ import { clamp01 } from "../../core/utils/numbers.ts";
 export function bindBackgroundVolume(apply: (multiplier: number) => void): () => void {
   const currentDocument = document;
   const currentWindow = window;
-  let focused = currentDocument.hasFocus();
   const update = () => {
     const value = Number(
       values.byId.has("background-volume") ? values.byId.get<unknown>("background-volume") : 0.4,
     );
-    apply(currentDocument.hidden || !focused ? (Number.isFinite(value) ? clamp01(value) : 0.4) : 1);
+    // A range drag focuses the input without dispatching `window.focus`. Read
+    // the live document state for every setting update so that slider changes
+    // cannot apply the background multiplier to a foreground window.
+    const foreground = !currentDocument.hidden && currentDocument.hasFocus();
+    apply(foreground ? 1 : Number.isFinite(value) ? clamp01(value) : 0.4);
   };
   const focus = () => {
-    focused = true;
     update();
   };
   const blur = () => {
-    focused = false;
     update();
   };
   const visibility = () => {
     // Webviews can dispatch `visibilitychange` before the native focus state
-    // catches up. Treat a visible document as foreground immediately, then
-    // re-check on the next turn so returning from another window always ramps
-    // back to full volume.
-    focused = !currentDocument.hidden;
+    // catches up. Re-read the state once now and once on the next turn so
+    // returning from another window always converges to the live answer.
     update();
     queueMicrotask(() => {
-      focused = currentDocument.hasFocus() || !currentDocument.hidden;
       update();
     });
   };
