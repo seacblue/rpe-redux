@@ -375,7 +375,7 @@ fn migrate_legacy_manifest(root: &Path, manifest_path: &Path, database: &Path) -
             if entry.is_dir() {
                 continue;
             }
-            let name = entry.name().to_owned();
+            let name = entry.name().map_err(error)?.into_owned();
             let mut bytes = Vec::new();
             entry.read_to_end(&mut bytes).map_err(error)?;
             if name == chart_entry {

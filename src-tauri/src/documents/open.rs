@@ -2,10 +2,11 @@
 //! and streams large charts to the frontend in line batches.
 
 use super::{
-    document, error, load_external_grants, read_entry_limited, read_file_limited,
-    rejected_reference_names, resolve_reference, resolve_references, store_external_grants, watch,
-    zip_name, Document, DocumentHost, Entry, ExternalResources, LoadProgress, Opened, Result,
-    MAX_CHART_BYTES, MAX_RESOURCE_BYTES, MAX_RESOURCE_TOTAL_BYTES, MAX_SIDECAR_BYTES,
+    archive_has_entry, document, error, load_external_grants, read_entry_limited,
+    read_file_limited, rejected_reference_names, resolve_reference, resolve_references,
+    store_external_grants, watch, zip_name, Document, DocumentHost, Entry, ExternalResources,
+    LoadProgress, Opened, Result, MAX_CHART_BYTES, MAX_RESOURCE_BYTES, MAX_RESOURCE_TOTAL_BYTES,
+    MAX_SIDECAR_BYTES,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -122,7 +123,7 @@ pub(crate) fn read_pez_progress<R: Read + Seek>(
     progress(0, count);
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(error)?;
-        let name = file.name().to_owned();
+        let name = file.name().map_err(error)?.into_owned();
         zip_name(&name)?;
         if !names.insert(name.clone()) {
             return Err("PEZ contains duplicate paths.".into());
@@ -476,14 +477,11 @@ pub(crate) fn resource_bytes(doc: &Document, name: &str) -> Result<Vec<u8>> {
             .resources
             .get(name)
             .map(|p| p.to_string_lossy().replace('\\', "/"));
-        let selected =
-            if let Some(alias) = alias.filter(|alias| archive.file_names().any(|n| n == alias)) {
-                alias
-            } else if archive.file_names().any(|n| n == relative) {
-                relative
-            } else {
-                name.to_owned()
-            };
+        let selected = match alias {
+            Some(alias) if archive_has_entry(&archive, &alias)? => alias,
+            _ if archive_has_entry(&archive, &relative)? => relative,
+            _ => name.to_owned(),
+        };
         let mut file = archive.by_name(&selected).map_err(error)?;
         let declared = file.size();
         let bytes = read_entry_limited(

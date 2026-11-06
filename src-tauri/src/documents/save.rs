@@ -1038,27 +1038,27 @@ pub(crate) fn write_document(
                     ZipArchive::new(File::open(&d.path).map_err(error)?).map_err(error)?;
                 for i in 0..archive.len() {
                     let file = archive.by_index(i).map_err(error)?;
-                    save_zip_name(file.name())?;
+                    let name = file.name().map_err(error)?.into_owned();
+                    save_zip_name(&name)?;
                     if !file.is_dir()
-                        && file.name() != d.chart_name
+                        && name != d.chart_name
                         && !overwrite_root
-                        && root.join(file.name()).exists()
+                        && root.join(&name).exists()
                     {
-                        return Err(
-                            format!("asset_export_destination_exists:{}", file.name()).into()
-                        );
+                        return Err(format!("asset_export_destination_exists:{}", name).into());
                     }
                 }
                 for i in 0..archive.len() {
                     let mut file = archive.by_index(i).map_err(error)?;
+                    let name = file.name().map_err(error)?.into_owned();
                     if file.is_dir()
-                        || file.name() == d.chart_name
-                        || removed.iter().any(|name| name == file.name())
+                        || name == d.chart_name
+                        || removed.iter().any(|removed_name| removed_name == &name)
                     {
                         continue;
                     }
-                    save_zip_name(file.name())?;
-                    let output = root.join(file.name());
+                    save_zip_name(&name)?;
+                    let output = root.join(&name);
                     if let Some(parent) = output.parent() {
                         fs::create_dir_all(parent).map_err(error)?;
                     }
@@ -1071,7 +1071,7 @@ pub(crate) fn write_document(
                     }
                     let mut bytes = Vec::new();
                     file.read_to_end(&mut bytes).map_err(error)?;
-                    if let Some(update) = assets.read(file.name())? {
+                    if let Some(update) = assets.read(&name)? {
                         bytes = update;
                     }
                     stage_directory_file(&mut directory_files, output, bytes);
@@ -1161,7 +1161,7 @@ pub(crate) fn write_document(
                     ZipArchive::new(File::open(&d.path).map_err(error)?).map_err(error)?;
                 for i in 0..archive.len() {
                     let mut file = archive.by_index(i).map_err(error)?;
-                    let name = file.name().to_owned();
+                    let name = file.name().map_err(error)?.into_owned();
                     if file.is_dir()
                         || name == chart_name
                         || name == d.chart_name

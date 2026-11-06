@@ -325,7 +325,8 @@ fn stage_database_import_inner(archive: &mut ZipArchive<File>, root: &Path) -> R
         if entry.is_dir() {
             continue;
         }
-        let Some(relative) = entry_relative(entry.name()) else {
+        let name = entry.name().map_err(error)?;
+        let Some(relative) = entry_relative(&name) else {
             continue;
         };
         if part_of(&relative) != Some("database") {
@@ -961,7 +962,8 @@ fn import_bundle(
         if entry.is_dir() {
             continue;
         }
-        let Some(relative) = entry_relative(entry.name()) else {
+        let name = entry.name().map_err(error)?;
+        let Some(relative) = entry_relative(&name) else {
             continue;
         };
         let Some(part) = part_of(&relative) else {
@@ -971,7 +973,7 @@ fn import_bundle(
             continue;
         }
         if !external_paths.insert(relative.clone()) {
-            return Err(format!("backup_resource_conflict:{}", entry.name()));
+            return Err(format!("backup_resource_conflict:{}", name));
         }
         external_restore_target(deployment, &relative)?;
     }
@@ -1025,7 +1027,8 @@ fn restore_archive_parts(
         if entry.is_dir() {
             continue;
         }
-        let Some(relative) = entry_relative(entry.name()) else {
+        let name = entry.name().map_err(error)?.into_owned();
+        let Some(relative) = entry_relative(&name) else {
             continue;
         };
         let Some(part) = part_of(&relative) else {
@@ -1034,7 +1037,7 @@ fn restore_archive_parts(
         if !chosen.contains(&part) || part == "database" {
             continue;
         }
-        let label = entry.name().to_owned();
+        let label = name;
         let bytes = read_limited(&mut entry, MAX_BACKUP_FILE_BYTES, &label)?;
         // Themes live in the deployment root, not in the data root; the bundle
         // still stores them under the shared `user-data/themes` prefix.

@@ -10,11 +10,12 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, File},
-    io::{Read, Write},
+    io::{Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Mutex,
 };
 use tauri::{ipc::Request, AppHandle, State};
+use zip::ZipArchive;
 
 mod library;
 mod media;
@@ -458,6 +459,23 @@ pub(crate) fn zip_name(name: &str) -> Result<()> {
         return Err("Unsafe PEZ resource path.".into());
     }
     Ok(())
+}
+
+/// Whether a zip archive contains an entry whose decoded name equals `target`.
+///
+/// Entry names are decoded from their raw bytes as UTF-8. A name that cannot be
+/// decoded fails the lookup instead of being silently skipped, so a malformed
+/// archive cannot hide an entry from the caller.
+pub(crate) fn archive_has_entry<R: Read + Seek>(
+    archive: &ZipArchive<R>,
+    target: &str,
+) -> Result<bool> {
+    for name in archive.file_names() {
+        if name.map_err(error)? == target {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// External resource targets explicitly granted for one document.

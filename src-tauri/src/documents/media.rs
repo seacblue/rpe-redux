@@ -2,8 +2,8 @@
 //! requests so audio seeking works without materialising whole files.
 
 use super::{
-    document, error, zip_name, Document, DocumentHost, Result, MAX_MEDIA_RESPONSE_BYTES,
-    MAX_RESOURCE_BYTES,
+    archive_has_entry, document, error, zip_name, Document, DocumentHost, Result,
+    MAX_MEDIA_RESPONSE_BYTES, MAX_RESOURCE_BYTES,
 };
 use std::{
     fs::File,
@@ -97,15 +97,11 @@ pub(super) fn serve_media(
             .resources
             .get(name)
             .map(|p| p.to_string_lossy().replace('\\', "/"));
-        let selected = alias
-            .filter(|alias| archive.file_names().any(|n| n == alias))
-            .unwrap_or_else(|| {
-                if archive.file_names().any(|n| n == relative) {
-                    relative
-                } else {
-                    name.to_owned()
-                }
-            });
+        let selected = match alias {
+            Some(alias) if archive_has_entry(&archive, &alias)? => alias,
+            _ if archive_has_entry(&archive, &relative)? => relative,
+            _ => name.to_owned(),
+        };
         let mut entry = archive.by_name(&selected).map_err(error)?;
         let total = entry.size();
         if total > MAX_RESOURCE_BYTES {
