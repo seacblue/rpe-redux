@@ -13,37 +13,6 @@ import type { NoteEntry } from "../../../../../../core/global/chart/runtime/scen
 /** Seconds between repeated hold-hit pulses. */
 export const HOLD_HIT_INTERVAL = 20 / 120;
 
-/** Frames at the tail of a hit animation that fade the skin frame and pull it inward. */
-export const HIT_FADE_FRAMES = 16;
-/** Fraction of the sprite size the tail collapse removes (0.5 keeps half). */
-export const HIT_COLLAPSE = 0.5;
-
-/** How far the skin frame is faded and shrunk at one animation frame. */
-export interface HitEffectPose {
-  /** Size multiplier applied to the skin frame. */
-  scale: number;
-  /** Opacity multiplier applied to the skin frame. */
-  alpha: number;
-}
-
-/**
- * Pose of the skin's hit animation: still, then a fading inward collapse.
- *
- * The skin frames already animate the diamond outwards; the last half of the
- * animation is where it has finished expanding, so the preview fades it out
- * while pulling it halfway back in. Earlier frames keep the sprite untouched.
- */
-export function hitEffectPose(frame: number, frameCount: number): HitEffectPose {
-  const count = Math.max(0, Math.floor(frameCount));
-  const tail = Math.min(HIT_FADE_FRAMES, count);
-  const first = count - tail + 1;
-  if (tail === 0 || frame < first) {
-    return { scale: 1, alpha: 1 };
-  }
-  const progress = Math.min(1, Math.max(0, (frame - first + 1) / tail));
-  return { scale: 1 - HIT_COLLAPSE * progress, alpha: 1 - progress };
-}
-
 /** The slice of `LineRuntime` the hit feed reads. */
 export interface HitRuntime {
   hitTimes: NoteEntry[];

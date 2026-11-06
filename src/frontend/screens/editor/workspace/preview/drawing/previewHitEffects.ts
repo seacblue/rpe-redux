@@ -3,7 +3,7 @@
  * Hit timing and particle state come from the sibling `hitEffects` and
  * `hitParticles` readers; this module owns only the canvas pass.
  */
-import { hitEffectPose, recentHitsInto, type Hit } from "./hitEffects.ts";
+import { recentHitsInto, type Hit } from "./hitEffects.ts";
 import { hitParticlesInto, type HitParticle } from "./hitParticles.ts";
 import {
   HIT_DURATION,
@@ -102,13 +102,8 @@ export function drawHitEffects(
         originY + (-state.y + position.x * Math.sin(angle) - position.y * Math.cos(angle)) * scaleY;
       // The skin supplies its own animation; the burst stays correct without one.
       if (picture && effectFrame !== null) {
-        const pose = hitEffectPose(effectFrame, particleFrameCount);
-        const size =
-          previewNoteWidth(surface.noteSize) * surface.hitEffectScale * 1.4 * scaleX * pose.scale;
-        context.globalAlpha = pose.alpha;
+        const size = previewNoteWidth(surface.noteSize) * surface.hitEffectScale * 1.4 * scaleX;
         context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
-        // The squares below set their own alpha; never inherit the collapse fade.
-        context.globalAlpha = 1;
       }
       context.fillStyle = `rgb(${Math.min(255, Math.max(0, Math.round(hitColor[0] ?? 0)))},${Math.min(255, Math.max(0, Math.round(hitColor[1] ?? 0)))},${Math.min(255, Math.max(0, Math.round(hitColor[2] ?? 0)))})`;
       const particleCount = hitParticlesInto(
