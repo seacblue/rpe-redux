@@ -119,7 +119,6 @@ function ApplicationDataImageField({
         variant="plain"
         className="redux-setting-image-picker-strip"
         aria-label={actionLabel}
-        data-tip-title={actionLabel}
         data-empty={value ? undefined : "true"}
         data-error={failed || undefined}
         disabled={!enabled}
