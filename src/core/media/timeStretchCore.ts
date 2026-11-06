@@ -24,6 +24,8 @@ const TAIL_FADE_MS = 4;
 const MAX_SUPPRESSIONS = 4;
 const TRANSIENT_FRAME_MS = 1.5;
 const TRANSIENT_MIN_GAP_MS = 30;
+const TRANSIENT_BASELINE_MS = 15;
+const TRANSIENT_BODY_MS = 55;
 
 /** Segment lengths for one tempo; slower rates use the larger windows. */
 interface StretchTuning {
@@ -92,12 +94,25 @@ export function detectTransients(channels: Float32Array[], sampleRate: number): 
   }
   const energyFloor = maximumEnergy * 0.004;
   const minimumGap = Math.max(1, Math.round((sampleRate * TRANSIENT_MIN_GAP_MS) / 1000));
+  const baselineFrames = Math.max(
+    2,
+    Math.round((sampleRate * TRANSIENT_BASELINE_MS) / (1000 * hop)),
+  );
   const positions: number[] = [];
   for (let index = 1; index < frames - 1; index += 1) {
     if (flux[index] < threshold || energy[index] < energyFloor) {
       continue;
     }
     if (flux[index] < flux[index - 1] || flux[index] < flux[index + 1]) {
+      continue;
+    }
+    // Compare with the recent envelope so each cycle of a decaying bass
+    // waveform cannot register as another attack after its zero crossing.
+    let recentPeak = 0;
+    for (let previous = Math.max(0, index - baselineFrames); previous < index - 1; previous += 1) {
+      recentPeak = Math.max(recentPeak, energy[previous]);
+    }
+    if (energy[index] <= recentPeak * 1.2) {
       continue;
     }
     const sample = index * hop + frame;
@@ -154,6 +169,7 @@ export class TimeStretch {
   private readonly suppressionOffsets = new Int32Array(MAX_SUPPRESSIONS);
   private readonly suppressionLength: number;
   private readonly suppressionPre: number;
+  private readonly transientBodyFrames: number;
   private readonly ready: Float32Array[];
   private readonly readyCapacity: number;
   private readonly targetFrames: number;
@@ -208,6 +224,8 @@ export class TimeStretch {
     this.transientReplacementOffsets = new Int32Array(this.transients.length);
     this.suppressionLength = Math.max(2, Math.floor(this.batchLength * 0.45));
     this.suppressionPre = Math.max(1, Math.floor(this.suppressionLength / 2));
+    this.transientBodyFrames =
+      this.rate < 1 ? Math.round((sampleRate * TRANSIENT_BODY_MS) / 1000) : 0;
 
     this.inputPosition = this.startFrame;
     this.midBuffers = channels.map(() => new Float32Array(this.referenceLength));
@@ -532,18 +550,34 @@ export class TimeStretch {
     return Math.round((transient - this.startFrame) / this.rate);
   }
 
-  /** Align the next onset when it fits in this grain or the overlap it saves. */
+  /** Carry an attack and its body across grain joins on the same source clock. */
   private alignedBase(batchStart: number): number | null {
-    const index = this.firstTransientAt(this.startFrame + (batchStart - 0.5) * this.rate);
+    const earliest = Math.max(0, batchStart - this.transientBodyFrames);
+    const end = batchStart + this.batchLength + this.overlapLength;
+    let index = this.firstTransientAt(this.startFrame + (earliest - 0.5) * this.rate);
     if (index === this.transients.length) {
       return null;
     }
+    let target = this.transientOutputFrame(this.transients[index]);
+    if (target < batchStart) {
+      // A new attack in this grain takes precedence over the decay of a close one.
+      const next = this.firstTransientAt(this.startFrame + (batchStart - 0.5) * this.rate);
+      if (next < this.transients.length) {
+        const nextTarget = this.transientOutputFrame(this.transients[next]);
+        if (nextTarget < end) {
+          index = next;
+          target = nextTarget;
+        }
+      }
+    }
     const transient = this.transients[index];
-    const target = this.transientOutputFrame(transient);
     const base = transient - (target - batchStart);
-    return target < batchStart + this.batchLength + this.overlapLength && base >= this.startFrame
-      ? base
-      : null;
+    if (target >= end || base < this.startFrame) {
+      return null;
+    }
+    // A continuing attack can return to the bounded grain search near the song end.
+    const frames = Math.min(this.batchLength, this.targetFrames - batchStart);
+    return target < batchStart && base + frames > this.length ? null : base;
   }
 
   /** Replace onset copies that would play away from their intended output frame. */

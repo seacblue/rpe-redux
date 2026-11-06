@@ -521,6 +521,77 @@ test("slow playback keeps successive attacks on time and the tone between them s
   }
 });
 
+test("slow playback keeps the body of identical kicks at a consistent level", () => {
+  const kicks = Array.from({ length: 9 }, (_, index) => 0.37 + index * 0.4);
+  const input = Float32Array.from(
+    { length: SAMPLE_RATE * 4 },
+    (_, index) => 0.06 * Math.sin((2 * Math.PI * 440 * index) / SAMPLE_RATE),
+  );
+  for (const kick of kicks) {
+    const start = Math.round(kick * SAMPLE_RATE);
+    for (let index = 0; index < SAMPLE_RATE * 0.15; index += 1) {
+      const time = index / SAMPLE_RATE;
+      const phase = 47 * time + 1.1 * (1 - Math.exp(-64 * time));
+      input[start + index] += 0.78 * Math.exp(-39 * time) * Math.sin(2 * Math.PI * phase);
+    }
+  }
+  const transients = detectTransients([input], SAMPLE_RATE);
+  assert.equal(transients.length, kicks.length);
+  for (const rate of RATES) {
+    const stretch = new TimeStretch({
+      channels: [input],
+      sampleRate: SAMPLE_RATE,
+      positionSeconds: 0,
+      rate,
+      transients,
+    });
+    const [output] = renderChannels(stretch, 4 / rate, 1);
+    const levels = kicks.map((kick) => {
+      const start = Math.round((kick / rate - 0.005) * SAMPLE_RATE);
+      const window = output.subarray(start, start + 0.08 * SAMPLE_RATE);
+      const energy = window.reduce((sum, sample) => sum + sample ** 2, 0);
+      return 10 * Math.log10(energy / window.length);
+    });
+    const spread = Math.max(...levels) - Math.min(...levels);
+    assert.ok(spread < 0.75, `rate ${rate} kick bodies varied by ${spread.toFixed(2)} dB`);
+  }
+});
+
+test("nearby attacks take precedence over the previous kick body", () => {
+  const input = Float32Array.from(
+    { length: SAMPLE_RATE },
+    (_, index) => 0.06 * Math.sin((2 * Math.PI * 440 * index) / SAMPLE_RATE),
+  );
+  for (let attack = 0; attack < 12; attack += 1) {
+    const start = Math.round((0.31 + attack * 0.033) * SAMPLE_RATE);
+    for (let index = 0; index < 300; index += 1) {
+      const time = index / SAMPLE_RATE;
+      input[start + index] += 0.82 * Math.exp(-time * 1000) * Math.cos(2 * Math.PI * 6500 * time);
+    }
+  }
+  const transients = detectTransients([input], SAMPLE_RATE);
+  assert.equal(transients.length, 12);
+  for (const rate of RATES) {
+    const stretch = new TimeStretch({
+      channels: [input],
+      sampleRate: SAMPLE_RATE,
+      positionSeconds: 0,
+      rate,
+      transients,
+    });
+    const [output] = renderChannels(stretch, 1 / rate, 1);
+    let count = 0;
+    let lastAttack = -Infinity;
+    for (let frame = 1; frame < output.length; frame += 1) {
+      if (Math.abs(output[frame] - output[frame - 1]) > 0.45) {
+        count += Number(frame - lastAttack > SAMPLE_RATE * 0.008);
+        lastAttack = frame;
+      }
+    }
+    assert.equal(count, 12, `rate ${rate} produced ${count} attacks`);
+  }
+});
+
 test("one 128-frame quantum stays inside the realtime budget", () => {
   const input = new Float32Array(SAMPLE_RATE * 2);
   for (let index = 0; index < input.length; index += 1) {
