@@ -110,6 +110,10 @@ export const displayValues = {
   timelineNoteSize: settingDisplay("timeline-note-size"),
   /** Number of event windows visible across the multi-line timeline. */
   multiLineEventWindowCount: settingDisplay("multi-line-event-window-count"),
+  /** Whether multi-line note editing uses one shared note field. */
+  multiLineMergeNotes: settingFlag("multi-line-merge-notes"),
+  /** Whether merged multi-line notes show their owning judge-line number below. */
+  multiLineNoteLineNumbers: settingFlag("multi-line-note-line-numbers"),
   /** Selectable interior lines for note X coordinates. */
   gridCount: display("timeline-grid-count", "11"),
   /** Timeline zoom, in pixels per second at the current division. */
@@ -251,6 +255,8 @@ export function readEditorDisplaySettings() {
     timeline: {
       cameraX: view.cameraX,
       noteScale: timelineNoteSize / 175,
+      // Timeline note size is authored for a field occupying half the workspace.
+      exclusiveRatio: Math.max(0, Math.min(1, contributedNumber("timeline-exclusive-width") / 100)),
       noteOpacity: contributedNumber("note-opacity"),
       multiLineNonCurrentOpacity: contributedNumber("preview-non-current-opacity") / 255,
       overlapThreshold: contributedNumber("note-overlap-threshold"),
@@ -259,6 +265,8 @@ export function readEditorDisplaySettings() {
       division: numberOf(displayValues.division),
       snapX: flagOf(displayValues.snapX),
       multiLineEventWindowCount,
+      multiLineMergeNotes: displayValues.multiLineMergeNotes.get(),
+      multiLineNoteLineNumbers: displayValues.multiLineNoteLineNumbers.get(),
       scrollSpeed: contributedNumber("scroll-speed") / 5,
       keyPressLabelEnabled: contributedFlag("key-press-label-enabled"),
       mouseTrailEnabled: contributedFlag("mouse-trail-enabled"),

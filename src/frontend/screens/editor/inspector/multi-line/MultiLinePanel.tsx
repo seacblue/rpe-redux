@@ -88,6 +88,16 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     useCallback(() => displayValues.multiLineEventWindowCount.get(), []),
     useCallback(() => displayValues.multiLineEventWindowCount.get(), []),
   );
+  const multiLineMergeNotes = useSyncExternalStore(
+    displayValues.multiLineMergeNotes.subscribe,
+    displayValues.multiLineMergeNotes.get,
+    displayValues.multiLineMergeNotes.get,
+  );
+  const multiLineNoteLineNumbers = useSyncExternalStore(
+    displayValues.multiLineNoteLineNumbers.subscribe,
+    displayValues.multiLineNoteLineNumbers.get,
+    displayValues.multiLineNoteLineNumbers.get,
+  );
   const [eventWindowCountDraft, setEventWindowCountDraft] = useState<string | null>(null);
   const eventWindowCountValue = eventWindowCountDraft ?? eventWindowCount;
   const lineOptions = useSyncExternalStore(
@@ -114,6 +124,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
   }, [currentLine, lineSelection]);
   const selectionRef = useRef(selectedSet);
   const lineListRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef(new Map<number, HTMLElement>());
   const marqueeCleanup = useRef<(() => void) | null>(null);
   const marqueeActive = useRef(false);
   const marqueePointer = useRef({ x: 0, y: 0 });
@@ -239,9 +250,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     const top = Math.min(from.y, to.y);
     const bottom = Math.max(from.y, to.y);
     const rows: { index: number; top: number }[] = [];
-    for (const row of container.querySelectorAll<HTMLElement>(
-      ".multi-line-line-row[data-line-index]",
-    )) {
+    for (const row of rowRefs.current.values()) {
       const index = Number(row.dataset.lineIndex);
       const rect = row.getBoundingClientRect();
       const rowLeft = rect.left - originX;
@@ -485,10 +494,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
             if (!event.shiftKey) {
               return;
             }
-            const target = event.target;
-            if (target instanceof Element && target.closest(".multi-line-line-row")) {
-              event.preventDefault();
-            }
+            event.preventDefault();
           }}
         >
           {marqueeRect && (
@@ -539,6 +545,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
                         <ListRow
                           as="button"
                           type="button"
+                          ref={(row) => {
+                            if (row) {
+                              rowRefs.current.set(item.index, row);
+                            } else {
+                              rowRefs.current.delete(item.index);
+                            }
+                          }}
                           key={item.index}
                           className={`line-selection-row multi-line-line-row${changing && !removing ? " is-marquee-preview" : ""}${removing ? " is-marquee-remove" : ""}`}
                           selected={previewing ? committed && !changing : item.selected}
@@ -583,10 +596,29 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
           <Input
             id={id}
             type="checkbox"
-            checked={session.multiLineMerge}
+            checked={multiLineMergeNotes}
             disabled={session.multiLineMode !== "notes"}
             onChange={(event) => {
-              session.setMultiLineMerge(event.currentTarget.checked);
+              const enabled = event.currentTarget.checked;
+              displayValues.multiLineMergeNotes.set(enabled);
+              session.setMultiLineMerge(enabled);
+              renderSession();
+            }}
+          />
+        )}
+      />
+      <FieldRow
+        layout="inline"
+        density="compact"
+        label={t("settings.field.multi-line-note-line-numbers.label")}
+        control={(id) => (
+          <Input
+            id={id}
+            type="checkbox"
+            checked={multiLineNoteLineNumbers}
+            disabled={session.multiLineMode !== "notes" || !multiLineMergeNotes}
+            onChange={(event) => {
+              displayValues.multiLineNoteLineNumbers.set(event.currentTarget.checked);
               renderSession();
             }}
           />

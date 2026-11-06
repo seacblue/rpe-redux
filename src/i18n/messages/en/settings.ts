@@ -401,6 +401,12 @@ export default {
   "settings.field.multi-edit-history-limit.label": "Batch edit history entries",
   "settings.field.multi-edit-history-limit.description":
     "Applied parameter sets kept for reuse; newest first.",
+  "settings.field.multi-line-merge-notes.label": "Merge notes",
+  "settings.field.multi-line-merge-notes.description":
+    "Show notes from selected judge lines in one multi-line editing field.",
+  "settings.field.multi-line-note-line-numbers.label": "Show judge-line numbers below notes",
+  "settings.field.multi-line-note-line-numbers.description":
+    "In merged multi-line note editing, show the owning judge-line number below each note.",
   "settings.field.scroll-acceleration.label": "Accelerate wheel scrolling",
   "settings.field.scroll-acceleration.description":
     "Makes repeated wheel edits use larger value steps.",
@@ -644,6 +650,13 @@ export default {
   // --------------------------------------------------------------- updates
   "settings.updates.autoCheck.label": "Automatically check for updates",
   "settings.updates.autoCheck.description": "Check for updates automatically at startup.",
+  "settings.updates.task.label": "Update package",
+  "settings.updates.downloadPolicy.label": "Update package download policy",
+  "settings.updates.downloadPolicy.description":
+    "Download a found update package in the background; installation still requires your action.",
+  "settings.updates.downloadPolicy.all": "Wi-Fi and metered networks",
+  "settings.updates.downloadPolicy.wifi": "Wi-Fi only",
+  "settings.updates.downloadPolicy.never": "Never download automatically",
   "settings.updates.prereleases.label": "Beta channel (pre-releases)",
   "settings.updates.verify.label": "Check for updates",
   "settings.updates.verify.action": "Check for updates",
@@ -656,6 +669,14 @@ export default {
   "settings.updates.current": "Current version: {version}",
   "settings.updates.checking": "Checking for updates…",
   "settings.updates.available": "Version {version} is available.",
+  "settings.updates.downloaded": "Version {version} is downloaded and ready to install.",
+  "settings.updates.scheduled":
+    "Version {version} will be installed silently after you close the app.",
+  "settings.updates.restartPrompt.title": "Update package downloaded",
+  "settings.updates.restartPrompt.description":
+    "Restart now to install version {version}? If you choose not to restart, the update will be installed silently after you close the app.",
+  "settings.updates.restartPrompt.defer": "Do not restart",
+  "settings.updates.restartPrompt.restartNow": "Restart now",
   "settings.updates.upToDate": "You are up to date.",
   "settings.updates.unconfigured": "Set a GitHub repository to enable update checks.",
   "settings.updates.installUnconfigured":

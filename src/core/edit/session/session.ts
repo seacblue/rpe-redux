@@ -267,7 +267,11 @@ export class EditorSession extends EventTarget {
   }
   /** Switches whether multi-line notes share one merged field. */
   setMultiLineMerge(enabled: unknown): void {
-    this.multiLineMerge = Boolean(enabled);
+    const next = Boolean(enabled);
+    if (this.multiLineMerge === next) {
+      return;
+    }
+    this.multiLineMerge = next;
     this.notify();
   }
   /** Selects whether multi-line editing targets notes or events. */

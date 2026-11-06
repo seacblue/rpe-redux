@@ -30,10 +30,13 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import { createLateBound } from "../../../../../../core/utils/lateBound.ts";
 import { requestNewChartDetectionChoice } from "./newChartDetectionPrompt.ts";
 import {
+  newChartDetectionTrigger,
   readTimingDetectionPreference,
   resolveNewChartDetection,
+  type NewChartDetectionTrigger,
   writeTimingDetectionPreference,
 } from "./newChartDetectionPreference.ts";
+import { openTimingDetection } from "../../timingDetection/timingDetectionState.ts";
 
 /** The images the asset pane picks up from the project folder. */
 const PROJECT_IMAGE_PATTERN = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
@@ -43,8 +46,8 @@ export interface DocumentServiceBindings {
   documents: TauriDocumentStore | null;
   openNativeDocument(): Promise<void>;
   guardReplace(action: () => unknown, title?: string): unknown;
-  /** Create a blank chart; `detectTiming` queues timing detection for later audio. */
-  createBlankChart(detectTiming?: boolean): Promise<void>;
+  /** Create a blank chart; timing detection waits for its first audio file. */
+  createBlankChart(trigger?: NewChartDetectionTrigger): Promise<void>;
   hasUnsavedChanges(): boolean;
   loadCandidate(
     candidate: EditorCandidate,
@@ -78,15 +81,33 @@ export function connectDocumentService(bindings: DocumentServiceBindings): () =>
   return service.bind(bindings);
 }
 
+/** Ask the new-chart timing question after the first audio file arrives. */
+export async function resolveNewChartDetectionAfterAudio(session: EditorSession): Promise<void> {
+  const bound = service.value();
+  if (!bound || bound.getSession() !== session) {
+    return;
+  }
+  const choice = await requestNewChartDetectionChoice();
+  if (choice === null || service.value() !== bound || bound.getSession() !== session) {
+    return;
+  }
+  const preference = readTimingDetectionPreference();
+  const decision = resolveNewChartDetection(preference, choice);
+  writeTimingDetectionPreference(decision.preference);
+  if (decision.detect) {
+    openTimingDetection("new-chart");
+  }
+}
+
 /** Create a blank library document and send the user to the metadata editor. */
 export function newDocument(): void {
   const bound = service.value();
   if (!bound) {
     return;
   }
-  const install = (detectTiming: boolean) => {
+  const install = (trigger: NewChartDetectionTrigger) => {
     void bound
-      .createBlankChart(detectTiming)
+      .createBlankChart(trigger)
       .then(() => {
         if (service.value() === bound) {
           // A new chart has no metadata yet; unfolding the toolbar row puts its
@@ -97,24 +118,11 @@ export function newDocument(): void {
       })
       .catch(bound.reportError);
   };
-  const askThenInstall = async (): Promise<void> => {
-    const preference = readTimingDetectionPreference();
-    if (preference === "ask") {
-      const choice = await requestNewChartDetectionChoice();
-      // Dismissing the question cancels this creation; it is not an implicit
-      // "never" because the author did not answer.
-      if (choice === null || service.value() !== bound) {
-        return;
-      }
-      const decision = resolveNewChartDetection(preference, choice);
-      writeTimingDetectionPreference(decision.preference);
-      install(decision.detect);
-      return;
-    }
-    install(resolveNewChartDetection(preference, null).detect);
+  const installWithPreference = (): void => {
+    install(newChartDetectionTrigger(readTimingDetectionPreference()));
   };
   if (!bound.hasUnsavedChanges()) {
-    void askThenInstall().catch(bound.reportError);
+    installWithPreference();
     return;
   }
   void requestConfirm({
@@ -124,7 +132,7 @@ export function newDocument(): void {
   })
     .then((confirmed) => {
       if (confirmed && service.value() === bound) {
-        void askThenInstall().catch(bound.reportError);
+        installWithPreference();
       }
     })
     .catch(bound.reportError);

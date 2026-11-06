@@ -23,6 +23,7 @@ const pending = createValue<EditorSession | null>({
   initial: null,
   equals: Object.is,
 });
+const pendingMode = createValue<"ask" | "detect" | null>({ initial: null });
 const audioRevision = createValue<number>({ initial: 0 });
 let nextRequest = 0;
 
@@ -47,24 +48,31 @@ export const subscribeTimingDetectionPending = pending.subscribe;
 export const getTimingDetectionPending = pending.get;
 
 /** Mark one new chart as waiting for its first audio file. */
-export function markTimingDetectionPending(session: EditorSession): void {
+export function markTimingDetectionPending(
+  session: EditorSession,
+  mode: "ask" | "detect" = "detect",
+): void {
   pending.set(session);
+  pendingMode.set(mode);
 }
 
 /** Clear the marker for one session, or for whichever session is pending. */
 export function clearTimingDetectionPending(session?: EditorSession): void {
   if (!session || pending.get() === session) {
     pending.set(null);
+    pendingMode.set(null);
   }
 }
 
 /** Consume the marker only when it belongs to the current session. */
-export function takeTimingDetectionPending(session: EditorSession): boolean {
+export function takeTimingDetectionPending(session: EditorSession): "ask" | "detect" | null {
   if (pending.get() !== session) {
-    return false;
+    return null;
   }
+  const mode = pendingMode.get();
   pending.set(null);
-  return true;
+  pendingMode.set(null);
+  return mode;
 }
 
 /** Subscribe to the audio-load revision used by a waiting dialog. */

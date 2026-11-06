@@ -25,6 +25,20 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     default: false,
   },
   {
+    key: UPDATE_SETTING_KEYS.downloadPolicy,
+    navigation: "help",
+    group: "",
+    label: "settings.updates.downloadPolicy.label",
+    description: "settings.updates.downloadPolicy.description",
+    control: "select",
+    default: "never",
+    options: [
+      { value: "all", label: "settings.updates.downloadPolicy.all" },
+      { value: "wifi", label: "settings.updates.downloadPolicy.wifi" },
+      { value: "never", label: "settings.updates.downloadPolicy.never" },
+    ],
+  },
+  {
     key: UPDATE_SETTING_KEYS.prereleases,
     navigation: "help",
     group: "",

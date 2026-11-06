@@ -95,6 +95,9 @@ export function applyEditorSettings({
   realtimePreview.invalidateFrame();
   realtimePreview.setDefaultColors({ defaultLineColor, defaultParticleColor, selectedLineColor });
   editorRealtimePreviewEnabled.set(config.preview.visible);
+  if (session.multiLineMerge !== config.timeline.multiLineMergeNotes) {
+    session.setMultiLineMerge(config.timeline.multiLineMergeNotes);
+  }
   timeline.viewport.apply(config.timeline);
   timeline.appearance.apply(config.timeline);
   session.history.limit = config.historyLimit;

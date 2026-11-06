@@ -10,6 +10,9 @@ import { values } from "../../../../../../core/state/values.ts";
 /** What future new-chart actions should do without asking. */
 export type TimingDetectionPreference = "ask" | "always" | "never";
 
+/** What the new-chart lifecycle should wait for after the chart is created. */
+export type NewChartDetectionTrigger = "ask-after-audio" | "detect-after-audio" | "none";
+
 /** The four answers the new-chart prompt can return. */
 export type NewChartDetectionChoice = "always" | "never" | "once" | "skip";
 
@@ -20,6 +23,16 @@ export const TIMING_DETECTION_SETTING_KEY = "timing-detection-on-new-chart";
 export interface NewChartDetectionDecision {
   detect: boolean;
   preference: TimingDetectionPreference;
+}
+
+/** Convert the remembered preference into the first-audio lifecycle action. */
+export function newChartDetectionTrigger(
+  preference: TimingDetectionPreference,
+): NewChartDetectionTrigger {
+  if (preference === "ask") {
+    return "ask-after-audio";
+  }
+  return preference === "always" ? "detect-after-audio" : "none";
 }
 
 /** Accept only the three known preference values. */

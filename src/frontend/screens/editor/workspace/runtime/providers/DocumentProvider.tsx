@@ -59,7 +59,10 @@ import {
 import { localService } from "../../../../../../core/global/library/service.ts";
 import { serverOrigin } from "../../../../../../core/global/library/client.ts";
 import { editorDocumentCoverUrl } from "../../../../../app/coverBackdropUrl.ts";
-import { connectDocumentService } from "../../document/lifecycle/service.ts";
+import {
+  connectDocumentService,
+  resolveNewChartDetectionAfterAudio,
+} from "../../document/lifecycle/service.ts";
 import type { DocumentLoadReason } from "../../document/lifecycle/service.ts";
 import { showExportDialog } from "../../document/export/exportPrompt.ts";
 import { setProgressDuration } from "../../../../../chrome/transport/chartProgressState.ts";
@@ -328,7 +331,10 @@ export function createDocumentRuntime(options: {
     commitLabel: () => t("editor.app.commit.selectMusic"),
     onLoaded: () => {
       notifyTimingDetectionAudioLoaded();
-      if (takeTimingDetectionPending(getSession())) {
+      const pendingMode = takeTimingDetectionPending(getSession());
+      if (pendingMode === "ask") {
+        void resolveNewChartDetectionAfterAudio(getSession()).catch(options.reportError);
+      } else if (pendingMode === "detect") {
         openTimingDetection("new-chart");
       }
     },
@@ -730,7 +736,9 @@ export function createDocumentRuntime(options: {
    * A failed load restores the previous document. A failed initial save leaves
    * the new chart open so the user can retry with Save.
    */
-  async function createBlankChartDocument(detectTiming = false): Promise<void> {
+  async function createBlankChartDocument(
+    trigger: "ask-after-audio" | "detect-after-audio" | "none" = "none",
+  ): Promise<void> {
     const next = createStarterChart();
     const assets: AssetMap = new Map();
     const previous = getSession();
@@ -793,8 +801,8 @@ export function createDocumentRuntime(options: {
       }
       throw error;
     }
-    if (detectTiming) {
-      markTimingDetectionPending(getSession());
+    if (trigger !== "none") {
+      markTimingDetectionPending(getSession(), trigger === "ask-after-audio" ? "ask" : "detect");
       options.notify(t("editorPanels.timingDetection.pendingToast"), "info");
     }
     getSession().history.markUnsaved();

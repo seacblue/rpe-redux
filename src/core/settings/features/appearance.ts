@@ -211,10 +211,11 @@ const AppearanceSettingsSchema: SettingDefinition[] = [
     group: "settings.group.notes",
     label: "settings.field.note-opacity.label",
     control: "range",
-    default: 0.6,
+    default: 1,
     min: 0,
     max: 1,
     step: 0.05,
+    percentage: true,
   },
 ];
 settingsRegistry.registerNavigations([
