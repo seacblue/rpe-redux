@@ -39,6 +39,7 @@ export const longTaskActions = new Contributions<LongTaskAction>();
 let tasks: readonly LongTask[] = [];
 const listeners = new Set<() => void>();
 const controllers = new Map<string, AbortController>();
+const removeOnSettle = new Set<string>();
 let startsBlocked = false;
 
 /** Prevent new long tasks during a short shutdown handoff; fail if any are active. */
@@ -137,7 +138,12 @@ export function startLongTask(options: {
           finishedAt: Date.now(),
         }),
     )
-    .finally(() => controllers.delete(id));
+    .finally(() => {
+      controllers.delete(id);
+      if (removeOnSettle.delete(id)) {
+        dismissLongTask(id);
+      }
+    });
   return id;
 }
 
@@ -158,6 +164,18 @@ export function dismissLongTask(id: string): void {
   tasks = tasks.filter((task) => task.id !== id);
   for (const listener of listeners) {
     listener();
+  }
+}
+
+/** Remove a task row, cancelling active work and waiting for its cleanup first. */
+export function removeLongTask(id: string): void {
+  if (!controllers.has(id)) {
+    dismissLongTask(id);
+    return;
+  }
+  if (!removeOnSettle.has(id)) {
+    removeOnSettle.add(id);
+    cancelLongTask(id);
   }
 }
 

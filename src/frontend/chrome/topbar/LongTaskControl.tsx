@@ -12,6 +12,7 @@ import { useAnchoredPopover } from "../../../design/patterns/useAnchoredPopover.
 import {
   dismissLongTask,
   getLongTasks,
+  removeLongTask,
   subscribeLongTasks,
 } from "../../../core/state/longTasks.ts";
 import { playTaskCompletionChime } from "../../platform/taskCompletionSound.ts";
@@ -81,18 +82,11 @@ export function LongTaskControl() {
     }
   }, [tasks]);
 
-  /** Closes the panel and optionally returns focus to the trigger. */
-  const close = (restoreFocus = false) => {
-    setOpen(false);
-    if (restoreFocus) {
-      trigger.current?.focus();
-    }
-  };
   const popover = useAnchoredPopover({
     open,
     anchor: trigger,
     panel,
-    onClose: () => close(),
+    onClose: () => setOpen(false),
     align: "end",
     gap: PANEL_GAP,
   });
@@ -126,24 +120,28 @@ export function LongTaskControl() {
         data-placement={popover.side}
         style={popover.style}
       >
-        <div className="long-task-popover-header">
-          <strong>{t("chrome.tasks.title")}</strong>
-          <IconButton
-            icon="close"
-            size="small"
-            label={t("common.action.close")}
-            onClick={() => close(true)}
-          />
-        </div>
         <div className="long-task-popover-list">
-          {tasks.length === 0 && <p className="long-task-empty">{t("chrome.tasks.empty")}</p>}
           {tasks.map((task) => {
             const working = task.status === "running" || task.status === "cancelling";
             const status = tRaw(`chrome.tasks.status.${task.status}`);
             const stage = working && task.stage ? tRaw(task.stage) : status;
             return (
               <article className="long-task-row" key={task.id} data-status={task.status}>
-                <strong className="long-task-row-title">{tRaw(task.label)}</strong>
+                <div className="long-task-row-header">
+                  <strong className="long-task-row-title">{tRaw(task.label)}</strong>
+                  <IconButton
+                    icon="trash"
+                    size="small"
+                    variant="plain"
+                    className="long-task-row-remove"
+                    label={t(working ? "chrome.tasks.cancelAndDismiss" : "chrome.tasks.dismiss")}
+                    disabled={task.status === "cancelling"}
+                    onClick={() => {
+                      removeLongTask(task.id);
+                      trigger.current?.focus();
+                    }}
+                  />
+                </div>
                 <p className="long-task-progress-line">
                   {working && task.progress !== null
                     ? `${Math.round(task.progress * 100)}% · ${stage}`

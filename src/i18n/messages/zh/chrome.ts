@@ -6,6 +6,7 @@ export default {
   "chrome.tasks.title": "后台任务",
   "chrome.tasks.empty": "暂无任务",
   "chrome.tasks.cancel": "取消",
+  "chrome.tasks.cancelAndDismiss": "取消并移除任务",
   "chrome.tasks.dismiss": "移除",
   "chrome.tasks.status.running": "运行中",
   "chrome.tasks.status.cancelling": "正在取消",

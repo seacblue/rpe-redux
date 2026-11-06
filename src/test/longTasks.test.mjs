@@ -5,9 +5,37 @@ import {
   acquireLongTaskFence,
   finishLongTask,
   getLongTasks,
+  removeLongTask,
   startLongTask,
   dismissLongTask,
 } from "../core/state/longTasks.ts";
+
+test("removing active work aborts it and retains the row until cleanup", async () => {
+  let release;
+  const cleanup = new Promise((resolve) => {
+    release = resolve;
+  });
+  let signal;
+  const id = startLongTask({
+    label: "active",
+    async run(context) {
+      signal = context.signal;
+      await cleanup;
+    },
+  });
+  await Promise.resolve();
+  removeLongTask(id);
+  removeLongTask(id);
+  assert.equal(signal.aborted, true);
+  assert.equal(getLongTasks().find((task) => task.id === id)?.status, "cancelling");
+  assert.equal(acquireLongTaskFence(), null);
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(
+    getLongTasks().some((task) => task.id === id),
+    false,
+  );
+});
 
 test("publishes a streaming path and restores the destination on completion", async () => {
   let finish;
