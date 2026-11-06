@@ -6,6 +6,9 @@ import { dialogDefaultPath, rememberDialogFile } from "./dialogPath.ts";
 export type RecordingFormat =
   "mp4" | "mkv" | "mov" | "webm" | "gif" | "apng" | "webp" | "mp3" | "flac" | "wav" | "ogg";
 
+/** Video rate-control profile used by the chart renderer. */
+export type RecordingRateControl = "standard" | "vbr2";
+
 /** One selectable output format and the rules the recording surface follows. */
 export interface RecordingFormatSpec {
   readonly id: RecordingFormat;
@@ -131,6 +134,7 @@ export interface DesktopRecordingOptions {
   /** Source PCM samples expected before `atempo`; eight bytes per stereo frame. */
   readonly audioSampleCount: number;
   readonly videoBitrate: number;
+  readonly videoRateControl: RecordingRateControl;
 }
 
 /** One native recording session with its staging files and encoder process. */
@@ -170,6 +174,7 @@ export async function beginDesktopRecording(
     speed: options.speed,
     audioSampleCount: options.audioSampleCount,
     videoBitrate: options.videoBitrate,
+    videoRateControl: options.videoRateControl,
   });
   let finished = false;
   return {

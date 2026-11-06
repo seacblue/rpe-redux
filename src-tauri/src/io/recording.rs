@@ -50,6 +50,24 @@ enum VideoInput {
     H264,
 }
 
+/// Video rate-control profile requested by the recording surface.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VideoRateControl {
+    Standard,
+    Vbr2,
+}
+
+impl VideoRateControl {
+    /// Parse the rate-control identifier sent by the frontend.
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "standard" => Some(Self::Standard),
+            "vbr2" => Some(Self::Vbr2),
+            _ => None,
+        }
+    }
+}
+
 /// Output container and codec profile requested by the recording surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecordingFormat {
@@ -136,6 +154,7 @@ struct Session {
     speed: f64,
     expected_audio_bytes: u64,
     video_bitrate: u32,
+    rate_control: VideoRateControl,
     written_frames: Mutex<u32>,
     audio_bytes: Mutex<u64>,
     publish: Mutex<()>,
@@ -311,6 +330,7 @@ pub fn recording_begin(
     speed: f64,
     audio_sample_count: u64,
     video_bitrate: u32,
+    video_rate_control: String,
 ) -> Result<RecordingStarted> {
     crate::app::ipc_guard::HostToken::require(token.inner(), request.headers())?;
     let video_input = match video_input.as_str() {
@@ -319,6 +339,8 @@ pub fn recording_begin(
         _ => return Err("recording_invalid_options".into()),
     };
     let format = RecordingFormat::parse(&format).ok_or("recording_invalid_options")?;
+    let rate_control =
+        VideoRateControl::parse(&video_rate_control).ok_or("recording_invalid_options")?;
     if !recording_options_valid(fps, video_bitrate, frame_count, speed, audio_sample_count) {
         return Err("recording_invalid_options".into());
     }
@@ -361,6 +383,7 @@ pub fn recording_begin(
         speed,
         expected_audio_bytes: audio_sample_count * 8,
         video_bitrate,
+        rate_control,
         written_frames: Mutex::new(0),
         audio_bytes: Mutex::new(0),
         publish: Mutex::new(()),
@@ -437,7 +460,33 @@ fn atempo_filter(speed: f64) -> Option<String> {
     )
 }
 
-/// Fixed command shared by the host and its format regression tests.
+/// Add a bounded VBR profile with a 2x peak target and a 4x VBV buffer.
+fn append_bounded_vbr(command: &mut Command, bitrate: u32) {
+    let target = format!("{bitrate}M");
+    let maxrate = format!("{}M", bitrate.saturating_mul(2));
+    let bufsize = format!("{}M", bitrate.saturating_mul(4));
+    command.args([
+        "-b:v",
+        target.as_str(),
+        "-maxrate",
+        maxrate.as_str(),
+        "-bufsize",
+        bufsize.as_str(),
+    ]);
+}
+
+/// Append the selected video rate-control profile to an encoder command.
+fn append_video_rate_control(command: &mut Command, bitrate: u32, rate_control: VideoRateControl) {
+    match rate_control {
+        VideoRateControl::Standard => {
+            let target = format!("{bitrate}M");
+            command.args(["-b:v", target.as_str()]);
+        }
+        VideoRateControl::Vbr2 => append_bounded_vbr(command, bitrate),
+    }
+}
+
+/// Build the fixed encoder command shared by the host and its format regression tests.
 fn encoder_command(
     encoder: &Path,
     audio: &Path,
@@ -446,6 +495,7 @@ fn encoder_command(
     format: RecordingFormat,
     fps: u32,
     bitrate: u32,
+    rate_control: VideoRateControl,
     speed: f64,
 ) -> Command {
     let mut command = Command::new(encoder);
@@ -505,11 +555,10 @@ fn encoder_command(
                         &fps.to_string(),
                         "-sc_threshold",
                         "0",
-                        "-b:v",
-                        &format!("{bitrate}M"),
                         "-pix_fmt",
                         "yuv420p",
                     ]);
+                    append_video_rate_control(&mut command, bitrate, rate_control);
                 }
             }
         } else {
@@ -518,8 +567,6 @@ fn encoder_command(
                     command.args([
                         "-c:v",
                         "libvpx-vp9",
-                        "-b:v",
-                        &format!("{bitrate}M"),
                         "-g",
                         &fps.to_string(),
                         "-row-mt",
@@ -531,6 +578,7 @@ fn encoder_command(
                         "-pix_fmt",
                         "yuv420p",
                     ]);
+                    append_video_rate_control(&mut command, bitrate, rate_control);
                 }
                 RecordingFormat::Gif => {
                     command.args(["-vf", "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"]);
@@ -642,6 +690,7 @@ pub async fn recording_start(host: State<'_, RecordingHost>, id: String) -> Resu
             entry.format,
             entry.fps,
             entry.video_bitrate,
+            entry.rate_control,
             entry.speed,
         );
         command
@@ -983,6 +1032,7 @@ mod streaming_tests {
             RecordingFormat::Mp4,
             30,
             2,
+            VideoRateControl::Standard,
             1.0,
         );
         command
@@ -1124,6 +1174,7 @@ mod streaming_tests {
             RecordingFormat::Mp4,
             30,
             2,
+            VideoRateControl::Standard,
             1.0,
         );
         command
@@ -1190,6 +1241,7 @@ mod format_tests {
             RecordingFormat::Mkv,
             60,
             12,
+            VideoRateControl::Standard,
             1.0,
         );
         let args = args(&command);
@@ -1198,6 +1250,45 @@ mod format_tests {
         assert!(has_pair(&args, "-f", "matroska"));
         assert!(has_pair(&args, "-map", "0:v:0"));
         assert!(args.contains(&"output.mkv".to_owned()));
+    }
+
+    #[test]
+    fn png_h264_fallback_uses_bounded_vbr() {
+        let command = encoder_command(
+            Path::new("ffmpeg"),
+            Path::new("audio.raw"),
+            Path::new("output.mp4"),
+            VideoInput::Png,
+            RecordingFormat::Mp4,
+            60,
+            12,
+            VideoRateControl::Vbr2,
+            1.0,
+        );
+        let args = args(&command);
+        assert!(has_pair(&args, "-c:v", "libx264"));
+        assert!(has_pair(&args, "-b:v", "12M"));
+        assert!(has_pair(&args, "-maxrate", "24M"));
+        assert!(has_pair(&args, "-bufsize", "48M"));
+    }
+
+    #[test]
+    fn png_h264_fallback_uses_standard_bitrate() {
+        let command = encoder_command(
+            Path::new("ffmpeg"),
+            Path::new("audio.raw"),
+            Path::new("output.mp4"),
+            VideoInput::Png,
+            RecordingFormat::Mp4,
+            60,
+            12,
+            VideoRateControl::Standard,
+            1.0,
+        );
+        let args = args(&command);
+        assert!(has_pair(&args, "-b:v", "12M"));
+        assert!(!args.contains(&"-maxrate".to_owned()));
+        assert!(!args.contains(&"-bufsize".to_owned()));
     }
 
     #[test]
@@ -1210,10 +1301,14 @@ mod format_tests {
             RecordingFormat::Webm,
             30,
             8,
+            VideoRateControl::Vbr2,
             1.0,
         );
         let args = args(&command);
         assert!(has_pair(&args, "-c:v", "libvpx-vp9"));
+        assert!(has_pair(&args, "-b:v", "8M"));
+        assert!(has_pair(&args, "-maxrate", "16M"));
+        assert!(has_pair(&args, "-bufsize", "32M"));
         assert!(has_pair(&args, "-c:a", "libopus"));
         assert!(has_pair(&args, "-f", "webm"));
         assert!(has_pair(&args, "-i", "pipe:0"));
@@ -1230,6 +1325,7 @@ mod format_tests {
             RecordingFormat::Gif,
             30,
             8,
+            VideoRateControl::Standard,
             1.0,
         );
         let args = args(&command);
@@ -1259,6 +1355,7 @@ mod format_tests {
                 RecordingFormat::Mp4,
                 30,
                 8,
+                VideoRateControl::Standard,
                 speed,
             );
             let args = args(&command);
@@ -1285,6 +1382,7 @@ mod format_tests {
                 format,
                 30,
                 8,
+                VideoRateControl::Standard,
                 4.0,
             );
             let args = args(&command);
@@ -1303,6 +1401,7 @@ mod format_tests {
             RecordingFormat::Mp3,
             30,
             8,
+            VideoRateControl::Standard,
             2.0,
         );
         let args = args(&command);
@@ -1334,6 +1433,7 @@ mod format_tests {
             RecordingFormat::Mp3,
             30,
             8,
+            VideoRateControl::Standard,
             1.0,
         );
         let args = args(&command);

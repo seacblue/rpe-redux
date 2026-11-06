@@ -5,6 +5,7 @@ import {
   recordingFormatSpec,
   type DesktopRecording,
   type RecordingFormat,
+  type RecordingRateControl,
 } from "../../../../../core/platform/desktop/recording.ts";
 import type { EditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import {
@@ -36,6 +37,7 @@ export interface RecordingJobOptions {
   /** Song seconds advanced per output frame; the output frame rate is unchanged. */
   speed: number;
   videoBitrate: number;
+  videoRateControl: RecordingRateControl;
   musicVolume: number;
   effectsVolume: number;
   start: number;
@@ -194,15 +196,17 @@ export async function runRecording(
   try {
     progress("preparing", 0);
     const audioOnly = recordingFormatSpec(options.format).audioOnly;
-    const videoConfig = audioOnly
-      ? null
-      : await selectRecordingVideoConfig({
-          width: options.width,
-          height: options.height,
-          fps: options.fps,
-          bitrateMbps: options.videoBitrate,
-          bitrateMode: "variable",
-        });
+    // VBR 2x is an FFmpeg profile; bypass WebCodecs so the selected mode is applied.
+    const videoConfig =
+      audioOnly || options.videoRateControl === "vbr2"
+        ? null
+        : await selectRecordingVideoConfig({
+            width: options.width,
+            height: options.height,
+            fps: options.fps,
+            bitrateMbps: options.videoBitrate,
+            bitrateMode: "variable",
+          });
     checkCancelled(signal);
     const captured = await snapshot.pending;
     images = captured[0];
@@ -216,6 +220,7 @@ export async function runRecording(
       speed: options.speed,
       audioSampleCount: recordingSampleCount(timeline),
       videoBitrate: options.videoBitrate,
+      videoRateControl: options.videoRateControl,
     });
     checkCancelled(signal);
     if (!audioOnly) {

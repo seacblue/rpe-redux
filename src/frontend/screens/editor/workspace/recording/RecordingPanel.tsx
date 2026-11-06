@@ -34,6 +34,7 @@ import {
   RECORDING_FORMATS,
   recordingFormatSpec,
   type RecordingFormat,
+  type RecordingRateControl,
 } from "../../../../../core/platform/desktop/recording.ts";
 import {
   AUTO_VIDEO_BITRATE,
@@ -109,6 +110,7 @@ export function RecordingPanel() {
   const [speed, setSpeed] = useState("1");
   const [autoBitrate, setAutoBitrate] = useState(true);
   const [bitrate, setBitrate] = useState("12");
+  const [rateControl, setRateControl] = useState<RecordingRateControl>("standard");
   const [musicVolume, setMusicVolume] = useState("100");
   const [effectsVolume, setEffectsVolume] = useState("100");
   const [rangeMode, setRangeMode] = useState<RecordingRangeMode>("beats");
@@ -280,6 +282,7 @@ export function RecordingPanel() {
         fps: Number(fps),
         speed: selectedSpeed,
         videoBitrate,
+        videoRateControl: rateControl,
         musicVolume: Number(musicVolume) / 100,
         effectsVolume: Number(effectsVolume) / 100,
         start: startSeconds,
@@ -514,6 +517,24 @@ export function RecordingPanel() {
               disabled={bitrateDisabled || autoBitrate}
               onChange={(event) => setBitrate(event.currentTarget.value)}
             />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editor.recording.rateControl")}
+          control={(id) => (
+            <Select
+              id={id}
+              value={rateControl}
+              disabled={bitrateDisabled}
+              onChange={(event) =>
+                setRateControl(event.currentTarget.value as RecordingRateControl)
+              }
+            >
+              <option value="standard">{t("editor.recording.rateControl.standard")}</option>
+              <option value="vbr2">{t("editor.recording.rateControl.vbr2")}</option>
+            </Select>
           )}
         />
         <FieldRow
