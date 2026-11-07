@@ -1,12 +1,10 @@
 # API conventions
 
-The Extension API is an asynchronous, capability-gated host facade. Every
-request is checked at the bridge and returns cloned data.
+The Extension API is an asynchronous, capability-gated host facade. Every request is checked at the bridge and returns cloned data.
 
 ## Purpose
 
-Use this page to understand signatures, result envelopes, error codes, and
-stale-read handling before browsing a specific handle.
+Use this page to understand signatures, result envelopes, error codes, and stale-read handling before browsing a specific handle.
 
 ## Signature
 
@@ -28,9 +26,7 @@ const committed = await context.api.transaction.apply(result.value.previewId);
 
 ## Advanced use
 
-Reads expose stable snapshots and opaque cursors. Pin a chart fingerprint before
-a write, use `preview` for user-visible changes, and apply only the preview that
-belongs to the current run.
+Reads expose stable snapshots and opaque cursors. Pin a chart fingerprint before a write, use `preview` for user-visible changes, and apply only the preview that belongs to the current run.
 
 ## Permissions and limits
 
@@ -40,11 +36,8 @@ belongs to the current run.
 
 ## Errors and recovery
 
-Branch on `error.code`, not on error text. Re-read after `stale_read`, request
-the missing capability before retrying `capabilityDenied`, and treat an
-unavailable runtime as a lifecycle state rather than a permanent failure.
+Branch on `error.code`, not on error text. Re-read after `stale_read`, request the missing capability before retrying `capabilityDenied`, and treat an unavailable runtime as a lifecycle state rather than a permanent failure.
 
 ## Related APIs
 
-See [Capabilities](capabilities.md), [Types](types.md), and the generated
-[API index](api:).
+See [Capabilities](capabilities.md), [Types](types.md), and the generated [API index](api:).

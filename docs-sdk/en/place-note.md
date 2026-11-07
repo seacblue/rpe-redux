@@ -1,8 +1,6 @@
 # Place a note
 
-The shortest safe path for placing one note is to request `scripts`,
-`chart.write`, and `ui.notice`, register a script, and call
-`context.api.chart.placeNote`.
+The shortest safe path for placing one note is to request `scripts`, `chart.write`, and `ui.notice`, register a script, and call `context.api.chart.placeNote`.
 
 ## Read the target
 
@@ -15,14 +13,11 @@ const result = await context.api.chart.placeNote(1, {
 });
 ```
 
-The stable note types are `1` Tap, `2` Hold, `3` Flick, and `4` Drag. A Hold
-uses `to` for its ending point. The host validates the target against the live
-chart before committing it.
+The stable note types are `1` Tap, `2` Hold, `3` Flick, and `4` Drag. A Hold uses `to` for its ending point. The host validates the target against the live chart before committing it.
 
 ## Check the result
 
-Every fallible API call returns an `ApiResult`. Test `ok` before reading
-`value`; a committed action reports its domain status inside that value.
+Every fallible API call returns an `ApiResult`. Test `ok` before reading `value`; a committed action reports its domain status inside that value.
 
 ```js
 if (!result.ok) {

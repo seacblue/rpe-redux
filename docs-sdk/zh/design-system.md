@@ -122,7 +122,9 @@ h("div", { style: { display: "grid", gap: "var(--space-1)" } }, [
 参数：`class` 使用 `redux-list-row`；`attrs.role` 容器用 `listbox`、行用 `option`；`attrs.aria-selected` 标记当前项；`style.padding` 使用 spacing token。
 
 ```js
-h("div", { attrs: { role: "listbox", "aria-label": "最近项目" } },
+h(
+  "div",
+  { attrs: { role: "listbox", "aria-label": "最近项目" } },
   state.items.map((item, index) =>
     h("div", {
       id: `item-${index}`,
@@ -221,18 +223,22 @@ const format = await context.ui.select({
 参数：`display`、`grid-template-columns`、`gap`、`padding`、`position`、`overflow`、`align-items` 等布局属性。
 
 ```js
-h("div", {
-  style: {
-    display: "grid",
-    gridTemplateColumns: "1fr auto",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "var(--space-3)",
+h(
+  "div",
+  {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr auto",
+      alignItems: "center",
+      gap: "var(--space-2)",
+      padding: "var(--space-3)",
+    },
   },
-}, [
-  h("span", { text: "目标线" }),
-  h("input", { id: "line", attrs: { type: "number", min: 0, max: 99, value: state.line } }),
-]);
+  [
+    h("span", { text: "目标线" }),
+    h("input", { id: "line", attrs: { type: "number", min: 0, max: 99, value: state.line } }),
+  ],
+);
 ```
 
 样式作用域、节点预算和事件规则见[声明式 UI](ui-reference.md)。

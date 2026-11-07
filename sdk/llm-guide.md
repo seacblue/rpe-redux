@@ -1,40 +1,23 @@
 # RPE Redux code-cell guide
 
-This is the runtime guide for one-shot code cells. A cell is an async JavaScript
-function body that reads the open document, can apply atomic chart transactions,
-and returns one JSON value. The runtime and profiles live in
-`src/core/codecell/`; the HTTP routes live in the local service. Read this guide
-once, then write short cells instead of a long sequence of transport calls.
+This is the runtime guide for one-shot code cells. A cell is an async JavaScript function body that reads the open document, can apply atomic chart transactions, and returns one JSON value. The runtime and profiles live in `src/core/codecell/`; the HTTP routes live in the local service. Read this guide once, then write short cells instead of a long sequence of transport calls.
 
 ## Before you start
 
 - The RPE Redux desktop application must be running.
-- A chart must already be open. Cells can edit the open chart, but they cannot
-  create, open, save, close, or delete a document or project. If the user wants
-  a new chart, ask them to create it in the application first.
-- Use `{ "profile": "read" }` when the task only inspects the document or chart.
-  The default is `write`; read cells cannot reach transactions or any write
-  handle.
-- Enable **Settings → General → AI-assisted development → Allow AI code cells**.
-  The guide stays readable when that setting is off, but `POST /api/cell/run`
-  returns `403` until it is enabled.
-- Asset writes update the stored library copy. Ask the user to save the open
-  document before changing assets, then patch any metadata or texture path that
-  points at them.
+- A chart must already be open. Cells can edit the open chart, but they cannot create, open, save, close, or delete a document or project. If the user wants a new chart, ask them to create it in the application first.
+- Use `{ "profile": "read" }` when the task only inspects the document or chart. The default is `write`; read cells cannot reach transactions or any write handle.
+- Enable **Settings → General → AI-assisted development → Allow AI code cells**. The guide stays readable when that setting is off, but `POST /api/cell/run` returns `403` until it is enabled.
+- Asset writes update the stored library copy. Ask the user to save the open document before changing assets, then patch any metadata or texture path that points at them.
 
 ## HTTP access
 
 The local service exposes the cell API over HTTP:
 
 - `GET {base}/api/cell/guide` returns this document.
-- `POST {base}/api/cell/run` accepts
-  `{ "source": "...", "profile": "read" | "write", "args": {...}, "expected": {...}, "timeoutMs": 10000 }`
-  with `Content-Type: application/json`; `profile` defaults to `write`.
+- `POST {base}/api/cell/run` accepts `{ "source": "...", "profile": "read" | "write", "args": {...}, "expected": {...}, "timeoutMs": 10000 }` with `Content-Type: application/json`; `profile` defaults to `write`.
 
-`{base}` is the origin of the guide URL you fetched. The routes require the
-service to be bound to a loopback address and the peer to be loopback. Post to
-`/api/cell/run` directly; the server root `/` is the library API and rejects a
-bare POST with `403 client_header_required`.
+`{base}` is the origin of the guide URL you fetched. The routes require the service to be bound to a loopback address and the peer to be loopback. Post to `/api/cell/run` directly; the server root `/` is the library API and rejects a bare POST with `403 client_header_required`.
 
 ```sh
 curl "{base}/api/cell/guide"
@@ -52,27 +35,11 @@ Invoke-RestMethod -Method Post -Uri "$base/api/cell/run" `
   -ContentType 'application/json' -Body $body
 ```
 
-HTTP status `200` means the cell finished; inspect `ok` inside the result.
-`400` is an invalid request, `403` means code cells are disabled, the service is
-not loopback-only, or the request carries a foreign browser `Origin`, `409` means
-`expected` is stale, `503` means no editor is connected, and `500` is an internal
-failure. The adapter promotes `disabled`,
-`invalid_request`, and `stale_read` to those HTTP errors; other cell error codes
-arrive inside a `200` result with `ok: false`.
+HTTP status `200` means the cell finished; inspect `ok` inside the result. `400` is an invalid request, `403` means code cells are disabled, the service is not loopback-only, or the request carries a foreign browser `Origin`, `409` means `expected` is stale, `503` means no editor is connected, and `500` is an internal failure. The adapter promotes `disabled`, `invalid_request`, and `stale_read` to those HTTP errors; other cell error codes arrive inside a `200` result with `ok: false`.
 
-`expected` may pin `chartFingerprint`, `diskSnapshot`, or `generation`; a
-mismatch returns `stale_read`. The same start snapshot is checked again before
-every `transaction.preview` and `transaction.apply`: if the user edits the
-chart, switches documents, or the disk snapshot changes during the run, the
-write returns `rejected` with issue `stale_read` and is not committed. The
-request may also set `timeoutMs` within the limit below.
+`expected` may pin `chartFingerprint`, `diskSnapshot`, or `generation`; a mismatch returns `stale_read`. The same start snapshot is checked again before every `transaction.preview` and `transaction.apply`: if the user edits the chart, switches documents, or the disk snapshot changes during the run, the write returns `rejected` with issue `stale_read` and is not committed. The request may also set `timeoutMs` within the limit below.
 
-The MCP `code.run` method follows the same rule: `disabled`, `invalid_request`,
-and `stale_read` are outer tool errors, while every other cell outcome —
-including `ok: false`, `busy`, `timeout`, `cancelled`, `syntax`, `exception`,
-`capabilityDenied`, and `runtime` — is returned as a successful tool result whose
-`value` is the cell result envelope. Inspect `value.ok` before treating the call
-as successful.
+The MCP `code.run` method follows the same rule: `disabled`, `invalid_request`, and `stale_read` are outer tool errors, while every other cell outcome — including `ok: false`, `busy`, `timeout`, `cancelled`, `syntax`, `exception`, `capabilityDenied`, and `runtime` — is returned as a successful tool result whose `value` is the cell result envelope. Inspect `value.ok` before treating the call as successful.
 
 ## What a cell is
 
@@ -83,45 +50,20 @@ const state = await redux.document.state();
 return { summary: state.name || "untitled" };
 ```
 
-- `redux` is the asynchronous editor facade. Every call crosses the sandbox
-  bridge and returns a promise; always `await` it, even for synchronous host
-  methods such as `redux.document.state()`.
-- `input` is the request's `args` value (normally an object or array), or
-  `undefined` when omitted. The HTTP/MCP adapter accepts `null` and objects;
-  primitives are rejected with `invalid_request`.
-- `console.log/info/warn/error` is captured and returned in `logs` (bounded);
-  `console.debug` is captured at level `log`. `atMs` is milliseconds since the
-  cell started.
-- `return` a JSON-safe value. `BigInt` becomes a string with an `n` suffix
-  (`1n` becomes `"1n"`); `Uint8Array` becomes a number array; functions and
-  symbols are omitted.
-- The request `profile` is `"write"` by default or `"read"`; any other value is
-  rejected before the sandbox starts. `read` can only read the document, chart,
-  and selection; it cannot reach transactions, library, playback, or any write
-  handle.
-- `await redux.capabilities()` returns the exact capability list for the run.
-  The same list is in `result.capabilities`. Use it instead of probing write
-  methods to discover permissions.
-- The default `write` profile can apply atomic chart transactions and add or
-  remove project assets. It cannot save, open, close, create, or delete
-  documents, use the network, access the host DOM, start nested workers, or read
-  the host window.
-- Do not use `import`, `require`, `fetch`, `XMLHttpRequest`, `WebSocket`,
-  `Worker`, `document`, `window`, `localStorage`, `setTimeout`, or `setInterval`;
-  they are outside the cell profile or blocked by the sandbox policy.
+- `redux` is the asynchronous editor facade. Every call crosses the sandbox bridge and returns a promise; always `await` it, even for synchronous host methods such as `redux.document.state()`.
+- `input` is the request's `args` value (normally an object or array), or `undefined` when omitted. The HTTP/MCP adapter accepts `null` and objects; primitives are rejected with `invalid_request`.
+- `console.log/info/warn/error` is captured and returned in `logs` (bounded); `console.debug` is captured at level `log`. `atMs` is milliseconds since the cell started.
+- `return` a JSON-safe value. `BigInt` becomes a string with an `n` suffix (`1n` becomes `"1n"`); `Uint8Array` becomes a number array; functions and symbols are omitted.
+- The request `profile` is `"write"` by default or `"read"`; any other value is rejected before the sandbox starts. `read` can only read the document, chart, and selection; it cannot reach transactions, library, playback, or any write handle.
+- `await redux.capabilities()` returns the exact capability list for the run. The same list is in `result.capabilities`. Use it instead of probing write methods to discover permissions.
+- The default `write` profile can apply atomic chart transactions and add or remove project assets. It cannot save, open, close, create, or delete documents, use the network, access the host DOM, start nested workers, or read the host window.
+- Do not use `import`, `require`, `fetch`, `XMLHttpRequest`, `WebSocket`, `Worker`, `document`, `window`, `localStorage`, `setTimeout`, or `setInterval`; they are outside the cell profile or blocked by the sandbox policy.
 
 ## Execution model and timeout
 
-Each cell runs in a fresh dedicated Web Worker owned by the opaque-origin
-sandbox iframe. The iframe never executes submitted code; it only relays bridge
-calls to the capability-gated host facade and enforces the deadline. The worker
-has no host DOM, Tauri IPC, or network. The submitted body is wrapped as an
-async function and receives the gated `redux` facade, `input`, and the captured
-`console`.
+Each cell runs in a fresh dedicated Web Worker owned by the opaque-origin sandbox iframe. The iframe never executes submitted code; it only relays bridge calls to the capability-gated host facade and enforces the deadline. The worker has no host DOM, Tauri IPC, or network. The submitted body is wrapped as an async function and receives the gated `redux` facade, `input`, and the captured `console`.
 
-`timeoutMs` is `1000`–`20000` milliseconds and defaults to `10000`. At the
-deadline the iframe calls `worker.terminate()`. The run resolves as a normal
-`ok: false` result, not a transport error:
+`timeoutMs` is `1000`–`20000` milliseconds and defaults to `10000`. At the deadline the iframe calls `worker.terminate()`. The run resolves as a normal `ok: false` result, not a transport error:
 
 ```json
 {
@@ -138,25 +80,11 @@ deadline the iframe calls `worker.terminate()`. The run resolves as a normal
 }
 ```
 
-Termination is real: an infinite loop, an endless microtask chain, or a cell
-that never resolves cannot continue after the deadline. The same shape applies
-to every budget; with `timeoutMs: 20000` the message ends in `20000 ms` and
-`durationMs` is `20000`. Logs are streamed back as they are written, so entries
-emitted before termination are included in `logs`. A log produced after
-termination begins may be lost; write the final state you need into the returned
-value, or finish before the budget. After every run the host disposes the
-sandbox, so the next cell starts with a fresh iframe and worker.
+Termination is real: an infinite loop, an endless microtask chain, or a cell that never resolves cannot continue after the deadline. The same shape applies to every budget; with `timeoutMs: 20000` the message ends in `20000 ms` and `durationMs` is `20000`. Logs are streamed back as they are written, so entries emitted before termination are included in `logs`. A log produced after termination begins may be lost; write the final state you need into the returned value, or finish before the budget. After every run the host disposes the sandbox, so the next cell starts with a fresh iframe and worker.
 
-Inside the worker, cell code cannot use `window`, `document`, `Worker`,
-`SharedWorker`, `importScripts`, `postMessage`, `setTimeout`, `setInterval`,
-`requestAnimationFrame`, `fetch`, `XMLHttpRequest`, or `WebSocket`. Use `redux`
-for editor reads and writes and `console` for logs. The loop back into the
-editor is asynchronous: `redux` values are promises and no host object is
-exposed directly.
+Inside the worker, cell code cannot use `window`, `document`, `Worker`, `SharedWorker`, `importScripts`, `postMessage`, `setTimeout`, `setInterval`, `requestAnimationFrame`, `fetch`, `XMLHttpRequest`, or `WebSocket`. Use `redux` for editor reads and writes and `console` for logs. The loop back into the editor is asynchronous: `redux` values are promises and no host object is exposed directly.
 
-Only one cell runs at a time. A second request while a cell is running returns
-`error.code: "busy"` immediately; it is not queued. Wait for the first result
-before submitting another cell.
+Only one cell runs at a time. A second request while a cell is running returns `error.code: "busy"` immediately; it is not queued. Wait for the first result before submitting another cell.
 
 ## Result envelope
 
@@ -183,10 +111,7 @@ A successful HTTP run returns the cell result:
 }
 ```
 
-`id` is present when the cell reached the sandbox and returned an outcome,
-including code errors and timeouts. Preflight failures may omit it. On success
-`value` is the returned JSON value; a cell that returns `undefined` produces
-`value: null` (the worker encodes it as `null`), not an omitted field.
+`id` is present when the cell reached the sandbox and returned an outcome, including code errors and timeouts. Preflight failures may omit it. On success `value` is the returned JSON value; a cell that returns `undefined` produces `value: null` (the worker encodes it as `null`), not an omitted field.
 
 A failed cell has this shape:
 
@@ -211,13 +136,9 @@ A failed cell has this shape:
 }
 ```
 
-`ok: false` means the cell itself failed; read `error.code`, `error.message`, and
-`logs`. This is different from a transaction that ran but was rejected: that
-still has cell `ok: true`, and its `value.status` is `rejected`, `conflict`, or
-`unchanged`.
+`ok: false` means the cell itself failed; read `error.code`, `error.message`, and `logs`. This is different from a transaction that ran but was rejected: that still has cell `ok: true`, and its `value.status` is `rejected`, `conflict`, or `unchanged`.
 
-Use `unwrap` for the `ApiResult` handles returned by chart, transaction,
-selection, and library calls:
+Use `unwrap` for the `ApiResult` handles returned by chart, transaction, selection, and library calls:
 
 ```js
 const unwrap = (result) => {
@@ -249,14 +170,9 @@ interface ApiError {
 }
 ```
 
-`ok: true` only means the call completed. For `chart.read` and transaction
-calls, also inspect `value.status`. `redux.document.state()`,
-`redux.document.snapshot()`, `redux.document.fingerprint()`, and
-`redux.capabilities()` resolve to their values directly through the bridge.
+`ok: true` only means the call completed. For `chart.read` and transaction calls, also inspect `value.status`. `redux.document.state()`, `redux.document.snapshot()`, `redux.document.fingerprint()`, and `redux.capabilities()` resolve to their values directly through the bridge.
 
-The request and result types are exported by the SDK as `CodeCellRequest`,
-`CodeCellResult`, `CodeCellError`, `CodeCellErrorCode`, `CodeCellLog`,
-`CodeCellProfile`, and `CodeCellRevisions`:
+The request and result types are exported by the SDK as `CodeCellRequest`, `CodeCellResult`, `CodeCellError`, `CodeCellErrorCode`, `CodeCellLog`, `CodeCellProfile`, and `CodeCellRevisions`:
 
 ```ts
 type CodeCellProfile = "read" | "write";
@@ -316,20 +232,15 @@ interface CodeCellResult {
 }
 ```
 
-`id` is present once the cell reached the sandbox and returned an outcome,
-including code errors and timeouts. Preflight failures may omit it.
+`id` is present once the cell reached the sandbox and returned an outcome, including code errors and timeouts. Preflight failures may omit it.
 
 ## Profiles, capabilities, and exact handles
 
-`redux.version` is always available as a synchronous string.
-`await redux.capabilities()` returns the exact grant list for the run. It works
-on every profile, does not read or change the chart, and returns the same array
-as `result.capabilities`. Do not discover permissions by calling write methods
-and catching errors.
+`redux.version` is always available as a synchronous string. `await redux.capabilities()` returns the exact grant list for the run. It works on every profile, does not read or change the chart, and returns the same array as `result.capabilities`. Do not discover permissions by calling write methods and catching errors.
 
-| profile           | exact capabilities                                                                             |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| `read`            | `document.read`, `chart.read`, `selection.read`                                                |
+| profile | exact capabilities |
+| --- | --- |
+| `read` | `document.read`, `chart.read`, `selection.read` |
 | `write` (default) | `document.read`, `chart.read`, `selection.read`, `chart.write`, `library.read`, `assets.write` |
 
 `read` can call:
@@ -339,11 +250,7 @@ and catching errors.
 - `redux.selection.availability/state/subscribe`
 - `redux.capabilities()`
 
-`read` cannot call or even access `redux.transaction`, `redux.library`,
-`redux.playback`, `redux.preview`, `redux.layout`, `redux.settings`,
-`redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.workspace`,
-`redux.help`, `redux.extensions`, `redux.chart.placeNote`, or any document write
-method. Those accesses return `capabilityDenied` and never partially write.
+`read` cannot call or even access `redux.transaction`, `redux.library`, `redux.playback`, `redux.preview`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.workspace`, `redux.help`, `redux.extensions`, `redux.chart.placeNote`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
 
 `write` adds:
 
@@ -351,17 +258,9 @@ method. Those accesses return `capabilityDenied` and never partially write.
 - `redux.library.availability/list/get/assets/asset/revisions/revision`
 - `redux.library.addAsset/removeAsset` (`assets.write`)
 
-`write` still cannot use `redux.chart.placeNote`, `redux.transaction.undo`,
-`redux.transaction.redo`, document writes, `redux.library.create/createRaw/
-update/remove/duplicate/createRevision/removeRevision`, playback, preview,
-layout, settings, values, toolbar, sidebar, workspace, help, or extensions.
-Use `redux.transaction.apply` for every chart edit.
+`write` still cannot use `redux.chart.placeNote`, `redux.transaction.undo`, `redux.transaction.redo`, document writes, `redux.library.create/createRaw/ update/remove/duplicate/createRevision/removeRevision`, playback, preview, layout, settings, values, toolbar, sidebar, workspace, help, or extensions. Use `redux.transaction.apply` for every chart edit.
 
-The types below describe the full chart and transaction format. They do not
-grant permission: a field present in a type can still be rejected with
-`ai.feature.restricted` when its AI switch is off. The rejecting transaction
-returns `status: "rejected"`, `issues[].code: "ai.feature.restricted"`, and
-`issues[].path` naming the field.
+The types below describe the full chart and transaction format. They do not grant permission: a field present in a type can still be rejected with `ai.feature.restricted` when its AI switch is off. The rejecting transaction returns `status: "rejected"`, `issues[].code: "ai.feature.restricted"`, and `issues[].path` naming the field.
 
 A capability denial is a normal cell error:
 
@@ -373,35 +272,15 @@ A capability denial is a normal cell error:
 }
 ```
 
-The host raises `ExtensionCapabilityError`, but the cell result usually reports
-`name: "Error"` because the bridge carries the message and code rather than the
-host class. A bridged call can also prefix the message with its path, for example
-`document.save: Extension capability is not granted: document.write (document.save)`.
-Always test `error.code === "capabilityDenied"`; never match the full message or
-the name.
+The host raises `ExtensionCapabilityError`, but the cell result usually reports `name: "Error"` because the bridge carries the message and code rather than the host class. A bridged call can also prefix the message with its path, for example `document.save: Extension capability is not granted: document.write (document.save)`. Always test `error.code === "capabilityDenied"`; never match the full message or the name.
 
-The source receives exactly `redux`, `input`, and `console`. There is no `ui`,
-`timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`,
-`context`, `window`, or `document`. `redux.values`, `redux.settings`,
-`redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.preview`,
-`redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.workspace`,
-`redux.help`, and `redux.extensions` throw `capabilityDenied` on property
-access in both profiles.
+The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.values`, `redux.settings`, `redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.preview`, `redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.workspace`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles.
 
 ### Exact signatures
 
-All methods cross the asynchronous bridge, so `await` every call except the
-synchronous `redux.version` string. `capabilities()` is cell-only; the SDK
-exports the `CodeCellApi` type, and the host implementation is
-`RestrictedCodeCellApi` in `src/core/codecell/restrictedApi.ts`.
+All methods cross the asynchronous bridge, so `await` every call except the synchronous `redux.version` string. `capabilities()` is cell-only; the SDK exports the `CodeCellApi` type, and the host implementation is `RestrictedCodeCellApi` in `src/core/codecell/restrictedApi.ts`.
 
-Chart object ids are `ChartObjectId` (`string & { readonly __chartObjectId:
-unique symbol }`) in the SDK; runtime values are UUID-shaped strings. Read ids
-from `chart.lines()`, `chart.notes()`, and `chart.events()` and pass them back;
-do not synthesize them. `redux.chart.snapshot()` returns a recursively frozen
-detached chart. `redux.chart.read()` pages and the
-`redux.chart.lines()/notes()/events()` arrays are detached read-only views; do
-not mutate them. `redux.document.snapshot()` returns a detached mutable copy.
+Chart object ids are `ChartObjectId` (`string & { readonly __chartObjectId: unique symbol }`) in the SDK; runtime values are UUID-shaped strings. Read ids from `chart.lines()`, `chart.notes()`, and `chart.events()` and pass them back; do not synthesize them. `redux.chart.snapshot()` returns a recursively frozen detached chart. `redux.chart.read()` pages and the `redux.chart.lines()/notes()/events()` arrays are detached read-only views; do not mutate them. `redux.document.snapshot()` returns a detached mutable copy.
 
 ```ts
 redux.version: string; // synchronous, not a promise
@@ -628,9 +507,7 @@ interface LibraryRevision extends LibraryRevisionSummary {
 
 ### Quick self-check
 
-Run this before a nontrivial cell when you need to confirm the profile, the open
-document, and the SDK version. `redux.version` is a synchronous string; the two
-handle calls are promises.
+Run this before a nontrivial cell when you need to confirm the profile, the open document, and the SDK version. `redux.version` is a synchronous string; the two handle calls are promises.
 
 ```js
 const [capabilities, state] = await Promise.all([redux.capabilities(), redux.document.state()]);
@@ -645,8 +522,7 @@ return {
 
 ### Minimal read-profile cell
 
-This completes without touching any write handle. The result also echoes the
-same `capabilities` array outside the cell.
+This completes without touching any write handle. The result also echoes the same `capabilities` array outside the cell.
 
 ```js
 // request: { "profile": "read", "source": "..." }
@@ -664,14 +540,11 @@ return {
 };
 ```
 
-`read` cannot access `redux.transaction` at all. Do not probe it with
-`try/catch`; call `redux.capabilities()` or read the profile table above.
+`read` cannot access `redux.transaction` at all. Do not probe it with `try/catch`; call `redux.capabilities()` or read the profile table above.
 
 ## Reading the chart
 
-`redux.document.state()` returns the document descriptor, including `name`,
-`path`, `format`, `dirty`, and `fingerprint`. Use the fingerprint when you want a
-read or a later write to be checked against the exact revision you inspected.
+`redux.document.state()` returns the document descriptor, including `name`, `path`, `format`, `dirty`, and `fingerprint`. Use the fingerprint when you want a read or a later write to be checked against the exact revision you inspected.
 
 `redux.chart.snapshot()` resolves to a detached chart:
 
@@ -682,9 +555,7 @@ const chart = unwrap(await redux.chart.snapshot());
 // chart.judgeLineList     [{ id, Name, notes, eventLayers, extended, ... }]
 ```
 
-`META` fields use the file format's lower-case names (`name`, `song`, `offset`,
-`composer`, `charter`, `level`, `background`, `illustration`). Judge-line fields
-keep their RPE spelling, notably `Name` and `Texture`.
+`META` fields use the file format's lower-case names (`name`, `song`, `offset`, `composer`, `charter`, `level`, `background`, `illustration`). Judge-line fields keep their RPE spelling, notably `Name` and `Texture`.
 
 <!-- ai-block:lineBpmFactor -->
 
@@ -696,8 +567,7 @@ keep their RPE spelling, notably `Name` and `Texture`.
 `zOrder`, `isCover`, and `attachUI` are extended line fields.
 <!-- /ai-block:lineExtended -->
 
-`redux.chart.lines()` resolves to an `ApiResult` whose value is the judge lines.
-`redux.chart.notes()` resolves to refs:
+`redux.chart.lines()` resolves to an `ApiResult` whose value is the judge lines. `redux.chart.notes()` resolves to refs:
 
 ```js
 // { id, lineId, lineIndex, index, note }
@@ -726,26 +596,15 @@ do {
 return { summary: `${count} notes` };
 ```
 
-The readable collections are `metadata`, `lines`, `notes`, and `events`. `limit`
-defaults to `50` and is clamped to `100`; a non-positive or non-integer value
-uses the default. A chart cursor pins the fingerprint and generation, so an edit
-invalidates it. When the result must match an earlier read, pass
-`chartFingerprint` and treat a `stale_read` result as a request to read the chart
-again.
+The readable collections are `metadata`, `lines`, `notes`, and `events`. `limit` defaults to `50` and is clamped to `100`; a non-positive or non-integer value uses the default. A chart cursor pins the fingerprint and generation, so an edit invalidates it. When the result must match an earlier read, pass `chartFingerprint` and treat a `stale_read` result as a request to read the chart again.
 
-The `cursor` is an opaque token. Only pass back a `nextCursor` you received;
-never parse, construct, or reuse it across fingerprints. If a cursor is
-malformed, the page status is `invalid_request` with
-`reason: "invalid_cursor"`.
+The `cursor` is an opaque token. Only pass back a `nextCursor` you received; never parse, construct, or reuse it across fingerprints. If a cursor is malformed, the page status is `invalid_request` with `reason: "invalid_cursor"`.
 
-`redux.chart.resources()` lists resource names referenced by the chart. Use it
-before replacing a song, background, illustration, line texture, or attached UI.
+`redux.chart.resources()` lists resource names referenced by the chart. Use it before replacing a song, background, illustration, line texture, or attached UI.
 
 ### Chart shapes
 
-The authoritative TypeScript definitions live in
-`src/core/global/chart/chart.ts` and `src/core/edit/chart/api.ts`. The stable
-cell-facing shape is:
+The authoritative TypeScript definitions live in `src/core/global/chart/chart.ts` and `src/core/edit/chart/api.ts`. The stable cell-facing shape is:
 
 ```ts
 type Beat = [number, number, number]; // [whole, numerator, denominator]
@@ -840,22 +699,15 @@ interface JudgeLineEvent {
 }
 ```
 
-`paintEvents` values are shader-defined opaque objects. Reuse existing values
-instead of constructing an unknown paint payload.
+`paintEvents` values are shader-defined opaque objects. Reuse existing values instead of constructing an unknown paint payload.
 
 ## Authoring workflow
 
-1. Call `redux.document.state()` and check that a chart is open. Save the
-   fingerprint for the revision you are about to inspect.
-2. Read `BPMList` and `META.offset` from a snapshot. Read the lines and any
-   notes/events you plan to update. Reuse their exact beat triples when possible.
-3. Build one transaction that expresses the whole change. Prefer one transaction
-   per cell; it commits atomically and appears as one undo entry.
-4. Call `redux.transaction.apply(request)` and inspect `value.status`,
-   `value.issues`, and `value.affectedObjectIds`.
-5. Read the changed line/notes/events back and summarize the result. If the
-   status is `conflict`, read the document again and rebuild the request; do not
-   retry the same stale write.
+1. Call `redux.document.state()` and check that a chart is open. Save the fingerprint for the revision you are about to inspect.
+2. Read `BPMList` and `META.offset` from a snapshot. Read the lines and any notes/events you plan to update. Reuse their exact beat triples when possible.
+3. Build one transaction that expresses the whole change. Prefer one transaction per cell; it commits atomically and appears as one undo entry.
+4. Call `redux.transaction.apply(request)` and inspect `value.status`, `value.issues`, and `value.affectedObjectIds`.
+5. Read the changed line/notes/events back and summarize the result. If the status is `conflict`, read the document again and rebuild the request; do not retry the same stale write.
 
 ## Beats, tempo, and time
 
@@ -865,27 +717,16 @@ Beats are reduced `[whole, numerator, denominator]` triples, not floats:
 - `[4, 0, 1]` is 4
 - `[0, 1, 4]` is 0.25
 
-Copy existing triples when possible. For a new position, write the exact
-fraction; the editor reduces it. Notes and events are always authored in beats,
-never seconds.
+Copy existing triples when possible. For a new position, write the exact fraction; the editor reduces it. Notes and events are always authored in beats, never seconds.
 
-`timing.bpmList` replaces the complete tempo map. It must contain at least one
-entry, and each entry is `{ "bpm": 180, "startTime": [0, 0, 1] }`. The editor
-sorts entries by `startTime`. For a constant-tempo chart one entry is enough;
-the first point normally starts at beat zero. `META.offset` is the audio offset
-in milliseconds.
+`timing.bpmList` replaces the complete tempo map. It must contain at least one entry, and each entry is `{ "bpm": 180, "startTime": [0, 0, 1] }`. The editor sorts entries by `startTime`. For a constant-tempo chart one entry is enough; the first point normally starts at beat zero. `META.offset` is the audio offset in milliseconds.
 
 <!-- ai-block:lineBpmFactor -->
 
-A line's `bpmfactor` scales time on that line; keep it at `1` unless the chart
-intentionally needs a per-line speed.
+A line's `bpmfactor` scales time on that line; keep it at `1` unless the chart intentionally needs a per-line speed.
 <!-- /ai-block:lineBpmFactor -->
 
-For a constant tempo, `seconds = beat * 60 / bpm`. If you start from a target
-audio time, convert it to beats that way and then write the reduced triple. Do
-not put BPM values in `metadata`; use `timing.bpmList`. Changing the tempo
-re-times every beat-based note and event but does not move its beat position, so
-set the tempo and offset before authoring the detailed note placement.
+For a constant tempo, `seconds = beat * 60 / bpm`. If you start from a target audio time, convert it to beats that way and then write the reduced triple. Do not put BPM values in `metadata`; use `timing.bpmList`. Changing the tempo re-times every beat-based note and event but does not move its beat position, so set the tempo and offset before authoring the detailed note placement.
 
 ## Notes
 
@@ -896,9 +737,7 @@ A note requires `type`, `startTime`, `endTime`, and `positionX`. Note types are:
 - `3` flick
 - `4` drag
 
-`positionX` spans `-675..675`, where 0 is centre. `above` is `1` above the line
-and `0` or `2` below. Hold notes use `startTime` and `endTime`; set `endTime`
-later than `startTime`. Other note types normally keep them equal.
+`positionX` spans `-675..675`, where 0 is centre. `above` is `1` above the line and `0` or `2` below. Hold notes use `startTime` and `endTime`; set `endTime` later than `startTime`. Other note types normally keep them equal.
 
 Useful optional fields:
 
@@ -913,18 +752,15 @@ Useful optional fields:
 | `color`       | RGB blend triple, for example `[255, 120, 200]`. <!-- ai-line:noteColor -->  |
 | `hitSound`    | Custom hit-sound name; empty uses the default. <!-- ai-line:noteHitSound --> |
 
-Write the fields the chart needs. Omitted optional fields fall back to the
-editor defaults.
+Write the fields the chart needs. Omitted optional fields fall back to the editor defaults.
 
 ## Events
 
-An event requires `startTime` and `endTime`; insert entries also require
-`eventType`. Base tracks live in `eventLayers[0]` by default.
+An event requires `startTime` and `endTime`; insert entries also require `eventType`. Base tracks live in `eventLayers[0]` by default.
 
 <!-- ai-block:eventLayers -->
 
-Values across base layers are summed, so leave `layer` at `0` unless you are
-intentionally building a multi-layer effect.
+Values across base layers are summed, so leave `layer` at `0` unless you are intentionally building a multi-layer effect.
 <!-- /ai-block:eventLayers -->
 
 <!-- ai-block:extendedEvents -->
@@ -932,64 +768,45 @@ intentionally building a multi-layer effect.
 Extended tracks use `layer: "extended"`.
 <!-- /ai-block:extendedEvents -->
 
-| Track           | Value shape | Meaning                                                               |
-| --------------- | ----------- | --------------------------------------------------------------------- |
-| `moveXEvents`   | number      | Absolute horizontal offset in chart units; positive is right.         |
-| `moveYEvents`   | number      | Absolute vertical offset in chart units; positive is up.              |
-| `rotateEvents`  | number      | Rotation in degrees.                                                  |
-| `alphaEvents`   | number      | Line opacity, `0..255`.                                               |
-| `speedEvents`   | number      | Scroll speed; the default line uses `10`. `0` freezes its notes.      |
-| `scaleXEvents`  | number      | Horizontal scale factor. <!-- ai-line:extendedEvents -->              |
-| `scaleYEvents`  | number      | Vertical scale factor. <!-- ai-line:extendedEvents -->                |
-| `colorEvents`   | `[r, g, b]` | Line colour, channels `0..255`. <!-- ai-line:extendedEvents -->       |
-| `textEvents`    | string      | Text event value; can carry `font`. <!-- ai-line:extendedEvents -->   |
-| `inclineEvents` | number      | Incline angle in degrees. <!-- ai-line:extendedEvents -->             |
-| `paintEvents`   | object      | Shader paint payload. <!-- ai-line:extendedEvents -->                 |
-| `gifEvents`     | number      | GIF frame value stored by the format. <!-- ai-line:extendedEvents --> |
+| Track | Value shape | Meaning |
+| --- | --- | --- |
+| `moveXEvents` | number | Absolute horizontal offset in chart units; positive is right. |
+| `moveYEvents` | number | Absolute vertical offset in chart units; positive is up. |
+| `rotateEvents` | number | Rotation in degrees. |
+| `alphaEvents` | number | Line opacity, `0..255`. |
+| `speedEvents` | number | Scroll speed; the default line uses `10`. `0` freezes its notes. |
+| `scaleXEvents` | number | Horizontal scale factor. <!-- ai-line:extendedEvents --> |
+| `scaleYEvents` | number | Vertical scale factor. <!-- ai-line:extendedEvents --> |
+| `colorEvents` | `[r, g, b]` | Line colour, channels `0..255`. <!-- ai-line:extendedEvents --> |
+| `textEvents` | string | Text event value; can carry `font`. <!-- ai-line:extendedEvents --> |
+| `inclineEvents` | number | Incline angle in degrees. <!-- ai-line:extendedEvents --> |
+| `paintEvents` | object | Shader paint payload. <!-- ai-line:extendedEvents --> |
+| `gifEvents` | number | GIF frame value stored by the format. <!-- ai-line:extendedEvents --> |
 
 <!-- ai-block:linkgroup -->
 
-Events on the same line can share a non-zero `linkgroup`. The editor uses it to
-select and edit related events together; leave it at `0` or omit it otherwise.
+Events on the same line can share a non-zero `linkgroup`. The editor uses it to select and edit related events together; leave it at `0` or omit it otherwise.
 <!-- /ai-block:linkgroup -->
 
-A track interpolates from the active event's `start` to `end` over its beat
-range, then holds the final value until the next event. Keep events on one track
-in time order and avoid overlapping ranges when the intent is a keyframe
-sequence. `easingType: 1` is linear. Common easing ids are `2` sine-out,
-`3` sine-in, `4` quadratic-out, `5` quadratic-in, `6` sine-in-out, `7`
-quadratic-in-out, `8` cubic-out, `9` cubic-in, `16` exponential-out, `17`
-exponential-in, `20` back-out, `21` back-in, `24` elastic-out, `25` elastic-in,
-`26` bounce-out, `27` bounce-in, and `29` elastic-in-out.
+A track interpolates from the active event's `start` to `end` over its beat range, then holds the final value until the next event. Keep events on one track in time order and avoid overlapping ranges when the intent is a keyframe sequence. `easingType: 1` is linear. Common easing ids are `2` sine-out, `3` sine-in, `4` quadratic-out, `5` quadratic-in, `6` sine-in-out, `7` quadratic-in-out, `8` cubic-out, `9` cubic-in, `16` exponential-out, `17` exponential-in, `20` back-out, `21` back-in, `24` elastic-out, `25` elastic-in, `26` bounce-out, `27` bounce-in, and `29` elastic-in-out.
 
 <!-- ai-block:bezier -->
 
-Set `bezier: true` and `bezierPoints: [x1, y1, x2, y2]` to use a Bézier instead
-of an easing id.
+Set `bezier: true` and `bezierPoints: [x1, y1, x2, y2]` to use a Bézier instead of an easing id.
 <!-- /ai-block:bezier -->
 
 <!-- ai-block:easingRange -->
 
-`easingLeft` and `easingRight` select a sub-range of the easing curve, normally
-`0` and `1`.
+`easingLeft` and `easingRight` select a sub-range of the easing curve, normally `0` and `1`.
 <!-- /ai-block:easingRange -->
 
-Line control curves are separate from events. `alphaControl`, `posControl`,
-`sizeControl`, `skewControl`, and `yControl` are arrays of `{ x, alpha|pos|
-size|skew|y, easing }` points. They sample by note distance from the line, not
-by time. Leave them out unless the effect needs them.
+Line control curves are separate from events. `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` are arrays of `{ x, alpha|pos| size|skew|y, easing }` points. They sample by note distance from the line, not by time. Leave them out unless the effect needs them.
 
 ## Transactions
 
-`redux.transaction.apply(request)` commits one transaction to the open chart.
-`redux.transaction.preview(request)` validates it without committing and returns
-a preview id; pass that id to `apply(previewId)` when the same plan should be
-committed. A preview id belongs to the cell that created it; a later cell cannot
-apply or cancel it.
+`redux.transaction.apply(request)` commits one transaction to the open chart. `redux.transaction.preview(request)` validates it without committing and returns a preview id; pass that id to `apply(previewId)` when the same plan should be committed. A preview id belongs to the cell that created it; a later cell cannot apply or cancel it.
 
-`redux.transaction.undo` and `redux.transaction.redo` are withheld; accessing
-either property returns `capabilityDenied`. `redux.chart.placeNote` is also
-unavailable. Every write must go through `preview`/`apply`.
+`redux.transaction.undo` and `redux.transaction.redo` are withheld; accessing either property returns `capabilityDenied`. `redux.chart.placeNote` is also unavailable. Every write must go through `preview`/`apply`.
 
 The exact result contracts are:
 
@@ -1044,63 +861,37 @@ interface TransactionHistoryState {
 }
 ```
 
-A committed cell transaction records
-`origin: { kind: "code-cell", requestId: result.id }`; the runtime stamps it and
-the cell cannot supply a different origin. `cancel(previewId)` returns
-`{ ok: true, value: boolean }`; an unknown or other-cell id returns `value:
-false`. Any preview left unconsumed is cancelled when the cell ends, times out,
-or is cancelled.
+A committed cell transaction records `origin: { kind: "code-cell", requestId: result.id }`; the runtime stamps it and the cell cannot supply a different origin. `cancel(previewId)` returns `{ ok: true, value: boolean }`; an unknown or other-cell id returns `value: false`. Any preview left unconsumed is cancelled when the cell ends, times out, or is cancelled.
 
 Preview lifecycle:
 
-- `preview(request)` returns `status: "previewed"` with an id when the request
-  changes the chart, and `status: "unchanged"` with an id when it does not.
-  `rejected` and `unavailable` return `previewId: null`.
-- The editor keeps at most one unused preview per editor session. A newer
-  `preview` replaces the older one; applying the older id then returns
-  `status: "rejected"` with `preview.notFound` (it was still created by this
-  cell, so it is not `ai.preview.unknown`). `cancel` on the replaced id returns
-  `{ ok: true, value: false }`.
-- A preview id is valid only inside the cell that created it and only for that
-  run. It is not persisted and cannot be sent from a later cell.
-- `preview` and `apply` both compare the document with the revision snapshot
-  captured when the cell started. After a user edit, document switch, or disk
-  change, the preview is invalid: `apply` returns `rejected` with `stale_read`
-  and does not write, and a new `preview` is rejected the same way.
-- `apply(previewId)` consumes the preview exactly once. A second apply of the
-  same id from the same cell returns `rejected` with `ai.preview.unknown`
-  because the cell no longer owns an unconsumed preview. If the chart changed
-  before the first apply, the result is `rejected` with `preview.stale`.
-- Use either `apply(request)` or `apply(previewId)`, not both. The implementation
-  treats the first argument as an id when it is a string; a second `previewId`
-  argument has no effect.
-- `apply()` with no argument is rejected with `ai.preview.unknown`; it does not
-  apply the most recent preview implicitly.
-- `preview` checks the AI field policy before planning. `apply(previewId)`
-  re-checks the current policy before committing; if a field was disabled since
-  the preview, the preview is cancelled and the result is `rejected` with
-  `ai.feature.restricted`.
-- In a read-only document, planning returns `rejected` with `editor.readOnly`.
-  A collaboration viewer can plan a preview but the commit is rejected with
-  `commit.rejected` because the room role blocks the history commit.
+- `preview(request)` returns `status: "previewed"` with an id when the request changes the chart, and `status: "unchanged"` with an id when it does not. `rejected` and `unavailable` return `previewId: null`.
+- The editor keeps at most one unused preview per editor session. A newer `preview` replaces the older one; applying the older id then returns `status: "rejected"` with `preview.notFound` (it was still created by this cell, so it is not `ai.preview.unknown`). `cancel` on the replaced id returns `{ ok: true, value: false }`.
+- A preview id is valid only inside the cell that created it and only for that run. It is not persisted and cannot be sent from a later cell.
+- `preview` and `apply` both compare the document with the revision snapshot captured when the cell started. After a user edit, document switch, or disk change, the preview is invalid: `apply` returns `rejected` with `stale_read` and does not write, and a new `preview` is rejected the same way.
+- `apply(previewId)` consumes the preview exactly once. A second apply of the same id from the same cell returns `rejected` with `ai.preview.unknown` because the cell no longer owns an unconsumed preview. If the chart changed before the first apply, the result is `rejected` with `preview.stale`.
+- Use either `apply(request)` or `apply(previewId)`, not both. The implementation treats the first argument as an id when it is a string; a second `previewId` argument has no effect.
+- `apply()` with no argument is rejected with `ai.preview.unknown`; it does not apply the most recent preview implicitly.
+- `preview` checks the AI field policy before planning. `apply(previewId)` re-checks the current policy before committing; if a field was disabled since the preview, the preview is cancelled and the result is `rejected` with `ai.feature.restricted`.
+- In a read-only document, planning returns `rejected` with `editor.readOnly`. A collaboration viewer can plan a preview but the commit is rejected with `commit.rejected` because the room role blocks the history commit.
 
 Common issue codes (not exhaustive; new validation codes may be added):
 
-| issue code                                                               | meaning                                                                                      |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `ai.feature.restricted`                                                  | a field disabled in the user's AI settings; inspect `path`                                   |
-| `ai.preview.unknown`                                                     | apply used an id this cell does not currently own (another cell, consumed, or never created) |
-| `stale_read`                                                             | the start revision changed (user edit, document switch, or disk snapshot); no write occurs   |
-| `editor.readOnly`                                                        | the open document is read-only                                                               |
-| `preview.notFound` / `preview.stale`                                     | the preview was replaced/cleared, or the chart changed                                       |
-| `request.object.required` / `request.unserializable`                     | the request is not a JSON object                                                             |
-| `object.id.invalid` / `object.id.duplicate`                              | an object id is invalid or repeated                                                          |
-| `object.operation.conflict`                                              | the same object is changed by conflicting operations                                         |
-| `line.target.required` / `line.target.mismatch`                          | a note/event target line is missing or mismatched                                            |
-| `line.index.invalid` / `line.id.invalid`                                 | a line index or id is invalid                                                                |
-| `event.type.required` / `event.type.unsupported` / `event.layer.invalid` | an event type or layer is invalid                                                            |
-| `timing.*` / `notes.*` / `events.*` / `lines.*`                          | that section failed shape validation                                                         |
-| `commit.rejected` / `history.record.missing`                             | a commit hook rejected the write or history was not recorded                                 |
+| issue code | meaning |
+| --- | --- |
+| `ai.feature.restricted` | a field disabled in the user's AI settings; inspect `path` |
+| `ai.preview.unknown` | apply used an id this cell does not currently own (another cell, consumed, or never created) |
+| `stale_read` | the start revision changed (user edit, document switch, or disk snapshot); no write occurs |
+| `editor.readOnly` | the open document is read-only |
+| `preview.notFound` / `preview.stale` | the preview was replaced/cleared, or the chart changed |
+| `request.object.required` / `request.unserializable` | the request is not a JSON object |
+| `object.id.invalid` / `object.id.duplicate` | an object id is invalid or repeated |
+| `object.operation.conflict` | the same object is changed by conflicting operations |
+| `line.target.required` / `line.target.mismatch` | a note/event target line is missing or mismatched |
+| `line.index.invalid` / `line.id.invalid` | a line index or id is invalid |
+| `event.type.required` / `event.type.unsupported` / `event.layer.invalid` | an event type or layer is invalid |
+| `timing.*` / `notes.*` / `events.*` / `lines.*` | that section failed shape validation |
+| `commit.rejected` / `history.record.missing` | a commit hook rejected the write or history was not recorded |
 
 The request shape is:
 
@@ -1213,8 +1004,7 @@ type JudgeLinePatch = Partial<
 }
 ```
 
-Read, preview, then apply one plan. `preview` is the cell-side validation step;
-it returns `issues` without writing when the plan is invalid.
+Read, preview, then apply one plan. `preview` is the cell-side validation step; it returns `issues` without writing when the plan is invalid.
 
 ```js
 const state = await redux.document.state();
@@ -1279,25 +1069,14 @@ return { summary: preview.status, issues: preview.issues };
 Rules:
 
 - Every section is optional; omitted sections leave the chart unchanged.
-- `metadata` is a partial `META` patch. It accepts `name`, `composer`,
-  `charter`, `illustration`, `level`, `song`, `background`, `offset`,
-  `RPEVersion`, `ReduxVersion`, and extra format fields. Do not use `BPMList`
-  here; use `timing`.
-- `timing.bpmList` replaces the whole tempo map. It must be non-empty; entries
-  are sorted by `startTime` on apply.
-- `lines.insert` appends a judge line. `line` accepts the same editable fields
-  as `lines.update`; the editor assigns the id and a default event layer. The
-  new line's index is the previous line count plus its position in `insert`, so
-  later notes/events in the same transaction can target it with `lineIndex`.
-  `lines.delete` is not available. Line patches accept `Name`, `Group`,
-  `Texture`, and the `alphaControl`, `posControl`, `sizeControl`, `skewControl`,
-  and `yControl` point arrays.
+- `metadata` is a partial `META` patch. It accepts `name`, `composer`, `charter`, `illustration`, `level`, `song`, `background`, `offset`, `RPEVersion`, `ReduxVersion`, and extra format fields. Do not use `BPMList` here; use `timing`.
+- `timing.bpmList` replaces the whole tempo map. It must be non-empty; entries are sorted by `startTime` on apply.
+- `lines.insert` appends a judge line. `line` accepts the same editable fields as `lines.update`; the editor assigns the id and a default event layer. The new line's index is the previous line count plus its position in `insert`, so later notes/events in the same transaction can target it with `lineIndex`. `lines.delete` is not available. Line patches accept `Name`, `Group`, `Texture`, and the `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` point arrays.
   <!-- ai-block:lineBpmFactor -->
   Add `bpmfactor` to change a line's local time scale.
   <!-- /ai-block:lineBpmFactor -->
   <!-- ai-block:parentLines -->
-  Add `father` / `parentId` and `rotateWithFather` for a parent-child relation.
-  Prefer `parentId` over the format's numeric `father`; do not send both.
+  Add `father` / `parentId` and `rotateWithFather` for a parent-child relation. Prefer `parentId` over the format's numeric `father`; do not send both.
   <!-- /ai-block:parentLines -->
   <!-- ai-block:lineExtended -->
   Add `zOrder`, `isCover`, `isGif`, or `attachUI` for extended line rendering.
@@ -1305,17 +1084,11 @@ Rules:
   <!-- ai-block:lineAnchor -->
   Add `anchor` as an `[x, y]` pair for a custom line pivot.
   <!-- /ai-block:lineAnchor -->
-  `id`, `notes`, `eventLayers`, `extended`, and `numOfNotes` are structural and
-  cannot be patched.
-- `notes.insert` targets an existing line with `lineId` or `lineIndex`. Omit
-  `id` to let the editor assign one. `notes.update` and `notes.delete` address
-  existing notes by id; a note's id is immutable.
-- `events.insert` targets an existing line with `lineId` or `lineIndex`.
-  `eventType` is one of `moveXEvents`, `moveYEvents`, `rotateEvents`,
-  `alphaEvents`, or `speedEvents`.
+  `id`, `notes`, `eventLayers`, `extended`, and `numOfNotes` are structural and cannot be patched.
+- `notes.insert` targets an existing line with `lineId` or `lineIndex`. Omit `id` to let the editor assign one. `notes.update` and `notes.delete` address existing notes by id; a note's id is immutable.
+- `events.insert` targets an existing line with `lineId` or `lineIndex`. `eventType` is one of `moveXEvents`, `moveYEvents`, `rotateEvents`, `alphaEvents`, or `speedEvents`.
   <!-- ai-block:extendedEvents -->
-  The extended tracks are `scaleXEvents`, `scaleYEvents`, `colorEvents`,
-  `paintEvents`, `textEvents`, `inclineEvents`, and `gifEvents`.
+  The extended tracks are `scaleXEvents`, `scaleYEvents`, `colorEvents`, `paintEvents`, `textEvents`, `inclineEvents`, and `gifEvents`.
   <!-- /ai-block:extendedEvents -->
   Base tracks default to `layer: 0`.
   <!-- ai-block:eventLayers -->
@@ -1324,26 +1097,11 @@ Rules:
   <!-- ai-block:extendedEvents -->
   Extended tracks use `layer: "extended"`.
   <!-- /ai-block:extendedEvents -->
-  `events.update` and `events.delete` address existing events by id; the id,
-  owning line, `eventType`, and layer are immutable on an update.
-- A transaction request is a patch, not a replacement. Every operation is
-  applied to a copy of the current chart; unknown fields are preserved, and
-  unknown top-level sections are ignored. A request containing only unknown
-  keys can report `unchanged`; always inspect `status` and `issues`. Chart-wide
-  fields outside `metadata` and `timing` (`judgeLineGroup`, `blockAreaList`,
-  `effects`, and `shaderEvents`) are not editable through this grammar; ask the
-  user to edit those in the application.
-- `numOfNotes` is derived from the note list and excludes Holds (type `2`), so
-  it is not the length of the notes array. Do not try to patch it.
-- `redux.transaction.preview(request)` validates without committing.
-  `redux.transaction.apply(request)` commits; `apply(previewId)` commits a
-  previewed plan. Both return `{ ok, value }`; check `value.status` and
-  `value.issues`. `value.status` is `committed`, `unchanged`, `rejected`,
-  `conflict`, or `unavailable`. A committed result also has `value.history`
-  with the cell audit origin; the runtime owns that field.
-- A `conflict` means the chart changed after the request was planned. Read the
-  document again and rebuild the request. A `rejected` result is not a conflict;
-  inspect `issues` and correct the request.
+  `events.update` and `events.delete` address existing events by id; the id, owning line, `eventType`, and layer are immutable on an update.
+- A transaction request is a patch, not a replacement. Every operation is applied to a copy of the current chart; unknown fields are preserved, and unknown top-level sections are ignored. A request containing only unknown keys can report `unchanged`; always inspect `status` and `issues`. Chart-wide fields outside `metadata` and `timing` (`judgeLineGroup`, `blockAreaList`, `effects`, and `shaderEvents`) are not editable through this grammar; ask the user to edit those in the application.
+- `numOfNotes` is derived from the note list and excludes Holds (type `2`), so it is not the length of the notes array. Do not try to patch it.
+- `redux.transaction.preview(request)` validates without committing. `redux.transaction.apply(request)` commits; `apply(previewId)` commits a previewed plan. Both return `{ ok, value }`; check `value.status` and `value.issues`. `value.status` is `committed`, `unchanged`, `rejected`, `conflict`, or `unavailable`. A committed result also has `value.history` with the cell audit origin; the runtime owns that field.
+- A `conflict` means the chart changed after the request was planned. Read the document again and rebuild the request. A `rejected` result is not a conflict; inspect `issues` and correct the request.
 
 ## Source-free AI authoring audit
 
@@ -1393,8 +1151,7 @@ return {
 
 ## Worked example: write a short opening section
 
-This assumes a chart is already open. It replaces the tempo map, sets the
-header, adds a line, and puts four taps and a moving line on it.
+This assumes a chart is already open. It replaces the tempo map, sets the header, adds a line, and puts four taps and a moving line on it.
 
 ```js
 const state = await redux.document.state();
@@ -1441,9 +1198,7 @@ const result = unwrap(
 return { summary: result.status, status: result.status, issues: result.issues };
 ```
 
-`lineIndex: 1` targets the newly inserted line because the existing chart in
-this example had one line at index 0. In a real chart, read `redux.chart.lines()`
-first and use the actual index, or insert the line and then read its id.
+`lineIndex: 1` targets the newly inserted line because the existing chart in this example had one line at index 0. In a real chart, read `redux.chart.lines()` first and use the actual index, or insert the line and then read its id.
 
 ## Worked example: add notes from input
 
@@ -1489,8 +1244,7 @@ Run it with:
 
 ## Assets
 
-Asset bytes live in the local library, not in the transaction. Find the project
-id with `redux.library.list`, then upload or remove one named asset:
+Asset bytes live in the local library, not in the transaction. Find the project id with `redux.library.list`, then upload or remove one named asset:
 
 ```js
 const listed = unwrap(await redux.library.list({ search: input?.project ?? "" }));
@@ -1502,77 +1256,50 @@ const removed = unwrap(await redux.library.removeAsset(project.id, "old.png"));
 return { summary: "assets updated", added: added.asset.name, removed };
 ```
 
-`addAsset` and `removeAsset` commit the project's stored library copy. Ask the
-user to save open editor changes before using them, and update metadata or line
-texture references with a transaction when an asset is renamed or removed. To
-attach a song, background, illustration, or line texture, upload the asset and
-then patch `metadata.song`, `metadata.background`, `metadata.illustration`, or
-the line's `Texture` to the exact asset name. Project deletion is not available
-to cells.
+`addAsset` and `removeAsset` commit the project's stored library copy. Ask the user to save open editor changes before using them, and update metadata or line texture references with a transaction when an asset is renamed or removed. To attach a song, background, illustration, or line texture, upload the asset and then patch `metadata.song`, `metadata.background`, `metadata.illustration`, or the line's `Texture` to the exact asset name. Project deletion is not available to cells.
 
 ## Limits and errors
 
 ### Limits
 
-| item                   | exact value                                 | notes                                                                          |
-| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
-| source                 | 100,000 UTF-8 bytes                         | empty or non-string returns `invalid_request`; the HTTP body limit is 4 MiB    |
-| result                 | 1,000,000 bytes/chars                       | see the serialization rules below                                              |
-| logs                   | 200 entries, 64 KiB total, 4,096 chars each | exceeding any cap sets `truncated: true`                                       |
-| timeout                | 10,000 ms default, 1,000 min, 20,000 max    | at the deadline the iframe terminates the worker; host guard is +1 s, max 20 s |
-| concurrency            | 1 active cell                               | a concurrent request returns `busy` and is not queued                          |
-| preview                | owned by the creating cell                  | leftover previews are cancelled when the cell ends                             |
-| iframe + worker        | new per run                                 | global state is not reused; timeout terminates the worker                      |
-| network / child frames | blocked by CSP                              | `connect-src 'none'`, `child-src 'none'`, `frame-src 'none'`                   |
-| nested workers         | blocked inside the cell worker              | `Worker`, `SharedWorker`, `importScripts`, and `postMessage` throw             |
-| persistence            | none                                        | results and logs live only in memory                                           |
+| item | exact value | notes |
+| --- | --- | --- |
+| source | 100,000 UTF-8 bytes | empty or non-string returns `invalid_request`; the HTTP body limit is 4 MiB |
+| result | 1,000,000 bytes/chars | see the serialization rules below |
+| logs | 200 entries, 64 KiB total, 4,096 chars each | exceeding any cap sets `truncated: true` |
+| timeout | 10,000 ms default, 1,000 min, 20,000 max | at the deadline the iframe terminates the worker; host guard is +1 s, max 20 s |
+| concurrency | 1 active cell | a concurrent request returns `busy` and is not queued |
+| preview | owned by the creating cell | leftover previews are cancelled when the cell ends |
+| iframe + worker | new per run | global state is not reused; timeout terminates the worker |
+| network / child frames | blocked by CSP | `connect-src 'none'`, `child-src 'none'`, `frame-src 'none'` |
+| nested workers | blocked inside the cell worker | `Worker`, `SharedWorker`, `importScripts`, and `postMessage` throw |
+| persistence | none | results and logs live only in memory |
 
 ### Result serialization
 
-- `BigInt` becomes a string with an `n` suffix (`1n` becomes `"1n"`);
-  `Uint8Array` becomes a number array; functions and symbols are dropped by the
-  replacer (object keys disappear, array entries become `null` per
-  `JSON.stringify`).
-- If `JSON.stringify` returns `undefined`, `value` is `null` and
-  `truncated: false`.
-- If the worker serialization exceeds 1,000,000 characters, `value` is `null`
-  and `truncated: true`. The host also checks UTF-8 bytes and returns
-  `error.code: "runtime"` if the encoded value still exceeds 1,000,000 bytes.
-- Logs stop at 200 entries or 64 KiB; a single entry longer than 4,096 chars is
-  cut and suffixed with `…`.
+- `BigInt` becomes a string with an `n` suffix (`1n` becomes `"1n"`); `Uint8Array` becomes a number array; functions and symbols are dropped by the replacer (object keys disappear, array entries become `null` per `JSON.stringify`).
+- If `JSON.stringify` returns `undefined`, `value` is `null` and `truncated: false`.
+- If the worker serialization exceeds 1,000,000 characters, `value` is `null` and `truncated: true`. The host also checks UTF-8 bytes and returns `error.code: "runtime"` if the encoded value still exceeds 1,000,000 bytes.
+- Logs stop at 200 entries or 64 KiB; a single entry longer than 4,096 chars is cut and suffixed with `…`.
 
 ### Cell error codes
 
-| `error.code`       | when                                                                                                                 | message example                                                       |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `disabled`         | code execution is off, or the MCP code host is absent                                                                | `Code execution is disabled`                                          |
-| `busy`             | another cell is running; not queued                                                                                  | `A code cell is already running`                                      |
-| `stale_read`       | an `expected` field no longer matches the start revision, or preview/apply ran after the start snapshot moved on     | `Code cell base revision is stale: chartFingerprint`                  |
-| `invalid_request`  | source empty/whitespace/non-string or over 100,000 UTF-8 bytes; unknown profile; invalid args/timeout at the adapter | `Unknown code cell profile: admin`                                    |
-| `timeout`          | execution budget exceeded; the worker is terminated                                                                  | `Code cell execution timed out after 10000 ms`                        |
-| `cancelled`        | user cancel or sandbox disposal                                                                                      | `Code cell was cancelled` / `Code cell sandbox was disposed`          |
-| `syntax`           | module parse failure                                                                                                 | `Unexpected token ...`                                                |
-| `exception`        | cell code threw                                                                                                      | the thrown message                                                    |
-| `capabilityDenied` | handle or method outside the profile                                                                                 | `Extension capability is not granted: chart.write (transaction.undo)` |
-| `runtime`          | no mounted document, no sandbox factory, bridge result channel missing, or the host UTF-8 result check failed        | `Code cell sandbox is unavailable`                                    |
+| `error.code` | when | message example |
+| --- | --- | --- |
+| `disabled` | code execution is off, or the MCP code host is absent | `Code execution is disabled` |
+| `busy` | another cell is running; not queued | `A code cell is already running` |
+| `stale_read` | an `expected` field no longer matches the start revision, or preview/apply ran after the start snapshot moved on | `Code cell base revision is stale: chartFingerprint` |
+| `invalid_request` | source empty/whitespace/non-string or over 100,000 UTF-8 bytes; unknown profile; invalid args/timeout at the adapter | `Unknown code cell profile: admin` |
+| `timeout` | execution budget exceeded; the worker is terminated | `Code cell execution timed out after 10000 ms` |
+| `cancelled` | user cancel or sandbox disposal | `Code cell was cancelled` / `Code cell sandbox was disposed` |
+| `syntax` | module parse failure | `Unexpected token ...` |
+| `exception` | cell code threw | the thrown message |
+| `capabilityDenied` | handle or method outside the profile | `Extension capability is not granted: chart.write (transaction.undo)` |
+| `runtime` | no mounted document, no sandbox factory, bridge result channel missing, or the host UTF-8 result check failed | `Code cell sandbox is unavailable` |
 
-`error.name` is the name carried by the thrown error. Syntax, timeout, and abort
-paths keep `SyntaxError`, `TimeoutError`, and `AbortError`; a normal cell
-exception keeps its own name. A capability denial raised on the host is an
-`ExtensionCapabilityError`, but after crossing the bridge the cell result usually
-reports `name: "Error"`. Branch on `error.code`, not `error.name`. `error.line`
-and `error.column` are adjusted to the submitted source, and `error.stack` names
-the source as `redux-cell.js`. `id` is present once the cell reached the sandbox
-and returned an outcome, including code errors and timeouts; preflight failures
-may omit it.
+`error.name` is the name carried by the thrown error. Syntax, timeout, and abort paths keep `SyntaxError`, `TimeoutError`, and `AbortError`; a normal cell exception keeps its own name. A capability denial raised on the host is an `ExtensionCapabilityError`, but after crossing the bridge the cell result usually reports `name: "Error"`. Branch on `error.code`, not `error.name`. `error.line` and `error.column` are adjusted to the submitted source, and `error.stack` names the source as `redux-cell.js`. `id` is present once the cell reached the sandbox and returned an outcome, including code errors and timeouts; preflight failures may omit it.
 
-`capabilityDenied` means the cell called a handle outside its profile. Do not
-retry it; inspect `redux.capabilities()` or the profile table. `stale_read` means
-the document changed after your pin; re-read and rebuild. `disabled` means the
-user has not enabled code cells; do not retry until they do. `timeout` and
-`cancelled` dispose that sandbox; a timed-out worker is terminated, so it cannot
-keep running in the background. Wait for the result before submitting another
-cell. Never retry in a loop against `busy`.
+`capabilityDenied` means the cell called a handle outside its profile. Do not retry it; inspect `redux.capabilities()` or the profile table. `stale_read` means the document changed after your pin; re-read and rebuild. `disabled` means the user has not enabled code cells; do not retry until they do. `timeout` and `cancelled` dispose that sandbox; a timed-out worker is terminated, so it cannot keep running in the background. Wait for the result before submitting another cell. Never retry in a loop against `busy`.
 
 A cell can return its own failure value instead of letting the run fail:
 
@@ -1591,42 +1318,18 @@ try {
 
 ### Format-defined or opaque behavior
 
-- `chart.read` cursors are opaque. Only pass back a `nextCursor`; never parse,
-  construct, or reuse it across fingerprints. Re-read `chart.state()` for a new
-  cursor.
-- `paintEvents`, shader events, and unknown extension fields are defined by the
-  chart format. This guide guarantees they are preserved, not that their payload
-  is constructible. Reuse an existing value or ask the user to edit it in the
-  application.
-- Transaction `issues[].code` is an open set. Inspect `status`, `issues[].path`,
-  and `issues[].message`; do not enumerate a fixed list.
-- Full chart and library objects can gain fields. The stable fields and
-  TypeScript types are in this guide and in `src/core/global/chart/chart.ts`,
-  `src/core/edit/chart/api.ts`, and `src/core/global/library/client.ts`.
-- `redux.capabilities()` and `result.capabilities` are the only dynamic
-  capability source. Do not test permissions by calling write methods.
-- Only one unused preview exists per editor session. A second `preview` replaces
-  the first; applying the replaced id returns `preview.notFound` rather than
-  `ai.preview.unknown`. Keep one preview at a time or apply the request
-  directly.
-- `apply()` with no argument is rejected with `ai.preview.unknown`; it never
-  applies the most recent preview implicitly.
-- `preview` can return `status: "unchanged"` with a non-null `previewId`.
-  `previewId` being non-null does not guarantee a write; inspect `status`.
-- A capability denial usually carries `name: "Error"` after the bridge. Only
-  `error.code` is stable; do not branch on the name.
-- A collaboration viewer can plan a preview but its commit is rejected with
-  `commit.rejected`, not `editor.readOnly`. Check the room role before treating
-  a successful preview as permission to apply.
-- A timeout returns the logs streamed before termination and
-  `truncated: true`; the returned value is unavailable. A log produced after
-  termination begins may be lost. Put anything you must keep in the returned
-  value, or finish before the budget.
-- The MCP `redux_code_run` `tools/list` schema currently lists `source`, `args`,
-  `expected`, and `timeoutMs` but not `profile`. The `cell.run`/`code.run`
-  runtime still accepts `profile`; pass it explicitly through the HTTP body or
-  the method when you need `read`. Adding `profile` to the backend schema is a
-  separate fix.
+- `chart.read` cursors are opaque. Only pass back a `nextCursor`; never parse, construct, or reuse it across fingerprints. Re-read `chart.state()` for a new cursor.
+- `paintEvents`, shader events, and unknown extension fields are defined by the chart format. This guide guarantees they are preserved, not that their payload is constructible. Reuse an existing value or ask the user to edit it in the application.
+- Transaction `issues[].code` is an open set. Inspect `status`, `issues[].path`, and `issues[].message`; do not enumerate a fixed list.
+- Full chart and library objects can gain fields. The stable fields and TypeScript types are in this guide and in `src/core/global/chart/chart.ts`, `src/core/edit/chart/api.ts`, and `src/core/global/library/client.ts`.
+- `redux.capabilities()` and `result.capabilities` are the only dynamic capability source. Do not test permissions by calling write methods.
+- Only one unused preview exists per editor session. A second `preview` replaces the first; applying the replaced id returns `preview.notFound` rather than `ai.preview.unknown`. Keep one preview at a time or apply the request directly.
+- `apply()` with no argument is rejected with `ai.preview.unknown`; it never applies the most recent preview implicitly.
+- `preview` can return `status: "unchanged"` with a non-null `previewId`. `previewId` being non-null does not guarantee a write; inspect `status`.
+- A capability denial usually carries `name: "Error"` after the bridge. Only `error.code` is stable; do not branch on the name.
+- A collaboration viewer can plan a preview but its commit is rejected with `commit.rejected`, not `editor.readOnly`. Check the room role before treating a successful preview as permission to apply.
+- A timeout returns the logs streamed before termination and `truncated: true`; the returned value is unavailable. A log produced after termination begins may be lost. Put anything you must keep in the returned value, or finish before the budget.
+- The MCP `redux_code_run` `tools/list` schema currently lists `source`, `args`, `expected`, and `timeoutMs` but not `profile`. The `cell.run`/`code.run` runtime still accepts `profile`; pass it explicitly through the HTTP body or the method when you need `read`. Adding `profile` to the backend schema is a separate fix.
 
 ## Authoring checklist
 
@@ -1640,11 +1343,8 @@ try {
 
 <!-- /ai-block:lineBpmFactor -->
 
-- Every note has `type`, `startTime`, `endTime`, and `positionX`; holds have a
-  later `endTime`.
-- Every event has `startTime`, `endTime`, `start`, and `end`; value shapes match
-  the track.
+- Every note has `type`, `startTime`, `endTime`, and `positionX`; holds have a later `endTime`.
+- Every event has `startTime`, `endTime`, `start`, and `end`; value shapes match the track.
 - Inserts omit `id`; updates and deletes use ids read from the chart.
-- A new line inserted earlier in the same transaction is targeted by
-  `lineIndex` equal to the old line count plus its insert position.
+- A new line inserted earlier in the same transaction is targeted by `lineIndex` equal to the old line count plus its insert position.
 - Inspect `status`, `issues`, and the changed objects before reporting success.

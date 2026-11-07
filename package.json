@@ -33,8 +33,8 @@
     "check:sdk": "tsc -p sdk/tsconfig.json --incremental --tsBuildInfoFile node_modules/.cache/sdk.tsbuildinfo",
     "check:extensions": "node scripts/checkExtensionMethods.mjs",
     "check:native": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo check --manifest-path src-tauri/Cargo.toml",
-    "verify": "npm run check && prettier --check --cache --cache-location node_modules/.cache/prettier-cache \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"docs/**/*.md\" \"sdk/**/*.{ts,js,json,md}\" \"*.{html,json,js,ts}\"",
-    "fix": "eslint . --fix && prettier --write \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"*.{html,json,js,ts}\""
+    "verify": "npm run check && prettier --check --cache --cache-location node_modules/.cache/prettier-cache \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"**/*.md\" \"sdk/**/*.{ts,js,json,md}\" \"*.{html,json,js,ts}\"",
+    "fix": "eslint . --fix && prettier --write \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"**/*.md\" \"sdk/**/*.{ts,js,json,md}\" \"*.{html,json,js,ts}\""
   },
   "devDependencies": {
     "@babel/core": "^8.0.7",

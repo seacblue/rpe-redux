@@ -1,7 +1,6 @@
 # Your first Extension
 
-Create a folder named `example.hello` in an Extension root with these two files.
-The folder name must match the manifest id.
+Create a folder named `example.hello` in an Extension root with these two files. The folder name must match the manifest id.
 
 `manifest.json`:
 
@@ -31,16 +30,8 @@ export default {
 };
 ```
 
-Open Extensions in settings, enable the package, and run **Say hello** from the
-script surface. The manifest grants only the two capabilities used here. Code
-runs in an isolated iframe; host operations use the asynchronous context bridge.
-Disable or remove the Extension from settings when finished.
+Open Extensions in settings, enable the package, and run **Say hello** from the script surface. The manifest grants only the two capabilities used here. Code runs in an isolated iframe; host operations use the asynchronous context bridge. Disable or remove the Extension from settings when finished.
 
-For package roots, installation, permissions, script steps, storage, and the
-full context contract, see the [Extension reference](extensions.md). The
-[SDK examples](../sdk/examples/) show TypeScript and data-only packages. The
-[composition example](../sdk/examples/composition.ts) shows a provider,
-consumer, hook, and design slot working together.
+For package roots, installation, permissions, script steps, storage, and the full context contract, see the [Extension reference](extensions.md). The [SDK examples](../sdk/examples/) show TypeScript and data-only packages. The [composition example](../sdk/examples/composition.ts) shows a provider, consumer, hook, and design slot working together.
 
-When a provider disappears, the consumer keeps its own activation and handles
-the unavailable callback; it does not need to stop the whole dependency graph.
+When a provider disappears, the consumer keeps its own activation and handles the unavailable callback; it does not need to stop the whole dependency graph.
