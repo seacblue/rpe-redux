@@ -640,7 +640,13 @@ export class Preview {
     drawStarted: number,
     setupMs: number,
     sampleMs: number,
-  ): { visibleNoteCount: number; visibleHoldCount: number; visibilityMs: number } {
+  ): {
+    visibleNoteCount: number;
+    visibleHoldCount: number;
+    visibilityMs: number;
+    visibilityIndexMs: number;
+    visibilityCandidateCount: number;
+  } {
     const lines = this.scene.lines;
     const visibleNotes = this.visibleNoteBuckets;
     const visibleHolds = this.visibleHoldBuckets;
@@ -648,6 +654,8 @@ export class Preview {
     visibleHolds.length = lines.length;
     let visibleNoteCount = 0;
     let visibleHoldCount = 0;
+    let visibilityIndexMs = 0;
+    let visibilityCandidateCount = 0;
     for (const index of order) {
       const state = states[index];
       const runtime = lines[index];
@@ -659,6 +667,8 @@ export class Preview {
         continue;
       }
       runtime.visibleNotes(seconds, state, 1600 * divisor + Math.hypot(state.x, state.y), bucket);
+      visibilityIndexMs += runtime.lastVisibilityStats.indexMs;
+      visibilityCandidateCount += runtime.lastVisibilityStats.candidateCount;
       holdBucket.length = 0;
       let noteWrite = 0;
       let holdWrite = 0;
@@ -678,6 +688,8 @@ export class Preview {
       visibleNoteCount,
       visibleHoldCount,
       visibilityMs: performance.now() - drawStarted - setupMs - sampleMs,
+      visibilityIndexMs,
+      visibilityCandidateCount,
     };
   }
 
@@ -863,15 +875,13 @@ export class Preview {
       scaleY,
       this.guideBuffer,
     );
-    const { visibleNoteCount, visibleHoldCount, visibilityMs } = this.collectVisibleNotes(
-      seconds,
-      states,
-      order,
-      divisor,
-      drawStarted,
-      setupMs,
-      sampleMs,
-    );
+    const {
+      visibleNoteCount,
+      visibleHoldCount,
+      visibilityMs,
+      visibilityIndexMs,
+      visibilityCandidateCount,
+    } = this.collectVisibleNotes(seconds, states, order, divisor, drawStarted, setupMs, sampleMs);
     const lines = this.scene.lines;
     const visibleNotes = this.visibleNoteBuckets;
     const visibleHolds = this.visibleHoldBuckets;
@@ -923,6 +933,8 @@ export class Preview {
       setupMs,
       sampleMs,
       visibilityMs,
+      visibilityIndexMs,
+      visibilityCandidateCount,
       notesMs,
       effectsMs,
       compositeMs,

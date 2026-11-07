@@ -21,6 +21,9 @@ interface IntervalBlock {
   starts: Float64Array;
   ends: Float64Array;
   maxEnd: number;
+  maxExpansionFactor: number;
+  minSecondaryStart: number;
+  maxSecondaryEnd: number;
 }
 
 const BLOCK_SIZE = 256;
@@ -47,6 +50,9 @@ export class IntervalIndex<T> {
 
   private readonly startOf: (item: T) => number;
   private readonly endOf: (item: T) => number;
+  private readonly expansionFactorOf: (item: T) => number;
+  private readonly secondaryStartOf: ((item: T) => number) | undefined;
+  private readonly secondaryEndOf: ((item: T) => number) | undefined;
   private blocks: IntervalBlock[] = [];
   /** First start in each block, used to find the query's right boundary. */
   private blockFirstStarts = new Float64Array(0);
@@ -59,9 +65,19 @@ export class IntervalIndex<T> {
    * `start` and `end` must return finite values for every item and are retained
    * for later incremental updates.
    */
-  constructor(items: readonly T[], start: (item: T) => number, end: (item: T) => number) {
+  constructor(
+    items: readonly T[],
+    start: (item: T) => number,
+    end: (item: T) => number,
+    expansionFactor: (item: T) => number = () => 0,
+    secondaryStart?: (item: T) => number,
+    secondaryEnd?: (item: T) => number,
+  ) {
     this.startOf = start;
     this.endOf = end;
+    this.expansionFactorOf = expansionFactor;
+    this.secondaryStartOf = secondaryStart;
+    this.secondaryEndOf = secondaryEnd;
     this.items = items;
     this.assignBlocks(this.sortedEntries(items));
   }
@@ -214,6 +230,89 @@ export class IntervalIndex<T> {
     return result;
   }
 
+  /**
+   * Fill `result` with intervals expanded by a per-item factor times `radius`.
+   *
+   * The block envelope uses the largest factor in each block, so this method
+   * may return extra candidates but never drops an item whose expanded interval
+   * overlaps `[start, end]`. Factors must be finite and non-negative for the
+   * indexed items; unbounded items belong in a separate fallback directory.
+   */
+  queryItemsExpandedInto(start: number, end: number, radius: number, result: T[]): T[] {
+    result.length = 0;
+    if (start > end) {
+      return result;
+    }
+    const safeRadius = Math.max(0, radius);
+    for (const block of this.blocks) {
+      const expansion = safeRadius * block.maxExpansionFactor;
+      if (block.maxEnd + expansion < start || block.starts[0] - expansion > end) {
+        continue;
+      }
+      for (let position = 0; position < block.indices.length; position++) {
+        const item = this.items[block.indices[position]];
+        const itemExpansion = safeRadius * this.expansionFactorOf(item);
+        if (
+          block.ends[position] + itemExpansion >= start &&
+          block.starts[position] - itemExpansion <= end
+        ) {
+          result.push(item);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Fill `result` with primary intervals that also overlap a secondary range.
+   *
+   * Secondary block envelopes skip blocks that cannot overlap the requested
+   * range, while each surviving item receives the exact secondary check. The
+   * primary expansion and secondary interval are independent proofs, so this
+   * intersection cannot drop a valid item.
+   */
+  queryItemsExpandedAndSecondaryInto(
+    start: number,
+    end: number,
+    radius: number,
+    secondaryStart: number,
+    secondaryEnd: number,
+    result: T[],
+  ): T[] {
+    if (!this.secondaryStartOf || !this.secondaryEndOf) {
+      return this.queryItemsExpandedInto(start, end, radius, result);
+    }
+    result.length = 0;
+    if (start > end || secondaryStart > secondaryEnd) {
+      return result;
+    }
+    const safeRadius = Math.max(0, radius);
+    for (const block of this.blocks) {
+      const expansion = safeRadius * block.maxExpansionFactor;
+      if (
+        block.maxEnd + expansion < start ||
+        block.starts[0] - expansion > end ||
+        block.maxSecondaryEnd < secondaryStart ||
+        block.minSecondaryStart > secondaryEnd
+      ) {
+        continue;
+      }
+      for (let position = 0; position < block.indices.length; position++) {
+        const item = this.items[block.indices[position]];
+        const itemExpansion = safeRadius * this.expansionFactorOf(item);
+        if (
+          block.ends[position] + itemExpansion >= start &&
+          block.starts[position] - itemExpansion <= end &&
+          this.secondaryEndOf(item) >= secondaryStart &&
+          this.secondaryStartOf(item) <= secondaryEnd
+        ) {
+          result.push(item);
+        }
+      }
+    }
+    return result;
+  }
+
   /** Report whether any entry overlaps the inclusive range. */
   has(start: number, end: number): boolean {
     if (start > end) {
@@ -273,7 +372,21 @@ export class IntervalIndex<T> {
       ends[position] = entry.end;
       maxEnd = Math.max(maxEnd, entry.end);
     }
-    return { indices, starts, ends, maxEnd };
+    let maxExpansionFactor = 0;
+    for (let position = 0; position < indices.length; position++) {
+      maxExpansionFactor = Math.max(
+        maxExpansionFactor,
+        this.expansionFactorOf(this.items[indices[position]]),
+      );
+    }
+    return {
+      indices,
+      starts,
+      ends,
+      maxEnd,
+      maxExpansionFactor,
+      ...this.secondaryEnvelope(indices),
+    };
   }
 
   /** Recompute per-block first starts and the prefix maximum of block ends. */
@@ -462,6 +575,38 @@ export class IntervalIndex<T> {
     for (const end of ends) {
       maxEnd = Math.max(maxEnd, end);
     }
-    return { indices, starts, ends, maxEnd };
+    let maxExpansionFactor = 0;
+    for (let position = 0; position < indices.length; position++) {
+      maxExpansionFactor = Math.max(
+        maxExpansionFactor,
+        this.expansionFactorOf(this.items[indices[position]]),
+      );
+    }
+    return {
+      indices,
+      starts,
+      ends,
+      maxEnd,
+      maxExpansionFactor,
+      ...this.secondaryEnvelope(indices),
+    };
+  }
+
+  /** Compute the conservative secondary envelope for one block. */
+  private secondaryEnvelope(indices: Uint32Array): {
+    minSecondaryStart: number;
+    maxSecondaryEnd: number;
+  } {
+    if (!this.secondaryStartOf || !this.secondaryEndOf) {
+      return { minSecondaryStart: -Infinity, maxSecondaryEnd: Infinity };
+    }
+    let minSecondaryStart = Infinity;
+    let maxSecondaryEnd = -Infinity;
+    for (const index of indices) {
+      const item = this.items[index];
+      minSecondaryStart = Math.min(minSecondaryStart, this.secondaryStartOf(item));
+      maxSecondaryEnd = Math.max(maxSecondaryEnd, this.secondaryEndOf(item));
+    }
+    return { minSecondaryStart, maxSecondaryEnd };
   }
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart, createNote } from "../../../core/global/chart/chart.ts";
 import { SceneRuntime } from "../../../core/global/chart/runtime/scene.ts";
+import { NoteVisibilityDirectory } from "../../../core/global/chart/runtime/noteVisibility.ts";
 import { fromNumber } from "../../../core/global/chart/timing/beat.ts";
 import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
 
@@ -82,5 +83,70 @@ test("a reversed hold is omitted from the scene runtime", () => {
     visible.map((entry) => entry.noteIndex),
     [1],
     "reversed notes do not enter the scene's visible-note indexes",
+  );
+});
+
+test("visibility expands each finite-speed note independently", () => {
+  const note = createNote(1, 1, 0);
+  note.speed = 0.01;
+  const farFastNote = createNote(1, 1, 0);
+  farFastNote.speed = 1;
+  const entries = [
+    { note, noteIndex: 0, start: 0, end: 1, floor: 100, tail: 100 },
+    { note: farFastNote, noteIndex: 1, start: 0, end: 1, floor: 100, tail: 100 },
+  ];
+  const directory = new NoteVisibilityDirectory(entries, {
+    floorExpansionFactor: (entry) => 1 / Math.abs(entry.note.speed ?? 1),
+  });
+  const result = [];
+
+  directory.query(0.5, 0, 2, result);
+
+  assert.deepEqual(
+    result.map((entry) => entry.noteIndex),
+    [0],
+    "a tiny speed expands only its own spatial interval",
+  );
+});
+
+test("unbounded distance models fall back to time instead of guessing", () => {
+  const note = createNote(1, 1, 0);
+  const entries = [{ note, noteIndex: 0, start: 10, end: 11, floor: 1e9, tail: 1e9 }];
+  const directory = new NoteVisibilityDirectory(entries, {
+    floorExpansionFactor: () => Infinity,
+  });
+  const result = [];
+
+  directory.query(10.5, 0, 2, result);
+
+  assert.deepEqual(
+    result.map((entry) => entry.noteIndex),
+    [0],
+  );
+});
+
+test("negative and zero note speeds keep their safe branches", () => {
+  const negative = createNote(1, 1, 0);
+  negative.speed = -2;
+  const zero = createNote(1, 1, 0);
+  zero.speed = 0;
+  const entries = [
+    { note: negative, noteIndex: 0, start: 0, end: 1, floor: 1, tail: 1 },
+    { note: zero, noteIndex: 1, start: 10, end: 11, floor: 1e9, tail: 1e9 },
+  ];
+  const directory = new NoteVisibilityDirectory(entries, {
+    floorExpansionFactor: (entry) => {
+      const speed = entry.note.speed ?? 1;
+      return speed === 0 ? Infinity : 1 / Math.abs(speed);
+    },
+  });
+  const result = [];
+
+  directory.query(10.5, 0, 2, result);
+
+  assert.deepEqual(
+    result.map((entry) => entry.noteIndex),
+    [1],
+    "negative speed uses its magnitude and expired spatial candidates are removed by time",
   );
 });
