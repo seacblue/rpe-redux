@@ -588,7 +588,7 @@ export default {
   "settings.startup.progress": "正在启动编辑器…",
   "settings.startup.testWarning.title": "测试功能提示",
   "settings.startup.testWarning.description":
-    "RPE Redux 仍在测试中，可能出现显示异常或偶尔不稳定；遇到问题请通过“帮助 → 问卷调查”反馈。",
+    "RPE Redux 仍在测试中，可能出现显示异常或偶尔不稳定；遇到问题请通过“帮助 > 问卷调查”反馈。",
   "settings.startup.testWarning.dontShow": "不再提示",
   // --------------------------------------------------------------- Updates
   "settings.updates.autoCheck.label": "自动检查更新",

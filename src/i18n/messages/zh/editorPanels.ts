@@ -53,7 +53,7 @@ export default {
   "editorPanels.batch.control.eventMoveLabel": "整体移动事件（保持长度）",
   "editorPanels.batch.control.eventEnd": "整体调整结束拍（首端不变）",
   "editorPanels.batch.control.eventStart": "整体调整开始拍（尾端不变）",
-  "editorPanels.batch.control.lineChange": "线 {from} → {to}",
+  "editorPanels.batch.control.lineChange": "线 {from} > {to}",
   "editorPanels.batch.control.horizontalScale": "横向缩放",
   "editorPanels.batch.control.selectionChanged": "选中内容已改变，已取消拖动",
   "editorPanels.batch.control.commit": "控制球{action}",
