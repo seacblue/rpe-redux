@@ -1,5 +1,7 @@
 /** Content-addressed asset rules shared by the client and room server. */
 
+import type { ChartChange } from "./changes.ts";
+
 /** The largest single audio/image blob a room accepts. */
 export const MAX_ASSET_BYTES = 256 * 1024 * 1024;
 /** Base64 chunks stay comfortably below the WebSocket message cap. */
@@ -150,4 +152,44 @@ export function chartAssetNames(chart: unknown): string[] {
     }
   }
   return [...names];
+}
+
+const ASSET_REFERENCE_FIELDS = new Set([
+  "song",
+  "background",
+  "illustration",
+  "Texture",
+  "attachUI",
+  "hitSound",
+  "hitsound",
+]);
+
+/** Decode one JSON-pointer path token for resource-change classification. */
+function decodeChangeToken(token: string): string {
+  return token.replaceAll("~1", "/").replaceAll("~0", "~");
+}
+
+/** Whether a chart change can alter the set of resources the chart references. */
+export function chartChangesMayAffectAssets(changes: readonly ChartChange[]): boolean {
+  return changes.some((change) => {
+    if (!change.path) {
+      return true;
+    }
+    const tokens = change.path.slice(1).split("/").map(decodeChangeToken);
+    if (tokens.some((token) => ASSET_REFERENCE_FIELDS.has(token))) {
+      return true;
+    }
+    if (tokens[0] === "META") {
+      return tokens.length === 1;
+    }
+    if (tokens[0] !== "judgeLineList") {
+      return false;
+    }
+    const relative = tokens.slice(1);
+    if (relative.length === 0 || change.op !== "set") {
+      return true;
+    }
+    const last = relative.at(-1) ?? "";
+    return last === "notes" || last.startsWith("$") || /^\d+$/.test(last);
+  });
 }

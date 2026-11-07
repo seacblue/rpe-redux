@@ -470,6 +470,34 @@ function cloneJson(value: unknown): unknown {
   return value === undefined ? value : structuredClone(value);
 }
 
+/** Clone one mutable container while retaining references to untouched children. */
+function cloneContainer(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.slice();
+  }
+  return isRecord(value) ? { ...value } : null;
+}
+
+/** Copy the containers leading to a change, preserving unrelated chart subtrees. */
+function clonePath(root: unknown, tokens: readonly PathToken[]): unknown {
+  const clonedRoot = cloneContainer(root);
+  if (clonedRoot === null) {
+    return root;
+  }
+  let original: unknown = root;
+  let copy: unknown = clonedRoot;
+  for (const token of tokens.slice(0, -1)) {
+    const child = readAt(original, token);
+    const clonedChild = cloneContainer(child);
+    if (clonedChild === null || !writeAt(copy, token, clonedChild, undefined, true)) {
+      return root;
+    }
+    original = child;
+    copy = clonedChild;
+  }
+  return clonedRoot;
+}
+
 /** Options for `applyChartChanges`. */
 export interface ApplyChangesOptions {
   /**
@@ -490,7 +518,7 @@ export function applyChartChanges(
   options: ApplyChangesOptions = {},
 ): ApplyChangesResult {
   const force = options.force === true;
-  let next = cloneJson(chart);
+  let next = cloneContainer(chart) ?? chart;
   const conflicts: string[] = [];
   // Parents before children; an atomic replacement makes descendants irrelevant.
   const ordered = [...changes].sort((left, right) => pathDepth(left.path) - pathDepth(right.path));
@@ -532,12 +560,24 @@ export function applyChartChanges(
         conflicts.push(change.path);
         continue;
       }
-      if (!writeAt(target.parent, target.token, change.after, undefined, true)) {
+      const isolated = clonePath(next, tokens);
+      const isolatedTarget = resolveParent(isolated, tokens);
+      if (
+        !isolatedTarget ||
+        !writeAt(
+          isolatedTarget.parent,
+          isolatedTarget.token,
+          cloneJson(change.after),
+          undefined,
+          true,
+        )
+      ) {
         if (!force) {
           conflicts.push(change.path);
         }
         continue;
       }
+      next = isolated;
       replaced.add(change.path);
       continue;
     }
@@ -546,20 +586,38 @@ export function applyChartChanges(
         conflicts.push(change.path);
         continue;
       }
-      if (!writeAt(target.parent, target.token, change.after, change.position, force) && !force) {
+      const isolated = clonePath(next, tokens);
+      const isolatedTarget = resolveParent(isolated, tokens);
+      if (
+        !isolatedTarget ||
+        (!writeAt(
+          isolatedTarget.parent,
+          isolatedTarget.token,
+          cloneJson(change.after),
+          change.position,
+          force,
+        ) &&
+          !force)
+      ) {
         conflicts.push(change.path);
+        continue;
       }
+      next = isolated;
       continue;
     }
     if (!force && !deepEqual(current, change.before)) {
       conflicts.push(change.path);
       continue;
     }
-    if (!deleteAt(target.parent, target.token)) {
+    const isolated = clonePath(next, tokens);
+    const isolatedTarget = resolveParent(isolated, tokens);
+    if (!isolatedTarget || !deleteAt(isolatedTarget.parent, isolatedTarget.token)) {
       if (!force) {
         conflicts.push(change.path);
       }
+      continue;
     }
+    next = isolated;
   }
   if (conflicts.length) {
     return { chart, conflicts };
