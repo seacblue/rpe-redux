@@ -32,14 +32,14 @@
   padding: 0;
 }
 
-.mcp-access {
+.code-cell-access {
   display: grid;
   gap: var(--space-3);
   width: 100%;
   min-width: 0;
 }
 
-.mcp-access-header {
+.code-cell-access-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -47,25 +47,25 @@
   gap: var(--space-2);
 }
 
-.mcp-access-title {
+.code-cell-access-title {
   color: var(--foreground-muted);
   font-size: var(--type-caption);
   font-weight: 600;
 }
 
-.mcp-access-header-actions {
+.code-cell-access-header-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.mcp-access-list {
+.code-cell-access-list {
   display: grid;
   gap: var(--space-2);
 }
 
-.mcp-access-line {
+.code-cell-access-line {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, var(--settings-control-width, 320px));
   align-items: center;
@@ -74,7 +74,7 @@
   font-size: var(--type-caption);
 }
 
-.mcp-access-line code {
+.code-cell-access-line code {
   min-width: 0;
   padding: var(--space-1) var(--space-2);
   overflow-wrap: anywhere;
@@ -89,11 +89,11 @@
 // starts wide, follows its content up to the viewport cap, and never exposes a
 // manual resize handle. The `.redux-app-root` qualifier outranks the shared textarea
 // control rule, which otherwise wins on the native element's id selector.
-.redux-app-root .mcp-prompt {
+.redux-app-root .code-cell-prompt {
   width: min(960px, calc(100vw - 32px));
 }
 
-.redux-app-root .mcp-prompt .mcp-prompt-text {
+.redux-app-root .code-cell-prompt .code-cell-prompt-text {
   width: 100%;
   min-height: 14rem;
   max-height: 50vh;
@@ -112,7 +112,7 @@
 }
 
 @media (max-width: 720px) {
-  .mcp-access-line {
+  .code-cell-access-line {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -29,7 +29,7 @@ rpe-redux(.exe)
 resources/redux-service
 assets/ themes/ skins/ extensions/
 user-data/        SQLite library, preferences, backups, logs, extensions/
-                  mcp-endpoint.json (per-process editor-bridge token)
+                  codecell-endpoint.json (per-process editor-bridge token)
 webview-data/     WebView2 or WebKitGTK profile
 ```
 
@@ -393,12 +393,12 @@ timeout falls back to terminating it. The sidecar logs the restart reason to
 `collab: { enabled, ok, port?, error? }`, so a room listener that failed to bind
 reports `collab.ok: false` instead of appearing fully healthy.
 
-The sidecar writes `user-data/mcp-endpoint.json` when the frontend asks for the
-bridge path, with the current process's editor-bridge token and bridge path. The
-desktop frontend reads the path from `GET /api/mcp/endpoint` and loads the file
-through the native host; other processes cannot open the editor bridge without
-presenting the token. Treat the file as local credential material; a new sidecar
-process replaces it.
+The sidecar writes `user-data/codecell-endpoint.json` when the frontend asks for
+the bridge path, with the current process's editor-bridge token and bridge path.
+The desktop frontend reads the path from `GET /api/cell/endpoint` and loads the
+file through the native host; other processes cannot open the editor bridge
+without presenting the token. Treat the file as local credential material; a
+new sidecar process replaces it.
 
 The library uses SQLite WAL mode with a busy timeout, so concurrent service
 processes serialize writes. Library commits use the revision check for

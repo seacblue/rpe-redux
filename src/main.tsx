@@ -20,10 +20,10 @@ import { installExtensionThemeTokens } from "./frontend/platform/extensionThemeT
 import { installScriptUiHost } from "./frontend/platform/ScriptUiHost.tsx";
 import { installExtensionRecovery } from "./frontend/platform/extensionShortcutBridge.ts";
 import { installExtensionUiHost } from "./frontend/platform/extensionUiHost.ts";
-import { installMcpBridge } from "./frontend/platform/mcpBridge.ts";
+import { installCodeCellBridge } from "./frontend/platform/codeCellBridge.ts";
 import { codeCellRuntime, installCodeCellApi } from "./core/codecell/runtime.ts";
-import { connectMcpGuide } from "./core/edit/mcp/guide.ts";
-import mcpGuide from "../sdk/llm-guide.md?raw";
+import { connectCodeCellGuide } from "./core/edit/codecell/guide.ts";
+import codeCellGuide from "../sdk/llm-guide.md?raw";
 import { createExtensionSandbox } from "./frontend/platform/extensionSandbox.tsx";
 import { extensionRuntime } from "./core/extensions/extensionRuntime.ts";
 import { isDesktop } from "./core/platform/environment.ts";
@@ -66,10 +66,10 @@ if (isPerformanceHudWindow()) {
   installExtensionThemeTokens();
   installScriptUiHost();
   installExtensionUiHost();
-  installMcpBridge();
+  installCodeCellBridge();
   extensionRuntime.setSandboxFactory(createExtensionSandbox);
   codeCellRuntime.setSandboxFactory(createExtensionSandbox);
-  connectMcpGuide(mcpGuide);
+  connectCodeCellGuide(codeCellGuide);
   installExtensionRecovery();
   if (isDesktop()) {
     const heartbeat = globalThis.setInterval(() => {

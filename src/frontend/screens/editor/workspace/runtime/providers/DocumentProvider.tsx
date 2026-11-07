@@ -78,17 +78,9 @@ import {
   createDiskChangeResolver,
   type DiskChangeAction,
 } from "../../../../../../core/edit/document/diskChangeResolution.ts";
-import { getChartApi } from "../../../../../../core/edit/chart/api.ts";
-import {
-  applyChartTransaction,
-  validateChartTransaction,
-} from "../../../../../../core/edit/transaction/preview.ts";
-import { connectMcpApi } from "../../../../../../core/edit/mcp/api.ts";
-import { createMcpAdapter } from "../../../../../../core/edit/mcp/adapter.ts";
-import { mcpEnabled } from "../../../../../../core/edit/mcp/enabled.ts";
-import { aiTransactionIssues } from "../../../../../../core/edit/aiEditingPolicy.ts";
+import { connectCodeCellApi } from "../../../../../../core/edit/codecell/api.ts";
+import { createCodeCellAdapter } from "../../../../../../core/edit/codecell/adapter.ts";
 import { codeCellRuntime } from "../../../../../../core/codecell/runtime.ts";
-import { collaborationRoom } from "../../../../../../core/collaboration/ui.ts";
 import type { SessionMutationGate } from "../../../../../../core/edit/session/session.ts";
 import {
   clearTimingDetectionPending,
@@ -1030,41 +1022,9 @@ export function createDocumentRuntime(options: {
     connectTransactionApi({ session: () => (options.hasDocument() ? getSession() : null) }),
   );
   options.scope.add(
-    connectMcpApi(
-      createMcpAdapter({
-        enabled: mcpEnabled,
-        writeAllowed: () => {
-          const room = collaborationRoom.get();
-          return !(room.roomId && room.role === "viewer");
-        },
-        chart: () => getChartApi(),
-        state: () => {
-          const current = documentCoordinator.snapshot();
-          const descriptor = documentDescriptor();
-          return {
-            lifecycle: current.lifecycle,
-            operation: current.operation,
-            source: current.source,
-            dirty: current.dirty,
-            name: descriptor.name,
-            title: options.hasDocument() ? (getSession().chart.META.name ?? "") : "",
-            path: descriptor.path,
-            format: descriptor.format,
-            revisions: toDocumentRevisions(current.revisions),
-          };
-        },
-        validate: (request) =>
-          validateChartTransaction(options.hasDocument() ? getSession() : null, request),
-        aiPolicy: (request) =>
-          aiTransactionIssues(request, options.hasDocument() ? getSession().chart : null),
-        transaction: {
-          coordinator: documentCoordinator,
-          apply: (request, context) =>
-            applyChartTransaction(options.hasDocument() ? getSession() : null, request, undefined, {
-              expectedFingerprint: context.expectedChartFingerprint,
-              origin: context.origin,
-            }),
-        },
+    connectCodeCellApi(
+      createCodeCellAdapter({
+        state: () => ({ revisions: toDocumentRevisions(documentCoordinator.snapshot().revisions) }),
         code: {
           run: (request) => codeCellRuntime.run(request),
         },

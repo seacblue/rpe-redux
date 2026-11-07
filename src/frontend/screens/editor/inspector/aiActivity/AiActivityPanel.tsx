@@ -4,15 +4,15 @@
  * The pane is a read-only inspector for the desktop bridge's request log: every
  * request an AI client sent, when it arrived, how long it took, and the exact
  * request and response bodies. Running cells from the UI is deliberately gone;
- * the AI client remains the only caller, and `core/edit/mcp/activity.ts` owns
+ * the AI client remains the only caller, and `core/edit/codecell/activity.ts` owns
  * the log contract.
  */
 import { useState, useSyncExternalStore } from "react";
 import {
-  mcpActivity,
-  type McpActivityEntry,
-  type McpActivityStatus,
-} from "../../../../../core/edit/mcp/activity.ts";
+  codeCellActivity,
+  type CodeCellActivityEntry,
+  type CodeCellActivityStatus,
+} from "../../../../../core/edit/codecell/activity.ts";
 import { isRecord } from "../../../../../core/utils/guards.ts";
 import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
 import { Button } from "../../../../../design/components/button/Button.tsx";
@@ -26,7 +26,7 @@ import { openSettings } from "../../../settings/settingsWindowController.ts";
 
 const MAX_DETAIL_CHARS = 40_000;
 
-const statusKeys: Readonly<Record<McpActivityStatus, MessageKey>> = Object.freeze({
+const statusKeys: Readonly<Record<CodeCellActivityStatus, MessageKey>> = Object.freeze({
   pending: "editorPanels.aiActivity.status.pending",
   ok: "editorPanels.aiActivity.status.ok",
   error: "editorPanels.aiActivity.status.error",
@@ -34,12 +34,12 @@ const statusKeys: Readonly<Record<McpActivityStatus, MessageKey>> = Object.freez
 
 /** Subscribes the pane to the shared log. */
 function subscribeActivity(listener: () => void): () => void {
-  return mcpActivity.subscribe(listener);
+  return codeCellActivity.subscribe(listener);
 }
 
 /** Reads the current log snapshot. */
-function activitySnapshot(): readonly McpActivityEntry[] {
-  return mcpActivity.get();
+function activitySnapshot(): readonly CodeCellActivityEntry[] {
+  return codeCellActivity.get();
 }
 
 /** Formats one timestamp as a local time-of-day. */
@@ -75,7 +75,7 @@ function sourceOf(request: unknown): string | null {
 }
 
 /** Renders one expandable request/response pair. */
-function ActivityEntryView({ entry }: { entry: McpActivityEntry }) {
+function ActivityEntryView({ entry }: { entry: CodeCellActivityEntry }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const source = sourceOf(entry.request);
@@ -166,7 +166,7 @@ export function AiActivityPanel() {
             variant="ghost"
             label={t("editorPanels.aiActivity.clear")}
             data-action="clear"
-            onClick={() => mcpActivity.clear()}
+            onClick={() => codeCellActivity.clear()}
           />
         </div>
       )}
@@ -174,7 +174,7 @@ export function AiActivityPanel() {
         {!enabled && (
           <div className="redux-ai-activity-disabled">
             <p>{t("editorPanels.aiActivity.disabledHint")}</p>
-            <Button variant="outlined" onClick={() => openSettings("general.mcp")}>
+            <Button variant="outlined" onClick={() => openSettings("general.codeCell")}>
               {t("editorPanels.aiActivity.openSettings")}
             </Button>
           </div>

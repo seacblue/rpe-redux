@@ -224,44 +224,22 @@ assets, so the Extension installer can keep its own fingerprint, consent, and
 sandbox boundary. The scope is currently descriptive; room admission does not
 auto-install or reject packages based on it.
 
-### MCP and code cells
+### Code Cells
 
-MCP clients use `http://127.0.0.1:47821/api/mcp`. The endpoint accepts loopback
-requests only and forwards to the mounted editor. The editor bridge itself needs
-the per-process token in `mcp-endpoint.json` beside the database; the frontend
-reads it through `GET /api/mcp/endpoint` plus the native file bridge instead of
-calling the unauthenticated JSON-RPC route. Chart writes are gated by the chart
-fingerprint and the active room role. Tool errors return the adapter's `code`
-and `details` in `structuredContent`, with a JSON text block for older clients.
-The transport remains available for compatible clients, but the AI settings page
-exposes only the code-cell toggle.
-
-Code cells are the product AI entry point. They are available over
-`GET /api/cell/guide` and `POST /api/cell/run`, and through the
-`redux_code_guide` and `redux_code_run` MCP tools. The canonical guide is
+Code Cells are the product AI entry point. They are available only over
+`GET /api/cell/guide` and `POST /api/cell/run`. The canonical guide is
 `sdk/llm-guide.md`; the HTTP route serves the same text the application binds at
-startup. The cell routes require both the listener and the peer to be loopback.
-There is no HTTP apply route.
+startup. The service also exposes a private authenticated editor bridge at
+`/api/cell/bridge` and its handshake at `/api/cell/endpoint`; these are internal
+implementation details, not client-facing tool protocols. All Code Cell routes
+require both the listener and the peer to be loopback.
 
-An external cell runs with the `write` profile: it reads the open document, can
-apply chart transactions, and can add or remove library assets. It cannot
-create, open, save, close, or delete a document or project. The in-app AI
-activity pane is a read-only log of the bridge requests and responses; the AI
-client remains the only caller.
-
-The transport advertises six tools: `redux_document_state`, `redux_chart_read`,
-`redux_chart_validate`, `redux_chart_apply`, `redux_code_guide`, and
-`redux_code_run`. `redux_document_state` reports the active document's `name`,
-`title`, `path`, and `format`. `redux_chart_read` accepts `metadata`, `lines`,
-`notes`, and `events`; `BPMList` is part of the chart snapshot and is read
-through a code cell. Validation does not retain a preview; apply the same
-request with `redux_chart_apply`. An apply `origin` (`clientId`/`requestId`) is
-echoed in the response's `history.origin`.
-
-The write tool's `inputSchema` documents the transaction grammar under
-`$defs.chartTransaction`: the replacement tempo map (`timing.bpmList`), beat
-triples, note types, event tracks, and insert/update/delete operations. The
-editor validates every operation.
+An external cell runs with the `write` profile by default: it reads the open
+document, can apply chart transactions, and can add or remove library assets.
+It cannot create, open, save, close, or delete a document or project. The
+`read` profile is read-only. The in-app AI activity pane is a read-only,
+session-only log of Code Cell requests and responses; the AI client remains the
+only caller.
 
 ### Updates
 

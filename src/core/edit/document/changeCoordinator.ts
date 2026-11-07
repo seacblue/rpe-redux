@@ -7,7 +7,7 @@ export type { CoordinatedRevisions, DocumentRevisions } from "../../contracts/re
 export type DocumentLifecycle = "closed" | "opening" | "open";
 export type DocumentOperation = "idle" | "rescan" | "applying" | "saving";
 export type DocumentSource = "unknown" | "synced" | "external-pending" | "conflict";
-export type ChangeKind = "ui" | "history" | "mcp" | "disk" | "save";
+export type ChangeKind = "ui" | "history" | "code-cell" | "disk" | "save";
 
 export interface ChangeOrigin {
   readonly kind: string;

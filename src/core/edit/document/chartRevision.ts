@@ -2,7 +2,7 @@
  * Computes the canonical chart revision used by every document-facing seam.
  *
  * The identity of a chart is its content, and callers only compare these
- * strings for equality (dirty tracking, save/load revisions, MCP preconditions).
+ * strings for equality (dirty tracking, save/load revisions, and Code Cell preconditions).
  *
  * The revision uses sorted object keys and recursively cached structural hashes:
  * unchanged note/event objects keep their digest across immutable chart edits,

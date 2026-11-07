@@ -5,14 +5,14 @@
  */
 
 /** The JSON record written beside the SQLite database by the Go sidecar. */
-export interface McpEndpointFile {
+export interface CodeCellEndpointFile {
   readonly version: number;
   readonly token: string;
   readonly bridge: string;
 }
 
 /** Returns the bridge token from an endpoint-file body, or null when invalid. */
-export function parseMcpEndpointFile(text: string): string | null {
+export function parseCodeCellEndpointFile(text: string): string | null {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -27,10 +27,10 @@ export function parseMcpEndpointFile(text: string): string | null {
 }
 
 /** Builds the authenticated loopback WebSocket URL for one server origin. */
-export function mcpBridgeUrl(origin: string, token: string): string {
+export function codeCellBridgeUrl(origin: string, token: string): string {
   const url = new URL(origin);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = "/api/mcp/bridge";
+  url.pathname = "/api/cell/bridge";
   url.search = new URLSearchParams({ token }).toString();
   return url.toString();
 }

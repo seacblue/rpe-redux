@@ -15,7 +15,7 @@ import (
 // DefaultPort is the coded default TCP port for the sidecar.
 const DefaultPort = 47821
 
-// DefaultAIPort is the loopback listener reserved for the editor's AI/MCP bridge.
+// DefaultAIPort is the loopback listener reserved for the editor's Code Cell bridge.
 const DefaultAIPort = 47822
 
 // DefaultHost keeps the service loopback-only unless explicitly overridden.
@@ -117,7 +117,7 @@ func Resolve(args []string) (*Config, error) {
 	fs := flag.NewFlagSet("rpe-redux-server", flag.ContinueOnError)
 
 	port := fs.Int("port", DefaultPort, "TCP port to listen on (0 selects a free port)")
-	aiPort := fs.Int("ai-port", DefaultAIPort, "loopback TCP port for the AI/MCP bridge (0 selects a free port)")
+	aiPort := fs.Int("ai-port", DefaultAIPort, "loopback TCP port for the Code Cell bridge (0 selects a free port)")
 	host := fs.String("host", DefaultHost, "host/interface to bind (loopback by default)")
 	db := fs.String("db", defaultDBPath(), "path to the SQLite database file")
 	origins := fs.String("origins", "", "comma-separated extra CORS origins")

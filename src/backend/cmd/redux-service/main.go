@@ -20,11 +20,11 @@ import (
 	"syscall"
 	"time"
 
+	"rperedux/server/internal/codecell"
 	"rperedux/server/internal/collab"
 	"rperedux/server/internal/config"
 	"rperedux/server/internal/httpapi"
 	"rperedux/server/internal/instances"
-	"rperedux/server/internal/mcp"
 	"rperedux/server/internal/preferences"
 	"rperedux/server/internal/store"
 )
@@ -82,24 +82,22 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer data.Close()
 
-	mcpServer := mcp.NewServer()
-	defer mcpServer.CloseAll()
-
-	// The MCP initialize response and the health payload report the same
-	// linker-injected product version.
+	// The Code Cell service and health payload report the same linker-injected
+	// product version.
 	httpapi.Version = version
-	mcp.Version = version
+	codecell.Version = version
 
 	absDB, err := filepath.Abs(cfg.DB)
 	if err != nil {
 		return err
 	}
+	cellServer := codecell.NewServer(absDB)
+	defer cellServer.CloseAll()
 
-	// Mint both loopback write credentials before serving so a file left by an
-	// earlier process can never authorize this one. The endpoint routes retry
-	// and report the credential unavailable if this first write fails.
-	if _, err := mcp.EnsureEndpoint(absDB); err != nil {
-		fmt.Fprintf(os.Stderr, "MCP bridge credential unavailable: %v\n", err)
+	// Mint the Code Cell bridge credential before serving so a file left by an
+	// earlier process can never authorize this one.
+	if _, err := codecell.EnsureEndpoint(absDB); err != nil {
+		fmt.Fprintf(os.Stderr, "Code Cell bridge credential unavailable: %v\n", err)
 	}
 	if _, err := preferences.EnsureEndpoint(absDB); err != nil {
 		fmt.Fprintf(os.Stderr, "preference write credential unavailable: %v\n", err)
@@ -129,7 +127,7 @@ func run(args []string, stdout io.Writer) error {
 
 	// Code cells are a read-only but locally privileged surface. Keep them off
 	// whenever the service is reachable beyond loopback.
-	if !mcpServer.RestrictCellsToListener(listener.Addr()) {
+	if !cellServer.RestrictCellsToListener(listener.Addr()) {
 		fmt.Fprintln(os.Stderr, "WARNING: code-cell endpoints are disabled because the service is not bound to a loopback address.")
 	}
 
@@ -243,10 +241,9 @@ func run(args []string, stdout io.Writer) error {
 	}
 	apiHandler := httpapi.NewAPIWithRuntimeAndDocs(data, liveInstances, collabStatus, requestShutdown, cfg.DocsDir, cfg.Origins...)
 	root := http.NewServeMux()
-	root.Handle("/api/mcp", mcpServer)
-	root.Handle("/api/mcp/bridge", mcpServer)
-	root.Handle("/api/cell/guide", mcpServer)
-	root.Handle("/api/cell/run", mcpServer)
+	root.Handle("/api/cell/bridge", cellServer)
+	root.Handle("/api/cell/guide", cellServer)
+	root.Handle("/api/cell/run", cellServer)
 	root.Handle("/", apiHandler)
 	handler := http.Handler(root)
 	server := &http.Server{
@@ -257,7 +254,7 @@ func run(args []string, stdout io.Writer) error {
 		IdleTimeout:       httpIdleTimeout,
 	}
 	aiServer := &http.Server{
-		Handler:           mcpServer,
+		Handler:           cellServer,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       httpReadTimeout,
 		WriteTimeout:      httpWriteTimeout,

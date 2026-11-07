@@ -1,4 +1,4 @@
-/** The shared revision contract carries editor state without widening MCP pins. */
+/** The shared revision contract carries editor state without widening Code Cell pins. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { revisionConflicts, toDocumentRevisions } from "../../../core/contracts/revisions.ts";
@@ -35,7 +35,7 @@ test("revision pins compare only the three writable snapshot fields", () => {
   ]);
 });
 
-test("crossing into MCP or a cell drops the saved-state fingerprint", () => {
+test("crossing into a Code Cell drops the saved-state fingerprint", () => {
   const coordinated = {
     chartFingerprint: "live",
     savedChartFingerprint: "saved",

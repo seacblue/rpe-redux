@@ -3,7 +3,7 @@
  *
  * `sdk/llm-guide.md` is the canonical author-facing guide; the application
  * entry imports it as text and binds it here. Keeping the binding separate lets
- * the MCP adapter stay transport-neutral and lets tests run without the bundle.
+ * the Code Cell adapter stay transport-neutral and lets tests run without the bundle.
  */
 import { createLateBound } from "../../utils/lateBound.ts";
 import { filterAiGuide } from "./aiGuide.ts";
@@ -17,7 +17,7 @@ const FALLBACK_GUIDE = [
   'open, save, close, or delete documents or projects. Pass `profile: "read"` for',
   "a read-only run; `await redux.capabilities()` reports the exact grant list.",
   "",
-  "Call `redux_code_run` with `{ source, args?, expected?, timeoutMs? }`; the HTTP",
+  "POST `/api/cell/run` with `{ source, args?, expected?, timeoutMs? }`; the HTTP",
   "`POST /api/cell/run` body also accepts `profile`. A transaction can replace",
   "`timing.bpmList`, patch metadata, insert judge lines, and insert/update/delete",
   "notes and events. Notes and events use beat triples. Preview ids are valid only",
@@ -29,11 +29,11 @@ const FALLBACK_GUIDE = [
 const guideBinding = createLateBound<string>();
 
 /** Bind the bundled guide text; returns an idempotent disposer. */
-export function connectMcpGuide(text: string): () => void {
+export function connectCodeCellGuide(text: string): () => void {
   return guideBinding.bind(text);
 }
 
 /** The bundled guide, or a compact fallback when the app entry is not mounted. */
-export function getMcpGuide(): string {
+export function getCodeCellGuide(): string {
   return filterAiGuide(guideBinding.value() ?? FALLBACK_GUIDE);
 }

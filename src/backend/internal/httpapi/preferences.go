@@ -5,8 +5,8 @@ package httpapi
 import (
 	"net/http"
 
+	"rperedux/server/internal/codecell"
 	"rperedux/server/internal/config"
-	"rperedux/server/internal/mcp"
 	"rperedux/server/internal/preferences"
 )
 
@@ -33,7 +33,7 @@ func (a *API) preferenceWriteAllowed(r *http.Request) bool {
 // without exposing the token itself. It is loopback-only and follows the same
 // origin allowlist as the rest of the API.
 func (a *API) handlePreferencesEndpoint(w http.ResponseWriter, r *http.Request) {
-	if !mcp.LoopbackRequest(r) {
+	if !codecell.LoopbackRequest(r) {
 		writeError(w, http.StatusForbidden, "loopback_required", "the preference endpoint is only available on loopback")
 		return
 	}

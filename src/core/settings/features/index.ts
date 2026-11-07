@@ -17,7 +17,7 @@ import "./timeline.ts";
 import "./audio.ts";
 import "./preview.ts";
 import "./files.ts";
-import "./mcp.ts";
+import "./codeCell.ts";
 import "./updates.ts";
 import "./extensions.ts";
 import "./shortcuts.ts";

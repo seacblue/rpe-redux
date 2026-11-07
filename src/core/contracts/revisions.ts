@@ -1,12 +1,12 @@
 /**
- * The document revision snapshot shared by the document coordinator, the MCP
+ * The document revision snapshot shared by the document coordinator, the Code Cell
  * adapter, and the code-cell runtime.
  *
  * Every surface pins the same fields before a read or write; keeping the shape
  * and conflict rule here prevents a second, subtly different definition of
  * "stale". Editor coordination state extends the base snapshot with the last
  * saved chart fingerprint so dirty tracking can compare the live chart with the
- * last saved chart; MCP and code-cell snapshots stay on the three pin fields.
+ * last saved chart; Code Cell snapshots stay on the three pin fields.
  */
 export interface DocumentRevisions {
   readonly chartFingerprint: string | null;
@@ -25,7 +25,7 @@ export type RevisionPinField = "chartFingerprint" | "diskSnapshot" | "generation
 /**
  * Narrows any revision snapshot to the fields every surface pins.
  *
- * Use this when an editor coordination snapshot crosses into MCP or a code
+ * Use this when an editor coordination snapshot crosses into a Code Cell or a code
  * cell, so the saved-state-only field never leaks into a public result.
  */
 export function toDocumentRevisions(revisions: DocumentRevisions): DocumentRevisions {

@@ -39,7 +39,7 @@ export default {
   "editorPanels.aiActivity.request": "请求",
   "editorPanels.aiActivity.response": "返回",
   "editorPanels.aiActivity.source": "源码",
-  "editorPanels.aiActivity.transport": "WebSocket /api/mcp/bridge",
+  "editorPanels.aiActivity.transport": "WebSocket /api/cell/bridge",
   "editorPanels.aiActivity.pending": "进行中…",
   "editorPanels.aiActivity.duration": "{ms} ms",
   "editorPanels.aiActivity.status.pending": "进行中",

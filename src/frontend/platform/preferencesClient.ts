@@ -2,7 +2,7 @@
  * Desktop preference writer.
  *
  * The sidecar requires a per-process token for the durable document because the
- * settings section carries the code-cell and MCP consent switches. The token is
+ * settings section carries the Code Cell consent switch. The token is
  * read from `preferences-endpoint.json` through the native file bridge, never
  * from an HTTP response. Browser development keeps the tokenless path the local
  * development sidecar accepts from its Vite origin.

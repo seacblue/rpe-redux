@@ -93,7 +93,7 @@ data lives in the test file unless several suites share it.
 | `e2eJourneySmoke.mjs` | The smoke command-line entry point; `scripts/smoke.mjs` drives it. |
 
 Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and
-`mcpTransport.test.mjs`. They skip when `src-tauri/resources/redux-service` is
+`codeCellTransport.test.mjs`. They skip when `src-tauri/resources/redux-service` is
 absent; build it with `npm run build:server` to include them. Both start the
 sidecar on ephemeral ports (`--port 0 --collab-port 0 --ai-port 0`), so they do
 not collide with a running desktop build. The rest of the unit suite does not

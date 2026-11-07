@@ -198,26 +198,19 @@ handles it receives.
   packages: they never receive the SDK, backend, document, filesystem, network,
   or host DOM, and declarative actions can only re-present registered sidebar
   items. See [Theme packages](../src/assets/themes/README.md).
-- MCP: `core/edit/mcp/` owns the transport-neutral read/write adapter;
-  `src/backend/internal/mcp/mcp.go` owns the loopback JSON-RPC endpoint and the
-  editor bridge.
-  The bridge is authenticated by a per-process session token written to
-  `mcp-endpoint.json` beside the SQLite database; `frontend/platform/mcpBridge.ts`
-  asks `GET /api/mcp/endpoint` for that path, reads the file through the native
-  host, and sends the token with the WebSocket handshake. The stored
-  `mcp-enabled` preference is its write-consent boundary; the settings page
-  exposes only the code-cell toggle.
-- Code cells: `core/codecell/` owns the one-shot runtime and its profiles;
-  `frontend/platform/extensionSandbox.tsx` runs the same opaque iframe in cell
-  mode. `src/backend/internal/mcp/mcp.go` exposes `GET /api/cell/guide` and
-  `POST /api/cell/run` on a loopback listener and peer; `redux_code_guide` and
-  `redux_code_run` are the MCP adapter. `core/edit/mcp/activity.ts` keeps a
-  bounded, session-only log of every bridge request and response, and
-  `frontend/screens/editor/inspector/aiActivity/` renders it as the AI activity
-  pane. `core/settings/editingAiAccess.ts` owns the per-feature AI permission,
-  `core/edit/aiEditingPolicy.ts` maps it to transaction fields, and
-  `core/edit/mcp/aiGuide.ts` removes restricted passages from the served guide.
-  There is no in-app source editor, HTTP apply route, or durable run history.
+- Code Cells: `core/codecell/` owns the one-shot runtime and its profiles;
+  `core/edit/codecell/` owns the mounted adapter, guide filtering, endpoint
+  handshake, and bounded activity log. `frontend/platform/codeCellBridge.ts`
+  connects the active editor to the local service over an authenticated
+  WebSocket, while `src/backend/internal/codecell/cell.go` exposes only
+  `GET /api/cell/guide` and `POST /api/cell/run` on a loopback listener and
+  peer. `frontend/platform/extensionSandbox.tsx` runs the same opaque iframe in
+  cell mode. `frontend/screens/editor/inspector/aiActivity/` renders the
+  session-only activity log. `core/settings/editingAiAccess.ts` owns the
+  per-feature AI permission, `core/edit/aiEditingPolicy.ts` maps it to
+  transaction fields, and `core/edit/codecell/aiGuide.ts` removes restricted
+  passages from the served guide. There is no JSON-RPC tool surface, in-app
+  source editor, HTTP apply route, or durable run history.
 - Video recording: `frontend/screens/editor/workspace/recording/`, the desktop
   adapter in `core/platform/desktop/recording.ts`, and `src-tauri/src/io/recording.rs`.
   `recordingVideoEncoder.ts` selects the platform H.264 encoder through WebCodecs

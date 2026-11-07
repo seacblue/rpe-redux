@@ -7,7 +7,7 @@ export default {
   "settings.field.backend-port.label": "后端端口",
   "settings.field.backend-port.description": "本地谱面服务使用的端口。",
   "settings.field.ai-port.label": "AI 服务端口",
-  "settings.field.ai-port.description": "AI/MCP 桥接服务使用的本机回环端口。",
+  "settings.field.ai-port.description": "代码单元桥接服务使用的本机回环端口。",
   "settings.restartRequired": "重启应用后生效",
   "settings.field.code-execution-enabled.label": "允许 AI 代码单元",
   "settings.field.code-execution-enabled.description":
@@ -16,16 +16,16 @@ export default {
   "settings.codeCell.enableWarning.description":
     "代码单元在沙箱中运行 JavaScript，可编辑当前谱面及其所属库项目的素材，但无法读取或修改其他库项目，也无法访问网络、宿主 DOM 或保存、删除文档。请仅在你信任代码时启用。",
   "settings.codeCell.enableWarning.confirm": "允许代码单元",
-  "settings.field.mcp-access.label": "AI 接入信息",
-  "settings.mcp.cellGuide": "代码单元指南",
-  "settings.mcp.cellRun": "代码单元运行地址",
-  "settings.mcp.nothingEnabled": "启用 AI 代码单元后才会显示端点。",
-  "settings.mcp.copyPrompt": "复制 AI 提示",
-  "settings.mcp.copyPromptSuccess": "提示已复制",
-  "settings.mcp.copyPromptFailed": "无法复制 AI 提示",
-  "settings.mcp.promptEdit": "调整提示",
-  "settings.mcp.promptTitle": "AI 提示",
-  "settings.mcp.aiPrompt":
+  "settings.field.code-cell-access.label": "AI 接入信息",
+  "settings.codeCell.cellGuide": "代码单元指南",
+  "settings.codeCell.cellRun": "代码单元运行地址",
+  "settings.codeCell.nothingEnabled": "启用 AI 代码单元后才会显示端点。",
+  "settings.codeCell.copyPrompt": "复制 AI 提示",
+  "settings.codeCell.copyPromptSuccess": "提示已复制",
+  "settings.codeCell.copyPromptFailed": "无法复制 AI 提示",
+  "settings.codeCell.promptEdit": "调整提示",
+  "settings.codeCell.promptTitle": "AI 提示",
+  "settings.codeCell.aiPrompt":
     "你正在通过本地代码单元 API 协助编辑 RPE Redux 中的谱面。\n" +
     "1. 读取指南 {guide}，其中包含可读写 SDK、谱面字段名和当前安装可用的 transaction 语法。\n" +
     '2. 用 POST {run} 执行代码单元，请求头为 "Content-Type: application/json"，请求体为 {"source":"..."}。检查 ok；事务结果还要检查 value.status 和 value.issues。\n' +
@@ -33,7 +33,7 @@ export default {
     "4. 需要修改时，在代码单元里调用 redux.transaction.apply(request)。它可以替换 timing.bpmList、修改 metadata、新增判定线，并插入/更新/删除音符与事件；不能删除判定线，也不能创建、打开、保存、关闭或删除文档。音符和事件使用拍数三元组，不是秒数。\n" +
     "5. 需要管理素材时，使用 redux.library.current 取得当前打开文档所属库项目的句柄，再调用它的 addAsset / removeAsset。其他库项目不可读也不可写。素材提交前请用户先保存文档；素材变化后要在事务中更新 metadata 或判定线 Texture 引用。代码单元不能删除项目。\n" +
     "6. 检查返回的 status 和 issues，重新读取修改过的对象，然后总结修改内容。conflict 表示谱面已经变化：重新读取并重建请求，不要重试旧的请求。",
-  "settings.mcp.desktopOnly": "AI 辅助开发仅在桌面应用中可用。",
+  "settings.codeCell.desktopOnly": "AI 辅助开发仅在桌面应用中可用。",
   "settings.startup.reportTitle": "RPE Redux — 启动失败",
   "settings.startup.reportTime": "时间：{time}",
   "settings.startup.reportRuntime": "运行环境：{runtime}",

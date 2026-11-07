@@ -22,7 +22,7 @@ export default {
   "settings.field.backend-port.label": "Backend port",
   "settings.field.backend-port.description": "Port used by the local chart service.",
   "settings.field.ai-port.label": "AI service port",
-  "settings.field.ai-port.description": "Loopback port used by the AI/MCP bridge.",
+  "settings.field.ai-port.description": "Loopback port used by the Code Cell bridge.",
   "settings.restartRequired": "Takes effect after restarting the application",
   "settings.field.code-execution-enabled.label": "Allow AI code cells",
   "settings.field.code-execution-enabled.description":
@@ -31,16 +31,16 @@ export default {
   "settings.codeCell.enableWarning.description":
     "Code cells run sandboxed JavaScript that can edit this chart and the assets of its library project, but cannot read or change other library projects, access the network or host DOM, or save or delete documents. Enable only if you trust the code.",
   "settings.codeCell.enableWarning.confirm": "Allow code cells",
-  "settings.field.mcp-access.label": "AI access details",
-  "settings.mcp.cellGuide": "Code-cell guide",
-  "settings.mcp.cellRun": "Code-cell run",
-  "settings.mcp.nothingEnabled": "Enable AI code cells to expose an endpoint.",
-  "settings.mcp.copyPrompt": "Copy AI prompt",
-  "settings.mcp.copyPromptSuccess": "Prompt copied",
-  "settings.mcp.copyPromptFailed": "Could not copy the prompt",
-  "settings.mcp.promptEdit": "Adjust prompt",
-  "settings.mcp.promptTitle": "AI prompt",
-  "settings.mcp.aiPrompt":
+  "settings.field.code-cell-access.label": "AI access details",
+  "settings.codeCell.cellGuide": "Code-cell guide",
+  "settings.codeCell.cellRun": "Code-cell run",
+  "settings.codeCell.nothingEnabled": "Enable AI code cells to expose an endpoint.",
+  "settings.codeCell.copyPrompt": "Copy AI prompt",
+  "settings.codeCell.copyPromptSuccess": "Prompt copied",
+  "settings.codeCell.copyPromptFailed": "Could not copy the prompt",
+  "settings.codeCell.promptEdit": "Adjust prompt",
+  "settings.codeCell.promptTitle": "AI prompt",
+  "settings.codeCell.aiPrompt":
     "You are helping edit a chart in RPE Redux through the local code-cell API.\n" +
     "1. Read the guide at {guide}; it contains the read/write SDK, chart field names, and the transaction grammar available to this installation.\n" +
     '2. Run a cell with POST {run}, header "Content-Type: application/json", body {"source":"..."}. Inspect ok; for a transaction inspect value.status and value.issues.\n' +
@@ -48,7 +48,8 @@ export default {
     "4. To edit, call redux.transaction.apply(request) inside the cell. It can replace timing.bpmList, patch metadata, insert judge lines, and insert/update/delete notes and events; it cannot delete judge lines or create/open/save/close/delete the document. Notes and events use beat triples, not seconds.\n" +
     "5. To manage assets, use the redux.library.current handle for the open document's library project, then call its addAsset / removeAsset methods. Other library projects are not readable or writable. Ask the user to save the document before asset commits, and update metadata or line Texture references in a transaction when an asset changes. Project deletion is not available.\n" +
     "6. Inspect the returned status and issues, re-read the changed objects, then summarize what changed. A conflict means the chart changed: re-read and rebuild the request instead of retrying the stale one.",
-  "settings.mcp.desktopOnly": "AI-assisted development is available in the desktop application.",
+  "settings.codeCell.desktopOnly":
+    "AI-assisted development is available in the desktop application.",
   "settings.startup.reportTitle": "RPE Redux — startup failure",
   "settings.startup.reportTime": "Time: {time}",
   "settings.startup.reportRuntime": "Runtime: {runtime}",

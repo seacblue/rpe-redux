@@ -590,7 +590,7 @@ export const codeCellRuntime = new CodeCellRuntime();
 /**
  * Install the debug/automation-only code-cell facade.
  *
- * Release builds never expose it; the sandbox and MCP remain the product
+ * Release builds never expose it; the sandbox and Code Cell bridge remain the product
  * surfaces. It mirrors `window.redux`'s development contract so the smoke suite
  * exercises the real iframe.
  */

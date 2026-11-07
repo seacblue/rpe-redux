@@ -2,8 +2,8 @@
 
 This is the runtime guide for one-shot code cells. A cell is an async JavaScript
 function body that reads the open document, can apply atomic chart transactions,
-and returns one JSON value. The runtime and profiles live in
-`src/core/codecell/`; the HTTP routes live in the local service. Read this guide
+and returns one JSON value. The runtime and profiles are part of the desktop
+application, while the HTTP routes live in the local service. Read this guide
 once, then write short cells instead of a long sequence of transport calls.
 
 ## Before you start
@@ -67,13 +67,6 @@ chart, switches documents, or the disk snapshot changes during the run, the
 write returns `rejected` with issue `stale_read` and is not committed. The
 request may also set `timeoutMs` within the limit below.
 
-The MCP `code.run` method follows the same rule: `disabled`, `invalid_request`,
-and `stale_read` are outer tool errors, while every other cell outcome —
-including `ok: false`, `busy`, `timeout`, `cancelled`, `syntax`, `exception`,
-`capabilityDenied`, and `runtime` — is returned as a successful tool result whose
-`value` is the cell result envelope. Inspect `value.ok` before treating the call
-as successful.
-
 ## What a cell is
 
 ```js
@@ -87,7 +80,7 @@ return { summary: state.name || "untitled" };
   bridge and returns a promise; always `await` it, even for synchronous host
   methods such as `redux.document.state()`.
 - `input` is the request's `args` value (normally an object or array), or
-  `undefined` when omitted. The HTTP/MCP adapter accepts `null` and objects;
+  `undefined` when omitted. The HTTP adapter accepts `null` and objects;
   primitives are rejected with `invalid_request`.
 - `console.log/info/warn/error` is captured and returned in `logs` (bounded);
   `console.debug` is captured at level `log`. `atMs` is milliseconds since the
@@ -393,7 +386,7 @@ access in both profiles.
 All methods cross the asynchronous bridge, so `await` every call except the
 synchronous `redux.version` string. `capabilities()` is cell-only; the SDK
 exports the `CodeCellApi` type, and the host implementation is
-`RestrictedCodeCellApi` in `src/core/codecell/restrictedApi.ts`.
+the restricted Code Cell host implementation.
 
 Chart object ids are `ChartObjectId` (`string & { readonly __chartObjectId:
 unique symbol }`) in the SDK; runtime values are UUID-shaped strings. Read ids
@@ -744,7 +737,7 @@ before replacing a song, background, illustration, line texture, or attached UI.
 ### Chart shapes
 
 The authoritative TypeScript definitions live in
-`src/core/global/chart/chart.ts` and `src/core/edit/chart/api.ts`. The stable
+the public chart and transaction types. The stable
 cell-facing shape is:
 
 ```ts
@@ -1545,7 +1538,7 @@ to cells.
 
 | `error.code`       | when                                                                                                                 | message example                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `disabled`         | code execution is off, or the MCP code host is absent                                                                | `Code execution is disabled`                                          |
+| `disabled`         | code execution is off, or the Code Cell host is absent                                                               | `Code execution is disabled`                                          |
 | `busy`             | another cell is running; not queued                                                                                  | `A code cell is already running`                                      |
 | `stale_read`       | an `expected` field no longer matches the start revision, or preview/apply ran after the start snapshot moved on     | `Code cell base revision is stale: chartFingerprint`                  |
 | `invalid_request`  | source empty/whitespace/non-string or over 100,000 UTF-8 bytes; unknown profile; invalid args/timeout at the adapter | `Unknown code cell profile: admin`                                    |
@@ -1601,8 +1594,7 @@ try {
 - Transaction `issues[].code` is an open set. Inspect `status`, `issues[].path`,
   and `issues[].message`; do not enumerate a fixed list.
 - Full chart and library objects can gain fields. The stable fields and
-  TypeScript types are in this guide and in `src/core/global/chart/chart.ts`,
-  `src/core/edit/chart/api.ts`, and `src/core/global/library/client.ts`.
+  TypeScript types are defined in this guide and the public SDK declarations.
 - `redux.capabilities()` and `result.capabilities` are the only dynamic
   capability source. Do not test permissions by calling write methods.
 - Only one unused preview exists per editor session. A second `preview` replaces
@@ -1622,11 +1614,6 @@ try {
   `truncated: true`; the returned value is unavailable. A log produced after
   termination begins may be lost. Put anything you must keep in the returned
   value, or finish before the budget.
-- The MCP `redux_code_run` `tools/list` schema currently lists `source`, `args`,
-  `expected`, and `timeoutMs` but not `profile`. The `cell.run`/`code.run`
-  runtime still accepts `profile`; pass it explicitly through the HTTP body or
-  the method when you need `read`. Adding `profile` to the backend schema is a
-  separate fix.
 
 ## Authoring checklist
 
