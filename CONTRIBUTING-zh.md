@@ -99,6 +99,11 @@ smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](d
 
 ## Pull request
 
+每个 PR 都以 squash 方式合入：一个 PR 在 `main` 上只产生一个提交，PR 标题就是该
+提交的标题。仓库已关闭 merge commit 与 rebase merge，所以标题请写成祈使句的
+conventional commit 形式，例如 `feat(editor): add curve handles`，契约与验证细节
+写进正文。
+
 PR 应说明：
 
 - 改变了什么用户可见行为或公开契约？

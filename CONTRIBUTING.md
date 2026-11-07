@@ -115,6 +115,13 @@ import React, Tauri, storage, or the network.
 
 ## Pull requests
 
+Every pull request is squash-merged: one pull request becomes exactly one commit
+on `main`, and the pull request title becomes that commit's subject. Merge
+commits and rebase merges are disabled at the repository level, so write the title
+as an imperative conventional-commit subject such as
+`feat(editor): add curve handles`, and put the contract and verification details
+in the body.
+
 A pull request should answer:
 
 - What user-visible behavior or public contract changed?
