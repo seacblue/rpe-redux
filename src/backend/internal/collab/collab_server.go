@@ -332,6 +332,22 @@ func (s *Server) send(socket *collabSocket, value any) {
 	}
 }
 
+// sendWait queues one isolated stream frame with backpressure. Unlike send,
+// this path may wait for a slow peer because asset streams already run in
+// their own goroutine and must not lose a chunk when the socket queue fills.
+func (s *Server) sendWait(socket *collabSocket, value any) bool {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		s.logf("encode message: %v", err)
+		return false
+	}
+	if err := socket.WriteTextWait(payload); err != nil {
+		socket.Close()
+		return false
+	}
+	return true
+}
+
 func (s *Server) sendError(socket *collabSocket, code, message string) {
 	s.send(socket, map[string]any{"type": "error", "code": code, "message": message})
 }
@@ -888,13 +904,15 @@ func (s *Server) sendAsset(socket *collabSocket, requestID string, asset collabA
 	if total < 1 {
 		total = 1
 	}
-	s.send(socket, map[string]any{
+	if !s.sendWait(socket, map[string]any{
 		"type":        "asset-download-begin",
 		"requestId":   requestID,
 		"asset":       asset,
 		"totalChunks": total,
 		"chunkSize":   collabAssetChunkBytes,
-	})
+	}) {
+		return
+	}
 	for index := 0; index < total; index++ {
 		start := index * collabAssetChunkBytes
 		end := start + collabAssetChunkBytes
@@ -904,14 +922,16 @@ func (s *Server) sendAsset(socket *collabSocket, requestID string, asset collabA
 		if start > len(bytes) {
 			start = len(bytes)
 		}
-		s.send(socket, map[string]any{
+		if !s.sendWait(socket, map[string]any{
 			"type":      "asset-download-chunk",
 			"requestId": requestID,
 			"index":     index,
 			"data":      base64.StdEncoding.EncodeToString(bytes[start:end]),
-		})
+		}) {
+			return
+		}
 	}
-	s.send(socket, map[string]any{"type": "asset-download-end", "requestId": requestID, "hash": asset.Hash})
+	s.sendWait(socket, map[string]any{"type": "asset-download-end", "requestId": requestID, "hash": asset.Hash})
 }
 
 // handleApprove resolves one join request and admits or rejects the waiting

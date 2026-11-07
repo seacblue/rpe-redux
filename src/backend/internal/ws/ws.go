@@ -269,6 +269,31 @@ func (w *Conn) WriteText(payload []byte) error {
 	return w.enqueue(opcodeText, payload)
 }
 
+// WriteTextWait queues one text frame, waiting for a queue slot when the
+// bounded outgoing buffer is full. Closing the connection unblocks the wait.
+// Streamed assets use this path so a large transfer applies backpressure
+// without turning the room broadcast path into an unbounded memory queue.
+func (w *Conn) WriteTextWait(payload []byte) error {
+	return w.enqueueWait(opcodeText, payload)
+}
+
+// enqueueWait adds one frame after capacity becomes available or the socket
+// closes. The caller is expected to use this only from an isolated stream
+// goroutine, never from the room's synchronous broadcast path.
+func (w *Conn) enqueueWait(opcode byte, payload []byte) error {
+	select {
+	case <-w.done:
+		return ErrClosed
+	default:
+	}
+	select {
+	case w.out <- frame{opcode: opcode, payload: payload}:
+		return nil
+	case <-w.done:
+		return ErrClosed
+	}
+}
+
 // writeControl queues a control frame, truncating its payload to 125 bytes.
 func (w *Conn) writeControl(opcode byte, payload []byte) error {
 	if len(payload) > 125 {
