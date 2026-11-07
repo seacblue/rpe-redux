@@ -26,11 +26,6 @@ export const STARTUP_EXTENSION_CANDIDATE_LIMIT = 8;
 /** Longest failure line shown beside a package name. */
 export const STARTUP_FAILURE_MESSAGE_LIMIT = 160;
 
-/** Whether a backend startup error offers a different-port recovery path. */
-export function isBackendPortConflict(error: string): boolean {
-  return /backend port \d+ is already in use/iu.test(error);
-}
-
 /** The package rows a failure screen should render. */
 export interface StartupExtensionCandidates {
   readonly kind: "failures" | "activations" | "none";
