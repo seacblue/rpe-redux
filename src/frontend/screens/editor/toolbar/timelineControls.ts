@@ -52,7 +52,7 @@ export function bindTimelineControlInputs(options: TimelineControlBindingOptions
     commitNumeric(property, rawValue) {
       const field = {
         division: { minimum: 1, maximum: 100, integer: true },
-        gridCount: { minimum: 1, maximum: 100, integer: true },
+        gridCount: { minimum: 1, maximum: 100, integer: false },
         scale: { minimum: 20, maximum: 2000, integer: false },
       }[property];
       const value = Number(rawValue);

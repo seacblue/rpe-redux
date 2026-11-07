@@ -7,7 +7,7 @@
  */
 import { beatFromFraction, beatValue, fromNumber, type Beat } from "../timing/beat.ts";
 
-/** The vertical grid's spacing, first line offset and selectable line count. */
+/** The vertical grid's spacing, first interior line and selectable line count. */
 interface VerticalGrid {
   spacing: number;
   first: number;
@@ -17,18 +17,23 @@ interface VerticalGrid {
 /**
  * The vertical snap grid.
  *
- * `count` is the total number of selectable lines across the chart field.
- * One line is the centred line; two lines are the left and right boundaries;
- * larger counts are evenly spaced from left to right. Rounding here keeps old
- * persisted fractional values usable while making the setting's meaning match
- * the visible line count.
+ * `count` is the number of selectable interior lines and may be fractional.
+ * The canvas frame supplies the two outer boundary lines; they are not snap
+ * positions, so the setting never counts lines that cannot be selected.
+ *
+ * The whole-line count selects the existing odd/even layout: an odd count has
+ * a centre line and the same number of lines on each side, while an even count
+ * straddles the centre. The fractional part only tightens the spacing, so
+ * `17.5` still has a centre line but sits closer together than `17`.
  */
 export function verticalGrid(count = 11): VerticalGrid {
   const value = Number(count);
-  const lineCount = Math.max(1, Number.isFinite(value) ? Math.round(value) : 11);
+  const numeric = Number.isFinite(value) && value > 0 ? value : 1;
+  // The integer part determines parity and therefore whether the centre line exists.
+  const lineCount = Math.max(1, Math.floor(numeric));
   return {
-    spacing: lineCount === 1 ? 1350 : 1350 / (lineCount - 1),
-    first: lineCount === 1 ? 0 : -(lineCount - 1) / 2,
+    spacing: 1350 / (numeric + 1),
+    first: -(lineCount - 1) / 2,
     lineCount,
   };
 }
