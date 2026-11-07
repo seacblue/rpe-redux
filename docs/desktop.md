@@ -404,6 +404,14 @@ The library uses SQLite WAL mode with a busy timeout, so concurrent service
 processes serialize writes. Library commits use the revision check for
 optimistic concurrency.
 
+For parallel development or AI-driven test runs, launch a copy with
+`--backend-port=<port>` and, when code cells are enabled, a matching
+`--ai-port=<port>`. The development wrapper also accepts
+`--frontend-port=<port>`. These are process-only overrides; they do not rewrite
+the saved Runtime ports settings. If the selected backend port is occupied, the
+launch stops without switching to a random port and the startup screen explains
+how to choose another one for the next run.
+
 The one-room-per-backend claim uses a named kernel mutex on Windows. Linux keeps
 the claim process-local until an equivalent kernel lock ships, so host or join a
 room from one instance per data directory there.
