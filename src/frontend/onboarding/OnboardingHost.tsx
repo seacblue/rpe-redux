@@ -383,7 +383,6 @@ export function OnboardingHost() {
           }
         }}
         label={t("onboarding.choice.title")}
-        description={t("onboarding.choice.description")}
         closeButton={false}
         className="redux-onboarding-choice-dialog"
         actions={

@@ -666,7 +666,7 @@ export default {
   "settings.startup.progress": "Starting the editor…",
   "settings.startup.testWarning.title": "Test feature notice",
   "settings.startup.testWarning.description":
-    "RPE Redux is still in testing; you may see visual glitches or occasional instability. Report problems from Help → Survey.",
+    "RPE Redux is still in testing; you may see visual glitches or occasional instability. Report problems from Help > Survey.",
   "settings.startup.testWarning.dontShow": "Do not show again",
   // --------------------------------------------------------------- updates
   "settings.updates.autoCheck.label": "Automatically check for updates",

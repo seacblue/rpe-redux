@@ -635,9 +635,7 @@ export default {
   "onboarding.kicker": "快速上手",
   "onboarding.progress": "{current} / {total}",
   "onboarding.choice.title": "你想怎么开始？",
-  "onboarding.choice.description":
-    "选择最接近你的情况。指引会直接贴在对应控件旁边，打开时仍然可以操作它们。",
-  "onboarding.choice.note": "之后可以在 设置 → 帮助 → 显示上手引导 中重新打开。",
+  "onboarding.choice.note": "之后可以在 设置 > 帮助 > 显示上手引导 中重新打开。",
   "onboarding.choice.rpe.title": "我熟悉 RPE",
   "onboarding.choice.rpe.description": "导入现有谱面，并了解这个编辑器与 RPE 的差异。",
   "onboarding.choice.new.title": "我没有写过谱面",
