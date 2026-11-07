@@ -62,9 +62,10 @@
           "English"
         ],
         "installMode": "currentUser",
+        "installerHooks": "nsis/installer.nsh",
         "startMenuFolder": "RPE Redux",
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico",
+        "uninstallerIcon": "nsis/uninstaller.ico",
         "headerImage": "nsis/header.bmp",
         "sidebarImage": "nsis/sidebar.bmp",
         "uninstallerHeaderImage": "nsis/header.bmp"

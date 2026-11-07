@@ -1,0 +1,15 @@
+<!-- Owns the distinct NSIS uninstaller mark: the product diamond with a destructive red badge. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <path
+    d="M128 8 248 128 128 248 8 128Z"
+    fill="none"
+    stroke="#6bd9e8"
+    stroke-linejoin="round"
+    stroke-width="10"
+  />
+  <circle cx="190" cy="190" r="50" fill="#0b0d12" stroke="#0b0d12" stroke-width="8" />
+  <circle cx="190" cy="190" r="42" fill="#e84b63" />
+  <path d="M170 176h40v38a6 6 0 0 1-6 6h-28a6 6 0 0 1-6-6Z" fill="#fff" />
+  <path d="M165 166h50v10h-50zM181 156h18v10h-18z" fill="#fff" />
+  <path d="M182 184v25M190 184v25M198 184v25" stroke="#e84b63" stroke-width="4" />
+</svg>
