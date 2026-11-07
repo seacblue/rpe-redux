@@ -12,11 +12,17 @@
 // one row, but the frame stays put so switching modes never resizes the shell.
 .redux-toolbar {
   --chrome-progress-width: clamp(312px, 36vw, 480px);
+  // The docked progress card owns an inline margin on both sides. The trailing
+  // column therefore reserves the card plus both margins; sizing the column from
+  // the same inset is what keeps the card's trailing edge inside the frame at
+  // every width instead of overflowing it.
+  --chrome-progress-inset: var(--space-3);
+  --chrome-progress-column: calc(var(--chrome-progress-width) + 2 * var(--chrome-progress-inset));
   --toolbar-seam-width: calc(var(--tool-cell) + var(--space-2));
   --tool-gap: var(--theme-toolbar-gap, var(--space-1));
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--chrome-progress-width);
+  grid-template-columns: minmax(0, 1fr) var(--chrome-progress-column);
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   flex: none;
@@ -43,7 +49,7 @@
 .redux-app-root .redux-toolbar .transport-host .redux-status-card {
   grid-column: 2;
   grid-row: 1;
-  margin: var(--space-1) var(--space-3);
+  margin: var(--space-1) var(--chrome-progress-inset);
   padding: var(--space-1) var(--space-2);
   grid-template-rows: minmax(48px, 1fr) auto;
   gap: 1px;
@@ -202,7 +208,7 @@
 }
 
 .redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-end {
-  right: var(--chrome-progress-width);
+  right: var(--chrome-progress-column);
 }
 
 .redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-end::before {
@@ -336,7 +342,7 @@
 @media (max-width: 1100px) {
   .redux-app-root .redux-toolbar {
     --chrome-progress-width: clamp(252px, 38vw, 480px);
-    grid-template-columns: minmax(0, 1fr) var(--chrome-progress-width);
+    grid-template-columns: minmax(0, 1fr) var(--chrome-progress-column);
   }
 }
 
