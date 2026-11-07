@@ -5,6 +5,7 @@ import { getSelectionSession } from "../edit/selection/api.ts";
 import { chart as chartApi, type ChartHandle } from "../api/chart.ts";
 import { selection as selectionApi, type SelectionHandle } from "../api/selection.ts";
 import { transaction as transactionApi, type TransactionHandle } from "../api/transaction.ts";
+import type { ReduxApi } from "../api/index.ts";
 import type { HitTestPreviewGeometry, HitTestRequest, HitTestResult } from "../edit/hitTest/api.ts";
 import type { ApiResult } from "../contracts/result.ts";
 import { shortcutRegistry } from "../shortcuts/registry.ts";
@@ -157,7 +158,7 @@ export interface ScriptGuideOptions {
 export interface ExtensionScriptContext {
   readonly manifest: TrustedExtensionManifest;
   readonly signal: AbortSignal;
-  readonly api: import("../api/index.ts").ReduxApi;
+  readonly api: ReduxApi;
   readonly i18n: ReturnType<typeof createExtensionI18n>;
   readonly editor: ScriptEditorContext;
   readonly params: Readonly<Record<string, ParamValue>>;
@@ -205,7 +206,7 @@ interface ScriptRecord {
   readonly signal: AbortSignal;
   readonly translations: ExtensionTranslations | undefined;
   /** Capability-gated facade for this package, resolved when a script runs. */
-  readonly api: () => import("../api/index.ts").ReduxApi;
+  readonly api: () => ReduxApi;
   readonly onFailure: ((error: unknown, action: string) => void) | undefined;
 }
 
@@ -890,7 +891,7 @@ export const scriptRegistry = {
     definition: ExtensionScriptDefinition,
     signal: AbortSignal,
     translations: ExtensionTranslations | undefined,
-    api: () => import("../api/index.ts").ReduxApi,
+    api: () => ReduxApi,
     onFailure?: (error: unknown, action: string) => void,
   ): ExtensionDisposer {
     if (!definition || typeof definition.id !== "string" || !definition.id.trim()) {

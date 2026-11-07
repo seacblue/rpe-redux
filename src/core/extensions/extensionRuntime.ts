@@ -50,7 +50,9 @@ import {
   subscribeExtensionData,
   subscribeExtensionService,
   updateExtensionData,
+  type ExtensionDataInfo,
 } from "./serviceRegistry.ts";
+import type { SandboxExtensionContext } from "./sandbox.ts";
 import {
   decodeExtensionStorageJson,
   encodeExtensionStorageJson,
@@ -1565,8 +1567,7 @@ export class ExtensionRuntime {
       },
       readData: <T = unknown>(id: string, version?: string) => {
         requireCapability("services", "services.readData");
-        return readExtensionData(manifest.id, id, version) as
-          import("./serviceRegistry.ts").ExtensionDataInfo<T> | null;
+        return readExtensionData(manifest.id, id, version) as ExtensionDataInfo<T> | null;
       },
       updateData: (id: string, value: unknown) => {
         requireCapability("services", "services.updateData");
@@ -1574,7 +1575,7 @@ export class ExtensionRuntime {
       },
       onDataChange: <T = unknown>(
         id: string,
-        listener: (info: import("./serviceRegistry.ts").ExtensionDataInfo<T> | null) => void,
+        listener: (info: ExtensionDataInfo<T> | null) => void,
       ) => {
         requireCapability("services", "services.onDataChange");
         return add(
@@ -1794,4 +1795,4 @@ onLanguageChange((language) => {
 });
 
 /** Canonical context type for a sandboxed Extension entry. */
-export type TrustedExtensionContext = import("./sandbox.ts").SandboxExtensionContext;
+export type TrustedExtensionContext = SandboxExtensionContext;

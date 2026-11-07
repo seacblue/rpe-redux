@@ -27,6 +27,15 @@ interface TextureDescriptor {
   };
 }
 
+/** Resolved Hold textures and skin-specific cap ratios for the current skin. */
+interface HoldTextureSet {
+  body: TextureDescriptor | null;
+  end: TextureDescriptor | null;
+  head: TextureDescriptor | null | undefined;
+  endRatio: number;
+  headRatio: number | undefined;
+}
+
 export interface NoteBatchSkin {
   /** Bumped whenever the skin swaps its decoded bitmaps. */
   readonly textureRevision?: number;
@@ -72,6 +81,10 @@ export class NoteBatch {
   private descriptorSkin: NoteBatchSkin | null = null;
   private descriptorRevision: number | undefined;
   private readonly descriptorCache = new Map<string, TextureDescriptor | null>();
+  private readonly holdDescriptorSets: [HoldTextureSet | null, HoldTextureSet | null] = [
+    null,
+    null,
+  ];
   private readonly rotationCache = new Map<number, readonly [number, number]>();
   private instanceBufferCapacity = 0;
   private active = false;
@@ -128,6 +141,7 @@ export class NoteBatch {
     this.groups.clear();
     this.selectedGroups.clear();
     this.descriptorCache.clear();
+    this.clearHoldDescriptorCache();
     this.instanceBufferCapacity = 0;
   };
 
@@ -137,6 +151,7 @@ export class NoteBatch {
     this.descriptorSkin = null;
     this.descriptorRevision = undefined;
     this.descriptorCache.clear();
+    this.clearHoldDescriptorCache();
     this.groups.clear();
     this.selectedGroups.clear();
     this.textures.clear();
@@ -364,6 +379,9 @@ export class NoteBatch {
     alpha: number,
     color?: NoteColor | null,
   ): boolean {
+    if (!this.active || this.isContextLost()) {
+      return false;
+    }
     const descriptor = this.descriptor(
       skin,
       `note:${type}:${highlight ? 1 : 0}`,
@@ -401,19 +419,21 @@ export class NoteBatch {
     color?: NoteColor | null,
     fallbackRotation = 0,
   ): boolean {
-    const body = this.descriptor(
-      skin,
-      `hold-body:${highlight ? 1 : 0}`,
-      () => skin?.holdBodyTexture(highlight) ?? null,
-    );
-    const end = this.descriptor(skin, "hold-end", () => skin?.holdEndTexture() ?? null);
-    const head = showHead
-      ? this.descriptor(
-          skin,
-          `hold-head:${highlight ? 1 : 0}`,
-          () => skin?.holdHeadTexture(highlight) ?? null,
-        )
-      : null;
+    if (!this.active || this.isContextLost()) {
+      return false;
+    }
+    const textures = this.holdTextures(skin, highlight);
+    const body = textures.body;
+    const end = textures.end;
+    let head = showHead ? textures.head : null;
+    if (showHead && head === undefined) {
+      head = this.descriptor(
+        skin,
+        `hold-head:${highlight ? 1 : 0}`,
+        () => skin?.holdHeadTexture(highlight) ?? null,
+      );
+      textures.head = head;
+    }
     if (!body || !end || (showHead && !head)) {
       return false;
     }
@@ -421,8 +441,11 @@ export class NoteBatch {
     // carries cap textures. It has no head-to-tail vector, so its rotation
     // comes from the line's angle.
     const rotation = holdRenderRotation(headX, headY, tailX, tailY, fallbackRotation);
-    const headLength = head ? width * (head.useful.height / head.useful.width) : 0;
-    const tailLength = width * (end.useful.height / end.useful.width);
+    if (showHead && textures.headRatio === undefined) {
+      textures.headRatio = head ? head.useful.height / head.useful.width : 0;
+    }
+    const headLength = head ? width * (textures.headRatio ?? 0) : 0;
+    const tailLength = width * textures.endRatio;
     const segment = holdBodySegment(headX, headY, tailX, tailY, headLength, tailLength);
     const bodyLength = Math.hypot(segment.tailX - segment.headX, segment.tailY - segment.headY);
     const bodyAdded = this.add(
@@ -442,7 +465,7 @@ export class NoteBatch {
       tailX,
       tailY,
       width,
-      (width * end.useful.height) / end.useful.width,
+      tailLength,
       rotation,
       0,
       alpha,
@@ -450,18 +473,7 @@ export class NoteBatch {
       color,
     );
     const headAdded = head
-      ? this.add(
-          head,
-          headX,
-          headY,
-          width,
-          (width * head.useful.height) / head.useful.width,
-          rotation,
-          0,
-          alpha,
-          true,
-          color,
-        )
+      ? this.add(head, headX, headY, width, headLength, rotation, 0, alpha, true, color)
       : true;
     return (bodyLength <= 0.5 || bodyAdded) && endAdded && headAdded;
   }
@@ -544,6 +556,7 @@ export class NoteBatch {
     this.groups.clear();
     this.selectedGroups.clear();
     this.descriptorCache.clear();
+    this.clearHoldDescriptorCache();
     this.instanceBufferCapacity = 0;
     this.program = null;
     this.cornerBuffer = null;
@@ -569,6 +582,7 @@ export class NoteBatch {
   private resetTextureCache(): void {
     this.cancelPrewarm();
     this.descriptorCache.clear();
+    this.clearHoldDescriptorCache();
     this.groups.clear();
     this.selectedGroups.clear();
     if (this.gl && !this.isContextLost()) {
@@ -595,6 +609,35 @@ export class NoteBatch {
     const descriptor = resolve();
     this.descriptorCache.set(key, descriptor);
     return descriptor;
+  }
+
+  /** Resolve the Hold body and tail textures once per skin/highlight variant. */
+  private holdTextures(skin: NoteBatchSkin | null, highlight: boolean): HoldTextureSet {
+    const slot = highlight ? 1 : 0;
+    const cached = this.holdDescriptorSets[slot];
+    if (cached) {
+      return cached;
+    }
+    const end = this.descriptor(skin, "hold-end", () => skin?.holdEndTexture() ?? null);
+    const result: HoldTextureSet = {
+      body: this.descriptor(
+        skin,
+        `hold-body:${highlight ? 1 : 0}`,
+        () => skin?.holdBodyTexture(highlight) ?? null,
+      ),
+      end,
+      head: undefined,
+      endRatio: end ? end.useful.height / end.useful.width : 0,
+      headRatio: undefined,
+    };
+    this.holdDescriptorSets[slot] = result;
+    return result;
+  }
+
+  /** Clear skin-derived Hold descriptors after a skin or context change. */
+  private clearHoldDescriptorCache(): void {
+    this.holdDescriptorSets[0] = null;
+    this.holdDescriptorSets[1] = null;
   }
 
   /**

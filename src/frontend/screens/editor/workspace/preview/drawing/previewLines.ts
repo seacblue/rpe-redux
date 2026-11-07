@@ -18,6 +18,7 @@ import { drawLine } from "./previewGuides.ts";
 import type { JudgeLine, JudgeLineNote } from "../../../../../../core/global/chart/chart.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import type {
+  LineRuntime,
   NoteEntry,
   NoteState,
   SampledLineState,
@@ -165,6 +166,20 @@ interface PreviewNoteScreenGeometry {
   tailY: number;
 }
 
+/** Per-frame line values shared by the Hold and ordinary-note passes. */
+interface PreparedPreviewLine {
+  state: SampledLineState;
+  runtime: LineRuntime;
+  centerX: number;
+  centerY: number;
+  rotation: number;
+  cosine: number;
+  sine: number;
+  lineScaleX: number;
+  lineScaleY: number;
+  isNoiseLine: boolean;
+}
+
 /** Resolve the screen coordinates shared by note rendering, culling, and picking. */
 function previewNoteScreenGeometry(
   position: NoteState,
@@ -271,6 +286,9 @@ function drawPreviewNoteEntry(
   scaleY: number,
   rotation: number,
   lineRotation: number,
+  lineCenterX: number,
+  lineCenterY: number,
+  lineRotationRadians: number,
   selected: boolean,
   highlight: boolean,
 ): boolean {
@@ -322,6 +340,14 @@ function drawPreviewNoteEntry(
   if (batchAdded) {
     return false;
   }
+  // A batch-active note pass is in screen space; restore the line transform
+  // only for this fallback note so Canvas keeps the legacy geometry contract.
+  const restoreBatchTransform = surface.noteBatch.isActive();
+  if (restoreBatchTransform) {
+    context.save();
+    context.translate(lineCenterX, lineCenterY);
+    context.rotate(lineRotationRadians);
+  }
   paintPreviewNoteFallback(
     surface,
     context,
@@ -337,6 +363,9 @@ function drawPreviewNoteEntry(
     tint,
     skewShear,
   );
+  if (restoreBatchTransform) {
+    context.restore();
+  }
   return true;
 }
 
@@ -445,6 +474,36 @@ export function drawLinePasses(
   } = frame;
   const { centerX, centerY } = frame;
   const lines = frame.scene.lines;
+  const preparedLines: Array<PreparedPreviewLine | null | undefined> = new Array(lines.length);
+  const batchActive = surface.noteBatch.isActive();
+  /** Prepare one line's shared transform once for every draw pass in this frame. */
+  const prepareLine = (index: number): PreparedPreviewLine | null => {
+    const cached = preparedLines[index];
+    if (cached !== undefined) {
+      return cached;
+    }
+    const state = states[index];
+    const runtime = lines[index];
+    if (!state || !runtime) {
+      preparedLines[index] = null;
+      return null;
+    }
+    const rotation = (state.rotation * Math.PI) / 180;
+    const prepared: PreparedPreviewLine = {
+      state,
+      runtime,
+      centerX: centerX + state.x * scaleX,
+      centerY: centerY - state.y * scaleY,
+      rotation,
+      cosine: Math.cos(rotation),
+      sine: Math.sin(rotation),
+      lineScaleX: state.scaleX,
+      lineScaleY: state.scaleY,
+      isNoiseLine: noiseLineSettings(runtime.line) !== null,
+    };
+    preparedLines[index] = prepared;
+    return prepared;
+  };
   const noteState: NoteState = {
     x: 0,
     y: 0,
@@ -483,11 +542,12 @@ export function drawLinePasses(
       if (surface.soloLine != null && index !== surface.soloLine) {
         continue;
       }
-      const state = states[index];
-      if (!state) {
+      const prepared = prepareLine(index);
+      if (!prepared) {
         // A line outside the sampled range has no state to draw.
         continue;
       }
+      const { state, runtime } = prepared;
       const samplingAlpha =
         surface.samplingAlpha?.lineIndex === index ? surface.samplingAlpha.alpha : null;
       const paintedState = samplingAlpha === null ? state : { ...state, alpha: samplingAlpha };
@@ -497,11 +557,7 @@ export function drawLinePasses(
       ) {
         continue;
       }
-      const runtime = lines[index];
-      if (!runtime) {
-        continue;
-      }
-      if (noiseLineSettings(runtime.line)) {
+      if (prepared.isNoiseLine) {
         continue;
       }
       if (
@@ -537,12 +593,19 @@ export function drawLinePasses(
           continue;
         }
       }
-      context.save();
-      context.translate(centerX + state.x * scaleX, centerY - state.y * scaleY);
-      const rotation = (state.rotation * Math.PI) / 180;
-      const cosine = Math.cos(rotation);
-      const sine = Math.sin(rotation);
-      context.rotate(rotation);
+      const lineCenterX = prepared.centerX;
+      const lineCenterY = prepared.centerY;
+      // NoteBatch receives screen-space coordinates. Canvas needs the line
+      // transform only when it will paint the line or the fallback notes.
+      const usesCanvasLineTransform = singleLinePass || !batchActive;
+      if (usesCanvasLineTransform) {
+        context.save();
+        context.translate(lineCenterX, lineCenterY);
+      }
+      const { rotation, cosine, sine } = prepared;
+      if (usesCanvasLineTransform) {
+        context.rotate(rotation);
+      }
       if (pass.kind === "line") {
         stats.lines += 1;
         if (surface.collectGeometry) {
@@ -558,11 +621,11 @@ export function drawLinePasses(
           );
           surface.lineFrames.push({
             lineIndex: index,
-            x: centerX + state.x * scaleX,
-            y: centerY - state.y * scaleY,
+            x: prepared.centerX,
+            y: prepared.centerY,
             rotation: state.rotation,
-            scaleX: state.scaleX,
-            scaleY: state.scaleY,
+            scaleX: prepared.lineScaleX,
+            scaleY: prepared.lineScaleY,
             ...geometry,
             texture: runtime.line.Texture ?? "line.png",
           });
@@ -644,6 +707,9 @@ export function drawLinePasses(
               scaleY,
               rotation,
               state.rotation,
+              lineCenterX,
+              lineCenterY,
+              rotation,
               selected,
               highlight,
             )
@@ -652,7 +718,9 @@ export function drawLinePasses(
           }
         }
       }
-      context.restore();
+      if (usesCanvasLineTransform) {
+        context.restore();
+      }
       const passMs = performance.now() - passStarted;
       if (singleLinePass) {
         stats.lineMs += passMs;

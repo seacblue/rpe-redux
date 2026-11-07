@@ -26,7 +26,11 @@ import {
 } from "../../../../../core/edit/multiEdit/parameters.ts";
 import { PREFERENCE_SECTIONS, preferenceStorage } from "../../../../../core/state/preferences.ts";
 import { t } from "../../../../../i18n/index.ts";
-import type { MultiEditFormHandle, MultiEditFormValues } from "./MultiEditForm.tsx";
+import type {
+  MultiEditFormHandle,
+  MultiEditFormModule,
+  MultiEditFormValues,
+} from "./MultiEditForm.tsx";
 import type { MultiEditState } from "./model.ts";
 import type { EditorFeedback } from "../../workspace/runtime/session/feedback.ts";
 import { drawEventGhost } from "./eventGhostDrawing.ts";
@@ -125,7 +129,7 @@ export class MultiEditPanel {
   private noiseActivationSelected = false;
   previewEnabled?: { checked: boolean };
   form?: MultiEditFormHandle;
-  formModule?: Promise<typeof import("./MultiEditForm.tsx")>;
+  formModule?: Promise<MultiEditFormModule>;
   /** These closures are assigned inside `open()` before any caller invokes them. */
   updateHistory?: (event?: Event) => void;
   load?: (value: Partial<MultiEditFormValues>) => void;

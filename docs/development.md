@@ -193,8 +193,8 @@ formatting.
 
 `npm run smoke` launches the debug application and runs the P0 scenarios in
 `src/test/e2e/`: API and Extension contract, document open/create/save, settings
-pages, session restore, workspace surfaces, and judge-line folders. Build the
-debug executable first. Feature-specific regression suites are not part of the
+pages, and session restore. Build the debug executable first. Feature-specific
+regression suites are not part of the
 default run; [Testing](testing.md) lists the groups and their commands. The
 harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux
 acceptance is manual until a WebDriver harness exists.
