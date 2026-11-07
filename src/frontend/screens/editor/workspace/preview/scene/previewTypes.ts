@@ -14,6 +14,7 @@ import type { PreviewViewport } from "./viewport.ts";
 import type { TextureImage } from "../render/background.ts";
 import type { ShaderPass } from "../render/shaderPipeline.ts";
 import type { NoteBatchSkin, NoteColor } from "../../../canvas/noteBatch.ts";
+import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
 
 /** Which host mounts the preview: the workspace underlay or a dedicated surface. */
 export type PreviewSurfaceKind = "workspace-underlay" | "dedicated";
@@ -23,7 +24,7 @@ export interface PreviewCanvasLayers {
   noteBatch?: HTMLCanvasElement;
   shader: HTMLCanvasElement;
   overlay: HTMLCanvasElement;
-  display?: import("../surface/previewDisplay.ts").PreviewDisplayAdapter;
+  display?: PreviewDisplayAdapter;
 }
 
 /**

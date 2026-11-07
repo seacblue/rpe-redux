@@ -6,6 +6,8 @@ export interface PreviewTimingSample {
   setupMs: number;
   sampleMs: number;
   visibilityMs: number;
+  visibilityIndexMs: number;
+  visibilityCandidateCount: number;
   notesMs: number;
   effectsMs: number;
   compositeMs: number;
