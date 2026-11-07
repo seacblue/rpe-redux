@@ -12,6 +12,9 @@ export default {
   "startup.failure.extensionSafeMode":
     "有扩展在注册信息时出错。安全模式已经启用；请在“设置 > 扩展”里停用或移除出问题的扩展，然后正常重启。",
   "startup.failure.unknown": "编辑器在启动时因未知原因中断。下方的技术细节可能指出原因。",
+  "startup.backendPortConflict.title": "后端端口已被占用",
+  "startup.backendPortConflict.description":
+    "下次启动时使用 --backend-port=<其他端口>，或到“设置 > 常规 > 界面 > 后端端口”修改后再重试。",
 
   "startup.extensions.title": "可能的来源",
   "startup.extensions.failures.title": "启动时这些扩展报错了",

@@ -6,12 +6,15 @@
  * rail group, and the travelling selection bar. A strong seam between page
  * sections keeps adjacent categories from reading as one page. Search results
  * still stack their matching pages inside the same scroller. A plain reopen resumes the
- * last category and offset; a deep link still lands on the page it names.
+ * last category and offset and keeps the search text and its results; a deep link
+ * still lands on the page it names. Page bodies mount one idle slice at a time, so
+ * a large catalog cannot stall the opening frame.
  */
 import { SettingsNavigation } from "./SettingsNavigation.tsx";
 import { SettingsFields } from "./SettingsFields.tsx";
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useLayoutEffect,
@@ -55,6 +58,7 @@ import {
   writeSettingsScrollMemory,
   type SettingsScrollMemory,
 } from "./settingsScrollMemory.ts";
+import { SettingsPageSkeleton, useSettingsPageHydration } from "./settingsPageHydration.tsx";
 import "./settingsFeatures.ts";
 
 type Field = SettingDefinition;
@@ -93,6 +97,10 @@ export function SettingsWindow({
   // The frame owns the flag: the shell only says "open this category" through a
   // window event, and the shared dialog follows `open` from here.
   const [open, setOpen] = useState(false);
+  // Content stays mounted through the exit transition, then drops so a closed
+  // window neither renders a large catalog nor pays for hidden layout.
+  const [contentMounted, setContentMounted] = useState(false);
+  const contentVisible = open || contentMounted;
   // A closed window cannot own the keyboard, so any shortcut capture ends with it.
   useEffect(() => {
     if (!open) {
@@ -118,7 +126,11 @@ export function SettingsWindow({
     }
     return expanded;
   });
+  // Search survives close/open, so the field keeps its text and the same result
+  // set. Filtering reads a deferred copy so a long query cannot make typing
+  // wait for the whole catalog to be re-matched.
   const [query, setQuery] = useState("");
+  const searchQuery = useDeferredValue(query);
   useSyncExternalStore(subscribeSettingsCatalog, settingsDefinitions, settingsDefinitions);
   const revealed = useSyncExternalStore(
     developerReveal.subscribe,
@@ -149,6 +161,14 @@ export function SettingsWindow({
     }
     return pages;
   }, [categories]);
+  // One page body mounts per idle slice. The active page and the pages that
+  // currently match the search render immediately; everything else keeps a
+  // skeleton until the queue reaches it, which keeps the opening frame short.
+  const pageKeys = useMemo(() => pageEntries.map((entry) => entry.key), [pageEntries]);
+  const { readyPages, reset: resetPageHydration } = useSettingsPageHydration({
+    open,
+    pageKeys,
+  });
   const fields = settingsDefinitions();
   const visibility = useSettingVisibility(fields);
   const panelsRef = useRef<HTMLDivElement | null>(null);
@@ -247,9 +267,10 @@ export function SettingsWindow({
     [activateCategory, categories],
   );
 
-  // A plain open returns to the last reading position. Deep links still land on
-  // the page they name, and a remembered page that no longer exists falls back
-  // to the first category.
+  // A plain open returns to the last reading position and keeps the search text
+  // and its result set. A deep link names a page, so it leaves search to show
+  // the page it was asked for; an unknown remembered page falls back to the
+  // first category without disturbing the search.
   const openSettingsRequest = useCallback(
     (requested?: string) => {
       if (requested) {
@@ -263,17 +284,25 @@ export function SettingsWindow({
         ? pageEntries.find((entry) => entry.key === remembered.category)
         : undefined;
       if (remembered && page) {
-        setQuery("");
         activateCategory(page.key);
-        requestScroll(page.key, remembered.offset);
+        if (!query.trim()) {
+          requestScroll(page.key, remembered.offset);
+        }
         return;
       }
-      openCategory("");
+      const fallback =
+        categories.find((entry) => !entry.parent)?.key ??
+        settingsNavigations().find((entry) => !entry.parent)?.key ??
+        "";
+      activateCategory(settingsNavigationTarget(fallback), !query.trim());
     },
-    [activateCategory, openCategory, pageEntries, requestScroll],
+    [activateCategory, categories, openCategory, pageEntries, query, requestScroll],
   );
 
   const searching = query.trim().length > 0;
+  // The first keystroke matches immediately; later edits run against the
+  // deferred text, so the field stays responsive while the catalog settles.
+  const activeSearchQuery = searchQuery.trim() ? searchQuery : query;
 
   // Search results always start at the top of the shared scroller. Without
   // this, typing while a lower category is on screen leaves the viewport in
@@ -301,9 +330,9 @@ export function SettingsWindow({
   // The search matches *rendered* text, so a language switch changes the result
   // for the same query and has to invalidate the memo.
   const matches = useMemo(
-    () => new Set(searchSettings(query).map((field) => field.key)),
+    () => new Set(searchSettings(activeSearchQuery).map((field) => field.key)),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `searchSettings` reads the catalog directly, so `language` is the only signal React can see
-    [query, language],
+    [activeSearchQuery, language],
   );
 
   // The shell asks for a category through a window event, so the top bar and the
@@ -314,6 +343,7 @@ export function SettingsWindow({
     const listener = (event: Event) => {
       const detail = (event as CustomEvent<SettingsRequest>).detail;
       openSettingsRequest(detail?.category);
+      setContentMounted(true);
       setOpen(true);
     };
     window.addEventListener(OPEN_SETTINGS_EVENT, listener);
@@ -335,7 +365,9 @@ export function SettingsWindow({
   // reachable from the same box as the row-based pages.
   const categoryMatchesKeywords = (id: string) => {
     const keywords = settingsPageFor(id)?.keywords;
-    return Boolean(keywords && matchesSettingsSearch(t(keywords), query, CATALOGS.en[keywords]));
+    return Boolean(
+      keywords && matchesSettingsSearch(t(keywords), activeSearchQuery, CATALOGS.en[keywords]),
+    );
   };
   /** Whether a page has a matching row or matching search keywords. */
   const categoryHasMatches = (id: string) => {
@@ -355,6 +387,18 @@ export function SettingsWindow({
       matchingNavigationKeys.add(entry.parent);
     }
   }
+  /**
+   * Whether one page body may mount now. The active page and the current
+   * search results never wait behind the idle queue.
+   */
+  const pageBodyReady = (key: string) =>
+    readyPages.has(key) ||
+    (!searching && key === category) ||
+    (searching && matchingNavigationKeys.has(key));
+  /** Whether a visible page still shows a skeleton. */
+  const pageContentPending = pageEntries.some(
+    (entry) => (!searching || matchingNavigationKeys.has(entry.key)) && !pageBodyReady(entry.key),
+  );
 
   /** Commit one setting value to the shared value store. */
   const commit = (field: Field, value: SettingValue) => {
@@ -441,10 +485,13 @@ export function SettingsWindow({
         observer.observe(section);
       }
     }
-    for (const delay of [120, 300, 600]) {
+    // Page bodies hydrate one idle slice at a time, so sections above the target
+    // keep changing height for longer than a settled page would. Keep re-aligning
+    // through that window; any wheel, pointer, or key input still cancels it.
+    for (const delay of [120, 400, 800, 1400, 2000, 2600]) {
       timers.push(window.setTimeout(align, delay));
     }
-    timers.push(window.setTimeout(cancel, 700));
+    timers.push(window.setTimeout(cancel, 3000));
     window.addEventListener("wheel", cancel, { passive: true, once: true });
     if (container) {
       container.addEventListener("pointerdown", cancel, { capture: true, once: true });
@@ -536,134 +583,158 @@ export function SettingsWindow({
     <Modal
       open={open}
       onClose={closeSettings}
+      onClosed={() => {
+        // A native close (Escape or the dialog itself) bypasses `onClose`, and
+        // the content may already be unmounted when the exit transition ends.
+        setOpen(false);
+        setContentMounted(false);
+        resetPageHydration();
+      }}
       labelledBy={titleId}
       closeButton={false}
       className="redux-settings"
     >
-      <div className="redux-settings-shell">
-        <SettingsNavigation
-          open={open}
-          categories={categories}
-          category={category}
-          query={query}
-          matchingNavigationKeys={matchingNavigationKeys}
-          expandedNavigationKeys={expandedNavigationKeys}
-          onToggleNavigation={(key) => {
-            setExpandedNavigationKeys((current) => {
-              const next = new Set(current);
-              if (next.has(key)) {
-                next.delete(key);
-              } else {
-                // Opening one root closes the others so the sidebar never grows
-                // past the window.
-                for (const entry of categories) {
-                  if (!entry.parent && entry.key !== key) {
-                    next.delete(entry.key);
-                  }
-                }
-                next.add(key);
-              }
-              return next;
-            });
-          }}
-          setCategory={openCategory}
-          setQuery={changeQuery}
-        />
-        <div className="redux-settings-body">
-          <header className="redux-settings-heading">
-            <div>
-              <h2 id={titleId}>
-                {searching
-                  ? t("settings.search.heading", { query: query.trim() })
-                  : activePath.map((entry, index) => (
-                      <span key={entry.key} className="redux-settings-breadcrumb-item">
-                        {index > 0 && (
-                          <span className="redux-settings-breadcrumb-separator" aria-hidden="true">
-                            ›
-                          </span>
-                        )}
-                        {t(entry.label)}
-                      </span>
-                    ))}
-              </h2>
-            </div>
-            <IconButton icon="close" label={t("settings.action.close")} onClick={closeSettings} />
-          </header>
-
-          <div className="redux-settings-panels" ref={panelsRef}>
-            {searching && !pageEntries.some((entry) => matchingNavigationKeys.has(entry.key)) && (
-              <EmptyState
-                icon="search"
-                title={t("settings.search.emptyTitle")}
-                description={t("settings.search.emptyDescription")}
-                className="redux-settings-search-empty"
-              />
-            )}
-            {pageEntries.map((entry) => {
-              const panelFields = settingsFields(entry.key);
-              // Every page names itself once. A page group whose title repeats
-              // the navigation label is suppressed by `SettingsFields`, so the
-              // page title is the only copy of that name in the content column.
-              const page = settingsPageFor(entry.key);
-              const pageLabel = t(entry.label);
-              const showPageTitle = !page?.hideTitle;
-              const visible = searching ? matchingNavigationKeys.has(entry.key) : true;
-              const Page = page?.component;
-              return (
-                <section
-                  key={entry.key}
-                  ref={(section) => {
-                    if (section) {
-                      sectionRefs.current.set(entry.key, section);
-                    } else {
-                      sectionRefs.current.delete(entry.key);
+      {contentVisible ? (
+        <div className="redux-settings-shell">
+          <SettingsNavigation
+            open={open}
+            categories={categories}
+            category={category}
+            query={query}
+            matchingNavigationKeys={matchingNavigationKeys}
+            expandedNavigationKeys={expandedNavigationKeys}
+            onToggleNavigation={(key) => {
+              setExpandedNavigationKeys((current) => {
+                const next = new Set(current);
+                if (next.has(key)) {
+                  next.delete(key);
+                } else {
+                  // Opening one root closes the others so the sidebar never grows
+                  // past the window.
+                  for (const entry of categories) {
+                    if (!entry.parent && entry.key !== key) {
+                      next.delete(entry.key);
                     }
-                  }}
-                  className="redux-settings-panel"
-                  data-category={entry.key}
-                  data-settings-section={entry.key}
-                  hidden={!visible}
-                >
-                  {searching &&
-                    visible &&
-                    !panelFields.some((field) => matches.has(field.key)) &&
-                    Page && (
-                      <div className="redux-settings-search-path" data-settings-path>
-                        {navigationPathFrom(categories, entry.key).map((pathEntry, index) => (
-                          <span key={pathEntry.key} data-settings-path-entry={pathEntry.key}>
-                            {index > 0 && <span aria-hidden="true"> › </span>}
-                            {t(pathEntry.label)}
-                          </span>
-                        ))}
-                      </div>
+                  }
+                  next.add(key);
+                }
+                return next;
+              });
+            }}
+            setCategory={openCategory}
+            setQuery={changeQuery}
+          />
+          <div className="redux-settings-body">
+            <header className="redux-settings-heading">
+              <div>
+                <h2 id={titleId}>
+                  {searching
+                    ? t("settings.search.heading", { query: query.trim() })
+                    : activePath.map((entry, index) => (
+                        <span key={entry.key} className="redux-settings-breadcrumb-item">
+                          {index > 0 && (
+                            <span
+                              className="redux-settings-breadcrumb-separator"
+                              aria-hidden="true"
+                            >
+                              ›
+                            </span>
+                          )}
+                          {t(entry.label)}
+                        </span>
+                      ))}
+                </h2>
+              </div>
+              <IconButton icon="close" label={t("settings.action.close")} onClick={closeSettings} />
+            </header>
+
+            <div
+              className="redux-settings-panels"
+              ref={panelsRef}
+              data-searching={searching ? "true" : "false"}
+              aria-busy={pageContentPending}
+            >
+              {searching && !pageEntries.some((entry) => matchingNavigationKeys.has(entry.key)) && (
+                <EmptyState
+                  icon="search"
+                  title={t("settings.search.emptyTitle")}
+                  description={t("settings.search.emptyDescription")}
+                  className="redux-settings-search-empty"
+                />
+              )}
+              {pageEntries.map((entry) => {
+                const panelFields = settingsFields(entry.key);
+                // Every page names itself once. A page group whose title repeats
+                // the navigation label is suppressed by `SettingsFields`, so the
+                // page title is the only copy of that name in the content column.
+                const page = settingsPageFor(entry.key);
+                const pageLabel = t(entry.label);
+                const showPageTitle = !page?.hideTitle;
+                const visible = searching ? matchingNavigationKeys.has(entry.key) : true;
+                const Page = page?.component;
+                return (
+                  <section
+                    key={entry.key}
+                    ref={(section) => {
+                      if (section) {
+                        sectionRefs.current.set(entry.key, section);
+                      } else {
+                        sectionRefs.current.delete(entry.key);
+                      }
+                    }}
+                    className="redux-settings-panel"
+                    data-category={entry.key}
+                    data-settings-section={entry.key}
+                    data-settings-ready={pageBodyReady(entry.key) ? "true" : "false"}
+                    hidden={!visible}
+                  >
+                    {searching &&
+                      visible &&
+                      !panelFields.some((field) => matches.has(field.key)) &&
+                      Page && (
+                        <div className="redux-settings-search-path" data-settings-path>
+                          {navigationPathFrom(categories, entry.key).map((pathEntry, index) => (
+                            <span key={pathEntry.key} data-settings-path-entry={pathEntry.key}>
+                              {index > 0 && <span aria-hidden="true"> › </span>}
+                              {t(pathEntry.label)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    {!searching && showPageTitle && (
+                      <h3 className="redux-settings-page-title">{pageLabel}</h3>
                     )}
-                  {!searching && showPageTitle && (
-                    <h3 className="redux-settings-page-title">{pageLabel}</h3>
-                  )}
-                  {panelFields.length > 0 && (
-                    <SettingsFields
-                      fields={panelFields}
-                      shown={shown}
-                      onCommitValue={commit}
-                      onOpenCategory={openCategory}
-                      searching={searching}
-                      pageTitle={showPageTitle ? pageLabel : undefined}
-                    />
-                  )}
-                  {Page && (
-                    <Page
-                      theme={theme}
-                      setTheme={setTheme}
-                      openCategory={openCategory}
-                      active={open && category === entry.key}
-                    />
-                  )}
-                </section>
-              );
-            })}
+                    {pageBodyReady(entry.key) ? (
+                      <>
+                        {panelFields.length > 0 && (
+                          <SettingsFields
+                            fields={panelFields}
+                            shown={shown}
+                            onCommitValue={commit}
+                            onOpenCategory={openCategory}
+                            searching={searching}
+                            pageTitle={showPageTitle ? pageLabel : undefined}
+                          />
+                        )}
+                        {Page && (
+                          <Page
+                            theme={theme}
+                            setTheme={setTheme}
+                            openCategory={openCategory}
+                            active={open && category === entry.key}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <SettingsPageSkeleton />
+                    )}
+                  </section>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </Modal>
   );
 }

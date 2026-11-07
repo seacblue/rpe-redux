@@ -4,6 +4,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { EXPORT_DOCUMENT_EVENT } from "../../../../../../core/shell/shellEventNames.ts";
 import { assetPath, resourceReferences } from "../../../../../../core/global/document/resources.ts";
 import type { LoadTask } from "../../../../../../core/global/document/loading.ts";
+import type { ChartDiagnostic } from "../../../../../../core/global/chart/diagnostics.ts";
 import {
   createChart,
   CURRENT_RPE_VERSION,
@@ -111,7 +112,7 @@ export interface DocumentRuntime {
     assets?: AssetMap,
     folders?: string[],
     loadImages?: boolean,
-    diagnostics?: import("../../../../../../core/global/chart/diagnostics.ts").ChartDiagnostic[],
+    diagnostics?: ChartDiagnostic[],
     readOnly?: boolean,
   ) => void;
   readonly loadCandidate: (

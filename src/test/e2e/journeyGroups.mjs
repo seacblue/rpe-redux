@@ -1,6 +1,6 @@
 /**
- * The P0 smoke suite: API/Extension contract, documents, settings pages,
- * session restore, and workspace surfaces.
+ * The P0 smoke suite: API/Extension contract, documents, settings pages, and
+ * session restore.
  *
  * Feature-specific journeys are not part of the default run. Their logic is
  * covered by unit suites, and the smoke run only proves the shared end-to-end
@@ -10,8 +10,6 @@ import { coldOpen, createChart, openResourceChart, roundtrip } from "./journeys.
 import { apiContract, replacePolicy } from "./contractJourneys.mjs";
 import { settingsSmoke } from "./settingsSmokeJourney.mjs";
 import { sessionRestore } from "./sessionRestoreJourney.mjs";
-import { workspaceSurfaces } from "./uiSmokeJourney.mjs";
-import { lineFolderJourney } from "./lineFolderJourney.mjs";
 
 function sequence(steps) {
   return async (runner) => {
@@ -40,6 +38,4 @@ export const journeys = {
   ]),
   settings: settingsSmoke,
   "session-restore": sessionRestore,
-  surfaces: workspaceSurfaces,
-  "line-folder": lineFolderJourney,
 };

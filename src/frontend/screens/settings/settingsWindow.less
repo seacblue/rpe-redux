@@ -98,6 +98,54 @@
   min-height: 100%;
 }
 
+// Page bodies mount one idle slice at a time. The placeholder keeps the field
+// grid's footprint so the content does not jump sideways when it arrives.
+.redux-settings-page-skeleton {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-3);
+}
+
+.redux-settings-skeleton-rows {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.redux-settings-skeleton-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--settings-control-width));
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+}
+
+.redux-settings-skeleton-line,
+.redux-settings-skeleton-control {
+  display: block;
+  height: var(--space-2);
+  border-radius: var(--radius-control);
+  background: linear-gradient(
+    105deg,
+    var(--surface-muted) 25%,
+    color-mix(in srgb, var(--surface-hover) 72%, var(--foreground) 8%) 45%,
+    var(--surface-muted) 65%
+  );
+  background-size: 220% 100%;
+  animation: redux-image-shimmer 1.2s linear infinite;
+}
+
+.redux-settings-skeleton-line {
+  max-width: 72%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redux-settings-skeleton-line,
+  .redux-settings-skeleton-control {
+    animation: none;
+  }
+}
+
 .redux-settings-panel:not([hidden]) {
   animation: redux-settings-panel-in var(--design-dur-tint) ease both;
 }

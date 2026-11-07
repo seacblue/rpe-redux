@@ -36,9 +36,6 @@ export interface HomeProjectCardsSnapshot extends HomeLibraryStatus {
   libraryProjects: HomeLibraryProject[];
   onOpenProject(id: string): void;
   onExportProject(id: string): void;
-  onRename(project: LibraryProjectSummary): void;
-  onCopy(project: LibraryProjectSummary): void;
-  onArchive(project: LibraryProjectSummary): void;
   onDelete(project: LibraryProjectSummary): void;
   onSort(sort: LibrarySort): void;
   onRetry(): void;
@@ -48,9 +45,6 @@ export interface HomeProjectCardsSnapshot extends HomeLibraryStatus {
 export interface HomeProjectCardsActions {
   onOpenProject(id: string): void;
   onExportProject(id: string): void;
-  onRename(project: LibraryProjectSummary): void;
-  onCopy(project: LibraryProjectSummary): void;
-  onArchive(project: LibraryProjectSummary): void;
   onDelete(project: LibraryProjectSummary): void;
   onSort(sort: LibrarySort): void;
   onRetry(): void;

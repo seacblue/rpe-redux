@@ -431,3 +431,40 @@ export function clampNoteHorizontal(
     this.multiLineViewportOffset(canvasWidth, "notes"),
   );
 }
+
+/** Explicit type surface used by the viewport receiver without a namespace import. */
+export type TimelineGeometryModule = {
+  point: typeof point;
+  eventColumnBounds: typeof eventColumnBounds;
+  factorForLine: typeof factorForLine;
+  noteFactorForLine: typeof noteFactorForLine;
+  noteVerticalForLine: typeof noteVerticalForLine;
+  noteBeatRangeForLine: typeof noteBeatRangeForLine;
+  verticalForLine: typeof verticalForLine;
+  beatRangeForLine: typeof beatRangeForLine;
+  panelCount: typeof panelCount;
+  panelIndex: typeof panelIndex;
+  panelWidth: typeof panelWidth;
+  panelGap: typeof panelGap;
+  panelStride: typeof panelStride;
+  visiblePanelRange: typeof visiblePanelRange;
+  multiLineViewportOffset: typeof multiLineViewportOffset;
+  panMultiLine: typeof panMultiLine;
+  lineIndexAt: typeof lineIndexAt;
+  panelHorizontal: typeof panelHorizontal;
+  timeAt: typeof timeAt;
+  beatAt: typeof beatAt;
+  snappedBeat: typeof snappedBeat;
+  vertical: typeof vertical;
+  eventVertical: typeof eventVertical;
+  eventBeatAt: typeof eventBeatAt;
+  horizontal: typeof horizontal;
+  noteInset: typeof noteInset;
+  eventInset: typeof eventInset;
+  noteWidth: typeof noteWidth;
+  snapXPosition: typeof snapXPosition;
+  noteHorizontal: typeof noteHorizontal;
+  positionAt: typeof positionAt;
+  notePositionAt: typeof notePositionAt;
+  clampNoteHorizontal: typeof clampNoteHorizontal;
+};

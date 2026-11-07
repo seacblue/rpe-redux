@@ -315,3 +315,8 @@ export function MultiEditForm({
     </div>
   );
 }
+
+/** The explicitly typed module shape returned by the lazy form loader. */
+export type MultiEditFormModule = {
+  MultiEditForm: typeof MultiEditForm;
+};

@@ -34,6 +34,14 @@ npm run desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
 
 The flags accept either `--name-port=value` or `--name-port value`, take precedence over the saved Runtime ports settings, and are not persisted. A packaged executable accepts the same `--backend-port` and `--ai-port` flags.
 
+Parallel desktop runs can select process-only ports without changing the shared profile configuration:
+
+```powershell
+npm run desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
+```
+
+The flags accept either `--name-port=value` or `--name-port value`, take precedence over the saved Runtime ports settings, and are not persisted. A packaged executable accepts the same `--backend-port` and `--ai-port` flags.
+
 A good first hour looks like this:
 
 1. Open the window and go through the chart library, create a chart, and press `Ctrl+K` to see the settings pages.
@@ -136,7 +144,7 @@ npm run smoke
 
 `npm run check` is the source gate: it type-checks incrementally, runs the TypeScript unit suite, reuses the ESLint and Prettier caches, compiles the Less manifest, checks the SDK, and runs the Go tests. `npm run verify` adds formatting.
 
-`npm run smoke` launches the debug application and runs the P0 scenarios in `src/test/e2e/`: API and Extension contract, document open/create/save, settings pages, session restore, workspace surfaces, and judge-line folders. Build the debug executable first. Feature-specific regression suites are not part of the default run; [Testing](testing.md) lists the groups and their commands. The harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux acceptance is manual until a WebDriver harness exists.
+`npm run smoke` launches the debug application and runs the P0 scenarios in `src/test/e2e/`: API and Extension contract, document open/create/save, settings pages, and session restore. Build the debug executable first. Feature-specific regression suites are not part of the default run; [Testing](testing.md) lists the groups and their commands. The harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux acceptance is manual until a WebDriver harness exists.
 
 Source checks verify types, lint, unit behavior, and formatting. Inspect the running desktop app for input, rendering, playback, native dialogs, and other behavior that only exists in the packaged product.
 

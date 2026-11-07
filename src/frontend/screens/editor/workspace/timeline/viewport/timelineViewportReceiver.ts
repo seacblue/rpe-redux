@@ -17,12 +17,12 @@ import type {
   TimelineNote,
   TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
-import type * as timelineGeometry from "./timelineGeometry.ts";
+import type { TimelineGeometryModule } from "./timelineGeometry.ts";
 import type { MultiLineScrollState } from "../multiLine/multiLineScrollBinding.ts";
 
 /** Structural seam for geometry functions that need a viewport receiver. */
 type TimelineViewportMethodSurface = {
-  [K in keyof typeof timelineGeometry]: OmitThisParameter<(typeof timelineGeometry)[K]>;
+  [K in keyof TimelineGeometryModule]: OmitThisParameter<TimelineGeometryModule[K]>;
 };
 
 export interface TimelineViewportReceiver extends TimelineViewportMethodSurface {
