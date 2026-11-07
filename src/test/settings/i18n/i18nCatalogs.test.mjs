@@ -9,6 +9,12 @@ const placeholders = (value) =>
 
 const CAPABILITY_KEY_PREFIX = "settings.extensions.capability.";
 
+/** Trailing closing quotes or brackets a sentence may carry after its full stop. */
+const CLOSERS = /["'”’»)\]]+$/;
+
+/** Whether `value` ends as a sentence in a language whose stop marks are `marks`. */
+const endsSentence = (value, marks) => marks.test(value.trim().replace(CLOSERS, ""));
+
 test("both catalogs declare the same message keys", () => {
   assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort());
 });
@@ -21,6 +27,23 @@ test("every catalog value is a non-empty string", () => {
   for (const [key, value] of Object.entries(zh)) {
     assert.equal(typeof value, "string", `zh.${key} is not a string`);
     assert.ok(value.trim().length > 0, `zh.${key} is empty`);
+  }
+});
+
+test("settings descriptions close as a sentence in both catalogs", () => {
+  const EN_STOP = /[.!?…]$/;
+  const ZH_STOP = /[。！？…]$/;
+  const keys = Object.keys(en).filter((key) => /^settings\..+\.description$/.test(key));
+  assert.ok(keys.length > 0, "no settings description keys found");
+  for (const key of keys) {
+    assert.ok(
+      endsSentence(en[key], EN_STOP),
+      `en.${key} does not end with a full stop: ${en[key]}`,
+    );
+    assert.ok(
+      endsSentence(zh[key], ZH_STOP),
+      `zh.${key} does not end with a full stop: ${zh[key]}`,
+    );
   }
 });
 

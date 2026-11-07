@@ -1,7 +1,7 @@
 {
   "en": {
     "name": "Official Built-ins",
-    "description": "A hands-on collection of note transforms for learning and remixing the Extension SDK.",
+    "description": "Start here — it covers most of RPE's quick scripts.",
     "notice.noSelection": "Select at least one note first.",
     "notice.noChanges": "The selected notes have no editable values for this transform.",
     "notice.success": "Updated {count} note(s).",
@@ -32,7 +32,7 @@
   },
   "zh": {
     "name": "官方内置包",
-    "description": "用于学习和魔改 Extension SDK 的音符变换脚本集合。",
+    "description": "从这里起步，涵盖 RPE 的大部分快捷脚本。",
     "notice.noSelection": "请先选择至少一个音符。",
     "notice.noChanges": "选中的音符没有可修改的值。",
     "notice.success": "已更新 {count} 个音符。",
