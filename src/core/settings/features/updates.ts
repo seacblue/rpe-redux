@@ -9,7 +9,7 @@
  */
 import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition } from "../types.ts";
-import { UPDATE_SETTING_KEYS } from "../updateKeys.ts";
+import { DEFAULT_UPDATE_DOWNLOAD_POLICY, UPDATE_SETTING_KEYS } from "../updateKeys.ts";
 import { HELP_SURVEY_URL } from "../../platform/desktop/helpLinks.ts";
 
 // An empty group keeps the rows in the page body without drawing a second
@@ -31,7 +31,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     label: "settings.updates.downloadPolicy.label",
     description: "settings.updates.downloadPolicy.description",
     control: "select",
-    default: "never",
+    default: DEFAULT_UPDATE_DOWNLOAD_POLICY,
     options: [
       { value: "all", label: "settings.updates.downloadPolicy.all" },
       { value: "wifi", label: "settings.updates.downloadPolicy.wifi" },
