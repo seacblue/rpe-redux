@@ -77,7 +77,6 @@ export function WelcomeMoreMenu() {
         icon="more"
         label={t("workspace.welcome.more")}
         className="redux-welcome-more"
-        variant="outlined"
         aria-haspopup="menu"
         aria-expanded={menu !== null}
         onClickCapture={(event) => {

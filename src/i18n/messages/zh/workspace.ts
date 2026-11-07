@@ -138,7 +138,7 @@ export default {
   "workspace.history.codeCell": "代码单元",
   "workspace.history.discarded": "快照已丢弃",
 
-  "workspace.welcome.settings": "偏好设置",
+  "workspace.welcome.settings": "设置",
   "workspace.welcome.more": "更多",
   "workspace.welcome.moreMenu": "更多操作",
   "workspace.welcome.importRpe": "从 RPE 导入…",

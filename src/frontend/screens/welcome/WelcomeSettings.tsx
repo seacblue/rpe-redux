@@ -1,11 +1,11 @@
 /**
- * The home screen's preferences entry point.
+ * The home screen's settings entry point.
  *
- * It sits in the page header and runs the same command and shortcut as the
- * toolbar's settings action.
+ * It sits in the page header and uses the same action id and tooltip lookup as
+ * the toolbar's settings action, while keeping the start screen independent of
+ * the toolbar frame.
  */
-import { Button } from "../../../design/components/button/Button.tsx";
-import { Icon } from "../../../design/components/icon/Icon.tsx";
+import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import { openSettings } from "../settings/settingsWindowController.ts";
 
@@ -14,15 +14,12 @@ export function WelcomeSettings() {
   const { t } = useTranslation();
   const label = t("workspace.welcome.settings");
   return (
-    <Button
-      variant="outlined"
+    <IconButton
+      icon="settings"
+      label={label}
       className="redux-welcome-settings"
-      aria-label={label}
       data-tip-action="workspace.settings"
       onClick={() => openSettings()}
-    >
-      <Icon name="settings" size={16} />
-      <span className="redux-button-label">{label}</span>
-    </Button>
+    />
   );
 }

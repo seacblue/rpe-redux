@@ -39,14 +39,22 @@
   display: flex;
   flex: none;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-6);
   min-width: 0;
   min-height: var(--control-height);
 }
 
-.redux-app-root .redux-home-page .redux-welcome-settings,
-.redux-app-root .redux-home-page .redux-welcome-more {
+.redux-app-root .redux-home-page .redux-welcome-actions {
+  --tool-cell: var(--theme-toolbar-cell, 41px);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-actions .redux-icon-button {
+  width: var(--tool-cell);
+  min-width: var(--tool-cell);
+  height: var(--tool-cell);
+  min-height: var(--tool-cell);
+  padding: 0;
   color: var(--foreground-muted);
 
   .redux-icon {
@@ -56,14 +64,6 @@
   &:hover:not(:disabled) {
     color: var(--foreground);
   }
-}
-
-.redux-app-root .redux-home-page .redux-welcome-more {
-  flex: none;
-  width: var(--control-height-icon);
-  height: var(--control-height-icon);
-  min-width: var(--control-height-icon);
-  min-height: var(--control-height-icon);
 }
 
 // ----------------------------------------------------------------- columns

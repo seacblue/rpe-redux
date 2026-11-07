@@ -159,7 +159,7 @@ export default {
 
   /** Not shown: the library menu carries the reachable copy of these actions. */
 
-  "workspace.welcome.settings": "Preferences",
+  "workspace.welcome.settings": "Settings",
   "workspace.welcome.more": "More",
   "workspace.welcome.moreMenu": "More actions",
   "workspace.welcome.importRpe": "Import from RPE…",
