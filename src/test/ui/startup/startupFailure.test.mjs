@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyStartupFailure,
+  isBackendPortConflict,
   STARTUP_EXTENSION_CANDIDATE_LIMIT,
   STARTUP_FAILURE_MESSAGE_LIMIT,
   startupExtensionCandidates,
@@ -71,4 +72,14 @@ test("a failure line keeps its first line and a bounded length", () => {
   assert.equal(shortened.length, STARTUP_FAILURE_MESSAGE_LIMIT);
   assert.ok(shortened.endsWith("…"));
   assert.equal(startupFailureMessage("  spaced  "), "spaced");
+});
+
+test("backend port conflicts get an actionable startup diagnosis", () => {
+  assert.equal(
+    isBackendPortConflict(
+      "Backend port 47821 is already in use. Start the next copy with --backend-port=<different-port>.",
+    ),
+    true,
+  );
+  assert.equal(isBackendPortConflict("Backend health check timed out after 15 seconds."), false);
 });

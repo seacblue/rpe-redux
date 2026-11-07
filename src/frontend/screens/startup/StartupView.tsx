@@ -20,6 +20,7 @@ import { getExtensionStartupState } from "../../platform/extensionLoader.ts";
 import { useDocumentSurface } from "./useDocumentSurface.ts";
 import {
   classifyStartupFailure,
+  isBackendPortConflict,
   startupExtensionCandidates,
   startupFailureMessage,
   type StartupFailureCategory,
@@ -93,6 +94,7 @@ export function StartupView({
     category === "extension" && startup.safeMode
       ? "startup.failure.extensionSafeMode"
       : FAILURE_DESCRIPTIONS[category];
+  const backendPortConflict = isBackendPortConflict(error);
 
   /** Copies the failure report and records the outcome for the button label. */
   const copyReport = () => {
@@ -144,6 +146,12 @@ export function StartupView({
       </div>
       {error && (
         <>
+          {backendPortConflict && (
+            <section className="redux-startup-port-guide" role="alert">
+              <h2>{t("startup.backendPortConflict.title")}</h2>
+              <p>{t("startup.backendPortConflict.description")}</p>
+            </section>
+          )}
           <section
             className="redux-startup-extensions"
             aria-labelledby="redux-startup-extensions-title"

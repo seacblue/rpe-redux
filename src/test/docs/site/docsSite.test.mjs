@@ -10,7 +10,11 @@ import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { assertSafeHref, buildDocsSite, renderMarkdown } from "../../../../scripts/buildDocsSite.mjs";
+import {
+  assertSafeHref,
+  buildDocsSite,
+  renderMarkdown,
+} from "../../../../scripts/buildDocsSite.mjs";
 import { EXTENSION_CAPABILITIES } from "../../../core/extensions/capabilities.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");

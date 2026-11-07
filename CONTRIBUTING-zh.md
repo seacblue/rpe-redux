@@ -1,8 +1,6 @@
 # 参与 RPE Redux
 
-RPE Redux 是一个面向 Windows 和 Linux 的 RPE 谱面桌面编辑器，由 React、
-TypeScript、Tauri 和本地 Go/SQLite 服务组成。欢迎在保持产品聚焦和谱面兼容性的
-前提下提交贡献。
+RPE Redux 是一个面向 Windows 和 Linux 的 RPE 谱面桌面编辑器，由 React、TypeScript、Tauri 和本地 Go/SQLite 服务组成。欢迎在保持产品聚焦和谱面兼容性的前提下提交贡献。
 
 [English](CONTRIBUTING.md) · 简体中文
 
@@ -18,17 +16,14 @@ TypeScript、Tauri 和本地 Go/SQLite 服务组成。欢迎在保持产品聚�
 
 ## 环境
 
-需要 Windows 10/11 及 WebView2 运行时，或带 WebKitGTK 4.1 的 Linux；Node.js
-22.18+、Go 1.25.3+、Rust stable 与平台 C++ 工具链（Windows 用 MSVC，Linux 用
-`build-essential`）。
+需要 Windows 10/11 及 WebView2 运行时，或带 WebKitGTK 4.1 的 Linux；Node.js 22.18+、Go 1.25.3+、Rust stable 与平台 C++ 工具链（Windows 用 MSVC，Linux 用 `build-essential`）。
 
 ```powershell
 npm ci
 npm run desktop
 ```
 
-`npm run desktop` 会准备原生依赖并启动产品窗口；`npm run dev` 只启动 Vite
-开发服务器。
+`npm run desktop` 会准备原生依赖并启动产品窗口；`npm run dev` 只启动 Vite 开发服务器。
 
 ## 流程
 
@@ -39,8 +34,7 @@ npm run desktop
 5. 提交 PR 前运行源码检查和桌面检查。
 6. 发布时在 release notes 中记录用户可见变化。
 
-提交信息使用常见前缀，例如 `feat(editor): add curve handles` 或
-`fix(desktop): restore window geometry`。标题使用祈使句，正文只描述契约和验证。
+提交信息使用常见前缀，例如 `feat(editor): add curve handles` 或 `fix(desktop): restore window geometry`。标题使用祈使句，正文只描述契约和验证。
 
 ## 验证
 
@@ -54,13 +48,9 @@ npm run build -- --debug
 npm run smoke
 ```
 
-`npm run check` 覆盖 TypeScript、ESLint、样式规则、文档链接、图标检查、SDK 类型
-检查、Extension 方法注册表检查、TypeScript 单元测试和 Go 测试；`npm run verify`
-额外检查格式。`npm run build -- --debug` 生成 `npm run smoke` 使用的可执行文件，
-smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](docs/testing.md)。
+`npm run check` 覆盖 TypeScript、ESLint、样式规则、文档链接、图标检查、SDK 类型检查、Extension 方法注册表检查、TypeScript 单元测试和 Go 测试；`npm run verify` 额外检查格式。`npm run build -- --debug` 生成 `npm run smoke` 使用的可执行文件，smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](docs/testing.md)。
 
-修改 Rust 时运行 `npm run check:native`；修改 Go 服务或联机房间时运行
-`npm run server:test`。
+修改 Rust 时运行 `npm run check:native`；修改 Go 服务或联机房间时运行 `npm run server:test`。
 
 ## 代码归属
 
@@ -76,18 +66,15 @@ smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](d
 | 本地 HTTP 服务与 SQLite      | `src/backend/`                                          |
 | Extension 作者契约           | `sdk/`、`src/core/api/sdk.ts`                           |
 
-`core/` 保持与宿主无关；`design/` 不导入产品领域类型；`frontend/` 可以直接
-导入 core 实现模块。谱面规则不导入 React、Tauri、存储或网络。
+`core/` 保持与宿主无关；`design/` 不导入产品领域类型；`frontend/` 可以直接导入 core 实现模块。谱面规则不导入 React、Tauri、存储或网络。
 
 ## 代码与文档
 
 - 每个源文件以简短的英文头注释说明它拥有什么、为什么存在。
 - 在声明旁记录导出的函数、类、方法和不明显的约束；签名已经清楚时，一句话即可。
-- 注释描述当前契约：用途、参数、返回值和约束。历史决策和未完成问题放在 issue
-  跟踪器中，不写进源码。
+- 注释描述当前契约：用途、参数、返回值和约束。历史决策和未完成问题放在 issue 跟踪器中，不写进源码。
 - 用户可见文案统一走 `src/i18n/`；诊断信息保持英文，只在 UI 边界翻译。
-- 文档说明一个区域的用途和当前工作方式。英文文档使用普通文件名，中文文档使用
-  `-zh.md` 后缀。
+- 文档说明一个区域的用途和当前工作方式。英文文档使用普通文件名，中文文档使用 `-zh.md` 后缀。
 - 目录或公开契约变化时，更新对应的 README 或归属文档。
 
 ## 资源、许可与兼容性
@@ -99,10 +86,7 @@ smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](d
 
 ## Pull request
 
-每个 PR 都以 squash 方式合入：一个 PR 在 `main` 上只产生一个提交，PR 标题就是该
-提交的标题。仓库已关闭 merge commit 与 rebase merge，所以标题请写成祈使句的
-conventional commit 形式，例如 `feat(editor): add curve handles`，契约与验证细节
-写进正文。
+每个 PR 都以 squash 方式合入：一个 PR 在 `main` 上只产生一个提交，PR 标题就是该提交的标题。仓库已关闭 merge commit 与 rebase merge，所以标题请写成祈使句的 conventional commit 形式，例如 `feat(editor): add curve handles`，契约与验证细节写进正文。
 
 PR 应说明：
 
@@ -115,5 +99,4 @@ PR 应说明：
 
 ## 许可
 
-RPE Redux 使用 [PolyForm Noncommercial License 1.0.0](LICENSE) 分发。提交贡献即表示
-同意以同一许可分发；商业用途需要另行取得版权持有人授权。
+RPE Redux 使用 [PolyForm Noncommercial License 1.0.0](LICENSE) 分发。提交贡献即表示同意以同一许可分发；商业用途需要另行取得版权持有人授权。

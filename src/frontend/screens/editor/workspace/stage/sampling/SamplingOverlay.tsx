@@ -296,7 +296,7 @@ export function SamplingOverlay() {
     }
     const preview = runtime.preview;
     const color =
-      preview.selectedLineColor.length === 3 ? [...preview.selectedLineColor] : [0, 200, 0];
+      preview.selectedLineColor.length >= 3 ? [...preview.selectedLineColor] : [0, 200, 0];
     preview.setSamplingFocus({ lineIndex: target.lineIndex, color });
     return () => preview.setSamplingFocus(null);
   }, [active, runtime, target]);

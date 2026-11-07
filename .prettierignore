@@ -7,6 +7,5 @@ src-tauri/
 src/backend/
 src/public/assets/
 collaboration-src/backend/
-docs/
 *.lock
 package-lock.json

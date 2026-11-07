@@ -1,7 +1,6 @@
 # Extension context
 
-`context` is the package-owned runtime object. `context.api` is the asynchronous
-facade for host data and actions; the other members provide package surfaces.
+`context` is the package-owned runtime object. `context.api` is the asynchronous facade for host data and actions; the other members provide package surfaces.
 
 ## Two entry points
 
@@ -12,9 +11,7 @@ facade for host data and actions; the other members provide package surfaces.
 
 ## Lifecycle
 
-The host calls `activate(context)` once the package is loaded. Keep disposers
-for every registration and release them in the package's deactivation path.
-The host may deactivate a package while a request is pending.
+The host calls `activate(context)` once the package is loaded. Keep disposers for every registration and release them in the package's deactivation path. The host may deactivate a package while a request is pending.
 
 ## Context helpers
 
@@ -24,6 +21,4 @@ The generated context method table is available below.
 
 ## Isolation
 
-The context contains no host DOM, Tauri object, network client, or raw chart
-object. Data crossing the bridge is cloned and bounded. Use [Public hooks](hooks.md)
-or a versioned service for cross-Extension communication.
+The context contains no host DOM, Tauri object, network client, or raw chart object. Data crossing the bridge is cloned and bounded. Use [Public hooks](hooks.md) or a versioned service for cross-Extension communication.

@@ -28,6 +28,7 @@ import { localService } from "../../../../core/global/library/service.ts";
 import { preferences } from "../../../../core/state/preferences.ts";
 import { declarePersistedValue } from "../../../../core/settings/settings.ts";
 import {
+  DEFAULT_UPDATE_DOWNLOAD_POLICY,
   UPDATE_SETTING_KEYS,
   type UpdateDownloadPolicy,
 } from "../../../../core/settings/updateKeys.ts";
@@ -48,7 +49,7 @@ export { UPDATE_SETTING_KEYS };
 
 declarePersistedValue(UPDATE_SETTING_KEYS.autoCheck, false);
 declarePersistedValue(UPDATE_SETTING_KEYS.prereleases, false);
-declarePersistedValue(UPDATE_SETTING_KEYS.downloadPolicy, "never");
+declarePersistedValue(UPDATE_SETTING_KEYS.downloadPolicy, DEFAULT_UPDATE_DOWNLOAD_POLICY);
 declarePersistedValue(UPDATE_SETTING_KEYS.skippedVersion, "");
 
 /** Every phase the update flow can publish. */
@@ -161,7 +162,7 @@ let state: UpdateState = {
   publicKey: UPDATE_PUBLIC_KEY,
   autoCheck: false,
   includePrereleases: false,
-  downloadPolicy: "never",
+  downloadPolicy: DEFAULT_UPDATE_DOWNLOAD_POLICY,
   skippedVersion: "",
   preparedVersion: null,
 };
@@ -206,7 +207,9 @@ const settingFlag = (key: string, fallback: boolean): boolean =>
 /** Read the persisted package-download policy, rejecting stale values safely. */
 function settingDownloadPolicy(): UpdateDownloadPolicy {
   const value = values.byId.get<string | undefined>(UPDATE_SETTING_KEYS.downloadPolicy);
-  return value === "all" || value === "wifi" || value === "never" ? value : "never";
+  return value === "all" || value === "wifi" || value === "never"
+    ? value
+    : DEFAULT_UPDATE_DOWNLOAD_POLICY;
 }
 
 /** Read the persisted version the user chose to skip, or an empty string. */

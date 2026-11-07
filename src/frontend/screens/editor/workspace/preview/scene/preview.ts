@@ -767,9 +767,11 @@ export class Preview {
     const previousTempo = this.scene.tempo;
     const chartChanged = this.scene.chart !== chart || previousTempo !== tempo;
     const tempoChanged = previousTempo !== tempo;
-    const lineColorChanged = this.scene.defaultLineColor.some(
-      (channel, index) => channel !== this.defaultLineColor[index],
-    );
+    const lineColorChanged =
+      this.scene.defaultLineColor.length !== this.defaultLineColor.length ||
+      this.scene.defaultLineColor.some(
+        (channel, index) => channel !== this.defaultLineColor[index],
+      );
     const liveGeometry = this.geometryObservers.size > 0;
     const collectGeometry = options.collectGeometry === true || liveGeometry;
     const selectedLines =

@@ -195,7 +195,7 @@ export default {
   "chrome.toolbar.division": "拍数细分",
   "chrome.toolbar.divisionHint": "每拍网格线数量",
   "chrome.toolbar.gridCount": "X 轴网格",
-  "chrome.toolbar.gridCountHint": "音符 X 坐标的可选网格线数量；1 为中心线，2 为左右边界线",
+  "chrome.toolbar.gridCountHint": "音符 X 坐标的可选网格线数量",
 
   "chrome.toolbar.ratio": "预览比例",
   "chrome.toolbar.scrollStart": "向右查看隐藏的工具",

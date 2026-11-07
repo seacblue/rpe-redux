@@ -57,7 +57,10 @@ import {
   normalizeRoomServerUrl,
   parseRoomInviteLink,
 } from "../../../../../core/collaboration/invite.ts";
-import { chartAssetNames } from "../../../../../core/collaboration/assets.ts";
+import {
+  chartAssetNames,
+  chartChangesMayAffectAssets,
+} from "../../../../../core/collaboration/assets.ts";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { changeLockKeys } from "../../../../../core/collaboration/changes.ts";
 import { sha256Hex } from "../../../../../core/collaboration/digest.ts";
@@ -322,6 +325,9 @@ async function localAssetBytes(
   return (await assets.read?.(path)) ?? null;
 }
 
+/** Keep at most two resource streams active so one large asset cannot starve all others. */
+const MAX_PARALLEL_ASSET_UPLOADS = 2;
+
 /** Uploads changed chart resources the room does not have at the same hash. */
 async function publishChartAssets(
   client: CollaborationClient | null,
@@ -350,28 +356,24 @@ async function publishChartAssets(
   if (references.background) {
     names.add(references.background);
   }
-  let ok = true;
-  for (const name of names) {
+  const uploadOne = async (name: string): Promise<boolean> => {
     const inFlight = uploading.get(name);
     if (inFlight) {
-      if (!(await inFlight)) {
-        ok = false;
-      }
-      continue;
+      return inFlight;
     }
     const bytes = await localAssetBytes(assets, name, chartName);
     if (!bytes) {
-      continue;
+      return true;
     }
     const hash = await sha256Hex(bytes);
     const existing = stateNow.assets.find((asset) => asset.name === name);
     if (existing && (existing.plaintextHash ?? existing.hash) === hash) {
-      continue;
+      return true;
     }
     // An editor may contribute a new resource, but only the host may replace an
     // existing room resource with different bytes.
     if (!canPublishAsset(stateNow.role, existing !== undefined)) {
-      continue;
+      return true;
     }
     const task = (async () => {
       try {
@@ -384,11 +386,22 @@ async function publishChartAssets(
       }
     })();
     uploading.set(name, task);
-    if (!(await task)) {
-      ok = false;
+    return task;
+  };
+  const namesList = [...names];
+  let nextIndex = 0;
+  const worker = async (): Promise<boolean> => {
+    let ok = true;
+    while (nextIndex < namesList.length) {
+      const name = namesList[nextIndex++];
+      if (!(await uploadOne(name))) {
+        ok = false;
+      }
     }
-  }
-  return ok;
+    return ok;
+  };
+  const workerCount = Math.min(MAX_PARALLEL_ASSET_UPLOADS, namesList.length);
+  return (await Promise.all(Array.from({ length: workerCount }, worker))).every(Boolean);
 }
 
 /** Requests room assets whose bytes differ from the local copy. */
@@ -986,9 +999,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           }
         }
         const strict = encrypted ? applyChartChanges(session.chart, message.changes) : null;
-        const result = applyChartChanges(session.chart, message.changes, {
-          force: encrypted,
-        });
+        const result =
+          encrypted && strict?.conflicts.length
+            ? applyChartChanges(session.chart, message.changes, { force: true })
+            : (strict ?? applyChartChanges(session.chart, message.changes));
         if (
           encrypted &&
           message.actorId === client.state.get().memberId &&
@@ -1016,7 +1030,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         }
         try {
           assertChart(result.chart);
-          const parsed = normalizeChartObjectIds(result.chart);
+          const parsed = result.chart as Chart;
           if (
             !session.commitRemoteChart(message.label, parsed, {
               clientId: message.actorId,
@@ -1027,7 +1041,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
             showNotice(t("workspace.collaboration.applyFailed"), "error");
             client.requestSnapshot();
           }
-          void requestMissing(parsed);
+          if (chartChangesMayAffectAssets(message.changes)) {
+            void requestMissing(parsed);
+          }
           appliedRevision.current = message.revision;
         } catch {
           retainRecovery(session.chart);
@@ -1165,12 +1181,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           transactionId: historyTransactionId(entry),
           ...(entry.origin?.undoOf ? { undoOf: entry.origin.undoOf } : {}),
         };
-        void publishChartAssets(
-          client,
-          contextRef.current.documentRuntime,
-          uploading.current,
-          entry.after,
-        ).then(async (ok) => {
+        const publish = chartChangesMayAffectAssets(changes)
+          ? publishChartAssets(
+              client,
+              contextRef.current.documentRuntime,
+              uploading.current,
+              entry.after,
+            )
+          : Promise.resolve(true);
+        void publish.then(async (ok) => {
           if (!ok) {
             rememberUnsent(
               input as TransactionInput & { readonly transactionId: string },

@@ -1,7 +1,7 @@
 /** Verifies the session gate used by room roles and remote history entries. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart } from "../../../core/global/chart/chart.ts";
+import { createChart, createEvent, createLine } from "../../../core/global/chart/chart.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import { selectiveUndo } from "../../../core/edit/session/selectiveUndo.ts";
 import { collaborationAccess } from "../../../core/collaboration/access.ts";
@@ -22,6 +22,126 @@ test("a viewer cannot commit, while an authoritative remote commit still applies
   assert.equal(session.commitChart("local", renamed(session.chart, "local")), false);
   assert.equal(session.commitRemoteChart("remote", renamed(session.chart, "remote")), true);
   assert.equal(session.chart.META.name, "remote");
+});
+
+test("a remote event insertion remaps the selected event by id", () => {
+  const base = createChart();
+  const line = base.judgeLineList[0];
+  const selected = line.eventLayers[0].moveXEvents[0];
+  const inserted = createEvent(5, 5);
+  const next = {
+    ...base,
+    judgeLineList: [
+      {
+        ...line,
+        eventLayers: line.eventLayers.map((layer, index) =>
+          index === 0 ? { ...layer, moveXEvents: [inserted, selected] } : layer,
+        ),
+      },
+    ],
+  };
+  const session = new EditorSession(base);
+  session.focus = "events";
+  session.eventLayer = 0;
+  session.eventSelection.add("moveXEvents:0");
+
+  assert.equal(session.commitRemoteChart("remote", next), true);
+  assert.deepEqual([...session.eventSelection], ["moveXEvents:1"]);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[1], selected);
+});
+
+test("remote event deletion drops the deleted event without shifting selection", () => {
+  const base = createChart();
+  const line = base.judgeLineList[0];
+  const deleted = line.eventLayers[0].moveXEvents[0];
+  const remaining = createEvent(5, 5);
+  const next = {
+    ...base,
+    judgeLineList: [
+      {
+        ...line,
+        eventLayers: line.eventLayers.map((layer, index) =>
+          index === 0 ? { ...layer, moveXEvents: [remaining] } : layer,
+        ),
+      },
+    ],
+  };
+  const session = new EditorSession(base);
+  session.focus = "events";
+  session.eventLayer = 0;
+  session.eventSelection.add("moveXEvents:0");
+
+  assert.equal(session.commitRemoteChart("remote", next), true);
+  assert.deepEqual([...session.eventSelection], []);
+  assert.notEqual(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0], deleted);
+});
+
+test("remote event reorder remaps a cloned event by stable id", () => {
+  const base = createChart();
+  const line = base.judgeLineList[0];
+  const first = line.eventLayers[0].moveXEvents[0];
+  const second = createEvent(5, 5);
+  const next = {
+    ...base,
+    judgeLineList: [
+      {
+        ...line,
+        eventLayers: line.eventLayers.map((layer, index) =>
+          index === 0
+            ? {
+                ...layer,
+                moveXEvents: [structuredClone(second), structuredClone(first)],
+              }
+            : layer,
+        ),
+      },
+    ],
+  };
+  const session = new EditorSession({
+    ...base,
+    judgeLineList: [
+      {
+        ...line,
+        eventLayers: line.eventLayers.map((layer, index) =>
+          index === 0 ? { ...layer, moveXEvents: [first, second] } : layer,
+        ),
+      },
+    ],
+  });
+  session.focus = "events";
+  session.eventLayer = 0;
+  session.eventSelection.add("moveXEvents:0");
+
+  assert.equal(session.commitRemoteChart("remote", next), true);
+  assert.deepEqual([...session.eventSelection], ["moveXEvents:1"]);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[1].id, first.id);
+});
+
+test("remote line reorder remaps multi-line event selections by line id", () => {
+  const base = createChart();
+  base.judgeLineList.push(createLine("Line 2"));
+  const first = base.judgeLineList[0];
+  const second = base.judgeLineList[1];
+  const next = { ...base, judgeLineList: [structuredClone(second), structuredClone(first)] };
+  const session = new EditorSession(base);
+  session.lineIndex = 1;
+  session.focus = "events";
+  session.eventLayer = 0;
+  session.eventSelection.add("moveXEvents:0");
+  session.multiLineEnabled = true;
+  session.multiLineMode = "events";
+  session.multiLineIndices = [1];
+  session.multiEventSelection = new Map([[1, new Set(["moveXEvents:0"])]]);
+
+  assert.equal(session.commitRemoteChart("remote", next), true);
+  assert.equal(session.lineIndex, 0);
+  assert.deepEqual([...session.multiLineIndices], [0]);
+  assert.deepEqual([...session.multiEventSelection], [[0, new Set(["moveXEvents:0"])]]);
+  assert.equal(session.chart.judgeLineList[0].id, second.id);
+  assert.equal(
+    session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0].id,
+    second.eventLayers[0].moveXEvents[0].id,
+  );
 });
 
 test("linear undo stops at an authoritative remote entry", () => {

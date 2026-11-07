@@ -12,6 +12,14 @@ import { writeInputValue } from "./nativeValue.ts";
 import type { ColorPopupState } from "./controlActions.ts";
 import { clamp01 } from "../../core/utils/numbers.ts";
 import { placeControlPopup } from "./controlPopupPlacement.ts";
+import {
+  cssColor,
+  displayHexColor,
+  formatHexColor,
+  normalizeHexColor,
+  parseHexColor,
+} from "../components/input/colorModel.ts";
+import type { CSSProperties } from "react";
 
 /** Hue, saturation, and value, each normalized to 0..1. */
 interface Hsv {
@@ -59,16 +67,20 @@ function rgbToHsv(r: number, g: number, b: number): Hsv {
   return { h, s: max <= 0 ? 0 : delta / max, v: max };
 }
 
-/** Parse `#rrggbb` text into normalized RGB, or `null` when it is not six hex digits. */
-function parseHex(text: string): { r: number; g: number; b: number } | null {
-  const value = text.trim().replace(/^#/, "");
-  if (!/^[0-9a-fA-F]{6}$/.test(value)) {
+/** Parse hexadecimal text into normalized RGB, or `null` when it is malformed. */
+function parseHex(
+  text: string,
+): { r: number; g: number; b: number; alpha: number; hasAlpha: boolean } | null {
+  const parsed = parseHexColor(text);
+  if (!parsed) {
     return null;
   }
   return {
-    r: Number.parseInt(value.slice(0, 2), 16) / 255,
-    g: Number.parseInt(value.slice(2, 4), 16) / 255,
-    b: Number.parseInt(value.slice(4, 6), 16) / 255,
+    r: parsed.red / 255,
+    g: parsed.green / 255,
+    b: parsed.blue / 255,
+    alpha: parsed.alpha,
+    hasAlpha: parsed.hasAlpha,
   };
 }
 
@@ -78,12 +90,15 @@ function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
     Math.round(clamp01(channel) * 255)
       .toString(16)
       .padStart(2, "0");
-  return `#${byte(r)}${byte(g)}${byte(b)}`;
+  return `#${byte(r)}${byte(g)}${byte(b)}`.toUpperCase();
 }
 
 /** Write a colour onto the native color input and announce the change. */
-function commitColor(element: HTMLInputElement, value: string) {
-  writeInputValue(element, value);
+function commitColor(element: HTMLInputElement, value: string, alpha: number, allowAlpha: boolean) {
+  writeInputValue(element, normalizeHexColor(value));
+  if (allowAlpha) {
+    element.dataset.colorAlpha = String(clamp01(alpha));
+  }
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -99,10 +114,15 @@ function commitColor(element: HTMLInputElement, value: string) {
 export function ColorPopup({ state }: { state: ColorPopupState }) {
   const { t } = useTranslation();
   const { element, anchor } = state;
+  const allowAlpha = element.dataset.colorAlphaEnabled === "true";
   const original = element.value;
+  const initial = parseHex(original) ?? { r: 0, g: 0, b: 0, alpha: 1, hasAlpha: false };
   const [hsv, setHsv] = useState<Hsv>(() => {
-    const rgb = parseHex(original);
-    return rgb ? rgbToHsv(rgb.r, rgb.g, rgb.b) : { h: 0, s: 0, v: 1 };
+    return rgbToHsv(initial.r, initial.g, initial.b);
+  });
+  const [alpha, setAlpha] = useState(() => {
+    const stored = Number(element.dataset.colorAlpha);
+    return allowAlpha && Number.isFinite(stored) ? clamp01(stored) : allowAlpha ? initial.alpha : 1;
   });
   const [hexDraft, setHexDraft] = useState<string | null>(null);
   const square = useRef<HTMLDivElement>(null);
@@ -111,6 +131,9 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
   const rgb = hsvToRgb(hsv);
   const color = toHex(rgb);
   const shownHex = hexDraft ?? color;
+  const storedColor = formatHexColor(color, alpha);
+  const shownColor = displayHexColor(storedColor, allowAlpha);
+  const fillStyle = { "--redux-color-fill": cssColor(storedColor) } as CSSProperties;
   const channels = {
     r: Math.round(rgb.r * 255),
     g: Math.round(rgb.g * 255),
@@ -131,10 +154,10 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
 
   const apply = useCallback(
     (value: string) => {
-      commitColor(element, value);
+      commitColor(element, value, alpha, allowAlpha);
       closeControlPopup(true);
     },
-    [element],
+    [allowAlpha, alpha, element],
   );
 
   useEffect(() => {
@@ -161,8 +184,8 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
     );
   };
 
-  const width = 344;
-  const height = 312;
+  const width = 392;
+  const height = allowAlpha ? 370 : 312;
   const viewport = { width: window.innerWidth, height: window.innerHeight };
   const dialogBox = popupDialogBoxOf(element);
   const { style } = placeControlPopup({
@@ -181,8 +204,11 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
       <div className="redux-color-head">
         <span>{t("design.colorPicker.title")}</span>
         <span className="redux-color-current-hex">
-          <span className="redux-color-current-swatch" style={{ background: color }} />
-          {color}
+          <span
+            className={`redux-color-current-swatch${allowAlpha ? " redux-color-checker" : ""}`}
+            style={allowAlpha ? fillStyle : { background: color }}
+          />
+          {shownColor}
         </span>
       </div>
       <div className="redux-color-body">
@@ -293,6 +319,9 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
                 // Keep the typed text visible while the parsed colour paints the
                 // square; clearing the draft here would rewrite the caret.
                 setHsv(rgbToHsv(parsed.r, parsed.g, parsed.b));
+                if (allowAlpha && parsed.hasAlpha) {
+                  setAlpha(parsed.alpha);
+                }
               }
             }}
             onBlur={() => setHexDraft(null)}
@@ -314,6 +343,20 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
             />
           </label>
         ))}
+        {allowAlpha && (
+          <label className="redux-color-alpha-channel">
+            <span>A</span>
+            <Input
+              type="number"
+              textAlign="center"
+              min={0}
+              max={100}
+              value={Math.round(alpha * 100)}
+              aria-label={t("design.colorPicker.alphaValue")}
+              onChange={(event) => setAlpha(clamp01(Number(event.currentTarget.value) / 100))}
+            />
+          </label>
+        )}
       </div>
       <div className="redux-color-actions">
         <Button variant="outlined" onClick={() => closeControlPopup(true)}>

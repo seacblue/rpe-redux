@@ -119,6 +119,21 @@ function remapIndices<T extends object>(
   });
 }
 
+/** Find a corresponding line by reference, stable id, or shared child arrays. */
+function remapLineIndex(source: Chart, target: Chart, sourceIndex: number): number | null {
+  const sourceLine = source.judgeLineList?.[sourceIndex];
+  if (!sourceLine) {
+    return null;
+  }
+  const targetIndex = (target.judgeLineList ?? []).findIndex(
+    (candidate) =>
+      candidate === sourceLine ||
+      (sourceLine.id !== undefined && candidate.id === sourceLine.id) ||
+      (candidate.notes === sourceLine.notes && candidate.eventLayers === sourceLine.eventLayers),
+  );
+  return targetIndex >= 0 ? targetIndex : null;
+}
+
 /** Maps a selection snapshot onto another chart revision by id and position. */
 export function remapSelection(
   source: Chart,
@@ -127,14 +142,7 @@ export function remapSelection(
 ): SelectionState {
   const line = source.judgeLineList?.[state.lineIndex];
   const lines = target.judgeLineList ?? [];
-  const matching = line
-    ? lines.findIndex(
-        (candidate) =>
-          candidate === line ||
-          (line.id !== undefined && candidate.id === line.id) ||
-          (candidate.notes === line.notes && candidate.eventLayers === line.eventLayers),
-      )
-    : -1;
+  const matching = remapLineIndex(source, target, state.lineIndex) ?? -1;
   const lineIndex =
     matching >= 0 ? matching : Math.max(0, Math.min(state.lineIndex, lines.length - 1));
   const sourceSession = { ...state, chart: source, line };
@@ -165,9 +173,12 @@ export function remapSelection(
   const multiEventSelection = (state.multiEventSelection ?? []).flatMap(
     ([sourceLineIndex, keys]): [number, string[]][] => {
       const sourceLine = source.judgeLineList?.[sourceLineIndex];
-      const targetLineIndex = sourceLineIndex;
+      const targetLineIndex = remapLineIndex(source, target, sourceLineIndex);
+      if (!sourceLine || targetLineIndex === null) {
+        return [];
+      }
       const targetLine = target.judgeLineList?.[targetLineIndex];
-      if (!sourceLine || !targetLine) {
+      if (!targetLine) {
         return [];
       }
       const sourceSession = {
@@ -206,13 +217,19 @@ export function remapSelection(
   const multiLineSelection = (state.multiLineSelection ?? []).flatMap(
     ([sourceLineIndex, indices]): [number, number[]][] => {
       const sourceNotes = source.judgeLineList?.[sourceLineIndex]?.notes ?? [];
-      const targetLineIndex = sourceLineIndex;
+      const targetLineIndex = remapLineIndex(source, target, sourceLineIndex);
+      if (targetLineIndex === null) {
+        return [];
+      }
       const targetNotes = target.judgeLineList?.[targetLineIndex]?.notes ?? [];
       const mapped = remapIndices(sourceNotes, targetNotes, indices);
       return mapped.length ? [[targetLineIndex, mapped]] : [];
     },
   );
-  const multiLineIndices = [...(state.multiLineIndices ?? [])];
+  const multiLineIndices = (state.multiLineIndices ?? []).flatMap((sourceLineIndex) => {
+    const targetLineIndex = remapLineIndex(source, target, sourceLineIndex);
+    return targetLineIndex === null ? [] : [targetLineIndex];
+  });
   return {
     ...state,
     lineIndex,

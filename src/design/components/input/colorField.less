@@ -9,7 +9,7 @@
   // A colour is one compact swatch, not a full-width field; it fills the
   // available control column up to a readable cap and stays on the trailing edge.
   width: 100%;
-  max-width: 120px;
+  max-width: 180px;
   min-width: 0;
 }
 
@@ -49,4 +49,34 @@
   &[data-ink="dark"] {
     color: var(--media-surface);
   }
+}
+
+// The first layer is the selected colour with its alpha; the two following
+// layers form a theme-aware checkerboard underneath it.
+.redux-color-checker {
+  background-color: var(--color-checker-light);
+  background-image:
+    linear-gradient(var(--redux-color-fill), var(--redux-color-fill)),
+    linear-gradient(
+      45deg,
+      var(--color-checker-dark) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-checker-dark) 75%
+    ),
+    linear-gradient(
+      45deg,
+      var(--color-checker-dark) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-checker-dark) 75%
+    );
+  background-position:
+    0 0,
+    0 0,
+    var(--space-1-5) var(--space-1-5);
+  background-size:
+    auto,
+    var(--space-3) var(--space-3),
+    var(--space-3) var(--space-3);
 }

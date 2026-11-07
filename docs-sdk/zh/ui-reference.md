@@ -135,7 +135,9 @@ h("input", {
 ### 列表与空态
 
 ```js
-h("div", { attrs: { role: "listbox", "aria-label": "最近项目" } },
+h(
+  "div",
+  { attrs: { role: "listbox", "aria-label": "最近项目" } },
   state.items.length
     ? state.items.map((item, index) =>
         h("div", {
@@ -203,9 +205,9 @@ context.addCleanup(() => overlay.dispose());
 
 ## 权限与上限
 
-| 能力 | 授予的表面 |
-| --- | --- |
-| `ui.panel` | `context.ui.registerPanel` |
+| 能力         | 授予的表面                   |
+| ------------ | ---------------------------- |
+| `ui.panel`   | `context.ui.registerPanel`   |
 | `ui.overlay` | `context.ui.registerOverlay` |
 | `ui.sidebar` | `context.ui.registerSidebar` |
 

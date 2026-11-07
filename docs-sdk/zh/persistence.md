@@ -4,12 +4,12 @@
 
 ## 用途
 
-| 数据 | 使用接口 | 用户可见 |
-| --- | --- | --- |
-| 用户可配置项 | `api.settings.registerSetting` + `api.values` | 是，设置页有行 |
-| 包私有草稿、缓存、版本标记 | `context.storage` | 否 |
-| 当前会话的活状态 | `api.values.define` | 否 |
-| 大文件、图片、音频、项目资产 | library / package 资产 | 是（P3 待开放） |
+| 数据                         | 使用接口                                      | 用户可见        |
+| ---------------------------- | --------------------------------------------- | --------------- |
+| 用户可配置项                 | `api.settings.registerSetting` + `api.values` | 是，设置页有行  |
+| 包私有草稿、缓存、版本标记   | `context.storage`                             | 否              |
+| 当前会话的活状态             | `api.values.define`                           | 否              |
+| 大文件、图片、音频、项目资产 | library / package 资产                        | 是（P3 待开放） |
 
 `context.storage` 是 owner 作用域的字符串键值存储，写入偏好文档的 `values` 段；每个 key 最终存成 `extension:<扩展 id>:<key>`。JSON 便利方法在同一存储上提供结构化读写。
 
@@ -196,14 +196,14 @@ const handle = context.api.values.define({
 
 ## 权限与上限
 
-| 接口 | 能力 | 上限 |
-| --- | --- | --- |
-| `context.storage.get/set/delete/clear` | `storage` | key 128 字符；值 256 KB UTF-8 |
-| `context.storage.getJSON/setJSON` | `storage` | JSON 编码后 256 KB；最多 32 层 |
-| `api.settings.registerNavigation` | `settings` | 包内 key 自动加 `extension.<owner>.` |
-| `api.settings.registerSetting` | `settings` | 设置值自动声明 |
-| `api.values.byId.get/set` | `values` | 只写本包值 |
-| `api.values.define` | `values` | 初始值必须可克隆 |
+| 接口                                   | 能力       | 上限                                 |
+| -------------------------------------- | ---------- | ------------------------------------ |
+| `context.storage.get/set/delete/clear` | `storage`  | key 128 字符；值 256 KB UTF-8        |
+| `context.storage.getJSON/setJSON`      | `storage`  | JSON 编码后 256 KB；最多 32 层       |
+| `api.settings.registerNavigation`      | `settings` | 包内 key 自动加 `extension.<owner>.` |
+| `api.settings.registerSetting`         | `settings` | 设置值自动声明                       |
+| `api.values.byId.get/set`              | `values`   | 只写本包值                           |
+| `api.values.define`                    | `values`   | 初始值必须可克隆                     |
 
 存储值会被备份和迁移，不提供加密；令牌、密码和隐私数据应放在宿主管理的安全通道，或完全不保存。
 

@@ -15,6 +15,7 @@ import { MAX_ASSET_BYTES, matchesAssetMagic, mimeForAsset } from "./assets.ts";
 import { AssetAssembler, assetChunkRanges } from "./transfer.ts";
 import { Outbox } from "./outbox.ts";
 import { base64ToBytes, bytesToBase64, randomToken, sha256Hex } from "./digest.ts";
+import { yieldToHost } from "../utils/yieldToHost.ts";
 import {
   createRoomKey,
   decryptBytes,
@@ -643,6 +644,7 @@ export class CollaborationClient {
         index: range.index,
         data: bytesToBase64(payload.subarray(range.offset, range.offset + range.length)),
       });
+      await yieldToHost();
     }
     this.send({ type: "asset-commit", requestId });
     return new Promise<string>((resolve, reject) => {

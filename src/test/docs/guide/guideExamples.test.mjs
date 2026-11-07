@@ -220,8 +220,5 @@ test("sdk/llm-guide.md examples compile against the SDK type surface", () => {
 
 test("runtime guide does not disclose internal implementation paths", () => {
   const guide = readFileSync(GUIDE_PATH, "utf8").replace(/\r\n/g, "\n");
-  assert.doesNotMatch(
-    guide,
-    /(?:src\/(?:core|frontend|backend|src-tauri)|RestrictedCodeCellApi)/u,
-  );
+  assert.doesNotMatch(guide, /(?:src\/(?:core|frontend|backend|src-tauri)|RestrictedCodeCellApi)/u);
 });

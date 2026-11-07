@@ -108,7 +108,7 @@ interface BeatSettingDefinition extends SettingDefinitionBase {
 
 interface ColorSettingDefinition extends SettingDefinitionBase {
   control: "color";
-  /** CSS hex colour persisted by the value store. */
+  /** Hex RGB or RGBA colour persisted by the value store. */
   default: string;
 }
 

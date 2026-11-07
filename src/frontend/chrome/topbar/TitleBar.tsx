@@ -19,10 +19,13 @@ import {
 import { useDocumentIdentityValue } from "../../contracts/editorHostReact.tsx";
 import { formatDocumentWindowTitle } from "../../contracts/documentIdentity.ts";
 import { appTitle, setAppWindowTitle } from "./windowControls/windowTitle.ts";
+import { useSetting } from "../../screens/settings/useSetting.ts";
+import type { WindowDisplayMode } from "../../platform/desktop/windowDisplay.ts";
 
 /** Custom title row: brand mark, menu, and background-task badges. */
 export function TitleBar() {
   const { t, language } = useTranslation();
+  const displayMode = useSetting<WindowDisplayMode>("window-display-mode", "windowed");
   const visibility = useSyncExternalStore(
     subscribeToEditorVisibility,
     getEditorVisibility,
@@ -40,7 +43,7 @@ export function TitleBar() {
   }, [displayName, identity.dirty, identity.open, language, visibility.atHome]);
 
   return (
-    <div className="redux-titlebar">
+    <div className="redux-titlebar" data-window-display-mode={displayMode}>
       <div className="redux-titlebar-left">
         <BrandLogo />
         <MenuBar />

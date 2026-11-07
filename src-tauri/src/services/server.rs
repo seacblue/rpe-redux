@@ -36,6 +36,16 @@ pub struct RuntimePorts {
     pub ai_port: u16,
 }
 
+/// One-process port overrides supplied by a desktop launch or its development
+/// wrapper. Overrides are intentionally not persisted, so parallel test runs
+/// can choose isolated ports without changing the user's normal profile.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RuntimePortOverrides {
+    frontend: Option<u16>,
+    backend: Option<u16>,
+    ai: Option<u16>,
+}
+
 impl Default for RuntimePorts {
     fn default() -> Self {
         Self {
@@ -50,6 +60,100 @@ fn runtime_ports_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(crate::storage::data_dir(app)?.join("runtime-ports.json"))
 }
 
+/// Parse one explicit port value and reject the ephemeral-port sentinel used
+/// by the standalone Go service; desktop clients need a stable URL.
+fn parse_runtime_port(flag: &str, value: &str) -> Result<u16, String> {
+    let port = value
+        .parse::<u32>()
+        .map_err(|_| format!("{flag} must be an integer between 1 and 65535"))?;
+    if !(1..=u32::from(u16::MAX)).contains(&port) {
+        return Err(format!("{flag} must be between 1 and 65535"));
+    }
+    Ok(port as u16)
+}
+
+/// Parse desktop launch arguments in both `--flag=value` and `--flag value`
+/// forms. Unknown application arguments remain untouched by this helper.
+fn parse_runtime_port_args<I, S>(args: I) -> Result<RuntimePortOverrides, String>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let mut overrides = RuntimePortOverrides::default();
+    let mut args = args.into_iter().map(Into::into).peekable();
+    while let Some(argument) = args.next() {
+        let (name, inline) = if let Some(value) = argument.strip_prefix("--frontend-port=") {
+            ("frontend", Some(value.to_owned()))
+        } else if let Some(value) = argument.strip_prefix("--backend-port=") {
+            ("backend", Some(value.to_owned()))
+        } else if let Some(value) = argument.strip_prefix("--ai-port=") {
+            ("ai", Some(value.to_owned()))
+        } else if matches!(
+            argument.as_str(),
+            "--frontend-port" | "--backend-port" | "--ai-port"
+        ) {
+            let value = args
+                .next()
+                .ok_or_else(|| format!("{argument} requires a port value"))?;
+            (argument.trim_start_matches("--"), Some(value))
+        } else {
+            continue;
+        };
+        let flag = format!("--{name}-port");
+        let value = parse_runtime_port(&flag, inline.as_deref().unwrap_or_default())?;
+        match name {
+            "frontend" => overrides.frontend = Some(value),
+            "backend" => overrides.backend = Some(value),
+            "ai" => overrides.ai = Some(value),
+            _ => unreachable!("only known runtime ports are parsed"),
+        }
+    }
+    Ok(overrides)
+}
+
+/// Read optional process environment overrides used by `npm run desktop`.
+fn runtime_port_env_overrides() -> Result<RuntimePortOverrides, String> {
+    let read = |name: &str, flag: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| parse_runtime_port(flag, &value))
+            .transpose()
+    };
+    Ok(RuntimePortOverrides {
+        frontend: read("REDUX_FRONTEND_PORT", "--frontend-port")?,
+        backend: read("REDUX_BACKEND_PORT", "--backend-port")?,
+        ai: read("REDUX_AI_PORT", "--ai-port")?,
+    })
+}
+
+/// Apply process-only overrides over the persisted next-launch configuration.
+fn effective_runtime_ports(mut ports: RuntimePorts) -> Result<RuntimePorts, String> {
+    let environment = runtime_port_env_overrides()?;
+    let arguments = parse_runtime_port_args(std::env::args())?;
+    ports.frontend_port = arguments
+        .frontend
+        .or(environment.frontend)
+        .unwrap_or(ports.frontend_port);
+    ports.backend_port = arguments
+        .backend
+        .or(environment.backend)
+        .unwrap_or(ports.backend_port);
+    ports.ai_port = arguments.ai.or(environment.ai).unwrap_or(ports.ai_port);
+    Ok(ports)
+}
+
+/// Read only the persisted values so a process-only launch override is never
+/// accidentally written back when the settings page updates another port.
+fn read_persisted_runtime_ports_file(app: &AppHandle) -> Result<RuntimePorts, String> {
+    let path = runtime_ports_path(app)?;
+    match std::fs::read_to_string(path) {
+        Ok(raw) => serde_json::from_str(&raw)
+            .map_err(|error| format!("Invalid runtime port configuration: {error}")),
+        Err(_) => Ok(RuntimePorts::default()),
+    }
+}
+
 /// Read the next-launch port configuration, falling back to product defaults.
 #[tauri::command]
 pub fn read_runtime_ports(app: AppHandle) -> Result<RuntimePorts, String> {
@@ -58,12 +162,7 @@ pub fn read_runtime_ports(app: AppHandle) -> Result<RuntimePorts, String> {
 
 /// Read the next-launch port configuration for host code that already borrows the app.
 fn read_runtime_ports_file(app: &AppHandle) -> Result<RuntimePorts, String> {
-    let path = runtime_ports_path(&app)?;
-    let Ok(raw) = std::fs::read_to_string(path) else {
-        return Ok(RuntimePorts::default());
-    };
-    serde_json::from_str(&raw)
-        .map_err(|error| format!("Invalid runtime port configuration: {error}"))
+    effective_runtime_ports(read_persisted_runtime_ports_file(app)?)
 }
 
 /// Update one next-launch port in the dedicated runtime configuration file.
@@ -73,7 +172,7 @@ pub fn write_runtime_port(app: AppHandle, name: String, port: u16) -> Result<Run
         return Err("Runtime ports must be between 1 and 65535".to_owned());
     }
     let path = runtime_ports_path(&app)?;
-    let mut ports = read_runtime_ports_file(&app)?;
+    let mut ports = read_persisted_runtime_ports_file(&app)?;
     match name.as_str() {
         "frontend" => ports.frontend_port = port,
         "backend" => ports.backend_port = port,
@@ -480,6 +579,7 @@ fn reuse_existing_backend(
     health: &serde_json::Value,
     expected_db: &Path,
     expected_version: &str,
+    expected_port: u16,
     expected_collab_port: u16,
     docs_requested: bool,
     addr: SocketAddr,
@@ -487,7 +587,7 @@ fn reuse_existing_backend(
 ) -> Result<bool, String> {
     if !health_matches_db(health, expected_db) {
         return Err(format!(
-            "Port {SERVER_PORT} is already used by another Redux database profile. Close that instance and retry."
+            "Backend port {expected_port} is already in use by another Redux database profile. This launch will not switch ports automatically. Start the next copy with --backend-port=<different-port>, or change the Backend port setting, then retry."
         ));
     }
     let version_matches = health_matches_version(health, expected_version);
@@ -580,6 +680,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
             &health,
             &expected_db,
             &expected_version,
+            expected_port,
             expected_collab_port,
             docs_requested,
             addr,
@@ -596,6 +697,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                     &health,
                     &expected_db,
                     &expected_version,
+                    expected_port,
                     expected_collab_port,
                     docs_requested,
                     addr,
@@ -614,7 +716,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         }
         if !settled {
             return Err(format!(
-                "Port {} is already in use by another program. Close it before starting Redux.",
+                "Backend port {} is already in use by another program. This launch will not switch ports automatically. Start the next copy with --backend-port=<different-port>, or change the Backend port setting, then retry.",
                 ports.backend_port
             ));
         }
@@ -884,6 +986,34 @@ mod tests {
         assert_eq!(health_version(&health(None)), "unknown");
         assert_eq!(health_version(&health(Some(""))), "unknown");
         assert_eq!(health_version(&health(Some("1.0.0"))), "1.0.0");
+    }
+
+    #[test]
+    fn desktop_launch_arguments_override_persisted_ports_without_persisting() {
+        let overrides = parse_runtime_port_args([
+            "rpe-redux.exe",
+            "--backend-port",
+            "48121",
+            "--ai-port=48122",
+            "--frontend-port",
+            "4174",
+        ])
+        .unwrap();
+        assert_eq!(
+            overrides,
+            RuntimePortOverrides {
+                frontend: Some(4174),
+                backend: Some(48121),
+                ai: Some(48122),
+            }
+        );
+    }
+
+    #[test]
+    fn desktop_launch_arguments_reject_invalid_ports() {
+        assert!(parse_runtime_port_args(["--backend-port=0"]).is_err());
+        assert!(parse_runtime_port_args(["--backend-port", "not-a-port"]).is_err());
+        assert!(parse_runtime_port_args(["--backend-port"]).is_err());
     }
 
     /// Build a health payload with the top-level and nested room port fields.

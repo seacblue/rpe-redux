@@ -438,11 +438,19 @@ export class EditorSession extends EventTarget {
     const metadata: HistoryEntryMetadata = {
       origin: { kind: "collaboration-remote", ...origin },
     };
-    return (
-      this.mutationGate?.run("ui", () =>
-        this.commitChartInternal(label, chart, this.selectionState(), metadata, {}, true),
-      ) ?? this.commitChartInternal(label, chart, this.selectionState(), metadata, {}, true)
-    );
+    const operation = (): boolean => {
+      const beforeSelection = this.selectionState();
+      const afterSelection = remapSelection(this.chart, chart, beforeSelection);
+      return this.commitChartInternal(
+        label,
+        chart,
+        beforeSelection,
+        metadata,
+        { afterSelection },
+        true,
+      );
+    };
+    return this.mutationGate?.run("ui", operation) ?? operation();
   }
 
   /** Apply the room role; viewers cannot commit, and remote entries stay protected. */

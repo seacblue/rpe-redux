@@ -45,10 +45,7 @@ export default {
       label: "查看主题",
       async run({ api, ui }) {
         const tokens = await api.theme.tokens();
-        ui.notice(
-          `主题 ${tokens.theme.name}（${tokens.theme.appearance}）`,
-          { level: "info" },
-        );
+        ui.notice(`主题 ${tokens.theme.name}（${tokens.theme.appearance}）`, { level: "info" });
       },
     });
   },
@@ -120,17 +117,17 @@ context.addCleanup(() => {
 
 方法页不再重复失败表；先检查 `result.ok`，失败时读 `error.code` 并按下表处理。类型说明见[类型与术语](types.md#apiresult)。
 
-| 错误 | 含义 | 恢复 |
-| --- | --- | --- |
-| `capabilityDenied` | 当前包没有该能力 | 在清单声明并重新确认 |
-| `methodNotRegistered` | 方法未登记 | 查方法页，升级宿主或换用已登记方法 |
-| `eventNotAllowed` | 事件不在白名单 | 使用已发布事件名 |
-| `unavailable` | 运行时未挂载 | 等待文档/播放就绪或查 `availability()` |
-| `bridge.limit` | 数据超过桥接上限 | 裁剪、分页或只传摘要 |
-| `stale_read` | 事务期间文档或谱面变化 | 重新读取并重新预览 |
-| `conflict` | 事务与当前谱面版本冲突 | 重新读取对象后再提交 |
-| `storageValueNotJson` | 存储值不是纯 JSON 数据 | 只写入纯 JSON |
-| `storageValueTooLarge` | 存储值超过 256 KB | 裁剪内容或改用资产通道 |
+| 错误                   | 含义                   | 恢复                                   |
+| ---------------------- | ---------------------- | -------------------------------------- |
+| `capabilityDenied`     | 当前包没有该能力       | 在清单声明并重新确认                   |
+| `methodNotRegistered`  | 方法未登记             | 查方法页，升级宿主或换用已登记方法     |
+| `eventNotAllowed`      | 事件不在白名单         | 使用已发布事件名                       |
+| `unavailable`          | 运行时未挂载           | 等待文档/播放就绪或查 `availability()` |
+| `bridge.limit`         | 数据超过桥接上限       | 裁剪、分页或只传摘要                   |
+| `stale_read`           | 事务期间文档或谱面变化 | 重新读取并重新预览                     |
+| `conflict`             | 事务与当前谱面版本冲突 | 重新读取对象后再提交                   |
+| `storageValueNotJson`  | 存储值不是纯 JSON 数据 | 只写入纯 JSON                          |
+| `storageValueTooLarge` | 存储值超过 256 KB      | 裁剪内容或改用资产通道                 |
 
 ## 相关接口
 

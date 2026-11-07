@@ -130,3 +130,32 @@ test("a set on an existing id or index replaces the addressed value", () => {
   assert.equal(result.chart.judgeLineList[0].notes[0].positionX, 9);
   assert.equal(result.chart.BPMList[0].bpm, 180);
 });
+
+test("remote note changes preserve unrelated chart subtrees", () => {
+  const base = chart();
+  base.judgeLineList[0].notes = Array.from({ length: 10_000 }, (_, index) => ({
+    id: `note-large-${index}`,
+    positionX: index,
+    alpha: 255,
+  }));
+  const changed = {
+    ...base,
+    judgeLineList: base.judgeLineList.map((line, lineIndex) =>
+      lineIndex === 0
+        ? {
+            ...line,
+            notes: line.notes.map((note, noteIndex) =>
+              noteIndex === 5_000 ? { ...note, positionX: 99 } : note,
+            ),
+          }
+        : line,
+    ),
+  };
+  const result = applyChartChanges(base, diffCharts(base, changed));
+
+  assert.deepEqual(result.conflicts, []);
+  assert.equal(result.chart.judgeLineList[1], base.judgeLineList[1]);
+  assert.equal(result.chart.judgeLineList[0].notes[0], base.judgeLineList[0].notes[0]);
+  assert.notEqual(result.chart.judgeLineList[0].notes[5_000], base.judgeLineList[0].notes[5_000]);
+  assert.equal(result.chart.judgeLineList[0].notes[5_000].positionX, 99);
+});

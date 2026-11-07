@@ -252,6 +252,7 @@ export function SettingControl({
         <ColorField
           id={field.key}
           value={textValue}
+          allowAlpha
           disabled={!enabled}
           describedBy={describedBy}
           onChange={(value) => onCommitValue(field, value)}
