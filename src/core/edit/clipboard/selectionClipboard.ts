@@ -87,8 +87,8 @@ export function createSelectionClipboard(deps: SelectionClipboardDependencies) {
   }
 
   /** Pastes at the session target beat, optionally preserving source times. */
-  function paste(keepTime = false): boolean {
-    deps.setClipboardMode({ keepTime });
+  function paste(options: SelectionClipboardMode = {}): boolean {
+    deps.setClipboardMode(options);
     return pasteAt(deps.targetBeat(), deps.clipboardMode());
   }
 

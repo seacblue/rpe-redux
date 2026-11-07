@@ -48,6 +48,7 @@ export default {
   "shortcuts.editor.paste": "Paste",
 
   "shortcuts.editor.keepTimePaste": "Paste keeping time",
+  "shortcuts.editor.mirrorPaste": "Paste mirrored",
 
   "shortcuts.editor.eventLayer0": "Event layer 0",
   "shortcuts.editor.eventLayer1": "Event layer 1",

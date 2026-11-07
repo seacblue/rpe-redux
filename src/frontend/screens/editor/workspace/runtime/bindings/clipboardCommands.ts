@@ -22,8 +22,8 @@ export function createClipboardCommands({ selectionClipboard }: ClipboardCommand
   function cutSelection() {
     selectionClipboard.cut();
   }
-  function pasteSelection(keepTime = false) {
-    selectionClipboard.paste(keepTime);
+  function pasteSelection(options: { mirror?: boolean; keepTime?: boolean } = {}) {
+    selectionClipboard.paste(options);
   }
   return {
     copySelection,

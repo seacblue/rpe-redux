@@ -81,6 +81,9 @@ export function copyObjects(session: EditorSession): number {
 /** Base event tracks that exist once per line layer. */
 const BASE_EVENT_TYPES = new Set<string>(EVENT_TYPES);
 
+/** Event tracks whose values describe the line transform mirrored by paste. */
+const MIRROR_EVENT_TYPES = new Set(["moveXEvents", "moveYEvents", "rotateEvents"]);
+
 /**
  * Copy every base layer of the selected event types inside the selection span.
  *
@@ -408,8 +411,7 @@ export function projectClipboard(
     }
     if (
       mirror &&
-      type !== "alphaEvents" &&
-      type !== NOISE_ACTIVE_EVENTS &&
+      MIRROR_EVENT_TYPES.has(type) &&
       typeof next.start === "number" &&
       typeof next.end === "number"
     ) {
@@ -620,10 +622,17 @@ export const clipboardShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "V", modifiers: ["CTRL", "SHIFT"] }],
   },
   {
+    id: "edit.paste.mirror",
+    category: "editor.clipboard",
+    title: "shortcuts.editor.mirrorPaste",
+    scope: "editor",
+    defaults: [{ key: "B", modifiers: ["CTRL"] }],
+  },
+  {
     id: "edit.delete",
     category: "editor.editing",
     title: "shortcuts.editor.delete",
     scope: "editor",
-    defaults: [{ key: "D" }],
+    defaults: [{ key: "D" }, { key: "DELETE" }],
   },
 ];

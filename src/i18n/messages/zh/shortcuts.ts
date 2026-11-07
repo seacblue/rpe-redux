@@ -47,6 +47,7 @@ export default {
   "shortcuts.editor.paste": "粘贴",
 
   "shortcuts.editor.keepTimePaste": "等时粘贴",
+  "shortcuts.editor.mirrorPaste": "镜像粘贴",
 
   "shortcuts.editor.eventLayer0": "事件层 0",
   "shortcuts.editor.eventLayer1": "事件层 1",
