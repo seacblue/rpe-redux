@@ -235,8 +235,8 @@ export default {
   "workspace.welcome.library.sort.charter": "Charter",
   "workspace.welcome.library.sort.newest": "Newest first",
   "workspace.welcome.library.sort.oldest": "Oldest first",
-  "workspace.welcome.library.sort.az": "A → Z",
-  "workspace.welcome.library.sort.za": "Z → A",
+  "workspace.welcome.library.sort.az": "A > Z",
+  "workspace.welcome.library.sort.za": "Z > A",
   "workspace.welcome.library.view.label": "Chart view",
   "workspace.welcome.library.view.list": "List",
   "workspace.welcome.library.view.grid": "Grid",
@@ -708,10 +708,8 @@ export default {
   "onboarding.kicker": "Quick start",
   "onboarding.progress": "{current} / {total}",
   "onboarding.choice.title": "How should we introduce the editor?",
-  "onboarding.choice.description":
-    "Choose the path that fits you. The guide points at the real controls and leaves them usable while it is open.",
   "onboarding.choice.note":
-    "You can replay this walkthrough later from Settings → Help → Show the onboarding guide.",
+    "You can replay this walkthrough later from Settings > Help > Show the onboarding guide.",
   "onboarding.choice.rpe.title": "I already use RPE",
   "onboarding.choice.rpe.description":
     "Import an existing chart, then learn where this editor differs from RPE.",
@@ -757,7 +755,7 @@ export default {
     "Select a note on the timeline, then adjust its beat, position, type, and other fields in the inspector on the right. Undo with Ctrl+Z.",
   "onboarding.finish.title": "You're ready",
   "onboarding.finish.body":
-    "Create or import a chart from the home screen. Replay this guide whenever you need it from Settings → Help.",
+    "Create or import a chart from the home screen. Replay this guide whenever you need it from Settings > Help.",
   "onboarding.action.previous": "Back",
   "onboarding.action.next": "Next",
   "onboarding.action.skip": "Skip guide",
