@@ -52,3 +52,36 @@ export function drawMarqueeRectangle(
   context.strokeRect(x + (preview ? 0.5 : 0), y + (preview ? 0.5 : 0), width, height);
   context.restore();
 }
+
+/** Paint one freehand sweep path in overlay-local coordinates. */
+export function drawSelectionSweep(
+  context: CanvasRenderingContext2D,
+  origin: MarqueeOrigin,
+  overlay: MarqueeOrigin,
+  points: readonly MarqueePoint[],
+  area: MarqueeArea,
+  palette: MarqueePalette,
+): void {
+  if (points.length < 2) {
+    return;
+  }
+  context.save();
+  context.beginPath();
+  points.forEach((point, index) => {
+    const x = origin.left - overlay.left + point.x;
+    const y = origin.top - overlay.top + point.y;
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.strokeStyle =
+    area === "notes" ? palette.selectionNotesStroke : palette.selectionEventsStroke;
+  context.lineWidth = 2;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.setLineDash([]);
+  context.stroke();
+  context.restore();
+}
