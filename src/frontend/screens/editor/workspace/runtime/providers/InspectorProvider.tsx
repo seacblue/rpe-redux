@@ -22,8 +22,8 @@ import {
   LinePanel,
   type LinePanelAsset,
 } from "../../../../global/sections/lines/linePanelController.ts";
-import { MultiEditPanel } from "../../../inspector/multi-edit/multiEdit.ts";
-import { MultiLinePanel } from "../../../inspector/multi-line/MultiLinePanel.tsx";
+import { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
+import { MultiLinePanel } from "../../../inspector/multiLine/MultiLinePanel.tsx";
 import { TrajectoryPanel } from "../../../inspector/trajectory/trajectoryPanel.ts";
 import { createAssetLibraryRuntime } from "../../../../global/sections/assets/assetLibraryRuntime.ts";
 import { createCurveEditor } from "../../../inspector/curveNotes/curveEditor.ts";

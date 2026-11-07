@@ -71,7 +71,7 @@ test("only the explicit inspector reset allowlist exposes reset affordances", ()
     "screens/editor/inspector/sampling/SamplingInspector.tsx",
     "screens/editor/inspector/trajectory/TrajectoryFieldsView.tsx",
     "screens/editor/inspector/scripts/ParameterForm.tsx",
-    "screens/editor/inspector/multi-line/MultiLinePanel.tsx",
+    "screens/editor/inspector/multiLine/MultiLinePanel.tsx",
   ]) {
     assert.doesNotMatch(read(`frontend/${path}`), /FieldReset|redux-setting-reset/u, path);
   }
@@ -80,7 +80,7 @@ test("only the explicit inspector reset allowlist exposes reset affordances", ()
     /field="result-ghost"/u,
   );
   assert.match(
-    read("frontend/screens/editor/inspector/multi-edit/MultiEditForm.tsx"),
+    read("frontend/screens/editor/inspector/multiEdit/MultiEditForm.tsx"),
     /field="result-ghost"/u,
   );
   assert.match(

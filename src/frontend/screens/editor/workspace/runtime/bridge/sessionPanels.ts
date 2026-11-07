@@ -12,8 +12,8 @@ import type { EditorUiState } from "../composition/editorUiState.ts";
 
 import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { LayerButtons } from "../../timeline/layers/layerButtons.ts";
-import type { MultiEditPanel } from "../../../inspector/multi-edit/multiEdit.ts";
-import type { MultiLinePanel } from "../../../inspector/multi-line/MultiLinePanel.tsx";
+import type { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
+import type { MultiLinePanel } from "../../../inspector/multiLine/MultiLinePanel.tsx";
 
 import { EditorSession } from "../../../../../../core/edit/session/session.ts";
 
