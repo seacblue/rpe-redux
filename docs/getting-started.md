@@ -77,7 +77,7 @@ The most useful view shortcuts:
 
 | Action                                      | Default                    |
 | ------------------------------------------- | -------------------------- |
-| Preview only (press again to restore)       | `Ctrl+Space`               |
+| Preview only / previous complete layout     | `Ctrl+Space`               |
 | Note region / event region / preview region | `Ctrl+Shift+Q` / `W` / `E` |
 | Notes and events together                   | `Ctrl+Shift+R`             |
 | Reset the view                              | `Ctrl+Shift+F`             |

@@ -32,9 +32,9 @@ function activateMultiLine(mode = "notes") {
 }
 
 /** A session stub whose mode write mirrors the published value. */
-function createSession() {
+function createSession(multiLineActive = true) {
   return {
-    multiLineActive: true,
+    multiLineActive,
     multiLineMode: "notes",
     setMultiLineMode(mode) {
       this.multiLineMode = mode;
@@ -99,4 +99,44 @@ test("switching multi-line mode reveals a field whose switch was off", () => {
 
   assert.equal(displayValues.showEvents.get(), true);
   assert.equal(getEditorRegionSnapshot().showEvents, true);
+});
+
+test("preview-only restores the complete layout after rapid region changes", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const clock = { value: 100 };
+  const controls = createEditorViewControls(createRuntime(createSession(false)), {
+    now: () => clock.value,
+  });
+
+  controls.toggleRegion("showNotes");
+  clock.value = 200;
+  controls.toggleRegion("showEvents");
+  controls.togglePreviewOnly();
+
+  assert.equal(displayValues.showNotes.get(), true);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+  assert.equal(getEditorRegionSnapshot().showPreview, true);
+});
+
+test("two preview-only shortcuts return to a newly completed layout", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  displayValues.showNotes.set(false);
+  const clock = { value: 100 };
+  const controls = createEditorViewControls(createRuntime(createSession(false)), {
+    now: () => clock.value,
+  });
+
+  controls.toggleRegion("showNotes");
+  clock.value = 200;
+  controls.togglePreviewOnly();
+  clock.value = 300;
+  controls.togglePreviewOnly();
+
+  assert.equal(displayValues.showNotes.get(), true);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+  assert.equal(getEditorRegionSnapshot().showPreview, true);
 });

@@ -7,7 +7,7 @@
  */
 import { ensureFixtures } from "./fixtures.mjs";
 import { delay, restartWithSameProfile } from "./journeySupport.mjs";
-import { drawerSdkState } from "./surfaceSupport.mjs";
+import { drawerSdkState } from "./drawerSupport.mjs";
 
 async function waitForDocument(runner) {
   await runner.waitFor("document open", () =>

@@ -33,7 +33,7 @@ export function verticalGrid(count = 11): VerticalGrid {
   const lineCount = Math.max(1, Math.floor(numeric));
   return {
     spacing: 1350 / (numeric + 1),
-    first: -(lineCount - 1) / 2,
+    first: lineCount === 1 ? 0 : -(lineCount - 1) / 2,
     lineCount,
   };
 }

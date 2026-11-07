@@ -22,7 +22,6 @@ import { LibraryDetail } from "./library/LibraryDetail.tsx";
 import { buildLibraryEntries, type LibraryEntry } from "./library/libraryEntries.ts";
 import { libraryDetailState, resolveLibrarySelection } from "./library/libraryDetailState.ts";
 import { getHomeProjectCardsSnapshot, subscribeHomeProjectCards } from "./homeProjectCards.ts";
-import { ProjectMenu } from "./library/ProjectMenu.tsx";
 import {
   getEditorVisibility,
   subscribeToEditorVisibility,
@@ -103,7 +102,6 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
               setSelectedKey(key);
               setArmedKey(key);
             }}
-            onOpenEntry={openEntry}
           />
         </div>
       </div>
@@ -118,7 +116,6 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
         </div>
       )}
       <WelcomeImportDialog />
-      <ProjectMenu />
     </main>
   );
 }

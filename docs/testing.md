@@ -22,7 +22,7 @@ RPE Redux has one source gate, one unit suite, one desktop smoke suite, and a th
 | Source gate | `npm run check` | Types, lint, style rules, Less compile, docs links, icons, SDK, unit suite, Go tests | `npm ci` |
 | Formatting gate | `npm run verify` | `check` plus Prettier over source and docs | `npm ci` |
 | Unit suite | `npm run test:unit` | `src/test/**/*.test.mjs` | Node.js 22.18+ |
-| Smoke suite | `npm run smoke` | Six P0 journeys against the packaged window | `npm run build -- --debug`; Windows |
+| Smoke suite | `npm run smoke` | Four P0 journeys against the packaged window | `npm run build -- --debug`; Windows |
 | Go service | `npm run server:test` | `src/backend/**/*_test.go` | Go 1.25.3+ |
 | Rust | `npm run check:native` | `cargo fmt --check` and `cargo check` | Rust stable |
 | Docs site | `npm run docs:build` | Extension SDK site into `docs-site-dist/` | `npm ci` |
@@ -83,8 +83,6 @@ Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and `co
 | `documents`       | cold open, PEZ open with resources, create, save round trip, replace policy |
 | `settings`        | settings pages and persistence                                              |
 | `session-restore` | restart with the same profile and restore the workspace                     |
-| `surfaces`        | shared workspace surfaces and drawers                                       |
-| `line-folder`     | judge-line folder editing                                                   |
 
 ```powershell
 npm run build -- --debug            # prerequisite

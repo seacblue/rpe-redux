@@ -19,7 +19,7 @@ import { LibraryCards } from "./LibraryCards.tsx";
 import { getHomeProjectCardsSnapshot, subscribeHomeProjectCards } from "../homeProjectCards.ts";
 import { getLibraryView, setLibraryView, type LibraryView } from "../libraryView.ts";
 import { getLibrarySort, type LibrarySort } from "../librarySort.ts";
-import { buildLibraryEntries, matchesLibraryQuery, type LibraryEntry } from "./libraryEntries.ts";
+import { buildLibraryEntries, matchesLibraryQuery } from "./libraryEntries.ts";
 
 /** Placeholder rows shown while the first library page is read. */
 function LibrarySkeleton({ view }: { view: LibraryView }) {
@@ -44,11 +44,9 @@ function LibrarySkeleton({ view }: { view: LibraryView }) {
 export function LibraryPanel({
   selectedKey,
   onSelect,
-  onOpenEntry,
 }: {
   selectedKey: string | null;
   onSelect(key: string): void;
-  onOpenEntry(entry: LibraryEntry): void;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -79,8 +77,6 @@ export function LibraryPanel({
     setSortState(next);
     cards?.onSort(next);
   };
-  /** Returns the library summary behind an entry. */
-  const projectOf = (entry: LibraryEntry) => entry.source.project;
   // Each option names both the field and the direction, so the control never
   // leaves the user guessing what its arrow means.
   const newest = t("workspace.welcome.library.sort.newest");
@@ -176,31 +172,6 @@ export function LibraryPanel({
           selectedKey={selectedKey}
           view={view}
           onActivate={(entry) => onSelect(entry.key)}
-          onOpen={onOpenEntry}
-          onRename={(entry) => {
-            const project = projectOf(entry);
-            if (project) {
-              cards.onRename(project);
-            }
-          }}
-          onCopy={(entry) => {
-            const project = projectOf(entry);
-            if (project) {
-              cards.onCopy(project);
-            }
-          }}
-          onArchive={(entry) => {
-            const project = projectOf(entry);
-            if (project) {
-              cards.onArchive(project);
-            }
-          }}
-          onDelete={(entry) => {
-            const project = projectOf(entry);
-            if (project) {
-              cards.onDelete(project);
-            }
-          }}
         />
       )}
       {libraryEmpty && (

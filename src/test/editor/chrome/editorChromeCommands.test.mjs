@@ -24,7 +24,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
       seekToBeat: (beat) => calls.push(`seek:${beat}`),
     },
     view: {
-      getPreviewOnly: () => true,
+      isPreviewLayout: () => true,
       resetCamera: () => calls.push("camera"),
       togglePreviewOnly: () => calls.push("preview-only"),
       toggleRegion: (region) => calls.push(region),
@@ -42,7 +42,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
   commands.transport.seekToBeat("4");
   commands.view.toggleRegion("showNotes");
   commands.navigation.openLibrary();
-  assert.equal(commands.view.getPreviewOnly(), true);
+  assert.equal(commands.view.isPreviewLayout(), true);
   assert.equal(commands.inspector.openPane("notes"), true);
   assert.equal(commands.inspector.openPane("missing"), false);
   assert.deepEqual(calls, ["save", "play", "seek:4", "showNotes", "library"]);

@@ -12,6 +12,17 @@ export async function settingsSmoke(runner) {
   await runner.waitFor("settings dialog", () =>
     runner.evaluate("Boolean(document.querySelector('dialog.redux-settings[open]'))"),
   );
+  // Page bodies hydrate one idle slice at a time, so wait for the queue before
+  // inspecting or driving content that belongs to a page below the first one.
+  await runner.waitFor("settings pages ready", () =>
+    runner.evaluate(`(() => {
+      const sections = [...document.querySelectorAll('[data-settings-section]')];
+      return (
+        sections.length > 0 &&
+        sections.every((section) => section.dataset.settingsReady === 'true')
+      );
+    })()`),
+  );
 
   const pages = await runner.evaluate(`(() => {
     return [...document.querySelectorAll('[data-settings-section]')].map((section) => ({
@@ -149,5 +160,49 @@ export async function settingsSmoke(runner) {
       return Boolean(section) && !section.hidden && (section.textContent ?? '').trim().length > 0;
     })()`),
   );
+
+  // Search text and its result set survive a close/reopen. The field is a
+  // controlled input, so set the value through the native setter and dispatch
+  // the input event React listens for.
+  const typed = await runner.evaluate(`(() => {
+    const input = document.querySelector('dialog.redux-settings[open] #settings-search');
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, 'skin');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  runner.assert(typed, "settings dialog has no search field");
+  await runner.waitFor("settings search active", () =>
+    runner.evaluate(
+      "Boolean(document.querySelector('dialog.redux-settings[open] .redux-settings-panels[data-searching=\"true\"]'))",
+    ),
+  );
+
+  await runner.evaluate("document.querySelector('dialog.redux-settings[open]')?.close(); true");
+  await runner.waitFor("settings closed after search", () =>
+    runner.evaluate("!document.querySelector('dialog.redux-settings[open]')"),
+  );
+  const reopenedSearch = await runner.callApi("window.redux.settings.open()");
+  runner.assert(reopenedSearch === true, "settings command was not handled after search close");
+  await runner.waitFor("settings search restored", () =>
+    runner.evaluate(`(() => {
+      const dialog = document.querySelector('dialog.redux-settings[open]');
+      const input = dialog?.querySelector('#settings-search');
+      return (
+        input?.value === 'skin' &&
+        Boolean(dialog.querySelector('.redux-settings-panels[data-searching="true"]'))
+      );
+    })()`),
+  );
+
+  // Leave the shared window without an active filter for later scenarios.
+  await runner.evaluate(`(() => {
+    const input = document.querySelector('dialog.redux-settings[open] #settings-search');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
   await runner.evaluate("document.querySelector('dialog.redux-settings[open]')?.close(); true");
 }

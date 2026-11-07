@@ -34,6 +34,7 @@ import {
   builtinTrustFingerprint,
   extensionFingerprint,
   matchesBuiltinTrust,
+  type BuiltinTrustRecord,
 } from "./extensionTrust.ts";
 import {
   clearExtensionReview,
@@ -231,7 +232,7 @@ function manifestFromText(text: string): TrustedExtensionManifest {
 }
 
 /** Version and fingerprint of one shipped package, used to verify built-ins. */
-type BundledTrust = import("./extensionTrust.ts").BuiltinTrustRecord;
+type BundledTrust = BuiltinTrustRecord;
 
 let bundledTrustPromise: Promise<Map<string, BundledTrust>> | null = null;
 

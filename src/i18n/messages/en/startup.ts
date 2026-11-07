@@ -13,6 +13,9 @@ export default {
     "An extension failed while its metadata was registered. Safe mode is already active; disable or remove the failing package in Settings > Extensions, then restart normally.",
   "startup.failure.unknown":
     "The editor stopped for an unexpected reason during startup. The technical details below may identify the cause.",
+  "startup.backendPortConflict.title": "The backend port is already in use",
+  "startup.backendPortConflict.description":
+    "Start the next copy with --backend-port=<different-port>, or change Settings > General > Interface > Backend port, then retry.",
 
   "startup.extensions.title": "Possible source",
   "startup.extensions.failures.title": "These extensions failed during startup",
