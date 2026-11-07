@@ -83,7 +83,7 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 | Previous / next judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down` |
 | Settings                       | `Ctrl+K`                            |
 
-`Ctrl+Space` stores the complete region snapshot, shows only the preview, and restores the exact previous snapshot on the next press. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview layout and keeps the selected layout.
+`Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
 Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
 
