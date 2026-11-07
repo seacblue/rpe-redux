@@ -57,7 +57,10 @@ import {
   normalizeRoomServerUrl,
   parseRoomInviteLink,
 } from "../../../../../core/collaboration/invite.ts";
-import { chartAssetNames } from "../../../../../core/collaboration/assets.ts";
+import {
+  chartAssetNames,
+  chartChangesMayAffectAssets,
+} from "../../../../../core/collaboration/assets.ts";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { changeLockKeys } from "../../../../../core/collaboration/changes.ts";
 import { sha256Hex } from "../../../../../core/collaboration/digest.ts";
@@ -986,9 +989,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           }
         }
         const strict = encrypted ? applyChartChanges(session.chart, message.changes) : null;
-        const result = applyChartChanges(session.chart, message.changes, {
-          force: encrypted,
-        });
+        const result =
+          encrypted && strict?.conflicts.length
+            ? applyChartChanges(session.chart, message.changes, { force: true })
+            : (strict ?? applyChartChanges(session.chart, message.changes));
         if (
           encrypted &&
           message.actorId === client.state.get().memberId &&
@@ -1016,7 +1020,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         }
         try {
           assertChart(result.chart);
-          const parsed = normalizeChartObjectIds(result.chart);
+          const parsed = result.chart as Chart;
           if (
             !session.commitRemoteChart(message.label, parsed, {
               clientId: message.actorId,
@@ -1027,7 +1031,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
             showNotice(t("workspace.collaboration.applyFailed"), "error");
             client.requestSnapshot();
           }
-          void requestMissing(parsed);
+          if (chartChangesMayAffectAssets(message.changes)) {
+            void requestMissing(parsed);
+          }
           appliedRevision.current = message.revision;
         } catch {
           retainRecovery(session.chart);
@@ -1165,12 +1171,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           transactionId: historyTransactionId(entry),
           ...(entry.origin?.undoOf ? { undoOf: entry.origin.undoOf } : {}),
         };
-        void publishChartAssets(
-          client,
-          contextRef.current.documentRuntime,
-          uploading.current,
-          entry.after,
-        ).then(async (ok) => {
+        const publish = chartChangesMayAffectAssets(changes)
+          ? publishChartAssets(
+              client,
+              contextRef.current.documentRuntime,
+              uploading.current,
+              entry.after,
+            )
+          : Promise.resolve(true);
+        void publish.then(async (ok) => {
           if (!ok) {
             rememberUnsent(
               input as TransactionInput & { readonly transactionId: string },

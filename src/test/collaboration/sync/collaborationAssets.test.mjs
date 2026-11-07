@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   chartAssetNames,
+  chartChangesMayAffectAssets,
   isAllowedAssetMime,
   matchesAssetMagic,
   mimeForAsset,
@@ -35,6 +36,32 @@ test("unsafe names and unknown MIME types are rejected", () => {
   assert.equal(mimeForAsset("cover.PNG"), "image/png");
   assert.equal(isAllowedAssetMime("image/png"), true);
   assert.equal(isAllowedAssetMime("text/html"), false);
+});
+
+test("resource-change classification skips ordinary note edits", () => {
+  assert.equal(
+    chartChangesMayAffectAssets([
+      { op: "set", path: "/judgeLineList/$line-a/notes/$note-a1/positionX", before: 1, after: 2 },
+    ]),
+    false,
+  );
+  assert.equal(
+    chartChangesMayAffectAssets([
+      {
+        op: "set",
+        path: "/judgeLineList/$line-a/notes/$note-a1/hitSound",
+        before: "old.wav",
+        after: "new.wav",
+      },
+    ]),
+    true,
+  );
+  assert.equal(
+    chartChangesMayAffectAssets([
+      { op: "add", path: "/judgeLineList/$line-a/notes/$note-a2", after: { id: "note-a2" } },
+    ]),
+    true,
+  );
 });
 
 test("magic checks reject a script disguised as an image", () => {
