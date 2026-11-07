@@ -6,22 +6,19 @@
  * against that swatch. Neither function paints a theme surface.
  */
 
-const FALLBACK_COLOR = "#000000";
+import {
+  displayHexColor,
+  formatHexColor,
+  normalizeHexColor,
+  parseHexColor,
+  cssColor,
+} from "../../../core/utils/colors.ts";
+
+export { cssColor, displayHexColor, formatHexColor, normalizeHexColor, parseHexColor };
 
 /** Normalize a stored colour to the `#rrggbb` form a colour input requires. */
 export function normalizeColor(value: string): string {
-  const trimmed = value.trim();
-  if (/^#[\da-f]{6}$/i.test(trimmed)) {
-    return trimmed.toUpperCase();
-  }
-  if (/^#[\da-f]{3}$/i.test(trimmed)) {
-    return `#${trimmed
-      .slice(1)
-      .split("")
-      .map((channel) => channel + channel)
-      .join("")}`.toUpperCase();
-  }
-  return FALLBACK_COLOR;
+  return normalizeHexColor(value);
 }
 
 /** Pick the readout ink with the stronger WCAG contrast against a colour. */

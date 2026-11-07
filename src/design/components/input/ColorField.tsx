@@ -6,7 +6,15 @@
  * and write the value back.
  */
 import { Input } from "./Input.tsx";
-import { colorInk, normalizeColor } from "./colorModel.ts";
+import {
+  colorInk,
+  cssColor,
+  displayHexColor,
+  formatHexColor,
+  normalizeColor,
+  parseHexColor,
+} from "./colorModel.ts";
+import type { CSSProperties } from "react";
 
 export interface ColorFieldProps {
   id?: string;
@@ -16,6 +24,8 @@ export interface ColorFieldProps {
   describedBy?: string;
   /** Tooltip content for the swatch input. */
   tipDescription?: string;
+  /** Allow the custom picker to edit and persist an alpha channel. */
+  allowAlpha?: boolean;
   className?: string;
 }
 
@@ -27,9 +37,14 @@ export function ColorField({
   onChange,
   describedBy,
   tipDescription,
+  allowAlpha = false,
   className = "",
 }: ColorFieldProps) {
   const color = normalizeColor(value);
+  const parsed = parseHexColor(value);
+  const alpha = parsed?.alpha ?? 1;
+  const display = displayHexColor(value, allowAlpha);
+  const fillStyle = { "--redux-color-fill": cssColor(value) } as CSSProperties;
   return (
     <span className={`redux-color-field${className ? ` ${className}` : ""}`}>
       <span className="redux-color-swatch">
@@ -37,13 +52,24 @@ export function ColorField({
           id={id}
           type="color"
           value={color}
+          data-color-alpha-enabled={allowAlpha ? "true" : undefined}
+          data-color-alpha={allowAlpha ? String(alpha) : undefined}
           disabled={disabled}
           aria-describedby={describedBy}
           tipDescription={tipDescription}
-          onChange={(event) => onChange(event.currentTarget.value)}
+          onChange={(event) => {
+            const nextAlpha = allowAlpha
+              ? Number(event.currentTarget.dataset.colorAlpha ?? alpha)
+              : 1;
+            onChange(formatHexColor(event.currentTarget.value, nextAlpha));
+          }}
         />
-        <output className="redux-color-hex" data-ink={colorInk(color)}>
-          {color}
+        <output
+          className={`redux-color-hex${allowAlpha ? " redux-color-checker" : ""}`}
+          data-ink={colorInk(color)}
+          style={allowAlpha ? fillStyle : undefined}
+        >
+          {display}
         </output>
       </span>
     </span>

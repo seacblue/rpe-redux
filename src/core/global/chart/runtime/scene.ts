@@ -35,10 +35,15 @@ export const DEFAULT_LINE_COLOR = [237, 236, 176] as const;
 
 /** Fill missing channels from `DEFAULT_LINE_COLOR` and keep finite values. */
 function normalizedColor(color: readonly number[]): number[] {
-  return DEFAULT_LINE_COLOR.map((fallback, index) => {
+  const normalized = DEFAULT_LINE_COLOR.map((fallback, index) => {
     const channel = Number(color[index]);
     return Number.isFinite(channel) ? channel : fallback;
   });
+  const alpha = Number(color[3]);
+  if (Number.isFinite(alpha)) {
+    normalized.push(Math.max(0, Math.min(1, alpha)));
+  }
+  return normalized;
 }
 
 /** True when both colour arrays have equal channels. */

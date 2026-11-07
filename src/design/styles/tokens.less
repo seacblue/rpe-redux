@@ -147,6 +147,10 @@
   // holds. The danger colour is mixed into the same surface both themes already
   // use, so the box reads as wrong without turning into a raw alert swatch.
   --input-surface-invalid: color-mix(in srgb, var(--danger) 25%, var(--input-surface));
+  // Alpha-capable colour swatches reveal transparency over this theme-aware
+  // checkerboard instead of relying on a hard-coded light/dark pair.
+  --color-checker-light: color-mix(in srgb, var(--input-surface) 88%, var(--foreground));
+  --color-checker-dark: color-mix(in srgb, var(--input-surface) 68%, var(--foreground));
   // Overridden by the skin / appearance settings.
   --radius-panel: 8px;
   --radius-control: 6px;

@@ -439,8 +439,11 @@ function validateSettingDefinition(definition: SettingDefinition): void {
     return;
   }
   if (control === "color") {
-    if (typeof value.default !== "string" || !/^#[\da-f]{3,8}$/i.test(value.default)) {
-      throw new TypeError(`Colour setting needs a hex default: ${definition.key}`);
+    if (
+      typeof value.default !== "string" ||
+      !/^#(?:[\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i.test(value.default)
+    ) {
+      throw new TypeError(`Colour setting needs a 3, 6, or 8 digit hex default: ${definition.key}`);
     }
     return;
   }
@@ -533,6 +536,16 @@ function ruleFor(definition: SettingDefinition): ((value: unknown) => void) | un
         !definition.options?.some((option) => option.value === String(value))
       ) {
         throw new TypeError(`Setting value is not an available option: ${definition.key}`);
+      }
+    };
+  }
+  if (definition.control === "color") {
+    return (value) => {
+      if (
+        value !== undefined &&
+        (typeof value !== "string" || !/^#(?:[\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i.test(value))
+      ) {
+        throw new TypeError(`Setting value is not a hexadecimal colour: ${definition.key}`);
       }
     };
   }
