@@ -120,6 +120,43 @@ test("preview-only restores the complete layout after rapid region changes", () 
   assert.equal(getEditorRegionSnapshot().showPreview, true);
 });
 
+test("preview-only overlays the recorded layout without rewriting its switches", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const controls = createEditorViewControls(createRuntime(createSession(false)));
+
+  controls.togglePreviewOnly();
+
+  assert.equal(displayValues.showNotes.get(), true);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+  assert.equal(getEditorRegionSnapshot().showNotes, false);
+  assert.equal(getEditorRegionSnapshot().showEvents, false);
+  assert.equal(getEditorRegionSnapshot().showPreview, true);
+
+  controls.togglePreviewOnly();
+
+  assert.equal(displayValues.showNotes.get(), true);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+  assert.equal(getEditorRegionSnapshot().showNotes, true);
+  assert.equal(getEditorRegionSnapshot().showEvents, true);
+});
+
+test("preview-only restores the last complete layout from an empty raw layout", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const controls = createEditorViewControls(createRuntime(createSession(false)));
+
+  controls.toggleRegions();
+  controls.toggleStagePreview();
+  controls.togglePreviewOnly();
+
+  assert.equal(displayValues.showNotes.get(), true);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+});
+
 test("two preview-only shortcuts return to a newly completed layout", () => {
   activateMultiLine();
   editorMultiLineActive.set(false);

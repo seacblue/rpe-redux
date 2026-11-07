@@ -71,7 +71,7 @@ export interface EditorKeyboardActionDependencies {
   copySelection: () => void;
   copySelectionAllLayers: () => void;
   cutSelection: () => void;
-  pasteSelection: (keepTime: boolean) => void;
+  pasteSelection: (options?: { mirror?: boolean; keepTime?: boolean }) => void;
   selectEventLayer: (layer: number) => void;
   togglePlayback: () => Promise<unknown>;
   showLineInfo: () => void;
@@ -181,8 +181,11 @@ export async function runEditorKeyboardAction(
       deps.selectEventLayer(EVENT_LAYER_ACTIONS[action]);
     } else if (action === "edit.cut") {
       deps.cutSelection();
-    } else if (["edit.paste", "edit.paste.keepTime"].includes(action)) {
-      deps.pasteSelection(action === "edit.paste.keepTime");
+    } else if (["edit.paste", "edit.paste.keepTime", "edit.paste.mirror"].includes(action)) {
+      deps.pasteSelection({
+        keepTime: action === "edit.paste.keepTime",
+        mirror: action === "edit.paste.mirror",
+      });
     } else if (action === "playback.pause") {
       event.preventDefault();
       await deps.togglePlayback();

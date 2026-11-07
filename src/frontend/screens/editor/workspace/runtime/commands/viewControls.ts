@@ -45,12 +45,15 @@ const regionValues = [
   displayValues.previewEnabled,
 ];
 
-/** The canonical preview layout used as the first Ctrl+Space swap target. */
+/** The canonical preview layout used when no earlier complete layout exists. */
 const PREVIEW_LAYOUT: EditorModeSnapshot = {
   showNotes: false,
   showEvents: false,
   showPreview: true,
 };
+
+/** Runtime-only preview focus; it never enters persisted display settings. */
+const previewOnly = createValue<boolean>({ initial: false });
 
 /** Reads the complete raw region state that a preview shortcut must restore. */
 function readModeSnapshot(): EditorModeSnapshot {
@@ -59,6 +62,11 @@ function readModeSnapshot(): EditorModeSnapshot {
     showEvents: displayValues.showEvents.get(),
     showPreview: displayValues.previewEnabled.get(),
   };
+}
+
+/** Whether a raw snapshot already has no authoring region to focus. */
+function isPreviewFallbackSnapshot(snapshot: EditorModeSnapshot): boolean {
+  return !snapshot.showNotes && !snapshot.showEvents;
 }
 
 /** Applies a complete raw region snapshot without creating a new history entry. */
@@ -74,14 +82,15 @@ function readRegions(): EditorRegionSnapshot {
   // own switch still hides it: turning the active field off leaves the preview
   // as the workspace fallback. The raw switches return unchanged when multi-line
   // editing ends.
+  const focused = previewOnly.get();
   const multiLineActive = editorMultiLineActive.get();
   const multiLineMode = editorMultiLineMode.get();
   const notesEnabled = displayValues.showNotes.get();
   const eventsEnabled = displayValues.showEvents.get();
   return {
-    showNotes: notesEnabled && (!multiLineActive || multiLineMode === "notes"),
-    showEvents: eventsEnabled && (!multiLineActive || multiLineMode === "events"),
-    showPreview: displayValues.previewEnabled.get(),
+    showNotes: !focused && notesEnabled && (!multiLineActive || multiLineMode === "notes"),
+    showEvents: !focused && eventsEnabled && (!multiLineActive || multiLineMode === "events"),
+    showPreview: focused || displayValues.previewEnabled.get(),
     multiLineActive,
     multiLineMode,
     multiLineMerge: editorMultiLineMerge.get(),
@@ -129,6 +138,7 @@ function revealMultiLineField(): void {
 for (const value of regionValues) {
   value.subscribeKey(refreshRegions);
 }
+previewOnly.subscribe(refreshRegions);
 editorMultiLineMode.subscribeKey(revealMultiLineField);
 editorMultiLineActive.subscribeKey(refreshRegions);
 editorMultiLineMode.subscribeKey(refreshRegions);
@@ -168,6 +178,18 @@ export function createEditorViewControls(
     runtime.invalidate();
   }
 
+  /** Materializes the effective preview-only view before another view command edits it. */
+  function materializePreviewOnly(): void {
+    if (!previewOnly.get()) {
+      return;
+    }
+    const effective = regions.get();
+    displayValues.showNotes.set(effective.showNotes);
+    displayValues.showEvents.set(effective.showEvents);
+    displayValues.previewEnabled.set(effective.showPreview);
+    previewOnly.set(false);
+  }
+
   /**
    * Toggles one authoring region, or selects it as the multi-line field.
    *
@@ -176,6 +198,7 @@ export function createEditorViewControls(
    * field, so a mode change never selects a hidden surface.
    */
   function toggleRegion(region: "showNotes" | "showEvents"): void {
+    materializePreviewOnly();
     const session = runtime.getSession();
     const value = region === "showNotes" ? displayValues.showNotes : displayValues.showEvents;
     if (session.multiLineActive) {
@@ -196,6 +219,7 @@ export function createEditorViewControls(
 
   /** Toggles both authoring regions as one visibility command. */
   function toggleRegions(): void {
+    materializePreviewOnly();
     const session = runtime.getSession();
     if (session.multiLineActive) {
       // The pair cannot be shown together in multi-line editing. Both switches
@@ -231,24 +255,31 @@ export function createEditorViewControls(
 
   /** The preview's own switch; hiding it never changes the authoring regions. */
   function toggleStagePreview(): void {
+    if (previewOnly.get()) {
+      previewOnly.set(false);
+      applyRegionVisibility();
+      return;
+    }
     runtime.setRealtimePreviewEnabled(!displayValues.previewEnabled.get());
     recordModeChange();
   }
 
   /**
-   * Exchanges the current complete region snapshot with the previous one.
-   * The first exchange uses the canonical preview layout as its previous
-   * snapshot, so no separate preview-only state is needed.
+   * Toggles the runtime preview-only overlay. If the raw layout is already a
+   * preview fallback, Ctrl+Space instead restores the last complete snapshot.
    */
   function togglePreviewOnly(): void {
-    // This shortcut is an explicit boundary between user intents. Flush any
-    // rapid region changes before exchanging complete snapshots.
     modeHistory.flush();
-    const swapped = modeHistory.swap();
-    if (swapped === null) {
-      return;
+    if (previewOnly.get()) {
+      previewOnly.set(false);
+    } else if (isPreviewFallbackSnapshot(readModeSnapshot())) {
+      const swapped = modeHistory.swap();
+      if (swapped !== null) {
+        applyModeSnapshot(swapped);
+      }
+    } else {
+      previewOnly.set(true);
     }
-    applyModeSnapshot(swapped);
     applyRegionVisibility();
   }
 
@@ -258,6 +289,7 @@ export function createEditorViewControls(
     if (!session.chart.judgeLineList?.length) {
       return;
     }
+    previewOnly.set(false);
     session.setMultiLineEnabled(false, mode);
     session.setMultiLineSelection([session.lineIndex]);
     displayValues.showNotes.set(mode === "notes");

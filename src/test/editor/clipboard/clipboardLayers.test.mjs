@@ -5,7 +5,12 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart, createEvent, createLine } from "../../../core/global/chart/chart.ts";
+import {
+  createChart,
+  createEvent,
+  createLine,
+  createNote,
+} from "../../../core/global/chart/chart.ts";
 import { beatValue } from "../../../core/global/chart/timing/beat.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import {
@@ -147,6 +152,46 @@ test("a dropped lowest layer does not shift the paste anchor", () => {
   assert.equal(session.chart.judgeLineList[1].eventLayers?.[4]?.moveXEvents?.length ?? 0, 0);
 });
 
+test("mirror paste negates note X and X/Y/Rotate event values without changing the clipboard", () => {
+  const chart = chartWithLines(1);
+  const line = chart.judgeLineList[0];
+  line.notes = [createNote(1, 0, 12)];
+  line.numOfNotes = 1;
+  line.eventLayers[0] = {
+    moveXEvents: [createEvent(10, 20)],
+    moveYEvents: [createEvent(30, 40)],
+    rotateEvents: [createEvent(50, 60)],
+    alphaEvents: [createEvent(70, 80)],
+    speedEvents: [createEvent(90, 100)],
+  };
+  const session = new EditorSession(chart);
+  session.selection = new Set([0]);
+  session.eventSelection = new Set([
+    "moveXEvents:0",
+    "moveYEvents:0",
+    "rotateEvents:0",
+    "alphaEvents:0",
+    "speedEvents:0",
+  ]);
+
+  assert.equal(copyObjects(session), 6);
+  const originalClipboard = structuredClone(session.clipboard);
+  const originalEventClipboard = structuredClone(session.eventClipboard);
+
+  assert.equal(pasteObjects(session, 0, { mirror: true, targetLineIndex: 0 }), true);
+  assert.deepEqual(session.clipboard, originalClipboard);
+  assert.deepEqual(session.eventClipboard, originalEventClipboard);
+  assert.equal(session.chart.judgeLineList[0].notes.at(-1).positionX, -12);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents.at(-1).start, -10);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents.at(-1).end, -20);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveYEvents.at(-1).start, -30);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveYEvents.at(-1).end, -40);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].rotateEvents.at(-1).start, -50);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].rotateEvents.at(-1).end, -60);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].alphaEvents.at(-1).start, 70);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].speedEvents.at(-1).start, 90);
+});
+
 test("layer shortcuts resolve in the event area and leave notes to the note-skin action", () => {
   const dispose = registerEditorShortcuts();
   try {
@@ -197,4 +242,8 @@ test("the layer and deep-copy shortcuts are registered with their defaults", () 
   assert.ok(layer.every((shortcut) => shortcut.defaults[0]?.modifiers?.includes("CTRL")));
   const deepCopy = EDITOR_SHORTCUTS.find((shortcut) => shortcut.id === "edit.copy.allLayers");
   assert.deepEqual(deepCopy?.defaults[0], { key: "C", modifiers: ["CTRL", "SHIFT"] });
+  const mirrorPaste = EDITOR_SHORTCUTS.find((shortcut) => shortcut.id === "edit.paste.mirror");
+  assert.deepEqual(mirrorPaste?.defaults[0], { key: "B", modifiers: ["CTRL"] });
+  const deleteShortcut = EDITOR_SHORTCUTS.find((shortcut) => shortcut.id === "edit.delete");
+  assert.deepEqual(deleteShortcut?.defaults, [{ key: "D" }, { key: "DELETE" }]);
 });

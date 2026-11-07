@@ -9,7 +9,11 @@
  */
 import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition } from "../types.ts";
-import { DEFAULT_UPDATE_DOWNLOAD_POLICY, UPDATE_SETTING_KEYS } from "../updateKeys.ts";
+import {
+  DEFAULT_UPDATE_AUTO_CHECK,
+  DEFAULT_UPDATE_DOWNLOAD_POLICY,
+  UPDATE_SETTING_KEYS,
+} from "../updateKeys.ts";
 import { HELP_SURVEY_URL } from "../../platform/desktop/helpLinks.ts";
 
 // An empty group keeps the rows in the page body without drawing a second
@@ -22,7 +26,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     label: "settings.updates.autoCheck.label",
     description: "settings.updates.autoCheck.description",
     control: "toggle",
-    default: false,
+    default: DEFAULT_UPDATE_AUTO_CHECK,
   },
   {
     key: UPDATE_SETTING_KEYS.downloadPolicy,
@@ -32,6 +36,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     description: "settings.updates.downloadPolicy.description",
     control: "select",
     default: DEFAULT_UPDATE_DOWNLOAD_POLICY,
+    enabledWhen: { key: UPDATE_SETTING_KEYS.autoCheck, equals: true },
     options: [
       { value: "all", label: "settings.updates.downloadPolicy.all" },
       { value: "wifi", label: "settings.updates.downloadPolicy.wifi" },

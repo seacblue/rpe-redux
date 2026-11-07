@@ -28,6 +28,7 @@ import { localService } from "../../../../core/global/library/service.ts";
 import { preferences } from "../../../../core/state/preferences.ts";
 import { declarePersistedValue } from "../../../../core/settings/settings.ts";
 import {
+  DEFAULT_UPDATE_AUTO_CHECK,
   DEFAULT_UPDATE_DOWNLOAD_POLICY,
   UPDATE_SETTING_KEYS,
   type UpdateDownloadPolicy,
@@ -47,7 +48,7 @@ import { requestUpdatePrompt } from "./updatePromptLauncher.ts";
 
 export { UPDATE_SETTING_KEYS };
 
-declarePersistedValue(UPDATE_SETTING_KEYS.autoCheck, false);
+declarePersistedValue(UPDATE_SETTING_KEYS.autoCheck, DEFAULT_UPDATE_AUTO_CHECK);
 declarePersistedValue(UPDATE_SETTING_KEYS.prereleases, false);
 declarePersistedValue(UPDATE_SETTING_KEYS.downloadPolicy, DEFAULT_UPDATE_DOWNLOAD_POLICY);
 declarePersistedValue(UPDATE_SETTING_KEYS.skippedVersion, "");
@@ -160,7 +161,7 @@ let state: UpdateState = {
   portable: false,
   repo: UPDATE_REPOSITORY,
   publicKey: UPDATE_PUBLIC_KEY,
-  autoCheck: false,
+  autoCheck: DEFAULT_UPDATE_AUTO_CHECK,
   includePrereleases: false,
   downloadPolicy: DEFAULT_UPDATE_DOWNLOAD_POLICY,
   skippedVersion: "",
@@ -223,7 +224,7 @@ function refreshSettings(): void {
   set({
     repo: UPDATE_REPOSITORY.trim(),
     publicKey: UPDATE_PUBLIC_KEY.trim(),
-    autoCheck: settingFlag(UPDATE_SETTING_KEYS.autoCheck, false),
+    autoCheck: settingFlag(UPDATE_SETTING_KEYS.autoCheck, DEFAULT_UPDATE_AUTO_CHECK),
     includePrereleases: settingFlag(UPDATE_SETTING_KEYS.prereleases, false),
     downloadPolicy: settingDownloadPolicy(),
     skippedVersion: settingSkippedVersion(),
@@ -261,8 +262,8 @@ async function ensureProgressListener(): Promise<void> {
 /**
  * Load the persisted update configuration and the host's install state.
  *
- * Automatic checks are opt-in (`autoCheck`, off by default). The manual verify
- * row always checks; initialization only contacts GitHub when the setting is on.
+ * Automatic checks follow the `autoCheck` preference. The manual verify row
+ * always checks; initialization only contacts GitHub when the setting is on.
  */
 export function initializeUpdates(): Promise<void> {
   if (initialization) {
@@ -273,9 +274,7 @@ export function initializeUpdates(): Promise<void> {
     const refreshAndMaybeCheck = () => {
       const before = state;
       refreshSettings();
-      const becameAutomatic =
-        (state.autoCheck || state.downloadPolicy !== "never") &&
-        !(before.autoCheck || before.downloadPolicy !== "never");
+      const becameAutomatic = state.autoCheck && !before.autoCheck;
       if (becameAutomatic && state.repo) {
         void checkForUpdates();
       } else if (
@@ -322,9 +321,7 @@ export function initializeUpdates(): Promise<void> {
       // Opening the surface refreshes the external notes it shows.
       window.setTimeout(requestChangelog, 900);
     }
-    // Automatic checks are opt-in; the default is off so opening the editor
-    // never waits on the network.
-    if ((state.autoCheck || state.downloadPolicy !== "never") && state.repo) {
+    if (state.autoCheck && state.repo) {
       void checkForUpdates();
     }
   })();
@@ -383,7 +380,7 @@ export async function checkForUpdates(): Promise<void> {
       preparedVersion:
         latest && state.preparedVersion === latest.version ? state.preparedVersion : null,
     });
-    if (available && latest) {
+    if (state.autoCheck && available && latest) {
       void autoDownload(latest);
     }
   } catch (error) {
@@ -539,7 +536,13 @@ async function downloadUpdate(release: GithubRelease): Promise<void> {
 
 /** Download automatically only when the selected connection policy allows it. */
 async function autoDownload(release: GithubRelease): Promise<void> {
+  if (!state.autoCheck) {
+    return;
+  }
   const connection = await networkStatus();
+  if (!state.autoCheck) {
+    return;
+  }
   if (!allowsAutomaticDownload(state.downloadPolicy, connection)) {
     return;
   }

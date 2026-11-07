@@ -243,7 +243,10 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
     window,
     "keyup",
     (event) => {
-      if (deps.timeline.gestures.clipboardMode?.keepTime) {
+      if (
+        deps.timeline.gestures.clipboardMode?.keepTime ||
+        deps.timeline.gestures.clipboardMode?.mirror
+      ) {
         deps.timeline.gestures.clipboardMode = {};
         deps.invalidate();
       }
