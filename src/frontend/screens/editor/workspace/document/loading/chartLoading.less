@@ -33,12 +33,38 @@
 
   .redux-loading-error {
     margin: 0;
-    color: var(--danger);
-    font-size: var(--type-label);
     line-height: 1.5;
     white-space: pre-wrap;
     max-height: 32vh;
     overflow: auto;
+  }
+
+  .redux-loading-error-message,
+  .redux-loading-error-solution,
+  .redux-loading-error-code {
+    margin: 0;
+  }
+
+  .redux-loading-error-message {
+    color: var(--foreground);
+    font-size: var(--type-label);
+  }
+
+  .redux-loading-error-solution {
+    margin-top: var(--space-3);
+    color: var(--muted);
+    font-size: var(--type-label);
+  }
+
+  .redux-loading-error-label {
+    color: var(--foreground);
+  }
+
+  .redux-loading-error-code {
+    margin-top: var(--space-4);
+    color: var(--muted);
+    font-size: var(--type-caption);
+    overflow-wrap: anywhere;
   }
 
   // The shared action row already spaces its buttons from the divider and the

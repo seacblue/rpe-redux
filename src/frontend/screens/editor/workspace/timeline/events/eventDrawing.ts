@@ -195,7 +195,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   const cached = this.cache.events(session.chart, indexKey, this.eventTypes, layer);
   this.gestures.eventRects = [];
   const labels = noiseLineSettings(session.line) ? noiseTrackLabels() : trackLabels();
-  backdrop.context.strokeStyle = palette.gridMinor;
+  backdrop.context.strokeStyle = this.appearance.verticalGridColor;
   const eventInset = this.viewport.eventInset(width);
   for (let channel = 1; channel < this.eventTypes.length; channel++) {
     const x = eventColumnBoundary(channel, width, this.eventTypes.length, eventInset);
@@ -452,7 +452,7 @@ export function drawMultiLineEvents(
     eventTypes.forEach((type, channel) => {
       context.globalAlpha = lineOpacity;
       const barX = offset + channel * channelWidth + (channelWidth - barWidth) / 2;
-      separators.strokeStyle = palette.gridMinor;
+      separators.strokeStyle = this.appearance.verticalGridColor;
       if (channel === 0) {
         strokeVerticalGrid(separators, Math.max(0.5, offset), height);
         strokeVerticalGrid(separators, Math.min(width - 0.5, contentRight), height);

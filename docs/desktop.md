@@ -82,7 +82,7 @@ stable snake_case error instead of being loaded into memory:
 
 | Input | Ceiling |
 | --- | --- |
-| Chart JSON or one PEZ chart entry | 64 MiB |
+| Chart JSON or one PEZ chart entry | 512 MiB |
 | One chart resource or media response | 256 MiB |
 | One PEZ or loose-document resource set | 1 GiB |
 | `extra.json` sidecar | 64 MiB |

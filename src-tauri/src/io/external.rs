@@ -45,7 +45,7 @@ pub struct ExternalChartScan {
     pub warnings: Vec<String>,
 }
 
-const MAX_CHART_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_CHART_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_SIDECAR_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_MEDIA_FILES: usize = 2048;
 const MAX_MEDIA_DEPTH: usize = 4;

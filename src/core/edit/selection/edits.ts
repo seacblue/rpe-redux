@@ -343,7 +343,7 @@ export function nudgeSelection(
     return true;
   }
   const deltaX = horizontal
-    ? (verticalGrid(gridCount).spacing / 2) * (direction === "ArrowLeft" ? -1 : 1)
+    ? verticalGrid(gridCount).spacing * (direction === "ArrowLeft" ? -1 : 1)
     : 0;
   // The vertical nudge is a grid division, computed in the triple, so a 1/3 or
   // 1/7 division moves by exactly that much.

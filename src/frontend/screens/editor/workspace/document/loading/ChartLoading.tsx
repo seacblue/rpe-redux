@@ -68,9 +68,22 @@ export function ChartLoading() {
         {/* A failed load keeps the modal focused on the error, without a
           progress bar and percentage beside it. */}
         {failed ? (
-          <p className="redux-loading-error" role="alert">
-            {shown.error}
-          </p>
+          <div className="redux-loading-error" role="alert">
+            <p className="redux-loading-error-message">{shown.error}</p>
+            {shown.errorSolution && (
+              <p className="redux-loading-error-solution">
+                <span className="redux-loading-error-label">
+                  {t("workspace.loading.solution")}:
+                </span>{" "}
+                {shown.errorSolution}
+              </p>
+            )}
+            {shown.errorCode && (
+              <p className="redux-loading-error-code">
+                ({t("workspace.loading.errorCode")}: {shown.errorCode})
+              </p>
+            )}
+          </div>
         ) : (
           <>
             <Progress

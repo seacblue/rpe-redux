@@ -6,6 +6,8 @@ export default {
   "workspace.loading.title": "正在加载谱面中…",
   "workspace.loading.failed": "无法打开谱面",
   "workspace.loading.progress": "谱面加载进度",
+  "workspace.loading.solution": "解决办法",
+  "workspace.loading.errorCode": "错误代码",
   "workspace.loading.read": "读取文件",
   "workspace.loading.unpack": "读取谱面包",
   "workspace.loading.notes": "正在解析音符",

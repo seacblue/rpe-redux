@@ -237,7 +237,10 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           return result;
         }
         if (result.status === "save_conflict") {
-          progressToast.finish(t("workspace.document.error.saveConflict"), "warning");
+          progressToast.finish(
+            `${t("workspace.document.error.saveConflict")} ${t("workspace.document.solutionLabel")}: ${t("workspace.document.solution.saveConflict")}`,
+            "warning",
+          );
           return result;
         }
         if (
@@ -284,12 +287,22 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
         return result;
       })
       .catch((error: unknown) => {
-        const message =
+        const baseMessage =
           error instanceof LocalLibraryError && error.code === "revision_conflict"
             ? t("workspace.document.error.libraryRevisionConflict")
             : error instanceof Error && error.message
               ? error.message
               : t("workspace.document.error.saveFailed");
+        const solution =
+          error instanceof LocalLibraryError && error.code === "revision_conflict"
+            ? t("workspace.document.solution.libraryRevisionConflict")
+            : error &&
+                typeof error === "object" &&
+                "solution" in error &&
+                typeof error.solution === "string"
+              ? error.solution
+              : t("workspace.document.solution.saveGeneric");
+        const message = `${baseMessage} ${t("workspace.document.solutionLabel")}: ${solution}`;
         progressToast.fail(message);
         throw error;
       })

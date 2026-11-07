@@ -13,6 +13,8 @@ export default {
   "workspace.loading.title": "Loading chart…",
   "workspace.loading.failed": "Unable to open chart",
   "workspace.loading.progress": "Chart loading progress",
+  "workspace.loading.solution": "Solution",
+  "workspace.loading.errorCode": "Error code",
   "workspace.loading.read": "Reading file",
   "workspace.loading.unpack": "Reading package",
   "workspace.loading.notes": "Parsing notes",

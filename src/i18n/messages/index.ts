@@ -21,6 +21,7 @@ import enShortcuts from "./en/shortcuts.ts";
 import enChrome from "./en/chrome.ts";
 import enWindowControls from "./en/windowControls.ts";
 import enWorkspace from "./en/workspace.ts";
+import enDocumentErrors from "./en/documentErrors.ts";
 import enEditor from "./en/editor.ts";
 import enEditorPanels from "./en/editorPanels.ts";
 import enTimingDetection from "./en/timingDetection.ts";
@@ -36,6 +37,7 @@ import zhShortcuts from "./zh/shortcuts.ts";
 import zhChrome from "./zh/chrome.ts";
 import zhWindowControls from "./zh/windowControls.ts";
 import zhWorkspace from "./zh/workspace.ts";
+import zhDocumentErrors from "./zh/documentErrors.ts";
 import zhEditor from "./zh/editor.ts";
 import zhEditorPanels from "./zh/editorPanels.ts";
 import zhTimingDetection from "./zh/timingDetection.ts";
@@ -53,6 +55,7 @@ export const en = {
   ...enChrome,
   ...enWindowControls,
   ...enWorkspace,
+  ...enDocumentErrors,
   ...enEditor,
   ...enEditorPanels,
   ...enTimingDetection,
@@ -74,6 +77,7 @@ export const zh: Record<MessageKey, string> = {
   ...zhChrome,
   ...zhWindowControls,
   ...zhWorkspace,
+  ...zhDocumentErrors,
   ...zhEditor,
   ...zhEditorPanels,
   ...zhTimingDetection,

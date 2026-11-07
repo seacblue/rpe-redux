@@ -35,6 +35,10 @@ export interface LoadingState {
   total: number;
   status: "loading" | "complete" | "error";
   error?: string;
+  /** Stable operation code shown after the human-readable explanation. */
+  errorCode?: string;
+  /** Actionable recovery guidance shown below the explanation. */
+  errorSolution?: string;
   issues?: readonly ChartDiagnostic[];
 }
 const progress = createValue<LoadingState | null>({ initial: null });
@@ -117,10 +121,16 @@ export function beginLoading(name: string): LoadTask {
       const resolvedIssues =
         issues ??
         (Array.isArray(embeddedIssues) ? (embeddedIssues as ChartDiagnostic[]) : undefined);
+      const errorRecord =
+        error && typeof error === "object"
+          ? (error as { code?: unknown; solution?: unknown })
+          : undefined;
       publish({
         ...current,
         status: "error",
         error: error instanceof Error ? error.message : String(error),
+        errorCode: typeof errorRecord?.code === "string" ? errorRecord.code : undefined,
+        errorSolution: typeof errorRecord?.solution === "string" ? errorRecord.solution : undefined,
         issues: resolvedIssues?.length ? resolvedIssues : undefined,
       });
     },

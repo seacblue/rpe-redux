@@ -24,7 +24,9 @@ import { defineValue, values, type ValueHandle } from "../../../core/state/value
 import { settingsRegistry } from "../../../core/settings/settings.ts";
 import {
   TIMELINE_GRID_COLORS,
+  TIMELINE_VERTICAL_GRID_COLORS,
   timelineGridColorKey,
+  timelineVerticalGridColorKey,
 } from "../../../core/settings/timelineGridColors.ts";
 import { PREFERENCE_SECTIONS } from "../../../core/state/preferences.ts";
 import { COVER_BACKGROUND_KEYS } from "../../../core/settings/features/coverBackground.ts";
@@ -114,7 +116,7 @@ export const displayValues = {
   multiLineMergeNotes: settingFlag("multi-line-merge-notes"),
   /** Whether merged multi-line notes show their owning judge-line number below. */
   multiLineNoteLineNumbers: settingFlag("multi-line-note-line-numbers"),
-  /** Selectable interior lines for note X coordinates. */
+  /** Selectable note X lines: one is centred; two are the left and right boundaries. */
   gridCount: display("timeline-grid-count", "11"),
   /** Timeline zoom, in pixels per second at the current division. */
   scale: display("timeline-scale", "500"),
@@ -286,6 +288,15 @@ export function readEditorDisplaySettings() {
       eventBarWidth: contributedNumber("event-bar-width"),
       subdivisionColors: TIMELINE_GRID_COLORS.map(([denominator]) =>
         contributedHex(timelineGridColorKey(denominator)),
+      ),
+      verticalGridColor: contributedHex(
+        timelineVerticalGridColorKey(TIMELINE_VERTICAL_GRID_COLORS[0][0]),
+      ),
+      verticalGridHighlightColor: contributedHex(
+        timelineVerticalGridColorKey(TIMELINE_VERTICAL_GRID_COLORS[1][0]),
+      ),
+      verticalGridCenterColor: contributedHex(
+        timelineVerticalGridColorKey(TIMELINE_VERTICAL_GRID_COLORS[2][0]),
       ),
     },
     historyLimit: numberOf(displayValues.historyLimit),

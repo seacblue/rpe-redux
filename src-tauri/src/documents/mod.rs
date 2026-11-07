@@ -43,11 +43,7 @@ pub use watch::document_disk_snapshot;
 pub(crate) type Result<T> = std::result::Result<T, String>;
 
 /// Largest chart JSON or PEZ chart entry accepted by the document host.
-///
-/// The external-folder importer already stops at 64 MiB. A parsed JSON value
-/// costs several times its serialized size, so this ceiling also keeps the
-/// 32-bit build away from an avoidable out-of-memory failure.
-pub(crate) const MAX_CHART_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_CHART_BYTES: u64 = 512 * 1024 * 1024;
 /// Largest single chart resource accepted from disk or a PEZ entry.
 pub(crate) const MAX_RESOURCE_BYTES: u64 = 256 * 1024 * 1024;
 /// Largest cumulative PEZ or loose-document resource set accepted.

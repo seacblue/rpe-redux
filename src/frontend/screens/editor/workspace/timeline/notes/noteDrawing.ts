@@ -374,7 +374,6 @@ function drawNoteLanes(
   width: number,
   height: number,
 ): void {
-  const palette = this.cache.palette() ?? readCanvasPalette();
   const grid = verticalGrid(this.viewport.gridCount);
   // Keep the lane grid tied to the actual panel geometry, so it fills the
   // visible width after a resize and in panels narrower than the canvas.
@@ -396,12 +395,6 @@ function drawNoteLanes(
   const maxLines = Math.max(2, Math.floor(contentWidth / 6));
   const lineStride = Math.max(1, Math.ceil(grid.lineCount / maxLines));
   const lanes = new Set<number>();
-  // The two outer lines frame the field for a multi-line grid, but a count of
-  // one intentionally shows only the single centre snap line.
-  if (grid.lineCount > 1) {
-    lanes.add(chartLeft);
-    lanes.add(chartRight);
-  }
   for (let index = firstGrid; index <= lastGrid; index++) {
     if ((index - firstGrid) % lineStride !== 0 && index !== lastGrid) {
       continue;
@@ -415,21 +408,11 @@ function drawNoteLanes(
     }
     for (const lane of lanes) {
       const center = Math.abs(lane - cameraX) < 1e-7;
-      const boundary = Math.abs(lane - chartLeft) < 1e-7 || Math.abs(lane - chartRight) < 1e-7;
       context.strokeStyle = center
-        ? palette.foreground
-        : boundary
-          ? palette.outline
-          : palette.gridMinor;
-      context.lineWidth = center ? 2 : boundary ? 1.5 : 1;
-      // The two chart boundaries frame the field itself, so they hug the panel
-      // edges instead of the note-safe inset used by snap lanes and note bodies.
-      // Half a stroke inside keeps the full width visible at the canvas edge.
-      const local = boundary
-        ? lane === chartLeft
-          ? Math.min(0.75, panelWidth / 2)
-          : Math.max(panelWidth - 0.75, panelWidth / 2)
-        : inset + ((lane - cameraX + 675) / 1350) * contentWidth;
+        ? this.appearance.verticalGridCenterColor
+        : this.appearance.verticalGridColor;
+      context.lineWidth = center ? 2 : 1;
+      const local = inset + ((lane - cameraX + 675) / 1350) * contentWidth;
       const horizontal =
         panel * panelStride - panelOffset + Math.max(0, Math.min(panelWidth, local));
       strokeVerticalGrid(context, horizontal, height);

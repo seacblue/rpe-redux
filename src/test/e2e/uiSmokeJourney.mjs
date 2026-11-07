@@ -119,6 +119,12 @@ export async function workspaceSurfaces(runner) {
   await runner.waitFor("welcome more menu", () =>
     runner.evaluate("Boolean(document.querySelector('.redux-welcome-more-popup button'))"),
   );
+  // Let the first-open animation dispatch its event before counting the
+  // second activation; slow desktop startup can otherwise attach the probe
+  // between popover insertion and the first rendered frame.
+  await runner.evaluate(
+    "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))))",
+  );
   await runner.evaluate(`(() => {
     const popup = document.querySelector('.redux-welcome-more-popup');
     if (!popup) return false;

@@ -5,7 +5,7 @@
  * commands, streams large charts line by line, and `DesktopAssetStore` persists
  * assets; chart rules stay in the document and chart modules.
  */
-import { t, tRaw } from "../../../i18n/index.ts";
+import { t } from "../../../i18n/index.ts";
 import { normalizeChartObjectIdsAsync, type Chart } from "../../global/chart/chart.ts";
 import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -29,6 +29,7 @@ import type {
 import { DOCUMENT_DISK_CHANGE_EVENT } from "../../global/document/desktopTypes.ts";
 import type { AssetMap } from "../../global/document/types.ts";
 import type { LibraryProjectRef } from "../../global/library/types.ts";
+import { localizeDocumentError } from "./documentErrors.ts";
 /** Tauri invocation with the shared generic signature used by this host adapter. */
 const invoke = async <T>(
   command: string,
@@ -171,53 +172,16 @@ async function writeChartChunks(
 /** Translate a native save failure into a localized error carrying the native code. */
 export function localizeSaveError(error: unknown): Error {
   const code = error instanceof Error ? error.message : String(error);
-  const key =
-    code === "save_baseline_unavailable"
-      ? "workspace.document.error.saveBaselineUnavailable"
-      : code === "save_session_missing"
-        ? "workspace.document.error.saveSessionMissing"
-        : code === "save_assets_binary_required"
-          ? "workspace.document.error.saveAssetsBinaryRequired"
-          : code === "invalid_save_asset_data" || code === "incomplete_save_asset_data"
-            ? "workspace.document.error.invalidSaveAssetData"
-            : code === "pez_to_json_export_directory_required" ||
-                code === "embedded_assets_export_directory_required" ||
-                code === "asset_export_directory_missing"
-              ? "workspace.document.error.saveExportDirectoryRequired"
-              : code.startsWith("save_asset_missing:")
-                ? "workspace.document.error.saveAssetMissing"
-                : code.startsWith("duplicate_save_asset:")
-                  ? "workspace.document.error.duplicateSaveAsset"
-                  : code.startsWith("asset_export_destination_exists:")
-                    ? "workspace.document.error.saveDestinationExists"
-                    : code.startsWith("save_asset_filename_missing:")
-                      ? "workspace.document.error.saveAssetFilenameMissing"
-                      : code === "unsafe_save_asset_path"
-                        ? "workspace.document.error.unsafeSaveAssetPath"
-                        : "workspace.document.error.saveFailed";
-  return Object.assign(new Error(tRaw(key)), { code });
+  return localizeDocumentError(new Error(code), "save");
 }
 
-/**
- * Explain the default-deny external-resource policy on a failed native open.
- *
- * Native open errors keep their diagnostic text. The appended hint makes an
- * absolute or escaping reference understandable when it surfaces as a parse or
- * resource failure instead of a missing resource. A superseded open is an
- * `AbortError`, not a failure, and is returned unchanged.
- */
+/** Normalize a native open failure into its matching explanation and solution. */
 export function localizeOpenError(error: unknown): Error {
   const failure = error instanceof Error ? error : new Error(String(error));
   if (failure.name === "AbortError") {
     return failure;
   }
-  const hint = tRaw("workspace.document.notice.externalResources");
-  if (failure.message.includes(hint)) {
-    return failure;
-  }
-  const localized = new Error(`${failure.message}\n${hint}`, { cause: error });
-  localized.name = failure.name;
-  return localized;
+  return localizeDocumentError(failure, "open");
 }
 
 /**

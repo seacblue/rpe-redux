@@ -369,6 +369,15 @@ export default {
   "settings.field.timeline-grid-color-12.label": "1/12 节拍线颜色",
   "settings.field.timeline-grid-color-16.label": "1/16 节拍线颜色",
   "settings.field.timeline-grid-color-default.label": "默认节拍线颜色",
+  "settings.field.timeline-vertical-grid-color.label": "竖向网格线颜色",
+  "settings.field.timeline-vertical-grid-color.description":
+    "用于音符时间轴和事件时间轴中未高亮的竖向网格线。",
+  "settings.field.timeline-vertical-grid-highlight-color.label": "高亮竖向网格线颜色",
+  "settings.field.timeline-vertical-grid-highlight-color.description":
+    "用于音符时间轴中距离指针最近的竖向网格线。",
+  "settings.field.timeline-vertical-grid-center-color.label": "中心竖向网格线颜色",
+  "settings.field.timeline-vertical-grid-center-color.description":
+    "当网格包含中心线时，用于音符时间轴的中心竖线。",
 
   "settings.field.preview-show-game-ui.label": "预览显示游戏内 UI",
   "settings.field.preview-show-game-ui.description":

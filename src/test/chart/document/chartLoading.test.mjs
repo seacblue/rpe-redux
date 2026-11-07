@@ -19,6 +19,7 @@ import {
 import { stripReduxExportVersion } from "../../../core/global/chart/exportProjection.ts";
 import { parseChartEntries } from "../../../core/global/document/chartParsing.ts";
 import { extensionRegistry } from "../../../core/extensions/runtime.ts";
+import { beginLoading, loadingProgress } from "../../../core/global/document/loading.ts";
 import {
   chartFingerprint,
   warmChartFingerprintAsync,
@@ -234,4 +235,19 @@ test("fingerprint is identical for the installed, streamed, and saved chart", as
   const exported = { ...structuredClone(source), META: { ...source.META, ReduxVersion: "1.0" } };
   stripReduxExportVersion(exported);
   assert.equal(chartFingerprint(exported), direct);
+});
+
+test("failed loading keeps the explanation, solution, and code as separate fields", () => {
+  const task = beginLoading("broken chart");
+  const failure = Object.assign(new Error("The chart is too large."), {
+    code: "chart_too_large",
+    solution: "Reduce the chart size and try again.",
+  });
+  task.fail(failure);
+
+  const state = loadingProgress.getSnapshot();
+  assert.equal(state?.error, "The chart is too large.");
+  assert.equal(state?.errorCode, "chart_too_large");
+  assert.equal(state?.errorSolution, "Reduce the chart size and try again.");
+  loadingProgress.dismiss();
 });

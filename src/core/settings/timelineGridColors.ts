@@ -24,3 +24,33 @@ export type TimelineGridDenominator = (typeof TIMELINE_GRID_COLORS)[number][0];
 export function timelineGridColorKey(denominator: TimelineGridDenominator): string {
   return `timeline-grid-color-${denominator}`;
 }
+
+/** The shared vertical timeline-line colours used by notes and events. */
+export const TIMELINE_VERTICAL_GRID_COLORS = [
+  [
+    "normal",
+    "#61640E",
+    "settings.field.timeline-vertical-grid-color.label",
+    "settings.field.timeline-vertical-grid-color.description",
+  ],
+  [
+    "highlight",
+    "#80810B",
+    "settings.field.timeline-vertical-grid-highlight-color.label",
+    "settings.field.timeline-vertical-grid-highlight-color.description",
+  ],
+  [
+    "center",
+    "#9DA00B",
+    "settings.field.timeline-vertical-grid-center-color.label",
+    "settings.field.timeline-vertical-grid-center-color.description",
+  ],
+] as const;
+
+/** The vertical timeline-line roles with user-configurable colours. */
+export type TimelineVerticalGridColorRole = (typeof TIMELINE_VERTICAL_GRID_COLORS)[number][0];
+
+/** Preference key holding one shared vertical timeline-line colour. */
+export function timelineVerticalGridColorKey(role: TimelineVerticalGridColorRole): string {
+  return `timeline-vertical-grid-color-${role}`;
+}

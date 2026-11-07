@@ -115,7 +115,7 @@ function strokeGridBatches(
 }
 
 type TimelineHoverGuideReceiver = {
-  appearance: Pick<TimelineAppearance, "hoverGuidesEnabled">;
+  appearance: Pick<TimelineAppearance, "hoverGuidesEnabled" | "verticalGridHighlightColor">;
   gestures: Pick<TimelineGestures, "cursor" | "eventCursor" | "hoverArea">;
   viewport: TimelineViewport;
 };
@@ -185,23 +185,26 @@ export function drawHoverGuides(
     return;
   }
   context.save();
-  context.strokeStyle = readCanvasPalette().bottomValue;
   context.globalAlpha = 0.72;
   // Keep the guide continuous and lift the underlying grid colour slightly.
   // A blend mode communicates emphasis without turning the grid into a second
   // dashed interaction layer.
   context.globalCompositeOperation = "screen";
   context.lineWidth = 1.5;
-  context.beginPath();
   if (nearestBeat >= 0) {
+    context.strokeStyle = readCanvasPalette().bottomValue;
+    context.beginPath();
     context.moveTo(0, horizontal + 0.5);
     context.lineTo(width, horizontal + 0.5);
+    context.stroke();
   }
   if (vertical !== null && Number.isFinite(vertical) && zeroY > 0) {
+    context.strokeStyle = this.appearance.verticalGridHighlightColor;
+    context.beginPath();
     context.moveTo(vertical + 0.5, 0);
     context.lineTo(vertical + 0.5, Math.min(height, zeroY));
+    context.stroke();
   }
-  context.stroke();
   context.restore();
 }
 

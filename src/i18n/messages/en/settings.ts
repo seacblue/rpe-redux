@@ -430,6 +430,16 @@ export default {
   "settings.field.timeline-grid-color-12.label": "1/12 beat-line color",
   "settings.field.timeline-grid-color-16.label": "1/16 beat-line color",
   "settings.field.timeline-grid-color-default.label": "Default beat-line color",
+  "settings.field.timeline-vertical-grid-color.label": "Vertical grid line color",
+  "settings.field.timeline-vertical-grid-color.description":
+    "Shared by the note and event timelines when a vertical grid line is not highlighted.",
+  "settings.field.timeline-vertical-grid-highlight-color.label":
+    "Highlighted vertical grid line color",
+  "settings.field.timeline-vertical-grid-highlight-color.description":
+    "Color used by the note timeline's vertical line nearest the pointer.",
+  "settings.field.timeline-vertical-grid-center-color.label": "Center vertical grid line color",
+  "settings.field.timeline-vertical-grid-center-color.description":
+    "Used by the note timeline's center line when the configured grid includes one.",
 
   // -------------------------------------------------------- playback
   "settings.field.preview-show-game-ui.label": "Show in-game UI in preview",

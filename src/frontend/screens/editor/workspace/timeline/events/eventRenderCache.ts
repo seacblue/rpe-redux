@@ -86,7 +86,7 @@ export function multiLineChromeKey(
     receiver.viewport.multiLineViewportOffset(width, "events"),
     palette.headerSurface,
     palette.foreground,
-    palette.gridMinor,
+    receiver.appearance.verticalGridColor,
     palette.outline,
   ].join("|");
 }
@@ -141,7 +141,7 @@ export function drawMultiLineEventChrome(
     // back into the header band so the last column keeps the panel's right
     // border instead of covering it with a solid block.
     context.lineWidth = 1;
-    context.strokeStyle = palette.gridMinor;
+    context.strokeStyle = receiver.appearance.verticalGridColor;
     for (let boundary = 0; boundary <= eventTypes.length; boundary += 1) {
       const raw = panelOffset + boundary * channelWidth;
       if (raw < 0 || raw > width) {
@@ -156,7 +156,7 @@ export function drawMultiLineEventChrome(
         context.strokeStyle = palette.outline;
         strokeVerticalGrid(context, Math.min(width - 1, Math.max(1, raw)), 23);
         context.lineWidth = 1;
-        context.strokeStyle = palette.gridMinor;
+        context.strokeStyle = receiver.appearance.verticalGridColor;
       }
     }
   }

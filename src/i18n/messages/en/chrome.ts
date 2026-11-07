@@ -213,7 +213,8 @@ export default {
   "chrome.toolbar.division": "Beat division",
   "chrome.toolbar.divisionHint": "Grid lines per beat",
   "chrome.toolbar.gridCount": "X-axis grid",
-  "chrome.toolbar.gridCountHint": "Selectable grid lines for note X coordinates",
+  "chrome.toolbar.gridCountHint":
+    "Selectable note X lines; 1 is centred and 2 are the left and right boundaries",
 
   "chrome.toolbar.ratio": "Preview ratio",
   "chrome.toolbar.scrollStart": "Show hidden toolbar actions to the right",
