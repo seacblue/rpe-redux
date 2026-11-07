@@ -9,6 +9,7 @@ import {
   noteSkewShear,
 } from "../../../frontend/screens/editor/canvas/noteGeometry.ts";
 import {
+  drawLinePasses,
   holdFallbackAlpha,
   isPreviewNoteSelected,
   previewNoteTint,
@@ -278,6 +279,106 @@ test("note batch degrades to canvas while the context is lost and rebuilds on re
   assert.equal(batch.addHead(skin, 1, false, 50, 50, 8, 0, 0, 1), true);
   batch.finish();
   assert.equal(calls.draws, 1);
+});
+
+test("active note batches skip line transforms while fallback notes restore them", () => {
+  const previousDocument = globalThis.document;
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  const previousWindow = globalThis.window;
+  globalThis.document = { documentElement: {} };
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#FFFFFF" });
+  globalThis.window = { addEventListener() {} };
+  try {
+    const calls = [];
+    const context = {
+      save: () => calls.push("save"),
+      restore: () => calls.push("restore"),
+      translate: (x, y) => calls.push(["translate", x, y]),
+      rotate: (angle) => calls.push(["rotate", angle]),
+      fillRect() {},
+    };
+    const note = { type: 1 };
+    const entry = { note, noteIndex: 0 };
+    const state = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, alpha: 1 };
+    const runtime = {
+      line: {},
+      noteState(_entry, _state, _seconds, target) {
+        Object.assign(target, {
+          x: 0,
+          y: 0,
+          tail: 0,
+          size: 1,
+          alpha: 1,
+          skew: 0,
+          showHead: false,
+        });
+        return target;
+      },
+    };
+    const frame = {
+      context,
+      chart: { judgeLineList: [{}] },
+      states: [state],
+      order: [0],
+      visibleNotes: [[entry]],
+      visibleHolds: [[]],
+      seconds: 0,
+      selectedLine: -1,
+      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
+      viewport: { left: 0, top: 0, width: 100, height: 100 },
+      centerX: 50,
+      centerY: 50,
+      scene: { lines: [runtime] },
+    };
+    const surface = {
+      noteBatch: { isActive: () => true, addHead: () => true, addHold: () => true },
+      passes: [{ kind: "note", depth: 1000 }],
+      noteOpacity: 1,
+      selectedLines: [],
+      selectedLineColor: [],
+      selectedNotes: new Map(),
+      simultaneous: null,
+      noteSize: 175,
+      lineFrames: [],
+      noteHitAreas: [],
+      collectGeometry: false,
+      skin: null,
+    };
+
+    const batched = drawLinePasses(surface, frame);
+    assert.equal(batched.notes, 1);
+    assert.deepEqual(calls, []);
+
+    surface.noteBatch.addHead = () => false;
+    const fallback = drawLinePasses(surface, frame);
+    assert.equal(fallback.batchFallbacks, 1);
+    assert.deepEqual(calls, [
+      "save",
+      ["translate", 50, 50],
+      ["rotate", 0],
+      "save",
+      "restore",
+      "restore",
+    ]);
+  } finally {
+    if (previousDocument === undefined) {
+      delete globalThis.document;
+    } else {
+      globalThis.document = previousDocument;
+    }
+    if (previousGetComputedStyle === undefined) {
+      delete globalThis.getComputedStyle;
+    } else {
+      globalThis.getComputedStyle = previousGetComputedStyle;
+    }
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+  }
 });
 
 test("selected note instances render after ordinary instances", () => {

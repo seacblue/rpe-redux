@@ -8,6 +8,14 @@
  */
 import { EventTrack, SpeedIntegral } from "../timing/events.ts";
 import { IntervalIndex } from "../../../utils/intervalIndex.ts";
+import { LineFloorCursor } from "./lineFloorCursor.ts";
+import {
+  buildControlDistanceEnvelope,
+  NoteVisibilityDirectory,
+  type ControlDistanceEnvelope,
+  type NoteVisibilityEntry,
+  type VisibilityDirectoryQueryStats,
+} from "./noteVisibility.ts";
 import { lowerBound } from "../../../utils/search.ts";
 import { easing } from "../../../utils/easing.ts";
 import {
@@ -20,7 +28,7 @@ import {
 import { CONTROL_TRACKS, type ControlTrackProperty } from "../chartTracks.ts";
 import { trajectoryHasRotation } from "../trajectory/curveTrajectory.ts";
 import { beatValue, isOrderedBeatRange } from "../timing/beat.ts";
-import type { JudgeLine, JudgeLineEvent, JudgeLineNote, LineEventValue } from "../chart.ts";
+import type { JudgeLine, JudgeLineEvent, LineEventValue } from "../chart.ts";
 import type { ControlPoint } from "../chart.ts";
 import type { Chart } from "../chart.ts";
 import type { TempoSource } from "../timing/events.ts";
@@ -94,14 +102,7 @@ export class ControlCurve {
 }
 
 /** A note plus its resolved seconds and floor positions. */
-export interface NoteEntry {
-  noteIndex?: number;
-  note: JudgeLineNote;
-  start: number;
-  end: number;
-  floor: number;
-  tail: number;
-}
+export interface NoteEntry extends NoteVisibilityEntry {}
 
 export interface LineState {
   x: number;
@@ -126,9 +127,97 @@ export interface NoteState {
   showHead: boolean;
 }
 
+/** Per-line visibility work measured for the most recent query. */
+export interface VisibilityQueryStats extends VisibilityDirectoryQueryStats {
+  candidateCount: number;
+  visibleCount: number;
+  indexMs: number;
+}
+
 export type SampledLineState = LineState;
 
-/** A compiled judge line with its event tracks, controls and note indexes. */
+/** Create a zeroed visibility sample before the first line query. */
+function emptyVisibilityStats(): VisibilityQueryStats {
+  return {
+    candidateCount: 0,
+    visibleCount: 0,
+    spatialCandidateCount: 0,
+    temporalCandidateCount: 0,
+    holdCandidateCount: 0,
+    indexMs: 0,
+  };
+}
+
+/** A certified direction of the accumulated line floor. */
+type FloorDirection = -1 | 0 | 1;
+
+/** Return whether an easing can stay between its endpoints on the unit interval. */
+function isRangePreservingSpeedEasing(type: number, left: number, right: number): boolean {
+  return (
+    Number.isInteger(type) &&
+    (type === 0 || (type >= 1 && type <= 19) || type === 22) &&
+    Number.isFinite(left) &&
+    Number.isFinite(right) &&
+    left >= 0 &&
+    left <= 1 &&
+    right >= 0 &&
+    right <= 1
+  );
+}
+
+/** Prove that one speed layer never changes the sign of its integrated slope. */
+function speedDirection(speed: SpeedIntegral): FloorDirection | null {
+  let direction: FloorDirection = 0;
+  for (let index = 0; index < speed.sources.length; index += 1) {
+    if (
+      !isRangePreservingSpeedEasing(
+        speed.easingTypes[index],
+        speed.easingLefts[index],
+        speed.easingRights[index],
+      )
+    ) {
+      return null;
+    }
+    const start = speed.startValues[index];
+    const end = speed.endValues[index];
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      return null;
+    }
+    const values = [start, end];
+    for (const value of values) {
+      const valueDirection = Math.sign(value) as FloorDirection;
+      if (valueDirection === 0) {
+        continue;
+      }
+      if (direction !== 0 && direction !== valueDirection) {
+        return null;
+      }
+      direction = valueDirection;
+    }
+  }
+  return direction;
+}
+
+/** Prove that the sum of all speed layers is monotone for active Hold culling. */
+function canCoverActiveHoldsSpatially(speeds: readonly SpeedIntegral[]): boolean {
+  let direction: FloorDirection = 0;
+  for (const speed of speeds) {
+    const layerDirection = speedDirection(speed);
+    if (layerDirection === null) {
+      return false;
+    }
+    if (layerDirection === 0) {
+      continue;
+    }
+    if (direction !== 0 && direction !== layerDirection) {
+      return false;
+    }
+    direction = layerDirection;
+  }
+  return true;
+}
+
+/** A compiled judge line with its event tracks, controls and visibility directory. */
 export class LineRuntime {
   declare line: JudgeLine;
   declare tempo: TempoSource;
@@ -138,26 +227,26 @@ export class LineRuntime {
     EventTrack[]
   >;
   declare speeds: SpeedIntegral[];
+  declare floorCursor: LineFloorCursor;
   declare extended: Record<
     "scaleXEvents" | "scaleYEvents" | "colorEvents" | "textEvents" | "inclineEvents",
     EventTrack
   >;
   declare controls: Record<ControlProperty, ControlCurve>;
   declare notes: NoteEntry[];
-  declare minSpeed: number;
   declare hitTimes: NoteEntry[];
+  /** Time directory used by hit effects; separate from visibility culling. */
   declare holdIndex: IntervalIndex<NoteEntry>;
-  declare staticNotes: NoteEntry[];
-  declare staticIndex: IntervalIndex<NoteEntry>;
-  declare staticQuery: NoteEntry[];
-  declare timeIndex: IntervalIndex<NoteEntry> | null;
-  declare timeQuery: NoteEntry[];
-  declare index: IntervalIndex<NoteEntry>;
+  declare visibility: NoteVisibilityDirectory<NoteEntry>;
+  declare lastVisibilityStats: VisibilityQueryStats;
   declare hasPositionControl: boolean;
   declare hasSizeControl: boolean;
   declare hasAlphaControl: boolean;
   declare hasSkewControl: boolean;
   declare hasYControl: boolean;
+  declare yEnvelope: ControlDistanceEnvelope;
+  /** True only when every speed layer proves the floor is monotone. */
+  declare holdActivationCoveredBySpatial: boolean;
   declare simpleState: boolean;
   declare staticScaleY: number;
   declare staticColor: number[];
@@ -195,6 +284,8 @@ export class LineRuntime {
     this.speeds = (line.eventLayers ?? [])
       .slice(0, 5)
       .map((layer) => new SpeedIntegral(layer?.speedEvents, tempo, factor));
+    this.floorCursor = new LineFloorCursor(this.speeds);
+    this.holdActivationCoveredBySpatial = canCoverActiveHoldsSpatially(this.speeds);
     const defaultLine =
       !line.attachUI &&
       !line.extended?.textEvents?.length &&
@@ -240,41 +331,19 @@ export class LineRuntime {
         },
       ];
     });
-    this.minSpeed = this.notes.reduce(
-      (minimum, entry) => Math.min(minimum, Math.abs(entry.note.speed ?? 1) || 1),
-      1,
-    );
     this.hitTimes = [...this.notes].sort((left, right) => left.start - right.start);
     this.holdIndex = new IntervalIndex(
       this.notes.filter((entry) => entry.note.type === 2),
       (entry) => entry.start,
       (entry) => entry.end,
     );
-    this.staticNotes = this.notes.filter((entry) => (entry.note.speed ?? 1) === 0);
-    this.staticIndex = new IntervalIndex(
-      this.staticNotes,
-      (entry) => entry.start - (entry.note.visibleTime ?? 999999),
-      (entry) => entry.end,
-    );
-    this.staticQuery = [];
-    this.index = new IntervalIndex(
-      this.notes.filter((entry) => (entry.note.speed ?? 1) !== 0),
-      (entry) => Math.min(entry.floor, entry.tail),
-      (entry) => Math.max(entry.floor, entry.tail),
-    );
     const yControl = line.yControl;
     this.hasYControl = Boolean(
       yControl && yControl.length > 1 && yControl.some((point) => point.y !== 1),
     );
-    // Lines with Y control need a time-based broad phase.
-    this.timeIndex = this.hasYControl
-      ? new IntervalIndex(
-          this.notes,
-          (entry) => entry.start - (entry.note.visibleTime ?? 999999),
-          (entry) => entry.end,
-        )
-      : null;
-    this.timeQuery = [];
+    this.yEnvelope = buildControlDistanceEnvelope(yControl);
+    this.visibility = this.createVisibilityDirectory();
+    this.lastVisibilityStats = emptyVisibilityStats();
     this.staticScaleY = Number(this.extended.scaleYEvents.fallback);
     this.staticColor = [...(this.extended.colorEvents.fallback as number[])];
     this.simpleState =
@@ -328,13 +397,9 @@ export class LineRuntime {
         }
       }
       this.hitTimes.splice(low, 0, entry);
-      this.minSpeed = Math.min(this.minSpeed, Math.abs(note.speed ?? 1) || 1);
     }
-    this.staticNotes = this.notes.filter((entry) => (entry.note.speed ?? 1) === 0);
-    this.staticIndex.replaceItems(this.staticNotes);
-    this.timeIndex?.replaceItems(this.notes);
-    this.index.replaceItems(this.notes.filter((entry) => (entry.note.speed ?? 1) !== 0));
     this.holdIndex.replaceItems(this.notes.filter((entry) => entry.note.type === 2));
+    this.visibility.replaceItems(this.notes);
   }
 
   /** Rebuild only note state and indexes while reusing the compiled event tracks. */
@@ -344,6 +409,7 @@ export class LineRuntime {
     next.line = line;
     const factor = line.bpmfactor ?? 1;
     next.factor = factor;
+    next.floorCursor = new LineFloorCursor(next.speeds);
     next.notes = (line.notes ?? []).flatMap((note, noteIndex) => {
       if (!isOrderedBeatRange(note.startTime, note.endTime)) {
         return [];
@@ -361,36 +427,13 @@ export class LineRuntime {
         },
       ];
     });
-    next.minSpeed = next.notes.reduce(
-      (minimum, entry) => Math.min(minimum, Math.abs(entry.note.speed ?? 1) || 1),
-      1,
-    );
     next.hitTimes = [...next.notes].sort((left, right) => left.start - right.start);
+    next.visibility = next.createVisibilityDirectory();
     next.holdIndex = new IntervalIndex(
       next.notes.filter((entry) => entry.note.type === 2),
       (entry) => entry.start,
       (entry) => entry.end,
     );
-    next.staticNotes = next.notes.filter((entry) => (entry.note.speed ?? 1) === 0);
-    next.staticIndex = new IntervalIndex(
-      next.staticNotes,
-      (entry) => entry.start - (entry.note.visibleTime ?? 999999),
-      (entry) => entry.end,
-    );
-    next.staticQuery = [];
-    next.index = new IntervalIndex(
-      next.notes.filter((entry) => (entry.note.speed ?? 1) !== 0),
-      (entry) => Math.min(entry.floor, entry.tail),
-      (entry) => Math.max(entry.floor, entry.tail),
-    );
-    next.timeIndex = next.hasYControl
-      ? new IntervalIndex(
-          next.notes,
-          (entry) => entry.start - (entry.note.visibleTime ?? 999999),
-          (entry) => entry.end,
-        )
-      : null;
-    next.timeQuery = [];
     return next;
   }
 
@@ -438,6 +481,7 @@ export class LineRuntime {
         (layer, index) =>
           this.speeds[index] ?? new SpeedIntegral(layer?.speedEvents, this.tempo, next.factor),
       );
+    next.floorCursor = new LineFloorCursor(next.speeds);
     const defaults: [keyof LineRuntime["extended"], LineEventValue][] = [
       ["scaleXEvents", 1],
       ["scaleYEvents", this.staticScaleY],
@@ -469,11 +513,7 @@ export class LineRuntime {
 
   /** Accumulated floor distance at `seconds` across every speed layer. */
   floor(seconds: number): number {
-    let result = 0;
-    for (const speed of this.speeds) {
-      result += speed.distance(seconds);
-    }
-    return result;
+    return this.floorCursor.value(seconds);
   }
   /** Sum one geometric track across all layers at `seconds`. */
   value(
@@ -564,11 +604,7 @@ export class LineRuntime {
     return target;
   }
 
-  /**
-   * Fill `result` with notes visible around `seconds` and return the same array.
-   *
-   * `radius` widens the floor window; speed-zero notes are matched by time.
-   */
+  /** Fill `result` with conservative candidates visible around `seconds`. */
   visibleNotes(
     seconds: number,
     state: LineState,
@@ -577,40 +613,16 @@ export class LineRuntime {
   ): NoteEntry[] {
     result.length = 0;
     if (state.alpha < 0) {
+      this.lastVisibilityStats = emptyVisibilityStats();
       return result;
     }
-    const range = radius / this.minSpeed;
-    if (this.hasYControl) {
-      if (this.timeIndex) {
-        this.timeIndex.queryItemsInto(seconds, seconds, this.timeQuery);
-        if (this.timeQuery.length > 1) {
-          this.timeQuery.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
-        }
-        result.length = this.timeQuery.length;
-        for (let index = 0; index < this.timeQuery.length; index++) {
-          result[index] = this.timeQuery[index];
-        }
-      } else {
-        result.length = this.notes.length;
-        for (let index = 0; index < this.notes.length; index++) {
-          result[index] = this.notes[index];
-        }
-      }
-    } else {
-      this.index.queryItemsInto(state.floor - range, state.floor + range, result);
-      // Speed-zero notes do not move with the chart floor, so a narrow window
-      // checks only the ones still inside their visible time. Sort them back to
-      // author order before appending, so the draw order is unchanged.
-      this.staticIndex.queryItemsInto(seconds, seconds, this.staticQuery);
-      if (this.staticQuery.length > 1) {
-        this.staticQuery.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
-      }
-      const offset = result.length;
-      result.length += this.staticQuery.length;
-      for (let index = 0; index < this.staticQuery.length; index++) {
-        result[offset + index] = this.staticQuery[index];
-      }
+    const queryStarted = performance.now();
+    this.visibility.query(seconds, state.floor, radius, result);
+    const indexMs = performance.now() - queryStarted;
+    if (this.hasYControl && result.length > 1) {
+      result.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
     }
+    const candidateCount = result.length;
     let write = 0;
     for (const entry of result) {
       if (entry.end < seconds || entry.start - seconds > (entry.note.visibleTime ?? 999999)) {
@@ -626,7 +638,51 @@ export class LineRuntime {
       result[write++] = entry;
     }
     result.length = write;
+    this.lastVisibilityStats = {
+      ...this.visibility.lastQueryStats,
+      candidateCount,
+      visibleCount: write,
+      indexMs,
+    };
     return result;
+  }
+
+  /** Build the conservative candidate directory for this line's distance model. */
+  private createVisibilityDirectory(): NoteVisibilityDirectory<NoteEntry> {
+    return new NoteVisibilityDirectory(this.notes, {
+      floorExpansionFactor: (entry) => this.noteFloorExpansionFactor(entry),
+      holdActivationCoveredBySpatial: this.holdActivationCoveredBySpatial,
+    });
+  }
+
+  /**
+   * Return a safe floor-to-screen expansion factor for one note.
+   *
+   * `note.speed` is a constant multiplier. Its sign changes direction but not
+   * the radius bound, while zero makes every floor position equally close in
+   * the vertical channel. Line speed events are already folded into the exact
+   * sampled `state.floor`, so they do not belong in this multiplier.
+   *
+   * A Hold uses its floor distance before activation and its head distance
+   * while active. The directory therefore indexes finite-speed Holds spatially
+   * for the first phase and unions them with the active-time directory; zero
+   * and non-finite speeds stay in the time fallback.
+   */
+  private noteFloorExpansionFactor(entry: NoteEntry): number {
+    const speed = Number(entry.note.speed ?? 1);
+    if (!Number.isFinite(speed) || speed === 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+    if (entry.note.type === 2) {
+      return 1 / Math.abs(speed);
+    }
+    if (this.hasYControl) {
+      if (!this.yEnvelope.certified || this.yEnvelope.minAbsValue <= 0) {
+        return Number.POSITIVE_INFINITY;
+      }
+      return 1 / (Math.abs(speed) * this.yEnvelope.minAbsValue);
+    }
+    return 1 / Math.abs(speed);
   }
 
   /** Sample one note's local position and visuals relative to the line state. */
