@@ -39,6 +39,8 @@ export default {
   "design.colorPicker.current": "Current color",
 
   "design.colorPicker.hexLabel": "HEX",
+  "design.colorPicker.alphaLabel": "Alpha",
+  "design.colorPicker.alphaValue": "Alpha percentage",
 
   "design.select.empty": "Nothing to choose",
 

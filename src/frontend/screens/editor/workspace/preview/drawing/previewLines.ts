@@ -574,7 +574,7 @@ export function drawLinePasses(
         // multi-line selection keeps its normal paint while the sampler runs.
         const selected =
           surface.samplingFocus == null &&
-          surface.selectedLineColor.length === 3 &&
+          surface.selectedLineColor.length >= 3 &&
           surface.selectedLines.includes(index);
         drawLine(
           surface,

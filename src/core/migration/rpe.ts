@@ -10,6 +10,7 @@ import { HIT_SOUND_KINDS } from "../media/hitsounds.ts";
 import { TIMELINE_GRID_COLORS, timelineGridColorKey } from "../settings/timelineGridColors.ts";
 import { canonicalText, normalizeShortcutKey, parseShortcut } from "../shortcuts/keys.ts";
 import type { Modifier, Shortcut } from "../shortcuts/types.ts";
+import { formatHexColor, normalizeHexColor, parseHexColor } from "../utils/colors.ts";
 import { isRecord } from "../utils/guards.ts";
 
 /** One settings value to write after the catalog has declared its key. */
@@ -210,25 +211,33 @@ function integerText(value: unknown, minimum: number, maximum: number): string |
   return String(Math.min(maximum, Math.max(minimum, Math.round(parsed))));
 }
 
-/** Format three channels as the settings colour spelling. */
-function rgbHex(channels: readonly number[]): string {
-  return `#${channels
+/** Format three channels and an optional alpha as the settings colour spelling. */
+function rgbHex(channels: readonly number[], alpha = 1): string {
+  const base = `#${channels
     .slice(0, 3)
     .map((channel) =>
       Math.round(Math.min(255, Math.max(0, channel)))
         .toString(16)
         .padStart(2, "0"),
     )
-    .join("")
-    .toUpperCase()}`;
+    .join("")}`.toUpperCase();
+  return formatHexColor(base, alpha);
 }
 
 /** Convert an RPE RGB array, hex string, or CSS-style rgb text to a settings colour. */
 function colourValue(value: unknown): string | undefined {
   if (typeof value === "string") {
     const text = value.trim();
-    if (/^#[\da-f]{6}$/i.test(text)) {
-      return text.toUpperCase();
+    const parsedHex = parseHexColor(text);
+    if (parsedHex) {
+      return formatHexColor(normalizeHexColor(text), parsedHex.alpha);
+    }
+    const rgba =
+      /^rgba\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[,/]\s*(\d+(?:\.\d+)?)\s*\)$/i.exec(
+        text,
+      );
+    if (rgba) {
+      return rgbHex(rgba.slice(1, 4).map(Number), Number(rgba[4]));
     }
     const css =
       /^rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/i.exec(text);
@@ -240,7 +249,7 @@ function colourValue(value: unknown): string | undefined {
       .filter(Boolean)
       .map(Number);
     if (channels.length >= 3 && channels.every(Number.isFinite)) {
-      return rgbHex(channels);
+      return rgbHex(channels, channels[3] ?? 1);
     }
     return undefined;
   }
@@ -251,7 +260,7 @@ function colourValue(value: unknown): string | undefined {
   if (channels.some((channel) => channel === undefined)) {
     return undefined;
   }
-  return rgbHex(channels as number[]);
+  return rgbHex(channels as number[], numberValue(value[3]) ?? 1);
 }
 
 /** Normalize a configuration key so `GridLineColor` and `grid-line-color` compare equal. */
@@ -442,7 +451,7 @@ function readColorEntries(entries: RpeColorEntries): {
 
 /** Extract colour tokens from a line-based UI.txt value. */
 function colorTokens(text: string): string[] {
-  const matches = text.match(/#[\da-f]{6}|rgba?\([^)]*\)|\d+\s*[, ]\s*\d+\s*[, ]\s*\d+/gi);
+  const matches = text.match(/#[\da-f]{3,8}|rgba?\([^)]*\)|\d+\s*[, ]\s*\d+\s*[, ]\s*\d+/gi);
   return matches?.map((value) => value.trim()) ?? [];
 }
 

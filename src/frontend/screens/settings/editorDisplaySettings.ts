@@ -30,6 +30,7 @@ import {
 } from "../../../core/settings/timelineGridColors.ts";
 import { PREFERENCE_SECTIONS } from "../../../core/state/preferences.ts";
 import { COVER_BACKGROUND_KEYS } from "../../../core/settings/features/coverBackground.ts";
+import { cssColor, parseHexColor } from "../../../core/utils/colors.ts";
 // A contributed setting declares its own value when its feature registers it, and the
 // reads below go straight to those values; importing the built-in catalog is what puts
 // them there before the first read.
@@ -176,20 +177,25 @@ function pitchStrategy(raw: string): "preserve" | "resample" {
   return raw === "false" || raw === "resample" ? "resample" : "preserve";
 }
 
-/** Parse a `#rrggbb` colour into 0-255 channels, or null when malformed. */
+/** Parse a stored hexadecimal colour into RGB(A) channels, or null when malformed. */
 const colorChannels = (raw: string): number[] | null => {
-  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/iu.exec(raw);
-  return match ? match.slice(1).map((channel) => Number.parseInt(channel, 16)) : null;
+  const parsed = parseHexColor(raw);
+  if (!parsed) {
+    return null;
+  }
+  return parsed.hasAlpha
+    ? [parsed.red, parsed.green, parsed.blue, parsed.alpha]
+    : [parsed.red, parsed.green, parsed.blue];
 };
 /** Read a contributed colour as RGB channels, defaulting to the preview yellow. */
 const contributedColor = (key: string): number[] => {
   const raw = stored(key) ?? schemaDefault(key) ?? "";
   return colorChannels(raw) ?? [237, 236, 176];
 };
-/** Read a contributed colour as an upper-case hex string, or black when missing. */
+/** Read a contributed colour as a CSS colour, preserving an optional alpha channel. */
 const contributedHex = (key: string): string => {
   const value = stored(key) ?? schemaDefault(key) ?? "";
-  return /^#[\da-f]{6}$/iu.test(value) ? value.toUpperCase() : "#000000";
+  return cssColor(value);
 };
 
 /** Decode the camera, zoom, GameUI, and aspect-ratio values shared by preview and timeline. */

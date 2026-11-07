@@ -103,6 +103,7 @@ export function drawHitEffects(
       // The skin supplies its own animation; the burst stays correct without one.
       if (picture && effectFrame !== null) {
         const size = previewNoteWidth(surface.noteSize) * surface.hitEffectScale * 1.4 * scaleX;
+        context.globalAlpha = Math.max(0, Math.min(1, hitColor[3] ?? 1));
         context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
       }
       context.fillStyle = `rgb(${Math.min(255, Math.max(0, Math.round(hitColor[0] ?? 0)))},${Math.min(255, Math.max(0, Math.round(hitColor[1] ?? 0)))},${Math.min(255, Math.max(0, Math.round(hitColor[2] ?? 0)))})`;
@@ -115,7 +116,7 @@ export function drawHitEffects(
       );
       for (let particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {
         const particle = particles[particleIndex];
-        context.globalAlpha = particle.alpha;
+        context.globalAlpha = particle.alpha * Math.max(0, Math.min(1, hitColor[3] ?? 1));
         context.fillRect(
           horizontal + particle.x - particle.radius,
           vertical + particle.y - particle.radius,
