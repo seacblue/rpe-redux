@@ -81,18 +81,23 @@ fn main() {
             1
         });
     }
-    if let Some(port) = options.remote_debugging_port {
-        if let Some(window) = context.config_mut().app.windows.first_mut() {
-            window.additional_browser_args = Some(format!(
+    // Keep normal and CDP launches on the same explicit WebView2 argument
+    // path. Wry's implicit defaults have caused environment creation failures
+    // on some Windows WebView2 runtime updates.
+    let additional_browser_args = options.remote_debugging_port.map_or_else(
+        || "--autoplay-policy=no-user-gesture-required".to_owned(),
+        |port| {
+            format!(
                 "--remote-debugging-port={} --autoplay-policy=no-user-gesture-required",
                 port
-            ));
-        }
-    }
+            )
+        },
+    );
     // The setup hook creates windows so a WebView2 failure can be handled as a
     // startup error.
     for window in &mut context.config_mut().app.windows {
         window.create = false;
+        window.additional_browser_args = Some(additional_browser_args.clone());
     }
 
     // Every custom command invoked from the main webview must carry the host
