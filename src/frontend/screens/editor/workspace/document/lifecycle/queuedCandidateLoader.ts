@@ -1,6 +1,6 @@
 /**
  * The document service decides when to replace, and the coordinator admits each
- * load so opening a chart cannot race a save, autosave, or MCP write.
+ * load so opening a chart cannot race a save, autosave, or Code Cell write.
  */
 import {
   beginLoading,
@@ -72,7 +72,7 @@ export interface QueuedCandidateLoaderOptions {
   readonly currentChart: () => Chart;
 }
 
-/** Admit document replacement work so loading cannot race a save or MCP write. */
+/** Admit document replacement work so loading cannot race a save or Code Cell write. */
 export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOptions) {
   const openWithExternalResources = options.openDocument
     ? createExternalResourceOpenSession(options.openDocument)

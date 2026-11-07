@@ -1,7 +1,7 @@
 // Preference document validation and the per-process write credential.
 //
 // The durable preference blob is a public HTTP read but a privileged write:
-// enabling code cells or MCP changes the local trust boundary. PUT therefore
+// enabling code cells changes the local trust boundary. PUT therefore
 // accepts only the known top-level sections with their declared JSON shapes and
 // requires the token written to a private file beside the SQLite database. The
 // desktop frontend reads that file through the native host; a browser origin
@@ -137,7 +137,6 @@ var preferenceSections = map[string]preferenceSectionRule{
 // The write token is the authorization boundary for the whole settings section.
 var preferenceBooleanSettings = map[string]bool{
 	"code-execution-enabled": true,
-	"mcp-enabled":            true,
 }
 
 // ValidateDocument checks the section allowlist and each section's

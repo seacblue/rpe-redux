@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"rperedux/server/internal/codecell"
 	"rperedux/server/internal/instances"
-	"rperedux/server/internal/mcp"
 	"rperedux/server/internal/preferences"
 	"rperedux/server/internal/store"
 )
@@ -118,7 +118,7 @@ func newAPI(
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
-	mux.HandleFunc("GET /api/mcp/endpoint", a.handleMCPEndpoint)
+	mux.HandleFunc("GET /api/cell/endpoint", a.handleCodeCellEndpoint)
 	mux.HandleFunc("POST /api/shutdown", a.handleShutdown)
 	mux.HandleFunc("GET /api/instances", a.handleListInstances)
 	mux.HandleFunc("POST /api/instances/register", a.handleRegisterInstance)
@@ -373,30 +373,30 @@ func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleMCPEndpoint reports the path of the bridge handshake file without
+// handleCodeCellEndpoint reports the path of the bridge handshake file without
 // exposing its token. The token stays in the user's data directory and travels
 // from the desktop host to the editor over the native file bridge.
-func (a *API) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
-	if !mcp.LoopbackRequest(r) {
-		writeError(w, http.StatusForbidden, "loopback_required", "the MCP endpoint is only available on loopback")
+func (a *API) handleCodeCellEndpoint(w http.ResponseWriter, r *http.Request) {
+	if !codecell.LoopbackRequest(r) {
+		writeError(w, http.StatusForbidden, "loopback_required", "the Code Cell endpoint is only available on loopback")
 		return
 	}
-	if !mcp.OriginAllowed(r) {
-		writeError(w, http.StatusForbidden, "origin_denied", "the MCP endpoint rejects browser origins")
+	if !codecell.OriginAllowed(r) {
+		writeError(w, http.StatusForbidden, "origin_denied", "the Code Cell endpoint rejects browser origins")
 		return
 	}
-	path, err := mcp.EnsureEndpoint(a.store.Path)
+	path, err := codecell.EnsureEndpoint(a.store.Path)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "mcp_endpoint_unavailable", "the MCP bridge credential is unavailable")
+		writeError(w, http.StatusServiceUnavailable, "codecell_endpoint_unavailable", "the Code Cell bridge credential is unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"path": path, "bridge": mcp.BridgePath})
+	writeJSON(w, http.StatusOK, map[string]any{"path": path, "bridge": codecell.BridgePath})
 }
 
 // handleShutdown asks the desktop-owned sidecar to stop gracefully. The route
 // stays loopback-only because the main listener may be exposed for rooms.
 func (a *API) handleShutdown(w http.ResponseWriter, r *http.Request) {
-	if !mcp.LoopbackRequest(r) {
+	if !codecell.LoopbackRequest(r) {
 		writeError(w, http.StatusForbidden, "loopback_required", "shutdown is only available on loopback")
 		return
 	}

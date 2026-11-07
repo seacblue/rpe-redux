@@ -13,3 +13,6 @@ export const UPDATE_SETTING_KEYS = Object.freeze({
 
 /** The user-selectable policy for downloading a verified update package. */
 export type UpdateDownloadPolicy = "all" | "wifi" | "never";
+
+/** The default policy that protects metered connections from update downloads. */
+export const DEFAULT_UPDATE_DOWNLOAD_POLICY: UpdateDownloadPolicy = "wifi";

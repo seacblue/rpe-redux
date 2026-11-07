@@ -1,20 +1,23 @@
 /**
  * Desktop editor bridge.
  *
- * The Go sidecar accepts local MCP and code-cell requests and forwards them to
- * this WebSocket. The bridge forwards to the mounted editor adapter and leaves
- * chart reads, cell execution, and commits to that adapter. Every
- * answered frame is recorded in the shared AI activity log for the inspector
+ * The Go sidecar accepts local Code Cell requests and forwards them to this
+ * WebSocket. The bridge forwards to the mounted editor adapter and leaves cell
+ * execution and chart edits to the sandbox runtime. Every answered frame is
+ * recorded in the shared AI activity log for the inspector
  * pane. The bridge authenticates with the per-process token the sidecar writes
  * beside its database. It stays connected so the guide remains readable when
- * both AI settings are off; the adapter and cell runtime still enforce those
- * settings for every other request.
+ * code execution is off; the adapter and cell runtime enforce that setting for
+ * every run request.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { getMcpApi } from "../../core/edit/mcp/api.ts";
-import { mcpActivity } from "../../core/edit/mcp/activity.ts";
-import { mcpBridgeUrl, parseMcpEndpointFile } from "../../core/edit/mcp/bridgeEndpoint.ts";
-import { getMcpGuide } from "../../core/edit/mcp/guide.ts";
+import { getCodeCellApi } from "../../core/edit/codecell/api.ts";
+import { codeCellActivity } from "../../core/edit/codecell/activity.ts";
+import {
+  codeCellBridgeUrl,
+  parseCodeCellEndpointFile,
+} from "../../core/edit/codecell/bridgeEndpoint.ts";
+import { getCodeCellGuide } from "../../core/edit/codecell/guide.ts";
 import { aiServiceOrigin } from "../../core/global/library/client.ts";
 import { isDesktop } from "../../core/platform/environment.ts";
 
@@ -23,7 +26,7 @@ const RECONNECT_MS = 1_500;
 /** Reads the sidecar's handshake token through the native file bridge. */
 async function readBridgeToken(origin: string): Promise<string | null> {
   try {
-    const response = await fetch(`${origin}/api/mcp/endpoint`, { cache: "no-store" });
+    const response = await fetch(`${origin}/api/cell/endpoint`, { cache: "no-store" });
     if (!response.ok) {
       return null;
     }
@@ -33,14 +36,14 @@ async function readBridgeToken(origin: string): Promise<string | null> {
     }
     const raw = await invoke<ArrayBuffer | number[]>("read_picked_file", { path: payload.path });
     const bytes = raw instanceof ArrayBuffer ? new Uint8Array(raw) : Uint8Array.from(raw);
-    return parseMcpEndpointFile(new TextDecoder().decode(bytes));
+    return parseCodeCellEndpointFile(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
 }
 
 /** Connects the editor bridge to the sidecar socket; returns a disposer that closes it. */
-export function installMcpBridge(): () => void {
+export function installCodeCellBridge(): () => void {
   if (!isDesktop()) {
     return () => {};
   }
@@ -93,18 +96,18 @@ export function installMcpBridge(): () => void {
       request && typeof request === "object" && "method" in request
         ? (request as { method?: unknown }).method
         : null;
-    const activity = mcpActivity.begin(request);
+    const activity = codeCellActivity.begin(request);
     let response: unknown;
     try {
-      if (method === "cell.guide" || method === "code.guide") {
-        // The guide follows AI permissions but must be readable before a chart mounts.
+      if (method === "cell.guide") {
+        // The guide is readable before a chart mounts so clients can discover the API.
         response = {
           ok: true,
-          value: { text: getMcpGuide() },
+          value: { text: getCodeCellGuide() },
           revisions: { chartFingerprint: null, diskSnapshot: null, generation: 0 },
         };
       } else {
-        const api = getMcpApi();
+        const api = getCodeCellApi();
         if (!api) {
           response = {
             ok: false,
@@ -152,7 +155,7 @@ export function installMcpBridge(): () => void {
         schedule();
         return;
       }
-      const current = new WebSocket(mcpBridgeUrl(origin, token));
+      const current = new WebSocket(codeCellBridgeUrl(origin, token));
       socket = current;
       current.addEventListener("open", () => {
         connecting = false;

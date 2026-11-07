@@ -32,7 +32,7 @@ export type EditingFeature = keyof typeof EDITING_FEATURE_KEYS;
  * Stable keys for the AI-side permission of each optional editing feature.
  *
  * Human permission stays in `EDITING_FEATURE_KEYS`; these values only gate
- * code-cell and MCP writes. A key is declared but never rendered as its own
+ * Code Cell writes. A key is declared but never rendered as its own
  * settings row: the human row draws both checkboxes.
  */
 export const EDITING_FEATURE_AI_KEYS = Object.freeze({

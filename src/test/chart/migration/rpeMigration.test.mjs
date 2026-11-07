@@ -94,6 +94,17 @@ test("UI.txt beat-line and playhead colours override the RPE defaults", () => {
   assert.equal(values["timeline-grid-color-4"], "#00FF00");
 });
 
+test("RPE colour arrays and CSS rgba values preserve alpha", () => {
+  const plan = createRpeMigrationPlan(
+    JSON.stringify({ DefaultColor: [17, 34, 51, 0.5] }),
+    "",
+    "GridColor1 = rgba(68, 85, 102, 0.25)",
+  );
+  const values = Object.fromEntries(plan.settings.map((setting) => [setting.key, setting.value]));
+  assert.equal(values["default-line-color"], "#11223380");
+  assert.equal(values["timeline-grid-color-1"], "#44556640");
+});
+
 test("RPE hotkeys map only commands this editor owns", () => {
   const plan = createRpeMigrationPlan(
     "",

@@ -7,7 +7,7 @@ export default {
   "settings.field.backend-port.label": "后端端口",
   "settings.field.backend-port.description": "本地谱面服务使用的端口。",
   "settings.field.ai-port.label": "AI 服务端口",
-  "settings.field.ai-port.description": "AI/MCP 桥接服务使用的本机回环端口。",
+  "settings.field.ai-port.description": "代码单元桥接服务使用的本机回环端口。",
   "settings.restartRequired": "重启应用后生效",
   "settings.field.code-execution-enabled.label": "允许 AI 代码单元",
   "settings.field.code-execution-enabled.description":
@@ -16,16 +16,16 @@ export default {
   "settings.codeCell.enableWarning.description":
     "代码单元在沙箱中运行 JavaScript，可编辑当前谱面及其所属库项目的素材，但无法读取或修改其他库项目，也无法访问网络、宿主 DOM 或保存、删除文档。请仅在你信任代码时启用。",
   "settings.codeCell.enableWarning.confirm": "允许代码单元",
-  "settings.field.mcp-access.label": "AI 接入信息",
-  "settings.mcp.cellGuide": "代码单元指南",
-  "settings.mcp.cellRun": "代码单元运行地址",
-  "settings.mcp.nothingEnabled": "启用 AI 代码单元后才会显示端点。",
-  "settings.mcp.copyPrompt": "复制 AI 提示",
-  "settings.mcp.copyPromptSuccess": "提示已复制",
-  "settings.mcp.copyPromptFailed": "无法复制 AI 提示",
-  "settings.mcp.promptEdit": "调整提示",
-  "settings.mcp.promptTitle": "AI 提示",
-  "settings.mcp.aiPrompt":
+  "settings.field.code-cell-access.label": "AI 接入信息",
+  "settings.codeCell.cellGuide": "代码单元指南",
+  "settings.codeCell.cellRun": "代码单元运行地址",
+  "settings.codeCell.nothingEnabled": "启用 AI 代码单元后才会显示端点。",
+  "settings.codeCell.copyPrompt": "复制 AI 提示",
+  "settings.codeCell.copyPromptSuccess": "提示已复制",
+  "settings.codeCell.copyPromptFailed": "无法复制 AI 提示",
+  "settings.codeCell.promptEdit": "调整提示",
+  "settings.codeCell.promptTitle": "AI 提示",
+  "settings.codeCell.aiPrompt":
     "你正在通过本地代码单元 API 协助编辑 RPE Redux 中的谱面。\n" +
     "1. 读取指南 {guide}，其中包含可读写 SDK、谱面字段名和当前安装可用的 transaction 语法。\n" +
     '2. 用 POST {run} 执行代码单元，请求头为 "Content-Type: application/json"，请求体为 {"source":"..."}。检查 ok；事务结果还要检查 value.status 和 value.issues。\n' +
@@ -33,7 +33,7 @@ export default {
     "4. 需要修改时，在代码单元里调用 redux.transaction.apply(request)。它可以替换 timing.bpmList、修改 metadata、新增判定线，并插入/更新/删除音符与事件；不能删除判定线，也不能创建、打开、保存、关闭或删除文档。音符和事件使用拍数三元组，不是秒数。\n" +
     "5. 需要管理素材时，使用 redux.library.current 取得当前打开文档所属库项目的句柄，再调用它的 addAsset / removeAsset。其他库项目不可读也不可写。素材提交前请用户先保存文档；素材变化后要在事务中更新 metadata 或判定线 Texture 引用。代码单元不能删除项目。\n" +
     "6. 检查返回的 status 和 issues，重新读取修改过的对象，然后总结修改内容。conflict 表示谱面已经变化：重新读取并重建请求，不要重试旧的请求。",
-  "settings.mcp.desktopOnly": "AI 辅助开发仅在桌面应用中可用。",
+  "settings.codeCell.desktopOnly": "AI 辅助开发仅在桌面应用中可用。",
   "settings.startup.reportTitle": "RPE Redux — 启动失败",
   "settings.startup.reportTime": "时间：{time}",
   "settings.startup.reportRuntime": "运行环境：{runtime}",
@@ -113,6 +113,17 @@ export default {
   "settings.option.render-fps.90": "90 帧/秒",
   "settings.option.render-fps.120": "120 帧/秒",
   "settings.option.render-fps.144": "144 帧/秒",
+  "settings.field.window-display-mode.label": "窗口模式",
+  "settings.option.window-display-mode.windowed": "窗口",
+  "settings.option.window-display-mode.fullscreen": "全屏",
+  "settings.option.window-display-mode.exclusive": "独占（兼容模式）",
+  "settings.field.window-resolution.label": "窗口分辨率",
+  "settings.option.window-resolution.auto": "自动",
+  "settings.option.window-resolution.1280x720": "1280 × 720",
+  "settings.option.window-resolution.1600x900": "1600 × 900",
+  "settings.option.window-resolution.1920x1080": "1920 × 1080",
+  "settings.option.window-resolution.2560x1440": "2560 × 1440",
+  "settings.option.window-resolution.3840x2160": "3840 × 2160",
   "settings.group.livePreviewLines": "预览显示",
   "settings.group.previewScope": "预览范围",
 
@@ -282,18 +293,18 @@ export default {
 
   "settings.field.editor-preview-background-enabled.label": "编辑器预览背景",
   "settings.field.editor-preview-background-enabled.description":
-    "在编辑器预览后方显示谱面曲绘或自定义背景",
+    "在编辑器预览后方显示谱面曲绘或自定义背景。",
   "settings.field.editor-preview-background-blur.label": "编辑器预览背景高斯模糊",
   "settings.field.editor-preview-background-brightness.label": "编辑器预览背景亮度",
   "settings.field.custom-background.label": "自定义背景图片",
   "settings.field.custom-background.error": "无法加载自定义背景。",
   "settings.field.welcome-cover-background-enabled.label": "欢迎页背景",
-  "settings.field.welcome-cover-background-enabled.description": "将所选谱面的曲绘显示在首页后方",
+  "settings.field.welcome-cover-background-enabled.description": "将所选谱面的曲绘显示在首页后方。",
   "settings.field.welcome-cover-background-blur.label": "欢迎页背景高斯模糊",
   "settings.field.welcome-cover-background-brightness.label": "欢迎页背景亮度",
   "settings.field.editor-cover-background-enabled.label": "编辑器窗口背景",
   "settings.field.editor-cover-background-enabled.description":
-    "将谱面曲绘显示在编辑器窗口后方；自定义背景会覆盖它",
+    "将谱面曲绘显示在编辑器窗口后方；自定义背景会覆盖它。",
   "settings.field.editor-cover-background-blur.label": "编辑器窗口背景高斯模糊",
   "settings.field.editor-cover-background-brightness.label": "编辑器窗口背景亮度",
   "settings.field.bar-width.label": "节拍线宽度",
@@ -577,11 +588,11 @@ export default {
   "settings.startup.progress": "正在启动编辑器…",
   "settings.startup.testWarning.title": "测试功能提示",
   "settings.startup.testWarning.description":
-    "RPE Redux 仍在测试中，可能出现显示异常或偶尔不稳定；遇到问题请通过“帮助 → 问卷调查”反馈。",
+    "RPE Redux 仍在测试中，可能出现显示异常或偶尔不稳定；遇到问题请通过“帮助 > 问卷调查”反馈。",
   "settings.startup.testWarning.dontShow": "不再提示",
   // --------------------------------------------------------------- Updates
   "settings.updates.autoCheck.label": "自动检查更新",
-  "settings.updates.autoCheck.description": "启动时自动检查更新",
+  "settings.updates.autoCheck.description": "启动时自动检查更新。",
   "settings.updates.task.label": "更新包体",
   "settings.updates.downloadPolicy.label": "更新包体下载策略",
   "settings.updates.downloadPolicy.description": "发现新版本后在后台下载更新包体，但不会自动安装。",

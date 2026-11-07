@@ -1,7 +1,7 @@
 /**
  * Machine-checks the examples in `sdk/llm-guide.md` against the SDK types.
  *
- * The guide is the only contract an MCP client can read before writing a cell,
+ * The guide is the only contract a Code Cell client can read before writing a cell,
  * so its JavaScript and JSON examples must use real handle names, result
  * fields, and request shapes. This test extracts every fenced example, wraps
  * the JavaScript ones in a typed cell stub, and runs the repository's
@@ -216,4 +216,9 @@ test("sdk/llm-guide.md examples compile against the SDK type surface", () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("runtime guide does not disclose internal implementation paths", () => {
+  const guide = readFileSync(GUIDE_PATH, "utf8").replace(/\r\n/g, "\n");
+  assert.doesNotMatch(guide, /(?:src\/(?:core|frontend|backend|src-tauri)|RestrictedCodeCellApi)/u);
 });

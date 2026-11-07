@@ -2,13 +2,14 @@
 import { ChipButton } from "../../../../design/components/chip/ChipButton.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { openUpdateChangelog } from "./changelog.ts";
+import { shouldShowUpdateBadge } from "./updatePresentation.ts";
 import { useUpdateState } from "./useUpdateState.ts";
 
 /** A title-bar pill that opens the changelog when a newer release is known. */
 export function UpdateBadge() {
   const { t } = useTranslation();
   const state = useUpdateState();
-  if (!state.available || !state.latest) {
+  if (!shouldShowUpdateBadge(state) || !state.latest) {
     return null;
   }
   return (

@@ -9,6 +9,19 @@ import type { UpdateErrorCode, UpdateState } from "./updateStore.ts";
 
 type UpdateTranslate = (key: MessageKey, params?: MessageParams) => string;
 
+/** Whether the title-bar update badge should remain visible for this state. */
+export function shouldShowUpdateBadge(
+  state: Pick<UpdateState, "available" | "latest" | "phase">,
+): boolean {
+  return (
+    state.available &&
+    state.latest !== null &&
+    state.phase !== "downloaded" &&
+    state.phase !== "scheduled" &&
+    state.phase !== "installed"
+  );
+}
+
 /** Render a byte count as megabytes with one decimal, or `?` when unknown. */
 function formatMegabytes(value: number | null): string {
   return value === null ? "?" : `${(value / (1024 * 1024)).toFixed(1)} MB`;

@@ -683,6 +683,11 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   border-radius: var(--design-radius-micro);
 }
 
+.redux-color-popup .redux-color-checker {
+  display: inline-block;
+  flex: none;
+}
+
 .redux-color-body {
   display: flex;
   gap: var(--space-3);
@@ -775,7 +780,8 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 }
 
 .redux-color-fields label:first-child {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .redux-color-fields input[type="text"] {
@@ -784,6 +790,10 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 }
 
 .redux-color-fields input[type="number"] {
+  width: 54px;
+}
+
+.redux-color-alpha-channel input[type="number"] {
   width: 54px;
 }
 

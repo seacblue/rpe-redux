@@ -13,6 +13,9 @@
  *   settings.group.<id>                 a row heading shared by several rows
  *   settings.option.<fieldId>.<value>   one option of a select row
  *   settings.*                          the pages that own their own markup
+ *
+ * A `description` is a full sentence, so it ends with the language's full stop;
+ * `*.label` and option text stay fragmentary. The catalog test enforces it.
  */
 export default {
   "settings.group.localAi": "AI-assisted development",
@@ -22,7 +25,7 @@ export default {
   "settings.field.backend-port.label": "Backend port",
   "settings.field.backend-port.description": "Port used by the local chart service.",
   "settings.field.ai-port.label": "AI service port",
-  "settings.field.ai-port.description": "Loopback port used by the AI/MCP bridge.",
+  "settings.field.ai-port.description": "Loopback port used by the Code Cell bridge.",
   "settings.restartRequired": "Takes effect after restarting the application",
   "settings.field.code-execution-enabled.label": "Allow AI code cells",
   "settings.field.code-execution-enabled.description":
@@ -31,16 +34,16 @@ export default {
   "settings.codeCell.enableWarning.description":
     "Code cells run sandboxed JavaScript that can edit this chart and the assets of its library project, but cannot read or change other library projects, access the network or host DOM, or save or delete documents. Enable only if you trust the code.",
   "settings.codeCell.enableWarning.confirm": "Allow code cells",
-  "settings.field.mcp-access.label": "AI access details",
-  "settings.mcp.cellGuide": "Code-cell guide",
-  "settings.mcp.cellRun": "Code-cell run",
-  "settings.mcp.nothingEnabled": "Enable AI code cells to expose an endpoint.",
-  "settings.mcp.copyPrompt": "Copy AI prompt",
-  "settings.mcp.copyPromptSuccess": "Prompt copied",
-  "settings.mcp.copyPromptFailed": "Could not copy the prompt",
-  "settings.mcp.promptEdit": "Adjust prompt",
-  "settings.mcp.promptTitle": "AI prompt",
-  "settings.mcp.aiPrompt":
+  "settings.field.code-cell-access.label": "AI access details",
+  "settings.codeCell.cellGuide": "Code-cell guide",
+  "settings.codeCell.cellRun": "Code-cell run",
+  "settings.codeCell.nothingEnabled": "Enable AI code cells to expose an endpoint.",
+  "settings.codeCell.copyPrompt": "Copy AI prompt",
+  "settings.codeCell.copyPromptSuccess": "Prompt copied",
+  "settings.codeCell.copyPromptFailed": "Could not copy the prompt",
+  "settings.codeCell.promptEdit": "Adjust prompt",
+  "settings.codeCell.promptTitle": "AI prompt",
+  "settings.codeCell.aiPrompt":
     "You are helping edit a chart in RPE Redux through the local code-cell API.\n" +
     "1. Read the guide at {guide}; it contains the read/write SDK, chart field names, and the transaction grammar available to this installation.\n" +
     '2. Run a cell with POST {run}, header "Content-Type: application/json", body {"source":"..."}. Inspect ok; for a transaction inspect value.status and value.issues.\n' +
@@ -48,7 +51,8 @@ export default {
     "4. To edit, call redux.transaction.apply(request) inside the cell. It can replace timing.bpmList, patch metadata, insert judge lines, and insert/update/delete notes and events; it cannot delete judge lines or create/open/save/close/delete the document. Notes and events use beat triples, not seconds.\n" +
     "5. To manage assets, use the redux.library.current handle for the open document's library project, then call its addAsset / removeAsset methods. Other library projects are not readable or writable. Ask the user to save the document before asset commits, and update metadata or line Texture references in a transaction when an asset changes. Project deletion is not available.\n" +
     "6. Inspect the returned status and issues, re-read the changed objects, then summarize what changed. A conflict means the chart changed: re-read and rebuild the request instead of retrying the stale one.",
-  "settings.mcp.desktopOnly": "AI-assisted development is available in the desktop application.",
+  "settings.codeCell.desktopOnly":
+    "AI-assisted development is available in the desktop application.",
   "settings.startup.reportTitle": "RPE Redux — startup failure",
   "settings.startup.reportTime": "Time: {time}",
   "settings.startup.reportRuntime": "Runtime: {runtime}",
@@ -133,6 +137,17 @@ export default {
   "settings.option.render-fps.90": "90 fps",
   "settings.option.render-fps.120": "120 fps",
   "settings.option.render-fps.144": "144 fps",
+  "settings.field.window-display-mode.label": "Window mode",
+  "settings.option.window-display-mode.windowed": "Windowed",
+  "settings.option.window-display-mode.fullscreen": "Fullscreen",
+  "settings.option.window-display-mode.exclusive": "Exclusive (compatibility mode)",
+  "settings.field.window-resolution.label": "Window resolution",
+  "settings.option.window-resolution.auto": "Automatic",
+  "settings.option.window-resolution.1280x720": "1280 × 720",
+  "settings.option.window-resolution.1600x900": "1600 × 900",
+  "settings.option.window-resolution.1920x1080": "1920 × 1080",
+  "settings.option.window-resolution.2560x1440": "2560 × 1440",
+  "settings.option.window-resolution.3840x2160": "3840 × 2160",
   "settings.group.livePreviewLines": "Preview display",
   "settings.group.previewScope": "Preview scope",
 
@@ -332,7 +347,7 @@ export default {
   // --------------------------------------------------------- editing (14 rows)
   "settings.field.editor-preview-background-enabled.label": "Editor preview background",
   "settings.field.editor-preview-background-enabled.description":
-    "Shows the chart or custom image behind the editor preview",
+    "Shows the chart or custom image behind the editor preview.",
   "settings.field.editor-preview-background-blur.label": "Editor preview background blur",
   "settings.field.editor-preview-background-brightness.label":
     "Editor preview background brightness",
@@ -340,12 +355,12 @@ export default {
   "settings.field.custom-background.error": "The custom background could not be loaded.",
   "settings.field.welcome-cover-background-enabled.label": "Welcome page background",
   "settings.field.welcome-cover-background-enabled.description":
-    "Shows the selected chart's cover behind the home page",
+    "Shows the selected chart's cover behind the home page.",
   "settings.field.welcome-cover-background-blur.label": "Welcome page background blur",
   "settings.field.welcome-cover-background-brightness.label": "Welcome page background brightness",
   "settings.field.editor-cover-background-enabled.label": "Editor window background",
   "settings.field.editor-cover-background-enabled.description":
-    "Shows the chart cover behind the editor window; the custom background overrides it",
+    "Shows the chart cover behind the editor window; the custom background overrides it.",
   "settings.field.editor-cover-background-blur.label": "Editor window background blur",
   "settings.field.editor-cover-background-brightness.label": "Editor window background brightness",
   "settings.field.bar-width.label": "Beat line width",
@@ -655,7 +670,7 @@ export default {
   "settings.startup.progress": "Starting the editor…",
   "settings.startup.testWarning.title": "Test feature notice",
   "settings.startup.testWarning.description":
-    "RPE Redux is still in testing; you may see visual glitches or occasional instability. Report problems from Help → Survey.",
+    "RPE Redux is still in testing; you may see visual glitches or occasional instability. Report problems from Help > Survey.",
   "settings.startup.testWarning.dontShow": "Do not show again",
   // --------------------------------------------------------------- updates
   "settings.updates.autoCheck.label": "Automatically check for updates",

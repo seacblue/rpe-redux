@@ -60,7 +60,7 @@ function stagePortable() {
   const portableRoot = join(root, "release", "RPE-Redux-portable");
   const packageRoot = join(portableRoot, "RPE-Redux");
   const userData = join(packageRoot, "user-data");
-  // Staging replaces the application files. User data (library, settings, MCP
+  // Staging replaces the application files. User data (library, settings, Code Cell
   // token) lives beside them, so move it out of the package for the staging
   // window and restore it even when a copy fails.
   const preservedUserData = join(root, "release", ".RPE-Redux-user-data");

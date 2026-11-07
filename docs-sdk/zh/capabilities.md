@@ -68,33 +68,33 @@ export default {
 
 ### 按功能拆分能力
 
-| 功能 | 需要的能力 |
-| --- | --- |
-| 注册脚本 | `scripts` |
-| 读取谱面 | `chart.read` |
-| 写入谱面 | `chart.write` |
-| 读取选区 | `selection.read` |
-| 修改选区 | `selection.write` |
-| 读取文档 | `document.read` |
-| 新建/打开/保存/关闭 | `document.write` |
-| 读取曲库 | `library.read` |
-| 写入曲库 | `library.write` |
-| 写入资源 | `assets.write` |
-| 播放控制 | `playback.read` / `playback.control` |
-| 通知与进度 | `ui.notice` |
-| 确认/输入/选择/引导 | `ui.dialog` |
-| 面板 / 侧栏 / 覆盖层 | `ui.panel` / `ui.sidebar` / `ui.overlay` |
-| 工具栏 / 右键菜单 | `ui.toolbar` / `ui.contextMenu` |
-| 快捷键 | `shortcuts` |
-| 读取快捷键文本 | `shortcuts.read` |
-| 设置行 | `settings` |
-| 值 | `values` |
-| 私有存储 | `storage` |
-| 宿主事件 | `events` |
-| 样式表 | `styles` |
-| 计时器 | `timers` |
-| 诊断 | `diagnostics` |
-| 预览几何 / 命中测试 / 布局锚点 | `preview.read` |
+| 功能                           | 需要的能力                               |
+| ------------------------------ | ---------------------------------------- |
+| 注册脚本                       | `scripts`                                |
+| 读取谱面                       | `chart.read`                             |
+| 写入谱面                       | `chart.write`                            |
+| 读取选区                       | `selection.read`                         |
+| 修改选区                       | `selection.write`                        |
+| 读取文档                       | `document.read`                          |
+| 新建/打开/保存/关闭            | `document.write`                         |
+| 读取曲库                       | `library.read`                           |
+| 写入曲库                       | `library.write`                          |
+| 写入资源                       | `assets.write`                           |
+| 播放控制                       | `playback.read` / `playback.control`     |
+| 通知与进度                     | `ui.notice`                              |
+| 确认/输入/选择/引导            | `ui.dialog`                              |
+| 面板 / 侧栏 / 覆盖层           | `ui.panel` / `ui.sidebar` / `ui.overlay` |
+| 工具栏 / 右键菜单              | `ui.toolbar` / `ui.contextMenu`          |
+| 快捷键                         | `shortcuts`                              |
+| 读取快捷键文本                 | `shortcuts.read`                         |
+| 设置行                         | `settings`                               |
+| 值                             | `values`                                 |
+| 私有存储                       | `storage`                                |
+| 宿主事件                       | `events`                                 |
+| 样式表                         | `styles`                                 |
+| 计时器                         | `timers`                                 |
+| 诊断                           | `diagnostics`                            |
+| 预览几何 / 命中测试 / 布局锚点 | `preview.read`                           |
 
 ### 读取能力使用情况
 
@@ -130,14 +130,14 @@ export default {
 
 ## 错误与恢复
 
-| 错误 | 含义 | 恢复 |
-| --- | --- | --- |
-| `capabilityDenied` | 清单没有请求，或用户没有授予 | 补能力并重新确认；避免循环重试 |
-| `methodNotRegistered` | 宿主门面暴露了未登记的方法 | 宿主缺陷；换用已登记方法 |
-| `eventNotAllowed` | 订阅了白名单外的事件 | 使用已发布事件名 |
-| `unavailable` | 运行时尚未挂载 | 先查 `availability()` 或等待事件 |
-| `bridge.limit` | 跨桥数据超过层级/节点/字节上限 | 分页、裁剪或改用摘要 |
-| 同意变为 `stale` | 包字节改变 | 让用户重新确认 |
+| 错误                  | 含义                           | 恢复                             |
+| --------------------- | ------------------------------ | -------------------------------- |
+| `capabilityDenied`    | 清单没有请求，或用户没有授予   | 补能力并重新确认；避免循环重试   |
+| `methodNotRegistered` | 宿主门面暴露了未登记的方法     | 宿主缺陷；换用已登记方法         |
+| `eventNotAllowed`     | 订阅了白名单外的事件           | 使用已发布事件名                 |
+| `unavailable`         | 运行时尚未挂载                 | 先查 `availability()` 或等待事件 |
+| `bridge.limit`        | 跨桥数据超过层级/节点/字节上限 | 分页、裁剪或改用摘要             |
+| 同意变为 `stale`      | 包字节改变                     | 让用户重新确认                   |
 
 `capabilityDenied` 会计入包的失败预算；`methodNotRegistered` 属于宿主注册缺口，不应归咎于包。
 

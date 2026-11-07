@@ -1,7 +1,6 @@
 # Complete examples
 
-These examples combine the public Extension surfaces. Each registration should
-be disposed when the package is deactivated.
+These examples combine the public Extension surfaces. Each registration should be disposed when the package is deactivated.
 
 ## Toolbar action and panel
 
@@ -25,8 +24,7 @@ const config = (await context.storage.getJSON("config")) ?? { enabled: true };
 await context.storage.setJSON("config", config);
 ```
 
-Use `values.define` when the setting must be observable by several package
-surfaces. Use package storage for private cached data.
+Use `values.define` when the setting must be observable by several package surfaces. Use package storage for private cached data.
 
 ## Transaction write
 
@@ -40,5 +38,4 @@ if (preview.ok) await context.api.transaction.apply(preview.value.previewId);
 
 ## Provider and consumer
 
-For a versioned integration, publish a service or a public hook. A consumer must
-handle the provider disappearing and keep a local fallback.
+For a versioned integration, publish a service or a public hook. A consumer must handle the provider disappearing and keep a local fallback.

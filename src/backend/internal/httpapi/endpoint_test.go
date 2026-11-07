@@ -1,4 +1,4 @@
-// Contract test for the MCP bridge handshake route.
+// Contract test for the Code Cell bridge handshake route.
 
 package httpapi
 
@@ -9,15 +9,15 @@ import (
 	"os"
 	"testing"
 
-	"rperedux/server/internal/mcp"
+	"rperedux/server/internal/codecell"
 )
 
-func TestMCPEndpointRouteReturnsTheCredentialPath(t *testing.T) {
+func TestCodeCellEndpointRouteReturnsTheCredentialPath(t *testing.T) {
 	data := testStore(t)
 	server := httptest.NewServer(NewAPI(data))
 	defer server.Close()
 
-	response, err := http.Get(server.URL + "/api/mcp/endpoint")
+	response, err := http.Get(server.URL + "/api/cell/endpoint")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestMCPEndpointRouteReturnsTheCredentialPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	path, _ := body["path"].(string)
-	if path == "" || body["bridge"] != mcp.BridgePath {
+	if path == "" || body["bridge"] != codecell.BridgePath {
 		t.Fatalf("endpoint route = %#v", body)
 	}
 	if _, err := os.Stat(path); err != nil {

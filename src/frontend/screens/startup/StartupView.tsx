@@ -2,8 +2,8 @@
  * The startup screen shown while the editor loads and when it cannot start.
  *
  * The failure state explains the likely cause in plain language, lists the
- * Extension evidence, folds the raw report behind technical details, and offers
- * a one-shot safe-mode restart that skips every package on the next launch.
+ * Extension evidence, shows the raw report, and offers a one-shot safe-mode
+ * restart that skips every package on the next launch.
  */
 import { Button } from "../../../design/components/button/Button.tsx";
 import { AppIcon } from "../../../design/components/brand/AppIcon.tsx";
@@ -20,7 +20,6 @@ import { getExtensionStartupState } from "../../platform/extensionLoader.ts";
 import { useDocumentSurface } from "./useDocumentSurface.ts";
 import {
   classifyStartupFailure,
-  isBackendPortConflict,
   startupExtensionCandidates,
   startupFailureMessage,
   type StartupFailureCategory,
@@ -94,8 +93,6 @@ export function StartupView({
     category === "extension" && startup.safeMode
       ? "startup.failure.extensionSafeMode"
       : FAILURE_DESCRIPTIONS[category];
-  const backendPortConflict = isBackendPortConflict(error);
-
   /** Copies the failure report and records the outcome for the button label. */
   const copyReport = () => {
     if (!navigator.clipboard?.writeText) {
@@ -146,12 +143,6 @@ export function StartupView({
       </div>
       {error && (
         <>
-          {backendPortConflict && (
-            <section className="redux-startup-port-guide" role="alert">
-              <h2>{t("startup.backendPortConflict.title")}</h2>
-              <p>{t("startup.backendPortConflict.description")}</p>
-            </section>
-          )}
           <section
             className="redux-startup-extensions"
             aria-labelledby="redux-startup-extensions-title"
@@ -213,10 +204,9 @@ export function StartupView({
               <p className="redux-startup-extensions-hint">{t("startup.extensions.none")}</p>
             )}
           </section>
-          <details className="redux-startup-report-details">
-            <summary>{t("startup.report.details")}</summary>
+          <section className="redux-startup-report-details">
             <pre className="redux-startup-report">{report}</pre>
-          </details>
+          </section>
           {logPath ? (
             <div className="redux-startup-log-guide">
               <p>{t("settings.startup.logGuide")}</p>

@@ -1,4 +1,4 @@
-// Failure screen styles: the explanation, Extension evidence, folded report,
+// Failure screen styles: the explanation, Extension evidence, technical report,
 // actions, and the stacking that keeps the independent window controls reachable.
 
 @import (reference) "../../../design/styles/palette.less";
@@ -93,12 +93,6 @@ body:has(.redux-app-root dialog.redux-startup-safe-mode[open]) > .redux-modal-sc
 .redux-startup-report-details {
   width: min(840px, calc(100% - 64px));
   margin: var(--space-3) auto 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
-  text-align: center;
-  > summary {
-    cursor: pointer;
-  }
 }
 
 .redux-startup-port-guide {

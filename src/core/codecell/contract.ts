@@ -1,5 +1,5 @@
 /**
- * The one-shot code-cell contract shared by the sandbox host, the MCP adapter,
+ * The one-shot Code Cell contract shared by the sandbox host, the local bridge,
  * and the in-app runner.
  *
  * A code cell is an ephemeral program: it has a profile, arguments, a source

@@ -1,7 +1,7 @@
 /**
  * Field-level AI write policy for optional chart data.
  *
- * A code cell or MCP client can only touch an advanced field while its AI
+ * A Code Cell client can only touch an advanced field while its AI
  * permission is on. The check lives here rather than in the transaction kernel
  * so a human edit, an extension, and an AI client keep the same transaction
  * grammar; only the AI entry points add this policy.

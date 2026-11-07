@@ -46,7 +46,7 @@ export default {
   "editorPanels.aiActivity.request": "Request",
   "editorPanels.aiActivity.response": "Response",
   "editorPanels.aiActivity.source": "Source",
-  "editorPanels.aiActivity.transport": "WebSocket /api/mcp/bridge",
+  "editorPanels.aiActivity.transport": "WebSocket /api/cell/bridge",
   "editorPanels.aiActivity.pending": "Running…",
   "editorPanels.aiActivity.duration": "{ms} ms",
   "editorPanels.aiActivity.status.pending": "Running",
@@ -62,7 +62,7 @@ export default {
   "editorPanels.batch.control.eventMoveLabel": "Move events together (keeping their length)",
   "editorPanels.batch.control.eventEnd": "Adjust the end beat together (start stays put)",
   "editorPanels.batch.control.eventStart": "Adjust the start beat together (end stays put)",
-  "editorPanels.batch.control.lineChange": "Line {from} → {to}",
+  "editorPanels.batch.control.lineChange": "Line {from} > {to}",
   "editorPanels.batch.control.horizontalScale": "Scale horizontally",
   "editorPanels.batch.control.selectionChanged":
     "The selection changed while dragging, so the drag was cancelled",

@@ -82,7 +82,11 @@ export default {
       },
     });
 
-    context.addCleanup(() => { action(); sidebar(); panel.dispose(); });
+    context.addCleanup(() => {
+      action();
+      sidebar();
+      panel.dispose();
+    });
   },
 };
 ```
@@ -149,7 +153,10 @@ export default {
       },
     });
 
-    context.addCleanup(() => { rows(); navigation(); });
+    context.addCleanup(() => {
+      rows();
+      navigation();
+    });
   },
 };
 ```

@@ -18,4 +18,4 @@ import "./help/HelpSettings.tsx";
 import "./help/DeveloperSettings.tsx";
 import "./help/onboardingAction.ts";
 import "./editing/EditingFeatureAccessControl.tsx";
-import "./McpAccessControl.tsx";
+import "./CodeCellAccessControl.tsx";

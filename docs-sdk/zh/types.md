@@ -37,12 +37,12 @@ interface ApiAvailability {
 
 放置音符、事件和事务提交会返回 `ActionResult<T>`。`status` 有四种：
 
-| status | 含义 |
-| --- | --- |
-| `committed` | 已写入 |
-| `unchanged` | 没有需要写入的内容 |
-| `rejected` | 输入不合法或被规则拒绝 |
-| `unavailable` | 运行时未连接 |
+| status        | 含义                   |
+| ------------- | ---------------------- |
+| `committed`   | 已写入                 |
+| `unchanged`   | 没有需要写入的内容     |
+| `rejected`    | 输入不合法或被规则拒绝 |
+| `unavailable` | 运行时未连接           |
 
 ## ChartObjectId
 
@@ -68,13 +68,13 @@ interface ApiAvailability {
 
 `chart.placeNote` 的放置目标：
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `lineIndex` | 是 | 判定线索引，从 0 开始 |
-| `from` | 是 | 音符头坐标 `{ beat, positionX }` |
-| `to` | 否 | Hold 尾部坐标 |
-| `layer` | 否 | 事件层编号 |
-| `eventType` | 否 | 事件驱动的放置类型 |
+| 字段        | 必填 | 说明                             |
+| ----------- | ---- | -------------------------------- |
+| `lineIndex` | 是   | 判定线索引，从 0 开始            |
+| `from`      | 是   | 音符头坐标 `{ beat, positionX }` |
+| `to`        | 否   | Hold 尾部坐标                    |
+| `layer`     | 否   | 事件层编号                       |
+| `eventType` | 否   | 事件驱动的放置类型               |
 
 `beat` 是拍位置，`positionX` 是横向谱面坐标；0 表示判定线中心。
 
@@ -86,12 +86,12 @@ interface ApiAvailability {
 
 `chart.placeNote` 的第一个参数，只有四个值：
 
-| 值 | 类型 |
-| --- | --- |
-| `1` | Tap |
-| `2` | Hold |
+| 值  | 类型  |
+| --- | ----- |
+| `1` | Tap   |
+| `2` | Hold  |
 | `3` | Flick |
-| `4` | Drag |
+| `4` | Drag  |
 
 ## ChartReadLine
 

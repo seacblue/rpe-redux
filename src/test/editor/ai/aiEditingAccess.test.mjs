@@ -1,10 +1,10 @@
 /**
  * AI editing permissions: first-enable seeding, guide filtering, and the
- * field-level transaction policy shared by code cells and MCP.
+ * field-level transaction policy shared by Code Cells.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterAiGuide } from "../../../core/edit/mcp/aiGuide.ts";
+import { filterAiGuide } from "../../../core/edit/codecell/aiGuide.ts";
 import { aiTransactionIssues } from "../../../core/edit/aiEditingPolicy.ts";
 import {
   AI_EDITING_INITIALIZED_KEY,

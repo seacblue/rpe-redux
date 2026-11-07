@@ -18,7 +18,7 @@ import { useSetting } from "./useSetting.ts";
 import { registerSettingControl } from "./settingsContributions.ts";
 
 /** Show the configured code-cell endpoints with a copyable client prompt. */
-export function McpAccessControl() {
+export function CodeCellAccessControl() {
   const { t } = useTranslation();
   const codeEnabled = useSetting("code-execution-enabled", false);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -70,10 +70,10 @@ export function McpAccessControl() {
   }, [promptDraft, promptOpen]);
 
   if (!isDesktop()) {
-    return <p className="redux-field-description">{t("settings.mcp.desktopOnly")}</p>;
+    return <p className="redux-field-description">{t("settings.codeCell.desktopOnly")}</p>;
   }
 
-  const prompt = t("settings.mcp.aiPrompt", {
+  const prompt = t("settings.codeCell.aiPrompt", {
     guide: guideEndpoint,
     run: runEndpoint,
   });
@@ -83,15 +83,15 @@ export function McpAccessControl() {
     void navigator.clipboard.writeText(text).then(
       () => {
         showToast({
-          message: t("settings.mcp.copyPromptSuccess"),
-          source: t("settings.field.mcp-access.label"),
+          message: t("settings.codeCell.copyPromptSuccess"),
+          source: t("settings.field.code-cell-access.label"),
         });
       },
       () => {
         showToast({
-          message: t("settings.mcp.copyPromptFailed"),
+          message: t("settings.codeCell.copyPromptFailed"),
           level: "error",
-          source: t("settings.field.mcp-access.label"),
+          source: t("settings.field.code-cell-access.label"),
         });
       },
     );
@@ -114,35 +114,37 @@ export function McpAccessControl() {
 
   return (
     <>
-      <div className="mcp-access">
-        <div className="mcp-access-header">
-          <span className="mcp-access-title">{t("settings.field.mcp-access.label")}</span>
+      <div className="code-cell-access">
+        <div className="code-cell-access-header">
+          <span className="code-cell-access-title">
+            {t("settings.field.code-cell-access.label")}
+          </span>
           {codeEnabled && (
-            <div className="mcp-access-header-actions">
+            <div className="code-cell-access-header-actions">
               <Button variant="outlined" onClick={editPrompt}>
-                {t("settings.mcp.promptEdit")}
+                {t("settings.codeCell.promptEdit")}
               </Button>
               <Button variant="outlined" onClick={() => copy(prompt)}>
-                {t("settings.mcp.copyPrompt")}
+                {t("settings.codeCell.copyPrompt")}
               </Button>
             </div>
           )}
         </div>
-        <div className="mcp-access-list">
+        <div className="code-cell-access-list">
           {codeEnabled && (
             <>
-              <div className="mcp-access-line">
-                <span>{t("settings.mcp.cellGuide")}</span>
+              <div className="code-cell-access-line">
+                <span>{t("settings.codeCell.cellGuide")}</span>
                 <code>{guideEndpoint}</code>
               </div>
-              <div className="mcp-access-line">
-                <span>{t("settings.mcp.cellRun")}</span>
+              <div className="code-cell-access-line">
+                <span>{t("settings.codeCell.cellRun")}</span>
                 <code>{runEndpoint}</code>
               </div>
             </>
           )}
           {!codeEnabled && (
-            <p className="redux-field-description">{t("settings.mcp.nothingEnabled")}</p>
+            <p className="redux-field-description">{t("settings.codeCell.nothingEnabled")}</p>
           )}
         </div>
       </div>
@@ -150,8 +152,8 @@ export function McpAccessControl() {
         open={promptOpen}
         onClose={() => setPromptOpen(false)}
         priority={10}
-        className="mcp-prompt"
-        label={t("settings.mcp.promptTitle")}
+        className="code-cell-prompt"
+        label={t("settings.codeCell.promptTitle")}
         actions={
           <Button variant="outlined" onClick={() => setPromptOpen(false)}>
             {t("common.action.close")}
@@ -160,8 +162,8 @@ export function McpAccessControl() {
       >
         <Textarea
           ref={promptRef}
-          className="mcp-prompt-text"
-          aria-label={t("settings.mcp.promptTitle")}
+          className="code-cell-prompt-text"
+          aria-label={t("settings.codeCell.promptTitle")}
           rows={12}
           value={promptDraft}
           spellCheck={false}
@@ -180,4 +182,4 @@ export function McpAccessControl() {
   );
 }
 
-registerSettingControl("mcp-access", McpAccessControl);
+registerSettingControl("code-cell-access", CodeCellAccessControl);

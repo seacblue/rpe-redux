@@ -222,7 +222,8 @@ export function drawLine(
 ): void {
   context.save();
   context.scale(state.scaleX, state.scaleY);
-  context.globalAlpha = clamp01(state.alpha / 255) * clamp01(opacity);
+  context.globalAlpha =
+    clamp01(state.alpha / 255) * clamp01(state.color[3] ?? 1) * clamp01(opacity);
   context.fillStyle = lineColor(state.color);
   if (line.extended?.textEvents?.length) {
     context.font = `${52 * scale}px Saira, 'Source Han Sans CN', sans-serif`;

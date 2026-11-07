@@ -17,7 +17,7 @@ export { LocalLibraryError, type RequestOptions } from "./http.ts";
 /** Default loopback origin of the local service. */
 export const DEFAULT_SERVER_ORIGIN = "http://127.0.0.1:47821";
 
-/** Origin of the configured local AI/MCP listener. */
+/** Origin of the configured local Code Cell listener. */
 export function aiServiceOrigin(): string {
   return `http://127.0.0.1:${getRuntimePorts().aiPort}`;
 }

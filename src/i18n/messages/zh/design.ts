@@ -35,6 +35,8 @@ export default {
   "design.colorPicker.current": "当前颜色",
 
   "design.colorPicker.hexLabel": "HEX",
+  "design.colorPicker.alphaLabel": "透明度",
+  "design.colorPicker.alphaValue": "透明度百分比",
 
   "design.select.empty": "没有可选项",
 

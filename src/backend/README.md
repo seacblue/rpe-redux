@@ -12,7 +12,7 @@ entry point is `src/backend/cmd/redux-service/`; domain packages live under
 ## Runtime
 
 The service uses `net/http`, `database/sql`, and the pure-Go `modernc.org/sqlite`
-driver. The HTTP listener defaults to `127.0.0.1:47821`; the AI/MCP bridge
+driver. The HTTP listener defaults to `127.0.0.1:47821`; the Code Cell bridge
 defaults to `127.0.0.1:47822`. `--port`, `--ai-port`, `--host`, and
 `--db` override the address and database path. SQLite runs in WAL mode with a
 15-second busy timeout. The desktop host starts the sidecar, waits for its
@@ -57,21 +57,15 @@ an ephemeral port, `--collab-host 0.0.0.0` to expose rooms on a LAN, or
 `ws://`; terminate TLS at a reverse proxy outside the process. The developer-only
 standalone Node server remains available for LAN and direct-TLS tests.
 
-## MCP and code cells
+## Code Cells
 
-`POST /api/mcp` is a loopback JSON-RPC endpoint for external MCP clients. It
-accepts loopback peers with a JSON content type and rejects browser origins.
-`/api/mcp/bridge` is the private WebSocket used by the desktop frontend. It
-requires the per-process session token from `mcp-endpoint.json` beside the
-database; `GET /api/mcp/endpoint` reports the file path without exposing the
-token. The sidecar forwards requests to the mounted editor, which owns chart
-state and commits. Tool failures keep the adapter's `code` and `details` in
-`structuredContent` and in a JSON fallback text block.
-
-`GET /api/cell/guide` and `POST /api/cell/run` run on a stricter boundary: the
-listener and peer must both be loopback, and browser origins are rejected. Code
-cells are read-only; the HTTP surface has no apply route. Enabling code
-execution in Settings is a separate consent from enabling MCP.
+`GET /api/cell/guide` and `POST /api/cell/run` are the only AI-facing routes.
+The listener and peer must both be loopback, and browser origins are rejected.
+The private editor WebSocket is `/api/cell/bridge`; its per-process token is
+stored in `codecell-endpoint.json` beside the database and discovered through
+`GET /api/cell/endpoint`. The sidecar forwards requests to the mounted editor,
+which owns chart state and commits. Code execution is enabled separately in
+Settings, and the HTTP surface has no direct apply route.
 
 ## Build and run
 

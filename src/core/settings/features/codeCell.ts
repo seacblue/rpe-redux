@@ -1,15 +1,14 @@
 /**
- * Registers the local AI-assisted development page under General: the code-cell
- * toggle and the loopback endpoints an external AI can use.
+ * Registers the local Code Cell page under General: the code-cell toggle and
+ * the loopback endpoints an external AI can use.
  *
- * Code cells are the only AI entry point. MCP transport code remains in the
- * application for compatibility, but this page exposes no MCP control.
+ * Code Cells are the only AI entry point and expose one explicit HTTP contract.
  */
 import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition, SettingsNavigation } from "../types.ts";
 
 const navigation: SettingsNavigation = {
-  key: "general.mcp",
+  key: "general.codeCell",
   parent: "general",
   label: "settings.group.localAi",
   icon: "external",
@@ -19,7 +18,7 @@ const navigation: SettingsNavigation = {
 const fields: SettingDefinition[] = [
   {
     key: "code-execution-enabled",
-    navigation: "general.mcp",
+    navigation: "general.codeCell",
     group: "",
     label: "settings.field.code-execution-enabled.label",
     description: "settings.field.code-execution-enabled.description",
@@ -35,10 +34,10 @@ const fields: SettingDefinition[] = [
     },
   },
   {
-    key: "mcp-access",
-    navigation: "general.mcp",
+    key: "code-cell-access",
+    navigation: "general.codeCell",
     group: "",
-    label: "settings.field.mcp-access.label",
+    label: "settings.field.code-cell-access.label",
     control: "custom",
     fullWidth: true,
     enabledWhen: { key: "code-execution-enabled", equals: true },

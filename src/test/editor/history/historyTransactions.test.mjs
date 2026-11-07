@@ -229,7 +229,7 @@ test("the guide's opening-section example commits in one transaction", () => {
 
 test("a committed transaction echoes its audit origin in the result", () => {
   const session = new EditorSession(createChart());
-  const origin = { kind: "mcp", clientId: "client-1", requestId: "request-1" };
+  const origin = { kind: "code-cell", clientId: "client-1", requestId: "request-1" };
   const result = applyChartTransaction(
     session,
     { label: "audited", metadata: { name: "audited" } },
