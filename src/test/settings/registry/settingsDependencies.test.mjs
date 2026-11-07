@@ -73,3 +73,11 @@ test("the AI service port follows the code-cell toggle", () => {
   assert.equal(settingsRegistry.definition("ai-port")?.enabledWhen?.key, "code-execution-enabled");
   assert.equal(settingsRegistry.definition("ai-port")?.enabledWhen?.equals, true);
 });
+
+test("the update download policy follows the automatic update toggle", () => {
+  const autoCheck = settingsRegistry.definition("update-auto-check");
+  const downloadPolicy = settingsRegistry.definition("update-download-policy");
+  assert.equal(autoCheck?.default, true);
+  assert.equal(downloadPolicy?.enabledWhen?.key, "update-auto-check");
+  assert.equal(downloadPolicy?.enabledWhen?.equals, true);
+});

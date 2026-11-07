@@ -11,6 +11,9 @@ export const UPDATE_SETTING_KEYS = Object.freeze({
   skippedVersion: "update-skipped-version",
 } as const);
 
+/** The default automatic update-check preference. */
+export const DEFAULT_UPDATE_AUTO_CHECK = true;
+
 /** The user-selectable policy for downloading a verified update package. */
 export type UpdateDownloadPolicy = "all" | "wifi" | "never";
 
