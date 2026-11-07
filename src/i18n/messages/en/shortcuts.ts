@@ -60,6 +60,7 @@ export default {
   "shortcuts.editor.nextBeat": "Forward one line",
   "shortcuts.editor.previousJudgeLine": "Previous judge line",
   "shortcuts.editor.nextJudgeLine": "Next judge line",
+  "shortcuts.editor.lineJump": "Jump to a judge line",
   "shortcuts.editor.timelineBackward": "Seek timeline backward",
   "shortcuts.editor.timelineForward": "Seek timeline forward",
   "shortcuts.editor.resetCamera": "Reset the view",

@@ -16,6 +16,8 @@ import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { LineSwitcher } from "../../timeline/lineSwitcher/lineSwitcher.ts";
 import type { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import type { EditorKeyboardBindingDependencies } from "../../../../../platform/shortcuts/editorKeyboard.ts";
+import { LINE_JUMP_SHORTCUT_ID } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
+import type { PrefixDigitSequenceSubmission } from "../../../../../../core/shortcuts/prefixDigitSequence.ts";
 import type { CanvasShortcutTarget } from "../../../../../platform/shortcuts/canvasShortcuts.ts";
 import type { EditorSettingsBindings } from "../../../../settings/editorRuntime.ts";
 import type { HistoryTravelOptions } from "../../../../../../core/edit/operations/editing.ts";
@@ -82,6 +84,8 @@ interface EditorBindingRuntime {
   save(): Promise<unknown>;
   reportError(error: unknown): void;
   notify: HistoryTravelOptions["notify"];
+  /** Commit a passive judge-line prefix gesture. */
+  lineJump(submission: PrefixDigitSequenceSubmission): void;
 }
 
 interface EditorBindingTimeline {
@@ -285,6 +289,10 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     seekBeat: deps.seekBeat,
     stepLine: (direction) => deps.lineSwitcher.step(direction) !== false,
     reportError: deps.reportError,
+    prefixDigitShortcut: {
+      id: LINE_JUMP_SHORTCUT_ID,
+      submit: deps.lineJump,
+    },
   });
   deps.scope.add(
     connectViewControls({

@@ -167,6 +167,9 @@ export default {
   "editor.app.notice.desktopOnlySaveFile": "Saving to a file needs the desktop app",
 
   "editor.app.notice.noteSource": "From judge line {line} · click to switch",
+  "editor.app.notice.lineJumpMissing":
+    "Judge line {line} does not exist. Available lines are 0–{max}.",
+  "editor.app.notice.lineJumpInvalid": "That judge line number is too long.",
   "editor.app.notice.nothingToRedo": "Nothing to redo",
   "editor.app.notice.nothingToUndo": "Nothing to undo",
 

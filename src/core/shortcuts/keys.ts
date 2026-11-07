@@ -62,6 +62,7 @@ const MODIFIER_TOKENS: Record<string, Modifier> = {
 /** Everything a plain key can be called, normalised to one token each. */
 const KEY_ALIASES: Record<string, string> = {
   " ": "SPACE",
+  CONTROL: "CTRL",
   RETURN: "ENTER",
   ESC: "ESCAPE",
   SPACEBAR: "SPACE",

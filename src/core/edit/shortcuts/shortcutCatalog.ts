@@ -30,6 +30,9 @@ import { playbackShortcuts } from "../playback/transport.ts";
 import { multiLineShortcuts } from "../multiLine/multiLineEdit.ts";
 import { TIMELINE_WHEEL_SHORTCUT_IDS } from "./timelineWheel.ts";
 
+/** Stable id for the passive judge-line prefix gesture. */
+export const LINE_JUMP_SHORTCUT_ID = "navigation.line.jump";
+
 /** Editor shortcuts that change stage and timeline visibility. */
 const viewShortcuts: readonly EditorShortcutDefinition[] = [
   {
@@ -112,6 +115,16 @@ const curveShortcuts: readonly EditorShortcutDefinition[] = [
 ];
 /** Wheel-driven line stepping and time seeking, both rebindable. */
 const navigationShortcuts: readonly EditorShortcutDefinition[] = [
+  {
+    id: LINE_JUMP_SHORTCUT_ID,
+    category: "editor.navigation",
+    title: "shortcuts.editor.lineJump",
+    scope: "editor",
+    defaults: [{ key: "CTRL" }],
+    // The editor keyboard host observes this binding as a prefix and commits on
+    // key-up; the ordinary dispatcher must never consume the bare modifier.
+    passive: true,
+  },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious,
     category: "editor.navigation",
@@ -247,6 +260,9 @@ function registryDefinition(
   if (shortcut.shared) {
     definition.shared = shortcut.shared;
   }
+  if (shortcut.passive) {
+    definition.passive = shortcut.passive;
+  }
   if (shortcut.when) {
     definition.when = shortcut.when;
   }
@@ -266,6 +282,9 @@ export function matchEditorShortcut(
   shortcutContext: ShortcutContext,
 ): string | undefined {
   for (const shortcut of EDITOR_SHORTCUTS) {
+    if (shortcut.passive) {
+      continue;
+    }
     if (!shortcutScopeAvailable(shortcut.scope, shortcutContext)) {
       continue;
     }
@@ -302,7 +321,7 @@ export function matchRegisteredShortcut(
       continue;
     }
     const definition = shortcuts.definition(view.id);
-    if (!definition || definition.enabled?.() === false) {
+    if (!definition || definition.passive || definition.enabled?.() === false) {
       continue;
     }
     const scope = definition.scope;

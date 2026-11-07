@@ -56,6 +56,8 @@ export interface ShortcutEventLike {
   shiftKey?: boolean;
   altKey?: boolean;
   isComposing?: boolean;
+  /** `KeyboardEvent.repeat`; present only on keyboard events. */
+  repeat?: boolean;
   /** `MouseEvent.button`; present only on pointer events. */
   button?: number;
   /** `WheelEvent.deltaY`; present only on wheel events. */
@@ -110,6 +112,8 @@ export interface ShortcutDefinition {
    * out of the conflict list rather than making the settings page cry wolf.
    */
   shared?: boolean;
+  /** Whether the binding is observed by a feature without dispatching a command. */
+  passive?: boolean;
   /** The direct operation this key runs when matched. */
   run?: (input?: unknown) => unknown;
   enabled?: () => boolean;

@@ -43,15 +43,18 @@ RPE Redux keeps the editing loop under the left hand. Q/W/E/R place notes and ev
 
 ## Movement and multi-line
 
-| Action                           | Default                  |
-| -------------------------------- | ------------------------ |
-| Previous / next line             | `Z` / `X` (or `←` / `→`) |
-| Nudge selection left / right     | `Z` / `X` (or `←` / `→`) |
-| Nudge selection earlier / later  | `B` / `T` (or `↓` / `↑`) |
-| Open multi-line editing          | `F`                      |
-| Switch multi-line notes / events | `G`                      |
+| Action                           | Default                                                 |
+| -------------------------------- | ------------------------------------------------------- |
+| Previous / next line             | `Z` / `X` (or `←` / `→`)                                |
+| Jump to a judge line             | Hold `Ctrl`, type a 0-based line number, release `Ctrl` |
+| Nudge selection left / right     | `Z` / `X` (or `←` / `→`)                                |
+| Nudge selection earlier / later  | `B` / `T` (or `↓` / `↑`)                                |
+| Open multi-line editing          | `F`                                                     |
+| Switch multi-line notes / events | `G`                                                     |
 
 `Z`/`X` step between lines when nothing is selected and nudge the selection when something is selected. Multi-line shortcuts apply while the editor workspace has an open document.
+
+Hold `Ctrl`, type a judge-line number, and release `Ctrl` to jump to that line and switch the timeline to a single-line selection. Line numbers are 0-based. An existing `Ctrl+number` command takes precedence over the gesture; an unavailable line number leaves the current line unchanged and shows a warning.
 
 The stage drag handles remain; the same transforms are also available from the keyboard:
 

@@ -7,7 +7,7 @@
 import { recordShortcut, shortcutKey } from "../../../../core/shortcuts/keyMatching.ts";
 import type { Shortcut, ShortcutEventLike } from "../../../../core/shortcuts/types.ts";
 
-const MODIFIER_KEYS = new Set(["CONTROL", "ALT", "SHIFT", "META"]);
+const MODIFIER_KEYS = new Set(["CTRL", "ALT", "SHIFT", "META"]);
 
 /** Keys currently held and the shortcut they spell, if one is complete. */
 export interface ShortcutCaptureState {

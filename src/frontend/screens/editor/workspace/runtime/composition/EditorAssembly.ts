@@ -99,6 +99,7 @@ import { getChartInfoExpanded } from "../../../../../chrome/statusbar/chartInfoP
 import { bindEditorInteractions } from "../bindings/editorBindings.ts";
 import { canvasShortcutTarget } from "../input/canvasShortcutTarget.ts";
 import type { CanvasShortcutTarget } from "../../../../../platform/shortcuts/canvasShortcuts.ts";
+import type { PrefixDigitSequenceSubmission } from "../../../../../../core/shortcuts/prefixDigitSequence.ts";
 import { bindEditorLanguageRefresh } from "../bindings/languageRefresh.ts";
 import { createHitTestPicker, createPreviewGeometryReader } from "../bindings/hitTestBindings.ts";
 import { createPreviewApiHost } from "../bindings/previewBindings.ts";
@@ -484,6 +485,35 @@ export function createEditorAssembly(
     editorLine.set(String(index));
     return true;
   }
+  /** Resolves a passive line-jump submission through the overview selection path. */
+  function handleLineJump(submission: PrefixDigitSequenceSubmission): void {
+    if (submission.kind === "invalid") {
+      notify({
+        message: t("editor.app.notice.lineJumpInvalid"),
+        level: "warning",
+        duration: 4000,
+        key: "editor.lineJump",
+      });
+      return;
+    }
+    if (submission.kind === "empty") {
+      return;
+    }
+    const index = submission.value;
+    if (selectOverviewLine(index)) {
+      return;
+    }
+    const lineCount = session.current.chart.judgeLineList?.length ?? 0;
+    if (!lineCount) {
+      return;
+    }
+    notify({
+      message: t("editor.app.notice.lineJumpMissing", { line: index, max: lineCount - 1 }),
+      level: "warning",
+      duration: 4000,
+      key: "editor.lineJump",
+    });
+  }
   scope.add(
     bindPreviewSelection({
       stage: surfaces.timeline.stage,
@@ -752,6 +782,7 @@ export function createEditorAssembly(
       save,
       reportError,
       notify,
+      lineJump: handleLineJump,
     },
     timeline: {
       timeline,

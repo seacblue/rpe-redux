@@ -79,7 +79,7 @@ export function shortcutKey(event: ShortcutEventLike): string {
     }
   }
   if (["CONTROL", "META", "ALT", "SHIFT"].includes(key)) {
-    return key;
+    return normalizeShortcutKey(key);
   }
   return normalizeShortcutKey(key);
 }
@@ -153,13 +153,9 @@ export function recordShortcut(event: ShortcutEventLike): Shortcut | null {
 /** Whether a key-up event released a key that `shortcut` uses. */
 export function released(event: ShortcutEventLike, shortcut: Shortcut): boolean {
   const key = shortcutKey(event);
-  const aliases: Record<string, Modifier> = {
-    CONTROL: "CTRL",
-    META: "META",
-    SHIFT: "SHIFT",
-    ALT: "ALT",
-  };
-  const alias = aliases[key];
+  const alias = (["CTRL", "META", "SHIFT", "ALT"] as readonly Modifier[]).includes(key as Modifier)
+    ? (key as Modifier)
+    : undefined;
   const modifiers = shortcut.modifiers ?? [];
   return (
     normalizeShortcutKey(shortcut.key) === key ||

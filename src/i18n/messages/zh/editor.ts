@@ -159,6 +159,8 @@ export default {
   "editor.app.notice.desktopOnlySaveFile": "仅桌面版支持保存到文件",
 
   "editor.app.notice.noteSource": "该音符来自 {line} 号线 · 点击切换",
+  "editor.app.notice.lineJumpMissing": "判定线 {line} 不存在。可用编号为 0–{max}。",
+  "editor.app.notice.lineJumpInvalid": "判定线编号过长。",
   "editor.app.notice.nothingToRedo": "没有可重做的编辑",
   "editor.app.notice.nothingToUndo": "没有可撤销的编辑",
 

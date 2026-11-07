@@ -12,6 +12,14 @@ import {
   matchRegisteredShortcut,
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import type { EditorShortcutArea } from "../../../core/edit/shortcuts/declarations.ts";
+import {
+  advancePrefixDigitSequence,
+  createPrefixDigitSequenceState,
+  type PrefixDigitModifier,
+  type PrefixDigitSequenceState,
+  type PrefixDigitSequenceSubmission,
+} from "../../../core/shortcuts/prefixDigitSequence.ts";
+import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
 import { releaseShortcutFocus } from "./focus.ts";
 import {
   runEditorKeyboardAction,
@@ -50,10 +58,30 @@ export interface EditorKeyboardBindingDependencies extends Omit<
    * Ctrl+Z would also undo the chart underneath it.
    */
   claimDraftShortcut?: (event: KeyboardEvent) => boolean;
+  /** Configure one passive prefix-digit shortcut handled by the dispatcher. */
+  prefixDigitShortcut: PrefixDigitShortcutBinding;
+}
+
+/** A generic prefix-digit binding whose result is interpreted by its owner. */
+export interface PrefixDigitShortcutBinding {
+  readonly id: string;
+  readonly submit: (submission: PrefixDigitSequenceSubmission) => void;
+}
+
+/** Resolve the configured bare modifier for one prefix-digit shortcut. */
+function configuredPrefix(id: string): PrefixDigitModifier | null {
+  const modifiers = new Set<PrefixDigitModifier>(["CTRL", "ALT", "SHIFT", "META"]);
+  return (
+    shortcutRegistry
+      .bindingsOf(id)
+      .map((binding) => normalizeShortcutKey(binding.key))
+      .find((key): key is PrefixDigitModifier => modifiers.has(key as PrefixDigitModifier)) ?? null
+  );
 }
 
 /** Registers the one keyboard dispatcher and its pointer/wheel canvas routing. */
 export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDependencies): void {
+  let prefixDigitState: PrefixDigitSequenceState = createPrefixDigitSequenceState();
   const keyboardDeps: EditorKeyboardActionDependencies = {
     ...deps,
     timeline: {
@@ -102,10 +130,12 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
     (event) => {
       const context = readShortcutContext(event.target);
       if (context.capturing || context.modal === "urgent") {
+        prefixDigitState = createPrefixDigitSequenceState();
         return;
       }
       const target = event.target as HTMLElement | null;
       if (context.modal === "none" && deps.claimDraftShortcut?.(event)) {
+        prefixDigitState = createPrefixDigitSequenceState();
         event.preventDefault();
         return;
       }
@@ -152,10 +182,36 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         scope !== "app" &&
         scope !== "instrument"
       ) {
+        prefixDigitState = createPrefixDigitSequenceState();
         event.preventDefault();
         return;
       }
       const shortcutId = editorAction ?? registered?.id ?? "";
+      if (shortcutId) {
+        prefixDigitState = createPrefixDigitSequenceState();
+      } else if (
+        context.documentOpen &&
+        context.modal === "none" &&
+        !context.textEntry &&
+        context.surface === null
+      ) {
+        const prefix = configuredPrefix(deps.prefixDigitShortcut.id);
+        if (prefix) {
+          const transition = advancePrefixDigitSequence(
+            prefixDigitState,
+            { type: "keydown", event },
+            prefix,
+          );
+          prefixDigitState = transition.state;
+          if (transition.handled) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+        }
+      } else {
+        prefixDigitState = createPrefixDigitSequenceState();
+      }
       if (shortcutId) {
         window.dispatchEvent(new Event(SHORTCUT_DISPATCHED_EVENT));
       }
@@ -186,11 +242,44 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
   deps.scope.listen(
     window,
     "keyup",
-    () => {
+    (event) => {
       if (deps.timeline.gestures.clipboardMode?.keepTime) {
         deps.timeline.gestures.clipboardMode = {};
         deps.invalidate();
       }
+      const context = readShortcutContext(event.target);
+      if (
+        context.capturing ||
+        context.modal === "urgent" ||
+        context.modal !== "none" ||
+        context.textEntry ||
+        context.surface !== null
+      ) {
+        prefixDigitState = createPrefixDigitSequenceState();
+        return;
+      }
+      const prefix = configuredPrefix(deps.prefixDigitShortcut.id);
+      if (!prefix) {
+        prefixDigitState = createPrefixDigitSequenceState();
+        return;
+      }
+      const transition = advancePrefixDigitSequence(
+        prefixDigitState,
+        { type: "keyup", event },
+        prefix,
+      );
+      prefixDigitState = transition.state;
+      if (transition.submission && transition.submission.kind !== "empty") {
+        deps.prefixDigitShortcut.submit(transition.submission);
+      }
+    },
+    true,
+  );
+  deps.scope.listen(
+    window,
+    "blur",
+    () => {
+      prefixDigitState = createPrefixDigitSequenceState();
     },
     true,
   );
