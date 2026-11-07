@@ -13,6 +13,9 @@
  *   settings.group.<id>                 a row heading shared by several rows
  *   settings.option.<fieldId>.<value>   one option of a select row
  *   settings.*                          the pages that own their own markup
+ *
+ * A `description` is a full sentence, so it ends with the language's full stop;
+ * `*.label` and option text stay fragmentary. The catalog test enforces it.
  */
 export default {
   "settings.group.localAi": "AI-assisted development",
@@ -344,7 +347,7 @@ export default {
   // --------------------------------------------------------- editing (14 rows)
   "settings.field.editor-preview-background-enabled.label": "Editor preview background",
   "settings.field.editor-preview-background-enabled.description":
-    "Shows the chart or custom image behind the editor preview",
+    "Shows the chart or custom image behind the editor preview.",
   "settings.field.editor-preview-background-blur.label": "Editor preview background blur",
   "settings.field.editor-preview-background-brightness.label":
     "Editor preview background brightness",
@@ -352,12 +355,12 @@ export default {
   "settings.field.custom-background.error": "The custom background could not be loaded.",
   "settings.field.welcome-cover-background-enabled.label": "Welcome page background",
   "settings.field.welcome-cover-background-enabled.description":
-    "Shows the selected chart's cover behind the home page",
+    "Shows the selected chart's cover behind the home page.",
   "settings.field.welcome-cover-background-blur.label": "Welcome page background blur",
   "settings.field.welcome-cover-background-brightness.label": "Welcome page background brightness",
   "settings.field.editor-cover-background-enabled.label": "Editor window background",
   "settings.field.editor-cover-background-enabled.description":
-    "Shows the chart cover behind the editor window; the custom background overrides it",
+    "Shows the chart cover behind the editor window; the custom background overrides it.",
   "settings.field.editor-cover-background-blur.label": "Editor window background blur",
   "settings.field.editor-cover-background-brightness.label": "Editor window background brightness",
   "settings.field.bar-width.label": "Beat line width",

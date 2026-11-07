@@ -293,18 +293,18 @@ export default {
 
   "settings.field.editor-preview-background-enabled.label": "编辑器预览背景",
   "settings.field.editor-preview-background-enabled.description":
-    "在编辑器预览后方显示谱面曲绘或自定义背景",
+    "在编辑器预览后方显示谱面曲绘或自定义背景。",
   "settings.field.editor-preview-background-blur.label": "编辑器预览背景高斯模糊",
   "settings.field.editor-preview-background-brightness.label": "编辑器预览背景亮度",
   "settings.field.custom-background.label": "自定义背景图片",
   "settings.field.custom-background.error": "无法加载自定义背景。",
   "settings.field.welcome-cover-background-enabled.label": "欢迎页背景",
-  "settings.field.welcome-cover-background-enabled.description": "将所选谱面的曲绘显示在首页后方",
+  "settings.field.welcome-cover-background-enabled.description": "将所选谱面的曲绘显示在首页后方。",
   "settings.field.welcome-cover-background-blur.label": "欢迎页背景高斯模糊",
   "settings.field.welcome-cover-background-brightness.label": "欢迎页背景亮度",
   "settings.field.editor-cover-background-enabled.label": "编辑器窗口背景",
   "settings.field.editor-cover-background-enabled.description":
-    "将谱面曲绘显示在编辑器窗口后方；自定义背景会覆盖它",
+    "将谱面曲绘显示在编辑器窗口后方；自定义背景会覆盖它。",
   "settings.field.editor-cover-background-blur.label": "编辑器窗口背景高斯模糊",
   "settings.field.editor-cover-background-brightness.label": "编辑器窗口背景亮度",
   "settings.field.bar-width.label": "节拍线宽度",
@@ -592,7 +592,7 @@ export default {
   "settings.startup.testWarning.dontShow": "不再提示",
   // --------------------------------------------------------------- Updates
   "settings.updates.autoCheck.label": "自动检查更新",
-  "settings.updates.autoCheck.description": "启动时自动检查更新",
+  "settings.updates.autoCheck.description": "启动时自动检查更新。",
   "settings.updates.task.label": "更新包体",
   "settings.updates.downloadPolicy.label": "更新包体下载策略",
   "settings.updates.downloadPolicy.description": "发现新版本后在后台下载更新包体，但不会自动安装。",
