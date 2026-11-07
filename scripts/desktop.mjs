@@ -5,6 +5,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { prepareDesktopPrerequisites } from "./desktopPrerequisites.mjs";
+import { desktopPortArgument } from "./desktopLaunchOptions.mjs";
 import { runTauri } from "./tauriCli.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -34,8 +35,21 @@ async function configuredFrontendPort() {
   return 4173;
 }
 
-const frontendPort = await configuredFrontendPort();
+const frontendPort =
+  desktopPortArgument(process.argv.slice(2), "frontend") ?? (await configuredFrontendPort());
+const backendPort = desktopPortArgument(process.argv.slice(2), "backend");
+const aiPort = desktopPortArgument(process.argv.slice(2), "ai");
 process.env.REDUX_FRONTEND_PORT = String(frontendPort);
+const frontendOrigins = [`http://127.0.0.1:${frontendPort}`, `http://localhost:${frontendPort}`];
+process.env.REDUX_SERVER_ORIGINS = [process.env.REDUX_SERVER_ORIGINS, ...frontendOrigins]
+  .filter(Boolean)
+  .join(",");
+if (backendPort !== undefined) {
+  process.env.REDUX_BACKEND_PORT = String(backendPort);
+}
+if (aiPort !== undefined) {
+  process.env.REDUX_AI_PORT = String(aiPort);
+}
 
 // The sidecar trusts the Vite origin only in this development loop. A packaged
 // build never receives this environment variable.

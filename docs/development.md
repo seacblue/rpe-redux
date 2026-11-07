@@ -26,6 +26,14 @@ npm run check          # the source gate before you report work
 
 `npm run desktop` is the supported entry point: it stages the Go sidecar and the media helpers, then opens the Tauri window. `npm run dev` starts only the Vite server, so browser-only changes load faster but native file, audio, and update paths do not work there.
 
+Parallel desktop runs can select process-only ports without changing the shared profile configuration:
+
+```powershell
+npm run desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
+```
+
+The flags accept either `--name-port=value` or `--name-port value`, take precedence over the saved Runtime ports settings, and are not persisted. A packaged executable accepts the same `--backend-port` and `--ai-port` flags.
+
 A good first hour looks like this:
 
 1. Open the window and go through the chart library, create a chart, and press `Ctrl+K` to see the settings pages.

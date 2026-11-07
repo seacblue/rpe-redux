@@ -163,6 +163,8 @@ The sidecar writes `user-data/mcp-endpoint.json` when the frontend asks for the 
 
 The library uses SQLite WAL mode with a busy timeout, so concurrent service processes serialize writes. Library commits use the revision check for optimistic concurrency.
 
+For parallel development or AI-driven test runs, launch a copy with `--backend-port=<port>` and, when code cells are enabled, a matching `--ai-port=<port>`. The development wrapper also accepts `--frontend-port=<port>`. These are process-only overrides; they do not rewrite the saved Runtime ports settings. If the selected backend port is occupied, the launch stops without switching to a random port and the startup screen explains how to choose another one for the next run.
+
 The one-room-per-backend claim uses a named kernel mutex on Windows. Linux keeps the claim process-local until an equivalent kernel lock ships, so host or join a room from one instance per data directory there.
 
 A document path or library project has one occupancy owner. Opening it from a second instance raises a warning modal whose choices clear the frontend lock, clear the backend record, repair and retry, or cancel the open. The lease is released when the document closes; an abandoned lease expires with its instance heartbeat.
