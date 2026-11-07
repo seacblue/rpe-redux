@@ -76,6 +76,12 @@ import {
   TransportSurfaceProvider,
   createTransportSurface,
 } from "../chrome/transport/TransportDomSurface.tsx";
+import { useSetting } from "../screens/settings/useSetting.ts";
+import {
+  applyWindowDisplaySettings,
+  showDesktopWindow,
+  type WindowDisplayMode,
+} from "../platform/desktop/windowDisplay.ts";
 
 // Install the note-skin bridge at module load so the media layer can resolve
 // bundled skins and announce changes before any skin is read.
@@ -118,6 +124,8 @@ function AppContent() {
   const [inspectorSurface] = useState(createInspectorSurface);
   const [transportSurface] = useState(createTransportSurface);
   const [backendReady, setBackendReady] = useState(false);
+  const windowDisplayMode = useSetting<WindowDisplayMode>("window-display-mode", "windowed");
+  const windowResolution = useSetting<string>("window-resolution", "auto");
 
   /** Tags editor construction/render failures without changing callback identity. */
   const handleEditorError = useCallback((value: string) => {
@@ -247,6 +255,30 @@ function AppContent() {
       window.dispatchEvent(new Event("resize"));
     }
   }, [ready]);
+
+  // The native window starts hidden so the first visible frame already has its
+  // restored geometry and the persisted display mode. Backend failure still
+  // reveals the startup report instead of leaving a hidden process behind.
+  useEffect(() => {
+    if (!backendReady && !error) {
+      return;
+    }
+    let cancelled = false;
+    void applyWindowDisplaySettings(windowDisplayMode, windowResolution)
+      .catch((failure) => {
+        console.error("Could not apply the window display settings", failure);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          void showDesktopWindow().catch((failure) => {
+            console.error("Could not show the desktop window", failure);
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [backendReady, error, windowDisplayMode, windowResolution]);
 
   return (
     <TimelineDomSurfaceProvider surface={timelineSurface}>

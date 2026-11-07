@@ -98,6 +98,13 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+// Fullscreen modes retain one close button at the frame edge, so the title-bar
+// content reserves one control cell instead of the normal three-button group.
+.redux-titlebar[data-window-display-mode="fullscreen"],
+.redux-titlebar[data-window-display-mode="exclusive"] {
+  --window-controls-reserved: calc(var(--window-control-size) + 2 * var(--window-control-padding));
+}
+
 .redux-titlebar-left {
   display: flex;
   flex: none;

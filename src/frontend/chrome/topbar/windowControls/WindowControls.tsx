@@ -3,7 +3,7 @@
  *
  * Minimize, maximize/restore, and close call the desktop window controller. The
  * controls stay outside the app shell's modal inertness so the window can still
- * be managed while a dialog is open.
+ * be managed while a dialog is open; fullscreen modes keep only close at the edge.
  */
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { controlWindow, observeWindowState } from "./windowControls.ts";
@@ -14,6 +14,8 @@ import { registerWindowControls } from "../../../../design/components/modal/Moda
 import { useThemeUi } from "../../../app/useThemeUi.ts";
 import { ThemeUiNodeView } from "../../../platform/themeUi.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
+import { useSetting } from "../../../screens/settings/useSetting.ts";
+import type { WindowDisplayMode } from "../../../platform/desktop/windowDisplay.ts";
 
 // Caption controls are window chrome, not page content: they answer the pointer
 // but stay out of the document's focus order, so Tab never leaves a dialog for
@@ -26,6 +28,7 @@ const chromeButtonProps = {
 /** Caption buttons for the frameless frame: minimize, maximize or restore, and close. */
 export function WindowControls() {
   const { t } = useTranslation();
+  const displayMode = useSetting<WindowDisplayMode>("window-display-mode", "windowed");
   const template = useThemeUi().components.windowControl;
   const [maximized, setMaximized] = useState(false);
   const [error, setError] = useState("");
@@ -96,14 +99,17 @@ export function WindowControls() {
       </Button>
     );
   };
+  const showWindowStateControls = displayMode === "windowed";
   return (
     <div className="redux-window-controls" role="group" ref={setControlsRef}>
-      {control("minimize", "windowMinimize", t("chrome.window.minimize"))}
-      {control(
-        "maximize",
-        maximized ? "windowRestore" : "windowMaximize",
-        t(maximized ? "chrome.window.restore" : "chrome.window.maximize"),
-      )}
+      {showWindowStateControls &&
+        control("minimize", "windowMinimize", t("chrome.window.minimize"))}
+      {showWindowStateControls &&
+        control(
+          "maximize",
+          maximized ? "windowRestore" : "windowMaximize",
+          t(maximized ? "chrome.window.restore" : "chrome.window.maximize"),
+        )}
       {control("close", "windowClose", t("chrome.window.close"), true)}
       {error && (
         <span className="redux-window-error" role="alert">
