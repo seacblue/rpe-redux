@@ -136,7 +136,7 @@ export function registerViewActions() {
       tooltip: "shortcuts.editor.togglePreviewOnlyHint",
       shortcutId: "view.togglePreviewOnly",
       shortcutScope: "editor",
-      checked: () => editorChromeCommands()?.view.getPreviewOnly() ?? false,
+      checked: () => editorChromeCommands()?.view.isPreviewLayout() ?? false,
       run: () => editorChromeCommands()?.view.togglePreviewOnly(),
     }),
     // Region switches stay on the left hand: Q, W, E follow the menu order,

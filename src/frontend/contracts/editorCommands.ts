@@ -28,7 +28,7 @@ export interface EditorTransportCommands {
 
 /** View commands and the region state their menu switches report. */
 export interface EditorViewCommands {
-  getPreviewOnly(): boolean;
+  isPreviewLayout(): boolean;
   resetCamera(resetPreview?: boolean): void;
   togglePreviewOnly(): void;
   toggleRegion(region: "showNotes" | "showEvents"): void;

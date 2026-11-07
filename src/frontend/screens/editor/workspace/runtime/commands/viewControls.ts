@@ -15,14 +15,13 @@ import {
 import type { Preview } from "../../preview/scene/preview.ts";
 import { createLateBound } from "../../../../../../core/utils/lateBound.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
+import { createEditorModeHistory, type EditorModeSnapshot } from "./modeHistory.ts";
 
 /** The regions the stage can show and the multi-line state applied to them. */
 export type EditorRegionSnapshot = {
   showNotes: boolean;
   showEvents: boolean;
   showPreview: boolean;
-  /** The stage is temporarily collapsed to the preview; region switches are untouched. */
-  previewOnly: boolean;
   multiLineActive: boolean;
   multiLineMode: "notes" | "events";
   multiLineMerge: boolean;
@@ -40,33 +39,49 @@ export type EditorTimelineMode = "notes" | "events";
 export function showsAuthoringRegion(regions: EditorRegionSnapshot): boolean {
   return !curvePreviewMode.get() && (regions.showNotes || regions.showEvents);
 }
-/**
- * Runtime-only preview focus. Entering it leaves the persisted region switches
- * alone, so leaving it restores the exact layout the user had before.
- */
-const previewOnly = createValue<boolean>({ initial: false });
 const regionValues = [
   displayValues.showNotes,
   displayValues.showEvents,
   displayValues.previewEnabled,
 ];
+
+/** The canonical preview layout used as the first Ctrl+Space swap target. */
+const PREVIEW_LAYOUT: EditorModeSnapshot = {
+  showNotes: false,
+  showEvents: false,
+  showPreview: true,
+};
+
+/** Reads the complete raw region state that a preview shortcut must restore. */
+function readModeSnapshot(): EditorModeSnapshot {
+  return {
+    showNotes: displayValues.showNotes.get(),
+    showEvents: displayValues.showEvents.get(),
+    showPreview: displayValues.previewEnabled.get(),
+  };
+}
+
+/** Applies a complete raw region snapshot without creating a new history entry. */
+function applyModeSnapshot(snapshot: EditorModeSnapshot): void {
+  displayValues.showNotes.set(snapshot.showNotes);
+  displayValues.showEvents.set(snapshot.showEvents);
+  displayValues.previewEnabled.set(snapshot.showPreview);
+}
 /** Derives the effective region flags from the persisted switches and editor mode. */
 function readRegions(): EditorRegionSnapshot {
   // Single-line editing keeps the three switches independent. In multi-line
   // mode the two authoring regions become one exclusive choice, but each field's
   // own switch still hides it: turning the active field off leaves the preview
   // as the workspace fallback. The raw switches return unchanged when multi-line
-  // editing ends, and preview focus overrides both.
-  const focused = previewOnly.get();
+  // editing ends.
   const multiLineActive = editorMultiLineActive.get();
   const multiLineMode = editorMultiLineMode.get();
   const notesEnabled = displayValues.showNotes.get();
   const eventsEnabled = displayValues.showEvents.get();
   return {
-    showNotes: !focused && notesEnabled && (!multiLineActive || multiLineMode === "notes"),
-    showEvents: !focused && eventsEnabled && (!multiLineActive || multiLineMode === "events"),
-    showPreview: focused || displayValues.previewEnabled.get(),
-    previewOnly: focused,
+    showNotes: notesEnabled && (!multiLineActive || multiLineMode === "notes"),
+    showEvents: eventsEnabled && (!multiLineActive || multiLineMode === "events"),
+    showPreview: displayValues.previewEnabled.get(),
     multiLineActive,
     multiLineMode,
     multiLineMerge: editorMultiLineMerge.get(),
@@ -114,7 +129,6 @@ function revealMultiLineField(): void {
 for (const value of regionValues) {
   value.subscribeKey(refreshRegions);
 }
-previewOnly.subscribe(refreshRegions);
 editorMultiLineMode.subscribeKey(revealMultiLineField);
 editorMultiLineActive.subscribeKey(refreshRegions);
 editorMultiLineMode.subscribeKey(refreshRegions);
@@ -131,7 +145,18 @@ export interface EditorViewControlRuntime {
 }
 
 /** Owns display-region and camera controls. */
-export function createEditorViewControls(runtime: EditorViewControlRuntime) {
+export function createEditorViewControls(
+  runtime: EditorViewControlRuntime,
+  options: { now?: () => number } = {},
+) {
+  const modeHistory = createEditorModeHistory(readModeSnapshot(), PREVIEW_LAYOUT);
+  const now = options.now ?? Date.now;
+
+  /** Records the final state of one user-visible region command. */
+  function recordModeChange(): void {
+    modeHistory.observe(readModeSnapshot(), now());
+  }
+
   /**
    * The region flags are values, so the classes follow a write on their own; what is
    * left for the caller is the relayout such a change needs.
@@ -144,22 +169,6 @@ export function createEditorViewControls(runtime: EditorViewControlRuntime) {
   }
 
   /**
-   * Bakes the preview-only layout into the three switches, so a direct region
-   * command starts from what is on screen. The runtime-only mode disappears with
-   * this write.
-   */
-  function materializePreviewOnly(): void {
-    if (!previewOnly.get()) {
-      return;
-    }
-    const effective = regions.get();
-    displayValues.showNotes.set(effective.showNotes);
-    displayValues.showEvents.set(effective.showEvents);
-    displayValues.previewEnabled.set(effective.showPreview);
-    previewOnly.set(false);
-  }
-
-  /**
    * Toggles one authoring region, or selects it as the multi-line field.
    *
    * Multi-line editing shows one field at a time, but pressing the active
@@ -167,7 +176,6 @@ export function createEditorViewControls(runtime: EditorViewControlRuntime) {
    * field, so a mode change never selects a hidden surface.
    */
   function toggleRegion(region: "showNotes" | "showEvents"): void {
-    materializePreviewOnly();
     const session = runtime.getSession();
     const value = region === "showNotes" ? displayValues.showNotes : displayValues.showEvents;
     if (session.multiLineActive) {
@@ -181,13 +189,13 @@ export function createEditorViewControls(runtime: EditorViewControlRuntime) {
     } else {
       value.set(!value.get());
     }
+    recordModeChange();
     applyRegionVisibility();
     runtime.persist();
   }
 
   /** Toggles both authoring regions as one visibility command. */
   function toggleRegions(): void {
-    materializePreviewOnly();
     const session = runtime.getSession();
     if (session.multiLineActive) {
       // The pair cannot be shown together in multi-line editing. Both switches
@@ -199,6 +207,7 @@ export function createEditorViewControls(runtime: EditorViewControlRuntime) {
       displayValues.showNotes.set(showBoth);
       displayValues.showEvents.set(showBoth);
     }
+    recordModeChange();
     applyRegionVisibility();
     runtime.persist();
   }
@@ -222,21 +231,24 @@ export function createEditorViewControls(runtime: EditorViewControlRuntime) {
 
   /** The preview's own switch; hiding it never changes the authoring regions. */
   function toggleStagePreview(): void {
-    if (previewOnly.get()) {
-      previewOnly.set(false);
-      applyRegionVisibility();
-      return;
-    }
     runtime.setRealtimePreviewEnabled(!displayValues.previewEnabled.get());
+    recordModeChange();
   }
 
   /**
-   * Collapse the stage to the preview, or return to the layout that was on
-   * screen before. Entering leaves the region switches untouched, so the second
-   * press restores the exact previous combination.
+   * Exchanges the current complete region snapshot with the previous one.
+   * The first exchange uses the canonical preview layout as its previous
+   * snapshot, so no separate preview-only state is needed.
    */
   function togglePreviewOnly(): void {
-    previewOnly.set(!previewOnly.get());
+    // This shortcut is an explicit boundary between user intents. Flush any
+    // rapid region changes before exchanging complete snapshots.
+    modeHistory.flush();
+    const swapped = modeHistory.swap();
+    if (swapped === null) {
+      return;
+    }
+    applyModeSnapshot(swapped);
     applyRegionVisibility();
   }
 
@@ -246,11 +258,11 @@ export function createEditorViewControls(runtime: EditorViewControlRuntime) {
     if (!session.chart.judgeLineList?.length) {
       return;
     }
-    previewOnly.set(false);
     session.setMultiLineEnabled(false, mode);
     session.setMultiLineSelection([session.lineIndex]);
     displayValues.showNotes.set(mode === "notes");
     displayValues.showEvents.set(mode === "events");
+    recordModeChange();
     applyRegionVisibility();
     runtime.persist();
   }

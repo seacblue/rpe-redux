@@ -32,7 +32,10 @@ export function connectEditorChromeHost(): () => void {
       seekToBeat: (beat) => transport.seekToBeat(beat),
     },
     view: {
-      getPreviewOnly: () => getEditorRegionSnapshot().previewOnly,
+      isPreviewLayout: () => {
+        const regions = getEditorRegionSnapshot();
+        return regions.showPreview && !regions.showNotes && !regions.showEvents;
+      },
       resetCamera: (resetPreview) => viewControls.resetCamera(resetPreview),
       togglePreviewOnly: () => viewControls.togglePreviewOnly(),
       toggleRegion: (region) => viewControls.toggleRegion(region),
