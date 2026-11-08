@@ -13,7 +13,6 @@ const InterfaceSettings: SettingDefinition[] = [
     navigation: "general.interface",
     group: "settings.group.interface",
     label: "settings.field.appearance-skin.label",
-    description: "settings.theme.description",
     control: "custom",
     default: "dark",
   },

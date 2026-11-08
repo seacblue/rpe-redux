@@ -456,7 +456,6 @@ export default {
   "settings.control.file.none": "未选择图片",
 
   "settings.skin.action.importTheme": "导入主题包…",
-  "settings.theme.description": "选择配色、布局、表面与动效预设。",
   "settings.theme.preview.label": "主题预览",
   "settings.theme.preview.primary": "确认",
   "settings.theme.preview.secondary": "播放",

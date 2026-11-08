@@ -532,7 +532,6 @@ export default {
 
   // ------------------------------------------------------------- note skins
   "settings.skin.action.importTheme": "Import theme…",
-  "settings.theme.description": "Choose a palette, layout, surface, and motion preset.",
   "settings.theme.preview.label": "Theme preview",
   "settings.theme.preview.primary": "Confirm",
   "settings.theme.preview.secondary": "Play",
