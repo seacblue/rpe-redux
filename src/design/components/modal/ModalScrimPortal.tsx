@@ -4,7 +4,12 @@
  */
 import { createPortal } from "react-dom";
 import { useSyncExternalStore, type CSSProperties } from "react";
-import { getModalScrimSnapshot, requestActiveModalCancel, subscribeModalScrim } from "./Modal.tsx";
+import {
+  activeModalBlocksScrimDismiss,
+  getModalScrimSnapshot,
+  requestActiveModalCancel,
+  subscribeModalScrim,
+} from "./Modal.tsx";
 
 /** React-owned document-level scrim for the native modal stack. */
 export function ModalScrimPortal() {
@@ -22,7 +27,11 @@ export function ModalScrimPortal() {
       aria-hidden="true"
       data-state={snapshot.state}
       style={{ "--modal-scrim-layer": snapshot.layer } as CSSProperties}
-      onPointerDown={requestActiveModalCancel}
+      onPointerDown={() => {
+        if (!activeModalBlocksScrimDismiss()) {
+          requestActiveModalCancel();
+        }
+      }}
     />,
     document.body,
   );

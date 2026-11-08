@@ -20,8 +20,8 @@ use documents::{
     delete_recovery, document_disk_snapshot, finish_recovery, finish_save_document,
     import_library_project, inspect_library, list_recovery, media_response, open_asset_external,
     open_document, read_asset, read_dropped_asset_files, read_picked_file, read_recovery,
-    startup_files, write_export_text, write_recovery, write_recovery_asset, write_recovery_chart,
-    write_save_asset, write_save_chart, DocumentHost,
+    startup_files, write_export_bytes, write_export_text, write_recovery, write_recovery_asset,
+    write_recovery_chart, write_save_asset, write_save_chart, DocumentHost,
 };
 use tauri::Manager;
 
@@ -135,6 +135,7 @@ fn main() {
             read_asset,
             read_dropped_asset_files,
             read_picked_file,
+            write_export_bytes,
             write_export_text,
             document_disk_snapshot,
             begin_save_document,
@@ -168,6 +169,9 @@ fn main() {
             assets::themes::remove_theme_package,
             assets::skins::list_note_skins,
             assets::skins::read_note_skin,
+            assets::skins::install_note_skin,
+            assets::skins::remove_note_skin,
+            assets::skins::builtin_note_skin_id,
             storage::open_app_data_folder,
             storage::write_diagnostic_log,
             storage::open_diagnostic_logs,

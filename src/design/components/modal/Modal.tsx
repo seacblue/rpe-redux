@@ -64,6 +64,11 @@ interface InstalledModal {
   cleanup?: () => void;
 }
 const installed = new WeakMap<HTMLDialogElement, InstalledModal>();
+/**
+ * Callbacks that intercept a modal's own close paths. When one is set the
+ * modal never closes itself; the surface owns its prompt and its own exit.
+ */
+const closeGuards = new WeakMap<HTMLDialogElement, () => Promise<boolean>>();
 let returnFocus: HTMLElement | null = null;
 let windowControls: HTMLElement | null = null;
 /** The stack is plain bookkeeping; the stylesheet derives each dialog's z-index. */
@@ -171,9 +176,46 @@ export function requestActiveModalCancel(): void {
   }
 }
 
+/** Ask the innermost guarded modal to close before the host window closes. */
+export async function requestActiveModalClose(): Promise<boolean> {
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const entry = stack[index];
+    if (!entry) {
+      continue;
+    }
+    const guard = closeGuards.get(entry.dialog);
+    if (!guard) {
+      continue;
+    }
+    try {
+      return await guard();
+    } catch {
+      // A failed save or a broken prompt must keep the window open.
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Invoke a close guard without letting a rejection escape the modal shell. */
+function requestGuardedClose(guard: () => Promise<boolean>): void {
+  void guard().catch(() => undefined);
+}
+
 /** Snapshot query for app-level keyboard and menu policies. */
 export function hasOpenModal(): boolean {
   return stack.length > 0;
+}
+
+/** Whether the active modal opts out of scrim-click dismissal. */
+export function activeModalBlocksScrimDismiss(): boolean {
+  const active = activeEntry();
+  if (!active) {
+    return false;
+  }
+  return (
+    active.dialog.getAttribute("data-no-scrim-dismiss") === "true" || closeGuards.has(active.dialog)
+  );
 }
 
 /** The keyboard context of the modal stack: open state and urgent priority. */
@@ -373,6 +415,11 @@ function installListeners() {
           closeControlPopup(true);
           return;
         }
+        const guard = closeGuards.get(active);
+        if (guard) {
+          requestGuardedClose(guard);
+          return;
+        }
         requestCancel(active);
       }
     },
@@ -395,7 +442,10 @@ function installListeners() {
 export interface ModalProps {
   /** Caller-owned: the element follows this flag and is never closed directly. */
   open: boolean;
-  /** Closed by the user — Escape, the close button, or the browser itself. */
+  /**
+   * Closed by the user — Escape, the close button, or the browser itself.
+   * `requestClose` replaces those paths when the surface owns its prompt.
+   */
   onClose(): void;
   /** Host notification after the native close and its exit animation complete. */
   onClosed?(): void;
@@ -420,12 +470,21 @@ export interface ModalProps {
   /** Extra attributes on the footer action row, for stable data hooks. */
   actionsProps?: Omit<HTMLAttributes<HTMLDivElement>, "className" | "children"> &
     Partial<Record<`data-${string}`, string>>;
-  /** Escape. `preventDefault` keeps the modal open, as the browser allows. */
+  /** Escape. `preventDefault` keeps it open; `requestClose` replaces this path. */
   onCancel?(event: SyntheticEvent<HTMLDialogElement>): void;
   /** The site's own styling hook, on top of the shared modal chrome. */
   className?: string;
   /** Confirmation surfaces use `alertdialog`; ordinary modals leave it unset. */
   role?: "dialog" | "alertdialog";
+  /** A pointer press on the scrim cancels the modal. Defaults to true. */
+  dismissOnScrim?: boolean;
+  /**
+   * Guard the header close button, Escape, and a native window close with one
+   * surface-owned request. The surface shows its own prompt and closes itself;
+   * resolve true once it has closed. Setting this also disables scrim
+   * dismissal, so the modal cannot be closed by clicking outside.
+   */
+  requestClose?(): Promise<boolean>;
   children?: ReactNode;
 }
 
@@ -453,6 +512,8 @@ export function Modal({
   onCancel,
   className,
   role,
+  dismissOnScrim = true,
+  requestClose,
   children,
 }: ModalProps) {
   const { t } = useTranslation();
@@ -460,6 +521,28 @@ export function Modal({
   useModalCleanup(ref);
   const titleId = useId();
   const descriptionId = useId();
+  // Native-window close and the document-level Escape policy run outside this
+  // component, so the current guard stays reachable through the dialog element.
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    if (!dialog || !requestClose) {
+      return undefined;
+    }
+    closeGuards.set(dialog, requestClose);
+    return () => {
+      if (closeGuards.get(dialog) === requestClose) {
+        closeGuards.delete(dialog);
+      }
+    };
+  }, [requestClose]);
+  /** Use the guarded path when the surface owns its own close prompt. */
+  const requestSurfaceClose = () => {
+    if (requestClose) {
+      requestGuardedClose(requestClose);
+      return;
+    }
+    onClose();
+  };
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) {
@@ -478,9 +561,17 @@ export function Modal({
       ref={ref}
       className={className}
       role={role}
+      data-no-scrim-dismiss={dismissOnScrim ? undefined : "true"}
       aria-labelledby={label ? titleId : labelledBy}
       aria-describedby={description ? descriptionId : undefined}
-      onCancel={onCancel}
+      onCancel={(event) => {
+        if (requestClose) {
+          event.preventDefault();
+          requestGuardedClose(requestClose);
+          return;
+        }
+        onCancel?.(event);
+      }}
       onClose={(event) => {
         // Native close events are queued. A newer request may have reopened
         // this same element before an older close event reaches React.
@@ -496,7 +587,11 @@ export function Modal({
             {titleMeta}
           </h2>
           {closeButton && (
-            <IconButton icon="close" label={t("common.action.close")} onClick={onClose} />
+            <IconButton
+              icon="close"
+              label={t("common.action.close")}
+              onClick={requestSurfaceClose}
+            />
           )}
         </div>
       )}

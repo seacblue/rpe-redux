@@ -16,6 +16,7 @@ interface OptionEntry {
   label: string;
   group: string;
   disabled: boolean;
+  tone?: string;
 }
 
 /** Read the current options of a native select at open time. */
@@ -28,6 +29,7 @@ function optionsOf(select: HTMLSelectElement): OptionEntry[] {
       label: option.textContent ?? option.value,
       group: parent?.tagName === "OPTGROUP" ? (parent as HTMLOptGroupElement).label : "",
       disabled: option.disabled,
+      tone: option.dataset.selectTone,
     };
   });
 }
@@ -174,6 +176,7 @@ export function SelectPopup({ state }: { state: SelectPopupState }) {
             aria-selected={option.index === element.selectedIndex}
             aria-disabled={option.disabled || undefined}
             data-active={option.index === active}
+            data-tone={option.tone}
             onPointerEnter={() => setActive(option.index)}
             onClick={() => choose(option.index)}
           >

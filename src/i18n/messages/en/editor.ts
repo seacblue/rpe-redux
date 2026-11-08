@@ -210,6 +210,8 @@ export default {
   "editor.skin.loadFailed": "Note skin failed to load: {message}. The last working skin is kept.",
   "editor.skin.missingFile": "Missing {file}",
   "editor.skin.missingTexture": "Missing texture {name}",
+  "editor.skin.invalidHoldAtlas": "Invalid Phira Hold atlas dimensions",
+  "editor.skin.invalidHitFx": "Invalid Phira hit-effect atlas dimensions",
   "editor.commands.batchEdit.nudgeLabel": "Move selection with the arrow keys",
   "editor.commands.batchEdit.scaleLabel": "Scale selection horizontally",
   "editor.commands.batchEdit.lineLabel": "Move selection to another judgement line",

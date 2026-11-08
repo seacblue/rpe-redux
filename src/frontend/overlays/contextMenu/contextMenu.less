@@ -11,13 +11,9 @@
   border: 1px solid var(--popover-border);
   box-shadow: var(--popover-shadow);
   width: 304px;
-  max-height: calc(100vh - 16px);
-  // The menu owns the wheel while the pointer is over it; a long action list
-  // scrolls itself and never chains into the canvas or timeline behind.
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  // The menu frame stays visible so a submenu can extend past its right or
+  // left edge; the inner scroll area owns overflow.
+  overflow: visible;
   transform-origin: top left;
   animation: redux-menu-in var(--design-dur-tint) var(--design-ease-enter) both;
 
@@ -26,6 +22,77 @@
   }
 }
 
+.redux-menu-scroll {
+  max-height: var(--redux-menu-max-height, calc(100vh - 16px));
+  // The menu owns the wheel while the pointer is over it; a long action list
+  // scrolls itself and never chains into the canvas or timeline behind.
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  // Reserve the scrollbar on both sides so a row's hover highlight keeps equal
+  // margins whether or not the action list overflows.
+  scrollbar-gutter: stable both-edges;
+}
+
+.redux-menu-submenu {
+  position: absolute;
+  top: var(--space-1);
+  width: 304px;
+  padding: var(--space-1);
+  border-radius: var(--radius-panel);
+  background: var(--popover-surface);
+  color: var(--foreground);
+  border: 1px solid var(--popover-border);
+  box-shadow: var(--popover-shadow);
+  transform-origin: top left;
+  animation: redux-menu-in var(--design-dur-tint) var(--design-ease-enter) both;
+
+  &[data-side="right"] {
+    // Overlap the parent's border so the two surfaces read as one sheet.
+    left: calc(100% - 1px);
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  &[data-side="left"] {
+    right: calc(100% - 1px);
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    transform-origin: top right;
+  }
+
+  .redux-menu-scroll {
+    max-height: var(--redux-menu-submenu-max-height, calc(100vh - 16px));
+  }
+}
+
+// A non-interactive card beside the submenu, aligned with the hovered row.
+// It never receives the pointer, so it cannot steal the row's hover.
+.redux-menu-preview {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 180px;
+  min-height: 120px;
+  padding: var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-panel);
+  background: var(--popover-surface);
+  box-shadow: var(--popover-shadow);
+  pointer-events: none;
+
+  &[data-side="right"] {
+    left: calc(100% + var(--space-1-5));
+  }
+
+  &[data-side="left"] {
+    right: calc(100% + var(--space-1-5));
+  }
+}
+
+// A submenu opens from the side that has room; the shared keyframe keeps its
+// motion tied to the main menu.
 @keyframes redux-menu-in {
   from {
     opacity: 0;
@@ -38,7 +105,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .redux-menu-popup {
+  .redux-menu-popup,
+  .redux-menu-submenu {
     animation: none;
   }
 }

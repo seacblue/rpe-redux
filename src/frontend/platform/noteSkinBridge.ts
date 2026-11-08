@@ -10,12 +10,17 @@ import {
   setBundledNoteSkinLoader,
   setExternalNoteSkinLoader,
   setNoteSkinChangeNotifier,
+  setNoteSkinFallbackSources,
   type LoadedNoteSkin,
 } from "../../core/media/noteSkins.ts";
 import { parseNoteSkin } from "../../core/media/noteSkin.ts";
-import { readExternalNoteSkin } from "../../core/platform/desktop/noteSkinPackages.ts";
-import { isPackageName, type PackageName } from "../../core/utils/packageName.ts";
-import { isRecord } from "../../core/utils/guards.ts";
+import { isDesktop } from "../../core/platform/environment.ts";
+import {
+  builtinNoteSkinPackageId,
+  externalNoteSkins,
+  readExternalNoteSkin,
+} from "../../core/platform/desktop/noteSkinPackages.ts";
+import { packageSlug, type PackageName } from "../../core/utils/packageName.ts";
 import { t } from "../../i18n/index.ts";
 
 /**
@@ -28,17 +33,15 @@ import { t } from "../../i18n/index.ts";
  * media layer the two capabilities it needs.
  */
 
-const bundledParticleAssets = import.meta.glob<string>(
-  "../../assets/skins/default/particle/img-*.png",
-  {
-    eager: true,
-    query: "?url",
-    import: "default",
-  },
-);
+/** Folder of the built-in package inside the source tree and the packaged site. */
+const BUNDLED_SKIN_FOLDER = "built_in_original";
+
+/** Last-resort display name when the bundled package cannot be read at all. */
+const BUNDLED_NAME_FALLBACK = "Built-in - Original";
+
 const bundledLineAssets =
   import.meta.env?.DEV || import.meta.env?.PROD
-    ? import.meta.glob<string>("../../assets/skins/default/judgeline/*.png", {
+    ? import.meta.glob<string>("../../assets/skins/built_in_original/line.png", {
         eager: true,
         query: "?url",
         import: "default",
@@ -52,9 +55,30 @@ export const DEFAULT_BUNDLED_LINE_TEXTURE_URL =
 /** The interface's note-skin-changed event; the shell and the preview both listen. */
 export const NOTE_SKIN_EVENT = "redux:note-skin-changed";
 
+/** Canonical files shipped by the built-in Phira resource pack. */
+const BUNDLED_PHIRA_FILES = [
+  "info.yml",
+  "click.png",
+  "click_mh.png",
+  "drag.png",
+  "drag_mh.png",
+  "flick.png",
+  "flick_mh.png",
+  "hold.png",
+  "hold_mh.png",
+  "hit_fx.png",
+  "event_hold.png",
+  "click.ogg",
+  "drag.ogg",
+  "flick.ogg",
+  "line.png",
+] as const;
+
 /** Resolve a built-in skin file in Vite dev or from the packaged site root. */
 export function bundledNoteSkinUrl(path: string): string {
-  const url = import.meta.env?.DEV ? `/src/assets/skins/default/${path}` : `skins/default/${path}`;
+  const url = import.meta.env?.DEV
+    ? `/src/assets/skins/${BUNDLED_SKIN_FOLDER}/${path}`
+    : `skins/${BUNDLED_SKIN_FOLDER}/${path}`;
   return new URL(url, document.baseURI).href;
 }
 
@@ -67,135 +91,88 @@ export function bundledNoteSkinUrl(path: string): string {
  */
 function bundledSkinBases(): URL[] {
   const paths = import.meta.env?.DEV
-    ? ["/src/assets/skins/default/", "skins/default/"]
-    : ["skins/default/", "/src/assets/skins/default/"];
+    ? [`/src/assets/skins/${BUNDLED_SKIN_FOLDER}/`, `skins/${BUNDLED_SKIN_FOLDER}/`]
+    : [`skins/${BUNDLED_SKIN_FOLDER}/`, `/src/assets/skins/${BUNDLED_SKIN_FOLDER}/`];
   return [...new Set(paths)].map((path) => new URL(path, document.baseURI));
-}
-
-/**
- * Reads a build-time skin asset, including one the bundler inlined as a `data:`
- * URI. The packaged page's `connect-src` does not cover `data:`, so inlined
- * textures are decoded here rather than fetched.
- */
-async function assetBytes(url: string, name: string): Promise<Uint8Array> {
-  if (url.startsWith("data:")) {
-    const comma = url.indexOf(",");
-    const header = url.slice(5, comma);
-    const payload = url.slice(comma + 1);
-    if (!header.endsWith(";base64")) {
-      return new TextEncoder().encode(decodeURIComponent(payload));
-    }
-    const binary = atob(payload);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-    return bytes;
-  }
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(t("settings.skin.error.bundledAssetUnavailable", { name }));
-  }
-  return new Uint8Array(await response.arrayBuffer());
 }
 
 /** Fetches and parses the default skin from one candidate base URL. */
 async function loadBundledDefaultSkinAt(base: URL): Promise<LoadedNoteSkin> {
-  const manifestResponse = await fetch(new URL("manifest.json", base));
-  if (!manifestResponse.ok) {
-    throw new Error(
-      t("settings.skin.error.bundledUnavailable", { status: manifestResponse.status }),
-    );
-  }
-  const manifestBytes = new Uint8Array(await manifestResponse.arrayBuffer());
-  const rawManifest = JSON.parse(new TextDecoder().decode(manifestBytes)) as {
-    notes?: Record<string, { file: string }>;
-    events?: Record<string, { file: string }>;
-    judgeline?: { line?: { file: string } };
-    particles?: Record<string, string>;
-    audio?: Record<string, string>;
-  };
-  const particlePatterns = Object.values(rawManifest.particles ?? {}).filter((name) =>
-    name.includes("*"),
-  );
-  const names = new Set([
-    ...Object.values(rawManifest.notes ?? {}).map((texture) => texture.file),
-    ...Object.values(rawManifest.events ?? {}).map((texture) => texture.file),
-    ...(rawManifest.judgeline?.line ? [rawManifest.judgeline.line.file] : []),
-    ...Object.values(rawManifest.particles ?? {}).filter((name) => !name.includes("*")),
-    ...Object.values(rawManifest.audio ?? {}),
-  ]);
-  const files = new Map<string, Uint8Array>([["manifest.json", manifestBytes]]);
+  const files = new Map<string, Uint8Array>();
+  const optional = new Set(["event_hold.png", "line.png"]);
   await Promise.all(
-    [...names].map(async (name) => {
+    BUNDLED_PHIRA_FILES.map(async (name) => {
       const response = await fetch(new URL(name, base));
       if (!response.ok) {
+        if (optional.has(name)) {
+          return;
+        }
         throw new Error(t("settings.skin.error.bundledAssetUnavailable", { name }));
       }
       files.set(name, new Uint8Array(await response.arrayBuffer()));
     }),
   );
-  await Promise.all(
-    Object.entries(bundledParticleAssets).map(async ([source, url]) => {
-      const name = `particle/${source.split("/").at(-1)}`;
-      if (
-        !particlePatterns.some((pattern) => {
-          const [prefix, suffix] = pattern.split("*");
-          const capture =
-            name.startsWith(prefix) && name.endsWith(suffix)
-              ? name.slice(prefix.length, name.length - suffix.length)
-              : "";
-          return /^\d+$/.test(capture);
-        })
-      ) {
-        return;
-      }
-      const response = await assetBytes(url, name);
-      files.set(name, response);
-    }),
-  );
+  if (!files.has("info.yml")) {
+    throw new Error(t("settings.skin.error.bundledUnavailable", { status: 404 }));
+  }
+  const manifest = parseNoteSkin(files);
   return {
     id: DEFAULT_NOTE_SKIN,
-    manifest: parseNoteSkin(files),
+    packageId: packageSlug(manifest.name),
+    source: "compiled",
+    manifest,
     files,
   };
 }
 
-// The bundled pack ships with the build, so it is fetched and validated once and
-// shared by every consumer: hit sounds, the editor skin, and the settings preview.
-let bundledCache: Promise<LoadedNoteSkin> | null = null;
-
-/** Reads the bundled skin's manifest name from the first reachable base. */
-async function readBundledSkinName(): Promise<PackageName> {
-  for (const base of bundledSkinBases()) {
-    try {
-      const response = await fetch(new URL("manifest.json", base));
-      if (!response.ok) {
-        continue;
-      }
-      const raw: unknown = await response.json();
-      if (isRecord(raw) && isPackageName(raw.name)) {
-        return raw.name;
-      }
-    } catch {
-      // Try the other layout.
-    }
+/**
+ * Reads the built-in package through the host.
+ *
+ * The built-in is one package identity: a saved edit lives in the writable
+ * skin root under the built-in id, and the host's user-root-first scan returns
+ * that override ahead of the shipped copy. Returns null when the host has no
+ * such package, so the caller can fall back to the assets compiled with the
+ * web build.
+ */
+async function loadHostBundledSkin(): Promise<LoadedNoteSkin | null> {
+  if (!isDesktop()) {
+    return null;
   }
-  return "Redux Default";
+  try {
+    const packageId = await builtinNoteSkinPackageId();
+    const { files, source } = await readExternalNoteSkin(packageId);
+    const manifest = parseNoteSkin(files);
+    return { id: DEFAULT_NOTE_SKIN, packageId, source, manifest, files };
+  } catch {
+    return null;
+  }
 }
 
+// The bundled pack ships with the build, so it is loaded and validated once and
+// shared by every consumer: hit sounds, the editor skin, and the settings
+// preview. A change event clears both caches because a same-id override can
+// replace the bytes the cached copy was parsed from.
+let bundledCache: Promise<LoadedNoteSkin> | null = null;
 let bundledNameCache: Promise<PackageName> | null = null;
 
-/** The built-in skin's self-provided name, without loading its assets. */
+/** The built-in skin's self-provided name, from the loaded package. */
 export function bundledNoteSkinName(): Promise<PackageName> {
-  bundledNameCache ??= readBundledSkinName();
+  bundledNameCache ??= loadBundledDefaultSkin().then(
+    (pack) => pack.manifest.name,
+    () => BUNDLED_NAME_FALLBACK,
+  );
   return bundledNameCache;
 }
 
-/** Loads and caches the default skin, trying each candidate base in turn. */
+/** Loads and caches the default skin: the host override first, then the bundle. */
 async function loadBundledDefaultSkin(): Promise<LoadedNoteSkin> {
   if (bundledCache) {
     return bundledCache;
+  }
+  const hostPack = await loadHostBundledSkin();
+  if (hostPack) {
+    bundledCache = Promise.resolve(hostPack);
+    return hostPack;
   }
   let failure: unknown = null;
   for (const base of bundledSkinBases()) {
@@ -219,14 +196,22 @@ async function loadBundledDefaultSkin(): Promise<LoadedNoteSkin> {
 export function installNoteSkinBridge(): void {
   setBundledNoteSkinLoader(loadBundledDefaultSkin);
   setExternalNoteSkinLoader(async (id) => {
-    const files = await readExternalNoteSkin(id);
+    const { files, source } = await readExternalNoteSkin(id);
     return {
       id: `${EXTERNAL_NOTE_SKIN_PREFIX}${id}`,
-      manifest: parseNoteSkin(files),
+      packageId: id,
+      source,
+      manifest: parseNoteSkin(files, { allowIncomplete: true }),
       files,
     };
   });
+  setNoteSkinFallbackSources(() => [
+    DEFAULT_NOTE_SKIN,
+    ...externalNoteSkins().map((skin) => `${EXTERNAL_NOTE_SKIN_PREFIX}${skin.id}`),
+  ]);
   setNoteSkinChangeNotifier(() => {
+    bundledCache = null;
+    bundledNameCache = null;
     window.dispatchEvent(new Event(NOTE_SKIN_EVENT));
   });
 }

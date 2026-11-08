@@ -62,18 +62,6 @@ export default {
 
   "model.noteSkin.invalidPng": "A note texture must be a valid PNG.",
   "model.noteSkin.invalidSize": "The PNG must measure between 1 and 4096 pixels.",
-  "model.noteSkin.invalidUseful": "useful must hold finite x/y/width/height numbers",
-  "model.noteSkin.usefulOutOfBounds": "useful reaches past the PNG bounds.",
-  "model.noteSkin.defaultName": "Custom note skin",
-  "model.noteSkin.tooLarge": "The skin pack is larger than 64 MiB or holds more than 256 files.",
-  "model.noteSkin.multipleManifests": "The skin pack holds more than one skin.json",
-  "model.noteSkin.manifestTooLarge": "skin.json is larger than 64 KiB",
-  "model.noteSkin.invalidManifest": "skin.json needs version:1, name and textures",
-  "model.noteSkin.invalidTexture": "Invalid texture reference {name}",
-  "model.noteSkin.duplicateTexture": "Duplicate texture name {name}",
-  "model.noteSkin.missingTexture": "Texture missing or larger than 8 MiB: {file}",
-  "model.noteSkin.pixelBudget": "The textures decode to more than the 16 Mi pixel budget.",
-  "model.noteSkin.missingRequired": "The skin is missing {name}.png",
 
   "model.shader.endBeforeStart": "The shader cannot end before it starts.",
   "model.shader.invalidValue": "Enter {dimensions} finite numbers, separated by commas",

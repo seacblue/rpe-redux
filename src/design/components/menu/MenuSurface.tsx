@@ -5,7 +5,7 @@
  * icon, label, checked mark, and shortcut. The surface owns only the menu role
  * and shared shell; sites own their actions and dismissal.
  */
-import type { ReactNode } from "react";
+import type { FocusEvent, PointerEvent, ReactNode } from "react";
 import { Button } from "../button/Button.tsx";
 import { Icon } from "../icon/Icon.tsx";
 
@@ -50,6 +50,7 @@ export function MenuItem({
   title,
   onClick,
   onFocus,
+  onPointerEnter,
 }: {
   label: ReactNode;
   icon?: ReactNode;
@@ -66,7 +67,8 @@ export function MenuItem({
   className?: string;
   title?: string;
   onClick?(): void;
-  onFocus?(): void;
+  onFocus?(event: FocusEvent<HTMLButtonElement>): void;
+  onPointerEnter?(event: PointerEvent<HTMLButtonElement>): void;
 }) {
   return (
     <Button
@@ -81,6 +83,7 @@ export function MenuItem({
       aria-expanded={expandable ? expanded : undefined}
       onClick={onClick}
       onFocus={onFocus}
+      onPointerEnter={onPointerEnter}
     >
       {icon && <span className="redux-menu-row-icon">{icon}</span>}
       <span className="redux-menu-row-label">{label}</span>

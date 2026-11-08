@@ -73,3 +73,8 @@ export async function chooseExternalChartFile(): Promise<string | null> {
 export async function writeExportText(path: string, text: string): Promise<string> {
   return invoke<string>("write_export_text", { path, text });
 }
+
+/** Write a binary single-file export through the host's atomic writer. */
+export async function writeExportBytes(path: string, bytes: Uint8Array): Promise<string> {
+  return invoke<string>("write_export_bytes", { path, bytes: [...bytes] });
+}

@@ -14,12 +14,13 @@ import {
 import {
   activeNoteSkin,
   DEFAULT_NOTE_SKIN,
-  loadNoteSkin,
+  loadNoteSkinWithFallback,
   selectNoteSkin,
 } from "../../../../core/media/noteSkins.ts";
 import { bundledNoteSkinUrl } from "../../../platform/noteSkinBridge.ts";
 import { toBlobPart } from "../../../../core/utils/bytes.ts";
 import { HIT_FRAME_COUNT } from "./hitFrame.ts";
+import { splitPhiraHitFx, splitPhiraHoldAtlas } from "./phiraAtlas.ts";
 import type { NoteColor } from "./noteBatch.ts";
 
 /** Note type → normal texture name. */
@@ -113,7 +114,7 @@ export class RpeSkin {
     );
     // The bundled line image is the base texture; a skin pack may replace it.
     const defaultLine = new Image();
-    defaultLine.src = bundledNoteSkinUrl("judgeline/line.png");
+    defaultLine.src = bundledNoteSkinUrl("line.png");
     try {
       await defaultLine.decode();
       if (!this.disposed) {
@@ -141,7 +142,7 @@ export class RpeSkin {
     const urls: string[] = [];
     let adopted = false;
     try {
-      const pack = await loadNoteSkin(id);
+      const pack = await loadNoteSkinWithFallback(id);
       for (const name of NOTE_TEXTURES) {
         images.delete(name);
       }
@@ -154,6 +155,9 @@ export class RpeSkin {
                 useful: pack.manifest.judgeline.line.useful,
               },
             ]
+          : []),
+        ...(pack.manifest.phira && pack.files.has(pack.manifest.phira.hitFxFile)
+          ? [{ name: "phira_hit_fx", file: pack.manifest.phira.hitFxFile }]
           : []),
         ...[...Object.entries(pack.manifest.notes), ...Object.entries(pack.manifest.events)].map(
           ([name, entry]) => ({
@@ -197,6 +201,42 @@ export class RpeSkin {
           }
         }),
       );
+      if (pack.manifest.phira) {
+        const atlas = images.get("hold_body");
+        const atlasMh = images.get("hold_body_highlight");
+        if (atlas && atlasMh) {
+          const [head, body, end] = await splitPhiraHoldAtlas(
+            atlas,
+            pack.manifest.phira.info.holdAtlas,
+          );
+          const [headMh, bodyMh, endMh] = await splitPhiraHoldAtlas(
+            atlasMh,
+            pack.manifest.phira.info.holdAtlasMH,
+          );
+          images.set("hold_head", head);
+          images.set("hold_body", body);
+          images.set("hold_end", end);
+          images.set("hold_head_highlight", headMh);
+          images.set("hold_body_highlight", bodyMh);
+          images.set("hold_end_highlight", endMh);
+          for (const name of [
+            "hold_head",
+            "hold_body",
+            "hold_end",
+            "hold_head_highlight",
+            "hold_body_highlight",
+            "hold_end_highlight",
+          ]) {
+            useful.delete(name);
+          }
+        }
+        const hitFx = images.get("phira_hit_fx");
+        if (hitFx) {
+          const frames = await splitPhiraHitFx(hitFx, pack.manifest.phira.info.hitFx);
+          frames.forEach((frame, index) => images.set(`img-${index + 1}`, frame));
+          images.delete("phira_hit_fx");
+        }
+      }
       if (generation !== this.generation || this.disposed) {
         return;
       }
@@ -279,7 +319,11 @@ export class RpeSkin {
     width: number,
     height: number,
   ): boolean {
-    const name = this.images.has("event_bar") ? "event_bar" : "hold_body";
+    const name = this.images.has("event_hold")
+      ? "event_hold"
+      : this.images.has("event_bar")
+        ? "event_bar"
+        : "hold_body";
     const picture = this.images.get(name);
     if (!picture || width <= 0 || height <= 0) {
       return false;
@@ -308,7 +352,11 @@ export class RpeSkin {
 
   /** Return the skin-owned event texture for GPU batch renderers. */
   eventBarTexture(): { source: HTMLImageElement; useful: UsefulRect } | null {
-    const name = this.images.has("event_bar") ? "event_bar" : "hold_body";
+    const name = this.images.has("event_hold")
+      ? "event_hold"
+      : this.images.has("event_bar")
+        ? "event_bar"
+        : "hold_body";
     const source = this.images.get(name);
     return source ? { source, useful: this.bounds(name, source) } : null;
   }
@@ -339,10 +387,12 @@ export class RpeSkin {
     return source ? { source, useful: this.bounds(name, source) } : null;
   }
 
-  /** Return the hold tail cap texture. */
-  holdEndTexture(): { source: HTMLImageElement; useful: UsefulRect } | null {
-    const source = this.images.get("hold_end");
-    return source ? { source, useful: this.bounds("hold_end", source) } : null;
+  /** Return the hold tail cap texture, preferring the highlighted variant. */
+  holdEndTexture(highlight: boolean): { source: HTMLImageElement; useful: UsefulRect } | null {
+    const name =
+      highlight && this.images.has("hold_end_highlight") ? "hold_end_highlight" : "hold_end";
+    const source = this.images.get(name);
+    return source ? { source, useful: this.bounds(name, source) } : null;
   }
   /** Release every generated tint canvas and reset source identity tracking. */
   private clearTints() {
@@ -604,7 +654,9 @@ export class RpeSkin {
     const bodyName =
       highlight && this.images.has("hold_body_highlight") ? "hold_body_highlight" : "hold_body";
     const body = this.images.get(bodyName);
-    const end = this.images.get("hold_end");
+    const endName =
+      highlight && this.images.has("hold_end_highlight") ? "hold_end_highlight" : "hold_end";
+    const end = this.images.get(endName);
     if (!body) {
       return false;
     }
@@ -627,7 +679,7 @@ export class RpeSkin {
     };
     const bodyRect = this.bounds(bodyName, body);
     const length = Math.max(1, Math.abs(tail - head));
-    const endRect = end ? this.bounds("hold_end", end) : null;
+    const endRect = end ? this.bounds(endName, end) : null;
     const headRect = headPicture ? this.bounds(headName, headPicture) : null;
     const headLength = showHead && headRect ? width * (headRect.height / headRect.width) : 0;
     const tailLength = endRect ? width * (endRect.height / endRect.width) : 0;
@@ -656,7 +708,7 @@ export class RpeSkin {
       );
     }
     if (end) {
-      const rect = this.bounds("hold_end", end);
+      const rect = this.bounds(endName, end);
       const endBox = alignedTextureBox(
         rect,
         end.naturalWidth || end.width || rect.width,
@@ -666,7 +718,7 @@ export class RpeSkin {
         width,
         tailLength,
       );
-      this.drawHoldTexture(context, texture("hold_end"), endBox, 0, length);
+      this.drawHoldTexture(context, texture(endName, highlight), endBox, 0, length);
     }
     if (showHead && headPicture) {
       const rect = this.bounds(headName, headPicture);

@@ -5,6 +5,13 @@
  * so this core module never imports a bundler glob or the DOM.
  */
 import type { NoteSkinManifest } from "./noteSkin.ts";
+import {
+  missingPhiraWorkbenchSlots,
+  mergePhiraWorkbenchFallback,
+  phiraWorkbenchAssetFromPack,
+  phiraWorkbenchDraftFromPack,
+  type PhiraWorkbenchSlot,
+} from "./phiraSkinDraft.ts";
 import { localService } from "../global/library/service.ts";
 import {
   PREFERENCE_SECTIONS,
@@ -34,6 +41,16 @@ export type ExternalNoteSkinLoader = (id: string) => Promise<LoadedNoteSkin>;
 let bundledLoader: BundledNoteSkinLoader | null = null;
 let externalLoader: ExternalNoteSkinLoader | null = null;
 let skinChanged: (() => void) | null = null;
+
+/** Supplies the ordered ids the runtime uses to fill missing skin slots. */
+export type NoteSkinFallbackSources = () => readonly string[];
+
+let fallbackSources: NoteSkinFallbackSources | null = null;
+
+/** Install the ordered fallback source list, or null to keep the built-in only. */
+export function setNoteSkinFallbackSources(provider: NoteSkinFallbackSources | null): void {
+  fallbackSources = provider;
+}
 
 /** Install the loader that resolves the bundled skin, or null to clear it. */
 export function setBundledNoteSkinLoader(loader: BundledNoteSkinLoader | null): void {
@@ -69,9 +86,22 @@ export interface NoteSkinReady {
 /** A parsed skin package: manifest plus its file bytes. */
 export interface LoadedNoteSkin {
   id: string;
+  /** Stable package folder id; the same id a save writes to. */
+  packageId?: string;
+  /** Where the bytes came from: the writable library, the shipped resources, or the build. */
+  source?: NoteSkinPackageSource;
   manifest: NoteSkinManifest;
   files: Map<string, Uint8Array>;
 }
+
+/**
+ * Provenance of a loaded package.
+ *
+ * `portable` is the writable library beside the executable, which can shadow a
+ * shipped package with the same id; `resource` is the packaged resource root;
+ * `compiled` is the asset bundle served by a web build.
+ */
+export type NoteSkinPackageSource = "portable" | "resource" | "compiled";
 
 /** Id of the skin compiled into the build. */
 export const DEFAULT_NOTE_SKIN = "builtin:default";
@@ -134,4 +164,63 @@ export async function loadNoteSkin(id: string): Promise<LoadedNoteSkin> {
   }
   // The bundled package is the only built-in skin; any non-external id loads it.
   return bundledLoader();
+}
+
+/** Load one active pack and fill its missing slots from the ordered sources. */
+export async function loadNoteSkinWithFallback(id: string): Promise<LoadedNoteSkin> {
+  const active = await loadNoteSkin(id);
+  const missing = missingPhiraWorkbenchSlots(phiraWorkbenchDraftFromPack(active));
+  if (!missing.length) {
+    return active;
+  }
+  const { sources } = await fallbackSourcePacks(id, missing);
+  return mergePhiraWorkbenchFallback(active, sources);
+}
+
+/** Slots no installed skin can provide for the selected pack. */
+export async function unresolvedNoteSkinSlots(id: string): Promise<PhiraWorkbenchSlot[]> {
+  const active = await loadNoteSkin(id);
+  const missing = missingPhiraWorkbenchSlots(phiraWorkbenchDraftFromPack(active));
+  if (!missing.length) {
+    return [];
+  }
+  const { remaining } = await fallbackSourcePacks(id, missing);
+  return [...remaining];
+}
+
+/**
+ * Load fallback sources in preference order until every requested slot is
+ * covered. Loading stops early so a normal incomplete skin usually reads only
+ * the built-in pack.
+ */
+async function fallbackSourcePacks(
+  activeId: string,
+  slots: readonly PhiraWorkbenchSlot[],
+): Promise<{
+  sources: LoadedNoteSkin[];
+  remaining: Set<PhiraWorkbenchSlot>;
+}> {
+  const remaining = new Set(slots);
+  const sources: LoadedNoteSkin[] = [];
+  const sourceIds = fallbackSources ? fallbackSources() : [DEFAULT_NOTE_SKIN];
+  for (const sourceId of sourceIds) {
+    if (!remaining.size) {
+      break;
+    }
+    if (sourceId === activeId) {
+      continue;
+    }
+    try {
+      const source = await loadNoteSkin(sourceId);
+      sources.push(source);
+      for (const slot of [...remaining]) {
+        if (phiraWorkbenchAssetFromPack(source, slot)) {
+          remaining.delete(slot);
+        }
+      }
+    } catch {
+      // A broken source cannot cover a slot; the next candidate still can.
+    }
+  }
+  return { sources, remaining };
 }

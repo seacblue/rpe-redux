@@ -9,6 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { TauriDocumentStore } from "../../core/platform/desktop/documentStore.ts";
 import { FILE_DRAG_EVENT } from "../../core/shell/shellEventNames.ts";
+import { requestActiveModalClose } from "../../design/components/modal/Modal.tsx";
 import { bindWindowTitle } from "../chrome/topbar/windowControls/windowTitle.ts";
 
 export interface DesktopLifecycleBindings {
@@ -32,6 +33,25 @@ export interface DesktopLifecycleBindings {
   notifyUnsupported(): void;
 }
 
+type DesktopExitGuard = () => Promise<boolean>;
+const desktopExitGuards = new Set<DesktopExitGuard>();
+
+/** Register an auxiliary surface that must approve a native window close. */
+export function registerDesktopExitGuard(guard: DesktopExitGuard): () => void {
+  desktopExitGuards.add(guard);
+  return () => desktopExitGuards.delete(guard);
+}
+
+/** Ask mounted auxiliary surfaces before the document close workflow runs. */
+async function confirmDesktopExitGuards(): Promise<boolean> {
+  for (const guard of desktopExitGuards) {
+    if (!(await guard())) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Connects the editor session to Tauri window, file, and shutdown events. */
 export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
   const { documents } = bindings;
@@ -49,22 +69,17 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
       // frame the same string `document.title` carries.
       bindings.addCleanup(bindWindowTitle(window));
 
-      bindings.addCleanup(
-        await listen("redux-open-files", (event) => bindings.openPaths(event.payload as string[])),
-      );
-      bindings.addCleanup(
-        await window.onDragDropEvent((event) => {
-          globalThis.window.dispatchEvent(
-            new CustomEvent(FILE_DRAG_EVENT, { detail: event.payload.type }),
-          );
-          if (event.payload.type === "drop") {
-            void bindings.dropPaths(event.payload.paths);
-          }
-        }),
-      );
+      // Register the close guard first: a modal can open before the optional
+      // file and drag-drop listeners finish binding.
       bindings.addCleanup(
         await window.onCloseRequested(async (event) => {
           event.preventDefault();
+          if (!(await requestActiveModalClose())) {
+            return;
+          }
+          if (!(await confirmDesktopExitGuards())) {
+            return;
+          }
           if (!(await bindings.confirmCollaborationExit())) {
             return;
           }
@@ -82,6 +97,19 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
           }
           bindings.dispose();
           await window.destroy();
+        }),
+      );
+      bindings.addCleanup(
+        await listen("redux-open-files", (event) => bindings.openPaths(event.payload as string[])),
+      );
+      bindings.addCleanup(
+        await window.onDragDropEvent((event) => {
+          globalThis.window.dispatchEvent(
+            new CustomEvent(FILE_DRAG_EVENT, { detail: event.payload.type }),
+          );
+          if (event.payload.type === "drop") {
+            void bindings.dropPaths(event.payload.paths);
+          }
         }),
       );
       const paths = await invoke<string[]>("startup_files");

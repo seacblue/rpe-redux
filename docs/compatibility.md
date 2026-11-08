@@ -66,7 +66,15 @@ A PEZ save rejects any out-of-bounds reference with `unsafe_save_asset_path`; an
 
 Preserve `LICENSE`, `NOTICE`, and resource manifests. Built-in themes, note skins, and Extensions are build-time packages under `src/assets/`; application-owned runtime assets live under `src/public/assets/` and are served at `assets/`.
 
-Note skins and theme packages use folder manifests with relative paths. Referenced files are validated and loaded on demand. The icon component uses PNG alpha as a mask and paints it with the active theme ink; authored SVG is reserved for decorative artwork.
+Theme packages use folder manifests with relative paths. Referenced files are validated and loaded on demand. The icon component uses PNG alpha as a mask and paints it with the active theme ink; authored SVG is reserved for decorative artwork.
+
+Note skins are Phira respacks and nothing else: `info.yml`, the fixed `click`/`drag`/`flick`/`hold`/`hit_fx` files, and optional audio files. The former `skin.json`/`manifest.json` note-skin format is neither read nor distributed, and no converter for it ships. Phira's vertical `hold.png` and `hold_mh.png` atlases are split into the runtime head/body/end slots using `holdAtlas` and `holdAtlasMH`; `mh` is the highlight variant. Redux adds two optional extensions inside the same package: `event_hold.png` (or the `eventHold` path in `info.yml`) for event bars, falling back to the Hold body texture, and a judge-line texture at the package root named `line.png`.
+
+The built-in skin ships as `src/assets/skins/built_in_original/`. A package id derives from its display name through the universal slug rule, so saving the built-in under its own name writes the same id instead of minting a second picker entry. The writable user skin root is read before the shipped root, so a same-id override shadows the shipped copy; the workbench's Delete skin action removes only that override and lets the shipped package show again.
+
+The skin workbench authors that layout one slot at a time, including the Redux event and judge-line textures and the optional hit sounds. A slot can copy its field from another installed package. The Hold slots record their cut boundaries through the workbench cutter, and the hit-effect slot records its frame grid. A ZIP or a folder containing `info.yml` can be dropped onto the board, and saving overwrites the package the workbench opened while carrying through files the board does not edit. Incomplete boards save as partial packages: the runtime fills a missing slot from the built-in pack, then from the first installed skin that provides it. When no package provides a slot, the note-skin setting marks the active skin with a warning dot and export stops after listing the unresolved parts.
+
+Phira export writes the canonical respack again: it copies the source package, always writes `event_hold.png` and its `eventHold` entry (cropping the Hold body when the source package has no event texture), and normalizes the judge-line texture to the package-root `line.png`. Exporting a package that is not a respack fails; there is no synthetic conversion path. The exported ZIP therefore re-imports with the same event bar and judge line.
 
 ## Compatibility corpus
 

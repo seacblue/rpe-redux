@@ -248,7 +248,7 @@ function appendPreviewNoteHitArea(
   const noteHeight = texture
     ? (noteWidth * texture.useful.height) / texture.useful.width
     : Math.max(8, noteWidth * 0.25);
-  const holdEndTexture = isHold ? surface.skin?.holdEndTexture() : null;
+  const holdEndTexture = isHold ? surface.skin?.holdEndTexture(highlight) : null;
   const holdHeadLength = holdHeadTexture
     ? (noteWidth * holdHeadTexture.useful.height) / holdHeadTexture.useful.width
     : 0;

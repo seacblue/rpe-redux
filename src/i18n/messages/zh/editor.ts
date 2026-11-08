@@ -198,6 +198,8 @@ export default {
   "editor.skin.loadFailed": "音符皮肤载入失败：{message}；已保留上次有效皮肤。",
   "editor.skin.missingFile": "缺少 {file}",
   "editor.skin.missingTexture": "缺少贴图 {name}",
+  "editor.skin.invalidHoldAtlas": "Phira Hold 图集尺寸无效",
+  "editor.skin.invalidHitFx": "Phira 打击效果图集尺寸无效",
   "editor.commands.batchEdit.nudgeLabel": "方向键移动选中项",
   "editor.commands.batchEdit.scaleLabel": "横向缩放选中项",
   "editor.commands.batchEdit.lineLabel": "移动选中项到其他判定线",

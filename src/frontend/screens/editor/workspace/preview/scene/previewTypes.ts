@@ -106,7 +106,7 @@ export interface PreviewSkin extends NoteBatchSkin {
     source: HTMLImageElement;
     useful: { x: number; y: number; width: number; height: number };
   } | null;
-  holdEndTexture(): {
+  holdEndTexture(highlight: boolean): {
     source: HTMLImageElement;
     useful: { x: number; y: number; width: number; height: number };
   } | null;

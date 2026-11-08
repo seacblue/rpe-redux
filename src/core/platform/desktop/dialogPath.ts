@@ -10,7 +10,7 @@ import { PREFERENCE_SECTIONS, preferenceStorage } from "../../state/preferences.
 
 /** Callers that remember and restore native dialog locations. */
 export type DialogKind =
-  "chart" | "media" | "image" | "audio" | "theme" | "backup" | "update" | "recording";
+  "chart" | "media" | "image" | "audio" | "theme" | "skin" | "backup" | "update" | "recording";
 
 const storage = preferenceStorage(PREFERENCE_SECTIONS.dialogs);
 const LAST_DIRECTORY = "last";

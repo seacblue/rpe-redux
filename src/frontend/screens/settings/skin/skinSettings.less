@@ -1,11 +1,9 @@
-// Note-skin settings styles: the skin picker, asset previews, and their empty
-// states.
+// Note-skin settings and the skin workbench: package selection plus the
+// complete asset board, its reuse chooser, and the Hold cutter.
 
 @import (reference) "../../../../design/styles/tokens.less";
 
-// The note-skin page: one selection row followed by the texture families. The
-// page owns no card grid of its own — previews are the only place where an
-// image is shown at its own aspect ratio.
+// The note-skin page: one selection row followed by the package actions.
 .redux-skin {
   display: grid;
   gap: var(--space-4);
@@ -16,275 +14,409 @@
   margin-top: 0;
 }
 
-.redux-skin-previews {
-  display: grid;
-  gap: var(--space-4);
-}
-
-// Match the settings row inset: section headings and their previews start on
-// the same line as the page title and the field labels above them.
-.redux-skin-preview-section {
-  padding: 0 var(--space-3);
-
-  h3 {
-    margin: 0;
-    color: var(--foreground-muted);
-    font-size: var(--type-label);
-    font-weight: 500;
-  }
-}
-
-.redux-skin-preview-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-
-.redux-skin-preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: var(--space-2);
-}
-
-.redux-skin-preview-asset {
-  display: grid;
-  grid-template-rows: 1fr auto;
-  gap: var(--space-1);
-  min-width: 0;
-  margin: 0;
-  padding: var(--space-2);
-  img {
-    display: block;
-    width: 100%;
-    height: 52px;
-    object-fit: contain;
-  }
-  figcaption {
-    overflow: hidden;
-    color: var(--foreground-muted);
-    font-family: var(--font-mono);
-    font-size: var(--type-caption);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-// The image well is the skeleton's positioning context. Keeping the caption
-// outside it lets the name stay readable while its texture decodes.
-.redux-skin-preview-media {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 52px;
-  overflow: hidden;
-}
-
-.redux-skin-particle-list {
-  display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-  gap: var(--space-2);
-  .redux-skin-preview-asset {
-    min-width: 0;
-  }
-  img {
-    height: 56px;
-  }
-}
-
-.redux-skin-bar-preview {
+.redux-skin-actions {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 96px;
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-control);
-  background: var(--control-on-surface);
-  .redux-skin-bar-media {
-    position: relative;
-    display: flex;
-    flex: 1;
-    align-items: center;
-    min-width: 0;
-    overflow: hidden;
-  }
-  img {
-    display: block;
-    min-width: 0;
-    object-fit: contain;
-  }
-  figcaption {
-    flex: none;
-    color: var(--foreground-muted);
-    font-family: var(--font-mono);
-    font-size: var(--type-caption);
-  }
-  // The event texture is a tall slice of the bar; the judge-line texture is a
-  // 4000x5 strip. Each is shown at the size that makes its subject readable.
-  &[data-asset="event_bar"] img {
-    height: 88px;
-    width: auto;
-  }
-  &[data-asset="line"] img {
-    width: 100%;
-    height: 5px;
-  }
-}
-
-// Three hit sounds share one row of equal-width buttons; auto-fit keeps them
-// side by side on a wide page and wraps them once the window narrows.
-.redux-skin-sounds {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-2);
-}
-
-// One sound is one button: the name on the left, the play/pause glyph on the
-// right, and a progress fill painted under both. The fill uses the theme's
-// playing-indicator green so it reads as playback on every palette.
-.redux-skin-sound-player {
-  min-width: 0;
-}
-
-button.redux-skin-sound {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  width: 100%;
-  min-width: 0;
-  min-height: var(--control-height);
-  padding: var(--space-1) var(--space-2);
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-control);
-  background: var(--control-on-surface);
-  color: var(--foreground);
-
-  &::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: var(--redux-skin-sound-progress, 0%);
-    background: color-mix(in srgb, var(--playing-indicator) 30%, transparent);
-    pointer-events: none;
-  }
-
-  &.is-playing {
-    border-color: color-mix(in srgb, var(--playing-indicator) 55%, var(--panel-border));
-  }
-
-  &.is-finished::before {
-    animation: redux-skin-sound-fade var(--design-dur-search) var(--design-ease-exit) forwards;
-  }
-
-  &:hover:not(:disabled),
-  &:active:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--control-on-surface);
-  }
-
-  // While the skeleton is up, nothing is actionable yet; keep the shared
-  // shimmer at full strength instead of the disabled-control fade.
-  &:disabled {
-    opacity: 1;
-    filter: none;
-  }
-}
-
-.redux-skin-sound-name,
-.redux-skin-sound-icon {
-  position: relative;
-  min-width: 0;
-}
-
-@keyframes redux-skin-sound-fade {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-.redux-skin-sound-name {
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: var(--type-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.redux-skin-sound-icon {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-}
-
-// Page-level skeletons keep the preview layout stable while the skin pack is
-// read; once it arrives, each asset swaps from its own skeleton to its content.
-.redux-skin-loading {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-control);
-  background: var(--control-on-surface);
-}
-
-.redux-skin-loading-tile {
-  height: 92px;
-}
-
-.redux-skin-loading-particle {
-  height: 76px;
-}
-
-.redux-skin-loading-bar {
-  height: 96px;
-}
-
-.redux-skin-loading-sound {
-  min-height: var(--control-height);
-}
-
-.redux-skin-missing {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 var(--space-3);
-  border: 1px dashed var(--panel-border);
-  border-radius: var(--radius-control);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
-  width: fit-content;
+  margin-top: var(--space-2);
+  // The field row keeps this inset, so matching it puts the last action flush
+  // with the select's trailing edge.
+  padding-right: var(--space-3);
 }
 
 .redux-skin-warning {
   margin: 0;
 }
 
-.redux-skin-error {
-  margin: 0;
+// ---------------------------------------------------------- workbench frame
+.redux-skin-workbench-dialog {
+  width: min(1180px, calc(100vw - var(--space-6)));
+  max-width: none;
 }
 
-.redux-skin-empty {
+// The shared modal shell caps every dialog against the viewport, so the
+// workbench's working height needs the same specificity to win over it.
+.redux-app-root dialog.redux-skin-workbench-dialog[open] {
+  // Keep the board a working size rather than a full-height document: the
+  // heading and footer stay on screen and only `.modal-content` scrolls.
+  max-height: min(720px, calc(100vh - var(--space-6)));
+}
+
+.redux-skin-workbench-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.redux-skin-workbench-dialog .modal-content {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  padding: var(--space-4) var(--space-5);
+}
+
+.redux-skin-workbench-dialog .modal-actions {
+  flex-wrap: wrap;
+}
+
+.redux-skin-workbench {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.redux-skin-workbench-fields {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.redux-skin-workbench-fields .redux-skin-workbench-field {
+  margin: 0;
+  --field-control-width: 64%;
+}
+
+.redux-skin-workbench-loading {
   margin: 0;
   padding: var(--space-5);
-  border: 1px dashed var(--panel-border);
-  border-radius: var(--radius-control);
   color: var(--foreground-muted);
   text-align: center;
 }
 
+.redux-skin-workbench-alert {
+  margin: 0;
+}
+
+// ------------------------------------------------------------ asset board
+.redux-skin-workbench-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.redux-skin-workbench-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: var(--space-2);
+}
+
+// Eight note tiles read as a balanced board in four columns; auto-fill leaves
+// an orphaned second row at the workbench width.
+.redux-skin-workbench-section[data-section="notes"] .redux-skin-workbench-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.redux-skin-workbench-triptych {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.redux-skin-workbench-triptych .redux-skin-workbench-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.redux-skin-workbench-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--control-on-surface);
+}
+
+.redux-skin-workbench-slot.is-empty {
+  border-style: dashed;
+}
+
+.redux-skin-workbench-slot.is-drop-target {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--control-on-surface));
+}
+
+.redux-skin-workbench-slot.is-invalid {
+  border-color: var(--danger);
+}
+
+.redux-skin-workbench-slot-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--foreground);
+  font-size: var(--type-caption);
+}
+
+.redux-skin-workbench-slot-heading > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-skin-workbench-slot-heading audio {
+  display: none;
+}
+
+button.redux-skin-workbench-media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 96px;
+  padding: var(--space-1);
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+button.redux-skin-workbench-media:hover,
+button.redux-skin-workbench-media:active {
+  border-color: var(--accent);
+  background: var(--surface-muted);
+}
+
+.redux-skin-workbench-preview {
+  display: block;
+  width: 100%;
+  height: 78px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.redux-skin-workbench-audio-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 78px;
+  color: var(--foreground-muted);
+}
+
+.redux-skin-workbench-plus {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-skin-workbench-plus .redux-icon {
+  --icon-color: var(--accent);
+}
+
+.redux-skin-workbench-grid-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.redux-skin-workbench-grid-fields label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-skin-workbench-grid-fields label > span {
+  flex: none;
+  white-space: nowrap;
+}
+
+.redux-skin-workbench-grid-fields .redux-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.redux-skin-workbench-error {
+  color: var(--danger);
+  font-size: var(--type-micro);
+}
+
+// ------------------------------------------------------------- Hold cutter
+.redux-skin-workbench-cutter {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--control-on-surface);
+}
+
+.redux-skin-workbench-cutter-heading {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.redux-skin-workbench-cutter-heading strong {
+  font-size: var(--type-heading);
+}
+
+.redux-skin-workbench-cutter-heading span {
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-skin-workbench-cutter-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.redux-skin-workbench-cutter-stage-wrap {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.redux-skin-workbench-cutter-stage {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  max-height: 52vh;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--media-surface);
+}
+
+.redux-skin-workbench-cutter-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 52vh;
+  object-fit: contain;
+}
+
+.redux-skin-workbench-cutter-line {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 0;
+  border-top: 1px dashed var(--accent);
+  pointer-events: none;
+}
+
+.redux-skin-workbench-cutter-handle {
+  position: absolute;
+  top: -6px;
+  right: var(--space-2);
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: 999px;
+  background: var(--accent);
+  cursor: ns-resize;
+  pointer-events: auto;
+}
+
+.redux-skin-workbench-cutter-size {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+}
+
+.redux-skin-workbench-cutter-fields {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.redux-skin-workbench-cutter-fields > label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 0.6fr);
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-skin-workbench-cutter-fields output {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.redux-skin-workbench-cutter-fields .redux-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.redux-skin-workbench-cutter-slices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.redux-skin-workbench-cutter-slices figure {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--media-surface);
+}
+
+.redux-skin-workbench-cutter-slices canvas {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 64px;
+  margin: 0 auto;
+}
+
+.redux-skin-workbench-cutter-slices figcaption {
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  text-align: center;
+}
+
+.redux-skin-workbench-cutter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 @media (max-width: 860px) {
-  .redux-skin-particle-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .redux-skin-workbench-section[data-section="notes"] .redux-skin-workbench-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .redux-skin-preview-pair {
+
+  .redux-skin-workbench-triptych {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .redux-skin-workbench-cutter-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+// The hovered reuse row earns an accent state so the floating preview has a
+// visible source row without moving the pointer onto the card.
+.redux-skin-workbench-reuse-list .redux-menu-row.is-previewing {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.redux-skin-workbench-reuse-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 156px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.redux-skin-workbench-reuse-preview-glyph {
+  color: var(--foreground-muted);
 }

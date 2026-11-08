@@ -401,6 +401,26 @@ pub fn write_export_text(
     Ok(path)
 }
 
+/// Write one binary package export selected by the native save dialog.
+#[tauri::command]
+pub fn write_export_bytes(
+    token: State<'_, crate::app::ipc_guard::HostToken>,
+    request: Request<'_>,
+    path: String,
+    bytes: Vec<u8>,
+) -> std::result::Result<String, String> {
+    crate::app::ipc_guard::HostToken::require(token.inner(), request.headers())?;
+    if bytes.len() as u64 > 64 * 1024 * 1024 {
+        return Err("export_bytes_too_large".into());
+    }
+    let target = PathBuf::from(&path);
+    if target.is_dir() {
+        return Err("The export target is a directory.".into());
+    }
+    atomic_write(&target, &bytes)?;
+    Ok(path)
+}
+
 /// Render any displayable error as its message.
 pub(crate) fn error<E: std::fmt::Display>(error: E) -> String {
     error.to_string()

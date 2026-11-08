@@ -532,6 +532,10 @@ export default {
 
   // ------------------------------------------------------------- note skins
   "settings.skin.action.importTheme": "Import theme…",
+  "settings.skin.action.importPhira": "Import skin pack…",
+  "settings.skin.action.exportPhira": "Export skin pack…",
+  "settings.skin.action.edit": "Edit",
+  "settings.skin.action.newPhira": "Add a skin…",
   "settings.theme.preview.label": "Theme preview",
   "settings.theme.preview.primary": "Confirm",
   "settings.theme.preview.secondary": "Play",
@@ -631,18 +635,9 @@ export default {
   "settings.skin.warning.missingActive":
     "The active note skin could not be found: {id}. Choose another skin.",
   "settings.skin.error.list": "Could not read the skin library: {message}",
+  "settings.skin.error.action": "Skin package action failed: {message}",
   "settings.skin.error.bundledUnavailable": "The bundled note skin is unavailable.",
   "settings.skin.error.bundledAssetUnavailable": "A bundled note skin asset is unavailable: {name}",
-  "settings.skin.preview.notes": "Note textures",
-  "settings.skin.preview.event": "Event bar texture",
-  "settings.skin.preview.judgeline": "Judge-line texture",
-  "settings.skin.preview.particles": "Hit effects",
-  "settings.skin.preview.sounds": "Hit sounds",
-  "settings.skin.preview.play": "Play",
-  "settings.skin.preview.pause": "Pause",
-  "settings.skin.preview.missing": "Not included",
-  "settings.skin.preview.empty": "No assets",
-  "settings.skin.preview.loading": "Loading…",
   // ------------------------------------------------------------ help / about
   "settings.help.version": "Version {version}",
   "settings.version.test": "Beta",

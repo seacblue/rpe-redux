@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { cp, writeFile } from "node:fs/promises";
+import { cp, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { readProductVersion } from "./scripts/productVersion.mjs";
 
@@ -81,6 +81,8 @@ export default defineConfig({
         await cp("LICENSE", "dist/LICENSE");
         await cp("src/assets/themes", "dist/themes", { recursive: true });
         await cp("src/assets/skins", "dist/skins", { recursive: true });
+        // Note-skin packages ship as data for the app, not as repository docs.
+        await rm("dist/skins/README.md", { force: true });
         await cp("src/assets/extensions", "dist/extensions", { recursive: true });
         // Keep static asset paths intact in hosted builds and portable archives.
         await writeFile("dist/.nojekyll", "");

@@ -118,6 +118,8 @@ Narrow list columns use the compact variant: `.redux-footer-bar` plus `.redux-fo
 
 `Modal` owns ordinary dialog chrome and focus containment. Dialogs portal into the app-root host registered by the entry point, so a dialog opened from another dialog is a peer of that window rather than a child of its stacking context. `KeyboardCaptureModal` is the recording variant: it keeps the dialog, scrim, and stacking from `Modal`, but focuses a capture body and keeps Escape available as a bindable key.
 
+`Modal.requestClose` hands the close paths to the surface: the header button, Escape, and a native window close ask the callback instead of closing, and scrim dismissal is disabled. The surface shows its own prompt, saves or discards, and hides itself; the dialog then runs its normal exit animation.
+
 ## Icons
 
 - `src/design/components/icon/iconAssets.ts` is the published name catalog. An icon resolves from that catalog; a contributed action with an unknown name draws the fallback `help` glyph. A theme supplies PNG alpha masks only, so there is no SVG fallback.

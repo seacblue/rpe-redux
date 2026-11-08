@@ -42,7 +42,7 @@ export interface NoteBatchSkin {
   noteTexture(type: number, highlight: boolean): TextureDescriptor | null;
   holdBodyTexture(highlight: boolean): TextureDescriptor | null;
   holdHeadTexture(highlight: boolean): TextureDescriptor | null;
-  holdEndTexture(): TextureDescriptor | null;
+  holdEndTexture(highlight: boolean): TextureDescriptor | null;
 }
 
 /** Instances sharing one texture, with their packed vertex data. */
@@ -275,8 +275,8 @@ export class NoteBatch {
       }
       enqueue(skin.holdBodyTexture(highlight));
       enqueue(skin.holdHeadTexture(highlight));
+      enqueue(skin.holdEndTexture(highlight));
     }
-    enqueue(skin.holdEndTexture());
     this.schedulePrewarm();
   }
 
@@ -618,7 +618,11 @@ export class NoteBatch {
     if (cached) {
       return cached;
     }
-    const end = this.descriptor(skin, "hold-end", () => skin?.holdEndTexture() ?? null);
+    const end = this.descriptor(
+      skin,
+      `hold-end:${highlight ? 1 : 0}`,
+      () => skin?.holdEndTexture(highlight) ?? null,
+    );
     const result: HoldTextureSet = {
       body: this.descriptor(
         skin,

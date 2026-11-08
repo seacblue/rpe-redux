@@ -4,6 +4,58 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use two inline annotations: `@name` credits a GitHub user (rendered bold and underlined), and `<red>text</red>` colours a run of text. The tag name is the colour: `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown tag, so the release page still reads as plain words.
 
+## 1.0.7 (2026-11-08)
+
+### 中文
+
+**新功能**
+
+- 音符皮肤改用 Phira respack 格式：可以导入 Phira 皮肤包（ZIP，或包含 `info.yml` 的文件夹），也可以把当前皮肤导出为标准 Phira 皮肤包。内置皮肤已按同一格式重制。
+- 新增皮肤工作台：按槽位编辑音符、事件条、判定线贴图、打击效果图和打击音，可从其他已安装皮肤复用素材；Hold 槽位用切割器记录头、身、尾边界，打击效果槽位记录图集网格。
+- 皮肤包支持两个 Redux 扩展：事件条贴图 `event_hold.png` 与判定线贴图 `line.png`；导出时会自动补齐事件条，并把判定线贴图规范到包根路径。
+- 新增「删除皮肤」按钮和确认框。删除内置皮肤时，移除的是用户覆盖副本，随版本附带的皮肤会重新出现。
+- 皮肤工作台可以直接拖入皮肤包打开。
+
+**改进**
+
+- 皮肤工作台改为固定高度并支持内部滚动，底部只保留「删除皮肤」和「保存皮肤」。
+- 导入、导出皮肤包的结果改为在左下角以 toast 提示；取消文件或保存对话框时不提示。
+- 不完整的皮肤仍可保存为部分包：运行时按槽位先从内置皮肤、再从其他已安装皮肤补齐缺失素材。
+
+**修复**
+
+- 修复编辑内置皮肤后「保存皮肤」会新建一份重复皮肤、皮肤选择器里出现第二个条目的问题：保存始终沿用打开的包 id。
+- 导入前完整校验 Phira 包结构、图片尺寸、Hold 图集边界与打击效果网格，避免坏包进入皮肤库。
+
+**移除**
+
+- 旧版 `skin.json` / `manifest.json` 音符皮肤格式不再读取，也不再随版本分发；不提供旧格式转换。
+
+### English
+
+**Features**
+
+- Note skins now use the Phira respack format: import a Phira skin package (a ZIP, or a folder containing `info.yml`), or export the selected skin as a standard Phira package. The built-in skin was rebuilt in the same format.
+- Added the skin workbench: edit notes, event bar, judge line, hit effect, and hit sounds slot by slot, reuse a slot from another installed skin, record Hold head/body/tail boundaries with the cutter, and record the hit-effect atlas grid.
+- Skin packages support two Redux extensions: the `event_hold.png` event-bar texture and the `line.png` judge-line texture; export fills in the event bar and normalizes the judge-line texture to the package root.
+- Added a Delete skin button with a confirmation dialog. For the built-in skin it removes the user override, so the shipped skin comes back.
+- A skin package can be dragged onto the workbench to open it.
+
+**Improvements**
+
+- The skin workbench now has a fixed height with internal scrolling, and its footer keeps only Delete skin and Save skin.
+- Import and export results are reported in the bottom-left toast stack; cancelling a file or save dialog reports nothing.
+- An incomplete skin still saves as a partial package: the runtime fills missing slots from the built-in skin first, then from the first installed skin that provides them.
+
+**Fixes**
+
+- Fixed saving the built-in skin creating a duplicate package and a second picker entry: saving always reuses the package id the workbench opened.
+- Imports now validate the Phira package layout, image sizes, Hold atlas boundaries, and the hit-effect grid before installing a package.
+
+**Removed**
+
+- The former `skin.json` / `manifest.json` note-skin format is no longer read or distributed, and no converter for it ships.
+
 ## 1.0.6 (2026-11-08)
 
 ### 中文

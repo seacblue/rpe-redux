@@ -15,7 +15,7 @@ import { toArrayBuffer } from "../utils/bytes.ts";
 import type { AudioTransport } from "./audio.ts";
 import type { Chart } from "../global/chart/chart.ts";
 import { hitTimeline, type HitSoundOffsetMap, type HitTimelineEntry } from "./hitTimeline.ts";
-import { activeNoteSkin, loadNoteSkin } from "./noteSkins.ts";
+import { activeNoteSkin, loadNoteSkinWithFallback } from "./noteSkins.ts";
 
 export { hitTimeline, type HitTimelineEntry } from "./hitTimeline.ts";
 
@@ -258,7 +258,7 @@ export class HitSounds {
   /** Load and cache the active skin's hit-sound byte map for this project. */
   private loadSkinAudio(): Promise<Map<string, Uint8Array>> {
     if (!this.skinAudio) {
-      this.skinAudio = loadNoteSkin(activeNoteSkin())
+      this.skinAudio = loadNoteSkinWithFallback(activeNoteSkin())
         .then((skin) => {
           const sounds = new Map<string, Uint8Array>();
           for (const [name, path] of Object.entries(skin.manifest.audio ?? {})) {

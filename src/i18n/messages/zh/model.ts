@@ -51,18 +51,6 @@ export default {
 
   "model.noteSkin.invalidPng": "音符贴图必须是有效 PNG",
   "model.noteSkin.invalidSize": "PNG 尺寸须在 1–4096 像素内",
-  "model.noteSkin.invalidUseful": "useful 必须包含有限数值 x/y/width/height",
-  "model.noteSkin.usefulOutOfBounds": "useful 超出 PNG 边界",
-  "model.noteSkin.defaultName": "自定义音符皮肤",
-  "model.noteSkin.tooLarge": "皮肤包超过 64 MiB 或 256 个文件",
-  "model.noteSkin.multipleManifests": "皮肤包包含多个 skin.json",
-  "model.noteSkin.manifestTooLarge": "skin.json 超过 64 KiB",
-  "model.noteSkin.invalidManifest": "skin.json 须包含 version:1、name 和 textures",
-  "model.noteSkin.invalidTexture": "无效贴图引用 {name}",
-  "model.noteSkin.duplicateTexture": "贴图名称重复 {name}",
-  "model.noteSkin.missingTexture": "贴图缺失或超过 8 MiB：{file}",
-  "model.noteSkin.pixelBudget": "全部贴图解码像素超过 16 Mi 像素预算",
-  "model.noteSkin.missingRequired": "皮肤缺少 {name}.png",
 
   "model.shader.endBeforeStart": "着色器结束拍不能早于开始拍",
   "model.shader.invalidValue": "请输入 {dimensions} 个有限数字，多个分量用逗号分隔",
