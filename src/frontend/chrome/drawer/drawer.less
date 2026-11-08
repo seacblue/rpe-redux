@@ -9,10 +9,9 @@
 // The sidebar keeps the higher navigation layer.
 
 .inspector.is-drawer {
-  // The drawer is an overlay island. It must not inherit the inspector's
-  // transparent treatment, because the canvas below it is itself translucent
-  // when a custom cover image is enabled.
-  --drawer-surface: var(--surface-raised);
+  // The drawer is an overlay island, but its material follows the active chrome
+  // recipe while retaining enough tint for the property fields to stay legible.
+  --drawer-surface: color-mix(in srgb, var(--chrome-panel-surface) 78%, transparent);
   --drawer-list-surface: var(--drawer-surface);
 
   // The drawer grows toward `data-chrome-drawer-side`. A leftward reveal is the
@@ -79,8 +78,8 @@
   min-height: 0;
 }
 
-// Both columns belong to one opaque overlay island. The list gets a quieter
-// surface for navigation, while the property face keeps the raised panel tone.
+// Both columns belong to one overlay island. The list gets a quieter surface
+// for navigation, while the property face keeps the active chrome material.
 .drawer-split {
   display: flex;
   width: 100%;
