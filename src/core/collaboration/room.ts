@@ -95,6 +95,8 @@ export interface RoomRecord {
   owner: string;
   chart: unknown;
   fingerprint: string;
+  /** Product version used by the host, for diagnostics and compatibility warnings. */
+  appVersion: string;
   revision: number;
   /** The chart is an opaque AES-GCM envelope and the log is client-applied. */
   encrypted: boolean;
@@ -234,6 +236,7 @@ export class CollaborationRooms {
     autoApproveEditor = false,
     customInvite = "",
     owner = "",
+    appVersion = "",
   ): RoomResult<{ room: RoomRecord; member: RoomMemberRecord }> {
     const invite = customInvite.trim();
     if (invite && [...invite].length < 8) {
@@ -281,6 +284,7 @@ export class CollaborationRooms {
       owner,
       chart: structuredClone(chart),
       fingerprint: fingerprint || stableFingerprint(chart),
+      appVersion: appVersion.trim(),
       revision: 0,
       encrypted,
       autoApproveEditor,
@@ -317,6 +321,7 @@ export class CollaborationRooms {
     roomId: string,
     invite: string,
     profile: CollaborationProfile,
+    appVersion = "",
   ): RoomResult<{
     room: RoomRecord;
     request?: PendingJoin;
@@ -401,6 +406,7 @@ export class CollaborationRooms {
   resume(
     roomId: string,
     resumeToken: string,
+    appVersion = "",
   ): RoomResult<{ room: RoomRecord; member: RoomMemberRecord }> {
     const room = this.rooms.get(roomId.trim().toUpperCase());
     if (!room) {
@@ -855,6 +861,7 @@ export class CollaborationRooms {
       };
       readonly chart: unknown;
       readonly fingerprint: string;
+      readonly appVersion: string;
       readonly revision: number;
       readonly encrypted: boolean;
       readonly autoApproveEditor: boolean;
@@ -885,6 +892,7 @@ export class CollaborationRooms {
             host: { id: host.id, token: host.token, profile: { ...host.profile } },
             chart: room.chart,
             fingerprint: room.fingerprint,
+            appVersion: room.appVersion,
             revision: room.revision,
             encrypted: room.encrypted,
             autoApproveEditor: room.autoApproveEditor,
@@ -965,6 +973,7 @@ export class CollaborationRooms {
         owner: typeof record.owner === "string" ? record.owner : "",
         chart: record.chart,
         fingerprint: record.fingerprint,
+        appVersion: typeof record.appVersion === "string" ? record.appVersion.trim() : "",
         revision: record.revision,
         encrypted: record.encrypted === true,
         autoApproveEditor: record.autoApproveEditor === true,
