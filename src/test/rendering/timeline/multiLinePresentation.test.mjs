@@ -7,15 +7,18 @@ import {
   multiLineScale,
 } from "../../../frontend/screens/editor/workspace/timeline/multiLine/multiLinePresentation.ts";
 
-test("split multi-line panel scale affects both horizontal and vertical geometry", () => {
+test("split multi-line panel scale affects horizontal note geometry", () => {
   const panelScale = multiLinePanelScale(400, 800, true);
 
   assert.equal(panelScale, 0.5);
   assert.equal(noteWidth(2 * panelScale, 1), 68);
-  assert.equal(multiLineScale(500, 1, true, panelScale), 250);
+});
+
+test("split multi-line panel scale does not affect vertical geometry", () => {
+  assert.equal(multiLineScale(500, 1, true), 500);
 });
 
 test("single or merged timelines keep their base geometry scale", () => {
   assert.equal(multiLinePanelScale(400, 800, false), 1);
-  assert.equal(multiLineScale(500, 1, true, 1), 500);
+  assert.equal(multiLineScale(500, 1, true), 500);
 });

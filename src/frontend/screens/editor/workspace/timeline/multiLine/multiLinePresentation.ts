@@ -39,15 +39,7 @@ export function multiLinePanelScale(
   return safePanelWidth > 0 ? safePanelWidth / safeCanvasWidth : 1;
 }
 
-/** Apply the multi-line panel and user zoom scales only to the active area. */
-export function multiLineScale(
-  baseScale: number,
-  zoom: number,
-  active: boolean,
-  panelScale = 1,
-): number {
-  const safePanelScale = Number.isFinite(panelScale) && panelScale > 0 ? panelScale : 1;
-  return active
-    ? baseScale * safePanelScale * Math.max(0.35, Math.min(6, Number(zoom) || 1))
-    : baseScale;
+/** Apply the user zoom only to the active area's vertical time scale. */
+export function multiLineScale(baseScale: number, zoom: number, active: boolean): number {
+  return active ? baseScale * Math.max(0.35, Math.min(6, Number(zoom) || 1)) : baseScale;
 }

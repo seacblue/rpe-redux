@@ -128,16 +128,12 @@ export class TimelineViewport {
   getMultiLineZoom(area: TimelineArea): number {
     return this.multiLineZoom[area];
   }
-  /** Vertical scale for one area, including its multi-line zoom. */
+  /** Vertical scale for one area; horizontal panel count never changes it. */
   scaleForArea(area: TimelineArea): number {
     const session = this.getSession();
     const active =
       area === "notes" ? session.notesMode !== "single" : session.eventsMode === "multi";
-    const canvas = area === "notes" ? this.notesCanvas : this.eventsCanvas;
-    const panelScale = active
-      ? multiLinePanelScale(this.panelWidth(canvas.clientWidth, area), canvas.clientWidth, true)
-      : 1;
-    return multiLineScale(this.scale, this.getMultiLineZoom(area), active, panelScale);
+    return multiLineScale(this.scale, this.getMultiLineZoom(area), active);
   }
   /** Copy display settings into this viewport. */
   apply(config: ViewportSettings): void {
