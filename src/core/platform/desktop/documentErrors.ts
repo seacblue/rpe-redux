@@ -17,6 +17,12 @@ export interface DocumentError extends Error {
 
 type Copy = { messageKey: string; solutionKey: string };
 
+/** Native open code for an archive that holds no RPE chart entry. */
+export const PEZ_CHART_MISSING_CODE = "pez_chart_missing";
+
+/** Native wording for the same failure, used when the host reports prose. */
+export const PEZ_CHART_MISSING_MESSAGE = "No RPE chart found in the PEZ archive.";
+
 const OPEN_COPIES: Record<string, Copy> = {
   pez_entry_limit: {
     messageKey: "workspace.document.error.pezEntryLimit",
@@ -50,7 +56,7 @@ const OPEN_COPIES: Record<string, Copy> = {
     messageKey: "workspace.document.error.pezChartCandidatesLimit",
     solutionKey: "workspace.document.solution.pezChartCandidatesLimit",
   },
-  pez_chart_missing: {
+  [PEZ_CHART_MISSING_CODE]: {
     messageKey: "workspace.document.error.pezChartMissing",
     solutionKey: "workspace.document.solution.pezChartMissing",
   },
@@ -166,8 +172,8 @@ function inferredCode(message: string, code: string | undefined): string | undef
   if (code) {
     return code;
   }
-  if (message.startsWith("No RPE chart found in the PEZ archive.")) {
-    return "pez_chart_missing";
+  if (message.startsWith(PEZ_CHART_MISSING_MESSAGE)) {
+    return PEZ_CHART_MISSING_CODE;
   }
   if (message.startsWith("PEZ contains multiple charts.")) {
     return "pez_multiple_charts";

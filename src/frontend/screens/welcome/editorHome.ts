@@ -266,9 +266,25 @@ export function createEditorHomeRuntime(deps: {
     reportError: deps.reportError,
     refresh: refreshHome,
   };
+  /**
+   * Convert one external chart package path and open the project it imported.
+   *
+   * Returns false when the path is not a supported external format so the
+   * native open path keeps owning RPE documents. The caller has already handled
+   * the unsaved-changes decision for the open that led here.
+   */
+  const openExternalChartFile = async (path: string): Promise<boolean> => {
+    const projectId = await importExternalPath(path, externalDeps);
+    if (!projectId) {
+      return false;
+    }
+    await openImported(projectId);
+    return true;
+  };
   const home = new ProjectHome({
     importRpePath: (path) => importRpePath(path, rpeDeps),
     importExternalPath: (path) => importExternalPath(path, externalDeps),
+    importExternalChart: openExternalChartFile,
     chooseRpeImport: () => chooseRpeFolderMigration(rpeDeps),
     chooseExternalImport: () => chooseExternalChartImport(externalDeps),
     openProject: async (id) => {

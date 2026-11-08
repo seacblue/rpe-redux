@@ -6,7 +6,13 @@
  * covered by unit suites, and the smoke run only proves the shared end-to-end
  * paths still connect the packaged app to the public API.
  */
-import { coldOpen, createChart, openResourceChart, roundtrip } from "./journeys.mjs";
+import {
+  coldOpen,
+  createChart,
+  openExternalPackage,
+  openResourceChart,
+  roundtrip,
+} from "./journeys.mjs";
 import { apiContract, replacePolicy } from "./contractJourneys.mjs";
 import { settingsSmoke } from "./settingsSmokeJourney.mjs";
 import { sessionRestore } from "./sessionRestoreJourney.mjs";
@@ -32,6 +38,7 @@ export const journeys = {
   documents: sequence([
     ["cold-open", coldOpen],
     ["open-resource", openResourceChart],
+    ["open-external-package", openExternalPackage],
     ["create", createChart],
     ["roundtrip", roundtrip],
     ["replace-policy", replacePolicy],

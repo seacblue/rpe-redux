@@ -659,6 +659,9 @@ export function createEditorAssembly(
   const documentRuntime = createDocumentRuntime({
     scope,
     documents,
+    // A native archive open that holds no RPE chart is converted through the
+    // external import pipeline instead of surfacing `pez_chart_missing`.
+    openExternalChart: (path) => home.importExternalChartFile(path),
     session,
     ui,
     document: documentState,

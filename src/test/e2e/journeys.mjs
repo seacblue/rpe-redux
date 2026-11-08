@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalChart, ensureFixtures } from "./fixtures.mjs";
+import { canonicalChart, chartSemantics, ensureFixtures } from "./fixtures.mjs";
 import {
   assertAudioTransport,
   assertCanonical,
@@ -115,6 +115,40 @@ export async function openResourceChart(runner) {
       `metadata inspector ${key} shows ${JSON.stringify(metadata.shown[key])}, chart has ${JSON.stringify(expected)}`,
     );
   }
+  await closeDocument(runner);
+}
+
+export async function openExternalPackage(runner) {
+  const paths = ensureFixtures();
+  const opened = await runner.callApi(
+    `window.redux.document.openPath(${expression(paths.pePackage)}, { replace: "discard" })`,
+  );
+  runner.assert(opened.ok === true, `PE package open failed: ${JSON.stringify(opened)}`);
+  await runner.waitFor("converted package loading modal close", () =>
+    runner.evaluate(
+      "!document.querySelector('dialog.redux-chart-loading[open]') && !document.querySelector('.redux-modal-scrim')",
+    ),
+  );
+  const state = await runner.callApi(readStateExpression());
+  runner.assert(state.document.status === "open", "the converted PE package did not open");
+  runner.assert(
+    state.metadata.name === "PE Package Fixture",
+    `the info.csv name was not applied: ${JSON.stringify(state.metadata)}`,
+  );
+  runner.assert(state.metadata.level === "2", "the info.csv level was not applied");
+  runner.assert(state.metadata.song === "smoke.wav", "the package music was not paired");
+  runner.assert(state.metadata.background === "smoke.png", "the package cover was not paired");
+  const semantics = chartSemantics(state.chart);
+  runner.assert(semantics.lines === 1, `the PEC chart lost its judge line: ${semantics.lines}`);
+  runner.assert(semantics.notes === 4, `the PEC chart lost notes: ${semantics.notes}`);
+  runner.assert(semantics.bpmEntries === 1, "the PEC tempo list was not converted");
+  const projects = await runner.callApi(
+    'window.redux.library.list({ search: "PE Package Fixture", limit: 20 })',
+  );
+  runner.assert(
+    projects.value.projects.some((project) => project.name === "PE Package Fixture"),
+    `the converted package was not imported into the library: ${JSON.stringify(projects)}`,
+  );
   await closeDocument(runner);
 }
 

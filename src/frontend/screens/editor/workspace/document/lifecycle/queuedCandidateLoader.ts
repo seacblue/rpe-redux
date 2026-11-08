@@ -32,7 +32,6 @@ export interface PreparedEditorCandidate extends EditorCandidate {
 export interface QueuedCandidateLoaderOptions {
   readonly coordinator: Pick<DocumentChangeCoordinator, "submitReplacement">;
   readonly openDocument?: (path: string, options?: OpenDocumentOptions) => Promise<OpenResult>;
-  readonly chooseOpenPath?: () => Promise<string | null>;
   readonly loadCandidateResources: (
     candidate: EditorCandidate,
     assets: AssetMap,
@@ -166,6 +165,10 @@ export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOption
     result: Awaited<ReturnType<DocumentChangeCoordinator["submitReplacement"]>>,
   ): void => {
     if (result.status === "rejected") {
+      // Keep the original failure so callers can act on its code and cause.
+      if (result.error instanceof Error) {
+        throw result.error;
+      }
       throw new Error(result.message ?? result.reason);
     }
     if (result.status === "stale") {
@@ -270,16 +273,5 @@ export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOption
     }
   };
 
-  /** Asks the host for a path and opens it when one is chosen. */
-  const chooseOpen = async (): Promise<void> => {
-    if (!options.chooseOpenPath) {
-      throw new Error(t("workspace.document.error.pathUnavailable"));
-    }
-    const path = await options.chooseOpenPath();
-    if (path) {
-      await openPath(path);
-    }
-  };
-
-  return { loadCandidate, openPath, chooseOpen };
+  return { loadCandidate, openPath };
 }

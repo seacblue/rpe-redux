@@ -57,3 +57,28 @@ test("an ordinary open does not trigger an extra save", async () => {
   await loader.openPath("C:/charts/old.json");
   assert.deepEqual(events, ["replacement:start", "resources", "replacement:end"]);
 });
+
+test("a rejected replacement rethrows the original error for callers", async () => {
+  const failure = Object.assign(new Error("No RPE chart found in the PEZ archive."), {
+    code: "pez_chart_missing",
+    solution: "…",
+    documentError: true,
+  });
+  const loader = createQueuedCandidateLoader({
+    coordinator: {
+      async submitReplacement() {
+        return { status: "rejected", reason: "failed", message: failure.message, error: failure };
+      },
+    },
+    openDocument: async () => {
+      throw new Error("the native open must not run for a rejected replacement");
+    },
+    loadCandidateResources: async () => undefined,
+    currentChartFingerprint: () => "fingerprint",
+    currentDiskSnapshot: () => null,
+    currentChartName: () => "old.json",
+    currentPath: () => null,
+    currentChart: () => ({ chart: true }),
+  });
+  await assert.rejects(loader.openPath("C:/charts/chart-less.zip"), (error) => error === failure);
+});

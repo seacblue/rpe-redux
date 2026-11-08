@@ -28,6 +28,11 @@ interface ProjectHomeOptions {
   importRpePath?: (path: string) => Promise<readonly string[] | null>;
   /** Import an official/PEC chart path; null when the path is not that format. */
   importExternalPath?: (path: string) => Promise<string | null>;
+  /**
+   * Convert one external chart package and open its library project.
+   * Returns false when the path is not a supported external format.
+   */
+  importExternalChart?: (path: string) => Promise<boolean>;
   /** Ask for an RPE root and run the confirmed migration. */
   chooseRpeImport?: () => Promise<unknown>;
   /** Ask for an official/PEC chart and import it. */
@@ -48,6 +53,7 @@ export class ProjectHome {
   private readonly openProject: (id: string) => Promise<unknown>;
   private readonly openImported?: (id: string) => Promise<unknown>;
   private readonly importExternalPath?: (path: string) => Promise<string | null>;
+  private readonly importExternalChart?: (path: string) => Promise<boolean>;
   private readonly chooseRpe?: () => Promise<unknown>;
   private readonly chooseExternal?: () => Promise<unknown>;
   private readonly reportError: (error: unknown) => void;
@@ -59,6 +65,7 @@ export class ProjectHome {
     importFile,
     importRpePath,
     importExternalPath,
+    importExternalChart,
     chooseRpeImport,
     chooseExternalImport,
     exportProject,
@@ -70,6 +77,7 @@ export class ProjectHome {
     this.openProject = openProject;
     this.openImported = openImported;
     this.importExternalPath = importExternalPath;
+    this.importExternalChart = importExternalChart;
     this.chooseRpe = chooseRpeImport;
     this.chooseExternal = chooseExternalImport;
     this.reportError = reportError;
@@ -112,6 +120,16 @@ export class ProjectHome {
     } catch (error) {
       this.reportError(error);
     }
+  }
+
+  /**
+   * Convert one external chart package and open the project it imported.
+   *
+   * Returns false when the host has no converter or the path is not a supported
+   * external format, so the caller can keep its own failure path.
+   */
+  importExternalChartFile(path: string): Promise<boolean> {
+    return this.importExternalChart?.(path) ?? Promise.resolve(false);
   }
 
   /**

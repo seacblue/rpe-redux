@@ -89,12 +89,42 @@ function zipStored(entries) {
   return concat([...localParts, directory, trailer]);
 }
 
+/**
+ * A PE package chart: the PhiEdit command text a PE package stores beside its
+ * `info.csv` sheet. Three taps with speed/size continuations and one hold.
+ */
+const PE_CHART = `175
+bp 0.000 120.000
+cp 0 0 1024 700
+cm 0 0 1 1024 700 1
+cd 0 0 0
+ca 0 0 255
+cv 0 0 17.111
+n1 0 1 1024 1 0
+# 1.000
+& 1.00
+n1 0 2 1024 1 0
+# 1.000
+& 1.00
+n1 0 3 1024 2 0
+# 1.000
+& 1.00
+n2 0 4 6 1024 1 0
+# 1.000
+& 1.00
+`;
+
+const PE_INFO = `Chart,Music,Image,Name,Level,Illustrator,Designer
+chart.pec,smoke.wav,smoke.png,PE Package Fixture,2,Fixture Artist,Fixture Charter
+`;
+
 export function fixturePaths() {
   return {
     json: join(SOURCE, "smoke.json"),
     image: join(SOURCE, "smoke.png"),
     audio: join(SOURCE, "smoke.wav"),
     pez: join(OUTPUT, "smoke.pez"),
+    pePackage: join(OUTPUT, "smoke.pe.zip"),
   };
 }
 
@@ -127,6 +157,17 @@ export function ensureFixtures() {
     ["smoke.wav", readFileSync(paths.audio)],
   ]);
   writeFileSync(paths.pez, packageBytes);
+  // A PE package is an archive with no RPE JSON: the native open must hand it to
+  // the external converter, which reads `info.csv` + the PEC chart.
+  writeFileSync(
+    paths.pePackage,
+    zipStored([
+      ["info.csv", encoder.encode(PE_INFO)],
+      ["chart.pec", encoder.encode(PE_CHART)],
+      ["smoke.png", readFileSync(paths.image)],
+      ["smoke.wav", readFileSync(paths.audio)],
+    ]),
+  );
   return paths;
 }
 

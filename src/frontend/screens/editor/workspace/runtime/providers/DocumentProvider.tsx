@@ -50,6 +50,7 @@ import { showToast } from "../../../../../../design/patterns/ToastHost.tsx";
 import { createMusicLoader } from "../../document/open/musicLoader.ts";
 import { createMetadataMedia } from "../../document/open/metadataMedia.ts";
 import { createCandidateLoader } from "../../document/open/candidateLoader.ts";
+import { openNativeChartPath } from "../../document/open/nativeOpenFallback.ts";
 import {
   createDocumentLeaseManager,
   documentKeyForCandidateName,
@@ -185,6 +186,12 @@ export function useDocumentRuntime(): DocumentRuntime | null {
 export function createDocumentRuntime(options: {
   scope: ResourceScope;
   documents: TauriDocumentStore | null;
+  /**
+   * Converts one external chart package and opens the imported project; false
+   * when the path is not a supported external format. Used only when a native
+   * archive open finds no RPE chart entry.
+   */
+  openExternalChart?: (path: string) => Promise<boolean>;
   session: Pick<EditorSessionRuntime, "current" | "replace">;
   ui: Pick<EditorUiState, "progress">;
   document: WorkspaceDocumentState;
@@ -492,12 +499,6 @@ export function createDocumentRuntime(options: {
       }
       return options.documents.open(path, openOptions);
     },
-    chooseOpenPath: () => {
-      if (!options.documents) {
-        throw new Error(t("workspace.document.error.pathUnavailable"));
-      }
-      return options.documents.chooseOpenPath();
-    },
     loadCandidateResources,
     currentChartFingerprint: () => chartFingerprint(getSession().chart),
     currentDiskSnapshot: () => options.documents?.current?.disk_snapshot ?? null,
@@ -507,6 +508,25 @@ export function createDocumentRuntime(options: {
     awaitFingerprint: () => getSession().warmFingerprint(),
   });
   const { loadCandidate } = candidateLoader;
+  /**
+   * Open one native chart path, converting an external package when the native
+   * reader finds no RPE chart in the archive.
+   */
+  const openNativeChart = (path: string): Promise<void> =>
+    openNativeChartPath(path, {
+      open: (target) => candidateLoader.openPath(target),
+      ...(options.openExternalChart ? { importExternalChart: options.openExternalChart } : {}),
+    });
+  /** Ask for one chart file and open it through the native/external path. */
+  const chooseNativeChart = async (): Promise<void> => {
+    if (!options.documents) {
+      throw new Error(t("workspace.document.error.pathUnavailable"));
+    }
+    const path = await options.documents.chooseOpenPath();
+    if (path) {
+      await openNativeChart(path);
+    }
+  };
   let diskObserver: ReturnType<typeof createDiskChangeObserver> | null = null;
   const documentSaver = createDocumentSaver({
     documents: options.documents,
@@ -974,7 +994,7 @@ export function createDocumentRuntime(options: {
     if (!options.documents) {
       throw new Error(t("workspace.document.error.pathUnavailable"));
     }
-    await candidateLoader.openPath(path);
+    await openNativeChart(path);
   };
   /** Parses chart bytes for the public API and installs the single candidate. */
   const openBytesForApi = async (
@@ -1072,7 +1092,7 @@ export function createDocumentRuntime(options: {
   options.scope.add(
     connectDocumentService({
       documents: options.documents,
-      openNativeDocument: () => candidateLoader.chooseOpen(),
+      openNativeDocument: () => chooseNativeChart(),
       guardReplace,
       createBlankChart: createBlankChartDocument,
       hasUnsavedChanges: () =>
@@ -1123,10 +1143,10 @@ export function createDocumentRuntime(options: {
       return;
     }
     if (getSession().history.dirty || options.document.assetDirty) {
-      guardReplace(() => candidateLoader.openPath(path));
+      guardReplace(() => openNativeChart(path));
       return;
     }
-    await candidateLoader.openPath(path);
+    await openNativeChart(path);
   };
   let assetReloadTimer: number | null = null;
   /** Coalesces asset-driven image reloads into one delayed decode. */

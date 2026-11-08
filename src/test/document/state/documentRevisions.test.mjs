@@ -35,6 +35,21 @@ test("revision pins compare only the three writable snapshot fields", () => {
   ]);
 });
 
+test("a rejected replacement keeps the original error for the caller", async () => {
+  const coordinator = createDocumentChangeCoordinator({
+    initial: { chartFingerprint: "live", lifecycle: "open" },
+  });
+  const failure = Object.assign(new Error("No RPE chart found in the PEZ archive."), {
+    code: "pez_chart_missing",
+  });
+  const result = await coordinator.submitReplacement(async () => {
+    throw failure;
+  });
+  assert.equal(result.status, "rejected");
+  assert.equal(result.error, failure);
+  assert.equal(result.message, failure.message);
+});
+
 test("crossing into a Code Cell drops the saved-state fingerprint", () => {
   const coordinated = {
     chartFingerprint: "live",

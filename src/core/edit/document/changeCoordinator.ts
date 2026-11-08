@@ -102,6 +102,11 @@ export type ChangeResult<T> =
       readonly status: "rejected";
       readonly reason: string;
       readonly message?: string;
+      /**
+       * The original rejection, so a caller that has to act on the failure keeps
+       * the error's identity, code, and cause instead of only its message.
+       */
+      readonly error?: unknown;
       readonly state: DocumentCoordinationState;
     }
   | {
@@ -598,6 +603,7 @@ export function createDocumentChangeCoordinator(options: DocumentChangeCoordinat
           status: "rejected",
           reason: "failed",
           message: error instanceof Error ? error.message : String(error),
+          error,
           state,
         } satisfies ChangeResult<T>;
       }

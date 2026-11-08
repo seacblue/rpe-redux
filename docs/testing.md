@@ -77,12 +77,12 @@ Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and `co
 
 `npm run smoke` launches the debug executable and runs the P0 journeys from `src/test/e2e/journeyGroups.mjs`:
 
-| Group             | Journey                                                                     |
-| ----------------- | --------------------------------------------------------------------------- |
-| `api-contract`    | `window.redux` API and Extension contract                                   |
-| `documents`       | cold open, PEZ open with resources, create, save round trip, replace policy |
-| `settings`        | settings pages and persistence                                              |
-| `session-restore` | restart with the same profile and restore the workspace                     |
+| Group | Journey |
+| --- | --- |
+| `api-contract` | `window.redux` API and Extension contract |
+| `documents` | cold open, PEZ open with resources, PE package conversion, create, save round trip, replace policy |
+| `settings` | settings pages and persistence |
+| `session-restore` | restart with the same profile and restore the workspace |
 
 ```powershell
 npm run build -- --debug            # prerequisite
