@@ -395,6 +395,26 @@ export class Preview {
   get collectGeometry(): boolean {
     return this.drawCollectGeometry;
   }
+
+  /** Reload custom GLSL sources changed by an external editor. */
+  reloadShaderSources(names: readonly string[]): void {
+    for (const name of names) {
+      this.shaderRuntime.invalidateSource(name);
+    }
+    if (names.length) {
+      this.shaderSourceRevision += 1;
+      this.invalidateFrame();
+      this.invalidate?.();
+    }
+  }
+
+  /** Set the chart path used when resolving relative shader assets. */
+  setShaderChartName(chartName: string): void {
+    this.shaderRuntime.setChartName(chartName);
+    this.shaderSourceRevision += 1;
+    this.invalidateFrame();
+    this.invalidate?.();
+  }
   /** Releases GPU, canvas, and noise resources owned by the preview. */
   dispose(): void {
     this.clearDocument();

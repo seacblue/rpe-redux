@@ -15,6 +15,7 @@ use std::{
     sync::Mutex,
 };
 use tauri::{ipc::Request, AppHandle, State};
+use tauri_plugin_opener::OpenerExt;
 use zip::ZipArchive;
 
 mod library;
@@ -38,6 +39,24 @@ pub use save::{
     write_save_chart,
 };
 pub use watch::document_disk_snapshot;
+
+/// Open one loose-document resource with the operating system's associated editor.
+#[tauri::command]
+pub fn open_asset_external(
+    app: AppHandle,
+    state: State<'_, DocumentHost>,
+    id: String,
+    name: String,
+) -> Result<()> {
+    let document = document(&state, &id)?;
+    if document.packed {
+        return Err("Packed chart assets must be extracted before external editing.".into());
+    }
+    let path = readable_resource_path(&document, &name)?;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(error)
+}
 
 /// Command result type: a diagnostic message on failure.
 pub(crate) type Result<T> = std::result::Result<T, String>;
@@ -418,16 +437,29 @@ pub(crate) fn resource_names(chart: &Value) -> Vec<String> {
             }
         }
     }
-    if let Some(effects) = chart["effects"].as_array() {
-        for effect in effects {
-            for key in ["shader", "source", "shaderPath"] {
-                if let Some(name) = effect[key].as_str() {
-                    if name.ends_with(".glsl") || name.ends_with(".frag") || name.ends_with(".vsh")
-                    {
-                        names.push(name.into());
+    let mut collect_shader_effects = |effects: Option<&Vec<Value>>| {
+        if let Some(effects) = effects {
+            for effect in effects {
+                for key in ["shader", "source", "shaderPath"] {
+                    if let Some(name) = effect[key].as_str() {
+                        let lower = name.to_ascii_lowercase();
+                        if [".glsl", ".frag", ".vert", ".vsh", ".fsh", ".shader"]
+                            .iter()
+                            .any(|suffix| lower.ends_with(suffix))
+                        {
+                            names.push(name.into());
+                        }
                     }
                 }
             }
+        }
+    };
+    collect_shader_effects(chart["effects"].as_array());
+    collect_shader_effects(chart["shaderEvents"].as_array());
+    collect_shader_effects(chart["META"]["effects"].as_array());
+    if let Some(lines) = chart["judgeLineList"].as_array() {
+        for line in lines {
+            collect_shader_effects(line["extended"]["paintEvents"].as_array());
         }
     }
     names.sort();

@@ -8,11 +8,17 @@
  */
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
 import { withChartFolders } from "../../../../../core/global/document/folders.ts";
+import {
+  setShaderParameterOverrides,
+  type ShaderParameterOverrides,
+} from "../../../../../core/global/chart/shader/shaderEvents.ts";
 import { t } from "../../../../../i18n/index.ts";
 import type { ProjectImages } from "../../../../../core/media/images.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
 import { readDroppedAssetFiles } from "../../../../platform/desktop/droppedAssetFiles.ts";
+import { invoke } from "@tauri-apps/api/core";
+import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { AssetLibraryPanel } from "./assetLibrary.ts";
 import type { AssetLibraryState } from "./model.ts";
 
@@ -31,6 +37,23 @@ function chartDirectoryName(): string | undefined {
   const parts = path.replaceAll("\\", "/").split("/");
   parts.pop();
   return parts.at(-1) || undefined;
+}
+
+/** Open a loose-document asset in the user's associated external editor. */
+async function openExternalAsset(
+  name: string,
+  notify: (message: string, severity?: string) => void,
+) {
+  const store = currentDocumentStore();
+  if (!isDesktop() || !store?.current) {
+    notify(t("editorPanels.assetLibrary.openExternalDesktopOnly"), "warning");
+    return;
+  }
+  try {
+    await invoke("open_asset_external", { id: store.current.id, name });
+  } catch (error) {
+    notify(error instanceof Error ? error.message : String(error), "error");
+  }
 }
 
 /**
@@ -68,6 +91,19 @@ export function createAssetLibraryRuntime(deps: {
       state: deps.state,
       notify: deps.notify,
       readDroppedFiles: readDroppedAssetFiles,
+      onOpenExternal: (name) => openExternalAsset(name, deps.notify),
+      onConfigureShader: (name: string, overrides: ShaderParameterOverrides) => {
+        const session = deps.getSession();
+        session.commitChart(
+          t("editorPanels.assetLibrary.shaderParametersCommit"),
+          setShaderParameterOverrides(session.chart, name, overrides),
+          session.selectionState(),
+          undefined,
+          { normalized: true },
+        );
+        deps.markDirty();
+        deps.renderSession();
+      },
       onChange: (nextAssets, nextFolders) => {
         const folders = new Set(nextFolders ?? []);
         deps.attachAssets(nextAssets);

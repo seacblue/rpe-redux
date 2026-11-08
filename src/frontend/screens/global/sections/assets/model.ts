@@ -6,9 +6,13 @@
  * tree so the view can hide a deleted Default group without losing the files.
  */
 import { createValue, type ValueCell } from "../../../../../core/state/values.ts";
+import type {
+  ShaderParameter,
+  ShaderParameterOverrides,
+} from "../../../../../core/global/chart/shader/shaderEvents.ts";
 
 /** A media file in the asset tree. */
-export type AssetViewKind = "image" | "audio";
+export type AssetViewKind = "image" | "audio" | "shader";
 
 /** A media file in the asset tree and the object URL used for its preview. */
 export interface AssetViewFile {
@@ -17,6 +21,7 @@ export interface AssetViewFile {
   url: string;
   selected: boolean;
   kind: AssetViewKind;
+  text?: string;
 }
 
 /** A folder in the asset tree, recursively containing child folders. */
@@ -35,6 +40,9 @@ export interface AssetViewSelected {
   name: string;
   url: string;
   kind: AssetViewKind;
+  text?: string;
+  shaderParameters?: ShaderParameter[];
+  shaderParameterOverrides?: ShaderParameterOverrides | null;
 }
 
 /** Panel callbacks, rebound by `AssetLibraryPanel` for each snapshot. */
@@ -50,8 +58,9 @@ export interface AssetLibraryViewActions {
   onMoveFolder(path: string, targetPath: string, after?: boolean): void;
   addInputRef(node: HTMLInputElement | null): void;
   onSelect(name: string): void;
-  onRename(): void;
-  onEdit(): void;
+  onRename(name?: string): void;
+  onConfigureShader(name: string, overrides: ShaderParameterOverrides): void;
+  onOpenExternal(): void;
   onDelete(): void;
 }
 

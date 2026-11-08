@@ -230,11 +230,14 @@ export function selectLocalSaveBinding(
 export class DesktopAssetStore extends AssetStore {
   /** Native document id used in asset URLs and read commands. */
   id: string;
+  /** Whether the source document is a packed archive without editable paths. */
+  packed: boolean;
 
   /** Initialize names from the opened document and bind the shared asset map. */
   constructor(opened: OpenedDocument) {
     super();
     this.id = opened.id;
+    this.packed = Boolean(opened.packed);
     for (const entry of opened.entries) {
       this.names.add(entry.name);
     }
@@ -282,6 +285,38 @@ export class DesktopAssetStore extends AssetStore {
       }
     }
     return this.assets;
+  }
+  /** Refresh selected loose-document resources after an external save. */
+  async refreshFromDisk(
+    assets: AssetMap,
+    pattern = /\.(?:glsl|frag|vert|vsh|fsh|shader|png|jpe?g|webp|gif|bmp|avif|mp3|wav|ogg|flac|m4a|aac|opus|webm)$/i,
+  ): Promise<string[]> {
+    if (this.packed) {
+      return [];
+    }
+    const changed: string[] = [];
+    for (const name of this.names) {
+      if (!pattern.test(name)) {
+        continue;
+      }
+      const response = await invoke<ArrayBuffer | number[]>("read_asset", {
+        id: this.id,
+        name,
+      });
+      const next =
+        response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response);
+      const previous = assets.get(name);
+      if (
+        !previous ||
+        previous.length !== next.length ||
+        previous.some((value, index) => value !== next[index])
+      ) {
+        assets.set(name, next);
+        this.original.set(name, next);
+        changed.push(name);
+      }
+    }
+    return changed;
   }
   /** Assets whose bytes differ from what the document was opened with. */
   changes(assets: ReadonlyMap<string, Uint8Array>): AssetChange[] {

@@ -64,10 +64,10 @@ export function PreviewCanvases() {
         aria-label={t("chrome.preview.canvas")}
       />
       <canvas ref={noteBatch} className="preview-note-batch" aria-hidden="true" />
-      {/* The workspace underlay has shaders disabled. Keeping the node as a
-          hidden ref preserves the surface contract without paying for another
-          full-stage compositing layer. */}
-      <canvas ref={shader} className="preview-shader-layer" aria-hidden="true" hidden />
+      {/* The runtime toggles visibility after a shader pass succeeds. Keeping
+          the node mounted lets the editor preview use the same compositing
+          surface as the dedicated preview and recording paths. */}
+      <canvas ref={shader} className="preview-shader-layer" aria-hidden="true" />
       <canvas ref={overlay} className="preview-overlay-layer" aria-hidden="true" />
       <div className="free-camera-frame-clip" aria-hidden="true">
         <div className="free-camera-frame" />

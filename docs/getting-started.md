@@ -56,7 +56,7 @@ Imports that lose or approximate data show a **compatibility report** listing th
 `Ctrl+N` creates a blank chart. Fill it in through the sidebar and inspector:
 
 1. **Chart information** — name, composer, charter, illustration, and level.
-2. **Asset library** — music, background, and cover images. Assets are stored with the chart and travel inside a PEZ package.
+2. **Asset library** — music, background, cover images, and GLSL shader files. Select any asset for an inline preview; on a loose desktop chart, **Open externally** launches the associated editor and saved changes are reflected in the preview. Select a project GLSL asset to choose which detected uniforms are exposed and optionally give them user-facing names; shader events then use that asset-library configuration in the inspector. Assets are stored with the chart and travel inside a PEZ package.
 3. **Timing** — the BPM list that all beat positions refer to.
 4. **Judge line** — the playfield lines; notes and events attach to them.
 5. **Note editing** and **Event editing** — the chart contents.

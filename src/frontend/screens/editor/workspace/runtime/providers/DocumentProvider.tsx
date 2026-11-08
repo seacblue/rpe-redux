@@ -291,6 +291,7 @@ export function createDocumentRuntime(options: {
         options.document.assetFolders = document.folders;
         options.document.assetDirty = false;
         options.document.chartName = document.name;
+        preview.realtimePreview.setShaderChartName(document.name);
         mediaState.current?.reset();
       },
       resetEditClock: options.resetEditClock,
@@ -524,6 +525,7 @@ export function createDocumentRuntime(options: {
     },
     setChartName: (name) => {
       options.document.chartName = name;
+      preview.realtimePreview.setShaderChartName(name);
     },
     renderSession: options.renderSession,
     onSaved: (_snapshot, result, generation) => {
@@ -679,6 +681,23 @@ export function createDocumentRuntime(options: {
     }
   };
 
+  /** Refresh changed loose-document resources before resolving the disk state. */
+  const refreshExternalResources = async (): Promise<boolean> => {
+    const changed =
+      (await options.documents?.assets?.refreshFromDisk(getAssets())) ?? ([] as string[]);
+    if (!changed.length) {
+      return false;
+    }
+    // Shader invalidation is synchronous up to the async source read, so the
+    // preview can repaint as soon as the external editor has written the file.
+    preview.realtimePreview.reloadShaderSources(changed);
+    void preview.images
+      .load(getSession().chart, getAssets(), getChartName())
+      .catch(options.reportError);
+    void inspector.assetLibrary.render();
+    return true;
+  };
+
   if (options.documents) {
     let diskDecision: Promise<void> | null = null;
     diskObserver = createDiskChangeObserver({
@@ -692,7 +711,20 @@ export function createDocumentRuntime(options: {
           (observation.status === "external-pending" || observation.status === "conflict") &&
           !diskDecision
         ) {
-          diskDecision = resolveDiskObservation(observation.snapshot)
+          const refresh = refreshExternalResources().catch((error) => {
+            options.reportError(error);
+            return false;
+          });
+          if (!isDirty() && options.documents) {
+            void refresh.then((changed) => {
+              if (changed) {
+                void diskObserver?.rescan();
+              }
+            });
+            return;
+          }
+          diskDecision = refresh
+            .then(() => resolveDiskObservation(observation.snapshot))
             .catch(options.reportError)
             .finally(() => {
               diskDecision = null;

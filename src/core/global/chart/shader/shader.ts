@@ -75,6 +75,22 @@ const aliases = new Map([
   ["heateffect", "heat_distortion"],
 ]);
 
+/** Resolve a chart or Phira-root GLSL asset path without accepting traversal. */
+export function shaderAssetPath(value: unknown): string | null {
+  const input = String(value ?? "")
+    .trim()
+    .replaceAll("\\", "/");
+  if (/^[a-zA-Z]:/.test(input)) {
+    return null;
+  }
+  const raw = input.replace(/^\/+/, "");
+  if (!raw || !/\.(glsl|frag|vert|vsh|fsh|shader)$/i.test(raw)) {
+    return null;
+  }
+  const parts = raw.split("/");
+  return parts.some((part) => !part || part === "." || part === "..") ? null : raw;
+}
+
 /**
  * The permissive shape accepted for a shader event.
  *
@@ -124,9 +140,49 @@ export function canonicalShaderName(value: unknown): string | null {
   return SHADER_NAMES.includes(name) ? name : null;
 }
 
+/** Tell built-in shader references apart from user asset paths. */
+export function builtinShaderReference(value: unknown): boolean {
+  const name = canonicalShaderName(value);
+  if (!name) {
+    return false;
+  }
+  if (typeof value !== "string") {
+    return true;
+  }
+  const reference = value.replaceAll("\\", "/");
+  // A bare name is a built-in selector. A filename is a library reference,
+  // except for the legacy Phira `/name_pr.glsl` spelling.
+  return (
+    (!reference.includes("/") && !/\.(?:glsl|frag|vert|vsh|fsh|shader)$/i.test(reference)) ||
+    /^\/?(?:pr\/)?[^/]+_pr\.glsl$/i.test(reference)
+  );
+}
+
+/** Select the old or portable branch of an embedded built-in shader source. */
+export function builtinShaderSource(source: string, legacy = false): string {
+  const normalized = source.replace(/\r\n?/g, "\n");
+  const match = normalized.match(
+    /#ifdef RPEN_LEGACY_SOURCE\n([\s\S]*?)\n#else\n([\s\S]*)\n#endif\s*$/,
+  );
+  return `// @rpen-builtin\n${match ? `#version 100\n${legacy ? match[1] : match[2]}` : normalized}`;
+}
+
+/** Whether a built-in name should use its legacy source variant. */
+export function legacyShaderSource(name: string, sourceName = ""): boolean {
+  return SHADER_NAMES.indexOf(name) >= 10 && !/(?:_pr\.glsl|\/pr\/)/i.test(sourceName);
+}
+
 /** Resolve the shader name an event uses, applying its clone suffix. */
 export function shaderIdentity(event: ShaderEventLike): string {
-  const name = canonicalShaderName(event.shader ?? event.shaderType ?? event.name) ?? "chromatic";
+  const value = event.shader ?? event.shaderType ?? event.name;
+  const custom = !builtinShaderReference(value) ? shaderAssetPath(value) : null;
+  if (custom) {
+    return custom;
+  }
+  const name = canonicalShaderName(value);
+  if (!name) {
+    return "chromatic";
+  }
   return event.clone && SHADER_NAMES.indexOf(name) < 10 ? `${name}_2` : name;
 }
 
@@ -167,9 +223,10 @@ function normalizeEffect(effect: unknown, lineIndex = -1): ShaderEffectDefinitio
   }
   // Arrays are accepted as record-like input alongside plain objects.
   const effectRecord = effect as Record<string, unknown>;
-  let shader = canonicalShaderName(
-    effectRecord.shader ?? effectRecord.shaderType ?? effectRecord.name,
-  );
+  const sourceValue = effectRecord.shader ?? effectRecord.shaderType ?? effectRecord.name;
+  let shader =
+    (!builtinShaderReference(sourceValue) ? shaderAssetPath(sourceValue) : null) ??
+    canonicalShaderName(sourceValue);
   if (!shader) {
     return null;
   }
@@ -186,7 +243,7 @@ function normalizeEffect(effect: unknown, lineIndex = -1): ShaderEffectDefinitio
     global: Boolean(effectRecord.global),
     order: Number(effectRecord.order ?? 0),
     vars: normalizeVars(effectRecord.vars),
-    sourceName: String(effectRecord.shader ?? ""),
+    sourceName: String(effectRecord.shader ?? effectRecord.name ?? ""),
   };
 }
 
@@ -233,13 +290,24 @@ export interface ActiveShaderEffect extends ShaderEffectDefinition {
  * The host resolves `redux/shaders/...` paths and returns their text; `null`
  * means the source is unavailable and the renderer shows the unprocessed frame.
  */
-export type ShaderSourceLoader = (path: string) => Promise<string | null>;
+export type ShaderSourceLoader = (path: string, chartName?: string) => Promise<string | null>;
+
+/** Resolve the source key used by both asynchronous loading and frame reads. */
+function shaderSourceKey(name: string, sourceName: string): string {
+  const custom = shaderAssetPath(sourceName) ?? shaderAssetPath(name);
+  if (custom) {
+    return custom;
+  }
+  const builtin = canonicalShaderName(name) ?? canonicalShaderName(sourceName) ?? name;
+  return /(?:_pr\.glsl|\/pr\/)/i.test(sourceName) ? `${builtin}:pr` : builtin;
+}
 
 /** Loads shader sources and reports the effects active at a chart time. */
 export class ShaderRuntime {
   declare invalidate: () => void;
   declare loadSource: ShaderSourceLoader;
   declare chart: Chart | null;
+  declare chartName: string;
   declare tempo: ShaderTempo | null;
   declare effects: ShaderEffectDefinition[];
   declare activeIndex: IntervalIndex<TimedShaderEffect>;
@@ -251,6 +319,7 @@ export class ShaderRuntime {
     this.invalidate = invalidate;
     this.loadSource = loadSource;
     this.chart = null;
+    this.chartName = "";
     this.tempo = null;
     this.effects = [];
     this.activeIndex = new IntervalIndex<TimedShaderEffect>(
@@ -260,6 +329,19 @@ export class ShaderRuntime {
     );
     this.sources = new Map();
     this.loading = new Set();
+  }
+
+  /** Update the chart path used to resolve relative shader assets. */
+  setChartName(chartName: string): void {
+    const next = String(chartName ?? "");
+    if (next === this.chartName) {
+      return;
+    }
+    this.chartName = next;
+    this.chart = null;
+    this.sources.clear();
+    this.loading.clear();
+    this.invalidate();
   }
 
   /** Rebuild active intervals when the chart or tempo source changes. */
@@ -291,19 +373,39 @@ export class ShaderRuntime {
 
   /** Fetch a shader source once, preferring the preview variant when requested. */
   async load(name: string, sourceName = ""): Promise<void> {
+    const assetPath = shaderAssetPath(sourceName) ?? shaderAssetPath(name);
     const previewSource = /(?:_pr\.glsl|\/pr\/)/i.test(sourceName);
-    const key = previewSource ? `${name}:pr` : name;
+    const key = shaderSourceKey(name, sourceName);
     if (this.sources.has(key) || this.loading.has(key)) {
       return;
     }
     this.loading.add(key);
-    const portable = `redux/shaders/pr/${name}_pr.glsl`;
-    const plain = `redux/shaders/${name}.glsl`;
+    if (assetPath) {
+      try {
+        const assetText = await this.loadSource(assetPath, this.chartName);
+        if (assetText !== null) {
+          this.sources.set(key, assetText);
+          this.loading.delete(key);
+          this.invalidate();
+          return;
+        }
+      } catch {
+        /* A missing document asset may still be a built-in reference. */
+      }
+      if (!builtinShaderReference(sourceName) && !builtinShaderReference(name)) {
+        this.loading.delete(key);
+        this.invalidate();
+        return;
+      }
+    }
+    const builtin = canonicalShaderName(name) ?? canonicalShaderName(sourceName) ?? name;
+    const portable = `redux/shaders/pr/${builtin}_pr.glsl`;
+    const plain = `redux/shaders/${builtin}.glsl`;
     try {
       for (const path of previewSource ? [portable, plain] : [plain, portable]) {
-        const text = await this.loadSource(path);
+        const text = await this.loadSource(path, this.chartName);
         if (text !== null) {
-          this.sources.set(key, text);
+          this.sources.set(key, builtinShaderSource(text, legacyShaderSource(builtin, sourceName)));
           break;
         }
       }
@@ -339,7 +441,21 @@ export class ShaderRuntime {
 
   /** Loaded source text for `name`, or an empty string when it is not loaded. */
   source(name: string, sourceName = ""): string {
-    return this.sources.get(/(?:_pr\.glsl|\/pr\/)/i.test(sourceName) ? `${name}:pr` : name) ?? "";
+    const key = shaderSourceKey(name, sourceName);
+    return this.sources.get(key) ?? "";
+  }
+
+  /** Drop one custom source so the next frame loads its externally edited text. */
+  invalidateSource(path: string): void {
+    const key = shaderAssetPath(path);
+    if (key) {
+      this.sources.delete(key);
+      for (const effect of this.effects) {
+        if (shaderAssetPath(effect.sourceName) === key || shaderAssetPath(effect.shader) === key) {
+          void this.load(effect.shader, effect.sourceName);
+        }
+      }
+    }
   }
 }
 

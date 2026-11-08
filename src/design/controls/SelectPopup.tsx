@@ -14,17 +14,22 @@ interface OptionEntry {
   index: number;
   value: string;
   label: string;
+  group: string;
   disabled: boolean;
 }
 
 /** Read the current options of a native select at open time. */
 function optionsOf(select: HTMLSelectElement): OptionEntry[] {
-  return [...select.options].map((option, index) => ({
-    index,
-    value: option.value,
-    label: option.textContent ?? option.value,
-    disabled: option.disabled,
-  }));
+  return [...select.options].map((option, index) => {
+    const parent = option.parentElement;
+    return {
+      index,
+      value: option.value,
+      label: option.textContent ?? option.value,
+      group: parent?.tagName === "OPTGROUP" ? (parent as HTMLOptGroupElement).label : "",
+      disabled: option.disabled,
+    };
+  });
 }
 
 /**
@@ -137,7 +142,10 @@ export function SelectPopup({ state }: { state: SelectPopupState }) {
     Math.max(1, viewport.width - 12),
     Math.max(1, (dialogBox?.width ?? viewport.width) - 12),
   );
-  const naturalHeight = Math.min(options.length * 36 + 2, 280);
+  const groupCount = options.filter(
+    (option, index) => option.group && option.group !== options[index - 1]?.group,
+  ).length;
+  const naturalHeight = Math.min(options.length * 36 + groupCount * 28 + 2, 320);
   const { style } = placeControlPopup({
     anchor,
     panelWidth: width,
@@ -153,18 +161,24 @@ export function SelectPopup({ state }: { state: SelectPopupState }) {
   return (
     <div className="redux-control-popup redux-select-popup" role="listbox" style={style}>
       {options.length === 0 && <div className="redux-select-empty">{t("design.select.empty")}</div>}
-      {options.map((option) => (
-        <div
-          key={`${option.index}:${option.value}`}
-          className="redux-select-option"
-          role="option"
-          aria-selected={option.index === element.selectedIndex}
-          aria-disabled={option.disabled || undefined}
-          data-active={option.index === active}
-          onPointerEnter={() => setActive(option.index)}
-          onClick={() => choose(option.index)}
-        >
-          {option.label}
+      {options.map((option, index) => (
+        <div key={`${option.index}:${option.value}`}>
+          {option.group && option.group !== options[index - 1]?.group && (
+            <div className="redux-select-group" role="presentation">
+              {option.group}
+            </div>
+          )}
+          <div
+            className="redux-select-option"
+            role="option"
+            aria-selected={option.index === element.selectedIndex}
+            aria-disabled={option.disabled || undefined}
+            data-active={option.index === active}
+            onPointerEnter={() => setActive(option.index)}
+            onClick={() => choose(option.index)}
+          >
+            {option.label}
+          </div>
         </div>
       ))}
     </div>
