@@ -327,6 +327,10 @@ export default {
   "workspace.collaboration.reconnected": "已重新连接联机房间。",
   "workspace.collaboration.connectionLost": "联机连接已断开。",
   "workspace.collaboration.connectionFailed": "无法连接联机服务器。",
+  "workspace.collaboration.compatibilityMismatch":
+    "此客户端与联机服务器不兼容。请更新 RPE Redux 后重试。",
+  "workspace.collaboration.versionDifferenceWarning":
+    "双方 RPE Redux 产品版本不同，但当前联机协议兼容，可以继续协作。",
   "workspace.collaboration.connectionTimeout": "连接联机服务器超时，请检查地址和网络。",
   "workspace.collaboration.handshakeTimeout": "联机服务器已接受连接，但没有及时响应，请重试。",
   "workspace.collaboration.connectionClosed": "房间就绪前联机连接已断开。",
