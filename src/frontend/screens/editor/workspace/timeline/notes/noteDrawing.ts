@@ -7,13 +7,14 @@
  */
 import { noteIsAbove } from "../../../../../../core/global/chart/chart.ts";
 import { verticalGrid } from "../../../../../../core/global/chart/editing/editGrid.ts";
+import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import { prepareCanvas } from "../../../canvas/canvas2d.ts";
 import { noteSkewAtHit, noteSkewCurve, noteSkewShear } from "../../../canvas/noteGeometry.ts";
 import {
   BACKGROUND_GRID,
   FOREGROUND_GRID,
   PLAYHEAD_GRID,
-  drawHoverGuides,
+  nearestVerticalPosition,
   strokeVerticalGrid,
 } from "../drawing/gridDrawing.ts";
 import { noteColor, readCanvasPalette, selectionHighlightColor } from "../../../canvas/palette.ts";
@@ -333,7 +334,6 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   } else {
     this.grid(context, width, height, playBeat, FOREGROUND_GRID, "notes");
   }
-  drawHoverGuides.call(this, context, width, height, "notes");
   if (multiNotes) {
     this.drawMultiLineBeatLabels(context, width, height, "notes");
   }
@@ -386,19 +386,25 @@ function drawNoteLanes(
   const targetLines = this.getSession().targetLineIndices;
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, "notes");
   const cameraX = this.viewport.cameraX ?? 0;
+  const hover =
+    this.gestures.hoverArea === "notes" && this.gestures.cursor
+      ? (() => {
+          const lineIndex = this.viewport.lineIndexAt(this.gestures.cursor.x, width, "notes");
+          return {
+            lineIndex,
+            position: nearestVerticalPosition(
+              this.viewport.notePositionAt(this.gestures.cursor.x, lineIndex),
+              this.viewport.gridCount,
+            ),
+          };
+        })()
+      : null;
   const chartLeft = cameraX - 675;
   const chartRight = cameraX + 675;
   const firstGrid = Math.max(0, Math.ceil(chartLeft / grid.spacing - grid.first));
   const lastGrid = Math.min(grid.lineCount - 1, Math.floor(chartRight / grid.spacing - grid.first));
-  // Keep dense grids readable: snap still uses the full grid, while the
-  // backdrop skips lanes that would land closer than a few pixels.
-  const maxLines = Math.max(2, Math.floor(contentWidth / 6));
-  const lineStride = Math.max(1, Math.ceil(grid.lineCount / maxLines));
   const lanes = new Set<number>();
   for (let index = firstGrid; index <= lastGrid; index++) {
-    if ((index - firstGrid) % lineStride !== 0 && index !== lastGrid) {
-      continue;
-    }
     lanes.add((index + grid.first) * grid.spacing);
   }
   for (let panel = firstPanel; panel <= Math.min(lastPanel, panelCount - 1); panel++) {
@@ -408,9 +414,14 @@ function drawNoteLanes(
     }
     for (const lane of lanes) {
       const center = Math.abs(lane - cameraX) < 1e-7;
-      context.strokeStyle = center
+      const highlighted =
+        hover !== null && hover.lineIndex === lineIndex && Math.abs(lane - hover.position) < 1e-7;
+      const baseColor = center
         ? this.appearance.verticalGridCenterColor
         : this.appearance.verticalGridColor;
+      context.strokeStyle = highlighted
+        ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
+        : baseColor;
       context.lineWidth = center ? 2 : 1;
       const local = inset + ((lane - cameraX + 675) / 1350) * contentWidth;
       const horizontal =

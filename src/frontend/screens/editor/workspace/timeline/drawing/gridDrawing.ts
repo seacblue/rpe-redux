@@ -14,6 +14,7 @@ import type { TimelineAppearance } from "./timelineAppearance.ts";
 import type { TimelineGestures } from "../interaction/timelineGestures.ts";
 import type { TimelineViewport } from "../viewport/timelineViewport.ts";
 import { BEAT_LINE_COLOR_KEYS, beatLineColorKeyAt } from "../../../canvas/beatLineColors.ts";
+import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 
 /**
  * Which parts of the beat grid a pass draws.
@@ -50,6 +51,23 @@ export const PLAYHEAD_GRID: GridParts = Object.freeze({
 });
 
 const draws = (parts: GridParts, part: keyof GridParts): boolean => parts[part] !== false;
+
+/** Include the hovered tick even when dense-grid culling skips its neighbours. */
+function visibleGridTicks(
+  first: number,
+  last: number,
+  stride: number,
+  highlightedTick: number | null,
+): number[] {
+  const ticks = new Set<number>();
+  for (let tick = first; tick <= last; tick += stride) {
+    ticks.add(tick);
+  }
+  if (highlightedTick !== null && highlightedTick >= first && highlightedTick <= last) {
+    ticks.add(highlightedTick);
+  }
+  return [...ticks].sort((left, right) => left - right);
+}
 
 /** Resolve the stroke colour for one grid tick from the configured subdivision colours. */
 function gridStrokeColor(
@@ -115,10 +133,34 @@ function strokeGridBatches(
 }
 
 type TimelineHoverGuideReceiver = {
-  appearance: Pick<TimelineAppearance, "hoverGuidesEnabled" | "verticalGridHighlightColor">;
+  appearance: Pick<TimelineAppearance, "hoverGuidesEnabled" | "gridHighlightColor">;
   gestures: Pick<TimelineGestures, "cursor" | "eventCursor" | "hoverArea">;
   viewport: TimelineViewport;
 };
+
+/** Resolve the snapped beat under the pointer for the requested timeline area. */
+function hoveredGridLine(
+  receiver: TimelineHoverGuideReceiver,
+  width: number,
+  height: number,
+  area: TimelineArea,
+): { lineIndex: number; beat: number } | null {
+  if (receiver.appearance.hoverGuidesEnabled === false || receiver.gestures.hoverArea !== area) {
+    return null;
+  }
+  const pointer = area === "events" ? receiver.gestures.eventCursor : receiver.gestures.cursor;
+  if (!pointer) {
+    return null;
+  }
+  const lineIndex = receiver.viewport.lineIndexAt(pointer.x, width, area);
+  const factor = receiver.viewport.factorForLine(lineIndex);
+  const seconds =
+    receiver.viewport.tempo.seconds(receiver.viewport.origin, factor) +
+    (height - receiver.viewport.judgementOffset - pointer.y) / receiver.viewport.scaleForArea(area);
+  const beat = receiver.viewport.tempo.beat(seconds, factor);
+  const snapped = Math.round(beat * receiver.viewport.division) / receiver.viewport.division;
+  return Number.isFinite(snapped) ? { lineIndex, beat: snapped } : null;
+}
 
 /** Spatial guides end at beat zero rather than continuing into negative time. */
 export function strokeVerticalGrid(
@@ -136,76 +178,13 @@ export function strokeVerticalGrid(
 }
 
 /** Snap a chart x position to the nearest lane. */
-function nearestVerticalPosition(value: number, count: number): number {
+export function nearestVerticalPosition(value: number, count: number): number {
   const grid = verticalGrid(count);
   const index = Math.min(
     grid.lineCount - 1,
     Math.max(0, Math.round(value / grid.spacing - grid.first)),
   );
   return (index + grid.first) * grid.spacing;
-}
-
-/** Event timelines highlight beat rows only; notes may also highlight a lane. */
-export function shouldDrawEventHoverVertical(area: TimelineArea): boolean {
-  return area !== "events";
-}
-
-/** Draws the nearest snap lines over the active editing surface. */
-export function drawHoverGuides(
-  this: TimelineHoverGuideReceiver,
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  area: TimelineArea,
-): void {
-  if (this.appearance.hoverGuidesEnabled === false || this.gestures.hoverArea !== area) {
-    return;
-  }
-  const pointer = area === "events" ? this.gestures.eventCursor : this.gestures.cursor;
-  if (!pointer) {
-    return;
-  }
-  const lineIndex = this.viewport.lineIndexAt(pointer.x, width, area);
-  const factor = this.viewport.factorForLine(lineIndex);
-  const seconds = this.viewport.timeAt(pointer.y);
-  const beat = this.viewport.tempo.beat(seconds, factor);
-  const nearestBeat = Math.round(beat * this.viewport.division) / this.viewport.division;
-  const horizontal = this.viewport.verticalForLine(nearestBeat, lineIndex, height, area);
-  const zeroY = this.viewport.verticalForLine(0, lineIndex, height, area);
-  const vertical = shouldDrawEventHoverVertical(area)
-    ? this.viewport.noteHorizontal(
-        nearestVerticalPosition(
-          this.viewport.notePositionAt(pointer.x, lineIndex),
-          this.viewport.gridCount,
-        ),
-        lineIndex,
-      )
-    : null;
-  if (!Number.isFinite(horizontal)) {
-    return;
-  }
-  context.save();
-  context.globalAlpha = 0.72;
-  // Keep the guide continuous and lift the underlying grid colour slightly.
-  // A blend mode communicates emphasis without turning the grid into a second
-  // dashed interaction layer.
-  context.globalCompositeOperation = "screen";
-  context.lineWidth = 1.5;
-  if (nearestBeat >= 0) {
-    context.strokeStyle = readCanvasPalette().bottomValue;
-    context.beginPath();
-    context.moveTo(0, horizontal + 0.5);
-    context.lineTo(width, horizontal + 0.5);
-    context.stroke();
-  }
-  if (vertical !== null && Number.isFinite(vertical) && zeroY > 0) {
-    context.strokeStyle = this.appearance.verticalGridHighlightColor;
-    context.beginPath();
-    context.moveTo(vertical + 0.5, 0);
-    context.lineTo(vertical + 0.5, Math.min(height, zeroY));
-    context.stroke();
-  }
-  context.restore();
 }
 
 /** Keep the configured thickness in CSS pixels even in narrow timeline panels. */
@@ -248,23 +227,30 @@ export function grid(
     1,
     Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
   );
+  const hovered = hoveredGridLine(this, width, height, area);
+  const highlightedTick = hovered ? Math.round(hovered.beat * this.viewport.division) : null;
   context.font = canvasFont("caption");
   context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
   const batches = new Map<string, GridStrokeBatch>();
-  for (let tick = first; tick <= last; tick += stride) {
+  for (const tick of visibleGridTicks(first, last, stride, highlightedTick)) {
     const beat = tick / this.viewport.division;
     const vertical = verticalAt(beat);
     const major = tick % this.viewport.division === 0;
-    const color = gridStrokeColor(
+    const baseColor = gridStrokeColor(
       palette,
       tick,
       this.viewport.division,
       this.appearance.subdivisionColors,
     );
-    const alpha = Math.min(
+    const baseAlpha = Math.min(
       1,
       (this.appearance.barAlpha ?? 1) * (major ? 0.9 : tick % 2 === 0 ? 0.6 : 0.4),
     );
+    const highlighted = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const color = highlighted
+      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor, baseAlpha)
+      : baseColor;
+    const alpha = highlighted ? 1 : baseAlpha;
     if (draws(parts, "lines")) {
       addGridPosition(batches, color, alpha, vertical);
     }
@@ -318,6 +304,13 @@ export function gridForLine(
     1,
     Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
   );
+  const canvasWidth =
+    area === "events"
+      ? this.viewport.eventsCanvas.clientWidth
+      : this.viewport.notesCanvas.clientWidth;
+  const hovered = hoveredGridLine(this, canvasWidth, height, area);
+  const highlightedTick =
+    hovered?.lineIndex === lineIndex ? Math.round(hovered.beat * this.viewport.division) : null;
   context.save();
   context.beginPath();
   context.rect(left, 0, width, height);
@@ -325,20 +318,25 @@ export function gridForLine(
   context.font = canvasFont("caption");
   context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
   const batches = new Map<string, GridStrokeBatch>();
-  for (let tick = first; tick <= last; tick += stride) {
+  for (const tick of visibleGridTicks(first, last, stride, highlightedTick)) {
     const beat = tick / this.viewport.division;
     const vertical = this.viewport.verticalForLine(beat, lineIndex, height, area);
     const major = tick % this.viewport.division === 0;
-    const color = gridStrokeColor(
+    const baseColor = gridStrokeColor(
       palette,
       tick,
       this.viewport.division,
       this.appearance.subdivisionColors,
     );
-    const alpha = Math.min(
+    const baseAlpha = Math.min(
       1,
       (this.appearance.barAlpha ?? 1) * (major ? 0.9 : tick % 2 === 0 ? 0.6 : 0.4),
     );
+    const highlighted = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const color = highlighted
+      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor, baseAlpha)
+      : baseColor;
+    const alpha = highlighted ? 1 : baseAlpha;
     if (draws(parts, "lines")) {
       addGridPosition(batches, color, alpha, vertical);
     }

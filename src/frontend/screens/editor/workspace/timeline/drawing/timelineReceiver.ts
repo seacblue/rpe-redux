@@ -47,7 +47,7 @@ export type TimelineGestureReceiver = Pick<
 /** The drawing contract for the shared grid and multi-line grid labels. */
 export type TimelineGridReceiver = Pick<
   TimelineRuntimeSurface,
-  "appearance" | "cache" | "getSession" | "gridForLine" | "viewport"
+  "appearance" | "cache" | "getSession" | "gridForLine" | "gestures" | "viewport"
 >;
 
 /** The contract used while resolving a rectangle selection. */

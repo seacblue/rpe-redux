@@ -7,6 +7,7 @@ import {
   formatHexColor,
   normalizeColor,
 } from "../../../design/components/input/colorModel.ts";
+import { sourceOverColor } from "../../../core/utils/colors.ts";
 
 test("normalizes long, short, and invalid colour values", () => {
   assert.equal(normalizeColor("#a1b2c3"), "#A1B2C3");
@@ -27,4 +28,8 @@ test("alpha colours keep RGB compatibility and format their readout", () => {
   assert.equal(formatHexColor("#123456", 1), "#123456");
   assert.equal(displayHexColor("#12345680"), "#123456 50%");
   assert.equal(displayHexColor("#123456"), "#123456");
+});
+
+test("source-over colour mixing keeps the base line in the highlight result", () => {
+  assert.equal(sourceOverColor("#000000", "#FFFFFF80", 0.9), "rgba(135,135,135,0.950196)");
 });

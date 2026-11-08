@@ -1,16 +1,16 @@
-/** Vertical grid counts accept fractions without losing the centred layout. */
+/** Vertical grid counts include both chart boundaries. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { snapPosition, verticalGrid } from "../../../core/global/chart/editing/editGrid.ts";
 
-test("fractional grid counts keep the integer parity and tune spacing", () => {
+test("grid counts preserve the centred layout for odd and even counts", () => {
   assert.deepEqual(verticalGrid(11), {
-    spacing: 1350 / 12,
+    spacing: 1350 / 10,
     first: -5,
     lineCount: 11,
   });
   assert.deepEqual(verticalGrid(10), {
-    spacing: 1350 / 11,
+    spacing: 1350 / 9,
     first: -4.5,
     lineCount: 10,
   });
@@ -19,7 +19,7 @@ test("fractional grid counts keep the integer parity and tune spacing", () => {
   const centred = verticalGrid(17.9);
   assert.equal(centred.lineCount, 17);
   assert.equal(centred.first, -8);
-  assert.equal(centred.spacing, 1350 / 18.9);
+  assert.equal(centred.spacing, 1350 / 16);
   assert.equal(snapPosition(0, 17.9), 0);
   assert.equal(snapPosition(centred.spacing, 17.9), centred.spacing);
   assert.equal(snapPosition(-centred.spacing, 17.9), -centred.spacing);
@@ -33,6 +33,14 @@ test("fractional grid counts keep the integer parity and tune spacing", () => {
 
 test("a grid count just below an integer does not lose its last line", () => {
   assert.equal(verticalGrid(3.5).lineCount, 3);
-  assert.equal(verticalGrid(3.5).spacing, 300);
+  assert.equal(verticalGrid(3.5).spacing, 675);
   assert.equal(verticalGrid(17.999).lineCount, 17);
+});
+
+test("the first and last lines are the chart boundaries", () => {
+  const grid = verticalGrid(11);
+  assert.equal((0 + grid.first) * grid.spacing, -675);
+  assert.equal((grid.lineCount - 1 + grid.first) * grid.spacing, 675);
+  assert.equal(snapPosition(-675, 11), -675);
+  assert.equal(snapPosition(675, 11), 675);
 });

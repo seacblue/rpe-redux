@@ -17,12 +17,7 @@ import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/te
 import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { NOISE_ACTIVE_EVENTS } from "../../../../../../core/edit/events/eventTracks.ts";
-import {
-  BACKGROUND_GRID,
-  FOREGROUND_GRID,
-  drawHoverGuides,
-  strokeVerticalGrid,
-} from "../drawing/gridDrawing.ts";
+import { BACKGROUND_GRID, FOREGROUND_GRID, strokeVerticalGrid } from "../drawing/gridDrawing.ts";
 import {
   eventLayerOf,
   hasNonPositiveRange,
@@ -173,7 +168,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     this.gestures.eventInteraction.draw(context, width);
     this.drawMultiLineBeatLabels(context, width, height, "events");
     this.drawMultiLinePanelLabels(context, width, height, "events");
-    drawHoverGuides.call(this, context, width, height, "events");
     if (repaintBatch) {
       this.eventBatch.finish();
     }
@@ -657,6 +651,5 @@ export function drawMultiLineEvents(
   drawEventDragOverlay(this, context, width, height, palette);
   context.globalAlpha = 1;
   context.lineWidth = 1;
-  drawHoverGuides.call(this, context, width, height, "events");
   return true;
 }
