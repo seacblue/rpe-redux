@@ -10,51 +10,85 @@ Inside either language section the notes may use two inline annotations: `@name`
 
 **新功能**
 
-- 音符皮肤改用 Phira respack 格式：可以导入 Phira 皮肤包（ZIP，或包含 `info.yml` 的文件夹），也可以把当前皮肤导出为标准 Phira 皮肤包。内置皮肤已按同一格式重制。
-- 新增皮肤工作台：按槽位编辑音符、事件条、判定线贴图、打击效果图和打击音，可从其他已安装皮肤复用素材；Hold 槽位用切割器记录头、身、尾边界，打击效果槽位记录图集网格。
-- 皮肤包支持两个 Redux 扩展：事件条贴图 `event_hold.png` 与判定线贴图 `line.png`；导出时会自动补齐事件条，并把判定线贴图规范到包根路径。
-- 新增「删除皮肤」按钮和确认框。删除内置皮肤时，移除的是用户覆盖副本，随版本附带的皮肤会重新出现。
-- 皮肤工作台可以直接拖入皮肤包打开。
+- 新增时间轴缩放功能快捷键配置，默认 Alt + WheelUp / Alt + WheelDown。
+- 新增“按住仅预览播放（松开返回）”与“按住仅预览播放（松开停留）”功能，使用 RPE 的用户肯定对它不陌生！默认快捷键 T / U。
+- 早在 1.0.6 版本，我们就新增了“镜像粘贴”功能，这是另一处与 RPE 的功能对齐。默认快捷键 Ctrl + B——我去，不早说！
+- 素材库支持对素材的外部修改。
+- 素材库支持 Shader 相关的素材导入与预览。
+- 支持对 Phira GLSL 1.00 接口的兼容。
+- 音符皮肤改用 Phira respack 格式：可以导入 Phira 皮肤包，也可以把当前皮肤导出为标准 Phira 皮肤包。
+- 新增皮肤工作台：按槽位编辑音符、事件条、判定线贴图、打击效果图和打击音，可从其他已安装皮肤复用素材。
 
 **改进**
 
-- 皮肤工作台改为固定高度并支持内部滚动，底部只保留「删除皮肤」和「保存皮肤」。
-- 导入、导出皮肤包的结果改为在左下角以 toast 提示；取消文件或保存对话框时不提示。
-- 不完整的皮肤仍可保存为部分包：运行时按槽位先从内置皮肤、再从其他已安装皮肤补齐缺失素材。
+- 多线编辑与音符 / 事件的多线编辑状态切换的快捷键从 F / G 改为 J / K，与 RPE 对齐。
+- 现在程序启动失败时，不会再允许后台的长任务执行。
+- 优化了欢迎界面的列表骨架屏显示。
+- 素材库的排列方式改回列表。
+- 素材库去除了对图片的修改功能，“为什么我们不能使用外部工具修改呢？”
+- 横线与竖线的高亮现在由颜色的叠加实现。
+- 事件在多选时不会有虚线边框了。虽然我们用了实线边框代替，但是下个版本我们会删除的。
+- 现在设置的搜索内容会匹配输入框、滑条与下拉框的内容。
+- 哦对了。在上个版本，设置的搜索内容已经可以在会话内保存，但是我们忘记写进更新日志了。
+
+**代码质量**
+
+- 修复了 settings journey 产品断言的返回值错误问题。
 
 **修复**
 
-- 修复编辑内置皮肤后「保存皮肤」会新建一份重复皮肤、皮肤选择器里出现第二个条目的问题：保存始终沿用打开的包 id。
-- 导入前完整校验 Phira 包结构、图片尺寸、Hold 图集边界与打击效果网格，避免坏包进入皮肤库。
-
-**移除**
-
-- 旧版 `skin.json` / `manifest.json` 音符皮肤格式不再读取，也不再随版本分发；不提供旧格式转换。
+- 修复了 Alt + 鼠标滚轮缩放时间轴时的闪烁 Bug。
+- 修复了播放头错误移动的 Bug。
+- 修复了扩展安全模式对特定扩展失效的 Bug。
+- 修复了不显示 Shader 的 Bug。
+- 修复了音符时间轴不显示左边框的 Bug。
+- 修复了竖线的计算不符合预期的 Bug。
+- 修复了在事件时间轴上，横线未正确高亮的 Bug。
+- 修复了使用划线多选与其他多选方案时，错误判断多选意图的 Bug。
+- 修复了无法正确载入 PE 格式谱面的 Bug。
+- 修复了状态栏的拖拽等事件无效且误触发程序内部点击事件的 Bug。
 
 ### English
 
 **Features**
 
-- Note skins now use the Phira respack format: import a Phira skin package (a ZIP, or a folder containing `info.yml`), or export the selected skin as a standard Phira package. The built-in skin was rebuilt in the same format.
-- Added the skin workbench: edit notes, event bar, judge line, hit effect, and hit sounds slot by slot, reuse a slot from another installed skin, record Hold head/body/tail boundaries with the cutter, and record the hit-effect atlas grid.
-- Skin packages support two Redux extensions: the `event_hold.png` event-bar texture and the `line.png` judge-line texture; export fills in the event bar and normalizes the judge-line texture to the package root.
-- Added a Delete skin button with a confirmation dialog. For the built-in skin it removes the user override, so the shipped skin comes back.
-- A skin package can be dragged onto the workbench to open it.
+- Added shortcut configuration for timeline zoom, defaulting to Alt + WheelUp / Alt + WheelDown.
+- Added "hold to preview only (release to return)" and "hold to preview only (release to stay)". RPE users will know exactly what this is! Default shortcuts T / U.
+- We added Mirror paste back in 1.0.6 — another step toward RPE feature parity. Default shortcut Ctrl + B — oh wow, why didn't anyone say so earlier.
+- The asset library now supports external edits to assets.
+- The asset library can import and preview shader assets.
+- Added compatibility with the Phira GLSL 1.00 interface.
+- Note skins now use the Phira respack format: import a Phira skin package, or export the current skin as a standard Phira package.
+- Added the skin workbench: edit notes, event bars, judge-line textures, hit-effect images, and hit sounds slot by slot, and reuse assets from other installed skins.
 
 **Improvements**
 
-- The skin workbench now has a fixed height with internal scrolling, and its footer keeps only Delete skin and Save skin.
-- Import and export results are reported in the bottom-left toast stack; cancelling a file or save dialog reports nothing.
-- An incomplete skin still saves as a partial package: the runtime fills missing slots from the built-in skin first, then from the first installed skin that provides them.
+- The shortcut for toggling multi-line editing, and multi-line editing of notes / events, changed from F / G to J / K to match RPE.
+- When startup fails, long background tasks are no longer allowed to run.
+- Improved the list skeleton screen on the welcome page.
+- The asset library layout is back to a list.
+- Removed image editing from the asset library — "why can't we just edit with external tools?"
+- Highlighting for horizontal and vertical lines now uses colour blending.
+- Events no longer get a dashed border when multi-selected. We replaced it with a solid border, but we will remove it next version.
+- Settings search now matches the contents of input fields, sliders, and dropdowns.
+- Oh, right: in the previous version, the settings search text already persisted within a session, but we forgot to mention it in the changelog.
+
+**Code quality**
+
+- Fixed an incorrect return value in a product assertion in the settings journey.
 
 **Fixes**
 
-- Fixed saving the built-in skin creating a duplicate package and a second picker entry: saving always reuses the package id the workbench opened.
-- Imports now validate the Phira package layout, image sizes, Hold atlas boundaries, and the hit-effect grid before installing a package.
-
-**Removed**
-
-- The former `skin.json` / `manifest.json` note-skin format is no longer read or distributed, and no converter for it ships.
+- Fixed flicker when zooming the timeline with Alt + mouse wheel.
+- Fixed the playhead moving incorrectly.
+- Fixed extension safe mode not applying to certain extensions.
+- Fixed shaders not being displayed.
+- Fixed the note timeline not showing its left border.
+- Fixed vertical-line calculations not behaving as expected.
+- Fixed horizontal lines not highlighting correctly in the event timeline.
+- Fixed misjudging the multi-select intent when mixing sweep selection with other selection methods.
+- Fixed PE-format charts failing to load correctly.
+- Fixed drag and other events on the status bar doing nothing and accidentally triggering the app's internal click events.
 
 ## 1.0.6 (2026-11-08)
 
