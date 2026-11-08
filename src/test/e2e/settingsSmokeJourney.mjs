@@ -199,10 +199,11 @@ export async function settingsSmoke(runner) {
   // Leave the shared window without an active filter for later scenarios.
   await runner.evaluate(`(() => {
     const input = document.querySelector('dialog.redux-settings[open] #settings-search');
-    if (!input) return;
+    if (!input) return false;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
     setter.call(input, '');
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
   })()`);
   await runner.evaluate("document.querySelector('dialog.redux-settings[open]')?.close(); true");
 }
