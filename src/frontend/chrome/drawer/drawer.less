@@ -9,10 +9,10 @@
 // The sidebar keeps the higher navigation layer.
 
 .inspector.is-drawer {
-  // The drawer is an overlay island, but its material follows the active chrome
-  // recipe while retaining enough tint for the property fields to stay legible.
-  --drawer-surface: color-mix(in srgb, var(--chrome-panel-surface) 78%, transparent);
-  --drawer-list-surface: var(--drawer-surface);
+  // The drawer uses the same outer material as the inspector. Its inner layers
+  // stay transparent so a glass material is composited only once.
+  --drawer-surface: var(--chrome-panel-surface);
+  --drawer-list-surface: transparent;
 
   // The drawer grows toward `data-chrome-drawer-side`. A leftward reveal is the
   // resting contract, so the base rules below also cover the frame before the
@@ -48,13 +48,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--drawer-surface);
+  background: transparent;
   overflow: hidden;
   scrollbar-gutter: auto;
 }
 
 .inspector.is-drawer .inspector-status {
-  background: var(--drawer-surface);
+  background: transparent;
   border-bottom-color: var(--border-subtle);
 }
 
@@ -83,7 +83,7 @@
 .drawer-split {
   display: flex;
   width: 100%;
-  background: var(--drawer-surface);
+  background: transparent;
   min-width: 0;
   min-height: 0;
 }
@@ -95,7 +95,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: 0;
-  background: var(--drawer-surface);
+  background: transparent;
 }
 
 // The list column is the part the inspector exposes when it grows. Its fixed
@@ -121,7 +121,7 @@
 // The property column always occupies the inspector's resting width.
 .drawer-split-properties {
   width: var(--inspector-width);
-  background: var(--drawer-surface);
+  background: transparent;
   // Its width stays fixed while the drawer grows, so the field rows measure
   // this column rather than the whole drawer surface.
   container-type: inline-size;

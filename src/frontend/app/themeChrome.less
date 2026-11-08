@@ -180,14 +180,6 @@
   border-color: transparent;
 }
 
-// A drawer is a widened overlay, not an ordinary inspector pane. Keep the
-// material override aligned with its inherited chrome surface so glass and flat
-// themes can reveal the workspace behind it.
-.redux-app-root .workbench-inspector > .inspector.is-drawer {
-  background: var(--drawer-surface);
-  border-color: var(--panel-border);
-}
-
 // An overlay inspector leaves the grid entirely and floats over the workspace.
 // The width stays capped at half the frame so the canvas remains usable. A top
 // bar or inspector-grid sidebar removes the right rail track first.

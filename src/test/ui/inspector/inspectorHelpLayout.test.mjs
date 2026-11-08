@@ -28,17 +28,19 @@ test("drawer list footers share the inspector inset", () => {
   assert.match(footerRule[1], /padding-bottom:\s*var\(--inspector-gutter\);/u);
 });
 
-test("drawer surfaces follow the active chrome material", () => {
+test("drawer surfaces share the inspector material contract", () => {
+  assert.match(drawerStyles, /--drawer-surface:\s*var\(--chrome-panel-surface\);/u);
+  assert.match(drawerStyles, /--drawer-list-surface:\s*transparent;/u);
   assert.match(
     drawerStyles,
-    /--drawer-surface:\s*color-mix\(in srgb, var\(--chrome-panel-surface\) 78%, transparent\);/u,
+    /\.inspector\.is-drawer \.inspector-content \{[\s\S]*?background:\s*transparent;/u,
   );
-  const drawerRule = themeChromeStyles.match(
-    /\.redux-app-root \.workbench-inspector > \.inspector\.is-drawer \{([\s\S]*?)\}/u,
+  assert.match(drawerStyles, /\.drawer-split \{[\s\S]*?background:\s*transparent;/u);
+  const inspectorRule = themeChromeStyles.match(
+    /\.redux-app-root \.workbench-inspector > \.inspector \{\s*background:\s*transparent;([\s\S]*?)\}/u,
   );
-  assert.ok(drawerRule);
-  assert.match(drawerRule[1], /background:\s*var\(--drawer-surface\);/u);
-  assert.doesNotMatch(drawerRule[1], /background:\s*var\(--surface-raised\);/u);
+  assert.ok(inspectorRule);
+  assert.doesNotMatch(themeChromeStyles, /\.inspector\.is-drawer\s*\{/u);
 });
 
 test("onboarding geometry moves without replaying the dimming animation", () => {
