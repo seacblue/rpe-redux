@@ -1,15 +1,12 @@
 /** Build the Go service that the desktop executable embeds at compile time. */
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readProductVersion } from "../../scripts/productVersion.mjs";
 
 const backend = dirname(fileURLToPath(import.meta.url));
-const productVersion = (
-  JSON.parse(readFileSync(resolve(backend, "../../package.json"), "utf8")) as {
-    version: string;
-  }
-).version;
+const productVersion = readProductVersion(resolve(backend, "../.."));
 const rust = spawnSync("rustc", ["-vV"], { encoding: "utf8" });
 if (rust.error || rust.status !== 0) {
   throw new Error(rust.error?.message ?? rust.stderr);
