@@ -81,6 +81,7 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 | Play / pause                   | `Space`                             |
 | Timeline backward / forward    | `Wheel Down` / `Wheel Up`           |
 | Previous / next judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down` |
+| Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`   |
 | Settings                       | `Ctrl+K`                            |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.

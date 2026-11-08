@@ -31,6 +31,8 @@ export interface EditorSettingsBindings {
   realtimePreview: Preview;
   timeline: Timeline;
   audioAnalysis: AudioAnalysis;
+  /** Cancel a pending wheel zoom before settings replace its scale. */
+  cancelTimelineZoom?: () => void;
   invalidate(): void;
   addCleanup(cleanup: () => void): void;
 }
@@ -39,6 +41,7 @@ export interface EditorSettingsBindings {
 export function createEditorSettingsBindings(options: EditorSettingsBindings) {
   /** Project the live services into the settings application call. */
   function applySettings(): void {
+    options.cancelTimelineZoom?.();
     applyEditorSettings({
       timeline: options.timeline,
       realtimePreview: options.realtimePreview,

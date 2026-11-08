@@ -146,7 +146,7 @@ export function createWorkspaceSessionRuntime(
     const current = deps.session();
     const offset = Number(current.chart.META.offset ?? 0) / 1000;
     deps.seek(Math.max(0, saved.view.playheadSeconds + offset));
-    deps.viewport.origin = saved.view.originBeat;
+    deps.viewport.setOrigin(saved.view.originBeat, "session");
     const line = saved.view.lineIndex;
     if (Number.isInteger(line) && current.chart.judgeLineList?.[line]) {
       current.selectLine(line);

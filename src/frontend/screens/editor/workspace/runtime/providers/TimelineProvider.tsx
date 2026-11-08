@@ -166,7 +166,10 @@ export function createTimelineOverview(options: {
       const originSeconds =
         center -
         (height / 2 - options.timeline.viewport.judgementOffset) / options.timeline.viewport.scale;
-      options.timeline.viewport.origin = options.tempo.get().beat(originSeconds, factor);
+      options.timeline.viewport.setOrigin(
+        options.tempo.get().beat(originSeconds, factor),
+        "overview",
+      );
       options.timeline.changed();
     },
   });

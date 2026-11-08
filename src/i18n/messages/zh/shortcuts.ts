@@ -63,6 +63,8 @@ export default {
   "shortcuts.editor.nextBeat": "前进一横线",
   "shortcuts.editor.previousJudgeLine": "判定线号递减",
   "shortcuts.editor.nextJudgeLine": "判定线号递增",
+  "shortcuts.editor.timelineZoomOut": "时间轴缩小",
+  "shortcuts.editor.timelineZoomIn": "时间轴放大",
   "shortcuts.editor.lineJump": "跳转到指定判定线",
   "shortcuts.editor.timelineBackward": "时间轴后退",
   "shortcuts.editor.timelineForward": "时间轴前进",

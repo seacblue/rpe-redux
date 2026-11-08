@@ -154,6 +154,20 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     scope: "editor",
     defaults: [{ key: "WHEELUP" }],
   },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut,
+    category: "editor.navigation",
+    title: "shortcuts.editor.timelineZoomOut",
+    scope: "editor",
+    defaults: [{ key: "WHEELDOWN", modifiers: ["ALT"] }],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn,
+    category: "editor.navigation",
+    title: "shortcuts.editor.timelineZoomIn",
+    scope: "editor",
+    defaults: [{ key: "WHEELUP", modifiers: ["ALT"] }],
+  },
 ];
 /** Editor shortcuts without default keys but available for custom binding. */
 const lineInfoShortcuts: readonly EditorShortcutDefinition[] = [

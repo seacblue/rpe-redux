@@ -89,7 +89,8 @@ export function createPlaybackRuntime(options: {
   const currentBeat = () =>
     options.tempo().beat(chartSeconds(), options.session.current.line?.bpmfactor ?? 1);
   const playback = new EditorPlayback(audio, hitSounds, () => {
-    options.timeline.viewport.origin = currentBeat();
+    options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
+    options.timeline.viewport.setOrigin(currentBeat(), "seek");
     realtimePreview.effectsSince = chartSeconds();
     options.invalidate();
   });
@@ -269,10 +270,13 @@ export function createPlaybackRuntime(options: {
   /** Starts or stops the transport for the current chart. */
   async function togglePlayback(): Promise<void> {
     cancelWheelSeek();
+    const starting = !audio.playing && !playback.pending;
+    options.timeline.viewport.setPlaybackActive(starting);
     if (!audio.playing && !playback.pending) {
       realtimePreview.effectsSince = chartSeconds() - 0.001;
     }
     await playback.toggle(options.session.current.chart);
+    options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
     options.invalidate();
   }
 
@@ -290,6 +294,7 @@ export function createPlaybackRuntime(options: {
       cancelWheelSeek();
       autoSave.cancel();
       void playback.pause();
+      options.timeline.viewport.setPlaybackActive(false);
     },
   };
 }

@@ -86,6 +86,8 @@ interface EditorBindingRuntime {
   notify: HistoryTravelOptions["notify"];
   /** Commit a passive judge-line prefix gesture. */
   lineJump(submission: PrefixDigitSequenceSubmission): void;
+  /** Cancel a pending timeline zoom before settings replace its scale. */
+  cancelTimelineZoom?: () => void;
 }
 
 interface EditorBindingTimeline {
@@ -231,6 +233,7 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     realtimePreview: deps.realtimePreview,
     timeline: deps.timeline,
     audioAnalysis: deps.audioAnalysis,
+    cancelTimelineZoom: groups.runtime.cancelTimelineZoom,
     invalidate: deps.invalidate,
     addCleanup: (cleanup) => deps.scope.add(cleanup),
   });

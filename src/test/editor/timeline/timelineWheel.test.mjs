@@ -6,8 +6,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registerEditorShortcuts } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
-import { matchTimelineWheel } from "../../../core/edit/shortcuts/timelineWheel.ts";
+import { bindTimelineNavigation } from "../../../frontend/screens/editor/workspace/timeline/interaction/timelineNavigation.ts";
+import {
+  matchTimelineWheel,
+  TIMELINE_WHEEL_SHORTCUT_IDS,
+} from "../../../core/edit/shortcuts/timelineWheel.ts";
 import { recordShortcut } from "../../../core/shortcuts/keyMatching.ts";
+import { shortcutRegistry } from "../../../core/shortcuts/registry.ts";
 import {
   advanceShortcutCapture,
   createShortcutCaptureState,
@@ -33,6 +38,80 @@ test("default wheel bindings step lines with Ctrl and seek time otherwise", () =
       direction: -1,
     });
   } finally {
+    dispose();
+  }
+});
+
+test("default Alt wheel bindings zoom the timeline", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true }), {
+      kind: "zoom",
+      direction: 1,
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true }), {
+      kind: "zoom",
+      direction: -1,
+    });
+  } finally {
+    dispose();
+  }
+});
+
+test("a rebound zoom shortcut keeps its configured direction", () => {
+  const dispose = registerEditorShortcuts();
+  const zoomOut = TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut;
+  const zoomIn = TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn;
+  try {
+    assert.equal(shortcutRegistry.replaceAllBindings(zoomOut, ["ALT+WHEELUP"]).ok, true);
+    assert.equal(shortcutRegistry.replaceAllBindings(zoomIn, []).ok, true);
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true }), {
+      kind: "zoom",
+      direction: -1,
+    });
+  } finally {
+    shortcutRegistry.resetShortcut(zoomOut);
+    shortcutRegistry.resetShortcut(zoomIn);
+    dispose();
+  }
+});
+
+test("a custom Alt wheel seek binding does not also zoom the timeline", () => {
+  const dispose = registerEditorShortcuts();
+  const zoomOut = TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut;
+  const timePrevious = TIMELINE_WHEEL_SHORTCUT_IDS.timePrevious;
+  try {
+    assert.equal(shortcutRegistry.replaceAllBindings(zoomOut, []).ok, true);
+    assert.equal(shortcutRegistry.replaceAllBindings(timePrevious, ["ALT+WHEELDOWN"]).ok, true);
+    const seeks = [];
+    const zooms = [];
+    const navigation = bindTimelineNavigation({
+      timeline: {
+        gestures: {},
+        viewport: { division: 4, minimumScrollSeconds: () => 0 },
+      },
+      session: () => ({ chart: { META: {} } }),
+      seekByBeats: (delta) => seeks.push(delta),
+      wheelSettings: () => ({ scrollSpeed: 1, scrollAcceleration: false }),
+      lineSwitcher: { step() {} },
+      zoomVertical: () => {
+        zooms.push(true);
+        return true;
+      },
+    });
+    navigation.wheel({
+      deltaY: 100,
+      deltaMode: 0,
+      altKey: true,
+      shiftKey: false,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+    assert.equal(seeks.length, 1);
+    assert.deepEqual(zooms, []);
+  } finally {
+    shortcutRegistry.resetShortcut(zoomOut);
+    shortcutRegistry.resetShortcut(timePrevious);
     dispose();
   }
 });
