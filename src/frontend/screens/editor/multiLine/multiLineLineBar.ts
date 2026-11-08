@@ -17,8 +17,6 @@ export interface MultiLineLineBarItem {
   name: string;
   /** Localized group name, or an empty string for the unnamed first group. */
   group: string;
-  /** Full localized label used for the row tooltip and accessible name. */
-  label: string;
   /** True for the line the timeline is editing. */
   current: boolean;
   /** True while the line belongs to the multi-line selection. */
@@ -80,7 +78,6 @@ export function buildMultiLineLineBarItems(
       index: option.index,
       name: withoutGroup || fallbackName(option.index),
       group: option.group,
-      label: option.label || fallbackName(option.index),
       current: option.index === current,
       selected: selected.has(option.index),
     };

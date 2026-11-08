@@ -6,7 +6,12 @@
  * keyboard event unhandled so an outer surface can still act on it.
  */
 import { eventKey, eventList } from "../events/eventTracks.ts";
-import { scaleSelection, shiftEventEdge, shiftSelectionLine } from "../selection/control.ts";
+import {
+  clearSelection,
+  scaleSelection,
+  shiftEventEdge,
+  shiftSelectionLine,
+} from "../selection/control.ts";
 import { nudgeSelection } from "../selection/edits.ts";
 import { MAX_BASE_EVENT_LAYERS } from "../../global/chart/chartVocabulary.ts";
 import type { EditorSession } from "../session/session.ts";
@@ -120,7 +125,11 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       return;
     }
-    if (PAGE_KEYS[action]) {
+    if (action === "selection.clear") {
+      if (clearSelection(session)) {
+        session.notify();
+      }
+    } else if (PAGE_KEYS[action]) {
       nudgeSelection(session, PAGE_KEYS[action], timeline.division, timeline.gridCount);
     } else if (action === "selection.scale.narrower") {
       scaleSelection(session, 0.95);

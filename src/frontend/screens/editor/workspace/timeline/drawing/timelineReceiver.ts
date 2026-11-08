@@ -63,6 +63,8 @@ export type TimelineSelectionReceiver = Pick<
   | "notesCanvas"
   | "refreshIndex"
   | "rectangleSelection"
+  | "sweepSelection"
+  | "updateSweep"
   | "up"
   | "viewport"
 >;
@@ -94,6 +96,7 @@ export type TimelineNoteInteractionReceiver = Pick<
   | "notesCanvas"
   | "rectangleTimes"
   | "refreshIndex"
+  | "updateSweep"
   | "viewport"
   | "visible"
 >;

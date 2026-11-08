@@ -10,8 +10,10 @@ import { BUILD_HELP, parseBuildFlags } from "./buildFlags.mjs";
 import { prepareDesktopPrerequisites } from "./desktopPrerequisites.mjs";
 import { portableTarget, stagePortablePayload } from "./portablePayload.mjs";
 import { runTauri } from "./tauriCli.mjs";
+import { readProductVersion } from "./productVersion.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+const productVersion = readProductVersion(root);
 const flags = parseBuildFlags(process.argv.slice(2));
 if (flags.help) {
   console.log(BUILD_HELP);
@@ -19,6 +21,7 @@ if (flags.help) {
 }
 
 const { mode, fast } = flags;
+console.log(`Building RPE Redux ${productVersion}`);
 if (fast) {
   // Fast profile: the release feature set with thin LTO and parallel codegen.
   process.env.CARGO_PROFILE_RELEASE_LTO = "thin";

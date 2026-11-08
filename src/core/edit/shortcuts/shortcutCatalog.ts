@@ -95,6 +95,7 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.samplingCancel",
     scope: "editor",
     defaults: [{ key: "ESCAPE" }],
+    shared: true,
     enabledFor: (context) => context.samplingActive !== true,
   },
 ];
@@ -302,6 +303,29 @@ export function matchEditorShortcut(
     }
   }
   return undefined;
+}
+
+/** Match one passive editor gesture without dispatching it as a command. */
+export function matchesEditorShortcut(
+  id: string,
+  event: ShortcutEventLike,
+  context: EditorShortcutContext,
+  shortcutContext: ShortcutContext,
+): boolean {
+  const shortcut = EDITOR_SHORTCUTS.find((candidate) => candidate.id === id);
+  if (!shortcut || !shortcutScopeAvailable(shortcut.scope, shortcutContext)) {
+    return false;
+  }
+  if (!(shortcut.when?.(shortcutContext) ?? true)) {
+    return false;
+  }
+  if (shortcut.surface && shortcut.surface !== context.surface) {
+    return false;
+  }
+  if (!(shortcut.enabledFor?.(context) ?? true)) {
+    return false;
+  }
+  return shortcuts.bindingsOf(id).some((binding) => matches(event, binding));
 }
 
 /**

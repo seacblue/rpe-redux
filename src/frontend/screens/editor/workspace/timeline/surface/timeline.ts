@@ -131,6 +131,9 @@ export class Timeline {
           return;
         }
         event.preventDefault();
+        if (this.gestures.consumeContextMenuSuppression()) {
+          return;
+        }
         this.gestures.onContextMenu(event, canvas);
       },
     });
@@ -155,6 +158,7 @@ export class Timeline {
         },
         pointerDown: (event) => {
           if (!this.disposed) {
+            this.gestures.clearContextMenuSuppression();
             this.gestures.beginSelectionHistory(this.getSession());
             this.down(event);
           }
@@ -178,6 +182,7 @@ export class Timeline {
         ...eventCanvasBindings,
         pointerDown: (event) => {
           if (!this.disposed) {
+            this.gestures.clearContextMenuSuppression();
             this.gestures.beginSelectionHistory(this.getSession());
             this.gestures.eventInteraction.down(event);
           }

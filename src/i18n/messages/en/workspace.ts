@@ -359,6 +359,10 @@ export default {
   "workspace.collaboration.reconnected": "Reconnected to the collaboration room.",
   "workspace.collaboration.connectionLost": "The collaboration connection was lost.",
   "workspace.collaboration.connectionFailed": "Could not connect to the collaboration server.",
+  "workspace.collaboration.compatibilityMismatch":
+    "This client is not compatible with the collaboration server. Update RPE Redux and try again.",
+  "workspace.collaboration.versionDifferenceWarning":
+    "The two RPE Redux versions are different, but their collaboration protocol is compatible.",
   "workspace.collaboration.connectionTimeout":
     "Timed out connecting to the collaboration server. Check the address and network.",
   "workspace.collaboration.handshakeTimeout":

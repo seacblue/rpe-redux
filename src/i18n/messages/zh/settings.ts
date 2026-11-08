@@ -319,6 +319,11 @@ export default {
   "settings.field.default-line-color.label": "默认判定线颜色",
   "settings.field.timeline-event-marquee-color.label": "事件框选颜色",
   "settings.field.timeline-note-marquee-color.label": "音符框选颜色",
+  "settings.field.timeline-sweep-add-color.label": "左键划线颜色",
+  "settings.field.timeline-sweep-add-color.description": "左键划线选中时间轴物件时使用的颜色。",
+  "settings.field.timeline-sweep-remove-color.label": "右键划线颜色",
+  "settings.field.timeline-sweep-remove-color.description":
+    "右键划线取消选中时间轴物件时使用的颜色。",
   "settings.field.selected-note-color.label": "选中音符颜色",
   "settings.field.default-particle-color.label": "默认粒子颜色",
   "settings.field.particle-effects-enabled.label": "渲染粒子效果",

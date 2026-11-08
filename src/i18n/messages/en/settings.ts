@@ -378,6 +378,12 @@ export default {
   "settings.field.default-line-color.label": "Default judgement-line colour",
   "settings.field.timeline-event-marquee-color.label": "Event marquee colour",
   "settings.field.timeline-note-marquee-color.label": "Note marquee colour",
+  "settings.field.timeline-sweep-add-color.label": "Left-button sweep colour",
+  "settings.field.timeline-sweep-add-color.description":
+    "Colour used while left-button sweep selection adds timeline objects.",
+  "settings.field.timeline-sweep-remove-color.label": "Right-button sweep colour",
+  "settings.field.timeline-sweep-remove-color.description":
+    "Colour used while right-button sweep selection removes timeline objects.",
   "settings.field.selected-note-color.label": "Selected note colour",
   "settings.field.default-particle-color.label": "Default particle colour",
   "settings.field.particle-effects-enabled.label": "Render hit particles",

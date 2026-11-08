@@ -82,8 +82,10 @@ export type ClientMessage =
       readonly profile: CollaborationProfile;
       readonly chart: unknown;
       readonly fingerprint: string;
-      /** Omitted by clients older than 1.0.0-a4; newer servers still accept them. */
-      readonly protocolVersion?: number;
+      /** Wire protocol revision understood by this client. */
+      readonly protocolVersion: number;
+      /** Product version used to create the room, when the client reports it. */
+      readonly appVersion?: string;
       /** Encrypted rooms send an opaque chart envelope. */
       readonly encrypted?: boolean;
       /** Joining members skip host approval and become editors. */
@@ -96,19 +98,24 @@ export type ClientMessage =
       readonly roomId: string;
       readonly invite: string;
       readonly profile: CollaborationProfile;
-      readonly protocolVersion?: number;
+      readonly protocolVersion: number;
+      /** Product version used by the joining client, when available. */
+      readonly appVersion?: string;
     }
   | {
       readonly type: "inspect-room";
       readonly roomId: string;
       readonly invite: string;
-      readonly protocolVersion?: number;
+      readonly protocolVersion: number;
+      readonly appVersion?: string;
     }
   | {
       readonly type: "resume";
       readonly roomId: string;
       readonly token: string;
-      readonly protocolVersion?: number;
+      readonly protocolVersion: number;
+      /** Product version used by the reconnecting client, when available. */
+      readonly appVersion?: string;
     }
   | {
       readonly type: "approve";
@@ -205,8 +212,10 @@ export type ServerMessage =
       readonly hostId: string;
       readonly role: CollaborationRole;
       readonly revision: number;
-      /** Protocol revision served by this room; older servers omit it. */
-      readonly protocolVersion?: number;
+      /** Protocol revision served by this room. */
+      readonly protocolVersion: number;
+      /** Product version advertised by this room, when available. */
+      readonly appVersion?: string;
       readonly chart?: unknown;
       readonly fingerprint: string;
       readonly maxMembers?: number;

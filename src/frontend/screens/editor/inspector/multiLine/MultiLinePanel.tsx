@@ -558,7 +558,6 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
                           current={item.current}
                           aria-pressed={previewing ? previewed : item.selected}
                           aria-current={item.current ? "true" : undefined}
-                          title={item.label}
                           data-line-index={item.index}
                           onPointerDown={(event) => handleLinePointerDown(event, item.index)}
                           onClick={(event) => handleLineClick(event, item.index)}

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createValue } from "../../../core/state/values.ts";
-import { MultiEditPanel } from "../../../frontend/screens/editor/inspector/multi-edit/multiEdit.ts";
+import { MultiEditPanel } from "../../../frontend/screens/editor/inspector/multiEdit/multiEdit.ts";
 
 test("hiding the multi-edit panel drops its preview result", () => {
   let invalidations = 0;

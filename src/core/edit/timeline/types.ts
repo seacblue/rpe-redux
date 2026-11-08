@@ -103,7 +103,24 @@ export interface RectangleDrag extends DragCommon {
   baselineEvents?: ReadonlyMap<number, ReadonlySet<string>>;
 }
 
-export type TimelineDrag = MoveDrag | PanDrag | RectangleDrag;
+/** A pointer path that adds to or removes from one timeline area. */
+export interface SweepDrag extends DragCommon {
+  kind: "sweep";
+  area: TimelineArea;
+  /** Pointer button that started the sweep; 2 is the context-menu gesture. */
+  button?: number;
+  remove?: boolean;
+  /** Whether the path crossed the click tolerance. */
+  sweepMoved?: boolean;
+  /** The last point already applied to the selection model. */
+  lastSweepPoint?: TimelinePoint;
+  /** The last world-space X already applied to the selection model. */
+  lastSweepWorldX?: number;
+  /** Screen-space samples used to paint the transient path. */
+  sweepPoints?: TimelinePoint[];
+}
+
+export type TimelineDrag = MoveDrag | PanDrag | RectangleDrag | SweepDrag;
 
 export interface EventMoveDrag extends DragCommon {
   kind: "move" | "startTime" | "endTime";
@@ -118,4 +135,4 @@ export interface EventMoveDrag extends DragCommon {
  * note anchors on a position index (`number`), so only that one variant is
  * declared twice. Everything else is the same shape and the same name.
  */
-export type TimelineEventDrag = EventMoveDrag | PanDrag | RectangleDrag;
+export type TimelineEventDrag = EventMoveDrag | PanDrag | RectangleDrag | SweepDrag;

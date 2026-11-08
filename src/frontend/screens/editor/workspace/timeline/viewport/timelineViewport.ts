@@ -26,7 +26,7 @@ import * as timelineGeometry from "./timelineGeometry.ts";
 import type { TimelineViewportReceiver } from "./timelineViewportReceiver.ts";
 import type { MultiLineScrollState } from "../multiLine/multiLineScrollBinding.ts";
 import { syncMultiLineChrome as publishMultiLineChrome } from "../multiLine/multiLineChrome.ts";
-import { multiLineScale } from "../multiLine/multiLinePresentation.ts";
+import { multiLinePanelScale, multiLineScale } from "../multiLine/multiLinePresentation.ts";
 
 type ViewportSettings = Pick<
   ReturnType<typeof readEditorDisplaySettings>["timeline"],
@@ -128,7 +128,7 @@ export class TimelineViewport {
   getMultiLineZoom(area: TimelineArea): number {
     return this.multiLineZoom[area];
   }
-  /** Vertical scale for one area, including its multi-line zoom. */
+  /** Vertical scale for one area; horizontal panel count never changes it. */
   scaleForArea(area: TimelineArea): number {
     const session = this.getSession();
     const active =
@@ -254,7 +254,15 @@ export class TimelineViewport {
       : session.multiLineActive && session.multiLineMode === "notes" && !session.multiLineMerge
         ? 1
         : this.exclusiveRatio;
-    return noteScaleForTimelineRatio(this.noteScale, timelineRatio);
+    const panelScale =
+      session.notesMode === "multi"
+        ? multiLinePanelScale(
+            this.panelWidth(this.notesCanvas.clientWidth, "notes"),
+            this.notesCanvas.clientWidth,
+            true,
+          )
+        : 1;
+    return noteScaleForTimelineRatio(this.noteScale, timelineRatio) * panelScale;
   }
 
   /**

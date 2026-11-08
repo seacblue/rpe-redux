@@ -221,6 +221,25 @@ export function shiftEventEdge(
   );
 }
 
+/** Clear every selected note and event, including selections on other lines. */
+export function clearSelection(session: EditorSession): boolean {
+  const changed = Boolean(
+    session.selection.size ||
+    session.eventSelection.size ||
+    [...session.multiLineSelection.values()].some((selection) => selection.size) ||
+    [...session.multiEventSelection.values()].some((selection) => selection.size),
+  );
+  if (!changed) {
+    return false;
+  }
+  session.selection.clear();
+  session.eventSelection.clear();
+  session.multiLineSelection.clear();
+  session.multiEventSelection.clear();
+  session.multiSelectionIntent = null;
+  return true;
+}
+
 /**
  * Select-all and the page keys move the selection this module edits.
  *
@@ -229,11 +248,39 @@ export function shiftEventEdge(
  */
 export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
   {
+    id: "selection.clear",
+    category: "editor.selection",
+    title: "shortcuts.editor.clearSelection",
+    scope: "editor",
+    defaults: [{ key: "ESCAPE" }],
+    shared: true,
+    enabledFor: (context) =>
+      context.hasSelection && context.samplingActive !== true && context.curveMode !== true,
+  },
+  {
     id: "edit.selectAll",
     category: "editor.editing",
     title: "shortcuts.editor.selectAll",
     scope: "editor",
     defaults: [{ key: "A", modifiers: ["CTRL"] }],
+  },
+  {
+    id: "selection.sweep.add",
+    category: "editor.selection",
+    title: "shortcuts.editor.sweepSelect",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0" }],
+    surface: "timeline",
+    passive: true,
+  },
+  {
+    id: "selection.sweep.remove",
+    category: "editor.selection",
+    title: "shortcuts.editor.sweepDeselect",
+    scope: "editor",
+    defaults: [{ key: "MOUSE2" }],
+    surface: "timeline",
+    passive: true,
   },
   {
     id: "selection.nudge.left",

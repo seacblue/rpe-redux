@@ -62,6 +62,7 @@ import {
   chartChangesMayAffectAssets,
 } from "../../../../../core/collaboration/assets.ts";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
+import { BUILD_APP_VERSION } from "../../../../../core/platform/buildInfo.ts";
 import { changeLockKeys } from "../../../../../core/collaboration/changes.ts";
 import { sha256Hex } from "../../../../../core/collaboration/digest.ts";
 import type {
@@ -450,6 +451,7 @@ interface HandlerSet {
   conflict: (conflict: Extract<ServerMessage, { type: "conflict" }>) => void;
   role: (role: CollaborationRole, reason?: string) => void;
   error: (message: string, code?: string) => void;
+  warning: (message: string, code?: string) => void;
   assetReady: (asset: RoomAsset, bytes: Uint8Array) => void;
   assetError: (message: string) => void;
   lockDenied: (conflicts: readonly RoomLock[]) => void;
@@ -506,6 +508,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     conflict: () => {},
     role: () => {},
     error: () => {},
+    warning: () => {},
     assetReady: () => {},
     assetError: () => {},
     lockDenied: () => {},
@@ -619,6 +622,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   // once and teardown is scoped to this provider.
   useEffect(() => {
     const client = new CollaborationClient({
+      appVersion: BUILD_APP_VERSION,
       state: stateCell,
       socketFactory: (url) => new WebSocket(url) as unknown as CollaborationSocket,
       onSnapshot: (snapshot, initial) => handlersRef.current.snapshot(snapshot, initial),
@@ -626,6 +630,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onConflict: (conflict) => handlersRef.current.conflict(conflict),
       onRole: (role, reason) => handlersRef.current.role(role, reason),
       onError: (message, code) => handlersRef.current.error(message, code),
+      onWarning: (message, code) => handlersRef.current.warning(message, code),
       onAssetReady: (asset, bytes) => handlersRef.current.assetReady(asset, bytes),
       onAssetError: (message) => handlersRef.current.assetError(message),
       onLockDenied: (conflicts) => handlersRef.current.lockDenied(conflicts),
@@ -893,6 +898,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return t("workspace.collaboration.queueFull");
         case "room_closed":
           return t("workspace.collaboration.roomClosed");
+        case "version_mismatch":
+          return t("workspace.collaboration.compatibilityMismatch");
         default:
           return message;
       }
@@ -1083,6 +1090,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           code === "no_room" ||
           code === "bad_resume" ||
           code === "protocol_mismatch" ||
+          code === "version_mismatch" ||
           code === "removed" ||
           code === "room_closed" ||
           code === "bad_invite"
@@ -1120,6 +1128,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           clientRef.current?.requestSnapshot();
         }
         showNotice(connectionErrorText(message, code), "error");
+      },
+      warning: () => {
+        showNotice(t("workspace.collaboration.versionDifferenceWarning"), "warning");
       },
       assetReady: (asset, bytes) => {
         contextRef.current.documentRuntime?.adoptAsset(asset.name, bytes);
