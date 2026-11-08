@@ -107,7 +107,11 @@ export interface RectangleDrag extends DragCommon {
 export interface SweepDrag extends DragCommon {
   kind: "sweep";
   area: TimelineArea;
+  /** Pointer button that started the sweep; 2 is the context-menu gesture. */
+  button?: number;
   remove?: boolean;
+  /** Whether the path crossed the click tolerance. */
+  sweepMoved?: boolean;
   /** The last point already applied to the selection model. */
   lastSweepPoint?: TimelinePoint;
   /** The last world-space X already applied to the selection model. */

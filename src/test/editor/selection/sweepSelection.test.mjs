@@ -4,9 +4,11 @@ import test from "node:test";
 import { createChart, createEvent, createNote } from "../../../core/global/chart/chart.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import { refreshNoteIndex } from "../../../core/edit/timeline/noteIndex.ts";
+import { TimelineGestures } from "../../../frontend/screens/editor/workspace/timeline/interaction/timelineGestures.ts";
 import {
   selectEventsAlongSegment,
   selectNotesAlongSegment,
+  shouldSuppressTimelineContextMenu,
 } from "../../../core/edit/timeline/selection.ts";
 
 test("a note sweep selects and then removes the note it crosses", () => {
@@ -48,4 +50,20 @@ test("an event sweep uses drawn event bars and does not select an unrelated bar"
     },
   );
   assert.deepEqual([...session.eventSelection], ["moveXEvents:0"]);
+});
+
+test("right-click sweep suppresses the menu only after movement", () => {
+  assert.equal(shouldSuppressTimelineContextMenu({ button: 2, moved: false }), false);
+  assert.equal(shouldSuppressTimelineContextMenu({ button: 2, moved: true }), true);
+  assert.equal(shouldSuppressTimelineContextMenu({ button: 0, moved: true }), false);
+});
+
+test("right-drag menu suppression is consumed once", () => {
+  const gestures = new TimelineGestures({}, () => new EditorSession(createChart()));
+  gestures.suppressNextContextMenu();
+  assert.equal(gestures.consumeContextMenuSuppression(), true);
+  assert.equal(gestures.consumeContextMenuSuppression(), false);
+  gestures.suppressNextContextMenu();
+  gestures.clearContextMenuSuppression();
+  assert.equal(gestures.consumeContextMenuSuppression(), false);
 });

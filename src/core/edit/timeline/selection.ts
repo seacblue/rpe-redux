@@ -50,6 +50,22 @@ export interface SelectionSweep {
   remove?: boolean;
 }
 
+/** Return whether a right-button sweep moved far enough to replace the context menu. */
+export function shouldSuppressTimelineContextMenu(input: {
+  button: number;
+  moved: boolean;
+}): boolean {
+  return input.button === 2 && input.moved;
+}
+
+/** Return whether a pointer path exceeds the timeline's click tolerance. */
+export function timelineSweepMoved(
+  start: { x: number; y: number },
+  current: { x: number; y: number },
+): boolean {
+  return Math.hypot(current.x - start.x, current.y - start.y) > 3;
+}
+
 /** Return whether a segment touches an axis-aligned rectangle. */
 function segmentTouchesRectangle(
   sweep: SelectionSweep,

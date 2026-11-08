@@ -11,6 +11,8 @@ import {
   selectNotesInRectangle,
   selectEventsAlongSegment,
   selectNotesAlongSegment,
+  shouldSuppressTimelineContextMenu,
+  timelineSweepMoved,
   type SelectionSweep,
 } from "../../../../../../core/edit/timeline/selection.ts";
 import { eventList } from "../../../../../../core/edit/events/eventTracks.ts";
@@ -172,6 +174,21 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
   if (current.x === previous.x && current.y === previous.y && currentWorldX === previousWorldX) {
     return;
   }
+  selection.drag.current = current;
+  selection.drag.currentWorldX = currentWorldX;
+  selection.drag.sweepPoints ??= [selection.drag.start];
+  selection.drag.sweepPoints.push(current);
+  const moved = timelineSweepMoved(selection.drag.start, current);
+  if (selection.drag.button === 2 && !moved) {
+    this.changed();
+    return;
+  }
+  if (!selection.drag.sweepMoved) {
+    selection.drag.sweepMoved = moved;
+    if (shouldSuppressTimelineContextMenu({ button: selection.drag.button ?? -1, moved })) {
+      this.gestures.suppressNextContextMenu();
+    }
+  }
   const sweep: SelectionSweep = {
     startX: previousWorldX,
     startY: previous.y,
@@ -218,12 +235,8 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
       scroll: this.viewport.multiLineViewportOffset(this.eventsCanvas.clientWidth, "events"),
     });
   }
-  selection.drag.current = current;
-  selection.drag.currentWorldX = currentWorldX;
   selection.drag.lastSweepPoint = current;
   selection.drag.lastSweepWorldX = currentWorldX;
-  selection.drag.sweepPoints ??= [selection.drag.start];
-  selection.drag.sweepPoints.push(current);
   this.changed();
 }
 
@@ -365,11 +378,7 @@ export function finishRectangle(this: TimelineSelectionReceiver, event: PointerE
       return false;
     }
     this.updateSweep(event);
-    const moved =
-      Math.hypot(
-        sweep.drag.current.x - sweep.drag.start.x,
-        sweep.drag.current.y - sweep.drag.start.y,
-      ) > 3;
+    const moved = timelineSweepMoved(sweep.drag.start, sweep.drag.current);
     if (!moved && event.type === "pointerup" && !sweep.drag.remove) {
       const session = this.getSession();
       if (sweep.area === "notes") {

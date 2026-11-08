@@ -324,6 +324,7 @@ export class EventInteraction implements EventInteractionHandle {
       this.drag = {
         kind: "sweep",
         area: "events",
+        button: event.button,
         remove: sweepMode === "remove",
         pointerId: event.pointerId,
         start: point,

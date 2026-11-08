@@ -149,9 +149,6 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     return;
   }
   event.preventDefault?.();
-  if (event.button === 2) {
-    return;
-  }
   if (this.finishRectangle(event)) {
     return;
   }
@@ -178,6 +175,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     this.gestures.drag = {
       kind: "sweep",
       area: "notes",
+      button: event.button,
       remove: sweepMode === "remove",
       pointerId: event.pointerId,
       start: position,

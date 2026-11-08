@@ -89,6 +89,8 @@ export class SelectionOverlay {
       "timeline-event-marquee-color",
       palette.selectionEventsStroke,
     );
+    const sweepAddColor = selectionColor("timeline-sweep-add-color", "#33FF33");
+    const sweepRemoveColor = selectionColor("timeline-sweep-remove-color", "#FFFFFF");
     const noteRgb = rgbChannels(noteColor) ?? [0, 103, 184];
     const eventRgb = rgbChannels(eventColor) ?? [180, 83, 9];
     const marqueePalette = {
@@ -114,6 +116,7 @@ export class SelectionOverlay {
           sweep.drag.sweepPoints ?? [sweep.drag.start, sweep.drag.current],
           sweep.area,
           marqueePalette,
+          sweep.drag.remove ? sweepRemoveColor : sweepAddColor,
         );
         this.hasPaintedSelection = true;
       } else {

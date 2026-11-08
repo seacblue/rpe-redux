@@ -61,6 +61,7 @@ export function drawSelectionSweep(
   points: readonly MarqueePoint[],
   area: MarqueeArea,
   palette: MarqueePalette,
+  strokeColor?: string,
 ): void {
   if (points.length < 2) {
     return;
@@ -77,7 +78,8 @@ export function drawSelectionSweep(
     }
   });
   context.strokeStyle =
-    area === "notes" ? palette.selectionNotesStroke : palette.selectionEventsStroke;
+    strokeColor ??
+    (area === "notes" ? palette.selectionNotesStroke : palette.selectionEventsStroke);
   context.lineWidth = 2;
   context.lineCap = "round";
   context.lineJoin = "round";
