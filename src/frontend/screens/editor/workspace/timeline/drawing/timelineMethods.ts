@@ -7,10 +7,12 @@
  */
 import {
   rectangleSelection,
+  sweepSelection,
   rectangleStart,
   rectangleTimes,
   refreshRectangleSelection,
   updateRectangle,
+  updateSweep,
   finishRectangle,
 } from "../selection/rectangleSelection.ts";
 import { cancelPlacement, autoScroll } from "../interaction/timelineInteraction.ts";
@@ -32,10 +34,12 @@ import { drawTrajectoryEvent, drawShaderEvents } from "../events/eventOverlayDra
 /** The satellite implementations installed on `Timeline.prototype`. */
 export const timelineMethods = {
   rectangleSelection,
+  sweepSelection,
   rectangleStart,
   rectangleTimes,
   refreshRectangleSelection,
   updateRectangle,
+  updateSweep,
   finishRectangle,
   cancelPlacement,
   movedNote,

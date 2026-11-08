@@ -12,8 +12,8 @@ import { createBpmForm } from "./bpm/model.ts";
 import { createCurveState } from "./curveNotes/model.ts";
 import { createEventInspectorState } from "./events/model.ts";
 import { createLinePanelState } from "../../global/sections/lines/model.ts";
-import { createMultiEditState } from "./multi-edit/model.ts";
-import { createMultiLinePanelState } from "./multi-line/model.ts";
+import { createMultiEditState } from "./multiEdit/model.ts";
+import { createMultiLinePanelState } from "./multiLine/model.ts";
 import { createNotesInspectorState } from "./notes/model.ts";
 import { createTrajectoryPanelState } from "./trajectory/model.ts";
 

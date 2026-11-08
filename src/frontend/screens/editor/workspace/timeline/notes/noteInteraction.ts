@@ -23,6 +23,7 @@ import {
   type OverlapMenuAction,
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { selectOverlappingNote } from "./noteSelectionDrawing.ts";
+import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
 
 /** The note with the active drag applied, for drawing and commit. */
 export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineNote): TimelineNote {
@@ -167,6 +168,35 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   this.gestures.hoverArea = "notes";
   const hit = this.hit(position);
   const session = this.getSession();
+  const sweepMode = timelineSweepMode(session, event, "notes");
+  if (
+    sweepMode &&
+    (event.button === 2 ||
+      (sweepMode === "add" && !hit && !this.gestures.tool && !this.gestures.pendingHold))
+  ) {
+    lockSweepArea(session, "notes");
+    this.gestures.drag = {
+      kind: "sweep",
+      area: "notes",
+      remove: sweepMode === "remove",
+      pointerId: event.pointerId,
+      start: position,
+      current: position,
+      startWorldX:
+        position.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes"),
+      lastSweepPoint: position,
+      lastSweepWorldX:
+        position.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes"),
+      sweepPoints: [position],
+    };
+    this.notesCanvas.setPointerCapture(event.pointerId);
+    session.notify();
+    this.changed();
+    return;
+  }
+  if (event.button === 2) {
+    return;
+  }
   if (event.button === 0 && !event.ctrlKey && !event.shiftKey) {
     session.marqueeSelection = null;
   }
@@ -370,6 +400,17 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
       this.gestures.drag.pointerId !== undefined &&
       this.gestures.drag.pointerId !== event.pointerId
     ) {
+      return;
+    }
+    this.gestures.drag = null;
+    this.notesCanvas.releasePointerCapture?.(event.pointerId);
+    this.changed();
+    return;
+  }
+  if (this.gestures.drag.kind === "sweep") {
+    if (!this.gestures.drag.finished) {
+      this.updateSweep(event);
+      this.changed();
       return;
     }
     this.gestures.drag = null;

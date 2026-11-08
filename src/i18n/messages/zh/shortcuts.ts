@@ -28,6 +28,8 @@ export default {
   "shortcuts.editor.undo": "撤销",
   "shortcuts.editor.redo": "重做",
   "shortcuts.editor.selectAll": "全选",
+  "shortcuts.editor.sweepSelect": "划线选中时间轴物件",
+  "shortcuts.editor.sweepDeselect": "划线取消选中时间轴物件",
   "shortcuts.editor.delete": "删除选中物件",
   "shortcuts.editor.curveDelete": "删除选中曲线线段",
   "shortcuts.editor.addTap": "放置 Tap / 钩定事件",

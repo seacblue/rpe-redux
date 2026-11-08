@@ -5,15 +5,20 @@
  * It owns the timeline-facing wrapper; coordinate and selection rules live in core.
  */
 import * as coreGeometry from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
+import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   selectEventsInRectangle,
   selectNotesInRectangle,
+  selectEventsAlongSegment,
+  selectNotesAlongSegment,
+  type SelectionSweep,
 } from "../../../../../../core/edit/timeline/selection.ts";
 import { eventList } from "../../../../../../core/edit/events/eventTracks.ts";
 import type {
   TimelineArea,
   TimelinePoint,
   RectangleDrag,
+  SweepDrag,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineSelectionReceiver } from "../drawing/timelineReceiver.ts";
 
@@ -63,6 +68,21 @@ export function rectangleSelection(this: TimelineSelectionReceiver): {
     return { drag: this.gestures.drag, canvas: this.notesCanvas, area: "notes" };
   }
   if (this.gestures.eventInteraction.drag?.kind === "rectangle") {
+    return { drag: this.gestures.eventInteraction.drag, canvas: this.eventsCanvas, area: "events" };
+  }
+  return null;
+}
+
+/** The active freehand selection and its canvas, if any. */
+export function sweepSelection(this: TimelineSelectionReceiver): {
+  drag: SweepDrag;
+  canvas: HTMLCanvasElement;
+  area: TimelineArea;
+} | null {
+  if (this.gestures.drag?.kind === "sweep") {
+    return { drag: this.gestures.drag, canvas: this.notesCanvas, area: "notes" };
+  }
+  if (this.gestures.eventInteraction.drag?.kind === "sweep") {
     return { drag: this.gestures.eventInteraction.drag, canvas: this.eventsCanvas, area: "events" };
   }
   return null;
@@ -132,6 +152,78 @@ export function updateRectangle(this: TimelineSelectionReceiver, event: PointerE
   if (selection.drag.startFactor !== undefined) {
     updateRectangleSeconds(this, selection.drag);
   }
+  this.changed();
+}
+
+/** Advance the active freehand gesture and apply only the newly swept segment. */
+export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent): void {
+  const selection = this.sweepSelection();
+  if (!selection) {
+    return;
+  }
+  if (selection.drag.pointerId !== undefined && selection.drag.pointerId !== event.pointerId) {
+    return;
+  }
+  const current = this.viewport.point(event, selection.canvas);
+  const currentWorldX =
+    current.x + this.viewport.multiLineViewportOffset(selection.canvas.clientWidth, selection.area);
+  const previous = selection.drag.lastSweepPoint ?? selection.drag.start;
+  const previousWorldX = selection.drag.lastSweepWorldX ?? selection.drag.startWorldX ?? previous.x;
+  if (current.x === previous.x && current.y === previous.y && currentWorldX === previousWorldX) {
+    return;
+  }
+  const sweep: SelectionSweep = {
+    startX: previousWorldX,
+    startY: previous.y,
+    endX: currentWorldX,
+    endY: current.y,
+    padding: 4,
+    remove: selection.drag.remove,
+  };
+  const session = this.getSession();
+  if (selection.area === "notes") {
+    selectNotesAlongSegment(session, sweep, {
+      indexForLine: (lineIndex) => {
+        this.refreshIndex(lineIndex);
+        return this.cache.noteIndex(lineIndex);
+      },
+      bounds: (note, lineIndex) => {
+        const x =
+          this.viewport.noteHorizontal(note.positionX, lineIndex) +
+          this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
+        const start = this.viewport.noteVerticalForLine(
+          beatValue(note.startTime),
+          lineIndex,
+          this.notesCanvas.clientHeight,
+          "notes",
+        );
+        const end = this.viewport.noteVerticalForLine(
+          beatValue(note.endTime),
+          lineIndex,
+          this.notesCanvas.clientHeight,
+          "notes",
+        );
+        const halfWidth = this.viewport.noteWidth(note) / 2;
+        return {
+          left: x - halfWidth,
+          right: x + halfWidth,
+          top: Math.min(start, end) - 4,
+          bottom: Math.max(start, end) + 4,
+        };
+      },
+    });
+  } else {
+    selectEventsAlongSegment(session, sweep, {
+      rectangles: this.gestures.eventRects,
+      scroll: this.viewport.multiLineViewportOffset(this.eventsCanvas.clientWidth, "events"),
+    });
+  }
+  selection.drag.current = current;
+  selection.drag.currentWorldX = currentWorldX;
+  selection.drag.lastSweepPoint = current;
+  selection.drag.lastSweepWorldX = currentWorldX;
+  selection.drag.sweepPoints ??= [selection.drag.start];
+  selection.drag.sweepPoints.push(current);
   this.changed();
 }
 
@@ -264,6 +356,39 @@ export function marqueeHistoryKey(
 /** Commit the marquee when the event ends it; false keeps the press live. */
 export function finishRectangle(this: TimelineSelectionReceiver, event: PointerEvent): boolean {
   const selection = this.rectangleSelection();
+  const sweep = this.sweepSelection();
+  if (sweep) {
+    if (
+      (sweep.drag.pointerId !== undefined && sweep.drag.pointerId !== event.pointerId) ||
+      (event.type !== "pointercancel" && ![0, 1, 2].includes(event.button))
+    ) {
+      return false;
+    }
+    this.updateSweep(event);
+    const moved =
+      Math.hypot(
+        sweep.drag.current.x - sweep.drag.start.x,
+        sweep.drag.current.y - sweep.drag.start.y,
+      ) > 3;
+    if (!moved && event.type === "pointerup" && !sweep.drag.remove) {
+      const session = this.getSession();
+      if (sweep.area === "notes") {
+        session.selection.clear();
+        session.multiLineSelection.clear();
+      } else {
+        session.eventSelection.clear();
+        session.multiEventSelection.clear();
+      }
+      session.notify();
+    }
+    sweep.drag.finished = true;
+    if (sweep.area === "notes") {
+      this.up(event);
+    } else {
+      this.gestures.eventInteraction.up(event);
+    }
+    return true;
+  }
   if (
     !selection ||
     (selection.drag.pointerId !== undefined && selection.drag.pointerId !== event.pointerId) ||

@@ -44,6 +44,7 @@ import {
   openOverlapMenu,
   type OverlapMenuAction,
 } from "../../../../../overlays/overlap/overlapMenu.ts";
+import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
 
 type EventTimeline = Pick<
   TimelineRuntimeSurface,
@@ -54,6 +55,7 @@ type EventTimeline = Pick<
   | "changed"
   | "finishRectangle"
   | "rectangleTimes"
+  | "updateSweep"
 > & {
   gestures: Pick<
     TimelineRuntimeSurface["gestures"],
@@ -298,9 +300,6 @@ export class EventInteraction implements EventInteractionHandle {
       return;
     }
     event.preventDefault?.();
-    if (event.button === 2) {
-      return;
-    }
     if (this.timeline.finishRectangle(event)) {
       return;
     }
@@ -313,6 +312,35 @@ export class EventInteraction implements EventInteractionHandle {
     }
     const point = this.timeline.viewport.point(event, this.canvas);
     const rectangle = this.hit(point);
+    const sweepMode = timelineSweepMode(session, event, "events");
+    if (
+      sweepMode &&
+      (event.button === 2 ||
+        (sweepMode === "add" && !rectangle && !this.timeline.gestures.tool && !this.pending))
+    ) {
+      lockSweepArea(session, "events");
+      const worldX =
+        point.x + this.timeline.viewport.multiLineViewportOffset(this.canvas.clientWidth, "events");
+      this.drag = {
+        kind: "sweep",
+        area: "events",
+        remove: sweepMode === "remove",
+        pointerId: event.pointerId,
+        start: point,
+        current: point,
+        startWorldX: worldX,
+        lastSweepPoint: point,
+        lastSweepWorldX: worldX,
+        sweepPoints: [point],
+      };
+      this.canvas.setPointerCapture(event.pointerId);
+      session.notify();
+      this.timeline.changed();
+      return;
+    }
+    if (event.button === 2) {
+      return;
+    }
     if (event.ctrlKey || event.shiftKey || event.button === 1) {
       session.multiSelectionIntent = "events";
     } else {
@@ -516,6 +544,10 @@ export class EventInteraction implements EventInteractionHandle {
         }
         return;
       }
+      if (drag.kind === "sweep") {
+        this.timeline.updateSweep(event);
+        return;
+      }
     }
     // Only a live gesture (a marquee or a multi-line pan) keeps the move cursor.
     // An event bar itself is a selection target, so it must not imply a drag.
@@ -536,6 +568,16 @@ export class EventInteraction implements EventInteractionHandle {
     }
     if (current.kind === "multi-pan") {
       if (current.pointerId !== undefined && current.pointerId !== event.pointerId) {
+        return;
+      }
+      this.drag = null;
+      this.canvas.releasePointerCapture?.(event.pointerId);
+      this.timeline.changed();
+      return;
+    }
+    if (current.kind === "sweep") {
+      if (!current.finished) {
+        this.timeline.changed();
         return;
       }
       this.drag = null;

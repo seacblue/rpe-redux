@@ -10,7 +10,7 @@ import { prepareCanvas } from "../../../canvas/canvas2d.ts";
 import { readCanvasPalette, rgbChannels, selectionColor } from "../../../canvas/palette.ts";
 import { type Timeline } from "../surface/timeline.ts";
 import { drawPreviewMarquee } from "../../preview/interaction/previewSelection.ts";
-import { drawMarqueeRectangle } from "./selectionOverlayDrawing.ts";
+import { drawMarqueeRectangle, drawSelectionSweep } from "./selectionOverlayDrawing.ts";
 
 /** Event target shape needed for the line-switcher exclusion check. */
 interface ClosestTarget {
@@ -35,11 +35,14 @@ export class SelectionOverlay {
     scope.listen(
       window,
       "pointermove",
-      (event: PointerEvent) => timeline.updateRectangle(event),
+      (event: PointerEvent) => {
+        timeline.updateRectangle(event);
+        timeline.updateSweep(event);
+      },
       true,
     );
     const finishWindowDrag = (event: PointerEvent) => {
-      if (!timeline.rectangleSelection()) {
+      if (!timeline.rectangleSelection() && !timeline.sweepSelection()) {
         return;
       }
       if (timeline.finishRectangle(event)) {
@@ -70,7 +73,8 @@ export class SelectionOverlay {
   draw(): void {
     const previewMarquee = this.timeline.gestures.previewMarquee;
     const selection = this.timeline.rectangleSelection();
-    if (!previewMarquee && !selection) {
+    const sweep = this.timeline.sweepSelection();
+    if (!previewMarquee && !selection && !sweep) {
       if (this.hasPaintedSelection) {
         prepareCanvas(this.canvas);
         this.hasPaintedSelection = false;
@@ -79,24 +83,48 @@ export class SelectionOverlay {
     }
 
     const { context } = prepareCanvas(this.canvas);
+    const palette = this.timeline.cache.palette() ?? readCanvasPalette();
+    const noteColor = selectionColor("timeline-note-marquee-color", palette.selectionNotesStroke);
+    const eventColor = selectionColor(
+      "timeline-event-marquee-color",
+      palette.selectionEventsStroke,
+    );
+    const noteRgb = rgbChannels(noteColor) ?? [0, 103, 184];
+    const eventRgb = rgbChannels(eventColor) ?? [180, 83, 9];
+    const marqueePalette = {
+      ...palette,
+      selectionNotesFill: `rgba(${noteRgb.join(", ")}, 0.18)`,
+      selectionNotesStroke: noteColor,
+      selectionEventsFill: `rgba(${eventRgb.join(", ")}, 0.24)`,
+      selectionEventsStroke: eventColor,
+    };
     if (previewMarquee) {
       drawPreviewMarquee(context, previewMarquee.start, previewMarquee.current);
       this.hasPaintedSelection = true;
       return;
     }
     if (!selection) {
-      this.hasPaintedSelection = false;
+      if (sweep) {
+        const origin = sweep.canvas.getBoundingClientRect();
+        const overlay = this.canvas.getBoundingClientRect();
+        drawSelectionSweep(
+          context,
+          { left: origin.left, top: origin.top },
+          { left: overlay.left, top: overlay.top },
+          sweep.drag.sweepPoints ?? [sweep.drag.start, sweep.drag.current],
+          sweep.area,
+          marqueePalette,
+        );
+        this.hasPaintedSelection = true;
+      } else {
+        this.hasPaintedSelection = false;
+      }
       return;
     }
     const origin = selection.canvas.getBoundingClientRect();
     const overlay = this.canvas.getBoundingClientRect();
     const start = this.timeline.rectangleStart(selection.drag);
     const { current } = selection.drag;
-    const palette = this.timeline.cache.palette() ?? readCanvasPalette();
-    const noteColor = selectionColor("timeline-note-marquee-color", "#006400");
-    const eventColor = selectionColor("timeline-event-marquee-color", "#644B50");
-    const noteRgb = rgbChannels(noteColor) ?? [0, 100, 0];
-    const eventRgb = rgbChannels(eventColor) ?? [100, 75, 80];
     drawMarqueeRectangle(
       context,
       { left: origin.left, top: origin.top },
@@ -104,13 +132,7 @@ export class SelectionOverlay {
       start,
       current,
       selection.area,
-      {
-        ...palette,
-        selectionNotesFill: `rgba(${noteRgb.join(", ")}, 0.18)`,
-        selectionNotesStroke: noteColor,
-        selectionEventsFill: `rgba(${eventRgb.join(", ")}, 0.24)`,
-        selectionEventsStroke: eventColor,
-      },
+      marqueePalette,
     );
     this.hasPaintedSelection = true;
   }

@@ -39,6 +39,61 @@ export interface SelectionRectangle {
   baseEvents?: ReadonlyMap<number, ReadonlySet<string>>;
 }
 
+/** One screen-space segment used by the timeline's freehand selection gesture. */
+export interface SelectionSweep {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  /** Extra hit padding in screen pixels. */
+  padding?: number;
+  remove?: boolean;
+}
+
+/** Return whether a segment touches an axis-aligned rectangle. */
+function segmentTouchesRectangle(
+  sweep: SelectionSweep,
+  rectangle: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  const padding = sweep.padding ?? 0;
+  const left = rectangle.left - padding;
+  const right = rectangle.right + padding;
+  const top = rectangle.top - padding;
+  const bottom = rectangle.bottom + padding;
+  const dx = sweep.endX - sweep.startX;
+  const dy = sweep.endY - sweep.startY;
+  let t0 = 0;
+  let t1 = 1;
+  const clip = (p: number, q: number): boolean => {
+    if (p === 0) {
+      return q >= 0;
+    }
+    const ratio = q / p;
+    if (p < 0) {
+      if (ratio > t1) {
+        return false;
+      }
+      if (ratio > t0) {
+        t0 = ratio;
+      }
+    } else {
+      if (ratio < t0) {
+        return false;
+      }
+      if (ratio < t1) {
+        t1 = ratio;
+      }
+    }
+    return true;
+  };
+  return (
+    clip(-dx, sweep.startX - left) &&
+    clip(dx, right - sweep.startX) &&
+    clip(-dy, sweep.startY - top) &&
+    clip(dy, bottom - sweep.startY)
+  );
+}
+
 /** Restore the note selection a marquee began with; returns whether it changed. */
 function restoreNoteBaseline(
   session: EditorSession,
@@ -267,6 +322,67 @@ export function selectNotesInRectangle(
   }
 }
 
+/** Geometry needed to test a note against one swept pointer segment. */
+export interface NoteSweepGeometry {
+  indexForLine: (lineIndex: number) => NoteIndex | undefined;
+  bounds: (
+    note: TimelineNote,
+    lineIndex: number,
+  ) => { left: number; top: number; right: number; bottom: number };
+}
+
+/** Adds or removes notes touched by a freehand timeline segment. */
+export function selectNotesAlongSegment(
+  session: EditorSession,
+  sweep: SelectionSweep,
+  geometry: NoteSweepGeometry,
+): void {
+  let dirty = false;
+  const multi = session.multiLineActive && session.multiLineMode === "notes";
+  const lines = multi ? session.targetLineIndices : [session.lineIndex];
+  for (const lineIndex of lines) {
+    const lineIndexData = geometry.indexForLine(lineIndex);
+    if (!lineIndexData) {
+      continue;
+    }
+    const selected = multi
+      ? new Set(session.multiLineSelection.get(lineIndex) ?? [])
+      : session.selection;
+    for (const entry of lineIndexData.index
+      .query(-Infinity, Infinity)
+      .filter((candidate) => isTimelineNoteRenderable(candidate.item))) {
+      const bounds = geometry.bounds(entry.item, lineIndex);
+      if (
+        !segmentTouchesRectangle(sweep, {
+          left: bounds.left,
+          top: bounds.top,
+          right: bounds.right,
+          bottom: bounds.bottom,
+        })
+      ) {
+        continue;
+      }
+      const changed = sweep.remove ? selected.delete(entry.index) : !selected.has(entry.index);
+      if (!changed) {
+        continue;
+      }
+      dirty = true;
+      if (!sweep.remove) {
+        selected.add(entry.index);
+      }
+    }
+    if (multi) {
+      session.multiLineSelection.set(lineIndex, selected);
+    }
+  }
+  if (multi) {
+    session.selection = new Set(session.multiLineSelection.get(session.lineIndex) ?? []);
+  }
+  if (dirty) {
+    session.notify();
+  }
+}
+
 export interface EventSelectionGeometry {
   rectangles: readonly TimelineEventRect[];
   scroll: number;
@@ -278,6 +394,60 @@ export interface EventSelectionGeometry {
     start: number,
     end: number,
   ): readonly { index: number; item: JudgeLineEvent }[];
+}
+
+/** Geometry needed to test drawn event bars against a freehand segment. */
+export interface EventSweepGeometry {
+  rectangles: readonly TimelineEventRect[];
+  scroll: number;
+}
+
+/** Adds or removes event bars touched by a freehand timeline segment. */
+export function selectEventsAlongSegment(
+  session: EditorSession,
+  sweep: SelectionSweep,
+  geometry: EventSweepGeometry,
+): void {
+  let dirty = false;
+  const multi = session.multiLineActive && session.multiLineMode === "events";
+  for (const hit of geometry.rectangles) {
+    const lineIndex = hit.lineIndex ?? session.lineIndex;
+    if (multi && !session.targetLineIndices.includes(lineIndex)) {
+      continue;
+    }
+    if (
+      !segmentTouchesRectangle(sweep, {
+        left: hit.x + geometry.scroll,
+        top: hit.y,
+        right: hit.x + hit.width + geometry.scroll,
+        bottom: hit.y + hit.height,
+      })
+    ) {
+      continue;
+    }
+    const key = eventKey(hit.type, hit.index);
+    const selected =
+      multi && lineIndex !== session.lineIndex
+        ? (session.multiEventSelection.get(lineIndex) ?? new Set<string>())
+        : session.eventSelection;
+    const changed = sweep.remove ? selected.delete(key) : !selected.has(key);
+    if (!changed) {
+      continue;
+    }
+    dirty = true;
+    if (!sweep.remove) {
+      selected.add(key);
+    }
+    if (multi) {
+      session.multiEventSelection.set(lineIndex, selected);
+    }
+  }
+  if (multi) {
+    session.eventSelection = new Set(session.multiEventSelection.get(session.lineIndex) ?? []);
+  }
+  if (dirty) {
+    session.notify();
+  }
 }
 
 /** Event arrays are immutable chart revisions; their paint lanes only need one sweep. */

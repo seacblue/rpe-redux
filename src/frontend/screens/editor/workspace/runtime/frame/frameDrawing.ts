@@ -10,7 +10,7 @@ import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.
 import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { TimelineOverview } from "../../timeline/overview/timelineOverview.ts";
 import type { SelectionOverlay } from "../../timeline/selection/selectionOverlay.ts";
-import type { MultiEditPanel } from "../../../inspector/multi-edit/multiEdit.ts";
+import type { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
 import type { TrajectoryPanel } from "../../../inspector/trajectory/trajectoryPanel.ts";
 import type { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import type { Preview } from "../../preview/scene/preview.ts";
