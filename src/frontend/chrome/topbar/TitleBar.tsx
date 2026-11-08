@@ -1,13 +1,17 @@
 /**
  * The custom window frame's title row.
  *
- * The product mark and application menu sit at the leading edge, while update
- * and background-task badges stay at the trailing edge. Window controls are
- * rendered separately at the frame edge.
+ * The row is the window's drag surface: `useTitleBarWindowDrag` owns the move
+ * gesture, so pressing any non-interactive point on the row moves the window and
+ * a drag never activates the content below. The product mark and application
+ * menu sit at the leading edge, while update and background-task badges stay at
+ * the trailing edge; those controls keep their own pointer behavior. Window
+ * controls are rendered separately at the frame edge.
  */
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { BrandLogo } from "./BrandLogo.tsx";
 import { MenuBar } from "./MenuBar.tsx";
+import { useTitleBarWindowDrag } from "./useTitleBarWindowDrag.ts";
 import { LongTaskControl } from "./LongTaskControl.tsx";
 import { ImportBadge } from "./ImportBadge.tsx";
 import { UpdateBadge } from "../../screens/settings/updates/UpdateBadge.tsx";
@@ -33,6 +37,7 @@ export function TitleBar() {
   );
   const identity = useDocumentIdentityValue();
   const displayName = identity.open ? identity.title || t("chrome.document.untitled") : appTitle();
+  const titleBar = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const next =
@@ -41,14 +46,15 @@ export function TitleBar() {
         : formatDocumentWindowTitle(displayName, identity.dirty, appTitle());
     setAppWindowTitle(next);
   }, [displayName, identity.dirty, identity.open, language, visibility.atHome]);
+  useTitleBarWindowDrag(titleBar);
 
   return (
-    <div className="redux-titlebar" data-window-display-mode={displayMode}>
+    <div className="redux-titlebar" ref={titleBar} data-window-display-mode={displayMode}>
       <div className="redux-titlebar-left">
         <BrandLogo />
         <MenuBar />
       </div>
-      <div className="redux-titlebar-drag" data-tauri-drag-region />
+      <div className="redux-titlebar-drag" />
       <div className="redux-titlebar-right">
         <ImportBadge />
         <UpdateBadge />
