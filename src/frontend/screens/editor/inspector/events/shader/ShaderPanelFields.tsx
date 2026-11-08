@@ -172,6 +172,13 @@ export function BeatControl({
   );
 }
 
+/** One option rendered by a labeled select; adjacent options with the same group share a heading. */
+export interface SelectOption {
+  value: string;
+  label: string;
+  group?: string;
+}
+
 /** Renders a labeled select from value/label options. */
 export function SelectField({
   title,
@@ -182,7 +189,7 @@ export function SelectField({
 }: {
   title: string;
   value: string;
-  options: readonly { value: string; label: string }[];
+  options: readonly SelectOption[];
   disabled?: boolean;
   onChange(value: string): void;
 }) {
@@ -198,11 +205,31 @@ export function SelectField({
           disabled={disabled}
           onChange={(event) => onChange(event.currentTarget.value)}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {options.map((option, index) => {
+            const previous = options[index - 1];
+            if (option.group && option.group !== previous?.group) {
+              const group = option.group;
+              const grouped = options.slice(index).findIndex((item) => item.group !== group);
+              const end = grouped < 0 ? options.length : index + grouped;
+              return (
+                <optgroup key={`group:${group}`} label={group}>
+                  {options.slice(index, end).map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            }
+            if (option.group) {
+              return null;
+            }
+            return (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            );
+          })}
         </Select>
       )}
     />

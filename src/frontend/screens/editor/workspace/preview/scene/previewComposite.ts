@@ -124,6 +124,9 @@ export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFr
       !showsAuthoringRegion(getEditorRegionSnapshot()))
       ? 1
       : clamp01(surface.opacity);
+  // The shader canvas replaces the primary underlay while it is visible, so it
+  // must receive the same timeline-underlay dimming as the primary canvas.
+  surface.display.setShaderOpacity(shaderRendered ? workspaceOpacity : 0);
   surface.display.setPrimaryOpacity(shaderRendered ? 0 : workspaceOpacity);
   surface.display.setNoteBatchOpacity(
     shaderRendered || surface.noiseComposited ? 0 : workspaceOpacity,

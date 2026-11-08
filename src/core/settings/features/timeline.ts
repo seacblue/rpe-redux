@@ -11,8 +11,10 @@ import type { SettingDefinition } from "../types.ts";
 import type { SettingsNavigation } from "../types.ts";
 import {
   TIMELINE_GRID_COLORS,
+  TIMELINE_GRID_HIGHLIGHT_COLOR,
   TIMELINE_VERTICAL_GRID_COLORS,
   timelineGridColorKey,
+  timelineGridHighlightColorKey,
   timelineVerticalGridColorKey,
 } from "../timelineGridColors.ts";
 import { DEFAULT_NOTE_OVERLAP_THRESHOLD } from "../../edit/timeline/noteOverlap.ts";
@@ -222,6 +224,15 @@ const TimelineSettingsSchema: SettingDefinition[] = [
   },
   ...TIMELINE_SUBDIVISION_COLORS,
   ...TIMELINE_VERTICAL_COLORS,
+  {
+    key: timelineGridHighlightColorKey(),
+    navigation: "editor.beat-lines",
+    group: "settings.group.beatLines",
+    label: TIMELINE_GRID_HIGHLIGHT_COLOR[1],
+    description: TIMELINE_GRID_HIGHLIGHT_COLOR[2],
+    control: "color",
+    default: TIMELINE_GRID_HIGHLIGHT_COLOR[0],
+  },
 ];
 settingsRegistry.registerNavigations([EditorSettingsNavigation, ...EditorSettingsSubPages]);
 settingsRegistry.registerSettings(TimelineSettingsSchema);

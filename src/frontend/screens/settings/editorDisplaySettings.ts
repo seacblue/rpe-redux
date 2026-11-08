@@ -24,6 +24,7 @@ import { defineValue, values, type ValueHandle } from "../../../core/state/value
 import { settingsRegistry } from "../../../core/settings/settings.ts";
 import {
   TIMELINE_GRID_COLORS,
+  timelineGridHighlightColorKey,
   TIMELINE_VERTICAL_GRID_COLORS,
   timelineGridColorKey,
   timelineVerticalGridColorKey,
@@ -298,12 +299,10 @@ export function readEditorDisplaySettings() {
       verticalGridColor: contributedHex(
         timelineVerticalGridColorKey(TIMELINE_VERTICAL_GRID_COLORS[0][0]),
       ),
-      verticalGridHighlightColor: contributedHex(
+      verticalGridCenterColor: contributedHex(
         timelineVerticalGridColorKey(TIMELINE_VERTICAL_GRID_COLORS[1][0]),
       ),
-      verticalGridCenterColor: contributedHex(
-        timelineVerticalGridColorKey(TIMELINE_VERTICAL_GRID_COLORS[2][0]),
-      ),
+      gridHighlightColor: contributedHex(timelineGridHighlightColorKey()),
     },
     historyLimit: numberOf(displayValues.historyLimit),
     cutDensity: contributedNumber("event-cut-density"),

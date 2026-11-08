@@ -72,6 +72,7 @@ export interface ShaderProgram {
   uniforms: Map<string, WebGLUniformLocation | null>;
   types: Map<string, number>;
   defaults: Record<string, number | number[]>;
+  builtin: boolean;
 }
 
 type GlContext = WebGL2RenderingContext | WebGLRenderingContext;
@@ -267,6 +268,9 @@ export class ShaderPipeline {
       types.set(uniformName, info.type);
     }
     const defaults = shaderDefaults(source);
+    const builtin =
+      /(?:^|\n)\/\/ @rpen-builtin\b/.test(source) ||
+      !/uniform\s+(?:(?:lowp|mediump|highp)\s+)?sampler2D\s+screenTexture\b/.test(source);
     const result: ShaderProgram = {
       program,
       positionAttribute: gl.getAttribLocation(program, "a_position"),
@@ -274,6 +278,7 @@ export class ShaderPipeline {
       uniforms,
       types,
       defaults,
+      builtin,
     };
     this.programs.set(key, result);
     return result;
@@ -323,12 +328,35 @@ export class ShaderPipeline {
       }
     };
     set("u_texture", 0);
-    set("u_time", seconds);
-    set("resolution", resolution ?? [PREVIEW_LOGICAL_SIZE.width, PREVIEW_LOGICAL_SIZE.height]);
+    set("u_time", provided.u_time ?? provided.time ?? seconds);
+    set("time", provided.time ?? provided.u_time ?? seconds);
+    const screenSize = result.builtin
+      ? (resolution ?? [PREVIEW_LOGICAL_SIZE.width, PREVIEW_LOGICAL_SIZE.height])
+      : rect
+        ? [width * (rect.max[0] - rect.min[0]), height * (rect.max[1] - rect.min[1])]
+        : [width, height];
+    set("screenSize", provided.screenSize ?? screenSize);
+    set("rpenSurfaceSize", [width, height]);
+    set(
+      "resolution",
+      provided.resolution ??
+        resolution ?? [PREVIEW_LOGICAL_SIZE.width, PREVIEW_LOGICAL_SIZE.height],
+    );
     set("rpeRectMin", rect?.min ?? [0, 0]);
     set("rpeRectMax", rect?.max ?? [1, 1]);
     for (const name of result.uniforms.keys()) {
-      if (["u_texture", "u_time", "resolution", "rpeRectMin", "rpeRectMax"].includes(name)) {
+      if (
+        [
+          "u_texture",
+          "u_time",
+          "time",
+          "screenSize",
+          "rpenSurfaceSize",
+          "resolution",
+          "rpeRectMin",
+          "rpeRectMax",
+        ].includes(name)
+      ) {
         continue;
       }
       const fallback =

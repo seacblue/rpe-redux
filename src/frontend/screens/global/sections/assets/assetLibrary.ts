@@ -1,6 +1,6 @@
 ﻿/**
  * The asset-library panel model: builds the folder tree and thumbnail URLs from
- * the chart's asset map and applies add, rename, edit, delete, and folder
+ * the chart's asset map and applies add, rename, delete, and folder
  * actions.
  *
  * Asset object URLs are owned here and released with the panel; folder changes
@@ -8,6 +8,7 @@
  * stay undoable and survive PEZ, project, and export serialization.
  */
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
+import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import {
   ASSET_EXTENSIONS,
   IMAGE_EXTENSIONS,
@@ -35,6 +36,7 @@ import type {
 import { flushSync } from "react-dom";
 import { openAssetPrompt } from "./assetPrompts.ts";
 import { requestConfirm } from "../../../../overlays/modals/prompts.ts";
+import type { ShaderParameterOverrides } from "../../../../../core/global/chart/shader/shaderEvents.ts";
 
 /** The editor-context slice read and written by the panel. */
 export interface AssetContext {
@@ -47,11 +49,7 @@ export interface AssetContext {
    */
   chartDirectoryName?: string;
   /** The open chart; it stores the persisted folder organization. */
-  chart?: {
-    judgeLineList?: { Texture?: string }[];
-    reduxAssetFolders?: unknown;
-    META?: { song?: string };
-  } | null;
+  chart?: Chart | null;
 }
 
 /** A file returned by the desktop drop reader. */
@@ -68,6 +66,8 @@ export interface AssetLibraryOptions {
   onTexture?: (from: string, to?: string) => void;
   /** Reads file bytes for OS drops; injected so the model owns no platform API. */
   readDroppedFiles?: (paths: readonly string[]) => Promise<readonly DroppedAssetFile[]>;
+  onOpenExternal?: (name: string) => Promise<void> | void;
+  onConfigureShader?: (name: string, overrides: ShaderParameterOverrides) => void;
 }
 
 /** Owns the asset tree model, asset bytes, and thumbnail URL lifetime for one panel. */
@@ -78,6 +78,8 @@ export class AssetLibraryPanel {
   onChange: (assets: AssetMap, folders: Set<string>) => void;
   onTexture: (from: string, to?: string) => void;
   readDroppedFiles?: (paths: readonly string[]) => Promise<readonly DroppedAssetFile[]>;
+  onOpenExternal: (name: string) => Promise<void> | void;
+  onConfigureShader: (name: string, overrides: ShaderParameterOverrides) => void;
   selected: string | null;
   /** Empty string is the chart's root folder, shown as Default. */
   selectedFolder: string;
@@ -96,6 +98,8 @@ export class AssetLibraryPanel {
       onChange = () => {},
       onTexture = () => {},
       readDroppedFiles,
+      onOpenExternal = () => {},
+      onConfigureShader = () => {},
     }: AssetLibraryOptions,
   ) {
     this.state = state;
@@ -104,6 +108,8 @@ export class AssetLibraryPanel {
     this.onChange = onChange;
     this.onTexture = onTexture;
     this.readDroppedFiles = readDroppedFiles;
+    this.onOpenExternal = onOpenExternal;
+    this.onConfigureShader = onConfigureShader;
     this.selected = null;
     this.selectedFolder = "";
     this.urls = new Map();
@@ -444,34 +450,6 @@ export class AssetLibraryPanel {
     }, t("editorPanels.assetLibrary.rename.done"));
   }
 
-  /** Opens the image editor for an asset that has bytes in the chart. */
-  editImage(name: string): void {
-    const bytes = this.getContext().assets?.get(name);
-    if (!bytes) {
-      return;
-    }
-    openAssetPrompt({
-      kind: "edit",
-      title: t("editorPanels.assetLibrary.edit.title"),
-      description: t("editorPanels.assetLibrary.edit.description"),
-      name,
-      bytes,
-      submit: (edited) => this.submitEditedImage(name, edited),
-    });
-  }
-
-  /** Writes edited pixels back to the asset map and rejects write failures. */
-  private async submitEditedImage(name: string, bytes: Uint8Array): Promise<void> {
-    const editedName = /\.png$/i.test(name) ? name : name.replace(/\.[^.]+$/, "") + ".png";
-    await this.mutate((next, folders) => {
-      next.delete(name);
-      next.set(editedName, bytes);
-      this.selected = editedName;
-      collectAssetFolders(editedName, folders);
-      this.onTexture(name, editedName);
-    }, t("editorPanels.assetLibrary.edit.applied"));
-  }
-
   /**
    * Rebuilds the panel view.
    *
@@ -586,6 +564,7 @@ export class AssetLibraryPanel {
       folders: this.currentFolders(),
       selected: this.selected,
       selectedFolder: this.selectedFolder,
+      chart: this.getContext().chart,
       defaultFolder: (folders) => this.firstFolder(folders),
       urlFor: (name, bytes) => this.urlFor(pending, created, name, bytes),
       isCurrent,
@@ -726,8 +705,21 @@ export class AssetLibraryPanel {
         this.selected = name;
         void this.render();
       },
-      onRename: () => this.selected && this.renameImage(this.selected),
-      onEdit: () => this.selected && this.editImage(this.selected),
+      onRename: (name) => {
+        const target = name ?? this.selected;
+        if (target) {
+          this.renameImage(target);
+        }
+      },
+      onConfigureShader: (name, overrides) => {
+        this.onConfigureShader(name, overrides);
+        void this.render();
+      },
+      onOpenExternal: () => {
+        if (this.selected) {
+          void this.onOpenExternal(this.selected);
+        }
+      },
       onDelete: () => {
         const name = this.selected;
         if (name) {

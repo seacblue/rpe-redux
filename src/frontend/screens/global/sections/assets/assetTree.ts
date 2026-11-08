@@ -6,6 +6,11 @@
  * returning `null` when `isCurrent()` turns false.
  */
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
+import type { Chart } from "../../../../../core/global/chart/chart.ts";
+import {
+  shaderParameterOverrides,
+  shaderParameters,
+} from "../../../../../core/global/chart/shader/shaderEvents.ts";
 import type {
   AssetLibraryPanelSnapshot,
   AssetViewFile,
@@ -27,6 +32,7 @@ export interface AssetSnapshotOptions {
   folders: ReadonlySet<string>;
   selected: string | null;
   selectedFolder: string;
+  chart: Chart | null | undefined;
   /** Root folder when present, otherwise the first authored group. */
   defaultFolder(folders: ReadonlySet<string>): string;
   /** Cached object URL for one asset, creating and tracking it as needed. */
@@ -101,12 +107,14 @@ export async function buildAssetSnapshot(
   };
   /** Maps one asset entry to its view row, retaining its cached URL. */
   const toViewFile = (name: string, file: string, bytes: Uint8Array): AssetViewFile => {
+    const kind = assetKind(name);
     return {
       name,
       file,
       url: urlFor(name, bytes),
-      kind: assetKind(name),
+      kind,
       selected: selected === name,
+      ...(kind === "shader" ? { text: new TextDecoder().decode(bytes) } : {}),
     };
   };
   /** Recursively maps a folder node and its children, yielding between batches. */
@@ -156,10 +164,19 @@ export async function buildAssetSnapshot(
   const selectedBytes = selected ? assets.get(selected) : undefined;
   let selectedView: AssetViewSelected | undefined;
   if (selected && selectedBytes) {
+    const selectedText =
+      assetKind(selected) === "shader" ? new TextDecoder().decode(selectedBytes) : undefined;
     selectedView = {
       name: selected,
       url: urlFor(selected, selectedBytes),
       kind: assetKind(selected),
+      ...(selectedText === undefined ? {} : { text: selectedText }),
+      ...(selectedText === undefined
+        ? {}
+        : {
+            shaderParameters: shaderParameters(selectedText),
+            shaderParameterOverrides: shaderParameterOverrides(options.chart, selected),
+          }),
     };
   }
   const folderExists = (folder: string): boolean =>

@@ -308,8 +308,12 @@
   display: none;
 }
 
+// Placeholders start on the same line as the real list instead of floating in
+// the middle of the column. Overflow is clipped because the extra rows exist
+// only to fill tall windows, not to be scrolled.
 .redux-home-page .redux-library-cards[data-skeleton="true"] {
-  align-content: center;
+  align-content: start;
+  overflow: hidden;
 }
 
 .redux-home-page .redux-library-cards[data-view="grid"] {

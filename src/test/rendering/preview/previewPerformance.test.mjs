@@ -11,6 +11,7 @@ import {
   PreviewBackground,
 } from "../../../frontend/screens/editor/workspace/preview/render/background.ts";
 import { shaderTextureSize } from "../../../frontend/screens/editor/workspace/preview/render/shaderPipeline.ts";
+import { fragmentSource } from "../../../frontend/screens/editor/workspace/preview/render/shaderSource.ts";
 
 /** Replaces the document factory for one test and always restores the global. */
 function withDocument(factory, run) {
@@ -119,4 +120,42 @@ test("shader texture fits the logical size inside 1920x1080", () => {
   assert.deepEqual(shaderTextureSize(2560, 1440), { width: 1920, height: 1080 });
   assert.deepEqual(shaderTextureSize(1000, 2000), { width: 540, height: 1080 });
   assert.deepEqual(shaderTextureSize(0, 0), { width: 1, height: 1 });
+});
+
+test("legacy shader texture samples map the chart rectangle into the source texture", () => {
+  const adapted = fragmentSource(
+    `varying vec2 v_texCoord;\nuniform sampler2D u_texture;\nvoid main() { gl_FragColor = texture2D(CC_Texture0, v_texCoord); }`,
+  );
+  assert.match(
+    adapted,
+    /vec2 local = \(coordinate - vec2\(0\.0, 0\.0333\)\) \/ vec2\(0\.7031, 1\.0 \/ 1\.2\);/,
+  );
+  assert.match(adapted, /texture2D\(source, mix\(rpeRectMin, rpeRectMax, local\)\)/);
+});
+
+test("portable shader coordinates keep standard screen uniforms in the preview domain", () => {
+  const adapted = fragmentSource(
+    `varying vec2 uv;\nuniform sampler2D screenTexture;\nuniform vec2 screenSize;\nuniform float time;\nvoid main() { gl_FragColor = texture2D(screenTexture, uv + vec2(time / screenSize.x)); }`,
+  );
+  assert.doesNotMatch(adapted, /uniform sampler2D screenTexture/);
+  assert.match(adapted, /uniform sampler2D u_texture/);
+  assert.match(adapted, /rpeSample\(u_texture, rpeCoordinate/);
+  assert.match(adapted, /screenSize/);
+  assert.match(adapted, /u_time/);
+});
+
+test("built-in shaders use logical resolution for gl_FragCoord", () => {
+  const adapted = fragmentSource(
+    `// @rpen-builtin\nvarying vec2 v_texCoord;\nuniform vec2 resolution;\nvoid main() { gl_FragColor = vec4(gl_FragCoord.xy / resolution, 0.0, 1.0); }`,
+  );
+  assert.doesNotMatch(adapted, /rpenFragCoord/);
+  assert.match(adapted, /resolution\)/);
+});
+
+test("custom sampler uniform names are mapped to the preview texture", () => {
+  const adapted = fragmentSource(
+    `varying vec2 v_texCoord;\nuniform sampler2D texture;\nvoid main() { gl_FragColor = texture2D(texture, v_texCoord); }`,
+  );
+  assert.doesNotMatch(adapted, /uniform sampler2D texture/);
+  assert.match(adapted, /rpeSample\(u_texture, rpeCoordinate\)/);
 });

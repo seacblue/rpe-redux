@@ -1,5 +1,5 @@
-// Asset library page: the scrolling tree, selection details, the asset editor
-// dialog, and the shared drop overlay.
+// Asset library page: the scrolling tree, media details, source preview, and
+// the shared drop overlay.
 
 // The workspace is one column: a view toolbar, the scrolling tree, and a fixed
 // footer with the same add/delete rhythm as judge lines and timing.
@@ -84,6 +84,32 @@
   background: color-mix(in srgb, var(--accent) 12%, var(--panel-header));
 }
 
+.asset-tree .asset-folder {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+}
+
+.asset-tree .asset-folder-header {
+  min-height: 30px;
+  padding: 0;
+  border-bottom: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+}
+
+.asset-tree .asset-folder-header:hover {
+  background: var(--surface-hover);
+}
+
+.asset-tree .asset-folder .redux-tree-folder-rows {
+  gap: var(--space-1);
+  margin-left: var(--space-3);
+  padding: 0 0 0 var(--space-2);
+}
+
 .asset-folder-rows {
   gap: var(--space-1);
 }
@@ -93,9 +119,9 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  margin-left: 18px;
-  padding: 2px 2px 2px var(--space-2);
-  border-left: 1px solid var(--border-subtle);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .asset-folder-empty {
@@ -126,8 +152,8 @@
   background: var(--active-accent-fill);
 }
 
-// Thumbnail box: the positioned ancestor for the loading spinner, and the grid
-// cell the row reserves for the picture.
+// Thumbnail box: the positioned ancestor for the loading spinner and the icon
+// cell the row reserves for the asset.
 .asset-image {
   position: relative;
   display: grid;
@@ -165,49 +191,8 @@
   }
 }
 
-.asset-tree[data-layout="grid"] .asset-folder-items {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
-  gap: var(--space-2);
-  margin-left: 0;
-  padding: var(--space-2);
-  border-left: 0;
-}
-
-.asset-tree[data-layout="grid"] .asset-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 96px auto;
-  align-items: stretch;
-  gap: var(--space-1-5);
-  min-height: 0;
-  padding: var(--space-2);
-  border-color: var(--border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--surface-raised);
-}
-
-.asset-tree[data-layout="grid"] .asset-row:hover:not(.is-selected) {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
-}
-
-.asset-tree[data-layout="grid"] .asset-row .asset-image {
-  width: 100%;
-  height: 96px;
-  border-radius: calc(var(--radius-control) - 2px);
-}
-
-.asset-tree[data-layout="grid"] .asset-row-name {
-  padding-inline: var(--space-1);
-  font-size: var(--type-caption);
-}
-
 .asset-details {
   margin: var(--space-3) var(--space-5) var(--space-4);
-  padding: var(--space-3);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-muted);
 }
 
 .asset-details strong {
@@ -218,13 +203,6 @@
   color: var(--accent);
 }
 
-.asset-details-kind {
-  color: var(--foreground-muted);
-  font-size: var(--type-micro);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .asset-details > .asset-image {
   width: 100%;
   height: 180px;
@@ -233,6 +211,87 @@
 
 .asset-details > .redux-audio {
   margin: var(--space-2) 0;
+}
+
+.asset-shader-preview {
+  margin: var(--space-2) 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+
+  pre {
+    max-height: 220px;
+    margin: 0;
+    padding: var(--space-2);
+    overflow: auto;
+    color: var(--foreground);
+    font-family: var(--font-mono);
+    font-size: var(--type-micro);
+    white-space: pre-wrap;
+  }
+
+  code {
+    font: inherit;
+  }
+
+  .asset-shader-token.is-comment {
+    color: var(--foreground-muted);
+  }
+
+  .asset-shader-token.is-preprocessor,
+  .asset-shader-token.is-keyword {
+    color: var(--accent);
+  }
+
+  .asset-shader-token.is-type,
+  .asset-shader-token.is-function {
+    color: var(--playing-indicator);
+  }
+
+  .asset-shader-token.is-string {
+    color: var(--warning);
+  }
+
+  .asset-shader-token.is-number {
+    color: var(--foreground-muted);
+  }
+
+  small {
+    display: block;
+    padding: var(--space-1) var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--foreground-muted);
+  }
+}
+
+.asset-shader-parameters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+
+  > strong {
+    color: var(--foreground);
+    font-size: var(--type-caption);
+  }
+}
+
+.asset-shader-parameter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.asset-shader-parameter-toggle {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+
+  code {
+    color: var(--accent);
+    font-family: var(--font-mono);
+  }
 }
 
 // The details pane with nothing selected keeps the real detail frame and its
@@ -278,44 +337,20 @@
   }
 }
 
-.asset-detail-actions,
-.asset-editor-controls {
+.asset-detail-actions {
   display: flex;
   gap: var(--space-1);
   align-items: center;
 }
 
+.asset-detail-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .asset-detail-actions button {
-  flex: 1;
-}
-
-.asset-editor-canvas {
-  display: block;
   width: 100%;
-  max-height: 58vh;
-  object-fit: contain;
-  background: var(--surface-muted);
-  margin: var(--space-1) 0 var(--space-3);
-}
-
-.asset-editor-controls select {
-  flex: 1;
-  min-width: 0;
-}
-
-.asset-editor-controls > label {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-}
-
-.asset-editor-controls > label > select,
-.asset-editor-controls > label > input[type="range"] {
-  width: 100%;
-}
-
-.asset-editor-controls input[type="range"] {
-  flex: 1;
+  flex: none;
 }
 
 // Asset dialogs are a name field or a crop editor, not a document workspace.

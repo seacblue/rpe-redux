@@ -28,6 +28,8 @@ export interface PreviewDisplayAdapter {
   setNoteBatchOpacity(value: number): void;
   /** Shows or hides the shader canvas, skipping unchanged writes. */
   setShaderVisible(visible: boolean): void;
+  /** Sets the shader canvas opacity, keeping it aligned with the preview underlay. */
+  setShaderOpacity(value: number): void;
   /** Sets the overlay canvas opacity, skipping unchanged writes. */
   setOverlayOpacity(value: number): void;
   /** Shows or hides the overlay canvas, skipping unchanged writes. */
@@ -52,6 +54,7 @@ export function createPreviewDisplay(
   let lastClipKey = "";
   let lastPrimaryOpacity = Number.NaN;
   let lastNoteBatchOpacity = Number.NaN;
+  let lastShaderOpacity = Number.NaN;
   let lastShaderVisible: boolean | null = null;
   let lastOverlayOpacity = Number.NaN;
   let lastOverlayVisible: boolean | null = null;
@@ -143,6 +146,9 @@ export function createPreviewDisplay(
     setNoteBatchOpacity(value) {
       lastNoteBatchOpacity = writeOpacity(nodes.noteBatch?.() ?? null, value, lastNoteBatchOpacity);
     },
+    setShaderOpacity(value) {
+      lastShaderOpacity = writeOpacity(nodes.shader(), value, lastShaderOpacity);
+    },
     setShaderVisible(visible) {
       lastShaderVisible = writeVisibility(nodes.shader(), visible, lastShaderVisible);
     },
@@ -156,6 +162,7 @@ export function createPreviewDisplay(
       lastClipKey = "";
       lastPrimaryOpacity = Number.NaN;
       lastNoteBatchOpacity = Number.NaN;
+      lastShaderOpacity = Number.NaN;
       lastShaderVisible = null;
       lastOverlayOpacity = Number.NaN;
       lastOverlayVisible = null;

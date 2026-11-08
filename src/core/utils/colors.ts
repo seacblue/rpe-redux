@@ -72,3 +72,76 @@ export function cssColor(value: string): string {
   }
   return `rgba(${parsed.red},${parsed.green},${parsed.blue},${parsed.alpha})`;
 }
+
+/** Parse the hexadecimal or rgba CSS colours used by canvas theme tokens. */
+function parseCssColor(value: string): HexColor | null {
+  const hex = parseHexColor(value);
+  if (hex) {
+    return hex;
+  }
+  const match = /^rgba?\((.*)\)$/iu.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  const channels = match[1]
+    .replace(/\//g, " ")
+    .split(/[\s,]+/u)
+    .filter(Boolean);
+  if (channels.length < 3 || channels.length > 4) {
+    return null;
+  }
+  const parseChannel = (channel: string): number | null => {
+    const percentage = channel.endsWith("%");
+    const number = Number.parseFloat(percentage ? channel.slice(0, -1) : channel);
+    if (!Number.isFinite(number)) {
+      return null;
+    }
+    return Math.round(
+      Math.max(0, Math.min(percentage ? 100 : 255, number)) * (percentage ? 2.55 : 1),
+    );
+  };
+  const red = parseChannel(channels[0]);
+  const green = parseChannel(channels[1]);
+  const blue = parseChannel(channels[2]);
+  if (red === null || green === null || blue === null) {
+    return null;
+  }
+  const rawAlpha = channels[3] ?? "1";
+  const alphaPercentage = rawAlpha.endsWith("%");
+  const alphaNumber = Number.parseFloat(alphaPercentage ? rawAlpha.slice(0, -1) : rawAlpha);
+  if (!Number.isFinite(alphaNumber)) {
+    return null;
+  }
+  return {
+    red,
+    green,
+    blue,
+    alpha: Math.max(0, Math.min(1, alphaPercentage ? alphaNumber / 100 : alphaNumber)),
+    hasAlpha: channels.length === 4,
+  };
+}
+
+/** Composite the highlight colour over one grid colour without drawing twice. */
+export function sourceOverColor(base: string, highlight: string, baseAlpha = 1): string {
+  const background = parseCssColor(base);
+  const foreground = parseCssColor(highlight);
+  if (!background || !foreground) {
+    return background ? base : highlight;
+  }
+  const backgroundAlpha = Math.max(0, Math.min(1, background.alpha * baseAlpha));
+  const foregroundAlpha = foreground.alpha;
+  const alpha = foregroundAlpha + backgroundAlpha * (1 - foregroundAlpha);
+  if (alpha <= 0) {
+    return "rgba(0,0,0,0)";
+  }
+  const channel = (foregroundChannel: number, backgroundChannel: number): number =>
+    Math.round(
+      (foregroundChannel * foregroundAlpha +
+        backgroundChannel * backgroundAlpha * (1 - foregroundAlpha)) /
+        alpha,
+    );
+  return `rgba(${channel(foreground.red, background.red)},${channel(
+    foreground.green,
+    background.green,
+  )},${channel(foreground.blue, background.blue)},${Number(alpha.toFixed(6))})`;
+}

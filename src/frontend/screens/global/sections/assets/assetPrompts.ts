@@ -28,23 +28,11 @@ export interface AssetNamePrompt {
   submit(value: string): Promise<void>;
 }
 
-/** The image editor: the same shape, but the answer is pixels rather than a name. */
-export interface AssetEditPrompt {
-  kind: "edit";
-  id: number;
-  title: string;
-  description: string;
-  /** The asset being edited, and the name the changed bytes are applied under. */
-  name: string;
-  bytes: Uint8Array;
-  submit(bytes: Uint8Array): Promise<void>;
-}
-
-/** Either prompt the library can be waiting on. */
-export type AssetPrompt = AssetNamePrompt | AssetEditPrompt;
+/** The prompt the asset library can be waiting on. */
+export type AssetPrompt = AssetNamePrompt;
 
 /** What a caller hands over; the module owns the identity. */
-export type AssetPromptRequest = Omit<AssetNamePrompt, "id"> | Omit<AssetEditPrompt, "id">;
+export type AssetPromptRequest = Omit<AssetNamePrompt, "id">;
 
 const prompt = createModalRequests<AssetPrompt>("asset");
 

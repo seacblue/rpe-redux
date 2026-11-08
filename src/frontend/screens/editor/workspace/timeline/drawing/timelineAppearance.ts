@@ -29,8 +29,8 @@ type AppearanceSettings = Pick<
   | "eventCurvesEnabled"
   | "subdivisionColors"
   | "verticalGridColor"
-  | "verticalGridHighlightColor"
   | "verticalGridCenterColor"
+  | "gridHighlightColor"
 >;
 
 /** Drawing preferences only; no cursor, viewport or document caches. */
@@ -54,8 +54,8 @@ export class TimelineAppearance {
   eventCurvesEnabled?: boolean;
   subdivisionColors: readonly string[] = [];
   verticalGridColor = "#61640E";
-  verticalGridHighlightColor = "#80810B";
   verticalGridCenterColor = "#9DA00B";
+  gridHighlightColor = "#FFFFFF80";
 
   /** Copy the current timeline display settings into this instance. */
   apply(config: AppearanceSettings): void {
@@ -77,7 +77,7 @@ export class TimelineAppearance {
     this.eventCurvesEnabled = config.eventCurvesEnabled;
     this.subdivisionColors = config.subdivisionColors;
     this.verticalGridColor = config.verticalGridColor;
-    this.verticalGridHighlightColor = config.verticalGridHighlightColor;
     this.verticalGridCenterColor = config.verticalGridCenterColor;
+    this.gridHighlightColor = config.gridHighlightColor;
   }
 }

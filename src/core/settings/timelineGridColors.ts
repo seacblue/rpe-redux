@@ -34,12 +34,6 @@ export const TIMELINE_VERTICAL_GRID_COLORS = [
     "settings.field.timeline-vertical-grid-color.description",
   ],
   [
-    "highlight",
-    "#80810B",
-    "settings.field.timeline-vertical-grid-highlight-color.label",
-    "settings.field.timeline-vertical-grid-highlight-color.description",
-  ],
-  [
     "center",
     "#9DA00B",
     "settings.field.timeline-vertical-grid-center-color.label",
@@ -53,4 +47,16 @@ export type TimelineVerticalGridColorRole = (typeof TIMELINE_VERTICAL_GRID_COLOR
 /** Preference key holding one shared vertical timeline-line colour. */
 export function timelineVerticalGridColorKey(role: TimelineVerticalGridColorRole): string {
   return `timeline-vertical-grid-color-${role}`;
+}
+
+/** The shared overlay colour for the highlighted horizontal and vertical grid lines. */
+export const TIMELINE_GRID_HIGHLIGHT_COLOR = [
+  "#FFFFFF80",
+  "settings.field.timeline-grid-highlight-color.label",
+  "settings.field.timeline-grid-highlight-color.description",
+] as const;
+
+/** Preference key holding the colour painted over highlighted grid lines. */
+export function timelineGridHighlightColorKey(): string {
+  return "timeline-grid-highlight-color";
 }
