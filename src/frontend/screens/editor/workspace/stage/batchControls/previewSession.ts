@@ -46,6 +46,7 @@ export function previewSession(live: EditorSession, result: SelectionEditResult)
   preview.multiLineMode = live.multiLineMode;
   preview.multiLineMerge = live.multiLineMerge;
   preview.focus = live.focus;
+  preview.selectionMode = live.selectionMode;
   preview.eventLayer = live.eventLayer;
   preview.multiSelectionIntent = live.multiSelectionIntent;
   preview.clipboard = live.clipboard;

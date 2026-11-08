@@ -25,6 +25,7 @@ import {
   type OverlapMenuAction,
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { applySelection, cloneSelection } from "./previewNoteSelection.ts";
+import { previewPointerMoved } from "./previewSelectionPolicy.ts";
 
 /** A CSS-pixel point in the preview canvas. */
 export interface PreviewPoint {
@@ -756,7 +757,7 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
     }
     const point = localPoint(pointer, options.preview.canvas);
     gesture.current = point;
-    gesture.moved = gesture.moved || !samePoint(gesture.start, point, 3);
+    gesture.moved = gesture.moved || previewPointerMoved(gesture.start, point);
     options.timeline.gestures.previewMarquee = { start: gesture.start, current: point };
     pointer.preventDefault();
     pointer.stopPropagation();

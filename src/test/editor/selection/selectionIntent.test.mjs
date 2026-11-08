@@ -29,12 +29,14 @@ test("one marquee-selected note or event opens multi-edit, while a click opens i
   session.selection.add(0);
   session.focus = "notes";
   session.marqueeSelection = "notes";
+  session.selectionMode = "multi";
   const marquee = session.selectionState();
   assert.deepEqual(resolveSelectionPane(session, 0, paneState).action, {
     kind: "open-multi",
     focus: "notes",
   });
   session.marqueeSelection = null;
+  session.selectionMode = "single";
   assert.deepEqual(resolveSelectionPane(session, 0, paneState).action, {
     kind: "activate-pane",
     name: "notes",
@@ -44,15 +46,50 @@ test("one marquee-selected note or event opens multi-edit, while a click opens i
   session.focus = "events";
   session.eventSelection.add("moveXEvents:0");
   session.marqueeSelection = "events";
+  session.selectionMode = "multi";
   assert.deepEqual(resolveSelectionPane(session, 0, paneState).action, {
     kind: "open-multi",
     focus: "events",
   });
   session.marqueeSelection = null;
+  session.selectionMode = "single";
   assert.deepEqual(resolveSelectionPane(session, 0, paneState).action, {
     kind: "activate-pane",
     name: "events",
   });
+});
+
+test("multi-selection intent stays multi when one selected object remains", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes.push(createNote(1, 2, 0));
+  const session = new EditorSession(chart);
+  session.focus = "notes";
+  session.selectionMode = "multi";
+  session.selection.add(0);
+  session.selection.add(1);
+
+  session.selection.delete(1);
+
+  assert.deepEqual(resolveSelectionPane(session, 0, paneState).action, {
+    kind: "open-multi",
+    focus: "notes",
+  });
+});
+
+test("undo restores the multi-selection intent separately from its count", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes.push(createNote(1, 1, 0));
+  const session = new EditorSession(chart);
+  session.selection.add(0);
+  session.selectionMode = "multi";
+  const before = session.selectionState();
+
+  session.selectionMode = "single";
+  session.recordSelection(undefined, before, false);
+
+  assert.equal(session.travel("undo"), true);
+  assert.equal(session.selectionMode, "multi");
+  assert.deepEqual([...session.selection], [0]);
 });
 
 test("re-selecting the active line keeps the note and event selection", () => {
@@ -88,6 +125,7 @@ test("pointer selections replace the curve inspector just like any other pane", 
   });
 
   session.marqueeSelection = "notes";
+  session.selectionMode = "multi";
   assert.deepEqual(resolveSelectionPane(session, 0, curveState).action, {
     kind: "open-multi",
     focus: "notes",
@@ -107,13 +145,16 @@ test("pointer selections replace the curve inspector just like any other pane", 
   // Anchor picking and stray clicks do not advance the revision; the curve
   // pane stays put for those.
   session.selection.clear();
+  session.selectionMode = "none";
   session.marqueeSelection = null;
   assert.deepEqual(resolveSelectionPane(session, 0, curveState).action, { kind: "none" });
   // An empty marquee has selected nothing yet, so the curve pane also stays.
   session.marqueeSelection = "notes";
+  session.selectionMode = "none";
   assert.deepEqual(resolveSelectionPane(session, 0, curveState).action, { kind: "none" });
   session.marqueeSelection = null;
   session.selection.add(0);
+  session.selectionMode = "single";
   assert.deepEqual(
     resolveSelectionPane(session, 0, { ...curveState, pointerSelection: false }).action,
     { kind: "none" },

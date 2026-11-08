@@ -194,6 +194,7 @@ export class EventInteraction implements EventInteractionHandle {
         run: () => {
           session.focus = "events";
           session.marqueeSelection = null;
+          session.selectionMode = "single";
           session.lineIndex = targetLine;
           session.eventSelection = new Set([eventKey(rectangle.type, rectangle.index)]);
           session.multiEventSelection.clear();
@@ -414,9 +415,13 @@ export class EventInteraction implements EventInteractionHandle {
     session.focus = "events";
     if (!event.ctrlKey && !event.shiftKey && event.button !== 1) {
       session.selection.clear();
+      if (session.multiLineActive && session.multiLineMode === "events") {
+        session.multiEventSelection.clear();
+      }
       if (!rectangle) {
         session.eventSelection.clear();
       }
+      session.selectionMode = "none";
     }
     this.canvas.focus();
     this.canvas.setPointerCapture(event.pointerId);
@@ -508,6 +513,10 @@ export class EventInteraction implements EventInteractionHandle {
           session.eventSelection = new Set([key]);
         }
       }
+      const hasSelection =
+        session.eventSelection.size > 0 ||
+        [...session.multiEventSelection.values()].some((selection) => selection.size > 0);
+      session.selectionMode = !hasSelection ? "none" : event.ctrlKey ? "multi" : "single";
       // An event is selected here, never dragged: body, start, and end moves all
       // go through the batch shortcuts so a click cannot reshape it by accident.
     }

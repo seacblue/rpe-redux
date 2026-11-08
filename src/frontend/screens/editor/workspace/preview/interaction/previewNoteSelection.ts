@@ -75,10 +75,14 @@ export function applySelection(
   marquee = false,
 ): void {
   const intent = marquee ? "notes" : null;
+  const hasSelection = [...next.values()].some((indices) => indices.size > 0);
+  const nextMode = !hasSelection ? "none" : marquee ? "multi" : "single";
   const intentChanged = session.marqueeSelection !== intent;
-  if (sameSelection(session, next) && !intentChanged) {
+  const modeChanged = session.selectionMode !== nextMode;
+  if (sameSelection(session, next) && !intentChanged && !modeChanged) {
     return;
   }
+  session.selectionMode = nextMode;
   session.marqueeSelection = intent;
   if (intentChanged) {
     session.selectionRevision += 1;

@@ -33,6 +33,7 @@ export function eventCurvePreviewSession(
     live.multiLineActive && hasMultiLineEvents ? live.lineIndex : result.lineIndex;
   preview.eventLayer = result.eventLayer;
   preview.focus = live.focus;
+  preview.selectionMode = live.selectionMode;
   preview.selection = new Set(live.selection);
   preview.eventSelection = new Set(result.eventSelection);
   preview.multiLineEnabled = live.multiLineEnabled;

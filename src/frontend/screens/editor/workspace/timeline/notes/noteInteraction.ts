@@ -268,6 +268,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     session.selection.clear();
     session.multiLineSelection.clear();
     session.multiSelectionIntent = null;
+    session.selectionMode = "none";
   }
   if (
     event.button === 0 &&
@@ -359,6 +360,10 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     if (session.multiLineActive && session.multiLineSelection) {
       session.multiLineSelection.set(hit.lineIndex, lineSelection);
     }
+    const hasSelection =
+      session.selection.size > 0 ||
+      [...session.multiLineSelection.values()].some((selection) => selection.size > 0);
+    session.selectionMode = !hasSelection ? "none" : event.ctrlKey ? "multi" : "single";
     const hitVertical = (beat: number) =>
       session.multiLineActive
         ? this.viewport.noteVerticalForLine(beat, hit.lineIndex, this.notesCanvas.clientHeight)

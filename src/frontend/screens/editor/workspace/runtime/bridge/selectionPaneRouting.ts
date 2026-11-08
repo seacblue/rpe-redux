@@ -53,7 +53,7 @@ export function selectionPaneSignature(session: EditorSession, eventLayerIndex: 
     session.multiLineSelection ?? new Map(),
     (a, b) => Number(a) - Number(b),
   );
-  return `${session.lineIndex}:${eventLayerIndex}|${session.focus}|${session.marqueeSelection}|${session.selectionRevision}|${[...session.selection].sort((a, b) => a - b).join(",")}|${[...session.eventSelection].sort().join(",")}|${multiNotes}|${multiEvents}`;
+  return `${session.lineIndex}:${eventLayerIndex}|${session.focus}|${session.marqueeSelection}|${session.selectionMode}|${session.selectionRevision}|${[...session.selection].sort((a, b) => a - b).join(",")}|${[...session.eventSelection].sort().join(",")}|${multiNotes}|${multiEvents}`;
 }
 
 /** Number of selected objects in the session's current focus. */
@@ -101,7 +101,7 @@ export function resolveSelectionPane(
     action = { kind: "activate-trajectory" };
   } else if (state.curveEditorOpen && !pointerSelection) {
     action = { kind: "activate-curve" };
-  } else if (count > 1 || (count > 0 && session.marqueeSelection === session.focus)) {
+  } else if (count > 0 && session.selectionMode === "multi") {
     action = { kind: "open-multi", focus: session.focus === "events" ? "events" : "notes" };
   } else if (count === 1) {
     const entries =

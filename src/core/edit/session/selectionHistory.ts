@@ -9,7 +9,7 @@
 import { eventList, eventKey } from "../events/eventTracks.ts";
 import type { EventSession } from "../events/eventTracks.ts";
 import type { Chart } from "../../global/chart/chart.ts";
-import type { EditorSession, EditorFocus, MultiLineMode } from "./session.ts";
+import type { EditorSession, EditorFocus, MultiLineMode, SelectionMode } from "./session.ts";
 
 /** Everything a commit captures around a change so undo can restore it. */
 export interface SelectionState {
@@ -18,6 +18,8 @@ export interface SelectionState {
   focus: EditorFocus;
   /** The gesture that produced the selection controls Inspector routing. */
   marqueeSelection?: "notes" | "events" | null;
+  /** Whether the active selection is single-object or multi-select intent. */
+  selectionMode?: SelectionMode;
   selection: number[];
   eventSelection: string[];
   multiLineSelection: [number, number[]][];
@@ -35,6 +37,7 @@ export function selectionState(session: EditorSession): SelectionState {
     eventLayer: session.eventLayer,
     focus: session.focus,
     marqueeSelection: session.marqueeSelection,
+    selectionMode: session.selectionMode,
     selection: [...session.selection].sort((left, right) => left - right),
     eventSelection: [...session.eventSelection].sort(),
     multiLineSelection: [...(session.multiLineSelection ?? new Map())]
@@ -69,6 +72,7 @@ export function sameSelection(left: SelectionState, right: SelectionState | unde
     left.eventLayer === right.eventLayer &&
     left.focus === right.focus &&
     (left.marqueeSelection ?? null) === (right.marqueeSelection ?? null) &&
+    (left.selectionMode ?? "none") === (right.selectionMode ?? "none") &&
     left.multiLineEnabled === right.multiLineEnabled &&
     left.multiLineMode === right.multiLineMode &&
     left.multiLineMerge === right.multiLineMerge &&
@@ -250,6 +254,12 @@ export function restoreSelection(session: EditorSession, state: SelectionState):
   session.eventLayer = state.eventLayer;
   session.focus = state.focus;
   session.marqueeSelection = state.marqueeSelection ?? null;
+  const hasSelection =
+    state.selection.length > 0 ||
+    state.eventSelection.length > 0 ||
+    state.multiLineSelection.some(([, values]) => values.length > 0) ||
+    state.multiEventSelection.some(([, values]) => values.length > 0);
+  session.selectionMode = state.selectionMode ?? (hasSelection ? "single" : "none");
   session.selection = new Set(state.selection.filter((index) => session.notes[index]));
   session.multiLineSelection = new Map(
     (state.multiLineSelection ?? [])

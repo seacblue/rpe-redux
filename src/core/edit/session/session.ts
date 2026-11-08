@@ -48,6 +48,8 @@ function collaborationRequestId(): string {
 
 /** Multi-line editing works on either notes or events. */
 export type MultiLineMode = "notes" | "events";
+/** Selection intent: no object, a normal single pick, or a multi-select gesture. */
+export type SelectionMode = "none" | "single" | "multi";
 /** The note field is single, merged multi-line, or split multi-line. */
 export type NoteTimelineMode = "single" | "multi_merged" | "multi";
 /** The event field is single or multi-line. */
@@ -99,6 +101,8 @@ export class EditorSession extends EventTarget {
   selectionRevision: number;
   /** The most recent rectangle selection's target, including a one-item result. */
   marqueeSelection: "notes" | "events" | null;
+  /** Whether the active object selection came from a single click or a multi-select gesture. */
+  selectionMode: SelectionMode;
   clipboard: JudgeLineNote[];
   clipboardNoteLines: number[];
   eventSelection: Set<string>;
@@ -152,6 +156,7 @@ export class EditorSession extends EventTarget {
     this.selection = new Set();
     this.selectionRevision = 0;
     this.marqueeSelection = null;
+    this.selectionMode = "none";
     this.clipboard = [];
     this.clipboardNoteLines = [];
     this.eventSelection = new Set();

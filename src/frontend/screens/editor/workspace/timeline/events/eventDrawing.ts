@@ -23,11 +23,7 @@ import {
   drawHoverGuides,
   strokeVerticalGrid,
 } from "../drawing/gridDrawing.ts";
-import {
-  eventLayerOf,
-  hasNonPositiveRange,
-  isHookedEvent,
-} from "../../../../../../core/edit/timeline/model.ts";
+import { eventLayerOf, hasNonPositiveRange } from "../../../../../../core/edit/timeline/model.ts";
 import { eventColumnBoundary } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type {
   TimelineEventLayer,
@@ -272,7 +268,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
           bottom,
         });
       }
-      const hooked = isHookedEvent(entry.item);
       context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity);
       drawEventBar(this, context, rectangle);
       if (
@@ -280,13 +275,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         hasNonPositiveRange(entry.item.startTime, entry.item.endTime)
       ) {
         drawEventOverlapFilter(context, rectangle, palette);
-      }
-      if (!selected && hooked) {
-        context.strokeStyle = palette.eventHookedStroke;
-        context.lineWidth = 1;
-        context.setLineDash([4, 3]);
-        context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
-        context.setLineDash([]);
       }
       context.globalAlpha = 1;
       if (entry.item.trajectory) {
@@ -514,7 +502,6 @@ export function drawMultiLineEvents(
             selectedValues.push({ start: event.start, end: event.end, top, bottom });
           }
         }
-        const hooked = isHookedEvent(event);
         context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, lineOpacity);
         if (type === "paintEvents") {
           context.fillStyle = selected ? palette.eventSelectedFill : palette.eventShaderFill;
@@ -526,15 +513,10 @@ export function drawMultiLineEvents(
           }
         }
         context.globalAlpha = lineOpacity;
-        if (!selected && (hooked || type === "paintEvents")) {
-          context.strokeStyle =
-            type === "paintEvents" ? palette.eventShaderFill : palette.eventHookedStroke;
+        if (!selected && type === "paintEvents") {
+          context.strokeStyle = palette.eventShaderFill;
           context.lineWidth = 1;
-          if (hooked) {
-            context.setLineDash([4, 3]);
-          }
           context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
-          context.setLineDash([]);
         }
         context.globalAlpha = lineOpacity;
         if (event.trajectory) {

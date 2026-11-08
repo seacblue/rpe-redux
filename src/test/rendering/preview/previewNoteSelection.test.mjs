@@ -32,6 +32,7 @@ test("a preview note click replaces the selected lines with the note's line", ()
   assert.deepEqual(session.multiLineIndices, []);
   assert.equal(session.multiLineEnabled, false);
   assert.deepEqual([...session.selection], [0]);
+  assert.equal(session.selectionMode, "single");
   assert.equal(session.focus, "notes");
 });
 
@@ -57,6 +58,7 @@ test("a preview marquee keeps only the lines that own the selected notes", () =>
   assert.deepEqual(session.multiLineIndices, [0, 2]);
   assert.equal(session.multiLineEnabled, true);
   assert.equal(session.multiLineMode, "notes");
+  assert.equal(session.selectionMode, "single");
   assert.deepEqual([...session.multiLineSelection.keys()].sort(), [0, 2]);
 });
 
@@ -75,6 +77,7 @@ test("a cross-line marquee moves the active line into the selected lines", () =>
   assert.equal(session.lineIndex, 1);
   assert.deepEqual([...session.selection], [0]);
   assert.equal(session.marqueeSelection, "notes");
+  assert.equal(session.selectionMode, "multi");
 });
 
 test("preview selection history restores active line and multi-line selection", () => {

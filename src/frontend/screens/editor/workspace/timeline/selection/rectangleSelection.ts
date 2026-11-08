@@ -13,6 +13,7 @@ import {
   selectNotesAlongSegment,
   shouldSuppressTimelineContextMenu,
   timelineSweepMoved,
+  type SelectionGestureResult,
   type SelectionSweep,
 } from "../../../../../../core/edit/timeline/selection.ts";
 import { eventList } from "../../../../../../core/edit/events/eventTracks.ts";
@@ -23,6 +24,22 @@ import type {
   SweepDrag,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineSelectionReceiver } from "../drawing/timelineReceiver.ts";
+
+/** Returns whether the requested timeline area still contains a selection. */
+function hasAreaSelection(
+  session: ReturnType<TimelineSelectionReceiver["getSession"]>,
+  area: TimelineArea,
+): boolean {
+  return area === "notes"
+    ? Boolean(
+        session.selection.size ||
+        [...session.multiLineSelection.values()].some((selection) => selection.size),
+      )
+    : Boolean(
+        session.eventSelection.size ||
+        [...session.multiEventSelection.values()].some((selection) => selection.size),
+      );
+}
 
 /**
  * The selection a Shift/Ctrl marquee must preserve. Captured once when the
@@ -198,8 +215,9 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
     remove: selection.drag.remove,
   };
   const session = this.getSession();
+  let result: SelectionGestureResult;
   if (selection.area === "notes") {
-    selectNotesAlongSegment(session, sweep, {
+    result = selectNotesAlongSegment(session, sweep, {
       indexForLine: (lineIndex) => {
         this.refreshIndex(lineIndex);
         return this.cache.noteIndex(lineIndex);
@@ -230,10 +248,13 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
       },
     });
   } else {
-    selectEventsAlongSegment(session, sweep, {
+    result = selectEventsAlongSegment(session, sweep, {
       rectangles: this.gestures.eventRects,
       scroll: this.viewport.multiLineViewportOffset(this.eventsCanvas.clientWidth, "events"),
     });
+  }
+  if (result.changed || result.matched) {
+    session.selectionMode = hasAreaSelection(session, selection.area) ? "multi" : "none";
   }
   selection.drag.lastSweepPoint = current;
   selection.drag.lastSweepWorldX = currentWorldX;
@@ -301,8 +322,9 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
   if (intentChanged) {
     session.selectionRevision += 1;
   }
+  let result: SelectionGestureResult;
   if (selection.area === "notes") {
-    selectNotesInRectangle(
+    result = selectNotesInRectangle(
       this.getSession(),
       {
         left,
@@ -323,7 +345,7 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
         this.viewport.multiLineViewportOffset(width, "notes"),
     );
   } else {
-    selectEventsInRectangle(
+    result = selectEventsInRectangle(
       this.getSession(),
       {
         left,
@@ -352,6 +374,9 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
         },
       },
     );
+  }
+  if (result.changed || result.matched) {
+    session.selectionMode = hasAreaSelection(session, selection.area) ? "multi" : "none";
   }
   if (intentChanged) {
     session.notify();
@@ -388,6 +413,7 @@ export function finishRectangle(this: TimelineSelectionReceiver, event: PointerE
         session.eventSelection.clear();
         session.multiEventSelection.clear();
       }
+      session.selectionMode = "none";
       session.notify();
     }
     sweep.drag.finished = true;

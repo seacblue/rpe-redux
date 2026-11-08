@@ -27,6 +27,7 @@ export function selectOverlappingNote(
   session: {
     focus: string;
     marqueeSelection: string | null;
+    selectionMode: "none" | "single" | "multi";
     lineIndex: number;
     selection: Set<number>;
     multiLineSelection: Map<number, Set<number>>;
@@ -42,6 +43,7 @@ export function selectOverlappingNote(
 ): void {
   const before = session.selectionState();
   session.focus = "notes";
+  session.selectionMode = "single";
   session.marqueeSelection = null;
   session.lineIndex = entry.lineIndex;
   session.selection = new Set([entry.index]);

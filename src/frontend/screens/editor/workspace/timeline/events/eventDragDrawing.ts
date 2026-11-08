@@ -21,7 +21,6 @@ export function drawEventDragOverlay(
   if (drag && drag.kind !== "rectangle") {
     const deltaBeat = receiver.gestures.eventInteraction.delta();
     context.strokeStyle = palette.foreground;
-    context.setLineDash([5, 3]);
     for (const rectangle of receiver.gestures.eventRects) {
       const rectLine = rectangle.lineIndex ?? session.lineIndex;
       const lineSelection =
@@ -48,6 +47,5 @@ export function drawEventDragOverlay(
       );
       context.strokeRect(rectangle.x, top, rectangle.width, bottom - top);
     }
-    context.setLineDash([]);
   }
 }

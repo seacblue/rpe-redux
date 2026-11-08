@@ -237,6 +237,7 @@ export function clearSelection(session: EditorSession): boolean {
   session.multiLineSelection.clear();
   session.multiEventSelection.clear();
   session.multiSelectionIntent = null;
+  session.selectionMode = "none";
   return true;
 }
 

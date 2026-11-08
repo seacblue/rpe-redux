@@ -263,6 +263,16 @@ function syncMultiSelectionIntent(session: EditorSession, focus: EditorFocus): v
     session.multiLineActive && session.multiLineMode === focus && hasSelection ? focus : null;
 }
 
+/** Returns whether any note or event remains selected in the session. */
+function selectionHasObjects(session: EditorSession): boolean {
+  return Boolean(
+    session.selection.size ||
+    session.eventSelection.size ||
+    [...session.multiLineSelection.values()].some((selection) => selection.size) ||
+    [...session.multiEventSelection.values()].some((selection) => selection.size),
+  );
+}
+
 /** Applies add, remove, or toggle semantics to a set. */
 function applyMode<T>(target: Set<T>, values: readonly T[], mode: SelectionMode): void {
   for (const value of values) {
@@ -300,6 +310,11 @@ function selectNotes(session: EditorSession, request: NoteSelectionRequest): voi
   applyMode(setForNotes(session, request.lineIndex), indices, mode);
   syncCurrentLine(session, request.lineIndex);
   syncMultiSelectionIntent(session, "notes");
+  session.selectionMode = !selectionHasObjects(session)
+    ? "none"
+    : mode === "replace"
+      ? "single"
+      : "multi";
 }
 
 /** Selects notes intersecting a beat and chart-X rectangle. */
@@ -363,6 +378,11 @@ function selectEvents(session: EditorSession, request: EventSelectionRequest): v
   );
   syncCurrentLine(session, request.lineIndex);
   syncMultiSelectionIntent(session, "events");
+  session.selectionMode = !selectionHasObjects(session)
+    ? "none"
+    : mode === "replace"
+      ? "single"
+      : "multi";
 }
 
 /** Selects overlapping events across one or more tracks in a beat range. */

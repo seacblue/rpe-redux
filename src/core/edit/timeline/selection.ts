@@ -50,6 +50,12 @@ export interface SelectionSweep {
   remove?: boolean;
 }
 
+/** Reports whether a marquee touched an object and whether it changed selection. */
+export interface SelectionGestureResult {
+  changed: boolean;
+  matched: boolean;
+}
+
 /** Return whether a right-button sweep moved far enough to replace the context menu. */
 export function shouldSuppressTimelineContextMenu(input: {
   button: number;
@@ -289,8 +295,9 @@ export function selectNotesInRectangle(
   rectangle: SelectionRectangle,
   indexForLine: (lineIndex: number) => NoteIndex | undefined,
   horizontal: (note: TimelineNote, lineIndex: number) => number,
-): void {
+): SelectionGestureResult {
   let dirty = restoreNoteBaseline(session, rectangle.baseNotes, rectangle.append ?? false);
+  let matched = false;
   dirty = pruneNoteBaseline(session) || dirty;
   const multi = session.multiLineActive && session.multiLineMode === "notes";
   const lines = multi ? session.targetLineIndices : [session.lineIndex];
@@ -315,6 +322,7 @@ export function selectNotesInRectangle(
       .filter((candidate) => isTimelineNoteRenderable(candidate.item))) {
       const x = horizontal(entry.item, lineIndex);
       if (x >= rectangle.left && x <= rectangle.right) {
+        matched = true;
         const changed = rectangle.remove
           ? selected.delete(entry.index)
           : !selected.has(entry.index);
@@ -336,6 +344,7 @@ export function selectNotesInRectangle(
   if (dirty) {
     session.notify();
   }
+  return { changed: dirty, matched };
 }
 
 /** Geometry needed to test a note against one swept pointer segment. */
@@ -352,8 +361,9 @@ export function selectNotesAlongSegment(
   session: EditorSession,
   sweep: SelectionSweep,
   geometry: NoteSweepGeometry,
-): void {
+): SelectionGestureResult {
   let dirty = false;
+  let matched = false;
   const multi = session.multiLineActive && session.multiLineMode === "notes";
   const lines = multi ? session.targetLineIndices : [session.lineIndex];
   for (const lineIndex of lines) {
@@ -378,6 +388,7 @@ export function selectNotesAlongSegment(
       ) {
         continue;
       }
+      matched = true;
       const changed = sweep.remove ? selected.delete(entry.index) : !selected.has(entry.index);
       if (!changed) {
         continue;
@@ -397,6 +408,7 @@ export function selectNotesAlongSegment(
   if (dirty) {
     session.notify();
   }
+  return { changed: dirty, matched };
 }
 
 export interface EventSelectionGeometry {
@@ -423,8 +435,9 @@ export function selectEventsAlongSegment(
   session: EditorSession,
   sweep: SelectionSweep,
   geometry: EventSweepGeometry,
-): void {
+): SelectionGestureResult {
   let dirty = false;
+  let matched = false;
   const multi = session.multiLineActive && session.multiLineMode === "events";
   for (const hit of geometry.rectangles) {
     const lineIndex = hit.lineIndex ?? session.lineIndex;
@@ -441,6 +454,7 @@ export function selectEventsAlongSegment(
     ) {
       continue;
     }
+    matched = true;
     const key = eventKey(hit.type, hit.index);
     const selected =
       multi && lineIndex !== session.lineIndex
@@ -464,6 +478,7 @@ export function selectEventsAlongSegment(
   if (dirty) {
     session.notify();
   }
+  return { changed: dirty, matched };
 }
 
 /** Event arrays are immutable chart revisions; their paint lanes only need one sweep. */
@@ -485,9 +500,10 @@ export function selectEventsInRectangle(
   session: EditorSession,
   rectangle: SelectionRectangle,
   geometry: EventSelectionGeometry,
-): void {
+): SelectionGestureResult {
   const { left, right, bottom, top, remove } = rectangle;
   let dirty = restoreEventBaseline(session, rectangle.baseEvents, rectangle.append ?? false);
+  let matched = false;
   dirty = pruneEventBaseline(session) || dirty;
   if (session.multiLineActive && session.multiLineMode === "events") {
     for (const hit of geometry.rectangles) {
@@ -542,8 +558,10 @@ export function selectEventsInRectangle(
           if (x >= right || x + Math.max(2, width - (lane.count > 1 ? 2 : 0)) <= left) {
             continue;
           }
+          matched = true;
         }
         const key = eventKey(type, index);
+        matched = true;
         const changed = remove
           ? session.eventSelection.delete(key)
           : !session.eventSelection.has(key);
@@ -559,6 +577,7 @@ export function selectEventsInRectangle(
   if (dirty) {
     session.notify();
   }
+  return { changed: dirty, matched };
 }
 
 /** Drops event keys that stopped resolving after an edit or undo. */
