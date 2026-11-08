@@ -2,9 +2,9 @@
  * Shared transport controls for the editor surface.
  *
  * The play button toggles playback (Space does the same), and holding the
- * audition button plays from the current position until release. Both are shell
- * chrome rather than editor-only controls, so every document keeps the same
- * transport affordances.
+ * audition button focuses the preview and plays from the current position until
+ * release. Both are shell chrome rather than editor-only controls, so every
+ * document keeps the same transport affordances.
  */
 import { useSyncExternalStore } from "react";
 import { Button } from "../../../design/components/button/Button.tsx";
@@ -60,7 +60,10 @@ export function PlaybackButton() {
   );
 }
 
-/** The hold-to-audition button; releasing seeks back to the starting position. */
+/**
+ * The hold-to-audition button; it focuses the preview while playing and
+ * releasing restores the layout and starting position.
+ */
 export function AuditionButton() {
   return (
     <IconButton
@@ -70,10 +73,11 @@ export function AuditionButton() {
       className="toolbar-audition-button"
       data-tip-title={t("chrome.playback.audition")}
       data-tip-desc={t("chrome.playback.auditionHint")}
+      data-tip-key="T"
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        editorChromeCommands()?.transport.beginAudition();
+        editorChromeCommands()?.transport.beginAudition({ previewOnly: true });
       }}
       onPointerUp={() => editorChromeCommands()?.transport.endAudition()}
       onPointerCancel={() => editorChromeCommands()?.transport.endAudition()}

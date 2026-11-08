@@ -17,10 +17,18 @@ export interface EditorDocumentCommands {
   closeDocument(): void;
 }
 
+/** Temporary transport options for one held audition. */
+export interface AuditionOptions {
+  /** Show only the preview until the hold ends. */
+  previewOnly?: boolean;
+  /** Return to the starting position on release; defaults to true. */
+  restoreTime?: boolean;
+}
+
 /** Playback commands shared by the View menu and the transport controls. */
 export interface EditorTransportCommands {
   togglePlayback(): void;
-  beginAudition(): void;
+  beginAudition(options?: AuditionOptions): void;
   endAudition(): void;
   rewind(): void;
   seekToBeat(beat: string): void;

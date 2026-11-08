@@ -33,6 +33,14 @@ test("scale and line-move defaults have left-hand chords before the arrows", () 
   assert.equal(bindingOf("selection.line.previous", 1), "Alt+UPARROW");
 });
 
+test("preview auditions use the held T and U keys", () => {
+  assert.equal(bindingOf("view.previewAudition"), "T");
+  assert.equal(bindingOf("view.previewAuditionStay"), "U");
+  assert.equal(byId.get("view.previewAudition")?.hold, true);
+  assert.equal(byId.get("view.previewAuditionStay")?.hold, true);
+  assert.equal(bindingOf("selection.nudge.up"), "G");
+});
+
 test("event-edge defaults have left-hand chords before the brackets", () => {
   assert.equal(bindingOf("selection.event.start.earlier"), "Alt+B");
   assert.equal(bindingOf("selection.event.start.later"), "Alt+T");
@@ -86,6 +94,14 @@ test("sampling opener yields to the open sampler and the left-hand chords resolv
         shortcutContext,
       ),
       "selection.event.start.earlier",
+    );
+    assert.equal(
+      matchEditorShortcut({ key: "T" }, { area: "notes", hasSelection: true }, shortcutContext),
+      "view.previewAudition",
+    );
+    assert.equal(
+      matchEditorShortcut({ key: "G" }, { area: "notes", hasSelection: true }, shortcutContext),
+      "selection.nudge.up",
     );
   } finally {
     dispose();

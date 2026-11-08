@@ -288,8 +288,8 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.pageLeft",
     scope: "editor",
-    // Z/X/T/B form a left-hand movement cluster: horizontal on the bottom row,
-    // time on the upper/lower pair. The arrows stay as the familiar binding.
+    // Z/X/G/B form a left-hand movement cluster: horizontal on the bottom row,
+    // time on the home/bottom pair. The arrows stay as the familiar binding.
     defaults: [{ key: "Z" }, { key: "LEFTARROW" }],
     enabledFor: (context) => context.hasSelection,
   },
@@ -308,7 +308,7 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.pageUp",
     scope: "editor",
-    defaults: [{ key: "T" }, { key: "UPARROW" }],
+    defaults: [{ key: "G" }, { key: "UPARROW" }],
     enabledFor: (context) => context.hasSelection,
   },
   {

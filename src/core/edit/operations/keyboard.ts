@@ -85,6 +85,10 @@ export interface EditorKeyboardActionDependencies {
   resetCamera: () => void;
   toggleGameUi: () => void;
   togglePreviewOnly: () => void;
+  /** Start a held audition in the preview-only layout. */
+  beginPreviewAudition: (restoreTime: boolean) => void;
+  /** End the active held audition and restore its layout. */
+  endPreviewAudition: () => void;
   openMultiLinePanel: () => void;
   captureCurve: (end: boolean) => void;
   deleteSelection: () => void;
@@ -115,6 +119,8 @@ export async function runEditorKeyboardAction(
         "view.showLineInfo",
         "view.toggleGameUi",
         "view.togglePreviewOnly",
+        "view.previewAudition",
+        "view.previewAuditionStay",
         "note.place.hold",
         "event.place",
         "note.place.tap",
@@ -210,6 +216,9 @@ export async function runEditorKeyboardAction(
     } else if (action === "view.togglePreviewOnly") {
       event.preventDefault();
       deps.togglePreviewOnly();
+    } else if (action === "view.previewAudition" || action === "view.previewAuditionStay") {
+      event.preventDefault();
+      deps.beginPreviewAudition(action === "view.previewAudition");
     } else if (action === "workspace.multiLine.toggle") {
       // Selecting multiple lines already owns the mode. The shortcut opens the
       // settings surface and re-asserts the current mode.
@@ -258,5 +267,21 @@ export async function runEditorKeyboardAction(
   } catch (error) {
     event.preventDefault();
     deps.reportError(error);
+  }
+}
+
+/**
+ * Run the release half of a held editor shortcut.
+ *
+ * Only actions declared with `hold` reach here; the dispatcher records the key
+ * that started them so a key-up, blur, or unmount always ends the temporary
+ * state instead of leaving playback or a preview layout behind.
+ */
+export function runEditorShortcutRelease(
+  action: string,
+  deps: EditorKeyboardActionDependencies,
+): void {
+  if (action === "view.previewAudition" || action === "view.previewAuditionStay") {
+    deps.endPreviewAudition();
   }
 }

@@ -73,6 +73,8 @@ export default {
   "shortcuts.editor.togglePreviewOnly": "Preview only",
   "shortcuts.editor.togglePreviewOnlyHint":
     "Show only the preview; press again to restore the previous layout",
+  "shortcuts.editor.previewAudition": "Hold preview-only playback (return on release)",
+  "shortcuts.editor.previewAuditionStay": "Hold preview-only playback (stay on release)",
   "shortcuts.editor.showNotes": "Show / hide the note region",
   "shortcuts.editor.showEvents": "Show / hide the event region",
   "shortcuts.editor.showPreview": "Show / hide the preview",

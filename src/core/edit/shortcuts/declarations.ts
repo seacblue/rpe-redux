@@ -44,4 +44,6 @@ export interface EditorShortcutDefinition extends ShortcutDefinition {
   enabledFor?: (context: EditorShortcutContext) => boolean;
   /** Restrict this shortcut to one canvas surface; omitted means both. */
   surface?: EditorShortcutSurface;
+  /** Keep the action active until the matching key is released. */
+  hold?: true;
 }

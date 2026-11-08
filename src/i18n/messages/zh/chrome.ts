@@ -151,8 +151,8 @@ export default {
   "chrome.statusBar.time": "时间：{time}",
 
   "chrome.playback.playPause": "播放/暂停",
-  "chrome.playback.audition": "试听",
-  "chrome.playback.auditionHint": "长按播放，松开按键时回到播放前位置",
+  "chrome.playback.audition": "预览试听",
+  "chrome.playback.auditionHint": "长按播放，松开时回到播放前位置",
   "chrome.playback.rewind": "回到开头",
   "chrome.transport.move": "移动播放条",
   "chrome.transport.scrubber": "播放位置",

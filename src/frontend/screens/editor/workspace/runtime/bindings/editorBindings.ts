@@ -46,6 +46,7 @@ import { curvePreviewMode } from "../../../curveEvents/mode.ts";
 import { deleteCurveSelectionAction } from "../../../curveEvents/store.ts";
 import { createEditorSettingsBindings } from "../../../../settings/editorRuntime.ts";
 import { connectViewControls, viewControls } from "../commands/viewControls.ts";
+import { transport } from "../commands/transport.ts";
 import { createClipboardCommands } from "./clipboardCommands.ts";
 import { selectEventLayer } from "../../timeline/layers/layerButtons.ts";
 import { registerLineActions } from "../../../../global/sections/lines/lineActions.ts";
@@ -281,6 +282,9 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     resetCamera: deps.resetCamera,
     toggleGameUi: deps.toggleGameUi,
     togglePreviewOnly: () => viewControls.togglePreviewOnly(),
+    beginPreviewAudition: (restoreTime) =>
+      transport.beginAudition({ previewOnly: true, restoreTime }),
+    endPreviewAudition: () => transport.endAudition(),
     openMultiLinePanel: deps.openMultiLinePanel,
     captureCurve: deps.curveEditor.capture,
     deleteSelection,

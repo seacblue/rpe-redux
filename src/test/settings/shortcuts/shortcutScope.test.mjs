@@ -1,10 +1,13 @@
-/** Verifies the pure shortcut scope matrix and precedence. */
+/** Verifies the pure shortcut scope matrix, focus rules, and precedence. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { shortcutScopeAvailable, shortcutScopePriority } from "../../../core/shortcuts/scope.ts";
 import { historyShortcuts } from "../../../core/edit/session/history.ts";
 import { playbackShortcuts } from "../../../core/edit/playback/transport.ts";
-import { isShortcutBlockingSurface } from "../../../frontend/platform/shortcuts/focus.ts";
+import {
+  isShortcutBlockingSurface,
+  isWindowBlur,
+} from "../../../frontend/platform/shortcuts/focus.ts";
 
 const base = {
   atHome: false,
@@ -94,4 +97,11 @@ test("inline listboxes do not hide workspace shortcuts", () => {
   assert.equal(isShortcutBlockingSurface(target("inline-listbox")), false);
   assert.equal(isShortcutBlockingSurface(target("button")), false);
   assert.equal(isShortcutBlockingSurface(null), false);
+});
+
+test("a control losing focus is not the window losing focus", () => {
+  const windowTarget = {};
+  assert.equal(isWindowBlur(windowTarget, windowTarget), true);
+  assert.equal(isWindowBlur({}, windowTarget), false);
+  assert.equal(isWindowBlur(null, windowTarget), false);
 });

@@ -31,6 +31,7 @@ import {
   settingsNavigationPath,
   settingsNavigationTarget,
   settingsNavigations,
+  settingsPageSearchText,
   navigationPathFrom,
   subscribeSettingsCatalog,
 } from "./settingsCatalog.ts";
@@ -361,12 +362,14 @@ export function SettingsWindow({
     return visibility(field) && (searching ? matches.has(field.key) : true);
   };
   // A category with no schema rows is still a search result when its keywords
-  // match, which is what keeps the skin, backup, extension and help pages
-  // reachable from the same box as the row-based pages.
-  const categoryMatchesKeywords = (id: string) => {
+  // or its page-owned values match, which is what keeps the skin, backup,
+  // extension, help and shortcut pages reachable from the same box as the
+  // row-based pages.
+  const categoryMatchesSearch = (id: string) => {
     const keywords = settingsPageFor(id)?.keywords;
     return Boolean(
-      keywords && matchesSettingsSearch(t(keywords), activeSearchQuery, CATALOGS.en[keywords]),
+      (keywords && matchesSettingsSearch(t(keywords), activeSearchQuery, CATALOGS.en[keywords])) ||
+      settingsPageSearchText(id).some((text) => matchesSettingsSearch(text, activeSearchQuery)),
     );
   };
   /** Whether a page has a matching row or matching search keywords. */
@@ -376,7 +379,7 @@ export function SettingsWindow({
       navigationKeys.some((key) =>
         fields.some((field) => field.navigation === key && matches.has(field.key)),
       ) ||
-      (searching && categoryMatchesKeywords(id))
+      (searching && categoryMatchesSearch(id))
     );
   };
   const matchingNavigationKeys = new Set(
@@ -722,6 +725,7 @@ export function SettingsWindow({
                             setTheme={setTheme}
                             openCategory={openCategory}
                             active={open && category === entry.key}
+                            query={searching ? activeSearchQuery : ""}
                           />
                         )}
                       </>

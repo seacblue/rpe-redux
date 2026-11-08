@@ -12,7 +12,9 @@ import type {
   SettingsNavigation,
 } from "../../../core/settings/types.ts";
 import { settingsRegistry } from "../../../core/settings/settings.ts";
+import { values } from "../../../core/state/values.ts";
 import "../../../core/settings/features/index.ts";
+import { settingsPageFor } from "./settingsContributions.ts";
 import { matchesSettingsSearch } from "./settingsSearch.ts";
 
 /** Registry navigation and definition readers bound for the settings UI. */
@@ -38,6 +40,85 @@ function englishSettingText(value: SettingText): string | undefined {
   return typeof value === "string" && !value.startsWith("extension::")
     ? CATALOGS.en[value as MessageKey]
     : undefined;
+}
+
+/** One translated string and, in Chinese mode, its English catalog alias. */
+interface SettingsSearchText {
+  text: string;
+  english?: string;
+}
+
+/** Resolve one schema text into the strings settings search compares. */
+function searchTextOf(value: SettingText): SettingsSearchText {
+  const text = settingText(value);
+  const english = englishSettingText(value);
+  return english !== undefined && english !== text ? { text, english } : { text };
+}
+
+/**
+ * Text a setting's control shows: the committed value, the value Reset restores,
+ * the percentage or unit readout, and every selectable dropdown option.
+ *
+ * Range bounds are deliberately not expanded into every step. A single port
+ * range would add tens of thousands of aliases and make a short numeric query
+ * match most of the catalog.
+ */
+function settingValueSearchText(definition: SettingDefinition): SettingsSearchText[] {
+  const entries: SettingsSearchText[] = [];
+  const seen = new Set<string>();
+  /** Add one visible string once. */
+  const add = (text: string, english?: string): void => {
+    const trimmed = text.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    entries.push(
+      english !== undefined && english !== trimmed ? { text: trimmed, english } : { text: trimmed },
+    );
+  };
+  /** Add a stored or default scalar value. */
+  const addValue = (value: unknown): void => {
+    if (typeof value === "string" || typeof value === "number") {
+      add(String(value));
+    }
+  };
+  const current = values.byId.has(definition.key)
+    ? values.byId.get<unknown>(definition.key)
+    : definition.default;
+  addValue(current);
+  addValue(definition.default);
+
+  if (definition.control === "range" || definition.control === "number") {
+    const value = typeof current === "number" ? current : Number(current);
+    if (Number.isFinite(value)) {
+      if (definition.control === "range") {
+        // Keep the slider readout in step with `SettingControl` and `SliderField`.
+        const percentage =
+          definition.percentage ??
+          (definition.min === 0 && (definition.max === 1 || definition.max === 100));
+        if (percentage) {
+          add(`${Math.round(value * (definition.max === 100 ? 1 : 100))}%`);
+        } else if (definition.unit) {
+          add(`${value} ${settingText(definition.unit)}`);
+        }
+      } else if (definition.unit) {
+        add(`${value} ${settingText(definition.unit)}`);
+      }
+    }
+  } else if (definition.control === "select") {
+    for (const option of definition.options) {
+      const label = searchTextOf(option.label);
+      add(label.text, label.english);
+      add(option.value);
+    }
+  }
+  return entries;
+}
+
+/** Extra visible strings contributed by one settings page for the search box. */
+export function settingsPageSearchText(key: string): string[] {
+  return [...(settingsPageFor(key)?.searchText?.() ?? [])];
 }
 
 /** Resolve a navigation key to its first page, or the key itself when it is a page. */
@@ -106,7 +187,7 @@ export function settingsFields(navigation: string): SettingDefinition[] {
     .filter((definition) => definition.navigation === navigation);
 }
 
-/** Search the translated text visible to the user. */
+/** Search the translated text and control values visible to the user. */
 export function searchSettings(query: unknown): SettingDefinition[] {
   const text = String(query ?? "");
   const definitions = settingsRegistry.definitions();
@@ -119,25 +200,15 @@ export function searchSettings(query: unknown): SettingDefinition[] {
     const parent = navigation?.parent
       ? navigations.find((entry) => entry.key === navigation.parent)
       : undefined;
-    const fields: { value: SettingText; english?: string }[] = [
-      { value: definition.label, english: englishSettingText(definition.label) },
-      ...(definition.description
-        ? [
-            {
-              value: definition.description,
-              english: englishSettingText(definition.description),
-            },
-          ]
-        : []),
-      { value: definition.group, english: englishSettingText(definition.group) },
-      ...(navigation
-        ? [{ value: navigation.label, english: englishSettingText(navigation.label) }]
-        : []),
-      ...(parent ? [{ value: parent.label, english: englishSettingText(parent.label) }] : []),
+    const fields: SettingsSearchText[] = [
+      searchTextOf(definition.label),
+      ...(definition.description ? [searchTextOf(definition.description)] : []),
+      searchTextOf(definition.group),
+      ...(navigation ? [searchTextOf(navigation.label)] : []),
+      ...(parent ? [searchTextOf(parent.label)] : []),
+      ...settingValueSearchText(definition),
     ];
-    return fields.some(({ value, english }) =>
-      matchesSettingsSearch(settingText(value), text, english),
-    );
+    return fields.some(({ text: value, english }) => matchesSettingsSearch(value, text, english));
   });
 }
 

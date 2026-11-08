@@ -71,6 +71,8 @@ export default {
   "shortcuts.editor.showLineInfo": "显示 / 隐藏当前线信息",
   "shortcuts.editor.togglePreviewOnly": "仅预览",
   "shortcuts.editor.togglePreviewOnlyHint": "只显示预览；再次按下恢复上一布局",
+  "shortcuts.editor.previewAudition": "按住仅预览播放（松开返回）",
+  "shortcuts.editor.previewAuditionStay": "按住仅预览播放（松开停留）",
   "shortcuts.editor.showNotes": "显示 / 隐藏音符区",
   "shortcuts.editor.showEvents": "显示 / 隐藏事件区",
   "shortcuts.editor.showPreview": "显示 / 隐藏预览区",

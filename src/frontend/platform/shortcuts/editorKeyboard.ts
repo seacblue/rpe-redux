@@ -8,10 +8,13 @@
  */
 import type { ResourceScope } from "../../../core/utils/resourceScope.ts";
 import {
+  holdsEditorShortcut,
   matchEditorShortcut,
   matchRegisteredShortcut,
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import type { EditorShortcutArea } from "../../../core/edit/shortcuts/declarations.ts";
+import type { Shortcut } from "../../../core/shortcuts/types.ts";
+import { matches, released } from "../../../core/shortcuts/keyMatching.ts";
 import {
   advancePrefixDigitSequence,
   createPrefixDigitSequenceState,
@@ -20,9 +23,10 @@ import {
   type PrefixDigitSequenceSubmission,
 } from "../../../core/shortcuts/prefixDigitSequence.ts";
 import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
-import { releaseShortcutFocus } from "./focus.ts";
+import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
   runEditorKeyboardAction,
+  runEditorShortcutRelease,
   type EditorKeyboardActionDependencies,
   type KeyboardActionEvent,
 } from "../../../core/edit/operations/keyboard.ts";
@@ -118,6 +122,24 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       keyboardDeps,
     );
   };
+
+  /** Editor actions that are active until their starting key is released. */
+  const heldShortcuts: { id: string; binding: Shortcut; area: EditorShortcutArea }[] = [];
+
+  /** End held actions, optionally only the one whose key released. */
+  const releaseHeldShortcuts = (event?: KeyboardEvent): void => {
+    for (const held of [...heldShortcuts]) {
+      if (event && !released(event, held.binding)) {
+        continue;
+      }
+      const index = heldShortcuts.indexOf(held);
+      if (index >= 0) {
+        heldShortcuts.splice(index, 1);
+      }
+      runEditorShortcutRelease(held.id, keyboardDeps);
+    }
+  };
+  deps.scope.add(() => releaseHeldShortcuts());
 
   registerTransportShortcuts({
     scope: deps.scope,
@@ -215,6 +237,14 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       if (shortcutId) {
         window.dispatchEvent(new Event(SHORTCUT_DISPATCHED_EVENT));
       }
+      if (editorAction && !event.repeat && holdsEditorShortcut(editorAction)) {
+        const binding = shortcutRegistry
+          .bindingsOf(editorAction)
+          .find((candidate) => matches(event, candidate));
+        if (binding && !heldShortcuts.some((held) => held.id === editorAction)) {
+          heldShortcuts.push({ id: editorAction, binding, area });
+        }
+      }
       if (
         shortcutId ||
         (!context.textEntry &&
@@ -243,6 +273,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
     window,
     "keyup",
     (event) => {
+      releaseHeldShortcuts(event);
       if (
         deps.timeline.gestures.clipboardMode?.keepTime ||
         deps.timeline.gestures.clipboardMode?.mirror
@@ -281,7 +312,13 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
   deps.scope.listen(
     window,
     "blur",
-    () => {
+    (event) => {
+      // Capture-phase focus events also reach the window for child elements.
+      // Only the window itself losing focus should cancel held input.
+      if (!isWindowBlur(event.target, window)) {
+        return;
+      }
+      releaseHeldShortcuts();
       prefixDigitState = createPrefixDigitSequenceState();
     },
     true,
