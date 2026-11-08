@@ -29,6 +29,7 @@ export default {
   "shortcuts.editor.undo": "Undo",
   "shortcuts.editor.redo": "Redo",
   "shortcuts.editor.selectAll": "Select all",
+  "shortcuts.editor.clearSelection": "Clear selection",
   "shortcuts.editor.sweepSelect": "Sweep-select timeline objects",
   "shortcuts.editor.sweepDeselect": "Sweep-deselect timeline objects",
   "shortcuts.editor.delete": "Delete selected objects",
