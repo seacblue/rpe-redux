@@ -4,36 +4,90 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use two inline annotations: `@name` credits a GitHub user (rendered bold and underlined), and `<red>text</red>` colours a run of text. The tag name is the colour: `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown tag, so the release page still reads as plain words.
 
-## 1.0.5 (2026-11-07)
+## 1.0.6 (2026-11-08)
 
 ### 中文
 
 **新功能**
 
-- 编辑器显示设置新增音符与事件时间轴共享的竖向网格线、指针高亮线和中心线颜色。
-- X 轴网格数量现在按实际可选线数配置；1 为中心线，2 为左右边界，工具栏输入改为整数。
+- 新增窗口、全屏和独占（兼容模式）显示设置，以及常用窗口分辨率选项。
+- 编辑器视图支持在完整布局快照之间切换，并保留视图模式历史，方便恢复之前的布局。<inspired by @MatrixBlanchet's suggestion>
+- 使用 Ctrl + 连续数字的快捷键，可以方便地切换线号。<inspired by @MuYan's suggestion>
+- 颜色设置支持透明度编辑与 RGBA 颜色迁移。
+- 支持在启动时指定前端、后端与 AI 功能的端口。
+- 现在按下 Esc 可以取消选中的物件。
+- 新增长按划线与取消功能。
+
+**改进**
+
+- 预览和画布渲染：现在会正确按照可见范围筛选音符。
+- 预览和画布渲染：现在会正确缓存线条高度计算，并复用批量绘制数据。
+- 协作编辑：改进资源传输的背压与限流。
+- 协作编辑：远程修改不再重复执行完整谱面计算。
+- 协作编辑：现在选区会在远程变更后正确映射。
+- X 轴网格恢复支持小数值。
+- 自动更新默认开启；关闭自动更新后，WiFi/流量更新下载策略会同步禁用。
+- 更新下载默认使用 WiFi 策略，避免自动占用移动网络。
+- 现在右上角的进度条终于不再那么靠近边缘。
+- 现在在启动界面失败时，完整的报错信息将不再被折叠。
+- 横线与竖线的高亮逻辑更加对齐 RPE。
+- 在我们录制演示视频时，发现设置界面的启动是同步的，所以现在它变成异步的了。
+- 卸载程序使用了更加精美的图标，以防有人打开软件时不小心点开卸载程序。
+- 修复了一些很明显是由 AI 遗留而极度缺乏人情味的文本内容。
+- 人类历史上曾经有一些关于使用 → 与 > 之间的强烈的争论，而我们已经做出了选择。
+
+**代码质量**
+
+- 将一些文件名从 kebab-case 改为 camelCase。
+- 移除了过时的 MCP 编辑通道。
+- 修改了 Markdown 文件的断行问题，现在它们看起来的效果不会这么可笑了。
 
 **修复**
 
-- 谱面 JSON 或 PEZ 谱面条目的大小上限提升至 512 MiB，可处理更大的有效谱面。
-- 打开和保存失败时显示本地化的错误说明、解决办法和稳定错误代码；保存冲突也会提供恢复指引。
-
-**内部改进**
-
-- 新增回归测试覆盖竖向网格、谱面加载错误、外部资源和保存行为，并同步更新相关运行时文档。
+- 修复了一些原生 tooltip 的错误展示，与我们不知道为什么会改坏的 tooltip 相关代码。
+- 修复了多线编辑下的物件缩放错误的 Bug。
+- 对齐普通 WebView2 启动参数，修复相关桌面启动问题。
+- 修复了卸载程序无法清理数据的 Bug，清理数据按钮一定要能清理数据。
 
 ### English
 
 **Features**
 
-- Editor display settings now expose shared vertical grid, pointer-highlight, and center-line colours for the note and event timelines.
-- The X-axis grid count now represents the actual selectable line count: 1 is the center line, 2 are the left and right boundaries, and the toolbar accepts integers only.
+- Added Windowed, Fullscreen, and Exclusive (compatibility mode) display settings, plus common window-resolution options.
+- Editor views can now switch between complete layout snapshots and retain view-mode history, making previous layouts easier to restore.<inspired by @MatrixBlanchet's suggestion>
+- Hold Ctrl and type a judge-line number to quickly switch to that line.<inspired by @MuYan's suggestion>
+- Colour settings now support alpha editing and RGBA colour migration.
+- The frontend, backend, and AI feature ports can now be specified at startup.
+- Pressing Esc now deselects the selected objects.
+- Added hold-and-drag sweep selection and deselection.
+
+**Improvements**
+
+- Preview and canvas rendering: notes are now culled correctly by visible range.
+- Preview and canvas rendering: line-floor calculations are now cached correctly, and batch-drawing data is reused.
+- Collaboration: improved backpressure and throttling for asset transfer.
+- Collaboration: remote edits no longer repeat full-chart calculations.
+- Collaboration: selections are now remapped correctly after remote changes.
+- X-axis grids support fractional values again.
+- Automatic updates are now enabled by default; disabling them also disables the Wi-Fi/metered download policy.
+- Update downloads now default to the Wi-Fi policy, avoiding automatic use of metered networks.
+- The progress bar in the top-right corner is finally no longer so close to the edge.
+- When the startup screen fails, the full error message is no longer collapsed.
+- The highlight behaviour for horizontal and vertical lines now aligns more closely with RPE.
+- While recording the demo video, we found that the settings screen opened synchronously, so it now opens asynchronously.
+- The uninstaller now uses a much nicer icon, so nobody opens it by accident when launching the app.
+- Fixed some text that was clearly left over from AI and sorely lacking in human warmth.
+- Human history has seen some fierce debates over using → versus >, and we have made our choice.
+
+**Code quality**
+
+- Renamed some files from kebab-case to camelCase.
+- Removed the obsolete MCP editing transport.
+- Changed line breaking in Markdown files; they no longer look so ridiculous.
 
 **Fixes**
 
-- The limit for chart JSON or a PEZ chart entry is now 512 MiB, allowing larger valid charts to open.
-- Failed opens and saves now show localized explanations, recovery steps, and stable error codes; save conflicts include recovery guidance.
-
-**Internal**
-
-- Regression coverage now includes vertical grids, chart-loading errors, external resources, and save behaviour, with the related runtime documentation updated.
+- Fixed some incorrect native tooltip displays, along with the tooltip-related code that we broke without knowing why.
+- Fixed a bug where objects scaled incorrectly in multi-line editing.
+- Aligned normal WebView2 startup arguments, fixing related desktop launch issues.
+- Fixed a bug where the uninstaller could not clean up data; the clear-data button must actually clear data.
