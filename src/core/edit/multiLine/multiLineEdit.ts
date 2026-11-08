@@ -100,10 +100,9 @@ export const multiLineShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.toggleMultiLine",
     scope: "editor",
-    // F and G sit under the left index beside the placement keys, so the
-    // toggle stays reachable while placing notes. The sampling pane owns F for
-    // applying a sample while it is open.
-    defaults: [{ key: "F" }],
+    // J and K are adjacent home-row keys, clear of the left-hand placement
+    // keys. The sampling pane still owns the workspace while a sample is active.
+    defaults: [{ key: "J" }],
     enabledFor: (context) => !context.samplingActive,
   },
   {
@@ -111,7 +110,7 @@ export const multiLineShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.switchMultiLineMode",
     scope: "editor",
-    defaults: [{ key: "G" }],
+    defaults: [{ key: "K" }],
     enabledFor: (context) => !context.samplingActive,
   },
 ];

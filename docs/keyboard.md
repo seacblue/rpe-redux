@@ -1,6 +1,6 @@
 # Keyboard
 
-RPE Redux keeps the editing loop under the left hand. Q/W/E/R place notes and events, movement commands use the left half or the thumb, and the arrow keys remain familiar alternatives. Every binding is editable in **Settings → Shortcuts**. The declarations live beside their actions in `src/core/edit/shortcuts/` and the implementing modules; the shell dispatcher is `src/frontend/platform/shortcuts/editorKeyboard.ts`.
+RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and events, movement commands use the left half or the thumb, and the arrow keys remain familiar alternatives. Every binding is editable in **Settings → Shortcuts**. The declarations live beside their actions in `src/core/edit/shortcuts/` and the implementing modules; the shell dispatcher is `src/frontend/platform/shortcuts/editorKeyboard.ts`.
 
 ## Placement and editing
 
@@ -48,9 +48,9 @@ RPE Redux keeps the editing loop under the left hand. Q/W/E/R place notes and ev
 | Previous / next line             | `Z` / `X` (or `←` / `→`)                                |
 | Jump to a judge line             | Hold `Ctrl`, type a 0-based line number, release `Ctrl` |
 | Nudge selection left / right     | `Z` / `X` (or `←` / `→`)                                |
-| Nudge selection earlier / later  | `B` / `T` (or `↓` / `↑`)                                |
-| Open multi-line editing          | `F`                                                     |
-| Switch multi-line notes / events | `G`                                                     |
+| Nudge selection earlier / later  | `B` / `G` (or `↓` / `↑`)                                |
+| Open multi-line editing          | `J`                                                     |
+| Switch multi-line notes / events | `K`                                                     |
 
 `Z`/`X` step between lines when nothing is selected and nudge the selection when something is selected. Multi-line shortcuts apply while the editor workspace has an open document.
 
@@ -79,11 +79,16 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 | Reset the view                 | `Ctrl+Shift+F`                      |
 | In-game UI                     | `Ctrl+Shift+G`                      |
 | Play / pause                   | `Space`                             |
+| Hold preview playback, return  | `T`                                 |
+| Hold preview playback, stay    | `U`                                 |
 | Timeline backward / forward    | `Wheel Down` / `Wheel Up`           |
 | Previous / next judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down` |
+| Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`   |
 | Settings                       | `Ctrl+K`                            |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
+
+`T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior.
 
 Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
 

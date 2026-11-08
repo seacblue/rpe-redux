@@ -8,7 +8,47 @@ import {
   removeLongTask,
   startLongTask,
   dismissLongTask,
+  setLongTaskBootState,
 } from "../../../core/state/longTasks.ts";
+
+test("does not start work while the application is stuck on startup", () => {
+  let ran = false;
+  setLongTaskBootState("failed");
+  assert.throws(
+    () =>
+      startLongTask({
+        label: "blocked",
+        run: async () => {
+          ran = true;
+        },
+      }),
+    /long_tasks_blocked_for_startup/,
+  );
+  assert.equal(ran, false);
+  setLongTaskBootState("ready");
+});
+
+test("cancels active work when startup fails", async () => {
+  let release;
+  let signal;
+  const waiting = new Promise((resolve) => {
+    release = resolve;
+  });
+  const id = startLongTask({
+    label: "active",
+    run: async (context) => {
+      signal = context.signal;
+      await waiting;
+    },
+  });
+  await Promise.resolve();
+  setLongTaskBootState("failed");
+  assert.equal(signal.aborted, true);
+  assert.equal(getLongTasks().find((task) => task.id === id)?.status, "cancelling");
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  setLongTaskBootState("ready");
+});
 
 test("removing active work aborts it and retains the row until cleanup", async () => {
   let release;

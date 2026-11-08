@@ -25,12 +25,19 @@ export interface SettingsPageContext {
   readonly openCategory: (key: string) => void;
   /** True while this page owns the visible section; pages can defer work until then. */
   readonly active: boolean;
+  /** The active settings search text, or an empty string outside search. */
+  readonly query: string;
 }
 
 /** A category page that replaces the schema rows as the page body. */
 export interface SettingsPageDefinition {
   /** Words that make this page reachable from the settings search box. */
   readonly keywords?: MessageKey;
+  /**
+   * Extra visible strings the page owns, such as its current control values.
+   * The page returns text already translated for the active language.
+   */
+  readonly searchText?: () => readonly string[];
   /** Pages that paint their own heading can omit the generic page title. */
   readonly hideTitle?: boolean;
   readonly component: ComponentType<SettingsPageContext>;

@@ -1,9 +1,9 @@
 /**
- * Binds timeline wheel input to playback seeking, line stepping, and Alt+wheel
- * vertical zoom.
+ * Binds timeline wheel input to playback seeking, line stepping, and vertical
+ * zoom.
  *
- * Direction and line-stepping are rebindable shortcuts; this module only owns
- * the wheel arithmetic and delegates the matched action. Transport and
+ * Direction, line-stepping, and zoom are rebindable shortcuts; this module only
+ * owns the wheel arithmetic and delegates the matched action. Transport and
  * line-step rules stay in core.
  */
 import { wheelStepBeats } from "../../../../../../core/global/chart/editing/editGrid.ts";
@@ -29,8 +29,8 @@ interface TimelineNavigationDependencies {
   seekByBeats(deltaBeats: number, minimumSeconds: number): void;
   wheelSettings: () => TimelineWheelSettings;
   lineSwitcher: Pick<LineSwitcher, "step">;
-  /** Returns false when the event did not land on the timeline. */
-  zoomVertical?: (event: WheelEvent) => boolean;
+  /** Returns true when the event changed timeline state and needs a repaint. */
+  zoomVertical?: (event: WheelEvent, direction: -1 | 1) => boolean;
 }
 
 /** A detent-sized pixel delta counts as one notch even when a device reports 37. */
@@ -53,7 +53,7 @@ export function bindTimelineNavigation({
   lineSwitcher,
   zoomVertical,
 }: TimelineNavigationDependencies): {
-  wheel(event: WheelEvent): void;
+  wheel(event: WheelEvent): boolean;
 } {
   let lastWheel = -Infinity;
   let lastNotchAt = -Infinity;
@@ -121,23 +121,22 @@ export function bindTimelineNavigation({
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    if (event.altKey) {
-      resetTrackpad();
-      if (zoomVertical?.(event)) {
-        return;
-      }
-    }
     const action = matchTimelineWheel(event);
+    if (action?.kind === "zoom") {
+      resetTrackpad();
+      return zoomVertical?.(event, action.direction) ?? false;
+    }
     if (action?.kind === "line") {
       resetTrackpad();
       if (event.deltaY) {
         lineSwitcher.step(action.direction);
+        return true;
       }
-      return;
+      return false;
     }
     if (action?.kind !== "seek" || !event.deltaY) {
       resetTrackpad();
-      return;
+      return false;
     }
     const direction = action.direction;
     const now = performance.now() / 1000;
@@ -149,7 +148,7 @@ export function bindTimelineNavigation({
       // Line/page deltas are already discrete.
       resetTrackpad();
       emitWheel(direction, 1, event.shiftKey);
-      return;
+      return true;
     }
     const magnitude = Math.abs(event.deltaY);
     if (magnitude >= WHEEL_MIN_DETENT_PIXELS) {
@@ -157,7 +156,7 @@ export function bindTimelineNavigation({
       // reports 37–120 px still counts once because of the minimum.
       resetTrackpad();
       emitWheel(direction, Math.max(1, Math.round(magnitude / WHEEL_NOTCH_PIXELS)), event.shiftKey);
-      return;
+      return true;
     }
     if (direction !== trackpadDirection) {
       trackpadDistance = 0;
@@ -174,6 +173,7 @@ export function bindTimelineNavigation({
       clearTimeout(trackpadTimer);
     }
     trackpadTimer = setTimeout(flushTrackpad, WHEEL_TRACKPAD_FLUSH_MS);
+    return false;
   };
   timeline.gestures.onWheel = wheel;
 

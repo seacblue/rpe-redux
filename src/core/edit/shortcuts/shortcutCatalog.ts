@@ -43,6 +43,22 @@ const viewShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "SPACE", modifiers: ["CTRL"] }],
   },
   {
+    id: "view.previewAudition",
+    category: "editor.playback",
+    title: "shortcuts.editor.previewAudition",
+    scope: "editor",
+    defaults: [{ key: "T" }],
+    hold: true,
+  },
+  {
+    id: "view.previewAuditionStay",
+    category: "editor.playback",
+    title: "shortcuts.editor.previewAuditionStay",
+    scope: "editor",
+    defaults: [{ key: "U" }],
+    hold: true,
+  },
+  {
     id: "view.resetCamera",
     category: "editor.playback",
     title: "shortcuts.editor.resetCamera",
@@ -153,6 +169,20 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.timelineForward",
     scope: "editor",
     defaults: [{ key: "WHEELUP" }],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut,
+    category: "editor.navigation",
+    title: "shortcuts.editor.timelineZoomOut",
+    scope: "editor",
+    defaults: [{ key: "WHEELDOWN", modifiers: ["ALT"] }],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn,
+    category: "editor.navigation",
+    title: "shortcuts.editor.timelineZoomIn",
+    scope: "editor",
+    defaults: [{ key: "WHEELUP", modifiers: ["ALT"] }],
   },
 ];
 /** Editor shortcuts without default keys but available for custom binding. */
@@ -303,6 +333,11 @@ export function matchEditorShortcut(
     }
   }
   return undefined;
+}
+
+/** Whether an editor action stays active until its key is released. */
+export function holdsEditorShortcut(id: string): boolean {
+  return EDITOR_SHORTCUTS.some((shortcut) => shortcut.id === id && shortcut.hold === true);
 }
 
 /** Match one passive editor gesture without dispatching it as a command. */

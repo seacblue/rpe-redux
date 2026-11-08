@@ -69,3 +69,13 @@ export function releaseShortcutFocus(target: ShortcutTarget | null | undefined):
     target.blur?.();
   }
 }
+
+/**
+ * Whether a focus event names the window itself.
+ *
+ * A capture-phase listener on the window also receives `blur` from focused
+ * child controls. Held keyboard input must survive those element-level moves.
+ */
+export function isWindowBlur(target: EventTarget | null, windowTarget: EventTarget): boolean {
+  return target === windowTarget;
+}

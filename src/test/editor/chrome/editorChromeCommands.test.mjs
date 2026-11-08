@@ -18,7 +18,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
     },
     transport: {
       togglePlayback: () => calls.push("play"),
-      beginAudition: () => calls.push("audition-start"),
+      beginAudition: (options) => calls.push(`audition-start:${options?.previewOnly === true}`),
       endAudition: () => calls.push("audition-end"),
       rewind: () => calls.push("rewind"),
       seekToBeat: (beat) => calls.push(`seek:${beat}`),
@@ -39,13 +39,21 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
   assert.notEqual(commands, null);
   commands.documents.saveDocument();
   commands.transport.togglePlayback();
+  commands.transport.beginAudition({ previewOnly: true });
   commands.transport.seekToBeat("4");
   commands.view.toggleRegion("showNotes");
   commands.navigation.openLibrary();
   assert.equal(commands.view.isPreviewLayout(), true);
   assert.equal(commands.inspector.openPane("notes"), true);
   assert.equal(commands.inspector.openPane("missing"), false);
-  assert.deepEqual(calls, ["save", "play", "seek:4", "showNotes", "library"]);
+  assert.deepEqual(calls, [
+    "save",
+    "play",
+    "audition-start:true",
+    "seek:4",
+    "showNotes",
+    "library",
+  ]);
 
   dispose();
   assert.equal(editorChromeCommands(), null);

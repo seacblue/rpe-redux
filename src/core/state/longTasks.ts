@@ -33,6 +33,9 @@ export interface LongTaskAction {
   run(): void;
 }
 
+/** Whether application startup permits background work to begin. */
+export type LongTaskBootState = "loading" | "ready" | "failed";
+
 /** Features register optional actions; there is no central action list. */
 export const longTaskActions = new Contributions<LongTaskAction>();
 
@@ -41,10 +44,31 @@ const listeners = new Set<() => void>();
 const controllers = new Map<string, AbortController>();
 const removeOnSettle = new Set<string>();
 let startsBlocked = false;
+// Unit consumers do not mount the application entry point, so the core keeps
+// its standalone default permissive until the desktop entry declares startup.
+let bootState: LongTaskBootState = "ready";
+
+/** Cancel every active task when the application cannot present its workspace. */
+function cancelForStartup(): void {
+  for (const [id, controller] of controllers) {
+    if (!controller.signal.aborted) {
+      change(id, { status: "cancelling" });
+      controller.abort();
+    }
+  }
+}
+
+/** Gate long-task creation on the application boot state. */
+export function setLongTaskBootState(next: LongTaskBootState): void {
+  bootState = next;
+  if (next !== "ready") {
+    cancelForStartup();
+  }
+}
 
 /** Prevent new long tasks during a short shutdown handoff; fail if any are active. */
 export function acquireLongTaskFence(): (() => void) | null {
-  if (startsBlocked || controllers.size > 0) {
+  if (bootState !== "ready" || startsBlocked || controllers.size > 0) {
     return null;
   }
   startsBlocked = true;
@@ -86,6 +110,9 @@ export function startLongTask(options: {
   stage?: string;
   run(context: LongTaskContext): Promise<void>;
 }): string {
+  if (bootState !== "ready") {
+    throw new Error("long_tasks_blocked_for_startup");
+  }
   if (startsBlocked) {
     throw new Error("long_tasks_blocked_for_update");
   }

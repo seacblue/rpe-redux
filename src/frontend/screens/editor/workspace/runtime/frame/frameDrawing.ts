@@ -49,12 +49,14 @@ type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession">
     Timeline["gestures"],
     "drag" | "eventInteraction" | "previewMarquee" | "previewRefresh"
   >;
-  viewport: Pick<Timeline["viewport"], "origin">;
+  viewport: Pick<Timeline["viewport"], "origin" | "setOrigin" | "setPlaybackActive">;
 };
 
 /** Services one editor frame paints through. */
 export interface FrameDrawingOptions {
   audio: Pick<AudioTransport, "playing" | "duration">;
+  /** True while a play request is still settling before audio reports playing. */
+  playbackPending(): boolean;
   timeline: FrameTimeline;
   batchControls: { active: unknown; sync(): void };
   lineSwitcher: { active: boolean };
@@ -119,8 +121,10 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       if (refreshHud) {
         runtime.updateLineInfo();
       }
+      const playbackActive = runtime.audio.playing || runtime.playbackPending();
+      runtime.timeline.viewport.setPlaybackActive(playbackActive);
       if (runtime.audio.playing) {
-        runtime.timeline.viewport.origin = beat;
+        runtime.timeline.viewport.setOrigin(beat, "playback");
       }
       runtime.timeline.refreshRectangleSelection();
       runtime.timeline.gestures.previewRefresh?.();

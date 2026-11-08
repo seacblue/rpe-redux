@@ -168,7 +168,7 @@ export default {
   "chrome.statusBar.time": "Time: {time}",
 
   "chrome.playback.playPause": "Play/Pause",
-  "chrome.playback.audition": "Audition",
+  "chrome.playback.audition": "Preview audition",
   "chrome.playback.auditionHint": "Hold to play; release to return to where playback started",
   "chrome.playback.rewind": "Back to the start",
   "chrome.transport.move": "Move transport",

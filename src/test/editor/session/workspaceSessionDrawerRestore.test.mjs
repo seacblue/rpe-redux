@@ -60,6 +60,10 @@ function createRuntime() {
     session: () => session,
     viewport: {
       origin: 0,
+      setOrigin(value) {
+        this.origin = value;
+        return true;
+      },
       multiLineScroll: 0,
       setMultiLineZoom() {},
     },

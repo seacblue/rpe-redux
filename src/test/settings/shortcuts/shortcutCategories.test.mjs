@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registerEditorShortcuts } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { multiLineShortcuts } from "../../../core/edit/multiLine/multiLineEdit.ts";
 import { SHORTCUT_CATEGORIES } from "../../../core/shortcuts/categories.ts";
 import { ShortcutRegistry, shortcutRegistry } from "../../../core/shortcuts/registry.ts";
 
@@ -17,6 +18,14 @@ test("editor shortcuts reuse a playback category a toolbar action registered fir
     disposeEditor();
     toolbarRegistration?.dispose();
   }
+});
+
+test("multi-line editing uses J and K by default", () => {
+  const defaults = Object.fromEntries(
+    multiLineShortcuts.map((shortcut) => [shortcut.id, shortcut.defaults.map(({ key }) => key)]),
+  );
+  assert.deepEqual(defaults["workspace.multiLine.toggle"], ["J"]);
+  assert.deepEqual(defaults["workspace.multiLine.switchMode"], ["K"]);
 });
 
 test("disabled shortcuts do not dispatch or create conflicts", () => {

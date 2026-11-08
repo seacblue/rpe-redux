@@ -7,7 +7,7 @@ import { createValue } from "../../../../../../core/state/values.ts";
 import type { ValueCell } from "../../../../../../core/state/values.ts";
 
 export interface TimelineCanvasBindings {
-  wheel(event: WheelEvent): void;
+  wheel(event: WheelEvent): boolean;
   contextMenu(event: MouseEvent): void;
 }
 

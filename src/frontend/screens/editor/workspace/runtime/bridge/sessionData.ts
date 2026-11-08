@@ -23,7 +23,7 @@ export interface SessionDataOptions {
   timeline: Pick<Timeline, "cancelPlacement"> & {
     resetModeState(): void;
     gestures: Pick<Timeline["gestures"], "drag" | "layer">;
-    viewport: Pick<Timeline["viewport"], "division" | "origin">;
+    viewport: Pick<Timeline["viewport"], "division" | "origin" | "setOrigin">;
   };
   tempo: { get(): TempoMap; setEntries(entries: readonly TempoEntry[]): void };
   hitSounds: Parameters<typeof applySessionRuntimeSettings>[1];
@@ -83,14 +83,14 @@ export function createSessionData(options: SessionDataOptions) {
       const factor = session.line?.bpmfactor ?? 1;
       if (originSession !== session || originFactor === null) {
         originSession = session;
-        timeline.viewport.origin = options.currentBeat();
+        timeline.viewport.setOrigin(options.currentBeat(), "session");
       } else if (factor !== originFactor) {
         // A line switch changes the factor that maps the origin's beat to
         // seconds. Re-express the same instant in the new factor so selecting
         // another line does not shift the visible time.
-        timeline.viewport.origin = currentTempo.beat(
-          currentTempo.seconds(timeline.viewport.origin, originFactor),
-          factor,
+        timeline.viewport.setOrigin(
+          currentTempo.beat(currentTempo.seconds(timeline.viewport.origin, originFactor), factor),
+          "session",
         );
       }
       originFactor = factor;

@@ -17,8 +17,11 @@ import { Button } from "../../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../../design/components/button/IconButton.tsx";
 import { KeyboardCaptureModal } from "../../../../design/components/modal/KeyboardCaptureModal.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
-import { registerSettingsPage } from "../settingsContributions.ts";
+import { CATALOGS } from "../../../../i18n/messages/index.ts";
+import { tRaw as translateRaw } from "../../../../i18n/index.ts";
+import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
 import { canonicalText, displayText } from "../../../../core/shortcuts/keys.ts";
+import { shortcutMatchesSearch, shortcutPageSearchTerms } from "./shortcutSearch.ts";
 import { shortcutRegistry as shortcuts } from "../../../../core/shortcuts/registry.ts";
 import { developerMode } from "../../../../core/platform/desktop/developer.ts";
 import { developerReveal, isDeveloperRevealed } from "../../../../core/state/developerReveal.ts";
@@ -74,6 +77,19 @@ function conflictLabels(
 
 /** The developer section is open when the host enables it or the About page revealed it. */
 const developerAvailableNow = (): boolean => developerMode.get() || isDeveloperRevealed();
+
+/** English catalog text for a host shortcut key; extension literals have none. */
+function englishShortcutTitle(key: string): string | undefined {
+  return (CATALOGS.en as Record<string, string | undefined>)[key];
+}
+
+/** Apply the developer visibility rule to a shortcut list. */
+function visibleShortcutViews(
+  views: readonly ShortcutView[],
+  developerAvailable: boolean,
+): readonly ShortcutView[] {
+  return developerAvailable ? views : views.filter((view) => view.category !== "developer");
+}
 
 /** Combine every developer-availability signal into one subscription. */
 const subscribeDeveloperAvailability = (listener: () => void): (() => void) => {
@@ -193,7 +209,7 @@ function RpeHotkeySection({
 }
 
 /** The shortcut editor for every binding the registry exposes. */
-export function ShortcutsSettings() {
+export function ShortcutsSettings({ query }: SettingsPageContext) {
   const { t, tRaw } = useTranslation();
   const allViews = useShortcuts();
   const developerAvailable = useSyncExternalStore(
@@ -201,9 +217,7 @@ export function ShortcutsSettings() {
     developerAvailableNow,
     developerAvailableNow,
   );
-  const views = developerAvailable
-    ? allViews
-    : allViews.filter((view) => view.category !== "developer");
+  const views = visibleShortcutViews(allViews, developerAvailable);
   const [message, setMessage] = useState("");
   // The recording target and its display data outlive the open session by one
   // exit transition: the dialog keeps painting while `recordingOpen` is false.
@@ -465,11 +479,19 @@ export function ShortcutsSettings() {
     stopRecording();
   }, [bindingIndex, recording, recordingOpen, stopRecording]);
 
-  const groups = shortcuts
-    .categories()
+  const filtering = query.trim().length > 0;
+  const searchTitles = { text: tRaw, english: englishShortcutTitle };
+  const categories = shortcuts.categories();
+  const shownViews = filtering
+    ? views.filter((view) => {
+        const category = categories.find((entry) => entry.id === view.category);
+        return category !== undefined && shortcutMatchesSearch(view, category, query, searchTitles);
+      })
+    : views;
+  const groups = categories
     .map((category) => ({
       category,
-      entries: views.filter((view) => view.category === category.id),
+      entries: shownViews.filter((view) => view.category === category.id),
     }))
     .filter((group) => group.entries.length > 0);
   const recordingView = recording ? views.find((view) => view.id === recording) : null;
@@ -491,7 +513,7 @@ export function ShortcutsSettings() {
           {message}
         </p>
       )}
-      {rpeRecord && rpeRecord.entries.length > 0 && (
+      {!filtering && rpeRecord && rpeRecord.entries.length > 0 && (
         <RpeHotkeySection
           record={rpeRecord}
           onClear={() => setRpeRecord(null)}
@@ -617,5 +639,11 @@ export function ShortcutsSettings() {
 
 registerSettingsPage("shortcuts", {
   keywords: "settings.search.shortcutsKeywords",
+  searchText: () =>
+    shortcutPageSearchTerms(
+      shortcuts.categories(),
+      visibleShortcutViews(shortcuts.shortcuts(), developerAvailableNow()),
+      { text: translateRaw, english: englishShortcutTitle },
+    ),
   component: ShortcutsSettings,
 });

@@ -131,10 +131,11 @@ export const editorLoopRange = defineValue<EditorLoopRange | null>({
 export const editorProjectId = defineValue({ id: "editor.projectId", initial: "" });
 
 /**
- * Whether the toolbar's hold-to-audition gesture owns the transport.
+ * Whether a hold-to-audition gesture owns the transport.
  *
  * The audio clock is running during audition, but the play button does not look
- * active or accept a second transport action while the hold is active.
+ * active or accept a second transport action while the hold is active. The
+ * gesture may also focus the preview and restore the layout on release.
  */
 export const editorAuditioning = defineValue({
   id: "editor.auditioning",

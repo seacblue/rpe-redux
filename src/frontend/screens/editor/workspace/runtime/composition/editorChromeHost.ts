@@ -26,7 +26,7 @@ export function connectEditorChromeHost(): () => void {
     },
     transport: {
       togglePlayback: () => transport.togglePlayback(),
-      beginAudition: () => transport.beginAudition(),
+      beginAudition: (options) => transport.beginAudition(options),
       endAudition: () => transport.endAudition(),
       rewind: () => transport.rewind(),
       seekToBeat: (beat) => transport.seekToBeat(beat),

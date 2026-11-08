@@ -64,6 +64,8 @@ export default {
   "shortcuts.editor.nextBeat": "Forward one line",
   "shortcuts.editor.previousJudgeLine": "Previous judge line",
   "shortcuts.editor.nextJudgeLine": "Next judge line",
+  "shortcuts.editor.timelineZoomOut": "Zoom timeline out",
+  "shortcuts.editor.timelineZoomIn": "Zoom timeline in",
   "shortcuts.editor.lineJump": "Jump to a judge line",
   "shortcuts.editor.timelineBackward": "Seek timeline backward",
   "shortcuts.editor.timelineForward": "Seek timeline forward",
@@ -73,6 +75,8 @@ export default {
   "shortcuts.editor.togglePreviewOnly": "Preview only",
   "shortcuts.editor.togglePreviewOnlyHint":
     "Show only the preview; press again to restore the previous layout",
+  "shortcuts.editor.previewAudition": "Hold preview-only playback (return on release)",
+  "shortcuts.editor.previewAuditionStay": "Hold preview-only playback (stay on release)",
   "shortcuts.editor.showNotes": "Show / hide the note region",
   "shortcuts.editor.showEvents": "Show / hide the event region",
   "shortcuts.editor.showPreview": "Show / hide the preview",

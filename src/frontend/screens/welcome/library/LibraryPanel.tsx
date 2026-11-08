@@ -21,11 +21,21 @@ import { getLibraryView, setLibraryView, type LibraryView } from "../libraryView
 import { getLibrarySort, type LibrarySort } from "../librarySort.ts";
 import { buildLibraryEntries, matchesLibraryQuery } from "./libraryEntries.ts";
 
+/**
+ * Placeholder counts for the first library read. They cover the card region of
+ * a typical window in either view; a shorter window clips the extra rows so
+ * the skeleton itself never grows a scrollbar.
+ */
+const LIBRARY_SKELETON_ROWS = 20;
+/** Wider tiles leave fewer rows visible; extra tiles fill a tall grid view. */
+const LIBRARY_SKELETON_TILES = 30;
+
 /** Placeholder rows shown while the first library page is read. */
 function LibrarySkeleton({ view }: { view: LibraryView }) {
+  const count = view === "grid" ? LIBRARY_SKELETON_TILES : LIBRARY_SKELETON_ROWS;
   return (
     <div className="redux-library-cards" data-view={view} data-skeleton="true" aria-hidden="true">
-      {Array.from({ length: view === "grid" ? 6 : 5 }, (_, index) => (
+      {Array.from({ length: count }, (_, index) => (
         <span className="project-card is-skeleton" key={index}>
           <span className="project-information">
             <span className="project-cover-frame" />

@@ -17,6 +17,8 @@ import type { EditorPlayback } from "../../../../../../core/edit/playback/transp
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import { editorAuditioning } from "../../../../../../core/edit/state/publishedValues.ts";
 import { createLateBound } from "../../../../../../core/utils/lateBound.ts";
+import type { AuditionOptions } from "../../../../../contracts/editorCommands.ts";
+import { viewControls } from "./viewControls.ts";
 
 /** Services the transport commands operate on. */
 export interface TransportBindings {
@@ -34,13 +36,22 @@ const transportBindings = createLateBound<TransportBindings>();
 
 /** Hands the mounted editor's transport to the commands below. */
 export function connectTransport(bindings: TransportBindings): () => void {
+  auditionRequest++;
   auditionAnchor = null;
+  auditionReturnsTime = true;
+  auditionPreviewOnly = false;
   editorAuditioning.set(false);
   return transportBindings.bind(bindings);
 }
 
 /** Audio position captured when the current audition began. */
 let auditionAnchor: number | null = null;
+/** Whether releasing the current audition returns to `auditionAnchor`. */
+let auditionReturnsTime = true;
+/** Whether the current audition owns the preview-only layout. */
+let auditionPreviewOnly = false;
+/** Guards a pending play start from clearing a newer audition's state. */
+let auditionRequest = 0;
 
 /** Play, or stop what is playing. */
 export function togglePlayback(): void {
@@ -54,39 +65,67 @@ export function togglePlayback(): void {
 /**
  * Start a temporary audition at the current audio position.
  *
- * The toolbar's hold button and the held Space shortcut use this so releasing
- * the control returns to the moment the user was inspecting.
+ * The toolbar's hold button and the held T/U shortcuts use this. Preview-only
+ * auditions restore the layout on release; `restoreTime` also returns to the
+ * moment the user was inspecting.
  */
-export function beginAudition(): void {
+export function beginAudition(options: AuditionOptions = {}): boolean {
   const bound = transportBindings.value();
   if (!bound || bound.playback.audio.playing || auditionAnchor !== null) {
-    return;
+    return false;
   }
+  const request = ++auditionRequest;
   auditionAnchor = bound.playback.audio.time;
+  auditionReturnsTime = options.restoreTime !== false;
+  auditionPreviewOnly = options.previewOnly === true;
+  if (auditionPreviewOnly) {
+    viewControls.beginPreviewOnlyHold();
+  }
   editorAuditioning.set(true);
   void bound.playback
     .play(bound.getSession().chart)
     .then(bound.invalidate)
     .catch((error) => {
+      if (request !== auditionRequest) {
+        return;
+      }
+      if (auditionPreviewOnly) {
+        viewControls.endPreviewOnlyHold();
+      }
       auditionAnchor = null;
+      auditionReturnsTime = true;
+      auditionPreviewOnly = false;
       editorAuditioning.set(false);
       bound.reportError(error);
     });
+  return true;
 }
 
-/** Stop a temporary audition and return to its starting position. */
+/** Stop a temporary audition, restoring its layout and optionally its position. */
 export function endAudition(): void {
   const bound = transportBindings.value();
   if (auditionAnchor === null) {
     return;
   }
   const anchor = auditionAnchor;
+  const restoreTime = auditionReturnsTime;
+  const restorePreview = auditionPreviewOnly;
+  auditionRequest++;
   auditionAnchor = null;
+  auditionReturnsTime = true;
+  auditionPreviewOnly = false;
   editorAuditioning.set(false);
+  if (restorePreview) {
+    viewControls.endPreviewOnlyHold();
+  }
   if (!bound) {
     return;
   }
-  bound.playback.seek(anchor);
+  if (restoreTime) {
+    bound.playback.seek(anchor);
+  } else {
+    bound.playback.pause();
+  }
   bound.invalidate();
 }
 

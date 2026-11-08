@@ -55,6 +55,12 @@ const PREVIEW_LAYOUT: EditorModeSnapshot = {
 /** Runtime-only preview focus; it never enters persisted display settings. */
 const previewOnly = createValue<boolean>({ initial: false });
 
+/** The layout a held preview audition must restore when its key is released. */
+interface PreviewOnlyHold {
+  raw: EditorModeSnapshot;
+  focused: boolean;
+}
+
 /** Reads the complete raw region state that a preview shortcut must restore. */
 function readModeSnapshot(): EditorModeSnapshot {
   return {
@@ -178,11 +184,41 @@ export function createEditorViewControls(
     runtime.invalidate();
   }
 
+  let previewOnlyHold: PreviewOnlyHold | null = null;
+
+  /** Lets an explicit layout command take ownership from an audition hold. */
+  function cancelPreviewOnlyHold(): void {
+    previewOnlyHold = null;
+  }
+
+  /** Focuses the preview for a held audition without recording a mode change. */
+  function beginPreviewOnlyHold(): void {
+    if (previewOnlyHold !== null) {
+      return;
+    }
+    previewOnlyHold = { raw: readModeSnapshot(), focused: previewOnly.get() };
+    previewOnly.set(true);
+    applyRegionVisibility();
+  }
+
+  /** Restores the layout captured when a held audition started. */
+  function endPreviewOnlyHold(): void {
+    if (previewOnlyHold === null) {
+      return;
+    }
+    const hold = previewOnlyHold;
+    previewOnlyHold = null;
+    applyModeSnapshot(hold.raw);
+    previewOnly.set(hold.focused);
+    applyRegionVisibility();
+  }
+
   /** Materializes the effective preview-only view before another view command edits it. */
   function materializePreviewOnly(): void {
     if (!previewOnly.get()) {
       return;
     }
+    cancelPreviewOnlyHold();
     const effective = regions.get();
     displayValues.showNotes.set(effective.showNotes);
     displayValues.showEvents.set(effective.showEvents);
@@ -256,6 +292,7 @@ export function createEditorViewControls(
   /** The preview's own switch; hiding it never changes the authoring regions. */
   function toggleStagePreview(): void {
     if (previewOnly.get()) {
+      cancelPreviewOnlyHold();
       previewOnly.set(false);
       applyRegionVisibility();
       return;
@@ -271,6 +308,7 @@ export function createEditorViewControls(
   function togglePreviewOnly(): void {
     modeHistory.flush();
     if (previewOnly.get()) {
+      cancelPreviewOnlyHold();
       previewOnly.set(false);
     } else if (isPreviewFallbackSnapshot(readModeSnapshot())) {
       const swapped = modeHistory.swap();
@@ -289,6 +327,7 @@ export function createEditorViewControls(
     if (!session.chart.judgeLineList?.length) {
       return;
     }
+    cancelPreviewOnlyHold();
     previewOnly.set(false);
     session.setMultiLineEnabled(false, mode);
     session.setMultiLineSelection([session.lineIndex]);
@@ -320,6 +359,8 @@ export function createEditorViewControls(
 
   return {
     applyRegionVisibility,
+    beginPreviewOnlyHold,
+    endPreviewOnlyHold,
     toggleRegion,
     toggleRegions,
     resetCamera,
@@ -350,6 +391,8 @@ export function connectViewControls(runtime: EditorViewControlRuntime): () => vo
 /** The display commands, as the menu and the toolbar's switches see them. */
 export const viewControls = Object.freeze({
   applyRegionVisibility: (): void => viewControlsBinding.value()?.applyRegionVisibility(),
+  beginPreviewOnlyHold: (): void => viewControlsBinding.value()?.beginPreviewOnlyHold(),
+  endPreviewOnlyHold: (): void => viewControlsBinding.value()?.endPreviewOnlyHold(),
   toggleRegion: (region: "showNotes" | "showEvents"): void =>
     viewControlsBinding.value()?.toggleRegion(region),
   toggleRegions: (): void => viewControlsBinding.value()?.toggleRegions(),

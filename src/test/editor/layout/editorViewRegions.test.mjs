@@ -143,6 +143,87 @@ test("preview-only overlays the recorded layout without rewriting its switches",
   assert.equal(getEditorRegionSnapshot().showEvents, true);
 });
 
+test("a held preview audition restores the layout it started from", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const controls = createEditorViewControls(createRuntime(createSession(false)));
+  if (getEditorRegionSnapshot().showNotes !== displayValues.showNotes.get()) {
+    controls.togglePreviewOnly();
+  }
+
+  controls.beginPreviewOnlyHold();
+  assert.equal(getEditorRegionSnapshot().showNotes, false);
+  assert.equal(getEditorRegionSnapshot().showEvents, false);
+  assert.equal(getEditorRegionSnapshot().showPreview, true);
+  assert.equal(displayValues.showNotes.get(), true);
+
+  controls.endPreviewOnlyHold();
+
+  assert.equal(displayValues.showNotes.get(), true);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+  assert.equal(getEditorRegionSnapshot().showNotes, true);
+  assert.equal(getEditorRegionSnapshot().showEvents, true);
+});
+
+test("an explicit region choice during a held audition keeps that layout", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const controls = createEditorViewControls(createRuntime(createSession(false)));
+  if (getEditorRegionSnapshot().showNotes !== displayValues.showNotes.get()) {
+    controls.togglePreviewOnly();
+  }
+
+  controls.beginPreviewOnlyHold();
+  controls.toggleRegion("showEvents");
+  controls.endPreviewOnlyHold();
+
+  assert.equal(displayValues.showNotes.get(), false);
+  assert.equal(displayValues.showEvents.get(), true);
+  assert.equal(displayValues.previewEnabled.get(), true);
+  assert.equal(getEditorRegionSnapshot().showNotes, false);
+  assert.equal(getEditorRegionSnapshot().showEvents, true);
+});
+
+test("an explicit preview choice during a held audition keeps that choice", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const controls = createEditorViewControls(createRuntime(createSession(false)));
+  if (getEditorRegionSnapshot().showNotes !== displayValues.showNotes.get()) {
+    controls.togglePreviewOnly();
+  }
+
+  controls.beginPreviewOnlyHold();
+  controls.toggleStagePreview();
+  controls.toggleStagePreview();
+  controls.endPreviewOnlyHold();
+
+  assert.equal(displayValues.previewEnabled.get(), false);
+  assert.equal(getEditorRegionSnapshot().showNotes, true);
+  assert.equal(getEditorRegionSnapshot().showEvents, true);
+  assert.equal(getEditorRegionSnapshot().showPreview, false);
+});
+
+test("a held preview audition keeps an existing preview-only focus", () => {
+  activateMultiLine();
+  editorMultiLineActive.set(false);
+  const controls = createEditorViewControls(createRuntime(createSession(false)));
+  if (getEditorRegionSnapshot().showNotes === displayValues.showNotes.get()) {
+    controls.togglePreviewOnly();
+  }
+
+  controls.beginPreviewOnlyHold();
+  controls.endPreviewOnlyHold();
+
+  assert.equal(getEditorRegionSnapshot().showNotes, false);
+  assert.equal(getEditorRegionSnapshot().showEvents, false);
+  assert.equal(getEditorRegionSnapshot().showPreview, true);
+
+  // Leave the shared runtime overlay off for the remaining tests.
+  controls.togglePreviewOnly();
+  assert.equal(getEditorRegionSnapshot().showNotes, true);
+});
+
 test("preview-only restores the last complete layout from an empty raw layout", () => {
   activateMultiLine();
   editorMultiLineActive.set(false);
