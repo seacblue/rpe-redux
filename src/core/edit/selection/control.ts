@@ -221,6 +221,25 @@ export function shiftEventEdge(
   );
 }
 
+/** Clear every selected note and event, including selections on other lines. */
+export function clearSelection(session: EditorSession): boolean {
+  const changed = Boolean(
+    session.selection.size ||
+    session.eventSelection.size ||
+    [...session.multiLineSelection.values()].some((selection) => selection.size) ||
+    [...session.multiEventSelection.values()].some((selection) => selection.size),
+  );
+  if (!changed) {
+    return false;
+  }
+  session.selection.clear();
+  session.eventSelection.clear();
+  session.multiLineSelection.clear();
+  session.multiEventSelection.clear();
+  session.multiSelectionIntent = null;
+  return true;
+}
+
 /**
  * Select-all and the page keys move the selection this module edits.
  *
@@ -228,6 +247,16 @@ export function shiftEventEdge(
  * whenever nothing is selected — that is where the two contexts come from.
  */
 export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
+  {
+    id: "selection.clear",
+    category: "editor.selection",
+    title: "shortcuts.editor.clearSelection",
+    scope: "editor",
+    defaults: [{ key: "ESCAPE" }],
+    shared: true,
+    enabledFor: (context) =>
+      context.hasSelection && context.samplingActive !== true && context.curveMode !== true,
+  },
   {
     id: "edit.selectAll",
     category: "editor.editing",

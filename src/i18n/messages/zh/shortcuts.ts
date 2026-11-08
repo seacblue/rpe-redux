@@ -28,6 +28,7 @@ export default {
   "shortcuts.editor.undo": "撤销",
   "shortcuts.editor.redo": "重做",
   "shortcuts.editor.selectAll": "全选",
+  "shortcuts.editor.clearSelection": "清空选中",
   "shortcuts.editor.sweepSelect": "划线选中时间轴物件",
   "shortcuts.editor.sweepDeselect": "划线取消选中时间轴物件",
   "shortcuts.editor.delete": "删除选中物件",

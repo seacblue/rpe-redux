@@ -95,6 +95,7 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.samplingCancel",
     scope: "editor",
     defaults: [{ key: "ESCAPE" }],
+    shared: true,
     enabledFor: (context) => context.samplingActive !== true,
   },
 ];
