@@ -121,9 +121,9 @@
   flex-direction: column;
   min-width: 0;
   min-height: 100%;
-  // The inspector owns the material; the property face stays transparent like
-  // the ordinary inspector content so glass is not composited twice.
-  background: transparent;
+  // The drawer property face is the same opaque panel surface as the ordinary
+  // inspector so the revealed list can never show the stage through its form.
+  background: var(--drawer-surface);
 }
 
 .inspector :is(.wide-button, .wide-field) {
