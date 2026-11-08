@@ -537,6 +537,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 				AutoApproveEditor: message["autoApproveEditor"] == true,
 				Invite:            collabStringField(message, "invite"),
 				Owner:             socket.clientKey,
+				AppVersion:        collabStringField(message, "appVersion"),
 			},
 		)
 		if failure != nil {
@@ -570,7 +571,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 			s.sendError(socket, "invalid_profile", "A display name is required")
 			return
 		}
-		room, request, member, failure := s.rooms.requestJoinWithAuto(roomID, invite, profile)
+		room, request, member, failure := s.rooms.requestJoinWithAuto(roomID, invite, profile, collabStringField(message, "appVersion"))
 		if failure != nil {
 			socket.joinFailures++
 			s.send(socket, map[string]any{"type": "rejected", "reason": failure.Code, "message": failure.Message})
@@ -656,7 +657,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 			s.sendError(socket, failure.Code, failure.Message)
 			return
 		}
-		room, member, failure := s.rooms.resume(collabStringField(message, "roomId"), collabStringField(message, "token"))
+		room, member, failure := s.rooms.resume(collabStringField(message, "roomId"), collabStringField(message, "token"), collabStringField(message, "appVersion"))
 		if failure != nil {
 			s.send(socket, map[string]any{"type": "rejected", "reason": failure.Code, "message": failure.Message})
 			return

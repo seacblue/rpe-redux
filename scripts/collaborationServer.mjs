@@ -541,6 +541,7 @@ function welcomeFor(room, member, includeChart) {
     role: member.role,
     revision: room.revision,
     protocolVersion: COLLAB_PROTOCOL_VERSION,
+    appVersion: room.appVersion,
     ...(includeChart ? { chart: room.chart } : {}),
     fingerprint: room.fingerprint,
     maxMembers: room.maxMembers,
@@ -633,6 +634,7 @@ function handleMessage(socket, message) {
       message.autoApproveEditor === true,
       stringField(message, "invite"),
       socketStates.get(socket)?.clientKey ?? "",
+      stringField(message, "appVersion"),
     );
     if (!created.ok) {
       sendJSON(socket, { type: "error", code: created.code, message: created.message });
@@ -683,7 +685,12 @@ function handleMessage(socket, message) {
       });
       return;
     }
-    const joined = rooms.requestJoin(stringField(message, "roomId"), message.invite, profile);
+    const joined = rooms.requestJoin(
+      stringField(message, "roomId"),
+      message.invite,
+      profile,
+      stringField(message, "appVersion"),
+    );
     if (!joined.ok) {
       if (state) {
         state.joinFailures += 1;
@@ -721,7 +728,11 @@ function handleMessage(socket, message) {
       rejectProtocol(socket, protocol);
       return;
     }
-    const resumed = rooms.resume(stringField(message, "roomId"), stringField(message, "token"));
+    const resumed = rooms.resume(
+      stringField(message, "roomId"),
+      stringField(message, "token"),
+      stringField(message, "appVersion"),
+    );
     if (!resumed.ok) {
       sendJSON(socket, { type: "rejected", reason: resumed.code, message: resumed.message });
       return;

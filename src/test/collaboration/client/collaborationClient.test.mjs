@@ -577,6 +577,46 @@ test("a newer server protocol is rejected before the room is accepted", () => {
   client.dispose();
 });
 
+test("different product versions warn when the collaboration protocol matches", () => {
+  const harness = socketHarness();
+  const warnings = [];
+  const client = new CollaborationClient({
+    appVersion: "1.0.10",
+    socketFactory: harness.factory,
+    reconnect: false,
+    onWarning: (message, code) => warnings.push({ message, code }),
+  });
+  client.connect("ws://127.0.0.1:47830");
+  const socket = harness.sockets[0];
+  socket.emit("open");
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "welcome",
+      roomId: "ROOM",
+      invite: "INVITE",
+      memberId: "me",
+      hostId: "host",
+      role: "editor",
+      revision: 1,
+      fingerprint: "fp",
+      protocolVersion: 1,
+      appVersion: "1.0.9",
+      members: [],
+      presence: [],
+      resumeToken: "token",
+    }),
+  });
+  assert.equal(client.state.get().status, "connected");
+  assert.deepEqual(warnings, [
+    {
+      message:
+        "This room uses RPE Redux 1.0.9; this client is 1.0.10. The collaboration protocol is compatible.",
+      code: "version_difference",
+    },
+  ]);
+  client.dispose();
+});
+
 test("resumeRoom sends the persisted token before a document is opened", () => {
   const harness = socketHarness();
   const client = new CollaborationClient({

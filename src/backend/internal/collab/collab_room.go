@@ -141,6 +141,8 @@ type collabCreateOptions struct {
 	Invite string
 	// Owner is the rate-limit identity of the creating connection.
 	Owner string
+	// AppVersion is product metadata used for compatibility warnings.
+	AppVersion string
 }
 
 // collabMinInviteLength is the shortest custom room password. Generated
@@ -170,6 +172,7 @@ type collabRoom struct {
 	Owner             string
 	Chart             any
 	Fingerprint       string
+	AppVersion        string
 	Revision          int
 	Encrypted         bool
 	AutoApproveEditor bool
@@ -375,6 +378,7 @@ func (r *Rooms) create(profile collabProfile, chart any, fingerprint string, opt
 		Owner:             opts.Owner,
 		Chart:             collabClone(chart),
 		Fingerprint:       fingerprint,
+		AppVersion:        strings.TrimSpace(opts.AppVersion),
 		Encrypted:         isEncrypted,
 		AutoApproveEditor: opts.AutoApproveEditor,
 		MaxMembers:        collabDefaultMembers,
@@ -410,8 +414,8 @@ func (r *Rooms) create(profile collabProfile, chart any, fingerprint string, opt
 
 // requestJoin returns the room and pending request, discarding the direct-member
 // result used by the auto-approve path.
-func (r *Rooms) requestJoin(roomID, invite string, profile collabProfile) (*collabRoom, *collabPending, *collabError) {
-	room, request, _, failure := r.requestJoinWithAuto(roomID, invite, profile)
+func (r *Rooms) requestJoin(roomID, invite string, profile collabProfile, appVersion ...string) (*collabRoom, *collabPending, *collabError) {
+	room, request, _, failure := r.requestJoinWithAuto(roomID, invite, profile, appVersion...)
 	return room, request, failure
 }
 
@@ -443,7 +447,7 @@ func (r *Rooms) inspectRoom(roomID, invite string) (*collabRoom, *collabError) {
 
 // requestJoinWithAuto creates an editor directly when the room opted out of
 // host approval; otherwise it returns a pending request for the host.
-func (r *Rooms) requestJoinWithAuto(roomID, invite string, profile collabProfile) (*collabRoom, *collabPending, *collabMember, *collabError) {
+func (r *Rooms) requestJoinWithAuto(roomID, invite string, profile collabProfile, appVersion ...string) (*collabRoom, *collabPending, *collabMember, *collabError) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	code := strings.ToUpper(strings.TrimSpace(roomID))
@@ -584,7 +588,7 @@ func (r *Rooms) approve(actorID, requestID string, allow bool, role string) (*co
 }
 
 // resume reconnects a member by its resume token and marks it online.
-func (r *Rooms) resume(roomID, token string) (*collabRoom, *collabMember, *collabError) {
+func (r *Rooms) resume(roomID, token string, appVersion ...string) (*collabRoom, *collabMember, *collabError) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	room := r.rooms[strings.ToUpper(strings.TrimSpace(roomID))]
@@ -1335,6 +1339,7 @@ func (r *Rooms) welcomePayload(room *collabRoom, memberID string, includeChart b
 		"locks":           locks,
 		"resumeToken":     member.Token,
 		"protocolVersion": collabProtocolVersion,
+		"appVersion":      room.AppVersion,
 	}
 	if includeChart {
 		payload["chart"] = room.Chart
@@ -1468,6 +1473,7 @@ type collabRoomState struct {
 	Chart             any               `json:"chart"`
 	Fingerprint       string            `json:"fingerprint"`
 	Revision          int               `json:"revision"`
+	AppVersion        string            `json:"appVersion,omitempty"`
 	Encrypted         bool              `json:"encrypted,omitempty"`
 	AutoApproveEditor bool              `json:"autoApproveEditor,omitempty"`
 	MaxMembers        int               `json:"maxMembers"`
@@ -1540,6 +1546,7 @@ func (r *Rooms) exportStateLocked() collabState {
 			Owner:             room.Owner,
 			Chart:             room.Chart,
 			Fingerprint:       room.Fingerprint,
+			AppVersion:        room.AppVersion,
 			Revision:          room.Revision,
 			Encrypted:         room.Encrypted,
 			AutoApproveEditor: room.AutoApproveEditor,
@@ -1645,6 +1652,7 @@ func (r *Rooms) importState(state collabState, blobs map[string][]byte) {
 			Owner:             record.Owner,
 			Chart:             record.Chart,
 			Fingerprint:       fingerprint,
+			AppVersion:        strings.TrimSpace(record.AppVersion),
 			Revision:          record.Revision,
 			Encrypted:         record.Encrypted,
 			AutoApproveEditor: record.AutoApproveEditor,

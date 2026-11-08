@@ -2,15 +2,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { cp, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { readProductVersion } from "./scripts/productVersion.mjs";
 
 // The browser build has no host to ask for the product version, so the build
-// bakes `package.json`'s version in as a compile-time constant. The desktop host
-// replaces it at runtime with the packaged application version.
-const packageVersion = (
-  JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
-    version: string;
-  }
-).version;
+// bakes the validated desktop version in as a compile-time constant. The host
+// must use the same version because it starts the matching sidecar.
+const packageVersion = readProductVersion();
 
 // The browser paints before the runtime theme registry has applied a package.
 // Generate that first-frame palette from the built-in dark package so the

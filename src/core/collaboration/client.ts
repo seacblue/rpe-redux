@@ -53,6 +53,8 @@ export type CommittedMessage = Omit<Extract<ServerMessage, { type: "committed" }
 export interface CollaborationClientOptions {
   readonly socketFactory?: CollaborationSocketFactory;
   readonly reconnect?: boolean;
+  /** Product version sent during room creation, join, and resume handshakes. */
+  readonly appVersion?: string;
   /** Shared observable state, when the React shell already owns the cell. */
   readonly state?: ValueCell<CollaborationState>;
   readonly onSnapshot?: (snapshot: RoomSnapshot, initial: boolean) => void;
@@ -60,6 +62,8 @@ export interface CollaborationClientOptions {
   readonly onConflict?: (message: Extract<ServerMessage, { type: "conflict" }>) => void;
   readonly onRole?: (role: CollaborationRole, reason?: string) => void;
   readonly onError?: (message: string, code?: string) => void;
+  /** A product-version difference that remains protocol-compatible. */
+  readonly onWarning?: (message: string, code?: string) => void;
   readonly onAssetReady?: (asset: RoomAsset, bytes: Uint8Array) => void;
   readonly onAssetError?: (message: string) => void;
   readonly onLockDenied?: (conflicts: readonly RoomLock[]) => void;
@@ -182,6 +186,7 @@ export class CollaborationClient {
   readonly state: ValueCell<CollaborationState>;
   private readonly options: CollaborationClientOptions;
   private readonly socketFactory: CollaborationSocketFactory;
+  private readonly appVersion: string;
   private socket: CollaborationSocket | null = null;
   private socketOpen = false;
   private serverUrl = "";
@@ -243,6 +248,7 @@ export class CollaborationClient {
   /** Create an idle client; `state` is shared when the shell already owns a cell. */
   constructor(options: CollaborationClientOptions = {}) {
     this.options = options;
+    this.appVersion = options.appVersion?.trim() ?? "";
     this.state = options.state ?? createCollaborationState();
     this.socketFactory =
       options.socketFactory ??
@@ -362,6 +368,7 @@ export class CollaborationClient {
           chart,
           fingerprint,
           protocolVersion: COLLAB_PROTOCOL_VERSION,
+          ...this.appVersionFields(),
           autoApproveEditor: this.autoApproveEditor,
           ...(this.roomInvite ? { invite: this.roomInvite } : {}),
         });
@@ -394,6 +401,7 @@ export class CollaborationClient {
         fingerprint: "",
         encrypted: true,
         protocolVersion: COLLAB_PROTOCOL_VERSION,
+        ...this.appVersionFields(),
         autoApproveEditor: this.autoApproveEditor,
         ...(this.roomInvite ? { invite: this.roomInvite } : {}),
       });
@@ -429,6 +437,7 @@ export class CollaborationClient {
         invite,
         profile,
         protocolVersion: COLLAB_PROTOCOL_VERSION,
+        ...this.appVersionFields(),
       });
     };
     if (!normalized) {
@@ -791,6 +800,7 @@ export class CollaborationClient {
         roomId: resume.roomId,
         token: resume.token,
         protocolVersion: COLLAB_PROTOCOL_VERSION,
+        ...this.appVersionFields(),
       });
       this.armHandshakeTimer();
       return;
@@ -801,6 +811,7 @@ export class CollaborationClient {
         roomId: this.state.get().roomId,
         token: this.resumeToken,
         protocolVersion: COLLAB_PROTOCOL_VERSION,
+        ...this.appVersionFields(),
       });
       this.armHandshakeTimer();
       return;
@@ -812,6 +823,7 @@ export class CollaborationClient {
         invite: this.invitedRoom.invite,
         profile: this.profile,
         protocolVersion: COLLAB_PROTOCOL_VERSION,
+        ...this.appVersionFields(),
       });
       this.armHandshakeTimer();
       return;
@@ -823,6 +835,7 @@ export class CollaborationClient {
         chart: this.hostChart.chart,
         fingerprint: this.hostChart.fingerprint,
         protocolVersion: COLLAB_PROTOCOL_VERSION,
+        ...this.appVersionFields(),
         ...(this.encrypted ? { encrypted: true } : {}),
         autoApproveEditor: this.autoApproveEditor,
         ...(this.roomInvite ? { invite: this.roomInvite } : {}),
@@ -1032,6 +1045,12 @@ export class CollaborationClient {
           this.failInitial("This room requires a newer version of RPE Redux.", "protocol_mismatch");
           return;
         }
+        if (this.appVersion && message.appVersion && message.appVersion !== this.appVersion) {
+          this.options.onWarning?.(
+            `This room uses RPE Redux ${message.appVersion}; this client is ${this.appVersion}. The collaboration protocol is compatible.`,
+            "version_difference",
+          );
+        }
         this.resumeToken = message.resumeToken;
         this.resumeTarget = null;
         this.reconnectBackoff.reset();
@@ -1118,6 +1137,7 @@ export class CollaborationClient {
           "no_room",
           "bad_invite",
           "protocol_mismatch",
+          "version_mismatch",
         ].includes(message.reason);
         if (terminal) {
           this.manualClose = true;
@@ -1614,6 +1634,11 @@ export class CollaborationClient {
       ...(pending.lockIds?.length ? { lockIds: pending.lockIds } : {}),
       ...(pending.undoOf ? { undoOf: pending.undoOf } : {}),
     });
+  }
+
+  /** Include product metadata when this host has a bundled build version. */
+  private appVersionFields(): { readonly appVersion?: string } {
+    return this.appVersion ? { appVersion: this.appVersion } : {};
   }
 
   /** Serialize and send one client message when the socket is open. */
