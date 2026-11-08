@@ -180,10 +180,11 @@
   border-color: transparent;
 }
 
-// A drawer is a widened overlay, not an ordinary inspector pane. Keep its
-// surface opaque so a translucent workspace/canvas can never show through it.
+// A drawer is a widened overlay, not an ordinary inspector pane. Keep the
+// material override aligned with its inherited chrome surface so glass and flat
+// themes can reveal the workspace behind it.
 .redux-app-root .workbench-inspector > .inspector.is-drawer {
-  background: var(--surface-raised);
+  background: var(--drawer-surface);
   border-color: var(--panel-border);
 }
 
