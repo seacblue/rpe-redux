@@ -9,6 +9,7 @@ import { StartupView } from "./StartupView.tsx";
 import { diagnosticText } from "../../platform/diagnosticLog.ts";
 import { showDesktopWindow } from "../../platform/desktop/windowDisplay.ts";
 import { t } from "../../../i18n/index.ts";
+import { setLongTaskBootState } from "../../../core/state/longTasks.ts";
 
 /** Keeps editor render failures from unmounting the independent window controls. */
 export class StartupBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -21,6 +22,7 @@ export class StartupBoundary extends Component<{ children: ReactNode }, { error:
 
   /** Appends the React component stack to the diagnostic text. */
   componentDidCatch(error: unknown, info: ErrorInfo): void {
+    setLongTaskBootState("failed");
     // A render failure can happen before AppContent reaches its normal reveal
     // barrier; keep the failure report reachable when the native window starts
     // hidden for geometry restoration.
@@ -36,7 +38,10 @@ export class StartupBoundary extends Component<{ children: ReactNode }, { error:
       <StartupView
         error={this.state.error}
         source="render"
-        retry={() => this.setState({ error: null })}
+        retry={() => {
+          setLongTaskBootState("loading");
+          this.setState({ error: null });
+        }}
       />
     ) : (
       this.props.children
