@@ -7,7 +7,6 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Input } from "../../../../../design/components/input/Input.tsx";
-import { useTranslation } from "../../../../../i18n/react.ts";
 import { formatRecordingTime, parseRecordingTime } from "./recordingTime.ts";
 
 export interface RecordingTimeFieldProps {
@@ -30,7 +29,6 @@ export function RecordingTimeField({
   disabled = false,
   onCommit,
 }: RecordingTimeFieldProps) {
-  const { t } = useTranslation();
   const [draft, setDraft] = useState(() => formatRecordingTime(value));
   const [invalid, setInvalid] = useState(false);
   const lastValue = useRef(value);
@@ -83,7 +81,6 @@ export function RecordingTimeField({
       value={draft}
       disabled={disabled}
       aria-invalid={invalid || undefined}
-      data-tip-title={invalid ? t("editor.recording.invalidTime") : undefined}
       onChange={(event) => {
         setDraft(event.currentTarget.value);
         setInvalid(false);

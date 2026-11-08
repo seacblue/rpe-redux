@@ -226,7 +226,6 @@ export function BeatField({
       className={`beat-field${className ? ` ${className}` : ""}`}
       data-beat="true"
       data-inspector-field={dataField}
-      data-tip-title={invalid ? t("design.beat.invalid") : undefined}
       onFocus={() => {
         onFocusChange?.(true);
       }}

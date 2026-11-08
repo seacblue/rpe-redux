@@ -59,8 +59,6 @@ export interface ToolbarNumberFieldProps {
   /** The shell's richer tooltip, drawn by the icon beside the field. */
   tipTitle?: string;
   tipDesc?: string;
-  /** The label of the current value; the line picker's option text. */
-  titleFor?(value: string): string | undefined;
   /**
    * Whether the box may take the text as it is being typed.
    *
@@ -105,7 +103,6 @@ export function ToolbarNumberField({
   inputRef,
   tipTitle,
   tipDesc,
-  titleFor,
   accept,
   commitOnBlur = false,
   onInput,
@@ -156,9 +153,6 @@ export function ToolbarNumberField({
       step={step}
       value={shown}
       disabled={disabled}
-      title={titleFor ? titleFor(shown) : undefined}
-      data-tip-title={titleFor ? titleFor(shown) : tipTitle}
-      data-tip-desc={tipDesc}
       aria-label={label}
       aria-invalid={invalid || undefined}
       onChange={(event) => change(event.currentTarget.value)}
@@ -285,7 +279,6 @@ function ToolbarLinePickerField({
         disabled={entry.disabled?.()}
         icon={entry.icon}
         fieldClassName={entry.className}
-        titleFor={entry.title}
         tipTitle={entry.tipTitle ? tRaw(entry.tipTitle) : undefined}
         tipDesc={entry.tipDesc ? tRaw(entry.tipDesc) : undefined}
         accept={entry.accept}
@@ -363,7 +356,6 @@ export function toolbarFieldNode(entry: ToolbarField, tRaw: (key: string) => str
       disabled={entry.disabled?.()}
       icon={entry.icon}
       fieldClassName={entry.className}
-      titleFor={entry.title}
       tipTitle={entry.tipTitle ? tRaw(entry.tipTitle) : undefined}
       tipDesc={entry.tipDesc ? tRaw(entry.tipDesc) : undefined}
       accept={entry.accept}
