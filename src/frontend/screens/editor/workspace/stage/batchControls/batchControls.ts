@@ -89,6 +89,7 @@ type BatchTimeline = Pick<
     | "origin"
     | "judgementOffset"
     | "scale"
+    | "scaleForArea"
     | "notePositionAt"
     | "division"
     | "factorForLine"
@@ -500,7 +501,7 @@ export class BatchControls {
           session.chart.judgeLineList?.[activeLineIndex]?.bpmfactor ?? 1,
         ) +
           (canvas.clientHeight - (this.timeline.viewport.judgementOffset ?? 42) - point.y) /
-            this.timeline.viewport.scale,
+            this.timeline.viewport.scaleForArea(area),
         session.chart.judgeLineList?.[activeLineIndex]?.bpmfactor ?? 1,
       ),
       startX:
@@ -551,7 +552,7 @@ export class BatchControls {
     const deltas = batchDragDeltas({
       tempo: this.timeline.viewport.tempo,
       origin: this.timeline.viewport.origin,
-      scale: this.timeline.viewport.scale,
+      scale: this.timeline.viewport.scaleForArea(active.area),
       judgementOffset: this.timeline.viewport.judgementOffset ?? 42,
       division: this.timeline.viewport.division,
       height: active.canvas.clientHeight,
