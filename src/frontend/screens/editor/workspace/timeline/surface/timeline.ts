@@ -120,11 +120,15 @@ export class Timeline {
 
     const canvasBindings = (canvas: HTMLCanvasElement) => ({
       wheel: (event: WheelEvent) => {
-        if (!this.disposed) {
-          event.preventDefault();
-          this.gestures.onWheel(event);
+        if (this.disposed) {
+          return false;
+        }
+        event.preventDefault();
+        const changed = this.gestures.onWheel(event);
+        if (changed) {
           this.changed();
         }
+        return changed;
       },
       contextMenu: (event: MouseEvent) => {
         if (this.disposed) {

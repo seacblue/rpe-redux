@@ -32,6 +32,11 @@ import { isPerformanceHudWindow } from "./core/platform/desktop/performanceHudWi
 import { PerformanceHudWindow } from "./frontend/overlays/performance/PerformanceHudWindow.tsx";
 import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.ts";
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
+import { setLongTaskBootState } from "./core/state/longTasks.ts";
+
+// Keep background operations behind the workspace boot barrier. The barrier is
+// opened only after the editor assembly has published a usable workspace.
+setLongTaskBootState("loading");
 
 /**
  * Pick the language before the first paint.

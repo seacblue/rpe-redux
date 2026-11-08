@@ -12,6 +12,11 @@ import {
   editorScale,
   editorSnapX,
 } from "../../../../core/edit/state/publishedValues.ts";
+import {
+  clampTimelineScale,
+  TIMELINE_SCALE_MAX,
+  TIMELINE_SCALE_MIN,
+} from "../workspace/timeline/viewport/timelineViewport.ts";
 
 interface TimelineControlBindingOptions {
   timeline: Timeline;
@@ -53,7 +58,7 @@ export function bindTimelineControlInputs(options: TimelineControlBindingOptions
       const field = {
         division: { minimum: 1, maximum: 100, integer: true },
         gridCount: { minimum: 1, maximum: 100, integer: true },
-        scale: { minimum: 20, maximum: 2000, integer: false },
+        scale: { minimum: TIMELINE_SCALE_MIN, maximum: TIMELINE_SCALE_MAX, integer: false },
       }[property];
       const value = Number(rawValue);
       if (Number.isFinite(value)) {
@@ -69,7 +74,7 @@ export function bindTimelineControlInputs(options: TimelineControlBindingOptions
       invalidate();
     },
     updateScale(rawValue) {
-      timeline.viewport.scale = Number(rawValue);
+      timeline.viewport.scale = clampTimelineScale(Number(rawValue), timeline.viewport.scale);
       editorScale.set(String(timeline.viewport.scale));
       persistEditor();
       invalidate();

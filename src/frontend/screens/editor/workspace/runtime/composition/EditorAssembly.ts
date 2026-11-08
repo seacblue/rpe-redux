@@ -399,12 +399,17 @@ export function createEditorAssembly(
     scalePersistTimer = null;
     persistEditor();
   });
-  const zoomAnimator = new TimelineZoomAnimator(timeline.viewport, invalidate, () => {
-    editorScale.set(String(timeline.viewport.scale));
-    scheduleScalePersist();
-  });
+  const zoomAnimator = new TimelineZoomAnimator(
+    timeline.viewport,
+    invalidate,
+    () => {
+      editorScale.set(String(timeline.viewport.scale));
+      scheduleScalePersist();
+    },
+    () => audio.playing || playback.pending,
+  );
   scope.add(() => zoomAnimator.cancel());
-  const zoomTimelineVertically = (event: WheelEvent): boolean => {
+  const zoomTimelineVertically = (event: WheelEvent, direction: -1 | 1): boolean => {
     const target = event.target;
     if (!(target instanceof Node) || !surfaces.timeline.stage.contains(target)) {
       return false;
@@ -422,12 +427,9 @@ export function createEditorAssembly(
     if (!canvas || !event.deltaY) {
       return false;
     }
-    const rect = canvas.getBoundingClientRect();
-    const height = canvas.clientHeight;
-    const vertical = Math.max(0, Math.min(height, event.clientY - rect.top));
     const delta = event.deltaMode === 0 ? event.deltaY : event.deltaY * 100;
-    zoomAnimator.request(timelineZoomFactor(delta), vertical);
-    return true;
+    const directedDelta = direction === 1 ? -Math.abs(delta) : Math.abs(delta);
+    return zoomAnimator.request(timelineZoomFactor(directedDelta));
   };
   const timelineNavigation = bindTimelineNavigation({
     timeline,
@@ -783,6 +785,7 @@ export function createEditorAssembly(
       reportError,
       notify,
       lineJump: handleLineJump,
+      cancelTimelineZoom: () => zoomAnimator.cancel(),
     },
     timeline: {
       timeline,
@@ -853,6 +856,7 @@ export function createEditorAssembly(
     },
     drawing: {
       audio,
+      playbackPending: () => playback.pending,
       timeline,
       batchControls,
       lineSwitcher,

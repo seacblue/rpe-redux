@@ -41,14 +41,48 @@ type ViewportSettings = Pick<
   | "judgementOffset"
 >;
 
+/** The authored 100% vertical timeline scale. */
+export const TIMELINE_SCALE_DEFAULT = 500;
+/** The smallest supported vertical timeline scale: 25% of the default. */
+export const TIMELINE_SCALE_MIN = 125;
+/** The largest supported vertical timeline scale: 400% of the default. */
+export const TIMELINE_SCALE_MAX = 2000;
+
+/** Clamp a timeline scale while preserving a safe value for invalid settings. */
+export function clampTimelineScale(value: number, fallback = TIMELINE_SCALE_DEFAULT): number {
+  const safeFallback = Number.isFinite(fallback) ? fallback : TIMELINE_SCALE_DEFAULT;
+  const candidate = Number.isFinite(value) ? value : safeFallback;
+  return Math.max(TIMELINE_SCALE_MIN, Math.min(TIMELINE_SCALE_MAX, candidate));
+}
+
+/** Return the origin that places beat zero at the top of a timeline viewport. */
+export function minimumTimelineBeatAtTop(
+  tempo: Pick<TempoMap, "beat" | "seconds">,
+  height: number,
+  scale: number,
+  judgementOffset: number,
+  factor = 1,
+): number {
+  const safeScale = Number.isFinite(scale)
+    ? Math.max(Number.EPSILON, scale)
+    : TIMELINE_SCALE_DEFAULT;
+  const span = Math.max(0, height - judgementOffset) / safeScale;
+  return tempo.beat(tempo.seconds(0, factor) - span, factor);
+}
+
+/** Identifies the owner that is allowed to update the timeline origin. */
+export type TimelineOriginSource =
+  "playback" | "seek" | "zoom" | "session" | "overview" | "settings";
+
 /**
  * Owns the viewport, snapping grid, and all pixel/time/line conversions.
  *
  * Geometry methods are supplied by the independently testable geometry module.
  */
 export class TimelineViewport {
-  origin = 0;
-  scale = 500;
+  private originValue = 0;
+  private playbackOwnsOrigin = false;
+  scale = TIMELINE_SCALE_DEFAULT;
   division = 4;
   snapX = true;
   gridCount = 11;
@@ -91,6 +125,30 @@ export class TimelineViewport {
   get tempo(): TempoMap {
     return this.getTempo();
   }
+  /** Current timeline origin in beats. */
+  get origin(): number {
+    return this.originValue;
+  }
+  /**
+   * Publish whether playback owns the origin.
+   *
+   * The lock includes the playback start transition so a pending audio start
+   * cannot be interleaved with a zoom or session publication.
+   */
+  setPlaybackActive(active: boolean): void {
+    this.playbackOwnsOrigin = active;
+  }
+  /** Write the origin only when the named owner is allowed to do so. */
+  setOrigin(value: number, source: TimelineOriginSource): boolean {
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+    if (this.playbackOwnsOrigin && source !== "playback" && source !== "settings") {
+      return false;
+    }
+    this.originValue = value;
+    return true;
+  }
   /** Track types for the active line. */
   get eventTypes(): string[] {
     return this.types();
@@ -109,7 +167,8 @@ export class TimelineViewport {
   }
   /** Return the timeline to beat zero. */
   reset(): void {
-    this.origin = 0;
+    this.originValue = 0;
+    this.playbackOwnsOrigin = false;
   }
 
   /** Drop geometry that belongs to the previous timeline presentation mode. */
@@ -152,7 +211,7 @@ export class TimelineViewport {
       cameraX,
       exclusiveRatio,
       gridCount,
-      scale,
+      scale: clampTimelineScale(scale),
       division,
       snapX,
       multiLineEventWindowCount,
@@ -229,8 +288,6 @@ export class TimelineViewport {
       if (canvas.clientHeight <= 0 || canvas.clientWidth <= 0) {
         continue;
       }
-      const span =
-        Math.max(0, canvas.clientHeight - this.judgementOffset) / this.scaleForArea(area);
       let lines = session.multiLineActive ? session.targetLineIndices : [session.lineIndex];
       if (session.multiLineActive && this.panelCount(area) > 1) {
         const [first, last] = this.visiblePanelRange(canvas.clientWidth, area);
@@ -238,7 +295,13 @@ export class TimelineViewport {
       }
       for (const lineIndex of lines) {
         const factor = this.factorForLine(lineIndex);
-        const beat = this.tempo.beat(this.tempo.seconds(0, factor) - span, factor);
+        const beat = minimumTimelineBeatAtTop(
+          this.tempo,
+          canvas.clientHeight,
+          this.scaleForArea(area),
+          this.judgementOffset,
+          factor,
+        );
         minimum = Math.max(minimum, this.tempo.seconds(beat, this.factor));
       }
     }

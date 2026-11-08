@@ -12,6 +12,7 @@ import { SettingsWindow } from "../screens/settings/SettingsWindow.tsx";
 import { initializeUpdates } from "../screens/settings/updates/updateStore.ts";
 import { preferences } from "../../core/state/preferences.ts";
 import { values } from "../../core/state/values.ts";
+import { setLongTaskBootState } from "../../core/state/longTasks.ts";
 
 import { DEFAULT_THEME } from "../../core/theme/themes.ts";
 import { activeTheme, setActiveTheme, subscribeActiveTheme } from "../../core/theme/activeTheme.ts";
@@ -130,9 +131,18 @@ function AppContent() {
   /** Tags editor construction/render failures without changing callback identity. */
   const handleEditorError = useCallback((value: string) => {
     if (value) {
+      setLongTaskBootState("failed");
       setErrorSource("editor");
     }
     setError(value);
+  }, []);
+
+  /** Opens the background-task gate only after the editor is usable. */
+  const handleEditorReady = useCallback((value: boolean) => {
+    setReady(value);
+    if (value) {
+      setLongTaskBootState("ready");
+    }
   }, []);
 
   useEffect(() => {
@@ -227,7 +237,6 @@ function AppContent() {
           // Extension consent is kept in durable preferences, so package
           // discovery runs only after the preference store attaches.
           await loadPackagedExtensions();
-          void initializeUpdates();
           if (!cancelled) {
             window.dispatchEvent(new Event(NOTE_SKIN_EVENT));
           }
@@ -239,6 +248,7 @@ function AppContent() {
       })
       .catch((failure) => {
         if (!cancelled) {
+          setLongTaskBootState("failed");
           setErrorSource("backend");
           setError(diagnosticText(failure));
         }
@@ -249,6 +259,15 @@ function AppContent() {
       cancelled = true;
     };
   }, [attempt]);
+
+  // Update checks and automatic package downloads are background work. Wait
+  // until the editor has crossed the startup barrier so a failed boot cannot
+  // continue the update flow behind the startup report.
+  useEffect(() => {
+    if (ready && backendReady) {
+      void initializeUpdates();
+    }
+  }, [backendReady, ready]);
 
   useEffect(() => {
     if (ready) {
@@ -289,7 +308,7 @@ function AppContent() {
               session={editorSession}
               enabled={backendReady}
               resetKey={attempt}
-              onReady={setReady}
+              onReady={handleEditorReady}
               onError={handleEditorError}
             >
               <ModalScrimPortal />
@@ -331,6 +350,7 @@ function AppContent() {
                 error={error}
                 source={errorSource}
                 retry={() => {
+                  setLongTaskBootState("loading");
                   setError("");
                   setErrorSource("unknown");
                   setReady(false);
