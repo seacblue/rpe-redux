@@ -11,7 +11,10 @@ import type { AssetMap } from "../../../../../core/global/document/types.ts";
 import type { AssetViewKind } from "./model.ts";
 
 export const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
-export const ASSET_EXTENSIONS = /\.(png|jpe?g|webp|gif|bmp|avif|mp3|wav|ogg|flac|m4a|aac|opus)$/i;
+export const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|m4a|aac|opus|webm)$/i;
+export const SHADER_EXTENSIONS = /\.(glsl|frag|vert|vsh|fsh|shader)$/i;
+export const ASSET_EXTENSIONS =
+  /\.(png|jpe?g|webp|gif|bmp|avif|mp3|wav|ogg|flac|m4a|aac|opus|webm|glsl|frag|vert|vsh|fsh|shader)$/i;
 
 /**
  * How many assets to build before yielding the event loop.
@@ -59,7 +62,13 @@ export function assetEntries(assets: AssetMap | null | undefined): [string, Uint
 
 /** Classifies an asset by its file extension. */
 export function assetKind(name: string): AssetViewKind {
-  return IMAGE_EXTENSIONS.test(name) ? "image" : "audio";
+  if (IMAGE_EXTENSIONS.test(name)) {
+    return "image";
+  }
+  if (AUDIO_EXTENSIONS.test(name)) {
+    return "audio";
+  }
+  return "shader";
 }
 
 /** Creates an object URL for an asset's bytes using its media type. */

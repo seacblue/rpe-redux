@@ -19,6 +19,12 @@ const MEDIA_TYPES: Record<string, string> = {
   gif: "image/gif",
   bmp: "image/bmp",
   avif: "image/avif",
+  glsl: "text/plain",
+  frag: "text/plain",
+  vert: "text/plain",
+  vsh: "text/plain",
+  fsh: "text/plain",
+  shader: "text/plain",
 };
 
 /** Media type for an asset name, or `application/octet-stream` when unknown. */

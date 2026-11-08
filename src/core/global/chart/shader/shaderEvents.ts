@@ -44,7 +44,20 @@ export interface ShaderParameter {
   type: string;
   dimensions: number;
   value: number | number[];
+  /** Optional user-facing name configured in the asset library. */
+  label?: string;
 }
+
+/** One asset-library override for a shader uniform. */
+export interface ShaderParameterOverride {
+  enabled: boolean;
+  label?: string;
+}
+
+/** Persisted shader uniform settings keyed by uniform name. */
+export type ShaderParameterOverrides = Record<string, ShaderParameterOverride>;
+
+const SHADER_PARAMETER_CONFIG_KEY = "ReduxShaderParameters";
 
 /** Per-chart cache of normalized shader events, keyed by line index. */
 const cache = new WeakMap<Chart, Map<number, ShaderChartEvent[]>>();
@@ -296,22 +309,90 @@ export function alignShaderParameters(event: JudgeLineEvent): JudgeLineEvent {
   };
 }
 
-/** Read `uniform` declarations and their `%...%` defaults from shader source text. */
+/** Read editable numeric/vector uniforms and their `%...%` defaults from shader source text. */
 export function shaderParameters(source: string): ShaderParameter[] {
-  return [...source.matchAll(/uniform\s+(float|int|bool|vec[234])\s+(\w+)\s*;([^\r\n]*)/g)]
-    .filter(([, , name]) => !["resolution", "screenSize", "time", "u_time"].includes(name))
-    .map(([, type, name, comment]) => {
-      const dimensions = type.startsWith("vec") ? Number(type.at(-1)) : 1;
-      const values = comment
-        .match(/%([^%]+)%/)?.[1]
-        .split(",")
-        .map(Number);
-      const fallback =
-        values?.length === dimensions && values.every(Number.isFinite)
-          ? values
-          : new Array<number>(dimensions).fill(0);
-      return { name, type, dimensions, value: dimensions === 1 ? fallback[0] : fallback };
-    });
+  const text = source
+    .replace(/\/*[\s\S]*?\*\//g, (match) => match.replace(/[^\r\n]/g, " "))
+    .replace(/\/\/([^\r\n]*)/g, (_, comment: string) =>
+      /%[^%]+%/.test(comment) ? ` // ${comment.replace(/uniform/g, "")}` : "",
+    );
+  return [
+    ...text.matchAll(
+      /\buniform\s+(?:(?:lowp|mediump|highp)\s+)?(float|int|bool|vec[234])\s+(\w+)\s*;([^\r\n]*)/g,
+    ),
+  ].map(([, type, name, comment]) => {
+    const dimensions = type.startsWith("vec") ? Number(type.at(-1)) : 1;
+    const rawValues = comment.match(/%([^%]+)%/)?.[1];
+    const values = rawValues?.split(",").map(Number);
+    const fallback =
+      values?.length === dimensions && values.every(Number.isFinite)
+        ? values
+        : new Array<number>(dimensions).fill(0);
+    return {
+      name,
+      type,
+      dimensions,
+      value: dimensions === 1 ? fallback[0] : fallback,
+    };
+  });
+}
+
+/** Read the optional shader uniform configuration stored in chart metadata. */
+export function shaderParameterOverrides(
+  chart: Chart | null | undefined,
+  shader: string,
+): ShaderParameterOverrides | null {
+  const root = chart?.META?.[SHADER_PARAMETER_CONFIG_KEY];
+  if (!isRecord(root) || !isRecord(root[shader])) {
+    return null;
+  }
+  return root[shader] as ShaderParameterOverrides;
+}
+
+/** Apply asset-library uniform settings to the declarations found in a shader source. */
+export function shaderParametersForChart(
+  chart: Chart | null | undefined,
+  shader: string,
+  source: string,
+): ShaderParameter[] {
+  const detected = shaderParameters(source);
+  const overrides = shaderParameterOverrides(chart, shader);
+  if (!overrides) {
+    return detected;
+  }
+  return detected.flatMap((parameter) => {
+    const override = overrides[parameter.name];
+    if (!override || override.enabled === false) {
+      return [];
+    }
+    return [
+      {
+        ...parameter,
+        ...(override.label?.trim() ? { label: override.label.trim() } : {}),
+      },
+    ];
+  });
+}
+
+/** Store one shader's explicit uniform settings in the chart metadata. */
+export function setShaderParameterOverrides(
+  chart: Chart,
+  shader: string,
+  overrides: ShaderParameterOverrides,
+): Chart {
+  const current = isRecord(chart.META[SHADER_PARAMETER_CONFIG_KEY])
+    ? chart.META[SHADER_PARAMETER_CONFIG_KEY]
+    : {};
+  return {
+    ...chart,
+    META: {
+      ...chart.META,
+      [SHADER_PARAMETER_CONFIG_KEY]: {
+        ...current,
+        [shader]: overrides,
+      },
+    },
+  };
 }
 
 /** Parse comma-separated component text for a uniform, throwing `invalidValue` on mismatch. */

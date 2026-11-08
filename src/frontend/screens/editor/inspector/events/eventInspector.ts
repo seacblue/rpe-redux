@@ -17,6 +17,8 @@ import type { InspectorEventEntry } from "./EventInspectorView.tsx";
 import type { EasingCurvePatch } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
 import { eventCurvePreviewSession } from "./eventCurvePreview.ts";
+import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
+import { shaderAssetPath } from "../../../../../core/global/chart/shader/shader.ts";
 export type { InspectorEventEntry } from "./EventInspectorView.tsx";
 
 /** Collects the selected events from the single-line or multi-line selection. */
@@ -45,6 +47,7 @@ interface EventRenderContext {
   multiLineMode: string;
   language: string;
   entries: InspectorEventEntry[];
+  shaderAssets: string;
 }
 
 /** The last published context per inspector state; see `noteInspector.ts`. */
@@ -77,6 +80,10 @@ export function renderEventInspector(
 ): void {
   const entries = inspectorEntries(session);
   const language = getLanguage();
+  const shaderAssets = [...(currentDocumentStore()?.assets?.names ?? [])]
+    .filter((name) => Boolean(shaderAssetPath(name)))
+    .sort()
+    .join("\u0000");
   const previous = renderContexts.get(state);
   if (
     previous &&
@@ -87,6 +94,7 @@ export function renderEventInspector(
     previous.multiLineActive === session.multiLineActive &&
     previous.multiLineMode === session.multiLineMode &&
     previous.language === language &&
+    previous.shaderAssets === shaderAssets &&
     sameEntries(previous.entries, entries)
   ) {
     return;
@@ -100,6 +108,7 @@ export function renderEventInspector(
     multiLineMode: session.multiLineMode,
     language,
     entries,
+    shaderAssets,
   });
   const entry = entries[0];
   state.selectedCount.set(entries.length);

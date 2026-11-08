@@ -23,18 +23,21 @@ import {
 import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import { SHADER_NAMES } from "../../../../../../core/global/chart/shader/shader.ts";
+import { shaderAssetPath } from "../../../../../../core/global/chart/shader/shader.ts";
 import type { ShaderVarTrack } from "../../../../../../core/global/chart/shader/sampling.ts";
 import { EasingField } from "../../../../../../design/components/easing/EasingField.tsx";
 import { EasingPreview } from "../../../../../../design/components/easing/EasingPreview.tsx";
 import { t } from "../../../../../../i18n/index.ts";
 import { requestConfirm } from "../../../../../overlays/modals/prompts.ts";
 import { Field, BeatControl, SelectField } from "./ShaderPanelFields.tsx";
+import type { SelectOption } from "./ShaderPanelFields.tsx";
 
 /** One parameter declared by a shader source. */
 export interface ShaderDefinition {
   name: string;
   dimensions: number;
   value: unknown;
+  label?: string;
 }
 
 /** Per-session UI state preserved across inspector re-renders. */
@@ -51,7 +54,12 @@ export interface ShaderInspectorViewProps {
   state: ShaderInspectorState;
   reportError(error: unknown): void;
   refresh(): void;
-  parametersFor(shader: string, source: string): Promise<ShaderDefinition[]>;
+  parametersFor(
+    shader: string,
+    source: string,
+    chart?: EditorSession["chart"],
+  ): Promise<ShaderDefinition[]>;
+  shaderOptions: readonly string[];
   setParameter(value: string): void;
   setOpen(value: boolean): void;
   setLiveEventEdit(active: boolean): void;
@@ -80,6 +88,7 @@ export function ShaderInspectorView({
   reportError,
   refresh,
   parametersFor,
+  shaderOptions,
   setParameter,
   setOpen,
   setLiveEventEdit,
@@ -106,20 +115,48 @@ export function ShaderInspectorView({
   const loading = loaded.identity !== identity;
   const definitions = useMemo(() => {
     const existing = definitionsFromEvent(event);
+    // A successful source load is authoritative: the asset-library selection
+    // must be able to hide an old event variable instead of adding it back.
+    if (!loading && !loadFailure && loaded.identity === identity) {
+      return loadedDefinitions;
+    }
     return [
       ...loadedDefinitions,
       ...existing.filter((entry) => !loadedDefinitions.some((item) => item.name === entry.name)),
     ];
-  }, [event, loadedDefinitions]);
+  }, [event, identity, loaded, loadedDefinitions, loadFailure, loading]);
   const parameter = definitions.some((entry) => entry.name === parameterState)
     ? parameterState
     : (definitions[0]?.name ?? "");
   const definition = definitions.find((entry) => entry.name === parameter);
   const track = definition ? shaderParameterTrack(event, definition.name, definition.value) : [];
+  const customShader = shaderAssetPath(identity);
+  const assetNames = [...new Set([...shaderOptions, ...(customShader ? [customShader] : [])])].sort(
+    (left, right) => left.localeCompare(right),
+  );
+  const assetGroups = new Map<string, SelectOption[]>();
+  for (const name of assetNames) {
+    const slash = name.lastIndexOf("/");
+    const folder = slash > 0 ? name.slice(0, slash) : "";
+    const group = folder
+      ? t("editorPanels.inspector.shader.libraryFolderGroup", { folder })
+      : t("editorPanels.inspector.shader.libraryGroup");
+    const entries = assetGroups.get(group) ?? [];
+    entries.push({ value: name, label: name, group });
+    assetGroups.set(group, entries);
+  }
+  const shaderChoices: SelectOption[] = [
+    ...SHADER_NAMES.map((name) => ({
+      value: name,
+      label: name,
+      group: t("editorPanels.inspector.shader.builtinGroup"),
+    })),
+    ...[...assetGroups.entries()].flatMap(([, entries]) => entries),
+  ];
 
   useEffect(() => {
     let active = true;
-    parametersFor(identity, shaderSource)
+    parametersFor(identity, shaderSource, session.chart)
       .then((result) => {
         if (active) {
           setLoaded({ identity, definitions: result, failure: "" });
@@ -137,7 +174,7 @@ export function ShaderInspectorView({
     return () => {
       active = false;
     };
-  }, [identity, loadAttempt, parametersFor, shaderSource]);
+  }, [identity, loadAttempt, parametersFor, session.chart, shaderSource]);
 
   const safely = (action: () => void): void => {
     try {
@@ -271,7 +308,7 @@ export function ShaderInspectorView({
       <SelectField
         title={t("editorPanels.inspector.field.type")}
         value={identity}
-        options={SHADER_NAMES.map((name) => ({ value: name, label: name }))}
+        options={shaderChoices}
         onChange={(name) =>
           safely(() => {
             setParameterState("");
@@ -280,7 +317,7 @@ export function ShaderInspectorView({
             setOpen(false);
             change(t("editorPanels.inspector.shader.modifyType"), (current) => ({
               ...current,
-              ...shaderTypeFields(name),
+              ...(shaderAssetPath(name) ? { shader: name, clone: false } : shaderTypeFields(name)),
               vars: {},
             }));
           })
@@ -355,7 +392,10 @@ export function ShaderInspectorView({
       <SelectField
         title={t("editorPanels.inspector.shader.parameters")}
         value={parameter}
-        options={definitions.map(({ name }) => ({ value: name, label: name }))}
+        options={definitions.map(({ name, label }) => ({
+          value: name,
+          label: label?.trim() || name,
+        }))}
         disabled={!definitions.length}
         onChange={(name) => {
           setParameterState(name);
@@ -415,7 +455,7 @@ export function ShaderInspectorView({
               <section className="shader-segment" key={index}>
                 <strong>
                   {t("editorPanels.inspector.shader.segmentTitle", {
-                    name: definition.name,
+                    name: definition.label?.trim() || definition.name,
                     index: index + 1,
                   })}
                 </strong>
@@ -464,7 +504,9 @@ export function ShaderInspectorView({
                           ),
                       );
                     },
-                    { kind: definition.dimensions === 1 ? "number" : "text" },
+                    {
+                      kind: definition.dimensions === 1 ? "number" : "text",
+                    },
                   );
                 })}
                 <EasingField
