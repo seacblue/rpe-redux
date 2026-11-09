@@ -126,9 +126,9 @@ export function TimelineCanvases() {
         hidden={!activeOverview || !densityBarsEnabled}
       />
       {/*
-        The backdrop holds the beat grid, the playhead and the lane separators.
-        It is its own canvas so note and event content can paint above those
-        lines instead of being covered by them.
+        The backdrop holds the beat grid and the lane separators. The playhead
+        gets its own canvas above the static grid so seeking repaints only the
+        red line; both sit below the note and event content layers.
       */}
       <BatchCanvas
         className="timeline-backdrop timeline-notes-backdrop"

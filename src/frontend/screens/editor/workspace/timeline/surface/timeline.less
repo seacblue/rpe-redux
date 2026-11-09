@@ -182,10 +182,12 @@ canvas {
   touch-action: none;
 }
 
-// The beat grid and lane separators live on the backdrop, under the content
+// The beat grid and lane separators live on the backdrop, under every moving
 // layer, so a note or an event bar is never crossed by a background line. The
-// editing canvas is above both: it carries the header bands, the value labels,
-// the playhead and every selection overlay.
+// playhead paints above the grid but below note and event content, so the red
+// current-time line never covers the notes or event bars it meets. The editing
+// canvases carry the header bands, the value labels, and the fallback content
+// above the batches; the selection overlay stays above every content layer.
 .timeline-backdrop {
   grid-row: 1;
   z-index: 0;
@@ -203,7 +205,7 @@ canvas {
 
 .timeline-playhead {
   grid-row: 1;
-  z-index: 4;
+  z-index: 1;
   pointer-events: none;
   background: transparent;
 }
@@ -222,14 +224,14 @@ canvas {
   border-left: 1px solid var(--border-strong);
   border-right: 1px solid var(--border-strong);
   position: relative;
-  z-index: 2;
+  z-index: 3;
   background: transparent;
 }
 
 .timeline-note-batch {
   grid-column: 2;
   grid-row: 1;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
   background: transparent;
 }
@@ -239,14 +241,14 @@ canvas {
   grid-row: 1;
   border-left: 1px solid var(--border-strong);
   position: relative;
-  z-index: 2;
+  z-index: 3;
   background: transparent;
 }
 
 .timeline-event-batch {
   grid-column: 3;
   grid-row: 1;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
   background: transparent;
 }
