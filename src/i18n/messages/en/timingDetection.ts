@@ -11,12 +11,10 @@ export default {
   "editorPanels.timingDetection.title": "Detect BPM and offset",
   "editorPanels.timingDetection.analyzing": "Analyzing the beat…",
   "editorPanels.timingDetection.analyzingHint":
-    "Sampling the track for its dominant pulse. Every track gets one BPM estimate and a confidence score.",
-  "editorPanels.timingDetection.confidence": "Confidence {value}%",
-  "editorPanels.timingDetection.confidenceLabel": "Detection confidence",
-  "editorPanels.timingDetection.lowConfidenceTitle": "No clear pulse",
-  "editorPanels.timingDetection.lowConfidenceBody":
-    "The BPM is still the best guess. Check the beat and offset by hand before applying.",
+    "Sampling the track for its dominant pulse. If no clear beat exists, the dialog says so instead of guessing.",
+  "editorPanels.timingDetection.notFound":
+    "Couldn't find a clear beat. Enter the BPM and offset by hand.",
+  "editorPanels.timingDetection.previewLabel": "Beat preview",
   "editorPanels.timingDetection.noAudioTitle": "No audio yet",
   "editorPanels.timingDetection.noAudioBody":
     "Choose the chart's audio track first, then run the detector.",
@@ -31,6 +29,10 @@ export default {
   "editorPanels.timingDetection.bpmUp": "Increase BPM by 0.1",
   "editorPanels.timingDetection.offsetDown": "Move offset 1 ms earlier",
   "editorPanels.timingDetection.offsetUp": "Move offset 1 ms later",
+  "editorPanels.timingDetection.offsetBeatDown": "Move offset one beat earlier",
+  "editorPanels.timingDetection.offsetBeatUp": "Move offset one beat later",
+  "editorPanels.timingDetection.offsetBeatDownShort": "−1 beat",
+  "editorPanels.timingDetection.offsetBeatUpShort": "+1 beat",
   "editorPanels.timingDetection.cancel": "Cancel",
   "editorPanels.timingDetection.apply": "Apply timing",
   "editorPanels.timingDetection.replaceAndApply": "Replace all timing and apply",

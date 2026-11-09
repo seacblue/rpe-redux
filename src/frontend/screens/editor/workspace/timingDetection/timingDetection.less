@@ -1,8 +1,8 @@
-/* Timing detection: the drawer entry, the result dialog, and the manual
-   controls. */
+/* Timing detection: the drawer entry, the result dialog, the measured summary,
+   the beat preview, and the manual controls. */
 
 .redux-app-root dialog.timing-detection-dialog {
-  width: min(980px, calc(100vw - 32px));
+  width: min(960px, calc(100vw - 32px));
 }
 
 /* Four short answers share one footer row; the wider prompt keeps the primary
@@ -12,7 +12,7 @@
 }
 
 .timing-detection-dialog .modal-content {
-  max-height: 68vh;
+  max-height: 72vh;
 }
 
 .timing-detection {
@@ -21,19 +21,116 @@
   gap: var(--space-4);
 }
 
-.timing-detection-manual {
+.timing-detection-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-panel);
   background: var(--surface);
 }
 
+.timing-detection-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.timing-detection-summary-item + .timing-detection-summary-item {
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.timing-detection-summary-label {
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: var(--line-label);
+}
+
+.timing-detection-summary-value {
+  color: var(--foreground);
+  font-size: var(--type-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.timing-detection-summary-unit {
+  margin-left: var(--space-1);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  font-weight: 400;
+}
+
+.timing-detection-preview {
+  position: relative;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.timing-detection-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.timing-detection-preview-wave {
+  fill: var(--accent);
+  opacity: 0.16;
+}
+
+.timing-detection-preview-beat {
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0.28;
+  vector-effect: non-scaling-stroke;
+}
+
+.timing-detection-preview-beat.is-downbeat {
+  stroke-width: 1.5;
+  opacity: 0.72;
+}
+
+.timing-detection-preview-label {
+  position: absolute;
+  inset-block-start: var(--space-1-5);
+  inset-inline-start: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: var(--line-label);
+  pointer-events: none;
+}
+
+.timing-detection-manual {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.timing-detection-dialog .redux-field-control > .timing-detection-nudge,
+.timing-detection-dialog .redux-field-control > .timing-detection-offset {
+  flex: 1 1 auto;
+}
+
+/* The offset row gives the number the leading half of its control and stacks
+   the whole-beat nudges on the trailing edge. */
+.timing-detection-dialog .timing-detection-offset-field {
+  --field-control-width: 72%;
+}
+
 .timing-detection-nudge {
   display: grid;
-  grid-template-columns: var(--design-control-height) minmax(0, 1fr) var(--design-control-height);
+  grid-template-columns: var(--control-height-compact) minmax(0, 1fr) var(--control-height-compact);
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
@@ -44,19 +141,27 @@
   min-width: 0;
 }
 
-.timing-detection-confidence {
-  display: grid;
+.timing-detection-offset {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
+  min-width: 0;
 }
 
-.timing-detection-confidence strong {
-  color: var(--foreground);
-  font-size: var(--type-body);
-  font-weight: 600;
+.timing-detection-offset > .timing-detection-nudge {
+  flex: 1 1 auto;
+}
+
+.timing-detection-beat-nudge {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.timing-detection-beat-nudge .redux-button {
+  min-width: 96px;
+  justify-content: center;
 }
 
 .timing-detection-loading,
@@ -96,8 +201,16 @@
   gap: var(--space-2);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
+  .timing-detection-summary,
   .timing-detection-manual {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .timing-detection-summary-item + .timing-detection-summary-item {
+    padding-top: var(--space-2);
+    padding-left: 0;
+    border-top: 1px solid var(--border-subtle);
+    border-left: 0;
   }
 }

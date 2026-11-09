@@ -3,8 +3,8 @@
  *
  * The worker and the synchronous fallback both analyze one already-mixed mono
  * signal through this function, so their reply shape cannot drift. A result is
- * always one fixed BPM plus its preview arrays; only those three buffers are
- * transferred back to the dialog.
+ * one measured BPM/offset plus its preview arrays, or `null`; only those three
+ * buffers are transferred back to the dialog.
  */
 import {
   detectAutoTimingFromSamples,
@@ -19,7 +19,7 @@ export interface TimingDetectionRequest {
   duration: number;
 }
 
-/** A fixed-BPM result or a diagnostic string for the waiting dialog. */
+/** A measured fixed-BPM result, a not-found answer, or a diagnostic string. */
 export type TimingDetectionReply =
   { type: "result"; result: BeatDetectionResult | null } | { type: "error"; message: string };
 

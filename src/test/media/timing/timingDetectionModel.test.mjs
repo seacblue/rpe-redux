@@ -1,32 +1,13 @@
-/** The timing dialog's pure confidence and fixed-apply rules. */
+/** The timing dialog's pure measurement, offset-nudge, and apply rules. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart } from "../../../core/global/chart/chart.ts";
 import {
   applyDetectedTiming,
   applyTimingLabelKey,
-  confidencePercent,
-  isLowConfidence,
-  LOW_CONFIDENCE_THRESHOLD,
   parseTimingDraft,
+  shiftOffsetByBeats,
 } from "../../../frontend/screens/editor/workspace/timingDetection/timingDetectionModel.ts";
-
-test("confidence displays as a clamped whole percentage", () => {
-  assert.equal(confidencePercent(0), 0);
-  assert.equal(confidencePercent(0.874), 87);
-  assert.equal(confidencePercent(1), 100);
-  assert.equal(confidencePercent(-0.2), 0);
-  assert.equal(confidencePercent(1.4), 100);
-  assert.equal(confidencePercent(Number.NaN), 0);
-});
-
-test("the low-confidence warning starts below 40 percent", () => {
-  assert.equal(isLowConfidence(0), true);
-  assert.equal(isLowConfidence(0.39), true);
-  assert.equal(isLowConfidence(LOW_CONFIDENCE_THRESHOLD), false);
-  assert.equal(isLowConfidence(0.87), false);
-  assert.equal(isLowConfidence(Number.NaN), true);
-});
 
 test("invalid or empty fields do not produce a draft", () => {
   assert.equal(parseTimingDraft("", "0"), null);
@@ -35,6 +16,20 @@ test("invalid or empty fields do not produce a draft", () => {
   assert.equal(parseTimingDraft("-120", "0"), null);
   assert.equal(parseTimingDraft("120", "not a number"), null);
   assert.deepEqual(parseTimingDraft("174.02", "-12.5"), { bpm: 174.02, offsetMs: -12.5 });
+});
+
+test("one beat of offset follows the current BPM", () => {
+  assert.equal(shiftOffsetByBeats(1000, 120, 1), 1500);
+  assert.equal(shiftOffsetByBeats(1500, 120, -1), 1000);
+  assert.equal(shiftOffsetByBeats(0, 174.02, 1), 344.788);
+  assert.equal(shiftOffsetByBeats(344.788, 174.02, -1), 0);
+});
+
+test("a beat nudge rounds to the measurement precision and snaps near integers", () => {
+  assert.equal(shiftOffsetByBeats(349.9995, 128, 1), 818.75);
+  assert.equal(shiftOffsetByBeats(620.0005, 120, 0), 620);
+  assert.equal(shiftOffsetByBeats(0, 0, 1), null);
+  assert.equal(shiftOffsetByBeats(Number.NaN, 120, 1), null);
 });
 
 test("applying replaces a multi-BPM chart with one fixed entry", () => {

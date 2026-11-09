@@ -2,8 +2,8 @@
  * Worker entry point for automatic fixed-BPM timing detection.
  *
  * The main thread mixes the decoded buffer, transfers one mono array, and gets
- * a single fixed answer plus its preview arrays back. The algorithm stays in
- * `core/media/beatDetection.ts`; the message shape lives in
+ * the measured answer plus its preview arrays, or `null`, back. The algorithm
+ * stays in `core/media/beatDetection.ts`; the message shape lives in
  * `timingDetectionWorkerProtocol.ts` so the synchronous fallback shares it.
  */
 import {

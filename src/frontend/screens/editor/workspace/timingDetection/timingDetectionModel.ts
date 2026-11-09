@@ -1,32 +1,19 @@
 /**
  * Pure view and apply rules for the fixed-BPM timing detector.
  *
- * The detector always answers with one BPM and a confidence. This module turns
- * that confidence into a display percentage, decides when the dialog warns
- * about a weak pulse, parses the two editable fields, and builds the fixed
- * timing chart the host commits. Keeping those rules here lets the React
- * surfaces stay thin and makes the behaviour testable without a DOM.
+ * The detector reports one measured BPM/offset pair, or no pair at all. This
+ * module formats that answer, parses the two editable fields, shifts the offset
+ * by whole beats, and builds the fixed timing chart the host commits. Keeping
+ * those rules here lets the React surfaces stay thin and makes the behaviour
+ * testable without a DOM.
  */
 import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import { chartWithDetectedTiming } from "../../../../../core/global/chart/editing/drafts.ts";
-
-/** Detector confidence below this reads as "no clear pulse". */
-export const LOW_CONFIDENCE_THRESHOLD = 0.4;
+import { roundMeasuredTiming } from "../../../../../core/media/beatDetection.ts";
 
 /** The action that applies a fixed BPM to the current chart. */
 export type TimingApplyLabelKey =
   "editorPanels.timingDetection.apply" | "editorPanels.timingDetection.replaceAndApply";
-
-/** Clamp a confidence into a whole percentage for display. */
-export function confidencePercent(confidence: number): number {
-  const value = Number.isFinite(confidence) ? confidence : 0;
-  return Math.round(Math.max(0, Math.min(1, value)) * 100);
-}
-
-/** Whether the dialog should warn that the detected pulse is weak. */
-export function isLowConfidence(confidence: number): boolean {
-  return !(confidence >= LOW_CONFIDENCE_THRESHOLD);
-}
 
 /** One validated BPM/offset pair from the dialog fields. */
 export interface TimingDraft {
@@ -45,6 +32,20 @@ export function parseTimingDraft(bpm: string, offset: string): TimingDraft | nul
     return null;
   }
   return { bpm: nextBpm, offsetMs: nextOffset };
+}
+
+/**
+ * Shift an offset by whole beats at the given BPM.
+ *
+ * The result keeps the detector's three-decimal precision and snaps to a whole
+ * millisecond when it lands within the measurement threshold of one. Returns
+ * `null` when the current BPM cannot define a beat.
+ */
+export function shiftOffsetByBeats(offsetMs: number, bpm: number, beats: number): number | null {
+  if (!Number.isFinite(offsetMs) || !Number.isFinite(beats) || !(bpm > 0)) {
+    return null;
+  }
+  return roundMeasuredTiming(offsetMs + (beats * 60000) / bpm);
 }
 
 /** The chart and seek time produced by applying the fixed timing. */

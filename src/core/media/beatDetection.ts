@@ -4,30 +4,17 @@
  *
  * The detector turns decoded PCM into a spectral-flux onset envelope, finds the
  * dominant pulse with a harmonic autocorrelation, resolves half/double-time
- * candidates from the accent pattern, and refits the phase from low-band onsets.
- * Every analyzable buffer yields one fixed BPM and a confidence in 0..1; audio
- * with no usable pulse falls back to 120 BPM at zero confidence, so automatic
- * detection never has to present an empty result. It owns no browser or chart
- * state: the editor hands it an `AudioBuffer`, and the result is a plain value
- * that a caller can preview, edit, or commit.
+ * candidates from the accent pattern, and fits the final grid against raw
+ * attacks across the track. A buffer with no clear pulse returns `null`, so the
+ * dialog can say the beat was not found instead of presenting a made-up tempo.
+ * It owns no browser or chart state: the editor hands it an `AudioBuffer`, and
+ * the result is a plain value that a caller can preview, edit, or commit.
  */
 import type { AudioBufferLike } from "./audioAnalysis.ts";
 
 /** The decoded buffer fields the detector reads, including the optional rate. */
 export interface BeatDetectionBuffer extends AudioBufferLike {
   sampleRate?: number;
-}
-
-/** One BPM interpretation with the audio time of its beat zero. */
-export interface BeatCandidate {
-  bpm: number;
-  /** Audio time of beat zero in milliseconds. */
-  offsetMs: number;
-  /** Relative score in the range 0..1. */
-  confidence: number;
-  /** Share of strong pulse peaks explained by this grid. */
-  coverage: number;
-  relation: "primary" | "half" | "double" | "dotted" | "triplet" | "alternate";
 }
 
 /** A compact peak envelope for the dialog's waveform preview. */
@@ -38,10 +25,10 @@ export interface BeatDetectionWaveform {
 
 /** The timing proposal plus the preview data the dialog draws. */
 export interface BeatDetectionResult {
+  /** Measured BPM, rounded to three decimals with near-integers snapped. */
   bpm: number;
+  /** Audio time of beat zero in milliseconds, at the same precision. */
   offsetMs: number;
-  confidence: number;
-  candidates: readonly BeatCandidate[];
   waveform: BeatDetectionWaveform;
   /** Decimated onset strength, normalized to 0..1. */
   onset: Float32Array;
@@ -62,11 +49,19 @@ export interface BeatDetectionOptions {
 
 const DEFAULT_MIN_BPM = 50;
 const DEFAULT_MAX_BPM = 220;
-const DEFAULT_FALLBACK_BPM = 120;
 const DEFAULT_MAX_CANDIDATES = 4;
 const DEFAULT_TARGET_RATE = 22050;
 const WAVEFORM_POINTS = 1600;
 const ONSET_POINTS = 2400;
+/** Below these internal thresholds the detector reports "not found". */
+const MIN_RELIABILITY = 0.42;
+const MIN_PERIODICITY = 0.45;
+const MIN_COVERAGE = 0.2;
+/** Output precision for BPM and offset, and the near-integer snap threshold. */
+const TIMING_DIGITS = 3;
+const SNAP_THRESHOLD = 0.001;
+/** Attack timing search radius around one predicted beat, in seconds. */
+const ATTACK_WINDOW = 0.035;
 
 interface OnsetEnvelope {
   /** Low + mid flux, used for tempo and beat presence. */
@@ -165,8 +160,9 @@ export function detectBeatGrid(
 /**
  * Detect the automatic timing answer.
  *
- * Automatic detection always reports one fixed BPM plus its confidence; callers
- * no longer choose between a fixed grid and a variable-tempo map.
+ * Automatic detection reports one fixed BPM, or `null` when the track has no
+ * clear pulse; callers no longer choose between a fixed grid and a
+ * variable-tempo map.
  */
 export function detectAutoTiming(
   buffer: BeatDetectionBuffer,
@@ -234,7 +230,7 @@ function buildAnalysis(
   };
 }
 
-/** Detect the automatic answer from a mixed mono signal; always one fixed BPM. */
+/** Detect the automatic answer from a mixed mono signal, or `null` when no pulse is found. */
 export function detectAutoTimingFromSamples(
   samples: Float32Array,
   sampleRate: number,
@@ -247,9 +243,8 @@ export function detectAutoTimingFromSamples(
 /**
  * Detect fixed timing from an already mixed mono signal.
  *
- * A buffer with samples and a positive sample rate always returns a result; a
- * buffer too short to build an onset envelope gets the fallback BPM at zero
- * confidence. Only empty input or an invalid rate returns null.
+ * Empty input, an invalid sample rate, audio too short to build an onset
+ * envelope, and audio without one reliable pulse all return `null`.
  */
 export function detectBeatGridFromSamples(
   samples: Float32Array,
@@ -261,98 +256,63 @@ export function detectBeatGridFromSamples(
     return null;
   }
   const context = buildAnalysis(samples, sampleRate, duration, options);
-  if (context) {
-    return fixedFromEnvelope(samples, context);
-  }
-  const { minBpm, maxBpm } = resolveTimingLimits(options);
-  const requestedDuration = Number(duration);
-  const totalDuration =
-    requestedDuration > 0 && Number.isFinite(requestedDuration)
-      ? requestedDuration
-      : samples.length / sampleRate;
-  return fallbackTimingResult(samples, totalDuration, minBpm, maxBpm);
+  return context ? fixedFromEnvelope(samples, context) : null;
 }
 
-/** Detect a fixed grid from the shared analysis envelope. */
-function fixedFromEnvelope(samples: Float32Array, context: AnalysisContext): BeatDetectionResult {
+/** Detect a fixed grid from the shared analysis envelope, or `null` when unclear. */
+function fixedFromEnvelope(
+  samples: Float32Array,
+  context: AnalysisContext,
+): BeatDetectionResult | null {
   const { envelope, totalDuration, minBpm, maxBpm, maxCandidates } = context;
   const lowPeaks = findPeaks(envelope.low, envelope, 0.8);
   const candidates = findCandidates(envelope, minBpm, maxBpm, maxCandidates, lowPeaks);
   if (!candidates.length) {
-    return fallbackTimingResult(samples, totalDuration, minBpm, maxBpm, envelope);
+    return null;
   }
   const best = candidates[0];
   const bestScore = Math.max(best.score, 1e-6);
-  const refits = candidates.map((candidate) =>
-    refitFromLowPeaks(candidate, lowPeaks, envelope.centre),
-  );
-  // A regression phase is periodic; anchor every candidate to the first strong
-  // low-band onset so the result lands on the song's first beat rather than a
-  // phantom beat before the intro. Alternatives keep their own period, so the
-  // same first beat still starts a half-time or double-time reading.
-  const firstLow = lowPeaks.find((peak) => peak.value >= 0.2) ?? lowPeaks[0];
-  if (firstLow) {
-    for (const refit of refits) {
-      refit.offsetSeconds = firstLow.time;
-    }
+  // Reliability is an internal accept/reject gate, not a number the author sees.
+  // Unpitched noise can form a weak autocorrelation peak, but its peak barely
+  // rises above the envelope variance and explains too few strong onsets.
+  if (
+    candidateReliability(best, bestScore) < MIN_RELIABILITY ||
+    best.periodicity < MIN_PERIODICITY ||
+    best.coverage < MIN_COVERAGE
+  ) {
+    return null;
   }
+  const refit = refitFromLowPeaks(best, lowPeaks);
+  // A regression phase is periodic; anchor the grid to the first strong
+  // low-band onset so the result lands on the song's first beat rather than a
+  // phantom beat before the intro.
+  const firstLow = lowPeaks.find((peak) => peak.value >= 0.2) ?? lowPeaks[0];
+  let bpm = clampBpm(refit.bpm, minBpm, maxBpm);
+  let offsetSeconds = firstLow ? firstLow.time : Math.max(0, refit.offsetSeconds);
+  // Raw attacks across the whole track resolve the period far below one onset
+  // frame; the first pass keeps the search near the candidate grid, and the
+  // second pass fits every accepted beat with the refined prediction.
   const refined = firstLow
     ? refineTimingFromAttacks(
         context.samples,
         context.sampleRate,
         firstLow.time,
-        refits[0].bpm,
+        bpm,
         context.totalDuration,
-        true,
       )
     : null;
-  if (refined && firstLow) {
-    const shift = refined.offsetSeconds - firstLow.time;
-    for (const refit of refits) {
-      refit.offsetSeconds = Math.max(0, refit.offsetSeconds + shift);
-    }
-    refits[0].bpm = refined.bpm;
+  if (refined) {
+    bpm = clampBpm(refined.bpm, minBpm, maxBpm);
+    offsetSeconds = refined.offsetSeconds;
   }
-  const primaryBpm = clampBpm(refits[0]?.bpm ?? best.bpm, minBpm, maxBpm);
-  const primaryConfidence = candidateConfidence(best, bestScore);
-  const publicCandidates: BeatCandidate[] = [];
-  candidates.forEach((candidate, index) => {
-    const refit = refits[index];
-    if (!refit || !Number.isFinite(refit.bpm) || !(refit.bpm > 0)) {
-      return;
-    }
-    const bpm = clampBpm(refit.bpm, minBpm, maxBpm);
-    if (
-      publicCandidates.some((entry) => Math.abs(entry.bpm - bpm) / Math.max(entry.bpm, bpm) < 0.007)
-    ) {
-      return;
-    }
-    // The chosen metrical level is the recommendation; an octave alternative
-    // may explain the onsets well, but it must not outrank the recommendation.
-    const confidence = Math.min(
-      index === 0 ? primaryConfidence : primaryConfidence * 0.92,
-      candidateConfidence(candidate, bestScore),
-    );
-    publicCandidates.push({
-      bpm: round(bpm, 4),
-      offsetMs: Number.isFinite(refit.offsetSeconds)
-        ? round(Math.max(0, refit.offsetSeconds) * 1000, 1)
-        : 0,
-      confidence: round(confidence, 3),
-      coverage: round(candidate.coverage, 3),
-      relation: relationToPrimary(bpm, primaryBpm),
-    });
-  });
-  const primary = publicCandidates[0];
-  if (!primary) {
-    return fallbackTimingResult(samples, totalDuration, minBpm, maxBpm, envelope);
+  const measuredBpm = roundMeasuredTiming(bpm);
+  const measuredOffset = roundMeasuredTiming(Math.max(0, offsetSeconds) * 1000);
+  if (!(measuredBpm > 0) || !Number.isFinite(measuredOffset)) {
+    return null;
   }
-  const beatTimes = buildBeatTimes(primary.bpm, primary.offsetMs / 1000, totalDuration);
   return {
-    bpm: primary.bpm,
-    offsetMs: primary.offsetMs,
-    confidence: clamp01(primary.confidence),
-    candidates: publicCandidates,
+    bpm: measuredBpm,
+    offsetMs: measuredOffset,
     waveform: {
       peaks: waveformPeaks(samples, WAVEFORM_POINTS),
       duration: totalDuration,
@@ -360,47 +320,7 @@ function fixedFromEnvelope(samples: Float32Array, context: AnalysisContext): Bea
     onset: decimate(envelope.full, ONSET_POINTS),
     onsetRate: envelope.fps,
     duration: totalDuration,
-    beatTimes,
-  };
-}
-
-/**
- * Build the always-answer fallback when no pulse candidate survives.
- *
- * 120 BPM is the chart default and the least surprising neutral answer; the
- * configured BPM range still wins when it excludes 120. Zero confidence keeps
- * the dialog's low-confidence warning visible and tells the author to verify
- * the answer by hand.
- */
-function fallbackTimingResult(
-  samples: Float32Array,
-  duration: number,
-  minBpm: number,
-  maxBpm: number,
-  envelope?: OnsetEnvelope,
-): BeatDetectionResult {
-  const bpm = clampBpm(DEFAULT_FALLBACK_BPM, minBpm, maxBpm);
-  return {
-    bpm: round(bpm, 4),
-    offsetMs: 0,
-    confidence: 0,
-    candidates: [
-      {
-        bpm: round(bpm, 4),
-        offsetMs: 0,
-        confidence: 0,
-        coverage: 0,
-        relation: "primary",
-      },
-    ],
-    waveform: {
-      peaks: waveformPeaks(samples, WAVEFORM_POINTS),
-      duration,
-    },
-    onset: envelope ? decimate(envelope.full, ONSET_POINTS) : new Float32Array(ONSET_POINTS),
-    onsetRate: envelope?.fps ?? 0,
-    duration,
-    beatTimes: buildBeatTimes(bpm, 0, duration),
+    beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
   };
 }
 
@@ -556,7 +476,7 @@ function fft(even: Float64Array, odd: Float64Array): void {
  * Blend period evidence, onset coverage, and phase concentration into 0..1.
  * `bestScore` normalises the pulse score against the strongest candidate.
  */
-function candidateConfidence(candidate: InternalCandidate, bestScore: number): number {
+function candidateReliability(candidate: InternalCandidate, bestScore: number): number {
   return clamp01(
     0.05 +
       0.42 * candidate.coverage +
@@ -873,15 +793,29 @@ function findPeaks(values: Float32Array, envelope: OnsetEnvelope, thresholdFacto
   return kept;
 }
 
+/** One accepted raw attack: its beat index and measured audio time. */
+interface AttackPoint {
+  beat: number;
+  time: number;
+}
+
+/** A fitted beat line plus the spread of the attacks that produced it. */
+interface BeatLineFit {
+  offsetSeconds: number;
+  bpm: number;
+  deviation: number;
+  points: number;
+}
+
 /**
- * Refine the opening timing from high-frequency attacks.
+ * Refine the grid from raw attacks across the track.
  *
- * The spectral-flux peak reacts to the FFT window's leading edge and can sit a
- * few milliseconds away from the click. The raw first difference gives a
- * direct attack time. With `allowFit`, a strong 16-beat line fit may correct
- * both BPM and offset; otherwise a small consensus among the first four beats
- * corrects only offset. Returns `null` when the opening is too noisy or the two
- * models disagree.
+ * The onset envelope is quantised to its analysis hop. The raw first difference
+ * marks each transient directly, so a robust line through those attack times
+ * resolves both the period and beat zero well below that hop. The first pass
+ * predicts a short opening window; the second pass extends the fitted grid over
+ * the whole track so a small initial tempo error cannot push later beats out of
+ * the attack search window. Returns `null` when too few attacks agree.
  */
 function refineTimingFromAttacks(
   samples: Float32Array,
@@ -889,106 +823,185 @@ function refineTimingFromAttacks(
   offsetSeconds: number,
   bpm: number,
   duration: number,
-  allowFit: boolean,
 ): { bpm: number; offsetSeconds: number } | null {
-  if (!(bpm > 0) || !(sampleRate > 0)) {
+  if (!(bpm > 0) || !(sampleRate > 0) || !(duration > 0)) {
     return null;
   }
+  const opening = fitAttackGrid(samples, sampleRate, offsetSeconds, bpm, duration, 24);
+  if (!opening || opening.points < 8) {
+    return null;
+  }
+  const fitted =
+    fitAttackGrid(samples, sampleRate, opening.offsetSeconds, opening.bpm, duration, 0) ?? opening;
+  if (Math.abs(fitted.bpm - bpm) / bpm > 0.02 || fitted.deviation > 0.006) {
+    return null;
+  }
+  return {
+    bpm: fitted.bpm,
+    offsetSeconds: Math.max(0, fitted.offsetSeconds),
+  };
+}
+
+/** Collect attacks around a predicted grid and robustly fit one line through them. */
+function fitAttackGrid(
+  samples: Float32Array,
+  sampleRate: number,
+  offsetSeconds: number,
+  bpm: number,
+  duration: number,
+  maxBeats: number,
+): BeatLineFit | null {
   const period = 60 / bpm;
-  const points: { beat: number; time: number }[] = [];
-  for (let beat = 0; beat < 16; beat++) {
-    const time = offsetSeconds + beat * period;
-    if (time + 0.03 >= duration) {
-      break;
-    }
-    const delta = attackDelta(samples, sampleRate, time);
+  const available = Math.floor((duration - offsetSeconds) / period) + 1;
+  const limit = maxBeats > 0 ? Math.min(maxBeats, available) : available;
+  const count = Math.max(0, Math.min(4096, limit));
+  const points: AttackPoint[] = [];
+  for (let beat = 0; beat < count; beat++) {
+    const expected = offsetSeconds + beat * period;
+    const delta = attackDelta(samples, sampleRate, expected);
     if (delta !== null) {
-      points.push({ beat, time: time + delta });
+      points.push({ beat, time: expected + delta });
     }
   }
-  if (allowFit && points.length >= 8) {
-    let sumBeat = 0;
-    let sumTime = 0;
-    let sumBeatSquared = 0;
-    let sumBeatTime = 0;
-    for (const point of points) {
-      sumBeat += point.beat;
-      sumTime += point.time;
-      sumBeatSquared += point.beat * point.beat;
-      sumBeatTime += point.beat * point.time;
-    }
-    const denominator = points.length * sumBeatSquared - sumBeat * sumBeat;
-    if (denominator > 0) {
-      const slope = (points.length * sumBeatTime - sumBeat * sumTime) / denominator;
-      const intercept = (sumTime - slope * sumBeat) / points.length;
-      const fittedBpm = slope > 0 ? 60 / slope : 0;
-      const residuals = points
-        .map((point) => Math.abs(intercept + slope * point.beat - point.time))
-        .sort((left, right) => left - right);
-      const mad = residuals[Math.floor(residuals.length / 2)];
-      if (
-        fittedBpm > 0 &&
-        Math.abs(fittedBpm - bpm) / bpm <= 0.005 &&
-        mad <= 0.002 &&
-        Math.abs(intercept - offsetSeconds) <= 0.015
-      ) {
-        return { bpm: fittedBpm, offsetSeconds: Math.max(0, intercept) };
-      }
-    }
+  if (points.length < 8) {
+    return null;
   }
-  const early: number[] = [];
-  for (const point of points) {
-    if (point.beat < 4) {
-      early.push(point.time - (offsetSeconds + point.beat * period));
-    }
-  }
-  if (early.length >= 2) {
-    early.sort((left, right) => left - right);
-    const median = early[Math.floor(early.length / 2)];
-    const spread = early[early.length - 1] - early[0];
-    if (spread <= 0.003 && Math.abs(median) <= 0.01) {
-      return { bpm, offsetSeconds: Math.max(0, offsetSeconds + median) };
-    }
-  }
-  return null;
+  const fit = robustBeatLine(points);
+  return fit ? { ...fit, points: points.length } : null;
 }
 
 /**
- * Time shift from the strongest high-frequency attack near one expected beat.
+ * Fit one beat line while dropping attacks that do not agree with the majority.
  *
- * The spectral-flux peak reacts to the leading edge of the FFT window and can
- * sit a few milliseconds before the click. The first difference of the raw
- * signal marks that click directly: find its maximum, then walk back to where
- * the attack falls to 20% of the peak. Returns `null` when no clear transient
- * exists or it falls outside the expected window.
+ * The median absolute residual keeps a few mis-detected transients (a cymbal
+ * before the kick, a missed beat) from tilting the period.
  */
-function attackDelta(samples: Float32Array, sampleRate: number, time: number): number | null {
-  const from = Math.max(1, Math.floor((time - 0.03) * sampleRate));
-  const to = Math.min(samples.length - 2, Math.ceil((time + 0.03) * sampleRate));
-  if (to - from < 4) {
+function robustBeatLine(
+  points: readonly AttackPoint[],
+): { offsetSeconds: number; bpm: number; deviation: number } | null {
+  let active = points.slice();
+  let fit = leastSquaresBeatLine(active);
+  for (let iteration = 0; iteration < 3; iteration++) {
+    if (!fit) {
+      break;
+    }
+    const current = fit;
+    const residuals = active.map(
+      (point) => point.time - (current.offsetSeconds + current.slope * point.beat),
+    );
+    const centre = median(residuals);
+    const deviation = median(residuals.map((residual) => Math.abs(residual - centre)));
+    const tolerance = Math.max(0.0015, Math.min(0.006, deviation * 4));
+    const next = active.filter((_, index) => Math.abs(residuals[index] - centre) <= tolerance);
+    if (next.length === active.length || next.length < 8) {
+      break;
+    }
+    active = next;
+    fit = leastSquaresBeatLine(active);
+  }
+  if (!fit || !(fit.slope > 0)) {
     return null;
   }
+  const residuals = active.map(
+    (point) => point.time - (fit.offsetSeconds + fit.slope * point.beat),
+  );
+  const centre = median(residuals);
+  const deviation = median(residuals.map((residual) => Math.abs(residual - centre)));
+  return {
+    offsetSeconds: fit.offsetSeconds,
+    bpm: 60 / fit.slope,
+    deviation,
+  };
+}
+
+/** Ordinary least squares for time over beat index. */
+function leastSquaresBeatLine(
+  points: readonly AttackPoint[],
+): { offsetSeconds: number; slope: number } | null {
+  if (points.length < 2) {
+    return null;
+  }
+  let sumBeat = 0;
+  let sumTime = 0;
+  let sumBeatSquared = 0;
+  let sumBeatTime = 0;
+  for (const point of points) {
+    sumBeat += point.beat;
+    sumTime += point.time;
+    sumBeatSquared += point.beat * point.beat;
+    sumBeatTime += point.beat * point.time;
+  }
+  const denominator = points.length * sumBeatSquared - sumBeat * sumBeat;
+  if (!(denominator > 0)) {
+    return null;
+  }
+  const slope = (points.length * sumBeatTime - sumBeat * sumTime) / denominator;
+  if (!(slope > 0)) {
+    return null;
+  }
+  return { offsetSeconds: (sumTime - slope * sumBeat) / points.length, slope };
+}
+
+/**
+ * Time shift from the strongest attack near one expected beat.
+ *
+ * The spectral-flux peak reacts to the FFT window and can sit a few
+ * milliseconds away from the click. A short trailing energy window marks the
+ * raw attack directly: find the energy maximum, walk back to where the attack
+ * crosses 20% of the peak, and interpolate that crossing between samples. The
+ * window smooths sample noise so repeated hits report the same attack time.
+ * Returns `null` when no clear transient exists or it falls outside the search
+ * window.
+ */
+function attackDelta(samples: Float32Array, sampleRate: number, time: number): number | null {
+  const from = Math.max(1, Math.floor((time - ATTACK_WINDOW) * sampleRate));
+  const to = Math.min(samples.length - 1, Math.ceil((time + ATTACK_WINDOW) * sampleRate));
+  if (to - from < 8) {
+    return null;
+  }
+  const window = Math.max(2, Math.round(sampleRate * 0.0015));
+  const prefixStart = Math.max(0, from - window);
+  const prefix = new Float64Array(to - prefixStart + 2);
+  for (let index = prefixStart; index <= to; index++) {
+    const sample = samples[index] ?? 0;
+    prefix[index - prefixStart + 1] = prefix[index - prefixStart] + sample * sample;
+  }
+  const energyAt = (index: number): number => {
+    const start = Math.max(0, index - window + 1);
+    const count = index - start + 1;
+    return (prefix[index - prefixStart + 1] - prefix[start - prefixStart]) / Math.max(1, count);
+  };
   let peak = 0;
   let peakIndex = from;
   for (let index = from; index <= to; index++) {
-    const value = Math.abs(samples[index] - samples[index - 1]);
+    const value = energyAt(index);
     if (value > peak) {
       peak = value;
       peakIndex = index;
     }
   }
-  if (!(peak > 1e-5)) {
+  if (!(peak > 1e-10)) {
     return null;
   }
-  let attack = peakIndex;
-  for (let index = peakIndex; index > from; index--) {
-    if (Math.abs(samples[index] - samples[index - 1]) < peak * 0.2) {
-      attack = index;
+  const threshold = peak * 0.2;
+  let lead = from;
+  for (let index = peakIndex; index >= from; index--) {
+    if (energyAt(index) < threshold) {
+      lead = Math.min(peakIndex, index + 1);
       break;
     }
   }
-  const delta = attack / sampleRate - time;
-  return delta >= -0.01 && delta <= 0.012 ? delta : null;
+  const left = energyAt(lead - 1);
+  const right = energyAt(lead);
+  let crossing = lead;
+  if (right > left) {
+    const fraction = (threshold - left) / (right - left);
+    crossing = lead - 1 + Math.max(0, Math.min(1, fraction));
+  }
+  // The trailing window reports the point where it has collected enough of the
+  // rise; its centre is the closest raw estimate of the attack start.
+  const delta = (crossing - window / 2) / sampleRate - time;
+  return delta >= -ATTACK_WINDOW && delta <= ATTACK_WINDOW ? delta : null;
 }
 
 /**
@@ -1001,12 +1014,11 @@ function attackDelta(samples: Float32Array, sampleRate: number, time: number): n
 function refitFromLowPeaks(
   candidate: InternalCandidate,
   lowPeaks: readonly Peak[],
-  centre: number,
 ): { bpm: number; offsetSeconds: number } {
   let period = 60 / candidate.bpm;
   let phase = candidate.phase;
-  for (let iteration = 0; iteration < 3; iteration++) {
-    const tolerance = period * 0.18;
+  for (let iteration = 0; iteration < 4; iteration++) {
+    const tolerance = Math.min(period * (iteration === 0 ? 0.18 : 0.12), 0.08);
     const points: { index: number; time: number; weight: number }[] = [];
     for (const peak of lowPeaks) {
       const index = Math.round((peak.time - phase) / period);
@@ -1048,27 +1060,6 @@ function refitFromLowPeaks(
     bpm: 60 / period,
     offsetSeconds: Math.max(0, phase),
   };
-}
-
-/** Convert a candidate BPM into its relation to the primary result. */
-function relationToPrimary(bpm: number, primaryBpm: number): BeatCandidate["relation"] {
-  const ratio = bpm / primaryBpm;
-  if (Math.abs(ratio - 1) < 0.03) {
-    return "primary";
-  }
-  if (Math.abs(ratio - 2) < 0.04) {
-    return "double";
-  }
-  if (Math.abs(ratio - 0.5) < 0.035) {
-    return "half";
-  }
-  if (Math.abs(ratio - 1.5) < 0.04) {
-    return "dotted";
-  }
-  if (Math.abs(ratio - 2 / 3) < 0.04) {
-    return "triplet";
-  }
-  return "alternate";
 }
 
 /** Build the primary grid's beat times from beat zero through the song. */
@@ -1179,6 +1170,16 @@ function mean(values: readonly number[]): number {
   return sum / values.length;
 }
 
+/** Median of a list, or zero for an empty list. */
+function median(values: readonly number[]): number {
+  if (!values.length) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 /** Maximum of a list, or zero for an empty list. */
 function max(values: readonly number[]): number {
   let maximum = 0;
@@ -1194,9 +1195,9 @@ function clampNumber(value: unknown, fallback: number, minimum: number, maximum:
   return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
 }
 
-/** Clamp a detected BPM into the configured range, falling back to 120. */
+/** Clamp a detected BPM into the configured range. */
 function clampBpm(value: number, minBpm: number, maxBpm: number): number {
-  const bpm = Number.isFinite(value) && value > 0 ? value : DEFAULT_FALLBACK_BPM;
+  const bpm = Number.isFinite(value) && value > 0 ? value : minBpm;
   return Math.max(minBpm, Math.min(maxBpm, bpm));
 }
 
@@ -1205,8 +1206,19 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-/** Round a finite value to a fixed number of decimal places. */
-function round(value: number, digits: number): number {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
+/**
+ * Round a measured BPM or offset to three decimals.
+ *
+ * A value within the snap threshold of a whole number becomes that integer, so
+ * an exact 128.0004 BPM reads as 128 rather than as a spurious decimal.
+ */
+export function roundMeasuredTiming(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const whole = Math.round(value);
+  if (Math.abs(value - whole) < SNAP_THRESHOLD) {
+    return whole;
+  }
+  return Math.round(value * 10 ** TIMING_DIGITS) / 10 ** TIMING_DIGITS;
 }
