@@ -114,6 +114,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleCellGuide(w, r)
 	case "/api/cell/run":
 		s.handleCellRun(w, r)
+	case "/api/cell/frame":
+		s.handleCellFrame(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -315,6 +317,134 @@ func (s *Server) handleCellRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(response["value"])
+}
+
+// handleCellFrame renders one chart frame and returns the encoded image.
+// The editor owns sampling and encoding; this route only validates the request,
+// forwards it over the authenticated bridge, and streams the decoded bytes.
+func (s *Server) handleCellFrame(w http.ResponseWriter, r *http.Request) {
+	if !s.cellAccessAllowed(r) {
+		writeCellHTTPError(w, http.StatusForbidden, "loopback_required",
+			"Code Cell API is loopback-only; bind the service to 127.0.0.1", nil, nil)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || (mediaType != "" && mediaType != "application/json") {
+		writeCellHTTPError(w, http.StatusUnsupportedMediaType, "invalid_request",
+			"Code Cell frame requests require JSON", nil, nil)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, cellMaxBody+1))
+	if err != nil || len(body) > cellMaxBody {
+		writeCellHTTPError(w, http.StatusRequestEntityTooLarge, "invalid_request",
+			"Code Cell frame request is too large", nil, nil)
+		return
+	}
+	var params map[string]any
+	if err := json.Unmarshal(body, &params); err != nil || params == nil {
+		writeCellHTTPError(w, http.StatusBadRequest, "invalid_request",
+			"Code Cell frame request must be a JSON object", nil, nil)
+		return
+	}
+	response, err := s.forward(map[string]any{"method": "cell.frame", "params": params})
+	if err != nil {
+		writeCellHTTPError(w, http.StatusServiceUnavailable, "unavailable", err.Error(), nil, nil)
+		return
+	}
+	if ok, _ := response["ok"].(bool); !ok {
+		code := "failed"
+		message := "The editor rejected the frame request"
+		var details any
+		if errorRecord, ok := response["error"].(map[string]any); ok {
+			if value, ok := errorRecord["code"].(string); ok && value != "" {
+				code = value
+			}
+			if value, ok := errorRecord["message"].(string); ok && value != "" {
+				message = value
+			}
+			details = errorRecord["details"]
+		}
+		writeCellHTTPError(w, cellHTTPStatus(code), code, message, details, response["revisions"])
+		return
+	}
+	value, _ := response["value"].(map[string]any)
+	if value == nil {
+		writeCellHTTPError(w, http.StatusBadGateway, "runtime",
+			"The editor returned an invalid frame response", nil, nil)
+		return
+	}
+	if strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json") {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "value": value})
+		return
+	}
+	dataURL, _ := value["dataUrl"].(string)
+	comma := strings.IndexByte(dataURL, ',')
+	if comma < 0 || !strings.HasPrefix(dataURL, "data:image/") {
+		writeCellHTTPError(w, http.StatusBadGateway, "runtime",
+			"The editor returned an invalid frame image", nil, nil)
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(dataURL[comma+1:])
+	if err != nil {
+		writeCellHTTPError(w, http.StatusBadGateway, "runtime",
+			"The editor returned an unreadable frame image", nil, nil)
+		return
+	}
+	mimeType := "image/png"
+	switch format, _ := value["format"].(string); format {
+	case "jpeg":
+		mimeType = "image/jpeg"
+	case "webp":
+		mimeType = "image/webp"
+	}
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("inline; filename=%q", frameFilename(value)))
+	writeFrameMetadata(w, value)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// writeFrameMetadata copies the resolved frame identity into response headers.
+func writeFrameMetadata(w http.ResponseWriter, value map[string]any) {
+	for header, key := range map[string]string{
+		"X-Redux-Frame-Seconds": "seconds",
+		"X-Redux-Frame-Beat":    "beatValue",
+		"X-Redux-Frame-Width":   "width",
+		"X-Redux-Frame-Height":  "height",
+	} {
+		if number, ok := value[key].(float64); ok {
+			w.Header().Set(header, strconv.FormatFloat(number, 'f', -1, 64))
+		}
+	}
+	if format, ok := value["format"].(string); ok {
+		w.Header().Set("X-Redux-Frame-Format", format)
+	}
+	if fingerprint, ok := value["chartFingerprint"].(string); ok {
+		w.Header().Set("X-Redux-Chart-Fingerprint", fingerprint)
+	}
+}
+
+// frameFilename names the image from the validated format, falling back to PNG.
+func frameFilename(value map[string]any) string {
+	format, _ := value["format"].(string)
+	switch format {
+	case "jpeg":
+		return "frame.jpg"
+	case "webp":
+		return "frame.webp"
+	default:
+		return "frame.png"
+	}
 }
 
 func (s *Server) bridgeTokenValid(r *http.Request) bool {

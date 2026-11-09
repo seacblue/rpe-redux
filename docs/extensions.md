@@ -431,7 +431,7 @@ Safe mode is entered when the launch URL sets `extensions=off` (or the legacy `m
 
 ## Preview geometry
 
-`api.preview` reads the objects visible in the last painted live-preview frame: notes, holds, and judgement lines. `snapshot()` reads the current frame once; `subscribe(listener)` follows painted frames and resolves to a disposer. A listener receives `null` when the document is cleared or the preview is hidden.
+`api.preview` reads the objects visible in the last painted live-preview frame: notes, holds, and judgement lines. `snapshot()` reads the current frame once; `frame(request)` renders an offscreen frame selected by chart seconds or beat and resolves to an encoded data URL; `subscribe(listener)` follows painted frames and resolves to a disposer. A listener receives `null` when the document is cleared or the preview is hidden. Frame rendering never seeks playback or changes the live preview; each edge defaults to a 960×540 frame, accepts 16–1920 pixels, and the total area is capped at 1,000,000 pixels. Supported encodings are `png`, `jpeg`, and `webp`.
 
 ```js
 const result = await api.preview.snapshot();

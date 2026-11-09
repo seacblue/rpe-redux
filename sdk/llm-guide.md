@@ -16,14 +16,19 @@ The local service exposes the cell API over HTTP:
 
 - `GET {base}/api/cell/guide` returns this document.
 - `POST {base}/api/cell/run` accepts `{ "source": "...", "profile": "read" | "write", "args": {...}, "expected": {...}, "timeoutMs": 10000 }` with `Content-Type: application/json`; `profile` defaults to `write`.
+- `POST {base}/api/cell/frame` accepts a frame request (`seconds` or `beat`, optional `width`, `height`, `format`, `quality`) and returns the encoded image. Add `Accept: application/json` to receive the same image as a data URL instead of raw bytes.
 
-`{base}` is the origin of the guide URL you fetched. The routes require the service to be bound to a loopback address and the peer to be loopback. Post to `/api/cell/run` directly; the server root `/` is the library API and rejects a bare POST with `403 client_header_required`.
+`{base}` is the origin of the guide URL you fetched. The routes require the service to be bound to a loopback address and the peer to be loopback. Post to `/api/cell/run` or `/api/cell/frame` directly; the server root `/` is the library API and rejects a bare POST with `403 client_header_required`.
 
 ```sh
 curl "{base}/api/cell/guide"
 curl -X POST "{base}/api/cell/run" \
   -H "Content-Type: application/json" \
   -d '{"source":"const s = await redux.document.state(); return { name: s.name };"}'
+curl -X POST "{base}/api/cell/frame" \
+  -H "Content-Type: application/json" \
+  -d '{"beat":[32,0,1],"width":960,"height":540}' \
+  --output frame-32.png
 ```
 
 On Windows PowerShell:
@@ -35,7 +40,7 @@ Invoke-RestMethod -Method Post -Uri "$base/api/cell/run" `
   -ContentType 'application/json' -Body $body
 ```
 
-HTTP status `200` means the cell finished; inspect `ok` inside the result. `400` is an invalid request, `403` means code cells are disabled, the service is not loopback-only, or the request carries a foreign browser `Origin`, `409` means `expected` is stale, `503` means no editor is connected, and `500` is an internal failure. The adapter promotes `disabled`, `invalid_request`, and `stale_read` to those HTTP errors; other cell error codes arrive inside a `200` result with `ok: false`.
+HTTP status `200` means the cell finished; inspect `ok` inside the result. `400` is an invalid request, `403` means code cells are disabled, the service is not loopback-only, or the request carries a foreign browser `Origin`, `409` means `expected` is stale, `503` means no editor is connected, and `500` is an internal failure. The adapter promotes `disabled`, `invalid_request`, and `stale_read` to those HTTP errors; other cell error codes arrive inside a `200` result with `ok: false`. `POST /api/cell/frame` uses the same status mapping and returns the encoded image on success, or `{ "ok": true, "value": { ... } }` when the request asks for JSON.
 
 `expected` may pin `chartFingerprint`, `diskSnapshot`, or `generation`; a mismatch returns `stale_read`. The same start snapshot is checked again before every `transaction.preview` and `transaction.apply`: if the user edits the chart, switches documents, or the disk snapshot changes during the run, the write returns `rejected` with issue `stale_read` and is not committed. The request may also set `timeoutMs` within the limit below.
 
@@ -238,17 +243,18 @@ interface CodeCellResult {
 
 | profile | exact capabilities |
 | --- | --- |
-| `read` | `document.read`, `chart.read`, `selection.read` |
-| `write` (default) | `document.read`, `chart.read`, `selection.read`, `chart.write`, `library.read`, `assets.write` |
+| `read` | `document.read`, `chart.read`, `selection.read`, `preview.read` |
+| `write` (default) | `document.read`, `chart.read`, `selection.read`, `preview.read`, `chart.write`, `library.read`, `assets.write` |
 
 `read` can call:
 
 - `redux.document.availability/state/snapshot/fingerprint`
 - `redux.chart.availability/state/read/snapshot/metadata/resources/lines/line/parentId/notes/note/events/event`
 - `redux.selection.availability/state/subscribe`
+- `redux.preview.availability/snapshot/frame`
 - `redux.capabilities()`
 
-`read` cannot call or even access `redux.transaction`, `redux.library`, `redux.playback`, `redux.preview`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.workspace`, `redux.help`, `redux.extensions`, `redux.chart.placeNote`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
+`read` cannot call or even access `redux.transaction`, `redux.library`, `redux.playback`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.workspace`, `redux.help`, `redux.extensions`, `redux.chart.placeNote`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
 
 `write` adds:
 
@@ -256,7 +262,7 @@ interface CodeCellResult {
 - `redux.library.availability/list/get/assets/asset/revisions/revision`
 - `redux.library.addAsset/removeAsset` (`assets.write`)
 
-`write` still cannot use `redux.chart.placeNote`, `redux.transaction.undo`, `redux.transaction.redo`, document writes, `redux.library.create/createRaw/ update/remove/duplicate/createRevision/removeRevision`, playback, preview, layout, settings, values, toolbar, sidebar, workspace, help, or extensions. Use `redux.transaction.apply` for every chart edit.
+`write` still cannot use `redux.chart.placeNote`, `redux.transaction.undo`, `redux.transaction.redo`, document writes, `redux.library.create/createRaw/ update/remove/duplicate/createRevision/removeRevision`, playback, layout, settings, values, toolbar, sidebar, workspace, help, or extensions. Use `redux.transaction.apply` for every chart edit.
 
 The types below describe the full chart and transaction format. They do not grant permission: a field present in a type can still be rejected with `ai.feature.restricted` when its AI switch is off. The rejecting transaction returns `status: "rejected"`, `issues[].code: "ai.feature.restricted"`, and `issues[].path` naming the field.
 
@@ -272,7 +278,7 @@ A capability denial is a normal cell error:
 
 The host raises `ExtensionCapabilityError`, but the cell result usually reports `name: "Error"` because the bridge carries the message and code rather than the host class. A bridged call can also prefix the message with its path, for example `document.save: Extension capability is not granted: document.write (document.save)`. Always test `error.code === "capabilityDenied"`; never match the full message or the name.
 
-The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.values`, `redux.settings`, `redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.preview`, `redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.workspace`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles.
+The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.values`, `redux.settings`, `redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.workspace`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles. `redux.preview` is available because both profiles hold `preview.read`; use it to inspect visible objects or render a frame.
 
 ### Exact signatures
 
@@ -393,6 +399,34 @@ interface SelectionApiSnapshot {
     layer: number | "extended";
     index: number;
   }[];
+}
+
+// Preview reads and frame images (both profiles).
+redux.preview.availability(): Promise<ApiAvailability>;
+redux.preview.snapshot(): Promise<ApiResult<PreviewSnapshot>>;
+redux.preview.frame(
+  request: {
+    seconds?: number;
+    beat?: number | readonly number[];
+    width?: number;
+    height?: number;
+    format?: "png" | "jpeg" | "webp";
+    quality?: number;
+  },
+): Promise<ApiResult<PreviewFrameImage>>;
+
+interface PreviewFrameImage {
+  seconds: number;
+  beat: readonly [number, number, number];
+  beatValue: number;
+  width: number;
+  height: number;
+  format: "png" | "jpeg" | "webp";
+  mimeType: string;
+  quality: number;
+  dataUrl: string;
+  byteLength: number;
+  chartFingerprint: string;
 }
 
 // Transactions (write profile only).
@@ -799,6 +833,39 @@ Set `bezier: true` and `bezierPoints: [x1, y1, x2, y2]` to use a Bézier instead
 <!-- /ai-block:easingRange -->
 
 Line control curves are separate from events. `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` are arrays of `{ x, alpha|pos| size|skew|y, easing }` points. They sample by note distance from the line, not by time. Leave them out unless the effect needs them.
+
+## Frame images
+
+`redux.preview.frame(request)` renders the chart at one position and returns an encoded image. Use it when a numeric chart read is not enough and you need to see the stage, judge-line layout, note placement, or a shader result. The renderer uses its own offscreen preview: it does not seek playback, change the live preview, or modify the chart.
+
+Select the frame with exactly one of:
+
+| field     | meaning                                                              |
+| --------- | -------------------------------------------------------------------- |
+| `seconds` | Chart seconds on the tempo map.                                      |
+| `beat`    | A beat number or a reduced `[whole, numerator, denominator]` triple. |
+
+Optional fields:
+
+| field | meaning |
+| --- | --- |
+| `width`, `height` | Pixel output. Defaults to `960 × 540`; naming one edge derives the other at 16:9. Each edge is 16–1920 and the area must not exceed 1,000,000 pixels. |
+| `format` | `"png"` (default), `"jpeg"`, or `"webp"`. PNG preserves transparency; JPEG and WebP are smaller for visual checks. |
+| `quality` | Lossy encoder quality from `0` to `1`; defaults to `0.92`. Ignored for PNG. |
+
+The result carries `seconds`, the reduced `beat` triple, `beatValue`, `width`, `height`, `format`, `mimeType`, `dataUrl`, `byteLength`, and `chartFingerprint`. The `dataUrl` is a standard `data:image/...;base64,...` URL.
+
+```js
+const frame = unwrap(await redux.preview.frame({ beat: [32, 0, 1], width: 960, height: 540 }));
+return {
+  beat: frame.beat,
+  seconds: frame.seconds,
+  bytes: frame.byteLength,
+  image: frame.dataUrl,
+};
+```
+
+The cell result is capped at 1,000,000 bytes, so a large PNG can fail the whole result. For visual checks prefer a smaller frame such as `640 × 360`, or use `jpeg`/`webp`. When the caller needs a full-size image or a saved file, use the `POST /api/cell/frame` HTTP route instead: it returns the encoded bytes directly and adds `X-Redux-Frame-Seconds`, `X-Redux-Frame-Beat`, `X-Redux-Frame-Width`, `X-Redux-Frame-Height`, `X-Redux-Frame-Format`, and `X-Redux-Chart-Fingerprint` headers.
 
 ## Transactions
 

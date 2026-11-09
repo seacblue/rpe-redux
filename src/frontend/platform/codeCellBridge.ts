@@ -20,8 +20,30 @@ import {
 import { getCodeCellGuide } from "../../core/edit/codecell/guide.ts";
 import { aiServiceOrigin } from "../../core/global/library/client.ts";
 import { isDesktop } from "../../core/platform/environment.ts";
+import { isRecord } from "../../core/utils/guards.ts";
 
 const RECONNECT_MS = 1_500;
+
+/**
+ * Keep a frame response readable in the activity pane without retaining its
+ * base64 payload. The HTTP route still receives the full response.
+ */
+function activityResponse(method: unknown, response: unknown): unknown {
+  if (method !== "cell.frame" || !isRecord(response) || !isRecord(response.value)) {
+    return response;
+  }
+  const dataUrl = response.value.dataUrl;
+  if (typeof dataUrl !== "string") {
+    return response;
+  }
+  return {
+    ...response,
+    value: {
+      ...response.value,
+      dataUrl: `[image data: ${dataUrl.length} characters]`,
+    },
+  };
+}
 
 /** Reads the sidecar's handshake token through the native file bridge. */
 async function readBridgeToken(origin: string): Promise<string | null> {
@@ -128,7 +150,7 @@ export function installCodeCellBridge(): () => void {
         revisions: null,
       };
     }
-    activity.finish(response);
+    activity.finish(activityResponse(method, response));
     // The request belongs to the bridge that delivered it; send the reply on
     // that socket even if the editor reconnects while the answer is in flight.
     if (current !== socket || current.readyState !== WebSocket.OPEN) {

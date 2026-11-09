@@ -73,6 +73,7 @@ test("a cell runs in the shared sandbox with the write profile", async () => {
     "document.read",
     "chart.read",
     "selection.read",
+    "preview.read",
     "chart.write",
     "library.read",
     "assets.write",
@@ -138,7 +139,12 @@ test("the read profile runs and denies the transaction handle lazily", async () 
   const result = await runtime.run({ source: "return 1;", profile: "read" });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.capabilities, ["document.read", "chart.read", "selection.read"]);
+  assert.deepEqual(result.capabilities, [
+    "document.read",
+    "chart.read",
+    "selection.read",
+    "preview.read",
+  ]);
   assert.deepEqual(capabilitiesValue, result.capabilities);
   assert.deepEqual(capture.input.manifest.capabilities, result.capabilities);
   assert.equal(transactionError?.code, "capabilityDenied");
@@ -502,7 +508,7 @@ test("disabled, stale, oversized, and failed cells return structured errors", as
   });
   assert.equal(stale.error.code, "stale_read");
   assert.match(stale.error.message, /chartFingerprint/);
-  assert.equal(stale.capabilities.length, 6);
+  assert.equal(stale.capabilities.length, 7);
 
   const oversized = await runtime.run({ source: "x".repeat(100_001) });
   assert.equal(oversized.error.code, "invalid_request");

@@ -7,6 +7,7 @@
  * while `surface` is relative to the preview canvas's top-left corner.
  */
 import { createLateBound } from "../../utils/lateBound.ts";
+import type { PreviewFrameImage, PreviewFrameSpec } from "./frame.ts";
 
 export type PreviewObjectKind = "note" | "hold" | "judgeLine";
 
@@ -102,6 +103,11 @@ export interface PreviewApiHost {
    * document is cleared or the live preview is hidden.
    */
   subscribe(listener: (snapshot: PreviewSnapshot | null) => void): () => void;
+  /**
+   * Render one chart frame into an encoded image without changing the live
+   * preview or playback position. The request is already normalized.
+   */
+  frame(request: PreviewFrameSpec): Promise<PreviewFrameImage>;
 }
 
 const previewApiBinding = createLateBound<PreviewApiHost>();

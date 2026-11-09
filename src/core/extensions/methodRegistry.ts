@@ -279,6 +279,7 @@ const HANDLE_METHODS = {
   preview: [
     ["availability", "preview.read", "read", false],
     ["snapshot", "preview.read", "read", false],
+    ["frame", "preview.read", "read", false],
     ["subscribe", "preview.read", "read", false],
   ],
   layout: [

@@ -179,9 +179,9 @@ Extensions remain client-local. A manifest may classify an Extension as `local`,
 
 ### Code Cells
 
-Code Cells are the product AI entry point. They are available only over `GET /api/cell/guide` and `POST /api/cell/run`. The canonical guide is `sdk/llm-guide.md`; the HTTP route serves the same text the application binds at startup. The service also exposes a private authenticated editor bridge at `/api/cell/bridge` and its handshake at `/api/cell/endpoint`; these are internal implementation details, not client-facing tool protocols. All Code Cell routes require both the listener and the peer to be loopback.
+Code Cells are the product AI entry point. They are available only over `GET /api/cell/guide`, `POST /api/cell/run`, and `POST /api/cell/frame`. The canonical guide is `sdk/llm-guide.md`; the HTTP routes serve the same text and frame contract the application binds at startup. The frame route returns a rendered chart image selected by chart seconds or beat, without seeking playback or changing the document. The service also exposes a private authenticated editor bridge at `/api/cell/bridge` and its handshake at `/api/cell/endpoint`; these are internal implementation details, not client-facing tool protocols. All Code Cell routes require both the listener and the peer to be loopback.
 
-An external cell runs with the `write` profile by default: it reads the open document, can apply chart transactions, and can add or remove library assets. It cannot create, open, save, close, or delete a document or project. The `read` profile is read-only. The in-app AI activity pane is a read-only, session-only log of Code Cell requests and responses; the AI client remains the only caller.
+An external cell runs with the `write` profile by default: it reads the open document, can apply chart transactions, and can add or remove library assets. It cannot create, open, save, close, or delete a document or project. The `read` profile is read-only. Both profiles hold `preview.read`, so a cell can inspect the painted frame or render one through `redux.preview.frame`. The in-app AI activity pane is a read-only, session-only log of Code Cell requests and responses; the AI client remains the only caller.
 
 ### Updates
 

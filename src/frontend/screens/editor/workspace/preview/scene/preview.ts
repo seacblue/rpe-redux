@@ -159,6 +159,12 @@ export class Preview {
   declare gameUiCornerCompression?: boolean;
   /** Override the workspace noise switch for a dedicated rendering surface. */
   detailedNoise?: boolean;
+  /**
+   * Fixed CSS-pixel frame size for a detached renderer, or null to follow the
+   * canvas layout. Offscreen captures set this because a detached canvas has no
+   * layout rectangle.
+   */
+  frameMeasurement: { width: number; height: number } | null = null;
   declare pickPreviewLines?: boolean;
   declare lineNumbers?: boolean;
   declare lineArrows?: boolean;
@@ -871,9 +877,10 @@ export class Preview {
     const selectionChanged = !sameLineSelection(this.selectedLines, selectedLines);
     // One cached layout read feeds both the reuse check and canvas preparation.
     const measurement =
-      this.display.kind === "workspace-underlay"
+      this.frameMeasurement ??
+      (this.display.kind === "workspace-underlay"
         ? { width: this.canvas.clientWidth, height: this.canvas.clientHeight }
-        : measureCanvas(this.canvas);
+        : measureCanvas(this.canvas));
     if (
       this.frameReusable(
         chart,

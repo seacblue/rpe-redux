@@ -18,6 +18,10 @@ import type {
   HitTestNoteGeometry,
   HitTestPreviewGeometry,
 } from "../../../../../../core/edit/hitTest/api.ts";
+import type {
+  PreviewFrameImage,
+  PreviewFrameSpec,
+} from "../../../../../../core/edit/preview/frame.ts";
 import type { Preview } from "../../preview/scene/preview.ts";
 
 /** A point in surface pixels. */
@@ -177,7 +181,13 @@ function buildSnapshot(preview: Preview, geometry: HitTestPreviewGeometry): Prev
 }
 
 /** Creates the host behind `redux.preview` for one mounted preview renderer. */
-export function createPreviewApiHost({ preview }: { preview: Preview }): PreviewApiHost {
+export function createPreviewApiHost({
+  preview,
+  captureFrame,
+}: {
+  preview: Preview;
+  captureFrame: (request: PreviewFrameSpec) => Promise<PreviewFrameImage>;
+}): PreviewApiHost {
   return {
     snapshot() {
       if (!editorRealtimePreviewEnabled.get()) {
@@ -206,6 +216,9 @@ export function createPreviewApiHost({ preview }: { preview: Preview }): Preview
         stopGeometry();
         stopVisibility();
       };
+    },
+    frame(request) {
+      return captureFrame(request);
     },
   };
 }

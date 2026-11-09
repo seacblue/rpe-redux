@@ -109,6 +109,7 @@ import { createHitTestPicker, createPreviewGeometryReader } from "../bindings/hi
 import { createPreviewApiHost } from "../bindings/previewBindings.ts";
 import { createLayoutApiHost } from "../bindings/layoutBindings.ts";
 import { bindPreviewSelection } from "../../preview/interaction/previewSelection.ts";
+import { createPreviewFrameCapture } from "../../preview/frame/frameCapture.ts";
 import { createEditorRuntime, type EditorRuntime } from "./EditorRuntime.tsx";
 import { createEditorUiState } from "./editorUiState.ts";
 import type { EditorSessionRuntime } from "../providers/SessionProvider.tsx";
@@ -235,8 +236,23 @@ export function createEditorAssembly(
     lineInfo,
     timelineActivity,
     images,
+    skin,
     timelineThumbnail,
   } = previewRuntime;
+  // AI frame requests sample their own detached preview so they never seek the
+  // live transport or disturb the workspace underlay.
+  const frameCapture = createPreviewFrameCapture({
+    preview: realtimePreview,
+    skin,
+    images,
+    chart: () => session.current.chart,
+    tempo: tempo.get,
+    duration: () => audio.duration,
+  });
+  scope.add(frameCapture.dispose);
+  /** Renders one validated chart frame for the API and the HTTP bridge. */
+  const captureFrame = (request: Parameters<typeof frameCapture.capture>[0]) =>
+    frameCapture.capture(request);
 
   let timelineMarkerController: TimelineMarkers | null = null;
   /** Edits one event of the given type at the current beat by default. */
@@ -289,6 +305,7 @@ export function createEditorAssembly(
     connectPreviewApi(
       createPreviewApiHost({
         preview: realtimePreview,
+        captureFrame,
       }),
     ),
   );
@@ -695,6 +712,7 @@ export function createEditorAssembly(
         images: previewRuntime.images,
         lineInfoScene: previewRuntime.lineInfoScene,
         realtimePreview: previewRuntime.realtimePreview,
+        captureFrame,
       },
       timeline: {
         audioAnalysis: timelineRuntime.audioAnalysis,
