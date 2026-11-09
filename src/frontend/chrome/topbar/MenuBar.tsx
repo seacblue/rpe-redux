@@ -5,10 +5,10 @@
  * section shows its command list on hover after a short delay or on click.
  * Moving the pointer away collapses the open section after a short grace
  * period; an outside click, Escape, or a command dismisses it too. Developer
- * commands stay out of this surface
- * and use their shortcuts and the small developer overlay. Commands still come
- * from the toolbar registry, so labels, availability, shortcuts, and actions
- * stay shared with the toolbar and shortcut editor.
+ * commands stay out of this surface and use their shortcuts; the developer
+ * settings page owns the environment summary and the performance monitor.
+ * Commands still come from the toolbar registry, so labels, availability,
+ * shortcuts, and actions stay shared with the toolbar and shortcut editor.
  */
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "../../../i18n/react.ts";

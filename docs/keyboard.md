@@ -110,21 +110,14 @@ New chart, open, and settings work on the chart library page before a chart is o
 
 ## Developer mode
 
-When the desktop host enables developer mode, or after the About logo is activated ten times, developer actions stay out of the application menu and use their shortcuts and the small overlay:
+When the desktop host enables developer mode, or after the About logo is activated ten times, the developer settings page and its actions become available. Developer commands stay out of the application menu:
 
-| Action                      | Default        |
-| --------------------------- | -------------- |
-| Toggle DevTools             | `F12`          |
-| Preview probe               | `Ctrl+Shift+P` |
-| Copy selection              | `Ctrl+Shift+A` |
-| Copy developer report       | `Ctrl+Shift+X` |
-| Performance monitor         | `F3`           |
-| Detach performance monitor  | —              |
-| Show / copy diagnostics     | —              |
-| Open app data folder / logs | —              |
-| Reload interface            | —              |
+| Action              | Default |
+| ------------------- | ------- |
+| Toggle DevTools     | `F12`   |
+| Performance monitor | `F3`    |
 
-The performance monitor's `F3` binding is available in ordinary builds; the other developer actions and the overlay follow the host's developer policy or the About gesture. DevTools and the preview probe remain subject to that policy. In probe mode, `Alt+wheel` cycles the hit hierarchy and a click copies the active hit.
+The performance monitor's `F3` binding is available in ordinary builds. DevTools and the developer settings page follow the host's developer policy or the About gesture.
 
 ## Scope rules
 

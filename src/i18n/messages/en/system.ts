@@ -68,6 +68,7 @@ export default {
   // Application-data backup.
   "system.backup.title": "Protect your local data",
   "system.backup.fileType": "RPE Redux application backup",
+  "system.diagnostics.fileType": "RPE Redux diagnostic bundle",
   "system.backup.description":
     "The local database or chart file could not be saved. Export an application-data backup before checking the disk or repairing the database.",
   "system.backup.exportAction": "Export backup",

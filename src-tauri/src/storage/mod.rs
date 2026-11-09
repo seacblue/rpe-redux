@@ -128,6 +128,12 @@ pub fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
     open_directory(&app, path)
 }
 
+/// Return the durable application-data directory for the developer summary.
+#[tauri::command]
+pub fn app_data_dir(app: AppHandle) -> Result<String, String> {
+    Ok(data_dir(&app)?.to_string_lossy().into_owned())
+}
+
 /// Open a directory in the host file manager.
 fn open_directory(app: &AppHandle, path: PathBuf) -> Result<(), String> {
     // Explorer opens a known directory directly; other hosts use the platform

@@ -515,7 +515,8 @@ export default {
   "settings.search.helpKeywords":
     "help update survey changelog release onboarding guide walkthrough",
   "settings.search.aboutKeywords": "about version author rights licence license credits",
-  "settings.search.developerKeywords": "developer diagnostics performance HUD",
+  "settings.search.developerKeywords":
+    "developer environment runtime version channel system GPU path performance HUD note borders diagnostic bundle logs",
   "settings.search.shortcutsKeywords": "shortcut key binding hotkey keyboard mouse wheel",
 
   "settings.action.close": "Close settings",
@@ -646,9 +647,44 @@ export default {
   "settings.field.docs.openFailed": "Could not open the extension development docs: {message}",
   "settings.field.onboarding-guide.label": "Open this panel's tutorial",
   "settings.help.developer.title": "Developer options",
+  "settings.help.developer.environment.title": "Runtime environment",
+  "settings.help.developer.environment.version": "Version",
+  "settings.help.developer.environment.channel": "Channel",
+  "settings.help.developer.environment.channel.stable": "Stable",
+  "settings.help.developer.environment.channel.beta": "Beta",
+  "settings.help.developer.environment.channel.development": "Development",
+  "settings.help.developer.environment.tauri": "Tauri",
+  "settings.help.developer.environment.webview": "WebView2",
+  "settings.help.developer.environment.chromium": "Chromium",
+  "settings.help.developer.environment.system": "System",
+  "settings.help.developer.environment.gpu": "GPU / WebGL",
+  "settings.help.developer.environment.theme": "Theme",
+  "settings.help.developer.environment.language": "Language",
+  "settings.help.developer.environment.dataDirectory": "Data directory",
+  "settings.help.developer.environment.developerMode": "Developer mode",
+  "settings.help.developer.environment.mode.host": "Desktop developer mode",
+  "settings.help.developer.environment.mode.browser": "Browser development mode",
+  "settings.help.developer.environment.mode.reveal": "About-page reveal",
+  "settings.help.developer.environment.mode.standard": "Standard build",
+  "settings.help.developer.environment.notDetected": "Not detected",
+  "settings.help.developer.environment.noBrowserData": "No data directory in a browser build",
+  "settings.help.developer.copySummary": "Copy summary",
+  "settings.help.developer.copySucceeded": "Copied to the clipboard",
+  "settings.help.developer.copyFailed": "Copy failed; check clipboard permission",
   "settings.help.developer.performanceHud": "Enable performance monitor",
   "settings.help.developer.performanceHudHint":
-    "Show FPS, draw time, memory and render-load graphs. F3 toggles it.",
+    "Show FPS, draw time, memory and render-load graphs.",
+  "settings.help.developer.noteBorders": "Enable note borders",
+  "settings.help.developer.noteBordersHint":
+    "Draw a red border around every preview note; a Hold shows head, body, and tail borders. Click a border to turn it green and show its parameters.",
+  "settings.help.developer.exportBundle": "Export diagnostic bundle",
+  "settings.help.developer.exportBundleHint":
+    "Package the environment summary, redacted diagnostics snapshot, recent logs, extension list, and current chart summary into one zip.",
+  "settings.help.developer.exportBundleBusy": "Exporting…",
+  "settings.help.developer.exportBundleSuccess": "Diagnostic bundle exported to {path}.",
+  "settings.help.developer.exportBundleFailed": "Could not export the diagnostic bundle: {message}",
+  "settings.help.developer.exportBundleDesktopOnly":
+    "The diagnostic bundle can only be exported from the desktop app.",
 
   // ------------------------------------------------------- the chart library
 

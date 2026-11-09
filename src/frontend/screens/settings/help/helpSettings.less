@@ -139,23 +139,81 @@
   margin-top: 0;
 }
 
-.redux-developer-actions {
+.redux-developer-environment {
+  width: 100%;
+}
+
+.redux-developer-environment > h4 {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-3);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.redux-developer-environment-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.redux-app-root .redux-developer-actions .redux-button {
-  justify-content: flex-start;
   width: 100%;
-  min-width: 0;
+  margin: 0;
+  padding: 0;
 }
 
-.redux-developer-actions .redux-button-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+// Environment rows keep their natural height. They are deliberately not a
+// shrinkable flex item: a long GPU or path value wraps instead of collapsing
+// the row into its neighbour.
+.redux-developer-environment-row {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(112px, max-content) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.redux-developer-environment-row:last-child {
+  border-bottom: 0;
+}
+
+.redux-developer-environment-row dt {
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+
+.redux-developer-environment-row dd {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--type-caption);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.redux-developer-environment-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-3) 0;
+}
+
+// The clipboard fallback lives off the visual flow but stays selectable.
+.redux-developer-copy-sink {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.redux-developer-divider {
+  margin: var(--space-5) 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
 }

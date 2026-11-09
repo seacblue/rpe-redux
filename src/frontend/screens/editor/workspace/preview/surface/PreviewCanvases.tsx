@@ -6,6 +6,13 @@
 import { useSyncExternalStore } from "react";
 import { t } from "../../../../../../i18n/index.ts";
 import { editorRealtimePreviewEnabled } from "../../../../../../core/edit/state/publishedValues.ts";
+import { developerMode } from "../../../../../../core/platform/desktop/developer.ts";
+import { developerNoteBorders } from "../../../../../../core/state/developerNoteBorders.ts";
+import {
+  developerReveal,
+  isDeveloperRevealed,
+} from "../../../../../../core/state/developerReveal.ts";
+import { PreviewNoteBorders } from "../debug/PreviewNoteBorders.tsx";
 import { usePreviewRuntime } from "../../runtime/providers/PreviewProvider.tsx";
 import { usePreviewSurface } from "./PreviewDomSurface.tsx";
 import { curvePreviewMode } from "../../../curveEvents/mode.ts";
@@ -14,6 +21,19 @@ import {
   getEditorRegionSnapshot,
   subscribeToEditorRegions,
 } from "../../runtime/commands/viewControls.ts";
+
+/** Subscribe to both gates that make developer overlays available. */
+function subscribeDeveloperAvailability(listener: () => void): () => void {
+  const disposeMode = developerMode.subscribe(listener);
+  const disposeReveal = developerReveal.subscribe(listener);
+  return () => {
+    disposeMode();
+    disposeReveal();
+  };
+}
+
+/** Whether the host or the About gesture has exposed developer surfaces. */
+const developerAvailableNow = (): boolean => developerMode.get() || isDeveloperRevealed();
 
 /**
  * The preview underlay's canvases, kept in one stacking context.
@@ -48,6 +68,16 @@ export function PreviewCanvases() {
     getEditorRegionSnapshot,
     getEditorRegionSnapshot,
   );
+  const noteBorders = useSyncExternalStore(
+    developerNoteBorders.subscribe,
+    developerNoteBorders.get,
+    developerNoteBorders.get,
+  );
+  const developerAvailable = useSyncExternalStore(
+    subscribeDeveloperAvailability,
+    developerAvailableNow,
+    developerAvailableNow,
+  );
   // The preview is the workspace's fallback surface when neither authoring
   // region is shown, even if its own switch is off.
   const fallback = !regions.showNotes && !regions.showEvents;
@@ -69,6 +99,7 @@ export function PreviewCanvases() {
           surface as the dedicated preview and recording paths. */}
       <canvas ref={shader} className="preview-shader-layer" aria-hidden="true" />
       <canvas ref={overlay} className="preview-overlay-layer" aria-hidden="true" />
+      {developerAvailable && noteBorders && <PreviewNoteBorders />}
       <div className="free-camera-frame-clip" aria-hidden="true">
         <div className="free-camera-frame" />
       </div>

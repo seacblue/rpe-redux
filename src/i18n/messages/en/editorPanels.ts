@@ -73,6 +73,17 @@ export default {
   "editorPanels.inspector.eventTools.skipped": "; skipped {skipped} unsupported events",
 
   "editorPanels.preview.shader.unavailable": "WebGL context unavailable",
+  "editorPanels.preview.debug.note": "Note",
+  "editorPanels.preview.debug.hold": "Hold",
+  "editorPanels.preview.debug.time": "Time",
+  "editorPanels.preview.debug.type": "Type",
+  "editorPanels.preview.debug.speed": "Speed",
+  "editorPanels.preview.debug.size": "Size",
+  "editorPanels.preview.debug.yOffset": "Y offset",
+  "editorPanels.preview.debug.above": "Above",
+  "editorPanels.preview.debug.fake": "Fake",
+  "editorPanels.preview.debug.yes": "Yes",
+  "editorPanels.preview.debug.no": "No",
 
   "editorPanels.multiLine.lines": "Judge lines",
   "editorPanels.multiLine.linesPlaceholder": "For example 0-3,5",

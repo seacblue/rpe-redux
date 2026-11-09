@@ -55,6 +55,7 @@ export default {
 
   "system.backup.title": "保护本地数据",
   "system.backup.fileType": "RPE Redux 应用数据备份",
+  "system.diagnostics.fileType": "RPE Redux 诊断包",
   "system.backup.description":
     "本地数据库或谱面文件保存失败。建议先导出应用数据备份，再检查磁盘空间或修复数据库。",
   "system.backup.exportAction": "导出备份",

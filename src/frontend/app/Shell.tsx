@@ -19,7 +19,6 @@ import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../core/edit/state/visibility.ts";
-import { DeveloperToolsOverlay } from "../chrome/topbar/developer/DeveloperToolsOverlay.tsx";
 import { PerformanceHud } from "../overlays/performance/PerformanceHud.tsx";
 import { InputOverlays } from "../screens/editor/workspace/stage/inputOverlays/InputOverlays.tsx";
 import { CoverBackdrop } from "./CoverBackdrop.tsx";
@@ -72,7 +71,6 @@ export const Shell = memo(function Shell() {
         <StatusBar hidden={editorVisibility.atHome} />
       </div>
       <TimelineMenu />
-      <DeveloperToolsOverlay />
       <InputOverlays />
       <PerformanceHud />
     </>

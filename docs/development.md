@@ -203,9 +203,12 @@ React owns layout and low-frequency state. Frame timestamps, pointer positions, 
 
 ## Debugging
 
-- **DevTools exist only in debug builds.** `npm run build -- --debug` produces an executable with F12 DevTools, element inspection, and the preview probe; release builds answer developer actions with `unavailable:devtools`.
+- **DevTools exist only in debug builds.** `npm run build -- --debug` produces an executable with F12 DevTools and element inspection; release builds answer DevTools with `unavailable:devtools`.
 - **Isolated profiles and CDP.** The debug executable accepts `--user-data-dir=<directory>` for a throwaway profile and `--remote-debugging-port=<port>` for the WebView2 debugging protocol. The smoke harness uses both; point a browser or CDP client at the printed port to inspect the live window.
-- **Performance monitor.** F3 opens it in ordinary builds. The rest of the developer overlay needs developer mode: the host flag, or ten activations of the About logo.
+- **Performance monitor.** F3 opens it in ordinary builds. The developer settings page needs developer mode: the host flag, or ten activations of the About logo.
+- **Environment summary.** The developer settings page lists the version, channel, Tauri, WebView2, Chromium, system, GPU, theme, language, data directory, and developer-mode source. Its copy button produces the same list as plain text for a bug report.
+- **Note borders.** Enable note borders in Settings → Developer to draw red rectangles around preview notes; Holds show head, body, and tail rectangles. Click a border to turn it green and show its authored parameters.
+- **Diagnostic bundle.** The developer settings page exports one zip with the environment summary, redacted diagnostics snapshot, recent logs, extension inventory, and current chart summary. Recent logs are bounded tails read by the desktop host.
 - **Logs and data.** Application logs live in `user-data/logs/`; **Settings → General → Files → Open app data folder** reveals them with the SQLite library.
 
 ## Documentation

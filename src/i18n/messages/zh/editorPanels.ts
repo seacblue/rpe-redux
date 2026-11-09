@@ -64,6 +64,17 @@ export default {
   "editorPanels.inspector.eventTools.skipped": "；跳过 {skipped} 个不适用的事件",
 
   "editorPanels.preview.shader.unavailable": "WebGL 上下文不可用",
+  "editorPanels.preview.debug.note": "音符",
+  "editorPanels.preview.debug.hold": "Hold",
+  "editorPanels.preview.debug.time": "时间",
+  "editorPanels.preview.debug.type": "类型",
+  "editorPanels.preview.debug.speed": "速度",
+  "editorPanels.preview.debug.size": "大小",
+  "editorPanels.preview.debug.yOffset": "Y 偏移",
+  "editorPanels.preview.debug.above": "方向",
+  "editorPanels.preview.debug.fake": "Fake",
+  "editorPanels.preview.debug.yes": "是",
+  "editorPanels.preview.debug.no": "否",
 
   "editorPanels.multiLine.lines": "判定线",
   "editorPanels.multiLine.linesPlaceholder": "例如 0-3,5",
