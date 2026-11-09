@@ -637,7 +637,7 @@ export default {
   "settings.updates.updatedBanner": "更新完成",
   "settings.updates.date": "发布于 {date}",
   "settings.group.timingDetection": "新建谱面时序",
-  "settings.field.timing-detection-on-new-chart.label": "新建谱面时自动检测 BPM 与 Offset",
+  "settings.field.timing-detection-on-new-chart.label": "新建谱面时自动检测 BPM 与偏移值",
   "settings.option.timing-detection-on-new-chart.ask": "每次询问",
   "settings.option.timing-detection-on-new-chart.always": "总是检测",
   "settings.option.timing-detection-on-new-chart.never": "从不检测",

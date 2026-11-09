@@ -6,6 +6,7 @@ import {
   applyDetectedTiming,
   applyTimingLabelKey,
   parseTimingDraft,
+  scaleMeasuredBpm,
   shiftOffsetByBeats,
 } from "../../../frontend/screens/editor/workspace/timingDetection/timingDetectionModel.ts";
 
@@ -16,6 +17,15 @@ test("invalid or empty fields do not produce a draft", () => {
   assert.equal(parseTimingDraft("-120", "0"), null);
   assert.equal(parseTimingDraft("120", "not a number"), null);
   assert.deepEqual(parseTimingDraft("174.02", "-12.5"), { bpm: 174.02, offsetMs: -12.5 });
+});
+
+test("tempo scaling keeps the detector's precision", () => {
+  assert.equal(scaleMeasuredBpm(174.02, 0.5), 87.01);
+  assert.equal(scaleMeasuredBpm(174.02, 2), 348.04);
+  assert.equal(scaleMeasuredBpm(123.457, 0.5), 61.729);
+  assert.equal(scaleMeasuredBpm(0, 2), null);
+  assert.equal(scaleMeasuredBpm(Number.NaN, 2), null);
+  assert.equal(scaleMeasuredBpm(120, 0), null);
 });
 
 test("one beat of offset follows the current BPM", () => {

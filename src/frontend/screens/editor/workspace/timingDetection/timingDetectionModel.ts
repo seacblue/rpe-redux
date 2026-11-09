@@ -2,10 +2,10 @@
  * Pure view and apply rules for the fixed-BPM timing detector.
  *
  * The detector reports one measured BPM/offset pair, or no pair at all. This
- * module formats that answer, parses the two editable fields, shifts the offset
- * by whole beats, and builds the fixed timing chart the host commits. Keeping
- * those rules here lets the React surfaces stay thin and makes the behaviour
- * testable without a DOM.
+ * module formats that answer, parses the two editable fields, scales the tempo,
+ * shifts the offset by whole beats, and builds the fixed timing chart the host
+ * commits. Keeping those rules here lets the React surfaces stay thin and makes
+ * the behaviour testable without a DOM.
  */
 import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import { chartWithDetectedTiming } from "../../../../../core/global/chart/editing/drafts.ts";
@@ -32,6 +32,19 @@ export function parseTimingDraft(bpm: string, offset: string): TimingDraft | nul
     return null;
   }
   return { bpm: nextBpm, offsetMs: nextOffset };
+}
+
+/**
+ * Scale a measured BPM by a positive factor such as 2 or 0.5.
+ *
+ * The result keeps the detector's three-decimal precision. Returns `null` when
+ * either input cannot produce a usable positive tempo.
+ */
+export function scaleMeasuredBpm(bpm: number, factor: number): number | null {
+  if (!Number.isFinite(bpm) || !Number.isFinite(factor) || !(bpm > 0) || !(factor > 0)) {
+    return null;
+  }
+  return roundMeasuredTiming(bpm * factor);
 }
 
 /**
