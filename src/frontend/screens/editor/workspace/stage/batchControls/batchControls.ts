@@ -30,6 +30,7 @@ import {
   selectionScaleAnchor,
 } from "../../../../../../core/edit/selection/control.ts";
 import { commitSelectionEdit } from "../../../../../../core/edit/selection/edits.ts";
+import { isSystemCancelKey } from "../../../../../../core/shortcuts/keyMatching.ts";
 import { t } from "../../../../../../i18n/index.ts";
 
 export interface BatchControlPresentation {
@@ -263,6 +264,8 @@ export class BatchControls {
       },
       true,
     );
+    // Escape and the 1/2 scale anchors belong to the live drag, not the
+    // shortcut table: they only exist while a pointer gesture owns the stage.
     scope.listen(
       window,
       "keydown",
@@ -272,7 +275,7 @@ export class BatchControls {
         if (!active || !key) {
           return;
         }
-        if (key === "Escape") {
+        if (isSystemCancelKey(event as KeyboardEvent)) {
           event.preventDefault();
           event.stopImmediatePropagation();
           this.cancel(true);

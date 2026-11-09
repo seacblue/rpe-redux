@@ -148,7 +148,7 @@ function loadPickedCharts(bound: DocumentServiceBindings, files: readonly File[]
         title: t("editor.app.dialog.chooseChart"),
         description: t("editor.app.dialog.multipleCharts"),
         entries: candidates,
-        label: (candidate) => `${candidate.name} · ${candidate.chart.META.name ?? ""}`,
+        label: (candidate) => `${candidate.name}, ${candidate.chart.META.name ?? ""}`,
       });
       if (chosen) {
         await bound.loadCandidate(chosen, assets).catch(bound.reportError);

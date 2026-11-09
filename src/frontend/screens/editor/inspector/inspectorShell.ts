@@ -16,7 +16,7 @@ import { openPane } from "./controller.ts";
 import { getEditorVisibility } from "../../../../core/edit/state/visibility.ts";
 import type { ValueCell } from "../../../../core/state/values.ts";
 
-/** The action that opens the pane, and the row and tooltip it shows. */
+/** The action that opens the pane, and the row it shows. */
 export interface InspectorToolDefinition {
   /** The action id, kept stable: contexts, shortcuts and suites address it. */
   id: string;
@@ -26,7 +26,6 @@ export interface InspectorToolDefinition {
   order: number;
   label: MessageKey;
   icon: IconName;
-  description: MessageKey;
   /** Start a new visual group in the tools list without changing the action id. */
   separatorBefore?: boolean;
 }
@@ -75,8 +74,7 @@ export function registerInspectorTool(definition: InspectorToolDefinition): () =
     order: definition.order,
     label: definition.label,
     icon: definition.icon,
-    tooltip: definition.description,
-    description: definition.description,
+    tooltip: definition.label,
     separatorBefore: definition.separatorBefore,
     // The panel's primary control is the sidebar button, so no toolbar row draws it.
     toolbar: false,

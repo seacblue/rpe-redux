@@ -22,10 +22,11 @@ interface EditorActionSpec {
     | "edit.delete"
     | "edit.selectAll";
   run(): void;
-  /** Message key: the toolbar, its tooltips and the shortcut editor resolve it. */
+  /** The visible action label. */
   label: MessageKey;
+  /** Message key for the tooltip and shortcut editor. */
+  tooltip: MessageKey;
   icon: ToolbarAction["icon"];
-  description: MessageKey;
   separatorBefore?: boolean;
   destructive?: boolean;
   toolbar?: boolean;
@@ -45,7 +46,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => editing.undo(),
     label: "common.action.undo",
     icon: "undo",
-    description: "chrome.menu.edit.undoHint",
+    tooltip: "chrome.menu.edit.undoHint",
   },
   {
     id: "edit.redo",
@@ -53,7 +54,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => editing.redo(),
     label: "common.action.redo",
     icon: "redo",
-    description: "chrome.menu.edit.redoHint",
+    tooltip: "chrome.menu.edit.redoHint",
   },
   {
     id: "edit.copy",
@@ -61,7 +62,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => editing.copy(),
     label: "common.action.copy",
     icon: "copy",
-    description: "shortcuts.editor.copy",
+    tooltip: "shortcuts.editor.copy",
     separatorBefore: true,
     toolbar: false,
   },
@@ -71,7 +72,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => editing.cut(),
     label: "shortcuts.editor.cut",
     icon: "cut",
-    description: "shortcuts.editor.cut",
+    tooltip: "shortcuts.editor.cut",
     toolbar: false,
   },
   {
@@ -80,7 +81,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => editing.paste(),
     label: "common.action.paste",
     icon: "paste",
-    description: "chrome.menu.edit.pasteHint",
+    tooltip: "chrome.menu.edit.pasteHint",
     toolbar: false,
   },
   {
@@ -89,7 +90,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => editing.remove(),
     label: "common.action.delete",
     icon: "trash",
-    description: "shortcuts.editor.delete",
+    tooltip: "shortcuts.editor.delete",
     separatorBefore: true,
     destructive: true,
     toolbar: false,
@@ -100,7 +101,7 @@ const EDITOR_ACTIONS: EditorActionSpec[] = [
     run: () => undefined,
     label: "shortcuts.editor.selectAll",
     icon: "select",
-    description: "shortcuts.editor.selectAll",
+    tooltip: "shortcuts.editor.selectAll",
     toolbar: false,
   },
 ];
@@ -114,8 +115,7 @@ export function registerEditActions() {
       order: 200 + order,
       label: action.label,
       icon: action.icon,
-      tooltip: action.description,
-      description: action.description,
+      tooltip: action.tooltip,
       // Undo and redo are top-bar controls. Paste remains a shared context
       // action.
       toolbar: action.toolbar ?? true,

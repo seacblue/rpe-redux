@@ -21,7 +21,6 @@ const disposeTool = registerInspectorTool({
   label: "workspace.history.title",
   icon: "clock",
   order: 290,
-  description: "workspace.history.description",
 });
 const disposeSidebar = registerInspectorSidebar({
   id: "history",

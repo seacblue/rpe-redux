@@ -367,13 +367,13 @@ export class LineSwitcher {
       );
       const defaultName =
         String(line?.Name ?? "").trim() === "Untitled" || isDefaultLineName(line, index);
-      const lineGroup = isDefaultLineGroup(chart, line) ? "" : ` · ${lineGroupName(chart, line)}`;
+      const lineGroup = isDefaultLineGroup(chart, line) ? "" : `, ${lineGroupName(chart, line)}`;
       cards.set(index, {
         index,
         selected: index === selected,
         titleNumber: `${index === selected ? "▶ " : ""}${index}`,
         lineGroup,
-        name: defaultName ? "" : ` · ${String(line.Name).trim()}`,
+        name: defaultName ? "" : `, ${String(line.Name).trim()}`,
         info: t("editorPanels.lineSwitcher.remaining", {
           notes: sample?.notesLeft ?? 0,
           events: sample?.eventsLeft ?? 0,

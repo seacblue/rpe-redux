@@ -1,6 +1,6 @@
 # AGENTS.md
 
-RPE Redux is a Windows desktop chart editor. The product UI is React and TypeScript in `src/`, hosted by Tauri in `src-tauri/`, with a local Go/SQLite service in `src/backend/`. `npm run desktop` is the supported product entry point.
+RPE Redux is a Windows desktop chart editor. The product UI is React and TypeScript in `src/`, hosted by Tauri in `src-tauri/`, with a local Go/SQLite service in `src/backend/`. `npm run dev` starts the Go service and Vite for browser development with hot reload; `npm run dev:desktop` opens the Tauri window.
 
 ## Read first
 

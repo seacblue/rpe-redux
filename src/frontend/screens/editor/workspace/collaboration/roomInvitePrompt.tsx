@@ -64,7 +64,6 @@ export function requestRoomInviteConfirmation(preview: RoomInvitePreview | null)
     };
     presentModal(id, {
       label: t("workspace.collaboration.joinInviteTitle"),
-      description: t("workspace.collaboration.joinInviteDescription"),
       className: "redux-prompt-dialog collab-invite-dialog",
       role: "alertdialog",
       priority: MODAL_PRIORITY.consent,

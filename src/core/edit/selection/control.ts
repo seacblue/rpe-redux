@@ -249,16 +249,6 @@ export function clearSelection(session: EditorSession): boolean {
  */
 export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
   {
-    id: "selection.clear",
-    category: "editor.selection",
-    title: "shortcuts.editor.clearSelection",
-    scope: "editor",
-    defaults: [{ key: "ESCAPE" }],
-    shared: true,
-    enabledFor: (context) =>
-      context.hasSelection && context.samplingActive !== true && context.curveMode !== true,
-  },
-  {
     id: "edit.selectAll",
     category: "editor.editing",
     title: "shortcuts.editor.selectAll",

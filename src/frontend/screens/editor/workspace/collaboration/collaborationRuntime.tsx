@@ -62,6 +62,7 @@ import {
   chartChangesMayAffectAssets,
 } from "../../../../../core/collaboration/assets.ts";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
+import { getRuntimePorts } from "../../../../../core/platform/runtimePorts.ts";
 import { BUILD_APP_VERSION } from "../../../../../core/platform/buildInfo.ts";
 import { changeLockKeys } from "../../../../../core/collaboration/changes.ts";
 import { sha256Hex } from "../../../../../core/collaboration/digest.ts";
@@ -110,7 +111,7 @@ export interface CollaborationSettings {
 }
 
 const DEFAULT_SETTINGS: CollaborationSettings = Object.freeze({
-  serverUrl: "ws://127.0.0.1:47830",
+  serverUrl: `ws://127.0.0.1:${getRuntimePorts().collabPort}`,
   displayName: "",
   color: "#77b7ff",
   hostMode: "tunnel",

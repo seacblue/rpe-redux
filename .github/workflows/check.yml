@@ -130,7 +130,7 @@ jobs:
         run: npm ci
 
       - name: Prepare Tauri assets
-        run: npm run docs:build && npm run build:web
+        run: npm run build:docs && npm run build:web
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

@@ -15,7 +15,7 @@
  * drift from the catalog.
  *
  * Usage:
- *   npm run icons:build
+ *   npm run build:icons
  */
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

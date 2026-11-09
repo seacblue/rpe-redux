@@ -5,6 +5,7 @@
  * reference the settings value keeps.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { isDesktop } from "../../../core/platform/environment.ts";
 
 /** Persist a validated image outside chart and library storage. */
 export async function saveCustomBackground(name: string, bytes: Uint8Array): Promise<string> {
@@ -21,6 +22,9 @@ export function deleteCustomBackground(reference: string): Promise<void> {
 
 /** Remove every saved background except the one still referenced by settings. */
 export function cleanupCustomBackgrounds(activeReference: string): Promise<void> {
+  if (!isDesktop()) {
+    return Promise.resolve();
+  }
   return invoke<void>("cleanup_custom_backgrounds", { activeReference });
 }
 

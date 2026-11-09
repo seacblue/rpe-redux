@@ -23,7 +23,7 @@ import { drawHitEffects } from "../drawing/previewHitEffects.ts";
 
 import { drawLinePasses } from "../drawing/previewLines.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
-import { ShaderPipeline } from "../render/shaderPipeline.ts";
+import { ShaderPipeline, type ShaderProgramSource } from "../render/shaderPipeline.ts";
 import { NoteBatch } from "../../../canvas/noteBatch.ts";
 import { PreviewBackground, type TextureImage } from "../render/background.ts";
 import { NoiseAreaRenderer } from "../render/noiseAreaRenderer.ts";
@@ -182,6 +182,9 @@ export class Preview {
   private readonly visibleNoteBuckets: NoteEntry[][] = [];
   private readonly visibleHoldBuckets: NoteEntry[][] = [];
   private readonly sampledStates: SampledLineState[] = [];
+  /** Chart and source revision already handed to the shader precompiler. */
+  private shaderPrewarmChart: Chart | null = null;
+  private shaderPrewarmRevision = -1;
   private readonly guideBuffer: NonNullable<Preview["guides"]> = [];
   readonly hitStateCache = new Map<number, (index: number) => SampledLineState>();
 
@@ -215,10 +218,14 @@ export class Preview {
     this.invalidateFrame();
     this.geometryCache.clear();
     this.shaderPipeline.dispose();
+    this.shaderPrewarmChart = null;
+    this.shaderPrewarmRevision = -1;
     this.noteBatch.clear();
     this.shaderRuntime.chart = null;
     this.shaderRuntime.effects = [];
     this.shaderRuntime.sources?.clear();
+    this.shaderRuntime.sourcesWanted?.clear();
+    this.shaderRuntime.sourceRevision += 1;
     this.backgroundFrame.clear();
     this.notifyGeometry(null);
   }
@@ -265,6 +272,57 @@ export class Preview {
     } else {
       setTimeout(run, 50);
     }
+  }
+
+  /**
+   * Compile every loaded shader in the chart away from the paint path.
+   *
+   * The source set follows the chart identity and `ShaderRuntime.sourceRevision`,
+   * so new charts and reloaded files start a pass while an unchanged frame does
+   * no work. Programs outside the current set are released at the same time;
+   * GPU programs are not JavaScript objects and would otherwise accumulate for
+   * the lifetime of the editor.
+   */
+  private prewarmShaderPrograms(): void {
+    const chart = this.chart;
+    const revision = this.shaderRuntime.sourceRevision;
+    if (!this.applyShaders || !chart || !this.shaderCanvas) {
+      if (this.shaderPipeline.programs.size || this.shaderPrewarmChart !== null) {
+        this.shaderPipeline.retainSources([]);
+        this.shaderPrewarmChart = null;
+        this.shaderPrewarmRevision = -1;
+      }
+      return;
+    }
+    if (this.shaderPrewarmChart === chart && this.shaderPrewarmRevision === revision) {
+      return;
+    }
+    this.shaderPrewarmChart = chart;
+    this.shaderPrewarmRevision = revision;
+    const entries: ShaderProgramSource[] = [];
+    const seen = new Set<string>();
+    for (const effect of this.shaderRuntime.effects) {
+      const source = this.shaderRuntime.source(effect.shader, effect.sourceName);
+      if (!source || seen.has(source)) {
+        continue;
+      }
+      seen.add(source);
+      entries.push({ name: effect.shader, source });
+    }
+    this.shaderPipeline.retainSources(seen);
+    if (
+      !entries.length ||
+      entries.every((entry) => this.shaderPipeline.isSettled(entry.source)) ||
+      !this.shaderPipeline.ensure(this.shaderCanvas)
+    ) {
+      return;
+    }
+    void this.shaderPipeline.precompile(entries).then(() => {
+      // A pass skipped while its program was pending can now draw, so request
+      // the frame that makes the compiled shader visible.
+      this.invalidateFrame();
+      this.invalidate?.();
+    });
   }
 
   /** Prepare noise resources before a caller samples frames without a live clock. */
@@ -874,6 +932,13 @@ export class Preview {
     if (chartChanged) {
       this.updateSceneCollections(chart, tempo, tempoChanged);
     }
+    // Start source loading and idle compilation before the composite pass can
+    // request a program. A pending source is skipped for this frame instead of
+    // linking synchronously while the transport is playing.
+    if (this.applyShaders) {
+      this.shaderRuntime.compile(chart, tempo);
+    }
+    this.prewarmShaderPrograms();
     const prepared = this.prepareCanvasFrame(measurement, drawStarted);
     const { context, width, height, viewport, divisor, screenScale, contentFrame, setupMs } =
       prepared;

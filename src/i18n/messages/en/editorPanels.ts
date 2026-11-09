@@ -29,14 +29,11 @@ export default {
   "editorPanels.linePanel.noiseUnsupported":
     "Complex transforms are exported as sampled events and may have small visual differences.",
   "editorPanels.scripts.title": "Scripts",
-  "editorPanels.scripts.description": "Run the scripts that enabled extensions provide.",
   "editorPanels.scripts.emptyTitle": "No scripts yet",
   "editorPanels.scripts.empty":
     "No scripts are registered yet. Enable a script extension in Settings › Extensions.",
   "editorPanels.scripts.openSettings": "Open settings",
   "editorPanels.aiActivity.title": "AI activity",
-  "editorPanels.aiActivity.description":
-    "Inspect the requests AI clients send to the editor and the responses they receive.",
   "editorPanels.aiActivity.emptyTitle": "No AI activity yet",
   "editorPanels.aiActivity.empty": "Requests from AI clients will appear here.",
   "editorPanels.aiActivity.disabledHint":
@@ -83,6 +80,13 @@ export default {
   "editorPanels.multiLine.notes": "Notes",
   "editorPanels.multiLine.events": "Events",
   "editorPanels.multiLine.mergeNotes": "Merge notes",
+  "editorPanels.multiLine.eventTracks": "Event tracks",
+  "editorPanels.multiLine.showX": "X events",
+  "editorPanels.multiLine.showY": "Y events",
+  "editorPanels.multiLine.showXY": "XY events",
+  "editorPanels.multiLine.showRotate": "Rotate events",
+  "editorPanels.multiLine.showAlpha": "Alpha events",
+  "editorPanels.multiLine.showSpeed": "Speed events",
   "editorPanels.multiLine.lineBar": "Judge line list",
   "editorPanels.multiLine.lineFallback": "Line {number}",
 
@@ -155,7 +159,6 @@ export default {
   "editorPanels.issues.eventPair": "Event {first} ↔ {second}",
   "editorPanels.issues.invalidRange": "Item {index} has no forward duration",
   "editorPanels.issues.locate": "Locate",
-  "editorPanels.issues.locateHint": "Jump to this overlap on the timeline",
   "editorPanels.issues.trackIncline": "Incline",
   "editorPanels.issues.trackGif": "GIF",
 
@@ -222,8 +225,6 @@ export default {
   "editorPanels.inspector.event.modeBezier": "Bezier",
   "editorPanels.inspector.event.toggleBezier": "Change the curve source",
   "editorPanels.inspector.event.bezierPoints": "Bezier control points",
-  "editorPanels.inspector.event.bezierPointsHint":
-    "Four numbers: x1, y1, x2, y2; each must be between 0 and 1",
   "editorPanels.inspector.event.modifyBezier": "Change the Bezier",
   "editorPanels.inspector.event.bezierDisabled":
     "Bézier editing is off in Settings. This event keeps its Bézier curve; enable Bézier curves to edit it.",
@@ -263,7 +264,7 @@ export default {
   "editorPanels.inspector.shader.alignToBeat": "Align to beat",
   "editorPanels.inspector.shader.alignToStart": "Align to the current parameter's start beat",
   "editorPanels.inspector.shader.alignLabel": "Align the shader parameters",
-  "editorPanels.inspector.shader.segmentTitle": "{name} · segment {index}",
+  "editorPanels.inspector.shader.segmentTitle": "{name}, segment {index}",
   "editorPanels.inspector.shader.segmentStart": "Start value",
   "editorPanels.inspector.shader.segmentEnd": "End value",
   "editorPanels.inspector.shader.parameterField": "Parameter {field}",
@@ -323,7 +324,6 @@ export default {
   "editorPanels.linePanel.groupNameRequired": "Enter a group name",
   "editorPanels.linePanel.lineNameRequired": "Enter a line name",
   "editorPanels.linePanel.groupCount": "Group count",
-  "editorPanels.linePanel.groupCountDescription": "How many groups should be added?",
   "editorPanels.linePanel.renameGroupLabel": "Rename a judgement line group",
   "editorPanels.linePanel.deleteGroupLabel": "Delete group",
   "editorPanels.linePanel.duplicateGroupName": "A group with this name already exists",
@@ -415,8 +415,6 @@ export default {
   "editorPanels.assetLibrary.drop.title": "Drop to import assets",
   "editorPanels.assetLibrary.drop.folder": "Files go to the end of {folder}",
   "editorPanels.assetLibrary.newFolder.title": "New asset folder",
-  "editorPanels.assetLibrary.newFolder.description":
-    "Folders group the asset list and are saved with the chart; they do not create directories on disk. A simple name is created inside the selected folder.",
   "editorPanels.assetLibrary.newFolder.placeholder": "e.g. lines/season-1",
   "editorPanels.assetLibrary.newFolder.label": "Asset folder name",
   "editorPanels.assetLibrary.newFolder.invalid": "Enter a valid folder name",
@@ -448,7 +446,6 @@ export default {
   "editorPanels.multiEdit.operation": "Operation",
   "editorPanels.multiEdit.previewToggle": "Show the result ghost",
   "editorPanels.multiEdit.apply": "Apply changes",
-  "editorPanels.multiEdit.applyHint": "Apply to selected objects",
   "editorPanels.multiEdit.appliedNotify": "Applied a batch edit to {count} objects",
 
   "editorPanels.trajectory.field.trimStart": "Trim start (0–1)",
@@ -493,7 +490,7 @@ export default {
   "editorPanels.trajectory.applyHint": "Writes X/Y and rotation events",
   "editorPanels.trajectory.split": "Split into plain events",
   "editorPanels.trajectory.splitHint": "Removes the trajectory wrapper",
-  "editorPanels.trajectory.presetAdjust": "{name} · adjusts before filling in",
+  "editorPanels.trajectory.presetAdjust": "{name}, adjusts before filling in",
   "editorPanels.trajectory.editPreset": "Edit the preset definition",
   "editorPanels.trajectory.deletePreset": "Delete this preset",
   "editorPanels.trajectory.presetDeleted": "The custom preset was deleted",
@@ -534,7 +531,7 @@ export default {
   "editorPanels.trajectory.commitSplit": "Split the curve trajectory",
   "editorPanels.trajectory.splitDone":
     "Split into plain X, Y / rotation events; one undo covers the whole split",
-  "editorPanels.trajectory.overlayLabel": "Trajectory preview · L{index}",
+  "editorPanels.trajectory.overlayLabel": "Trajectory preview, L{index}",
 
   "editorPanels.curvePreview.title": "Curve trajectory generation",
   "editorPanels.curvePreview.hint":
@@ -654,7 +651,7 @@ export default {
   "editorPanels.sampling.entry": "Sample start and end",
   "editorPanels.sampling.entryHint":
     "Drag in the workspace to pick the start and end values, then choose easing",
-  "editorPanels.sampling.target": "Line {line} · {axis} · start/end values",
+  "editorPanels.sampling.target": "Line {line}, {axis}, start/end values",
   "editorPanels.sampling.anchorStart": "Start {value}",
   "editorPanels.sampling.anchorEnd": "End {value}",
   "editorPanels.sampling.axis.x": "X position",
@@ -673,7 +670,6 @@ export default {
   "editorPanels.sampling.guideOpacity": "Guide opacity",
   "editorPanels.sampling.samplingHint":
     "Press and drag to pick the start and end values; release to choose easing",
-  "editorPanels.sampling.shiftHint": "Hold Shift to temporarily hide the guides",
   "editorPanels.sampling.easing": "Easing",
   "editorPanels.sampling.confirm": "Confirm",
   "editorPanels.sampling.cancel": "Cancel",

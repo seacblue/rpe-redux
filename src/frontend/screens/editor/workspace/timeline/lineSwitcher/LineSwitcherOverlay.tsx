@@ -3,6 +3,9 @@
  * switcher content owns only feature actions.
  */
 import { useEffect, useRef, type CSSProperties } from "react";
+import { LINE_JUMP_SHORTCUT_ID } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { released } from "../../../../../../core/shortcuts/keyMatching.ts";
+import { shortcutRegistry } from "../../../../../../core/shortcuts/registry.ts";
 import { useEditorRuntimeValue } from "../../runtime/composition/EditorRuntime.tsx";
 import { LineSwitcherView } from "./LineSwitcherView.tsx";
 
@@ -27,7 +30,13 @@ export function LineSwitcherOverlay() {
       }
     };
     const keyUp = (event: KeyboardEvent) => {
-      if (["Control", "Meta"].includes(event.key)) {
+      // The overlay opens from the line-jump prefix; releasing that binding,
+      // whatever the user rebound it to, commits and dismisses the switcher.
+      if (
+        shortcutRegistry
+          .bindingsOf(LINE_JUMP_SHORTCUT_ID)
+          .some((binding) => released(event, binding))
+      ) {
         actions.dismiss();
       }
     };

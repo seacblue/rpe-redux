@@ -143,11 +143,14 @@ function IssuesContent() {
                   <strong className="event-issue-title">
                     {issue.target === "hold"
                       ? t("editorPanels.issues.holdTrack")
-                      : trackLabel(issue.track, t)}{" "}
-                    · {line}
+                      : trackLabel(issue.track, t)}
+                    {", "}
+                    {line}
                   </strong>
                   <span className="event-issue-meta">
-                    {layer} · {beat}
+                    {layer}
+                    {", "}
+                    {beat}
                   </span>
                 </div>
                 <IconButton
@@ -157,7 +160,6 @@ function IssuesContent() {
                   variant="plain"
                   label={t("editorPanels.issues.locate")}
                   data-tip-title={t("editorPanels.issues.locate")}
-                  data-tip-desc={t("editorPanels.issues.locateHint")}
                   onClick={() => locate(issue)}
                 />
               </ListRow>

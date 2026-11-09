@@ -7,13 +7,16 @@
  * line-step rules stay in core.
  */
 import { wheelStepBeats } from "../../../../../../core/global/chart/editing/editGrid.ts";
-import { matchTimelineWheel } from "../../../../../../core/edit/shortcuts/timelineWheel.ts";
+import {
+  matchTimelineWheel,
+  type TimelineSeekStep,
+} from "../../../../../../core/edit/shortcuts/timelineWheel.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { LineSwitcher } from "../lineSwitcher/lineSwitcher.ts";
 import type { TimelineGestures } from "./timelineGestures.ts";
 import type { TimelineViewport } from "../viewport/timelineViewport.ts";
 
-/** Preferences that shape an ordinary wheel notch; Shift always means one beat. */
+/** Preferences that shape an ordinary grid-step wheel notch. */
 export interface TimelineWheelSettings {
   readonly scrollSpeed: number;
   readonly scrollAcceleration: boolean;
@@ -60,7 +63,7 @@ export function bindTimelineNavigation({
   let burstStart = 0;
   let trackpadDistance = 0;
   let trackpadDirection: -1 | 1 = 1;
-  let trackpadShift = false;
+  let trackpadStep: TimelineSeekStep = "grid";
   let trackpadTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Forget the accumulated trackpad distance and its flush timer. */
@@ -80,7 +83,7 @@ export function bindTimelineNavigation({
    * makes a 37 px detent, a 100 px detent and a smooth-scrolled 120 px gesture
    * all move by the same amount.
    */
-  const emitWheel = (direction: -1 | 1, notches: number, shiftKey: boolean) => {
+  const emitWheel = (direction: -1 | 1, notches: number, step: TimelineSeekStep) => {
     if (!notches) {
       return;
     }
@@ -91,16 +94,17 @@ export function bindTimelineNavigation({
     }
     lastWheel = now;
     const division = timeline.viewport.division > 0 ? timeline.viewport.division : 4;
-    // Shift is a whole beat regardless of the grid, so it bypasses the speed and
-    // acceleration preferences. The action binding decides the direction.
-    const stepBeats = shiftKey
-      ? 1
-      : wheelStepBeats(
-          division,
-          settings.scrollSpeed,
-          settings.scrollAcceleration,
-          now - burstStart,
-        );
+    // A whole-beat action bypasses the speed and acceleration preferences; the
+    // binding, not a held modifier, decides which step the wheel gets.
+    const stepBeats =
+      step === "beat"
+        ? 1
+        : wheelStepBeats(
+            division,
+            settings.scrollSpeed,
+            settings.scrollAcceleration,
+            now - burstStart,
+          );
     const minimum =
       timeline.viewport.minimumScrollSeconds() + Number(session().chart.META.offset ?? 0) / 1000;
     seekByBeats(direction * notches * stepBeats, minimum);
@@ -114,7 +118,7 @@ export function bindTimelineNavigation({
     if (Math.abs(distance) < WHEEL_MIN_TRACKPAD_PIXELS) {
       return;
     }
-    emitWheel(trackpadDirection, 1, trackpadShift);
+    emitWheel(trackpadDirection, 1, trackpadStep);
   };
 
   /** Route a wheel event to zoom, line stepping, or smooth seeking. */
@@ -139,6 +143,7 @@ export function bindTimelineNavigation({
       return false;
     }
     const direction = action.direction;
+    const step = action.step;
     const now = performance.now() / 1000;
     if (now - lastNotchAt > WHEEL_ACCUMULATOR_RESET_SECONDS) {
       trackpadDistance = 0;
@@ -147,7 +152,7 @@ export function bindTimelineNavigation({
     if (event.deltaMode !== 0) {
       // Line/page deltas are already discrete.
       resetTrackpad();
-      emitWheel(direction, 1, event.shiftKey);
+      emitWheel(direction, 1, step);
       return true;
     }
     const magnitude = Math.abs(event.deltaY);
@@ -155,19 +160,19 @@ export function bindTimelineNavigation({
       // Coalesced events can carry several notches; a single mouse detent that
       // reports 37–120 px still counts once because of the minimum.
       resetTrackpad();
-      emitWheel(direction, Math.max(1, Math.round(magnitude / WHEEL_NOTCH_PIXELS)), event.shiftKey);
+      emitWheel(direction, Math.max(1, Math.round(magnitude / WHEEL_NOTCH_PIXELS)), step);
       return true;
     }
     if (direction !== trackpadDirection) {
       trackpadDistance = 0;
     }
     trackpadDirection = direction;
-    trackpadShift = event.shiftKey;
+    trackpadStep = step;
     trackpadDistance += magnitude;
     const whole = Math.trunc(trackpadDistance / WHEEL_NOTCH_PIXELS);
     if (whole) {
       trackpadDistance -= whole * WHEEL_NOTCH_PIXELS;
-      emitWheel(direction, whole, event.shiftKey);
+      emitWheel(direction, whole, step);
     }
     if (trackpadTimer !== null) {
       clearTimeout(trackpadTimer);

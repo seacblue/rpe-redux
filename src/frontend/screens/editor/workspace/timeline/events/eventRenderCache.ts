@@ -9,6 +9,8 @@
 import type { TimelineEventRect } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.ts";
 import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
+import { eventTypesForLine } from "../drawing/tracks.ts";
+import { eventColumnLabel } from "./eventColumns.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { canvasFont } from "../../../canvas/text.ts";
@@ -115,7 +117,14 @@ export function drawMultiLineEventChrome(
       continue;
     }
     const eventTypes = receiver.viewport.eventTypesForLine(lineIndex);
+    if (!eventTypes.length) {
+      continue;
+    }
     const channelWidth = contentWidth / eventTypes.length;
+    const rawTypes = eventTypesForLine(
+      session.chart.judgeLineList?.[lineIndex],
+      receiver.gestures.extended,
+    );
     const labels = receiver.gestures.extended
       ? extendedLabels()
       : noiseLineSettings(session.chart.judgeLineList?.[lineIndex])
@@ -128,7 +137,7 @@ export function drawMultiLineEventChrome(
         context.font = canvasFont("caption");
         context.textAlign = "center";
         context.fillText(
-          labels[channel] ?? "",
+          eventColumnLabel(eventTypes[channel], rawTypes, labels),
           panelOffset + channel * channelWidth + channelWidth / 2,
           16,
           Math.max(8, channelWidth - 8),

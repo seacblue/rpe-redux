@@ -12,6 +12,7 @@ import {
   type OccupancyAcquireInput,
 } from "../../../../../../core/global/library/client.ts";
 import { currentInstanceId } from "../../../../../../core/global/library/instances.ts";
+import { getRuntimePorts } from "../../../../../../core/platform/runtimePorts.ts";
 import { cachedNormalizePath } from "../../../../../../core/io/pathCache.ts";
 
 /** Cross-instance handle for one document replacement attempt. */
@@ -30,6 +31,8 @@ export type DocumentLeaseResult =
       readonly documentKey: string;
       readonly chartName: string;
       readonly backendId: string;
+      /** TCP port of the backend that arbitrates this document. */
+      readonly backendPort: number;
       readonly owner: BackendInstance;
     };
 
@@ -67,11 +70,25 @@ function conflictFrom(details: unknown): { backendId: string; owner: BackendInst
     owner: {
       id: instance.id,
       label: typeof instance.label === "string" ? instance.label : "",
+      frontendPort: typeof instance.frontendPort === "number" ? instance.frontendPort : undefined,
       pid: typeof instance.pid === "number" ? instance.pid : 0,
       startedAt: typeof instance.startedAt === "string" ? instance.startedAt : "",
       heartbeatAt: typeof instance.heartbeatAt === "string" ? instance.heartbeatAt : "",
     },
   };
+}
+
+/** Reads the TCP port from one library origin, defaulting to the scheme's port. */
+export function originPort(origin: string): number {
+  try {
+    const url = new URL(origin);
+    if (url.port) {
+      return Number(url.port);
+    }
+    return url.protocol === "https:" ? 443 : 80;
+  } catch {
+    return 0;
+  }
 }
 
 /** A handle for paths that need no lock. */
@@ -133,6 +150,7 @@ export function createDocumentLeaseManager(deps: DocumentLeaseDependencies): Doc
       instanceId: instanceId(),
       chartName,
       label: "RPE Redux",
+      frontendPort: getRuntimePorts().frontendPort,
     };
     try {
       await library.occupancyAcquire(input, { timeoutMs: 3_000 });
@@ -145,6 +163,7 @@ export function createDocumentLeaseManager(deps: DocumentLeaseDependencies): Doc
             documentKey,
             chartName,
             backendId: conflict.backendId,
+            backendPort: originPort(library.origin),
             owner: conflict.owner,
           };
         }

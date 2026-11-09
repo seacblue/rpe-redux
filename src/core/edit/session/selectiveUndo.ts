@@ -275,7 +275,7 @@ export function selectiveUndo(
             }
           : { kind: "selective-undo", requestId: String(id) },
       },
-      { afterSelection: nextSelection },
+      { afterSelection: nextSelection, beatRange: entry.beatRange },
     );
     if (!committed) {
       return { status: "rejected" };

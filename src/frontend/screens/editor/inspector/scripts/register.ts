@@ -29,7 +29,6 @@ const disposeTool = registerInspectorTool({
   label: "editorPanels.scripts.title",
   icon: "extension",
   order: 280,
-  description: "editorPanels.scripts.description",
   separatorBefore: true,
 });
 const disposeDivider = registerSidebarDivider({

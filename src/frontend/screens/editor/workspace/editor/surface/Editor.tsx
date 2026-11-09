@@ -1,5 +1,5 @@
 /** Workspace authoring surface: canvas slots, layer selector, stage toasts, and thumbnail. */
-import { useEffect, useSyncExternalStore, type CSSProperties } from "react";
+import { useLayoutEffect, useSyncExternalStore, type CSSProperties } from "react";
 import { useSetting } from "../../../../settings/useSetting.ts";
 import { LayerButtonsOverlay } from "../../timeline/layers/LayerButtonsOverlay.tsx";
 import { TimelineThumbnailView } from "../../timeline/overview/TimelineThumbnail.tsx";
@@ -59,14 +59,15 @@ export function Editor() {
   const exclusiveRatio = exclusiveWidth / 100;
   const stripWidthSetting = useSetting("timeline-overview-strip-width", "24");
   const stripWidth = Math.max(0, Math.min(64, Number(stripWidthSetting) || 0));
-  useEffect(() => {
-    // Width changes resize the canvas hosts without a window resize; notify the
-    // timeline so it repaints at the new backing size.
+  const className = `${editorClassName(regions)}${densityBarsEnabled ? "" : " density-bars-hidden"}`;
+  useLayoutEffect(() => {
+    // The grid tracks and canvas hosts change together. Resolve the new sizes in
+    // the layout phase so the first painted frame already uses the final layout.
     window.dispatchEvent(new Event("resize"));
-  }, [exclusiveWidth, stripWidth]);
+  }, [className, exclusiveWidth, stripWidth]);
   return (
     <div
-      className={`${editorClassName(regions)}${densityBarsEnabled ? "" : " density-bars-hidden"}`}
+      className={className}
       style={
         {
           "--timeline-exclusive-width": `${exclusiveWidth}%`,

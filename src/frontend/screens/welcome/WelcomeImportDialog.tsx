@@ -62,7 +62,6 @@ export function WelcomeImportDialog() {
       open={open}
       onClose={closeWelcomeImportDialog}
       label={t("workspace.welcome.importDialog.title")}
-      description={t("workspace.welcome.importDialog.description")}
       className="redux-welcome-import-dialog"
       actions={
         <>
@@ -94,6 +93,9 @@ export function WelcomeImportDialog() {
               : "workspace.welcome.importDialog.dropTitle",
           )}
         </strong>
+        <span className="redux-welcome-import-drop-formats">
+          {t("workspace.welcome.importDialog.dropFormats")}
+        </span>
       </div>
     </Modal>
   );

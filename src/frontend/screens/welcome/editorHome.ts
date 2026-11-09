@@ -11,9 +11,11 @@ import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { loadingProgress } from "../../../core/global/document/loading.ts";
 import { TauriDocumentStore } from "../../../core/platform/desktop/documentStore.ts";
 import type { LibraryProjectSummary } from "../../../core/global/library/client.ts";
+import type { DropClassification } from "../../../core/global/document/dropIntake.ts";
 import type { LoadTask } from "../../../core/global/document/loading.ts";
 import { ProjectHome } from "./projectLibrary.ts";
 import { showExportDialog } from "../editor/workspace/document/export/exportPrompt.ts";
+import { openSettings } from "../settings/settingsWindowController.ts";
 import type { AssetMap, EditorCandidate } from "../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../core/global/library/types.ts";
 import type { Chart } from "../../../core/global/chart/chart.ts";
@@ -25,7 +27,8 @@ import {
 } from "../../../core/global/library/libraryCatalog.ts";
 import { materializeAssets, openLibraryProject } from "../../../core/global/library/document.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
-import { createChartTextExport } from "../../../core/global/document/export.ts";
+import { createChartExport, createChartTextExport } from "../../../core/global/document/export.ts";
+import { download } from "../../platform/download.ts";
 import {
   chooseRpeImport as chooseRpeFolderMigration,
   importRpePath,
@@ -57,6 +60,48 @@ function chartTitle(chart: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+/** The last segment of a Windows or POSIX path, for a drop label. */
+function pathLabel(value: string): string {
+  return value.split(/[\\/]/).filter(Boolean).at(-1) ?? value;
+}
+
+/** The display name a classified package should show. */
+function dropName(item: DropClassification): string {
+  return item.name?.trim() || item.packageId?.trim() || pathLabel(item.path);
+}
+
+/**
+ * Tell the user which package was detected and offer the owning settings page.
+ *
+ * The classifier only routes; installation and validation stay on the page so
+ * a dropped package cannot bypass the existing consent or package checks.
+ */
+function offerPackageSettings(item: DropClassification, kind: "extension" | "skin"): void {
+  const name = dropName(item);
+  if (!item.valid) {
+    showToast({
+      message: t("workspace.welcome.drop.invalidPackage", { name }),
+      level: "warning",
+    });
+    return;
+  }
+  showToast({
+    message: t(
+      kind === "extension"
+        ? "workspace.welcome.drop.extensionDetected"
+        : "workspace.welcome.drop.skinDetected",
+      { name },
+    ),
+    level: "info",
+    actions: [
+      {
+        label: t("workspace.welcome.drop.openSettings"),
+        onSelect: () => openSettings(kind === "extension" ? "extensions" : "appearance.skin"),
+      },
+    ],
+  });
 }
 
 /** Connects the home view's open and rename actions to the live editor session. */
@@ -100,24 +145,24 @@ export function createEditorHomeRuntime(deps: {
         });
       },
       async ({ name, format }) => {
-        const exporter = new TauriDocumentStore();
-        try {
-          if (format !== "pez") {
-            const result = createChartTextExport(
-              opened.project.chart as Chart,
-              opened.project.name,
-              format,
-              { name },
-            );
-            if (result.warnings.length) {
-              showToast({
-                message: t("editor.dialogs.exportDialog.warnings", {
-                  count: result.warnings.length,
-                }),
-                level: "warning",
-              });
-            }
-            return exporter.exportText(result.text, {
+        const chart = opened.project.chart as Chart;
+        if (format !== "pez") {
+          const result = createChartTextExport(chart, opened.project.name, format, { name });
+          if (result.warnings.length) {
+            showToast({
+              message: t("editor.dialogs.exportDialog.warnings", {
+                count: result.warnings.length,
+              }),
+              level: "warning",
+            });
+          }
+          if (!deps.documents) {
+            download(new Blob([result.text], { type: result.mime }), result.name);
+            return result.name;
+          }
+          const exporter = new TauriDocumentStore();
+          try {
+            return await exporter.exportText(result.text, {
               name: result.name,
               extension: format === "official" ? "json" : "pec",
               filter: t(
@@ -126,9 +171,21 @@ export function createEditorHomeRuntime(deps: {
                   : "system.document.pecFilter",
               ),
             });
+          } finally {
+            await exporter.close();
           }
-          const assets = await materializeAssets(opened.assets);
-          const result = await exporter.export(opened.project.chart, assets, {
+        }
+        const assets = await materializeAssets(opened.assets);
+        if (!deps.documents) {
+          const result = createChartExport(chart, assets, opened.project.name, {
+            name: exportFileName(name),
+          });
+          download(result.blob, result.name);
+          return result.name;
+        }
+        const exporter = new TauriDocumentStore();
+        try {
+          const result = await exporter.export(chart, assets, {
             format: "pez",
             name: exportFileName(name),
           });
@@ -281,9 +338,29 @@ export function createEditorHomeRuntime(deps: {
     await openImported(projectId);
     return true;
   };
+  /** Ask the local service which owner a drop belongs to. */
+  const classifyPaths = async (
+    paths: readonly string[],
+  ): Promise<readonly DropClassification[]> => {
+    const found = await localService();
+    if (!found) {
+      throw libraryMissing();
+    }
+    const result = await found.library.classifyDropped(paths);
+    return result.items;
+  };
   const home = new ProjectHome({
     importRpePath: (path) => importRpePath(path, rpeDeps),
     importExternalPath: (path) => importExternalPath(path, externalDeps),
+    classifyPaths,
+    importExtension: async (item) => offerPackageSettings(item, "extension"),
+    importSkin: async (item) => offerPackageSettings(item, "skin"),
+    unsupportedDrop: (item) => {
+      showToast({
+        message: t("workspace.welcome.drop.unsupported", { name: dropName(item) }),
+        level: "warning",
+      });
+    },
     importExternalChart: openExternalChartFile,
     chooseRpeImport: () => chooseRpeFolderMigration(rpeDeps),
     chooseExternalImport: () => chooseExternalChartImport(externalDeps),

@@ -242,7 +242,7 @@ light/                随应用发布的亮色参考主题
 
 随应用发布的主题图标是扁平的 `icons/<snake_case>.png` 文件，渲染为 192×192；嵌套目录、kebab-case 名称、SVG 文件和未被引用的文件会被 `npm run icons:check` 拒绝。检查器还会解码每个 PNG，验证签名、尺寸、alpha 通道和引用覆盖。渲染器把每个 PNG 的 alpha 当作遮罩，用当前主题墨色绘制。可分发的主题 JSON 以 PNG data URL 内联同一组图标。远程 URL、SVG 数据、绝对路径和路径穿越都会被拒绝。data URL 必须是带 PNG 签名的 base64，因此载荷无法把引号或 CSS 文本带进图标 URL。
 
-缺失的图标名沿用主题外观对应的参考图形，因此亮色主题会继承更轻的视觉粗细。给暗色包和 `src/design/components/icon/iconAssets.ts` 添加图标后，`npm run icons:build` 会重新生成两套图标，`npm run icons:export` 会写出内联全部图标的独立主题 JSON。
+缺失的图标名沿用主题外观对应的参考图形，因此亮色主题会继承更轻的视觉粗细。给暗色包和 `src/design/components/icon/iconAssets.ts` 添加图标后，`npm run build:icons` 会重新生成两套图标，`npm run icons:export` 会写出内联全部图标的独立主题 JSON。
 
 ## 发现
 

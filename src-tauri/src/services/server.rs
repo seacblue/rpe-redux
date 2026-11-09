@@ -19,7 +19,7 @@ use tauri::{AppHandle, Manager};
 const SERVER_PORT: &str = "47821";
 
 /// The room server rides in the same sidecar but keeps the default URL used by
-/// the standalone `npm run collab` contract.
+/// the standalone `npm run dev:collab` contract.
 const COLLAB_PORT: &str = "47830";
 
 /// Default ports written to the user-editable runtime configuration file.
@@ -111,7 +111,7 @@ where
     Ok(overrides)
 }
 
-/// Read optional process environment overrides used by `npm run desktop`.
+/// Read optional process environment overrides used by `npm run dev:desktop`.
 fn runtime_port_env_overrides() -> Result<RuntimePortOverrides, String> {
     let read = |name: &str, flag: &str| {
         std::env::var(name)

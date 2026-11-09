@@ -226,14 +226,14 @@ export function splitTrajectoryChart(
 export const trajectoryShortcuts: readonly EditorShortcutDefinition[] = [
   {
     id: "event.trajectory.capture.begin",
-    category: "editor.notes",
+    category: "editor.curve",
     title: "shortcuts.editor.curveBegin",
     scope: "editor",
     defaults: [],
   },
   {
     id: "event.trajectory.capture.end",
-    category: "editor.notes",
+    category: "editor.curve",
     title: "shortcuts.editor.curveEnd",
     scope: "editor",
     defaults: [],

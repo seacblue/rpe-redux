@@ -55,12 +55,10 @@ export function LineTreeCreatePrompt({
             : "editorPanels.linePanel.addLine",
       )}
       description={
-        prompt?.mode === "count"
-          ? prompt.kind === "line"
-            ? t("editorPanels.linePanel.addLinesDescription", {
-                group: labels[prompt.group] ?? "",
-              })
-            : t("editorPanels.linePanel.groupCountDescription")
+        prompt?.mode === "count" && prompt.kind === "line"
+          ? t("editorPanels.linePanel.addLinesDescription", {
+              group: labels[prompt.group] ?? "",
+            })
           : undefined
       }
       confirmLabel={t("common.action.confirm")}

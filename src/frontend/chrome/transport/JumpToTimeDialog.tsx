@@ -118,7 +118,6 @@ function JumpDialog({ onClose }: { onClose(): void }) {
       open
       onClose={onClose}
       label={t("chrome.transport.jump.title")}
-      description={t("chrome.transport.jump.description")}
       className="redux-jump-dialog"
       actions={
         <>

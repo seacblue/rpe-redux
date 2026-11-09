@@ -34,6 +34,9 @@ groups are:
 
 - `/api/health`, `/api/instances/*`, and `/api/occupancy/*` for service and
   editor leases.
+- `/api/intake/classify` for the bounded drop inspection that tells the frontend
+  whether a local path is an RPE/PEC/official chart, an Extension package, or a
+  Phira note-skin package.
 - `/api/projects/*` for project summaries, chart commits, assets, duplication,
   and revisions.
 - `/api/revisions/*` for revision reads and deletion.
@@ -70,6 +73,8 @@ Settings, and the HTTP surface has no direct apply route.
 ## Build and run
 
 ```sh
+npm run dev                  # browser loop: Go service + Vite
+npm run dev:server           # this service only, on the product defaults
 go run ./cmd/redux-service   # from src/backend
 npm run build:server         # compiles the target-specific sidecar for packaging
 npm run build                # full desktop build, including the sidecar

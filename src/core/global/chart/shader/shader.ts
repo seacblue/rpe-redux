@@ -313,6 +313,10 @@ export class ShaderRuntime {
   declare activeIndex: IntervalIndex<TimedShaderEffect>;
   declare sources: Map<string, string>;
   declare loading: Set<string>;
+  /** Source keys the current effects still reference; older text is released. */
+  declare sourcesWanted: Set<string>;
+  /** Bumped whenever loaded source text changes; callers use it as a cache key. */
+  declare sourceRevision: number;
 
   /** Create a runtime; `invalidate` is called when loaded sources change. */
   constructor(invalidate: () => void = () => {}, loadSource: ShaderSourceLoader) {
@@ -329,6 +333,8 @@ export class ShaderRuntime {
     );
     this.sources = new Map();
     this.loading = new Set();
+    this.sourcesWanted = new Set();
+    this.sourceRevision = 0;
   }
 
   /** Update the chart path used to resolve relative shader assets. */
@@ -341,6 +347,8 @@ export class ShaderRuntime {
     this.chart = null;
     this.sources.clear();
     this.loading.clear();
+    this.sourcesWanted.clear();
+    this.sourceRevision += 1;
     this.invalidate();
   }
 
@@ -366,6 +374,26 @@ export class ShaderRuntime {
       (entry) => entry.start,
       (entry) => entry.end,
     );
+    this.sourcesWanted = new Set(
+      this.effects.map((effect) => shaderSourceKey(effect.shader, effect.sourceName)),
+    );
+    // A chart switch or an edit that drops an effect must not keep its GLSL text
+    // alive; loaded sources are only useful while an effect still references them.
+    let pruned = false;
+    for (const key of this.sources.keys()) {
+      if (!this.sourcesWanted.has(key)) {
+        this.sources.delete(key);
+        pruned = true;
+      }
+    }
+    for (const key of this.loading) {
+      if (!this.sourcesWanted.has(key)) {
+        this.loading.delete(key);
+      }
+    }
+    if (pruned) {
+      this.sourceRevision += 1;
+    }
     for (const effect of this.effects) {
       this.load(effect.shader, effect.sourceName);
     }
@@ -384,8 +412,13 @@ export class ShaderRuntime {
       try {
         const assetText = await this.loadSource(assetPath, this.chartName);
         if (assetText !== null) {
+          if (!this.sourcesWanted.has(key)) {
+            this.loading.delete(key);
+            return;
+          }
           this.sources.set(key, assetText);
           this.loading.delete(key);
+          this.sourceRevision += 1;
           this.invalidate();
           return;
         }
@@ -405,7 +438,12 @@ export class ShaderRuntime {
       for (const path of previewSource ? [portable, plain] : [plain, portable]) {
         const text = await this.loadSource(path, this.chartName);
         if (text !== null) {
+          if (!this.sourcesWanted.has(key)) {
+            this.loading.delete(key);
+            return;
+          }
           this.sources.set(key, builtinShaderSource(text, legacyShaderSource(builtin, sourceName)));
+          this.sourceRevision += 1;
           break;
         }
       }
@@ -450,6 +488,7 @@ export class ShaderRuntime {
     const key = shaderAssetPath(path);
     if (key) {
       this.sources.delete(key);
+      this.sourceRevision += 1;
       for (const effect of this.effects) {
         if (shaderAssetPath(effect.sourceName) === key || shaderAssetPath(effect.shader) === key) {
           void this.load(effect.shader, effect.sourceName);

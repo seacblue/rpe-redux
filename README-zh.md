@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <sub><a href="README.md">English</a> · 简体中文</sub>
+  <sub><a href="README.md">English</a>、简体中文</sub>
 </p>
 
 ## 项目简介
@@ -41,17 +41,18 @@ RPE Redux 是一款面向 Phigros 自制谱面的编辑器。
 
 ```powershell
 npm ci
-npm run desktop   # 启动开发窗口
-npm run build     # Windows 生成 NSIS 安装包；Linux 生成 deb、rpm 和 AppImage
+npm run dev           # 浏览器开发循环，支持热更新
+npm run dev:desktop   # 原生 Tauri 窗口
+npm run build         # Windows 生成 NSIS 安装包；Linux 生成 deb、rpm 和 AppImage
 ```
 
-`npm run build -- --portable` 只生成便携版。首次桌面构建会准备 FFmpeg、Cloudflared 和 Go sidecar，在缓存不存在时需要联网。
+`npm run dev` 会同时启动 Go 服务和 Vite，然后在默认浏览器中打开编辑器。它只需要 Node.js 和 Go，不需要 Rust 或平台 WebView，开发数据保存在 `.scratch/dev/`。需要原生文件对话框、窗口行为或打包运行时时使用 `npm run dev:desktop`。`npm run build -- --portable` 只生成便携版。首次桌面构建会准备 FFmpeg、Cloudflared 和 Go sidecar，在缓存不存在时需要联网。
 
 > Windows 提供 x64、x86 和 ARM64 的 NSIS 安装包。Linux 提供 x64 的 deb、rpm 和 AppImage 包。只有 AppImage 能通过应用内更新替换自身；deb 和 rpm 用户通过包管理器升级。
 
 ## 开发
 
-`npm run desktop` 是受支持的产品入口；`npm run dev` 只启动 Vite 开发服务器。先读[开发说明](docs/development.md)（工作流、命令、仓库导览）和[测试说明 ](docs/testing.md)（测试套件、fixture、新测试放哪里）。归属规则、贡献方式和代码约定见 [AGENTS.md](AGENTS.md) 与[贡献指南](CONTRIBUTING-zh.md)。
+`npm run dev` 是浏览器开发循环：同时启动 Go 服务和 Vite，每个工作树使用一组固定端口，源码修改后页面热更新。需要原生宿主能力时使用 `npm run dev:desktop` 打开 Tauri 窗口。先读[开发说明](docs/development.md)（工作流、命令、仓库导览）和[测试说明 ](docs/testing.md)（测试套件、fixture、新测试放哪里）。归属规则、贡献方式和代码约定见 [AGENTS.md](AGENTS.md) 与[贡献指南](CONTRIBUTING-zh.md)。
 
 提交 PR 前请运行：
 
@@ -69,4 +70,4 @@ RPE Redux 使用 [PolyForm Noncommercial License 1.0.0](LICENSE) 分发，派生
 
 ## 文档
 
-[文档索引](docs/README.md) · [快速上手](docs/getting-started.md) · [架构说明](docs/architecture.md) · [开发说明](docs/development.md) · [测试说明](docs/testing.md) · [兼容性](docs/compatibility.md) · [桌面运行时](docs/desktop.md) · [键盘](docs/keyboard.md) · [Extension 平台](docs/extensions-zh.md)
+[文档索引](docs/README.md)、[快速上手](docs/getting-started.md)、[架构说明](docs/architecture.md)、[开发说明](docs/development.md)、[测试说明](docs/testing.md)、[兼容性](docs/compatibility.md)、[桌面运行时](docs/desktop.md)、[键盘](docs/keyboard.md)、[Extension 平台](docs/extensions-zh.md)

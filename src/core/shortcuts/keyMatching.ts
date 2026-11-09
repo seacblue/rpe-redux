@@ -122,6 +122,17 @@ export function matches(event: ShortcutEventLike, shortcut: Shortcut): boolean {
 }
 
 /**
+ * Whether `event` is the fixed system cancel key.
+ *
+ * Escape is an interaction key rather than a rebindable command: it must keep
+ * working in every editor context and is therefore never registered in the
+ * shortcut table.
+ */
+export function isSystemCancelKey(event: ShortcutEventLike): boolean {
+  return matches(event, { key: "ESCAPE" });
+}
+
+/**
  * Records the event the user just pressed as one shortcut.
  *
  * Modifiers are written out explicitly rather than as `MOD`: the user pressed a

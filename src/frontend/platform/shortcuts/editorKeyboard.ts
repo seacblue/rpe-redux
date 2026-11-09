@@ -25,6 +25,7 @@ import {
 import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
 import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
+  fixedCancelAction,
   runEditorKeyboardAction,
   runEditorShortcutRelease,
   type EditorKeyboardActionDependencies,
@@ -42,7 +43,10 @@ export interface EditorKeyboardBindingDependencies extends Omit<
   EditorKeyboardActionDependencies,
   "timeline"
 > {
-  timeline: Pick<Timeline, "viewport" | "gestures" | "eventTypes" | "addAtCursor">;
+  timeline: Pick<
+    Timeline,
+    "viewport" | "gestures" | "eventTypes" | "addAtCursor" | "cancelPlacement"
+  >;
   scope: ResourceScope;
   batchControlsActive: () => boolean;
   /** The curve trajectory surface owns the editor stage. */
@@ -102,6 +106,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         return deps.timeline.gestures.eventInteraction;
       },
       addAtCursor: (type) => deps.timeline.addAtCursor(type),
+      cancelPlacement: () => deps.timeline.cancelPlacement(),
     },
   };
 
@@ -181,18 +186,36 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
           session.eventSelection.size ||
           [...(session.multiEventSelection?.values() ?? [])].some((values) => values.size),
         );
-        editorAction = matchEditorShortcut(
-          event,
-          {
-            area,
-            hasSelection,
-            hasEventSelection,
-            samplingActive: deps.samplingActive(),
-            surface,
-            curveMode: deps.curveModeActive(),
-          },
-          context,
+        const hasPendingPlacement = Boolean(
+          timeline.gestures.pendingHold || timeline.gestures.eventInteraction.pending,
         );
+        const samplingActive = deps.samplingActive();
+        const curveMode = deps.curveModeActive();
+        const fixedCancel =
+          !context.textEntry && context.surface === null && !context.atHome
+            ? fixedCancelAction(event, {
+                hasPendingPlacement,
+                hasSelection,
+                samplingActive,
+                curveMode,
+                batchActive: deps.batchControlsActive(),
+              })
+            : undefined;
+        editorAction =
+          fixedCancel ??
+          matchEditorShortcut(
+            event,
+            {
+              area,
+              hasSelection,
+              hasPendingPlacement,
+              hasEventSelection,
+              samplingActive,
+              surface,
+              curveMode,
+            },
+            context,
+          );
       }
       const registered = editorAction ? undefined : matchRegisteredShortcut(event, context);
       const scope = editorAction

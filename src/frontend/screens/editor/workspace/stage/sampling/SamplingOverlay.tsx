@@ -16,11 +16,12 @@ import {
   wheelZoomDelta,
   zoomFreeCameraAt,
 } from "../freeCamera/freeCamera.ts";
+import { SAMPLING_SHORTCUT_IDS } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
 import {
   samplingSettings,
   type SamplingTarget,
 } from "../../../../../../core/edit/sampling/sampling.ts";
-import { matches } from "../../../../../../core/shortcuts/keyMatching.ts";
+import { isSystemCancelKey, matches } from "../../../../../../core/shortcuts/keyMatching.ts";
 import { shortcutRegistry } from "../../../../../../core/shortcuts/registry.ts";
 import {
   beginSamplingDrag,
@@ -44,8 +45,6 @@ import {
   type SamplingProjection,
   type SamplingViewport,
 } from "./samplingGuides.ts";
-const SAMPLING_HIDE_GUIDES_SHORTCUT = "sampling.hideGuides";
-const SAMPLING_CANCEL_SHORTCUT = "sampling.cancel";
 const EMPTY_SHORTCUT_BINDINGS: readonly never[] = [];
 type GestureMode = "drag" | "camera";
 
@@ -125,10 +124,7 @@ export function SamplingOverlay() {
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const interaction = local.target === target ? local.interaction : "idle";
   const hideGuideBindings =
-    shortcutViews.find((view) => view.id === SAMPLING_HIDE_GUIDES_SHORTCUT)?.bindings ??
-    EMPTY_SHORTCUT_BINDINGS;
-  const cancelBindings =
-    shortcutViews.find((view) => view.id === SAMPLING_CANCEL_SHORTCUT)?.bindings ??
+    shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.hideGuides)?.bindings ??
     EMPTY_SHORTCUT_BINDINGS;
 
   /** Set the interaction mode for the current target, resetting stale flags. */
@@ -156,10 +152,10 @@ export function SamplingOverlay() {
     [setInteraction],
   );
 
-  // The configured guide modifier temporarily hides every guide; the configured cancel key
-  // floating draft before the inspector's cancel shortcut sees it. The listener
-  // is attached while the stage exists so it wins the capture order once the
-  // inspector pane opens.
+  // The configured guide modifier temporarily hides every guide; the fixed
+  // Escape key drops the floating draft before the inspector sees it. The
+  // listener is attached while the stage exists so it wins the capture order
+  // once the inspector pane opens.
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (hideGuideBindings.some((binding) => matches(event, binding))) {
@@ -167,7 +163,7 @@ export function SamplingOverlay() {
         setShiftHidden(true);
         return;
       }
-      if (!cancelBindings.some((binding) => matches(event, binding))) {
+      if (!isSystemCancelKey(event)) {
         return;
       }
       const current = samplingSession.get();
@@ -208,7 +204,7 @@ export function SamplingOverlay() {
       window.removeEventListener("keyup", keyup, true);
       window.removeEventListener("blur", blur);
     };
-  }, [cancelBindings, cancelGesture, hideGuideBindings]);
+  }, [cancelGesture, hideGuideBindings]);
 
   // A new target is a new interaction: no pointer or camera drag from
   // the previous event may leak into it. The local flags are keyed by target,

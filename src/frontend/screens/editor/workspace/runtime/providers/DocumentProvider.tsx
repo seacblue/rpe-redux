@@ -388,17 +388,25 @@ export function createDocumentRuntime(options: {
       if (result.status === "acquired") {
         return result.handle;
       }
+      const frontendPort =
+        result.owner.frontendPort && result.owner.frontendPort > 0
+          ? String(result.owner.frontendPort)
+          : t("workspace.document.occupancy.unknownPort");
+      const backendPort =
+        result.backendPort > 0
+          ? String(result.backendPort)
+          : t("workspace.document.occupancy.unknownPort");
       const choice = await requestChoice<"frontend" | "backend" | "reconcile">({
         title: t("workspace.document.occupancy.title"),
         description: t("workspace.document.occupancy.description", {
           name: result.chartName,
-          owner: `${result.owner.label || "RPE Redux"} (${result.owner.id.slice(0, 8)})`,
         }),
         detail: t("workspace.document.occupancy.detail", {
-          owner: result.owner.id.slice(0, 12),
-          backend: result.backendId || "unknown",
+          frontend: frontendPort,
+          backend: backendPort,
         }),
         entries: ["frontend", "backend", "reconcile"],
+        actionsClassName: "modal-actions-inline",
         label: (entry) =>
           entry === "frontend"
             ? t("workspace.document.occupancy.frontend")

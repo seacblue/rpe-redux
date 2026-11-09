@@ -62,9 +62,9 @@ export function openChangelog(mode: ChangelogMode = "current"): boolean {
             },
             onLater: close,
             onUpdate: () => {
-              close();
               void installUpdate();
             },
+            onComplete: close,
           }),
         }
       : {}),

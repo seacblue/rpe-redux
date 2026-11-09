@@ -355,9 +355,9 @@ export function DeveloperToolsOverlay() {
       {current.probe && (
         <div className="redux-developer-probe-hint" role="status">
           {activeHit
-            ? `${activeHit.kind} · ${activeHit.lineIndex}${
+            ? `${activeHit.kind}, ${activeHit.lineIndex}${
                 activeHit.noteIndex !== undefined ? `:${activeHit.noteIndex}` : ""
-              } · ${current.probeIndex + 1}/${current.probeHits.length}`
+              }, ${current.probeIndex + 1}/${current.probeHits.length}`
             : translate("chrome.developer.probeEmpty")}
           <span>{translate("chrome.developer.probeHint")}</span>
         </div>

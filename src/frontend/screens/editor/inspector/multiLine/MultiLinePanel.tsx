@@ -28,6 +28,7 @@ import type { EditorSession } from "../../../../../core/edit/session/session.ts"
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
 import { t } from "../../../../../i18n/index.ts";
 import { displayValues } from "../../../settings/editorDisplaySettings.ts";
+import { MultiLineEventTracks } from "./MultiLineEventTracks.tsx";
 import {
   editorLine,
   editorLineOptions,
@@ -59,7 +60,7 @@ import {
 
 import type { MultiLinePanelState } from "./model.ts";
 
-type MultiLineTimeline = Pick<Timeline, "changed">;
+type MultiLineTimeline = Pick<Timeline, "changed" | "cancelPlacement">;
 
 const MARQUEE_EDGE = 28;
 const MARQUEE_SCROLL_STEP = 14;
@@ -587,6 +588,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
           renderSession();
         }}
       />
+      <MultiLineEventTracks session={session} timeline={timeline} renderSession={renderSession} />
       <FieldRow
         layout="inline"
         density="compact"

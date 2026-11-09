@@ -25,7 +25,7 @@ export function registerWorkspaceActions() {
       toolbar: false,
       icon: "home",
       label: "chrome.menu.file.titleScreen",
-      tooltip: "chrome.menu.file.titleScreenHint",
+      tooltip: "chrome.menu.file.titleScreen",
       shortcuts: [{ key: "H", modifiers: ["CTRL", "SHIFT"] }],
       shortcutCategory: SHORTCUT_CATEGORIES.workspace,
       shortcutScope: "workspace",

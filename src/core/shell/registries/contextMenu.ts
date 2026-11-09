@@ -30,8 +30,6 @@ export interface ContextMenuItem {
    * literal unchanged.
    */
   label: string;
-  /** Message key, or the rendered text for a contribution that has none. */
-  tooltip?: string;
   /** A glyph name the design system knows; see `design/components/icon/Icon.tsx`. */
   icon?: string;
   /** Destructive commands keep the danger ink in menus and context lists. */

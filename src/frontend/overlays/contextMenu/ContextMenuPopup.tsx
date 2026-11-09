@@ -25,7 +25,6 @@ import { POPOVER_EDGE, type PopoverAlign } from "../../../design/patterns/useAnc
 export interface ContextMenuAction {
   id: string;
   label: string;
-  tooltip?: string;
   icon?: string;
   /** Destructive commands keep danger ink in the popup. */
   danger?: boolean;

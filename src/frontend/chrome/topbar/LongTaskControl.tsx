@@ -146,7 +146,7 @@ export function LongTaskControl() {
                 </div>
                 <p className="long-task-progress-line">
                   {working && task.progress !== null
-                    ? `${Math.round(task.progress * 100)}% · ${stage}`
+                    ? `${Math.round(task.progress * 100)}%, ${stage}`
                     : stage}
                 </p>
                 {working && (

@@ -23,6 +23,7 @@ import { EVENT_TYPES } from "../../../../../../core/global/chart/chart.ts";
 import { eventColumnBounds } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { trackLabels } from "../drawing/canvas.ts";
 import { eventTypeAt, SPECIAL_TRACKS, specialTrackLabel } from "../drawing/tracks.ts";
+import { eventColumnForTrack } from "./eventColumns.ts";
 import {
   eventKey,
   eventListAt,
@@ -182,15 +183,15 @@ export class EventInteraction implements EventInteractionHandle {
       ];
       return {
         id: `event:${targetLine}:${rectangle.type}:${rectangle.index}`,
-        label: `${eventTypeLabel(rectangle.type)} · ${
+        label: `${eventTypeLabel(rectangle.type)}, ${
           session.chart.judgeLineList?.[targetLine]?.Name ??
           t("editorPanels.overlap.line", { index: targetLine })
         }`,
         detail: `${t("editorPanels.overlap.layer", {
           value: this.timeline.gestures.layer,
-        })} · ${t("editorPanels.overlap.beat", {
+        })}, ${t("editorPanels.overlap.beat", {
           value: event ? `${formatBeat(event.startTime)} – ${formatBeat(event.endTime)}` : "—",
-        })} · #${rectangle.index}`,
+        })}, #${rectangle.index}`,
         run: () => {
           session.focus = "events";
           session.marqueeSelection = null;
@@ -255,7 +256,7 @@ export class EventInteraction implements EventInteractionHandle {
       this.pending?.type ??
       type ??
       eventTypeAt(eventTypes, (point?.x ?? 0) - panelOffset - eventInset, contentWidth);
-    if (!eventType) {
+    if (!eventType || eventColumnForTrack(eventTypes, eventType) < 0) {
       return false;
     }
     const at =
@@ -687,20 +688,24 @@ export class EventInteraction implements EventInteractionHandle {
     const session = this.timeline.getSession();
     const pendingLineIndex = pending.lineIndex ?? session.lineIndex;
     const eventTypes = this.timeline.viewport.eventTypesForLine(pendingLineIndex);
-    const channel = eventTypes.indexOf(pending.type);
+    const channel = eventColumnForTrack(eventTypes, pending.type);
     if (channel < 0) {
       return;
     }
-    const end = this.timeline.gestures.eventCursor
+    const cursorBeat = this.timeline.gestures.eventCursor
       ? this.timeline.viewport.eventBeatAt(this.timeline.gestures.eventCursor.y, pending.type, true)
       : pending.beat;
+    // The endpoint may be earlier than the start. Order the two anchors here
+    // so the preview and the committed event share one span.
+    const startBeat = Math.min(pending.beat, cursorBeat);
+    const endBeat = Math.max(pending.beat, cursorBeat);
     let valid = true;
     try {
       placedEvent(
         this.timeline.getSession(),
         pending.type,
-        pending.beat,
-        end,
+        startBeat,
+        endBeat,
         undefined,
         pending.lineIndex,
       );
@@ -713,25 +718,25 @@ export class EventInteraction implements EventInteractionHandle {
         ? (beat: number) =>
             this.timeline.viewport.verticalForLine(beat, lineIndex, this.canvas.clientHeight)
         : (beat: number) => this.timeline.viewport.eventVertical(beat, pending.type);
-    const top = Math.min(vertical(pending.beat), vertical(end));
-    const height = Math.max(2, Math.abs(vertical(pending.beat) - vertical(end)));
+    const top = Math.min(vertical(startBeat), vertical(endBeat));
+    const height = Math.max(2, Math.abs(vertical(startBeat) - vertical(endBeat)));
     const panelWidth = this.timeline.viewport.panelWidth(width, "events");
     const panelOffset =
       this.timeline.viewport.panelIndex(lineIndex, "events") *
         this.timeline.viewport.panelStride(width, "events") -
       this.timeline.viewport.multiLineViewportOffset(width, "events");
-    const { x: localBarX, width: barWidth } = eventColumnBounds(
+    const column = eventColumnBounds(
       channel,
       panelWidth,
       eventTypes.length,
       this.timeline.viewport.eventBarWidth ?? 0.82,
       this.timeline.viewport.eventInset(panelWidth),
     );
-    const barX = panelOffset + localBarX;
+    const barX = panelOffset + column.x;
     const palette = readCanvasPalette();
     context.fillStyle = valid ? palette.overlayValidFill : palette.overlayInvalidFill;
     context.strokeStyle = valid ? palette.overlayValidStroke : palette.overlayInvalidStroke;
-    context.fillRect(barX, top, barWidth, height);
-    context.strokeRect(barX, top, barWidth, height);
+    context.fillRect(barX, top, column.width, height);
+    context.strokeRect(barX, top, column.width, height);
   }
 }

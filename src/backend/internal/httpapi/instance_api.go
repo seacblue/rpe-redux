@@ -9,9 +9,10 @@ import (
 
 // instanceRegisterRequest is the POST /api/instances/register body.
 type instanceRegisterRequest struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	PID   int    `json:"pid"`
+	ID           string `json:"id"`
+	Label        string `json:"label"`
+	FrontendPort int    `json:"frontendPort"`
+	PID          int    `json:"pid"`
 }
 
 // instanceIDRequest names a frontend instance.
@@ -21,10 +22,11 @@ type instanceIDRequest struct {
 
 // documentKeyRequest identifies a document lock and its holder.
 type documentKeyRequest struct {
-	DocumentKey string `json:"documentKey"`
-	InstanceID  string `json:"instanceId"`
-	ChartName   string `json:"chartName"`
-	Label       string `json:"label"`
+	DocumentKey  string `json:"documentKey"`
+	InstanceID   string `json:"instanceId"`
+	ChartName    string `json:"chartName"`
+	Label        string `json:"label"`
+	FrontendPort int    `json:"frontendPort"`
 }
 
 // handleListInstances returns the live instance and lock listing.
@@ -44,7 +46,12 @@ func (a *API) handleRegisterInstance(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "instance id is required")
 		return
 	}
-	instance := a.instances.Register(request.ID, strings.TrimSpace(request.Label), request.PID)
+	instance := a.instances.Register(
+		request.ID,
+		strings.TrimSpace(request.Label),
+		request.PID,
+		request.FrontendPort,
+	)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"backendId": a.instances.BackendID(),
 		"instance":  instance,
@@ -110,6 +117,7 @@ func (a *API) handleAcquireDocument(w http.ResponseWriter, r *http.Request) {
 		request.InstanceID,
 		strings.TrimSpace(request.Label),
 		strings.TrimSpace(request.ChartName),
+		request.FrontendPort,
 	)
 	if !acquired {
 		writeJSON(w, http.StatusConflict, map[string]any{

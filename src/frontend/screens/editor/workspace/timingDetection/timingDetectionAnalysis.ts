@@ -2,9 +2,10 @@
  * Runs automatic fixed-BPM timing detection off the UI thread.
  *
  * The decoded buffer is mixed on the main thread (the worker receives one mono
- * array), then a short-lived worker returns one BPM plus its confidence and
- * preview arrays. A missing worker falls back to the same protocol function
- * synchronously so the feature still works in a restricted WebView.
+ * array), then a short-lived worker returns the measured BPM/offset and preview
+ * arrays, or `null` when no clear beat exists. A missing worker falls back to
+ * the same protocol function synchronously so the feature still works in a
+ * restricted WebView.
  */
 import { mixToMono, type BeatDetectionResult } from "../../../../../core/media/beatDetection.ts";
 import {

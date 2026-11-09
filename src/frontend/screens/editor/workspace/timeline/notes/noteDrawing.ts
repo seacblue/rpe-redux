@@ -265,18 +265,15 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   }
   if (this.gestures.pendingHold && this.gestures.cursor) {
     const lineIndex = this.gestures.pendingHold.lineIndex ?? this.getSession().lineIndex;
-    const head = this.viewport.noteVerticalForLine(
-      this.gestures.pendingHold.beat,
-      lineIndex,
-      height,
-      "notes",
-    );
-    const tail = this.viewport.noteVerticalForLine(
-      this.viewport.snappedBeat(this.gestures.cursor.y),
-      lineIndex,
-      height,
-      "notes",
-    );
+    // The second click may land before the first; the committed Hold always
+    // orders its anchors, so the preview must swap them the same way or its
+    // head and tail caps would flip on commit.
+    const anchor = this.gestures.pendingHold.beat;
+    const cursorBeat = this.viewport.snappedBeat(this.gestures.cursor.y);
+    const startBeat = Math.min(anchor, cursorBeat);
+    const endBeat = Math.max(anchor, cursorBeat);
+    const head = this.viewport.noteVerticalForLine(startBeat, lineIndex, height, "notes");
+    const tail = this.viewport.noteVerticalForLine(endBeat, lineIndex, height, "notes");
     const pendingHorizontal = this.viewport.noteHorizontal(
       this.gestures.pendingHold.positionX,
       lineIndex,

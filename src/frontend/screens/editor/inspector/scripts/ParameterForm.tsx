@@ -688,12 +688,7 @@ export function ParameterForm({
         <Button variant="outlined" type="button" onClick={onCancel}>
           {t("common.action.cancel")}
         </Button>
-        <Button
-          variant="solid"
-          type="submit"
-          data-tip-desc={t("workspace.scripts.runParameterHint")}
-          disabled={!canSubmit}
-        >
+        <Button variant="solid" type="submit" disabled={!canSubmit}>
           {t("workspace.scripts.run")}
         </Button>
       </div>

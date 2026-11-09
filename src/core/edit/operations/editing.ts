@@ -7,6 +7,7 @@
  * start page, and every operation here does nothing then.
  */
 import { t } from "../../../i18n/index.ts";
+import type { HistoryBeatRange } from "../session/history.ts";
 import type { EditorSession } from "../session/session.ts";
 import { selectiveUndoLatest, type SelectiveUndoResult } from "../session/selectiveUndo.ts";
 import { createLateBound } from "../../utils/lateBound.ts";
@@ -15,6 +16,8 @@ export interface HistoryTravelOptions {
   getSession(): EditorSession;
   cancelPlacement(): void;
   notify(message: string, level?: string, duration?: number): void;
+  /** Reveal the edited beat span after a successful undo or redo. */
+  jumpToEdit?(range: HistoryBeatRange): void;
 }
 
 /** Reports the outcome of a collaborative undo without claiming unapplied work. */
@@ -44,7 +47,19 @@ function notifyCollaborativeUndo(
 }
 
 /** Builds undo/redo actions that cancel placement and report the entry they travel to. */
-export function createHistoryTravel({ getSession, cancelPlacement, notify }: HistoryTravelOptions) {
+export function createHistoryTravel({
+  getSession,
+  cancelPlacement,
+  notify,
+  jumpToEdit,
+}: HistoryTravelOptions) {
+  /** Reveal the beat span the last successful history move touched. */
+  function reveal(session: EditorSession): void {
+    if (session.lastEditBeatRange) {
+      jumpToEdit?.(session.lastEditBeatRange);
+    }
+  }
+
   /** Cancels pending placement, then travels one step or reports an empty stack. */
   function travel(direction: "undo" | "redo"): void {
     cancelPlacement();
@@ -54,10 +69,11 @@ export function createHistoryTravel({ getSession, cancelPlacement, notify }: His
         notify(t("workspace.history.redoUnavailable"), "warning");
         return;
       }
-      notifyCollaborativeUndo(
-        selectiveUndoLatest(session, t("workspace.history.collaborativeUndo")),
-        notify,
-      );
+      const result = selectiveUndoLatest(session, t("workspace.history.collaborativeUndo"));
+      notifyCollaborativeUndo(result, notify);
+      if (result.status === "committed") {
+        reveal(session);
+      }
       return;
     }
     const entry = (direction === "undo" ? session.history.undoStack : session.history.redoStack).at(
@@ -75,6 +91,7 @@ export function createHistoryTravel({ getSession, cancelPlacement, notify }: His
     if (!session.travel(direction)) {
       return;
     }
+    reveal(session);
     notify(
       t("editor.app.notice.travel", {
         action: direction === "undo" ? t("common.action.undo") : t("common.action.redo"),

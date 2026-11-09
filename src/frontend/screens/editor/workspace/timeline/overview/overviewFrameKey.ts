@@ -24,6 +24,15 @@ export interface OverviewStripKey {
 /** Inputs that decide whether a complete overview frame can be reused. */
 export interface OverviewFrameKey extends OverviewStripKey {
   readonly markerY: number;
+  /** Whether clipboard and paste range overlays are painted. */
+  readonly rangeBarsEnabled?: boolean;
+  /** Fill opacity shared by both range overlays. */
+  readonly rangeBarOpacity?: number;
+  /** Clipboard and paste spans, encoded so equality compares the visible state. */
+  readonly clipboardRangeKey?: string;
+  readonly pasteRangeKey?: string;
+  readonly clipboardColor?: string;
+  readonly pasteColor?: string;
 }
 
 /** True when both keys describe the same cached strip pixels. */
@@ -48,5 +57,14 @@ export function sameOverviewStripKey(
 
 /** True when the last painted overview frame already shows this state. */
 export function sameOverviewFrame(left: OverviewFrameKey | null, right: OverviewFrameKey): boolean {
-  return sameOverviewStripKey(left, right) && left?.markerY === right.markerY;
+  return (
+    sameOverviewStripKey(left, right) &&
+    left?.markerY === right.markerY &&
+    (left?.rangeBarsEnabled ?? false) === (right.rangeBarsEnabled ?? false) &&
+    (left?.rangeBarOpacity ?? 0) === (right.rangeBarOpacity ?? 0) &&
+    (left?.clipboardRangeKey ?? "") === (right.clipboardRangeKey ?? "") &&
+    (left?.pasteRangeKey ?? "") === (right.pasteRangeKey ?? "") &&
+    (left?.clipboardColor ?? "") === (right.clipboardColor ?? "") &&
+    (left?.pasteColor ?? "") === (right.pasteColor ?? "")
+  );
 }

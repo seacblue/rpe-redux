@@ -63,7 +63,7 @@ const AppearanceSettingsSchema: SettingDefinition[] = [
     group: "settings.group.notes",
     label: "settings.field.timeline-event-marquee-color.label",
     control: "color",
-    default: "#B45309",
+    default: "#00C800",
   },
   {
     key: "timeline-note-marquee-color",
@@ -71,7 +71,7 @@ const AppearanceSettingsSchema: SettingDefinition[] = [
     group: "settings.group.notes",
     label: "settings.field.timeline-note-marquee-color.label",
     control: "color",
-    default: "#1D4ED8",
+    default: "#00C800",
   },
   {
     key: "timeline-sweep-add-color",

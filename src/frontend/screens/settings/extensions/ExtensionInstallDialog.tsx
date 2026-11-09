@@ -476,7 +476,7 @@ function ExtensionConsent({
       ))}
       {missing.length > 0 && (
         <p className="redux-extension-consent-required" role="status">
-          {t("settings.extensions.consent.required")} {missingLabels.join(" · ")}
+          {t("settings.extensions.consent.required")} {missingLabels.join(", ")}
         </p>
       )}
     </section>

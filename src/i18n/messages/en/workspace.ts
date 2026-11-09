@@ -39,13 +39,15 @@ export default {
   "workspace.document.compatibility.openAnyway": "Open anyway",
   "workspace.document.occupancy.title": "Chart in use",
   "workspace.document.occupancy.description":
-    '"{name}" is held by {owner}. The lock may be stale after a crash.',
-  "workspace.document.occupancy.detail": "Owner {owner} · backend {backend}",
-  "workspace.document.occupancy.frontend": "Clear the occupying frontend",
-  "workspace.document.occupancy.backend": "Clear the backend record",
-  "workspace.document.occupancy.reconcile": "Repair and retry in the background",
+    '"{name}" is already open in another editor window. If that window crashed, its lock may be stale.',
+  "workspace.document.occupancy.detail":
+    "Other window: frontend port {frontend}, backend port {backend}",
+  "workspace.document.occupancy.unknownPort": "unknown",
+  "workspace.document.occupancy.frontend": "Release other window",
+  "workspace.document.occupancy.backend": "Clear backend record",
+  "workspace.document.occupancy.reconcile": "Repair and retry",
   "workspace.document.occupancy.clearFailed":
-    "The backend did not release the occupying lock. Try clearing the backend record or cancel opening.",
+    "The backend did not release the lock. Try clearing this chart's backend record, or cancel opening.",
   "workspace.document.error.createCancelled": "Document creation was cancelled by an extension.",
   "workspace.document.error.openCancelled": "Document opening was cancelled by an extension.",
   "workspace.document.error.closeCancelled": "Document closing was cancelled by an extension.",
@@ -107,16 +109,15 @@ export default {
   "workspace.dialogs.editMarker": "Edit a time marker",
   /** The dialog's "neither apply nor delete, just get me out" button. */
   "workspace.dialogs.dismiss": "Cancel",
-  "workspace.timeline.historyTooltip": "{label} · {count} affected objects",
+  "workspace.timeline.historyTooltip": "{label}, {count} affected objects",
 
   "workspace.scripts.source": "Provided by {source}",
   "workspace.scripts.run": "Run",
-  "workspace.scripts.runParameterHint": "Run with these values",
   "workspace.scripts.parameters.title": "Run {script} with parameters",
   "workspace.scripts.parameters.description": "Enter valid values before running this script.",
   "workspace.scripts.parameters.fields": "Fields: {value}",
   "workspace.scripts.parameters.functions": "Functions: {value}",
-  "workspace.scripts.parameters.judgeLine.option": "Line {index} · {name}",
+  "workspace.scripts.parameters.judgeLine.option": "Line {index}, {name}",
   "workspace.scripts.parameters.judgeLine.allocate": "Assign free judge line",
   "workspace.scripts.parameters.judgeLine.allocateHint":
     "Choose a free judge line for this parameter. Reuse an empty line and add one only when none is free.",
@@ -144,7 +145,6 @@ export default {
   "workspace.scripts.recipe.fadeNotesDescription": "Scale the alpha of selected notes.",
 
   "workspace.history.title": "Edit history",
-  "workspace.history.description": "Jump through the edit history and revert to an earlier step.",
   "workspace.history.emptyTitle": "No edit history yet",
   "workspace.history.empty": "Undo history appears after your first edit.",
   "workspace.history.undo": "Undo history",
@@ -166,14 +166,19 @@ export default {
   "workspace.welcome.moreMenu": "More actions",
   "workspace.welcome.importRpe": "Import from RPE…",
   "workspace.welcome.importDialog.title": "Import charts",
-  "workspace.welcome.importDialog.description":
-    "Choose an RPE installation folder or another supported chart file. You can also drop one below.",
   "workspace.welcome.importDialog.dropTitle": "Drop a folder or file",
+  "workspace.welcome.importDialog.dropFormats":
+    "Supports RPE JSON / PEZ, PhiEdit PEC, and Phigros official JSON",
   "workspace.welcome.importDialog.dropActive": "Release to import",
   "workspace.welcome.importDialog.rpe": "Choose RPE folder",
   "workspace.welcome.importDialog.external": "Choose another chart",
   "workspace.welcome.drop.title": "Drop to import",
   "workspace.welcome.drop.imported": "Imported {name}",
+  "workspace.welcome.drop.extensionDetected": "Detected Extension: {name}",
+  "workspace.welcome.drop.skinDetected": "Detected note skin: {name}",
+  "workspace.welcome.drop.openSettings": "Open settings",
+  "workspace.welcome.drop.invalidPackage": "The package {name} could not be validated.",
+  "workspace.welcome.drop.unsupported": "This drop is not a chart, Extension, or note skin: {name}",
   "workspace.welcome.rpe.title": "Migrate from RPE",
   "workspace.welcome.rpe.viewHotkeys": "View key mapping",
   "workspace.welcome.rpe.pickFolder": "Choose an RPE installation folder",
@@ -292,8 +297,6 @@ export default {
   "workspace.collaboration.joinHint":
     "Paste the invitation link. The host approves the join unless the room allows editors automatically.",
   "workspace.collaboration.joinInviteTitle": "Join this room?",
-  "workspace.collaboration.joinInviteDescription":
-    "This invitation opens a collaboration room. Review who is currently there before joining.",
   "workspace.collaboration.joinInviteMembers": "People in this room",
   "workspace.collaboration.joinInviteCapacity": "{count} of {max} members",
   "workspace.collaboration.joinInviteOnline": "Online",
@@ -326,8 +329,6 @@ export default {
   "workspace.collaboration.invalidInviteLink": "This invitation link is invalid.",
   "workspace.collaboration.invalidRoomDetails": "Enter the server address and room password.",
   "workspace.collaboration.autoApproveEditor": "Allow new members to edit",
-  "workspace.collaboration.autoApproveHint":
-    "Link holders join as editors; you can still remove them",
   "workspace.collaboration.copyFailed": "The invite link could not be copied.",
   "workspace.collaboration.e2eOverwrite":
     "Encrypted rooms apply changes in revision order. A concurrent edit replaced a field in this document; a recovery copy is kept.",
@@ -396,12 +397,10 @@ export default {
   "workspace.collaboration.status.error": "Connection error",
   "workspace.collaboration.queued": "{count} change(s) waiting for confirmation",
   "workspace.collaboration.location.none": "No active location",
-  "workspace.collaboration.location.global": "Global · {section}",
-  "workspace.collaboration.location.edit": "Edit · beat {beat}",
+  "workspace.collaboration.location.global": "Global, {section}",
+  "workspace.collaboration.location.edit": "Edit, beat {beat}",
   "workspace.collaboration.location.design": "Design",
   "workspace.collaboration.assets": "Resources",
-  "workspace.collaboration.assetSyncHint":
-    "Resources are content-addressed and verified before they replace a local copy.",
   "workspace.collaboration.assetSyncing": "Syncing",
   "workspace.collaboration.locks": "Edit locks",
   "workspace.collaboration.locked": "{owners} is editing {objects}. Wait or ask them to finish.",

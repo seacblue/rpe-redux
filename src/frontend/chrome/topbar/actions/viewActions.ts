@@ -76,11 +76,10 @@ export function registerViewActions() {
       separatorBefore: true,
       icon: "jump",
       label: "chrome.menu.playback.seek",
-      tooltip: "chrome.menu.playback.seekHint",
+      tooltip: "chrome.menu.playback.seek",
       run: () => {
         void requestInput({
           title: t("chrome.menu.playback.seek"),
-          description: t("chrome.menu.playback.seekHint"),
           defaultValue: editorSeekBeat.get(),
           label: t("common.action.apply"),
           cancelLabel: t("common.action.cancel"),
@@ -98,11 +97,10 @@ export function registerViewActions() {
       order: 120,
       icon: "rate",
       label: "chrome.time.rate",
-      tooltip: "chrome.menu.playback.rateHint",
+      tooltip: "chrome.time.rate",
       run: () => {
         void requestSelect({
           title: t("chrome.time.rate"),
-          description: t("chrome.menu.playback.rateHint"),
           defaultValue: editorRate.get(),
           cancelLabel: t("common.action.cancel"),
           entries: PLAYBACK_RATES.map((rate) => ({ value: rate, label: `${rate}x` })),

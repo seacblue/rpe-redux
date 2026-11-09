@@ -20,7 +20,8 @@ import type { ScriptUiSelectOption } from "../../../core/extensions/scriptUi.ts"
 
 interface PromptMessage {
   title: string;
-  description: string;
+  /** The paragraph under the title; omit it when the title is enough. */
+  description?: string;
   detail?: string;
   priority?: ModalPriority;
 }
@@ -188,7 +189,7 @@ export function requestInput(
       children: createElement(PromptInput, {
         inputRef,
         title: options.title,
-        label: options.description.trim() || undefined,
+        label: options.description?.trim() || undefined,
         defaultValue: options.defaultValue,
         placeholder: options.placeholder,
         multiline: options.multiline,
@@ -250,6 +251,8 @@ export function requestChoice<T>(
   options: PromptMessage & {
     entries: readonly T[];
     label(entry: T): string;
+    /** Extra class for the footer when its answers must stay on one row. */
+    actionsClassName?: string;
   },
 ): Promise<T | null> {
   return new Promise((resolve) => {
@@ -267,6 +270,7 @@ export function requestChoice<T>(
       label: options.title,
       description: description(options),
       className: "redux-prompt-dialog",
+      actionsClassName: options.actionsClassName,
       onClose: () => settle(),
       actions: createElement(ChoiceActions, {
         labels: options.entries.map(options.label),

@@ -55,7 +55,7 @@ interface MultiEditFormProps {
  * only has room for the symbol.
  */
 function shortLabel(label: string): string {
-  return label.split("·")[0]?.trim() || label;
+  return label.split(/[·,，、]/u)[0]?.trim() || label;
 }
 
 /** Renders one labeled input or select for a batch parameter. */
@@ -301,13 +301,7 @@ export function MultiEditForm({
       )}
       <div className="batch-apply redux-footer-bar">
         <div className="redux-footer-actions">
-          <Button
-            type="button"
-            variant="solid"
-            data-tip-desc={t("editorPanels.multiEdit.applyHint")}
-            disabled={!canApply}
-            onClick={onApply}
-          >
+          <Button type="button" variant="solid" disabled={!canApply} onClick={onApply}>
             {t("editorPanels.multiEdit.apply")}
           </Button>
         </div>

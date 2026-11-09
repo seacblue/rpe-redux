@@ -16,6 +16,7 @@ import { nudgeSelection } from "../selection/edits.ts";
 import { MAX_BASE_EVENT_LAYERS } from "../../global/chart/chartVocabulary.ts";
 import type { EditorSession } from "../session/session.ts";
 import type { TimelineArea } from "../timeline/types.ts";
+import { isSystemCancelKey } from "../../shortcuts/keyMatching.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
 
 export interface KeyboardActionEvent extends ShortcutEventLike {
@@ -36,6 +37,42 @@ interface KeyboardTimeline {
   eventTypes: string[];
   eventInteraction: Pick<EventKeyboardTarget, "pending">;
   addAtCursor(type: number): boolean;
+  cancelPlacement(): void;
+}
+
+/** The live state the fixed Escape action resolves against. */
+export interface FixedCancelState {
+  hasPendingPlacement: boolean;
+  hasSelection: boolean;
+  samplingActive: boolean;
+  curveMode: boolean;
+  batchActive: boolean;
+}
+
+/**
+ * Resolve Escape to the editor action it should run.
+ *
+ * Escape is a fixed system cancel key, not a rebindable shortcut: it cancels a
+ * pending placement before it clears the selection, and surfaces that own their
+ * own Escape handling (sampling, curve, and batch drags) keep it for themselves.
+ */
+export function fixedCancelAction(
+  event: ShortcutEventLike,
+  state: FixedCancelState,
+): "placement.cancel" | "selection.clear" | undefined {
+  if (!isSystemCancelKey(event)) {
+    return undefined;
+  }
+  if (state.samplingActive || state.curveMode || state.batchActive) {
+    return undefined;
+  }
+  if (state.hasPendingPlacement) {
+    return "placement.cancel";
+  }
+  if (state.hasSelection) {
+    return "selection.clear";
+  }
+  return undefined;
 }
 
 /** Keyboard action ids mapped to timeline note types and navigation directions. */
@@ -77,6 +114,10 @@ export interface EditorKeyboardActionDependencies {
   copySelectionAllLayers: () => void;
   cutSelection: () => void;
   pasteSelection: (options?: { mirror?: boolean; keepTime?: boolean }) => void;
+  /** Seek to the clipboard's first or last beat; false when it is empty. */
+  jumpToClipboard: (edge: "start" | "end") => boolean;
+  /** Remove the active clipboard contents without touching history entries. */
+  clearClipboard: () => void;
   selectEventLayer: (layer: number) => void;
   togglePlayback: () => Promise<unknown>;
   showLineInfo: () => void;
@@ -131,7 +172,9 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       return;
     }
-    if (action === "selection.clear") {
+    if (action === "placement.cancel") {
+      timeline.cancelPlacement();
+    } else if (action === "selection.clear") {
       if (clearSelection(session)) {
         session.notify();
       }
@@ -201,6 +244,12 @@ export async function runEditorKeyboardAction(
         keepTime: action === "edit.paste.keepTime",
         mirror: action === "edit.paste.mirror",
       });
+    } else if (action === "edit.clipboard.jumpStart") {
+      handled = deps.jumpToClipboard("start");
+    } else if (action === "edit.clipboard.jumpEnd") {
+      handled = deps.jumpToClipboard("end");
+    } else if (action === "edit.clipboard.clear") {
+      deps.clearClipboard();
     } else if (action === "playback.pause") {
       event.preventDefault();
       await deps.togglePlayback();

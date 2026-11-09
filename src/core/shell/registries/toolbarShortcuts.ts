@@ -5,15 +5,12 @@
  * into a rebindable shortcut. A shortcut with an explicit `shortcutId` is
  * skipped because the editor owns the canonical declaration for it.
  */
-import type { ShortcutCategory, ShortcutDisposer } from "../../shortcuts/types.ts";
+import type { ShortcutDisposer } from "../../shortcuts/types.ts";
 import { shortcutRegistry } from "../../shortcuts/registry.ts";
+import { SHORTCUT_CATEGORIES } from "../../shortcuts/categories.ts";
 import { actionAvailable, type ToolbarEntry } from "../registries/toolbar.ts";
 
-const WORKSPACE_CATEGORY: ShortcutCategory = {
-  id: "workspace",
-  title: "shortcuts.category.workspace",
-  order: 10,
-};
+const WORKSPACE_CATEGORY = SHORTCUT_CATEGORIES.workspace;
 
 /**
  * Register rebindable shortcuts for toolbar actions that declare `shortcuts`

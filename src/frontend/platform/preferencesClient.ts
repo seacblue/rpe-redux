@@ -13,6 +13,7 @@ import {
   type LocalLibrary,
   type RequestOptions,
 } from "../../core/global/library/client.ts";
+import { browserDevRuntime } from "../../core/platform/browser/devRuntime.ts";
 import { isDesktop } from "../../core/platform/environment.ts";
 import type { PreferenceClient } from "../../core/state/preferences.ts";
 
@@ -46,10 +47,18 @@ function parseCredentialFile(text: string): string | null {
   return typeof token === "string" && token.trim() ? token : null;
 }
 
-/** Read the write credential through the native file bridge, or null when unavailable. */
+/** Read the write credential through the native file bridge, or the browser dev token. */
 async function readCredential(origin: string): Promise<WriteCredential | null> {
   if (!isDesktop()) {
-    return null;
+    const development = browserDevRuntime();
+    if (!development?.preferenceToken) {
+      return null;
+    }
+    return {
+      origin,
+      header: development.preferenceHeader || DEFAULT_TOKEN_HEADER,
+      token: development.preferenceToken,
+    };
   }
   try {
     const response = await fetch(`${origin}/api/preferences/endpoint`, { cache: "no-store" });

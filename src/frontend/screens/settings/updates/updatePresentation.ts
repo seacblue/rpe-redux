@@ -5,7 +5,12 @@
  * module, so status text and failure text cannot drift between views.
  */
 import type { MessageKey, MessageParams } from "../../../../i18n/index.ts";
-import type { UpdateErrorCode, UpdateState } from "./updateStore.ts";
+import {
+  isUpdateBusy,
+  type UpdateErrorCode,
+  type UpdatePhase,
+  type UpdateState,
+} from "./updateStore.ts";
 
 type UpdateTranslate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -20,6 +25,18 @@ export function shouldShowUpdateBadge(
     state.phase !== "scheduled" &&
     state.phase !== "installed"
   );
+}
+
+/** The changelog footer while an update owns the flow: every action is locked. */
+export function changelogUpdateAction(phase: UpdatePhase): {
+  locked: boolean;
+  labelKey: MessageKey;
+} {
+  const locked = isUpdateBusy(phase);
+  return {
+    locked,
+    labelKey: locked ? "chrome.changelog.updating" : "chrome.changelog.updateNow",
+  };
 }
 
 /** Render a byte count as megabytes with one decimal, or `?` when unknown. */

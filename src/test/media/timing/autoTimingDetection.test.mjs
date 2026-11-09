@@ -1,7 +1,10 @@
-/** Automatic timing always answers with one fixed BPM and a confidence. */
+/** Automatic timing returns one precise fixed BPM or a "not found" answer. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectAutoTimingFromSamples } from "../../../core/media/beatDetection.ts";
+import {
+  detectAutoTimingFromSamples,
+  roundMeasuredTiming,
+} from "../../../core/media/beatDetection.ts";
 
 const SAMPLE_RATE = 22050;
 
@@ -75,15 +78,17 @@ function stepBeats(offset, sections) {
   return beats;
 }
 
-/** Assert that a result is a finite fixed answer in the displayable range. */
-function assertFixedAnswer(result) {
-  assert.ok(result, "automatic detection must return a result");
+/** Assert that a result is one finite answer at the detector's precision. */
+function assertMeasuredAnswer(result) {
+  assert.ok(result, "a clear pulse must return a result");
   assert.ok(Number.isFinite(result.bpm), `BPM was ${result.bpm}`);
   assert.ok(result.bpm >= 50 && result.bpm <= 220, `BPM was ${result.bpm}`);
   assert.ok(Number.isFinite(result.offsetMs), `offset was ${result.offsetMs}`);
   assert.ok(result.offsetMs >= 0, `offset was ${result.offsetMs}`);
-  assert.ok(result.confidence >= 0 && result.confidence <= 1);
-  assert.ok(result.candidates.length >= 1);
+  assert.equal(roundMeasuredTiming(result.bpm), result.bpm);
+  assert.equal(roundMeasuredTiming(result.offsetMs), result.offsetMs);
+  assert.equal("confidence" in result, false);
+  assert.equal("candidates" in result, false);
   assert.equal("mode" in result, false);
   assert.equal("variable" in result, false);
 }
@@ -94,55 +99,68 @@ test("empty input or an invalid sample rate is the only refusal", () => {
   assert.equal(detectAutoTimingFromSamples(new Float32Array(16), Number.NaN), null);
 });
 
-test("silence returns the 120 BPM fallback at zero confidence", () => {
-  const result = detectAutoTimingFromSamples(
-    new Float32Array(SAMPLE_RATE * 4),
-    SAMPLE_RATE,
-    SAMPLE_RATE * 4,
+test("silence and audio too short for an envelope report not found", () => {
+  assert.equal(
+    detectAutoTimingFromSamples(new Float32Array(SAMPLE_RATE * 4), SAMPLE_RATE, 4),
+    null,
   );
-  assertFixedAnswer(result);
-  assert.equal(result.bpm, 120);
-  assert.equal(result.offsetMs, 0);
-  assert.equal(result.confidence, 0);
-  assert.equal(result.beatTimes.length >= 1, true);
-  assert.ok([...result.beatTimes].every((time) => Number.isFinite(time)));
-});
-
-test("very short audio still returns a finite fixed answer", () => {
   for (const length of [1, 32, 512]) {
-    const result = detectAutoTimingFromSamples(
-      new Float32Array(length),
-      SAMPLE_RATE,
-      length / SAMPLE_RATE,
+    assert.equal(
+      detectAutoTimingFromSamples(new Float32Array(length), SAMPLE_RATE, length / SAMPLE_RATE),
+      null,
     );
-    assertFixedAnswer(result);
-    assert.equal(result.bpm, 120);
-    assert.ok([...result.beatTimes].every((time) => Number.isFinite(time)));
   }
 });
 
-test("unpitched noise keeps a fixed answer and a low confidence", () => {
-  const randomValue = random(7);
-  const noise = new Float32Array(SAMPLE_RATE * 4);
-  for (let index = 0; index < noise.length; index++) {
-    noise[index] = randomValue() * 0.2;
+test("unpitched noise reports not found instead of a guessed tempo", () => {
+  for (const seed of [1, 3, 5, 7, 9]) {
+    const randomValue = random(seed);
+    const noise = new Float32Array(SAMPLE_RATE * 4);
+    for (let index = 0; index < noise.length; index++) {
+      noise[index] = randomValue() * 0.2;
+    }
+    assert.equal(detectAutoTimingFromSamples(noise, SAMPLE_RATE, 4), null);
   }
-  const result = detectAutoTimingFromSamples(noise, SAMPLE_RATE, 4);
-  assertFixedAnswer(result);
-  assert.ok(result.confidence < 0.4, `confidence was ${result.confidence}`);
 });
 
-test("a clear pulse scores above silence", () => {
+test("a clear pulse reports the exact integer BPM and its offset", () => {
   const beat = 60 / 128;
   const beats = [];
-  for (let time = 0.35; time < 16; time += beat) {
+  for (let index = 0; ; index++) {
+    const time = 0.35 + index * beat;
+    if (time >= 16) {
+      break;
+    }
     beats.push(time);
   }
   const clear = detectAutoTimingFromSamples(arrangement(beats, 16, 8), SAMPLE_RATE, 16);
-  assertFixedAnswer(clear);
-  assert.ok(Math.abs(clear.bpm - 128) < 0.5, `BPM was ${clear.bpm}`);
-  assert.ok(clear.confidence > 0.7, `confidence was ${clear.confidence}`);
-  assert.ok(clear.confidence > 0);
+  assertMeasuredAnswer(clear);
+  assert.equal(clear.bpm, 128);
+  assert.ok(Math.abs(clear.offsetMs - 350) <= 1, `offset was ${clear.offsetMs}`);
+});
+
+test("a fractional BPM keeps three-decimal precision", () => {
+  const beat = 60 / 173.45;
+  const beats = [];
+  for (let index = 0; ; index++) {
+    const time = 0.4 + index * beat;
+    if (time >= 24) {
+      break;
+    }
+    beats.push(time);
+  }
+  const result = detectAutoTimingFromSamples(arrangement(beats, 24, 14), SAMPLE_RATE, 24);
+  assertMeasuredAnswer(result);
+  assert.ok(Math.abs(result.bpm - 173.45) <= 0.001, `BPM was ${result.bpm}`);
+  assert.ok(Math.abs(result.offsetMs - 400) <= 1, `offset was ${result.offsetMs}`);
+});
+
+test("near-integer measurements snap to whole numbers", () => {
+  assert.equal(roundMeasuredTiming(128.0004), 128);
+  assert.equal(roundMeasuredTiming(127.9996), 128);
+  assert.equal(roundMeasuredTiming(128.0014), 128.001);
+  assert.equal(roundMeasuredTiming(620.0009), 620);
+  assert.equal(roundMeasuredTiming(620.0012), 620.001);
 });
 
 test("a step-tempo song still reports one fixed BPM", () => {
@@ -151,12 +169,12 @@ test("a step-tempo song still reports one fixed BPM", () => {
     [150, 8],
   ]);
   const result = detectAutoTimingFromSamples(arrangement(beats, 16, 9), SAMPLE_RATE, 16);
-  assertFixedAnswer(result);
+  assertMeasuredAnswer(result);
   assert.ok(result.beatTimes.length > 20);
   assert.ok([...result.beatTimes].every((time) => Number.isFinite(time)));
 });
 
-test("the same input produces the same fixed answer", () => {
+test("the same input produces the same measured answer", () => {
   const beats = [];
   for (let time = 0.5; time < 12; time += 60 / 150) {
     beats.push(time);
@@ -168,13 +186,11 @@ test("the same input produces the same fixed answer", () => {
     {
       bpm: first?.bpm,
       offsetMs: first?.offsetMs,
-      confidence: first?.confidence,
       beatTimes: first ? [...first.beatTimes] : null,
     },
     {
       bpm: second?.bpm,
       offsetMs: second?.offsetMs,
-      confidence: second?.confidence,
       beatTimes: second ? [...second.beatTimes] : null,
     },
   );

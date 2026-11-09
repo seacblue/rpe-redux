@@ -127,7 +127,7 @@ Narrow list columns use the compact variant: `.redux-footer-bar` plus `.redux-fo
 - Theme packages carry monochrome alpha masks. The icon primitive paints each mask with the active surface token, so light and dark differ by optical stroke (2.0 vs 1.75) and surface colour rather than by a second colour drawing.
 - Use 20 for transport and icon buttons, 18 for category and toolbar glyphs, 16 for compact controls, and 14 for disclosure chevrons and keycap affordances. Window caption glyphs use 14 because their source viewBox reserves padding. Callers use these sizes; the icon primitive defaults to 18.
 - One glyph names one meaning. Playback controls use `playbackPlay`; audio settings use `volume`; a plus does not stand in for a file, a line, and an extension.
-- Add a glyph to the dark package and to `iconAssets.ts`, then regenerate both packages with `npm run icons:build` and update `scripts/iconSources.mjs` alongside the catalog. `npm run icons:check` verifies the pair.
+- Add a glyph to the dark package and to `iconAssets.ts`, then regenerate both packages with `npm run build:icons` and update `scripts/iconSources.mjs` alongside the catalog. `npm run icons:check` verifies the pair.
 - `npm run icons:export` writes a self-contained theme JSON with every glyph inlined as a PNG data URL.
 
 See [Architecture](../../docs/architecture.md) for module ownership before adding a shared component or another visual seam.

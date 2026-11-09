@@ -23,9 +23,9 @@ RPE Redux has one source gate, one unit suite, one desktop smoke suite, and a th
 | Formatting gate | `npm run verify` | `check` plus Prettier over source and docs | `npm ci` |
 | Unit suite | `npm run test:unit` | `src/test/**/*.test.mjs` | Node.js 22.18+ |
 | Smoke suite | `npm run smoke` | Four P0 journeys against the packaged window | `npm run build -- --debug`; Windows |
-| Go service | `npm run server:test` | `src/backend/**/*_test.go` | Go 1.25.3+ |
+| Go service | `npm run test:server` | `src/backend/**/*_test.go` | Go 1.25.3+ |
 | Rust | `npm run check:native` | `cargo fmt --check` and `cargo check` | Rust stable |
-| Docs site | `npm run docs:build` | Extension SDK site into `docs-site-dist/` | `npm ci` |
+| Docs site | `npm run build:docs` | Extension SDK site into `docs-site-dist/` | `npm ci` |
 | Extension methods | `npm run check:extensions` | Method registry vs capability gate (part of `check`) | `npm ci` |
 
 CI runs `npm run verify` on Windows and `npm run check` on Linux (`.github/workflows/check.yml`). When a change touches `src-tauri/**`, the same workflow also runs a conditional Linux Rust job with `cargo fmt --check` and `cargo check`. The desktop smoke suite stays local because it needs a built desktop executable. There is no tracked Git hook; run the gates yourself before reporting.
@@ -43,7 +43,7 @@ npm run check:icons   # theme icon coverage
 npm run check:sdk     # tsc -p sdk/tsconfig.json
 npm run check:extensions # Extension method registry vs capability gate
 npm run test:unit
-npm run server:test
+npm run test:server
 ```
 
 `npm run verify` adds `prettier --check` over source, scripts, and all maintained Markdown, TypeScript, JavaScript, JSON, and HTML files. `npm run fix` applies ESLint and Prettier fixes to source, scripts, and maintained Markdown, TypeScript, JavaScript, JSON, and HTML files.
@@ -99,7 +99,7 @@ A journey is an async function that receives the runner. Use `runner.callApi` fo
 
 ```powershell
 node --test src/test/editor/timeline/timeStretch.test.mjs
-npm run desktop
+npm run dev:desktop
 ```
 
 The unit suite checks that 1× preserves decoded samples through a transient. At slower rates it checks pitch, duration, stereo phase, and attack timing. In the desktop app, open a chart with clear drum attacks and a sustained sound. Set the four hit-sound levels to zero under **Settings → Audio**. At 1×, play the same five to ten seconds with **Keep pitch when changing speed** on and off at the same music level. Listen to the attacks and the sound between them. On v1.0.0 the two settings can produce different audio around attacks. With unity-rate passthrough they should sound alike once playback settles.
@@ -108,10 +108,10 @@ Enable pitch preservation and replay the section at 0.75×, 0.5×, and 0.25×. L
 
 ## Platform checks
 
-- `npm run server:test` runs the Go service tests in `src/backend/`. The collaboration room tests bind ephemeral ports and clean up their data directory.
+- `npm run test:server` runs the Go service tests in `src/backend/`. The collaboration room tests bind ephemeral ports and clean up their data directory.
 - `npm run check:native` checks Rust formatting and compilation. It does not run Rust unit tests; use `cargo test --manifest-path src-tauri/Cargo.toml` when a change adds one.
 - `node scripts/checkExtensionMethods.mjs` (also `npm run check:extensions`) is the static gate for the Extension method registry; it runs in `npm run check`.
-- `npm run docs:build` builds the Extension documentation site; its renderer, links, navigation, and generated API pages are exercised by `src/test/docs/site/docsSite.test.mjs` as part of `npm run test:unit`.
+- `npm run build:docs` builds the Extension documentation site; its renderer, links, navigation, and generated API pages are exercised by `src/test/docs/site/docsSite.test.mjs` as part of `npm run test:unit`.
 
 ## Fixtures
 

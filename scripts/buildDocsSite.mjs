@@ -693,7 +693,7 @@ const ATTR_DESCRIPTIONS = Object.freeze({
 /** Curated design-token table groups validated against the source sheets. */
 const TOKEN_GROUPS = Object.freeze([
   {
-    title: "颜色 · 表面与文字",
+    title: "颜色、表面与文字",
     tokens: [
       ["--surface", "应用和主面板底色"],
       ["--surface-raised", "卡片和浮起表面"],
@@ -709,7 +709,7 @@ const TOKEN_GROUPS = Object.freeze([
     ],
   },
   {
-    title: "颜色 · 操作与状态",
+    title: "颜色、操作与状态",
     tokens: [
       ["--accent", "强调色和选中态"],
       ["--accent-hover", "强调色悬停"],
@@ -725,7 +725,7 @@ const TOKEN_GROUPS = Object.freeze([
     ],
   },
   {
-    title: "颜色 · 输入与浮层",
+    title: "颜色、输入与浮层",
     tokens: [
       ["--input-surface", "输入框底色"],
       ["--input-border", "输入框边框"],

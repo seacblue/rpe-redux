@@ -270,7 +270,7 @@ export async function loadMarketplaceCatalog(url: string): Promise<MarketplaceCa
       code: "httpError",
       phase: "marketplace",
       message: `Marketplace returned HTTP ${response.status}.`,
-      detail: [response.statusText, body.slice(0, 400)].filter(Boolean).join(" · "),
+      detail: [response.statusText, body.slice(0, 400)].filter(Boolean).join(", "),
       hint: "Check that the URL points at a public JSON document.",
       source: trimmed,
       status: response.status,
@@ -767,7 +767,7 @@ async function request(
       message: rateLimited
         ? "GitHub rate limit reached while resolving the Extension."
         : `GitHub returned HTTP ${response.status} for ${url}.`,
-      detail: [response.statusText, body.slice(0, 400)].filter(Boolean).join(" · "),
+      detail: [response.statusText, body.slice(0, 400)].filter(Boolean).join(", "),
       hint: rateLimited
         ? "Wait for the rate-limit window to reset, or install from a downloaded package."
         : response.status === 404

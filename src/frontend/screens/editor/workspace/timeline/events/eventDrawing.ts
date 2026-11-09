@@ -1,6 +1,6 @@
 /**
  * Draws the event field: backdrop grid and columns, event bars, curves, selection
- * and overlap tints, drag previews, and multi-line chrome.
+ * and overlap tints, and multi-line chrome.
  *
  * It owns painting and per-pass culling; event lookup, drag deltas, and viewport
  * projection come from core, the cache, and the viewport.
@@ -38,7 +38,6 @@ import {
   multiLineChromeKey,
   verticalAtBeat,
 } from "./eventRenderCache.ts";
-import { drawEventDragOverlay } from "./eventDragDrawing.ts";
 import { labelGroups, shouldDrawEventCurves } from "./eventLabelLayout.ts";
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
 const EMPTY_EVENTS: readonly JudgeLineEvent[] = [];
@@ -371,7 +370,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     const x = eventColumnBoundary(boundary, width, this.eventTypes.length, eventInset);
     strokeVerticalGrid(context, Math.max(0.5, Math.min(width - 0.5, x)), 23);
   }
-  drawEventDragOverlay(this, context, width, height, palette);
   this.gestures.eventInteraction.draw(context, width);
   this.eventBatch.finish();
 }
@@ -402,7 +400,7 @@ export function drawMultiLineEvents(
       continue;
     }
     const eventTypes = this.viewport.eventTypesForLine(lineIndex);
-    const channelWidth = contentWidth / eventTypes.length;
+    const channelWidth = eventTypes.length ? contentWidth / eventTypes.length : 0;
     const barWidth =
       channelWidth * Math.max(0.35, Math.min(1, this.appearance.eventBarWidth ?? 0.82));
     const lineOpacity = multiLineLineOpacity(
@@ -431,6 +429,13 @@ export function drawMultiLineEvents(
         : eventLayerOf(
             session.chart.judgeLineList?.[lineIndex]?.eventLayers?.[this.gestures.layer],
           );
+    if (!eventTypes.length) {
+      // Every ordinary track is hidden. Keep the panel edges so the field still
+      // reads as one empty multi-line panel instead of an unclipped void.
+      separators.strokeStyle = this.appearance.verticalGridColor;
+      strokeVerticalGrid(separators, Math.max(0.5, offset), height);
+      strokeVerticalGrid(separators, Math.min(width - 0.5, offset + contentWidth), height);
+    }
     eventTypes.forEach((type, channel) => {
       context.globalAlpha = lineOpacity;
       const barX = offset + channel * channelWidth + (channelWidth - barWidth) / 2;
@@ -497,20 +502,9 @@ export function drawMultiLineEvents(
           }
         }
         context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, lineOpacity);
-        if (type === "paintEvents") {
-          context.fillStyle = selected ? palette.eventSelectedFill : palette.eventShaderFill;
-          context.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
-        } else {
-          drawEventBar(this, context, rectangle, lineOpacity);
-          if (display.overlaps.has(index) || hasNonPositiveRange(event.startTime, event.endTime)) {
-            drawEventOverlapFilter(context, rectangle, palette);
-          }
-        }
-        context.globalAlpha = lineOpacity;
-        if (!selected && type === "paintEvents") {
-          context.strokeStyle = palette.eventShaderFill;
-          context.lineWidth = 1;
-          context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+        drawEventBar(this, context, rectangle, lineOpacity);
+        if (display.overlaps.has(index) || hasNonPositiveRange(event.startTime, event.endTime)) {
+          drawEventOverlapFilter(context, rectangle, palette);
         }
         context.globalAlpha = lineOpacity;
         if (event.trajectory) {
@@ -630,7 +624,6 @@ export function drawMultiLineEvents(
       separators.lineWidth = 1;
     }
   }
-  drawEventDragOverlay(this, context, width, height, palette);
   context.globalAlpha = 1;
   context.lineWidth = 1;
   return true;

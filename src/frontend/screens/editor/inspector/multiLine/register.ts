@@ -22,7 +22,6 @@ const disposeTool = registerInspectorTool({
   label: "chrome.pane.multiLine",
   icon: "layers",
   order: 270,
-  description: "chrome.menu.tools.multiLineHint",
 });
 const disposeSidebar = registerInspectorSidebar({
   id: "multi-line",

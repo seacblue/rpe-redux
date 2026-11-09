@@ -21,7 +21,7 @@ const DefaultAIPort = 47822
 // DefaultHost keeps the service loopback-only unless explicitly overridden.
 const DefaultHost = "127.0.0.1"
 
-// DefaultCollabPort matches the standalone `npm run collab` contract. The
+// DefaultCollabPort matches the standalone `npm run dev:collab` contract. The
 // desktop app uses the same URL so room creation works without extra setup.
 const DefaultCollabPort = 47830
 

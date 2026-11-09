@@ -42,7 +42,10 @@ import {
 } from "../commands/viewControls.ts";
 import { EditorEditClock } from "../../../../../../core/edit/state/editClock.ts";
 import { EditorChartInfoPresenter } from "../../../../../chrome/statusbar/chartInfoPresenter.ts";
-import { bindDesktopLifecycle } from "../../../../../platform/desktopLifecycle.ts";
+import {
+  bindBrowserLifecycle,
+  bindDesktopLifecycle,
+} from "../../../../../platform/desktopLifecycle.ts";
 import { bindEditorWindowEvents } from "../../../../../platform/windowEvents.ts";
 import { preferences } from "../../../../../../core/state/preferences.ts";
 import { getDrawerState } from "../../../../../chrome/drawer/drawerPanes.ts";
@@ -376,6 +379,13 @@ export function createEditorAssembly(
     ui,
     densityBarsEnabled: () => values.byId.get<boolean>("timeline-density-bars-enabled"),
     hoverPreviewEnabled: () => values.byId.get<boolean>("timeline-hover-preview-enabled"),
+    clipboardRangesEnabled: () =>
+      values.byId.get<boolean>("timeline-clipboard-range-bars-enabled") === true,
+    rangeBarOpacity: () => {
+      const stored = values.byId.get<unknown>("timeline-range-bar-opacity");
+      const value = typeof stored === "number" ? stored : Number(stored);
+      return Number.isFinite(value) ? Math.max(0.02, Math.min(0.8, value)) : 0.18;
+    },
     visibility: { hasDocument, atHome },
   });
   // Alt+wheel writes the scale continuously; persisting it re-applies every
@@ -538,6 +548,18 @@ export function createEditorAssembly(
   });
   scope.add(connectRpeImport(() => home.chooseRpeImport()));
   scope.add(connectExternalImport(() => home.chooseExternalImport()));
+  // Debug and automation builds expose the same drop entry point the window
+  // uses, so a test can route local paths without synthesizing an OS drag. The
+  // probe shares the test flag with the public facade and dies with the scope.
+  if ((globalThis as { __REDUX_TEST_API__?: unknown }).__REDUX_TEST_API__ === true) {
+    Object.defineProperty(globalThis, "__REDUX_DROP_PATHS__", {
+      configurable: true,
+      value: (paths: string[]) => home.importPaths(paths),
+    });
+    scope.add(() => {
+      delete (globalThis as { __REDUX_DROP_PATHS__?: unknown }).__REDUX_DROP_PATHS__;
+    });
+  }
   const workspaceNavigationBinding = bindWorkspaceNavigation({
     atHome,
     hasDocument,
@@ -969,84 +991,91 @@ export function createEditorAssembly(
   });
   scope.add(workspaceSession.dispose);
 
-  bindDesktopLifecycle({
-    documents,
-    addCleanup: (cleanup) => scope.add(cleanup),
-    openPaths: documentRuntime.openPaths,
-    // A drop is an import first: the file lands in the library whatever the
-    // current document is. Opening it is a second step that goes through the
-    // unsaved-changes decision, so a drop never silently discards edits.
-    dropPaths: async (paths) => {
-      if (atHome()) {
-        await home.importPaths(paths);
-        return;
-      }
-      const drawer = getDrawerState();
-      if (drawer.open && drawer.pane === "assets") {
-        await assetLibrary.importPaths(paths);
-        return;
-      }
-      const imported = await home.importPaths(paths);
-      if (!imported.length) {
-        return;
-      }
-      if (imported.length > 1) {
-        // A folder can yield several charts; opening one of them without asking
-        // would pick for the user, so the library keeps them and the notice says
-        // where they went.
-        notify(t("editor.app.notice.droppedManyImported", { count: imported.length }), "info");
-        return;
-      }
-      const target = imported[0];
-      const dirty = session.current.history.dirty || documentState.assetDirty;
-      if (dirty) {
-        const choice = await requestExitChoice({
-          title: t("editor.app.dialog.unsavedChangesTitle"),
-          description: t("editor.app.dialog.unsavedChangesBody"),
-          saveLabel: t("common.action.save"),
-          discardLabel: t("editor.app.dialog.openWithoutSaving"),
-          cancelLabel: t("common.action.cancel"),
-          priority: MODAL_PRIORITY.closePrompt,
-        });
-        if (choice === "cancel") {
+  if (documents) {
+    bindDesktopLifecycle({
+      documents,
+      addCleanup: (cleanup) => scope.add(cleanup),
+      openPaths: documentRuntime.openPaths,
+      // A drop is an import first: the file lands in the library whatever the
+      // current document is. Opening it is a second step that goes through the
+      // unsaved-changes decision, so a drop never silently discards edits.
+      dropPaths: async (paths) => {
+        if (atHome()) {
+          await home.importPaths(paths);
           return;
         }
-        if (choice === "save") {
-          const result = await documentRuntime.save();
-          if (!result || result.status === "save_conflict") {
+        const drawer = getDrawerState();
+        if (drawer.open && drawer.pane === "assets") {
+          await assetLibrary.importPaths(paths);
+          return;
+        }
+        const imported = await home.importPaths(paths);
+        if (!imported.length) {
+          return;
+        }
+        if (imported.length > 1) {
+          // A folder can yield several charts; opening one of them without asking
+          // would pick for the user, so the library keeps them and the notice says
+          // where they went.
+          notify(t("editor.app.notice.droppedManyImported", { count: imported.length }), "info");
+          return;
+        }
+        const target = imported[0];
+        const dirty = session.current.history.dirty || documentState.assetDirty;
+        if (dirty) {
+          const choice = await requestExitChoice({
+            title: t("editor.app.dialog.unsavedChangesTitle"),
+            description: t("editor.app.dialog.unsavedChangesBody"),
+            saveLabel: t("common.action.save"),
+            discardLabel: t("editor.app.dialog.openWithoutSaving"),
+            cancelLabel: t("common.action.cancel"),
+            priority: MODAL_PRIORITY.closePrompt,
+          });
+          if (choice === "cancel") {
             return;
           }
+          if (choice === "save") {
+            const result = await documentRuntime.save();
+            if (!result || result.status === "save_conflict") {
+              return;
+            }
+          }
         }
-      }
-      await home.open(target);
-    },
-    restoreLastSession: workspaceSession.restore,
-    persistSession: async () => {
-      // A normal close clears the record so the next launch starts empty; only
-      // periodic samples survive a crash or update restart.
-      workspaceSession.clear();
-      workspaceSession.dispose();
-      await preferences.flush();
-    },
-    pendingSave: () => documentSaver.pending?.then(() => undefined) ?? null,
-    isDirty: () => session.current.history.dirty || documentState.assetDirty,
-    confirmExit,
-    confirmCollaborationExit: () => {
-      if (!roomNeedsExitConfirmation(collaborationRoom.get(), collaborationPreparing.get())) {
-        return Promise.resolve(true);
-      }
-      return requestConfirm({
-        title: t("workspace.collaboration.exitTitle"),
-        description: t("workspace.collaboration.exitBody"),
-        label: t("workspace.collaboration.exitConfirm"),
-        destructive: true,
-        priority: MODAL_PRIORITY.closePrompt,
-      });
-    },
-    dispose,
-    reportError,
-    notifyUnsupported: () => notify(t("editor.app.notice.desktopEnvironment"), "warning"),
-  });
+        await home.open(target);
+      },
+      restoreLastSession: workspaceSession.restore,
+      persistSession: async () => {
+        // A normal close clears the record so the next launch starts empty; only
+        // periodic samples survive a crash or update restart.
+        workspaceSession.clear();
+        workspaceSession.dispose();
+        await preferences.flush();
+      },
+      pendingSave: () => documentSaver.pending?.then(() => undefined) ?? null,
+      isDirty: () => session.current.history.dirty || documentState.assetDirty,
+      confirmExit,
+      confirmCollaborationExit: () => {
+        if (!roomNeedsExitConfirmation(collaborationRoom.get(), collaborationPreparing.get())) {
+          return Promise.resolve(true);
+        }
+        return requestConfirm({
+          title: t("workspace.collaboration.exitTitle"),
+          description: t("workspace.collaboration.exitBody"),
+          label: t("workspace.collaboration.exitConfirm"),
+          destructive: true,
+          priority: MODAL_PRIORITY.closePrompt,
+        });
+      },
+      dispose,
+      reportError,
+      notifyUnsupported: () => notify(t("editor.app.notice.desktopEnvironment"), "warning"),
+    });
+  } else {
+    bindBrowserLifecycle({
+      restoreLastSession: workspaceSession.restore,
+      reportError,
+    });
+  }
   const runtime = createEditorRuntime({
     getSession: () => session.current,
     timeline,

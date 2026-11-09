@@ -15,7 +15,7 @@ const dispose = toolbar.register({
   order: 60,
   icon: "help",
   label: "settings.field.onboarding-guide.label",
-  tooltip: "settings.field.onboarding-guide.description",
+  tooltip: "settings.field.onboarding-guide.label",
   toolbar: false,
   run: () => {
     closeSettings();

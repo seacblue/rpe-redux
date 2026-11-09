@@ -4,6 +4,7 @@
  * instance that stops heartbeating so a crash does not block a chart forever.
  */
 import type { LocalLibrary } from "./client.ts";
+import { getRuntimePorts } from "../../platform/runtimePorts.ts";
 
 /** Interval between instance heartbeats. */
 const HEARTBEAT_MS = 10_000;
@@ -58,7 +59,14 @@ export function registerLibraryInstance(library: LocalLibrary): Promise<string> 
   }
   const id = currentInstanceId();
   pending = library
-    .instancesRegister({ id, label: "RPE Redux" }, { timeoutMs: 2_000 })
+    .instancesRegister(
+      {
+        id,
+        label: "RPE Redux",
+        frontendPort: getRuntimePorts().frontendPort,
+      },
+      { timeoutMs: 2_000 },
+    )
     .then(() => {
       registered = true;
       scheduleHeartbeat(library);

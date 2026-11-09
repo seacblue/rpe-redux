@@ -10,7 +10,10 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { toolbar } from "../../../../core/shell/registries/toolbar.ts";
-import { developerMode } from "../../../../core/platform/desktop/developer.ts";
+import {
+  developerMode,
+  requestDevtoolsToggle,
+} from "../../../../core/platform/desktop/developer.ts";
 import { isDeveloperRevealed } from "../../../../core/state/developerReveal.ts";
 import { isDesktop } from "../../../../core/platform/environment.ts";
 import { tearOffPerformanceHud } from "../../../../core/platform/desktop/performanceHudWindow.ts";
@@ -59,9 +62,16 @@ function detachPerformanceHud(): void {
 
 const DEVELOPER_ACTIONS = [
   {
+    id: "developer.devtools",
+    label: "chrome.developer.devtools",
+    tooltip: "chrome.developer.devtoolsHint",
+    icon: "keyboard",
+    shortcuts: [{ key: "F12" }],
+    run: () => requestDevtoolsToggle(),
+  },
+  {
     id: "developer.probe",
     label: "chrome.developer.probe",
-    tooltip: "chrome.developer.probeHint",
     icon: "select",
     shortcuts: [{ key: "P", modifiers: ["CTRL", "SHIFT"] }],
     run: toggleDeveloperProbe,
@@ -69,7 +79,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.copySelection",
     label: "chrome.developer.copySelection",
-    tooltip: "chrome.developer.copySelectionHint",
     icon: "clipboard",
     shortcuts: [{ key: "A", modifiers: ["CTRL", "SHIFT"] }],
     run: copySelection,
@@ -77,7 +86,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.copyReport",
     label: "chrome.developer.copyReport",
-    tooltip: "chrome.developer.copyReportHint",
     icon: "copy",
     shortcuts: [{ key: "X", modifiers: ["CTRL", "SHIFT"] }],
     run: copyDeveloperReport,
@@ -85,7 +93,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.performanceHud",
     label: "chrome.developer.performanceHud",
-    tooltip: "chrome.developer.performanceHudHint",
     icon: "monitor",
     shortcuts: [{ key: "F3" }],
     run: togglePerformanceHud,
@@ -93,7 +100,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.detachPerformanceHud",
     label: "chrome.developer.detachPerformanceHud",
-    tooltip: "chrome.developer.detachPerformanceHudHint",
     icon: "external",
     shortcuts: [],
     run: detachPerformanceHud,
@@ -101,7 +107,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.showDiagnostics",
     label: "chrome.developer.showDiagnostics",
-    tooltip: "chrome.developer.showDiagnosticsHint",
     icon: "info",
     shortcuts: [],
     run: showDiagnostics,
@@ -109,7 +114,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.copyDiagnostics",
     label: "chrome.developer.copyDiagnostics",
-    tooltip: "chrome.developer.copyDiagnosticsHint",
     icon: "copy",
     shortcuts: [],
     run: copyDiagnostics,
@@ -117,7 +121,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.openAppData",
     label: "chrome.developer.openAppData",
-    tooltip: "chrome.developer.openAppDataHint",
     icon: "open",
     shortcuts: [],
     run: openAppDataFolder,
@@ -125,7 +128,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.openLogs",
     label: "chrome.developer.openLogs",
-    tooltip: "chrome.developer.openLogsHint",
     icon: "external",
     shortcuts: [],
     run: () => {
@@ -135,7 +137,6 @@ const DEVELOPER_ACTIONS = [
   {
     id: "developer.reload",
     label: "chrome.developer.reload",
-    tooltip: "chrome.developer.reloadHint",
     icon: "refresh",
     shortcuts: [],
     run: reloadInterface,
@@ -161,8 +162,7 @@ export function registerDeveloperActions(): () => void {
       group: "developer",
       order: 300 + order,
       label: definition.label,
-      tooltip: definition.tooltip,
-      description: definition.tooltip,
+      tooltip: definition.label,
       icon: definition.icon,
       shortcuts: definition.shortcuts,
       shortcutCategory: SHORTCUT_CATEGORIES.developer,

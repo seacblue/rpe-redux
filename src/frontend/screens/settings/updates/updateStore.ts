@@ -114,6 +114,28 @@ export interface UpdateApplied {
   backup: string;
 }
 
+/** A verified package kept from a previous launch instead of being fetched again. */
+export interface CachedUpdateInfo {
+  version: string;
+  tag: string;
+  prerelease: boolean;
+  kind: "installer" | "portable";
+}
+
+/** Build the release-shaped prompt target for one cached package. */
+export function releaseFromCachedUpdate(info: CachedUpdateInfo, repo: string): GithubRelease {
+  const tag = info.tag.trim() || `v${info.version}`;
+  return {
+    tag,
+    version: info.version,
+    name: info.version,
+    notes: "",
+    publishedAt: "",
+    prerelease: info.prerelease,
+    url: repo ? `https://github.com/${repo}/releases/tag/${tag}` : "",
+  };
+}
+
 /** Progress payload emitted by the host during an install handoff. */
 interface UpdateProgress {
   phase: "downloading" | "installing" | "installed";
@@ -293,10 +315,11 @@ export function initializeUpdates(): Promise<void> {
     const version = await appVersion().catch(() => BUILD_APP_VERSION);
     set({ currentVersion: version });
     if (isDesktop()) {
-      const [portable, applied, failure] = await Promise.all([
+      const [portable, applied, failure, cached] = await Promise.all([
         invoke<string>("install_kind").catch(() => "installed"),
         invoke<UpdateApplied | null>("update_result").catch(() => null),
         invoke<{ detail: string } | null>("local_update_failure").catch(() => null),
+        invoke<CachedUpdateInfo | null>("update_restore_cached").catch(() => null),
       ]);
       set({
         portable: portable === "portable",
@@ -315,11 +338,30 @@ export function initializeUpdates(): Promise<void> {
         window.setTimeout(() => openSettings("help"), 900);
         return;
       }
+      if (cached && isVersion(cached.version) && compareVersions(cached.version, version) > 0) {
+        if (cached.version === state.skippedVersion) {
+          void invoke("update_cached_remove", { version: cached.version }).catch(() => undefined);
+        } else {
+          const release = releaseFromCachedUpdate(cached, state.repo);
+          set({
+            latest: release,
+            available: true,
+            preparedVersion: release.version,
+            phase: "downloaded",
+          });
+        }
+      } else if (cached) {
+        void invoke("update_cached_remove", { version: cached.version }).catch(() => undefined);
+      }
     }
     if (state.updated) {
       // Defer the changelog request so the shell can mount its modal host first.
       // Opening the surface refreshes the external notes it shows.
       window.setTimeout(requestChangelog, 900);
+    }
+    if (state.preparedVersion && state.latest) {
+      // The verified package survived the last launch; ask without downloading it again.
+      void promptForPreparedUpdate(state.latest);
     }
     if (state.autoCheck && state.repo) {
       void checkForUpdates();
@@ -372,18 +414,45 @@ export async function checkForUpdates(): Promise<void> {
       state.currentVersion,
     );
     const skipped = latest?.version === state.skippedVersion;
+    // Keep a cached package when the eligible release is no newer than it; a
+    // channel switch must not strand an already verified download.
+    const preparedVersion =
+      state.preparedVersion &&
+      state.preparedVersion !== state.skippedVersion &&
+      (!latest || compareVersions(state.preparedVersion, latest.version) >= 0)
+        ? state.preparedVersion
+        : null;
+    const cachedLatest =
+      preparedVersion && state.latest?.version === preparedVersion ? state.latest : null;
+    const shownLatest =
+      cachedLatest && (!latest || compareVersions(cachedLatest.version, latest.version) > 0)
+        ? cachedLatest
+        : latest;
+    // A check started at launch can settle while the cached prompt already
+    // handed off; keep the active installation phase instead of replacing it.
+    const installing =
+      isUpdateBusy(state.phase) || state.phase === "scheduled" || state.phase === "installed";
+    const nextPhase = preparedVersion
+      ? "downloaded"
+      : available && !skipped
+        ? "available"
+        : "up-to-date";
     set({
-      phase: available && !skipped ? "available" : "up-to-date",
+      phase: installing ? state.phase : nextPhase,
       releases,
-      latest,
-      available: available && !skipped,
-      preparedVersion:
-        latest && state.preparedVersion === latest.version ? state.preparedVersion : null,
+      latest: shownLatest,
+      available: Boolean(preparedVersion) || (available && !skipped),
+      preparedVersion,
     });
     if (state.autoCheck && available && latest) {
       void autoDownload(latest);
     }
   } catch (error) {
+    // A package handoff or scheduled install owns the surface; a background
+    // check failure must not replace its progress with a network error.
+    if (isUpdateBusy(state.phase) || state.phase === "scheduled") {
+      return;
+    }
     const code = error instanceof GithubReleaseError ? error.code : "network";
     set({
       phase: "error",
@@ -399,9 +468,15 @@ export function skipUpdateVersion(version: string): void {
     return;
   }
   values.byId.set(UPDATE_SETTING_KEYS.skippedVersion, version);
+  if (isDesktop()) {
+    // The cached package belongs to the skipped release; keep it from prompting
+    // again or occupying space until a newer release replaces it.
+    void invoke("update_cached_remove", { version }).catch(() => undefined);
+  }
   set({
     skippedVersion: version,
     available: false,
+    preparedVersion: null,
     phase: "up-to-date",
     errorCode: null,
     errorDetail: "",
@@ -491,6 +566,7 @@ async function downloadUpdate(release: GithubRelease): Promise<void> {
               repo: state.repo,
               publicKey: state.publicKey,
               tag: release.tag,
+              prerelease: release.prerelease,
             });
           } catch (error) {
             if (signal.aborted) {

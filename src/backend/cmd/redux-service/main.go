@@ -206,31 +206,6 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer stopCollab()
 
-	// The readiness contract: exactly one line, then flush before serving.
-	line, err := json.Marshal(listeningEvent{
-		Event:      "listening",
-		Name:       httpapi.Name,
-		API:        httpapi.APIVersion,
-		Port:       actualPort,
-		AIPort:     actualAIPort,
-		DB:         absDB,
-		Version:    version,
-		CollabPort: actualCollabPort,
-	})
-	if err != nil {
-		_ = listener.Close()
-		_ = aiListener.Close()
-		return err
-	}
-	if _, err := fmt.Fprintf(stdout, "%s\n", line); err != nil {
-		_ = listener.Close()
-		_ = aiListener.Close()
-		return err
-	}
-	if f, ok := stdout.(*os.File); ok {
-		_ = f.Sync()
-	}
-
 	liveInstances := instances.NewHub()
 	shutdownRequested := make(chan struct{}, 1)
 	requestShutdown := func() {
@@ -277,6 +252,39 @@ func run(args []string, stdout io.Writer) error {
 		serveErr <- nil
 	}()
 
+	// The readiness contract: the host reads one line and then treats the
+	// service as available. Poll the real health route first so the line is not
+	// emitted during the gap between binding the listener and accepting
+	// requests.
+	if err := waitForHTTPReady(listener, 5*time.Second); err != nil {
+		_ = server.Close()
+		_ = aiServer.Close()
+		return err
+	}
+	line, err := json.Marshal(listeningEvent{
+		Event:      "listening",
+		Name:       httpapi.Name,
+		API:        httpapi.APIVersion,
+		Port:       actualPort,
+		AIPort:     actualAIPort,
+		DB:         absDB,
+		Version:    version,
+		CollabPort: actualCollabPort,
+	})
+	if err != nil {
+		_ = server.Close()
+		_ = aiServer.Close()
+		return err
+	}
+	if _, err := fmt.Fprintf(stdout, "%s\n", line); err != nil {
+		_ = server.Close()
+		_ = aiServer.Close()
+		return err
+	}
+	if f, ok := stdout.(*os.File); ok {
+		_ = f.Sync()
+	}
+
 	parentExited := make(chan struct{}, 1)
 	parentDone := make(chan struct{})
 	if parentPID, ok := configuredParentPID(); ok {
@@ -317,5 +325,35 @@ func run(args []string, stdout io.Writer) error {
 			time.Sleep(time.Second)
 		}
 		return shutdown()
+	}
+}
+
+// waitForHTTPReady polls the loopback health route after the main listener
+// starts, so the readiness line means requests can be answered rather than
+// only that the port is bound.
+func waitForHTTPReady(listener net.Listener, timeout time.Duration) error {
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return fmt.Errorf("service listener has no TCP address")
+	}
+	host := addr.IP.String()
+	if host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	url := "http://" + net.JoinHostPort(host, fmt.Sprintf("%d", addr.Port)) + "/api/health"
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	deadline := time.Now().Add(timeout)
+	for {
+		response, err := client.Get(url)
+		if err == nil {
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("service did not answer health at %s within %s", url, timeout)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

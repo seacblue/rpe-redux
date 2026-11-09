@@ -4,9 +4,10 @@
  * Escape unwinds the current gesture, then the selection, then the mode.
  * Delete is a registered editor shortcut (`editor.curve.delete`) rather than a
  * local listener, so it appears in the shortcut settings and respects text
- * entry. This hook only owns the gesture/selection unwinding keys.
+ * entry. This hook only owns the overlay's local gesture/selection unwinding.
  */
 import { useEffect, useRef } from "react";
+import { isSystemCancelKey } from "../../../../core/shortcuts/keyMatching.ts";
 import { t } from "../../../../i18n/index.ts";
 import type { CurveTool } from "./curveTools.ts";
 import type { SegmentTarget } from "./pathModel.ts";
@@ -29,7 +30,7 @@ interface CurveOverlayKeyboardOptions {
 }
 
 /**
- * Bind the overlay's Escape unwinding keys while it is active.
+ * Bind Escape while the overlay is active.
  *
  * Escape cancels a draft, then a pending connect, then the selection, and
  * finally closes the mode. Delete is a registered editor shortcut, not handled
@@ -47,7 +48,7 @@ export function useCurveOverlayKeyboard(options: CurveOverlayKeyboardOptions): v
       if (!current.active || isTextTarget(event.target)) {
         return;
       }
-      if (event.key === "Escape") {
+      if (isSystemCancelKey(event)) {
         event.preventDefault();
         if (current.hasDraft()) {
           current.cancelDraft();

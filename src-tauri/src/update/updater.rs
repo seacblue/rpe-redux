@@ -5,8 +5,10 @@
 //! package signature before the NSIS installer is launched; this module never
 //! executes an unverified download.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
+    fs,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -51,8 +53,208 @@ struct PreparedUpdate {
     version: String,
     bytes: Vec<u8>,
     signature: Option<Vec<u8>>,
+    /// Detached signature text kept separately for a portable payload loaded
+    /// from the launch cache, which has no `Update` metadata.
+    portable_signature: Option<String>,
     backup: Option<String>,
     resources: Option<crate::update::update_guard::ResourceSnapshot>,
+}
+
+/// Directory below the data root that keeps one verified download between launches.
+const CACHE_DIR: &str = "update-cache";
+/// Cached payload bytes.
+const CACHE_PAYLOAD: &str = "payload.bin";
+/// Cached base64 signature text for the payload.
+const CACHE_SIGNATURE: &str = "payload.sig";
+/// Cached release metadata.
+const CACHE_META: &str = "meta.json";
+
+/// Cached release metadata shared with the frontend at launch.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedUpdateInfo {
+    pub version: String,
+    pub tag: String,
+    #[serde(default)]
+    pub prerelease: bool,
+    /// `installer` or `portable`.
+    pub kind: String,
+}
+
+/// One authenticated cached package ready to become a prepared update.
+struct CachedUpdate {
+    info: CachedUpdateInfo,
+    kind: PreparedKind,
+    bytes: Vec<u8>,
+    signature: String,
+}
+
+/// Compare release versions after stripping a tag prefix; equal strings otherwise.
+fn same_version(left: &str, right: &str) -> bool {
+    let parse =
+        |value: &str| semver::Version::parse(value.trim().trim_start_matches(['v', 'V'])).ok();
+    if let (Some(left_version), Some(right_version)) = (parse(left), parse(right)) {
+        left_version == right_version
+    } else {
+        left.trim() == right.trim()
+    }
+}
+
+/// Name one prepared kind in cache metadata.
+fn cache_kind_name(kind: PreparedKind) -> &'static str {
+    match kind {
+        PreparedKind::Installer => "installer",
+        PreparedKind::Portable => "portable",
+    }
+}
+
+/// Parse one cache metadata kind.
+fn cache_kind(value: &str) -> Option<PreparedKind> {
+    match value {
+        "installer" => Some(PreparedKind::Installer),
+        "portable" => Some(PreparedKind::Portable),
+        _ => None,
+    }
+}
+
+/// Path of the launch cache below one data root.
+fn cache_dir(data: &Path) -> PathBuf {
+    data.join(CACHE_DIR)
+}
+
+/// Remove the cached package and its metadata.
+fn remove_cache(data: &Path) {
+    let _ = fs::remove_dir_all(cache_dir(data));
+}
+
+/// Replace a cache file through a sibling temporary file.
+fn write_cache_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| "The update cache path has no file name.".to_owned())?;
+    let temporary = path.with_file_name(format!("{}.tmp", name.to_string_lossy()));
+    fs::write(&temporary, bytes).map_err(|error| error.to_string())?;
+    let renamed = fs::rename(&temporary, path);
+    if renamed.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    renamed.map_err(|error| error.to_string())
+}
+
+/// Keep one verified download so the next launch can prompt without fetching it again.
+fn write_cache(
+    data: &Path,
+    kind: PreparedKind,
+    version: &str,
+    tag: &str,
+    prerelease: bool,
+    bytes: &[u8],
+    signature: &str,
+) -> Result<(), String> {
+    // Only the Windows host can apply a cached payload without the live
+    // `Update` metadata that Tauri's installer path requires on other hosts.
+    if !cfg!(windows) {
+        return Ok(());
+    }
+    let directory = cache_dir(data);
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let info = CachedUpdateInfo {
+        version: version.to_owned(),
+        tag: tag.to_owned(),
+        prerelease,
+        kind: cache_kind_name(kind).to_owned(),
+    };
+    write_cache_file(&directory.join(CACHE_PAYLOAD), bytes)?;
+    write_cache_file(&directory.join(CACHE_SIGNATURE), signature.as_bytes())?;
+    let meta = serde_json::to_vec_pretty(&info).map_err(|error| error.to_string())?;
+    write_cache_file(&directory.join(CACHE_META), &meta)
+}
+
+/// Read and authenticate the cached package for this build and data root.
+///
+/// Missing, stale, malformed, or unauthenticated entries are removed so a cache
+/// can never outlive a successful update or survive a failed signature check.
+fn read_cache(data: &Path, key: &str, current: &str) -> Option<CachedUpdate> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let directory = cache_dir(data);
+    let info = match crate::storage::read_json::<CachedUpdateInfo>(&directory.join(CACHE_META)) {
+        Some(info) => info,
+        None => {
+            remove_cache(data);
+            return None;
+        }
+    };
+    let kind = match cache_kind(&info.kind) {
+        Some(kind) => kind,
+        None => {
+            remove_cache(data);
+            return None;
+        }
+    };
+    let bytes = match crate::update::local_update::read_bounded(
+        &directory.join(CACHE_PAYLOAD),
+        crate::update::local_update::MAX_INSTALLER_BYTES,
+    ) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            remove_cache(data);
+            return None;
+        }
+    };
+    let signature = match crate::update::local_update::read_bounded(
+        &directory.join(CACHE_SIGNATURE),
+        crate::update::local_update::MAX_SIGNATURE_BYTES,
+    )
+    .ok()
+    .and_then(|bytes| String::from_utf8(bytes).ok())
+    {
+        Some(signature) => signature,
+        None => {
+            remove_cache(data);
+            return None;
+        }
+    };
+    let verified = match kind {
+        PreparedKind::Installer => {
+            crate::update::local_update::verify(&bytes, signature.as_bytes(), key, current)
+                .map(|info| info.version)
+        }
+        PreparedKind::Portable => {
+            crate::update::local_update::verify_payload(&bytes, signature.as_bytes(), key, current)
+        }
+    };
+    match verified {
+        Ok(version) if same_version(&version, &info.version) => Some(CachedUpdate {
+            info,
+            kind,
+            bytes,
+            signature,
+        }),
+        _ => {
+            remove_cache(data);
+            None
+        }
+    }
+}
+
+/// Keep one completed download for the next launch without failing the current one.
+fn keep_cached_download(
+    app: &AppHandle,
+    kind: PreparedKind,
+    version: &str,
+    tag: &str,
+    prerelease: bool,
+    bytes: &[u8],
+    signature: &str,
+) {
+    let Ok(data) = crate::storage::data_dir(app) else {
+        return;
+    };
+    if let Err(error) = write_cache(&data, kind, version, tag, prerelease, bytes, signature) {
+        eprintln!("Could not cache the downloaded update package: {error}");
+    }
 }
 
 /// Whether a GitHub owner or repository component is safe to place in a URL.
@@ -159,6 +361,7 @@ pub async fn update_download(
     repo: String,
     public_key: String,
     tag: Option<String>,
+    prerelease: bool,
 ) -> Result<String, String> {
     let key = UPDATE_PUBLIC_KEY.trim();
     if key.is_empty() {
@@ -169,6 +372,7 @@ pub async fn update_download(
     if !public_key.trim().is_empty() && public_key.trim() != key {
         return Err("The updater public key does not match this build.".to_owned());
     }
+    let cache_tag = tag.clone().unwrap_or_default();
 
     // Windows prefers the signed portable payload: it replaces files in place
     // on exit instead of running the NSIS installer. A missing or broken
@@ -177,6 +381,16 @@ pub async fn update_download(
     if let Ok(endpoint) = portable_endpoint_for(&repo, tag.as_deref()) {
         if let Ok((update, bytes)) = download_release(&app, endpoint, key).await {
             let version = update.version.clone();
+            let signature = update.signature.clone();
+            keep_cached_download(
+                &app,
+                PreparedKind::Portable,
+                &version,
+                &cache_tag,
+                prerelease,
+                &bytes,
+                &signature,
+            );
             *host.prepared.lock().map_err(|error| error.to_string())? = Some(PreparedUpdate {
                 id: uuid::Uuid::new_v4(),
                 kind: PreparedKind::Portable,
@@ -184,6 +398,7 @@ pub async fn update_download(
                 version: version.clone(),
                 bytes,
                 signature: None,
+                portable_signature: Some(signature),
                 backup: None,
                 resources: None,
             });
@@ -194,7 +409,17 @@ pub async fn update_download(
     let endpoint = endpoint_for(&repo, tag.as_deref())?;
     let (update, bytes) = download_release(&app, endpoint, key).await?;
     let version = update.version.clone();
-    let signature = update.signature.as_bytes().to_vec();
+    let signature_text = update.signature.clone();
+    let signature = signature_text.as_bytes().to_vec();
+    keep_cached_download(
+        &app,
+        PreparedKind::Installer,
+        &version,
+        &cache_tag,
+        prerelease,
+        &bytes,
+        &signature_text,
+    );
     *host.prepared.lock().map_err(|error| error.to_string())? = Some(PreparedUpdate {
         id: uuid::Uuid::new_v4(),
         kind: PreparedKind::Installer,
@@ -202,6 +427,7 @@ pub async fn update_download(
         version: version.clone(),
         bytes,
         signature: Some(signature),
+        portable_signature: None,
         backup: None,
         resources: None,
     });
@@ -258,6 +484,61 @@ async fn download_release(
     Ok((update, bytes))
 }
 
+/// Load the authenticated download kept from the previous launch, if one is newer.
+#[tauri::command]
+pub async fn update_restore_cached(
+    app: AppHandle,
+    host: State<'_, UpdateHost>,
+) -> Result<Option<CachedUpdateInfo>, String> {
+    let store = host.prepared.clone();
+    let data = crate::storage::data_dir(&app)?;
+    let current = app.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(cached) = read_cache(&data, UPDATE_PUBLIC_KEY.trim(), &current) else {
+            return Ok(None);
+        };
+        let info = cached.info.clone();
+        let signature = cached.signature.clone();
+        *store.lock().map_err(|error| error.to_string())? = Some(PreparedUpdate {
+            id: uuid::Uuid::new_v4(),
+            kind: cached.kind,
+            update: None,
+            version: info.version.clone(),
+            bytes: cached.bytes,
+            signature: Some(signature.as_bytes().to_vec()),
+            portable_signature: Some(signature),
+            backup: None,
+            resources: None,
+        });
+        Ok(Some(info))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Drop the cached package for one version, including its prepared in-memory copy.
+#[tauri::command]
+pub fn update_cached_remove(
+    app: AppHandle,
+    host: State<'_, UpdateHost>,
+    version: String,
+) -> Result<(), String> {
+    let data = crate::storage::data_dir(&app)?;
+    let directory = cache_dir(&data);
+    let cached = crate::storage::read_json::<CachedUpdateInfo>(&directory.join(CACHE_META));
+    if cached.is_some_and(|info| same_version(&info.version, &version)) {
+        remove_cache(&data);
+        let mut prepared = host.prepared.lock().map_err(|error| error.to_string())?;
+        if prepared
+            .as_ref()
+            .is_some_and(|item| same_version(&item.version, &version))
+        {
+            *prepared = None;
+        }
+    }
+    Ok(())
+}
+
 /// Authenticate a selected installer and hold its exact verified bytes for handoff.
 #[tauri::command]
 pub async fn update_load_local(
@@ -286,6 +567,7 @@ pub async fn update_load_local(
             version: version.clone(),
             bytes,
             signature: Some(signature),
+            portable_signature: None,
             backup: None,
             resources: None,
         });
@@ -344,11 +626,14 @@ pub async fn update_install(
         );
         if prepared.kind == PreparedKind::Portable {
             let signature = prepared
-                .update
-                .as_ref()
-                .ok_or("No verified remote update.")?
-                .signature
-                .clone();
+                .portable_signature
+                .or_else(|| {
+                    prepared
+                        .update
+                        .as_ref()
+                        .map(|update| update.signature.clone())
+                })
+                .ok_or("No verified portable update.")?;
             let result = crate::update::local_update_worker::handoff_portable(
                 &app,
                 &version,
@@ -492,5 +777,116 @@ mod tests {
         assert!(!valid_tag(""));
         assert!(!valid_tag("v1/../../x"));
         assert!(!valid_tag("v1?x"));
+    }
+
+    #[test]
+    fn cache_version_matching_ignores_a_tag_prefix() {
+        assert!(same_version("v2.0.0", "2.0.0"));
+        assert!(same_version("V2.0.0", "2.0.0"));
+        assert!(!same_version("2.0.0", "2.0.1"));
+        assert!(!same_version("not-a-version", "2.0.0"));
+    }
+
+    // These fixtures are a synthetic PE stub signed with a disposable test key.
+    // The launch cache is a Windows-only install path.
+    #[cfg(windows)]
+    const CACHE_KEY: &str =
+        include_str!("../../../src/test/fixtures/signed-update/test-public.key");
+    #[cfg(windows)]
+    const CACHE_FILE: &[u8] =
+        include_bytes!("../../../src/test/fixtures/signed-update/installer.fixture");
+    #[cfg(windows)]
+    const CACHE_SIGNATURE: &[u8] =
+        include_bytes!("../../../src/test/fixtures/signed-update/installer.fixture.sig");
+
+    /// Decode the fixture signature as the base64 text the updater emits.
+    #[cfg(windows)]
+    fn cache_signature() -> &'static str {
+        std::str::from_utf8(CACHE_SIGNATURE).expect("fixture signature is text")
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cached_installer_round_trips_for_the_next_launch() {
+        let data = tempfile::tempdir().unwrap();
+        write_cache(
+            data.path(),
+            PreparedKind::Installer,
+            "2.0.0",
+            "v2.0.0",
+            false,
+            CACHE_FILE,
+            cache_signature(),
+        )
+        .unwrap();
+
+        let cached = read_cache(data.path(), CACHE_KEY, "1.0.0").expect("verified cache");
+        assert_eq!(cached.info.version, "2.0.0");
+        assert_eq!(cached.info.tag, "v2.0.0");
+        assert_eq!(cached.info.kind, "installer");
+        assert_eq!(cached.bytes, CACHE_FILE);
+        assert_eq!(cached.signature, cache_signature());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cached_portable_payload_uses_the_signed_bytes() {
+        let data = tempfile::tempdir().unwrap();
+        write_cache(
+            data.path(),
+            PreparedKind::Portable,
+            "2.0.0",
+            "v2.0.0",
+            true,
+            CACHE_FILE,
+            cache_signature(),
+        )
+        .unwrap();
+
+        let cached = read_cache(data.path(), CACHE_KEY, "1.0.0").expect("verified cache");
+        assert_eq!(cached.info.kind, "portable");
+        assert!(cached.info.prerelease);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn stale_cache_is_removed_after_the_update_lands() {
+        let data = tempfile::tempdir().unwrap();
+        write_cache(
+            data.path(),
+            PreparedKind::Installer,
+            "2.0.0",
+            "v2.0.0",
+            false,
+            CACHE_FILE,
+            cache_signature(),
+        )
+        .unwrap();
+
+        assert!(read_cache(data.path(), CACHE_KEY, "2.0.0").is_none());
+        assert!(!cache_dir(data.path()).exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tampered_cache_is_removed_instead_of_being_offered() {
+        let data = tempfile::tempdir().unwrap();
+        write_cache(
+            data.path(),
+            PreparedKind::Installer,
+            "2.0.0",
+            "v2.0.0",
+            false,
+            CACHE_FILE,
+            cache_signature(),
+        )
+        .unwrap();
+        let payload = cache_dir(data.path()).join(CACHE_PAYLOAD);
+        let mut bytes = fs::read(&payload).unwrap();
+        bytes[100] ^= 1;
+        fs::write(&payload, bytes).unwrap();
+
+        assert!(read_cache(data.path(), CACHE_KEY, "1.0.0").is_none());
+        assert!(!cache_dir(data.path()).exists());
     }
 }

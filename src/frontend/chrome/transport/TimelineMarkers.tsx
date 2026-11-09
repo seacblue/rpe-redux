@@ -67,8 +67,8 @@ export function TimelineMarkersView({
             data-marker-id={marker.id}
             data-marker-time={String(marker.time)}
             data-marker-name={name}
-            data-tip-title={`${marker.name} · ${Number(marker.time).toFixed(3)} s`}
-            aria-label={`${marker.name} · ${Number(marker.time).toFixed(3)} s`}
+            data-tip-title={`${marker.name}, ${Number(marker.time).toFixed(3)} s`}
+            aria-label={`${marker.name}, ${Number(marker.time).toFixed(3)} s`}
             style={style}
             onClick={() => onSeek(audioSeconds)}
           >

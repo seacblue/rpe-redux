@@ -21,6 +21,7 @@ import { CATALOGS } from "../../../../i18n/messages/index.ts";
 import { tRaw as translateRaw } from "../../../../i18n/index.ts";
 import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
 import { canonicalText, displayText } from "../../../../core/shortcuts/keys.ts";
+import { compareShortcutCategories } from "../../../../core/shortcuts/categories.ts";
 import { shortcutMatchesSearch, shortcutPageSearchTerms } from "./shortcutSearch.ts";
 import { shortcutRegistry as shortcuts } from "../../../../core/shortcuts/registry.ts";
 import { developerMode } from "../../../../core/platform/desktop/developer.ts";
@@ -481,7 +482,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
 
   const filtering = query.trim().length > 0;
   const searchTitles = { text: tRaw, english: englishShortcutTitle };
-  const categories = shortcuts.categories();
+  const categories = [...shortcuts.categories()].sort(compareShortcutCategories);
   const shownViews = filtering
     ? views.filter((view) => {
         const category = categories.find((entry) => entry.id === view.category);

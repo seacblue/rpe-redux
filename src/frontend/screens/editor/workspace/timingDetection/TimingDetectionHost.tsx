@@ -3,8 +3,8 @@
  *
  * The timing drawer, a new chart waiting for audio, and a fresh music load all
  * ask for the same surface through `timingDetectionState`. This host resolves
- * the current song, runs the worker analysis, and commits the single fixed BPM
- * the detector always returns.
+ * the current song, runs the worker analysis, and commits the measured fixed
+ * BPM, or shows the detector's "not found" answer when no pulse is clear.
  */
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";
@@ -115,9 +115,9 @@ export function TimingDetectionHost() {
           return;
         }
         if (!detected) {
-          // Analysis only returns null for an abort or a buffer without
-          // samples; neither leaves a timing answer to edit.
-          setStatus("no-audio");
+          // Analysis returns null when the track has no clear pulse; the
+          // dialog reports one short "not found" message instead of a guess.
+          setStatus("not-found");
           return;
         }
         setResult(detected);

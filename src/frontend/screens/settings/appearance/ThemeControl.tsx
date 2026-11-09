@@ -33,8 +33,8 @@ export function ThemeControl({ field }: SettingControlProps) {
       ? Object.keys(pkg.ui?.slots ?? {}).length > 0 ||
         Object.keys(pkg.ui?.components ?? {}).length > 0
       : false;
-    const source = option.source === "builtin" ? name : `${name} · ${option.source}`;
-    return customUi ? `${source} · ${t("settings.theme.customUi.badge")}` : source;
+    const source = option.source === "builtin" ? name : `${name}, ${option.source}`;
+    return customUi ? `${source}, ${t("settings.theme.customUi.badge")}` : source;
   };
 
   return (

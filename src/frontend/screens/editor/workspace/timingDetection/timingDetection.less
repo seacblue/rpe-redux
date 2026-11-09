@@ -1,8 +1,8 @@
-/* Timing detection: the drawer entry, the result dialog, and the manual
-   controls. */
+/* Timing detection: the drawer entry, the result dialog, and the editable
+   BPM/offset controls with their quick corrections. */
 
 .redux-app-root dialog.timing-detection-dialog {
-  width: min(980px, calc(100vw - 32px));
+  width: min(620px, calc(100vw - 32px));
 }
 
 /* Four short answers share one footer row; the wider prompt keeps the primary
@@ -12,7 +12,7 @@
 }
 
 .timing-detection-dialog .modal-content {
-  max-height: 68vh;
+  max-height: 72vh;
 }
 
 .timing-detection {
@@ -21,42 +21,36 @@
   gap: var(--space-4);
 }
 
+.timing-detection-intro {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-body);
+  line-height: var(--line-body);
+}
+
+/* BPM and Offset stack without a card wrapper. Each field owns the second row
+   of its block for its two quick corrections. */
 .timing-detection-manual {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
+  --field-control-width: 62%;
 }
 
-.timing-detection-nudge {
-  display: grid;
-  grid-template-columns: var(--design-control-height) minmax(0, 1fr) var(--design-control-height);
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.timing-detection-nudge input {
-  width: 100%;
-  min-width: 0;
-}
-
-.timing-detection-confidence {
-  display: grid;
+/* The footer sits under the field control inside FieldRow: tempo scaling for
+   BPM, whole-beat shifts for Offset. */
+.timing-detection-field-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
+  padding-top: var(--space-2);
 }
 
-.timing-detection-confidence strong {
-  color: var(--foreground);
-  font-size: var(--type-body);
-  font-weight: 600;
+.timing-detection-field-actions .redux-button {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .timing-detection-loading,
@@ -94,10 +88,4 @@
   display: flex;
   justify-content: center;
   gap: var(--space-2);
-}
-
-@media (max-width: 720px) {
-  .timing-detection-manual {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

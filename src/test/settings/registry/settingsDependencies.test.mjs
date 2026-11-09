@@ -59,6 +59,27 @@ test("preview and timeline sub-options follow their parent toggles", () => {
   );
 });
 
+test("note and event marquee colours share the default", () => {
+  assert.equal(settingsRegistry.definition("timeline-note-marquee-color")?.default, "#00C800");
+  assert.equal(settingsRegistry.definition("timeline-event-marquee-color")?.default, "#00C800");
+});
+
+test("clipboard overview ranges follow the overview bar toggle", () => {
+  for (const key of [
+    "timeline-clipboard-range-bars-enabled",
+    "timeline-clipboard-range-color",
+    "timeline-paste-range-color",
+    "timeline-range-bar-opacity",
+  ]) {
+    assert.equal(
+      settingsRegistry.definition(key)?.enabledWhen?.key,
+      "timeline-density-bars-enabled",
+      key,
+    );
+    assert.equal(settingsRegistry.definition(key)?.enabledWhen?.equals, true, key);
+  }
+});
+
 test("merged multi-line note labels follow the merge-notes setting", () => {
   const merge = settingsRegistry.definition("multi-line-merge-notes");
   const labels = settingsRegistry.definition("multi-line-note-line-numbers");

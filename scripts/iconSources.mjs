@@ -4,7 +4,7 @@
  * The key is the flat package-relative path published in
  * `src/design/components/icon/iconAssets.ts`; a string value names a Lucide icon
  * and an object value names a glyph in another documented source collection.
- * `npm run icons:build` writes every entry to both theme packages. The light set
+ * `npm run build:icons` writes every entry to both theme packages. The light set
  * uses a slightly thinner stroke because dark ink on a light surface gains
  * apparent weight; the dark set uses the library's full 2px stroke.
  */
