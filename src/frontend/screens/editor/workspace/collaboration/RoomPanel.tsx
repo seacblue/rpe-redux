@@ -511,7 +511,7 @@ function RoomPanelBody() {
               className={`collab-status is-${startingRoom || joiningRoom ? "connecting" : state.status}`}
               role="status"
             >
-              {joiningRoom ? t("workspace.collaboration.joiningRoom") : statusText}
+              {joiningRoom ? t("workspace.collaboration.joiningRoom") : statusText}...
             </p>
           )}
           {canHost && (

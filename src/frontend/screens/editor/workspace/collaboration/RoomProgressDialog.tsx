@@ -6,7 +6,7 @@
  * manual close always asks the provider to abort the in-flight operation and
  * clear transfer buffers.
  */
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";
@@ -22,6 +22,9 @@ import { useCollaboration } from "./collaborationRuntime.tsx";
 
 /** Current phase as one continuous bar, matching the chart-loading surface. */
 function progressRatio(progress: CollaborationProgressState): number {
+  if (!progress.visible) {
+    return 0;
+  }
   if (progress.ready) {
     return 1;
   }
@@ -45,7 +48,7 @@ function progressRatio(progress: CollaborationProgressState): number {
       const assets =
         progress.assets.reduce((sum, asset) => sum + assetProgressRatio(asset), 0) /
         progress.assets.length;
-      return 0.4 + assets * 0.55;
+      return 0.45 + assets * 0.5;
     }
     case "error":
       return 0;
@@ -108,12 +111,51 @@ function statusText(progress: CollaborationProgressState, translator: Translator
     if (!asset) {
       return t("workspace.collaboration.progress.status.assets");
     }
-    const percent = Math.round(assetProgressRatio(asset) * 100);
     return asset.kind === "audio"
-      ? t("workspace.collaboration.progress.status.audio", { percent })
-      : t("workspace.collaboration.progress.status.background", { percent });
+      ? t("workspace.collaboration.progress.status.audio")
+      : t("workspace.collaboration.progress.status.background");
   }
   return t("workspace.collaboration.progress.status.connect");
+}
+
+/** Ease the displayed value toward a new target so the bar never jumps. */
+function useSmoothRatio(target: number, active: boolean): number {
+  const [value, setValue] = useState(target);
+  const current = useRef(target);
+  useEffect(() => {
+    if (!active) {
+      current.current = target;
+      const frame = requestAnimationFrame(() => setValue(target));
+      return () => cancelAnimationFrame(frame);
+    }
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      current.current = target;
+      const frame = requestAnimationFrame(() => setValue(target));
+      return () => cancelAnimationFrame(frame);
+    }
+    const start = current.current;
+    if (Math.abs(target - start) < 0.001) {
+      current.current = target;
+      setValue(target);
+      return;
+    }
+    const duration = 500;
+    const started = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const elapsed = Math.min(1, (now - started) / duration);
+      const eased = 1 - Math.pow(1 - elapsed, 3);
+      const next = start + (target - start) * eased;
+      current.current = next;
+      setValue(next);
+      if (elapsed < 1) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, active]);
+  return value;
 }
 
 /** The room setup progress dialog; close aborts until the room is ready. */
@@ -126,7 +168,8 @@ export function RoomProgressDialog() {
     collaborationProgress.get,
     collaborationProgress.get,
   );
-  const ratio = progressRatio(progress);
+  const ratio = useSmoothRatio(progressRatio(progress), progress.visible);
+  const percent = Math.round(ratio * 100);
   const close = () => {
     if (progress.ready) {
       dismissRoomProgress();
@@ -164,15 +207,15 @@ export function RoomProgressDialog() {
     >
       <div className="collab-progress-overall" role="status" data-state={progress.phase}>
         <p className="collab-progress-stage" aria-live="polite">
-          {statusText(progress, translator)}
+          {statusText(progress, translator)}...
         </p>
         <Progress
           value={ratio}
           max={1}
           label={t("workspace.collaboration.progress.title")}
-          valueText={`${Math.round(ratio * 100)}%`}
+          valueText={`${percent}%`}
         />
-        <p className="collab-progress-percent">{Math.round(ratio * 100)}%</p>
+        <p className="collab-progress-percent">{percent}%</p>
       </div>
       {progress.error && (
         <InlineAlert tone="danger" className="collab-progress-error">
