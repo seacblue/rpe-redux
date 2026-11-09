@@ -13,8 +13,15 @@ import type {
   PreviewObjectGeometry,
   PreviewSnapshot,
 } from "../edit/preview/api.ts";
+import {
+  frozenPreviewFrameImage,
+  normalizePreviewFrameRequest,
+  type PreviewFrameImage,
+  type PreviewFrameRequest,
+} from "../edit/preview/frame.ts";
 import { type ApiAvailability, type ApiResult } from "./contract.ts";
 import {
+  apiCallAsync,
   availabilityFor,
   errorResult,
   frozenPoint,
@@ -301,6 +308,32 @@ export const preview = Object.freeze({
   },
 
   /**
+   * Render one chart frame into an encoded image.
+   *
+   * Select the frame with exactly one of `seconds` (tempo-map seconds) or
+   * `beat` (a number or reduced triple). The renderer samples an offscreen
+   * preview and never changes the live preview or playback position. The
+   * result carries a data URL and the resolved time, beat, and chart revision.
+   */
+  async frame(request: PreviewFrameRequest): Promise<ApiResult<PreviewFrameImage>> {
+    const api = getPreviewApi();
+    if (!api) {
+      return unavailable();
+    }
+    let spec;
+    try {
+      spec = normalizePreviewFrameRequest(request);
+    } catch (error) {
+      return errorResult(error);
+    }
+    const result = await apiCallAsync(() => api.frame(spec));
+    if (!result.ok) {
+      return result;
+    }
+    return { ok: true, value: frozenPreviewFrameImage(result.value) };
+  },
+
+  /**
    * Listen for painted preview frames at a throttled rate.
    *
    * The listener receives null when the document is cleared or the preview is
@@ -358,3 +391,9 @@ export type {
   PreviewRect,
   PreviewSnapshot,
 } from "../edit/preview/api.ts";
+export type {
+  PreviewFrameFormat,
+  PreviewFrameImage,
+  PreviewFrameRequest,
+  PreviewFrameSpec,
+} from "../edit/preview/frame.ts";

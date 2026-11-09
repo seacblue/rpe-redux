@@ -43,7 +43,7 @@ The surface is grouped by handle and contract:
 - Every fallible runtime operation returns `ApiResult<T>`; chart and transaction domain status stays inside `value`. Subscriptions are the documented exception: every `subscribe` method returns a disposer directly, so the function can cross the sandbox bridge as a handle. A missing runtime yields a no-op disposer; call `availability()` when the caller needs the reason.
 - Request/result types for document, chart, selection, playback, hit test, library, toolbar, sidebar, context menu, shortcuts, settings, values, and transaction. Named chart reads (`ChartReadState`, `ChartReadCollection`, `ChartReadItem`), transaction outcomes (`TransactionConflict`, `TransactionPreviewStatus`), revision snapshots (`DocumentRevisions`), and Extension event payloads (`ExtensionEventPayloads`, `ExtensionHookPayloads`) are published alongside the signatures that mention them.
 - Extension manifest, capability, context, definition, trust, and provenance types.
-- Script, parameter, step, i18n, declarative surface (`SandboxPanelDefinition`, `SandboxOverlayDefinition`, `SandboxSidebarDefinition`), preview snapshot, and layout anchor types.
+- Script, parameter, step, i18n, declarative surface (`SandboxPanelDefinition`, `SandboxOverlayDefinition`, `SandboxSidebarDefinition`), preview snapshot/frame, and layout anchor types.
 
 Add a name in `src/core/api/sdk.ts` to publish it; the entry re-exports that one barrel, so there is no second list to keep in sync. `sdk/type-tests/publicSurface.ts` imports the names that public signatures mention, so `npm run check:sdk` fails when a host type exists but was never published.
 
@@ -55,7 +55,7 @@ Right-click menu rows use `context.api.contextMenu` and require the `ui.contextM
 
 ## Code cells
 
-`sdk/llm-guide.md` is the runtime guide served at `GET /api/cell/guide`. It describes the write-capable cell profile, chart shapes, beat triples, limits, the transaction grammar, and asset handling. The served copy omits passages that the user has disabled for AI in **Editor → Advanced editing**; the source file keeps the complete reference. `POST /api/cell/run` executes a cell. `sdk/examples/code-cell.ts` mirrors the same shape and is type-checked with the SDK.
+`sdk/llm-guide.md` is the runtime guide served at `GET /api/cell/guide`. It describes the write-capable cell profile, chart shapes, beat triples, limits, the transaction grammar, asset handling, and frame rendering. The served copy omits passages that the user has disabled for AI in **Editor → Advanced editing**; the source file keeps the complete reference. `POST /api/cell/run` executes a cell, and `POST /api/cell/frame` renders one chart frame by time or beat. `sdk/examples/code-cell.ts` mirrors the cell shape and is type-checked with the SDK.
 
 A cell receives `redux`, `input`, and `console`, and returns one JSON value. It can read the open document, apply chart transactions, and add or remove project assets. It cannot save, open, close, create, or delete a document, delete a project, or access the network or host DOM.
 

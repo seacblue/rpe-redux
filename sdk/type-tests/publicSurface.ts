@@ -16,6 +16,8 @@ import type {
   DocumentRevisions,
   ExtensionEventPayloads,
   ExtensionHookPayloads,
+  PreviewFrameImage,
+  PreviewFrameRequest,
   ReduxApi,
   SandboxOverlayDefinition,
   SandboxPanelDefinition,
@@ -39,6 +41,8 @@ interface PublishedSurface {
   readonly style: SandboxStyle;
   readonly conflict: TransactionConflict;
   readonly previewStatus: TransactionPreviewStatus;
+  readonly frameRequest: PreviewFrameRequest;
+  readonly frameImage: PreviewFrameImage;
   readonly designCatalog: ExtensionDesignCatalog;
   readonly designNode: ExtensionDesignNode;
   readonly designPanel: ExtensionDesignPanelDefinition;

@@ -13,7 +13,10 @@ export function recordingError(reason: unknown): string {
   if (detail.includes("recording_encoder_start") || detail.includes("recording_encoder_missing")) {
     return t("editor.recording.noEncoder");
   }
-  if (detail.includes("recording_encoder_failed")) {
+  if (
+    detail.includes("recording_encoder_failed") ||
+    detail.includes("preview_frame_encode_failed")
+  ) {
     return t("editor.recording.encoderFailed");
   }
   if (detail.includes("recording_music_unavailable")) {
@@ -25,7 +28,12 @@ export function recordingError(reason: unknown): string {
   if (detail.includes("recording_image_unavailable")) {
     return t("editor.recording.imageError");
   }
-  if (detail.includes("recording_shader_") || detail.includes("recording_noise_")) {
+  if (
+    detail.includes("recording_shader_") ||
+    detail.includes("recording_noise_") ||
+    detail.includes("preview_frame_shader_") ||
+    detail.includes("preview_frame_noise_")
+  ) {
     return t("editor.recording.effectError");
   }
   if (detail.includes("recording_resources_changed")) {

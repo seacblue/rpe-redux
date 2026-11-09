@@ -88,6 +88,11 @@ import {
 import { connectCodeCellApi } from "../../../../../../core/edit/codecell/api.ts";
 import { createCodeCellAdapter } from "../../../../../../core/edit/codecell/adapter.ts";
 import { codeCellRuntime } from "../../../../../../core/codecell/runtime.ts";
+import { codeExecutionEnabled } from "../../../../../../core/codecell/enabled.ts";
+import type {
+  PreviewFrameImage,
+  PreviewFrameSpec,
+} from "../../../../../../core/edit/preview/frame.ts";
 import type { SessionMutationGate } from "../../../../../../core/edit/session/session.ts";
 import {
   clearTimingDetectionPending,
@@ -150,7 +155,10 @@ export interface DocumentRuntime {
 type DocumentPreviewResources = Pick<
   PreviewRuntime,
   "audio" | "hitSounds" | "images" | "lineInfoScene" | "realtimePreview"
->;
+> & {
+  /** Renders one detached chart frame for the Code Cell frame route. */
+  readonly captureFrame: (request: PreviewFrameSpec) => Promise<PreviewFrameImage>;
+};
 
 type DocumentTimelineResources = Pick<
   TimelineRuntime,
@@ -1132,6 +1140,8 @@ export function createDocumentRuntime(options: {
         code: {
           run: (request) => codeCellRuntime.run(request),
         },
+        frame: (request) => options.resources.preview.captureFrame(request),
+        enabled: codeExecutionEnabled,
       }),
     ),
   );

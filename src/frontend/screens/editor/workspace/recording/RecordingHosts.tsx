@@ -9,7 +9,7 @@ import {
   type RecordingStage,
   type captureRecording,
 } from "./recordingJob.ts";
-import type { RecordingSurface } from "./recordingRenderer.ts";
+import type { OffscreenPreviewSurface as RecordingSurface } from "../preview/frame/offscreenPreview.ts";
 
 type Snapshot = ReturnType<typeof captureRecording>;
 type Entry = { id: string; width: number; height: number; ready(surface: RecordingSurface): void };

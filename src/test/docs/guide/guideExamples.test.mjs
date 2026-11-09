@@ -66,6 +66,7 @@ type CellApi = {
     | "event"
   >;
   readonly selection: Pick<ReduxApi["selection"], "availability" | "state" | "subscribe">;
+  readonly preview: Pick<ReduxApi["preview"], "availability" | "snapshot" | "frame">;
   readonly transaction: Pick<
     ReduxApi["transaction"],
     "availability" | "preview" | "apply" | "cancel" | "history"

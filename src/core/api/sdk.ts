@@ -167,6 +167,12 @@ export type {
   PreviewSnapshot,
 } from "../edit/preview/api.ts";
 export type {
+  PreviewFrameFormat,
+  PreviewFrameImage,
+  PreviewFrameRequest,
+  PreviewFrameSpec,
+} from "../edit/preview/frame.ts";
+export type {
   LayoutAnchor,
   LayoutAnchorKind,
   LayoutRect,

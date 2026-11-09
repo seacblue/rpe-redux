@@ -14,6 +14,11 @@ import type {
   CodeCellResult,
 } from "../../codecell/contract.ts";
 import { isCodeCellProfile } from "../../codecell/profiles.ts";
+import {
+  normalizePreviewFrameRequest,
+  type PreviewFrameImage,
+  type PreviewFrameSpec,
+} from "../preview/frame.ts";
 import { isRecord } from "../../utils/guards.ts";
 import { getCodeCellGuide } from "./guide.ts";
 
@@ -32,6 +37,10 @@ export interface CodeCellAdapterOptions {
   readonly state: () => CodeCellDocumentState;
   /** Present only while the editor mount can run a code cell. */
   readonly code?: CodeCellHost;
+  /** Present while the mounted editor can render chart frames. */
+  readonly frame?: (request: PreviewFrameSpec) => Promise<PreviewFrameImage>;
+  /** Rechecks the user's code-execution consent for direct frame requests. */
+  readonly enabled?: () => boolean;
 }
 
 export interface CodeCellResponse<T> {
@@ -218,6 +227,34 @@ export function createCodeCellAdapter(options: CodeCellAdapterOptions): CodeCell
         value: Object.freeze({ text: getCodeCellGuide() }),
         revisions: current,
       });
+    }
+    if (request.method === "cell.frame") {
+      if (options.enabled && !options.enabled()) {
+        return failure("disabled", current, "Code execution is unavailable");
+      }
+      if (!options.frame) {
+        return failure("unavailable", current, "Frame rendering is unavailable");
+      }
+      let spec: PreviewFrameSpec;
+      try {
+        spec = normalizePreviewFrameRequest(request.params);
+      } catch (error) {
+        return failure(
+          "invalid_request",
+          current,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      try {
+        const frame = await options.frame(spec);
+        return Object.freeze({
+          ok: true,
+          value: Object.freeze(frame),
+          revisions: current,
+        });
+      } catch (error) {
+        return failure("runtime", current, error instanceof Error ? error.message : String(error));
+      }
     }
     if (request.method !== "cell.run") {
       return failure(

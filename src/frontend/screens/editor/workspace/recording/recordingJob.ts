@@ -16,10 +16,10 @@ import {
 import { snapshotRecordingImages } from "./recordingImages.ts";
 import { recordingPcmChunks } from "./recordingPcm.ts";
 import type {
-  RecordingRenderer,
-  RecordingAppearance,
-  RecordingSurface,
-} from "./recordingRenderer.ts";
+  OffscreenPreviewRenderer as RecordingRenderer,
+  OffscreenPreviewAppearance as RecordingAppearance,
+  OffscreenPreviewSurface as RecordingSurface,
+} from "../preview/frame/offscreenPreview.ts";
 import { RecordingTimeline } from "./recordingTimeline.ts";
 import {
   createRecordingVideoEncoder,
@@ -228,8 +228,8 @@ export async function runRecording(
         throw new Error("recording_invalid_options");
       }
       const recordingImages = images;
-      const { RecordingRenderer } = await import("./recordingRenderer.ts");
-      renderer = new RecordingRenderer({
+      const { OffscreenPreviewRenderer } = await import("../preview/frame/offscreenPreview.ts");
+      renderer = new OffscreenPreviewRenderer({
         surface,
         chart,
         tempo,

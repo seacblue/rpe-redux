@@ -3,7 +3,8 @@
  *
  * A profile is the consent boundary for AI-authored code: the source changes on
  * every run, so the host grants a fixed, reviewable set of handles rather than
- * binding consent to package bytes. The `write` profile can apply chart
+ * binding consent to package bytes. Both profiles can read the live preview
+ * and render offscreen frames; the `write` profile can also apply chart
  * transactions and change assets of the library project behind the open
  * document, but cannot save, open, close, or delete documents. The capability
  * gate scopes every library handle to that one project.
@@ -22,6 +23,7 @@ const READ_CAPABILITIES: readonly ExtensionCapability[] = Object.freeze([
   "document.read",
   "chart.read",
   "selection.read",
+  "preview.read",
 ]);
 
 /** The `write` profile keeps reads and adds atomic chart transactions. */
