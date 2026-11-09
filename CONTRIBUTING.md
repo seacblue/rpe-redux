@@ -25,30 +25,44 @@ npm run dev
 
 `npm run dev` starts the Go service and Vite together, keeps one fixed port set per checkout, and opens the editor in your browser with hot reload. `npm run dev:desktop` stages the native helpers and launches the Tauri window when the change needs the desktop host.
 
+Keep the browser loop running while you edit, and leave the port record worktree-local: the first run picks a random free set in `.scratch/dev/ports.json`, and later runs reuse it. Do not copy or edit that file, so parallel checkouts and AI sessions keep separate backend, AI bridge, and collaboration ports.
+
 ## Workflow
 
 1. Create a focused branch from `main`.
 2. Change the module that owns the behavior, then register the feature through the existing contribution registry.
 3. Add English and Chinese strings together under `src/i18n/`.
 4. Add or update tests beside the behavior they cover; [Testing](docs/testing.md) says which suite a change belongs to.
-5. Run the source gate and the desktop checks before opening a pull request.
+5. Run the source gate before opening a pull request; run the debug build and smoke suite when the change needs the packaged runtime.
 6. Record user-visible changes in the release notes when publishing.
 
 Use a conventional commit subject such as `feat(editor): add curve handles` or `fix(desktop): restore window geometry`. Keep the subject imperative and the body limited to the contract and verification.
 
 ## Verification
 
-Run from the repository root:
+Use the browser loop for behavior checks while you edit, and run the focused unit test beside the change:
+
+```powershell
+npm run dev
+node --test src/test/<topic>/<subject>.test.mjs
+```
+
+Before opening a pull request, run the source gate:
 
 ```powershell
 npm run check
 npm run verify
-npm run build
-npm run build -- --debug
-npm run smoke
 ```
 
-`npm run check` covers TypeScript, ESLint, style rules, documentation links, icon checks, the SDK type-check, the Extension method registry check, the TypeScript unit suite, and the Go tests. `npm run verify` adds formatting. `npm run build -- --debug` produces the executable used by `npm run smoke`; the smoke suite covers the P0 desktop journeys. See [Testing](docs/testing.md) for the individual suites and single-test commands.
+Build only when the change needs the packaged runtime or as final acceptance:
+
+```powershell
+npm run build -- --debug
+npm run smoke
+npm run build
+```
+
+`npm run check` covers TypeScript, ESLint, style rules, documentation links, icon checks, the SDK type-check, the Extension method registry check, the TypeScript unit suite, and the Go tests. `npm run verify` adds formatting. `npm run build -- --debug` produces the executable used by `npm run smoke`; the smoke suite covers the P0 desktop journeys. `npm run build` is the full release build and belongs at the end of the task, not in the edit loop. See [Testing](docs/testing.md) for the individual suites and single-test commands.
 
 Run `npm run check:native` when a change touches Rust. Run `npm run test:server` when a change touches the Go service or collaboration rooms.
 

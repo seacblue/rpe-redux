@@ -52,9 +52,9 @@ npm run build         # NSIS installer on Windows; deb, rpm, and AppImage on Lin
 
 ## Development
 
-`npm run dev` is the browser development loop: it starts the Go service and Vite together, uses one fixed port set per checkout, and reloads the page on source edits. `npm run dev:desktop` opens the Tauri window for native-host work. Start with [Development](docs/development.md) for the workflow, commands, and a repository tour, and [Testing](docs/testing.md) for the test suites, fixtures, and where a new test belongs. Ownership rules, contribution patterns, and the code conventions are in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+`npm run dev` is the browser development loop: it starts the Go service and Vite together, uses one fixed port set per checkout, and reloads the page on source edits. `npm run dev:desktop` opens the Tauri window for native-host work. Each checkout chooses its own random port set in `.scratch/dev/ports.json`; keep that record worktree-local so parallel checkouts and AI sessions do not share a backend. Start with [Development](docs/development.md) for the workflow, commands, and a repository tour, and [Testing](docs/testing.md) for the test suites, fixtures, and where a new test belongs. Ownership rules, contribution patterns, and the code conventions are in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Before opening a pull request:
+Use `npm run dev` for the edit loop and build only for packaged behavior or final acceptance. Before opening a pull request:
 
 ```powershell
 npm run verify
@@ -62,7 +62,7 @@ npm run build -- --debug
 npm run smoke
 ```
 
-`npm run verify` covers types, lint, style, docs links, icons, the SDK, unit tests, Go tests, and formatting. The debug build and smoke suite cover desktop interaction.
+`npm run verify` covers types, lint, style, docs links, icons, the SDK, unit tests, Go tests, and formatting. The debug build and smoke suite cover desktop interaction. `npm run build` is the full release build and belongs at the end of the task.
 
 ## License and provenance
 

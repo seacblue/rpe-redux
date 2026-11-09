@@ -2,6 +2,8 @@
 
 RPE Redux has one source gate, one unit suite, one desktop smoke suite, and a thin set of platform checks. This page says what each one covers, how to run a single case, and where a new test belongs.
 
+For everyday behavior checks, use the browser loop (`npm run dev`) and let hot reload apply the change. The source gate is the reporting check; the desktop smoke suite validates the packaged window and belongs at final acceptance, after a debug build.
+
 ## Contents
 
 - [Suites at a glance](#suites-at-a-glance)
@@ -93,6 +95,8 @@ npm run smoke -- --scenario=documents
 
 The runner creates an isolated profile under `.scratch/e2e-smoke-quality/runs/` and writes screenshots and round-trip artifacts under `.scratch/e2e-smoke-quality/artifacts/`. It drives the real window through the WebView2 debugging protocol, so it runs on Windows only; Linux acceptance stays manual until an equivalent driver exists.
 
+Treat the smoke suite as a final acceptance check, not an edit loop. It needs a fresh debug build, so run it after the browser checks and the source gate are green.
+
 A journey is an async function that receives the runner. Use `runner.callApi` for product API calls, `runner.evaluate` for DOM probes, `runner.waitFor` instead of fixed sleeps, and `runner.assert` for checks. Feature-specific journeys are not part of the default run: unit-test the extracted rule, and add a journey only for a P0 path that must be proven end to end.
 
 ## Quick audio check
@@ -146,6 +150,7 @@ Tests should not write outside `.scratch/` or the OS temporary directory. Use `m
 ## Troubleshooting
 
 - **`npm run smoke` reports a missing debug executable** — run `npm run build -- --debug` first; the smoke runner launches `src-tauri/target/debug/rpe-redux.exe`.
+- **`npm run dev` reports its ports are already in use** — another loop is probably running in this worktree. Stop it; if the recorded set is truly stale, rotate it with `npm run dev -- --new-ports`. Do not copy another worktree's `.scratch/dev/ports.json`.
 - **The two sidecar suites are skipped** — `npm run build:server` writes `src-tauri/resources/redux-service(.exe)`.
 - **Smoke fails to start the window** — a previous run can hold the loopback port or the profile. The runner retries three times; if it still fails, close the leftover `rpe-redux` processes and retry.
 - **`npm run check:docs` rejects a link or language** — links are relative to the document, and English documents cannot contain Han characters.

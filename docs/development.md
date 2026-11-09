@@ -38,6 +38,15 @@ npm run dev:desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
 
 The flags accept either `--name-port=value` or `--name-port value`. They update the worktree port record for later runs and are not written to the desktop Runtime ports settings. The browser loop also accepts `--data-dir <path>`; its default is `.scratch/dev/data`.
 
+### Parallel checkouts and AI sessions
+
+The port record is worktree-local state, not shared configuration. The first loop in a checkout picks a random free set and writes `.scratch/dev/ports.json`; every later run reuses it. That is what lets concurrent checkouts, developers, and AI sessions keep separate backend, AI bridge, and collaboration ports without coordinating by hand.
+
+- Keep one loop running while you edit and let hot reload apply the change; rebuild only when the packaged host is involved.
+- Run one loop per checkout. From automation, pass `--no-open` and read the app URL from the console.
+- Do not edit or copy the port record, and do not pin a shared default to make two checkouts match.
+- If a recorded port is held by an unrelated process, stop that process or rotate the set with `--new-ports`. Do not start a second loop on a fresh set while the first one is still running.
+
 A good first hour looks like this:
 
 1. Open the editor and go through the chart library, create a chart, and press `Ctrl+K` to see the settings pages.
@@ -133,21 +142,26 @@ A feature arrives as a registered contribution beside its owner: a toolbar row, 
 
 ## Verification
 
-Run from the repository root before reporting work complete:
+Use the browser loop for behavior checks while you work; it reloads the editor in place. Run the focused unit test beside the change, then the source gate before reporting:
 
 ```powershell
+node --test src/test/<topic>/<subject>.test.mjs
 npm run check
 npm run verify
-npm run build
-npm run build -- --debug
-npm run smoke
 ```
 
 `npm run check` is the source gate: it type-checks incrementally, runs the TypeScript unit suite, reuses the ESLint and Prettier caches, compiles the Less manifest, checks the SDK, and runs the Go tests. `npm run verify` adds formatting.
 
-`npm run smoke` launches the debug application and runs the P0 scenarios in `src/test/e2e/`: API and Extension contract, document open/create/save, settings pages, and session restore. Build the debug executable first. Feature-specific regression suites are not part of the default run; [Testing](testing.md) lists the groups and their commands. The harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux acceptance is manual until a WebDriver harness exists.
+Build the desktop executable only for packaged runtime behavior or final acceptance. The debug build is required when the change touches runtime wiring, the Go service, Tauri integration, or behavior that only exists in the packaged application:
 
-Source checks verify types, lint, unit behavior, and formatting. Inspect the running desktop app for input, rendering, playback, native dialogs, and other behavior that only exists in the packaged product.
+```powershell
+npm run build -- --debug
+npm run smoke
+```
+
+`npm run smoke` launches the debug application and runs the P0 scenarios in `src/test/e2e/`: API and Extension contract, document open/create/save, settings pages, and session restore. Feature-specific regression suites are not part of the default run; [Testing](testing.md) lists the groups and their commands. The harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux acceptance is manual until a WebDriver harness exists.
+
+Source checks verify types, lint, unit behavior, and formatting. Inspect the running desktop app for input, rendering, playback, native dialogs, and other behavior that the browser loop cannot reach. `npm run build` is the full release build and belongs at the end of the task, not in the edit loop.
 
 ## Runtime contracts
 

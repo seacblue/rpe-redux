@@ -25,30 +25,44 @@ npm run dev
 
 `npm run dev` 会同时启动 Go 服务和 Vite，为每个工作树保留一组固定端口，并在浏览器中打开支持热更新的编辑器。需要原生宿主能力时运行 `npm run dev:desktop`，它会准备原生依赖并启动 Tauri 窗口。
 
+编辑时保持浏览器循环运行，并让端口记录只留在当前工作树：首次运行会在 `.scratch/dev/ports.json` 中随机选择一组空闲端口，后续运行继续复用。不要复制或修改该文件，这样并行的工作树和 AI 会话会各自使用独立的后端、AI 桥接和联机端口。
+
 ## 流程
 
 1. 从 `main` 创建聚焦的分支。
 2. 在拥有该行为的模块中修改，再通过现有贡献注册表注册功能。
 3. 同时在 `src/i18n/` 中补充英文和中文文案。
 4. 在行为附近补充或更新测试；[测试说明](docs/testing.md) 说明了改动应落在哪个套件。
-5. 提交 PR 前运行源码检查和桌面检查。
+5. 提交 PR 前运行源码检查；改动涉及打包运行时时再运行 debug 构建和 smoke 套件。
 6. 发布时在 release notes 中记录用户可见变化。
 
 提交信息使用常见前缀，例如 `feat(editor): add curve handles` 或 `fix(desktop): restore window geometry`。标题使用祈使句，正文只描述契约和验证。
 
 ## 验证
 
-在仓库根目录运行：
+编辑时用浏览器循环检查行为，并在改动旁运行聚焦的单元测试：
+
+```powershell
+npm run dev
+node --test src/test/<topic>/<subject>.test.mjs
+```
+
+提交 PR 前运行源码检查：
 
 ```powershell
 npm run check
 npm run verify
-npm run build
-npm run build -- --debug
-npm run smoke
 ```
 
-`npm run check` 覆盖 TypeScript、ESLint、样式规则、文档链接、图标检查、SDK 类型检查、Extension 方法注册表检查、TypeScript 单元测试和 Go 测试；`npm run verify` 额外检查格式。`npm run build -- --debug` 生成 `npm run smoke` 使用的可执行文件，smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](docs/testing.md)。
+只有在改动涉及打包运行时，或做最终验收时才构建：
+
+```powershell
+npm run build -- --debug
+npm run smoke
+npm run build
+```
+
+`npm run check` 覆盖 TypeScript、ESLint、样式规则、文档链接、图标检查、SDK 类型检查、Extension 方法注册表检查、TypeScript 单元测试和 Go 测试；`npm run verify` 额外检查格式。`npm run build -- --debug` 生成 `npm run smoke` 使用的可执行文件，smoke 套件覆盖 P0 桌面路径。`npm run build` 是完整发布构建，放在任务最后执行，不要放进编辑循环。各套件的单独命令见[测试说明](docs/testing.md)。
 
 修改 Rust 时运行 `npm run check:native`；修改 Go 服务或联机房间时运行 `npm run test:server`。
 

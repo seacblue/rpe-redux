@@ -52,9 +52,9 @@ npm run build         # Windows 生成 NSIS 安装包；Linux 生成 deb、rpm �
 
 ## 开发
 
-`npm run dev` 是浏览器开发循环：同时启动 Go 服务和 Vite，每个工作树使用一组固定端口，源码修改后页面热更新。需要原生宿主能力时使用 `npm run dev:desktop` 打开 Tauri 窗口。先读[开发说明](docs/development.md)（工作流、命令、仓库导览）和[测试说明 ](docs/testing.md)（测试套件、fixture、新测试放哪里）。归属规则、贡献方式和代码约定见 [AGENTS.md](AGENTS.md) 与[贡献指南](CONTRIBUTING-zh.md)。
+`npm run dev` 是浏览器开发循环：同时启动 Go 服务和 Vite，每个工作树使用一组固定端口，源码修改后页面热更新。需要原生宿主能力时使用 `npm run dev:desktop` 打开 Tauri 窗口。每个工作树会在 `.scratch/dev/ports.json` 中随机选择自己的端口组；请让该记录只留在当前工作树，避免并行的工作树和 AI 会话共用一个后端。先读[开发说明](docs/development.md)（工作流、命令、仓库导览）和[测试说明 ](docs/testing.md)（测试套件、fixture、新测试放哪里）。归属规则、贡献方式和代码约定见 [AGENTS.md](AGENTS.md) 与[贡献指南](CONTRIBUTING-zh.md)。
 
-提交 PR 前请运行：
+编辑时使用 `npm run dev`，只在验证打包行为或最终验收时构建。提交 PR 前请运行：
 
 ```powershell
 npm run verify
@@ -62,7 +62,7 @@ npm run build -- --debug
 npm run smoke
 ```
 
-`npm run verify` 覆盖类型、Lint、样式、文档链接、图标、SDK、单元测试、Go 测试和格式检查。Debug 构建与 smoke 套件负责验证桌面交互。
+`npm run verify` 覆盖类型、Lint、样式、文档链接、图标、SDK、单元测试、Go 测试和格式检查。Debug 构建与 smoke 套件负责验证桌面交互。`npm run build` 是完整发布构建，放在任务最后执行。
 
 ## 许可与来源
 
