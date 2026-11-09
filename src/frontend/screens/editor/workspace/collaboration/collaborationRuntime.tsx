@@ -45,6 +45,7 @@ import {
   collaborationRoom,
   collaborationRoomDocument,
   EMPTY_COLLABORATION_STATE,
+  roomExitClosesRoom,
 } from "../../../../../core/collaboration/ui.ts";
 import { openPane } from "../../inspector/controller.ts";
 import {
@@ -102,6 +103,7 @@ import type { EditorSession } from "../../../../../core/edit/session/session.ts"
 import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
 import { inspectRoomInvite } from "./roomInvitePreview.ts";
 import { requestRoomInviteConfirmation } from "./roomInvitePrompt.tsx";
+import { bindCollaborationRoomExit } from "./roomExit.ts";
 
 /** How a host exposes its room to invitees. */
 export type CollaborationHostMode = "tunnel" | "lan";
@@ -933,6 +935,35 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       void invoke("release_collab_session").catch(() => undefined);
     }
   };
+
+  /**
+   * Ends the room for a return to the library.
+   *
+   * A host owns the room's lifetime, so the room closes and every member is
+   * disconnected. A guest or a connection that has not completed simply leaves.
+   */
+  const exitRoomForLibrary = () => {
+    const current = stateCell.get();
+    if (roomExitClosesRoom(current)) {
+      clientRef.current?.closeRoom();
+    } else {
+      clientRef.current?.leave();
+    }
+    finishRoomExit();
+  };
+  const exitRoomForLibraryRef = useRef(exitRoomForLibrary);
+  // The provider republishes the latest closure after every render; the seam
+  // itself binds once so workspace navigation can reach it before React state.
+  useEffect(() => {
+    exitRoomForLibraryRef.current = exitRoomForLibrary;
+  });
+  useEffect(
+    () =>
+      bindCollaborationRoomExit({
+        exitForLibrary: () => exitRoomForLibraryRef.current(),
+      }),
+    [],
+  );
 
   // Callbacks read the latest editor closures; installing them after each
   // commit keeps the client independent of React's render cycle.
