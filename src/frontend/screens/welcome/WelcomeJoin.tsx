@@ -12,8 +12,9 @@ import { FieldRow } from "../../../design/components/field/FieldRow.tsx";
 import { ColorField } from "../../../design/components/input/ColorField.tsx";
 import { Input } from "../../../design/components/input/Input.tsx";
 import { Modal } from "../../../design/components/modal/Modal.tsx";
+import { Segmented } from "../../../design/components/segmented/Segmented.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
-import { parseRoomInviteLink } from "../../../core/collaboration/invite.ts";
+import { parseRoomInviteLink, type RoomInvite } from "../../../core/collaboration/invite.ts";
 import { useCollaboration } from "../editor/workspace/collaboration/collaborationRuntime.tsx";
 
 /** Join-only room entry for the home screen header. */
@@ -21,13 +22,21 @@ export function WelcomeJoin() {
   const { t } = useTranslation();
   const { settings, joinRoom, updateSettings, state } = useCollaboration();
   const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<"link" | "custom">("link");
   const [link, setLink] = useState("");
+  const [server, setServer] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState(settings.displayName);
   const [color, setColor] = useState(settings.color);
-  const valid = Boolean(parseRoomInviteLink(link));
+  const valid =
+    method === "link"
+      ? Boolean(parseRoomInviteLink(link))
+      : Boolean(server.trim()) && password.trim().length >= 4;
   const close = () => {
     setOpen(false);
     setLink("");
+    setServer("");
+    setPassword("");
   };
   const submit = () => {
     if (!valid || state.roomId) {
@@ -35,8 +44,10 @@ export function WelcomeJoin() {
     }
     const displayName = name.trim() || settings.displayName;
     updateSettings({ displayName, color });
+    const input: string | RoomInvite =
+      method === "link" ? link : { serverUrl: server, invite: password };
     close();
-    void joinRoom(link, { displayName, color });
+    void joinRoom(input, { displayName, color });
   };
   return (
     <>
@@ -52,8 +63,7 @@ export function WelcomeJoin() {
       <Modal
         open={open}
         onClose={close}
-        label={t("workspace.collaboration.joinInviteTitle")}
-        description={t("workspace.collaboration.joinHint")}
+        label={t("workspace.collaboration.joinTab")}
         className="redux-prompt-dialog collab-welcome-join"
         actions={
           <>
@@ -84,24 +94,72 @@ export function WelcomeJoin() {
             label={t("workspace.collaboration.color")}
             control={<ColorField value={color} onChange={setColor} />}
           />
-          <FieldRow
-            layout="inline"
-            label={t("workspace.collaboration.inviteLink")}
-            control={(id) => (
-              <Input
-                id={id}
-                value={link}
-                placeholder={t("workspace.collaboration.inviteLinkPlaceholder")}
-                onChange={(event) => setLink(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    submit();
-                  }
-                }}
-              />
-            )}
+          <Segmented<"link" | "custom">
+            className="is-block collab-mode-switch"
+            ariaLabel={t("workspace.collaboration.joinMethod")}
+            value={method}
+            options={[
+              { value: "link", label: t("workspace.collaboration.joinMethod.link") },
+              { value: "custom", label: t("workspace.collaboration.joinMethod.custom") },
+            ]}
+            onChange={setMethod}
           />
+          {method === "link" ? (
+            <FieldRow
+              layout="inline"
+              label={t("workspace.collaboration.inviteLink")}
+              control={(id) => (
+                <Input
+                  id={id}
+                  value={link}
+                  placeholder={t("workspace.collaboration.inviteLinkPlaceholder")}
+                  onChange={(event) => setLink(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      submit();
+                    }
+                  }}
+                />
+              )}
+            />
+          ) : (
+            <>
+              <FieldRow
+                layout="inline"
+                label={t("workspace.collaboration.serverUrl")}
+                control={(id) => (
+                  <Input
+                    id={id}
+                    value={server}
+                    placeholder={t("workspace.collaboration.serverUrlPlaceholder")}
+                    onChange={(event) => setServer(event.currentTarget.value)}
+                  />
+                )}
+              />
+              <FieldRow
+                layout="inline"
+                label={t("workspace.collaboration.password")}
+                control={(id) => (
+                  <Input
+                    id={id}
+                    type="password"
+                    value={password}
+                    minLength={4}
+                    maxLength={64}
+                    autoComplete="off"
+                    onChange={(event) => setPassword(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        submit();
+                      }
+                    }}
+                  />
+                )}
+              />
+            </>
+          )}
         </div>
       </Modal>
     </>

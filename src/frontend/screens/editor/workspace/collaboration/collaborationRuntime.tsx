@@ -1804,7 +1804,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!getEditorVisibility().hasDocument) {
-      showToast(t("workspace.collaboration.hostNeedsDocument"), "warning");
       return;
     }
     const document = contextRef.current.documentRuntime;

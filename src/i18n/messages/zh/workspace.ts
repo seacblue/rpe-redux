@@ -230,7 +230,6 @@ export default {
   "workspace.collaboration.createTab": "创建房间",
   "workspace.collaboration.joinTab": "加入房间",
   "workspace.collaboration.create": "创建房间",
-  "workspace.collaboration.hostNeedsDocument": "请先打开谱面再创建房间。",
   "workspace.collaboration.join": "申请加入",
   "workspace.collaboration.leave": "离开房间",
   "workspace.collaboration.leaveTitle": "离开这个房间？",

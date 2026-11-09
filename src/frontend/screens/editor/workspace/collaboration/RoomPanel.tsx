@@ -651,7 +651,6 @@ function RoomPanelBody() {
                       />
                     )}
                   />
-                  <p className="hint">{t("workspace.collaboration.joinHint")}</p>
                 </>
               ) : (
                 <>

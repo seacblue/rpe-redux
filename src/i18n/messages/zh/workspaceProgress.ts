@@ -3,9 +3,6 @@ export default {
   "workspace.collaboration.progress.hostTitle": "正在创建房间",
   "workspace.collaboration.progress.guestTitle": "正在加入房间",
   "workspace.collaboration.progress.title": "房间准备进度",
-  "workspace.collaboration.progress.abortHint":
-    "房间准备期间请保持此窗口打开。关闭会中止传输并清理缓存数据。",
-  "workspace.collaboration.progress.readyHint": "房间已就绪，此窗口即将自动关闭。",
   "workspace.collaboration.progress.abort": "中止并关闭",
   "workspace.collaboration.progress.close": "关闭",
   "workspace.collaboration.progress.status.preparing": "正在准备谱面",

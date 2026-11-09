@@ -8,10 +8,6 @@ export default {
   "workspace.collaboration.progress.hostTitle": "Creating the room",
   "workspace.collaboration.progress.guestTitle": "Joining the room",
   "workspace.collaboration.progress.title": "Room setup progress",
-  "workspace.collaboration.progress.abortHint":
-    "Keep this window open while the room prepares. Closing it aborts the transfer and clears buffered data.",
-  "workspace.collaboration.progress.readyHint":
-    "The room is ready. This window closes automatically.",
   "workspace.collaboration.progress.abort": "Abort and close",
   "workspace.collaboration.progress.close": "Close",
   "workspace.collaboration.progress.status.preparing": "Preparing the chart",

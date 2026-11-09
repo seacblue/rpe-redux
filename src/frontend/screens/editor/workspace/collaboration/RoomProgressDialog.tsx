@@ -162,13 +162,6 @@ export function RoomProgressDialog() {
         </Button>
       }
     >
-      <p className="collab-progress-hint">
-        {t(
-          progress.ready
-            ? "workspace.collaboration.progress.readyHint"
-            : "workspace.collaboration.progress.abortHint",
-        )}
-      </p>
       <div className="collab-progress-overall" role="status" data-state={progress.phase}>
         <p className="collab-progress-stage" aria-live="polite">
           {statusText(progress, translator)}
