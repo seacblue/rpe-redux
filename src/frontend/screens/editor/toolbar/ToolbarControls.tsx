@@ -269,7 +269,6 @@ const ROW_TWO: readonly ToolbarEntry[] = [
     icon: "zoom",
     label: "chrome.toolbar.freeCamera",
     tooltip: "chrome.toolbar.freeCameraHint",
-    description: "chrome.toolbar.freeCameraHint",
     checked: () => freeCameraState.get().active,
     run: toggleFreeCamera,
   },

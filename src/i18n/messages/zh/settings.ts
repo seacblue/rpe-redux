@@ -159,7 +159,6 @@ export default {
     "这个 Extension 与已启用的 Extension 冲突：{value}。",
   "settings.extensions.error.dependentEnabled": "已启用的 Extension 依赖这个 Extension：{value}。",
   "settings.extensions.installed.title": "扩展",
-  "settings.extensions.installed.description": "安装、启用、排序或移除扩展。",
   "settings.extensions.install.open": "从 GitHub 安装…",
   "settings.extensions.install.safeModeHint":
     "扩展安全模式已启用；请在不带安全模式参数的情况下重启后再安装扩展包。",
@@ -269,7 +268,7 @@ export default {
   "settings.extensions.remove.installedDescription":
     "确定要移除 {name} 并删除它的托管扩展包目录吗？此操作无法撤销。",
 
-  "settings.backup.description": "导出谱面库、偏好设置和已导入的音符皮肤。",
+  "settings.backup.description": "导出设置与谱面库、导入的主题包、外部音符皮肤和外部扩展。",
   "settings.backup.action": "导出应用数据备份",
   "settings.backup.busy": "正在准备备份…",
   "settings.backup.success": "备份已导出到 {path}。",
@@ -309,12 +308,9 @@ export default {
   "settings.field.editor-cover-background-brightness.label": "编辑器窗口背景亮度",
   "settings.field.bar-width.label": "节拍线宽度",
   "settings.field.bar-alpha.label": "节拍线亮度",
-  "settings.field.timeline-playhead-height.label": "播放头横线高度",
-  "settings.field.timeline-playhead-height.description": "调整播放头横线距离时间轴底部的高度。",
+  "settings.field.timeline-playhead-height.label": "播放头横线距底部高度",
   "settings.field.timeline-playhead-width.label": "播放头横线粗细",
-  "settings.field.timeline-playhead-width.description": "调整时间轴中播放头横线的粗细。",
   "settings.field.timeline-playhead-color.label": "播放头横线颜色",
-  "settings.field.timeline-playhead-color.description": "调整时间轴中播放头横线的颜色。",
   "settings.field.default-line-thickness.label": "默认判定线宽度",
   "settings.field.default-line-color.label": "默认判定线颜色",
   "settings.field.timeline-event-marquee-color.label": "事件框选颜色",
@@ -353,16 +349,12 @@ export default {
 
   "settings.field.scroll-speed.label": "滚轮跳转速度",
   "settings.field.timeline-exclusive-width.label": "独占时的时间轴宽度",
-  "settings.field.timeline-exclusive-width.description":
-    "单线独占工作区时的时间轴宽度；分栏多线编辑会占满。",
   "settings.field.multi-edit-history-limit.label": "批量编辑历史条数",
   "settings.field.multi-edit-history-limit.description": "保留的可复用参数组数量；最新的排在最前。",
   "settings.field.multi-line-merge-notes.label": "合并音符",
   "settings.field.multi-line-merge-notes.description":
     "在一个多线编辑音符区域中显示所选判定线的音符。",
-  "settings.field.multi-line-note-line-numbers.label": "在音符下显示判定线号",
-  "settings.field.multi-line-note-line-numbers.description":
-    "在合并音符模式下，在每个音符下显示所属判定线编号。",
+  "settings.field.multi-line-note-line-numbers.label": "合并音符时显示判定线号",
   "settings.field.scroll-acceleration.label": "加速滚轮调整",
   "settings.field.scroll-acceleration.description": "连续滚轮调整时使用更大的数值步进。",
   "settings.field.key-press-label-enabled.label": "显示按键标签",
@@ -433,6 +425,7 @@ export default {
   "settings.field.autosave-seconds.label": "自动保存间隔",
   "settings.field.autosave-limit.label": "每谱保留备份数",
   "settings.field.open-data-folder.label": "打开应用数据文件夹",
+  "settings.field.open-data-folder.description": "打开包含数据库、日志和缓存资源的目录。",
   "settings.reset.label": "将{name}恢复为默认值",
   "settings.reset.tooltip": "恢复默认值",
   "settings.search.heading": "搜索“{query}”",
@@ -575,7 +568,6 @@ export default {
   "settings.field.docs.label": "扩展开发文档",
   "settings.field.docs.openFailed": "无法打开扩展开发文档：{message}",
   "settings.field.onboarding-guide.label": "打开此面板的使用教程",
-  "settings.field.onboarding-guide.description": "直接启动当前设置面板对应的逐步教程。",
   "settings.help.developer.title": "开发者选项",
   "settings.help.developer.performanceHud": "启用性能监测窗口",
   "settings.help.developer.performanceHudHint":
@@ -591,7 +583,6 @@ export default {
   "settings.startup.testWarning.dontShow": "不再提示",
   // --------------------------------------------------------------- Updates
   "settings.updates.autoCheck.label": "自动检查更新",
-  "settings.updates.autoCheck.description": "启动时自动检查更新。",
   "settings.updates.task.label": "更新包体",
   "settings.updates.downloadPolicy.label": "更新包体下载策略",
   "settings.updates.downloadPolicy.description": "发现新版本后在后台下载更新包体，但不会自动安装。",

@@ -26,8 +26,7 @@ export function registerToolsActions() {
       separatorBefore: true,
       label: "chrome.pane.audio",
       icon: "waves",
-      tooltip: "chrome.menu.tools.audioHint",
-      description: "chrome.menu.tools.audioHint",
+      tooltip: "chrome.pane.audio",
       // The rail has no button for it and the toolbar has its own control, so the
       // action lives in the shortcut editor alone.
       toolbar: false,

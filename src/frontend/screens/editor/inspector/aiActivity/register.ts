@@ -35,7 +35,6 @@ const disposeTool = registerInspectorTool({
   label: "editorPanels.aiActivity.title",
   icon: "bot",
   order: 300,
-  description: "editorPanels.aiActivity.description",
   separatorBefore: true,
 });
 const disposeDivider = registerSidebarDivider({

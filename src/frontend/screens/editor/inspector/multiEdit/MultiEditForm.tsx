@@ -301,13 +301,7 @@ export function MultiEditForm({
       )}
       <div className="batch-apply redux-footer-bar">
         <div className="redux-footer-actions">
-          <Button
-            type="button"
-            variant="solid"
-            data-tip-desc={t("editorPanels.multiEdit.applyHint")}
-            disabled={!canApply}
-            onClick={onApply}
-          >
+          <Button type="button" variant="solid" disabled={!canApply} onClick={onApply}>
             {t("editorPanels.multiEdit.apply")}
           </Button>
         </div>

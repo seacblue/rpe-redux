@@ -27,7 +27,6 @@ const disposeEntry = [
     label: "chrome.pane.trajectory",
     icon: "route",
     order: 260,
-    description: "chrome.menu.tools.trajectoryHint",
   }),
   registerInspectorSidebar({
     id: "curve-preview",

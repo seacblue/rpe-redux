@@ -312,7 +312,6 @@ export class AssetLibraryPanel {
     openAssetPrompt({
       kind: "name",
       title: t("editorPanels.assetLibrary.newFolder.title"),
-      description: t("editorPanels.assetLibrary.newFolder.description"),
       label: t("editorPanels.assetLibrary.newFolder.label"),
       placeholder: t("editorPanels.assetLibrary.newFolder.placeholder"),
       submit: (name) => this.submitFolder(name),

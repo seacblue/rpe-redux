@@ -20,7 +20,8 @@ export interface AssetNamePrompt {
   /** Identifies this request; a fresh one remounts the dialog, so its field starts clean. */
   id: number;
   title: string;
-  description: string;
+  /** The paragraph under the title; omit it when the title is enough. */
+  description?: string;
   label: string;
   placeholder?: string;
   /** Starting text: the rename dialog opens on the name already in place. */

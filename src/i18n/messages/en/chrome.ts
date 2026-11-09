@@ -57,29 +57,19 @@ export default {
   "chrome.developer.devtools": "Toggle DevTools",
   "chrome.developer.devtoolsHint": "Open or close the WebView developer tools",
   "chrome.developer.performanceHud": "Performance monitor",
-  "chrome.developer.performanceHudHint": "Show or hide the floating frame and memory monitor",
   "chrome.developer.detachPerformanceHud": "Detach performance monitor",
-  "chrome.developer.detachPerformanceHudHint": "Open the monitor in its own always-on-top window",
   "chrome.developer.openAppData": "Open app data folder",
-  "chrome.developer.openAppDataHint": "Reveal the SQLite database, logs, and cached resources",
   "chrome.developer.openLogs": "Open diagnostic logs",
-  "chrome.developer.openLogsHint": "Reveal the desktop log directory",
   "chrome.developer.reload": "Reload interface",
-  "chrome.developer.reloadHint": "Reload the WebView without restarting the application",
   "chrome.developer.copyDiagnostics": "Copy diagnostics",
-  "chrome.developer.copyDiagnosticsHint": "Copy the redacted runtime diagnostics snapshot",
   "chrome.developer.showDiagnostics": "Show diagnostics",
-  "chrome.developer.showDiagnosticsHint": "View actions, values, runtime and backend trace",
   "chrome.developer.diagnosticsTitle": "Developer diagnostics",
   "chrome.developer.closeDiagnostics": "Close diagnostics",
   "chrome.developer.probe": "Preview probe",
   "chrome.developer.probeHint": "Alt+wheel cycles hits, click copies, Esc exits",
   "chrome.developer.probeEmpty": "Point at the preview to query objects",
   "chrome.developer.copySelection": "Copy selection",
-  "chrome.developer.copySelectionHint": "Copy the selected notes and events as JSON",
   "chrome.developer.copyReport": "Copy developer report",
-  "chrome.developer.copyReportHint":
-    "Copy selection, probe, preview, element, and diagnostics together",
   "chrome.developer.copySucceeded": "Copied to clipboard",
   "chrome.developer.copyFailed": "Copy failed; check clipboard permission",
   "chrome.performanceHud.title": "Performance",
@@ -98,7 +88,6 @@ export default {
 
   "chrome.settings.open": "Settings",
   "chrome.menu.file.settingsHint": "Open application settings",
-  "chrome.menu.help.settingsHint": "Open application settings",
   "chrome.menu.help.operationList": "Open tutorial",
   "chrome.menu.help.operationListHint": "Start the guided tutorial for the current workspace",
   "chrome.menu.help.survey": "Survey",
@@ -184,7 +173,6 @@ export default {
   "chrome.transport.menu.manageMarkers": "Manage time markers…",
 
   "chrome.transport.jump.title": "Jump to time",
-  "chrome.transport.jump.description": "Move to a chart position by time or beat.",
   "chrome.transport.jump.mode": "Jump by",
   "chrome.transport.jump.mode.time": "Time",
   "chrome.transport.jump.mode.beat": "Beat",
@@ -195,7 +183,6 @@ export default {
   "chrome.transport.jump.submit": "Jump",
 
   "chrome.transport.markerManager.title": "Time markers",
-  "chrome.transport.markerManager.description": "Manage the current chart's time markers.",
   "chrome.transport.markerManager.empty": "This chart has no time markers yet.",
   "chrome.transport.markerManager.add": "Add marker",
   "chrome.transport.markerManager.name": "Name",
@@ -208,8 +195,6 @@ export default {
   "chrome.transport.markerManager.selectFirst": "Select a time marker first.",
 
   "chrome.menu.playback.seek": "Jump to beat",
-  "chrome.menu.playback.seekHint": "Move the edit cursor to a beat",
-  "chrome.menu.playback.rateHint": "Choose the playback speed",
 
   "chrome.toolbar.extensions": "Extensions",
   "chrome.toolbar.extensionsEmpty": "No enabled object-action Extension is available",
@@ -224,23 +209,19 @@ export default {
 
   "chrome.time.beat": "Beat",
   "chrome.time.beatHint": "Seek to the beat you entered",
-  "chrome.time.rate": "Rate",
+  "chrome.time.rate": "Playback speed",
 
   "chrome.menu.label": "Application menu",
   "chrome.menu.file": "File",
   "chrome.menu.edit": "Edit",
   "chrome.menu.view": "View",
   "chrome.menu.help": "Help",
-  "chrome.menu.file.new": "New chart",
-  "chrome.menu.file.newHint": "Create a blank chart",
-  "chrome.menu.file.open": "Import JSON / PEZ",
-  "chrome.menu.file.openHint": "Import a chart file from outside",
-  "chrome.menu.file.saveHint": "Save the current revision",
+  "chrome.menu.file.new": "New blank chart",
+  "chrome.menu.file.open": "Import chart",
   "chrome.menu.file.closeDocument": "Return to chart library",
   "chrome.menu.file.closeDocumentHint":
     "Check for unsaved changes before returning to the chart library",
   "chrome.menu.file.titleScreen": "Show chart library",
-  "chrome.menu.file.titleScreenHint": "Show the chart library while keeping the current chart open",
   "chrome.menu.edit.undoHint": "Undo the last chart change",
   "chrome.menu.edit.redoHint": "Redo the change that was just undone",
 
@@ -248,9 +229,4 @@ export default {
 
   "chrome.menu.tools.noteSkin": "Note skin",
   "chrome.menu.tools.noteSkinHint": "Choose or import standalone note textures",
-
-  "chrome.menu.tools.curveHint": "Generate a run of notes from a curve",
-  "chrome.menu.tools.trajectoryHint": "Drag shapes onto the preview and adjust Bezier nodes",
-  "chrome.menu.tools.multiLineHint": "Edit several judge lines at once",
-  "chrome.menu.tools.audioHint": "Analyse the music on demand and align the rhythm",
 } as const;

@@ -24,7 +24,6 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     navigation: "help",
     group: "",
     label: "settings.updates.autoCheck.label",
-    description: "settings.updates.autoCheck.description",
     control: "toggle",
     default: DEFAULT_UPDATE_AUTO_CHECK,
   },

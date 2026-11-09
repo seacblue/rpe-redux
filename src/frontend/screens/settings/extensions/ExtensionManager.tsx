@@ -37,9 +37,6 @@ export function ExtensionManager() {
       <div className="redux-extension-manager-heading">
         <div>
           <h2>{t("settings.extensions.installed.title")}</h2>
-          <p className="redux-setting-description">
-            {t("settings.extensions.installed.description")}
-          </p>
           {startup.safeMode && (
             <p className="redux-setting-description">
               {t("settings.extensions.install.safeModeHint")}

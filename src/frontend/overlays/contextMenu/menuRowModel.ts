@@ -59,8 +59,6 @@ export interface ContextMenuRegistryRow {
   icon?: string;
   /** The live keyboard hint, or an empty string when the row has no binding. */
   shortcut: string;
-  /** Tooltip text, as a message key or literal text. */
-  title?: string;
   /** Whether the row paints its checked mark. */
   checked?: boolean;
   /** Destructive commands keep the danger ink. */
@@ -113,7 +111,6 @@ export function resolveContextMenuRows(
       label: entry.label,
       icon: entry.icon,
       shortcut: actionShortcut(entry),
-      title: entry.tooltip || undefined,
       checked: entry.checked?.() === true,
       danger: entry.destructive === true,
       disabled: state.disabled,
@@ -140,7 +137,6 @@ export function resolveContextMenuRows(
       label: entry.label,
       icon: entry.icon,
       shortcut: entryShortcut(entry),
-      title: entry.tooltip,
       danger: entry.danger === true,
       disabled: state.disabled,
       separatorBefore: entry.separatorBefore === true,

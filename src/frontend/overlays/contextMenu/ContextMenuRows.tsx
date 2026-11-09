@@ -100,7 +100,6 @@ export function ContextMenuRows({
         checked={row.checked}
         danger={row.danger}
         disabled={row.disabled}
-        title={row.title ? tRaw(row.title) : undefined}
         onClick={() => {
           close();
           row.select();
@@ -124,7 +123,6 @@ export function ContextMenuRows({
         shortcut={siteShortcut(action)}
         danger={action.danger === true}
         disabled={disabled}
-        title={action.tooltip}
         onClick={() => {
           close();
           action.run();

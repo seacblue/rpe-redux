@@ -86,15 +86,10 @@ function MeasuredToolbarAction({ entry, tRaw }: MeasuredToolbarActionProps) {
   const cells = automatic ? measuredCells : entry.cells;
   const style: CSSProperties & { "--toolbar-action-cells"?: number } =
     cells === null || cells === "auto" ? {} : { "--toolbar-action-cells": cells };
-  const description =
-    entry.description && entry.description !== entry.label && entry.description !== entry.tooltip
-      ? tRaw(entry.description)
-      : undefined;
   const shortcuts = actionShortcuts(entry);
   const ariaShortcut = shortcuts[0] ? ariaShortcutText(shortcuts[0]) : "";
   const tips = {
     "data-tip-title": tRaw(entry.label),
-    "data-tip-desc": description,
     "data-tip-key": actionShortcut(entry),
     "data-tip-action": entry.id,
     "aria-keyshortcuts": ariaShortcut || undefined,

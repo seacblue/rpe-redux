@@ -96,7 +96,6 @@ export default {
 
   "workspace.scripts.source": "提供者：{source}",
   "workspace.scripts.run": "运行",
-  "workspace.scripts.runParameterHint": "使用这些参数运行",
   "workspace.scripts.parameters.title": "使用参数运行 {script}",
   "workspace.scripts.parameters.description": "请输入有效值后运行此脚本。",
   "workspace.scripts.parameters.fields": "字段：{value}",
@@ -127,7 +126,6 @@ export default {
   "workspace.scripts.recipe.fadeNotesDescription": "缩放选中音符的透明度。",
 
   "workspace.history.title": "编辑历史",
-  "workspace.history.description": "浏览编辑历史并撤回到之前的状态。",
   "workspace.history.emptyTitle": "还没有编辑历史",
   "workspace.history.empty": "第一次编辑后，这里会出现撤销历史。",
   "workspace.history.undo": "撤销历史",
@@ -147,9 +145,9 @@ export default {
   "workspace.welcome.moreMenu": "更多操作",
   "workspace.welcome.importRpe": "从 RPE 导入…",
   "workspace.welcome.importDialog.title": "导入谱面",
-  "workspace.welcome.importDialog.description":
-    "选择 RPE 安装文件夹或其他受支持的谱面文件，也可以直接拖到下方。",
   "workspace.welcome.importDialog.dropTitle": "拖入文件夹或文件",
+  "workspace.welcome.importDialog.dropFormats":
+    "支持 RPE JSON / PEZ、PhiEdit PEC 和 Phigros 官谱 JSON",
   "workspace.welcome.importDialog.dropActive": "松开即可导入",
   "workspace.welcome.importDialog.rpe": "选择 RPE 文件夹",
   "workspace.welcome.importDialog.external": "选择其它谱面",
@@ -272,8 +270,6 @@ export default {
   "workspace.collaboration.joinHint":
     "粘贴邀请链接加入。除非房间允许自动编辑，否则仍需要房主批准。",
   "workspace.collaboration.joinInviteTitle": "加入这个房间？",
-  "workspace.collaboration.joinInviteDescription":
-    "这是一个联机房间邀请。加入前先看看当前有哪些成员。",
   "workspace.collaboration.joinInviteMembers": "房间成员",
   "workspace.collaboration.joinInviteCapacity": "{count}/{max} 人",
   "workspace.collaboration.joinInviteOnline": "在线",
@@ -305,7 +301,6 @@ export default {
   "workspace.collaboration.invalidInviteLink": "邀请链接无效。",
   "workspace.collaboration.invalidRoomDetails": "请填写服务器地址和房间密码。",
   "workspace.collaboration.autoApproveEditor": "允许新加入成员编辑",
-  "workspace.collaboration.autoApproveHint": "拿到链接者直接以编辑身份加入",
   "workspace.collaboration.copyFailed": "无法复制邀请链接。",
   "workspace.collaboration.e2eOverwrite":
     "加密房间按版本顺序应用修改。并发编辑覆盖了此文档中的字段，已保留本地恢复副本。",
@@ -369,7 +364,6 @@ export default {
   "workspace.collaboration.location.edit": "编辑，节拍 {beat}",
   "workspace.collaboration.location.design": "Design",
   "workspace.collaboration.assets": "资源",
-  "workspace.collaboration.assetSyncHint": "资源按内容哈希同步，校验通过后才会替换本地副本。",
   "workspace.collaboration.assetSyncing": "同步中",
   "workspace.collaboration.locks": "编辑锁",
   "workspace.collaboration.locked": "{owners} 正在编辑 {objects}，请等待或让对方先完成。",

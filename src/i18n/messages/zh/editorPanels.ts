@@ -25,12 +25,10 @@ export default {
   "editorPanels.linePanel.noiseChanged": "谱面或当前判定线已改变，请重新操作。",
   "editorPanels.linePanel.noiseUnsupported": "复杂变换导出时会转换为采样事件，轨迹可能有微小误差。",
   "editorPanels.scripts.title": "脚本",
-  "editorPanels.scripts.description": "运行已启用扩展提供的脚本。",
   "editorPanels.scripts.emptyTitle": "还没有脚本",
   "editorPanels.scripts.empty": "还没有可运行的脚本。请在设置 › 扩展中启用脚本扩展。",
   "editorPanels.scripts.openSettings": "打开设置",
   "editorPanels.aiActivity.title": "AI 操作记录",
-  "editorPanels.aiActivity.description": "查看 AI 客户端发给编辑器的请求和返回内容。",
   "editorPanels.aiActivity.emptyTitle": "还没有 AI 请求",
   "editorPanels.aiActivity.empty": "AI 客户端发来的请求会显示在这里。",
   "editorPanels.aiActivity.disabledHint": "AI 代码单元已关闭。请在设置中启用后让 AI 客户端连接。",
@@ -151,7 +149,6 @@ export default {
   "editorPanels.issues.eventPair": "事件 {first} ↔ {second}",
   "editorPanels.issues.invalidRange": "对象 {index} 没有正向时长",
   "editorPanels.issues.locate": "定位",
-  "editorPanels.issues.locateHint": "在时间轴定位这处重叠",
   "editorPanels.issues.trackIncline": "倾斜",
   "editorPanels.issues.trackGif": "GIF",
 
@@ -218,7 +215,6 @@ export default {
   "editorPanels.inspector.event.modeBezier": "Bezier",
   "editorPanels.inspector.event.toggleBezier": "切换曲线方式",
   "editorPanels.inspector.event.bezierPoints": "Bezier 控制点",
-  "editorPanels.inspector.event.bezierPointsHint": "四个数字：x1, y1, x2, y2，每个都在 0 到 1 之间",
   "editorPanels.inspector.event.modifyBezier": "修改 Bezier",
   "editorPanels.inspector.event.bezierDisabled":
     "设置中已关闭贝塞尔曲线。此事件仍保留贝塞尔曲线；启用贝塞尔曲线后可编辑。",
@@ -315,7 +311,6 @@ export default {
   "editorPanels.linePanel.groupNameRequired": "请输入分组名称",
   "editorPanels.linePanel.lineNameRequired": "请输入判定线名称",
   "editorPanels.linePanel.groupCount": "分组数量",
-  "editorPanels.linePanel.groupCountDescription": "要新增多少个分组？",
   "editorPanels.linePanel.renameGroupLabel": "重命名判定线分组",
   "editorPanels.linePanel.deleteGroupLabel": "删除分组",
   "editorPanels.linePanel.duplicateGroupName": "已存在同名分组",
@@ -400,8 +395,6 @@ export default {
   "editorPanels.assetLibrary.drop.title": "拖入以导入素材",
   "editorPanels.assetLibrary.drop.folder": "文件将添加到 {folder} 末尾",
   "editorPanels.assetLibrary.newFolder.title": "新建素材文件夹",
-  "editorPanels.assetLibrary.newFolder.description":
-    "文件夹只用于给素材列表分组，会随谱面一起保存，不会在磁盘上创建目录。简单名称会创建在当前选中的文件夹内。",
   "editorPanels.assetLibrary.newFolder.placeholder": "例如：lines/season-1",
   "editorPanels.assetLibrary.newFolder.label": "素材文件夹名称",
   "editorPanels.assetLibrary.newFolder.invalid": "请输入有效的文件夹名称",
@@ -430,7 +423,6 @@ export default {
   "editorPanels.multiEdit.operation": "修改方式",
   "editorPanels.multiEdit.previewToggle": "显示结果虚影",
   "editorPanels.multiEdit.apply": "应用更改",
-  "editorPanels.multiEdit.applyHint": "应用到选中对象",
   "editorPanels.multiEdit.appliedNotify": "已应用 {count} 个物件的批量编辑",
 
   "editorPanels.trajectory.field.trimStart": "截取起点（0–1）",
@@ -633,7 +625,6 @@ export default {
   "editorPanels.sampling.xyBindingHint":
     "开启后，创建或删除 X/Y 事件时，会同步创建或删除另一轴上时间区间完全相同的事件。",
   "editorPanels.sampling.guideOpacity": "辅助线透明度",
-  "editorPanels.sampling.shiftHint": "按住 Shift 临时隐藏辅助线",
   "editorPanels.sampling.samplingHint": "按住并拖动确定首尾值，松手后可选择缓动",
   "editorPanels.sampling.easing": "缓动",
   "editorPanels.sampling.confirm": "确认",

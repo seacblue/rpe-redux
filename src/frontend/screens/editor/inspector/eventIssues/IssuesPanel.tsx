@@ -160,7 +160,6 @@ function IssuesContent() {
                   variant="plain"
                   label={t("editorPanels.issues.locate")}
                   data-tip-title={t("editorPanels.issues.locate")}
-                  data-tip-desc={t("editorPanels.issues.locateHint")}
                   onClick={() => locate(issue)}
                 />
               </ListRow>

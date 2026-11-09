@@ -102,8 +102,6 @@ export interface ToolbarAction {
   label: string;
   /** Message key, or the rendered text for a contribution that has none yet. */
   tooltip: string;
-  /** Secondary description used by the scene-wide tooltip and context menus. */
-  description?: string;
   /** Action-only contributions share context menus and keyboard shortcuts. */
   toolbar?: boolean;
   contexts?: readonly ActionContext[];

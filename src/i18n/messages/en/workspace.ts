@@ -113,7 +113,6 @@ export default {
 
   "workspace.scripts.source": "Provided by {source}",
   "workspace.scripts.run": "Run",
-  "workspace.scripts.runParameterHint": "Run with these values",
   "workspace.scripts.parameters.title": "Run {script} with parameters",
   "workspace.scripts.parameters.description": "Enter valid values before running this script.",
   "workspace.scripts.parameters.fields": "Fields: {value}",
@@ -146,7 +145,6 @@ export default {
   "workspace.scripts.recipe.fadeNotesDescription": "Scale the alpha of selected notes.",
 
   "workspace.history.title": "Edit history",
-  "workspace.history.description": "Jump through the edit history and revert to an earlier step.",
   "workspace.history.emptyTitle": "No edit history yet",
   "workspace.history.empty": "Undo history appears after your first edit.",
   "workspace.history.undo": "Undo history",
@@ -168,9 +166,9 @@ export default {
   "workspace.welcome.moreMenu": "More actions",
   "workspace.welcome.importRpe": "Import from RPE…",
   "workspace.welcome.importDialog.title": "Import charts",
-  "workspace.welcome.importDialog.description":
-    "Choose an RPE installation folder or another supported chart file. You can also drop one below.",
   "workspace.welcome.importDialog.dropTitle": "Drop a folder or file",
+  "workspace.welcome.importDialog.dropFormats":
+    "Supports RPE JSON / PEZ, PhiEdit PEC, and Phigros official JSON",
   "workspace.welcome.importDialog.dropActive": "Release to import",
   "workspace.welcome.importDialog.rpe": "Choose RPE folder",
   "workspace.welcome.importDialog.external": "Choose another chart",
@@ -299,8 +297,6 @@ export default {
   "workspace.collaboration.joinHint":
     "Paste the invitation link. The host approves the join unless the room allows editors automatically.",
   "workspace.collaboration.joinInviteTitle": "Join this room?",
-  "workspace.collaboration.joinInviteDescription":
-    "This invitation opens a collaboration room. Review who is currently there before joining.",
   "workspace.collaboration.joinInviteMembers": "People in this room",
   "workspace.collaboration.joinInviteCapacity": "{count} of {max} members",
   "workspace.collaboration.joinInviteOnline": "Online",
@@ -333,8 +329,6 @@ export default {
   "workspace.collaboration.invalidInviteLink": "This invitation link is invalid.",
   "workspace.collaboration.invalidRoomDetails": "Enter the server address and room password.",
   "workspace.collaboration.autoApproveEditor": "Allow new members to edit",
-  "workspace.collaboration.autoApproveHint":
-    "Link holders join as editors; you can still remove them",
   "workspace.collaboration.copyFailed": "The invite link could not be copied.",
   "workspace.collaboration.e2eOverwrite":
     "Encrypted rooms apply changes in revision order. A concurrent edit replaced a field in this document; a recovery copy is kept.",
@@ -407,8 +401,6 @@ export default {
   "workspace.collaboration.location.edit": "Edit, beat {beat}",
   "workspace.collaboration.location.design": "Design",
   "workspace.collaboration.assets": "Resources",
-  "workspace.collaboration.assetSyncHint":
-    "Resources are content-addressed and verified before they replace a local copy.",
   "workspace.collaboration.assetSyncing": "Syncing",
   "workspace.collaboration.locks": "Edit locks",
   "workspace.collaboration.locked": "{owners} is editing {objects}. Wait or ask them to finish.",

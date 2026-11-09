@@ -24,7 +24,6 @@ const disposeTool = registerInspectorTool({
   label: "chrome.pane.curve",
   icon: "curve",
   order: 250,
-  description: "chrome.menu.tools.curveHint",
   separatorBefore: true,
 });
 const disposeSidebar = registerInspectorSidebar({

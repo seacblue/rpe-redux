@@ -304,7 +304,6 @@ export function MarkerManagerDialog() {
       open={open}
       onClose={closeMarkerDialog}
       label={t("chrome.transport.markerManager.title")}
-      description={t("chrome.transport.markerManager.description")}
       className="marker-manager-dialog"
       actions={
         <>

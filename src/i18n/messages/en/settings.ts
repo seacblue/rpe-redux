@@ -193,7 +193,6 @@ export default {
   "settings.extensions.error.dependentEnabled":
     "An enabled Extension depends on this Extension: {value}.",
   "settings.extensions.installed.title": "Extensions",
-  "settings.extensions.installed.description": "Install, enable, reorder, or remove Extensions.",
   "settings.extensions.install.open": "Install from GitHub…",
   "settings.extensions.install.safeModeHint":
     "Extension safe mode is active; restart without the safe-mode flag before installing a package.",
@@ -318,7 +317,8 @@ export default {
   "settings.extensions.remove.installedDescription":
     "Remove {name} from the loaded Extensions and delete its managed package folder? This cannot be undone.",
 
-  "settings.backup.description": "Export the chart library, preferences, and imported note skins.",
+  "settings.backup.description":
+    "Export settings and the chart library, imported theme packages, external note skins, and extensions.",
   "settings.backup.action": "Export application-data backup",
   "settings.backup.busy": "Preparing backup…",
   "settings.backup.success": "Backup exported to {path}.",
@@ -365,15 +365,9 @@ export default {
   "settings.field.editor-cover-background-brightness.label": "Editor window background brightness",
   "settings.field.bar-width.label": "Beat line width",
   "settings.field.bar-alpha.label": "Beat line brightness",
-  "settings.field.timeline-playhead-height.label": "Playhead line height",
-  "settings.field.timeline-playhead-height.description":
-    "Sets the distance between the playhead line and the bottom of the timeline.",
+  "settings.field.timeline-playhead-height.label": "Playhead line distance from bottom",
   "settings.field.timeline-playhead-width.label": "Playhead line thickness",
-  "settings.field.timeline-playhead-width.description":
-    "Sets the thickness of the playhead line in the timeline.",
   "settings.field.timeline-playhead-color.label": "Playhead line color",
-  "settings.field.timeline-playhead-color.description":
-    "Sets the color of the playhead line in the timeline.",
   "settings.field.default-line-thickness.label": "Default judgement-line width",
   "settings.field.default-line-color.label": "Default judgement-line colour",
   "settings.field.timeline-event-marquee-color.label": "Event marquee colour",
@@ -417,17 +411,14 @@ export default {
   // -------------------------------------------------------- timeline (5 rows)
   "settings.field.scroll-speed.label": "Wheel seek speed",
   "settings.field.timeline-exclusive-width.label": "Exclusive timeline width",
-  "settings.field.timeline-exclusive-width.description":
-    "Timeline width while one line owns the workspace; split multi-line editing fills it.",
   "settings.field.multi-edit-history-limit.label": "Batch edit history entries",
   "settings.field.multi-edit-history-limit.description":
     "Applied parameter sets kept for reuse; newest first.",
   "settings.field.multi-line-merge-notes.label": "Merge notes",
   "settings.field.multi-line-merge-notes.description":
     "Show notes from selected judge lines in one multi-line editing field.",
-  "settings.field.multi-line-note-line-numbers.label": "Show judge-line numbers below notes",
-  "settings.field.multi-line-note-line-numbers.description":
-    "In merged multi-line note editing, show the owning judge-line number below each note.",
+  "settings.field.multi-line-note-line-numbers.label":
+    "Show judge-line numbers while merging notes",
   "settings.field.scroll-acceleration.label": "Accelerate wheel scrolling",
   "settings.field.scroll-acceleration.description":
     "Makes repeated wheel edits use larger value steps.",
@@ -505,6 +496,8 @@ export default {
   "settings.field.autosave-seconds.label": "Autosave interval",
   "settings.field.autosave-limit.label": "Backups kept per chart",
   "settings.field.open-data-folder.label": "Open application data folder",
+  "settings.field.open-data-folder.description":
+    "Open the folder that contains the database, logs, and cached resources.",
   // -------------------------------------------------------- select options
   // ------------------------------------------------------ skins & appearance
 
@@ -652,8 +645,6 @@ export default {
   "settings.field.docs.label": "Extension development docs",
   "settings.field.docs.openFailed": "Could not open the extension development docs: {message}",
   "settings.field.onboarding-guide.label": "Open this panel's tutorial",
-  "settings.field.onboarding-guide.description":
-    "Start the guided tutorial for the current settings panel directly.",
   "settings.help.developer.title": "Developer options",
   "settings.help.developer.performanceHud": "Enable performance monitor",
   "settings.help.developer.performanceHudHint":
@@ -675,7 +666,6 @@ export default {
   "settings.startup.testWarning.dontShow": "Do not show again",
   // --------------------------------------------------------------- updates
   "settings.updates.autoCheck.label": "Automatically check for updates",
-  "settings.updates.autoCheck.description": "Check for updates automatically at startup.",
   "settings.updates.task.label": "Update package",
   "settings.updates.downloadPolicy.label": "Update package download policy",
   "settings.updates.downloadPolicy.description":
