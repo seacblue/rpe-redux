@@ -68,6 +68,6 @@
     "@tauri-apps/plugin-opener": "^2.7.2",
     "pinyin-pro": "^3.29.5",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.1"
   }
 }
