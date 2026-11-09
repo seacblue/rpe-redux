@@ -23,6 +23,7 @@ import { EVENT_TYPES } from "../../../../../../core/global/chart/chart.ts";
 import { eventColumnBounds } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { trackLabels } from "../drawing/canvas.ts";
 import { eventTypeAt, SPECIAL_TRACKS, specialTrackLabel } from "../drawing/tracks.ts";
+import { eventColumnForTrack } from "./eventColumns.ts";
 import {
   eventKey,
   eventListAt,
@@ -255,7 +256,7 @@ export class EventInteraction implements EventInteractionHandle {
       this.pending?.type ??
       type ??
       eventTypeAt(eventTypes, (point?.x ?? 0) - panelOffset - eventInset, contentWidth);
-    if (!eventType) {
+    if (!eventType || eventColumnForTrack(eventTypes, eventType) < 0) {
       return false;
     }
     const at =
@@ -687,7 +688,7 @@ export class EventInteraction implements EventInteractionHandle {
     const session = this.timeline.getSession();
     const pendingLineIndex = pending.lineIndex ?? session.lineIndex;
     const eventTypes = this.timeline.viewport.eventTypesForLine(pendingLineIndex);
-    const channel = eventTypes.indexOf(pending.type);
+    const channel = eventColumnForTrack(eventTypes, pending.type);
     if (channel < 0) {
       return;
     }
@@ -720,18 +721,18 @@ export class EventInteraction implements EventInteractionHandle {
       this.timeline.viewport.panelIndex(lineIndex, "events") *
         this.timeline.viewport.panelStride(width, "events") -
       this.timeline.viewport.multiLineViewportOffset(width, "events");
-    const { x: localBarX, width: barWidth } = eventColumnBounds(
+    const column = eventColumnBounds(
       channel,
       panelWidth,
       eventTypes.length,
       this.timeline.viewport.eventBarWidth ?? 0.82,
       this.timeline.viewport.eventInset(panelWidth),
     );
-    const barX = panelOffset + localBarX;
+    const barX = panelOffset + column.x;
     const palette = readCanvasPalette();
     context.fillStyle = valid ? palette.overlayValidFill : palette.overlayInvalidFill;
     context.strokeStyle = valid ? palette.overlayValidStroke : palette.overlayInvalidStroke;
-    context.fillRect(barX, top, barWidth, height);
-    context.strokeRect(barX, top, barWidth, height);
+    context.fillRect(barX, top, column.width, height);
+    context.strokeRect(barX, top, column.width, height);
   }
 }

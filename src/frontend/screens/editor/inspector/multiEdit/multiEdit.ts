@@ -18,6 +18,7 @@ import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import { normalizeChartObjectIds } from "../../../../../core/global/chart/chart.ts";
 import { isChartObjectId, type ChartObjectId } from "../../../../../core/global/chart/identity.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
+import { eventColumnBounds } from "../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { noteColor, readCanvasPalette } from "../../canvas/palette.ts";
 import { canvasFont } from "../../canvas/text.ts";
 import {
@@ -34,6 +35,7 @@ import type {
 import type { MultiEditState } from "./model.ts";
 import type { EditorFeedback } from "../../workspace/runtime/session/feedback.ts";
 import { drawEventGhost } from "./eventGhostDrawing.ts";
+import { eventColumnForTrack } from "../../workspace/timeline/events/eventColumns.ts";
 
 const OPERATION_LABELS: Readonly<Record<string, string>> = {
   By: "editor.commands.multiEdit.operation.by",
@@ -88,7 +90,7 @@ function affectedObjectIds(session: EditorSession, result: MultiEditResult): Cha
 
 type MultiEditTimeline = Pick<
   Timeline,
-  "notesCanvas" | "eventsCanvas" | "eventTypes" | "appearance"
+  "notesCanvas" | "eventsCanvas" | "eventTypes" | "eventColumns" | "appearance"
 > & {
   viewport: Pick<
     Timeline["viewport"],
@@ -105,7 +107,8 @@ type MultiEditTimeline = Pick<
     | "noteWidth"
     | "clampNoteHorizontal"
     | "noteHorizontal"
-    | "eventColumnBounds"
+    | "eventInset"
+    | "eventBarWidth"
   >;
   cache: Pick<Timeline["cache"], "eventRange">;
 };
@@ -421,7 +424,10 @@ export class MultiEditPanel {
         const range = ranges.get(rangeKey) ?? [Infinity, -Infinity];
         const chain =
           change.lineIndex === session.lineIndex
-            ? timeline.cache.eventRange(timeline.eventTypes.indexOf(change.type), change.index)
+            ? timeline.cache.eventRange(
+                eventColumnForTrack(timeline.eventColumns, change.type),
+                change.index,
+              )
             : null;
         if (chain && Number.isFinite(chain.min) && Number.isFinite(chain.max)) {
           range[0] = Math.min(range[0], chain.min);
@@ -526,12 +532,22 @@ export class MultiEditPanel {
           context.restore();
         }
       } else {
-        const column = timeline.eventTypes.indexOf(change.type);
+        const columns = timeline.eventColumns;
+        const column = eventColumnForTrack(columns, change.type);
         if (column < 0) {
           continue;
         }
-        const localBounds = timeline.viewport.eventColumnBounds(column, panelWidth);
-        const bounds = { x: panelOffset + localBounds.x, width: localBounds.width };
+        const columnBounds = eventColumnBounds(
+          column,
+          panelWidth,
+          columns.length,
+          timeline.viewport.eventBarWidth ?? 0.82,
+          timeline.viewport.eventInset(panelWidth),
+        );
+        const bounds = {
+          x: panelOffset + columnBounds.x,
+          width: columnBounds.width,
+        };
         context.save();
         context.beginPath();
         context.rect(bounds.x, 23, bounds.width, canvas.clientHeight);
