@@ -70,6 +70,30 @@
   }
 }
 
+.redux-welcome-join {
+  position: absolute;
+  z-index: var(--z-content-overlay);
+  inset-block-start: var(--space-1-5);
+  inset-inline-end: var(--space-3);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-join .redux-icon-button {
+  width: var(--theme-toolbar-cell, 41px);
+  min-width: var(--theme-toolbar-cell, 41px);
+  height: var(--theme-toolbar-cell, 41px);
+  min-height: var(--theme-toolbar-cell, 41px);
+  padding: 0;
+  color: var(--foreground-muted);
+
+  .redux-icon {
+    --icon-color: currentColor;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--foreground);
+  }
+}
+
 // ----------------------------------------------------------------- columns
 
 // The two columns stay mounted for every read phase, including an empty

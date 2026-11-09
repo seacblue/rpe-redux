@@ -257,6 +257,7 @@ export default {
   "workspace.collaboration.createTab": "Create room",
   "workspace.collaboration.joinTab": "Join room",
   "workspace.collaboration.create": "Create room",
+  "workspace.collaboration.hostNeedsDocument": "Open a chart before creating a room.",
   "workspace.collaboration.join": "Request to join",
   "workspace.collaboration.leave": "Leave room",
   "workspace.collaboration.leaveTitle": "Leave this room?",
