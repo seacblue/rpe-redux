@@ -143,11 +143,14 @@ function IssuesContent() {
                   <strong className="event-issue-title">
                     {issue.target === "hold"
                       ? t("editorPanels.issues.holdTrack")
-                      : trackLabel(issue.track, t)}{" "}
-                    · {line}
+                      : trackLabel(issue.track, t)}
+                    {", "}
+                    {line}
                   </strong>
                   <span className="event-issue-meta">
-                    {layer} · {beat}
+                    {layer}
+                    {", "}
+                    {beat}
                   </span>
                 </div>
                 <IconButton

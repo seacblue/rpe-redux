@@ -107,7 +107,7 @@ function HistoryRowView({
           <strong>{summary.label}</strong>
           <small>
             {t("workspace.history.affected", { count: summary.affectedCount })}
-            {" · "}
+            {", "}
             {relativeTime(summary.at, now)}
           </small>
         </span>

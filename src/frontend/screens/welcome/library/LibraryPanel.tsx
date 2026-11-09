@@ -94,16 +94,16 @@ export function LibraryPanel({
   const ascending = t("workspace.welcome.library.sort.az");
   const descending = t("workspace.welcome.library.sort.za");
   const sortOptions = [
-    ["updated:desc", `${t("workspace.welcome.library.sort.updated")} · ${newest}`],
-    ["updated:asc", `${t("workspace.welcome.library.sort.updated")} · ${oldest}`],
-    ["created:desc", `${t("workspace.welcome.library.sort.created")} · ${newest}`],
-    ["created:asc", `${t("workspace.welcome.library.sort.created")} · ${oldest}`],
-    ["name:asc", `${t("workspace.welcome.library.sort.name")} · ${ascending}`],
-    ["name:desc", `${t("workspace.welcome.library.sort.name")} · ${descending}`],
-    ["composer:asc", `${t("workspace.welcome.library.sort.composer")} · ${ascending}`],
-    ["composer:desc", `${t("workspace.welcome.library.sort.composer")} · ${descending}`],
-    ["charter:asc", `${t("workspace.welcome.library.sort.charter")} · ${ascending}`],
-    ["charter:desc", `${t("workspace.welcome.library.sort.charter")} · ${descending}`],
+    ["updated:desc", `${t("workspace.welcome.library.sort.updated")}, ${newest}`],
+    ["updated:asc", `${t("workspace.welcome.library.sort.updated")}, ${oldest}`],
+    ["created:desc", `${t("workspace.welcome.library.sort.created")}, ${newest}`],
+    ["created:asc", `${t("workspace.welcome.library.sort.created")}, ${oldest}`],
+    ["name:asc", `${t("workspace.welcome.library.sort.name")}, ${ascending}`],
+    ["name:desc", `${t("workspace.welcome.library.sort.name")}, ${descending}`],
+    ["composer:asc", `${t("workspace.welcome.library.sort.composer")}, ${ascending}`],
+    ["composer:desc", `${t("workspace.welcome.library.sort.composer")}, ${descending}`],
+    ["charter:asc", `${t("workspace.welcome.library.sort.charter")}, ${ascending}`],
+    ["charter:desc", `${t("workspace.welcome.library.sort.charter")}, ${descending}`],
   ] as const;
   return (
     <section className="redux-welcome-library">

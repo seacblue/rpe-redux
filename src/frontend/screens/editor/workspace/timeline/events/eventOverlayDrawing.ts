@@ -151,7 +151,7 @@ export function drawShaderEvents(
     context.fillText(name, rectangle.x + rectangle.width / 2, top + 16, rectangle.width - 4);
     if (rectangle.height > 40) {
       context.fillText(
-        `#${entry.item.order ?? 0}${entry.item.global ? " · UI" : ""}`,
+        `#${entry.item.order ?? 0}${entry.item.global ? ", UI" : ""}`,
         rectangle.x + rectangle.width / 2,
         top + 33,
         rectangle.width - 4,

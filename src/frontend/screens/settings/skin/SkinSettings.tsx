@@ -167,7 +167,7 @@ export function SkinSettings() {
       const missing = missingPhiraWorkbenchSlots(phiraWorkbenchDraftFromPack(raw));
       let pack = raw;
       if (missing.length) {
-        const parts = missing.map(slotLabel).join(" · ");
+        const parts = missing.map(slotLabel).join(", ");
         const confirmed = await requestConfirm({
           title: t("settings.skin.export.incomplete.title"),
           description: t("settings.skin.export.incomplete.description", { parts }),
@@ -184,7 +184,7 @@ export function SkinSettings() {
           showNotice({
             title: t("settings.skin.export.unresolved.title"),
             description: t("settings.skin.export.unresolved.description", {
-              parts: unresolved.map(slotLabel).join(" · "),
+              parts: unresolved.map(slotLabel).join(", "),
             }),
             priority: MODAL_PRIORITY.closePrompt,
           });
@@ -261,10 +261,10 @@ export function SkinSettings() {
                   className="redux-setting-restart-marker"
                   role="img"
                   aria-label={t("settings.skin.warning.incompleteActive", {
-                    parts: unresolvedSlots.map(slotLabel).join(" · "),
+                    parts: unresolvedSlots.map(slotLabel).join(", "),
                   })}
                   data-tip-title={t("settings.skin.warning.incompleteTitle")}
-                  data-tip-desc={unresolvedSlots.map(slotLabel).join(" · ")}
+                  data-tip-desc={unresolvedSlots.map(slotLabel).join(", ")}
                 />
               )}
             </span>

@@ -9,7 +9,7 @@
  * embedded Go listener's handshake validation, per-address upgrade and message
  * budgets, bounded per-socket send queue, and read/write timeouts.
  *
- * Run with `npm run collab` (uses Node's type-stripping support for the shared
+ * Run with `npm run dev:collab` (uses Node's type-stripping support for the shared
  * TypeScript modules). Use `--host 0.0.0.0` to accept LAN connections. Origin,
  * rate, timeout, and queue limits can be overridden with REDUX_COLLAB_*
  * environment variables:

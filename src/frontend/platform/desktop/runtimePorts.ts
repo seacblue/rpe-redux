@@ -28,7 +28,10 @@ export async function initializeRuntimePorts(): Promise<RuntimePorts> {
     return getRuntimePorts();
   }
   try {
-    setRuntimePorts(await invoke<RuntimePorts>("read_runtime_ports"));
+    setRuntimePorts({
+      ...DEFAULT_RUNTIME_PORTS,
+      ...(await invoke<Partial<RuntimePorts>>("read_runtime_ports")),
+    });
   } catch {
     setRuntimePorts(DEFAULT_RUNTIME_PORTS);
   }
@@ -52,7 +55,10 @@ export async function writeRuntimePort(name: RuntimePortName, port: number): Pro
   pending.add(name);
   publish();
   if (isDesktop()) {
-    setRuntimePorts(await invoke<RuntimePorts>("write_runtime_port", { name, port }));
+    setRuntimePorts({
+      ...getRuntimePorts(),
+      ...(await invoke<Partial<RuntimePorts>>("write_runtime_port", { name, port })),
+    });
   } else {
     setRuntimePorts({
       ...getRuntimePorts(),

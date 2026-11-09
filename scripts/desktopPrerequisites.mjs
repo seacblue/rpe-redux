@@ -1,5 +1,5 @@
 /**
- * The native resources both `npm run desktop` and `npm run build` need before
+ * The native resources both `npm run dev:desktop` and `npm run build` need before
  * Tauri starts. Keeping the list here means a new download or sidecar build is
  * added once instead of in two scripts.
  */

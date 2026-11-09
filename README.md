@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <sub>English · <a href="README-zh.md">简体中文</a></sub>
+  <sub>English, <a href="README-zh.md">简体中文</a></sub>
 </p>
 
 ## What is RPE Redux?
@@ -41,17 +41,18 @@ The [Getting started guide](docs/getting-started.md) covers the first chart, the
 
 ```powershell
 npm ci
-npm run desktop   # development window
-npm run build     # NSIS installer on Windows; deb, rpm, and AppImage on Linux
+npm run dev           # browser development loop with hot reload
+npm run dev:desktop   # native Tauri window
+npm run build         # NSIS installer on Windows; deb, rpm, and AppImage on Linux
 ```
 
-`npm run build -- --portable` skips the installer. The first desktop build stages FFmpeg, Cloudflared, and the Go sidecar, so it needs network access unless those artifacts are already cached.
+`npm run dev` starts the Go service and Vite, then opens the editor in your browser. It needs Node.js and Go, not Rust or the platform webview, and keeps its profile under `.scratch/dev/`. Use `npm run dev:desktop` when a change needs native file dialogs, window behaviour, or the packaged runtime. `npm run build -- --portable` skips the installer. The first desktop build stages FFmpeg, Cloudflared, and the Go sidecar, so it needs network access unless those artifacts are already cached.
 
 > Windows ships x64, x86, and ARM64 NSIS installers. Linux ships x64 deb, rpm, and AppImage packages. Only the AppImage replaces itself through the in-app updater; deb and rpm users upgrade through their package manager.
 
 ## Development
 
-`npm run desktop` is the supported product entry point; `npm run dev` starts only the Vite server. Start with [Development](docs/development.md) for the workflow, commands, and a repository tour, and [Testing](docs/testing.md) for the test suites, fixtures, and where a new test belongs. Ownership rules, contribution patterns, and the code conventions are in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+`npm run dev` is the browser development loop: it starts the Go service and Vite together, uses one fixed port set per checkout, and reloads the page on source edits. `npm run dev:desktop` opens the Tauri window for native-host work. Start with [Development](docs/development.md) for the workflow, commands, and a repository tour, and [Testing](docs/testing.md) for the test suites, fixtures, and where a new test belongs. Ownership rules, contribution patterns, and the code conventions are in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Before opening a pull request:
 
@@ -69,4 +70,4 @@ RPE Redux is distributed under the [PolyForm Noncommercial License 1.0.0](LICENS
 
 ## Documentation
 
-[Docs index](docs/README.md) · [Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Development](docs/development.md) · [Testing](docs/testing.md) · [Compatibility](docs/compatibility.md) · [Desktop](docs/desktop.md) · [Keyboard](docs/keyboard.md) · [Extensions](docs/extensions.md)
+[Docs index](docs/README.md), [Getting started](docs/getting-started.md), [Architecture](docs/architecture.md), [Development](docs/development.md), [Testing](docs/testing.md), [Compatibility](docs/compatibility.md), [Desktop](docs/desktop.md), [Keyboard](docs/keyboard.md), [Extensions](docs/extensions.md)

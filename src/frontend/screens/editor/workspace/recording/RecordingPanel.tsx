@@ -645,7 +645,7 @@ export function RecordingPanel() {
       <div className="recording-estimate">
         <span>{t("editor.recording.estimatedSize")}</span>
         <span className="recording-estimate-size">
-          {formatEstimatedSize(estimate.bytes)} ·{" "}
+          {formatEstimatedSize(estimate.bytes)},{" "}
           {t("editor.recording.outputDuration", {
             seconds: formatOutputSeconds(estimate.outputSeconds),
           })}

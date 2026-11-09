@@ -61,7 +61,7 @@ export default {
   "chrome.developer.diagnosticsTitle": "开发者诊断",
   "chrome.developer.closeDiagnostics": "关闭诊断信息",
   "chrome.developer.probe": "预览探针",
-  "chrome.developer.probeHint": "Alt+滚轮切换命中 · 点击复制 · Esc 退出",
+  "chrome.developer.probeHint": "Alt+滚轮切换命中，点击复制，Esc 退出",
   "chrome.developer.probeEmpty": "指向预览区以查询对象",
   "chrome.developer.copySelection": "复制当前选择",
   "chrome.developer.copySelectionHint": "把选中的音符和事件复制为 JSON",

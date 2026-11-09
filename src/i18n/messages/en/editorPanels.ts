@@ -270,7 +270,7 @@ export default {
   "editorPanels.inspector.shader.alignToBeat": "Align to beat",
   "editorPanels.inspector.shader.alignToStart": "Align to the current parameter's start beat",
   "editorPanels.inspector.shader.alignLabel": "Align the shader parameters",
-  "editorPanels.inspector.shader.segmentTitle": "{name} · segment {index}",
+  "editorPanels.inspector.shader.segmentTitle": "{name}, segment {index}",
   "editorPanels.inspector.shader.segmentStart": "Start value",
   "editorPanels.inspector.shader.segmentEnd": "End value",
   "editorPanels.inspector.shader.parameterField": "Parameter {field}",
@@ -500,7 +500,7 @@ export default {
   "editorPanels.trajectory.applyHint": "Writes X/Y and rotation events",
   "editorPanels.trajectory.split": "Split into plain events",
   "editorPanels.trajectory.splitHint": "Removes the trajectory wrapper",
-  "editorPanels.trajectory.presetAdjust": "{name} · adjusts before filling in",
+  "editorPanels.trajectory.presetAdjust": "{name}, adjusts before filling in",
   "editorPanels.trajectory.editPreset": "Edit the preset definition",
   "editorPanels.trajectory.deletePreset": "Delete this preset",
   "editorPanels.trajectory.presetDeleted": "The custom preset was deleted",
@@ -541,7 +541,7 @@ export default {
   "editorPanels.trajectory.commitSplit": "Split the curve trajectory",
   "editorPanels.trajectory.splitDone":
     "Split into plain X, Y / rotation events; one undo covers the whole split",
-  "editorPanels.trajectory.overlayLabel": "Trajectory preview · L{index}",
+  "editorPanels.trajectory.overlayLabel": "Trajectory preview, L{index}",
 
   "editorPanels.curvePreview.title": "Curve trajectory generation",
   "editorPanels.curvePreview.hint":
@@ -661,7 +661,7 @@ export default {
   "editorPanels.sampling.entry": "Sample start and end",
   "editorPanels.sampling.entryHint":
     "Drag in the workspace to pick the start and end values, then choose easing",
-  "editorPanels.sampling.target": "Line {line} · {axis} · start/end values",
+  "editorPanels.sampling.target": "Line {line}, {axis}, start/end values",
   "editorPanels.sampling.anchorStart": "Start {value}",
   "editorPanels.sampling.anchorEnd": "End {value}",
   "editorPanels.sampling.axis.x": "X position",

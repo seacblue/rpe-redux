@@ -2,7 +2,7 @@
 
 RPE Redux is a desktop chart editor for Windows and Linux, built from React, TypeScript, Tauri, and a local Go/SQLite service. Contributions are welcome when they keep the product focused and preserve chart compatibility.
 
-[简体中文](CONTRIBUTING-zh.md) · English
+[简体中文](CONTRIBUTING-zh.md), English
 
 ## Before you start
 
@@ -16,14 +16,14 @@ Read these documents first:
 
 ## Set up
 
-Requirements: Windows 10/11 with the WebView2 runtime, or Linux with WebKitGTK 4.1; Node.js 22.18+, Go 1.25.3+, Rust stable with the platform C++ toolchain (MSVC on Windows, `build-essential` on Linux).
+Requirements: Node.js 22.18+ and Go 1.25.3+ for the browser loop. The desktop loop additionally needs Windows 10/11 with the WebView2 runtime or Linux with WebKitGTK 4.1, Rust stable, and the platform C++ toolchain (MSVC on Windows, `build-essential` on Linux).
 
 ```powershell
 npm ci
-npm run desktop
+npm run dev
 ```
 
-`npm run desktop` stages the native helpers and launches the product window. `npm run dev` starts only the Vite server.
+`npm run dev` starts the Go service and Vite together, keeps one fixed port set per checkout, and opens the editor in your browser with hot reload. `npm run dev:desktop` stages the native helpers and launches the Tauri window when the change needs the desktop host.
 
 ## Workflow
 
@@ -50,7 +50,7 @@ npm run smoke
 
 `npm run check` covers TypeScript, ESLint, style rules, documentation links, icon checks, the SDK type-check, the Extension method registry check, the TypeScript unit suite, and the Go tests. `npm run verify` adds formatting. `npm run build -- --debug` produces the executable used by `npm run smoke`; the smoke suite covers the P0 desktop journeys. See [Testing](docs/testing.md) for the individual suites and single-test commands.
 
-Run `npm run check:native` when a change touches Rust. Run `npm run server:test` when a change touches the Go service or collaboration rooms.
+Run `npm run check:native` when a change touches Rust. Run `npm run test:server` when a change touches the Go service or collaboration rooms.
 
 ## What belongs where
 

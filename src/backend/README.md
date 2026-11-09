@@ -73,6 +73,8 @@ Settings, and the HTTP surface has no direct apply route.
 ## Build and run
 
 ```sh
+npm run dev                  # browser loop: Go service + Vite
+npm run dev:server           # this service only, on the product defaults
 go run ./cmd/redux-service   # from src/backend
 npm run build:server         # compiles the target-specific sidecar for packaging
 npm run build                # full desktop build, including the sidecar

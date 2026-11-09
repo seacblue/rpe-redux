@@ -422,12 +422,12 @@ function noteMenuActions(
     const position = note ? Number(note.positionX).toFixed(2) : "—";
     return {
       id: `note:${candidate.lineIndex}:${candidate.noteIndex ?? -1}`,
-      label: `${type} · ${
+      label: `${type}, ${
         line?.Name ?? t("editorPanels.overlap.line", { index: candidate.lineIndex })
       }`,
       detail: `${t("editorPanels.overlap.beat", {
         value: `${start}${end}`,
-      })} · X ${position} · #${candidate.noteIndex ?? -1}`,
+      })}, X ${position}, #${candidate.noteIndex ?? -1}`,
       run: () => {
         const before = session.selectionState();
         applySelection(
@@ -455,7 +455,7 @@ function lineMenuActions(
     return {
       id: `line:${lineIndex}`,
       label: line?.Name ?? t("editorPanels.overlap.line", { index: lineIndex }),
-      detail: `${t("editorPanels.overlap.line", { index: lineIndex })} · ${line?.Group ?? 0}`,
+      detail: `${t("editorPanels.overlap.line", { index: lineIndex })}, ${line?.Group ?? 0}`,
       run: () => {
         session.selectLine(lineIndex);
         session.recordSelection(undefined, before, true);

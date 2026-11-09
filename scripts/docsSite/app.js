@@ -706,7 +706,7 @@
     }
     state.activeRoute = page.route;
     expandRouteAncestors(page.route);
-    document.title = `${page.title} · ${state.content?.title ?? "RPE Redux Extension SDK"}`;
+    document.title = `${page.title}, ${state.content?.title ?? "RPE Redux Extension SDK"}`;
     elements.article.innerHTML = page.html;
     decorateArticle();
     elements.crumbs.replaceChildren();
@@ -745,7 +745,7 @@
     elements.crumbs.replaceChildren();
     elements.pager.replaceChildren();
     elements.toc.hidden = true;
-    document.title = `${copy("notFound", "Page not found")} · ${state.content?.title ?? "RPE Redux Extension SDK"}`;
+    document.title = `${copy("notFound", "Page not found")}, ${state.content?.title ?? "RPE Redux Extension SDK"}`;
     closeMenu();
     hideSearch();
     renderNav();

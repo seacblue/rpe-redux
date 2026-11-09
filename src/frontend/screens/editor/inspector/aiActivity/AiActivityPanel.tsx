@@ -106,7 +106,7 @@ function ActivityEntryView({ entry }: { entry: CodeCellActivityEntry }) {
               <time dateTime={new Date(entry.at).toISOString()} data-tip-title={fullTime(entry.at)}>
                 {clockTime(entry.at)}
               </time>
-              <span aria-hidden="true"> · </span>
+              <span aria-hidden="true">, </span>
               {entry.status === "pending"
                 ? t("editorPanels.aiActivity.pending")
                 : t("editorPanels.aiActivity.duration", {

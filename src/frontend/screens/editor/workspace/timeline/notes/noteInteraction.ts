@@ -130,12 +130,12 @@ export function overlapActions(
     const end = entry.item.type === 2 ? ` – ${entry.end.toFixed(3)}` : "";
     return {
       id: `note:${entry.lineIndex}:${entry.index}`,
-      label: `${noteTypeLabel(entry.item.type)} · ${
+      label: `${noteTypeLabel(entry.item.type)}, ${
         line?.Name ?? t("editorPanels.overlap.line", { index: entry.lineIndex })
       }`,
       detail: `${t("editorPanels.overlap.beat", {
         value: `${entry.start.toFixed(3)}${end}`,
-      })} · X ${Number(entry.item.positionX).toFixed(2)} · #${entry.index}`,
+      })}, X ${Number(entry.item.positionX).toFixed(2)}, #${entry.index}`,
       run: () => {
         selectOverlappingNote(session, entry, receiver.changed);
       },

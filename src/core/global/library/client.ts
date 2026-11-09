@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- this transport file mirrors the backend route table; splitting it would scatter one contract across files. */
 // HTTP client for the local Go + SQLite service in `src/backend/`.
 //
 // The desktop build owns both documents on disk (Tauri commands) and the
@@ -8,7 +9,7 @@
 import { t } from "../../../i18n/index.ts";
 import { beginBackendTrace } from "../../diagnostics/backendTrace.ts";
 import { PREFERENCE_SECTIONS, preferences } from "../../state/preferences.ts";
-import { getRuntimePorts } from "../../platform/runtimePorts.ts";
+import { browserDevPorts, getRuntimePorts } from "../../platform/runtimePorts.ts";
 import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
 import type { LibraryViewState } from "./types.ts";
 import type { DropClassification } from "../document/dropIntake.ts";
@@ -95,6 +96,8 @@ export interface LibraryRevision extends LibraryRevisionSummary {
 export interface BackendInstance {
   id: string;
   label: string;
+  /** TCP port of the editor's own frontend, for human-readable diagnostics. */
+  frontendPort?: number;
   pid: number;
   startedAt: string;
   heartbeatAt: string;
@@ -123,6 +126,8 @@ export interface OccupancyAcquireInput {
   instanceId: string;
   chartName?: string;
   label?: string;
+  /** TCP port of the requesting editor's frontend. */
+  frontendPort?: number;
 }
 
 /** Details of the instance that already owns a document. */
@@ -138,6 +143,12 @@ export interface OccupancyConflict {
  * otherwise returns `DEFAULT_SERVER_ORIGIN`.
  */
 export function serverOrigin(): string {
+  // The browser development server owns the worktree's service port. A stored
+  // server preference belongs to the durable desktop profile and must not
+  // redirect the development page to a different checkout's service.
+  if (browserDevPorts()) {
+    return `http://127.0.0.1:${getRuntimePorts().backendPort}`;
+  }
   try {
     const stored = preferences.read<unknown>(PREFERENCE_SECTIONS.server, null);
     if (typeof stored === "string") {
@@ -326,7 +337,7 @@ export class LocalLibrary {
 
   /** Register this editor instance and return the backend id and its record. */
   instancesRegister(
-    input: { id: string; label: string; pid?: number },
+    input: { id: string; label: string; pid?: number; frontendPort?: number },
     options: RequestOptions = {},
   ): Promise<{ backendId: string; instance: BackendInstance }> {
     return request(this.origin, "/api/instances/register", {

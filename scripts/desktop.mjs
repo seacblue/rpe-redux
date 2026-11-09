@@ -1,55 +1,55 @@
 /**
- * Runs the desktop development loop: stage the native prerequisites once, then
- * hand the window and the Vite server to the Tauri CLI.
+ * Desktop development loop.
+ *
+ * Resolves the worktree's fixed development ports, stages the native
+ * prerequisites once, and hands the window and the Vite server to the Tauri
+ * CLI. Browser-only work uses `npm run dev`; this path is for native dialogs,
+ * WebView2 behaviour, and the packaged runtime.
  */
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { prepareDesktopPrerequisites } from "./desktopPrerequisites.mjs";
 import { desktopPortArgument } from "./desktopLaunchOptions.mjs";
+import { loadOrCreateDevPorts } from "./devPorts.mjs";
 import { runTauri } from "./tauriCli.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+const argv = process.argv.slice(2);
 
-/** Read the next-launch frontend port from the same profile file as Tauri. */
-async function configuredFrontendPort() {
-  const candidates = [];
-  if (process.env.REDUX_PROFILE_DIR) {
-    candidates.push(resolve(process.env.REDUX_PROFILE_DIR, "runtime-ports.json"));
-  }
-  candidates.push(resolve(root, "src-tauri", "target", "debug", "user-data", "runtime-ports.json"));
-  candidates.push(resolve(root, "user-data", "runtime-ports.json"));
-  for (const path of candidates) {
-    try {
-      const value = JSON.parse(await readFile(path, "utf8"));
-      if (
-        Number.isInteger(value.frontendPort) &&
-        value.frontendPort >= 1 &&
-        value.frontendPort <= 65535
-      ) {
-        return value.frontendPort;
-      }
-    } catch {
-      // A missing or partially written settings file uses the product default.
-    }
-  }
-  return 4173;
+if (argv.includes("--help") || argv.includes("-h")) {
+  console.log(`Usage: npm run dev:desktop -- [flags]
+
+Stages the Go sidecar and media helpers, then opens the Tauri window.
+
+  --frontend-port <port>  Pin the Vite port for this run.
+  --backend-port <port>   Pin the local service port for this run.
+  --ai-port <port>        Pin the Code Cell bridge port for this run.
+  --new-ports             Choose a new fixed port set for this worktree.
+
+The selected ports are stored in .scratch/dev/ports.json and reused by
+npm run dev and npm run dev:desktop. The browser loop also owns the
+collaboration port; the desktop host keeps its packaged default.`);
+  process.exit(0);
 }
 
-const frontendPort =
-  desktopPortArgument(process.argv.slice(2), "frontend") ?? (await configuredFrontendPort());
-const backendPort = desktopPortArgument(process.argv.slice(2), "backend");
-const aiPort = desktopPortArgument(process.argv.slice(2), "ai");
-process.env.REDUX_FRONTEND_PORT = String(frontendPort);
-const frontendOrigins = [`http://127.0.0.1:${frontendPort}`, `http://localhost:${frontendPort}`];
+const ports = await loadOrCreateDevPorts(root, {
+  overrides: {
+    frontendPort: desktopPortArgument(argv, "frontend"),
+    backendPort: desktopPortArgument(argv, "backend"),
+    aiPort: desktopPortArgument(argv, "ai"),
+  },
+  fresh: argv.includes("--new-ports"),
+});
+
+process.env.REDUX_FRONTEND_PORT = String(ports.frontendPort);
+const frontendOrigins = [
+  `http://127.0.0.1:${ports.frontendPort}`,
+  `http://localhost:${ports.frontendPort}`,
+];
 process.env.REDUX_SERVER_ORIGINS = [process.env.REDUX_SERVER_ORIGINS, ...frontendOrigins]
   .filter(Boolean)
   .join(",");
-if (backendPort !== undefined) {
-  process.env.REDUX_BACKEND_PORT = String(backendPort);
-}
-if (aiPort !== undefined) {
-  process.env.REDUX_AI_PORT = String(aiPort);
-}
+process.env.REDUX_BACKEND_PORT = String(ports.backendPort);
+process.env.REDUX_AI_PORT = String(ports.aiPort);
 
 // The sidecar trusts the Vite origin only in this development loop. A packaged
 // build never receives this environment variable.
@@ -58,5 +58,5 @@ await prepareDesktopPrerequisites(root);
 runTauri(root, [
   "dev",
   "--config",
-  JSON.stringify({ build: { devUrl: `http://127.0.0.1:${frontendPort}` } }),
+  JSON.stringify({ build: { devUrl: `http://127.0.0.1:${ports.frontendPort}` } }),
 ]);

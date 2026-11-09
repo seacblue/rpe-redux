@@ -27,7 +27,8 @@ import {
 } from "../../../core/global/library/libraryCatalog.ts";
 import { materializeAssets, openLibraryProject } from "../../../core/global/library/document.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
-import { createChartTextExport } from "../../../core/global/document/export.ts";
+import { createChartExport, createChartTextExport } from "../../../core/global/document/export.ts";
+import { download } from "../../platform/download.ts";
 import {
   chooseRpeImport as chooseRpeFolderMigration,
   importRpePath,
@@ -144,24 +145,24 @@ export function createEditorHomeRuntime(deps: {
         });
       },
       async ({ name, format }) => {
-        const exporter = new TauriDocumentStore();
-        try {
-          if (format !== "pez") {
-            const result = createChartTextExport(
-              opened.project.chart as Chart,
-              opened.project.name,
-              format,
-              { name },
-            );
-            if (result.warnings.length) {
-              showToast({
-                message: t("editor.dialogs.exportDialog.warnings", {
-                  count: result.warnings.length,
-                }),
-                level: "warning",
-              });
-            }
-            return exporter.exportText(result.text, {
+        const chart = opened.project.chart as Chart;
+        if (format !== "pez") {
+          const result = createChartTextExport(chart, opened.project.name, format, { name });
+          if (result.warnings.length) {
+            showToast({
+              message: t("editor.dialogs.exportDialog.warnings", {
+                count: result.warnings.length,
+              }),
+              level: "warning",
+            });
+          }
+          if (!deps.documents) {
+            download(new Blob([result.text], { type: result.mime }), result.name);
+            return result.name;
+          }
+          const exporter = new TauriDocumentStore();
+          try {
+            return await exporter.exportText(result.text, {
               name: result.name,
               extension: format === "official" ? "json" : "pec",
               filter: t(
@@ -170,9 +171,21 @@ export function createEditorHomeRuntime(deps: {
                   : "system.document.pecFilter",
               ),
             });
+          } finally {
+            await exporter.close();
           }
-          const assets = await materializeAssets(opened.assets);
-          const result = await exporter.export(opened.project.chart, assets, {
+        }
+        const assets = await materializeAssets(opened.assets);
+        if (!deps.documents) {
+          const result = createChartExport(chart, assets, opened.project.name, {
+            name: exportFileName(name),
+          });
+          download(result.blob, result.name);
+          return result.name;
+        }
+        const exporter = new TauriDocumentStore();
+        try {
+          const result = await exporter.export(chart, assets, {
             format: "pez",
             name: exportFileName(name),
           });

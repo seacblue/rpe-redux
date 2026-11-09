@@ -96,9 +96,15 @@ export function EditorProviderTree({
     providerRenderFailed.current = false;
     let active = true;
     let mounted: EditorRuntime | null = null;
-    let frame = 0;
+    let timer = 0;
     let attempts = 0;
-    /** Builds the assembly once every surface ref has a node, retrying briefly. */
+    /**
+     * Builds the assembly once every surface ref has a node, retrying briefly.
+     *
+     * The retry uses a task timer rather than an animation frame: an occluded
+     * browser tab or a minimized window may pause animation frames, and editor
+     * startup must still finish while the window is in the background.
+     */
     const mount = () => {
       if (!active) {
         return;
@@ -111,7 +117,7 @@ export function EditorProviderTree({
       ].every(Boolean);
       if (!surfacesReady && attempts < 30) {
         attempts += 1;
-        frame = requestAnimationFrame(mount);
+        timer = window.setTimeout(mount, 16);
         return;
       }
       try {
@@ -141,11 +147,11 @@ export function EditorProviderTree({
         onReady(false);
       }
     };
-    frame = requestAnimationFrame(mount);
+    timer = window.setTimeout(mount, 0);
 
     return () => {
       active = false;
-      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
       mounted?.dispose();
       setRuntime(null);
     };

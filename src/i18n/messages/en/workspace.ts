@@ -39,13 +39,15 @@ export default {
   "workspace.document.compatibility.openAnyway": "Open anyway",
   "workspace.document.occupancy.title": "Chart in use",
   "workspace.document.occupancy.description":
-    '"{name}" is held by {owner}. The lock may be stale after a crash.',
-  "workspace.document.occupancy.detail": "Owner {owner} · backend {backend}",
-  "workspace.document.occupancy.frontend": "Clear the occupying frontend",
-  "workspace.document.occupancy.backend": "Clear the backend record",
-  "workspace.document.occupancy.reconcile": "Repair and retry in the background",
+    '"{name}" is already open in another editor window. If that window crashed, its lock may be stale.',
+  "workspace.document.occupancy.detail":
+    "Other window: frontend port {frontend}, backend port {backend}",
+  "workspace.document.occupancy.unknownPort": "unknown",
+  "workspace.document.occupancy.frontend": "Release other window",
+  "workspace.document.occupancy.backend": "Clear backend record",
+  "workspace.document.occupancy.reconcile": "Repair and retry",
   "workspace.document.occupancy.clearFailed":
-    "The backend did not release the occupying lock. Try clearing the backend record or cancel opening.",
+    "The backend did not release the lock. Try clearing this chart's backend record, or cancel opening.",
   "workspace.document.error.createCancelled": "Document creation was cancelled by an extension.",
   "workspace.document.error.openCancelled": "Document opening was cancelled by an extension.",
   "workspace.document.error.closeCancelled": "Document closing was cancelled by an extension.",
@@ -107,7 +109,7 @@ export default {
   "workspace.dialogs.editMarker": "Edit a time marker",
   /** The dialog's "neither apply nor delete, just get me out" button. */
   "workspace.dialogs.dismiss": "Cancel",
-  "workspace.timeline.historyTooltip": "{label} · {count} affected objects",
+  "workspace.timeline.historyTooltip": "{label}, {count} affected objects",
 
   "workspace.scripts.source": "Provided by {source}",
   "workspace.scripts.run": "Run",
@@ -116,7 +118,7 @@ export default {
   "workspace.scripts.parameters.description": "Enter valid values before running this script.",
   "workspace.scripts.parameters.fields": "Fields: {value}",
   "workspace.scripts.parameters.functions": "Functions: {value}",
-  "workspace.scripts.parameters.judgeLine.option": "Line {index} · {name}",
+  "workspace.scripts.parameters.judgeLine.option": "Line {index}, {name}",
   "workspace.scripts.parameters.judgeLine.allocate": "Assign free judge line",
   "workspace.scripts.parameters.judgeLine.allocateHint":
     "Choose a free judge line for this parameter. Reuse an empty line and add one only when none is free.",
@@ -401,8 +403,8 @@ export default {
   "workspace.collaboration.status.error": "Connection error",
   "workspace.collaboration.queued": "{count} change(s) waiting for confirmation",
   "workspace.collaboration.location.none": "No active location",
-  "workspace.collaboration.location.global": "Global · {section}",
-  "workspace.collaboration.location.edit": "Edit · beat {beat}",
+  "workspace.collaboration.location.global": "Global, {section}",
+  "workspace.collaboration.location.edit": "Edit, beat {beat}",
   "workspace.collaboration.location.design": "Design",
   "workspace.collaboration.assets": "Resources",
   "workspace.collaboration.assetSyncHint":

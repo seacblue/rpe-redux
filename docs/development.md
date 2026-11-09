@@ -19,59 +19,60 @@ This guide covers the local workflow, the required checks, and the runtime contr
 
 ```powershell
 npm ci
-npm run desktop        # stage native helpers and open the product window
+npm run dev            # Go service + Vite, hot reload, default browser
+npm run dev:desktop    # Tauri window when the change needs native behaviour
 npm run test:unit      # fast feedback while editing
 npm run check          # the source gate before you report work
 ```
 
-`npm run desktop` is the supported entry point: it stages the Go sidecar and the media helpers, then opens the Tauri window. `npm run dev` starts only the Vite server, so browser-only changes load faster but native file, audio, and update paths do not work there.
+`npm run dev` is the fast development loop: it starts the Go service and Vite together, injects the worktree's fixed ports into the page, and opens the editor in the default browser. It does not stage FFmpeg or Cloudflared, build the sidecar executable, compile Rust, or open a Tauri window. Interface, editor, settings, and chart-library changes reload in place.
 
-Parallel desktop runs can select process-only ports without changing the shared profile configuration:
+The browser loop uses `.scratch/dev/data/` as its profile, so experiments do not touch the desktop library. Native file dialogs, OS file drops, update installation, Extension installation, and the collaboration tunnel still need the desktop window. Export and chart import have browser paths; use `npm run dev:desktop` when the change touches the native host.
 
-```powershell
-npm run desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
-```
-
-The flags accept either `--name-port=value` or `--name-port value`, take precedence over the saved Runtime ports settings, and are not persisted. A packaged executable accepts the same `--backend-port` and `--ai-port` flags.
-
-Parallel desktop runs can select process-only ports without changing the shared profile configuration:
+`npm run dev:desktop` stages the Go sidecar and media helpers, then opens the Tauri window. Both loops keep one fixed port set per checkout in `.scratch/dev/ports.json`, so parallel checkouts and AI runs do not fight over the backend address. The first run chooses free ports below the Windows ephemeral range; later runs reuse them. Pass `--new-ports` to rotate the set, or pin one value with a flag:
 
 ```powershell
-npm run desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
+npm run dev -- --backend-port=48121 --no-open
+npm run dev:desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
 ```
 
-The flags accept either `--name-port=value` or `--name-port value`, take precedence over the saved Runtime ports settings, and are not persisted. A packaged executable accepts the same `--backend-port` and `--ai-port` flags.
+The flags accept either `--name-port=value` or `--name-port value`. They update the worktree port record for later runs and are not written to the desktop Runtime ports settings. The browser loop also accepts `--data-dir <path>`; its default is `.scratch/dev/data`.
 
 A good first hour looks like this:
 
-1. Open the window and go through the chart library, create a chart, and press `Ctrl+K` to see the settings pages.
+1. Open the editor and go through the chart library, create a chart, and press `Ctrl+K` to see the settings pages.
 2. Read [Architecture](architecture.md) for the layers, then `frontend/app/` (`App`, `Shell`, `Workbench`) for how the window is composed.
 3. Follow one feature from registry to surface in [Repository tour](#repository-tour).
 4. Add a focused unit test in the matching `src/test/<topic>/` folder and run `npm run test:unit`; add the desktop check only after the source gate is green.
 
 ## Prerequisites
 
-Node.js 22.18+, Rust with the native linker for the selected target, the platform webview (WebView2 on Windows, WebKitGTK 4.1 on Linux), and Go 1.25.3+. Install JavaScript dependencies with `npm ci`. On Debian/Ubuntu, install `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` before the first desktop build.
+Node.js 22.18+ and Go 1.25.3+ cover the browser loop. The desktop loop additionally needs Rust with the native linker for the selected target and the platform webview (WebView2 on Windows, WebKitGTK 4.1 on Linux). Install JavaScript dependencies with `npm ci`. On Debian/Ubuntu, install `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` before the first desktop build.
 
 ## Commands
 
 ```powershell
-npm run desktop              # stage native helpers and launch Tauri
+npm run dev                  # Go service + Vite in the browser with hot reload
+npm run dev:desktop          # stage native helpers and launch Tauri
+npm run dev:web              # Vite only, no service (UI shell and fixtures)
+npm run dev:server           # Go service only on its default port
 npm run build                # release installer + staged portable folder
 npm run build -- --portable  # portable folder only
 npm run build -- --fast      # release-shaped smoke build with thin LTO
 npm run build -- --debug     # debug executable for smoke tests
 npm run build -- --help      # list the build modes
 npm run build:web            # frontend bundle only
+npm run build:docs           # Extension SDK documentation site
+npm run build:server         # target-specific Go sidecar
+npm run build:icons          # regenerate both theme icon packages
 npm run check                # types, lint, style, docs, icons, SDK, extensions, unit, and Go tests
 npm run check:native         # Rust formatting and compile check
 npm run verify               # check + formatting
 npm run test:unit            # TypeScript unit tests only
+npm run test:server          # embedded Go service and room tests
 npm run smoke                # P0 desktop journeys (needs build -- --debug)
 npm run smoke -- --list      # smoke group names
-npm run docs:build           # Extension SDK documentation site
-npm run server:test          # embedded Go service and room tests
-npm run collab               # standalone collaboration room server
+npm run dev:collab           # standalone collaboration room server
 ```
 
 `npm run check` is the gate; [Testing](testing.md) explains what each part covers, how to run a single test, and where fixtures live.
@@ -97,7 +98,7 @@ A version with a hyphen (for example `1.1.0-beta.1`) is published as a GitHub pr
 
 The release workflow builds the Windows x64, Windows ARM64, Windows x86, and Linux x64 packages and uploads them to the Release. `npm run build -- --debug` is unrelated: it produces the executable the smoke suite drives locally.
 
-The desktop window is the supported product. `npm run dev` starts only the Vite server. Release builds stage the portable application at `release/RPE-Redux-portable/RPE-Redux/`.
+The desktop window is the supported product. `npm run dev` starts the browser development loop; `npm run dev:web` runs only the Vite server. Release builds stage the portable application at `release/RPE-Redux-portable/RPE-Redux/`.
 
 `--fast` keeps the release code paths and installer shape but uses thin LTO and parallel codegen. Use it for local acceptance and CI smoke builds; publish with the normal `npm run build`.
 

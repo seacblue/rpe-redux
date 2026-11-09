@@ -20,11 +20,12 @@ const instanceTTL = 30 * time.Second
 
 // instanceRecord is the in-memory lease for one connected editor.
 type instanceRecord struct {
-	ID          string
-	Label       string
-	PID         int
-	StartedAt   time.Time
-	HeartbeatAt time.Time
+	ID           string
+	Label        string
+	FrontendPort int
+	PID          int
+	StartedAt    time.Time
+	HeartbeatAt  time.Time
 }
 
 // documentLock is an in-memory claim on one open document.
@@ -38,12 +39,13 @@ type documentLock struct {
 
 // Snapshot is the JSON view of an instance and its lock keys.
 type Snapshot struct {
-	ID          string   `json:"id"`
-	Label       string   `json:"label"`
-	PID         int      `json:"pid"`
-	StartedAt   string   `json:"startedAt"`
-	HeartbeatAt string   `json:"heartbeatAt"`
-	Locks       []string `json:"locks,omitempty"`
+	ID           string   `json:"id"`
+	Label        string   `json:"label"`
+	FrontendPort int      `json:"frontendPort,omitempty"`
+	PID          int      `json:"pid"`
+	StartedAt    string   `json:"startedAt"`
+	HeartbeatAt  string   `json:"heartbeatAt"`
+	Locks        []string `json:"locks,omitempty"`
 }
 
 // LockSnapshot is the JSON view of one document lock.
@@ -108,7 +110,7 @@ func (h *Hub) ActiveCount() int {
 }
 
 // Register creates or refreshes an instance lease and returns its snapshot.
-func (h *Hub) Register(id, label string, pid int) Snapshot {
+func (h *Hub) Register(id, label string, pid, frontendPort int) Snapshot {
 	now := time.Now()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -119,6 +121,9 @@ func (h *Hub) Register(id, label string, pid int) Snapshot {
 	}
 	record.Label = label
 	record.PID = pid
+	if frontendPort > 0 {
+		record.FrontendPort = frontendPort
+	}
 	record.HeartbeatAt = now
 	h.instances[id] = record
 	return h.snapshotLocked(record, now)
@@ -186,7 +191,7 @@ func (h *Hub) ClearDocument(key string) bool {
 
 // Acquire claims a document for an instance. When another live instance owns
 // it, acquire returns that owner's snapshot and false.
-func (h *Hub) Acquire(key, id, label, chartName string) (Snapshot, bool) {
+func (h *Hub) Acquire(key, id, label, chartName string, frontendPort int) (Snapshot, bool) {
 	now := time.Now()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -194,6 +199,9 @@ func (h *Hub) Acquire(key, id, label, chartName string) (Snapshot, bool) {
 	record, ok := h.instances[id]
 	if !ok {
 		record = instanceRecord{ID: id, Label: label, StartedAt: now}
+	}
+	if frontendPort > 0 {
+		record.FrontendPort = frontendPort
 	}
 	record.HeartbeatAt = now
 	h.instances[id] = record
@@ -255,12 +263,13 @@ func (h *Hub) snapshotLocked(record instanceRecord, now time.Time) Snapshot {
 	}
 	sort.Strings(locks)
 	return Snapshot{
-		ID:          record.ID,
-		Label:       record.Label,
-		PID:         record.PID,
-		StartedAt:   record.StartedAt.UTC().Format(time.RFC3339Nano),
-		HeartbeatAt: record.HeartbeatAt.UTC().Format(time.RFC3339Nano),
-		Locks:       locks,
+		ID:           record.ID,
+		Label:        record.Label,
+		FrontendPort: record.FrontendPort,
+		PID:          record.PID,
+		StartedAt:    record.StartedAt.UTC().Format(time.RFC3339Nano),
+		HeartbeatAt:  record.HeartbeatAt.UTC().Format(time.RFC3339Nano),
+		Locks:        locks,
 	}
 }
 

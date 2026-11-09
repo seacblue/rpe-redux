@@ -2,7 +2,7 @@
 
 RPE Redux 是一个面向 Windows 和 Linux 的 RPE 谱面桌面编辑器，由 React、TypeScript、Tauri 和本地 Go/SQLite 服务组成。欢迎在保持产品聚焦和谱面兼容性的前提下提交贡献。
 
-[English](CONTRIBUTING.md) · 简体中文
+[English](CONTRIBUTING.md)、简体中文
 
 ## 开始之前
 
@@ -16,14 +16,14 @@ RPE Redux 是一个面向 Windows 和 Linux 的 RPE 谱面桌面编辑器，由 
 
 ## 环境
 
-需要 Windows 10/11 及 WebView2 运行时，或带 WebKitGTK 4.1 的 Linux；Node.js 22.18+、Go 1.25.3+、Rust stable 与平台 C++ 工具链（Windows 用 MSVC，Linux 用 `build-essential`）。
+浏览器开发循环需要 Node.js 22.18+ 和 Go 1.25.3+。桌面开发循环还需要 Windows 10/11 及 WebView2 运行时，或带 WebKitGTK 4.1 的 Linux；Rust stable 与平台 C++ 工具链（Windows 用 MSVC，Linux 用 `build-essential`）。
 
 ```powershell
 npm ci
-npm run desktop
+npm run dev
 ```
 
-`npm run desktop` 会准备原生依赖并启动产品窗口；`npm run dev` 只启动 Vite 开发服务器。
+`npm run dev` 会同时启动 Go 服务和 Vite，为每个工作树保留一组固定端口，并在浏览器中打开支持热更新的编辑器。需要原生宿主能力时运行 `npm run dev:desktop`，它会准备原生依赖并启动 Tauri 窗口。
 
 ## 流程
 
@@ -50,7 +50,7 @@ npm run smoke
 
 `npm run check` 覆盖 TypeScript、ESLint、样式规则、文档链接、图标检查、SDK 类型检查、Extension 方法注册表检查、TypeScript 单元测试和 Go 测试；`npm run verify` 额外检查格式。`npm run build -- --debug` 生成 `npm run smoke` 使用的可执行文件，smoke 套件覆盖 P0 桌面路径。各套件的单独命令见[测试说明](docs/testing.md)。
 
-修改 Rust 时运行 `npm run check:native`；修改 Go 服务或联机房间时运行 `npm run server:test`。
+修改 Rust 时运行 `npm run check:native`；修改 Go 服务或联机房间时运行 `npm run test:server`。
 
 ## 代码归属
 

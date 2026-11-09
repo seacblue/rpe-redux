@@ -242,7 +242,7 @@ Large surfaces stay in the mid-grey range rather than pure white. The raised sur
 
 Bundled theme icons are flat `icons/<snake_case>.png` files rendered at 192×192; nested folders, kebab-case names, SVG files, and unreferenced files are rejected by `npm run icons:check`. The checker decodes every PNG and verifies its signature, dimensions, alpha channel, and referenced-file coverage. The renderer uses each PNG alpha as a mask and paints it with the active theme ink. A distributable theme JSON carries the same glyphs as inline PNG data URLs. Remote URLs, SVG data, absolute paths, and path traversal are rejected. A data URL must be base64 with the PNG signature, so its payload cannot carry quotes or CSS text into the icon URL.
 
-Absent glyph names keep the reference artwork for the theme's appearance, so a light package inherits the lighter optical weight. Add a glyph to the dark package and to `src/design/components/icon/iconAssets.ts`; `npm run icons:build` regenerates both bundles, and `npm run icons:export` writes a self-contained theme JSON with every glyph inlined.
+Absent glyph names keep the reference artwork for the theme's appearance, so a light package inherits the lighter optical weight. Add a glyph to the dark package and to `src/design/components/icon/iconAssets.ts`; `npm run build:icons` regenerates both bundles, and `npm run icons:export` writes a self-contained theme JSON with every glyph inlined.
 
 ## Discovery
 

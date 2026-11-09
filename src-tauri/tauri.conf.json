@@ -4,7 +4,7 @@
   "version": "1.0.7",
   "identifier": "io.rperedux.editor",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run dev:web",
     "devUrl": "http://127.0.0.1:4173",
     "beforeBuildCommand": "node scripts/buildDocsSite.mjs && vite build",
     "frontendDist": "../dist"

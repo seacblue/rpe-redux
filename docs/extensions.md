@@ -274,7 +274,7 @@ const card = context.ui.registerPanel({
       padding: tokens.spacing["3"],
       fontFamily: tokens.fonts.family,
     },
-    text: `${tokens.theme.name} · ${tokens.theme.appearance} · ${tokens.theme.density}`,
+    text: `${tokens.theme.name}, ${tokens.theme.appearance}, ${tokens.theme.density}`,
   },
 });
 
@@ -285,7 +285,7 @@ context.api.theme.subscribe(() => {
       kind: "element",
       tag: "div",
       style: { color: next.colors.foreground, padding: next.spacing["2"] },
-      text: `${next.theme.name} · ${next.theme.density}`,
+      text: `${next.theme.name}, ${next.theme.density}`,
     });
   });
 });

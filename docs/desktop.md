@@ -74,7 +74,7 @@ Release CI uses `src-tauri/updater.conf.json` to enable updater artifacts and re
 
 ## Documentation site
 
-`npm run docs:build` generates the static extension-development documentation into `docs-site-dist/`; `npm run build` runs the same generator before Tauri collects bundle resources. The installer carries the folder as `docs-site-dist` in the Tauri resource directory and the Go sidecar serves it read-only on `http://127.0.0.1:47821/docs/`, so **Settings → Help → extension development docs** can open it in the system browser. The route accepts `GET` and `HEAD`, falls back to `index.html` for SPA client routes, and sends `Cache-Control: no-cache` so a rebuilt site is picked up without stale assets.
+`npm run build:docs` generates the static extension-development documentation into `docs-site-dist/`; `npm run build` runs the same generator before Tauri collects bundle resources. The installer carries the folder as `docs-site-dist` in the Tauri resource directory and the Go sidecar serves it read-only on `http://127.0.0.1:47821/docs/`, so **Settings → Help → extension development docs** can open it in the system browser. The route accepts `GET` and `HEAD`, falls back to `index.html` for SPA client routes, and sends `Cache-Control: no-cache` so a rebuilt site is picked up without stale assets.
 
 The host passes `--docs-dir` only when it finds a usable bundle. Resolution order is `REDUX_DOCS_DIR`, then `docs-site-dist` inside the Tauri resource directory, then the repository copy found from the development executable's ancestors. Without a bundle the route answers 503, `/api/health` reports `docs: false`, and a running sidecar that lacks the surface is restarted instead of reused by a launch that expects it.
 
@@ -165,11 +165,11 @@ The sidecar writes `user-data/codecell-endpoint.json` when the frontend asks for
 
 The library uses SQLite WAL mode with a busy timeout, so concurrent service processes serialize writes. Library commits use the revision check for optimistic concurrency.
 
-For parallel development or AI-driven test runs, launch a copy with `--backend-port=<port>` and, when code cells are enabled, a matching `--ai-port=<port>`. The development wrapper also accepts `--frontend-port=<port>`. These are process-only overrides; they do not rewrite the saved Runtime ports settings. If the selected backend port is occupied, the launch stops without switching to a random port and the startup screen explains how to choose another one for the next run.
+For parallel development or AI-driven test runs, `npm run dev` and `npm run dev:desktop` share one fixed port record per checkout at `.scratch/dev/ports.json`. The first run chooses free ports below the Windows ephemeral range, and later runs reuse them; `--new-ports` rotates the set, while `--backend-port`, `--frontend-port`, and `--ai-port` pin individual values. The browser loop also accepts `--collab-port` and starts the Go service directly with a profile under `.scratch/dev/data`, so it does not touch the desktop library. A packaged executable also accepts `--backend-port` and `--ai-port`; if the selected backend port is occupied, the launch stops without switching to a random port and the startup screen explains how to choose another one for the next run.
 
 The one-room-per-backend claim uses a named kernel mutex on Windows. Linux keeps the claim process-local until an equivalent kernel lock ships, so host or join a room from one instance per data directory there.
 
-A document path or library project has one occupancy owner. Opening it from a second instance raises a warning modal whose choices clear the frontend lock, clear the backend record, repair and retry, or cancel the open. The lease is released when the document closes; an abandoned lease expires with its instance heartbeat.
+A document path or library project has one occupancy owner. Opening it from a second instance raises a warning that names the other window's frontend port and the library's backend port; its choices release the other window's locks, clear this chart's backend record, repair and retry, or cancel the open. The lease is released when the document closes; an abandoned lease expires with its instance heartbeat.
 
 ## Acceptance
 

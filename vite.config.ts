@@ -9,6 +9,53 @@ import { readProductVersion } from "./scripts/productVersion.mjs";
 // must use the same version because it starts the matching sidecar.
 const packageVersion = readProductVersion();
 
+/**
+ * Browser-development settings injected by `scripts/dev.mjs`.
+ *
+ * The object carries the worktree's fixed ports and the sidecar's one-process
+ * preference token. The development server writes it into the page before the
+ * module graph runs; a production build never emits the bootstrap script.
+ */
+function readDevRuntime(): unknown {
+  const raw = process.env.REDUX_DEV_RUNTIME;
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** Inject the browser-development settings into the served page only. */
+function devRuntimeBootstrap() {
+  const runtime = readDevRuntime();
+  return {
+    name: "redux-dev-runtime",
+    apply: "serve" as const,
+    transformIndexHtml(_html: string, context: { filename?: string }) {
+      const filename = (context.filename ?? "").replaceAll("\\", "/");
+      // The Extension sandbox is an opaque-origin iframe; it must never see the
+      // host's preference credential.
+      if (filename.endsWith("/extension-sandbox.html")) {
+        return [];
+      }
+      if (!runtime) {
+        return [];
+      }
+      return [
+        {
+          tag: "script",
+          attrs: { "data-redux-dev-runtime": "" },
+          children: `globalThis.__REDUX_DEV_RUNTIME__=${JSON.stringify(runtime).replaceAll("<", "\\u003c")};`,
+          injectTo: "head-prepend" as const,
+        },
+      ];
+    },
+  };
+}
+
 // The browser paints before the runtime theme registry has applied a package.
 // Generate that first-frame palette from the built-in dark package so the
 // package stays the only place colour values are written by hand.
@@ -74,6 +121,7 @@ export default defineConfig({
   publicDir: "src/public",
   plugins: [
     react(),
+    devRuntimeBootstrap(),
     themeBootstrap(),
     {
       name: "redux-static-assets",

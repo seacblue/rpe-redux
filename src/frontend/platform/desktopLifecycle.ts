@@ -33,6 +33,26 @@ export interface DesktopLifecycleBindings {
   notifyUnsupported(): void;
 }
 
+/** Browser-only startup: restore the library session and mark the host surface. */
+export interface BrowserLifecycleBindings {
+  /** Reopen the project recorded by the last workspace session. */
+  restoreLastSession(): Promise<void>;
+  reportError(error: unknown): void;
+}
+
+/**
+ * Bind the browser host.
+ *
+ * A browser page has no native window, file association, or drag-drop path
+ * source, but the chart library and the workspace-session record are shared
+ * with the desktop build. Restoring that record makes a refresh reopen the
+ * project the developer was editing without a Tauri window.
+ */
+export function bindBrowserLifecycle(bindings: BrowserLifecycleBindings): void {
+  document.body.dataset.environment = "browser";
+  void bindings.restoreLastSession().catch(bindings.reportError);
+}
+
 type DesktopExitGuard = () => Promise<boolean>;
 const desktopExitGuards = new Set<DesktopExitGuard>();
 

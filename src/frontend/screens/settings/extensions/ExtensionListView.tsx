@@ -82,9 +82,7 @@ function extensionDescription(extension: ExtensionStatusSnapshot): string {
 
 /** The source label with its optional catalog name appended. */
 function sourceText(extension: ExtensionStatusSnapshot): string {
-  return extension.sourceLabel
-    ? `${extension.source} · ${extension.sourceLabel}`
-    : extension.source;
+  return extension.sourceLabel ? `${extension.source}, ${extension.sourceLabel}` : extension.source;
 }
 
 /** Folder-backed packages can be re-read from disk without a page reload. */
@@ -258,7 +256,7 @@ export function ExtensionListView() {
                   <h3>{extensionName(extension)}</h3>
                   <p className="redux-extension-description">{extensionDescription(extension)}</p>
                   <p className="redux-setting-description">
-                    {extension.content} · {sourceText(extension)} · {extension.manifest.version}
+                    {extension.content}, {sourceText(extension)}, {extension.manifest.version}
                   </p>
                 </div>
                 <div className="redux-extension-actions">

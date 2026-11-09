@@ -79,7 +79,7 @@ export function showImportReport(source: string, reports: readonly ImportReport[
           createElement(
             "h3",
             { className: "import-report-heading" },
-            `${report.title} · ${report.source}`,
+            `${report.title}, ${report.source}`,
           ),
           createElement(IssueList, { issues: report.issues }),
         ),

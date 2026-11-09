@@ -183,15 +183,15 @@ export class EventInteraction implements EventInteractionHandle {
       ];
       return {
         id: `event:${targetLine}:${rectangle.type}:${rectangle.index}`,
-        label: `${eventTypeLabel(rectangle.type)} · ${
+        label: `${eventTypeLabel(rectangle.type)}, ${
           session.chart.judgeLineList?.[targetLine]?.Name ??
           t("editorPanels.overlap.line", { index: targetLine })
         }`,
         detail: `${t("editorPanels.overlap.layer", {
           value: this.timeline.gestures.layer,
-        })} · ${t("editorPanels.overlap.beat", {
+        })}, ${t("editorPanels.overlap.beat", {
           value: event ? `${formatBeat(event.startTime)} – ${formatBeat(event.endTime)}` : "—",
-        })} · #${rectangle.index}`,
+        })}, #${rectangle.index}`,
         run: () => {
           session.focus = "events";
           session.marqueeSelection = null;

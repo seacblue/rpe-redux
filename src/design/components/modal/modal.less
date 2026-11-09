@@ -117,6 +117,19 @@ dialog.redux-keyboard-capture {
   }
 }
 
+// A prompt with three short answers keeps them on one decision row. The answers
+// share the available width instead of wrapping onto a second line.
+.modal-actions.modal-actions-inline {
+  flex-wrap: nowrap;
+
+  > .redux-button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--space-3);
+    white-space: nowrap;
+  }
+}
+
 .modal-error {
   color: var(--danger);
   white-space: pre-wrap;

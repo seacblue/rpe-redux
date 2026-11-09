@@ -86,7 +86,7 @@ export function installScriptUiHost(): () => void {
     },
     confirm(request, message) {
       return requestConfirm({
-        title: `${request.source.name} · Extension`,
+        title: `${request.source.name}, Extension`,
         description: message,
         signal: request.signal,
       });

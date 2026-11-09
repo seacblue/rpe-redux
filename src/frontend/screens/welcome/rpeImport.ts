@@ -51,7 +51,7 @@ function summaryText(scan: RpeFolderScan): string {
   if (scan.hotkeysText) {
     parts.push(t("workspace.welcome.rpe.hotkeysFound"));
   }
-  return parts.join(" · ");
+  return parts.join(", ");
 }
 
 /**

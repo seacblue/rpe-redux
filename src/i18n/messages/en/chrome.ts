@@ -73,7 +73,7 @@ export default {
   "chrome.developer.diagnosticsTitle": "Developer diagnostics",
   "chrome.developer.closeDiagnostics": "Close diagnostics",
   "chrome.developer.probe": "Preview probe",
-  "chrome.developer.probeHint": "Alt+wheel cycles hits · click copies · Esc exits",
+  "chrome.developer.probeHint": "Alt+wheel cycles hits, click copies, Esc exits",
   "chrome.developer.probeEmpty": "Point at the preview to query objects",
   "chrome.developer.copySelection": "Copy selection",
   "chrome.developer.copySelectionHint": "Copy the selected notes and events as JSON",
