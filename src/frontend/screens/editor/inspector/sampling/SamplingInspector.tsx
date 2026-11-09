@@ -26,6 +26,9 @@ import {
   samplingSettings,
   updateSamplingSettings,
 } from "../../../../../core/edit/sampling/sampling.ts";
+import { SAMPLING_SHORTCUT_IDS } from "../../../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { matches } from "../../../../../core/shortcuts/keyMatching.ts";
+import { shortcutRegistry } from "../../../../../core/shortcuts/registry.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { useEditorRuntime } from "../../workspace/runtime/composition/EditorRuntime.tsx";
@@ -38,6 +41,8 @@ import {
   setSamplingCurve,
 } from "../../sampling/samplingSession.ts";
 import { resolveCurveValues } from "../../sampling/samplingCurveModel.ts";
+
+const EMPTY_BINDINGS: readonly never[] = [];
 
 /** Renders the current sampling session and its commit controls. */
 export function SamplingInspector() {
@@ -53,6 +58,17 @@ export function SamplingInspector() {
     samplingSettings.get,
     samplingSettings.get,
   );
+  const shortcutViews = useSyncExternalStore(
+    shortcutRegistry.subscribe,
+    shortcutRegistry.getSnapshot,
+    shortcutRegistry.getSnapshot,
+  );
+  const applyBindings =
+    shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.apply)?.bindings ??
+    EMPTY_BINDINGS;
+  const cancelBindings =
+    shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.cancel)?.bindings ??
+    EMPTY_BINDINGS;
   const bezierEnabled = useEditingFeature("bezier");
   const easingRangeEnabled = useEditingFeature("easingRange");
   const globalXYBinding = useSetting("xy-binding", false);
@@ -80,10 +96,11 @@ export function SamplingInspector() {
     }
   }, [runtime]);
 
-  // Sampling keeps both ends of the loop under the left hand: Escape cancels,
-  // F confirms, and Enter confirms from the workspace but keeps native behavior
-  // on the pane's own controls. The editor dispatcher releases F while sampling
-  // is active, so this capture listener is the only handler for the gesture.
+  // Sampling keeps both ends of the loop under the left hand: the registered
+  // cancel binding (Escape by default) cancels, the registered apply binding (F
+  // by default) confirms, and Enter confirms from the workspace but keeps native
+  // behavior on the pane's own controls. The editor dispatcher leaves these
+  // passive bindings to this capture listener while sampling is active.
   useEffect(() => {
     if (!target) {
       return;
@@ -92,7 +109,7 @@ export function SamplingInspector() {
       if (event.defaultPrevented) {
         return;
       }
-      if (event.key === "Escape") {
+      if (cancelBindings.some((binding) => matches(event, binding))) {
         event.preventDefault();
         event.stopPropagation();
         cancelSampling();
@@ -102,12 +119,7 @@ export function SamplingInspector() {
       const onControl = Boolean(
         targetElement?.closest("button, input, select, textarea, [contenteditable='true']"),
       );
-      const applyKey =
-        event.key.toLowerCase() === "f" &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey;
+      const applyKey = applyBindings.some((binding) => matches(event, binding));
       if (!applyKey && !(event.key === "Enter" && !onControl)) {
         return;
       }
@@ -117,7 +129,7 @@ export function SamplingInspector() {
     };
     window.addEventListener("keydown", keydown, true);
     return () => window.removeEventListener("keydown", keydown, true);
-  }, [commit, target]);
+  }, [applyBindings, cancelBindings, commit, target]);
 
   if (!target || !axis) {
     return <InspectorEmpty>{t("editorPanels.sampling.empty")}</InspectorEmpty>;

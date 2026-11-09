@@ -30,7 +30,20 @@ import {
   selectionScaleAnchor,
 } from "../../../../../../core/edit/selection/control.ts";
 import { commitSelectionEdit } from "../../../../../../core/edit/selection/edits.ts";
+import { BATCH_SHORTCUT_IDS } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { matches, released } from "../../../../../../core/shortcuts/keyMatching.ts";
+import { shortcutRegistry } from "../../../../../../core/shortcuts/registry.ts";
 import { t } from "../../../../../../i18n/index.ts";
+
+/** Whether a live binding of `id` answers to this keyboard event. */
+function bound(id: string, event: KeyboardEvent): boolean {
+  return shortcutRegistry.bindingsOf(id).some((binding) => matches(event, binding));
+}
+
+/** Whether the released key belongs to one binding of `id`. */
+function releasedBinding(id: string, event: KeyboardEvent): boolean {
+  return shortcutRegistry.bindingsOf(id).some((binding) => released(event, binding));
+}
 
 export interface BatchControlPresentation {
   visible: boolean;
@@ -268,27 +281,38 @@ export class BatchControls {
       "keydown",
       (event: Event) => {
         const active = this.active;
-        const key = (event as KeyboardEvent).key;
-        if (!active || !key) {
+        const keyboard = event as KeyboardEvent;
+        if (!active || !keyboard.key) {
           return;
         }
-        if (key === "Escape") {
+        if (bound(BATCH_SHORTCUT_IDS.cancel, keyboard)) {
           event.preventDefault();
           event.stopImmediatePropagation();
           this.cancel(true);
           return;
         }
-        if (["1", "2"].includes(key) && active.kind === "note-scale") {
+        if (active.kind !== "note-scale") {
+          return;
+        }
+        if (bound(BATCH_SHORTCUT_IDS.anchorStart, keyboard)) {
           event.preventDefault();
-          this.anchorMode = Number(key);
+          this.anchorMode = 1;
+          this.update();
+        } else if (bound(BATCH_SHORTCUT_IDS.anchorEnd, keyboard)) {
+          event.preventDefault();
+          this.anchorMode = 2;
           this.update();
         }
       },
       true,
     );
     scope.listen(window, "keyup", (event: Event) => {
-      const key = (event as KeyboardEvent).key;
-      if (key && Number(key) === this.anchorMode) {
+      const keyboard = event as KeyboardEvent;
+      if (
+        this.anchorMode !== 0 &&
+        (releasedBinding(BATCH_SHORTCUT_IDS.anchorStart, keyboard) ||
+          releasedBinding(BATCH_SHORTCUT_IDS.anchorEnd, keyboard))
+      ) {
         this.anchorMode = 0;
         this.update();
       }

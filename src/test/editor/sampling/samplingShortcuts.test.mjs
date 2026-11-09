@@ -42,8 +42,11 @@ test("holding the sampling guide shortcut disables pointer snapping", () => {
 test("sampling shortcuts are rebindable and support bare modifier keys", () => {
   const hideGuides = EDITOR_SHORTCUTS.find((shortcut) => shortcut.id === "sampling.hideGuides");
   const cancel = EDITOR_SHORTCUTS.find((shortcut) => shortcut.id === "sampling.cancel");
+  const apply = EDITOR_SHORTCUTS.find((shortcut) => shortcut.id === "sampling.apply");
   assert.deepEqual(hideGuides?.defaults, [{ key: "SHIFT" }]);
   assert.deepEqual(cancel?.defaults, [{ key: "ESCAPE" }]);
+  assert.deepEqual(apply?.defaults, [{ key: "F" }]);
+  assert.equal(apply?.passive, true);
   assert.deepEqual(parseShortcut("SHIFT"), { ok: true, shortcut: { key: "SHIFT", modifiers: [] } });
   assert.equal(
     matches({ key: "Shift", code: "ShiftLeft", shiftKey: true }, { key: "SHIFT" }),

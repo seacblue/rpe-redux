@@ -516,6 +516,11 @@ export const historyShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.editing",
     title: "shortcuts.editor.redo",
     scope: "workspace",
-    defaults: [{ key: "Z", modifiers: ["CTRL", "SHIFT"] }],
+    // The Ctrl+Y alternative matches the migration map and the curve draft's
+    // long-standing redo key.
+    defaults: [
+      { key: "Z", modifiers: ["CTRL", "SHIFT"] },
+      { key: "Y", modifiers: ["CTRL"] },
+    ],
   },
 ];

@@ -32,10 +32,12 @@ test("default wheel bindings step lines with Ctrl and seek time otherwise", () =
     assert.deepEqual(matchTimelineWheel({ deltaY: -100 }), {
       kind: "seek",
       direction: 1,
+      step: "grid",
     });
     assert.deepEqual(matchTimelineWheel({ deltaY: 100 }), {
       kind: "seek",
       direction: -1,
+      step: "grid",
     });
   } finally {
     dispose();
@@ -116,17 +118,77 @@ test("a custom Alt wheel seek binding does not also zoom the timeline", () => {
   }
 });
 
-test("Shift changes the seek distance without stealing the wheel direction", () => {
+test("Shift wheel is a separate whole-beat seek binding", () => {
   const dispose = registerEditorShortcuts();
   try {
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, shiftKey: true }), {
       kind: "seek",
       direction: -1,
+      step: "beat",
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, shiftKey: true }), {
+      kind: "seek",
+      direction: 1,
+      step: "beat",
     });
     assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), {
       kind: "line",
       direction: -1,
     });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
+      kind: "zoom",
+      direction: -1,
+    });
+  } finally {
+    dispose();
+  }
+});
+
+test("fast seek bindings can be rebound without changing the grid-seek action", () => {
+  const dispose = registerEditorShortcuts();
+  const fastNext = TIMELINE_WHEEL_SHORTCUT_IDS.fastNext;
+  const timeNext = TIMELINE_WHEEL_SHORTCUT_IDS.timeNext;
+  try {
+    assert.equal(shortcutRegistry.replaceAllBindings(timeNext, []).ok, true);
+    assert.equal(shortcutRegistry.replaceAllBindings(fastNext, ["WHEELUP"]).ok, true);
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100 }), {
+      kind: "seek",
+      direction: 1,
+      step: "beat",
+    });
+  } finally {
+    shortcutRegistry.resetShortcut(timeNext);
+    shortcutRegistry.resetShortcut(fastNext);
+    dispose();
+  }
+});
+
+test("a fast seek binding moves by one beat and a grid binding keeps the grid step", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    const seeks = [];
+    const navigation = bindTimelineNavigation({
+      timeline: {
+        gestures: {},
+        viewport: { division: 4, minimumScrollSeconds: () => 0 },
+      },
+      session: () => ({ chart: { META: {} } }),
+      seekByBeats: (delta) => seeks.push(delta),
+      wheelSettings: () => ({ scrollSpeed: 1, scrollAcceleration: false }),
+      lineSwitcher: { step() {} },
+    });
+    const wheel = (deltaY, shiftKey = false) => ({
+      deltaY,
+      deltaMode: 0,
+      shiftKey,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+    navigation.wheel(wheel(-100));
+    navigation.wheel(wheel(-100, true));
+    assert.equal(seeks.length, 2);
+    assert.notEqual(seeks[0], 1);
+    assert.equal(seeks[1], 1);
   } finally {
     dispose();
   }

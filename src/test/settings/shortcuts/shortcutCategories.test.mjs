@@ -1,9 +1,15 @@
 /** Shortcut categories shared by the toolbar and the editor register once. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerEditorShortcuts } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
+import {
+  EDITOR_SHORTCUTS,
+  registerEditorShortcuts,
+} from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import { multiLineShortcuts } from "../../../core/edit/multiLine/multiLineEdit.ts";
-import { SHORTCUT_CATEGORIES } from "../../../core/shortcuts/categories.ts";
+import {
+  SHORTCUT_CATEGORIES,
+  compareShortcutCategories,
+} from "../../../core/shortcuts/categories.ts";
 import { ShortcutRegistry, shortcutRegistry } from "../../../core/shortcuts/registry.ts";
 
 test("editor shortcuts reuse a playback category a toolbar action registered first", () => {
@@ -26,6 +32,37 @@ test("multi-line editing uses J and K by default", () => {
   );
   assert.deepEqual(defaults["workspace.multiLine.toggle"], ["J"]);
   assert.deepEqual(defaults["workspace.multiLine.switchMode"], ["K"]);
+});
+
+test("built-in categories have one product-wide order", () => {
+  const categories = Object.values(SHORTCUT_CATEGORIES).sort(compareShortcutCategories);
+  const orders = categories.map((category) => category.order);
+  assert.deepEqual(
+    orders,
+    [...orders].sort((left, right) => left - right),
+    "category order must compare as a sequence",
+  );
+  assert.equal(new Set(orders).size, orders.length, "category order must be unique");
+  assert.equal(
+    SHORTCUT_CATEGORIES.editorNavigation.order < SHORTCUT_CATEGORIES.editorPlayback.order,
+    true,
+  );
+  assert.equal(SHORTCUT_CATEGORIES.editorCurve.order < SHORTCUT_CATEGORIES.sampling.order, true);
+});
+
+test("sampling commands form their own category", () => {
+  const sampling = EDITOR_SHORTCUTS.filter(
+    (shortcut) =>
+      shortcut.id === "sampling.apply" ||
+      shortcut.id === "sampling.cancel" ||
+      shortcut.id === "sampling.hideGuides" ||
+      shortcut.id === "event.sample.start" ||
+      shortcut.id === "event.sample.end",
+  );
+  assert.equal(sampling.length, 5);
+  for (const shortcut of sampling) {
+    assert.equal(shortcut.category, SHORTCUT_CATEGORIES.sampling.id, shortcut.id);
+  }
 });
 
 test("disabled shortcuts do not dispatch or create conflicts", () => {

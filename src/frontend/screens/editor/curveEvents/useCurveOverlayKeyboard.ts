@@ -1,12 +1,15 @@
 /**
  * Keyboard handling for the curve trajectory overlay.
  *
- * Escape unwinds the current gesture, then the selection, then the mode.
- * Delete is a registered editor shortcut (`editor.curve.delete`) rather than a
- * local listener, so it appears in the shortcut settings and respects text
- * entry. This hook only owns the gesture/selection unwinding keys.
+ * The registered curve-cancel binding unwinds the current gesture, then the
+ * selection, then the mode. Delete is a registered editor shortcut
+ * (`editor.curve.delete`) rather than a local listener, so both appear in the
+ * shortcut settings and respect text entry.
  */
 import { useEffect, useRef } from "react";
+import { CURVE_SHORTCUT_IDS } from "../../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { matches } from "../../../../core/shortcuts/keyMatching.ts";
+import { shortcutRegistry } from "../../../../core/shortcuts/registry.ts";
 import { t } from "../../../../i18n/index.ts";
 import type { CurveTool } from "./curveTools.ts";
 import type { SegmentTarget } from "./pathModel.ts";
@@ -29,11 +32,11 @@ interface CurveOverlayKeyboardOptions {
 }
 
 /**
- * Bind the overlay's Escape unwinding keys while it is active.
+ * Bind the overlay's registered cancel key while it is active.
  *
- * Escape cancels a draft, then a pending connect, then the selection, and
- * finally closes the mode. Delete is a registered editor shortcut, not handled
- * here.
+ * The default Escape cancels a draft, then a pending connect, then the
+ * selection, and finally closes the mode. Delete is a registered editor
+ * shortcut, not handled here.
  */
 export function useCurveOverlayKeyboard(options: CurveOverlayKeyboardOptions): void {
   const latest = useRef(options);
@@ -47,7 +50,8 @@ export function useCurveOverlayKeyboard(options: CurveOverlayKeyboardOptions): v
       if (!current.active || isTextTarget(event.target)) {
         return;
       }
-      if (event.key === "Escape") {
+      const cancelBindings = shortcutRegistry.bindingsOf(CURVE_SHORTCUT_IDS.cancel);
+      if (cancelBindings.some((binding) => matches(event, binding))) {
         event.preventDefault();
         if (current.hasDraft()) {
           current.cancelDraft();

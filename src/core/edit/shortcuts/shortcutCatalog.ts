@@ -11,6 +11,7 @@
  */
 import { type EditorShortcutContext, type EditorShortcutDefinition } from "./declarations.ts";
 import { shortcutRegistry as shortcuts } from "../../shortcuts/registry.ts";
+import { SHORTCUT_CATEGORIES } from "../../shortcuts/categories.ts";
 import {
   type Shortcut,
   type ShortcutCategory,
@@ -34,18 +35,40 @@ import { TIMELINE_WHEEL_SHORTCUT_IDS } from "./timelineWheel.ts";
 /** Stable id for the passive judge-line prefix gesture. */
 export const LINE_JUMP_SHORTCUT_ID = "navigation.line.jump";
 
+/** Ids for the sampling commands owned by the workspace sampler. */
+export const SAMPLING_SHORTCUT_IDS = Object.freeze({
+  start: "event.sample.start",
+  end: "event.sample.end",
+  hideGuides: "sampling.hideGuides",
+  cancel: "sampling.cancel",
+  apply: "sampling.apply",
+});
+
+/** Ids for the commands owned by the curve trajectory stage. */
+export const CURVE_SHORTCUT_IDS = Object.freeze({
+  delete: "editor.curve.delete",
+  cancel: "editor.curve.cancel",
+});
+
+/** Ids for the stage batch controls while a drag owns the pointer. */
+export const BATCH_SHORTCUT_IDS = Object.freeze({
+  cancel: "batch.cancel",
+  anchorStart: "batch.scale.anchorStart",
+  anchorEnd: "batch.scale.anchorEnd",
+});
+
 /** Editor shortcuts that change stage and timeline visibility. */
 const viewShortcuts: readonly EditorShortcutDefinition[] = [
   {
     id: "view.togglePreviewOnly",
-    category: "editor.playback",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
     title: "shortcuts.editor.togglePreviewOnly",
     scope: "editor",
     defaults: [{ key: "SPACE", modifiers: ["CTRL"] }],
   },
   {
     id: "view.previewAudition",
-    category: "editor.playback",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
     title: "shortcuts.editor.previewAudition",
     scope: "editor",
     defaults: [{ key: "T" }],
@@ -53,7 +76,7 @@ const viewShortcuts: readonly EditorShortcutDefinition[] = [
   },
   {
     id: "view.previewAuditionStay",
-    category: "editor.playback",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
     title: "shortcuts.editor.previewAuditionStay",
     scope: "editor",
     defaults: [{ key: "U" }],
@@ -61,7 +84,7 @@ const viewShortcuts: readonly EditorShortcutDefinition[] = [
   },
   {
     id: "view.resetCamera",
-    category: "editor.playback",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
     title: "shortcuts.editor.resetCamera",
     scope: "editor",
     // F reads as "fit the view"; Ctrl+Shift keeps it beside the left index.
@@ -69,17 +92,23 @@ const viewShortcuts: readonly EditorShortcutDefinition[] = [
   },
   {
     id: "view.toggleGameUi",
-    category: "editor.playback",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
     title: "shortcuts.editor.toggleGameUi",
     scope: "editor",
     defaults: [{ key: "G", modifiers: ["CTRL", "SHIFT"] }],
   },
 ];
-/** Editor shortcuts that open the workspace sampler for the selected event. */
+/**
+ * Editor shortcuts that open or close the workspace sampler.
+ *
+ * The sampler's live surfaces own the key listeners while it is open, so these
+ * are passive declarations: the shortcut editor lists and rebinds them, and the
+ * overlay matches the registry instead of a literal key.
+ */
 const samplingShortcuts: readonly EditorShortcutDefinition[] = [
   {
-    id: "event.sample.start",
-    category: "editor.editing",
+    id: SAMPLING_SHORTCUT_IDS.start,
+    category: SHORTCUT_CATEGORIES.sampling.id,
     title: "shortcuts.editor.sampleStart",
     scope: "editor",
     // V reads as "pick a value"; Shift selects the other anchor of the event.
@@ -90,8 +119,8 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
       context.hasEventSelection === true && !context.curveMode && !context.samplingActive,
   },
   {
-    id: "event.sample.end",
-    category: "editor.editing",
+    id: SAMPLING_SHORTCUT_IDS.end,
+    category: SHORTCUT_CATEGORIES.sampling.id,
     title: "shortcuts.editor.sampleEnd",
     scope: "editor",
     defaults: [{ key: "V", modifiers: ["SHIFT"] }],
@@ -99,29 +128,37 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
       context.hasEventSelection === true && !context.curveMode && !context.samplingActive,
   },
   {
-    id: "sampling.hideGuides",
-    category: "editor.editing",
+    id: SAMPLING_SHORTCUT_IDS.hideGuides,
+    category: SHORTCUT_CATEGORIES.sampling.id,
     title: "shortcuts.editor.samplingHideGuides",
     scope: "editor",
     defaults: [{ key: "SHIFT" }],
-    enabledFor: (context) => context.samplingActive !== true,
+    passive: true,
   },
   {
-    id: "sampling.cancel",
-    category: "editor.editing",
+    id: SAMPLING_SHORTCUT_IDS.cancel,
+    category: SHORTCUT_CATEGORIES.sampling.id,
     title: "shortcuts.editor.samplingCancel",
     scope: "editor",
     defaults: [{ key: "ESCAPE" }],
     shared: true,
-    enabledFor: (context) => context.samplingActive !== true,
+    passive: true,
+  },
+  {
+    id: SAMPLING_SHORTCUT_IDS.apply,
+    category: SHORTCUT_CATEGORIES.sampling.id,
+    title: "shortcuts.editor.samplingApply",
+    scope: "editor",
+    defaults: [{ key: "F" }],
+    passive: true,
   },
 ];
 
 /** Editor shortcuts owned by the curve trajectory stage. */
 const curveShortcuts: readonly EditorShortcutDefinition[] = [
   {
-    id: "editor.curve.delete",
-    category: "editor.curve",
+    id: CURVE_SHORTCUT_IDS.delete,
+    category: SHORTCUT_CATEGORIES.editorCurve.id,
     title: "shortcuts.editor.curveDelete",
     scope: "editor",
     defaults: [{ key: "D" }],
@@ -130,12 +167,23 @@ const curveShortcuts: readonly EditorShortcutDefinition[] = [
     shared: true,
     enabledFor: (context) => context.curveMode === true,
   },
+  {
+    id: CURVE_SHORTCUT_IDS.cancel,
+    category: SHORTCUT_CATEGORIES.editorCurve.id,
+    title: "shortcuts.editor.curveCancel",
+    scope: "editor",
+    defaults: [{ key: "ESCAPE" }],
+    // Escape unwinds the overlay's own gesture stack before the dispatcher
+    // would see it; the local listener matches this live binding.
+    shared: true,
+    passive: true,
+  },
 ];
 /** Wheel-driven line stepping and time seeking, both rebindable. */
 const navigationShortcuts: readonly EditorShortcutDefinition[] = [
   {
     id: LINE_JUMP_SHORTCUT_ID,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.lineJump",
     scope: "editor",
     defaults: [{ key: "CTRL" }],
@@ -145,52 +193,106 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.previousJudgeLine",
     scope: "editor",
-    defaults: [{ key: "WHEELUP", modifiers: ["CTRL"] }],
+    defaults: [
+      { key: "WHEELUP", modifiers: ["CTRL"] },
+      { key: "WHEELUP", modifiers: ["CTRL", "SHIFT"] },
+    ],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.lineNext,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.nextJudgeLine",
     scope: "editor",
-    defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL"] }],
+    defaults: [
+      { key: "WHEELDOWN", modifiers: ["CTRL"] },
+      { key: "WHEELDOWN", modifiers: ["CTRL", "SHIFT"] },
+    ],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.fastPrevious,
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
+    title: "shortcuts.editor.timelineFastBackward",
+    scope: "editor",
+    defaults: [{ key: "WHEELDOWN", modifiers: ["SHIFT"] }],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.fastNext,
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
+    title: "shortcuts.editor.timelineFastForward",
+    scope: "editor",
+    defaults: [{ key: "WHEELUP", modifiers: ["SHIFT"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.timePrevious,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineBackward",
     scope: "editor",
     defaults: [{ key: "WHEELDOWN" }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.timeNext,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineForward",
     scope: "editor",
     defaults: [{ key: "WHEELUP" }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineZoomOut",
     scope: "editor",
-    defaults: [{ key: "WHEELDOWN", modifiers: ["ALT"] }],
+    defaults: [
+      { key: "WHEELDOWN", modifiers: ["ALT"] },
+      { key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] },
+    ],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn,
-    category: "editor.navigation",
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineZoomIn",
     scope: "editor",
-    defaults: [{ key: "WHEELUP", modifiers: ["ALT"] }],
+    defaults: [
+      { key: "WHEELUP", modifiers: ["ALT"] },
+      { key: "WHEELUP", modifiers: ["ALT", "SHIFT"] },
+    ],
+  },
+];
+/** Stage batch controls that run while a drag owns the pointer. */
+const batchShortcuts: readonly EditorShortcutDefinition[] = [
+  {
+    id: BATCH_SHORTCUT_IDS.cancel,
+    category: SHORTCUT_CATEGORIES.editorSelection.id,
+    title: "shortcuts.editor.batchCancel",
+    scope: "surface",
+    defaults: [{ key: "ESCAPE" }],
+    shared: true,
+    passive: true,
+  },
+  {
+    id: BATCH_SHORTCUT_IDS.anchorStart,
+    category: SHORTCUT_CATEGORIES.editorSelection.id,
+    title: "shortcuts.editor.batchAnchorStart",
+    scope: "surface",
+    defaults: [{ key: "1" }],
+    passive: true,
+  },
+  {
+    id: BATCH_SHORTCUT_IDS.anchorEnd,
+    category: SHORTCUT_CATEGORIES.editorSelection.id,
+    title: "shortcuts.editor.batchAnchorEnd",
+    scope: "surface",
+    defaults: [{ key: "2" }],
+    passive: true,
   },
 ];
 /** Editor shortcuts without default keys but available for custom binding. */
 const lineInfoShortcuts: readonly EditorShortcutDefinition[] = [
   {
     id: "view.showLineInfo",
-    category: "editor.playback",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
     title: "shortcuts.editor.showLineInfo",
     scope: "editor",
     // Line information remains available through a custom binding; Tab stays
@@ -201,13 +303,14 @@ const lineInfoShortcuts: readonly EditorShortcutDefinition[] = [
 
 /** The editor's categories, in the order the settings page lists them. */
 const EDITOR_CATEGORIES: readonly ShortcutCategory[] = [
-  { id: "editor.editing", title: "shortcuts.category.editorEditing", order: 20 },
-  { id: "editor.notes", title: "shortcuts.category.editorNotes", order: 30 },
-  { id: "editor.curve", title: "shortcuts.category.editorCurve", order: 35 },
-  { id: "editor.selection", title: "shortcuts.category.editorSelection", order: 40 },
-  { id: "editor.clipboard", title: "shortcuts.category.editorClipboard", order: 50 },
-  { id: "editor.navigation", title: "shortcuts.category.editorNavigation", order: 55 },
-  { id: "editor.playback", title: "shortcuts.category.editorPlayback", order: 60 },
+  SHORTCUT_CATEGORIES.editorEditing,
+  SHORTCUT_CATEGORIES.editorNotes,
+  SHORTCUT_CATEGORIES.editorSelection,
+  SHORTCUT_CATEGORIES.editorClipboard,
+  SHORTCUT_CATEGORIES.editorNavigation,
+  SHORTCUT_CATEGORIES.editorPlayback,
+  SHORTCUT_CATEGORIES.editorCurve,
+  SHORTCUT_CATEGORIES.sampling,
 ];
 
 // ------------------------------------------------------------------ shortcuts
@@ -216,7 +319,7 @@ const EDITOR_CATEGORIES: readonly ShortcutCategory[] = [
 export const documentShortcuts: readonly EditorShortcutDefinition[] = [
   {
     id: "document.save",
-    category: "file",
+    category: SHORTCUT_CATEGORIES.file.id,
     title: "shortcuts.editor.save",
     defaults: [{ key: "S", modifiers: ["CTRL"] }],
     scope: "app",
@@ -235,6 +338,7 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcutDefinition[] = [
   ...samplingShortcuts,
   ...trajectoryShortcuts,
   ...curveShortcuts,
+  ...batchShortcuts,
   ...clipboardShortcuts,
   ...navigationShortcuts,
   ...playbackShortcuts,

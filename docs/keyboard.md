@@ -13,7 +13,7 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Cancel placement / clear selection      | `Esc`                          |
 | Delete selected objects / curve segment | `D`                            |
 | Undo                                    | `Ctrl+Z`                       |
-| Redo                                    | `Ctrl+Shift+Z`                 |
+| Redo                                    | `Ctrl+Shift+Z` / `Ctrl+Y`      |
 | Copy / cut / paste                      | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
 | Copy all event layers in the span       | `Ctrl+Shift+C`                 |
 | Paste keeping time                      | `Ctrl+Shift+V`                 |
@@ -40,7 +40,7 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Sample the event field being edited | `Alt+V`         |
 | Apply the sample / cancel sampling  | `F` / `Esc`     |
 
-`V` opens the workspace sampler for the selected event; the sampler then reads the pointer in the preview. `Alt+V` starts from the exact field that has focus, so editing an end anchor does not require leaving the keyboard. `F` applies a locked sample, and `Enter` does the same while the preview has focus. Sampling works on one selected event at a time.
+`V` opens the workspace sampler for the selected event; the sampler then reads the pointer in the preview. `Alt+V` starts from the exact field that has focus, so editing an end anchor does not require leaving the keyboard. `F` applies a locked sample, and `Enter` does the same while the preview has focus. Sampling works on one selected event at a time. The guide-hide, cancel, and apply keys are ordinary rebindable shortcuts under **Sampling**.
 
 ## Movement and multi-line
 
@@ -70,38 +70,40 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 
 ## View and transport
 
-| Action                         | Default                             |
-| ------------------------------ | ----------------------------------- |
-| Preview only / previous layout | `Ctrl+Space`                        |
-| Note region                    | `Ctrl+Shift+Q`                      |
-| Event region                   | `Ctrl+Shift+W`                      |
-| Preview region                 | `Ctrl+Shift+E`                      |
-| Notes and events together      | `Ctrl+Shift+R`                      |
-| Reset the view                 | `Ctrl+Shift+F`                      |
-| In-game UI                     | `Ctrl+Shift+G`                      |
-| Play / pause                   | `Space`                             |
-| Hold preview playback, return  | `T`                                 |
-| Hold preview playback, stay    | `U`                                 |
-| Timeline backward / forward    | `Wheel Down` / `Wheel Up`           |
-| Previous / next judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down` |
-| Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`   |
-| Settings                       | `Ctrl+K`                            |
+| Action                         | Default                               |
+| ------------------------------ | ------------------------------------- |
+| Preview only / previous layout | `Ctrl+Space`                          |
+| Note region                    | `Ctrl+Shift+Q`                        |
+| Event region                   | `Ctrl+Shift+W`                        |
+| Preview region                 | `Ctrl+Shift+E`                        |
+| Notes and events together      | `Ctrl+Shift+R`                        |
+| Reset the view                 | `Ctrl+Shift+F`                        |
+| In-game UI                     | `Ctrl+Shift+G`                        |
+| Play / pause                   | `Space`                               |
+| Hold preview playback, return  | `T`                                   |
+| Hold preview playback, stay    | `U`                                   |
+| Timeline backward / forward    | `Wheel Down` / `Wheel Up`             |
+| Fast seek backward / forward   | `Shift+Wheel Down` / `Shift+Wheel Up` |
+| Previous / next judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down`   |
+| Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`     |
+| Settings                       | `Ctrl+K`                              |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior.
 
-Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
+Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` / `Ctrl+Y` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
 
 ## File and application keys
 
-| Action             | Default        |
-| ------------------ | -------------- |
-| New chart          | `Ctrl+N`       |
-| Open chart         | `Ctrl+O`       |
-| Save chart         | `Ctrl+S`       |
-| Settings           | `Ctrl+K`       |
-| Show chart library | `Ctrl+Shift+H` |
+| Action                             | Default              |
+| ---------------------------------- | -------------------- |
+| New chart                          | `Ctrl+N`             |
+| Open chart                         | `Ctrl+O`             |
+| Save chart                         | `Ctrl+S`             |
+| Settings                           | `Ctrl+K`             |
+| Show chart library                 | `Ctrl+Shift+H`       |
+| Disable all extensions (emergency) | `Ctrl+Alt+Shift+F11` |
 
 New chart, open, and settings work on the chart library page before a chart is open. Save requires an open document. The show-library action requires an open document and is enabled away from the library page.
 
@@ -112,7 +114,6 @@ When the desktop host enables developer mode, or after the About logo is activat
 | Action                      | Default        |
 | --------------------------- | -------------- |
 | Toggle DevTools             | `F12`          |
-| Inspect element             | `Ctrl+Shift+E` |
 | Preview probe               | `Ctrl+Shift+P` |
 | Copy selection              | `Ctrl+Shift+A` |
 | Copy developer report       | `Ctrl+Shift+X` |
@@ -122,7 +123,7 @@ When the desktop host enables developer mode, or after the About logo is activat
 | Open app data folder / logs | —              |
 | Reload interface            | —              |
 
-The performance monitor's `F3` binding is available in ordinary builds; the other developer actions and the overlay follow the host's developer policy or the About gesture. DevTools, element inspection, and the preview probe remain subject to that policy. In probe mode, `Alt+wheel` cycles the hit hierarchy and a click copies the active hit.
+The performance monitor's `F3` binding is available in ordinary builds; the other developer actions and the overlay follow the host's developer policy or the About gesture. DevTools and the preview probe remain subject to that policy. In probe mode, `Alt+wheel` cycles the hit hierarchy and a click copies the active hit.
 
 ## Scope rules
 

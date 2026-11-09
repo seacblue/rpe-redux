@@ -10,7 +10,10 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { toolbar } from "../../../../core/shell/registries/toolbar.ts";
-import { developerMode } from "../../../../core/platform/desktop/developer.ts";
+import {
+  developerMode,
+  requestDevtoolsToggle,
+} from "../../../../core/platform/desktop/developer.ts";
 import { isDeveloperRevealed } from "../../../../core/state/developerReveal.ts";
 import { isDesktop } from "../../../../core/platform/environment.ts";
 import { tearOffPerformanceHud } from "../../../../core/platform/desktop/performanceHudWindow.ts";
@@ -58,6 +61,14 @@ function detachPerformanceHud(): void {
 }
 
 const DEVELOPER_ACTIONS = [
+  {
+    id: "developer.devtools",
+    label: "chrome.developer.devtools",
+    tooltip: "chrome.developer.devtoolsHint",
+    icon: "keyboard",
+    shortcuts: [{ key: "F12" }],
+    run: () => requestDevtoolsToggle(),
+  },
   {
     id: "developer.probe",
     label: "chrome.developer.probe",

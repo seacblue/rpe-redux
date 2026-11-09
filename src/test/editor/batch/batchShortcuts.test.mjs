@@ -13,6 +13,10 @@ import {
   shiftEventEdge,
   shiftSelectionLine,
 } from "../../../core/edit/selection/control.ts";
+import {
+  BATCH_SHORTCUT_IDS,
+  EDITOR_SHORTCUTS,
+} from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 
 function noteSession() {
@@ -28,6 +32,15 @@ function noteSession() {
   session.focus = "notes";
   return session;
 }
+
+test("batch gestures read their keys from the shortcut registry", () => {
+  const byId = new Map(EDITOR_SHORTCUTS.map((shortcut) => [shortcut.id, shortcut]));
+  assert.deepEqual(byId.get(BATCH_SHORTCUT_IDS.cancel)?.defaults, [{ key: "ESCAPE" }]);
+  assert.deepEqual(byId.get(BATCH_SHORTCUT_IDS.anchorStart)?.defaults, [{ key: "1" }]);
+  assert.deepEqual(byId.get(BATCH_SHORTCUT_IDS.anchorEnd)?.defaults, [{ key: "2" }]);
+  assert.equal(byId.get(BATCH_SHORTCUT_IDS.cancel)?.passive, true);
+  assert.equal(byId.get(BATCH_SHORTCUT_IDS.anchorStart)?.passive, true);
+});
 
 test("scale shortcut keeps the centre and changes every selected X", () => {
   const session = noteSession();

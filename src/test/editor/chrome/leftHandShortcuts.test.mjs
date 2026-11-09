@@ -22,6 +22,12 @@ function bindingOf(id, index = 0) {
 test("sampling selected events uses the left-hand V key for both anchors", () => {
   assert.equal(bindingOf("event.sample.start"), "V");
   assert.equal(bindingOf("event.sample.end"), "Shift+V");
+  assert.equal(bindingOf("sampling.apply"), "F");
+});
+
+test("redo keeps the Ctrl+Y alternative used by the curve draft and RPE migration", () => {
+  assert.equal(bindingOf("edit.redo"), "CTRL+Shift+Z");
+  assert.equal(bindingOf("edit.redo", 1), "CTRL+Y");
 });
 
 test("scale and line-move defaults have left-hand chords before the arrows", () => {

@@ -71,9 +71,6 @@ export function installInteractionPolicy(): () => void {
         ["arrowleft", "arrowright", "arrowup", "arrowdown", "f4", "home"].includes(key)) ||
       (modified && ["tab", "pageup", "pagedown"].includes(key)) ||
       ["f3", "f5", "f6", "f7", "f10", "f11"].includes(key);
-    if (event.key === "F12") {
-      return;
-    }
     if (browserShortcut) {
       event.preventDefault();
     }

@@ -16,6 +16,7 @@ import {
   wheelZoomDelta,
   zoomFreeCameraAt,
 } from "../freeCamera/freeCamera.ts";
+import { SAMPLING_SHORTCUT_IDS } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
 import {
   samplingSettings,
   type SamplingTarget,
@@ -44,8 +45,6 @@ import {
   type SamplingProjection,
   type SamplingViewport,
 } from "./samplingGuides.ts";
-const SAMPLING_HIDE_GUIDES_SHORTCUT = "sampling.hideGuides";
-const SAMPLING_CANCEL_SHORTCUT = "sampling.cancel";
 const EMPTY_SHORTCUT_BINDINGS: readonly never[] = [];
 type GestureMode = "drag" | "camera";
 
@@ -125,10 +124,10 @@ export function SamplingOverlay() {
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const interaction = local.target === target ? local.interaction : "idle";
   const hideGuideBindings =
-    shortcutViews.find((view) => view.id === SAMPLING_HIDE_GUIDES_SHORTCUT)?.bindings ??
+    shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.hideGuides)?.bindings ??
     EMPTY_SHORTCUT_BINDINGS;
   const cancelBindings =
-    shortcutViews.find((view) => view.id === SAMPLING_CANCEL_SHORTCUT)?.bindings ??
+    shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.cancel)?.bindings ??
     EMPTY_SHORTCUT_BINDINGS;
 
   /** Set the interaction mode for the current target, resetting stale flags. */

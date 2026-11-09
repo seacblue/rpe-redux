@@ -54,6 +54,8 @@ export default {
   "chrome.toolbar.lineSelectionGroupClearAll": "Clear every judge line in {name}",
   "chrome.global.timing.emptyTitle": "No timing points yet",
   "chrome.global.timing.empty": "Add a BPM point at the playhead to start timing this chart.",
+  "chrome.developer.devtools": "Toggle DevTools",
+  "chrome.developer.devtoolsHint": "Open or close the WebView developer tools",
   "chrome.developer.performanceHud": "Performance monitor",
   "chrome.developer.performanceHudHint": "Show or hide the floating frame and memory monitor",
   "chrome.developer.detachPerformanceHud": "Detach performance monitor",
