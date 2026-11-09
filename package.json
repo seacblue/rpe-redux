@@ -38,7 +38,7 @@
     "fix": "eslint . --fix && prettier --write \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"**/*.md\" \"sdk/**/*.{ts,js,json,md}\" \"*.{html,json,js,ts}\""
   },
   "devDependencies": {
-    "@babel/core": "^8.0.7",
+    "@babel/core": "^8.1.0",
     "@babel/eslint-parser": "^8.0.7",
     "@babel/plugin-syntax-jsx": "^8.0.1",
     "@babel/preset-typescript": "^8.0.7",
