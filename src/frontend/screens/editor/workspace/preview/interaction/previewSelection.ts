@@ -47,7 +47,7 @@ export function previewOwnsPointer(target: EventTarget | null, stage: HTMLElemen
 
 type Point = PreviewPoint;
 
-/** The visible head-to-tail span of a hold, including its caps. */
+/** The painted head-to-tail span of a hold; its caps fit inside these anchors. */
 export function holdUsefulInterval(area: HitTestNoteGeometry): {
   head: Point;
   tail: Point;

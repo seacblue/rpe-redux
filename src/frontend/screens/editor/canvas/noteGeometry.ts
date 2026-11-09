@@ -41,27 +41,18 @@ export interface HoldUsefulInterval {
   readonly tail: { x: number; y: number };
 }
 
-/** Extend a Hold's anchor segment to the useful intervals of its head and tail caps. */
+/**
+ * The painted span of a Hold.
+ *
+ * A Hold's caps fit inside its head-to-tail anchors: the head cap starts at the
+ * head anchor and the tail cap ends at the tail anchor. The anchors are
+ * therefore the outermost painted points, with no half-cap extension.
+ */
 export function holdUsefulInterval(area: {
   readonly head: { x: number; y: number };
   readonly tail: { x: number; y: number };
-  readonly headLength?: number;
-  readonly tailLength?: number;
 }): HoldUsefulInterval {
-  const deltaX = area.tail.x - area.head.x;
-  const deltaY = area.tail.y - area.head.y;
-  const length = Math.hypot(deltaX, deltaY);
-  if (length <= 0) {
-    return { head: { ...area.head }, tail: { ...area.tail } };
-  }
-  const unitX = deltaX / length;
-  const unitY = deltaY / length;
-  const headInset = Math.max(0, area.headLength ?? 0) / 2;
-  const tailInset = Math.max(0, area.tailLength ?? 0) / 2;
-  return {
-    head: { x: area.head.x - unitX * headInset, y: area.head.y - unitY * headInset },
-    tail: { x: area.tail.x + unitX * tailInset, y: area.tail.y + unitY * tailInset },
-  };
+  return { head: { ...area.head }, tail: { ...area.tail } };
 }
 
 /** Resolve the complete texture quad aligned by its useful area. */
@@ -101,38 +92,70 @@ export function alignedTextureQuad(
   };
 }
 
-/** Inset a Hold body so its useful edges meet the cap useful edges. */
-export function holdBodySegment(
+/** Fitted cap and body geometry for one Hold, in the anchors' coordinate space. */
+export interface HoldLayout {
+  /** Centre of the head cap after fitting it inside the anchor span. */
+  readonly headCap: { x: number; y: number };
+  /** Centre of the tail cap after fitting it inside the anchor span. */
+  readonly tailCap: { x: number; y: number };
+  /** Body start, meeting the head cap's inner edge. */
+  readonly bodyHead: { x: number; y: number };
+  /** Body end, meeting the tail cap's inner edge. */
+  readonly bodyTail: { x: number; y: number };
+  /** Longitudinal cap lengths after fitting; zero when that cap is hidden. */
+  readonly headCapLength: number;
+  readonly tailCapLength: number;
+  /** Distance between the body endpoints. */
+  readonly bodyLength: number;
+}
+
+/**
+ * Fit a Hold's head cap, body, and tail cap inside its head-to-tail anchors.
+ *
+ * The caps occupy the ends of the anchor span and the body fills the middle, so
+ * the painted Hold never extends past the note's start or end. When the caps
+ * together are longer than the span, both shrink proportionally. A Hold shorter
+ * than half a CSS pixel has no room to fit them and keeps its authored caps on
+ * the anchors instead.
+ */
+export function holdLayout(
   headX: number,
   headY: number,
   tailX: number,
   tailY: number,
   headCapLength: number,
   tailCapLength = headCapLength,
-): { headX: number; headY: number; tailX: number; tailY: number } {
+): HoldLayout {
   const deltaX = tailX - headX;
   const deltaY = tailY - headY;
   const length = Math.hypot(deltaX, deltaY);
-  if (length <= 0) {
-    return { headX, headY, tailX, tailY };
+  const requestedHead = Math.max(0, headCapLength);
+  const requestedTail = Math.max(0, tailCapLength);
+  const requestedTotal = requestedHead + requestedTail;
+  if (length <= 0.5) {
+    return {
+      headCap: { x: headX, y: headY },
+      tailCap: { x: tailX, y: tailY },
+      bodyHead: { x: headX, y: headY },
+      bodyTail: { x: tailX, y: tailY },
+      headCapLength: requestedHead,
+      tailCapLength: requestedTail,
+      bodyLength: 0,
+    };
   }
-  const totalInset = Math.min(
-    length,
-    Math.max(0, headCapLength / 2) + Math.max(0, tailCapLength / 2),
-  );
-  const headInset = totalInset
-    ? (Math.min(length / 2, Math.max(0, headCapLength / 2)) /
-        (headCapLength / 2 + tailCapLength / 2 || 1)) *
-      totalInset
-    : 0;
-  const tailInset = totalInset - headInset;
+  const scale = requestedTotal > length ? length / requestedTotal : 1;
+  const head = requestedHead * scale;
+  const tail = requestedTail * scale;
   const unitX = deltaX / length;
   const unitY = deltaY / length;
   return {
-    headX: headX + unitX * headInset,
-    headY: headY + unitY * headInset,
-    tailX: tailX - unitX * tailInset,
-    tailY: tailY - unitY * tailInset,
+    headCap: { x: headX + unitX * (head / 2), y: headY + unitY * (head / 2) },
+    tailCap: { x: tailX - unitX * (tail / 2), y: tailY - unitY * (tail / 2) },
+    bodyHead: { x: headX + unitX * head, y: headY + unitY * head },
+    bodyTail: { x: tailX - unitX * tail, y: tailY - unitY * tail },
+    headCapLength: head,
+    tailCapLength: tail,
+    bodyLength: Math.max(0, length - head - tail),
   };
 }
 

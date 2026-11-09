@@ -20,6 +20,7 @@ import {
 import { bundledNoteSkinUrl } from "../../../platform/noteSkinBridge.ts";
 import { toBlobPart } from "../../../../core/utils/bytes.ts";
 import { HIT_FRAME_COUNT } from "./hitFrame.ts";
+import { holdLayout } from "./noteGeometry.ts";
 import { splitPhiraHitFx, splitPhiraHoldAtlas } from "./phiraAtlas.ts";
 import type { NoteColor } from "./noteBatch.ts";
 
@@ -678,60 +679,53 @@ export class RpeSkin {
       return picture;
     };
     const bodyRect = this.bounds(bodyName, body);
-    const length = Math.max(1, Math.abs(tail - head));
+    const span = Math.abs(tail - head);
     const endRect = end ? this.bounds(endName, end) : null;
     const headRect = headPicture ? this.bounds(headName, headPicture) : null;
     const headLength = showHead && headRect ? width * (headRect.height / headRect.width) : 0;
     const tailLength = endRect ? width * (endRect.height / endRect.width) : 0;
-    const bodyStart = headLength / 2;
-    const bodyEnd = Math.max(bodyStart, length - tailLength / 2);
-    const bodyLength = Math.max(0, bodyEnd - bodyStart);
+    const layout = holdLayout(0, 0, 0, span, headLength, tailLength);
     context.save();
     context.translate(horizontal, head);
     context.rotate(axisRotation);
-    if (bodyLength > 0) {
+    if (layout.bodyLength > 0) {
+      const bodyCenter = (layout.bodyHead.y + layout.bodyTail.y) / 2;
       const bodyBox = alignedTextureBox(
         bodyRect,
         body.naturalWidth || body.width || bodyRect.width,
         body.naturalHeight || body.height || bodyRect.height,
         0,
-        (bodyStart + bodyEnd) / 2,
+        bodyCenter,
         width,
-        bodyLength,
+        layout.bodyLength,
       );
-      this.drawHoldTexture(
-        context,
-        texture(bodyName, highlight),
-        bodyBox,
-        0,
-        (bodyStart + bodyEnd) / 2,
-      );
+      this.drawHoldTexture(context, texture(bodyName, highlight), bodyBox, 0, bodyCenter);
     }
-    if (end) {
+    if (end && layout.tailCapLength > 0) {
       const rect = this.bounds(endName, end);
       const endBox = alignedTextureBox(
         rect,
         end.naturalWidth || end.width || rect.width,
         end.naturalHeight || end.height || rect.height,
         0,
-        length,
+        layout.tailCap.y,
         width,
-        tailLength,
+        layout.tailCapLength,
       );
-      this.drawHoldTexture(context, texture(endName, highlight), endBox, 0, length);
+      this.drawHoldTexture(context, texture(endName, highlight), endBox, 0, layout.tailCap.y);
     }
-    if (showHead && headPicture) {
+    if (showHead && headPicture && layout.headCapLength > 0) {
       const rect = this.bounds(headName, headPicture);
       const headBox = alignedTextureBox(
         rect,
         headPicture.naturalWidth || headPicture.width,
         headPicture.naturalHeight || headPicture.height,
         0,
-        0,
+        layout.headCap.y,
         width,
-        headLength,
+        layout.headCapLength,
       );
-      this.drawHoldTexture(context, texture(headName, highlight), headBox, 0, 0);
+      this.drawHoldTexture(context, texture(headName, highlight), headBox, 0, layout.headCap.y);
     }
     context.restore();
     return true;
