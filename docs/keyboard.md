@@ -10,6 +10,7 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Place Drag                              | `W`                            |
 | Place Flick                             | `E`                            |
 | Place Hold / place event                | `R`                            |
+| Cancel placement / clear selection      | `Esc`                          |
 | Delete selected objects / curve segment | `D`                            |
 | Undo                                    | `Ctrl+Z`                       |
 | Redo                                    | `Ctrl+Shift+Z`                 |
@@ -19,7 +20,7 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Select all                              | `Ctrl+A`                       |
 | Save chart                              | `Ctrl+S`                       |
 
-`R` places a Hold over the note area and an event over the event area. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise.
+`R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise.
 
 ## Event layers and relative paste
 

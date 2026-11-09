@@ -22,6 +22,7 @@ import {
 import { matches } from "../../shortcuts/keyMatching.ts";
 import { shortcutScopeAvailable, shortcutScopePriority } from "../../shortcuts/scope.ts";
 import { historyShortcuts } from "../session/history.ts";
+import { placementShortcuts } from "../operations/keyboard.ts";
 import { selectionShortcuts } from "../selection/control.ts";
 import { clipboardShortcuts } from "../clipboard/operations.ts";
 import { eventLayerShortcuts, eventShortcuts } from "../events/eventCommands.ts";
@@ -227,6 +228,7 @@ export const documentShortcuts: readonly EditorShortcutDefinition[] = [
 export const EDITOR_SHORTCUTS: readonly EditorShortcutDefinition[] = [
   ...documentShortcuts,
   ...historyShortcuts,
+  ...placementShortcuts,
   ...selectionShortcuts,
   ...eventLayerShortcuts,
   ...eventShortcuts,

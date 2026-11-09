@@ -42,7 +42,10 @@ export interface EditorKeyboardBindingDependencies extends Omit<
   EditorKeyboardActionDependencies,
   "timeline"
 > {
-  timeline: Pick<Timeline, "viewport" | "gestures" | "eventTypes" | "addAtCursor">;
+  timeline: Pick<
+    Timeline,
+    "viewport" | "gestures" | "eventTypes" | "addAtCursor" | "cancelPlacement"
+  >;
   scope: ResourceScope;
   batchControlsActive: () => boolean;
   /** The curve trajectory surface owns the editor stage. */
@@ -102,6 +105,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         return deps.timeline.gestures.eventInteraction;
       },
       addAtCursor: (type) => deps.timeline.addAtCursor(type),
+      cancelPlacement: () => deps.timeline.cancelPlacement(),
     },
   };
 
@@ -181,11 +185,15 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
           session.eventSelection.size ||
           [...(session.multiEventSelection?.values() ?? [])].some((values) => values.size),
         );
+        const hasPendingPlacement = Boolean(
+          timeline.gestures.pendingHold || timeline.gestures.eventInteraction.pending,
+        );
         editorAction = matchEditorShortcut(
           event,
           {
             area,
             hasSelection,
+            hasPendingPlacement,
             hasEventSelection,
             samplingActive: deps.samplingActive(),
             surface,

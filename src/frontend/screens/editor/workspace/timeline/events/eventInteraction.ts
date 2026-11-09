@@ -692,16 +692,20 @@ export class EventInteraction implements EventInteractionHandle {
     if (channel < 0) {
       return;
     }
-    const end = this.timeline.gestures.eventCursor
+    const cursorBeat = this.timeline.gestures.eventCursor
       ? this.timeline.viewport.eventBeatAt(this.timeline.gestures.eventCursor.y, pending.type, true)
       : pending.beat;
+    // The endpoint may be earlier than the start. Order the two anchors here
+    // so the preview and the committed event share one span.
+    const startBeat = Math.min(pending.beat, cursorBeat);
+    const endBeat = Math.max(pending.beat, cursorBeat);
     let valid = true;
     try {
       placedEvent(
         this.timeline.getSession(),
         pending.type,
-        pending.beat,
-        end,
+        startBeat,
+        endBeat,
         undefined,
         pending.lineIndex,
       );
@@ -714,8 +718,8 @@ export class EventInteraction implements EventInteractionHandle {
         ? (beat: number) =>
             this.timeline.viewport.verticalForLine(beat, lineIndex, this.canvas.clientHeight)
         : (beat: number) => this.timeline.viewport.eventVertical(beat, pending.type);
-    const top = Math.min(vertical(pending.beat), vertical(end));
-    const height = Math.max(2, Math.abs(vertical(pending.beat) - vertical(end)));
+    const top = Math.min(vertical(startBeat), vertical(endBeat));
+    const height = Math.max(2, Math.abs(vertical(startBeat) - vertical(endBeat)));
     const panelWidth = this.timeline.viewport.panelWidth(width, "events");
     const panelOffset =
       this.timeline.viewport.panelIndex(lineIndex, "events") *

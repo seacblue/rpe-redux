@@ -1,6 +1,6 @@
 /**
  * Draws the event field: backdrop grid and columns, event bars, curves, selection
- * and overlap tints, drag previews, and multi-line chrome.
+ * and overlap tints, and multi-line chrome.
  *
  * It owns painting and per-pass culling; event lookup, drag deltas, and viewport
  * projection come from core, the cache, and the viewport.
@@ -38,7 +38,6 @@ import {
   multiLineChromeKey,
   verticalAtBeat,
 } from "./eventRenderCache.ts";
-import { drawEventDragOverlay } from "./eventDragDrawing.ts";
 import { labelGroups, shouldDrawEventCurves } from "./eventLabelLayout.ts";
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
 const EMPTY_EVENTS: readonly JudgeLineEvent[] = [];
@@ -371,7 +370,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     const x = eventColumnBoundary(boundary, width, this.eventTypes.length, eventInset);
     strokeVerticalGrid(context, Math.max(0.5, Math.min(width - 0.5, x)), 23);
   }
-  drawEventDragOverlay(this, context, width, height, palette);
   this.gestures.eventInteraction.draw(context, width);
   this.eventBatch.finish();
 }
@@ -637,7 +635,6 @@ export function drawMultiLineEvents(
       separators.lineWidth = 1;
     }
   }
-  drawEventDragOverlay(this, context, width, height, palette);
   context.globalAlpha = 1;
   context.lineWidth = 1;
   return true;
