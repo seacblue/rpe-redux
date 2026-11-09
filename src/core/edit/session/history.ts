@@ -70,6 +70,12 @@ export interface HistoryEntryMetadata {
   origin?: HistoryEntryOrigin;
 }
 
+/** A beat interval a history surface can reveal after undo or redo. */
+export interface HistoryBeatRange {
+  start: number;
+  end: number;
+}
+
 export interface HistoryRecordOptions {
   /** The editor mutation already preserved chart object IDs. */
   normalized?: boolean;
@@ -77,6 +83,8 @@ export interface HistoryRecordOptions {
   skipValidation?: boolean;
   /** Optional bounded estimate for a deletion-only change. */
   estimatedBytes?: number;
+  /** The edited beat span, used to reveal the change after undo or redo. */
+  beatRange?: HistoryBeatRange;
 }
 
 /** One undoable document change, with the bytes it is estimated to retain. */
@@ -95,6 +103,8 @@ export interface HistoryCommand {
   recipe?: HistoryEntryRecipe;
   beforeSelection?: SelectionState;
   afterSelection?: SelectionState;
+  /** The edited beat span, when an owner supplied or the session derived one. */
+  beatRange?: HistoryBeatRange;
 }
 
 /** A read-only history row for surfaces that render the undo and redo stacks. */
@@ -243,6 +253,7 @@ export class History {
       issues: Object.freeze([...(metadata.issues ?? [])]),
       origin: metadata.origin ? structuredClone(metadata.origin) : undefined,
       recipe: metadata.recipe ? structuredClone(metadata.recipe) : undefined,
+      ...(options.beatRange ? { beatRange: Object.freeze({ ...options.beatRange }) } : {}),
       ...selectionState,
     };
     // A new entry makes the redo branch unreachable. Drop its accounting

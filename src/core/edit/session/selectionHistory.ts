@@ -8,7 +8,9 @@
  */
 import { eventList, eventKey } from "../events/eventTracks.ts";
 import type { EventSession } from "../events/eventTracks.ts";
+import { beatValue } from "../../global/chart/timing/beat.ts";
 import type { Chart } from "../../global/chart/chart.ts";
+import type { HistoryBeatRange } from "./history.ts";
 import type { EditorSession, EditorFocus, MultiLineMode, SelectionMode } from "./session.ts";
 
 /** Everything a commit captures around a change so undo can restore it. */
@@ -54,6 +56,65 @@ export function selectionState(session: EditorSession): SelectionState {
     multiLineMerge: session.multiLineMerge,
     multiLineIndices: [...(session.multiLineIndices ?? [])],
   };
+}
+
+/**
+ * The beat span covered by one selection snapshot against a chart revision.
+ *
+ * It reads the selected notes and events directly, so a history entry can keep
+ * the edited time even when the object has been deleted from the committed
+ * revision. Returns null when the selection addresses no timed object.
+ */
+export function selectionBeatRange(chart: Chart, state: SelectionState): HistoryBeatRange | null {
+  let start = Infinity;
+  let end = -Infinity;
+  const consider = (item: { startTime?: readonly number[]; endTime?: readonly number[] }): void => {
+    if (!item?.startTime || !item?.endTime) {
+      return;
+    }
+    try {
+      start = Math.min(start, beatValue(item.startTime));
+      end = Math.max(end, beatValue(item.endTime));
+    } catch {
+      // A malformed selection entry contributes no span instead of hiding the
+      // valid objects selected beside it.
+    }
+  };
+  const notesOnLine = (lineIndex: number, indices: readonly number[]): void => {
+    const notes = chart.judgeLineList?.[lineIndex]?.notes ?? [];
+    for (const index of indices) {
+      if (Number.isInteger(index)) {
+        consider(notes[index]);
+      }
+    }
+  };
+  notesOnLine(state.lineIndex, state.selection);
+  for (const [lineIndex, indices] of state.multiLineSelection ?? []) {
+    notesOnLine(lineIndex, indices);
+  }
+  const eventsOnLine = (lineIndex: number, keys: readonly string[]): void => {
+    const eventSession: EventSession = {
+      chart,
+      lineIndex,
+      eventLayer: state.eventLayer,
+    };
+    for (const key of keys) {
+      const separator = String(key).lastIndexOf(":");
+      if (separator <= 0) {
+        continue;
+      }
+      const index = Number(String(key).slice(separator + 1));
+      if (!Number.isInteger(index)) {
+        continue;
+      }
+      consider(eventList(eventSession, String(key).slice(0, separator))[index]);
+    }
+  };
+  eventsOnLine(state.lineIndex, state.eventSelection);
+  for (const [lineIndex, keys] of state.multiEventSelection ?? []) {
+    eventsOnLine(lineIndex, keys);
+  }
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null;
 }
 
 /** Index-wise equality of the two index/event-key lists. */

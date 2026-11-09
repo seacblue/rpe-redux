@@ -369,9 +369,9 @@ export default {
   "settings.field.mouse-trail-enabled.label": "显示鼠标轨迹",
   "settings.field.hover-guides-enabled.label": "高亮最近网格线",
   "settings.field.timeline-density-bars-enabled.label": "显示时间轴概览条",
+  "settings.field.timeline-density-bars-enabled.description": "在时间轴左右两侧显示概览条。",
   "settings.field.timeline-overview-strip-width.label": "概览条宽度",
-  "settings.field.timeline-overview-strip-width.description":
-    "时间轴两侧的谱面密度条和编辑历史条宽度。",
+  "settings.field.timeline-overview-strip-width.description": "时间轴两侧概览条的宽度。",
   "settings.field.timeline-hover-preview-enabled.label": "显示概览悬停预览",
   "settings.field.note-overlap-threshold.label": "音符重叠提示距离",
   "settings.field.note-overlap-threshold.description":
@@ -650,4 +650,13 @@ export default {
   "settings.option.timing-detection-on-new-chart.ask": "每次询问",
   "settings.option.timing-detection-on-new-chart.always": "总是检测",
   "settings.option.timing-detection-on-new-chart.never": "从不检测",
+  "settings.field.timeline-undo-jump.label": "撤销/重做后跳转到改动位置",
+  "settings.field.timeline-undo-jump.description":
+    "撤销或重做完成后，将播放头和视图移动到本次改动的时间位置。",
+  "settings.field.timeline-clipboard-range-bars-enabled.label": "在概览条显示剪贴板与粘贴范围",
+  "settings.field.timeline-clipboard-range-color.label": "剪贴板范围颜色",
+  "settings.field.timeline-paste-range-color.label": "粘贴范围颜色",
+  "settings.field.timeline-range-bar-opacity.label": "范围区域透明度",
+  "settings.field.timeline-range-bar-opacity.description":
+    "时间轴两侧概览条上剪贴板与粘贴范围的透明度。",
 } as const;

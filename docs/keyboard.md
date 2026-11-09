@@ -17,10 +17,12 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Copy / cut / paste                      | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
 | Copy all event layers in the span       | `Ctrl+Shift+C`                 |
 | Paste keeping time                      | `Ctrl+Shift+V`                 |
+| Jump to clipboard start / end           | Unbound (set in Settings)      |
+| Clear clipboard                         | `Ctrl+Shift+Delete`            |
 | Select all                              | `Ctrl+A`                       |
 | Save chart                              | `Ctrl+S`                       |
 
-`R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise.
+`R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise. Clipboard start and end jumps have no default key; assign them in **Settings → Shortcuts** when needed. Clearing the clipboard keeps the remembered clipboard-history entries.
 
 ## Event layers and relative paste
 

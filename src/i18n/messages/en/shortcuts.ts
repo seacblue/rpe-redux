@@ -134,4 +134,7 @@ export default {
   "shortcuts.error.alreadyBound": "That key is already bound to this shortcut.",
   "shortcuts.error.noSuchBinding": "That binding no longer exists.",
   "shortcuts.error.notRegistered": "That shortcut is not registered.",
+  "shortcuts.editor.clipboardJumpStart": "Jump to the clipboard start",
+  "shortcuts.editor.clipboardJumpEnd": "Jump to the clipboard end",
+  "shortcuts.editor.clearClipboard": "Clear the clipboard",
 } as const;

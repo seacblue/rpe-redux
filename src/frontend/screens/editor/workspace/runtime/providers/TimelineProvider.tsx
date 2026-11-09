@@ -14,8 +14,8 @@ import { bindMultiLineScroll } from "../../timeline/multiLine/multiLineScrollBin
 import { createLineSwitcher } from "../../timeline/lineSwitcher/lineSwitcherBindings.ts";
 import { createScrubberSpectrumLoader } from "../../../../../chrome/transport/scrubberSpectrumLoader.ts";
 import { createSelectionClipboard } from "../../../../../../core/edit/clipboard/selectionClipboard.ts";
+import { clipboardBeatRange } from "../../../../../../core/edit/clipboard/operations.ts";
 import { clipboardBeat } from "../../timeline/interaction/clipboardTarget.ts";
-import { selectiveUndo } from "../../../../../../core/edit/session/selectiveUndo.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { hasOpenModal } from "../../../../../../design/components/modal/Modal.tsx";
 import { values } from "../../../../../../core/state/values.ts";
@@ -120,6 +120,8 @@ export function createTimelineOverview(options: {
   ui: EditorUiState;
   densityBarsEnabled(): boolean;
   hoverPreviewEnabled(): boolean;
+  clipboardRangesEnabled(): boolean;
+  rangeBarOpacity(): number;
   visibility: { hasDocument(): boolean; atHome(): boolean };
 }): TimelineOverview {
   const overview = new TimelineOverview({
@@ -131,47 +133,28 @@ export function createTimelineOverview(options: {
     bindings: options.ui.timelineBindings,
     densityBarsEnabled: options.densityBarsEnabled,
     hoverPreviewEnabled: options.hoverPreviewEnabled,
-    getSnapshot: () => ({
-      chart: options.session.current.chart,
-      tempo: options.tempo.get(),
-      lineIndex: options.session.current.lineIndex,
-      layer: options.timeline.gestures.layer,
-      extended: options.timeline.gestures.extended,
-      mediaDuration: options.audio.duration,
-      currentSeconds: options.chartSeconds(),
-      offsetSeconds: options.offsetSeconds(),
-      recentEdits: options.session.current.recentEdits ?? [],
-      historyEntries: options.session.current.historyEntries(),
-      historyRevision: options.session.current.history.revision,
-      hasDocument: options.visibility.hasDocument(),
-      atHome: options.visibility.atHome(),
-    }),
-    seek: (seconds) => options.playback.playback.seek(seconds),
-    jumpToHistory: (entryId) => {
+    clipboardRangesEnabled: options.clipboardRangesEnabled,
+    rangeBarOpacity: options.rangeBarOpacity,
+    getSnapshot: () => {
       const session = options.session.current;
-      if (!session.collaborationActive) {
-        return session.jumpToHistory(entryId);
-      }
-      // A room has no shared redo branch; the history strip can only publish
-      // an author-scoped compensation for this member's own entries.
-      return (
-        selectiveUndo(session, entryId, t("workspace.history.collaborativeUndo")).status ===
-        "committed"
-      );
+      return {
+        chart: session.chart,
+        tempo: options.tempo.get(),
+        lineIndex: session.lineIndex,
+        layer: options.timeline.gestures.layer,
+        extended: options.timeline.gestures.extended,
+        mediaDuration: options.audio.duration,
+        currentSeconds: options.chartSeconds(),
+        offsetSeconds: options.offsetSeconds(),
+        historyRevision: session.history.revision,
+        bpmFactor: session.line?.bpmfactor ?? 1,
+        clipboardRange: clipboardBeatRange(session),
+        pasteRange: session.lastPasteBeatRange,
+        hasDocument: options.visibility.hasDocument(),
+        atHome: options.visibility.atHome(),
+      };
     },
-    centerTimeline: (start, end) => {
-      const height = options.timeline.viewport.viewHeight();
-      const center = (start + end) / 2;
-      const factor = options.timeline.viewport.factorForLine(options.session.current.lineIndex);
-      const originSeconds =
-        center -
-        (height / 2 - options.timeline.viewport.judgementOffset) / options.timeline.viewport.scale;
-      options.timeline.viewport.setOrigin(
-        options.tempo.get().beat(originSeconds, factor),
-        "overview",
-      );
-      options.timeline.changed();
-    },
+    seek: (seconds) => options.playback.playback.seek(seconds),
   });
   options.scope.add(() => overview.dispose());
   return overview;

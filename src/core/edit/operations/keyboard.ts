@@ -95,6 +95,10 @@ export interface EditorKeyboardActionDependencies {
   copySelectionAllLayers: () => void;
   cutSelection: () => void;
   pasteSelection: (options?: { mirror?: boolean; keepTime?: boolean }) => void;
+  /** Seek to the clipboard's first or last beat; false when it is empty. */
+  jumpToClipboard: (edge: "start" | "end") => boolean;
+  /** Remove the active clipboard contents without touching history entries. */
+  clearClipboard: () => void;
   selectEventLayer: (layer: number) => void;
   togglePlayback: () => Promise<unknown>;
   showLineInfo: () => void;
@@ -221,6 +225,12 @@ export async function runEditorKeyboardAction(
         keepTime: action === "edit.paste.keepTime",
         mirror: action === "edit.paste.mirror",
       });
+    } else if (action === "edit.clipboard.jumpStart") {
+      handled = deps.jumpToClipboard("start");
+    } else if (action === "edit.clipboard.jumpEnd") {
+      handled = deps.jumpToClipboard("end");
+    } else if (action === "edit.clipboard.clear") {
+      deps.clearClipboard();
     } else if (action === "playback.pause") {
       event.preventDefault();
       await deps.togglePlayback();

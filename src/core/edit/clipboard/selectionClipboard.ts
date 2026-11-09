@@ -21,7 +21,7 @@ export interface SelectionClipboardDependencies {
   targetBeat(): number;
   clipboardMode(): { mirror?: boolean; keepTime?: boolean };
   setClipboardMode(mode: { mirror?: boolean; keepTime?: boolean }): void;
-  history: Pick<ClipboardHistory, "remember">;
+  history: Pick<ClipboardHistory, "remember" | "clearCurrent">;
   notify(message: string, severity?: string): void;
   copiedMessage(count: number): string;
   invalidate(): void;
@@ -92,5 +92,12 @@ export function createSelectionClipboard(deps: SelectionClipboardDependencies) {
     return pasteAt(deps.targetBeat(), deps.clipboardMode());
   }
 
-  return { targetLine, copy, copyAllLayers, cut, remove, paste, pasteAt };
+  /** Empties the active clipboard while keeping the remembered history entries. */
+  function clearClipboard(): void {
+    const currentSession = session();
+    deps.history.clearCurrent(currentSession);
+    deps.invalidate();
+  }
+
+  return { targetLine, copy, copyAllLayers, cut, remove, paste, pasteAt, clearClipboard };
 }

@@ -435,9 +435,11 @@ export default {
   "settings.field.mouse-trail-enabled.label": "Show mouse trail",
   "settings.field.hover-guides-enabled.label": "Highlight nearest grid lines",
   "settings.field.timeline-density-bars-enabled.label": "Show timeline overview bars",
-  "settings.field.timeline-overview-strip-width.label": "Overview strip width",
+  "settings.field.timeline-density-bars-enabled.description":
+    "Shows the overview bars on both sides of the timeline.",
+  "settings.field.timeline-overview-strip-width.label": "Overview bar width",
   "settings.field.timeline-overview-strip-width.description":
-    "Width of the chart-density and edit-history strips on both sides of the timeline.",
+    "Width of the overview bars on both sides of the timeline.",
   "settings.field.timeline-hover-preview-enabled.label": "Show overview hover preview",
   "settings.field.note-overlap-threshold.label": "Note overlap warning distance",
   "settings.field.note-overlap-threshold.description":
@@ -739,4 +741,14 @@ export default {
   "settings.option.timing-detection-on-new-chart.ask": "Ask each time",
   "settings.option.timing-detection-on-new-chart.always": "Always detect",
   "settings.option.timing-detection-on-new-chart.never": "Never detect",
+  "settings.field.timeline-undo-jump.label": "Jump to the changed time after undo or redo",
+  "settings.field.timeline-undo-jump.description":
+    "Moves the playhead and view to the edited time when an undo or redo step completes.",
+  "settings.field.timeline-clipboard-range-bars-enabled.label":
+    "Show clipboard and paste ranges on overview bars",
+  "settings.field.timeline-clipboard-range-color.label": "Clipboard range colour",
+  "settings.field.timeline-paste-range-color.label": "Paste range colour",
+  "settings.field.timeline-range-bar-opacity.label": "Range area opacity",
+  "settings.field.timeline-range-bar-opacity.description":
+    "Opacity of the clipboard and paste ranges on the timeline overview bars.",
 } as const;

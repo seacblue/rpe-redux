@@ -30,6 +30,12 @@ import {
 } from "../../../../../../core/edit/state/publishedValues.ts";
 import { formatLineSelection } from "../../../../../../core/edit/state/lineSelectionInput.ts";
 import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
+import { values } from "../../../../../../core/state/values.ts";
+import {
+  clipboardEndBeat,
+  clipboardStartBeat,
+} from "../../../../../../core/edit/clipboard/operations.ts";
+import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   bindPlaybackControls,
   bindEditorPlaybackValues,
@@ -226,6 +232,13 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     getSession: deps.getSession,
     cancelPlacement: () => deps.timeline.cancelPlacement(),
     notify: deps.notify,
+    jumpToEdit: (range) => {
+      if (values.byId.get<boolean>("timeline-undo-jump") !== true) {
+        return;
+      }
+      deps.seekBeat(range.start);
+      deps.invalidate();
+    },
   });
   const settingsBindings = createEditorSettingsBindings({
     getSession: deps.getSession,
@@ -278,6 +291,16 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     copySelectionAllLayers,
     cutSelection,
     pasteSelection,
+    jumpToClipboard: (edge) => {
+      const session = deps.getSession();
+      const beat = edge === "start" ? clipboardStartBeat(session) : clipboardEndBeat(session);
+      if (!beat) {
+        return false;
+      }
+      deps.seekBeat(beatValue(beat));
+      return true;
+    },
+    clearClipboard: () => deps.selectionClipboard.clearClipboard(),
     selectEventLayer: (layer) => selectEventLayer(deps.timeline, deps.getSession(), layer),
     togglePlayback: deps.togglePlayback,
     showLineInfo: deps.showLineInfo,

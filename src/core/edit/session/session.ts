@@ -4,6 +4,7 @@ import { t } from "../../../i18n/index.ts";
 import { warmChartFingerprintAsync } from "../document/chartRevision.ts";
 import {
   History,
+  type HistoryBeatRange,
   type HistoryEntries,
   type HistoryEntryDetail,
   type HistoryEntryMetadata,
@@ -19,6 +20,7 @@ import {
 import { createChartObjectId } from "../../global/chart/identity.ts";
 import type { Chart, JudgeLine, JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
 import {
+  selectionBeatRange,
   selectionState,
   sameSelection,
   remapSelection,
@@ -127,6 +129,10 @@ export class EditorSession extends EventTarget {
   multiSelectionIntent: unknown;
   editSeconds: number;
   recentEdits: RecentEdit[];
+  /** Beat span of the latest commit or history move, used by undo jump. */
+  lastEditBeatRange: HistoryBeatRange | null;
+  /** Beat span of the most recent paste, for the overview strip marker. */
+  lastPasteBeatRange: HistoryBeatRange | null;
   readonly readOnly: boolean;
   /** The active room role can make an otherwise writable document read-only. */
   collaborationReadOnly = false;
@@ -179,6 +185,8 @@ export class EditorSession extends EventTarget {
     this.multiSelectionIntent = null;
     this.editSeconds = 0;
     this.recentEdits = [];
+    this.lastEditBeatRange = null;
+    this.lastPasteBeatRange = null;
   }
 
   /** The committed chart held by history. */
@@ -538,21 +546,28 @@ export class EditorSession extends EventTarget {
         return false;
       }
     }
+    const afterSelection = options.afterSelection ?? this.selectionState();
+    const beatRange =
+      options.beatRange ??
+      selectionBeatRange(before.chart, afterSelection) ??
+      selectionBeatRange(this.chart, before.beforeSelection);
     const committed = this.history.record(
       before.label,
       before.chart,
       {
         beforeSelection: before.beforeSelection,
-        afterSelection: options.afterSelection ?? this.selectionState(),
+        afterSelection,
       },
       before.metadata,
       {
         normalized: options.normalized && !beforeHook,
         skipValidation: options.skipValidation,
         estimatedBytes: options.estimatedBytes,
+        beatRange: beatRange ?? undefined,
       },
     );
     if (committed) {
+      this.lastEditBeatRange = beatRange ?? null;
       if (options.afterSelection) {
         restoreSelection(this, options.afterSelection);
       }
@@ -810,6 +825,7 @@ export class EditorSession extends EventTarget {
       this,
       sameSelection(current, from) && to ? to : remapSelection(source, this.chart, current),
     );
+    this.lastEditBeatRange = command.beatRange ?? null;
     this.notify();
     return true;
   }

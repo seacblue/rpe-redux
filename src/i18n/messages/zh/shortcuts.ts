@@ -132,4 +132,7 @@ export default {
   "shortcuts.error.alreadyBound": "这个按键已经绑定到该快捷键。",
   "shortcuts.error.noSuchBinding": "这条绑定已经不存在了。",
   "shortcuts.error.notRegistered": "该快捷键未注册。",
+  "shortcuts.editor.clipboardJumpStart": "跳转到剪贴板起点",
+  "shortcuts.editor.clipboardJumpEnd": "跳转到剪贴板终点",
+  "shortcuts.editor.clearClipboard": "清空剪贴板",
 } as const;

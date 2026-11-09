@@ -41,6 +41,12 @@ export interface ClipboardOptions {
   targetLineIndex?: number;
 }
 
+/** A beat interval covered by clipboard content or one paste. */
+export interface ClipboardBeatRange {
+  start: number;
+  end: number;
+}
+
 /** The clipboard projected onto a target beat, ready to be inserted. */
 export interface ClipboardProjection {
   notes: JudgeLineNote[];
@@ -310,10 +316,37 @@ export function clipboardStartBeat(session: EditorSession): Beat | null {
   return earliest;
 }
 
+/** The latest clipboard beat as an exact triple, or null for an empty clipboard. */
+export function clipboardEndBeat(session: EditorSession): Beat | null {
+  let latest: Beat | null = null;
+  const consider = (beat: readonly number[]): void => {
+    const value = normalizeBeat(beat);
+    if (!latest || compareBeats(value, latest) > 0) {
+      latest = value;
+    }
+  };
+  for (const note of session.clipboard) {
+    consider(note.endTime);
+    consider(note.startTime);
+  }
+  for (const { event } of session.eventClipboard) {
+    consider(event.endTime);
+    consider(event.startTime);
+  }
+  return latest;
+}
+
 /** The earliest clipboard beat as a number, for the surfaces that draw it. */
 export function clipboardStart(session: EditorSession): number {
   const earliest = clipboardStartBeat(session);
   return earliest ? beatValue(earliest) : Infinity;
+}
+
+/** The clipboard's exact beat span, or null when it holds no objects. */
+export function clipboardBeatRange(session: EditorSession): ClipboardBeatRange | null {
+  const start = clipboardStartBeat(session);
+  const end = clipboardEndBeat(session);
+  return start && end ? { start: beatValue(start), end: beatValue(end) } : null;
 }
 
 /** Relocates the clipboard to a beat and line without modifying the session. */
@@ -431,6 +464,23 @@ export function projectClipboard(
   };
 }
 
+/** The beat span of one projected paste, after its relative shift. */
+function projectedBeatRange(projected: ClipboardProjection): ClipboardBeatRange | null {
+  let start = Infinity;
+  let end = -Infinity;
+  const consider = (item: { startTime: readonly number[]; endTime: readonly number[] }): void => {
+    start = Math.min(start, beatValue(item.startTime));
+    end = Math.max(end, beatValue(item.endTime));
+  };
+  for (const note of projected.notes) {
+    consider(note);
+  }
+  for (const { event } of projected.events) {
+    consider(event);
+  }
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null;
+}
+
 /** Inserts the projected clipboard as one history entry; false when empty. */
 export function pasteObjects(
   session: EditorSession,
@@ -441,6 +491,7 @@ export function pasteObjects(
   if (!projected.notes.length && !projected.events.length) {
     return false;
   }
+  const beatRange = projectedBeatRange(projected);
   let chart = session.chart;
   const selection = new Set<number>();
   const eventSelection = new Set<string>();
@@ -573,7 +624,12 @@ export function pasteObjects(
     options?.mirror
       ? t("editor.commands.clipboard.pasteMirrorLabel")
       : t("editor.commands.clipboard.pasteLabel"),
+    {},
+    { beatRange: beatRange ?? undefined },
   );
+  if (committed) {
+    session.lastPasteBeatRange = beatRange;
+  }
   return committed;
 }
 
@@ -627,6 +683,29 @@ export const clipboardShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.mirrorPaste",
     scope: "editor",
     defaults: [{ key: "B", modifiers: ["CTRL"] }],
+  },
+  {
+    id: "edit.clipboard.jumpStart",
+    category: "editor.clipboard",
+    title: "shortcuts.editor.clipboardJumpStart",
+    scope: "editor",
+    // The CLI and settings page can assign a key; navigation stays unbound by
+    // default so the left-hand editing layout is unchanged.
+    defaults: [],
+  },
+  {
+    id: "edit.clipboard.jumpEnd",
+    category: "editor.clipboard",
+    title: "shortcuts.editor.clipboardJumpEnd",
+    scope: "editor",
+    defaults: [],
+  },
+  {
+    id: "edit.clipboard.clear",
+    category: "editor.clipboard",
+    title: "shortcuts.editor.clearClipboard",
+    scope: "editor",
+    defaults: [{ key: "DELETE", modifiers: ["CTRL", "SHIFT"] }],
   },
   {
     id: "edit.delete",
