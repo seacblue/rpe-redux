@@ -1,9 +1,11 @@
 //! One-room-per-backend guard for multi-window or multi-process runs.
 //!
-//! Every process that shares the same application data directory shares the
-//! same authority. Holding a named mutex for the duration of a room prevents a
-//! second window from hosting or joining another room against that authority.
-//! The kernel releases the claim when the owning process exits.
+//! Every process that shares the same backend port shares the same authority.
+//! Holding a named mutex for the duration of a room prevents a second window
+//! from hosting or joining another room against that authority. Separate
+//! backend ports are isolated test or development instances and may each hold
+//! one room session. The kernel releases the claim when the owning process
+//! exits.
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
@@ -38,10 +40,19 @@ pub struct CollabSession {
 }
 
 #[cfg(windows)]
-/// One machine-wide name: every instance that shares the sidecar shares one
-/// room session.
-fn claim_name(_app: &AppHandle) -> String {
-    "Local\\rperedux-collab-session".to_string()
+/// One machine-wide name per backend port: every instance that shares the
+/// backend shares one room session, while isolated ports stay independent.
+fn claim_name(app: &AppHandle) -> String {
+    let port = crate::services::server::read_runtime_ports(app.clone())
+        .map(|ports| ports.backend_port)
+        .unwrap_or(crate::services::server::DEFAULT_BACKEND_PORT);
+    claim_name_for_port(port)
+}
+
+#[cfg(windows)]
+/// Named mutex shared by every window attached to the same backend port.
+fn claim_name_for_port(port: u16) -> String {
+    format!("Local\\rperedux-collab-session-{port}")
 }
 
 /// Claim this backend for one host/join session. Re-entrant for the same app.
@@ -87,5 +98,16 @@ pub fn release_collab_session(app: AppHandle) {
         if let Ok(mut guard) = state.handle.lock() {
             guard.take();
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn claim_names_are_scoped_by_backend_port() {
+        assert_eq!(claim_name_for_port(47821), claim_name_for_port(47821));
+        assert_ne!(claim_name_for_port(47821), claim_name_for_port(47822));
     }
 }

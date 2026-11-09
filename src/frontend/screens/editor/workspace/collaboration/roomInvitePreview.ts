@@ -1,8 +1,6 @@
 /** Reads room membership for an invitation without joining or creating a request. */
-import {
-  COLLAB_PROTOCOL_VERSION,
-  type RoomMember,
-} from "../../../../../core/collaboration/types.ts";
+import type { RoomMember } from "../../../../../core/collaboration/types.ts";
+import { BUILD_APP_VERSION } from "../../../../../core/platform/buildInfo.ts";
 import {
   normalizeRoomServerUrl,
   type RoomInvite,
@@ -55,7 +53,7 @@ export function inspectRoomInvite(invite: RoomInvite): Promise<RoomInvitePreview
           type: "inspect-room",
           roomId: invite.roomId ?? "",
           invite: invite.invite,
-          protocolVersion: COLLAB_PROTOCOL_VERSION,
+          appVersion: BUILD_APP_VERSION,
         }),
       );
     };

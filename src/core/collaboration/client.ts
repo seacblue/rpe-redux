@@ -29,7 +29,6 @@ import {
 } from "./e2e.ts";
 import { EMPTY_COLLABORATION_STATE } from "./ui.ts";
 import {
-  COLLAB_PROTOCOL_VERSION,
   type ClientMessage,
   type CollaborationProfile,
   type CollaborationRole,
@@ -62,8 +61,6 @@ export interface CollaborationClientOptions {
   readonly onConflict?: (message: Extract<ServerMessage, { type: "conflict" }>) => void;
   readonly onRole?: (role: CollaborationRole, reason?: string) => void;
   readonly onError?: (message: string, code?: string) => void;
-  /** A product-version difference that remains protocol-compatible. */
-  readonly onWarning?: (message: string, code?: string) => void;
   readonly onAssetReady?: (asset: RoomAsset, bytes: Uint8Array) => void;
   readonly onAssetError?: (message: string) => void;
   readonly onLockDenied?: (conflicts: readonly RoomLock[]) => void;
@@ -367,7 +364,6 @@ export class CollaborationClient {
           profile,
           chart,
           fingerprint,
-          protocolVersion: COLLAB_PROTOCOL_VERSION,
           ...this.appVersionFields(),
           autoApproveEditor: this.autoApproveEditor,
           ...(this.roomInvite ? { invite: this.roomInvite } : {}),
@@ -400,7 +396,6 @@ export class CollaborationClient {
         chart: payload,
         fingerprint: "",
         encrypted: true,
-        protocolVersion: COLLAB_PROTOCOL_VERSION,
         ...this.appVersionFields(),
         autoApproveEditor: this.autoApproveEditor,
         ...(this.roomInvite ? { invite: this.roomInvite } : {}),
@@ -436,7 +431,6 @@ export class CollaborationClient {
         roomId,
         invite,
         profile,
-        protocolVersion: COLLAB_PROTOCOL_VERSION,
         ...this.appVersionFields(),
       });
     };
@@ -493,6 +487,10 @@ export class CollaborationClient {
 
   /** Leave the room, stop reconnecting, and reset presentation state. */
   leave(): void {
+    // A host owns the room lifetime and may only close it, never leave it.
+    if (this.state.get().role === "host") {
+      return;
+    }
     this.send({ type: "leave" });
     this.shutdownRoom();
   }
@@ -799,7 +797,6 @@ export class CollaborationClient {
         type: "resume",
         roomId: resume.roomId,
         token: resume.token,
-        protocolVersion: COLLAB_PROTOCOL_VERSION,
         ...this.appVersionFields(),
       });
       this.armHandshakeTimer();
@@ -810,7 +807,6 @@ export class CollaborationClient {
         type: "resume",
         roomId: this.state.get().roomId,
         token: this.resumeToken,
-        protocolVersion: COLLAB_PROTOCOL_VERSION,
         ...this.appVersionFields(),
       });
       this.armHandshakeTimer();
@@ -822,7 +818,6 @@ export class CollaborationClient {
         roomId: this.invitedRoom.roomId,
         invite: this.invitedRoom.invite,
         profile: this.profile,
-        protocolVersion: COLLAB_PROTOCOL_VERSION,
         ...this.appVersionFields(),
       });
       this.armHandshakeTimer();
@@ -834,7 +829,6 @@ export class CollaborationClient {
         profile: this.profile,
         chart: this.hostChart.chart,
         fingerprint: this.hostChart.fingerprint,
-        protocolVersion: COLLAB_PROTOCOL_VERSION,
         ...this.appVersionFields(),
         ...(this.encrypted ? { encrypted: true } : {}),
         autoApproveEditor: this.autoApproveEditor,
@@ -1038,18 +1032,14 @@ export class CollaborationClient {
     }
     switch (message.type) {
       case "welcome": {
-        if (
-          message.protocolVersion !== undefined &&
-          message.protocolVersion > COLLAB_PROTOCOL_VERSION
-        ) {
-          this.failInitial("This room requires a newer version of RPE Redux.", "protocol_mismatch");
-          return;
-        }
-        if (this.appVersion && message.appVersion && message.appVersion !== this.appVersion) {
-          this.options.onWarning?.(
-            `This room uses RPE Redux ${message.appVersion}; this client is ${this.appVersion}. The collaboration protocol is compatible.`,
-            "version_difference",
+        const roomVersion = message.appVersion?.trim() ?? "";
+        if (roomVersion !== this.appVersion) {
+          const version = (value: string) => value || "unknown";
+          this.failInitial(
+            `This room uses RPE Redux ${version(roomVersion)}; this client is ${version(this.appVersion)}. Both copies must use the same version.`,
+            "version_mismatch",
           );
+          return;
         }
         this.resumeToken = message.resumeToken;
         this.resumeTarget = null;
@@ -1136,7 +1126,6 @@ export class CollaborationClient {
           "bad_resume",
           "no_room",
           "bad_invite",
-          "protocol_mismatch",
           "version_mismatch",
         ].includes(message.reason);
         if (terminal) {

@@ -86,7 +86,7 @@ export default {
   "editorPanels.inspector.form.field.name": "曲名",
   "editorPanels.inspector.form.field.composer": "曲师",
   "editorPanels.inspector.form.field.charter": "谱师",
-  "editorPanels.inspector.form.field.illustration": "曲绘",
+  "editorPanels.inspector.form.field.illustration": "曲绘作者",
   "editorPanels.inspector.form.field.level": "难度名",
   "editorPanels.metadata.invalidAudio": "请选择有效、可播放的音频文件。",
   "editorPanels.metadata.invalidCover": "请选择有效的图片文件。",

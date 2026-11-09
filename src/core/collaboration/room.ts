@@ -140,6 +140,29 @@ export type RoomResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly code: string; readonly message: string };
 
+/** One rejected room operation. */
+type RoomFailure = Extract<RoomResult<never>, { readonly ok: false }>;
+
+/**
+ * Reject a join or resume when the room and client product versions differ.
+ *
+ * A room has no cross-version compatibility contract: both copies must run the
+ * same build version. An empty version only matches another empty version.
+ */
+function versionMismatch(room: RoomRecord, clientVersion: string): RoomFailure | null {
+  const expected = room.appVersion.trim();
+  const actual = clientVersion.trim();
+  if (expected === actual) {
+    return null;
+  }
+  const label = (value: string) => value || "unknown";
+  return {
+    ok: false,
+    code: "version_mismatch",
+    message: `This room uses RPE Redux ${label(expected)}; this client is ${label(actual)}. Both copies must use the same version.`,
+  };
+}
+
 /** Random room code using the unambiguous alphabet. */
 function token(size = 6): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -192,20 +215,28 @@ function cleanProfile(profile: CollaborationProfile): CollaborationProfile {
   return { name, color };
 }
 
-/** Reject payloads that cannot be a chart before they become room state. */
+/**
+ * Reject payloads that cannot hold chart changes before they become room state.
+ *
+ * Only the envelope the room protocol walks is required: metadata, tempo, and an
+ * optional line list. Note and event collections are optional in the chart model,
+ * so a line that omits its empty collections is still a valid room chart.
+ */
 export function isChartLike(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
   }
-  if (
-    !isRecord(value.META) ||
-    !Array.isArray(value.BPMList) ||
-    !Array.isArray(value.judgeLineList)
-  ) {
+  if (!isRecord(value.META) || !Array.isArray(value.BPMList)) {
     return false;
   }
-  return value.judgeLineList.every(
-    (line) => isRecord(line) && Array.isArray(line.notes) && Array.isArray(line.eventLayers),
+  if (value.judgeLineList != null && !Array.isArray(value.judgeLineList)) {
+    return false;
+  }
+  return (value.judgeLineList ?? []).every(
+    (line) =>
+      isRecord(line) &&
+      (line.notes == null || Array.isArray(line.notes)) &&
+      (line.eventLayers == null || Array.isArray(line.eventLayers)),
   );
 }
 
@@ -313,6 +344,32 @@ export class CollaborationRooms {
   }
 
   /**
+   * Authenticate an invitation without creating a member or a pending request.
+   *
+   * Mirrors the embedded server's preview path: the endpoint, password, and
+   * product version must all match before room details are returned.
+   */
+  inspect(roomId: string, invite: string, appVersion = ""): RoomResult<RoomRecord> {
+    const code = roomId.trim();
+    const rooms = [...this.rooms.values()].sort((left, right) => right.createdAt - left.createdAt);
+    const room =
+      code.length > 0
+        ? this.rooms.get(code.toUpperCase())
+        : (rooms.find((candidate) => candidate.invite === invite.trim()) ?? rooms[0]);
+    if (!room) {
+      return { ok: false, code: "no_room", message: "Room not found" };
+    }
+    if (room.invite !== invite.trim()) {
+      return { ok: false, code: "bad_invite", message: "Room password is incorrect" };
+    }
+    const versionFailure = versionMismatch(room, appVersion);
+    if (versionFailure) {
+      return versionFailure;
+    }
+    return { ok: true, value: room };
+  }
+
+  /**
    * Resolve a join by room code or invite, checking the password and capacity.
    *
    * Returns a pending request unless the room auto-approves editors.
@@ -340,6 +397,10 @@ export class CollaborationRooms {
     }
     if (room.invite !== invite.trim()) {
       return { ok: false, code: "bad_invite", message: "Room password is incorrect" };
+    }
+    const versionFailure = versionMismatch(room, appVersion);
+    if (versionFailure) {
+      return versionFailure;
     }
     if ([...room.members.values()].filter((member) => member.online).length >= room.maxMembers) {
       return { ok: false, code: "room_full", message: "Room is full" };
@@ -416,6 +477,10 @@ export class CollaborationRooms {
     if (!member) {
       return { ok: false, code: "bad_resume", message: "Room session expired" };
     }
+    const versionFailure = versionMismatch(room, appVersion);
+    if (versionFailure) {
+      return versionFailure;
+    }
     // A reconnect must not add an online member beyond the cap. A member whose
     // previous socket is still marked online keeps its existing slot; an
     // offline member needs a free one.
@@ -446,15 +511,9 @@ export class CollaborationRooms {
     if (!actor || !canPerform(actor.role, "manage-room")) {
       return { ok: false, code: "forbidden", message: "Only the host can change the limit" };
     }
-    // Lowering the cap below the current online count would put the room over
-    // its own limit immediately, including when members later resume.
-    if ([...room.members.values()].filter((member) => member.online).length > value) {
-      return {
-        ok: false,
-        code: "bad_max_members",
-        message: "Maximum members cannot be lower than the current online member count",
-      };
-    }
+    // Existing members keep their place when the host lowers the cap. Later
+    // joins and resumes are refused by the capacity checks, so the room never
+    // removes or disconnects anyone as a side effect of a limit change.
     room.maxMembers = value;
     return { ok: true, value: { room } };
   }
@@ -754,8 +813,8 @@ export class CollaborationRooms {
 
   /**
    * Validate and register one content-addressed asset after the transport has
-   * verified its hash. Adding a new name follows upload permission; replacing an
-   * existing name is host-only.
+   * verified its hash. Editors may add or replace a resource; viewers cannot
+   * upload either way.
    */
   acceptAsset(
     memberId: string,
@@ -786,7 +845,7 @@ export class CollaborationRooms {
       return {
         ok: false,
         code: "forbidden",
-        message: "Only the host can replace an existing asset",
+        message: "This member cannot replace an existing asset",
       };
     }
     if (!ASSET_HASH.test(hash) || !isAllowedAssetMime(mime)) {

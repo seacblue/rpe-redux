@@ -24,34 +24,12 @@ import {
 } from "../../../../../../core/global/library/libraryCatalog.ts";
 import { saveLibraryDocument } from "../../../../../../core/global/library/save.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
-import {
-  selectLocalSaveBinding,
-  type TauriDocumentStore,
-} from "../../../../../../core/platform/desktop/documentStore.ts";
+import { collaborationRoomDocument } from "../../../../../../core/collaboration/ui.ts";
+import type { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { LibraryProjectRef } from "../../../../../../core/global/library/types.ts";
 import type { LocalLibrary } from "../../../../../../core/global/library/client.ts";
 import type { SaveResult } from "../../../../../../core/global/document/desktopTypes.ts";
-
-/**
- * Whether the live document came from a joined room.
- *
- * While set, a save ignores the project and file path the editor had before the
- * join; that target belongs to the guest's original document. The first
- * successful library save binds the new local copy and releases the mark.
- */
-let joinedRoomDocument = false;
-
-/**
- * Marks the live document as a joined room copy, or clears the mark.
- *
- * The collaboration runtime keeps this set from the join until the room chart
- * replaces the previous document identity. A save that lands before that
- * replacement still creates a local copy rather than writing the original.
- */
-export function setJoinedRoomDocument(active: boolean): void {
-  joinedRoomDocument = active;
-}
 
 /** Live document state and persistence side effects used by the saver. */
 export interface DocumentSaverDependencies {
@@ -87,17 +65,17 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
     if (saving) {
       return saving;
     }
+    // A room chart is a temporary working copy. Only an explicit export path
+    // may write it; the normal save path must never create a library entry.
+    if (!path && collaborationRoomDocument.get()) {
+      return null;
+    }
 
     const current = deps.currentSession();
     const generation = deps.currentGeneration?.() ?? 0;
     const snapshot = current.chart;
     const captured = snapshotAssets(deps.currentAssets());
-    const binding = selectLocalSaveBinding(
-      joinedRoomDocument,
-      deps.currentLibraryProject?.() ?? null,
-      deps.currentSourcePath?.() ?? null,
-    );
-    const project = binding.project;
+    const project = deps.currentLibraryProject?.() ?? null;
     const metaName = typeof snapshot.META?.name === "string" ? snapshot.META.name.trim() : "";
     const backgroundPath = assetPath(captured, snapshot.META?.background, deps.currentChartName());
     const background = backgroundPath ? captured.uri?.(backgroundPath) : undefined;
@@ -132,7 +110,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
       // A native document has no project ref, but its file may already have been
       // imported; reuse that project and avoid a second library copy.
       let target = project;
-      const sourcePath = binding.sourcePath;
+      const sourcePath = deps.currentSourcePath?.() ?? null;
       if (!target?.id && sourcePath) {
         const mappedId = catalogIdFor(sourcePath);
         if (mappedId) {
@@ -217,8 +195,6 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           ? { assetFolders: deps.currentAssetFolders?.() ?? target?.assetFolders }
           : {}),
       });
-      // The copy now has its own library identity, so later saves update it.
-      joinedRoomDocument = false;
       return {
         status: "saved" as const,
         storage: "library" as const,

@@ -97,6 +97,8 @@ function HistoryRowView({
     !summary.discarded &&
     (collaborative
       ? row.stack === "undo" &&
+        summary.origin?.kind !== "collaborative-undo" &&
+        !summary.origin?.compensated &&
         Boolean(summary.origin?.requestId) &&
         summary.origin?.clientId === actorId
       : row.stack !== "discarded");

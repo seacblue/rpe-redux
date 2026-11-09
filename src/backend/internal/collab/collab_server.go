@@ -487,38 +487,10 @@ func (s *Server) detach(socket *collabSocket) {
 	}, nil)
 }
 
-// collabProtocolFailure validates a handshake's required numeric protocol
-// revision. Missing, mistyped, fractional, and mismatched revisions are all
-// rejected before any room state changes.
-func collabProtocolFailure(message map[string]any) *collabError {
-	value, ok := message["protocolVersion"]
-	if !ok {
-		return collabFailure("protocol_mismatch", "This room requires protocol version 1.")
-	}
-	number, ok := value.(float64)
-	if !ok || math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number {
-		return collabFailure("protocol_mismatch", "The protocol version is invalid.")
-	}
-	if int(number) != collabProtocolVersion {
-		return collabFailure("protocol_mismatch", "This room requires protocol version 1.")
-	}
-	return nil
-}
-
-// collabProtocolAccepted reports whether a handshake message can be served by
-// this build.
-func collabProtocolAccepted(message map[string]any) bool {
-	return collabProtocolFailure(message) == nil
-}
-
 // handleMessage maps one wire message onto the room API.
 func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 	switch collabStringField(message, "type") {
 	case "create":
-		if failure := collabProtocolFailure(message); failure != nil {
-			s.sendError(socket, failure.Code, failure.Message)
-			return
-		}
 		if s.connection(socket) != nil {
 			s.sendError(socket, "already_in_room", "Leave the current room before creating another")
 			return
@@ -549,10 +521,6 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		s.persistSchedule()
 		return
 	case "join":
-		if failure := collabProtocolFailure(message); failure != nil {
-			s.sendError(socket, failure.Code, failure.Message)
-			return
-		}
 		if socket.joinFailures >= collabMaxJoinAttempts {
 			s.sendError(socket, "too_many_joins", "Too many failed join attempts; reconnect to try again.")
 			socket.Close()
@@ -595,13 +563,10 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		}
 		return
 	case "inspect-room":
-		if failure := collabProtocolFailure(message); failure != nil {
-			s.sendError(socket, failure.Code, failure.Message)
-			return
-		}
 		room, failure := s.rooms.inspectRoom(
 			collabStringField(message, "roomId"),
 			collabStringField(message, "invite"),
+			collabStringField(message, "appVersion"),
 		)
 		if failure != nil {
 			s.send(socket, map[string]any{"type": "rejected", "reason": failure.Code, "message": failure.Message})
@@ -653,10 +618,6 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		s.persistSchedule()
 		return
 	case "resume":
-		if failure := collabProtocolFailure(message); failure != nil {
-			s.sendError(socket, failure.Code, failure.Message)
-			return
-		}
 		room, member, failure := s.rooms.resume(collabStringField(message, "roomId"), collabStringField(message, "token"), collabStringField(message, "appVersion"))
 		if failure != nil {
 			s.send(socket, map[string]any{"type": "rejected", "reason": failure.Code, "message": failure.Message})
@@ -723,6 +684,10 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 			}
 		}
 	case "leave":
+		if connection.memberID == room.HostID {
+			s.sendError(socket, "host_must_close", "The host must close the room instead of leaving")
+			return
+		}
 		s.rooms.leave(connection.memberID)
 		s.mu.Lock()
 		delete(s.sockets, socket)
@@ -994,8 +959,8 @@ func (s *Server) handleRemoveMember(socket *collabSocket, connection *collabConn
 		return
 	}
 	if target := s.socketFor(member.ID); target != nil {
-		s.send(target, map[string]any{"type": "rejected", "reason": "removed", "message": "The host removed you from the room"})
-		target.Close()
+		s.send(target, map[string]any{"type": "rejected", "reason": "removed", "message": "The host asked you to leave the room"})
+		target.CloseAfterFlush()
 	}
 	s.broadcast(room, map[string]any{"type": "members", "members": s.rooms.members(room)}, nil)
 	s.broadcast(room, map[string]any{"type": "locks", "locks": s.rooms.roomLocks(room)}, nil)

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart, createEvent, createNote } from "../../../core/global/chart/chart.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
-import { selectiveUndo } from "../../../core/edit/session/selectiveUndo.ts";
+import { selectiveUndo, selectiveUndoLatest } from "../../../core/edit/session/selectiveUndo.ts";
 
 function fixture() {
   const chart = createChart();
@@ -131,6 +131,25 @@ test("event edits on the same layer can be compensated independently", () => {
   const events = session.chart.judgeLineList[0].eventLayers[0].moveXEvents;
   assert.equal(events[0].start, oldValue);
   assert.equal(events[1].start, 30);
+});
+
+test("collaborative undo walks back original transactions instead of compensations", () => {
+  const session = fixture();
+  session.setCollaborationAccess(true, false);
+  session.setCollaborationActor("actor");
+  edit(session, "A", (note, index) => (index === 0 ? { ...note, positionX: 20 } : note));
+  edit(session, "B", (note, index) => (index === 1 ? { ...note, positionX: 30 } : note));
+  assert.equal(selectiveUndoLatest(session, "undo B").status, "committed");
+  assert.deepEqual(
+    session.chart.judgeLineList[0].notes.map((note) => note.positionX),
+    [20, 1],
+  );
+  assert.equal(selectiveUndoLatest(session, "undo A").status, "committed");
+  assert.deepEqual(
+    session.chart.judgeLineList[0].notes.map((note) => note.positionX),
+    [0, 1],
+  );
+  assert.equal(selectiveUndoLatest(session, "nothing left").status, "unavailable");
 });
 
 test("interval endpoints changed by different edits conflict", () => {

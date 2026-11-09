@@ -10,7 +10,16 @@
 }
 
 .collab-room {
+  gap: var(--inspector-section-gap, var(--space-4));
+}
+
+.collab-room-info {
+  display: grid;
   gap: var(--space-1);
+}
+
+.collab-room-info > :last-child {
+  margin-bottom: 0;
 }
 
 .collab-panel .hint {
@@ -50,14 +59,6 @@
   text-align: right;
 }
 
-.collab-field-action {
-  align-items: center;
-}
-
-.collab-field-action .redux-button {
-  flex: none;
-}
-
 .collab-error {
   margin: 0;
 }
@@ -83,21 +84,38 @@
 }
 
 .collab-section {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .collab-section h3 {
+  position: relative;
   margin: 0;
+  padding: 0 0 var(--space-1);
   color: var(--foreground);
-  font-size: var(--type-label);
+  font-size: var(--type-heading);
   font-weight: 600;
+  line-height: 1.2;
+}
+
+.collab-section h3::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 24px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .collab-member-list,
 .collab-pending-list {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -108,10 +126,16 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 34px;
-  padding: var(--space-1) var(--space-2);
+  min-height: var(--control-height);
+  padding: var(--space-1-5) var(--space-2);
   border-radius: var(--radius-control);
-  background: var(--surface-muted);
+  background: transparent;
+  transition: background-color var(--design-dur-tint) ease;
+}
+
+.collab-member:hover,
+.collab-pending:hover {
+  background: var(--surface-hover);
 }
 
 .collab-member-name {
@@ -138,6 +162,16 @@
 .collab-member-role {
   color: var(--foreground-muted);
   font-size: var(--type-caption);
+}
+
+// Match the access dropdown beside it so the dismiss action reads as one row
+// control rather than a tiny trailing glyph.
+.redux-app-root .collab-panel .collab-member .collab-member-kick {
+  flex: none;
+  width: var(--control-height);
+  height: var(--control-height);
+  min-width: var(--control-height);
+  min-height: var(--control-height);
 }
 
 .collab-max-members {
@@ -253,7 +287,7 @@
 
 .collab-playhead-bar {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 50%;
   width: 2px;
   height: 8px;
@@ -265,7 +299,7 @@
 
 .collab-playhead-name {
   position: absolute;
-  top: 0;
+  bottom: 8px;
   left: 50%;
   max-width: 160px;
   padding: 1px var(--space-1);
@@ -279,7 +313,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   transform: translateX(-50%) scaleX(0.86);
-  transform-origin: center top;
+  transform-origin: center bottom;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -316,24 +350,6 @@
   text-align: left;
 }
 
-.collab-room-actions {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.collab-room-actions .redux-button {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.collab-room-details {
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
-  background: var(--surface-muted);
-}
-
 .collab-secret-value {
   display: flex;
   align-items: center;
@@ -348,14 +364,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.collab-password-editor {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-width: 0;
 }
 
 .collab-secret-input {
@@ -383,11 +391,6 @@
 
 .collab-secret-toggle {
   flex: none;
-}
-
-.redux-app-root .collab-room .collab-password-update {
-  margin-bottom: 0;
-  padding: 0;
 }
 
 .collab-invite-preview-heading {

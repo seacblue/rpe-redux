@@ -1,9 +1,9 @@
 /**
- * Other members' playhead ticks in the lower half of the transport marker band.
+ * Other members' playhead ticks inside the lower part of the progress bar.
  *
  * Presence publishes `playheadBeat`; this layer maps it through the chart tempo
  * to the scrubber's audio position. The name stays hidden until the pointer
- * approaches the tick, matching the local marker's upper-half tick.
+ * approaches the tick.
  */
 import { useEffect, useState } from "react";
 import { useTransportSurface } from "../../../../chrome/transport/TransportDomSurface.tsx";
@@ -29,8 +29,8 @@ export function RemotePlayheads() {
   if (!runtime || !state.roomId) {
     return null;
   }
-  const band = transport.refs.timelineMarkers.current;
-  const bounds = band?.getBoundingClientRect();
+  const scrubber = transport.refs.scrubber.current;
+  const bounds = scrubber?.getBoundingClientRect();
   if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
     return null;
   }
@@ -61,7 +61,7 @@ export function RemotePlayheads() {
           className="collab-playhead"
           style={{
             left: bounds.left + playhead.ratio * bounds.width,
-            top: bounds.top + 8,
+            top: bounds.bottom - 16,
             color: playhead.color,
           }}
         >

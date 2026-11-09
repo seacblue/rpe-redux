@@ -23,11 +23,11 @@ Stages the Go sidecar and media helpers, then opens the Tauri window.
   --frontend-port <port>  Pin the Vite port for this run.
   --backend-port <port>   Pin the local service port for this run.
   --ai-port <port>        Pin the Code Cell bridge port for this run.
+  --collab-port <port>    Pin the collaboration room port for this run.
   --new-ports             Choose a new fixed port set for this worktree.
 
 The selected ports are stored in .scratch/dev/ports.json and reused by
-npm run dev and npm run dev:desktop. The browser loop also owns the
-collaboration port; the desktop host keeps its packaged default.`);
+npm run dev and npm run dev:desktop.`);
   process.exit(0);
 }
 
@@ -36,6 +36,7 @@ const ports = await loadOrCreateDevPorts(root, {
     frontendPort: desktopPortArgument(argv, "frontend"),
     backendPort: desktopPortArgument(argv, "backend"),
     aiPort: desktopPortArgument(argv, "ai"),
+    collabPort: desktopPortArgument(argv, "collab"),
   },
   fresh: argv.includes("--new-ports"),
 });
@@ -50,6 +51,7 @@ process.env.REDUX_SERVER_ORIGINS = [process.env.REDUX_SERVER_ORIGINS, ...fronten
   .join(",");
 process.env.REDUX_BACKEND_PORT = String(ports.backendPort);
 process.env.REDUX_AI_PORT = String(ports.aiPort);
+process.env.REDUX_COLLAB_PORT = String(ports.collabPort);
 
 // The sidecar trusts the Vite origin only in this development loop. A packaged
 // build never receives this environment variable.

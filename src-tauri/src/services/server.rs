@@ -18,13 +18,13 @@ use tauri::{AppHandle, Manager};
 /// Loopback port of the local service.
 const SERVER_PORT: &str = "47821";
 
-/// The room server rides in the same sidecar but keeps the default URL used by
-/// the standalone `npm run dev:collab` contract.
-const COLLAB_PORT: &str = "47830";
+/// The room server rides in the same sidecar; the default matches the
+/// standalone `npm run dev:collab` contract.
+pub(crate) const DEFAULT_COLLAB_PORT: u16 = 47830;
 
 /// Default ports written to the user-editable runtime configuration file.
 const DEFAULT_FRONTEND_PORT: u16 = 4173;
-const DEFAULT_BACKEND_PORT: u16 = 47821;
+pub(crate) const DEFAULT_BACKEND_PORT: u16 = 47821;
 const DEFAULT_AI_PORT: u16 = 47822;
 
 /// Ports that take effect on the next application start.
@@ -34,6 +34,13 @@ pub struct RuntimePorts {
     pub frontend_port: u16,
     pub backend_port: u16,
     pub ai_port: u16,
+    #[serde(default = "default_collab_port")]
+    pub collab_port: u16,
+}
+
+/// Missing or legacy configuration files use the standalone room port.
+fn default_collab_port() -> u16 {
+    DEFAULT_COLLAB_PORT
 }
 
 /// One-process port overrides supplied by a desktop launch or its development
@@ -44,6 +51,7 @@ struct RuntimePortOverrides {
     frontend: Option<u16>,
     backend: Option<u16>,
     ai: Option<u16>,
+    collab: Option<u16>,
 }
 
 impl Default for RuntimePorts {
@@ -52,6 +60,7 @@ impl Default for RuntimePorts {
             frontend_port: DEFAULT_FRONTEND_PORT,
             backend_port: DEFAULT_BACKEND_PORT,
             ai_port: DEFAULT_AI_PORT,
+            collab_port: DEFAULT_COLLAB_PORT,
         }
     }
 }
@@ -88,9 +97,11 @@ where
             ("backend", Some(value.to_owned()))
         } else if let Some(value) = argument.strip_prefix("--ai-port=") {
             ("ai", Some(value.to_owned()))
+        } else if let Some(value) = argument.strip_prefix("--collab-port=") {
+            ("collab", Some(value.to_owned()))
         } else if matches!(
             argument.as_str(),
-            "--frontend-port" | "--backend-port" | "--ai-port"
+            "--frontend-port" | "--backend-port" | "--ai-port" | "--collab-port"
         ) {
             let value = args
                 .next()
@@ -105,6 +116,7 @@ where
             "frontend" => overrides.frontend = Some(value),
             "backend" => overrides.backend = Some(value),
             "ai" => overrides.ai = Some(value),
+            "collab" => overrides.collab = Some(value),
             _ => unreachable!("only known runtime ports are parsed"),
         }
     }
@@ -124,6 +136,7 @@ fn runtime_port_env_overrides() -> Result<RuntimePortOverrides, String> {
         frontend: read("REDUX_FRONTEND_PORT", "--frontend-port")?,
         backend: read("REDUX_BACKEND_PORT", "--backend-port")?,
         ai: read("REDUX_AI_PORT", "--ai-port")?,
+        collab: read("REDUX_COLLAB_PORT", "--collab-port")?,
     })
 }
 
@@ -140,6 +153,10 @@ fn effective_runtime_ports(mut ports: RuntimePorts) -> Result<RuntimePorts, Stri
         .or(environment.backend)
         .unwrap_or(ports.backend_port);
     ports.ai_port = arguments.ai.or(environment.ai).unwrap_or(ports.ai_port);
+    ports.collab_port = arguments
+        .collab
+        .or(environment.collab)
+        .unwrap_or(ports.collab_port);
     Ok(ports)
 }
 
@@ -638,6 +655,7 @@ fn configure_sidecar(
 ) {
     let backend_port = ports.backend_port.to_string();
     let ai_port = ports.ai_port.to_string();
+    let collab_port = ports.collab_port.to_string();
     command
         .args([
             "--port",
@@ -647,7 +665,7 @@ fn configure_sidecar(
             "--host",
             "127.0.0.1",
         ])
-        .args(["--collab-port", COLLAB_PORT, "--collab-host", "127.0.0.1"])
+        .args(["--collab-port", &collab_port, "--collab-host", "127.0.0.1"])
         .arg("--collab-data")
         .arg(data_dir.join("collaboration"));
     if let Some(directory) = docs_dir {
@@ -671,7 +689,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     let expected_version = app.package_info().version.to_string();
     let expected_port = ports.backend_port;
     let expected_ai_port = ports.ai_port;
-    let expected_collab_port: u16 = COLLAB_PORT.parse().unwrap();
+    let expected_collab_port = ports.collab_port;
     let docs_dir = resolve_docs_dir(app, &data_dir);
     let docs_requested = docs_dir.is_some();
     let addr: SocketAddr = format!("127.0.0.1:{}", ports.backend_port).parse().unwrap();
@@ -997,6 +1015,8 @@ mod tests {
             "--ai-port=48122",
             "--frontend-port",
             "4174",
+            "--collab-port",
+            "48130",
         ])
         .unwrap();
         assert_eq!(
@@ -1005,6 +1025,7 @@ mod tests {
                 frontend: Some(4174),
                 backend: Some(48121),
                 ai: Some(48122),
+                collab: Some(48130),
             }
         );
     }
@@ -1014,6 +1035,15 @@ mod tests {
         assert!(parse_runtime_port_args(["--backend-port=0"]).is_err());
         assert!(parse_runtime_port_args(["--backend-port", "not-a-port"]).is_err());
         assert!(parse_runtime_port_args(["--backend-port"]).is_err());
+        assert!(parse_runtime_port_args(["--collab-port=0"]).is_err());
+    }
+
+    #[test]
+    fn legacy_runtime_ports_default_the_collab_port() {
+        let parsed: RuntimePorts =
+            serde_json::from_str(r#"{"frontendPort":4173,"backendPort":47821,"aiPort":47822}"#)
+                .unwrap();
+        assert_eq!(parsed.collab_port, DEFAULT_COLLAB_PORT);
     }
 
     /// Build a health payload with the top-level and nested room port fields.
@@ -1194,6 +1224,9 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair[0] == "--port" && pair[1] == SERVER_PORT));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "--collab-port" && pair[1] == ports.collab_port.to_string()
+        }));
 
         let mut bare = Command::new("sidecar");
         configure_sidecar(&mut bare, data_dir, None, &ports);

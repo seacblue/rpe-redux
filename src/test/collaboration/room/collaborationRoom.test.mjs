@@ -39,6 +39,84 @@ function joinEditor(rooms, room) {
   return approved.value.member;
 }
 
+test("a chart without optional line collections can open a room", () => {
+  const rooms = new CollaborationRooms();
+  const sparse = {
+    META: { name: "sparse" },
+    BPMList: [{ bpm: 120, startTime: [0, 0, 1] }],
+    judgeLineList: [
+      { Name: "line without notes" },
+      { notes: null, eventLayers: null },
+      { notes: [], eventLayers: [] },
+    ],
+  };
+  const created = rooms.create({ name: "Host", color: "#ffffff" }, sparse, "");
+  assert.equal(created.ok, true);
+  assert.deepEqual(created.value.room.chart, sparse);
+  const changed = rooms.commit(created.value.member.id, "sparse-1", "rename", [
+    { op: "set", path: "/META/name", before: "sparse", after: "renamed" },
+  ]);
+  assert.equal(changed.ok, true);
+});
+
+test("a join and resume require the room's exact product version", () => {
+  const rooms = new CollaborationRooms();
+  const created = rooms.create(
+    { name: "Host", color: "#ffffff" },
+    chart(),
+    "",
+    false,
+    true,
+    "",
+    "",
+    "1.0.7",
+  );
+  assert.equal(created.ok, true);
+  const { room, member: host } = created.value;
+  const mismatchedJoin = rooms.requestJoin(
+    room.id,
+    room.invite,
+    { name: "Guest", color: "#00ff00" },
+    "1.0.8",
+  );
+  assert.equal(mismatchedJoin.ok, false);
+  assert.equal(mismatchedJoin.code, "version_mismatch");
+  const matchedJoin = rooms.requestJoin(
+    room.id,
+    room.invite,
+    { name: "Guest", color: "#00ff00" },
+    "1.0.7",
+  );
+  assert.equal(matchedJoin.ok, true);
+  assert.equal(matchedJoin.value.member.role, "editor");
+  const mismatchedResume = rooms.resume(room.id, host.token, "1.0.6");
+  assert.equal(mismatchedResume.ok, false);
+  assert.equal(mismatchedResume.code, "version_mismatch");
+  const matchedResume = rooms.resume(room.id, host.token, "1.0.7");
+  assert.equal(matchedResume.ok, true);
+});
+
+test("room creation still rejects payloads without a chart envelope", () => {
+  const rooms = new CollaborationRooms();
+  const profile = { name: "Host", color: "#ffffff" };
+  const invalid = [
+    null,
+    [],
+    {},
+    { META: [], BPMList: [] },
+    { META: {}, BPMList: {} },
+    { META: {}, BPMList: [], judgeLineList: {} },
+    { META: {}, BPMList: [], judgeLineList: [null] },
+    { META: {}, BPMList: [], judgeLineList: [{ notes: {} }] },
+    { META: {}, BPMList: [], judgeLineList: [{ eventLayers: 1 }] },
+  ];
+  for (const chart of invalid) {
+    const created = rooms.create(profile, chart, "");
+    assert.equal(created.ok, false);
+    assert.equal(created.code, "invalid_chart");
+  }
+});
+
 test("host approval creates an editor and viewer permissions are enforced", () => {
   const { rooms, room, host } = setup();
   const editor = joinEditor(rooms, room);
@@ -112,6 +190,34 @@ test("hosts can lower the live member limit", () => {
   assert.equal(second.ok, false);
   assert.equal(second.code, "room_full");
   assert.equal(rooms.setMaxMembers(first.value.member.id, 3).ok, false);
+});
+
+test("lowering the limit keeps existing members and blocks further joins", () => {
+  const rooms = new CollaborationRooms();
+  const created = rooms.create(
+    { name: "Host", color: "#ffffff" },
+    chart(),
+    "fingerprint",
+    false,
+    true,
+  );
+  const { room } = created.value;
+  const host = created.value.member;
+  const first = rooms.requestJoin(room.id, room.invite, { name: "One", color: "#00ff00" });
+  const second = rooms.requestJoin(room.id, room.invite, { name: "Two", color: "#ff0000" });
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(room.members.size, 3);
+
+  assert.equal(rooms.setMaxMembers(host.id, 2).ok, true);
+  assert.equal(room.maxMembers, 2);
+  assert.equal(room.members.size, 3);
+  assert.equal(room.members.get(first.value.member.id).online, true);
+  assert.equal(room.members.get(second.value.member.id).online, true);
+
+  const third = rooms.requestJoin(room.id, room.invite, { name: "Three", color: "#0000ff" });
+  assert.equal(third.ok, false);
+  assert.equal(third.code, "room_full");
 });
 
 test("approval rechecks the live member limit before admitting a request", () => {
@@ -308,7 +414,7 @@ test("assets are content-addressed, role checked, and scoped to members", () => 
   assert.equal(rooms.assetForMember(viewer.id, hash).ok, true);
 
   const replacement = "d".repeat(64);
-  const denied = rooms.acceptAsset(
+  const replaced = rooms.acceptAsset(
     editor.id,
     "cover.png",
     replacement,
@@ -316,9 +422,8 @@ test("assets are content-addressed, role checked, and scoped to members", () => 
     "image/png",
     new Uint8Array(4),
   );
-  assert.equal(denied.ok, false);
-  assert.equal(denied.code, "forbidden");
-  assert.equal(rooms.assetManifest(room)[0].hash, hash);
+  assert.equal(replaced.ok, true);
+  assert.equal(rooms.assetManifest(room)[0].hash, replacement);
   assert.equal(
     rooms.acceptAsset(editor.id, "extra.png", replacement, 4, "image/png", new Uint8Array(4)).ok,
     true,

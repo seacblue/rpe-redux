@@ -21,8 +21,27 @@ export interface SliderFieldProps extends Omit<
   /** Attach a surface handle directly to the range input. */
   inputRef?: Ref<HTMLInputElement>;
   onChange: ChangeEventHandler<HTMLInputElement>;
+  /**
+   * Runs once when a pointer, key, or focus interaction ends.
+   *
+   * Use this for settings that should not write on every drag step; `onChange`
+   * still drives the live local readout.
+   */
+  onCommit?: (value: number) => void;
   [key: `data-${string}`]: unknown;
 }
+
+/** Keys that finish a keyboard adjustment when released. */
+const COMMIT_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
 
 /** Wraps the shared slider with a readable value label. */
 export function SliderField({
@@ -34,6 +53,10 @@ export function SliderField({
   unit,
   percentage = false,
   onChange,
+  onCommit,
+  onPointerUp,
+  onKeyUp,
+  onBlur,
   inputRef,
   ...props
 }: SliderFieldProps) {
@@ -54,6 +77,24 @@ export function SliderField({
         onChange={onChange}
         aria-valuetext={readout}
         {...props}
+        onPointerUp={(event) => {
+          onPointerUp?.(event);
+          if (!event.defaultPrevented) {
+            onCommit?.(Number(event.currentTarget.value));
+          }
+        }}
+        onKeyUp={(event) => {
+          onKeyUp?.(event);
+          if (!event.defaultPrevented && COMMIT_KEYS.has(event.key)) {
+            onCommit?.(Number(event.currentTarget.value));
+          }
+        }}
+        onBlur={(event) => {
+          onBlur?.(event);
+          if (!event.defaultPrevented) {
+            onCommit?.(Number(event.currentTarget.value));
+          }
+        }}
       />
     </span>
   );

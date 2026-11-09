@@ -96,7 +96,7 @@ export interface ChartEventReadRef {
 }
 
 export interface ChartResourceReference {
-  readonly kind: "song" | "background" | "illustration" | "lineTexture" | "attachUI";
+  readonly kind: "song" | "background" | "lineTexture" | "attachUI";
   readonly name: string;
 }
 
@@ -312,7 +312,6 @@ function resourceReferences(snapshot: ChartReadSnapshot): readonly ChartResource
   };
   add("song", snapshot.META.song);
   add("background", snapshot.META.background);
-  add("illustration", snapshot.META.illustration);
   for (const line of snapshot.judgeLineList ?? []) {
     add("lineTexture", line.Texture);
     add("attachUI", line.attachUI);

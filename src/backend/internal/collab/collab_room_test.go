@@ -77,6 +77,59 @@ func TestCollabJoinWithoutRoomCode(t *testing.T) {
 	}
 }
 
+func TestCollabChartWithoutOptionalLineCollectionsCanOpenRoom(t *testing.T) {
+	chart := map[string]any{
+		"META":    map[string]any{"name": "sparse"},
+		"BPMList": []any{},
+		"judgeLineList": []any{
+			map[string]any{"Name": "line without notes"},
+			map[string]any{"notes": nil, "eventLayers": nil},
+			map[string]any{"notes": []any{}, "eventLayers": []any{}},
+		},
+	}
+	rooms := NewRooms()
+	room, host, failure := rooms.create(
+		collabProfile{Name: "Host", Color: "#ffffff"},
+		chart,
+		"",
+	)
+	if failure != nil {
+		t.Fatalf("create: %v", failure)
+	}
+	lines, ok := room.Chart.(map[string]any)["judgeLineList"].([]any)
+	if !ok || len(lines) != 3 {
+		t.Fatalf("lines = %v", lines)
+	}
+	if _, failure := rooms.commit(host.ID, "sparse-1", "rename", []collabChange{
+		{Op: "set", Path: "/META/name", Before: "sparse", After: "renamed"},
+	}, ""); failure != nil {
+		t.Fatalf("commit: %v", failure)
+	}
+}
+
+func TestCollabRoomRejectsPayloadsWithoutChartEnvelope(t *testing.T) {
+	cases := map[string]any{
+		"null":             nil,
+		"array":            []any{},
+		"missing meta":     map[string]any{"BPMList": []any{}},
+		"non-array bpm":    map[string]any{"META": map[string]any{}, "BPMList": map[string]any{}},
+		"non-array lines":  map[string]any{"META": map[string]any{}, "BPMList": []any{}, "judgeLineList": map[string]any{}},
+		"non-object line":  map[string]any{"META": map[string]any{}, "BPMList": []any{}, "judgeLineList": []any{nil}},
+		"non-array notes":  map[string]any{"META": map[string]any{}, "BPMList": []any{}, "judgeLineList": []any{map[string]any{"notes": map[string]any{}}}},
+		"non-array layers": map[string]any{"META": map[string]any{}, "BPMList": []any{}, "judgeLineList": []any{map[string]any{"eventLayers": 1.0}}},
+	}
+	for label, chart := range cases {
+		rooms := NewRooms()
+		if _, _, failure := rooms.create(
+			collabProfile{Name: "Host", Color: "#ffffff"},
+			chart,
+			"",
+		); failure == nil || failure.Code != "invalid_chart" {
+			t.Fatalf("%s: %v", label, failure)
+		}
+	}
+}
+
 func TestCollabCustomRoomPassword(t *testing.T) {
 	rooms := NewRooms()
 	room, _, failure := rooms.create(
@@ -166,7 +219,7 @@ func TestCollabApproveRechecksMemberLimit(t *testing.T) {
 	}
 }
 
-func TestCollabMemberLimitCannotDropBelowOnlineMembers(t *testing.T) {
+func TestCollabMemberLimitMayDropBelowOnlineMembersWithoutRemovingThem(t *testing.T) {
 	rooms := NewRooms()
 	room, host, failure := rooms.create(
 		collabProfile{Name: "Host", Color: "#ffffff"},
@@ -193,15 +246,21 @@ func TestCollabMemberLimitCannotDropBelowOnlineMembers(t *testing.T) {
 	if failure != nil || second == nil {
 		t.Fatalf("second join: %v", failure)
 	}
-	if _, failure := rooms.setMaxMembers(host.ID, 2); failure == nil || failure.Code != "bad_max_members" {
-		t.Fatalf("limit below online members = %v", failure)
-	}
-	if room.MaxMembers != collabDefaultMembers {
-		t.Fatalf("rejected limit changed maxMembers = %d", room.MaxMembers)
-	}
-	rooms.leave(second.ID)
 	if _, failure := rooms.setMaxMembers(host.ID, 2); failure != nil {
-		t.Fatalf("limit at online member count: %v", failure)
+		t.Fatalf("lower limit: %v", failure)
+	}
+	if room.MaxMembers != 2 {
+		t.Fatalf("lowered maxMembers = %d", room.MaxMembers)
+	}
+	if !first.Online || !second.Online || len(room.Members) != 3 {
+		t.Fatalf("lowering the limit removed or disconnected an existing member")
+	}
+	if _, _, extra, failure := rooms.requestJoinWithAuto(
+		room.ID,
+		room.Invite,
+		collabProfile{Name: "Three", Color: "#0000ff"},
+	); failure == nil || failure.Code != "room_full" || extra != nil {
+		t.Fatalf("join over the lowered limit = %v", failure)
 	}
 }
 
@@ -429,7 +488,7 @@ func TestCollabAssetsAreContentAddressedAndScoped(t *testing.T) {
 	}
 }
 
-func TestCollabAssetReplacementIsHostOnly(t *testing.T) {
+func TestCollabAssetReplacementIsAnEditorAction(t *testing.T) {
 	rooms, room, host := collabSetup(t)
 	editor := collabJoinEditor(t, rooms, room)
 	original := []byte("\x89PNG\r\n\x1a\noriginal")
@@ -439,21 +498,21 @@ func TestCollabAssetReplacementIsHostOnly(t *testing.T) {
 	}
 	replacement := []byte("\x89PNG\r\n\x1a\nreplacement")
 	replacementHash := sha256Hex(replacement)
-	if _, failure := rooms.acceptAsset(editor.ID, "cover.png", replacementHash, int64(len(replacement)), "image/png", replacement); failure == nil || failure.Code != "forbidden" {
-		t.Fatalf("editor replacement = %v", failure)
+	if _, failure := rooms.acceptAsset(editor.ID, "cover.png", replacementHash, int64(len(replacement)), "image/png", replacement); failure != nil {
+		t.Fatalf("editor replacement: %v", failure)
 	}
-	if room.Assets["cover.png"].Hash != originalHash {
-		t.Fatal("rejected replacement changed the manifest")
+	if room.Assets["cover.png"].Hash != replacementHash {
+		t.Fatal("editor replacement did not update the manifest")
 	}
 	extra := []byte("\x89PNG\r\n\x1a\nextra")
 	extraHash := sha256Hex(extra)
 	if _, failure := rooms.acceptAsset(editor.ID, "extra.png", extraHash, int64(len(extra)), "image/png", extra); failure != nil {
 		t.Fatalf("editor new name: %v", failure)
 	}
-	if _, failure := rooms.acceptAsset(host.ID, "cover.png", replacementHash, int64(len(replacement)), "image/png", replacement); failure != nil {
+	if _, failure := rooms.acceptAsset(host.ID, "cover.png", originalHash, int64(len(original)), "image/png", original); failure != nil {
 		t.Fatalf("host replacement: %v", failure)
 	}
-	if room.Assets["cover.png"].Hash != replacementHash {
+	if room.Assets["cover.png"].Hash != originalHash {
 		t.Fatal("host replacement did not update the manifest")
 	}
 }
@@ -552,11 +611,24 @@ func TestCollabPresenceIsEphemeralAndMemberScoped(t *testing.T) {
 	rooms, room, _ := collabSetup(t)
 	editor := collabJoinEditor(t, rooms, room)
 	beat := 12.5
-	updated, ok := rooms.updatePresence(editor.ID, collabPresence{Area: "edit", LineID: "line", Beat: &beat})
+	cursorRatio := 0.75
+	updated, ok := rooms.updatePresence(editor.ID, collabPresence{
+		Area:         "edit",
+		LineID:       "line",
+		Beat:         &beat,
+		CursorRatio:  &cursorRatio,
+		Timeline:     true,
+		TimelineArea: "notes",
+	})
 	if !ok || updated.MemberID != editor.ID || updated.Beat == nil || *updated.Beat != 12.5 {
 		t.Fatalf("presence = %+v, %v", updated, ok)
 	}
-	if presence := rooms.presence(room); len(presence) != 1 || presence[0].LineID != "line" {
+	if presence := rooms.presence(room); len(presence) != 1 ||
+		presence[0].LineID != "line" ||
+		!presence[0].Timeline ||
+		presence[0].TimelineArea != "notes" ||
+		presence[0].CursorRatio == nil ||
+		*presence[0].CursorRatio != 0.75 {
 		t.Fatalf("presence list = %+v", presence)
 	}
 	rooms.leave(editor.ID)

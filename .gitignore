@@ -3,6 +3,7 @@ docs-site-dist/
 release/
 node_modules/
 *.log
+.agents/
 .local-tools/
 .scratch/
 .env

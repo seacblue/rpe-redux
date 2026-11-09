@@ -76,6 +76,7 @@ export default [
       "dist/**",
       "release/**",
       "node_modules/**",
+      ".agents/**",
       ".scratch/**",
       ".local-tools/**",
       "src-tauri/**",

@@ -37,7 +37,6 @@ import {
   sanitizeAssetName,
 } from "../src/core/collaboration/assets.ts";
 import { CollaborationRooms } from "../src/core/collaboration/room.ts";
-import { COLLAB_PROTOCOL_VERSION } from "../src/core/collaboration/types.ts";
 
 /** Read one `--name value` argument, falling back when it is absent. */
 function argValue(name, fallback) {
@@ -280,37 +279,6 @@ function decodeBase64(value) {
   return bytes.toString("base64") === value ? bytes : null;
 }
 
-/**
- * Validate a create/join/resume protocol revision.
- *
- * Missing, non-numeric, fractional, and mismatched values are rejected before
- * any room state changes, using the same codes and messages as the Go listener.
- */
-function protocolFailure(message) {
-  if (!Object.hasOwn(message, "protocolVersion")) {
-    return {
-      code: "protocol_mismatch",
-      message: `This room requires protocol version ${COLLAB_PROTOCOL_VERSION}.`,
-    };
-  }
-  const value = message.protocolVersion;
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
-    return { code: "protocol_mismatch", message: "The protocol version is invalid." };
-  }
-  if (value !== COLLAB_PROTOCOL_VERSION) {
-    return {
-      code: "protocol_mismatch",
-      message: `This room requires protocol version ${COLLAB_PROTOCOL_VERSION}.`,
-    };
-  }
-  return null;
-}
-
-/** Send the shared protocol rejection for one handshake. */
-function rejectProtocol(socket, failure) {
-  sendJSON(socket, { type: "error", code: failure.code, message: failure.message });
-}
-
 /** Normalize one explicit origin to `scheme://host[:port]`, or "" when invalid. */
 function normalizeOrigin(origin) {
   if (typeof origin !== "string" || origin.trim() === "") {
@@ -540,7 +508,6 @@ function welcomeFor(room, member, includeChart) {
     hostId: room.hostId,
     role: member.role,
     revision: room.revision,
-    protocolVersion: COLLAB_PROTOCOL_VERSION,
     appVersion: room.appVersion,
     ...(includeChart ? { chart: room.chart } : {}),
     fingerprint: room.fingerprint,
@@ -604,11 +571,6 @@ function handleMessage(socket, message) {
     return;
   }
   if (message.type === "create") {
-    const protocol = protocolFailure(message);
-    if (protocol) {
-      rejectProtocol(socket, protocol);
-      return;
-    }
     if (sockets.get(socket)) {
       sendJSON(socket, {
         type: "error",
@@ -647,11 +609,6 @@ function handleMessage(socket, message) {
   }
 
   if (message.type === "join") {
-    const protocol = protocolFailure(message);
-    if (protocol) {
-      rejectProtocol(socket, protocol);
-      return;
-    }
     const state = socketStates.get(socket);
     if (state && state.joinFailures >= MAX_JOIN_ATTEMPTS) {
       sendJSON(socket, {
@@ -723,11 +680,6 @@ function handleMessage(socket, message) {
   }
 
   if (message.type === "resume") {
-    const protocol = protocolFailure(message);
-    if (protocol) {
-      rejectProtocol(socket, protocol);
-      return;
-    }
     const resumed = rooms.resume(
       stringField(message, "roomId"),
       stringField(message, "token"),
@@ -749,6 +701,25 @@ function handleMessage(socket, message) {
       }
     }
     broadcast(resumed.value.room, { type: "members", members: memberList(resumed.value.room) });
+    return;
+  }
+
+  if (message.type === "inspect-room") {
+    const inspected = rooms.inspect(
+      stringField(message, "roomId"),
+      stringField(message, "invite"),
+      stringField(message, "appVersion"),
+    );
+    if (!inspected.ok) {
+      sendJSON(socket, { type: "rejected", reason: inspected.code, message: inspected.message });
+      return;
+    }
+    sendJSON(socket, {
+      type: "room-info",
+      roomId: inspected.value.id,
+      maxMembers: inspected.value.maxMembers,
+      members: memberList(inspected.value),
+    });
     return;
   }
 
@@ -1072,7 +1043,7 @@ function handleMessage(socket, message) {
       sendJSON(target, {
         type: "rejected",
         reason: "removed",
-        message: "The host removed you from the room",
+        message: "The host asked you to leave the room",
       });
       endSocket(target);
     }
@@ -1113,6 +1084,14 @@ function handleMessage(socket, message) {
   }
 
   if (message.type === "leave") {
+    if (connection.memberId === room.hostId) {
+      sendJSON(socket, {
+        type: "error",
+        code: "host_must_close",
+        message: "The host must close the room instead of leaving",
+      });
+      return;
+    }
     rooms.leave(connection.memberId);
     sockets.delete(socket);
     memberSockets.delete(connection.memberId);

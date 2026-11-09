@@ -54,7 +54,7 @@ A noise area has no judge-line parent relation, so ancestor translation and rota
 
 ## Resource resolution
 
-`META.song` and `META.background` name the music and background; a sibling `Info.txt` may name the same resources as `Song` and `Picture`. `resourceReferences()` resolves a declared archive entry, then a same-kind file in the chart directory, then a declared name without bytes, then nothing.
+`META.song` and `META.background` name the music and background; a sibling `Info.txt` may name the same resources as `Song` and `Picture`. `META.illustration` and `Info.txt` `Illustration` are the illustrator credit text, not image paths. `resourceReferences()` resolves a declared archive entry, then a same-kind file in the chart directory, then a declared name without bytes, then nothing.
 
 Music extensions are `mp3`, `ogg`, `wav`, `flac`, `m4a`, `aac`, `opus`, and `webm`. Background extensions are `png`, `jpg`/`jpeg`, `webp`, `gif`, `bmp`, and `avif`.
 

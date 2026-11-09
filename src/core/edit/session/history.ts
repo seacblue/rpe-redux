@@ -60,6 +60,8 @@ export interface HistoryEntryOrigin {
   readonly requestId?: string;
   /** The room transaction this entry compensates, when it is a collaborative undo. */
   readonly undoOf?: string;
+  /** The local history marker set after this transaction was compensated in the room. */
+  readonly compensated?: boolean;
 }
 
 /** Metadata shared by history producers, including transaction-based edits. */

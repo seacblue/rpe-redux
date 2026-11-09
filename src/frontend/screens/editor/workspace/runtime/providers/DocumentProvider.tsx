@@ -16,6 +16,11 @@ import {
   detectChartCompatibility,
 } from "../../../../../../core/global/chart/compatibility.ts";
 import { BUILD_APP_VERSION } from "../../../../../../core/platform/buildInfo.ts";
+import {
+  bumpCollaborationAssetRevision,
+  collaborationPendingAssets,
+  collaborationRoomDocument,
+} from "../../../../../../core/collaboration/ui.ts";
 import type { AssetMap, EditorCandidate } from "../../../../../../core/global/document/types.ts";
 import { materializeAssets } from "../../../../../../core/global/library/document.ts";
 import { openFiles } from "../../../../../../core/global/document/import.ts";
@@ -116,6 +121,8 @@ export interface DocumentRuntime {
     diagnostics?: ChartDiagnostic[],
     readOnly?: boolean,
   ) => void;
+  /** Install an authoritative external chart as an unsaved open document. */
+  readonly adoptChart: (chart: Chart, name: string) => void;
   readonly loadCandidate: (
     candidate: EditorCandidate,
     assets: AssetMap,
@@ -134,6 +141,8 @@ export interface DocumentRuntime {
   readonly guardReplace: (action: () => unknown, title?: string) => void;
   readonly installBlankChart: () => void;
   readonly closeDocument: () => boolean;
+  /** Close the open document without a close hook; used to discard a room copy. */
+  readonly discardDocument: () => void;
   readonly openPaths: (paths: string[]) => Promise<void>;
 }
 
@@ -313,6 +322,22 @@ export function createDocumentRuntime(options: {
       setHome: options.setHome,
     }),
   });
+  /**
+   * Adopt a chart supplied by another authority, such as a room snapshot.
+   *
+   * The normal open/create paths complete the document coordinator themselves.
+   * This path bypasses the file loader, so it must publish the new generation
+   * and chart fingerprint here; otherwise a save sees a stale generation and
+   * the document cannot acquire a local library copy.
+   */
+  const adoptChart = (chart: Chart, name: string): void => {
+    replaceChart(chart, name);
+    documentCoordinator.replaceDocument({
+      chartFingerprint: chartFingerprint(chart),
+      savedChartFingerprint: null,
+    });
+  };
+
   const loadMusic = createMusicLoader({
     loadAudio: (bytes, name) => preview.audio.load(bytes, name),
     pause: () => playback.playback.pause(),
@@ -369,8 +394,12 @@ export function createDocumentRuntime(options: {
     resolveDesktopSong: (song, assets, name) =>
       options.documents?.assets?.url(assetPath(assets, song, name) ?? song),
     loadMusic,
-    missingMusic: (name) =>
-      options.notify(t("editor.app.status.musicMissing", { name }), "warning"),
+    missingMusic: (name) => {
+      if (collaborationRoomDocument.get() || collaborationPendingAssets.get().includes(name)) {
+        return;
+      }
+      options.notify(t("editor.app.status.musicMissing", { name }), "warning");
+    },
     selectLine: (index) => getSession().selectLine(index),
     invalidate: options.invalidate,
     waitForFirstRender: options.waitForFirstRender,
@@ -578,6 +607,10 @@ export function createDocumentRuntime(options: {
     if (getSession().readOnly) {
       return Promise.resolve(null);
     }
+    if (!path && collaborationRoomDocument.get()) {
+      showToast(t("workspace.collaboration.roomChartSaveBlocked"), "warning");
+      return Promise.resolve(null);
+    }
     const payload = { saveAs, cancel: false };
     extensionRegistry.emitHook("document:before-save", payload);
     if (payload.cancel) {
@@ -719,6 +752,7 @@ export function createDocumentRuntime(options: {
     // Shader invalidation is synchronous up to the async source read, so the
     // preview can repaint as soon as the external editor has written the file.
     preview.realtimePreview.reloadShaderSources(changed);
+    bumpCollaborationAssetRevision();
     void preview.images
       .load(getSession().chart, getAssets(), getChartName())
       .catch(options.reportError);
@@ -909,6 +943,15 @@ export function createDocumentRuntime(options: {
       })
       .catch(options.reportError);
     return true;
+  };
+  /** Discards a temporary room document without letting a close hook retain it. */
+  const discardDocument = (): void => {
+    void documentCoordinator
+      .submitClose(async () => {
+        await documentLeases.releaseCurrent();
+        finishClose(true);
+      })
+      .catch(options.reportError);
   };
   /** Describes the open document for the public document API. */
   const documentDescriptor = () => {
@@ -1209,6 +1252,7 @@ export function createDocumentRuntime(options: {
   return {
     metadataMedia: media,
     replaceChart,
+    adoptChart,
     currentAssets: getAssets,
     currentChartName: getChartName,
     coverUrl,
@@ -1220,6 +1264,7 @@ export function createDocumentRuntime(options: {
     guardReplace,
     installBlankChart,
     closeDocument,
+    discardDocument,
     openPaths,
   };
 }

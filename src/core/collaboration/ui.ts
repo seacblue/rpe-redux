@@ -46,6 +46,30 @@ export const collaborationPendingAssets: ValueCell<readonly string[]> = createVa
 /** Whether the provider is preparing a room before a connection exists. */
 export const collaborationPreparing: ValueCell<boolean> = createValue<boolean>({ initial: false });
 
+/**
+ * Whether the open document is a guest's temporary room copy.
+ *
+ * Room charts are never persisted to the local library: saves are refused,
+ * recovery autosave stays off, and leaving the room discards the document.
+ */
+export const collaborationRoomDocument: ValueCell<boolean> = createValue<boolean>({
+  initial: false,
+});
+
+/**
+ * Bumped after a local asset-library mutation.
+ *
+ * Chart commits carry their own publish hook, but image/audio bytes live beside
+ * the chart. This revision lets the room runtime publish a replaced asset
+ * explicitly without treating a remote manifest change as a local edit.
+ */
+export const collaborationAssetRevision = createValue<number>({ initial: 0 });
+
+/** Announce one local asset-library mutation to the room runtime. */
+export function bumpCollaborationAssetRevision(): void {
+  collaborationAssetRevision.set(collaborationAssetRevision.get() + 1);
+}
+
 /** Returns whether exiting would interrupt a room or an in-progress connection. */
 export function roomNeedsExitConfirmation(state: CollaborationState, preparing: boolean): boolean {
   return (

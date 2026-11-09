@@ -129,10 +129,12 @@ function sidecarMetadata(sidecars: readonly ExternalSidecar[]): SidecarMetadata 
     name: cleanValue(fields.name),
     composer: cleanValue(fields.composer ?? fields.artist),
     charter: cleanValue(fields.charter),
-    illustrator: cleanValue(fields.illustrator),
+    illustrator: cleanValue(fields.illustrator ?? fields.illustration),
     level: cleanValue(fields.level),
     song: cleanValue(fields.music ?? fields.song),
-    background: cleanValue(fields.illustration ?? fields.image ?? fields.picture),
+    // RPE Info.txt uses `Picture` for the background image and `Illustration`
+    // for the artist credit. Never treat the credit as a file name.
+    background: cleanValue(fields.picture ?? fields.image ?? fields.background),
   };
   const chartFile = cleanValue(fields.chart);
   return { metadata, ...(chartFile ? { chartFile } : {}) };

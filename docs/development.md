@@ -33,10 +33,10 @@ The browser loop uses `.scratch/dev/data/` as its profile, so experiments do not
 
 ```powershell
 npm run dev -- --backend-port=48121 --no-open
-npm run dev:desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122
+npm run dev:desktop -- --frontend-port=4174 --backend-port=48121 --ai-port=48122 --collab-port=48130
 ```
 
-The flags accept either `--name-port=value` or `--name-port value`. They update the worktree port record for later runs and are not written to the desktop Runtime ports settings. The browser loop also accepts `--data-dir <path>`; its default is `.scratch/dev/data`.
+The flags accept either `--name-port=value` or `--name-port value`. They update the worktree port record for later runs and are not written to the desktop Runtime ports settings. The browser loop also accepts `--data-dir <path>`; its default is `.scratch/dev/data`. A packaged executable accepts the same `--backend-port`, `--ai-port`, and `--collab-port` flags; give each parallel copy its own backend and collaboration ports so both can host or join a room.
 
 ### Parallel checkouts and AI sessions
 

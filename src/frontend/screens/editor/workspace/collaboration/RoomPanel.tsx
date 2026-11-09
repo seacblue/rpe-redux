@@ -5,7 +5,14 @@
  * switches; the sidebar route and the room badge both open it by the stable
  * `collaboration` inspector id.
  */
-import { useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
@@ -13,14 +20,15 @@ import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { FieldReset } from "../../../../../design/components/field/FieldReset.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { ColorField } from "../../../../../design/components/input/ColorField.tsx";
+import { Modal } from "../../../../../design/components/modal/Modal.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
-import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { createRoomPassword } from "../../../../../core/collaboration/invite.ts";
 import { requestConfirm } from "../../../../overlays/modals/prompts.ts";
 import { download } from "../../../../platform/download.ts";
 import { suggestedLanPort, useCollaboration } from "./collaborationRuntime.tsx";
+import { MaxMembersControl } from "./MaxMembersControl.tsx";
 
 const ROLE_KEYS = {
   host: "workspace.collaboration.role.host",
@@ -39,6 +47,8 @@ interface SecretInputProps {
   minLength?: number;
   maxLength?: number;
   autoComplete?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }
 
 /** A text field with an inline reveal button; hidden until the reader asks for it. */
@@ -50,12 +60,15 @@ function SecretInput({
   minLength,
   maxLength,
   autoComplete,
+  inputRef,
+  onKeyDown,
 }: SecretInputProps) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   return (
     <div className="collab-secret-input">
       <Input
+        ref={inputRef}
         id={id}
         type={visible ? "text" : "password"}
         value={value}
@@ -64,6 +77,7 @@ function SecretInput({
         autoComplete={autoComplete}
         placeholder={placeholder}
         onChange={(event) => onChange(event.currentTarget.value)}
+        onKeyDown={onKeyDown}
       />
       <IconButton
         size="small"
@@ -78,8 +92,8 @@ function SecretInput({
   );
 }
 
-/** Read-only secret value with a reveal button, hidden until asked for. */
-function SecretValue({ value }: { value: string }) {
+/** Read-only secret value with a reveal button and an optional trailing action. */
+function SecretValue({ value, action }: { value: string; action?: ReactNode }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   return (
@@ -96,6 +110,7 @@ function SecretValue({ value }: { value: string }) {
         className="collab-secret-toggle"
         onClick={() => setVisible((current) => !current)}
       />
+      {action}
     </div>
   );
 }
@@ -142,12 +157,23 @@ function RoomPanelBody() {
   const [lanPort, setLanPort] = useState(settings.lanPort);
   const [password, setPassword] = useState(createRoomPassword);
   const [newPassword, setNewPassword] = useState("");
-  const [passwordFormKey, setPasswordFormKey] = useState(0);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [joinMethod, setJoinMethod] = useState<"link" | "custom">("link");
   const [joinLink, setJoinLink] = useState(pendingInviteLink);
   const [serverUrl, setServerUrl] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [autoApproveEditor, setAutoApproveEditor] = useState(true);
+  const passwordInput = useRef<HTMLInputElement | null>(null);
+
+  // The modal opens through the shared dialog stack, which focuses its close
+  // button first. Move focus into the field once that stack settles.
+  useEffect(() => {
+    if (!passwordOpen) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => passwordInput.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [passwordOpen]);
 
   /** Persists the editable identity and host fields, returning them normalized. */
   const applySettings = () => {
@@ -177,7 +203,7 @@ function RoomPanelBody() {
     }
     return t("workspace.collaboration.location.design");
   };
-  /** Confirms, then removes one member from the room. */
+  /** Confirms, then asks one member to leave the room. */
   const kickMember = async (member: (typeof state.members)[number]) => {
     const confirmed = await requestConfirm({
       title: t("workspace.collaboration.kickTitle"),
@@ -187,6 +213,18 @@ function RoomPanelBody() {
     });
     if (confirmed) {
       removeMember(member.id);
+    }
+  };
+  /** Confirms leaving because the temporary room chart is discarded. */
+  const leaveRoomWithConfirm = async () => {
+    const confirmed = await requestConfirm({
+      title: t("workspace.collaboration.leaveTitle"),
+      description: t("workspace.collaboration.leaveBody"),
+      label: t("workspace.collaboration.leaveConfirm"),
+      destructive: true,
+    });
+    if (confirmed) {
+      leaveRoom();
     }
   };
   /** Confirms, then deletes the room for every member. */
@@ -201,6 +239,26 @@ function RoomPanelBody() {
       closeRoom();
     }
   };
+  /** Opens a fresh password draft; the pencil beside the secret owns this entry. */
+  const openPasswordEditor = () => {
+    setNewPassword("");
+    setPasswordOpen(true);
+  };
+  /** Drops the draft and dismisses the password modal. */
+  const closePasswordEditor = () => {
+    setPasswordOpen(false);
+    setNewPassword("");
+  };
+  /** Publishes a valid password draft and closes the modal. */
+  const submitPassword = () => {
+    const next = newPassword.trim();
+    const length = [...next].length;
+    if (length < 8 || length > 64) {
+      return;
+    }
+    updateRoomPassword(next);
+    closePasswordEditor();
+  };
   /** Downloads the retained recovery chart as JSON. */
   const downloadRecovery = () => {
     if (!recovery) {
@@ -214,11 +272,8 @@ function RoomPanelBody() {
     <div className="collab-panel">
       {inRoom ? (
         <div className="collab-room">
-          <section className="collab-room-details">
+          <div className="collab-room-info">
             <FieldRow
-              layout="inline"
-              density="compact"
-              divided
               label={t("workspace.collaboration.statusLabel")}
               control={
                 <span className={`collab-status is-${state.status}`} role="status">
@@ -227,28 +282,34 @@ function RoomPanelBody() {
               }
             />
             <FieldRow
-              layout="inline"
-              density="compact"
-              divided
               label={t("workspace.collaboration.password")}
-              control={<SecretValue key={state.roomId} value={state.invite} />}
+              control={
+                <SecretValue
+                  key={state.roomId}
+                  value={state.invite}
+                  action={
+                    state.role === "host" ? (
+                      <IconButton
+                        size="small"
+                        icon="pencil"
+                        label={t("workspace.collaboration.changePassword")}
+                        onClick={openPasswordEditor}
+                      />
+                    ) : undefined
+                  }
+                />
+              }
             />
             <FieldRow
-              layout="inline"
-              density="compact"
-              divided
               htmlFor="collab-max-members"
               label={t("workspace.collaboration.maxMembers")}
               control={
                 state.role === "host" ? (
-                  <SliderField
-                    id="collab-max-members"
-                    min={2}
-                    max={32}
-                    step={1}
+                  <MaxMembersControl
+                    key={state.maxMembers}
                     value={state.maxMembers}
-                    aria-label={t("workspace.collaboration.maxMembers")}
-                    onChange={(event) => setMaxMembers(Number(event.currentTarget.value))}
+                    memberCount={state.members.length}
+                    onChange={setMaxMembers}
                   />
                 ) : (
                   <code className="collab-field-value">{state.maxMembers}</code>
@@ -256,54 +317,14 @@ function RoomPanelBody() {
               }
             />
             <FieldRow
-              layout="inline"
-              density="compact"
-              divided
-              className="collab-field-action"
               label={t("workspace.collaboration.inviteLink")}
               control={
-                <IconButton
-                  size="small"
-                  icon="copy"
-                  label={t("workspace.collaboration.copyInviteLink")}
-                  onClick={() => void copyInvite()}
-                />
+                <Button variant="outlined" onClick={() => void copyInvite()}>
+                  {t("workspace.collaboration.copyInviteLink")}
+                </Button>
               }
             />
-          </section>
-          {state.role === "host" && (
-            <FieldRow
-              layout="block"
-              density="compact"
-              className="collab-password-update"
-              label={t("workspace.collaboration.changePassword")}
-              control={(id) => (
-                <div className="collab-password-editor">
-                  <SecretInput
-                    key={passwordFormKey}
-                    id={id}
-                    value={newPassword}
-                    minLength={8}
-                    maxLength={64}
-                    autoComplete="new-password"
-                    placeholder={t("workspace.collaboration.changePasswordPlaceholder")}
-                    onChange={setNewPassword}
-                  />
-                  <IconButton
-                    icon="check"
-                    variant="solid"
-                    label={t("workspace.collaboration.updatePassword")}
-                    disabled={newPassword.trim().length < 8}
-                    onClick={() => {
-                      updateRoomPassword(newPassword.trim());
-                      setNewPassword("");
-                      setPasswordFormKey((current) => current + 1);
-                    }}
-                  />
-                </div>
-              )}
-            />
-          )}
+          </div>
           {state.queued > 0 && (
             <p className="hint">{t("workspace.collaboration.queued", { count: state.queued })}</p>
           )}
@@ -346,10 +367,11 @@ function RoomPanelBody() {
                     )}
                     {host && (
                       <IconButton
-                        size="small"
+                        size="md"
                         icon="trash"
                         label={t("workspace.collaboration.kick")}
                         variant="danger"
+                        className="collab-member-kick"
                         onClick={() => void kickMember(member)}
                       />
                     )}
@@ -454,15 +476,26 @@ function RoomPanelBody() {
               </div>
             </section>
           )}
-          <div className="collab-room-actions">
-            {state.role === "host" && (
-              <Button variant="danger" onClick={() => void closeRoomWithConfirm()}>
-                {t("workspace.collaboration.closeRoom")}
-              </Button>
-            )}
-            <Button variant={state.role === "host" ? "outlined" : "danger"} onClick={leaveRoom}>
-              {t("workspace.collaboration.leave")}
-            </Button>
+          <div className="redux-footer-bar">
+            <div className="redux-footer-actions">
+              {state.role === "host" ? (
+                <Button
+                  variant="danger"
+                  className="urgent"
+                  onClick={() => void closeRoomWithConfirm()}
+                >
+                  {t("workspace.collaboration.closeRoom")}
+                </Button>
+              ) : (
+                <Button
+                  variant="danger"
+                  className="urgent"
+                  onClick={() => void leaveRoomWithConfirm()}
+                >
+                  {t("workspace.collaboration.leave")}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -488,8 +521,6 @@ function RoomPanelBody() {
             onChange={setMode}
           />
           <FieldRow
-            layout="inline"
-            density="compact"
             label={t("workspace.collaboration.displayName")}
             control={(id) => (
               <Input
@@ -500,8 +531,6 @@ function RoomPanelBody() {
             )}
           />
           <FieldRow
-            layout="inline"
-            density="compact"
             label={t("workspace.collaboration.color")}
             control={<ColorField value={color} onChange={setColor} />}
           />
@@ -509,8 +538,6 @@ function RoomPanelBody() {
           {mode === "create" ? (
             <>
               <FieldRow
-                layout="inline"
-                density="compact"
                 label={t("workspace.collaboration.hostMode")}
                 control={(id) => (
                   <Select
@@ -525,8 +552,6 @@ function RoomPanelBody() {
               />
               {hostMode !== "tunnel" && (
                 <FieldRow
-                  layout="inline"
-                  density="compact"
                   label={t("workspace.collaboration.lanPort")}
                   control={(id) => (
                     <Input
@@ -543,8 +568,6 @@ function RoomPanelBody() {
                 />
               )}
               <FieldRow
-                layout="inline"
-                density="compact"
                 label={t("workspace.collaboration.password")}
                 control={(id) => (
                   <SecretInput
@@ -558,7 +581,6 @@ function RoomPanelBody() {
                 )}
               />
               <FieldRow
-                density="compact"
                 htmlFor="collab-auto-approve"
                 label={t("workspace.collaboration.autoApproveEditor")}
                 reset={
@@ -613,8 +635,6 @@ function RoomPanelBody() {
               {joinMethod === "link" ? (
                 <>
                   <FieldRow
-                    layout="inline"
-                    density="compact"
                     label={t("workspace.collaboration.inviteLink")}
                     control={(id) => (
                       <SecretInput
@@ -630,8 +650,6 @@ function RoomPanelBody() {
               ) : (
                 <>
                   <FieldRow
-                    layout="inline"
-                    density="compact"
                     label={t("workspace.collaboration.serverUrl")}
                     control={(id) => (
                       <Input
@@ -643,8 +661,6 @@ function RoomPanelBody() {
                     )}
                   />
                   <FieldRow
-                    layout="inline"
-                    density="compact"
                     label={t("workspace.collaboration.password")}
                     control={(id) => (
                       <SecretInput
@@ -685,6 +701,51 @@ function RoomPanelBody() {
           )}
         </div>
       )}
+      <Modal
+        open={passwordOpen}
+        onClose={closePasswordEditor}
+        label={t("workspace.collaboration.changePassword")}
+        description={t("workspace.collaboration.changePasswordHint")}
+        className="redux-prompt-dialog collab-password-dialog"
+        actions={
+          <>
+            <Button variant="outlined" onClick={closePasswordEditor}>
+              {t("common.action.cancel")}
+            </Button>
+            <Button
+              variant="solid"
+              disabled={[...newPassword.trim()].length < 8}
+              onClick={submitPassword}
+            >
+              {t("workspace.collaboration.updatePassword")}
+            </Button>
+          </>
+        }
+      >
+        <FieldRow
+          layout="inline"
+          htmlFor="collab-new-password"
+          label={t("workspace.collaboration.newPassword")}
+          control={
+            <SecretInput
+              id="collab-new-password"
+              value={newPassword}
+              minLength={8}
+              maxLength={64}
+              autoComplete="new-password"
+              inputRef={passwordInput}
+              placeholder={t("workspace.collaboration.changePasswordPlaceholder")}
+              onChange={setNewPassword}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  submitPassword();
+                }
+              }}
+            />
+          }
+        />
+      </Modal>
     </div>
   );
 }

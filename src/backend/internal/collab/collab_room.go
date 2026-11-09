@@ -17,10 +17,9 @@ import (
 
 // Room limits, lease timing, and asset quotas.
 const (
-	collabProtocolVersion = 1
-	collabTokenAlphabet   = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	collabMaxMembers      = 32
-	collabDefaultMembers  = 4
+	collabTokenAlphabet  = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	collabMaxMembers     = 32
+	collabDefaultMembers = 4
 	// Room creation is bounded globally and per creator address so an
 	// unauthenticated caller cannot retain unlimited charts and logs.
 	collabMaxRooms         = 32
@@ -77,14 +76,17 @@ type collabMemberWire struct {
 
 // collabPresence is a member's cursor and viewport state.
 type collabPresence struct {
-	MemberID  string   `json:"memberId"`
-	Area      string   `json:"area"`
-	Section   string   `json:"section,omitempty"`
-	LineID    string   `json:"lineId,omitempty"`
-	Beat      *float64 `json:"beat,omitempty"`
-	PositionX *float64 `json:"positionX,omitempty"`
-	Playhead  *float64 `json:"playheadBeat,omitempty"`
-	UpdatedAt int64    `json:"updatedAt"`
+	MemberID     string   `json:"memberId"`
+	Area         string   `json:"area"`
+	Section      string   `json:"section,omitempty"`
+	LineID       string   `json:"lineId,omitempty"`
+	Beat         *float64 `json:"beat,omitempty"`
+	PositionX    *float64 `json:"positionX,omitempty"`
+	CursorRatio  *float64 `json:"cursorRatio,omitempty"`
+	Timeline     bool     `json:"timeline"`
+	TimelineArea string   `json:"timelineArea,omitempty"`
+	Playhead     *float64 `json:"playheadBeat,omitempty"`
+	UpdatedAt    int64    `json:"updatedAt"`
 }
 
 // collabAsset is one accepted room asset.
@@ -206,6 +208,31 @@ func collabFailure(code, message string) *collabError {
 	return &collabError{Code: code, Message: message}
 }
 
+// collabVersionFailure rejects a join or resume when the room and client
+// product versions differ. A room has no cross-version contract: both copies
+// must run the same build version.
+func collabVersionFailure(room *collabRoom, clientVersion string) *collabError {
+	expected := strings.TrimSpace(room.AppVersion)
+	actual := strings.TrimSpace(clientVersion)
+	if expected == actual {
+		return nil
+	}
+	label := func(value string) string {
+		if value == "" {
+			return "unknown"
+		}
+		return value
+	}
+	return collabFailure(
+		"version_mismatch",
+		fmt.Sprintf(
+			"This room uses RPE Redux %s; this client is %s. Both copies must use the same version.",
+			label(expected),
+			label(actual),
+		),
+	)
+}
+
 // Rooms owns every room and the shared asset blobs.
 type Rooms struct {
 	mu    sync.Mutex
@@ -314,8 +341,9 @@ func (r *Rooms) collabRoomQuotaLocked(owner string) *collabError {
 	return nil
 }
 
-// collabIsChartLike reports whether value has the top-level chart shape the room
-// accepts.
+// collabIsChartLike reports whether value has the chart envelope the room
+// accepts. Note and event collections are optional in the document model, so a
+// line that omits its empty collections is still a valid room chart.
 func collabIsChartLike(value any) bool {
 	record, ok := collabIsRecord(value)
 	if !ok {
@@ -327,7 +355,11 @@ func collabIsChartLike(value any) bool {
 	if _, ok := record["BPMList"].([]any); !ok {
 		return false
 	}
-	lines, ok := record["judgeLineList"].([]any)
+	linesValue, present := record["judgeLineList"]
+	if !present || linesValue == nil {
+		return true
+	}
+	lines, ok := linesValue.([]any)
 	if !ok {
 		return false
 	}
@@ -336,11 +368,14 @@ func collabIsChartLike(value any) bool {
 		if !ok {
 			return false
 		}
-		if _, ok := line["notes"].([]any); !ok {
-			return false
-		}
-		if _, ok := line["eventLayers"].([]any); !ok {
-			return false
+		for _, field := range []string{"notes", "eventLayers"} {
+			value, present := line[field]
+			if !present || value == nil {
+				continue
+			}
+			if _, ok := value.([]any); !ok {
+				return false
+			}
 		}
 	}
 	return true
@@ -421,7 +456,7 @@ func (r *Rooms) requestJoin(roomID, invite string, profile collabProfile, appVer
 
 // inspectRoom authenticates an invitation without creating a member or a
 // pending join request. It is used by the welcome-page deep-link preview.
-func (r *Rooms) inspectRoom(roomID, invite string) (*collabRoom, *collabError) {
+func (r *Rooms) inspectRoom(roomID, invite, appVersion string) (*collabRoom, *collabError) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	code := strings.ToUpper(strings.TrimSpace(roomID))
@@ -442,12 +477,19 @@ func (r *Rooms) inspectRoom(roomID, invite string) (*collabRoom, *collabError) {
 	if room.Invite != strings.TrimSpace(invite) {
 		return nil, collabFailure("bad_invite", "Room password is incorrect")
 	}
+	if failure := collabVersionFailure(room, appVersion); failure != nil {
+		return nil, failure
+	}
 	return room, nil
 }
 
 // requestJoinWithAuto creates an editor directly when the room opted out of
 // host approval; otherwise it returns a pending request for the host.
 func (r *Rooms) requestJoinWithAuto(roomID, invite string, profile collabProfile, appVersion ...string) (*collabRoom, *collabPending, *collabMember, *collabError) {
+	clientVersion := ""
+	if len(appVersion) > 0 {
+		clientVersion = appVersion[0]
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	code := strings.ToUpper(strings.TrimSpace(roomID))
@@ -477,6 +519,9 @@ func (r *Rooms) requestJoinWithAuto(roomID, invite string, profile collabProfile
 	}
 	if room.Invite != strings.TrimSpace(invite) {
 		return nil, nil, nil, collabFailure("bad_invite", "Room password is incorrect")
+	}
+	if failure := collabVersionFailure(room, clientVersion); failure != nil {
+		return nil, nil, nil, failure
 	}
 	if collabOnlineMembers(room) >= room.MaxMembers {
 		return nil, nil, nil, collabFailure("room_full", "Room is full")
@@ -513,14 +558,9 @@ func (r *Rooms) setMaxMembers(actorID string, value int) (*collabRoom, *collabEr
 	if actor == nil || actor.Role != "host" {
 		return nil, collabFailure("forbidden", "Only the host can change the limit")
 	}
-	// Lowering the cap below the current online count would put the room over
-	// its own limit immediately, including when members later resume.
-	if online := collabOnlineMembers(room); online > value {
-		return nil, collabFailure(
-			"bad_max_members",
-			"Maximum members cannot be lower than the current online member count",
-		)
-	}
+	// Existing members keep their place when the host lowers the cap. Later
+	// joins and resumes are refused by the capacity checks, so the room never
+	// removes or disconnects anyone as a side effect of a limit change.
 	room.MaxMembers = value
 	return room, nil
 }
@@ -589,6 +629,10 @@ func (r *Rooms) approve(actorID, requestID string, allow bool, role string) (*co
 
 // resume reconnects a member by its resume token and marks it online.
 func (r *Rooms) resume(roomID, token string, appVersion ...string) (*collabRoom, *collabMember, *collabError) {
+	clientVersion := ""
+	if len(appVersion) > 0 {
+		clientVersion = appVersion[0]
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	room := r.rooms[strings.ToUpper(strings.TrimSpace(roomID))]
@@ -597,6 +641,9 @@ func (r *Rooms) resume(roomID, token string, appVersion ...string) (*collabRoom,
 	}
 	for _, member := range room.Members {
 		if member.Token == token {
+			if failure := collabVersionFailure(room, clientVersion); failure != nil {
+				return nil, nil, failure
+			}
 			// A reconnect must not add an online member beyond the cap. A member
 			// whose previous socket is still marked online keeps its existing
 			// slot; an offline member needs a free one.
@@ -892,8 +939,8 @@ func (r *Rooms) evictOldestTransactionLocked(room *collabRoom) {
 	}
 }
 
-// acceptAsset records one uploaded asset, enforcing role, name, type, quota, and
-// host-only replacement rules.
+// acceptAsset records one uploaded asset, enforcing role, name, type, and quota.
+// Editors may add or replace a resource; viewers may never upload.
 func (r *Rooms) acceptAsset(memberID, name, hash string, size int64, mime string, bytes []byte, plaintextHash ...string) (collabAsset, *collabError) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -913,9 +960,6 @@ func (r *Rooms) acceptAsset(memberID, name, hash string, size int64, mime string
 		return collabAsset{}, collabFailure("invalid_name", "Asset name is not safe")
 	}
 	_, exists := room.Assets[safeName]
-	if exists && member.Role != "host" {
-		return collabAsset{}, collabFailure("forbidden", "Only the host can replace an existing asset")
-	}
 	if !collabAssetHashPattern.MatchString(hash) || !collabAllowedMime[mime] {
 		return collabAsset{}, collabFailure("invalid_asset", "Asset hash or type is invalid")
 	}
@@ -1324,22 +1368,21 @@ func (r *Rooms) welcomePayload(room *collabRoom, memberID string, includeChart b
 	}
 	sort.Slice(locks, func(left, right int) bool { return locks[left].ID < locks[right].ID })
 	payload := map[string]any{
-		"type":            "welcome",
-		"roomId":          room.ID,
-		"invite":          room.Invite,
-		"memberId":        member.ID,
-		"hostId":          room.HostID,
-		"role":            member.Role,
-		"revision":        room.Revision,
-		"fingerprint":     room.Fingerprint,
-		"maxMembers":      room.MaxMembers,
-		"members":         members,
-		"presence":        presence,
-		"assets":          assets,
-		"locks":           locks,
-		"resumeToken":     member.Token,
-		"protocolVersion": collabProtocolVersion,
-		"appVersion":      room.AppVersion,
+		"type":        "welcome",
+		"roomId":      room.ID,
+		"invite":      room.Invite,
+		"memberId":    member.ID,
+		"hostId":      room.HostID,
+		"role":        member.Role,
+		"revision":    room.Revision,
+		"fingerprint": room.Fingerprint,
+		"maxMembers":  room.MaxMembers,
+		"members":     members,
+		"presence":    presence,
+		"assets":      assets,
+		"locks":       locks,
+		"resumeToken": member.Token,
+		"appVersion":  room.AppVersion,
 	}
 	if includeChart {
 		payload["chart"] = room.Chart

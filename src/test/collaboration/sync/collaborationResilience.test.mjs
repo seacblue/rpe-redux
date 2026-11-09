@@ -22,11 +22,11 @@ import { recordUndo, validateUndo } from "../../../core/collaboration/undoLedger
 test("roles map to explicit capabilities", () => {
   assert.equal(canPerform("host", "manage-room"), true);
   assert.equal(canPerform("editor", "edit-chart"), true);
-  assert.equal(canPerform("editor", "replace-asset"), false);
+  assert.equal(canPerform("editor", "replace-asset"), true);
   assert.equal(canPerform("viewer", "edit-chart"), false);
   assert.equal(canPerform("viewer", "read"), true);
   assert.equal(canPublishAsset("editor", false), true);
-  assert.equal(canPublishAsset("editor", true), false);
+  assert.equal(canPublishAsset("editor", true), true);
   assert.equal(canPublishAsset("host", true), true);
   assert.equal(roomPermissions("viewer").read, true);
   assert.equal(roomPermissions("viewer").editChart, false);

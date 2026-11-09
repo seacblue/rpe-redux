@@ -371,7 +371,7 @@ interface ChartEventReadRef {
 }
 
 interface ChartResourceReference {
-  kind: "song" | "background" | "illustration" | "lineTexture" | "attachUI";
+  kind: "song" | "background" | "lineTexture" | "attachUI";
   name: string;
 }
 
@@ -598,7 +598,7 @@ The readable collections are `metadata`, `lines`, `notes`, and `events`. `limit`
 
 The `cursor` is an opaque token. Only pass back a `nextCursor` you received; never parse, construct, or reuse it across fingerprints. If a cursor is malformed, the page status is `invalid_request` with `reason: "invalid_cursor"`.
 
-`redux.chart.resources()` lists resource names referenced by the chart. Use it before replacing a song, background, illustration, line texture, or attached UI.
+`redux.chart.resources()` lists resource names referenced by the chart. Use it before replacing a song, background, line texture, or attached UI. `META.illustration` is the illustrator credit text, not an asset name.
 
 ### Chart shapes
 
@@ -1254,7 +1254,7 @@ const removed = unwrap(await redux.library.removeAsset(project.id, "old.png"));
 return { summary: "assets updated", added: added.asset.name, removed };
 ```
 
-`addAsset` and `removeAsset` commit the project's stored library copy. Ask the user to save open editor changes before using them, and update metadata or line texture references with a transaction when an asset is renamed or removed. To attach a song, background, illustration, or line texture, upload the asset and then patch `metadata.song`, `metadata.background`, `metadata.illustration`, or the line's `Texture` to the exact asset name. Project deletion is not available to cells.
+`addAsset` and `removeAsset` commit the project's stored library copy. Ask the user to save open editor changes before using them, and update metadata or line texture references with a transaction when an asset is renamed or removed. To attach a song, background, or line texture, upload the asset and then patch `metadata.song`, `metadata.background`, or the line's `Texture` to the exact asset name. Patch `metadata.illustration` only to change the illustrator credit. Project deletion is not available to cells.
 
 ## Limits and errors
 

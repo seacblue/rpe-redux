@@ -39,9 +39,11 @@ import {
   type TransactionInput,
 } from "../../../../../core/collaboration/client.ts";
 import {
+  collaborationAssetRevision,
   collaborationPendingAssets,
   collaborationPreparing,
   collaborationRoom,
+  collaborationRoomDocument,
   EMPTY_COLLABORATION_STATE,
 } from "../../../../../core/collaboration/ui.ts";
 import { openPane } from "../../inspector/controller.ts";
@@ -63,9 +65,14 @@ import {
 } from "../../../../../core/collaboration/assets.ts";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { getRuntimePorts } from "../../../../../core/platform/runtimePorts.ts";
+import {
+  getEditorRegionSnapshot,
+  showsAuthoringRegion,
+  subscribeToEditorRegions,
+} from "../runtime/commands/viewControls.ts";
 import { BUILD_APP_VERSION } from "../../../../../core/platform/buildInfo.ts";
 import { changeLockKeys } from "../../../../../core/collaboration/changes.ts";
-import { sha256Hex } from "../../../../../core/collaboration/digest.ts";
+import { randomToken, sha256Hex } from "../../../../../core/collaboration/digest.ts";
 import type {
   CollaborationProfile,
   CollaborationRole,
@@ -93,7 +100,6 @@ import {
 import { useEditorSession } from "../runtime/providers/SessionProvider.tsx";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
-import { setJoinedRoomDocument } from "../document/save/saver.ts";
 import { inspectRoomInvite } from "./roomInvitePreview.ts";
 import { requestRoomInviteConfirmation } from "./roomInvitePrompt.tsx";
 
@@ -117,6 +123,11 @@ const DEFAULT_SETTINGS: CollaborationSettings = Object.freeze({
   hostMode: "tunnel",
   lanPort: "",
 });
+
+/** The loopback room endpoint owned by this desktop process. */
+function localRoomServerUrl(): string {
+  return `ws://127.0.0.1:${getRuntimePorts().collabPort}`;
+}
 
 /**
  * A fresh LAN port suggestion for this app launch; never written on its own.
@@ -302,6 +313,20 @@ function applyRole(session: EditorSession, state: CollaborationState): void {
   session.setCollaborationActor(access.active ? state.memberId : "");
 }
 
+/**
+ * Authored audio and background image a room must be able to share.
+ *
+ * RPE stores the picture in `META.background`; `META.illustration` is the
+ * illustrator credit text and never names an asset.
+ */
+function missingRequiredRoomAssets(chart: Chart, assets: AssetMap, chartName: string): string[] {
+  const meta = chart.META ?? {};
+  const required = [meta.song, meta.background].filter(
+    (name): name is string => typeof name === "string" && name.trim().length > 0,
+  );
+  return [...new Set(required)].filter((name) => !assetPath(assets, name, chartName));
+}
+
 /** Joins the display names of the members holding conflicting locks. */
 function lockOwners(conflicts: readonly RoomLock[], members: readonly RoomMember[]): string {
   const names = conflicts.map(
@@ -336,6 +361,7 @@ async function publishChartAssets(
   document: DocumentRuntime | null,
   uploading: Map<string, Promise<boolean>>,
   chart: unknown,
+  allowReplace = false,
 ): Promise<boolean> {
   if (!client || !document) {
     return true;
@@ -372,8 +398,12 @@ async function publishChartAssets(
     if (existing && (existing.plaintextHash ?? existing.hash) === hash) {
       return true;
     }
-    // An editor may contribute a new resource, but only the host may replace an
-    // existing room resource with different bytes.
+    // Joining or committing the chart only fills gaps; replacing a room
+    // resource requires an explicit asset-library edit, so a stale local copy
+    // cannot win a race against a remote replacement.
+    if (existing && !allowReplace) {
+      return true;
+    }
     if (!canPublishAsset(stateNow.role, existing !== undefined)) {
       return true;
     }
@@ -452,7 +482,6 @@ interface HandlerSet {
   conflict: (conflict: Extract<ServerMessage, { type: "conflict" }>) => void;
   role: (role: CollaborationRole, reason?: string) => void;
   error: (message: string, code?: string) => void;
-  warning: (message: string, code?: string) => void;
   assetReady: (asset: RoomAsset, bytes: Uint8Array) => void;
   assetError: (message: string) => void;
   lockDenied: (conflicts: readonly RoomLock[]) => void;
@@ -483,6 +512,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const uploading = useRef(new Map<string, Promise<boolean>>());
   const stateCell = collaborationRoom;
   const state = useSyncExternalStore(stateCell.subscribe, stateCell.get, stateCell.get);
+  const assetRevision = useSyncExternalStore(
+    collaborationAssetRevision.subscribe,
+    collaborationAssetRevision.get,
+    collaborationAssetRevision.get,
+  );
+  const publishedAssetRevision = useRef(collaborationAssetRevision.get());
   const visible = useSyncExternalStore(
     subscribeToEditorVisibility,
     getEditorVisibility,
@@ -509,7 +544,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     conflict: () => {},
     role: () => {},
     error: () => {},
-    warning: () => {},
     assetReady: () => {},
     assetError: () => {},
     lockDenied: () => {},
@@ -631,7 +665,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onConflict: (conflict) => handlersRef.current.conflict(conflict),
       onRole: (role, reason) => handlersRef.current.role(role, reason),
       onError: (message, code) => handlersRef.current.error(message, code),
-      onWarning: (message, code) => handlersRef.current.warning(message, code),
       onAssetReady: (asset, bytes) => handlersRef.current.assetReady(asset, bytes),
       onAssetError: (message) => handlersRef.current.assetError(message),
       onLockDenied: (conflicts) => handlersRef.current.lockDenied(conflicts),
@@ -647,10 +680,20 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         sessionClaimed.current = false;
         void invoke("release_collab_session").catch(() => undefined);
       }
+      const documents = runtime?.documents ?? currentDocumentStore();
+      void documents?.discardDetachedRecovery();
       collaborationRoom.set(EMPTY_COLLABORATION_STATE);
       collaborationPendingAssets.set([]);
+      collaborationRoomDocument.set(false);
     };
-  }, [stateCell]);
+  }, [runtime, stateCell]);
+
+  // A temporary room chart must not survive a crash or a previous run. Clear
+  // the detached recovery family once the editor host is available.
+  useEffect(() => {
+    const documents = runtime?.documents ?? currentDocumentStore();
+    void documents?.discardDetachedRecovery();
+  }, [runtime]);
 
   // Resume the host's last room once a document is mounted. The room server
   // persists its members, so the token keeps the host role and authoritative
@@ -721,7 +764,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         return;
       }
       client.resumeRoom(publicUrl, stored.roomId, stored.resumeToken, {
-        socketUrl: isDesktop() ? DEFAULT_SETTINGS.serverUrl : publicUrl,
+        socketUrl: isDesktop() ? localRoomServerUrl() : publicUrl,
       });
     })();
   }, [visible.hasDocument, sessionRuntime, ensureSession, settings.hostMode, settings.lanPort]);
@@ -746,7 +789,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         // A join that never produced a snapshot leaves the local document intact.
         roomJoinPending.current = false;
         joinedRecoveryFingerprint.current = null;
-        setJoinedRoomDocument(false);
+        collaborationRoomDocument.set(false);
       }
       if (next === "connected") {
         showToast(
@@ -779,6 +822,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   /** Writes one displaced chart into the native recovery store, reporting failure. */
   const writeRecovery = async (chart: unknown): Promise<boolean> => {
+    // A room chart is a temporary working copy. Keep conflict copies in the
+    // panel for export, but never persist them into local recovery storage.
+    if (roomDocumentAdopted.current) {
+      return true;
+    }
     const documents = runtime?.documents ?? currentDocumentStore();
     if (!documents) {
       return false;
@@ -810,9 +858,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   /**
    * Replaces the joined guest's document with the room chart.
    *
-   * The room chart has no local file or library target. Save isolation stays set
-   * until the old native document is detached; if detaching fails, it remains as
-   * the fallback that keeps Ctrl+S from overwriting the guest's original file.
+   * The room chart gets a temporary title and no local file or library target.
+   * It stays a room document until the guest leaves; saves are refused and any
+   * recovery draft from the previous document remains owned by that document.
    */
   const adoptJoinedRoomChart = (chart: Chart): void => {
     const document = contextRef.current.documentRuntime;
@@ -820,25 +868,36 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       return;
     }
     const documents = contextRef.current.runtime?.documents ?? currentDocumentStore();
-    setJoinedRoomDocument(true);
-    document.replaceChart(chart, t("workspace.collaboration.roomChart"));
+    collaborationRoomDocument.set(true);
+    // Mark room assets that are about to download before the chart loads its
+    // images. The media report can then wait for the room copy instead of
+    // flashing a transient "missing asset" notice during normal joining.
+    const roomAssets = clientRef.current?.state.get().assets ?? [];
+    const localAssets = document.currentAssets();
+    const chartName = document.currentChartName();
+    const pending = chartAssetNames(chart).filter((name) => {
+      if (!roomAssets.some((asset) => asset.name === name)) {
+        return false;
+      }
+      const path = assetPath(localAssets, name, chartName);
+      return !path || (!localAssets.get(path) && !localAssets.uri?.(path));
+    });
+    setPendingAssets(pending);
+    collaborationPendingAssets.set(pending);
+    // A joined chart is a temporary document with no durable local identity.
+    // A 32-byte random value gives it a 64-hex-character name no local chart
+    // can collide with, even when the chart metadata or song name matches.
+    document.adoptChart(chart, randomToken(32));
     roomDocumentAdopted.current = true;
     void requestMissing(chart);
-    // Future autosaves belong to the room document, not the pre-join draft.
+    // Future recovery writes belong to the pre-join draft, never the room copy.
     documents?.detachRecoveryTarget();
-    if (!documents?.current) {
-      setJoinedRoomDocument(false);
-      return;
-    }
-    void documents
-      .close()
-      .then(() => {
-        setJoinedRoomDocument(false);
-      })
-      .catch(() => {
-        // The old path is still mounted, so keep the save guard active.
+    if (documents?.current) {
+      void documents.close().catch(() => {
+        // The old path is still mounted, but the save guard stays active.
         showToast(t("workspace.collaboration.applyFailed"), "error");
       });
+    }
   };
 
   /** Clears the local room presentation and releases host bridges. */
@@ -849,15 +908,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const adopted = roomDocumentAdopted.current;
     roomDocumentAdopted.current = false;
     const documents = runtime?.documents ?? currentDocumentStore();
-    if (adopted && documents?.current) {
-      // The earlier detach failed; retry before dropping the save guard.
-      void documents
-        .close()
-        .then(() => setJoinedRoomDocument(false))
-        .catch(() => undefined);
-    } else {
-      setJoinedRoomDocument(false);
-    }
+    collaborationRoomDocument.set(false);
+    void documents?.discardDetachedRecovery();
     writeHostSession(null);
     setStartingRoom(false);
     setJoiningRoom(false);
@@ -869,6 +921,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setPendingAssets([]);
     collaborationPendingAssets.set([]);
     sessionRuntime.current.setCollaborationAccess(false, false);
+    // The adopted document is the guest's temporary room copy. Drop it so a
+    // later local save cannot turn it into a permanent library chart.
+    if (adopted) {
+      contextRef.current.documentRuntime?.discardDocument();
+    }
     if (isDesktop()) {
       void invoke("stop_collab_tunnel").catch(() => undefined);
       void invoke("stop_lan_bridge").catch(() => undefined);
@@ -900,7 +957,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         case "room_closed":
           return t("workspace.collaboration.roomClosed");
         case "version_mismatch":
-          return t("workspace.collaboration.compatibilityMismatch");
+          return t("workspace.collaboration.versionMismatch");
+        case "host_must_close":
+          return t("workspace.collaboration.hostMustClose");
+        case "removed":
+          return t("workspace.collaboration.removed");
         default:
           return message;
       }
@@ -957,8 +1018,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (!getEditorVisibility().hasDocument && document) {
-          document.replaceChart(parsed, t("workspace.collaboration.roomChart"));
-          void requestMissing(parsed);
+          adoptJoinedRoomChart(parsed);
           return;
         }
         appliedRevision.current = client.state.get().revision;
@@ -1082,6 +1142,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         );
       },
       error: (message, code) => {
+        if (code === "removed") {
+          finishRoomExit();
+          showNotice(connectionErrorText(message, code), "warning");
+          return;
+        }
         if (code === "room_closed") {
           finishRoomExit();
           showNotice(connectionErrorText(message, code), "warning");
@@ -1090,9 +1155,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (
           code === "no_room" ||
           code === "bad_resume" ||
-          code === "protocol_mismatch" ||
           code === "version_mismatch" ||
-          code === "removed" ||
           code === "room_closed" ||
           code === "bad_invite"
         ) {
@@ -1100,7 +1163,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           if (roomJoinPending.current) {
             roomJoinPending.current = false;
             joinedRecoveryFingerprint.current = null;
-            setJoinedRoomDocument(false);
+            collaborationRoomDocument.set(false);
           }
           if (resuming.current) {
             resuming.current = false;
@@ -1129,9 +1192,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           clientRef.current?.requestSnapshot();
         }
         showNotice(connectionErrorText(message, code), "error");
-      },
-      warning: () => {
-        showNotice(t("workspace.collaboration.versionDifferenceWarning"), "warning");
       },
       assetReady: (asset, bytes) => {
         contextRef.current.documentRuntime?.adoptAsset(asset.name, bytes);
@@ -1250,7 +1310,48 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     applyRole(sessionRuntime.current, stateCell.get());
   }, [sessionRuntime, stateCell, state.role, state.roomId]);
 
+  // Joining or reconnecting fills room asset gaps, but never overwrites an
+  // existing room resource with a stale local copy.
   useEffect(() => {
+    if (state.status !== "connected" || !state.roomId) {
+      return;
+    }
+    void publishChartAssets(
+      clientRef.current,
+      contextRef.current.documentRuntime,
+      uploading.current,
+      sessionRuntime.current.chart,
+    ).then((ok) => {
+      if (!ok) {
+        showToast(t("workspace.collaboration.assetUploadFailed"), "error");
+      }
+    });
+  }, [sessionRuntime, state.role, state.roomId, state.status]);
+
+  // A remote manifest change only requests missing bytes. Publishing here would
+  // make one client's stale copy fight the replacement that just arrived.
+  useEffect(() => {
+    if (state.status !== "connected" || !state.roomId) {
+      return;
+    }
+    void requestChartAssets(
+      clientRef.current,
+      contextRef.current.documentRuntime,
+      sessionRuntime.current.chart,
+    ).then((missing) => {
+      setPendingAssets(missing);
+      collaborationPendingAssets.set(missing);
+    });
+  }, [sessionRuntime, state.assets, state.role, state.roomId, state.status]);
+
+  // A local asset-library edit is explicit: it may replace room bytes and is
+  // pushed asynchronously so an in-progress chart edit is never blocked.
+  useEffect(() => {
+    const revision = collaborationAssetRevision.get();
+    if (revision === publishedAssetRevision.current) {
+      return;
+    }
+    publishedAssetRevision.current = revision;
     if (state.status !== "connected" || !state.roomId) {
       return;
     }
@@ -1260,13 +1361,20 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       contextRef.current.documentRuntime,
       uploading.current,
       chart,
-    )
-      .then(() => requestChartAssets(clientRef.current, contextRef.current.documentRuntime, chart))
-      .then((missing) => {
-        setPendingAssets(missing);
-        collaborationPendingAssets.set(missing);
-      });
-  }, [sessionRuntime, state.assets, state.role, state.roomId, state.status]);
+      true,
+    ).then((ok) => {
+      if (!ok) {
+        showToast(t("workspace.collaboration.assetUploadFailed"), "error");
+        return;
+      }
+      void requestChartAssets(clientRef.current, contextRef.current.documentRuntime, chart).then(
+        (missing) => {
+          setPendingAssets(missing);
+          collaborationPendingAssets.set(missing);
+        },
+      );
+    });
+  }, [assetRevision, sessionRuntime, state.role, state.roomId, state.status]);
 
   // Presence sampling: pointer moves are throttled, while a low-rate timer keeps
   // the playhead and the current workspace visible even without pointer motion.
@@ -1274,9 +1382,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!runtime) {
       return;
     }
-    const canvas = runtime.timeline.notesCanvas;
+    const notesCanvas = runtime.timeline.notesCanvas;
+    const eventsCanvas = runtime.timeline.eventsCanvas;
     let lastSent = 0;
-    let lastPointer: { x: number; y: number } | null = null;
+    let lastPointer: { area: "notes" | "events"; x: number; y: number } | null = null;
     let timer: number | null = null;
 
     const publish = (force = false) => {
@@ -1294,11 +1403,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       }
       const session = runtime.getSession();
       const drawer = getDrawerState();
+      const timeline = showsAuthoringRegion(getEditorRegionSnapshot());
       const base: MemberPresence = {
         memberId: roomState.memberId,
         area: "edit",
         updatedAt: now,
         playheadBeat: runtime.timeline.viewport.origin,
+        timeline,
       };
       if (drawer.open) {
         client.sendPresence({ ...base, section: drawer.pane });
@@ -1306,51 +1417,82 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         return;
       }
       const point = lastPointer;
-      if (!point) {
+      if (!point || !timeline) {
         client.sendPresence(base);
         lastSent = now;
         return;
       }
+      const canvas = point.area === "events" ? eventsCanvas : notesCanvas;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       if (width <= 0 || height <= 0) {
+        client.sendPresence(base);
+        lastSent = now;
+        return;
+      }
+      const cursorRatio = Math.min(1, Math.max(0, point.x / width));
+      if (point.area === "events") {
+        client.sendPresence({
+          ...base,
+          timelineArea: "events",
+          beat: runtime.timeline.viewport.eventBeatAt(point.y, "moveX"),
+          cursorRatio,
+        });
+        lastSent = now;
         return;
       }
       const lineIndex = runtime.timeline.viewport.lineIndexAt(point.x, width, "notes");
       const line = session.chart.judgeLineList?.[lineIndex];
       client.sendPresence({
         ...base,
+        timelineArea: "notes",
         lineId: line?.id,
         beat: runtime.timeline.viewport.beatAt(point.y),
         positionX: runtime.timeline.viewport.notePositionAt(point.x, lineIndex),
+        cursorRatio,
       });
       lastSent = now;
     };
 
-    const onPointerMove = (event: PointerEvent) => {
+    const trackPointer = (area: "notes" | "events") => (event: PointerEvent) => {
+      const canvas = area === "events" ? eventsCanvas : notesCanvas;
       const bounds = canvas.getBoundingClientRect();
       if (bounds.width <= 0 || bounds.height <= 0) {
         return;
       }
       lastPointer = {
+        area,
         x: ((event.clientX - bounds.left) * canvas.clientWidth) / bounds.width,
         y: ((event.clientY - bounds.top) * canvas.clientHeight) / bounds.height,
       };
       publish();
     };
-    const onPointerLeave = () => {
+    const onNotesMove = trackPointer("notes");
+    const onEventsMove = trackPointer("events");
+    const onPointerLeave = (event: PointerEvent) => {
+      // Crossing between the two canvases keeps the last pointer until the
+      // destination reports its own move.
+      if (event.relatedTarget === notesCanvas || event.relatedTarget === eventsCanvas) {
+        return;
+      }
       lastPointer = null;
       publish(true);
     };
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerleave", onPointerLeave);
+    notesCanvas.addEventListener("pointermove", onNotesMove);
+    eventsCanvas.addEventListener("pointermove", onEventsMove);
+    notesCanvas.addEventListener("pointerleave", onPointerLeave);
+    eventsCanvas.addEventListener("pointerleave", onPointerLeave);
     const unsubscribeDrawer = subscribeDrawer(() => publish(true));
+    const unsubscribeRegions = subscribeToEditorRegions(() => publish(true));
     timer = window.setInterval(() => publish(true), 1000);
     publish(true);
     return () => {
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerleave", onPointerLeave);
+      notesCanvas.removeEventListener("pointermove", onNotesMove);
+      eventsCanvas.removeEventListener("pointermove", onEventsMove);
+      notesCanvas.removeEventListener("pointerleave", onPointerLeave);
+      eventsCanvas.removeEventListener("pointerleave", onPointerLeave);
       unsubscribeDrawer();
+      unsubscribeRegions();
       if (timer !== null) {
         window.clearInterval(timer);
       }
@@ -1407,13 +1549,30 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!client || hostBusy.current || resuming.current) {
       return;
     }
+    const document = contextRef.current.documentRuntime;
+    const missing = document
+      ? missingRequiredRoomAssets(
+          sessionRuntime.current.chart,
+          document.currentAssets(),
+          document.currentChartName(),
+        )
+      : [];
+    if (missing.length) {
+      showModalNotice({
+        title: t("workspace.collaboration.assetsRequiredTitle"),
+        description: t("workspace.collaboration.assetsRequiredBody", {
+          names: missing.join(", "),
+        }),
+      });
+      return;
+    }
     if (!(await ensureSession())) {
       return;
     }
     roomJoinPending.current = false;
     joinedRecoveryFingerprint.current = null;
     roomDocumentAdopted.current = false;
-    setJoinedRoomDocument(false);
+    collaborationRoomDocument.set(false);
     hostBusy.current = true;
     setStartingRoom(true);
     try {
@@ -1446,7 +1605,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       // The host stays on the local authoritative server; only invitees cross
       // the Tunnel or LAN bridge. This avoids waiting for public DNS first.
       client.connect(current.serverUrl, {
-        socketUrl: isDesktop() ? DEFAULT_SETTINGS.serverUrl : current.serverUrl,
+        socketUrl: isDesktop() ? localRoomServerUrl() : current.serverUrl,
       });
       client.createRoom(
         profile(current),
@@ -1533,14 +1692,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     // arrives, then persist the local edits so closing the app cannot lose them.
     roomJoinPending.current = true;
     roomDocumentAdopted.current = false;
-    setJoinedRoomDocument(true);
+    collaborationRoomDocument.set(true);
     if (recoverySnapshot) {
       setRecovery(recoverySnapshot);
       if (!(await writeRecovery(recoverySnapshot))) {
         // Joining would replace the only copy of these edits.
         roomJoinPending.current = false;
         joinedRecoveryFingerprint.current = null;
-        setJoinedRoomDocument(false);
+        collaborationRoomDocument.set(false);
         setJoiningRoom(false);
         showToast(t("workspace.collaboration.recoveryWriteFailed"), "error");
         return;
@@ -1562,8 +1721,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   /** Leaves the room and releases the host bridge and session claim. */
   const leaveRoom = () => {
+    if (stateCell.get().role === "host") {
+      showToast(t("workspace.collaboration.hostMustClose"), "warning");
+      return;
+    }
     clientRef.current?.leave();
     finishRoomExit();
+    showToast(t("workspace.collaboration.left"), "info");
   };
 
   /** Host-only room deletion; guests receive the server's close notice. */

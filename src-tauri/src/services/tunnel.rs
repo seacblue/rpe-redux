@@ -1,8 +1,9 @@
 //! Managed Cloudflare Quick Tunnel for the local collaboration room.
 //!
-//! The desktop sidecar already owns the authoritative WebSocket server on
-//! loopback. This module only exposes that port through a temporary
-//! `trycloudflare.com` HTTPS endpoint and reports the URL to the frontend.
+//! The desktop sidecar already owns the authoritative WebSocket server on its
+//! configured loopback port. This module only exposes that port through a
+//! temporary `trycloudflare.com` HTTPS endpoint and reports the URL to the
+//! frontend.
 
 use std::{
     io::{BufRead, BufReader, Read},
@@ -13,8 +14,6 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-/// Loopback HTTP origin the tunnel forwards to.
-const ROOM_ORIGIN: &str = "http://127.0.0.1:47830";
 /// Bundled tunnel client file name for the host platform.
 const CLOUDFLARED_FILE: &str = if cfg!(windows) {
     "cloudflared.exe"
@@ -173,12 +172,16 @@ fn start(app: &AppHandle) -> Result<String, String> {
     let binary = cloudflared_path(app)?;
     crate::storage::ensure_executable(&binary)
         .map_err(|error| format!("Cloudflare Tunnel client is not executable: {error}"))?;
+    let room_origin = format!(
+        "http://127.0.0.1:{}",
+        crate::services::server::read_runtime_ports(app.clone())?.collab_port
+    );
     let mut command = Command::new(binary);
     command
         .args([
             "tunnel".to_owned(),
             "--url".to_owned(),
-            ROOM_ORIGIN.to_owned(),
+            room_origin,
             // Force IPv4 edges so a machine without a working IPv6 route does
             // not spend the startup window retrying unreachable endpoints.
             "--edge-ip-version".to_owned(),

@@ -10,9 +10,9 @@ import {
   sanitizeAssetName,
 } from "../../../core/collaboration/assets.ts";
 
-test("chart resource names include metadata, line textures, and note hit sounds", () => {
+test("chart resource names include assets but not the illustration credit", () => {
   const names = chartAssetNames({
-    META: { song: "audio/song.mp3", background: "cover.png", illustration: "cover.png" },
+    META: { song: "audio/song.mp3", background: "cover.png", illustration: "artist credit" },
     judgeLineList: [
       {
         Texture: "line.png",
@@ -25,6 +25,7 @@ test("chart resource names include metadata, line textures, and note hit sounds"
     [...names].sort(),
     ["audio/song.mp3", "cover.png", "hit-2.wav", "hit.wav", "line.png", "ui/skin.png"].sort(),
   );
+  assert.equal(names.includes("artist credit"), false);
 });
 
 test("unsafe names and unknown MIME types are rejected", () => {
@@ -61,6 +62,12 @@ test("resource-change classification skips ordinary note edits", () => {
       { op: "add", path: "/judgeLineList/$line-a/notes/$note-a2", after: { id: "note-a2" } },
     ]),
     true,
+  );
+  assert.equal(
+    chartChangesMayAffectAssets([
+      { op: "set", path: "/META/illustration", before: "old artist", after: "new artist" },
+    ]),
+    false,
   );
 });
 

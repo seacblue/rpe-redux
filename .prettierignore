@@ -2,6 +2,7 @@
 dist/
 release/
 node_modules/
+.agents/
 .local-tools/
 src-tauri/
 src/backend/

@@ -132,7 +132,6 @@ export function chartAssetNames(chart: unknown): string[] {
   };
   add(record.META?.song);
   add(record.META?.background);
-  add(record.META?.illustration);
   if (Array.isArray(record.judgeLineList)) {
     for (const line of record.judgeLineList) {
       if (!line || typeof line !== "object") {
@@ -154,10 +153,11 @@ export function chartAssetNames(chart: unknown): string[] {
   return [...names];
 }
 
+// `META.illustration` is the illustrator credit, not an image name. Only the
+// fields that resolve to an asset travel in the reference list.
 const ASSET_REFERENCE_FIELDS = new Set([
   "song",
   "background",
-  "illustration",
   "Texture",
   "attachUI",
   "hitSound",

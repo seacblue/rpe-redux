@@ -54,6 +54,7 @@ const EDITOR_CAPABILITIES: readonly RoomCapability[] = Object.freeze([
   "edit-chart",
   "edit-metadata",
   "upload-asset",
+  "replace-asset",
   "undo-own",
 ]);
 
@@ -90,8 +91,8 @@ export function roomPermissions(role: CollaborationRole): RoomPermissions {
 /**
  * Whether a role may publish bytes under one asset name.
  *
- * Adding a new resource is an editor action; replacing an existing room
- * resource with different bytes stays a host action. Viewers may never upload.
+ * Editors may add or replace a room resource; viewers may never upload. The
+ * room remains authoritative and broadcasts the accepted bytes to every member.
  */
 export function canPublishAsset(role: CollaborationRole, replacesExisting: boolean): boolean {
   return canPerform(role, replacesExisting ? "replace-asset" : "upload-asset");

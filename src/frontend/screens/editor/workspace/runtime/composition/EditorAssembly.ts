@@ -10,6 +10,7 @@
 import {
   collaborationPreparing,
   collaborationRoom,
+  collaborationRoomDocument,
   roomNeedsExitConfirmation,
 } from "../../../../../../core/collaboration/ui.ts";
 import { createTimelineEventAction } from "../../timeline/events/eventActions.ts";
@@ -910,7 +911,7 @@ export function createEditorAssembly(
       clock: autoSave,
       session: () => session.current,
       lastDraftDocument: () => documentState.lastDraftDocument,
-      enabled: () => runtimeValues.autosaveEnabled.get(),
+      enabled: () => runtimeValues.autosaveEnabled.get() && !collaborationRoomDocument.get(),
       seconds: () => Number(runtimeValues.autosaveSeconds.get() ?? 60),
     },
     metrics: playbackMetrics,
@@ -935,14 +936,23 @@ export function createEditorAssembly(
   let disposePlayback = () => {};
   let disposeSelection = () => {};
   const confirmExit = () =>
-    requestConfirm({
-      title: t("editor.app.dialog.exitUnsavedTitle"),
-      description: t("editor.app.dialog.exitUnsavedBody"),
-      label: t("editor.app.dialog.exitDiscard"),
-      cancelLabel: t("editor.app.dialog.exitKeep"),
-      destructive: true,
-      priority: MODAL_PRIORITY.closePrompt,
-    });
+    collaborationRoomDocument.get()
+      ? requestConfirm({
+          title: t("workspace.collaboration.exitTemporaryTitle"),
+          description: t("workspace.collaboration.exitTemporaryBody"),
+          label: t("workspace.collaboration.exitTemporaryConfirm"),
+          cancelLabel: t("editor.app.dialog.exitKeep"),
+          destructive: true,
+          priority: MODAL_PRIORITY.closePrompt,
+        })
+      : requestConfirm({
+          title: t("editor.app.dialog.exitUnsavedTitle"),
+          description: t("editor.app.dialog.exitUnsavedBody"),
+          label: t("editor.app.dialog.exitDiscard"),
+          cancelLabel: t("editor.app.dialog.exitKeep"),
+          destructive: true,
+          priority: MODAL_PRIORITY.closePrompt,
+        });
   scope.add(clearToasts);
   scope.add(() => disposePlayback());
   scope.add(() => disposeSelection());

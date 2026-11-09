@@ -401,7 +401,7 @@ function buildChart() {
   chart.META.composer = CHART.composer;
   chart.META.charter = CHART.charter;
   chart.META.level = CHART.level;
-  chart.META.illustration = IMAGE.file;
+  chart.META.illustration = "Fixture Illustrator";
   chart.META.song = AUDIO.file;
   chart.META.background = IMAGE.file;
   chart.META.offset = 0;

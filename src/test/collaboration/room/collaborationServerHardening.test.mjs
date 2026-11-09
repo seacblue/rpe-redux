@@ -6,10 +6,6 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { connect as connectTcp } from "node:net";
 
-const PROTOCOL_MISMATCH = "protocol_mismatch";
-const REQUIRES_V1 = "This room requires protocol version 1.";
-const INVALID_VERSION = "The protocol version is invalid.";
-
 function chart(name = "base") {
   return {
     META: { name },
@@ -289,51 +285,24 @@ class RawRoomClient {
   }
 }
 
-test("create, join, and resume require the current numeric protocol version", async () => {
+test("joins, resumes, and previews require the same product version", async () => {
   const running = await startServer();
   try {
-    const cases = [
-      { name: "missing", value: undefined, message: REQUIRES_V1 },
-      { name: "string", value: "1", message: INVALID_VERSION },
-      { name: "fractional", value: 1.5, message: INVALID_VERSION },
-      { name: "older", value: 0, message: REQUIRES_V1 },
-      { name: "newer", value: 2, message: REQUIRES_V1 },
-    ];
-    for (const testCase of cases) {
-      const client = await open(running.url);
-      client.socket.send(
-        JSON.stringify({
-          type: "create",
-          ...(testCase.value === undefined ? {} : { protocolVersion: testCase.value }),
-          profile: { name: "Host", color: "#ffffff" },
-          chart: chart(),
-          fingerprint: "protocol",
-        }),
-      );
-      const rejected = await client.next();
-      assert.equal(rejected.type, "error", testCase.name);
-      assert.equal(rejected.code, PROTOCOL_MISMATCH, testCase.name);
-      assert.equal(rejected.message, testCase.message, testCase.name);
-      client.socket.close();
-    }
-    const health = await fetch(`http://127.0.0.1:${running.port}/health`).then((response) =>
-      response.json(),
-    );
-    assert.equal(health.rooms, 0, "a rejected handshake must not create a room");
-
     const host = await open(running.url);
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
-        fingerprint: "protocol",
+        fingerprint: "version",
+        appVersion: "1.0.7",
+        autoApproveEditor: true,
       }),
     );
     const welcome = await host.next();
     assert.equal(welcome.type, "welcome");
-    assert.equal(welcome.protocolVersion, 1);
+    assert.equal(welcome.protocolVersion, undefined);
+    assert.equal(welcome.appVersion, "1.0.7");
 
     const guest = await open(running.url);
     guest.socket.send(
@@ -342,28 +311,49 @@ test("create, join, and resume require the current numeric protocol version", as
         roomId: welcome.roomId,
         invite: welcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
+        appVersion: "1.0.8",
       }),
     );
     const joinRejected = await guest.next();
-    assert.equal(joinRejected.code, PROTOCOL_MISMATCH);
+    assert.equal(joinRejected.type, "rejected");
+    assert.equal(joinRejected.reason, "version_mismatch");
+
     guest.socket.send(
       JSON.stringify({
-        type: "join",
-        protocolVersion: 1,
+        type: "inspect-room",
         roomId: welcome.roomId,
         invite: welcome.invite,
-        profile: { name: "Guest", color: "#00ff00" },
+        appVersion: "1.0.8",
       }),
     );
-    assert.equal((await guest.next()).type, "waiting");
+    const previewRejected = await guest.next();
+    assert.equal(previewRejected.type, "rejected");
+    assert.equal(previewRejected.reason, "version_mismatch");
 
     const resume = await open(running.url);
     resume.socket.send(
-      JSON.stringify({ type: "resume", roomId: welcome.roomId, token: welcome.resumeToken }),
+      JSON.stringify({
+        type: "resume",
+        roomId: welcome.roomId,
+        token: welcome.resumeToken,
+        appVersion: "1.0.6",
+      }),
     );
     const resumeRejected = await resume.next();
-    assert.equal(resumeRejected.code, PROTOCOL_MISMATCH);
+    assert.equal(resumeRejected.type, "rejected");
+    assert.equal(resumeRejected.reason, "version_mismatch");
     resume.socket.close();
+
+    guest.socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId: welcome.roomId,
+        invite: welcome.invite,
+        profile: { name: "Guest", color: "#00ff00" },
+        appVersion: "1.0.7",
+      }),
+    );
+    assert.equal((await guest.next()).type, "welcome");
     guest.socket.close();
     host.socket.close();
   } finally {
@@ -423,7 +413,6 @@ test("a socket is closed after ten failed join attempts", async () => {
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
         fingerprint: "joins",
@@ -437,7 +426,6 @@ test("a socket is closed after ten failed join attempts", async () => {
       guest.socket.send(
         JSON.stringify({
           type: "join",
-          protocolVersion: 1,
           roomId: welcome.roomId,
           invite: "wrong-password",
           profile: { name: "Guest", color: "#00ff00" },
@@ -450,7 +438,6 @@ test("a socket is closed after ten failed join attempts", async () => {
     guest.socket.send(
       JSON.stringify({
         type: "join",
-        protocolVersion: 1,
         roomId: welcome.roomId,
         invite: welcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
@@ -473,7 +460,6 @@ test("a paused client cannot stall broadcasts and is dropped when its queue fill
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
         fingerprint: "slow",
@@ -487,7 +473,6 @@ test("a paused client cannot stall broadcasts and is dropped when its queue fill
     fast.socket.send(
       JSON.stringify({
         type: "join",
-        protocolVersion: 1,
         roomId: hostWelcome.roomId,
         invite: hostWelcome.invite,
         profile: { name: "Fast", color: "#00ff00" },
@@ -500,7 +485,6 @@ test("a paused client cannot stall broadcasts and is dropped when its queue fill
     await slow.open();
     slow.send({
       type: "join",
-      protocolVersion: 1,
       roomId: hostWelcome.roomId,
       invite: hostWelcome.invite,
       profile: { name: "Slow", color: "#0000ff" },

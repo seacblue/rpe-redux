@@ -1,9 +1,9 @@
 //! Local LAN bridge for the collaboration room.
 //!
-//! The embedded Go room server stays loopback-only on port 47830. This module
-//! exposes the same WebSocket endpoint on a configurable interface so guests on
-//! the same LAN, or a user-managed tunnel/port forward, can reach it. The bridge
-//! is a byte-level TCP forwarder; it never interprets room messages.
+//! The embedded Go room server stays loopback-only on its configured port. This
+//! module exposes the same WebSocket endpoint on a configurable interface so
+//! guests on the same LAN, or a user-managed tunnel/port forward, can reach it.
+//! The bridge is a byte-level TCP forwarder; it never interprets room messages.
 
 use std::{
     collections::HashMap,
@@ -19,10 +19,6 @@ use std::{
 
 use tauri::{AppHandle, Manager};
 
-/// Loopback endpoint of the authoritative room server.
-const ROOM_ORIGIN: &str = "127.0.0.1:47830";
-/// Ports the bridge refuses to bind: the API and room ports.
-const RESERVED_PORTS: [u16; 2] = [47821, 47830];
 /// Idle wait between non-blocking accept polls.
 const ACCEPT_POLL: Duration = Duration::from_millis(80);
 
@@ -126,11 +122,12 @@ fn accept_loop(
     listener: TcpListener,
     stop: Arc<AtomicBool>,
     clients: Arc<Mutex<HashMap<u64, TcpStream>>>,
+    room_origin: String,
 ) {
     while !stop.load(Ordering::SeqCst) {
         match listener.accept() {
             Ok((client, _)) => {
-                let Ok(upstream) = TcpStream::connect(ROOM_ORIGIN) else {
+                let Ok(upstream) = TcpStream::connect(&room_origin) else {
                     continue;
                 };
                 // Force blocking sockets so both copy directions run to completion.
@@ -162,9 +159,14 @@ fn accept_loop(
 /// Start (or reuse) the LAN bridge and return the address guests should use.
 #[tauri::command]
 pub fn start_lan_bridge(app: AppHandle, port: u16) -> Result<String, String> {
-    if port < 1024 || RESERVED_PORTS.contains(&port) {
-        return Err("Choose a port between 1024 and 65535; 47821 and 47830 are reserved.".into());
+    let ports = crate::services::server::read_runtime_ports(app.clone())?;
+    if port < 1024 || port == ports.backend_port || port == ports.collab_port {
+        return Err(format!(
+            "Choose a port between 1024 and 65535; {} and {} are reserved.",
+            ports.backend_port, ports.collab_port
+        ));
     }
+    let room_origin = format!("127.0.0.1:{}", ports.collab_port);
     let state = app.state::<LanBridge>();
     let mut guard = state.inner.lock().map_err(|error| error.to_string())?;
     if let Some(current) = guard.as_ref() {
@@ -187,7 +189,7 @@ pub fn start_lan_bridge(app: AppHandle, port: u16) -> Result<String, String> {
     let handle = {
         let stop = stop.clone();
         let clients = clients.clone();
-        thread::spawn(move || accept_loop(listener, stop, clients))
+        thread::spawn(move || accept_loop(listener, stop, clients, room_origin))
     };
     *guard = Some(Bridge {
         port,

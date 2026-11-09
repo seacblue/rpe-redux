@@ -73,6 +73,8 @@ export function createAssetLibraryRuntime(deps: {
   setAssets(assets: AssetMap): void;
   setAssetFolders(folders: Set<string>): void;
   markDirty(): void;
+  /** Announces a committed local asset-map mutation to the room runtime. */
+  onAssetsChanged?(): void;
   images: Pick<ProjectImages, "load">;
   notify(message: string, severity?: string): void;
   renderSession(): void;
@@ -106,9 +108,18 @@ export function createAssetLibraryRuntime(deps: {
       },
       onChange: (nextAssets, nextFolders) => {
         const folders = new Set(nextFolders ?? []);
+        const previousAssets = deps.getAssets();
+        const bytesChanged =
+          nextAssets.size !== previousAssets.size ||
+          [...nextAssets].some(([name, bytes]) => previousAssets.get(name) !== bytes);
         deps.attachAssets(nextAssets);
         deps.setAssets(nextAssets);
         deps.setAssetFolders(folders);
+        // Folder organization alone is not a room asset replacement; only a
+        // changed name or byte reference should reach the collaboration push.
+        if (bytesChanged) {
+          deps.onAssetsChanged?.();
+        }
         // The organization is chart data: writing it into the chart object is
         // what makes a PEZ, a JSON project and an export all keep it. The commit
         // is the document's own change, so it is undoable like any other.

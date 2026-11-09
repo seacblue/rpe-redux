@@ -205,7 +205,14 @@ export function selectiveUndoLatest(session: EditorSession, label: string): Sele
   }
   for (let index = session.history.undoStack.length - 1; index >= 0; index -= 1) {
     const entry = session.history.undoStack[index];
-    if (entry.origin?.kind === "collaboration-remote") {
+    // A room has no redo branch: skip both peer edits and earlier compensations,
+    // otherwise repeated undo would toggle the newest compensation instead of
+    // walking back through this member's original transactions.
+    if (
+      entry.origin?.kind === "collaboration-remote" ||
+      entry.origin?.kind === "collaborative-undo" ||
+      entry.origin?.compensated
+    ) {
       continue;
     }
     if (entry.origin?.clientId !== session.collaborationActorId || !entry.origin.requestId) {
@@ -228,7 +235,9 @@ export function selectiveUndo(
       !entry ||
       entry.before === entry.after ||
       session.readOnly ||
-      entry.origin?.kind === "collaboration-remote"
+      entry.origin?.kind === "collaboration-remote" ||
+      entry.origin?.kind === "collaborative-undo" ||
+      entry.origin?.compensated
     ) {
       return { status: "unavailable" };
     }
@@ -279,6 +288,10 @@ export function selectiveUndo(
     );
     if (!committed) {
       return { status: "rejected" };
+    }
+    if (entry.origin) {
+      entry.origin = { ...entry.origin, compensated: true };
+      session.notify();
     }
     const committedEntry = session.history.undoStack.at(-1);
     return committedEntry

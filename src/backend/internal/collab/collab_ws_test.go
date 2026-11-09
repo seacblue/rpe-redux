@@ -179,11 +179,10 @@ func TestCollabWebSocketApprovalTransactionsLocksAndAssets(t *testing.T) {
 	host := dialTestWS(t, httpServer.URL)
 	defer host.close()
 	host.sendJSON(t, map[string]any{
-		"type":            "create",
-		"profile":         map[string]any{"name": "Host", "color": "#ffffff"},
-		"chart":           collabTestChart(),
-		"fingerprint":     "fingerprint",
-		"protocolVersion": 1,
+		"type":        "create",
+		"profile":     map[string]any{"name": "Host", "color": "#ffffff"},
+		"chart":       collabTestChart(),
+		"fingerprint": "fingerprint",
 	})
 	welcome := host.readUntil(t, "welcome")
 	roomID, _ := welcome["roomId"].(string)
@@ -202,11 +201,10 @@ func TestCollabWebSocketApprovalTransactionsLocksAndAssets(t *testing.T) {
 	editor := dialTestWS(t, httpServer.URL)
 	defer editor.close()
 	editor.sendJSON(t, map[string]any{
-		"type":            "join",
-		"roomId":          roomID,
-		"invite":          invite,
-		"profile":         map[string]any{"name": "Editor", "color": "#00ff00"},
-		"protocolVersion": 1,
+		"type":    "join",
+		"roomId":  roomID,
+		"invite":  invite,
+		"profile": map[string]any{"name": "Editor", "color": "#00ff00"},
 	})
 	editor.readUntil(t, "waiting")
 	pending := host.readUntil(t, "pending")
@@ -325,11 +323,10 @@ func TestCollabWebSocketAssetReplacementIsHostOnly(t *testing.T) {
 	host := dialTestWS(t, httpServer.URL)
 	defer host.close()
 	host.sendJSON(t, map[string]any{
-		"type":            "create",
-		"profile":         map[string]any{"name": "Host", "color": "#ffffff"},
-		"chart":           collabTestChart(),
-		"fingerprint":     "fingerprint",
-		"protocolVersion": 1,
+		"type":        "create",
+		"profile":     map[string]any{"name": "Host", "color": "#ffffff"},
+		"chart":       collabTestChart(),
+		"fingerprint": "fingerprint",
 	})
 	welcome := host.readUntil(t, "welcome")
 	roomID, _ := welcome["roomId"].(string)
@@ -339,11 +336,10 @@ func TestCollabWebSocketAssetReplacementIsHostOnly(t *testing.T) {
 	editor := dialTestWS(t, httpServer.URL)
 	defer editor.close()
 	editor.sendJSON(t, map[string]any{
-		"type":            "join",
-		"roomId":          roomID,
-		"invite":          invite,
-		"profile":         map[string]any{"name": "Editor", "color": "#00ff00"},
-		"protocolVersion": 1,
+		"type":    "join",
+		"roomId":  roomID,
+		"invite":  invite,
+		"profile": map[string]any{"name": "Editor", "color": "#00ff00"},
 	})
 	editor.readUntil(t, "waiting")
 	pending := host.readUntil(t, "pending")
@@ -366,22 +362,30 @@ func TestCollabWebSocketAssetReplacementIsHostOnly(t *testing.T) {
 	host.readUntil(t, "asset-manifest")
 
 	replacement := []byte("\x89PNG\r\n\x1a\nreplacement")
+	replacementHash := sha256Hex(replacement)
 	sendTestAsset(t, editor, "upload-replace", "cover.png", "image/png", replacement)
-	rejected := editor.readUntil(t, "asset-rejected")
-	if rejected["code"] != "forbidden" || rejected["name"] != "cover.png" {
-		t.Fatalf("editor replacement = %v", rejected)
+	editorReplacementAccepted := false
+	for attempts := 0; attempts < 5; attempts++ {
+		accepted := editor.readUntil(t, "asset-accepted")
+		asset, _ := accepted["asset"].(map[string]any)
+		if asset["name"] == "cover.png" && asset["hash"] == replacementHash {
+			editorReplacementAccepted = true
+			break
+		}
 	}
-	host.expectNoMessage(t, 300*time.Millisecond)
+	if !editorReplacementAccepted {
+		t.Fatal("editor replacement was not accepted")
+	}
 
 	sendTestAsset(t, editor, "upload-new", "extra.png", "image/png", replacement)
 	editor.readUntil(t, "asset-accepted")
 
-	sendTestAsset(t, host, "host-replace", "cover.png", "image/png", replacement)
+	sendTestAsset(t, host, "host-replace", "cover.png", "image/png", original)
 	hostReplacementAccepted := false
 	for attempts := 0; attempts < 5; attempts++ {
 		accepted := host.readUntil(t, "asset-accepted")
 		asset, _ := accepted["asset"].(map[string]any)
-		if asset["name"] == "cover.png" && asset["hash"] == sha256Hex(replacement) {
+		if asset["name"] == "cover.png" && asset["hash"] == sha256Hex(original) {
 			hostReplacementAccepted = true
 			break
 		}
@@ -483,7 +487,6 @@ func TestCollabWebSocketReplayIsNotRebroadcast(t *testing.T) {
 		"profile":           map[string]any{"name": "Host", "color": "#ffffff"},
 		"chart":             collabTestChart(),
 		"fingerprint":       "replay",
-		"protocolVersion":   1,
 		"autoApproveEditor": true,
 	})
 	welcome := host.readUntil(t, "welcome")
@@ -493,11 +496,10 @@ func TestCollabWebSocketReplayIsNotRebroadcast(t *testing.T) {
 	editor := dialTestWS(t, httpServer.URL)
 	defer editor.close()
 	editor.sendJSON(t, map[string]any{
-		"type":            "join",
-		"roomId":          roomID,
-		"invite":          invite,
-		"profile":         map[string]any{"name": "Editor", "color": "#00ff00"},
-		"protocolVersion": 1,
+		"type":    "join",
+		"roomId":  roomID,
+		"invite":  invite,
+		"profile": map[string]any{"name": "Editor", "color": "#00ff00"},
 	})
 	editor.readUntil(t, "welcome")
 	host.readUntil(t, "members")
@@ -532,7 +534,6 @@ func TestCollabWebSocketHostCloseNotifiesAndPersistsDeletion(t *testing.T) {
 		"profile":           map[string]any{"name": "Host", "color": "#ffffff"},
 		"chart":             collabTestChart(),
 		"fingerprint":       "close",
-		"protocolVersion":   1,
 		"autoApproveEditor": true,
 	})
 	welcome := host.readUntil(t, "welcome")
@@ -542,11 +543,10 @@ func TestCollabWebSocketHostCloseNotifiesAndPersistsDeletion(t *testing.T) {
 	guest := dialTestWS(t, httpServer.URL)
 	defer guest.close()
 	guest.sendJSON(t, map[string]any{
-		"type":            "join",
-		"roomId":          roomID,
-		"invite":          invite,
-		"profile":         map[string]any{"name": "Guest", "color": "#00ff00"},
-		"protocolVersion": 1,
+		"type":    "join",
+		"roomId":  roomID,
+		"invite":  invite,
+		"profile": map[string]any{"name": "Guest", "color": "#00ff00"},
 	})
 	guest.readUntil(t, "welcome")
 	host.readUntil(t, "members")
@@ -586,19 +586,17 @@ func TestCollabWebSocketCreateIsLimitedPerConnection(t *testing.T) {
 	host := dialTestWS(t, httpServer.URL)
 	defer host.close()
 	host.sendJSON(t, map[string]any{
-		"type":            "create",
-		"profile":         map[string]any{"name": "Host", "color": "#ffffff"},
-		"chart":           collabTestChart(),
-		"fingerprint":     "first",
-		"protocolVersion": 1,
+		"type":        "create",
+		"profile":     map[string]any{"name": "Host", "color": "#ffffff"},
+		"chart":       collabTestChart(),
+		"fingerprint": "first",
 	})
 	host.readUntil(t, "welcome")
 	host.sendJSON(t, map[string]any{
-		"type":            "create",
-		"profile":         map[string]any{"name": "Host", "color": "#ffffff"},
-		"chart":           collabTestChart(),
-		"fingerprint":     "second",
-		"protocolVersion": 1,
+		"type":        "create",
+		"profile":     map[string]any{"name": "Host", "color": "#ffffff"},
+		"chart":       collabTestChart(),
+		"fingerprint": "second",
 	})
 	rejected := host.readUntil(t, "error")
 	if rejected["code"] != "already_in_room" {

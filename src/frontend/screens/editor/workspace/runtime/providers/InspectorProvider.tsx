@@ -26,6 +26,7 @@ import { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
 import { MultiLinePanel } from "../../../inspector/multiLine/MultiLinePanel.tsx";
 import { TrajectoryPanel } from "../../../inspector/trajectory/trajectoryPanel.ts";
 import { createAssetLibraryRuntime } from "../../../../global/sections/assets/assetLibraryRuntime.ts";
+import { bumpCollaborationAssetRevision } from "../../../../../../core/collaboration/ui.ts";
 import { createCurveEditor } from "../../../inspector/curveNotes/curveEditor.ts";
 import { viewControls } from "../commands/viewControls.ts";
 import type { EditorTimelineMode } from "../commands/viewControls.ts";
@@ -190,6 +191,7 @@ export function createInspectorRuntime(options: {
       options.document.assetFolders = nextFolders;
     },
     markDirty: options.document.markAssetDirty,
+    onAssetsChanged: bumpCollaborationAssetRevision,
     images: options.images,
     notify: options.notify,
     renderSession: options.renderSession,

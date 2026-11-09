@@ -196,7 +196,6 @@ test("join sends a request and waits for host approval", () => {
     roomId: "ROOM",
     invite: "INVITE",
     profile: { name: "Guest", color: "#00ff00" },
-    protocolVersion: 1,
   });
   socket.emit("message", { data: JSON.stringify({ type: "waiting", roomId: "ROOM" }) });
   assert.equal(client.state.get().status, "waiting");
@@ -547,9 +546,10 @@ test("reconnect attempts grow when a socket closes before welcome", () => {
   client.dispose();
 });
 
-test("a newer server protocol is rejected before the room is accepted", () => {
+test("a room from a different product version is rejected before acceptance", () => {
   const harness = socketHarness();
   const client = new CollaborationClient({
+    appVersion: "1.0.10",
     socketFactory: harness.factory,
     reconnect: false,
   });
@@ -566,10 +566,10 @@ test("a newer server protocol is rejected before the room is accepted", () => {
       role: "editor",
       revision: 1,
       fingerprint: "fp",
+      appVersion: "1.0.9",
       members: [],
       presence: [],
       resumeToken: "token",
-      protocolVersion: 2,
     }),
   });
   assert.equal(client.state.get().status, "error");
@@ -577,14 +577,12 @@ test("a newer server protocol is rejected before the room is accepted", () => {
   client.dispose();
 });
 
-test("different product versions warn when the collaboration protocol matches", () => {
+test("a room from the same product version is accepted", () => {
   const harness = socketHarness();
-  const warnings = [];
   const client = new CollaborationClient({
     appVersion: "1.0.10",
     socketFactory: harness.factory,
     reconnect: false,
-    onWarning: (message, code) => warnings.push({ message, code }),
   });
   client.connect("ws://127.0.0.1:47830");
   const socket = harness.sockets[0];
@@ -599,21 +597,13 @@ test("different product versions warn when the collaboration protocol matches", 
       role: "editor",
       revision: 1,
       fingerprint: "fp",
-      protocolVersion: 1,
-      appVersion: "1.0.9",
+      appVersion: "1.0.10",
       members: [],
       presence: [],
       resumeToken: "token",
     }),
   });
   assert.equal(client.state.get().status, "connected");
-  assert.deepEqual(warnings, [
-    {
-      message:
-        "This room uses RPE Redux 1.0.9; this client is 1.0.10. The collaboration protocol is compatible.",
-      code: "version_difference",
-    },
-  ]);
   client.dispose();
 });
 
@@ -630,7 +620,6 @@ test("resumeRoom sends the persisted token before a document is opened", () => {
     type: "resume",
     roomId: "ROOM",
     token: "saved-token",
-    protocolVersion: 1,
   });
   client.dispose();
 });

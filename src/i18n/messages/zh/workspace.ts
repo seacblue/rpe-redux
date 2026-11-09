@@ -232,10 +232,14 @@ export default {
   "workspace.collaboration.create": "创建房间",
   "workspace.collaboration.join": "申请加入",
   "workspace.collaboration.leave": "离开房间",
+  "workspace.collaboration.leaveTitle": "离开这个房间？",
+  "workspace.collaboration.leaveBody":
+    "临时房间谱面和其中的未保存修改会从这台设备删除。如需保留，请先导出谱面。",
+  "workspace.collaboration.leaveConfirm": "离开房间",
   "workspace.collaboration.closeRoom": "关闭房间",
   "workspace.collaboration.closeRoomTitle": "关闭这个房间？",
   "workspace.collaboration.closeRoomBody":
-    "所有成员都会被断开，房间数据会从这台设备删除。对方本地的副本仍会保留。",
+    "所有成员都会被断开。房间和每台设备上的临时房间谱面都会被删除。",
   "workspace.collaboration.closeRoomConfirm": "关闭房间",
   "workspace.collaboration.roomClosed": "房主已关闭房间。",
   "workspace.collaboration.displayName": "显示名称",
@@ -250,7 +254,10 @@ export default {
   "workspace.collaboration.serverUrl": "服务器地址",
   "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
   "workspace.collaboration.changePassword": "更新房间密码",
+  "workspace.collaboration.changePasswordHint":
+    "设置新的房间密码。已在房间里的成员不会被断开，但旧邀请链接会失效。",
   "workspace.collaboration.changePasswordPlaceholder": "输入新密码",
+  "workspace.collaboration.newPassword": "新密码",
   "workspace.collaboration.updatePassword": "更新密码",
   "workspace.collaboration.showSecret": "显示",
   "workspace.collaboration.hideSecret": "隐藏",
@@ -258,9 +265,15 @@ export default {
   "workspace.collaboration.exitBody":
     "退出程序会断开房间连接。如果你是房主，其他成员也可能受到影响。",
   "workspace.collaboration.exitConfirm": "退出程序",
+  "workspace.collaboration.exitTemporaryTitle": "退出并删除房间谱面？",
+  "workspace.collaboration.exitTemporaryBody":
+    "临时房间谱面和其中的未保存修改都会被删除。如需保留，请先导出谱面。",
+  "workspace.collaboration.exitTemporaryConfirm": "退出并删除",
   "workspace.collaboration.password": "房间密码",
   "workspace.collaboration.invalidServerUrl": "请填写 ws:// 或 wss:// 服务器地址。",
   "workspace.collaboration.hostFailed": "无法创建房间：{detail}",
+  "workspace.collaboration.assetsRequiredTitle": "谱面素材不完整",
+  "workspace.collaboration.assetsRequiredBody": "创建房间前请先补齐谱面的音频和图像：{names}",
   "workspace.collaboration.sessionBusyTitle": "此设备已在房间中",
   "workspace.collaboration.sessionBusyBody":
     "同一个后端只能同时主持或加入一个房间。请先在另一个窗口离开房间，或关闭该窗口后再试。",
@@ -286,11 +299,15 @@ export default {
   "workspace.collaboration.role.editor": "可编辑",
   "workspace.collaboration.role.viewer": "只读",
   "workspace.collaboration.roleLabel": "{name} 的权限",
-  "workspace.collaboration.kick": "移除成员",
-  "workspace.collaboration.kickTitle": "移除这个成员？",
-  "workspace.collaboration.kickBody": "将 {name} 移出房间？对方本地的副本仍会保留。",
-  "workspace.collaboration.kickConfirm": "移除",
+  "workspace.collaboration.kick": "请离成员",
+  "workspace.collaboration.kickTitle": "请离这个成员？",
+  "workspace.collaboration.kickBody": "将 {name} 请离房间？",
+  "workspace.collaboration.kickConfirm": "请离",
   "workspace.collaboration.maxMembers": "最大人数",
+  "workspace.collaboration.maxMembersBelowTitle": "人数上限低于当前成员数",
+  "workspace.collaboration.maxMembersBelowBody":
+    "你设定的人数比当前成员数少。这不会踢掉已经加入的成员，但其他成员将无法加入。确认要这样更改吗？",
+  "workspace.collaboration.maxMembersBelowConfirm": "确认更改",
   "workspace.collaboration.approveEditor": "允许编辑",
   "workspace.collaboration.approveViewer": "允许查看",
   "workspace.collaboration.reject": "拒绝",
@@ -304,8 +321,9 @@ export default {
   "workspace.collaboration.copyFailed": "无法复制邀请链接。",
   "workspace.collaboration.e2eOverwrite":
     "加密房间按版本顺序应用修改。并发编辑覆盖了此文档中的字段，已保留本地恢复副本。",
-  "workspace.collaboration.recovery": "本地恢复副本",
-  "workspace.collaboration.recoveryHint": "被拒绝的本地修改会保留在这里，丢弃前请先下载。",
+  "workspace.collaboration.recovery": "恢复副本",
+  "workspace.collaboration.recoveryHint":
+    "被拒绝的本地修改只保留在当前房间会话中，丢弃前请先下载。",
   "workspace.collaboration.reapplyMine": "重新应用我的版本",
   "workspace.collaboration.resumeTitle": "恢复上次的协作房间？",
   "workspace.collaboration.resumeBody":
@@ -322,17 +340,18 @@ export default {
   "workspace.collaboration.downloadRecovery": "下载副本",
   "workspace.collaboration.clearRecovery": "丢弃副本",
   "workspace.collaboration.invalidSnapshot": "房间快照无效：{detail}",
-  "workspace.collaboration.roomChart": "房间谱面",
+  "workspace.collaboration.roomChartSaveBlocked":
+    "房间谱面不会保存到本地谱面库，离开房间时会被删除。如需保留，请导出谱面。",
   "workspace.collaboration.joined": "已加入联机房间。",
   "workspace.collaboration.waitingApproval": "已连接，等待房主批准…",
   "workspace.collaboration.reconnecting": "连接中断，正在重连…",
   "workspace.collaboration.reconnected": "已重新连接联机房间。",
   "workspace.collaboration.connectionLost": "联机连接已断开。",
   "workspace.collaboration.connectionFailed": "无法连接联机服务器。",
-  "workspace.collaboration.compatibilityMismatch":
-    "此客户端与联机服务器不兼容。请更新 RPE Redux 后重试。",
-  "workspace.collaboration.versionDifferenceWarning":
-    "双方 RPE Redux 产品版本不同，但当前联机协议兼容，可以继续协作。",
+  "workspace.collaboration.versionMismatch": "双方必须使用相同版本的 RPE Redux 才能加入房间。",
+  "workspace.collaboration.hostMustClose": "房主不能离开房间，请关闭房间。",
+  "workspace.collaboration.removed": "您已被请离房间。",
+  "workspace.collaboration.left": "已离开房间，临时房间谱面已删除。",
   "workspace.collaboration.connectionTimeout": "连接联机服务器超时，请检查地址和网络。",
   "workspace.collaboration.handshakeTimeout": "联机服务器已接受连接，但没有及时响应，请重试。",
   "workspace.collaboration.connectionClosed": "房间就绪前联机连接已断开。",
@@ -347,7 +366,7 @@ export default {
   "workspace.collaboration.roleChangedReason": "你的房间权限已变更为 {role}：{reason}",
   "workspace.collaboration.replaceDirtyTitle": "加入房间并替换当前文档？",
   "workspace.collaboration.replaceDirtyBody":
-    "当前谱面有未保存修改。房间谱面替换当前文档前，会先把本地谱面写入文档恢复存储；后续发生冲突时会再保留一份恢复副本。房间谱面保存为新的本地谱面库项目，不会写回原文件或原项目。",
+    "当前谱面有未保存修改。临时房间谱面替换当前文档前，会先把本地谱面写入文档恢复存储。房间谱面不会保存到本地谱面库，离开房间时会被删除。",
   "workspace.collaboration.recoveryWriteFailed":
     "无法写入本地恢复副本，因此没有加入房间。请先保存或导出当前谱面，然后重试。",
   "workspace.collaboration.continue": "继续",
@@ -594,7 +613,7 @@ export default {
     "先填写曲名、曲师、谱师和难度。它们会出现在谱面库、导出结果和协作信息中；这里的修改只更新文档信息，不会自动改动音符。",
   "tutorial.metadata.timing.title": "补全制作信息",
   "tutorial.metadata.timing.body":
-    "填写曲师、谱师、插画和难度。它们会出现在谱面库、导出结果和协作信息中；这里的修改只更新文档信息，不会自动改动音符。",
+    "填写曲师、谱师、曲绘作者和难度。它们会出现在谱面库、导出结果和协作信息中；这里的修改只更新文档信息，不会自动改动音符。",
   "tutorial.metadata.resources.title": "核对媒体引用",
   "tutorial.metadata.resources.body":
     "在资源区域确认歌曲和背景文件已经关联到当前谱面。导入或移动文件后重新检查路径与预览，避免把缺失资源误判成音符或判定线问题。",

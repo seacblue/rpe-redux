@@ -1,11 +1,8 @@
-/** A joined room must not inherit the guest's local save target or recovery id. */
+/** A joined room is temporary: its recovery family is discarded, never saved. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart } from "../../../core/global/chart/chart.ts";
-import {
-  selectLocalSaveBinding,
-  TauriDocumentStore,
-} from "../../../core/platform/desktop/documentStore.ts";
+import { TauriDocumentStore } from "../../../core/platform/desktop/documentStore.ts";
 
 /** Capture the Tauri commands a recovery write issues. */
 function captureTauri() {
@@ -21,15 +18,20 @@ function captureTauri() {
   return calls;
 }
 
-test("a joined room save ignores the previous library project and file path", () => {
-  const project = { id: "before-join", revision: 4, name: "Original" };
-  const detached = selectLocalSaveBinding(true, project, "C:\\charts\\original.json");
-  assert.equal(detached.project, null);
-  assert.equal(detached.sourcePath, null);
+test("discarding a room document deletes its detached recovery family", async () => {
+  const calls = captureTauri();
+  const store = new TauriDocumentStore(async (chart) => JSON.stringify(chart));
+  const untitled = store.recoveryId;
+  store.detachRecoveryTarget();
+  const detached = store.recoveryId;
+  assert.notEqual(detached, untitled);
 
-  const normal = selectLocalSaveBinding(false, project, "C:\\charts\\original.json");
-  assert.equal(normal.project, project);
-  assert.equal(normal.sourcePath, "C:\\charts\\original.json");
+  await store.discardDetachedRecovery();
+
+  const deleted = calls.find((call) => call.command === "delete_recovery");
+  assert.ok(deleted, "discard must delete the detached recovery draft");
+  assert.equal(deleted.args.id, detached);
+  assert.equal(store.recoveryId, untitled);
 });
 
 test("a displaced chart is written through the native recovery command stream", async () => {

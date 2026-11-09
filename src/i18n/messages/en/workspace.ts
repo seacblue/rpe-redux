@@ -259,10 +259,14 @@ export default {
   "workspace.collaboration.create": "Create room",
   "workspace.collaboration.join": "Request to join",
   "workspace.collaboration.leave": "Leave room",
+  "workspace.collaboration.leaveTitle": "Leave this room?",
+  "workspace.collaboration.leaveBody":
+    "The temporary room chart and its unsaved changes will be deleted from this device. Export the chart first if you need to keep a copy.",
+  "workspace.collaboration.leaveConfirm": "Leave room",
   "workspace.collaboration.closeRoom": "Close room",
   "workspace.collaboration.closeRoomTitle": "Close this room?",
   "workspace.collaboration.closeRoomBody":
-    "Everyone will be disconnected and the room will be deleted from this device. Their local copies stay on their devices.",
+    "Everyone will be disconnected. The room and every temporary room chart will be deleted from their devices.",
   "workspace.collaboration.closeRoomConfirm": "Close room",
   "workspace.collaboration.roomClosed": "The host closed the room.",
   "workspace.collaboration.displayName": "Display name",
@@ -277,7 +281,10 @@ export default {
   "workspace.collaboration.serverUrl": "Server address",
   "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
   "workspace.collaboration.changePassword": "Change room password",
+  "workspace.collaboration.changePasswordHint":
+    "Set a new room password. Members already in the room stay connected, but the old invitation link stops working.",
   "workspace.collaboration.changePasswordPlaceholder": "New password",
+  "workspace.collaboration.newPassword": "New password",
   "workspace.collaboration.updatePassword": "Update password",
   "workspace.collaboration.showSecret": "Show",
   "workspace.collaboration.hideSecret": "Hide",
@@ -285,9 +292,16 @@ export default {
   "workspace.collaboration.exitBody":
     "Exiting disconnects you from the room. Other members may be affected if you are the host.",
   "workspace.collaboration.exitConfirm": "Exit anyway",
+  "workspace.collaboration.exitTemporaryTitle": "Exit and delete the room chart?",
+  "workspace.collaboration.exitTemporaryBody":
+    "This temporary room chart and its unsaved changes will be deleted. Export the chart first if you need to keep a copy.",
+  "workspace.collaboration.exitTemporaryConfirm": "Exit and delete",
   "workspace.collaboration.password": "Room password",
   "workspace.collaboration.invalidServerUrl": "Enter a ws:// or wss:// server address.",
   "workspace.collaboration.hostFailed": "Could not create the room: {detail}",
+  "workspace.collaboration.assetsRequiredTitle": "Chart assets are incomplete",
+  "workspace.collaboration.assetsRequiredBody":
+    "Add the chart's audio and images before creating a room: {names}",
   "workspace.collaboration.sessionBusyTitle": "This device is already in a room",
   "workspace.collaboration.sessionBusyBody":
     "One backend can host or join only one room at a time. Leave the room in the other window, or close it, then try again.",
@@ -313,12 +327,15 @@ export default {
   "workspace.collaboration.role.editor": "Editor",
   "workspace.collaboration.role.viewer": "Read only",
   "workspace.collaboration.roleLabel": "Access for {name}",
-  "workspace.collaboration.kick": "Remove member",
-  "workspace.collaboration.kickTitle": "Remove this member?",
-  "workspace.collaboration.kickBody":
-    "Remove {name} from the room? Their local copy stays on their device.",
-  "workspace.collaboration.kickConfirm": "Remove",
+  "workspace.collaboration.kick": "Dismiss member",
+  "workspace.collaboration.kickTitle": "Dismiss this member?",
+  "workspace.collaboration.kickBody": "Ask {name} to leave the room?",
+  "workspace.collaboration.kickConfirm": "Dismiss",
   "workspace.collaboration.maxMembers": "Maximum members",
+  "workspace.collaboration.maxMembersBelowTitle": "Limit below the current member count?",
+  "workspace.collaboration.maxMembersBelowBody":
+    "You are setting the limit below the current member count. This will not remove members who already joined, but other members will not be able to join. Change the limit anyway?",
+  "workspace.collaboration.maxMembersBelowConfirm": "Change limit",
   "workspace.collaboration.approveEditor": "Allow editing",
   "workspace.collaboration.approveViewer": "Allow viewing",
   "workspace.collaboration.reject": "Decline",
@@ -332,9 +349,9 @@ export default {
   "workspace.collaboration.copyFailed": "The invite link could not be copied.",
   "workspace.collaboration.e2eOverwrite":
     "Encrypted rooms apply changes in revision order. A concurrent edit replaced a field in this document; a recovery copy is kept.",
-  "workspace.collaboration.recovery": "Local recovery copy",
+  "workspace.collaboration.recovery": "Recovery copy",
   "workspace.collaboration.recoveryHint":
-    "A rejected local edit is kept here. Download it before discarding it.",
+    "A rejected local edit is kept for this room session only. Download it before discarding it.",
   "workspace.collaboration.reapplyMine": "Reapply my version",
   "workspace.collaboration.resumeTitle": "Resume the collaboration room?",
   "workspace.collaboration.resumeBody":
@@ -352,7 +369,8 @@ export default {
   "workspace.collaboration.downloadRecovery": "Download copy",
   "workspace.collaboration.clearRecovery": "Discard copy",
   "workspace.collaboration.invalidSnapshot": "The room snapshot is invalid: {detail}",
-  "workspace.collaboration.roomChart": "Room chart",
+  "workspace.collaboration.roomChartSaveBlocked":
+    "Room charts are not saved to the local library and are deleted when you leave. Export the chart to keep a copy.",
   "workspace.collaboration.joined": "Joined the collaboration room.",
   "workspace.collaboration.waitingApproval":
     "Connected. Waiting for the host to approve this device…",
@@ -360,10 +378,12 @@ export default {
   "workspace.collaboration.reconnected": "Reconnected to the collaboration room.",
   "workspace.collaboration.connectionLost": "The collaboration connection was lost.",
   "workspace.collaboration.connectionFailed": "Could not connect to the collaboration server.",
-  "workspace.collaboration.compatibilityMismatch":
-    "This client is not compatible with the collaboration server. Update RPE Redux and try again.",
-  "workspace.collaboration.versionDifferenceWarning":
-    "The two RPE Redux versions are different, but their collaboration protocol is compatible.",
+  "workspace.collaboration.versionMismatch":
+    "Both devices must run the same RPE Redux version to join this room.",
+  "workspace.collaboration.hostMustClose":
+    "The host cannot leave the room. Close the room instead.",
+  "workspace.collaboration.removed": "You were dismissed from the room.",
+  "workspace.collaboration.left": "Left the room. The temporary room chart was deleted.",
   "workspace.collaboration.connectionTimeout":
     "Timed out connecting to the collaboration server. Check the address and network.",
   "workspace.collaboration.handshakeTimeout":
@@ -384,7 +404,7 @@ export default {
   "workspace.collaboration.roleChangedReason": "Your room access is now {role}: {reason}",
   "workspace.collaboration.replaceDirtyTitle": "Join the room and replace this document?",
   "workspace.collaboration.replaceDirtyBody":
-    "This chart has unsaved changes. It is written to the local recovery store before the room chart replaces this document; a later conflict keeps another recovery copy. The room chart saves into a new local library copy, not the original file or project.",
+    "This chart has unsaved changes. It is written to the local recovery store before the temporary room chart replaces this document. The room chart is never saved to the local library and is deleted when you leave the room.",
   "workspace.collaboration.recoveryWriteFailed":
     "The local recovery copy could not be saved, so the room was not joined. Save or export this chart, then try again.",
   "workspace.collaboration.continue": "Continue",
@@ -665,7 +685,7 @@ export default {
     "Start with the title, composer, charter, and difficulty. These values appear in the library, exports, and collaboration details; changing them does not rewrite notes.",
   "tutorial.metadata.timing.title": "Complete the production credits",
   "tutorial.metadata.timing.body":
-    "Fill in the composer, charter, illustration, and difficulty. These values appear in the library, exports, and collaboration details; changing them does not rewrite notes.",
+    "Fill in the composer, charter, illustrator, and difficulty. These values appear in the library, exports, and collaboration details; changing them does not rewrite notes.",
   "tutorial.metadata.resources.title": "Check media references",
   "tutorial.metadata.resources.body":
     "Confirm that the song and background files belong to this chart. Recheck paths and the preview after importing or moving a file instead of mistaking a missing resource for a note or line issue.",

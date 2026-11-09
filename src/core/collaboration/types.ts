@@ -46,6 +46,12 @@ export interface MemberPresence {
   readonly lineId?: string;
   readonly beat?: number;
   readonly positionX?: number;
+  /** Pointer position across the timeline canvas, from 0 (left) to 1 (right). */
+  readonly cursorRatio?: number;
+  /** Whether this member currently shows an authoring timeline. */
+  readonly timeline?: boolean;
+  /** The timeline surface the pointer is over. */
+  readonly timelineArea?: "notes" | "events";
   readonly playheadBeat?: number;
   readonly updatedAt: number;
 }
@@ -72,9 +78,6 @@ export interface RoomPendingRequest {
   readonly profile: CollaborationProfile;
 }
 
-/** Wire protocol revision understood by this client and server. */
-export const COLLAB_PROTOCOL_VERSION = 1;
-
 /** Messages the client sends over the room socket. */
 export type ClientMessage =
   | {
@@ -82,8 +85,6 @@ export type ClientMessage =
       readonly profile: CollaborationProfile;
       readonly chart: unknown;
       readonly fingerprint: string;
-      /** Wire protocol revision understood by this client. */
-      readonly protocolVersion: number;
       /** Product version used to create the room, when the client reports it. */
       readonly appVersion?: string;
       /** Encrypted rooms send an opaque chart envelope. */
@@ -98,7 +99,6 @@ export type ClientMessage =
       readonly roomId: string;
       readonly invite: string;
       readonly profile: CollaborationProfile;
-      readonly protocolVersion: number;
       /** Product version used by the joining client, when available. */
       readonly appVersion?: string;
     }
@@ -106,14 +106,12 @@ export type ClientMessage =
       readonly type: "inspect-room";
       readonly roomId: string;
       readonly invite: string;
-      readonly protocolVersion: number;
       readonly appVersion?: string;
     }
   | {
       readonly type: "resume";
       readonly roomId: string;
       readonly token: string;
-      readonly protocolVersion: number;
       /** Product version used by the reconnecting client, when available. */
       readonly appVersion?: string;
     }
@@ -212,8 +210,6 @@ export type ServerMessage =
       readonly hostId: string;
       readonly role: CollaborationRole;
       readonly revision: number;
-      /** Protocol revision served by this room. */
-      readonly protocolVersion: number;
       /** Product version advertised by this room, when available. */
       readonly appVersion?: string;
       readonly chart?: unknown;

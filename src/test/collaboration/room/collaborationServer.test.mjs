@@ -192,7 +192,6 @@ test("a host and an approved editor exchange a transaction and a conflict", asyn
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
         fingerprint: "base",
@@ -207,7 +206,6 @@ test("a host and an approved editor exchange a transaction and a conflict", asyn
     guest.socket.send(
       JSON.stringify({
         type: "join",
-        protocolVersion: 1,
         roomId: hostWelcome.roomId,
         invite: hostWelcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
@@ -363,7 +361,6 @@ test("room state and verified assets survive a server restart", async () => {
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart("persisted"),
         fingerprint: "persisted",
@@ -406,7 +403,6 @@ test("room state and verified assets survive a server restart", async () => {
     resumed.socket.send(
       JSON.stringify({
         type: "resume",
-        protocolVersion: 1,
         roomId: welcome.roomId,
         token: welcome.resumeToken,
       }),
@@ -434,7 +430,6 @@ test("standalone server relays encrypted transactions and requires leases", asyn
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: payload,
         fingerprint: "",
@@ -450,7 +445,6 @@ test("standalone server relays encrypted transactions and requires leases", asyn
     guest.socket.send(
       JSON.stringify({
         type: "join",
-        protocolVersion: 1,
         roomId: welcome.roomId,
         invite: welcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
@@ -506,7 +500,6 @@ test("a retry is acknowledged once and the host can close the room", async () =>
     host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
         fingerprint: "close",
@@ -519,7 +512,6 @@ test("a retry is acknowledged once and the host can close the room", async () =>
     guest.socket.send(
       JSON.stringify({
         type: "join",
-        protocolVersion: 1,
         roomId: welcome.roomId,
         invite: welcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
@@ -552,37 +544,81 @@ test("a retry is acknowledged once and the host can close the room", async () =>
   }
 });
 
-test("handshakes require the current protocol version and welcome advertises it", async () => {
+test("the host can only close the room, not leave it", async () => {
   const running = await startServer(0);
   try {
-    const client = await open(running.url);
-    client.socket.send(
+    const host = await open(running.url);
+    host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 2,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
-        fingerprint: "version",
+        fingerprint: "host-leave",
       }),
     );
-    const rejected = await client.next();
-    assert.equal(rejected.type, "error");
-    assert.equal(rejected.code, "protocol_mismatch");
-    assert.equal(rejected.message, "This room requires protocol version 1.");
+    assert.equal((await host.next()).type, "welcome");
 
-    client.socket.send(
+    host.socket.send(JSON.stringify({ type: "leave" }));
+    const rejected = await host.next();
+    assert.equal(rejected.type, "error");
+    assert.equal(rejected.code, "host_must_close");
+
+    host.socket.send(JSON.stringify({ type: "close-room" }));
+    assert.equal((await host.next()).type, "room-closed");
+  } finally {
+    await stopServer(running);
+  }
+});
+
+test("handshakes need no protocol revision and require the same product version", async () => {
+  const running = await startServer(0);
+  try {
+    const host = await open(running.url);
+    host.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
         fingerprint: "version",
+        appVersion: "1.0.7",
+        autoApproveEditor: true,
       }),
     );
-    const welcome = await client.next();
+    const welcome = await host.next();
     assert.equal(welcome.type, "welcome");
-    assert.equal(welcome.protocolVersion, 1);
-    client.socket.close();
+    assert.equal(welcome.protocolVersion, undefined);
+    assert.equal(welcome.appVersion, "1.0.7");
+
+    const guest = await open(running.url);
+    guest.socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId: welcome.roomId,
+        invite: welcome.invite,
+        profile: { name: "Guest", color: "#00ff00" },
+        appVersion: "1.0.8",
+      }),
+    );
+    const rejected = await guest.next();
+    assert.equal(rejected.type, "rejected");
+    assert.equal(rejected.reason, "version_mismatch");
+
+    const inspector = await open(running.url);
+    inspector.socket.send(
+      JSON.stringify({
+        type: "inspect-room",
+        roomId: welcome.roomId,
+        invite: welcome.invite,
+        appVersion: "1.0.8",
+      }),
+    );
+    const preview = await inspector.next();
+    assert.equal(preview.type, "rejected");
+    assert.equal(preview.reason, "version_mismatch");
+
+    host.socket.close();
+    guest.socket.close();
+    inspector.socket.close();
   } finally {
     await stopServer(running);
   }
@@ -623,7 +659,6 @@ test("a client above the message-rate budget is disconnected", async () => {
     client.socket.send(
       JSON.stringify({
         type: "create",
-        protocolVersion: 1,
         profile: { name: "Host", color: "#ffffff" },
         chart: chart(),
         fingerprint: "messages",

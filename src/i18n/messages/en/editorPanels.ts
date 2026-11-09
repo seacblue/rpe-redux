@@ -95,7 +95,7 @@ export default {
   "editorPanels.inspector.form.field.name": "Title",
   "editorPanels.inspector.form.field.composer": "Composer",
   "editorPanels.inspector.form.field.charter": "Charter",
-  "editorPanels.inspector.form.field.illustration": "Illustration",
+  "editorPanels.inspector.form.field.illustration": "Illustrator",
   "editorPanels.inspector.form.field.level": "Difficulty name",
   "editorPanels.metadata.invalidAudio": "Choose a valid, playable audio file.",
   "editorPanels.metadata.invalidCover": "Choose a valid image file.",

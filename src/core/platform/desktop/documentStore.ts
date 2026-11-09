@@ -28,7 +28,6 @@ import type {
 } from "../../global/document/desktopTypes.ts";
 import { DOCUMENT_DISK_CHANGE_EVENT } from "../../global/document/desktopTypes.ts";
 import type { AssetMap } from "../../global/document/types.ts";
-import type { LibraryProjectRef } from "../../global/library/types.ts";
 import { localizeDocumentError } from "./documentErrors.ts";
 /** Tauri invocation with the shared generic signature used by this host adapter. */
 const invoke = async <T>(
@@ -198,27 +197,6 @@ export async function hydratePostSaveSnapshot(
     return result;
   }
   return { ...result, disk_snapshot: await probe() };
-}
-
-/** The local document a save may reuse as its target. */
-export interface LocalSaveBinding {
-  readonly project: LibraryProjectRef | null;
-  readonly sourcePath: string | null;
-}
-
-/**
- * Choose the inherited local target for a save.
- *
- * A joined room owns the live chart, not the guest's previous file or library
- * project. `detached` clears both fields so the save creates a new local copy
- * instead of overwriting the document the guest had open before joining.
- */
-export function selectLocalSaveBinding(
-  detached: boolean,
-  project: LibraryProjectRef | null,
-  sourcePath: string | null,
-): LocalSaveBinding {
-  return detached ? { project: null, sourcePath: null } : { project, sourcePath };
 }
 
 /**
@@ -656,6 +634,22 @@ export class TauriDocumentStore {
   detachRecoveryTarget(): void {
     this.recoveryDetached = true;
     this.recoveryId = stableRecoveryId(DETACHED_RECOVERY_KEY);
+  }
+  /**
+   * Delete the detached recovery family and reattach future drafts to the
+   * untitled document.
+   *
+   * Joined-room charts live only for the room session. Startup, leaving a room,
+   * and closing the application each call this best-effort cleanup so a crash
+   * cannot resurrect a temporary room chart from recovery storage.
+   */
+  async discardDetachedRecovery(): Promise<void> {
+    const detached = stableRecoveryId(DETACHED_RECOVERY_KEY);
+    await invoke<boolean>("delete_recovery", { id: detached }).catch(() => false);
+    if (this.recoveryDetached) {
+      this.recoveryDetached = false;
+      this.recoveryId = stableRecoveryId(UNTITLED_RECOVERY_KEY);
+    }
   }
   /** Write a recovery snapshot for the current document or the untitled session. */
   async recover(
