@@ -142,6 +142,7 @@ export default {
   "chrome.statusBar.totalNotes": "全部音符：{count}",
   "chrome.statusBar.totalEvents": "全部事件：{count}",
   "chrome.statusBar.time": "时间：{time}",
+  "chrome.statusBar.bugReport": "Bug 反馈 >",
 
   "chrome.playback.playPause": "播放/暂停",
   "chrome.playback.audition": "预览试听",

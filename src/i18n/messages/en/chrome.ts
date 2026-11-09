@@ -158,6 +158,7 @@ export default {
   "chrome.statusBar.totalNotes": "All notes: {count}",
   "chrome.statusBar.totalEvents": "All events: {count}",
   "chrome.statusBar.time": "Time: {time}",
+  "chrome.statusBar.bugReport": "Bug feedback >",
 
   "chrome.playback.playPause": "Play/Pause",
   "chrome.playback.audition": "Preview audition",
