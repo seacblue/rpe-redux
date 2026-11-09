@@ -16,7 +16,7 @@ import { EventInteraction } from "../events/eventInteraction.ts";
 import { TimelineEventBatch } from "../events/timelineEventBatch.ts";
 import { NoteBatch } from "../../../canvas/noteBatch.ts";
 
-import { eventTypesForLine } from "../drawing/tracks.ts";
+import { eventColumnsForLine, visibleEventTypesForLine } from "../events/eventColumns.ts";
 
 import {
   type TimelineBindingsState,
@@ -99,11 +99,10 @@ export class Timeline {
       eventsCanvas,
       this.getSession,
       getTempo,
-      (lineIndex) =>
-        eventTypesForLine(
-          this.getSession().chart.judgeLineList?.[lineIndex ?? this.getSession().lineIndex],
-          this.gestures.extended,
-        ),
+      (lineIndex) => {
+        const session = this.getSession();
+        return eventColumnsForLine(session, lineIndex ?? session.lineIndex, this.gestures.extended);
+      },
       this.appearance,
       multiLineScrollState,
     );
@@ -268,9 +267,16 @@ export class Timeline {
     return this.gestures.preview;
   }
 
-  /** Track types for the active line and layer mode. */
+  /** Selectable storage tracks for the active line and layer mode. */
   get eventTypes(): string[] {
-    return eventTypesForLine(this.getSession().line, this.gestures.extended);
+    const session = this.getSession();
+    return visibleEventTypesForLine(session, session.lineIndex, this.gestures.extended);
+  }
+
+  /** Painted display columns for the active line and layer mode. */
+  get eventColumns(): string[] {
+    const session = this.getSession();
+    return eventColumnsForLine(session, session.lineIndex, this.gestures.extended);
   }
 }
 

@@ -11,6 +11,7 @@ import { PREFERENCE_SECTIONS, preferences } from "../../state/preferences.ts";
 import { getRuntimePorts } from "../../platform/runtimePorts.ts";
 import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
 import type { LibraryViewState } from "./types.ts";
+import type { DropClassification } from "../document/dropIntake.ts";
 
 export { LocalLibraryError, type RequestOptions } from "./http.ts";
 
@@ -309,6 +310,18 @@ export class LocalLibrary {
   /** Check that the service answers. */
   health(options: RequestOptions = {}): Promise<{ ok: boolean }> {
     return request(this.origin, "/api/health", options);
+  }
+
+  /** Classify dropped paths as a chart, Extension, or note skin, one per path. */
+  classifyDropped(
+    paths: readonly string[],
+    options: RequestOptions = {},
+  ): Promise<{ items: DropClassification[] }> {
+    return request(this.origin, "/api/intake/classify", {
+      ...options,
+      method: "POST",
+      body: { paths: [...paths] },
+    });
   }
 
   /** Register this editor instance and return the backend id and its record. */

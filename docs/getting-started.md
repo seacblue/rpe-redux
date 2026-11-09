@@ -49,6 +49,8 @@ On the first run the onboarding card asks whether you already know RPE, are new 
 
 Imports that lose or approximate data show a **compatibility report** listing the differences. The report is informational; the imported chart is already usable.
 
+A dropped path is classified before an importer runs: RPE, official, and PhiEdit charts go to the matching chart flow, an Extension package offers the Extensions settings page, and a Phira note-skin package offers the note-skin settings page.
+
 **File → Return to chart library** closes the current document and returns to the library. **Ctrl+Shift+H** (Show chart library) opens the library without closing the chart, so the chart stays open behind it.
 
 ## Create a chart

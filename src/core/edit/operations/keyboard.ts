@@ -15,6 +15,7 @@ import {
 import { nudgeSelection } from "../selection/edits.ts";
 import { MAX_BASE_EVENT_LAYERS } from "../../global/chart/chartVocabulary.ts";
 import type { EditorSession } from "../session/session.ts";
+import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
 import type { TimelineArea } from "../timeline/types.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
 
@@ -36,7 +37,24 @@ interface KeyboardTimeline {
   eventTypes: string[];
   eventInteraction: Pick<EventKeyboardTarget, "pending">;
   addAtCursor(type: number): boolean;
+  cancelPlacement(): void;
 }
+
+/** Escape cancels a started Hold or event placement before it commits a point. */
+export const placementShortcuts: readonly EditorShortcutDefinition[] = [
+  {
+    id: "placement.cancel",
+    category: "editor.notes",
+    title: "shortcuts.editor.cancelPlacement",
+    scope: "editor",
+    defaults: [{ key: "ESCAPE" }],
+    shared: true,
+    enabledFor: (context) =>
+      context.hasPendingPlacement === true &&
+      context.samplingActive !== true &&
+      context.curveMode !== true,
+  },
+];
 
 /** Keyboard action ids mapped to timeline note types and navigation directions. */
 const NOTE_TYPE_BY_ACTION: Record<string, 1 | 2 | 3 | 4> = {
@@ -131,7 +149,9 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       return;
     }
-    if (action === "selection.clear") {
+    if (action === "placement.cancel") {
+      timeline.cancelPlacement();
+    } else if (action === "selection.clear") {
       if (clearSelection(session)) {
         session.notify();
       }

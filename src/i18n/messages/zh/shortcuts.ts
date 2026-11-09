@@ -38,6 +38,7 @@ export default {
   "shortcuts.editor.addFlick": "放置 Flick",
   "shortcuts.editor.addHold": "放置 Hold",
   "shortcuts.editor.addEvent": "放置事件",
+  "shortcuts.editor.cancelPlacement": "取消摆放",
   "shortcuts.editor.sampleStart": "从工作区采样所选事件的起始值",
   "shortcuts.editor.sampleEnd": "从工作区采样所选事件的结束值",
   "shortcuts.editor.samplingHideGuides": "临时隐藏采样辅助线并关闭吸附",

@@ -73,6 +73,13 @@ export default {
   "editorPanels.multiLine.notes": "音符",
   "editorPanels.multiLine.events": "事件",
   "editorPanels.multiLine.mergeNotes": "合并音符",
+  "editorPanels.multiLine.eventTracks": "事件轨道",
+  "editorPanels.multiLine.showX": "X 事件",
+  "editorPanels.multiLine.showY": "Y 事件",
+  "editorPanels.multiLine.showXY": "XY 事件",
+  "editorPanels.multiLine.showRotate": "Rotate 事件",
+  "editorPanels.multiLine.showAlpha": "Alpha 事件",
+  "editorPanels.multiLine.showSpeed": "Speed 事件",
   "editorPanels.multiLine.lineBar": "判定线列表",
   "editorPanels.multiLine.lineFallback": "第 {number} 条",
 

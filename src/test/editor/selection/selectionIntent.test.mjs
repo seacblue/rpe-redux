@@ -216,4 +216,16 @@ test("preview overlap respects the rotated note rectangle and Hold body", () => 
   };
   assert.equal(previewNoteContains(hold, { x: 4, y: -30 }), true);
   assert.equal(previewNoteContains(hold, { x: 8, y: -30 }), false);
+  // Caps fit inside the anchors, so picking stops at the published end.
+  assert.equal(previewNoteContains(hold, { x: 0, y: -61 }), false);
+  assert.equal(previewNoteContains(hold, { x: 0, y: 1 }), false);
+  // A zero-length Hold still paints one cap centred on its anchor.
+  const zeroLength = {
+    ...hold,
+    tail: { x: 0, y: 0 },
+    headLength: 0,
+    tailLength: 20,
+  };
+  assert.equal(previewNoteContains(zeroLength, { x: 0, y: -8 }), true);
+  assert.equal(previewNoteContains(zeroLength, { x: 0, y: -12 }), false);
 });

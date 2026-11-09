@@ -27,9 +27,9 @@ export interface PreviewRect {
 export interface PreviewObjectGeometry {
   /** Object centre. */
   readonly center: PreviewPoint;
-  /** Note head centre, or the judge line centre. */
+  /** Note head anchor, or the judge line centre. */
   readonly head: PreviewPoint;
-  /** Hold tail centre; equal to `head` for taps and judge lines. */
+  /** Hold tail anchor, its painted end; equal to `head` for taps and judge lines. */
   readonly tail: PreviewPoint;
   /** Oriented box corners, starting at the top-left in the object's local space. */
   readonly corners: readonly PreviewPoint[];

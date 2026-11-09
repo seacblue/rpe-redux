@@ -538,6 +538,18 @@ export function createEditorAssembly(
   });
   scope.add(connectRpeImport(() => home.chooseRpeImport()));
   scope.add(connectExternalImport(() => home.chooseExternalImport()));
+  // Debug and automation builds expose the same drop entry point the window
+  // uses, so a test can route local paths without synthesizing an OS drag. The
+  // probe shares the test flag with the public facade and dies with the scope.
+  if ((globalThis as { __REDUX_TEST_API__?: unknown }).__REDUX_TEST_API__ === true) {
+    Object.defineProperty(globalThis, "__REDUX_DROP_PATHS__", {
+      configurable: true,
+      value: (paths: string[]) => home.importPaths(paths),
+    });
+    scope.add(() => {
+      delete (globalThis as { __REDUX_DROP_PATHS__?: unknown }).__REDUX_DROP_PATHS__;
+    });
+  }
   const workspaceNavigationBinding = bindWorkspaceNavigation({
     atHome,
     hasDocument,

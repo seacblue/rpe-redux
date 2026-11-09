@@ -118,6 +118,16 @@ export const displayValues = {
   multiLineMergeNotes: settingFlag("multi-line-merge-notes"),
   /** Whether merged multi-line notes show their owning judge-line number below. */
   multiLineNoteLineNumbers: settingFlag("multi-line-note-line-numbers"),
+  /** Whether multi-line event editing paints X events. */
+  multiLineEventShowX: display("multi-line-event-show-x", true),
+  /** Whether multi-line event editing paints Y events. */
+  multiLineEventShowY: display("multi-line-event-show-y", true),
+  /** Whether multi-line event editing paints rotation events. */
+  multiLineEventShowRotate: display("multi-line-event-show-rotate", true),
+  /** Whether multi-line event editing paints alpha events. */
+  multiLineEventShowAlpha: display("multi-line-event-show-alpha", true),
+  /** Whether multi-line event editing paints speed events. */
+  multiLineEventShowSpeed: display("multi-line-event-show-speed", true),
   /** Selectable note X lines: one is centred; two are the left and right boundaries. */
   gridCount: display("timeline-grid-count", "11"),
   /** Timeline zoom, in pixels per second at the current division. */

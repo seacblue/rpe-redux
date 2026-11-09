@@ -23,6 +23,8 @@ export type EditorShortcutSurface = "preview" | "timeline";
 export interface EditorShortcutContext {
   area: EditorShortcutArea;
   hasSelection: boolean;
+  /** Whether a two-click Hold or event placement is waiting for its endpoint. */
+  hasPendingPlacement?: boolean;
   /** Whether at least one event is selected; sampling reads one event's anchor. */
   hasEventSelection?: boolean;
   /** The sampling pane currently owns the workspace and the preview. */

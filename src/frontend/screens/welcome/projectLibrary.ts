@@ -5,6 +5,7 @@
  * for the editor host.
  */
 import type { LibraryProjectSummary } from "../../../core/global/library/client.ts";
+import { dropRoute, type DropClassification } from "../../../core/global/document/dropIntake.ts";
 import { HomeProjectCardsAdapter } from "./homeProjectCards.ts";
 import { LibraryProjectsController } from "./libraryProjectsController.ts";
 import type { LibrarySort } from "./librarySort.ts";
@@ -28,6 +29,14 @@ interface ProjectHomeOptions {
   importRpePath?: (path: string) => Promise<readonly string[] | null>;
   /** Import an official/PEC chart path; null when the path is not that format. */
   importExternalPath?: (path: string) => Promise<string | null>;
+  /** Ask the backend to classify dropped paths before choosing an importer. */
+  classifyPaths?: (paths: readonly string[]) => Promise<readonly DropClassification[]>;
+  /** Route a recognized Extension package to its settings surface. */
+  importExtension?: (item: DropClassification) => Promise<unknown>;
+  /** Route a recognized note-skin package to its settings surface. */
+  importSkin?: (item: DropClassification) => Promise<unknown>;
+  /** Report a drop the backend could not route. */
+  unsupportedDrop?: (item: DropClassification) => void;
   /**
    * Convert one external chart package and open its library project.
    * Returns false when the path is not a supported external format.
@@ -53,6 +62,12 @@ export class ProjectHome {
   private readonly openProject: (id: string) => Promise<unknown>;
   private readonly openImported?: (id: string) => Promise<unknown>;
   private readonly importExternalPath?: (path: string) => Promise<string | null>;
+  private readonly classifyPaths?: (
+    paths: readonly string[],
+  ) => Promise<readonly DropClassification[]>;
+  private readonly importExtension?: (item: DropClassification) => Promise<unknown>;
+  private readonly importSkin?: (item: DropClassification) => Promise<unknown>;
+  private readonly unsupportedDrop?: (item: DropClassification) => void;
   private readonly importExternalChart?: (path: string) => Promise<boolean>;
   private readonly chooseRpe?: () => Promise<unknown>;
   private readonly chooseExternal?: () => Promise<unknown>;
@@ -65,6 +80,10 @@ export class ProjectHome {
     importFile,
     importRpePath,
     importExternalPath,
+    classifyPaths,
+    importExtension,
+    importSkin,
+    unsupportedDrop,
     importExternalChart,
     chooseRpeImport,
     chooseExternalImport,
@@ -77,6 +96,10 @@ export class ProjectHome {
     this.openProject = openProject;
     this.openImported = openImported;
     this.importExternalPath = importExternalPath;
+    this.classifyPaths = classifyPaths;
+    this.importExtension = importExtension;
+    this.importSkin = importSkin;
+    this.unsupportedDrop = unsupportedDrop;
     this.importExternalChart = importExternalChart;
     this.chooseRpe = chooseRpeImport;
     this.chooseExternal = chooseExternalImport;
@@ -137,30 +160,28 @@ export class ProjectHome {
    *
    * Returns the projects it created or updated, in the order the drop supplied
    * them; one bad file must not stop the rest of the drop, and the failure is
-   * reported by the same surface that owns the import action.
+   * reported by the same surface that owns the import action. The backend
+   * classification picks the owner first; when it is unavailable the legacy
+   * probe order keeps drops working.
    */
   async importPaths(paths: readonly string[]): Promise<readonly string[]> {
+    if (!paths.length) {
+      return [];
+    }
+    let classified: readonly DropClassification[] | null = null;
+    if (this.classifyPaths) {
+      try {
+        classified = await this.classifyPaths(paths);
+      } catch (error) {
+        this.reportError(error);
+      }
+    }
     const imported: string[] = [];
     for (const path of paths) {
       try {
-        if (this.importRpePath) {
-          const ids = await this.importRpePath(path);
-          if (ids !== null) {
-            imported.push(...ids);
-            continue;
-          }
-        }
-        if (this.importExternalPath) {
-          const id = await this.importExternalPath(path);
-          if (id) {
-            imported.push(id);
-            continue;
-          }
-        }
-        const id = await this.importFile(path);
-        if (id) {
-          imported.push(id);
-        }
+        const item = classified?.find((entry) => entry.path === path);
+        const ids = item ? await this.importClassified(item) : await this.importSequentially(path);
+        imported.push(...ids);
       } catch (error) {
         this.reportError(error);
       }
@@ -173,6 +194,63 @@ export class ProjectHome {
       }
     }
     return imported;
+  }
+
+  /** Imports one path through the classifier's route. */
+  private async importClassified(item: DropClassification): Promise<readonly string[]> {
+    const route = dropRoute(item);
+    switch (route.action) {
+      case "chart-rpe": {
+        const ids = this.importRpePath ? await this.importRpePath(route.path) : null;
+        if (ids !== null) {
+          return ids;
+        }
+        const id = await this.importFile(route.entry);
+        return id ? [id] : [];
+      }
+      case "chart-external": {
+        const id = this.importExternalPath ? await this.importExternalPath(route.path) : null;
+        if (!id) {
+          this.unsupportedDrop?.(item);
+        }
+        return id ? [id] : [];
+      }
+      case "extension":
+        if (this.importExtension) {
+          await this.importExtension(item);
+        } else {
+          this.unsupportedDrop?.(item);
+        }
+        return [];
+      case "skin":
+        if (this.importSkin) {
+          await this.importSkin(item);
+        } else {
+          this.unsupportedDrop?.(item);
+        }
+        return [];
+      case "unsupported":
+        this.unsupportedDrop?.(item);
+        return [];
+    }
+  }
+
+  /** Legacy probe order used when the classification service is unreachable. */
+  private async importSequentially(path: string): Promise<readonly string[]> {
+    if (this.importRpePath) {
+      const ids = await this.importRpePath(path);
+      if (ids !== null) {
+        return ids;
+      }
+    }
+    if (this.importExternalPath) {
+      const id = await this.importExternalPath(path);
+      if (id) {
+        return [id];
+      }
+    }
+    const id = await this.importFile(path);
+    return id ? [id] : [];
   }
 
   /** Opens one library project after an import; the caller handled unsaved work. */

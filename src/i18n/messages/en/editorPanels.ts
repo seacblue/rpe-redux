@@ -83,6 +83,13 @@ export default {
   "editorPanels.multiLine.notes": "Notes",
   "editorPanels.multiLine.events": "Events",
   "editorPanels.multiLine.mergeNotes": "Merge notes",
+  "editorPanels.multiLine.eventTracks": "Event tracks",
+  "editorPanels.multiLine.showX": "X events",
+  "editorPanels.multiLine.showY": "Y events",
+  "editorPanels.multiLine.showXY": "XY events",
+  "editorPanels.multiLine.showRotate": "Rotate events",
+  "editorPanels.multiLine.showAlpha": "Alpha events",
+  "editorPanels.multiLine.showSpeed": "Speed events",
   "editorPanels.multiLine.lineBar": "Judge line list",
   "editorPanels.multiLine.lineFallback": "Line {number}",
 

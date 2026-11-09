@@ -35,6 +35,34 @@ test("clearSelection removes single-line and multi-line note and event selection
   assert.equal(clearSelection(session), false);
 });
 
+test("Escape cancels a pending Hold or event before clearing the selection", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    const pending = {
+      area: "notes",
+      hasSelection: true,
+      hasPendingPlacement: true,
+      hasEventSelection: false,
+      samplingActive: false,
+      curveMode: false,
+    };
+    assert.equal(
+      matchEditorShortcut({ key: "Escape" }, pending, shortcutContext),
+      "placement.cancel",
+    );
+    assert.equal(
+      matchEditorShortcut({ key: "Escape" }, { ...pending, area: "events" }, shortcutContext),
+      "placement.cancel",
+    );
+    assert.notEqual(
+      matchEditorShortcut({ key: "Escape" }, { ...pending, samplingActive: true }, shortcutContext),
+      "placement.cancel",
+    );
+  } finally {
+    dispose();
+  }
+});
+
 test("Escape clears chart selection only after sampling and curve contexts yield", () => {
   const dispose = registerEditorShortcuts();
   try {

@@ -39,6 +39,7 @@ export default {
   "shortcuts.editor.addFlick": "Place Flick",
   "shortcuts.editor.addHold": "Place Hold",
   "shortcuts.editor.addEvent": "Place event",
+  "shortcuts.editor.cancelPlacement": "Cancel placement",
   "shortcuts.editor.sampleStart": "Sample the selected event's start value",
   "shortcuts.editor.sampleEnd": "Sample the selected event's end value",
   "shortcuts.editor.samplingHideGuides": "Temporarily hide sampling guides and disable snapping",

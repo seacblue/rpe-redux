@@ -4,7 +4,7 @@
  * buffers, and per-frame instance data.
  */
 import { sizeCanvasBackingStore } from "./canvas2d.ts";
-import { holdBodySegment, holdRenderRotation } from "./noteGeometry.ts";
+import { holdLayout, holdRenderRotation } from "./noteGeometry.ts";
 import {
   bindInstanceAttribute,
   configureTextureSampling,
@@ -446,36 +446,60 @@ export class NoteBatch {
     }
     const headLength = head ? width * (textures.headRatio ?? 0) : 0;
     const tailLength = width * textures.endRatio;
-    const segment = holdBodySegment(headX, headY, tailX, tailY, headLength, tailLength);
-    const bodyLength = Math.hypot(segment.tailX - segment.headX, segment.tailY - segment.headY);
-    const bodyAdded = this.add(
-      body,
-      (segment.headX + segment.tailX) / 2,
-      (segment.headY + segment.tailY) / 2,
-      width,
-      bodyLength,
-      rotation,
-      0,
-      alpha,
-      true,
-      color,
+    const layout = holdLayout(headX, headY, tailX, tailY, headLength, tailLength);
+    const bodyAdded =
+      layout.bodyLength <= 0.5 ||
+      this.add(
+        body,
+        (layout.bodyHead.x + layout.bodyTail.x) / 2,
+        (layout.bodyHead.y + layout.bodyTail.y) / 2,
+        width,
+        layout.bodyLength,
+        rotation,
+        0,
+        alpha,
+        true,
+        color,
+      );
+    return (
+      bodyAdded &&
+      this.addHoldCap(
+        end,
+        layout.tailCap.x,
+        layout.tailCap.y,
+        width,
+        layout.tailCapLength,
+        rotation,
+        alpha,
+        color,
+      ) &&
+      this.addHoldCap(
+        head,
+        layout.headCap.x,
+        layout.headCap.y,
+        width,
+        layout.headCapLength,
+        rotation,
+        alpha,
+        color,
+      )
     );
-    const endAdded = this.add(
-      end,
-      tailX,
-      tailY,
-      width,
-      tailLength,
-      rotation,
-      0,
-      alpha,
-      true,
-      color,
-    );
-    const headAdded = head
-      ? this.add(head, headX, headY, width, headLength, rotation, 0, alpha, true, color)
+  }
+
+  /** Queue one Hold cap, or report success when that cap is not drawn. */
+  private addHoldCap(
+    descriptor: TextureDescriptor | null | undefined,
+    centerX: number,
+    centerY: number,
+    width: number,
+    height: number,
+    rotation: number,
+    alpha: number,
+    color?: NoteColor | null,
+  ): boolean {
+    return descriptor
+      ? this.add(descriptor, centerX, centerY, width, height, rotation, 0, alpha, true, color)
       : true;
-    return (bodyLength <= 0.5 || bodyAdded) && endAdded && headAdded;
   }
 
   /** Upload the queued instance data and draw every group. */

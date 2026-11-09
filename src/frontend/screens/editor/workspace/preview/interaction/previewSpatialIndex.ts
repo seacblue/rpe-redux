@@ -175,34 +175,11 @@ export class PreviewNoteSpatialIndex {
 /** Broad-phase bounds for one note, padded by its hit radius. */
 function noteBounds(note: HitTestNoteGeometry): PreviewBounds {
   const padding = Math.max(0, note.radius);
-  const interval = note.kind === "hold" ? holdInterval(note) : { head: note.head, tail: note.tail };
   return {
-    left: Math.min(interval.head.x, interval.tail.x) - padding,
-    right: Math.max(interval.head.x, interval.tail.x) + padding,
-    top: Math.min(interval.head.y, interval.tail.y) - padding,
-    bottom: Math.max(interval.head.y, interval.tail.y) + padding,
-  };
-}
-
-/** Extends a hold's segment by half of each visible cap. */
-function holdInterval(note: HitTestNoteGeometry): { head: HitTestPoint; tail: HitTestPoint } {
-  const dx = note.tail.x - note.head.x;
-  const dy = note.tail.y - note.head.y;
-  const length = Math.hypot(dx, dy);
-  if (length <= 0) {
-    return { head: note.head, tail: note.tail };
-  }
-  const headInset = Math.max(0, note.headLength ?? 0) / 2;
-  const tailInset = Math.max(0, note.tailLength ?? 0) / 2;
-  return {
-    head: {
-      x: note.head.x - (dx / length) * headInset,
-      y: note.head.y - (dy / length) * headInset,
-    },
-    tail: {
-      x: note.tail.x + (dx / length) * tailInset,
-      y: note.tail.y + (dy / length) * tailInset,
-    },
+    left: Math.min(note.head.x, note.tail.x) - padding,
+    right: Math.max(note.head.x, note.tail.x) + padding,
+    top: Math.min(note.head.y, note.tail.y) - padding,
+    bottom: Math.max(note.head.y, note.tail.y) + padding,
   };
 }
 

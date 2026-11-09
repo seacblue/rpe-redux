@@ -183,6 +183,8 @@ fn main() {
             update::local_update_worker::local_update_failure,
             update::updater::update_prepare,
             update::updater::update_download,
+            update::updater::update_restore_cached,
+            update::updater::update_cached_remove,
             update::updater::update_load_local,
             update::updater::update_discard,
             update::updater::update_install,
