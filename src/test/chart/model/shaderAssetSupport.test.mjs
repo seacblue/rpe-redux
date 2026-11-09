@@ -102,6 +102,49 @@ test("passes the chart path to relative shader asset loaders", async () => {
   assert.deepEqual(calls, [["effects/rain.glsl", "charts/main.json"]]);
 });
 
+test("drops source text when an effect leaves the chart", async () => {
+  const runtime = new ShaderRuntime(
+    () => {},
+    async () => "void main() { gl_FragColor = vec4(1.0); }",
+  );
+  const first = {
+    META: {},
+    BPMList: [],
+    judgeLineList: [],
+    effects: [{ shader: "effects/a.glsl", start: [0, 0, 1], end: [1, 0, 1] }],
+  };
+  runtime.compile(first, null);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(runtime.sources.size, 1);
+
+  runtime.compile({ ...first, effects: [] }, null);
+  assert.equal(runtime.sources.size, 0);
+  assert.equal(runtime.sourcesWanted.size, 0);
+});
+
+test("a late source load does not resurrect a dropped effect", async () => {
+  let resolveLoad;
+  const pending = new Promise((resolve) => {
+    resolveLoad = resolve;
+  });
+  const runtime = new ShaderRuntime(
+    () => {},
+    () => pending,
+  );
+  const first = {
+    META: {},
+    BPMList: [],
+    judgeLineList: [],
+    effects: [{ shader: "effects/a.glsl", start: [0, 0, 1], end: [1, 0, 1] }],
+  };
+  runtime.compile(first, null);
+  runtime.compile({ ...first, effects: [] }, null);
+
+  resolveLoad("void main() { gl_FragColor = vec4(1.0); }");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(runtime.sources.size, 0);
+});
+
 test("sniffs every editable numeric uniform without guessing from its name", () => {
   const parameters = shaderParameters(`
     uniform float intensity; // %0.5%

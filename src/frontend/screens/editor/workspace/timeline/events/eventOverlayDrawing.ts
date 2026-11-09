@@ -1,4 +1,4 @@
-/** Draws the trajectory and shader event overlays over the event field. */
+/** Draws the trajectory preview and shader event bars in the event field. */
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import { type IntervalEntry } from "../../../../../../core/utils/intervalIndex.ts";
 import { eventKey } from "../../../../../../core/edit/events/eventTracks.ts";
@@ -8,9 +8,14 @@ import { trajectoryEventValue } from "../../../../../../core/global/chart/trajec
 import { t } from "../../../../../../i18n/index.ts";
 import type { TimelineEventRect } from "../../../../../../core/edit/timeline/types.ts";
 import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
-import type { TimelineEventOverlayReceiver } from "../drawing/timelineReceiver.ts";
+import type {
+  TimelineEventDrawingReceiver,
+  TimelineEventOverlayReceiver,
+} from "../drawing/timelineReceiver.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
+import { drawEventBar, eventBarOpacity } from "./eventRenderCache.ts";
+import { drawEventSelectionFilters } from "./eventSelectionDrawing.ts";
 
 /** Draw the trajectory preview inside one event bar. */
 export function drawTrajectoryEvent(
@@ -93,9 +98,9 @@ export function drawTrajectoryEvent(
   context.restore();
 }
 
-/** Draw paint events in their shader lanes with their shader names. */
+/** Draw paint events in their shader lanes with the shared event-bar skin. */
 export function drawShaderEvents(
-  this: TimelineEventOverlayReceiver,
+  this: TimelineEventDrawingReceiver,
   context: CanvasRenderingContext2D,
   entries: readonly IntervalEntry<JudgeLineEvent>[],
   channel: number,
@@ -127,18 +132,15 @@ export function drawShaderEvents(
     this.gestures.eventRects.push(rectangle);
     const selected = this.getSession().eventSelection.has(eventKey("paintEvents", entry.index));
     context.save();
-    context.globalAlpha = this.appearance.eventOpacity ?? 1;
-    context.fillStyle = selected ? palette.eventSelectedFill : palette.eventShaderFill;
-    context.fillRect(rectangle.x, top, rectangle.width, rectangle.height);
+    context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity);
+    drawEventBar(this, context, rectangle);
+    context.globalAlpha = 1;
     if (hasNonPositiveRange(entry.item.startTime, entry.item.endTime)) {
       context.fillStyle = palette.overlayInvalidFill;
       context.fillRect(rectangle.x, top, rectangle.width, rectangle.height);
     }
-    context.globalAlpha = 1;
-    if (!selected) {
-      context.strokeStyle = palette.eventShaderFill;
-      context.lineWidth = 1;
-      context.strokeRect(rectangle.x, top, rectangle.width, rectangle.height);
+    if (selected) {
+      drawEventSelectionFilters(context, [rectangle], palette);
     }
     context.beginPath();
     context.rect(rectangle.x, top, rectangle.width, rectangle.height);

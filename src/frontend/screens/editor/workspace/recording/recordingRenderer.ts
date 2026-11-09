@@ -136,16 +136,21 @@ export class RecordingRenderer {
       }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    for (const effect of preview.shaderRuntime.effects) {
+    const shaderSources = preview.shaderRuntime.effects.map((effect) => {
       const source = preview.shaderRuntime.source(effect.shader, effect.sourceName);
       if (!source) {
         throw new Error(`recording_shader_unavailable:${effect.shader}`);
       }
-      if (
-        !preview.shaderPipeline.ensure(this.surface.shader) ||
-        !preview.shaderPipeline.compile(effect.shader, source)
-      ) {
-        throw new Error(`recording_shader_failed:${effect.shader}`);
+      return { name: effect.shader, source };
+    });
+    if (!preview.shaderPipeline.ensure(this.surface.shader)) {
+      throw new Error("recording_shader_failed");
+    }
+    preview.shaderPipeline.retainSources(shaderSources.map((entry) => entry.source));
+    await preview.shaderPipeline.precompile(shaderSources);
+    for (const entry of shaderSources) {
+      if (!preview.shaderPipeline.compile(entry.name, entry.source)) {
+        throw new Error(`recording_shader_failed:${entry.name}`);
       }
     }
     if (!(await noise) || this.noiseFailed) {

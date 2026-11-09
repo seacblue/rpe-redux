@@ -1,7 +1,8 @@
 /**
- * WebGL shader pipeline for chart shaders: compiles a portable program, uploads
- * uniforms, and draws one pass inside the preview viewport. Source rewriting and
- * uniform defaults live in the sibling shader modules.
+ * WebGL shader pipeline for chart shaders: compiles portable programs, uploads
+ * uniforms, and draws passes inside the preview viewport. Compilation runs ahead
+ * of playback, and only sources the current chart references stay cached. Source
+ * rewriting and uniform defaults live in the sibling shader modules.
  */
 import { PREVIEW_LOGICAL_SIZE } from "../scene/constants.ts";
 import { defaultShaderUniform } from "../../../../../../core/global/chart/shader/shader.ts";
@@ -64,6 +65,12 @@ export interface ShaderPass {
   values?: unknown;
 }
 
+/** One shader source to compile ahead of a render pass. */
+export interface ShaderProgramSource {
+  readonly name: string;
+  readonly source: string;
+}
+
 /** Compiled and linked program with its uniform metadata. */
 export interface ShaderProgram {
   program: WebGLProgram;
@@ -79,6 +86,34 @@ type GlContext = WebGL2RenderingContext | WebGLRenderingContext;
 
 /** Clip-space position and texture coordinates for one full-screen quad. */
 const FULLSCREEN_QUAD = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
+
+/** The optional completion-status query from KHR_parallel_shader_compile. */
+interface ParallelShaderCompile {
+  readonly COMPLETION_STATUS_KHR: number;
+}
+
+/**
+ * Yield once to idle time, or to the next task when idle scheduling is absent.
+ *
+ * Compilation starts outside the paint that requested it, so the first shader
+ * upload never extends a frame that is already over budget.
+ */
+function nextIdleSlice(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof globalThis.requestIdleCallback === "function") {
+      globalThis.requestIdleCallback(() => resolve(), { timeout: 250 });
+    } else {
+      globalThis.setTimeout(resolve, 0);
+    }
+  });
+}
+
+/** Yield one task turn while polling a parallel compile. */
+function nextTurn(): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, 0);
+  });
+}
 
 /** Uniform values: any non-null object is a valid `Record<string, unknown>`. */
 function isUniformValues(value: unknown): value is Record<string, unknown> {
@@ -97,7 +132,7 @@ export function shaderViewport(
   };
 }
 
-/** Owns the WebGL context, compiled programs, and ping-pong textures for shader passes. */
+/** Owns the WebGL context, program cache, and ping-pong textures for shader passes. */
 export class ShaderPipeline {
   invalidate: () => void;
   gl: GlContext | null;
@@ -119,9 +154,24 @@ export class ShaderPipeline {
   private uploadedRevision?: number | null;
   private uploadedWidth?: number;
   private uploadedHeight?: number;
+  /** Sources the current chart wants; everything else is released on retain. */
+  private wantedSources = new Set<string>();
+  /** Sources queued or waiting for their idle compile turn. */
+  private readonly pendingSources = new Set<string>();
+  /** Sources that failed to link; retrying them every frame would stall playback. */
+  private readonly failedSources = new Set<string>();
+  /** Serializes asynchronous compilation so one selection never floods the GPU. */
+  private precompileChain: Promise<void> = Promise.resolve();
+  /** Invalidates queued work when the context or canvas is replaced. */
+  private cacheEpoch = 0;
 
   /** Releases every GL object this pipeline created. */
   dispose(): void {
+    this.cacheEpoch += 1;
+    this.wantedSources.clear();
+    this.pendingSources.clear();
+    this.failedSources.clear();
+    this.precompileChain = Promise.resolve();
     const gl = this.gl;
     if (gl) {
       for (const result of this.programs.values()) {
@@ -235,27 +285,119 @@ export class ShaderPipeline {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   }
 
+  /**
+   * Release every compiled program the selected chart no longer references.
+   *
+   * WebGL programs are driver resources rather than JavaScript objects, so the
+   * engine garbage collector cannot reclaim them. Keeping only the current
+   * source set bounds GPU memory across chart switches and shader edits.
+   */
+  retainSources(sources: Iterable<string>): void {
+    this.wantedSources = new Set(sources);
+    for (const source of [...this.failedSources]) {
+      if (!this.wantedSources.has(source)) {
+        this.failedSources.delete(source);
+      }
+    }
+    const gl = this.gl;
+    for (const [source, cached] of [...this.programs]) {
+      if (this.wantedSources.has(source)) {
+        continue;
+      }
+      gl?.deleteProgram(cached.program);
+      this.programs.delete(source);
+    }
+  }
+
+  /** Whether a source already has a program or a recorded compile failure. */
+  isSettled(source: string): boolean {
+    return this.programs.has(source) || this.failedSources.has(source);
+  }
+
+  /**
+   * Compile missing programs away from the paint path.
+   *
+   * Source text arrives asynchronously, so the caller repeats this call as more
+   * sources load; cached sources are skipped. A queued source is marked pending
+   * before the first await, which makes the synchronous `compile` path skip it
+   * instead of stalling a playback frame. Works through KHR parallel compile
+   * when the driver exposes it, and otherwise links during an idle slice.
+   */
+  precompile(sources: readonly ShaderProgramSource[]): Promise<void> {
+    if (!this.gl) {
+      return Promise.resolve();
+    }
+    this.wantedSources = new Set(sources.map((entry) => entry.source));
+    const jobs: ShaderProgramSource[] = [];
+    for (const entry of sources) {
+      if (
+        !entry.source ||
+        this.programs.has(entry.source) ||
+        this.pendingSources.has(entry.source) ||
+        this.failedSources.has(entry.source)
+      ) {
+        continue;
+      }
+      this.pendingSources.add(entry.source);
+      jobs.push(entry);
+    }
+    if (!jobs.length) {
+      return this.precompileChain;
+    }
+    this.precompileChain = this.precompileChain
+      .then(async () => {
+        for (const job of jobs) {
+          if (!this.wantedSources.has(job.source)) {
+            this.pendingSources.delete(job.source);
+            continue;
+          }
+          try {
+            await this.compileAsync(job.name, job.source);
+          } finally {
+            this.pendingSources.delete(job.source);
+          }
+        }
+      })
+      .catch(() => undefined);
+    return this.precompileChain;
+  }
+
   /** Compiles and caches one program per source; returns null and records the log on failure. */
   compile(name: string, source: string): ShaderProgram | null {
     const key = source;
-    if (this.programs.has(key)) {
-      return this.programs.get(key) ?? null;
+    const cached = this.programs.get(key);
+    if (cached) {
+      return cached;
+    }
+    // The idle precompile owns this source; skipping it for one frame avoids a
+    // synchronous link in the middle of playback. The next frame repaints when
+    // the queued program becomes available.
+    if (this.pendingSources.has(key) || this.failedSources.has(key)) {
+      return null;
     }
     const gl = this.context();
     let program: WebGLProgram;
     try {
-      program = linkProgram(
-        gl,
-        this.webgl2
-          ? "#version 300 es\n" +
-              VERTEX_SOURCE.replace(/attribute\b/g, "in").replace(/varying\b/g, "out")
-          : VERTEX_SOURCE,
-        fragmentSource(source, this.webgl2),
-      );
+      program = linkProgram(gl, this.vertexSource(), fragmentSource(source, this.webgl2));
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
+      this.failedSources.add(key);
       return null;
     }
+    return this.record(source, program);
+  }
+
+  /** Vertex source for the active WebGL dialect. */
+  private vertexSource(): string {
+    return this.webgl2
+      ? "#version 300 es\n" +
+          VERTEX_SOURCE.replace(/\battribute\b/g, "in").replace(/\bvarying\b/g, "out")
+      : VERTEX_SOURCE;
+  }
+
+  /** Read one linked program's uniforms and metadata, then cache it. */
+  private record(source: string, program: WebGLProgram): ShaderProgram {
+    const gl = this.context();
     const uniforms = new Map<string, WebGLUniformLocation | null>();
     const types = new Map<string, number>();
     for (let index = 0; index < gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); index++) {
@@ -280,8 +422,107 @@ export class ShaderPipeline {
       defaults,
       builtin,
     };
-    this.programs.set(key, result);
+    this.programs.set(source, result);
+    this.failedSources.delete(source);
+    this.lastError = null;
     return result;
+  }
+
+  /** Compile and link one program outside the frame, honouring parallel compile. */
+  private async compileAsync(name: string, source: string): Promise<ShaderProgram | null> {
+    if (this.programs.has(source)) {
+      return this.programs.get(source) ?? null;
+    }
+    const epoch = this.cacheEpoch;
+    await nextIdleSlice();
+    if (epoch !== this.cacheEpoch || !this.gl || !this.wantedSources.has(source)) {
+      return null;
+    }
+    const program = await this.linkAsync(source, epoch);
+    if (!program) {
+      if (epoch === this.cacheEpoch && this.wantedSources.has(source)) {
+        this.failedSources.add(source);
+      }
+      return null;
+    }
+    if (epoch !== this.cacheEpoch || !this.wantedSources.has(source)) {
+      this.gl?.deleteProgram(program);
+      return null;
+    }
+    try {
+      return this.record(source, program);
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : String(error);
+      this.failedSources.add(source);
+      this.gl?.deleteProgram(program);
+      return null;
+    }
+  }
+
+  /** Link one program; with the parallel extension, wait without blocking. */
+  private async linkAsync(source: string, epoch: number): Promise<WebGLProgram | null> {
+    const gl = this.gl;
+    if (!gl) {
+      return null;
+    }
+    const vertex = gl.createShader(gl.VERTEX_SHADER);
+    const fragment = gl.createShader(gl.FRAGMENT_SHADER);
+    const program = gl.createProgram();
+    if (!vertex || !fragment || !program) {
+      if (vertex) {
+        gl.deleteShader(vertex);
+      }
+      if (fragment) {
+        gl.deleteShader(fragment);
+      }
+      if (program) {
+        gl.deleteProgram(program);
+      }
+      this.lastError = "Cannot create shader program";
+      return null;
+    }
+    try {
+      gl.shaderSource(vertex, this.vertexSource());
+      gl.compileShader(vertex);
+      gl.shaderSource(fragment, fragmentSource(source, this.webgl2));
+      gl.compileShader(fragment);
+      gl.attachShader(program, vertex);
+      gl.attachShader(program, fragment);
+      gl.linkProgram(program);
+      const parallel = gl.getExtension(
+        "KHR_parallel_shader_compile",
+      ) as ParallelShaderCompile | null;
+      if (parallel) {
+        const status = parallel.COMPLETION_STATUS_KHR;
+        while (!gl.getProgramParameter(program, status)) {
+          if (epoch !== this.cacheEpoch || !this.wantedSources.has(source)) {
+            gl.deleteProgram(program);
+            return null;
+          }
+          await nextTurn();
+        }
+      }
+      const vertexLog = gl.getShaderParameter(vertex, gl.COMPILE_STATUS)
+        ? null
+        : (gl.getShaderInfoLog(vertex) ?? "Vertex shader compilation failed");
+      const fragmentLog = gl.getShaderParameter(fragment, gl.COMPILE_STATUS)
+        ? null
+        : (gl.getShaderInfoLog(fragment) ?? "Fragment shader compilation failed");
+      if (vertexLog || fragmentLog) {
+        throw new Error(vertexLog ?? fragmentLog ?? "Shader compilation failed");
+      }
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(program) ?? "Program link failed");
+      }
+      return program;
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : String(error);
+      gl.deleteProgram(program);
+      return null;
+    } finally {
+      gl.deleteShader(vertex);
+      gl.deleteShader(fragment);
+    }
   }
 
   /** Uploads the frame uniforms and the pass's value overrides. */

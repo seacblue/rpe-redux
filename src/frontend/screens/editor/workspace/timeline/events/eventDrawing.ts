@@ -502,20 +502,9 @@ export function drawMultiLineEvents(
           }
         }
         context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, lineOpacity);
-        if (type === "paintEvents") {
-          context.fillStyle = selected ? palette.eventSelectedFill : palette.eventShaderFill;
-          context.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
-        } else {
-          drawEventBar(this, context, rectangle, lineOpacity);
-          if (display.overlaps.has(index) || hasNonPositiveRange(event.startTime, event.endTime)) {
-            drawEventOverlapFilter(context, rectangle, palette);
-          }
-        }
-        context.globalAlpha = lineOpacity;
-        if (!selected && type === "paintEvents") {
-          context.strokeStyle = palette.eventShaderFill;
-          context.lineWidth = 1;
-          context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+        drawEventBar(this, context, rectangle, lineOpacity);
+        if (display.overlaps.has(index) || hasNonPositiveRange(event.startTime, event.endTime)) {
+          drawEventOverlapFilter(context, rectangle, palette);
         }
         context.globalAlpha = lineOpacity;
         if (event.trajectory) {
