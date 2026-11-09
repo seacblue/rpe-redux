@@ -134,9 +134,38 @@ export default {
   "editor.app.dialog.saveAndReturn": "保存并返回",
   "editor.app.dialog.switchChart": "切换谱面",
   "editor.app.dialog.unsavedChangesBody": "保存以保留修改，或放弃并离开。",
-  "editor.app.dialog.returnHomeTitle": "返回谱面库",
-  "editor.app.dialog.returnHomeBody": "已保存，之后可从谱面库重新打开。",
+  "editor.app.dialog.returnHomeTitle": "返回谱面库？",
+  "editor.app.dialog.returnHomeBody": "当前没有未保存的修改。返回谱面库可以打开其他谱面。",
   "editor.app.dialog.returnHome": "返回",
+  "editor.app.dialog.returnStay": "留在此处",
+  "editor.app.dialog.returnLeaveRoomTitle": "返回谱面库并离开房间？",
+  "editor.app.dialog.returnLeaveRoomBody":
+    "返回后会断开联机。临时房间谱面和其中的未保存修改都会从这台设备删除；如需保留，请先导出谱面。",
+  "editor.app.dialog.returnLeaveRoom": "离开房间并返回",
+  "editor.app.dialog.returnLeaveRoomDirtyTitle": "离开房间前保存谱面？",
+  "editor.app.dialog.returnLeaveRoomDirtyBody":
+    "当前谱面有未保存修改，返回谱面库还会离开房间。可以保存谱面、放弃修改，或留在此处。",
+  "editor.app.dialog.saveLeaveRoomAndReturn": "保存并离开房间",
+  "editor.app.dialog.discardLeaveRoomAndReturn": "放弃并离开房间",
+  "editor.app.dialog.returnCloseRoomTitle": "返回谱面库并关闭房间？",
+  "editor.app.dialog.returnCloseRoomBody":
+    "你是房主。返回谱面库会为所有人关闭房间，并删除他们设备上的临时房间谱面。",
+  "editor.app.dialog.returnCloseRoom": "关闭房间并返回",
+  "editor.app.dialog.returnCloseRoomDirtyTitle": "关闭房间前保存谱面？",
+  "editor.app.dialog.returnCloseRoomDirtyBody":
+    "当前谱面有未保存修改，返回谱面库还会为所有人关闭房间。可以保存并关闭房间、放弃修改，或留在此处。",
+  "editor.app.dialog.saveCloseRoomAndReturn": "保存并关闭房间",
+  "editor.app.dialog.discardCloseRoomAndReturn": "放弃并关闭房间",
+  "editor.app.dialog.returnCancelConnectTitle": "返回谱面库并取消联机？",
+  "editor.app.dialog.returnCancelConnectBody": "房间连接尚未完成，返回谱面库会取消这次连接。",
+  "editor.app.dialog.returnCancelConnect": "取消联机并返回",
+  "editor.app.dialog.returnCancelConnectDirtyTitle": "取消联机前保存谱面？",
+  "editor.app.dialog.returnCancelConnectDirtyBody":
+    "当前谱面有未保存修改，返回谱面库还会取消房间连接。可以保存谱面、放弃修改，或留在此处。",
+  "editor.app.dialog.returnRoomDocumentTitle": "离开房间并返回谱面库？",
+  "editor.app.dialog.returnRoomDocumentBody":
+    "临时房间谱面和其中的未保存修改都会从这台设备删除；如需保留，请先导出谱面。",
+  "editor.app.dialog.returnRoomDocumentConfirm": "离开房间并返回",
   "editor.app.dialog.unsavedChangesTitle": "未保存的修改",
 
   "editor.app.error.libraryServiceDown": "本地服务未运行，无法打开谱面库项目",

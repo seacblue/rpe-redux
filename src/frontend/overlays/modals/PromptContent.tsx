@@ -73,6 +73,37 @@ export function ChoiceActions({
   );
 }
 
+/** One footer answer whose value is chosen by the caller. */
+export interface ActionChoice<T extends string> {
+  readonly value: T;
+  readonly label: string;
+  /** The surface the answer uses; defaults to the secondary outline. */
+  readonly variant?: "solid" | "outlined" | "danger";
+}
+
+/** Footer for a caller-defined set of answers, preserving the supplied order. */
+export function ActionChoiceActions<T extends string>({
+  choices,
+  choose,
+}: {
+  choices: readonly ActionChoice<T>[];
+  choose(value: T): void;
+}) {
+  return (
+    <>
+      {choices.map((choice) => (
+        <Button
+          key={`${choice.value}:${choice.label}`}
+          variant={choice.variant ?? "outlined"}
+          onClick={() => choose(choice.value)}
+        >
+          {choice.label}
+        </Button>
+      ))}
+    </>
+  );
+}
+
 /** The three answers a document-close prompt can return. */
 export type ExitChoice = "save" | "discard" | "cancel";
 

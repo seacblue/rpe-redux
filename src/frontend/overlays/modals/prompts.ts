@@ -7,6 +7,7 @@
 import { createElement, Fragment } from "react";
 import { dismissModal, presentModal, type ModalPriority } from "./modalQueue.ts";
 import {
+  ActionChoiceActions,
   ChoiceActions,
   ExitActions,
   InputActions,
@@ -14,6 +15,7 @@ import {
   PromptActions,
   PromptInput,
   PromptSelect,
+  type ActionChoice,
   type ExitChoice,
 } from "./PromptContent.tsx";
 import type { ScriptUiSelectOption } from "../../../core/extensions/scriptUi.ts";
@@ -240,6 +242,55 @@ export function requestSelect(
       children: createElement(PromptSelect, {
         choices: options.entries,
         selectedValue: options.defaultValue,
+        choose: settle,
+      }),
+    });
+  });
+}
+
+/**
+ * Asks for one caller-defined answer rendered as a footer button.
+ *
+ * Dismissal, Escape, or an abort resolves `cancelValue`, so the surface never
+ * needs a second close path. Answers keep the order the caller supplied.
+ */
+export function requestActionChoice<T extends string>(
+  options: PromptMessage & {
+    entries: readonly ActionChoice<T>[];
+    cancelValue: T;
+    actionsClassName?: string;
+    signal?: AbortSignal;
+  },
+): Promise<T> {
+  return new Promise((resolve) => {
+    const id = identity();
+    let pending = true;
+    const abort = () => settle(options.cancelValue);
+    const settle = (value: T) => {
+      if (!pending) {
+        return;
+      }
+      pending = false;
+      options.signal?.removeEventListener("abort", abort);
+      dismissModal(id);
+      resolve(value);
+    };
+    if (options.signal?.aborted) {
+      settle(options.cancelValue);
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
+    presentModal(id, {
+      label: options.title,
+      description: description(options),
+      className: "redux-confirm",
+      closeButton: false,
+      role: "alertdialog",
+      onClose: () => settle(options.cancelValue),
+      priority: options.priority,
+      actionsClassName: options.actionsClassName,
+      actions: createElement(ActionChoiceActions, {
+        choices: options.entries,
         choose: settle,
       }),
     });

@@ -131,9 +131,30 @@
 
 // ------------------------------------------------------- application menu
 
-// The title bar's leading brand mark. It owns a fixed square footprint in front
-// of both menu presentations and stays out of hit testing, so the frame keeps
-// its drag and click targets.
+// The title bar's leading brand action. The button owns the hit target and the
+// library command; the mark stays decorative inside it.
+.redux-app-root .redux-titlebar-brand {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: var(--radius-control);
+  color: inherit;
+}
+
+.redux-app-root .redux-titlebar-brand:hover:not([aria-disabled="true"]),
+.redux-app-root .redux-titlebar-brand:focus-visible:not([aria-disabled="true"]) {
+  background: var(--design-fill-hover);
+}
+
+.redux-titlebar-brand[aria-disabled="true"] {
+  cursor: default;
+}
+
 .redux-titlebar-logo {
   display: block;
   flex: none;

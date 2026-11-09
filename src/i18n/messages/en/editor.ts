@@ -138,9 +138,41 @@ export default {
   "editor.app.dialog.switchChart": "Switch chart",
   "editor.app.dialog.unsavedChangesBody": "Save to keep your changes, or discard to leave.",
   "editor.app.dialog.unsavedChangesTitle": "Unsaved changes",
-  "editor.app.dialog.returnHomeTitle": "Return to library",
-  "editor.app.dialog.returnHomeBody": "Saved. Reopen it later from the chart library.",
+  "editor.app.dialog.returnHomeTitle": "Return to the chart library?",
+  "editor.app.dialog.returnHomeBody":
+    "There are no unsaved changes. Return to the library to open another chart.",
   "editor.app.dialog.returnHome": "Return",
+  "editor.app.dialog.returnStay": "Stay in editor",
+  "editor.app.dialog.returnLeaveRoomTitle": "Return to the library and leave the room?",
+  "editor.app.dialog.returnLeaveRoomBody":
+    "Returning disconnects you from the room. The temporary room chart and its unsaved changes will be deleted from this device. Export it first if you need a copy.",
+  "editor.app.dialog.returnLeaveRoom": "Leave room and return",
+  "editor.app.dialog.returnLeaveRoomDirtyTitle": "Save before leaving the room?",
+  "editor.app.dialog.returnLeaveRoomDirtyBody":
+    "This chart has unsaved changes, and returning to the library leaves the room. Save the chart, discard the changes, or stay in the editor.",
+  "editor.app.dialog.saveLeaveRoomAndReturn": "Save and leave room",
+  "editor.app.dialog.discardLeaveRoomAndReturn": "Discard and leave room",
+  "editor.app.dialog.returnCloseRoomTitle": "Return to the library and close the room?",
+  "editor.app.dialog.returnCloseRoomBody":
+    "You are hosting the room. Returning closes it for everyone and deletes the temporary room charts on their devices.",
+  "editor.app.dialog.returnCloseRoom": "Close room and return",
+  "editor.app.dialog.returnCloseRoomDirtyTitle": "Save before closing the room?",
+  "editor.app.dialog.returnCloseRoomDirtyBody":
+    "This chart has unsaved changes, and returning to the library closes the room for everyone. Save and close the room, discard the changes, or stay in the editor.",
+  "editor.app.dialog.saveCloseRoomAndReturn": "Save and close room",
+  "editor.app.dialog.discardCloseRoomAndReturn": "Discard and close room",
+  "editor.app.dialog.returnCancelConnectTitle":
+    "Return to the library and cancel the room connection?",
+  "editor.app.dialog.returnCancelConnectBody":
+    "The room connection has not finished. Returning to the library cancels it.",
+  "editor.app.dialog.returnCancelConnect": "Cancel connection and return",
+  "editor.app.dialog.returnCancelConnectDirtyTitle": "Save before cancelling the room connection?",
+  "editor.app.dialog.returnCancelConnectDirtyBody":
+    "This chart has unsaved changes, and returning to the library cancels the room connection. Save the chart, discard the changes, or stay in the editor.",
+  "editor.app.dialog.returnRoomDocumentTitle": "Leave the room and return to the library?",
+  "editor.app.dialog.returnRoomDocumentBody":
+    "The temporary room chart and its unsaved changes will be deleted from this device. Export the chart first if you need a copy.",
+  "editor.app.dialog.returnRoomDocumentConfirm": "Leave room and return",
 
   "editor.app.error.libraryServiceDown":
     "The local service is not running, so the chart library project cannot be opened",

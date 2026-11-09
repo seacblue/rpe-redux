@@ -70,6 +70,16 @@ export function bumpCollaborationAssetRevision(): void {
   collaborationAssetRevision.set(collaborationAssetRevision.get() + 1);
 }
 
+/**
+ * Whether ending the current session must close the room for every member.
+ *
+ * Only a host whose room exists owns the room's lifetime. A pending connection
+ * or any guest exits by leaving instead of closing the room.
+ */
+export function roomExitClosesRoom(state: CollaborationState): boolean {
+  return state.role === "host" && Boolean(state.roomId);
+}
+
 /** Returns whether exiting would interrupt a room or an in-progress connection. */
 export function roomNeedsExitConfirmation(state: CollaborationState, preparing: boolean): boolean {
   return (
