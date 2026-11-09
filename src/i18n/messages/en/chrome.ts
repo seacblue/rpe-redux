@@ -134,6 +134,7 @@ export default {
   "chrome.changelog.skipVersion": "Skip this version",
   "chrome.changelog.later": "Later",
   "chrome.changelog.updateNow": "Update now",
+  "chrome.changelog.updating": "Updating…",
 
   "chrome.pane.notes": "Note editing",
   "chrome.pane.events": "Event editing",

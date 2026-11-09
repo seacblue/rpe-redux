@@ -1,7 +1,10 @@
-/** Update presentation rules keep the title-bar badge aligned with download state. */
+/** Update presentation rules keep the badge and changelog footer aligned with the flow. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shouldShowUpdateBadge } from "../../../frontend/screens/settings/updates/updatePresentation.ts";
+import {
+  changelogUpdateAction,
+  shouldShowUpdateBadge,
+} from "../../../frontend/screens/settings/updates/updatePresentation.ts";
 
 const release = { version: "1.0.6" };
 
@@ -30,4 +33,19 @@ test("the update badge stays hidden without an available release", () => {
     false,
   );
   assert.equal(shouldShowUpdateBadge({ available: true, latest: null, phase: "available" }), false);
+});
+
+test("an active update locks the changelog footer and renames its primary action", () => {
+  for (const phase of ["preparing", "verifying", "downloading", "installing"]) {
+    assert.deepEqual(changelogUpdateAction(phase), {
+      locked: true,
+      labelKey: "chrome.changelog.updating",
+    });
+  }
+  for (const phase of ["idle", "checking", "available", "downloaded", "scheduled", "error"]) {
+    assert.deepEqual(changelogUpdateAction(phase), {
+      locked: false,
+      labelKey: "chrome.changelog.updateNow",
+    });
+  }
 });
