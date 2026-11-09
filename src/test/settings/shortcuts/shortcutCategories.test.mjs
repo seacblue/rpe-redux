@@ -54,12 +54,11 @@ test("sampling commands form their own category", () => {
   const sampling = EDITOR_SHORTCUTS.filter(
     (shortcut) =>
       shortcut.id === "sampling.apply" ||
-      shortcut.id === "sampling.cancel" ||
       shortcut.id === "sampling.hideGuides" ||
       shortcut.id === "event.sample.start" ||
       shortcut.id === "event.sample.end",
   );
-  assert.equal(sampling.length, 5);
+  assert.equal(sampling.length, 4);
   for (const shortcut of sampling) {
     assert.equal(shortcut.category, SHORTCUT_CATEGORIES.sampling.id, shortcut.id);
   }

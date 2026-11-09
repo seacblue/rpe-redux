@@ -23,7 +23,6 @@ import {
 import { matches } from "../../shortcuts/keyMatching.ts";
 import { shortcutScopeAvailable, shortcutScopePriority } from "../../shortcuts/scope.ts";
 import { historyShortcuts } from "../session/history.ts";
-import { placementShortcuts } from "../operations/keyboard.ts";
 import { selectionShortcuts } from "../selection/control.ts";
 import { clipboardShortcuts } from "../clipboard/operations.ts";
 import { eventLayerShortcuts, eventShortcuts } from "../events/eventCommands.ts";
@@ -40,21 +39,7 @@ export const SAMPLING_SHORTCUT_IDS = Object.freeze({
   start: "event.sample.start",
   end: "event.sample.end",
   hideGuides: "sampling.hideGuides",
-  cancel: "sampling.cancel",
   apply: "sampling.apply",
-});
-
-/** Ids for the commands owned by the curve trajectory stage. */
-export const CURVE_SHORTCUT_IDS = Object.freeze({
-  delete: "editor.curve.delete",
-  cancel: "editor.curve.cancel",
-});
-
-/** Ids for the stage batch controls while a drag owns the pointer. */
-export const BATCH_SHORTCUT_IDS = Object.freeze({
-  cancel: "batch.cancel",
-  anchorStart: "batch.scale.anchorStart",
-  anchorEnd: "batch.scale.anchorEnd",
 });
 
 /** Editor shortcuts that change stage and timeline visibility. */
@@ -136,15 +121,6 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
     passive: true,
   },
   {
-    id: SAMPLING_SHORTCUT_IDS.cancel,
-    category: SHORTCUT_CATEGORIES.sampling.id,
-    title: "shortcuts.editor.samplingCancel",
-    scope: "editor",
-    defaults: [{ key: "ESCAPE" }],
-    shared: true,
-    passive: true,
-  },
-  {
     id: SAMPLING_SHORTCUT_IDS.apply,
     category: SHORTCUT_CATEGORIES.sampling.id,
     title: "shortcuts.editor.samplingApply",
@@ -157,7 +133,7 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
 /** Editor shortcuts owned by the curve trajectory stage. */
 const curveShortcuts: readonly EditorShortcutDefinition[] = [
   {
-    id: CURVE_SHORTCUT_IDS.delete,
+    id: "editor.curve.delete",
     category: SHORTCUT_CATEGORIES.editorCurve.id,
     title: "shortcuts.editor.curveDelete",
     scope: "editor",
@@ -166,17 +142,6 @@ const curveShortcuts: readonly EditorShortcutDefinition[] = [
     // regular object delete otherwise.
     shared: true,
     enabledFor: (context) => context.curveMode === true,
-  },
-  {
-    id: CURVE_SHORTCUT_IDS.cancel,
-    category: SHORTCUT_CATEGORIES.editorCurve.id,
-    title: "shortcuts.editor.curveCancel",
-    scope: "editor",
-    defaults: [{ key: "ESCAPE" }],
-    // Escape unwinds the overlay's own gesture stack before the dispatcher
-    // would see it; the local listener matches this live binding.
-    shared: true,
-    passive: true,
   },
 ];
 /** Wheel-driven line stepping and time seeking, both rebindable. */
@@ -260,34 +225,6 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     ],
   },
 ];
-/** Stage batch controls that run while a drag owns the pointer. */
-const batchShortcuts: readonly EditorShortcutDefinition[] = [
-  {
-    id: BATCH_SHORTCUT_IDS.cancel,
-    category: SHORTCUT_CATEGORIES.editorSelection.id,
-    title: "shortcuts.editor.batchCancel",
-    scope: "surface",
-    defaults: [{ key: "ESCAPE" }],
-    shared: true,
-    passive: true,
-  },
-  {
-    id: BATCH_SHORTCUT_IDS.anchorStart,
-    category: SHORTCUT_CATEGORIES.editorSelection.id,
-    title: "shortcuts.editor.batchAnchorStart",
-    scope: "surface",
-    defaults: [{ key: "1" }],
-    passive: true,
-  },
-  {
-    id: BATCH_SHORTCUT_IDS.anchorEnd,
-    category: SHORTCUT_CATEGORIES.editorSelection.id,
-    title: "shortcuts.editor.batchAnchorEnd",
-    scope: "surface",
-    defaults: [{ key: "2" }],
-    passive: true,
-  },
-];
 /** Editor shortcuts without default keys but available for custom binding. */
 const lineInfoShortcuts: readonly EditorShortcutDefinition[] = [
   {
@@ -331,14 +268,12 @@ export const documentShortcuts: readonly EditorShortcutDefinition[] = [
 export const EDITOR_SHORTCUTS: readonly EditorShortcutDefinition[] = [
   ...documentShortcuts,
   ...historyShortcuts,
-  ...placementShortcuts,
   ...selectionShortcuts,
   ...eventLayerShortcuts,
   ...eventShortcuts,
   ...samplingShortcuts,
   ...trajectoryShortcuts,
   ...curveShortcuts,
-  ...batchShortcuts,
   ...clipboardShortcuts,
   ...navigationShortcuts,
   ...playbackShortcuts,

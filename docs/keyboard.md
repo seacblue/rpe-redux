@@ -42,7 +42,7 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Sample the event field being edited | `Alt+V`         |
 | Apply the sample / cancel sampling  | `F` / `Esc`     |
 
-`V` opens the workspace sampler for the selected event; the sampler then reads the pointer in the preview. `Alt+V` starts from the exact field that has focus, so editing an end anchor does not require leaving the keyboard. `F` applies a locked sample, and `Enter` does the same while the preview has focus. Sampling works on one selected event at a time. The guide-hide, cancel, and apply keys are ordinary rebindable shortcuts under **Sampling**.
+`V` opens the workspace sampler for the selected event; the sampler then reads the pointer in the preview. `Alt+V` starts from the exact field that has focus, so editing an end anchor does not require leaving the keyboard. `F` applies a locked sample, and `Enter` does the same while the preview has focus. Sampling works on one selected event at a time. The guide-hide and apply keys are ordinary rebindable shortcuts under **Sampling**; `Esc` stays the fixed cancel key.
 
 ## Movement and multi-line
 
@@ -68,7 +68,7 @@ The stage drag handles remain; the same transforms are also available from the k
 | Event start earlier / later | `Alt+B` / `Alt+T` (or `[` / `]`) |
 | Event end earlier / later | `Alt+Shift+B` / `Alt+Shift+T` (or `Shift+[` / `Shift+]`) |
 
-The left-hand chords are the defaults; the arrow and bracket chords remain familiar alternatives for a keyboard-only pass.
+The left-hand chords are the defaults; the arrow and bracket chords remain familiar alternatives for a keyboard-only pass. Dragging a control ball uses the same transforms; while a note-scale drag is active, hold `1` or `2` to anchor the left or right edge, and press `Esc` to cancel the drag. Those keys belong to the live gesture rather than the shortcut table.
 
 ## View and transport
 
@@ -98,14 +98,13 @@ Play/pause and undo/redo use workspace scope because they belong to the open doc
 
 ## File and application keys
 
-| Action                             | Default              |
-| ---------------------------------- | -------------------- |
-| New chart                          | `Ctrl+N`             |
-| Open chart                         | `Ctrl+O`             |
-| Save chart                         | `Ctrl+S`             |
-| Settings                           | `Ctrl+K`             |
-| Show chart library                 | `Ctrl+Shift+H`       |
-| Disable all extensions (emergency) | `Ctrl+Alt+Shift+F11` |
+| Action             | Default        |
+| ------------------ | -------------- |
+| New chart          | `Ctrl+N`       |
+| Open chart         | `Ctrl+O`       |
+| Save chart         | `Ctrl+S`       |
+| Settings           | `Ctrl+K`       |
+| Show chart library | `Ctrl+Shift+H` |
 
 New chart, open, and settings work on the chart library page before a chart is open. Save requires an open document. The show-library action requires an open document and is enabled away from the library page.
 
@@ -130,3 +129,5 @@ The performance monitor's `F3` binding is available in ordinary builds; the othe
 ## Scope rules
 
 Bindings are registered in one of these scopes: `emergency`, `modal`, `surface`, `editor`, `workspace`, `app`, or `instrument`. Capture and urgent dialogs own the keyboard; editor shortcuts take first refusal while the edit workspace is active, and the most specific available scope wins when two commands share a binding. Text entry and open menus keep their native keys.
+
+`Esc` is a fixed system cancel key rather than a registered shortcut: the surface that owns the current gesture consumes it, and it never appears in the shortcut editor.

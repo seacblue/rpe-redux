@@ -1,42 +1,29 @@
 /**
  * Extension emergency recovery.
  *
- * The stop binding is registered like every other command, so it appears in the
- * shortcut editor, and it is checked before scopes and modals so it still works
- * when a package has made the ordinary input path unusable.
+ * The stop chord is a hidden recovery gesture rather than a shortcut command:
+ * it is checked before scopes and modals so it still works when a package has
+ * made the ordinary input path unusable, but it never appears in the shortcut
+ * editor and cannot be rebound.
  */
-import { SHORTCUT_CATEGORIES } from "../../core/shortcuts/categories.ts";
 import { matches } from "../../core/shortcuts/keyMatching.ts";
-import { shortcutRegistry } from "../../core/shortcuts/registry.ts";
+import type { Shortcut } from "../../core/shortcuts/types.ts";
 import { extensionRuntime } from "../../core/extensions/extensionRuntime.ts";
 
-/** Stable id for the emergency stop that disables every extension. */
-export const EXTENSION_EMERGENCY_SHORTCUT_ID = "extensions.emergencyStop";
+/** Hidden chord that disables every extension when ordinary input is broken. */
+const EXTENSION_EMERGENCY_BINDING: Shortcut = {
+  key: "F11",
+  modifiers: ["CTRL", "ALT", "SHIFT"],
+};
 
 /**
- * Install the emergency stop even when the editor is at home or a modal is
- * open. A broken package may be the reason the normal input path is unusable.
+ * Install the emergency recovery chord even when the editor is at home or a
+ * modal is open. A broken package may be the reason the normal input path is
+ * unusable.
  */
 export function installExtensionRecovery(): () => void {
-  let categoryDispose: (() => void) | null = null;
-  if (!shortcutRegistry.hasCategory(SHORTCUT_CATEGORIES.tools.id)) {
-    categoryDispose = shortcutRegistry.registerCategory(SHORTCUT_CATEGORIES.tools).dispose;
-  }
-  const shortcutDispose = shortcutRegistry.has(EXTENSION_EMERGENCY_SHORTCUT_ID)
-    ? () => {}
-    : shortcutRegistry.registerShortcut({
-        id: EXTENSION_EMERGENCY_SHORTCUT_ID,
-        category: SHORTCUT_CATEGORIES.tools.id,
-        title: "shortcuts.app.extensionEmergencyStop",
-        defaults: [{ key: "F11", modifiers: ["CTRL", "ALT", "SHIFT"] }],
-        scope: "emergency",
-      });
   const onKeyDown = (event: KeyboardEvent) => {
-    if (
-      !shortcutRegistry
-        .bindingsOf(EXTENSION_EMERGENCY_SHORTCUT_ID)
-        .some((binding) => matches(event, binding))
-    ) {
+    if (!matches(event, EXTENSION_EMERGENCY_BINDING)) {
       return;
     }
     event.preventDefault();
@@ -48,7 +35,5 @@ export function installExtensionRecovery(): () => void {
   window.addEventListener("keydown", onKeyDown, true);
   return () => {
     window.removeEventListener("keydown", onKeyDown, true);
-    shortcutDispose();
-    categoryDispose?.();
   };
 }

@@ -15,8 +15,8 @@ import {
 import { nudgeSelection } from "../selection/edits.ts";
 import { MAX_BASE_EVENT_LAYERS } from "../../global/chart/chartVocabulary.ts";
 import type { EditorSession } from "../session/session.ts";
-import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
 import type { TimelineArea } from "../timeline/types.ts";
+import { isSystemCancelKey } from "../../shortcuts/keyMatching.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
 
 export interface KeyboardActionEvent extends ShortcutEventLike {
@@ -40,21 +40,40 @@ interface KeyboardTimeline {
   cancelPlacement(): void;
 }
 
-/** Escape cancels a started Hold or event placement before it commits a point. */
-export const placementShortcuts: readonly EditorShortcutDefinition[] = [
-  {
-    id: "placement.cancel",
-    category: "editor.notes",
-    title: "shortcuts.editor.cancelPlacement",
-    scope: "editor",
-    defaults: [{ key: "ESCAPE" }],
-    shared: true,
-    enabledFor: (context) =>
-      context.hasPendingPlacement === true &&
-      context.samplingActive !== true &&
-      context.curveMode !== true,
-  },
-];
+/** The live state the fixed Escape action resolves against. */
+export interface FixedCancelState {
+  hasPendingPlacement: boolean;
+  hasSelection: boolean;
+  samplingActive: boolean;
+  curveMode: boolean;
+  batchActive: boolean;
+}
+
+/**
+ * Resolve Escape to the editor action it should run.
+ *
+ * Escape is a fixed system cancel key, not a rebindable shortcut: it cancels a
+ * pending placement before it clears the selection, and surfaces that own their
+ * own Escape handling (sampling, curve, and batch drags) keep it for themselves.
+ */
+export function fixedCancelAction(
+  event: ShortcutEventLike,
+  state: FixedCancelState,
+): "placement.cancel" | "selection.clear" | undefined {
+  if (!isSystemCancelKey(event)) {
+    return undefined;
+  }
+  if (state.samplingActive || state.curveMode || state.batchActive) {
+    return undefined;
+  }
+  if (state.hasPendingPlacement) {
+    return "placement.cancel";
+  }
+  if (state.hasSelection) {
+    return "selection.clear";
+  }
+  return undefined;
+}
 
 /** Keyboard action ids mapped to timeline note types and navigation directions. */
 const NOTE_TYPE_BY_ACTION: Record<string, 1 | 2 | 3 | 4> = {

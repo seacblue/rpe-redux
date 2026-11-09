@@ -27,7 +27,7 @@ import {
   updateSamplingSettings,
 } from "../../../../../core/edit/sampling/sampling.ts";
 import { SAMPLING_SHORTCUT_IDS } from "../../../../../core/edit/shortcuts/shortcutCatalog.ts";
-import { matches } from "../../../../../core/shortcuts/keyMatching.ts";
+import { isSystemCancelKey, matches } from "../../../../../core/shortcuts/keyMatching.ts";
 import { shortcutRegistry } from "../../../../../core/shortcuts/registry.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
@@ -66,9 +66,6 @@ export function SamplingInspector() {
   const applyBindings =
     shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.apply)?.bindings ??
     EMPTY_BINDINGS;
-  const cancelBindings =
-    shortcutViews.find((view) => view.id === SAMPLING_SHORTCUT_IDS.cancel)?.bindings ??
-    EMPTY_BINDINGS;
   const bezierEnabled = useEditingFeature("bezier");
   const easingRangeEnabled = useEditingFeature("easingRange");
   const globalXYBinding = useSetting("xy-binding", false);
@@ -96,11 +93,11 @@ export function SamplingInspector() {
     }
   }, [runtime]);
 
-  // Sampling keeps both ends of the loop under the left hand: the registered
-  // cancel binding (Escape by default) cancels, the registered apply binding (F
-  // by default) confirms, and Enter confirms from the workspace but keeps native
-  // behavior on the pane's own controls. The editor dispatcher leaves these
-  // passive bindings to this capture listener while sampling is active.
+  // Sampling keeps both ends of the loop under the left hand: the fixed Escape
+  // key cancels, the registered apply binding (F by default) confirms, and Enter
+  // confirms from the workspace but keeps native behavior on the pane's own
+  // controls. The editor dispatcher leaves the apply binding to this capture
+  // listener while sampling is active.
   useEffect(() => {
     if (!target) {
       return;
@@ -109,7 +106,7 @@ export function SamplingInspector() {
       if (event.defaultPrevented) {
         return;
       }
-      if (cancelBindings.some((binding) => matches(event, binding))) {
+      if (isSystemCancelKey(event)) {
         event.preventDefault();
         event.stopPropagation();
         cancelSampling();
@@ -129,7 +126,7 @@ export function SamplingInspector() {
     };
     window.addEventListener("keydown", keydown, true);
     return () => window.removeEventListener("keydown", keydown, true);
-  }, [applyBindings, cancelBindings, commit, target]);
+  }, [applyBindings, commit, target]);
 
   if (!target || !axis) {
     return <InspectorEmpty>{t("editorPanels.sampling.empty")}</InspectorEmpty>;

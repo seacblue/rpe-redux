@@ -25,6 +25,7 @@ import {
 import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
 import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
+  fixedCancelAction,
   runEditorKeyboardAction,
   runEditorShortcutRelease,
   type EditorKeyboardActionDependencies,
@@ -188,19 +189,33 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         const hasPendingPlacement = Boolean(
           timeline.gestures.pendingHold || timeline.gestures.eventInteraction.pending,
         );
-        editorAction = matchEditorShortcut(
-          event,
-          {
-            area,
-            hasSelection,
-            hasPendingPlacement,
-            hasEventSelection,
-            samplingActive: deps.samplingActive(),
-            surface,
-            curveMode: deps.curveModeActive(),
-          },
-          context,
-        );
+        const samplingActive = deps.samplingActive();
+        const curveMode = deps.curveModeActive();
+        const fixedCancel =
+          !context.textEntry && context.surface === null && !context.atHome
+            ? fixedCancelAction(event, {
+                hasPendingPlacement,
+                hasSelection,
+                samplingActive,
+                curveMode,
+                batchActive: deps.batchControlsActive(),
+              })
+            : undefined;
+        editorAction =
+          fixedCancel ??
+          matchEditorShortcut(
+            event,
+            {
+              area,
+              hasSelection,
+              hasPendingPlacement,
+              hasEventSelection,
+              samplingActive,
+              surface,
+              curveMode,
+            },
+            context,
+          );
       }
       const registered = editorAction ? undefined : matchRegisteredShortcut(event, context);
       const scope = editorAction
