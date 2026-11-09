@@ -118,6 +118,7 @@ func newAPI(
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
+	mux.HandleFunc("POST /api/intake/classify", a.handleClassifyIntake)
 	mux.HandleFunc("GET /api/cell/endpoint", a.handleCodeCellEndpoint)
 	mux.HandleFunc("POST /api/shutdown", a.handleShutdown)
 	mux.HandleFunc("GET /api/instances", a.handleListInstances)

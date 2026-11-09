@@ -34,6 +34,9 @@ groups are:
 
 - `/api/health`, `/api/instances/*`, and `/api/occupancy/*` for service and
   editor leases.
+- `/api/intake/classify` for the bounded drop inspection that tells the frontend
+  whether a local path is an RPE/PEC/official chart, an Extension package, or a
+  Phira note-skin package.
 - `/api/projects/*` for project summaries, chart commits, assets, duplication,
   and revisions.
 - `/api/revisions/*` for revision reads and deletion.
