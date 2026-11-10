@@ -151,7 +151,11 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       }
       if (!chartDocumentForSession) {
         try {
-          chart = await chartDocument.materializeAll();
+          await chartDocument.materializeAll();
+          // The session must hold the document facade, not the detached
+          // materialized snapshot, so later resource loading sees the same
+          // chart identity. The facade now contains every materialized line.
+          chart = chartDocument.chart;
           // Keep the document for streamed saves and canonical fingerprints.
           // Its worker/source is released with the session, not here.
           chartDocumentForSession = chartDocument;
