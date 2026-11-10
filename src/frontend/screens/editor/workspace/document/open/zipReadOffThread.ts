@@ -31,6 +31,10 @@ export const readZipOffThread: ArchiveReader = (buffer, limits, onProgress) => {
   });
   const id = nextRequestId++;
   const source = buffer instanceof Uint8Array ? buffer.slice().buffer : buffer.slice(0);
+  // The progress callback stays local; only the numeric limits cross the
+  // worker boundary, because functions cannot be structured-cloned.
+  const { onProgress: limitsProgress, ...workerLimits } = limits;
+  const progress = onProgress ?? limitsProgress;
   return new Promise<Map<string, Uint8Array>>((resolve) => {
     const finish = (): void => worker.terminate();
     worker.onmessage = (event: MessageEvent<ZipProgress | ZipResult>) => {
@@ -38,7 +42,7 @@ export const readZipOffThread: ArchiveReader = (buffer, limits, onProgress) => {
         return;
       }
       if (event.data.kind === "progress") {
-        void onProgress?.(event.data.completed, event.data.total);
+        void progress?.(event.data.completed, event.data.total);
         return;
       }
       finish();
@@ -46,8 +50,8 @@ export const readZipOffThread: ArchiveReader = (buffer, limits, onProgress) => {
     };
     worker.onerror = () => {
       finish();
-      resolve(readZip(buffer, { ...limits, onProgress }));
+      resolve(readZip(buffer, { ...workerLimits, onProgress: progress }));
     };
-    worker.postMessage({ id, buffer: source, limits }, [source]);
+    worker.postMessage({ id, buffer: source, limits: workerLimits }, [source]);
   });
 };
