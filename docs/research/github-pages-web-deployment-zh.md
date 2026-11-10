@@ -250,7 +250,7 @@ React 主线程
 2. **Web Locks 选主。** 所有标签页竞争 `navigator.locks.request("rpe-redux-db", { mode: "exclusive" }, ...)`。拿到锁的标签页启动 DB Worker 并持有锁；其他标签页通过 `BroadcastChannel` 把请求转发给主标签页。主标签页关闭或崩溃时锁自动释放，下一个标签页接管并重新打开数据库。
 3. **主标签页保持一个 Web Lock。** Chrome/Edge 会挂起长时间不活跃的标签页；PowerSync 的做法是让主标签页持有一个 Web Lock，防止承载数据库的 Worker 被挂起。
 4. **所有调用串行化。** 一个 Worker 一个连接，所有读写排队执行。事务保持短小，避免长时间持有 OPFS 句柄。
-5. **资源字节用 Transferable。** `stageAsset` / `asset` 传 `ArrayBuffer`，避免 structured clone 再复制一份 256 MB 的音乐。
+5. **资源字节用 Transferable。** `stageAsset` / `asset` 传 `ArrayBuffer`，避免 structured clone 再复制一份 256 MB 的音乐。follower 标签页不要用 BroadcastChannel 传大字节（它不支持 transfer list）；正式实现应在建链时交换 `MessagePort`，让大资源走带 transfer 的通道。
 6. **同一个 v1 schema。** `projects`、`revisions`、`preferences`、`assets`、`project_assets`、`revision_assets` 原样建表；用 `PRAGMA user_version` 记录 schema 版本，后续迁移在事务里做。
 7. **`journal_mode` 不要用 WAL。** 在没有 COOP/COEP 的 WASM 环境里没有共享内存，WAL 需要 `locking_mode=EXCLUSIVE`，在 OPFS 上没有并发收益。用默认的回滚日志，`synchronous=FULL` 保证提交落盘；批量导入资源时可以临时 `NORMAL`，提交后再恢复。
 8. **`opfs-sahpool` 容量。** 默认池容量只够一两个库；至少要覆盖主库、journal、临时文件和备份。建议 `initialCapacity: 10`，并用 `reserveMinimumCapacity()` 兜底。每次升级 SQLite 前验证池容量和 `exportFile` 行为。
