@@ -7,8 +7,8 @@ import { getPopup } from "./controlActions.ts";
 import {
   closeControlPopup,
   editableSelect,
-  openControlColor,
   repositionControlPopup,
+  toggleControlColor,
 } from "./controlActions.ts";
 
 /** The select a target belongs to, resolving through an associated label. */
@@ -49,8 +49,9 @@ export function installControls(): () => void {
     }
     const color = target?.closest('input[type="color"]');
     if (color instanceof HTMLInputElement && !color.disabled) {
+      // Suppress the platform dialog on press; the click handler owns the
+      // open/close decision so a second activation can toggle the React picker.
       event.preventDefault();
-      openControlColor(color);
       return;
     }
     if (!target?.closest(".redux-control-popup")) {
@@ -59,7 +60,7 @@ export function installControls(): () => void {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (getPopup() || event.defaultPrevented) {
+    if (event.defaultPrevented) {
       return;
     }
     const target = event.target instanceof Element ? event.target : null;
@@ -69,8 +70,12 @@ export function installControls(): () => void {
       !color.disabled &&
       ["Enter", " "].includes(event.key)
     ) {
+      const current = getPopup();
+      if (current && (current.kind !== "color" || current.element !== color)) {
+        return;
+      }
       event.preventDefault();
-      openControlColor(color);
+      toggleControlColor(color);
     }
   };
 
@@ -82,9 +87,7 @@ export function installControls(): () => void {
       // dialog can still be dispatched by the subsequent click default action.
       event.preventDefault();
       event.stopPropagation();
-      if (getPopup()?.element !== color) {
-        openControlColor(color);
-      }
+      toggleControlColor(color);
     }
   };
 

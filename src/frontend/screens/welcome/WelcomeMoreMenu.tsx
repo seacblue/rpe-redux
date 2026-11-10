@@ -30,10 +30,9 @@ export function WelcomeMoreMenu() {
 
   /** Anchor the menu below the trigger and align the menu's right edge to it. */
   const openMenu = (event: MouseEvent<HTMLButtonElement>) => {
-    // A second click while the popup is already open must not replace its
-    // snapshot. Replacing it makes the native popover replay its enter motion.
+    // The capture handler owns the close half of the toggle, so opening never
+    // replaces an existing snapshot and replays the native popover's motion.
     if (moreMenu.get() !== null) {
-      event.preventDefault();
       return;
     }
     const rect = event.currentTarget.getBoundingClientRect();
@@ -81,15 +80,17 @@ export function WelcomeMoreMenu() {
         aria-expanded={menu !== null}
         onClickCapture={(event) => {
           // Capture the second activation before the browser's auto-popover
-          // light-dismiss listener can close the already-open menu.
+          // light-dismiss listener can close and reopen the menu. The click
+          // closes through the store, so the popup does not replay its motion.
           if (moreMenu.get() !== null) {
             event.preventDefault();
             event.stopPropagation();
+            moreMenu.set(null);
           }
         }}
         onPointerDown={(event) => {
-          // `popover="auto"` treats the trigger as an outside press. Keep a
-          // second click from dismissing and immediately reopening the menu.
+          // `popover="auto"` treats the trigger as an outside press. Keep that
+          // light dismissal from firing before the click toggles the menu.
           if (moreMenu.get() !== null) {
             event.preventDefault();
           }
