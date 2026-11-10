@@ -32,7 +32,7 @@ The frontend tree follows the visible interface:
   - `editor/` owns the editing workspace, object inspector, canvas, metadata, curve events, line-selection preferences, and its toolbar controls and fields under `editor/toolbar/`.
   - `global/` owns the document-wide drawer pages under `global/sections/` and the shared metadata form.
   - `settings/` owns the settings window and its update panels.
-- `src/frontend/overlays/` owns shared surfaces above the screens: modals, context menus, help video, performance HUD, and Extension notices.
+- `src/frontend/overlays/` owns shared surfaces above the screens: modals, context menus, help video, performance HUD, Extension notices, and the app-root host for non-modal floating panels.
 - `src/frontend/platform/` owns host adapters and bridges.
 
 `src/core/global/` owns chart rules, document lifecycle, and the library. `src/core/edit/` owns the editing session, editing operations, and editor services. The design system remains in `src/design/`.

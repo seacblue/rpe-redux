@@ -83,7 +83,7 @@ export function generateCurveNotes({
     throw new Error(t("model.curveNotes.invalidOptions"));
   }
   if (
-    ![1, 3, 4].includes(type) ||
+    ![1, 2, 3, 4].includes(type) ||
     !Number.isInteger(easingType) ||
     easingType < 1 ||
     easingType > 29
@@ -106,7 +106,11 @@ export function generateCurveNotes({
     const beat = sameBeat
       ? beatCopy(startTime)
       : addBeatFraction(startTime, index + 1, denominator);
-    return { ...createNote(type, 0, position), startTime: beat, endTime: beatCopy(beat) };
+    // A Hold curve uses one horizontal grid step as every body: the current
+    // division is the number of lines in a beat, so each hold is 1/division.
+    const endBeat =
+      type === 2 ? addBeatFraction(beat, 1, Math.max(1, Math.trunc(division))) : beatCopy(beat);
+    return { ...createNote(type, 0, position), startTime: beat, endTime: endBeat };
   });
 }
 
@@ -178,16 +182,20 @@ export interface CurveNotePlan {
   notes: JudgeLineNote[];
 }
 
-/** Build one zero-length curve anchor at an exact beat and X. */
+/** Build one curve anchor at an exact beat and X; a Hold spans one division. */
 export function createCurveAnchorNote(
   type: number,
   startTime: Beat,
   positionX: number,
+  division = 4,
 ): JudgeLineNote {
   return {
     ...createNote(type, 0, positionX),
     startTime: beatCopy(startTime),
-    endTime: beatCopy(startTime),
+    endTime:
+      type === 2
+        ? addBeatFraction(startTime, 1, Math.max(1, Math.trunc(division)))
+        : beatCopy(startTime),
   };
 }
 
@@ -259,7 +267,12 @@ export function planCurveNotes(options: CurveNotePlanOptions): CurveNotePlan {
   cacheMisses += 1;
   const type = options.type ?? 4;
   const generated = generateCurveNotes(options);
-  const start = createCurveAnchorNote(type, options.startTime, options.startX);
+  const start = createCurveAnchorNote(
+    type,
+    options.startTime,
+    options.startX,
+    options.division ?? 4,
+  );
   const items: CurveNotePlanItem[] = [
     {
       note: start,
@@ -268,7 +281,7 @@ export function planCurveNotes(options: CurveNotePlanOptions): CurveNotePlan {
     ...generated.map((note) => ({ note, existing: false })),
   ];
   if (compareBeats(options.startTime, options.endTime) !== 0) {
-    const end = createCurveAnchorNote(type, options.endTime, options.endX);
+    const end = createCurveAnchorNote(type, options.endTime, options.endX, options.division ?? 4);
     items.push({
       note: end,
       existing: existing.some((note) => curveNoteMatches(note, end)),

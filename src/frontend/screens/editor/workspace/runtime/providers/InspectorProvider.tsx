@@ -226,6 +226,7 @@ export function createInspectorRuntime(options: {
   });
   options.timeline.gestures.curvePick = curveEditor.pick;
   options.timeline.gestures.curvePickPoint = curveEditor.pickPoint;
+  options.timeline.gestures.curveQuickPick = curveEditor.quickPick;
   options.timeline.gestures.curveGhost = curveEditor.ghost;
   options.scope.add(() => closeInspector(options.ui.activeInspector));
   options.scope.add(bindInspectorLifecycle("multi", { onClose: () => multiEdit.hide() }));

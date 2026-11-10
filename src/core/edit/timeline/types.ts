@@ -8,6 +8,7 @@
  */
 import type { IntervalIndex, IntervalEntry } from "../../utils/intervalIndex.ts";
 import type { JudgeLineEvent, JudgeLineNote, LineEventLayer } from "../../global/chart/chart.ts";
+import type { Beat } from "../../global/chart/timing/beat.ts";
 
 export type TimelineArea = "notes" | "events";
 
@@ -25,7 +26,7 @@ export type TimelineNote = JudgeLineNote & {
 
 /** The note anchor `timeline.curvePick` hands back to the curve editor. */
 export interface CurveAnchor {
-  startTime: number[];
+  startTime: Beat;
   positionX: number;
   type: number;
 }

@@ -116,6 +116,7 @@ export default {
   "editor.app.curve.endBeat": "End beat",
   "editor.app.curve.endX": "End X",
   "editor.app.curve.generated": "Generated {count} curve notes",
+  "editor.app.curve.needEnd": "Pick the curve end first",
   "editor.app.curve.needStart": "Pick the curve start first",
   "editor.app.curve.nothingToGenerate": "These parameters produce no intermediate notes",
   "editor.app.curve.startBeat": "Start beat",

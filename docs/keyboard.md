@@ -24,6 +24,8 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 
 `R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise. Clipboard start and end jumps have no default key; assign them in **Settings → Shortcuts** when needed. Clearing the clipboard keeps the remembered clipboard-history entries.
 
+`Ctrl+click` a note to open the curve-note inspector with that note as the start, then `Ctrl+click` another note to set the end. The floating quick panel appears after both notes are picked; drag its title row to move it, change the type and easing, and generate the intermediate notes. A reversed click order is swapped to the earlier beat when generating, and a further `Ctrl+click` starts a new curve. The quick panel's Hold type writes one hold per point, each lasting one beat division (`1/X` at the current horizontal line count). Cancel the quick panel to drop both anchors and keep editing the pane by hand.
+
 ## Event layers and relative paste
 
 | Action                        | Default                                   |

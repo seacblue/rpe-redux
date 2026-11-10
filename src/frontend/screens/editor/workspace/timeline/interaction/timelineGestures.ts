@@ -49,8 +49,9 @@ export class TimelineGestures {
   clipboardMode: { mirror?: boolean; keepTime?: boolean } = {};
   scaleAxis: number | null = null;
   scaleAxisLine: number | null = null;
-  curvePick: ((note: TimelineNote, index: number) => unknown) | null = null;
+  curvePick: ((note: TimelineNote, index: number, lineIndex: number) => unknown) | null = null;
   curvePickPoint?: ((beat: number, positionX: number) => unknown) | null;
+  curveQuickPick: ((note: TimelineNote, index: number, lineIndex: number) => boolean) | null = null;
   curveGhost?: () => TimelineNote[];
   previewPick?: (event: PointerEvent) => unknown;
   previewCancel?: () => void;

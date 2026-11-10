@@ -33,6 +33,7 @@ import { PerformanceHudWindow } from "./frontend/overlays/performance/Performanc
 import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.ts";
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
 import { setLongTaskBootState } from "./core/state/longTasks.ts";
+import { registerFloatingHost } from "./frontend/overlays/floatingHost.ts";
 
 // Keep background operations behind the workspace boot barrier. The barrier is
 // opened only after the editor assembly has published a usable workspace.
@@ -61,6 +62,7 @@ if (!container) {
 // becoming siblings of the shell, so a nested dialog is not trapped in the
 // opening window's stacking context.
 registerModalHost(container);
+registerFloatingHost(container);
 
 if (isPerformanceHudWindow()) {
   createRoot(container).render(<PerformanceHudWindow />);

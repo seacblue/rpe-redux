@@ -111,16 +111,32 @@
 .sampling-float-header {
   display: flex;
   flex: none;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--panel-header);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.sampling-float-header:active {
+  cursor: grabbing;
 }
 
 .sampling-float-title {
   font-size: var(--type-label);
   font-weight: 600;
   line-height: var(--line-label);
+}
+
+.sampling-float-grip {
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  letter-spacing: -2px;
+  line-height: 1;
 }
 
 .sampling-float-body {

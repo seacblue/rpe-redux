@@ -133,7 +133,7 @@ export type TimelineNoteDrawingReceiver = Pick<
 /** The minimal contract for rendering curve ghosts above notes. */
 export type TimelineCurveGhostReceiver = Pick<
   TimelineRuntimeSurface,
-  "cache" | "gestures" | "viewport"
+  "appearance" | "cache" | "gestures" | "viewport"
 >;
 
 /** The lightweight moving overlay shared by notes and events timelines. */

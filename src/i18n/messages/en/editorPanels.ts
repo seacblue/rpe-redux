@@ -253,6 +253,9 @@ export default {
   "editorPanels.inspector.event.swapLabel": "Swap the event's start and end",
 
   "editorPanels.curve.previewToggle": "Show the result ghost",
+  "editorPanels.curve.quickTitle": "Curve notes",
+  "editorPanels.curve.quickCancel": "Cancel",
+  "editorPanels.curve.quickGenerate": "Generate",
 
   "editorPanels.inspector.shader.loadFailed": "Cannot read the shader parameter definitions",
   "editorPanels.inspector.shader.loading": "Reading shader parameters…",

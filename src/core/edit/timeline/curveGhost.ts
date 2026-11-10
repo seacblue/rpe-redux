@@ -47,9 +47,9 @@ export function buildCurveGhostNotes(
   });
   /** Draws the anchors alone when generation cannot produce a path. */
   const anchorsOnly = (): TimelineNote[] => {
-    const anchors = [createCurveAnchorNote(values.type, values.startTime, values.startX)];
+    const anchors = [createCurveAnchorNote(values.type, values.startTime, values.startX, division)];
     if (end && compareBeats(values.endTime, values.startTime) >= 0) {
-      anchors.push(createCurveAnchorNote(values.type, values.endTime, values.endX));
+      anchors.push(createCurveAnchorNote(values.type, values.endTime, values.endX, division));
     }
     return anchors.map((note) =>
       ghostNote(
