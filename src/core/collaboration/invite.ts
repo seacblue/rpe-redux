@@ -59,6 +59,41 @@ export function buildRoomInviteLink(invite: RoomInvite): string {
   return `rperedux://join?${params.toString()}`;
 }
 
+/** Build an HTTPS link that opens the same invitation in the static web app. */
+export function buildWebRoomInviteLink(invite: RoomInvite, baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("join", "1");
+  url.searchParams.set("server", invite.serverUrl);
+  url.searchParams.set("invite", invite.invite);
+  const roomId = invite.roomId?.trim();
+  if (roomId) {
+    url.searchParams.set("room", roomId);
+  }
+  return url.toString();
+}
+
+/** Parse a web-app invitation URL; null for any other page or missing fields. */
+export function parseWebRoomInviteUrl(value: string): RoomInvite | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsed.searchParams.get("join") !== "1") {
+    return null;
+  }
+  const serverUrl = parsed.searchParams.get("server")?.trim() ?? "";
+  const invite = parsed.searchParams.get("invite")?.trim() ?? "";
+  if (!serverUrl || !invite) {
+    return null;
+  }
+  const roomId = parsed.searchParams.get("room")?.trim() ?? "";
+  return { serverUrl, invite, ...(roomId ? { roomId } : {}) };
+}
+
 /** Parse a room invite link, returning null for any other URL or missing fields. */
 export function parseRoomInviteLink(value: string): RoomInvite | null {
   let parsed: URL;

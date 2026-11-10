@@ -32,6 +32,7 @@ import { MemberAccessDialog } from "./MemberAccessDialog.tsx";
 import { MemberActionsMenu } from "./MemberActionsMenu.tsx";
 import { RoomLocks } from "./RoomLocks.tsx";
 import { suggestedLanPort, useCollaboration } from "./collaborationRuntime.tsx";
+import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { MaxMembersControl } from "./MaxMembersControl.tsx";
 
 const ROLE_KEYS = {
@@ -178,7 +179,7 @@ function RoomPanelBody() {
   const [accessRole, setAccessRole] = useState<"editor" | "viewer">("editor");
   const [joinMethod, setJoinMethod] = useState<"link" | "custom">("link");
   const [joinLink, setJoinLink] = useState(pendingInviteLink);
-  const [serverUrl, setServerUrl] = useState("");
+  const [serverUrl, setServerUrl] = useState(settings.serverUrl);
   const [joinPassword, setJoinPassword] = useState("");
   const [autoApproveEditor, setAutoApproveEditor] = useState(true);
   const passwordInput = useRef<HTMLInputElement | null>(null);
@@ -200,6 +201,9 @@ function RoomPanelBody() {
       color,
       hostMode,
       lanPort: lanPort.trim(),
+      // A browser host has no local bridge; its room server is the only
+      // address that can carry the room and its invitations.
+      serverUrl: isDesktop() ? settings.serverUrl : serverUrl.trim() || settings.serverUrl,
     };
     updateSettings(next);
     return next;
@@ -545,32 +549,52 @@ function RoomPanelBody() {
           {state.error && <InlineAlert className="collab-error">{state.error}</InlineAlert>}
           {effectiveMode === "create" ? (
             <>
-              <FieldRow
-                label={t("workspace.collaboration.hostMode")}
-                control={(id) => (
-                  <Select
-                    id={id}
-                    value={hostMode}
-                    onChange={(event) => setHostMode(event.currentTarget.value as typeof hostMode)}
-                  >
-                    <option value="tunnel">{t("workspace.collaboration.hostMode.tunnel")}</option>
-                    <option value="lan">{t("workspace.collaboration.hostMode.lan")}</option>
-                  </Select>
-                )}
-              />
-              {hostMode !== "tunnel" && (
+              {isDesktop() ? (
+                <>
+                  <FieldRow
+                    label={t("workspace.collaboration.hostMode")}
+                    control={(id) => (
+                      <Select
+                        id={id}
+                        value={hostMode}
+                        onChange={(event) =>
+                          setHostMode(event.currentTarget.value as typeof hostMode)
+                        }
+                      >
+                        <option value="tunnel">
+                          {t("workspace.collaboration.hostMode.tunnel")}
+                        </option>
+                        <option value="lan">{t("workspace.collaboration.hostMode.lan")}</option>
+                      </Select>
+                    )}
+                  />
+                  {hostMode !== "tunnel" && (
+                    <FieldRow
+                      label={t("workspace.collaboration.lanPort")}
+                      control={(id) => (
+                        <Input
+                          id={id}
+                          type="number"
+                          min="1024"
+                          max="65535"
+                          step="1"
+                          value={lanPort}
+                          placeholder={suggestedLanPort}
+                          onChange={(event) => setLanPort(event.currentTarget.value)}
+                        />
+                      )}
+                    />
+                  )}
+                </>
+              ) : (
                 <FieldRow
-                  label={t("workspace.collaboration.lanPort")}
+                  label={t("workspace.collaboration.serverUrl")}
                   control={(id) => (
                     <Input
                       id={id}
-                      type="number"
-                      min="1024"
-                      max="65535"
-                      step="1"
-                      value={lanPort}
-                      placeholder={suggestedLanPort}
-                      onChange={(event) => setLanPort(event.currentTarget.value)}
+                      value={serverUrl}
+                      placeholder={t("workspace.collaboration.serverUrlPlaceholder")}
+                      onChange={(event) => setServerUrl(event.currentTarget.value)}
                     />
                   )}
                 />
@@ -612,7 +636,11 @@ function RoomPanelBody() {
                 <div className="redux-footer-actions">
                   <Button
                     variant="solid"
-                    disabled={startingRoom || [...password.trim()].length < 8}
+                    disabled={
+                      startingRoom ||
+                      [...password.trim()].length < 8 ||
+                      (!isDesktop() && !serverUrl.trim())
+                    }
                     onClick={() =>
                       void createRoom({
                         ...applySettings(),

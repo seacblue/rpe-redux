@@ -5,7 +5,7 @@
  * room: it never offers hosting. Once the room snapshot arrives, the shared
  * document runtime opens the temporary room chart in the editor.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { FieldRow } from "../../../design/components/field/FieldRow.tsx";
@@ -20,7 +20,7 @@ import { useCollaboration } from "../editor/workspace/collaboration/collaboratio
 /** Join-only room entry for the home screen header. */
 export function WelcomeJoin() {
   const { t } = useTranslation();
-  const { settings, joinRoom, updateSettings, state } = useCollaboration();
+  const { settings, joinRoom, updateSettings, state, pendingInviteLink } = useCollaboration();
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<"link" | "custom">("link");
   const [link, setLink] = useState("");
@@ -28,6 +28,20 @@ export function WelcomeJoin() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState(settings.displayName);
   const [color, setColor] = useState(settings.color);
+  const handledInvite = useRef("");
+  // A web invitation URL lands on the welcome page before the editor exists,
+  // so seed the join modal instead of opening the inspector.
+  useEffect(() => {
+    if (!pendingInviteLink || handledInvite.current === pendingInviteLink) {
+      return;
+    }
+    handledInvite.current = pendingInviteLink;
+    setName(settings.displayName);
+    setColor(settings.color);
+    setMethod("link");
+    setLink(pendingInviteLink);
+    setOpen(true);
+  }, [pendingInviteLink, settings.displayName, settings.color]);
   const valid =
     method === "link"
       ? Boolean(parseRoomInviteLink(link))

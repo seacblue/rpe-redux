@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRoomInviteLink,
+  buildWebRoomInviteLink,
   createRoomPassword,
   normalizeRoomServerUrl,
   parseRoomInviteLink,
+  parseWebRoomInviteUrl,
 } from "../../../core/collaboration/invite.ts";
 
 test("invite links round-trip the endpoint, room id, and password", () => {
@@ -26,6 +28,24 @@ test("links from older builds still resolve by endpoint and password", () => {
     serverUrl: "wss://example.trycloudflare.com",
     invite: "INVITE5678",
   });
+});
+
+test("web invite URLs round-trip through the static app origin", () => {
+  const invite = {
+    serverUrl: "wss://example.trycloudflare.com",
+    invite: "INVITE5678",
+    roomId: "ROOM2345",
+  };
+  const link = buildWebRoomInviteLink(invite, "https://seacblue.github.io/rpe-redux/?old=1#top");
+  assert.match(link, /^https:\/\/seacblue\.github\.io\/rpe-redux\/\?join=1&/);
+  assert.equal(link.includes("old=1"), false);
+  assert.equal(link.includes("#top"), false);
+  assert.deepEqual(parseWebRoomInviteUrl(link), invite);
+  assert.equal(parseWebRoomInviteUrl("https://seacblue.github.io/rpe-redux/"), null);
+  assert.equal(
+    parseWebRoomInviteUrl("https://seacblue.github.io/rpe-redux/?join=1&server=x"),
+    null,
+  );
 });
 
 test("generated room passwords are typeable and distinct", () => {

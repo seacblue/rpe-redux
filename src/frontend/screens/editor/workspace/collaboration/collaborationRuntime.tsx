@@ -73,8 +73,10 @@ import { serializeChartJsonOffThread } from "../document/save/chartSerializeOffT
 import { canPerform, canPublishAsset } from "../../../../../core/collaboration/permissions.ts";
 import {
   buildRoomInviteLink,
+  buildWebRoomInviteLink,
   normalizeRoomServerUrl,
   parseRoomInviteLink,
+  parseWebRoomInviteUrl,
 } from "../../../../../core/collaboration/invite.ts";
 import {
   chartAssetNames,
@@ -857,12 +859,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // A second launch receives the invitation as a process argument; the first
-  // launch reads the pending value once the provider mounts.
+  // A desktop second launch receives the invitation as a process argument; a
+  // web page consumes the same invitation from its own URL.
   useEffect(() => {
-    if (!isDesktop()) {
-      return;
-    }
     let disposed = false;
     let unlisten: (() => void) | undefined;
     const openInvite = async (link: string) => {
@@ -886,8 +885,28 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         updateSettings({ displayName: identity.name, color: identity.color });
       }
       setPendingInviteLink(link);
-      openPane("collaboration");
+      // The welcome page owns its own join modal; only the editor needs the
+      // inspector pane opened for an invitation.
+      if (!visible.atHome) {
+        openPane("collaboration");
+      }
     };
+    if (!isDesktop()) {
+      const webInvite = parseWebRoomInviteUrl(location.href);
+      if (webInvite) {
+        // Consume the one-shot query so a reload or a copied URL cannot reopen
+        // the prompt after the invitation was already handled.
+        const clean = new URL(location.href);
+        for (const key of ["join", "server", "invite", "room"]) {
+          clean.searchParams.delete(key);
+        }
+        history.replaceState(null, "", clean.toString());
+        void openInvite(buildRoomInviteLink(webInvite));
+      }
+      return () => {
+        disposed = true;
+      };
+    }
     void invoke<string | null>("take_collab_invite").then((link) => {
       if (link) {
         void openInvite(link);
@@ -2190,7 +2209,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           collaborationProgress.update({ detail: "lan" });
         }
       } else {
-        publicUrl = normalizeRoomServerUrl(settings.serverUrl);
+        publicUrl = normalizeRoomServerUrl(override?.serverUrl ?? settings.serverUrl);
       }
       if (!publicUrl) {
         throw new Error(t("workspace.collaboration.invalidServerUrl"));
@@ -2482,11 +2501,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!current.roomId || !current.invite || !current.serverUrl) {
       return;
     }
-    const link = buildRoomInviteLink({
+    const invite = {
       serverUrl: current.serverUrl,
       invite: current.invite,
       roomId: current.roomId,
-    });
+    };
+    const link = isDesktop()
+      ? buildRoomInviteLink(invite)
+      : buildWebRoomInviteLink(invite, location.href);
     try {
       await navigator.clipboard.writeText(link);
       showToast(t("workspace.collaboration.inviteLinkCopied"), "success");
