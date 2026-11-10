@@ -250,7 +250,7 @@ export function createEditorAssembly(
     tempo: tempo.get,
     duration: () => audio.duration,
   });
-  scope.add(frameCapture.dispose);
+  scope.add(() => frameCapture.dispose());
   /** Renders one validated chart frame for the API and the HTTP bridge. */
   const captureFrame = (request: Parameters<typeof frameCapture.capture>[0]) =>
     frameCapture.capture(request);

@@ -110,7 +110,13 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
           } catch (error) {
             bindings.reportError(error);
           }
-          bindings.dispose();
+          // A cleanup failure must not cancel the quit the user already
+          // confirmed; report it and destroy the window anyway.
+          try {
+            bindings.dispose();
+          } catch (error) {
+            bindings.reportError(error);
+          }
           await window.destroy();
         }),
       );
