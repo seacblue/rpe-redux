@@ -499,10 +499,12 @@ func (r *Rooms) create(profile collabProfile, chart any, fingerprint string, opt
 		chartWire = opts.ChartWire
 	}
 	room := &collabRoom{
-		ID:                collabRandomToken(8),
-		Invite:            invite,
-		Owner:             opts.Owner,
-		Chart:             collabClone(chart),
+		ID:     collabRandomToken(8),
+		Invite: invite,
+		Owner:  opts.Owner,
+		// The decoded transport payload is not retained elsewhere, so the room
+		// takes ownership instead of cloning a second full chart copy.
+		Chart:             chart,
 		ChartWire:         chartWire,
 		ChartWireRevision: 0,
 		Fingerprint:       fingerprint,

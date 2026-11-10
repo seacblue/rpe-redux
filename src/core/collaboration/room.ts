@@ -315,7 +315,9 @@ export class CollaborationRooms {
       invite: invite || token(10),
       hostId: "",
       owner,
-      chart: structuredClone(chart),
+      // The transport drops its decoded chart reference after create, so the
+      // room takes ownership instead of retaining a second full chart copy.
+      chart,
       fingerprint: fingerprint || stableFingerprint(chart),
       appVersion: appVersion.trim(),
       revision: 0,
