@@ -361,7 +361,7 @@ fn path_owner_key(path: &str) -> String {
 
 /// SHA-256 content id for one asset blob.
 fn content_hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 /// Whether a table exists in the current database.

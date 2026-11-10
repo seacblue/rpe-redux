@@ -62,7 +62,7 @@ pub(crate) fn verify(
     Ok(LocalUpdateInfo {
         version,
         bytes: installer.len() as u64,
-        sha256: format!("{:x}", Sha256::digest(installer)),
+        sha256: hex::encode(Sha256::digest(installer)),
     })
 }
 

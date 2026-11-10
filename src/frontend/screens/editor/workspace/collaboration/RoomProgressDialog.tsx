@@ -7,6 +7,7 @@
  * clear transfer buffers.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";
 import { Progress } from "../../../../../design/components/progress/Progress.tsx";
@@ -21,11 +22,11 @@ import { useCollaboration } from "./collaborationRuntime.tsx";
 
 /** Current phase as one continuous bar, matching the chart-loading surface. */
 function progressRatio(progress: CollaborationProgressState): number {
-  if (progress.ready) {
-    return 1;
-  }
   if (!progress.visible) {
     return 0;
+  }
+  if (progress.ready) {
+    return 1;
   }
   switch (progress.phase) {
     case "preparing":
@@ -133,10 +134,9 @@ function useSmoothRatio(target: number, active: boolean): number {
       return () => cancelAnimationFrame(frame);
     }
     const start = current.current;
-    const boundedTarget = active ? Math.max(target, start) : target;
-    if (Math.abs(boundedTarget - start) < 0.001) {
-      current.current = boundedTarget;
-      setValue(boundedTarget);
+    if (Math.abs(target - start) < 0.001) {
+      current.current = target;
+      setValue(target);
       return;
     }
     const duration = 500;
@@ -145,7 +145,7 @@ function useSmoothRatio(target: number, active: boolean): number {
     const tick = (now: number) => {
       const elapsed = Math.min(1, (now - started) / duration);
       const eased = 1 - Math.pow(1 - elapsed, 3);
-      const next = start + (boundedTarget - start) * eased;
+      const next = start + (target - start) * eased;
       current.current = next;
       setValue(next);
       if (elapsed < 1) {
@@ -195,11 +195,15 @@ export function RoomProgressDialog() {
           : "workspace.collaboration.progress.guestTitle",
       )}
       className="redux-prompt-dialog collab-progress-dialog"
-      dismissOnScrim={false}
-      requestClose={async () => {
-        close();
-        return true;
-      }}
+      actions={
+        <Button variant="danger" className="urgent" onClick={close}>
+          {t(
+            progress.ready
+              ? "workspace.collaboration.progress.close"
+              : "workspace.collaboration.progress.abort",
+          )}
+        </Button>
+      }
     >
       <div className="collab-progress-overall" role="status" data-state={progress.phase}>
         <p className="collab-progress-stage" aria-live="polite">

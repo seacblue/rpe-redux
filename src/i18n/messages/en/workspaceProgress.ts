@@ -8,6 +8,8 @@ export default {
   "workspace.collaboration.progress.hostTitle": "Creating the room",
   "workspace.collaboration.progress.guestTitle": "Joining the room",
   "workspace.collaboration.progress.title": "Room setup progress",
+  "workspace.collaboration.progress.abort": "Abort and close",
+  "workspace.collaboration.progress.close": "Close",
   "workspace.collaboration.progress.status.preparing": "Preparing the chart",
   "workspace.collaboration.progress.status.bridgeTunnel": "Starting Cloudflare Tunnel",
   "workspace.collaboration.progress.status.bridgeLan": "Starting the LAN bridge",
