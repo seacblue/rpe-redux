@@ -14,7 +14,6 @@ import {
   type LoadedNoteSkin,
 } from "../../core/media/noteSkins.ts";
 import { parseNoteSkin } from "../../core/media/noteSkin.ts";
-import { isDesktop } from "../../core/platform/environment.ts";
 import {
   builtinNoteSkinPackageId,
   externalNoteSkins,
@@ -135,9 +134,6 @@ async function loadBundledDefaultSkinAt(base: URL): Promise<LoadedNoteSkin> {
  * web build.
  */
 async function loadHostBundledSkin(): Promise<LoadedNoteSkin | null> {
-  if (!isDesktop()) {
-    return null;
-  }
   try {
     const packageId = await builtinNoteSkinPackageId();
     const { files, source } = await readExternalNoteSkin(packageId);

@@ -587,6 +587,7 @@ export default {
   "settings.skin.warning.missingActive": "无法找到当前正在使用的音符皮肤：{id}。请重新选择皮肤。",
   "settings.skin.error.list": "皮肤库读取失败：{message}",
   "settings.skin.error.action": "皮肤包操作失败：{message}",
+  "settings.skin.error.browserStorage": "浏览器存储不可用，无法保存皮肤包。",
   "settings.skin.error.bundledUnavailable": "内置音符皮肤不可用。",
   "settings.skin.error.bundledAssetUnavailable": "内置音符皮肤资源不可用：{name}",
 

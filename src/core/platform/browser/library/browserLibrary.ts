@@ -47,6 +47,19 @@ interface PendingCall {
   reject(error: Error): void;
 }
 
+/** One installed application package; skins, themes, and Extensions share it. */
+export interface AppPackageSummary {
+  id: string;
+  name: string;
+  fingerprint: string;
+  updatedAt: string;
+}
+
+/** One package with every file byte returned by the worker. */
+export interface AppPackageRecord extends AppPackageSummary {
+  files: Array<{ name: string; bytes: Uint8Array }>;
+}
+
 /** Browser-library errors map worker codes back to the service envelope. */
 function browserError(error: WorkerResponse["error"]): LocalLibraryError {
   const code = error?.code ?? "browser_library_error";
@@ -543,6 +556,35 @@ export class BrowserLibrary extends LocalLibrary {
 
   override asset(id: string, name: string, _options: RequestOptions = {}): Promise<Uint8Array> {
     return this.bytes("asset", { id, name });
+  }
+
+  /** List installed packages of one kind from the shared browser database. */
+  async appPackageList(kind: string): Promise<AppPackageSummary[]> {
+    const result = await this.result<{ packages: AppPackageSummary[] }>("packageList", { kind });
+    return result.packages;
+  }
+
+  /** Read one package and its file bytes. */
+  async appPackageRead(kind: string, id: string): Promise<AppPackageRecord> {
+    const result = await this.result<{ package: AppPackageRecord }>("packageRead", { kind, id });
+    return result.package;
+  }
+
+  /** Replace one package and its complete file set. */
+  async appPackageInstall(
+    kind: string,
+    id: string,
+    name: string,
+    fingerprint: string,
+    files: ReadonlyArray<{ name: string; bytes: Uint8Array }>,
+  ): Promise<void> {
+    await this.result("packageInstall", { kind, id, name, fingerprint, files });
+  }
+
+  /** Delete one package and its file set; true when it existed. */
+  async appPackageRemove(kind: string, id: string): Promise<boolean> {
+    const result = await this.result<{ removed: boolean }>("packageRemove", { kind, id });
+    return result.removed;
   }
 
   override stageAsset(

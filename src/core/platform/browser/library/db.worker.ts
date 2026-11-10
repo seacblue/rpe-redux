@@ -225,6 +225,25 @@ CREATE TABLE IF NOT EXISTS library_meta (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS app_packages (
+    kind        TEXT NOT NULL,
+    id          TEXT NOT NULL,
+    name        TEXT NOT NULL DEFAULT '',
+    fingerprint TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY(kind, id)
+);
+CREATE INDEX IF NOT EXISTS idx_app_packages_kind ON app_packages(kind, name);
+
+CREATE TABLE IF NOT EXISTS app_package_files (
+    kind  TEXT NOT NULL,
+    id    TEXT NOT NULL,
+    name  TEXT NOT NULL,
+    bytes BLOB NOT NULL,
+    PRIMARY KEY(kind, id, name)
+);
+
 CREATE TABLE IF NOT EXISTS assets (
     hash       TEXT PRIMARY KEY,
     size       INTEGER NOT NULL,
@@ -1521,6 +1540,37 @@ async function backupRestoreCommit(target: { id: string; commit: BackupCommit })
     const currentRow = db
       ? requireDb().selectObject(`SELECT data FROM preferences WHERE id = 1`)
       : undefined;
+    // Installed packages are app-level state, not chart history. Keep the live
+    // set across a library restore so rolling back a chart cannot uninstall a
+    // skin or theme the user installed afterwards.
+    if (db) {
+      for (const entry of requireDb().selectObjects(
+        `SELECT kind, id, name, fingerprint, created_at, updated_at FROM app_packages`,
+      )) {
+        restoreDb.exec({
+          sql: `INSERT OR REPLACE INTO app_packages
+            (kind, id, name, fingerprint, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+          bind: [
+            entry.kind,
+            entry.id,
+            entry.name,
+            entry.fingerprint,
+            entry.created_at,
+            entry.updated_at,
+          ],
+        });
+      }
+      for (const entry of requireDb().selectObjects(
+        `SELECT kind, id, name, bytes FROM app_package_files`,
+      )) {
+        restoreDb.exec({
+          sql: `INSERT OR REPLACE INTO app_package_files (kind, id, name, bytes)
+            VALUES (?, ?, ?, ?)`,
+          bind: [entry.kind, entry.id, entry.name, entry.bytes],
+        });
+      }
+    }
     const snapshotPreferences = JSON.parse(
       new TextDecoder().decode(
         await readBackupObject(BACKUP_KIND_PREFERENCES, target.commit.preferences),
@@ -1889,6 +1939,174 @@ function assets(params: Record<string, unknown>): Record<string, unknown> {
     size: Number(row.size),
   }));
   return { assets: manifest };
+}
+
+// ------------------------------------------------------ application packages
+// Web-only storage for skins, themes, and Extensions. They share the browser
+// SQLite file so exports carry them; the desktop host keeps the same packages in
+// external app-data folders instead of these tables.
+
+/** Read a package kind, which is a short stable namespace such as `skin`. */
+function packageKind(params: Record<string, unknown>): string {
+  const kind = stringParam(params, "kind");
+  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(kind)) {
+    throw new DbError("invalid_request", "invalid package kind");
+  }
+  return kind;
+}
+
+/** Read a package id, which is a non-empty opaque key. */
+function packageId(params: Record<string, unknown>): string {
+  const id = stringParam(params, "id").trim();
+  if (!id || id.length > 200) {
+    throw new DbError("invalid_request", "invalid package id");
+  }
+  return id;
+}
+
+/** Reject relative paths that could escape a package root. */
+function packageFileName(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    value.includes("\0") ||
+    value.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new DbError("invalid_request", "invalid package file name");
+  }
+  return value;
+}
+
+/** Decode one file entry and reject empty or ambiguous names. */
+function packageFiles(value: unknown): Array<{ name: string; bytes: Uint8Array }> {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new DbError("invalid_request", "package requires files");
+  }
+  const names = new Set<string>();
+  return value.map((entry) => {
+    if (!isRecord(entry)) {
+      throw new DbError("invalid_request", "package file must be an object");
+    }
+    const name = packageFileName(entry.name);
+    if (names.has(name)) {
+      throw new DbError("invalid_request", `duplicate package file: ${name}`);
+    }
+    names.add(name);
+    const bytes =
+      entry.bytes instanceof Uint8Array
+        ? entry.bytes
+        : entry.bytes instanceof ArrayBuffer
+          ? new Uint8Array(entry.bytes)
+          : null;
+    if (!bytes) {
+      throw new DbError("invalid_request", `package file has no bytes: ${name}`);
+    }
+    return { name, bytes };
+  });
+}
+
+/** List installed packages of one kind. */
+function packageList(params: Record<string, unknown>): Record<string, unknown> {
+  const kind = packageKind(params);
+  const rows = requireDb().selectObjects(
+    `SELECT id, name, fingerprint, updated_at
+       FROM app_packages
+      WHERE kind = ?
+      ORDER BY name, id`,
+    [kind],
+  );
+  return {
+    packages: rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      fingerprint: String(row.fingerprint ?? ""),
+      updatedAt: String(row.updated_at ?? ""),
+    })),
+  };
+}
+
+/** Read one package and all of its file bytes. */
+function packageRead(params: Record<string, unknown>): Record<string, unknown> {
+  const kind = packageKind(params);
+  const id = packageId(params);
+  const row = requireDb().selectObject(
+    `SELECT id, name, fingerprint, updated_at FROM app_packages WHERE kind = ? AND id = ?`,
+    [kind, id],
+  );
+  if (!row) {
+    throw new DbError("not_found", "package not found");
+  }
+  const files = requireDb().selectObjects(
+    `SELECT name, bytes FROM app_package_files WHERE kind = ? AND id = ? ORDER BY name`,
+    [kind, id],
+  );
+  return {
+    package: {
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      fingerprint: String(row.fingerprint ?? ""),
+      updatedAt: String(row.updated_at ?? ""),
+      files: files.map((file) => ({ name: String(file.name), bytes: file.bytes })),
+    },
+  };
+}
+
+/** Replace one package and its file set in a single transaction. */
+function packageInstall(params: Record<string, unknown>): Record<string, unknown> {
+  const kind = packageKind(params);
+  const id = packageId(params);
+  const name = stringParam(params, "name");
+  const fingerprint = stringParam(params, "fingerprint");
+  const files = packageFiles(params.files);
+  const now = nowString();
+  run("BEGIN IMMEDIATE");
+  try {
+    run(
+      `INSERT INTO app_packages (kind, id, name, fingerprint, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(kind, id) DO UPDATE SET
+         name = excluded.name,
+         fingerprint = excluded.fingerprint,
+         updated_at = excluded.updated_at`,
+      [kind, id, name, fingerprint, now, now],
+    );
+    run(`DELETE FROM app_package_files WHERE kind = ? AND id = ?`, [kind, id]);
+    for (const file of files) {
+      run(`INSERT INTO app_package_files (kind, id, name, bytes) VALUES (?, ?, ?, ?)`, [
+        kind,
+        id,
+        file.name,
+        file.bytes,
+      ]);
+    }
+    run("COMMIT");
+  } catch (error) {
+    run("ROLLBACK");
+    throw error;
+  }
+  return { ok: true, id };
+}
+
+/** Delete one package and every file it owns. */
+function packageRemove(params: Record<string, unknown>): Record<string, unknown> {
+  const kind = packageKind(params);
+  const id = packageId(params);
+  const row = requireDb().selectObject(`SELECT id FROM app_packages WHERE kind = ? AND id = ?`, [
+    kind,
+    id,
+  ]);
+  run("BEGIN IMMEDIATE");
+  try {
+    run(`DELETE FROM app_package_files WHERE kind = ? AND id = ?`, [kind, id]);
+    run(`DELETE FROM app_packages WHERE kind = ? AND id = ?`, [kind, id]);
+    run("COMMIT");
+  } catch (error) {
+    run("ROLLBACK");
+    throw error;
+  }
+  return { removed: Boolean(row) };
 }
 
 async function stageAsset(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -2275,6 +2493,10 @@ const handlers = new Map<string, Handler>([
   ["assets", assets],
   ["stageAsset", stageAsset],
   ["asset", asset],
+  ["packageList", packageList],
+  ["packageRead", packageRead],
+  ["packageInstall", packageInstall],
+  ["packageRemove", packageRemove],
   ["commit", commit],
   ["revisions", revisions],
   ["createRevision", createRevision],
@@ -2326,6 +2548,8 @@ const MUTATING_METHODS = new Set([
   "createRevision",
   "removeRevision",
   "savePreferences",
+  "packageInstall",
+  "packageRemove",
   "import",
 ]);
 

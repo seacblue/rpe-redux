@@ -668,6 +668,7 @@ export default {
     "The active note skin could not be found: {id}. Choose another skin.",
   "settings.skin.error.list": "Could not read the skin library: {message}",
   "settings.skin.error.action": "Skin package action failed: {message}",
+  "settings.skin.error.browserStorage": "Browser storage is unavailable for skin packages.",
   "settings.skin.error.bundledUnavailable": "The bundled note skin is unavailable.",
   "settings.skin.error.bundledAssetUnavailable": "A bundled note skin asset is unavailable: {name}",
   // ------------------------------------------------------------ help / about
