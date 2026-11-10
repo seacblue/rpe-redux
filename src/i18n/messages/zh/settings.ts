@@ -321,6 +321,9 @@ export default {
   "settings.field.timeline-sweep-remove-color.description":
     "右键划线取消选中时间轴物件时使用的颜色。",
   "settings.field.selected-note-color.label": "选中音符颜色",
+  "settings.field.selected-event-color.label": "选中事件颜色",
+  "settings.field.collaboration-selected-note-color.label": "协作选中音符颜色",
+  "settings.field.collaboration-selected-event-color.label": "协作选中事件颜色",
   "settings.field.default-particle-color.label": "默认粒子颜色",
   "settings.field.particle-effects-enabled.label": "渲染粒子效果",
   "settings.field.particle-effects-enabled.description":

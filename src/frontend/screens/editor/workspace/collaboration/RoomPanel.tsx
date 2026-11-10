@@ -27,6 +27,10 @@ import { useTranslation } from "../../../../../i18n/react.ts";
 import { createRoomPassword } from "../../../../../core/collaboration/invite.ts";
 import { requestConfirm } from "../../../../overlays/modals/prompts.ts";
 import { download } from "../../../../platform/download.ts";
+import { useEditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
+import { MemberAccessDialog } from "./MemberAccessDialog.tsx";
+import { MemberActionsMenu } from "./MemberActionsMenu.tsx";
+import { RoomLocks } from "./RoomLocks.tsx";
 import { suggestedLanPort, useCollaboration } from "./collaborationRuntime.tsx";
 import { MaxMembersControl } from "./MaxMembersControl.tsx";
 
@@ -125,6 +129,7 @@ export function RoomPanel() {
 /** Form state for one room session, reseeded when an invitation arrives. */
 function RoomPanelBody() {
   const { t } = useTranslation();
+  const runtime = useEditorRuntime();
   const {
     state,
     settings,
@@ -162,6 +167,15 @@ function RoomPanelBody() {
   const [password, setPassword] = useState(createRoomPassword);
   const [newPassword, setNewPassword] = useState("");
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [accessTarget, setAccessTarget] = useState<(typeof state.members)[number] | null>(null);
+  // Members stay in the room record while offline so their resume token still
+  // works. The roster only shows who is actually present.
+  const onlineMembers = state.members.filter((member) => member.online);
+  const activeAccessTarget =
+    accessTarget && onlineMembers.some((member) => member.id === accessTarget.id)
+      ? accessTarget
+      : null;
+  const [accessRole, setAccessRole] = useState<"editor" | "viewer">("editor");
   const [joinMethod, setJoinMethod] = useState<"link" | "custom">("link");
   const [joinLink, setJoinLink] = useState(pendingInviteLink);
   const [serverUrl, setServerUrl] = useState("");
@@ -218,6 +232,18 @@ function RoomPanelBody() {
     if (confirmed) {
       removeMember(member.id);
     }
+  };
+  /** Opens the access modal with the member's current role preselected. */
+  const openAccess = (member: (typeof state.members)[number]) => {
+    setAccessTarget(member);
+    setAccessRole(member.role === "viewer" ? "viewer" : "editor");
+  };
+  const closeAccess = () => setAccessTarget(null);
+  const saveAccess = () => {
+    if (activeAccessTarget) {
+      setRole(activeAccessTarget.id, accessRole);
+    }
+    setAccessTarget(null);
   };
   /** Confirms leaving because the temporary room chart is discarded. */
   const leaveRoomWithConfirm = async () => {
@@ -312,7 +338,7 @@ function RoomPanelBody() {
                   <MaxMembersControl
                     key={state.maxMembers}
                     value={state.maxMembers}
-                    memberCount={state.members.length}
+                    memberCount={onlineMembers.length}
                     onChange={setMaxMembers}
                   />
                 ) : (
@@ -336,9 +362,9 @@ function RoomPanelBody() {
           <section className="collab-section">
             <h3>{t("workspace.collaboration.members")}</h3>
             <ul className="collab-member-list">
-              {state.members.map((member) => {
+              {onlineMembers.map((member) => {
                 const isSelf = member.id === state.memberId;
-                const host = state.role === "host" && member.role !== "host" && !isSelf;
+                const canManage = state.role === "host" && member.role !== "host" && !isSelf;
                 return (
                   <li key={member.id} className="collab-member">
                     <span
@@ -353,32 +379,14 @@ function RoomPanelBody() {
                         {locationText(state.presence.find((entry) => entry.memberId === member.id))}
                       </small>
                     </span>
-                    {host ? (
-                      <Select
-                        aria-label={t("workspace.collaboration.roleLabel", {
-                          name: member.profile.name,
-                        })}
-                        value={member.role}
-                        onChange={(event) =>
-                          setRole(member.id, event.currentTarget.value as "editor" | "viewer")
-                        }
-                      >
-                        <option value="editor">{t("workspace.collaboration.role.editor")}</option>
-                        <option value="viewer">{t("workspace.collaboration.role.viewer")}</option>
-                      </Select>
-                    ) : (
-                      <span className="collab-member-role">{t(ROLE_KEYS[member.role])}</span>
-                    )}
-                    {host && (
-                      <IconButton
-                        size="md"
-                        icon="trash"
-                        label={t("workspace.collaboration.kick")}
-                        variant="danger"
-                        className="collab-member-kick"
-                        onClick={() => void kickMember(member)}
+                    {canManage && (
+                      <MemberActionsMenu
+                        memberName={member.profile.name}
+                        onChangeAccess={() => openAccess(member)}
+                        onKick={() => void kickMember(member)}
                       />
                     )}
+                    <span className="collab-member-role">{t(ROLE_KEYS[member.role])}</span>
                   </li>
                 );
               })}
@@ -387,17 +395,11 @@ function RoomPanelBody() {
           {state.locks.length > 0 && (
             <section className="collab-section">
               <h3>{t("workspace.collaboration.locks")}</h3>
-              <ul className="collab-member-list">
-                {state.locks.map((lock) => (
-                  <li key={lock.id} className="collab-member">
-                    <span className="collab-member-name">{lock.id}</span>
-                    <small className="collab-member-role">
-                      {state.members.find((member) => member.id === lock.ownerId)?.profile.name ??
-                        lock.ownerId}
-                    </small>
-                  </li>
-                ))}
-              </ul>
+              <RoomLocks
+                locks={state.locks}
+                members={state.members}
+                chart={runtime?.getSession().chart}
+              />
             </section>
           )}
           {state.role === "host" && state.pending.length > 0 && (
@@ -706,6 +708,14 @@ function RoomPanelBody() {
           )}
         </div>
       )}
+      <MemberAccessDialog
+        open={Boolean(activeAccessTarget)}
+        memberName={activeAccessTarget?.profile.name ?? ""}
+        role={accessRole}
+        onRoleChange={setAccessRole}
+        onClose={closeAccess}
+        onSave={saveAccess}
+      />
       <Modal
         open={passwordOpen}
         onClose={closePasswordEditor}

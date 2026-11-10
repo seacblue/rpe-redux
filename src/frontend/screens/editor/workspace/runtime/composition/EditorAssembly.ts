@@ -161,7 +161,7 @@ export function createEditorAssembly(
   const { notify, failureMessage, reportError } = feedback;
   const atHome = () => getEditorVisibility().atHome;
   const hasDocument = () => getEditorVisibility().hasDocument;
-  setEditorVisibility({ atHome: true, hasDocument: false, dirty: false });
+  setEditorVisibility({ atHome: true, hasDocument: false, dirty: false, readOnly: false });
   /** Records the chart last written to the recovery store. */
   function setLastDraftDocument(chart: Chart): void {
     documentState.lastDraftDocument = chart;
@@ -693,8 +693,9 @@ export function createEditorAssembly(
     const current = getEditorVisibility();
     const dirty =
       current.hasDocument && (session.current.history.dirty || documentState.assetDirty);
-    if (dirty !== current.dirty) {
-      setEditorVisibility({ ...current, dirty });
+    const readOnly = !session.current.editable;
+    if (dirty !== current.dirty || readOnly !== current.readOnly) {
+      setEditorVisibility({ ...current, dirty, readOnly });
     }
   }
   const documentRuntime = createDocumentRuntime({

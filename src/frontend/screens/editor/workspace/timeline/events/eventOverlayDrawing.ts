@@ -15,7 +15,10 @@ import type {
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
 import { drawEventBar, eventBarOpacity } from "./eventRenderCache.ts";
-import { drawEventSelectionFilters } from "./eventSelectionDrawing.ts";
+import {
+  drawEventSelectionFilters,
+  drawRemoteEventSelectionFilters,
+} from "./eventSelectionDrawing.ts";
 
 /** Draw the trajectory preview inside one event bar. */
 export function drawTrajectoryEvent(
@@ -140,7 +143,9 @@ export function drawShaderEvents(
       context.fillRect(rectangle.x, top, rectangle.width, rectangle.height);
     }
     if (selected) {
-      drawEventSelectionFilters(context, [rectangle], palette);
+      drawEventSelectionFilters(context, [rectangle]);
+    } else if (entry.item.id !== undefined && this.remoteSelectedEventIds.has(entry.item.id)) {
+      drawRemoteEventSelectionFilters(context, [rectangle], palette);
     }
     context.beginPath();
     context.rect(rectangle.x, top, rectangle.width, rectangle.height);

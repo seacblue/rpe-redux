@@ -318,7 +318,15 @@ export class TimelineCache {
       return this.colors;
     }
     const root = document.documentElement;
-    const theme = `${root.dataset.theme}|${root.dataset.skin}|${root.style?.getPropertyValue?.("--accent") ?? ""}|${selectionColor("selected-note-color", "#00C800")}`;
+    const theme = [
+      root.dataset.theme,
+      root.dataset.skin,
+      root.style?.getPropertyValue?.("--accent") ?? "",
+      selectionColor("selected-note-color", "#00C800"),
+      selectionColor("selected-event-color", "#00C800"),
+      selectionColor("collaboration-selected-note-color", "#FFCC66"),
+      selectionColor("collaboration-selected-event-color", "#FFCC66"),
+    ].join("|");
     if (this.theme !== theme) {
       this.colors = readCanvasPalette();
       this.theme = theme;

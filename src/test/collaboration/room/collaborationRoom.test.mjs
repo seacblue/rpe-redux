@@ -494,9 +494,10 @@ test("presence is ephemeral and scoped to the member", () => {
     lineId: "line",
     beat: 4,
     positionX: 2,
+    selectedEventIds: ["event-1"],
     updatedAt: 10,
   });
-  assert.equal(rooms.presence(room).length, 1);
+  assert.deepEqual(rooms.presence(room)[0].selectedEventIds, ["event-1"]);
   rooms.leave(editor.id);
   assert.equal(rooms.presence(room).length, 0);
   assert.equal(editor.online, false);

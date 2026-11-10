@@ -543,7 +543,7 @@ export function ParameterForm({
   });
   const issues = new Map(validation.ok ? [] : validation.issues.map((entry) => [entry.key, entry]));
   const canSubmit = validation.ok;
-  const canAllocateLine = Boolean(session && !session.readOnly);
+  const canAllocateLine = Boolean(session?.editable);
 
   useEffect(
     () => () => {

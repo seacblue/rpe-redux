@@ -16,11 +16,17 @@ export interface EditorVisibilitySnapshot {
    * whose JSON is unchanged still needs a save. `false` at home.
    */
   dirty: boolean;
+  /** Whether local user actions are forbidden from changing the chart. */
+  readOnly: boolean;
 }
 
 const visibility = createValue<EditorVisibilitySnapshot>({
-  initial: { atHome: true, hasDocument: false, dirty: false },
-  equals: (a, b) => a.atHome === b.atHome && a.hasDocument === b.hasDocument && a.dirty === b.dirty,
+  initial: { atHome: true, hasDocument: false, dirty: false, readOnly: false },
+  equals: (a, b) =>
+    a.atHome === b.atHome &&
+    a.hasDocument === b.hasDocument &&
+    a.dirty === b.dirty &&
+    a.readOnly === b.readOnly,
 });
 
 /** Current home and document state of the editor surface. */

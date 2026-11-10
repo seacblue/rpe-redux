@@ -44,6 +44,13 @@ export interface DrawerPaneDefinition {
   requiresDocument?: boolean;
   /** Pane-owned anchored walkthrough opened from the inspector header. */
   tutorial?: HelpTutorialDefinition;
+  /**
+   * Whether the page changes the chart or its assets.
+   *
+   * A read-only document keeps the page visible but makes its body inert, so
+   * its controls cannot start an edit the session would refuse.
+   */
+  editsChart?: boolean;
 }
 
 /** Which page is showing and whether the inspector is in drawer mode. */

@@ -148,6 +148,7 @@ func newAPI(
 	mux.HandleFunc("GET /api/projects/{id}/chart/stream", a.handleChartStream)
 	mux.HandleFunc("GET /api/projects/{id}/chart/lines", a.handleChartLines)
 	mux.HandleFunc("POST /api/projects/{id}/duplicate", a.handleDuplicateProject)
+	mux.HandleFunc("GET /api/assets/{hash}", a.handleReadAssetByHash)
 	mux.HandleFunc("GET /api/projects/{id}/assets", a.handleListAssets)
 	mux.HandleFunc("POST /api/projects/{id}/assets", a.handleStageAsset)
 	mux.HandleFunc("GET /api/projects/{id}/assets/{name...}", a.handleReadAsset)
@@ -714,6 +715,43 @@ func (a *API) handleStageAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"asset": asset, "staged": true})
+}
+
+// isContentHash reports whether value is a lowercase SHA-256 digest.
+func isContentHash(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// handleReadAssetByHash serves one library blob by its content hash. Room
+// downloads use it to reuse bytes already stored in the local library.
+func (a *API) handleReadAssetByHash(w http.ResponseWriter, r *http.Request) {
+	hash := strings.ToLower(strings.TrimSpace(r.PathValue("hash")))
+	if !isContentHash(hash) {
+		writeError(w, http.StatusBadRequest, "invalid_asset", "asset hash is invalid")
+		return
+	}
+	reader, _, err := a.store.OpenAssetByHash(r.Context(), hash)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeStoreError(w, err)
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid_asset", "the asset request was rejected")
+		return
+	}
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+hash+`"`)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeContent(w, r, "", time.Time{}, reader)
 }
 
 // handleReadAsset serves exact blob bytes with Range support so audio seeking

@@ -14,6 +14,7 @@ const unregister = registerInspectorPanel({
   label: "chrome.pane.notes",
   icon: "pencil",
   tutorial: INSPECTOR_TUTORIALS.notes,
+  editsChart: true,
 });
 
 if (import.meta.hot) {

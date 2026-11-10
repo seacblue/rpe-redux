@@ -14,6 +14,7 @@ const unregister = registerInspectorPanel({
   label: "chrome.pane.multiEdit",
   icon: "layers",
   tutorial: INSPECTOR_TUTORIALS.multi,
+  editsChart: true,
 });
 
 if (import.meta.hot) {

@@ -9,6 +9,10 @@ import {
   mimeForAsset,
   sanitizeAssetName,
 } from "../../../core/collaboration/assets.ts";
+import {
+  decodeBinaryAssetFrame,
+  encodeBinaryAssetFrame,
+} from "../../../core/collaboration/transfer.ts";
 
 test("chart resource names include assets but not the illustration credit", () => {
   const names = chartAssetNames({
@@ -69,6 +73,18 @@ test("resource-change classification skips ordinary note edits", () => {
     ]),
     false,
   );
+});
+
+test("binary asset frames round-trip their header and chunk", () => {
+  const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const frame = encodeBinaryAssetFrame(
+    { type: "asset-chunk", requestId: "request", index: 2 },
+    body,
+  );
+  const decoded = decodeBinaryAssetFrame(frame);
+  assert.deepEqual(decoded.header, { type: "asset-chunk", requestId: "request", index: 2 });
+  assert.deepEqual([...decoded.body], [...body]);
+  assert.throws(() => decodeBinaryAssetFrame(new ArrayBuffer(2)), /too short/);
 });
 
 test("magic checks reject a script disguised as an image", () => {

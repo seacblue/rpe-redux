@@ -290,6 +290,7 @@ export class TimelineMarkers {
       actions.push({
         id: "trajectory-context-split",
         label: t("workspace.dialogs.splitTrajectory"),
+        enabled: () => session.editable,
         run: () =>
           this.options.splitTrajectory(selected, selection.lineIndex, timeline.gestures.layer),
       });

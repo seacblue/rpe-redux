@@ -130,6 +130,8 @@ export interface CommittedTransaction {
   readonly actorId: string;
   readonly label: string;
   readonly changes: readonly ChartChange[] | EncryptedPayload;
+  /** The encrypted plaintext was gzipped before encryption. */
+  readonly changesEncoding?: "gzip";
   readonly undoOf?: string;
   readonly fingerprint: string;
   /** A deduplicated retry that must not be broadcast again. */
@@ -661,6 +663,7 @@ export class CollaborationRooms {
     changes: readonly ChartChange[] | EncryptedPayload,
     undoOf?: string,
     lockIds: readonly string[] = [],
+    changesEncoding?: "gzip",
   ): RoomResult<CommittedTransaction> {
     const room = this.roomForMember(actorId);
     if (!room) {
@@ -762,6 +765,7 @@ export class CollaborationRooms {
       actorId,
       label,
       changes,
+      ...(changesEncoding ? { changesEncoding } : {}),
       ...(undoOf ? { undoOf } : {}),
       fingerprint: room.fingerprint,
     });

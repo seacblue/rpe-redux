@@ -3,8 +3,6 @@ export default {
   "workspace.collaboration.progress.hostTitle": "正在创建房间",
   "workspace.collaboration.progress.guestTitle": "正在加入房间",
   "workspace.collaboration.progress.title": "房间准备进度",
-  "workspace.collaboration.progress.abort": "中止并关闭",
-  "workspace.collaboration.progress.close": "关闭",
   "workspace.collaboration.progress.status.preparing": "正在准备谱面",
   "workspace.collaboration.progress.status.bridgeTunnel": "正在启动 Cloudflare Tunnel",
   "workspace.collaboration.progress.status.bridgeLan": "正在启动局域网桥接",
@@ -23,4 +21,9 @@ export default {
   "workspace.collaboration.progress.status.publish": "正在发布谱面与素材",
   "workspace.collaboration.progress.status.ready": "房间已就绪",
   "workspace.collaboration.progress.aborted": "已中止房间准备。",
+  "workspace.collaboration.memberActions": "{name} 的成员操作",
+  "workspace.collaboration.changeAccess": "修改权限",
+  "workspace.collaboration.changeAccessTitle": "修改 {name} 的权限",
+  "workspace.collaboration.changeAccessField": "权限",
+  "workspace.collaboration.changeAccessSave": "保存权限",
 };

@@ -20,7 +20,7 @@ interface LineActionHost {
 /** Registers duplicate and delete actions for the selected judge line; returns their disposer. */
 export function registerLineActions(host: LineActionHost): () => void {
   const lines = () => host.getSession().chart.judgeLineList ?? [];
-  const enabled = () => host.hasDocument() && lines().length > 0;
+  const enabled = () => host.hasDocument() && host.getSession().editable && lines().length > 0;
   const disposers = [
     toolbar.register({
       kind: "action",

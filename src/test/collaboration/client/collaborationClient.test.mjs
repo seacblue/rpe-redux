@@ -1,8 +1,14 @@
+/* eslint-disable max-lines -- handshake, retry, presence, and asset cases share one fake-socket harness. */
 /** Exercises the room client handshake, retries, and state fan-out with a fake socket. */
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 import { CollaborationClient } from "../../../core/collaboration/client.ts";
 import { sha256Hex } from "../../../core/collaboration/digest.ts";
+import {
+  decodeBinaryAssetFrame,
+  encodeBinaryAssetFrame,
+} from "../../../core/collaboration/transfer.ts";
+import { encodeGzipJson } from "../../../core/collaboration/chartWire.ts";
 
 class FakeSocket {
   sent = [];
@@ -10,7 +16,7 @@ class FakeSocket {
   listeners = new Map();
 
   send(data) {
-    this.sent.push(JSON.parse(data));
+    this.sent.push(typeof data === "string" ? JSON.parse(data) : data);
   }
 
   close() {
@@ -91,6 +97,39 @@ test("create waits for open, sends the snapshot, and accepts the welcome", () =>
     data: JSON.stringify({ type: "room-settings", maxMembers: 8 }),
   });
   assert.equal(client.state.get().maxMembers, 8);
+  client.dispose();
+});
+
+test("a member-left notice reports the departing member", () => {
+  const harness = socketHarness();
+  const departed = [];
+  const client = new CollaborationClient({
+    socketFactory: harness.factory,
+    reconnect: false,
+    onMemberLeft: (memberId) => departed.push(memberId),
+  });
+  client.connect("ws://127.0.0.1:47830");
+  const socket = harness.sockets[0];
+  socket.emit("open");
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "welcome",
+      roomId: "ROOM",
+      invite: "INVITE",
+      memberId: "host",
+      hostId: "host",
+      role: "host",
+      revision: 0,
+      fingerprint: "fp",
+      members: [],
+      presence: [],
+      resumeToken: "secret",
+    }),
+  });
+  socket.emit("message", {
+    data: JSON.stringify({ type: "member-left", memberId: "guest" }),
+  });
+  assert.deepEqual(departed, ["guest"]);
   client.dispose();
 });
 
@@ -196,6 +235,7 @@ test("join sends a request and waits for host approval", () => {
     roomId: "ROOM",
     invite: "INVITE",
     profile: { name: "Guest", color: "#00ff00" },
+    binaryChunks: true,
   });
   socket.emit("message", { data: JSON.stringify({ type: "waiting", roomId: "ROOM" }) });
   assert.equal(client.state.get().status, "waiting");
@@ -405,6 +445,214 @@ test("asset uploads are chunked and downloads verify their hash", async () => {
   );
   assert.equal(transfers.at(-1).name, "cover.png");
   assert.equal(transfers.at(-1).received, bytes.length);
+  client.dispose();
+});
+
+test("binary asset chunks stream after a non-adopted begin", async () => {
+  const harness = socketHarness();
+  const ready = [];
+  const client = new CollaborationClient({
+    socketFactory: harness.factory,
+    reconnect: false,
+    onAssetReady: (asset, bytes) => ready.push({ asset, bytes }),
+  });
+  client.connect("ws://127.0.0.1:47830");
+  const socket = harness.sockets[0];
+  socket.emit("open");
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "welcome",
+      roomId: "ROOM",
+      invite: "INVITE",
+      memberId: "me",
+      hostId: "host",
+      role: "editor",
+      revision: 0,
+      fingerprint: "fp",
+      binaryChunks: true,
+      assetAdopt: true,
+      members: [],
+      presence: [],
+      assets: [],
+      resumeToken: "token",
+    }),
+  });
+  const bytes = new TextEncoder().encode("binary asset bytes");
+  const hash = await sha256Hex(bytes);
+  const upload = client.uploadAsset("cover.png", bytes);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (socket.sent.some((message) => message?.type === "asset-begin")) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const begin = socket.sent.find((message) => message?.type === "asset-begin");
+  assert.equal(begin.adopt, true);
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "asset-begin-result",
+      requestId: begin.requestId,
+      adopted: false,
+    }),
+  });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (socket.sent.some((message) => message instanceof ArrayBuffer)) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const frames = socket.sent
+    .filter((message) => message instanceof ArrayBuffer)
+    .map((frame) => decodeBinaryAssetFrame(frame));
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0].header.type, "asset-chunk");
+  assert.deepEqual([...frames[0].body], [...bytes]);
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "asset-accepted",
+      asset: { name: "cover.png", hash, size: bytes.length, mime: "image/png" },
+    }),
+  });
+  assert.equal(await upload, hash);
+
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "asset-download-begin",
+      requestId: "download",
+      asset: { name: "cover.png", hash, size: bytes.length, mime: "image/png" },
+      totalChunks: 1,
+      chunkSize: 256 * 1024,
+    }),
+  });
+  socket.emit("message", {
+    data: encodeBinaryAssetFrame(
+      { type: "asset-download-chunk", requestId: "download", index: 0 },
+      bytes,
+    ),
+  });
+  socket.emit("message", {
+    data: JSON.stringify({ type: "asset-download-end", requestId: "download", hash }),
+  });
+  for (let attempt = 0; attempt < 100 && ready.length === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(ready.length, 1);
+  assert.deepEqual([...ready[0].bytes], [...bytes]);
+  client.dispose();
+});
+
+test("an adopted asset upload stops before sending chunks", async () => {
+  const harness = socketHarness();
+  const client = new CollaborationClient({ socketFactory: harness.factory, reconnect: false });
+  client.connect("ws://127.0.0.1:47830");
+  const socket = harness.sockets[0];
+  socket.emit("open");
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "welcome",
+      roomId: "ROOM",
+      invite: "INVITE",
+      memberId: "me",
+      hostId: "host",
+      role: "editor",
+      revision: 0,
+      fingerprint: "fp",
+      binaryChunks: true,
+      assetAdopt: true,
+      members: [],
+      presence: [],
+      assets: [],
+      resumeToken: "token",
+    }),
+  });
+  const bytes = new TextEncoder().encode("adopted bytes");
+  const hash = await sha256Hex(bytes);
+  const upload = client.uploadAsset("cover.png", bytes);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (socket.sent.some((message) => message?.type === "asset-begin")) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const begin = socket.sent.find((message) => message?.type === "asset-begin");
+  socket.emit("message", {
+    data: JSON.stringify({ type: "asset-begin-result", requestId: begin.requestId, adopted: true }),
+  });
+  assert.equal(await upload, hash);
+  assert.equal(
+    socket.sent.some((message) => message instanceof ArrayBuffer),
+    false,
+  );
+  assert.equal(
+    socket.sent.some((message) => message?.type === "asset-commit"),
+    false,
+  );
+  client.dispose();
+});
+
+test("large transactions are gzipped before the wire and expanded on commit", async () => {
+  const harness = socketHarness();
+  const committed = [];
+  const client = new CollaborationClient({
+    socketFactory: harness.factory,
+    reconnect: false,
+    onCommitted: (message) => committed.push(message),
+  });
+  client.connect("ws://127.0.0.1:47830");
+  const socket = harness.sockets[0];
+  socket.emit("open");
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "welcome",
+      roomId: "ROOM",
+      invite: "INVITE",
+      memberId: "me",
+      hostId: "host",
+      role: "editor",
+      revision: 0,
+      fingerprint: "fp",
+      members: [],
+      presence: [],
+      assets: [],
+      resumeToken: "token",
+    }),
+  });
+  const changes = [
+    {
+      op: "set",
+      path: "/META/name",
+      before: "room",
+      after: "x".repeat(20_000),
+    },
+  ];
+  client.sendTransaction({ label: "large", changes, affectedObjectIds: [] });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (socket.sent.some((message) => message?.type === "transaction")) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const transaction = socket.sent.find((message) => message?.type === "transaction");
+  assert.equal(transaction.changesEncoding, "gzip");
+  assert.equal(typeof transaction.changes, "string");
+
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "committed",
+      revision: 1,
+      transactionId: transaction.transactionId,
+      actorId: "other",
+      label: "large",
+      changes: await encodeGzipJson(JSON.stringify(changes)),
+      changesEncoding: "gzip",
+      fingerprint: "fp-1",
+    }),
+  });
+  for (let attempt = 0; attempt < 100 && committed.length === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(committed.length, 1);
+  assert.deepEqual(committed[0].changes, changes);
   client.dispose();
 });
 
@@ -632,6 +880,7 @@ test("resumeRoom sends the persisted token before a document is opened", () => {
     type: "resume",
     roomId: "ROOM",
     token: "saved-token",
+    binaryChunks: true,
   });
   client.dispose();
 });

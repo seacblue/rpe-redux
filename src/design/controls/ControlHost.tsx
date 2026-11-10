@@ -7,7 +7,12 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { closeControlPopup, getPopup, subscribePopup } from "./controlActions.ts";
+import {
+  closeControlPopup,
+  getPopup,
+  popupAnchorVisible,
+  subscribePopup,
+} from "./controlActions.ts";
 import { useHoldFloatingSurface } from "../patterns/floatingSurface.ts";
 import { SelectPopup } from "./SelectPopup.tsx";
 import { ColorPopup } from "./ColorPopup.tsx";
@@ -26,12 +31,22 @@ import { installControls } from "./enhance.ts";
 export function ControlHost() {
   useEffect(() => installControls(), []);
   const popup = useSyncExternalStore(subscribePopup, getPopup);
-  const attached = Boolean(popup?.element.isConnected);
+  const attached = Boolean(popup && popupAnchorVisible(popup.element));
   useHoldFloatingSurface(attached);
   useEffect(() => {
-    if (popup && !popup.element.isConnected) {
-      closeControlPopup();
+    if (!popup) {
+      return;
     }
+    // The popup store does not change when its parent panel is closed, so a
+    // short poll notices an unmounted or hidden anchor and dismisses the list.
+    const check = () => {
+      if (!popupAnchorVisible(popup.element)) {
+        closeControlPopup();
+      }
+    };
+    check();
+    const timer = window.setInterval(check, 120);
+    return () => window.clearInterval(timer);
   }, [popup]);
   if (!popup || !attached) {
     return null;

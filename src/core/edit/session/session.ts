@@ -139,6 +139,10 @@ export class EditorSession extends EventTarget {
   readonly chartDocument?: ChartDocument;
   /** The active room role can make an otherwise writable document read-only. */
   collaborationReadOnly = false;
+  /** Whether local user actions may change the chart. */
+  get editable(): boolean {
+    return !this.readOnly && !this.collaborationReadOnly;
+  }
   /** Remote entries are applied through the room and must not be undone locally. */
   collaborationActive = false;
   /** Stable member id attached to local history entries while a room is active. */
@@ -502,7 +506,7 @@ export class EditorSession extends EventTarget {
     options: SessionCommitOptions,
     remote = false,
   ): boolean {
-    if ((this.readOnly || this.collaborationReadOnly) && !remote) {
+    if (!this.editable && !remote) {
       this.notify();
       return false;
     }
@@ -801,6 +805,10 @@ export class EditorSession extends EventTarget {
 
   /** Moves one step through history through the mutation gate. */
   travel(direction: "undo" | "redo"): boolean {
+    if (!this.editable) {
+      this.notify();
+      return false;
+    }
     if (this.collaborationActive) {
       // A room has no shared redo branch. Undo must compensate the newest
       // transaction this member actually sent, not move a local stack pointer.

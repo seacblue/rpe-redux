@@ -27,6 +27,7 @@ const definition: DrawerPaneDefinition = {
   body: AssetsDrawerBody,
   requiresDocument: true,
   tutorial: GLOBAL_DRAWER_TUTORIALS.assets,
+  editsChart: true,
 };
 
 const dispose = registerDrawerPane(definition);

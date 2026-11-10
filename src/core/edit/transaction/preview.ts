@@ -116,7 +116,7 @@ function planChartTransaction(
       }),
     };
   }
-  if (session.readOnly) {
+  if (!session.editable) {
     return {
       result: result(
         "rejected",

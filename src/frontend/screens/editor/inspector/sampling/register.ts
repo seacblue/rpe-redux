@@ -16,6 +16,7 @@ const disposePanel = registerInspectorPanel({
   label: "editorPanels.sampling.title",
   icon: "preview",
   tutorial: INSPECTOR_TUTORIALS.sampling,
+  editsChart: true,
 });
 const disposeLifecycle = bindInspectorLifecycle("sampling", {
   onClose: stopSampling,

@@ -15,9 +15,13 @@ interface SerializeResponse {
 
 interface PendingSerialize {
   chart: unknown;
+  mode: SerializeMode;
   resolve(text: string): void;
   reject(error: unknown): void;
 }
+
+/** The two serializers share one worker but use different output rules. */
+type SerializeMode = "chart" | "json";
 
 /**
  * One worker per editor lifetime. Requests are matched by id; the posted chart
@@ -34,10 +38,15 @@ function inProcess(chart: unknown): string {
   return serializeChart(chart);
 }
 
+/** Serialize one chart on the main thread for the requested output mode. */
+function inProcessMode(chart: unknown, mode: SerializeMode): string {
+  return mode === "json" ? JSON.stringify(chart) : inProcess(chart);
+}
+
 /** Completes one pending request through the main-thread serializer. */
 function fallback(request: PendingSerialize): void {
   try {
-    request.resolve(inProcess(request.chart));
+    request.resolve(inProcessMode(request.chart, request.mode));
   } catch (error) {
     request.reject(error);
   }
@@ -190,16 +199,36 @@ export async function serializeChartOffThread(chart: unknown): Promise<string> {
   }
   const hasCustomSerializer =
     extensionRegistry.hasHook("chart:serialize") || extensionRegistry.hasHook("chart:validate");
-  if (hasCustomSerializer) {
-    return inProcess(chart);
+  return serializeOffThread(chart, "chart", hasCustomSerializer);
+}
+
+/**
+ * Serialize the room chart as plain JSON away from the UI thread.
+ *
+ * Room snapshots use the same chart shape as the live editor; they do not run
+ * save hooks or legacy-field stripping. A worker failure falls back to
+ * `JSON.stringify` on the main thread so a create can still proceed.
+ */
+export async function serializeChartJsonOffThread(chart: unknown): Promise<string> {
+  return serializeOffThread(chart, "json", false);
+}
+
+/** Share the line-by-line posting path between the save and room serializers. */
+async function serializeOffThread(
+  chart: unknown,
+  mode: SerializeMode,
+  forceInProcess: boolean,
+): Promise<string> {
+  if (forceInProcess) {
+    return inProcessMode(chart, mode);
   }
   const worker = workerInstance();
   if (!worker) {
-    return inProcess(chart);
+    return inProcessMode(chart, mode);
   }
   const id = serializer.nextRequestId++;
   return new Promise<string>((resolve, reject) => {
-    serializer.pending.set(id, { chart, resolve, reject });
+    serializer.pending.set(id, { chart, mode, resolve, reject });
     const fail = (error: unknown): void => {
       serializer.pending.delete(id);
       worker.terminate();
@@ -207,7 +236,7 @@ export async function serializeChartOffThread(chart: unknown): Promise<string> {
         serializer.worker = null;
       }
       try {
-        resolve(inProcess(chart));
+        resolve(inProcessMode(chart, mode));
       } catch {
         reject(error);
       }
@@ -220,7 +249,7 @@ export async function serializeChartOffThread(chart: unknown): Promise<string> {
             : null;
         const lines = Array.isArray(record?.judgeLineList) ? record.judgeLineList : null;
         if (!record || !lines) {
-          worker.postMessage({ id, kind: "whole", chart });
+          worker.postMessage({ id, kind: "whole", chart, mode });
           return;
         }
         // Send the header once and each judge line separately so no single
@@ -232,6 +261,7 @@ export async function serializeChartOffThread(chart: unknown): Promise<string> {
           kind: "start",
           chart: header,
           lineCount: lines.length,
+          mode,
         });
         let lastYield = performance.now();
         for (let index = 0; index < lines.length; index++) {

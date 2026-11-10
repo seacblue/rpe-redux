@@ -28,6 +28,7 @@ const definition: DrawerPaneDefinition = {
   body: LinesDrawerBody,
   requiresDocument: true,
   tutorial: GLOBAL_DRAWER_TUTORIALS.lines,
+  editsChart: true,
 };
 
 const dispose = registerDrawerPane(definition);

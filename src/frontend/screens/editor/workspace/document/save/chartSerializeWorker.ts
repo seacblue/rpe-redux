@@ -5,11 +5,14 @@
  */
 import { serializeChart } from "../../../../../../core/global/chart/chart.ts";
 
+type SerializeMode = "chart" | "json";
+
 interface SerializeStart {
   id: number;
   kind: "start";
   chart: Record<string, unknown>;
   lineCount: number;
+  mode?: SerializeMode;
 }
 
 interface SerializeLine {
@@ -28,6 +31,7 @@ interface SerializeWhole {
   id: number;
   kind: "whole";
   chart: unknown;
+  mode?: SerializeMode;
 }
 
 type SerializeRequest = SerializeStart | SerializeLine | SerializeEnd | SerializeWhole;
@@ -35,6 +39,7 @@ type SerializeRequest = SerializeStart | SerializeLine | SerializeEnd | Serializ
 interface SerializeJob {
   chart: Record<string, unknown>;
   lines: unknown[];
+  mode: SerializeMode;
 }
 
 /** Per-request chart headers awaiting their line postings. */
@@ -44,13 +49,16 @@ self.onmessage = (event: MessageEvent<SerializeRequest>) => {
   const request = event.data;
   if (request.kind === "whole") {
     jobs.delete(request.id);
-    self.postMessage({ id: request.id, text: serializeChart(request.chart) });
+    const text =
+      request.mode === "json" ? JSON.stringify(request.chart) : serializeChart(request.chart);
+    self.postMessage({ id: request.id, text });
     return;
   }
   if (request.kind === "start") {
     jobs.set(request.id, {
       chart: request.chart,
       lines: new Array<unknown>(request.lineCount),
+      mode: request.mode ?? "chart",
     });
     return;
   }
@@ -66,5 +74,6 @@ self.onmessage = (event: MessageEvent<SerializeRequest>) => {
   // Lines arrive separately so the UI thread never clones the full chart in one
   // task; rebuild the original shape before the serializer validates it.
   const chart = { ...job.chart, judgeLineList: job.lines };
-  self.postMessage({ id: request.id, text: serializeChart(chart) });
+  const text = job.mode === "json" ? JSON.stringify(chart) : serializeChart(chart);
+  self.postMessage({ id: request.id, text });
 };

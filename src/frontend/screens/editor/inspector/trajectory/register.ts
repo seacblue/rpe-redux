@@ -19,6 +19,7 @@ const disposePanel = registerInspectorPanel({
   label: "chrome.pane.trajectory",
   icon: "route",
   tutorial: INSPECTOR_TUTORIALS["curve-preview"],
+  editsChart: true,
 });
 const disposeEntry = [
   registerInspectorTool({

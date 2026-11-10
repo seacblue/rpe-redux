@@ -22,6 +22,7 @@ const disposePanel = registerInspectorPanel({
   label: "editorPanels.scripts.title",
   icon: "extension",
   tutorial: INSPECTOR_TUTORIALS.scripts,
+  editsChart: true,
 });
 const disposeTool = registerInspectorTool({
   panelId: "scripts",

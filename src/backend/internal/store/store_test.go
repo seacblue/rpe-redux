@@ -10,6 +10,7 @@ import (
 	"io"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -140,6 +141,32 @@ func TestAssetReaderStreamsAcrossChunks(t *testing.T) {
 	start := int64(assetChunkBytes - 10)
 	if !bytes.Equal(window, payload[start:start+int64(len(window))]) {
 		t.Fatal("range crossing a reader chunk boundary was corrupted")
+	}
+}
+
+func TestOpenAssetByHashFindsAnExistingBlob(t *testing.T) {
+	store := testStore(t)
+	project := createTestProject(t, store)
+	ctx := context.Background()
+	payload := []byte("content addressed bytes")
+	asset := stage(t, store, project.ID, "cover.png", string(payload))
+
+	reader, size, err := store.OpenAssetByHash(ctx, asset.Hash)
+	if err != nil {
+		t.Fatalf("open asset by hash: %v", err)
+	}
+	if size != int64(len(payload)) {
+		t.Fatalf("size = %d, want %d", size, len(payload))
+	}
+	whole, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read asset by hash: %v", err)
+	}
+	if !bytes.Equal(whole, payload) {
+		t.Fatalf("bytes = %q", whole)
+	}
+	if _, _, err := store.OpenAssetByHash(ctx, strings.Repeat("0", 64)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing hash error = %v", err)
 	}
 }
 

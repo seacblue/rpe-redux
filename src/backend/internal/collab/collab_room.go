@@ -77,17 +77,20 @@ type collabMemberWire struct {
 
 // collabPresence is a member's cursor and viewport state.
 type collabPresence struct {
-	MemberID     string   `json:"memberId"`
-	Area         string   `json:"area"`
-	Section      string   `json:"section,omitempty"`
-	LineID       string   `json:"lineId,omitempty"`
-	Beat         *float64 `json:"beat,omitempty"`
-	PositionX    *float64 `json:"positionX,omitempty"`
-	CursorRatio  *float64 `json:"cursorRatio,omitempty"`
-	Timeline     bool     `json:"timeline"`
-	TimelineArea string   `json:"timelineArea,omitempty"`
-	Playhead     *float64 `json:"playheadBeat,omitempty"`
-	UpdatedAt    int64    `json:"updatedAt"`
+	MemberID         string   `json:"memberId"`
+	Area             string   `json:"area"`
+	Section          string   `json:"section,omitempty"`
+	LineID           string   `json:"lineId,omitempty"`
+	Beat             *float64 `json:"beat,omitempty"`
+	PositionX        *float64 `json:"positionX,omitempty"`
+	CursorRatio      *float64 `json:"cursorRatio,omitempty"`
+	Timeline         bool     `json:"timeline"`
+	TimelineArea     string   `json:"timelineArea,omitempty"`
+	SelectedLineIDs  []string `json:"selectedLineIds,omitempty"`
+	SelectedNoteIDs  []string `json:"selectedNoteIds,omitempty"`
+	SelectedEventIDs []string `json:"selectedEventIds,omitempty"`
+	Playhead         *float64 `json:"playheadBeat,omitempty"`
+	UpdatedAt        int64    `json:"updatedAt"`
 }
 
 // collabAsset is one accepted room asset.
@@ -128,9 +131,12 @@ type collabCommitted struct {
 	Label         string `json:"label"`
 	// Plaintext rooms store []collabChange; encrypted rooms store one opaque
 	// AES-GCM envelope and never inspect it.
-	Changes     any    `json:"changes"`
-	UndoOf      string `json:"undoOf,omitempty"`
-	Fingerprint string `json:"fingerprint"`
+	Changes any `json:"changes"`
+	// ChangesEncoding marks an encrypted plaintext that was gzipped before
+	// encryption. Plaintext batches are compressed on broadcast instead.
+	ChangesEncoding string `json:"changesEncoding,omitempty"`
+	UndoOf          string `json:"undoOf,omitempty"`
+	Fingerprint     string `json:"fingerprint"`
 	// Replay marks a deduplicated retry. It is never persisted or broadcast to
 	// other members.
 	Replay bool `json:"-"`
@@ -146,6 +152,9 @@ type collabCreateOptions struct {
 	Owner string
 	// AppVersion is product metadata used for compatibility warnings.
 	AppVersion string
+	// ChartWire is the already compressed create payload, reused for the first
+	// welcome instead of compressing the decoded chart again.
+	ChartWire string
 }
 
 // collabMinInviteLength is the shortest custom room password. Generated
@@ -180,6 +189,8 @@ type collabRoom struct {
 	HostID            string
 	Owner             string
 	Chart             any
+	ChartWire         string
+	ChartWireRevision int
 	Fingerprint       string
 	AppVersion        string
 	Revision          int
@@ -481,11 +492,17 @@ func (r *Rooms) create(profile collabProfile, chart any, fingerprint string, opt
 		return nil, nil, inviteFailure
 	}
 	now := time.Now().UnixMilli()
+	chartWire := ""
+	if !isEncrypted {
+		chartWire = opts.ChartWire
+	}
 	room := &collabRoom{
 		ID:                collabRandomToken(8),
 		Invite:            invite,
 		Owner:             opts.Owner,
 		Chart:             collabClone(chart),
+		ChartWire:         chartWire,
+		ChartWireRevision: 0,
 		Fingerprint:       fingerprint,
 		AppVersion:        strings.TrimSpace(opts.AppVersion),
 		Encrypted:         isEncrypted,
@@ -876,6 +893,15 @@ func (r *Rooms) updatePresence(memberID string, presence collabPresence) (collab
 	}
 	presence.MemberID = memberID
 	presence.UpdatedAt = time.Now().UnixMilli()
+	if len(presence.SelectedLineIDs) > 64 {
+		presence.SelectedLineIDs = presence.SelectedLineIDs[:64]
+	}
+	if len(presence.SelectedNoteIDs) > 128 {
+		presence.SelectedNoteIDs = presence.SelectedNoteIDs[:128]
+	}
+	if len(presence.SelectedEventIDs) > 128 {
+		presence.SelectedEventIDs = presence.SelectedEventIDs[:128]
+	}
 	member.Presence = &presence
 	return presence, true
 }
@@ -1015,6 +1041,20 @@ func (r *Rooms) commit(
 	return &copy, nil
 }
 
+// setChangesEncoding records the compression tag for an encrypted transaction
+// so a later replay can expand it. The caller does not hold r.mu.
+func (r *Rooms) setChangesEncoding(room *collabRoom, actorID, transactionID, encoding string) {
+	if encoding == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := collabTransactionKey(actorID, transactionID)
+	if entry := room.Transactions[key]; entry != nil {
+		entry.ChangesEncoding = encoding
+	}
+}
+
 // evictOldestTransactionLocked drops the oldest retained transaction and its
 // undo entry; the caller holds r.mu.
 func (r *Rooms) evictOldestTransactionLocked(room *collabRoom) {
@@ -1042,6 +1082,28 @@ func (r *Rooms) evictOldestTransactionLocked(room *collabRoom) {
 func (r *Rooms) acceptAsset(memberID, name, hash string, size int64, mime string, bytes []byte, plaintextHash ...string) (collabAsset, *collabError) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.acceptAssetLocked(memberID, name, hash, size, mime, bytes, plaintextHash...)
+}
+
+// adoptAsset attaches an existing server-global blob to a room when its size
+// and type match. The boolean reports a hit; a miss falls back to streaming.
+func (r *Rooms) adoptAsset(memberID, name, hash string, size int64, mime, plaintextHash string) (collabAsset, bool, *collabError) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	bytes, ok := r.blobs[hash]
+	if !ok || int64(len(bytes)) != size {
+		return collabAsset{}, false, nil
+	}
+	if room := r.roomForMemberLocked(memberID); room != nil && !room.Encrypted &&
+		!collabMatchesAssetMagic(mime, bytes) {
+		return collabAsset{}, false, nil
+	}
+	asset, failure := r.acceptAssetLocked(memberID, name, hash, size, mime, bytes, plaintextHash)
+	return asset, true, failure
+}
+
+// acceptAssetLocked records one uploaded asset. The caller holds r.mu.
+func (r *Rooms) acceptAssetLocked(memberID, name, hash string, size int64, mime string, bytes []byte, plaintextHash ...string) (collabAsset, *collabError) {
 	room := r.roomForMemberLocked(memberID)
 	if room == nil {
 		return collabAsset{}, collabFailure("no_room", "Not in a room")
@@ -1429,11 +1491,32 @@ func (r *Rooms) presence(room *collabRoom) []collabPresence {
 	return presence
 }
 
+// collabResumeView is the chart revision a resuming client already applied.
+type collabResumeView struct {
+	HasChart    bool
+	Revision    int
+	Fingerprint string
+}
+
 // welcomePayload builds the room snapshot sent to one member, optionally with
 // the chart and encrypted transaction log.
 func (r *Rooms) welcomePayload(room *collabRoom, memberID string, includeChart bool) (map[string]any, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.welcomePayloadLocked(room, memberID, includeChart, room.Encrypted)
+}
+
+// welcomePayloadResumed omits the chart and encrypted replay when the client
+// already holds the room's exact revision.
+func (r *Rooms) welcomePayloadResumed(room *collabRoom, memberID string, resume collabResumeView) (map[string]any, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	includeChart := !resume.HasChart || resume.Revision != room.Revision || resume.Fingerprint != room.Fingerprint
+	return r.welcomePayloadLocked(room, memberID, includeChart, includeChart && room.Encrypted)
+}
+
+// welcomePayloadLocked assembles one welcome message. The caller holds r.mu.
+func (r *Rooms) welcomePayloadLocked(room *collabRoom, memberID string, includeChart, includeTransactions bool) (map[string]any, bool) {
 	member := room.Members[memberID]
 	if member == nil {
 		return nil, false
@@ -1483,11 +1566,20 @@ func (r *Rooms) welcomePayload(room *collabRoom, memberID string, includeChart b
 		"appVersion":  room.AppVersion,
 	}
 	if includeChart {
-		payload["chart"] = room.Chart
+		if room.Encrypted {
+			payload["chart"] = room.Chart
+		} else if encoded, err := room.chartWireLocked(); err == nil {
+			payload["chart"] = encoded
+			payload["chartEncoding"] = "gzip"
+		} else {
+			payload["chart"] = room.Chart
+		}
 	}
 	if room.Encrypted {
 		payload["encrypted"] = true
-		payload["transactions"] = r.transactionLogLocked(room)
+		if includeTransactions {
+			payload["transactions"] = r.transactionLogLocked(room)
+		}
 	}
 	return payload, true
 }
@@ -1519,6 +1611,47 @@ func (r *Rooms) snapshot(room *collabRoom) (int, any, string, bool) {
 		return 0, nil, "", false
 	}
 	return room.Revision, room.Chart, room.Fingerprint, true
+}
+
+// snapshotPayload builds one snapshot wire message with the chart encoding the
+// client expects. The caller does not hold the room lock.
+func (r *Rooms) snapshotPayload(room *collabRoom) (map[string]any, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if room == nil {
+		return nil, false
+	}
+	payload := map[string]any{
+		"type":        "snapshot",
+		"revision":    room.Revision,
+		"fingerprint": room.Fingerprint,
+	}
+	if room.Encrypted {
+		payload["chart"] = room.Chart
+		payload["encrypted"] = true
+		payload["transactions"] = r.transactionLogLocked(room)
+	} else if encoded, err := room.chartWireLocked(); err == nil {
+		payload["chart"] = encoded
+		payload["chartEncoding"] = "gzip"
+	} else {
+		payload["chart"] = room.Chart
+	}
+	return payload, true
+}
+
+// chartWireLocked returns the gzip chart for the current revision, caching it
+// until the next accepted transaction. The caller holds r.mu.
+func (room *collabRoom) chartWireLocked() (string, error) {
+	if room.ChartWire != "" && room.ChartWireRevision == room.Revision {
+		return room.ChartWire, nil
+	}
+	encoded, err := collabEncodeChart(room.Chart)
+	if err != nil {
+		return "", err
+	}
+	room.ChartWire = encoded
+	room.ChartWireRevision = room.Revision
+	return encoded, nil
 }
 
 // pendingFor returns the join requests waiting on a room.

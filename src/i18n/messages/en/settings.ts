@@ -379,6 +379,9 @@ export default {
   "settings.field.timeline-sweep-remove-color.description":
     "Colour used while right-button sweep selection removes timeline objects.",
   "settings.field.selected-note-color.label": "Selected note colour",
+  "settings.field.selected-event-color.label": "Selected event colour",
+  "settings.field.collaboration-selected-note-color.label": "Collaboration selected note colour",
+  "settings.field.collaboration-selected-event-color.label": "Collaboration selected event colour",
   "settings.field.default-particle-color.label": "Default particle colour",
   "settings.field.particle-effects-enabled.label": "Render hit particles",
   "settings.field.particle-effects-enabled.description":

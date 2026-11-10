@@ -345,6 +345,9 @@ export default {
   "workspace.collaboration.resumeBody":
     "The last hosted room is still available on this device. Resuming restores its authoritative chart and replaces the current document.",
   "workspace.collaboration.resumeAction": "Resume room",
+  "workspace.collaboration.resumeGuestTitle": "Rejoin the collaboration room?",
+  "workspace.collaboration.resumeGuestBody":
+    "Your last joined room is still available. Rejoining restores the room chart and its assets.",
   "workspace.collaboration.lockDeniedRetry":
     "The room could not reserve this edit. Retry when the other member releases it.",
   "workspace.collaboration.rebaseLabel": "Reapply: {label}",
@@ -360,6 +363,7 @@ export default {
   "workspace.collaboration.roomChartSaveBlocked":
     "Room charts are not saved to the local library and are deleted when you leave. Export the chart to keep a copy.",
   "workspace.collaboration.joined": "Joined the collaboration room.",
+  "workspace.collaboration.memberLeft": "{name} left the room.",
   "workspace.collaboration.waitingApproval":
     "Connected. Waiting for the host to approve this device…",
   "workspace.collaboration.reconnecting": "Connection lost. Reconnecting…",
@@ -419,6 +423,13 @@ export default {
   "workspace.collaboration.assetSyncing": "Syncing",
   "workspace.collaboration.locks": "Edit locks",
   "workspace.collaboration.locked": "{owners} is editing {objects}. Wait or ask them to finish.",
+  "workspace.collaboration.lockedUntil":
+    "{owners} is editing {objects}. The earliest lock releases in about {seconds}s.",
+  "workspace.collaboration.lockReleases": "releases in {seconds}s",
+  "workspace.collaboration.lockExpired": "released",
+  "workspace.collaboration.lockObject.chart": "the chart",
+  "workspace.collaboration.lockObject.line": "line {name}",
+  "workspace.collaboration.lockObject.note": "note {name}",
   "workspace.collaboration.lockTimeout":
     "The room did not answer the edit-lock request. Your change was not sent; try again when the connection settles.",
   "workspace.collaboration.queueFull":

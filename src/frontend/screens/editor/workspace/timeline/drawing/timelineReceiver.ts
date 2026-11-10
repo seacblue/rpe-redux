@@ -34,6 +34,10 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   eventBatch: TimelineEventBatch;
   getSession: () => EditorSession;
   getPreviewSession(): EditorSession | null;
+  /** Note ids another room member selected, drawn with the collaboration tint. */
+  readonly remoteSelectedNoteIds: ReadonlySet<string>;
+  /** Event ids another room member selected, drawn with the collaboration tint. */
+  readonly remoteSelectedEventIds: ReadonlySet<string>;
   changed: () => void;
   eventTypes: string[];
 }
@@ -120,6 +124,7 @@ export type TimelineNoteDrawingReceiver = Pick<
   | "noteBatch"
   | "notesBackdrop"
   | "notesCanvas"
+  | "remoteSelectedNoteIds"
   | "rectangleStart"
   | "viewport"
   | "visible"
@@ -156,13 +161,14 @@ export type TimelineEventDrawingReceiver = Pick<
   | "gestures"
   | "grid"
   | "rectangleStart"
+  | "remoteSelectedEventIds"
   | "viewport"
 >;
 
 /** The event overlay contract, without event-canvas pointer interaction. */
 export type TimelineEventOverlayReceiver = Pick<
   TimelineRuntimeSurface,
-  "appearance" | "cache" | "getSession" | "gestures" | "viewport"
+  "appearance" | "cache" | "getSession" | "gestures" | "remoteSelectedEventIds" | "viewport"
 >;
 
 /** The event-layer status contract used by the layer-button surface. */

@@ -19,9 +19,24 @@ test("an idle client is not treated as a read-only viewer", () => {
 test("a viewer cannot commit, while an authoritative remote commit still applies", () => {
   const session = new EditorSession(createChart());
   session.setCollaborationAccess(true, true);
+  assert.equal(session.editable, false);
   assert.equal(session.commitChart("local", renamed(session.chart, "local")), false);
   assert.equal(session.commitRemoteChart("remote", renamed(session.chart, "remote")), true);
   assert.equal(session.chart.META.name, "remote");
+});
+
+test("read-only sessions reject history travel as well as new commits", () => {
+  const session = new EditorSession(createChart());
+  assert.equal(session.commitChart("local", renamed(session.chart, "local")), true);
+  session.setCollaborationAccess(true, true);
+  assert.equal(session.editable, false);
+  assert.equal(session.travel("undo"), false);
+  assert.equal(session.chart.META.name, "local");
+
+  const locked = new EditorSession(createChart(), true);
+  assert.equal(locked.editable, false);
+  assert.equal(locked.commitChart("local", renamed(locked.chart, "local")), false);
+  assert.notEqual(locked.chart.META.name, "local");
 });
 
 test("a remote event insertion remaps the selected event by id", () => {

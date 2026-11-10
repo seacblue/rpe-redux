@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- handshake, chart, presence, and persistence cases share one server harness. */
 /** End-to-end room protocol over the standalone WebSocket server. */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -8,12 +9,21 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { connect as connectTcp } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 import {
   createRoomKey,
   decryptJson,
   encryptJson,
   importRoomKey,
 } from "../../../core/collaboration/e2e.ts";
+
+/** Read the chart a welcome or snapshot carries, decoding the gzip wire form. */
+function messageChart(message) {
+  if (message.chartEncoding !== "gzip") {
+    return message.chart;
+  }
+  return JSON.parse(gunzipSync(Buffer.from(message.chart, "base64")).toString("utf8"));
+}
 
 function chart(name = "base") {
   return {
@@ -58,6 +68,72 @@ async function open(url) {
     await once(connection.socket, "open");
   }
   return connection;
+}
+
+/** Connect a client that keeps text and binary frames distinguishable. */
+async function openFrames(url) {
+  const socket = new WebSocket(url);
+  socket.binaryType = "arraybuffer";
+  const queue = [];
+  const waiters = [];
+  socket.addEventListener("message", (event) => {
+    const frame =
+      typeof event.data === "string"
+        ? { message: JSON.parse(event.data) }
+        : decodeServerBinaryFrame(event.data);
+    const waiter = waiters.shift();
+    if (waiter) {
+      waiter(frame);
+    } else {
+      queue.push(frame);
+    }
+  });
+  if (socket.readyState !== WebSocket.OPEN) {
+    await once(socket, "open");
+  }
+  const next = () =>
+    queue.length
+      ? Promise.resolve(queue.shift())
+      : new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error("timed out waiting for room frame")),
+            10000,
+          );
+          waiters.push((frame) => {
+            clearTimeout(timer);
+            resolve(frame);
+          });
+        });
+  return { socket, next };
+}
+
+/** Split one server binary asset frame into its header and body. */
+function decodeServerBinaryFrame(data) {
+  const buffer = Buffer.from(data);
+  const length = buffer.readUInt32BE(0);
+  return {
+    message: JSON.parse(buffer.subarray(4, 4 + length).toString("utf8")),
+    body: buffer.subarray(4 + length),
+  };
+}
+
+/** Build one client binary asset frame with its JSON header. */
+function clientBinaryFrame(header, body) {
+  const encoded = Buffer.from(JSON.stringify(header), "utf8");
+  const prefix = Buffer.allocUnsafe(4);
+  prefix.writeUInt32BE(encoded.length, 0);
+  return new Uint8Array(Buffer.concat([prefix, encoded, body]));
+}
+
+/** Wait for one frame whose JSON header carries the requested type. */
+async function nextFrameType(connection, type) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const frame = await connection.next();
+    if (frame.message?.type === type) {
+      return frame;
+    }
+  }
+  throw new Error(`did not receive ${type}`);
 }
 
 async function nextType(connection, type) {
@@ -164,6 +240,60 @@ function closed(socket) {
   });
 }
 
+test("a chart above 4MB is gzipped for create and welcomed to a guest", async () => {
+  const running = await startServer(0);
+  try {
+    const notes = Array.from({ length: 120_000 }, (_, index) => ({
+      id: `note-${index}`,
+      positionX: (index % 100) / 100,
+      type: 1,
+    }));
+    const large = {
+      META: { name: "large" },
+      BPMList: [{ beat: [0, 0, 1], bpm: 120 }],
+      judgeLineList: [{ id: "line", notes, eventLayers: [] }],
+    };
+    const json = JSON.stringify(large);
+    assert.ok(Buffer.byteLength(json) > 4 * 1024 * 1024);
+    const payload = gzipSync(Buffer.from(json, "utf8")).toString("base64");
+
+    const host = await open(running.url);
+    host.socket.send(
+      JSON.stringify({
+        type: "create",
+        profile: { name: "Host", color: "#ffffff" },
+        chart: payload,
+        chartEncoding: "gzip",
+        fingerprint: "large",
+        autoApproveEditor: true,
+      }),
+    );
+    const welcome = await host.next();
+    assert.equal(welcome.type, "welcome");
+    assert.equal(welcome.chart, undefined);
+    assert.equal(welcome.chartEncoding, undefined);
+
+    const guest = await open(running.url);
+    guest.socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId: welcome.roomId,
+        invite: welcome.invite,
+        profile: { name: "Guest", color: "#00ff00" },
+      }),
+    );
+    const guestWelcome = await guest.next();
+    assert.equal(guestWelcome.type, "welcome");
+    assert.equal(guestWelcome.chartEncoding, "gzip");
+    const restored = messageChart(guestWelcome);
+    assert.equal(restored.judgeLineList[0].notes.length, notes.length);
+    host.socket.close();
+    guest.socket.close();
+  } finally {
+    await stopServer(running);
+  }
+});
+
 test("a host and an approved editor exchange a transaction and a conflict", async () => {
   const child = spawn(process.execPath, ["scripts/collaborationServer.mjs", "--port", "0"], {
     cwd: process.cwd(),
@@ -224,7 +354,7 @@ test("a host and an approved editor exchange a transaction and a conflict", asyn
     );
     const guestWelcome = await guest.next();
     assert.equal(guestWelcome.type, "welcome");
-    assert.deepEqual(guestWelcome.chart, chart());
+    assert.deepEqual(messageChart(guestWelcome), chart());
     assert.equal(guestWelcome.role, "editor");
     assert.equal((await host.next()).type, "pending-cleared");
     assert.equal((await host.next()).type, "members");
@@ -411,7 +541,7 @@ test("room state and verified assets survive a server restart", async () => {
     assert.equal(restored.type, "welcome");
     assert.equal(restored.assets.length, 1);
     assert.equal(restored.assets[0].hash, hash);
-    assert.equal(restored.chart.META.name, "persisted");
+    assert.equal(messageChart(restored).META.name, "persisted");
     resumed.socket.close();
   } finally {
     running.child.kill();
@@ -541,6 +671,51 @@ test("a retry is acknowledged once and the host can close the room", async () =>
   } finally {
     running.child.kill();
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+});
+
+test("a guest leaving publishes member-left to the remaining members", async () => {
+  const running = await startServer(0);
+  try {
+    const host = await open(running.url);
+    host.socket.send(
+      JSON.stringify({
+        type: "create",
+        profile: { name: "Host", color: "#ffffff" },
+        chart: chart(),
+        fingerprint: "member-left",
+        autoApproveEditor: true,
+      }),
+    );
+    const welcome = await nextType(host, "welcome");
+
+    const guest = await open(running.url);
+    guest.socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId: welcome.roomId,
+        invite: welcome.invite,
+        profile: { name: "Guest", color: "#00ff00" },
+      }),
+    );
+    const guestWelcome = await nextType(guest, "welcome");
+
+    guest.socket.send(JSON.stringify({ type: "leave" }));
+    let notice;
+    let offline = false;
+    for (let attempt = 0; attempt < 8 && !notice; attempt++) {
+      const message = await host.next();
+      if (message.type === "member-left") {
+        notice = message;
+      } else if (message.type === "members") {
+        offline =
+          message.members.find((member) => member.id === guestWelcome.memberId)?.online === false;
+      }
+    }
+    assert.equal(notice?.memberId, guestWelcome.memberId);
+    assert.equal(offline, true);
+  } finally {
+    await stopServer(running);
   }
 });
 
@@ -689,6 +864,188 @@ test("a client above the message-rate budget is disconnected", async () => {
     assert.equal(limited.type, "error");
     assert.equal(limited.code, "rate_limited");
     await close;
+  } finally {
+    await stopServer(running);
+  }
+});
+
+test("binary asset chunks and server-global blob adoption use one transport", async () => {
+  const running = await startServer(0);
+  try {
+    const asset = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from("binary asset"),
+    ]);
+    const hash = createHash("sha256").update(asset).digest("hex");
+    const host = await openFrames(running.url);
+    host.socket.send(
+      JSON.stringify({
+        type: "create",
+        profile: { name: "Host", color: "#ffffff" },
+        chart: chart(),
+        fingerprint: "binary",
+        binaryChunks: true,
+      }),
+    );
+    const welcome = await nextFrameType(host, "welcome");
+    assert.equal(welcome.message.binaryChunks, true);
+    assert.equal(welcome.message.assetAdopt, true);
+
+    host.socket.send(
+      JSON.stringify({
+        type: "asset-begin",
+        requestId: "upload-1",
+        name: "cover.png",
+        hash,
+        size: asset.byteLength,
+        mime: "image/png",
+        adopt: true,
+      }),
+    );
+    const begin = await nextFrameType(host, "asset-begin-result");
+    assert.equal(begin.message.adopted, false);
+    host.socket.send(
+      clientBinaryFrame({ type: "asset-chunk", requestId: "upload-1", index: 0 }, asset),
+    );
+    host.socket.send(JSON.stringify({ type: "asset-commit", requestId: "upload-1" }));
+    const accepted = await nextFrameType(host, "asset-accepted");
+    assert.equal(accepted.message.asset.hash, hash);
+
+    host.socket.send(
+      JSON.stringify({
+        type: "asset-begin",
+        requestId: "upload-2",
+        name: "copy.png",
+        hash,
+        size: asset.byteLength,
+        mime: "image/png",
+        adopt: true,
+      }),
+    );
+    const adopted = await nextFrameType(host, "asset-begin-result");
+    assert.equal(adopted.message.adopted, true);
+
+    host.socket.send(
+      JSON.stringify({
+        type: "asset-request",
+        requestId: "download-1",
+        hash,
+        name: "copy.png",
+      }),
+    );
+    await nextFrameType(host, "asset-download-begin");
+    const chunk = await host.next();
+    assert.equal(chunk.message.type, "asset-download-chunk");
+    assert.equal(chunk.message.requestId, "download-1");
+    assert.equal(chunk.message.index, 0);
+    assert.deepEqual([...chunk.body], [...asset]);
+    await nextFrameType(host, "asset-download-end");
+    host.socket.close();
+  } finally {
+    await stopServer(running);
+  }
+});
+
+test("resume omits an unchanged chart and sends one after a stale fingerprint", async () => {
+  const running = await startServer(0);
+  try {
+    const host = await open(running.url);
+    host.socket.send(
+      JSON.stringify({
+        type: "create",
+        profile: { name: "Host", color: "#ffffff" },
+        chart: chart(),
+        fingerprint: "resume",
+      }),
+    );
+    const welcome = await nextType(host, "welcome");
+
+    const current = await open(running.url);
+    current.socket.send(
+      JSON.stringify({
+        type: "resume",
+        roomId: welcome.roomId,
+        token: welcome.resumeToken,
+        hasChart: true,
+        revision: welcome.revision,
+        fingerprint: welcome.fingerprint,
+      }),
+    );
+    const currentWelcome = await nextType(current, "welcome");
+    assert.equal(currentWelcome.chart, undefined);
+    assert.equal(currentWelcome.chartEncoding, undefined);
+
+    const stale = await open(running.url);
+    stale.socket.send(
+      JSON.stringify({
+        type: "resume",
+        roomId: welcome.roomId,
+        token: welcome.resumeToken,
+        hasChart: true,
+        revision: welcome.revision,
+        fingerprint: "stale",
+      }),
+    );
+    const staleWelcome = await nextType(stale, "welcome");
+    assert.deepEqual(messageChart(staleWelcome), chart());
+    current.socket.close();
+    stale.socket.close();
+  } finally {
+    await stopServer(running);
+  }
+});
+
+test("large plaintext transactions are gzipped and small retries stay inline", async () => {
+  const running = await startServer(0);
+  try {
+    const host = await open(running.url);
+    host.socket.send(
+      JSON.stringify({
+        type: "create",
+        profile: { name: "Host", color: "#ffffff" },
+        chart: chart(),
+        fingerprint: "changes",
+      }),
+    );
+    await nextType(host, "welcome");
+    const large = [
+      {
+        op: "set",
+        path: "/META/name",
+        before: "base",
+        after: "x".repeat(20_000),
+      },
+    ];
+    host.socket.send(
+      JSON.stringify({
+        type: "transaction",
+        transactionId: "large",
+        label: "large",
+        changes: gzipSync(Buffer.from(JSON.stringify(large), "utf8")).toString("base64"),
+        changesEncoding: "gzip",
+      }),
+    );
+    const committed = await nextType(host, "committed");
+    assert.equal(committed.changesEncoding, "gzip");
+    assert.deepEqual(
+      JSON.parse(gunzipSync(Buffer.from(committed.changes, "base64")).toString("utf8")),
+      large,
+    );
+
+    host.socket.send(
+      JSON.stringify({
+        type: "transaction",
+        transactionId: "small",
+        label: "small",
+        changes: [{ op: "set", path: "/BPMList/0/bpm", before: 120, after: 121 }],
+      }),
+    );
+    const small = await nextType(host, "committed");
+    assert.equal(small.changesEncoding, undefined);
+    assert.deepEqual(small.changes, [
+      { op: "set", path: "/BPMList/0/bpm", before: 120, after: 121 },
+    ]);
+    host.socket.close();
   } finally {
     await stopServer(running);
   }

@@ -60,6 +60,12 @@
   text-overflow: ellipsis;
 }
 
+// Match the glyph-and-label button rule: the visible text ink needs the same
+// subpixel nudge to sit on the icon's optical centre.
+.redux-menu-row:has(> .redux-menu-row-icon) > .redux-menu-row-label {
+  transform: translateY(0.06em);
+}
+
 .redux-menu-row-icon,
 .redux-menu-row-check {
   display: grid;

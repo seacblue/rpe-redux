@@ -4,10 +4,13 @@ package collab
 
 import "rperedux/server/internal/ws"
 
-// collabSocket adds the room rate-limit identity and failed-join counter to a
-// framed connection. Only the reader goroutine touches joinFailures.
+// collabSocket adds the room rate-limit identity, failed-join counter, and
+// negotiated transport capabilities to a framed connection. Only the reader
+// goroutine touches joinFailures; binaryChunks is set by the handshake before
+// the socket attaches to a room.
 type collabSocket struct {
 	*ws.Conn
 	joinFailures int
 	clientKey    string
+	binaryChunks bool
 }

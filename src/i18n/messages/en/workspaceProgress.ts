@@ -8,8 +8,6 @@ export default {
   "workspace.collaboration.progress.hostTitle": "Creating the room",
   "workspace.collaboration.progress.guestTitle": "Joining the room",
   "workspace.collaboration.progress.title": "Room setup progress",
-  "workspace.collaboration.progress.abort": "Abort and close",
-  "workspace.collaboration.progress.close": "Close",
   "workspace.collaboration.progress.status.preparing": "Preparing the chart",
   "workspace.collaboration.progress.status.bridgeTunnel": "Starting Cloudflare Tunnel",
   "workspace.collaboration.progress.status.bridgeLan": "Starting the LAN bridge",
@@ -29,4 +27,9 @@ export default {
   "workspace.collaboration.progress.status.publish": "Publishing the chart and assets",
   "workspace.collaboration.progress.status.ready": "Room ready",
   "workspace.collaboration.progress.aborted": "Room setup was aborted.",
+  "workspace.collaboration.memberActions": "Member actions for {name}",
+  "workspace.collaboration.changeAccess": "Change access",
+  "workspace.collaboration.changeAccessTitle": "Change access for {name}",
+  "workspace.collaboration.changeAccessField": "Access",
+  "workspace.collaboration.changeAccessSave": "Save access",
 };

@@ -613,7 +613,7 @@ export function createDocumentRuntime(options: {
   });
   /** Saves through the change coordinator, honoring the before-save hook. */
   const runSave = (saveAs: boolean, path?: string) => {
-    if (getSession().readOnly) {
+    if (!getSession().editable) {
       return Promise.resolve(null);
     }
     if (!path && collaborationRoomDocument.get()) {
@@ -1095,7 +1095,7 @@ export function createDocumentRuntime(options: {
     if (!options.hasDocument()) {
       throw new Error(t("workspace.document.error.noDocument"));
     }
-    if (getSession().readOnly) {
+    if (!getSession().editable) {
       throw new Error(t("workspace.document.error.readOnly"));
     }
     const result = await runSave(Boolean(path), path);

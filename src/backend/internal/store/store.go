@@ -1089,6 +1089,21 @@ func (s *Store) OpenProjectAsset(ctx context.Context, projectID, name string) (*
 	return &asset, &AssetReader{db: s.db, hash: asset.Hash, size: int64(asset.Size)}, nil
 }
 
+// OpenAssetByHash returns a range-capable reader for any locally stored blob
+// whose content hash matches. Collaboration uses it to reuse an asset already
+// present in the library before downloading it from a room.
+func (s *Store) OpenAssetByHash(ctx context.Context, hash string) (*AssetReader, int64, error) {
+	var size int64
+	err := s.db.QueryRowContext(ctx, `SELECT size FROM assets WHERE hash = ?`, hash).Scan(&size)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, 0, ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("read asset by hash: %w", err)
+	}
+	return &AssetReader{db: s.db, hash: hash, size: size}, size, nil
+}
+
 // assetChunkBytes is the SQL read size behind AssetReader. It is larger than
 // http.ServeContent's copy buffer so most Read calls are served from memory.
 const assetChunkBytes = 256 << 10

@@ -166,12 +166,40 @@
 
 // Match the access dropdown beside it so the dismiss action reads as one row
 // control rather than a tiny trailing glyph.
-.redux-app-root .collab-panel .collab-member .collab-member-kick {
+.redux-app-root .collab-panel .collab-member .collab-member-actions {
   flex: none;
   width: var(--control-height);
   height: var(--control-height);
   min-width: var(--control-height);
   min-height: var(--control-height);
+}
+
+.collab-member-actions {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--design-dur-tint) ease;
+}
+
+.collab-member:hover .collab-member-actions,
+.collab-member:focus-within .collab-member-actions,
+.collab-member-actions[data-open="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.collab-member-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 176px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-overlay-popover);
+
+  .redux-menu-row {
+    min-height: 34px;
+  }
 }
 
 .collab-max-members {

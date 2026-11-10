@@ -28,6 +28,7 @@ import { createServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { isIP } from "node:net";
 import { join } from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
 import {
   ASSET_CHUNK_BYTES,
   ASSET_HASH,
@@ -498,8 +499,107 @@ function presenceList(room) {
   return rooms.presence(room);
 }
 
+/** Maximum decompressed room chart accepted by the standalone server. */
+const MAX_CHART_JSON = 512 * 1024 * 1024;
+
+/** One cached gzip chart payload per room revision. */
+const chartWireCache = new WeakMap();
+
+/** Encode the current room chart for a welcome or snapshot message. */
+function chartWire(room) {
+  if (room.encrypted) {
+    return { chart: room.chart };
+  }
+  const cached = chartWireCache.get(room);
+  if (cached && cached.revision === room.revision) {
+    return cached.payload;
+  }
+  const payload = {
+    chart: gzipSync(Buffer.from(JSON.stringify(room.chart), "utf8"), {
+      level: 6,
+    }).toString("base64"),
+    chartEncoding: "gzip",
+  };
+  chartWireCache.set(room, { revision: room.revision, payload });
+  return payload;
+}
+
+/** Decode one incoming create chart, including the gzip wire form. */
+function decodeChart(message) {
+  if (stringField(message, "chartEncoding") !== "gzip") {
+    return message.chart;
+  }
+  const compressed = Buffer.from(String(message.chart ?? ""), "base64");
+  const data = gunzipSync(compressed, { maxOutputLength: MAX_CHART_JSON });
+  return JSON.parse(data.toString("utf8"));
+}
+
+/** Size above which one plaintext change batch is gzipped for the wire. */
+const CHANGES_GZIP_THRESHOLD = 16 * 1024;
+
+/** Expand one base64 gzip change batch sent by a client. */
+function decodeChangesWire(value) {
+  if (typeof value !== "string") {
+    throw new Error("Compressed changes are not text");
+  }
+  const compressed = Buffer.from(value, "base64");
+  const data = gunzipSync(compressed, { maxOutputLength: MAX_CHART_JSON });
+  const changes = JSON.parse(data.toString("utf8"));
+  if (!Array.isArray(changes)) {
+    throw new Error("Compressed changes are not a change array");
+  }
+  return changes;
+}
+
+/** Compress one plaintext change batch when it crosses the wire threshold. */
+function encodeChangesWire(value) {
+  const canonical = JSON.stringify(value);
+  if (Buffer.byteLength(canonical, "utf8") <= CHANGES_GZIP_THRESHOLD) {
+    return { changes: value };
+  }
+  return {
+    changes: gzipSync(Buffer.from(canonical, "utf8"), { level: 1 }).toString("base64"),
+    changesEncoding: "gzip",
+  };
+}
+
+/** Maximum JSON header standing in front of one binary asset chunk. */
+const MAX_BINARY_HEADER = 16 << 10;
+
+/** Build one binary asset frame: 4-byte header length + JSON header + bytes. */
+function binaryFrame(header, payload) {
+  const encoded = Buffer.from(json(header), "utf8");
+  if (encoded.length === 0 || encoded.length > MAX_BINARY_HEADER) {
+    throw new Error("Binary asset header is invalid");
+  }
+  const prefix = Buffer.allocUnsafe(4);
+  prefix.writeUInt32BE(encoded.length, 0);
+  return Buffer.concat([prefix, encoded, payload]);
+}
+
+/** Split one binary asset frame into its header and chunk bytes. */
+function parseBinaryFrame(payload) {
+  if (payload.length < 4) {
+    throw new Error("Binary asset frame is too short");
+  }
+  const length = payload.readUInt32BE(0);
+  if (length === 0 || length > MAX_BINARY_HEADER || 4 + length > payload.length) {
+    throw new Error("Binary asset header is invalid");
+  }
+  let header;
+  try {
+    header = JSON.parse(payload.subarray(4, 4 + length).toString("utf8"));
+  } catch {
+    throw new Error("Binary asset header is not JSON");
+  }
+  if (header === null || typeof header !== "object" || Array.isArray(header)) {
+    throw new Error("Binary asset header is not JSON");
+  }
+  return { header, body: payload.subarray(4 + length) };
+}
+
 /** The welcome payload a member receives after creating, joining, or resuming. */
-function welcomeFor(room, member, includeChart) {
+function welcomeFor(room, member, includeChart, binaryChunks = false, includeTransactions = true) {
   return {
     type: "welcome",
     roomId: room.id,
@@ -509,7 +609,7 @@ function welcomeFor(room, member, includeChart) {
     role: member.role,
     revision: room.revision,
     appVersion: room.appVersion,
-    ...(includeChart ? { chart: room.chart } : {}),
+    ...(includeChart ? chartWire(room) : {}),
     fingerprint: room.fingerprint,
     maxMembers: room.maxMembers,
     members: memberList(room),
@@ -519,9 +619,11 @@ function welcomeFor(room, member, includeChart) {
     ...(room.encrypted
       ? {
           encrypted: true,
-          transactions: rooms.encryptedTransactions(room),
+          ...(includeTransactions ? { transactions: rooms.encryptedTransactions(room) } : {}),
         }
       : {}),
+    ...(binaryChunks ? { binaryChunks: true } : {}),
+    assetAdopt: true,
     resumeToken: member.token,
   };
 }
@@ -565,12 +667,91 @@ function detach(socket) {
   return connection;
 }
 
+/** Append one ordered upload chunk after its text or binary wire decode. */
+function applyAssetChunk(socket, requestId, index, chunk) {
+  const upload = uploads.get(requestId);
+  if (!upload || upload.socket !== socket || index !== upload.nextIndex) {
+    sendJSON(socket, {
+      type: "asset-rejected",
+      requestId,
+      hash: upload?.hash,
+      name: upload?.name,
+      message: "Asset chunk is out of order",
+    });
+    return;
+  }
+  if (!chunk || chunk.length === 0 || chunk.length > ASSET_CHUNK_BYTES) {
+    uploads.delete(requestId);
+    sendJSON(socket, {
+      type: "asset-rejected",
+      requestId,
+      hash: upload.hash,
+      name: upload.name,
+      message: "Asset chunk has an invalid size",
+    });
+    return;
+  }
+  if (upload.received + chunk.length > upload.size) {
+    uploads.delete(requestId);
+    sendJSON(socket, {
+      type: "asset-rejected",
+      requestId,
+      hash: upload.hash,
+      name: upload.name,
+      message: "Asset upload exceeds its declared size",
+    });
+    return;
+  }
+  upload.chunks.push(chunk);
+  upload.received += chunk.length;
+  upload.nextIndex += 1;
+}
+
+/** Dispatch one binary frame; only asset upload chunks use this transport. */
+function handleBinaryMessage(socket, payload) {
+  let parsed;
+  try {
+    parsed = parseBinaryFrame(payload);
+  } catch (error) {
+    sendJSON(socket, {
+      type: "error",
+      code: "invalid_binary",
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  const { header, body } = parsed;
+  if (header.type !== "asset-chunk") {
+    sendJSON(socket, {
+      type: "error",
+      code: "invalid_binary",
+      message: "Binary frames carry asset chunks only",
+    });
+    return;
+  }
+  const requestId = stringField(header, "requestId");
+  const index = integerField(header, "index");
+  if (index === null) {
+    sendJSON(socket, {
+      type: "asset-rejected",
+      requestId,
+      message: "Asset chunk is out of order",
+    });
+    return;
+  }
+  applyAssetChunk(socket, requestId, index, body);
+}
+
 /** Dispatch one decoded client message; unknown types are ignored. */
 function handleMessage(socket, message) {
   if (!message || typeof message !== "object" || Array.isArray(message)) {
     return;
   }
   if (message.type === "create") {
+    const capabilityState = socketStates.get(socket);
+    if (capabilityState) {
+      capabilityState.binaryChunks = message.binaryChunks === true;
+    }
     if (sockets.get(socket)) {
       sendJSON(socket, {
         type: "error",
@@ -588,9 +769,20 @@ function handleMessage(socket, message) {
       });
       return;
     }
+    let chart;
+    try {
+      chart = decodeChart(message);
+    } catch (error) {
+      sendJSON(socket, {
+        type: "error",
+        code: "invalid_chart",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
     const created = rooms.create(
       profile,
-      message.chart,
+      chart,
       stringField(message, "fingerprint"),
       message.encrypted === true,
       message.autoApproveEditor === true,
@@ -602,14 +794,31 @@ function handleMessage(socket, message) {
       sendJSON(socket, { type: "error", code: created.code, message: created.message });
       return;
     }
+    if (message.chartEncoding === "gzip" && !created.value.room.encrypted) {
+      chartWireCache.set(created.value.room, {
+        revision: 0,
+        payload: { chart: String(message.chart ?? ""), chartEncoding: "gzip" },
+      });
+    }
     attach(socket, created.value.room, created.value.member);
-    sendJSON(socket, welcomeFor(created.value.room, created.value.member, false));
+    sendJSON(
+      socket,
+      welcomeFor(
+        created.value.room,
+        created.value.member,
+        false,
+        socketStates.get(socket)?.binaryChunks === true,
+      ),
+    );
     schedulePersist();
     return;
   }
 
   if (message.type === "join") {
     const state = socketStates.get(socket);
+    if (state) {
+      state.binaryChunks = message.binaryChunks === true;
+    }
     if (state && state.joinFailures >= MAX_JOIN_ATTEMPTS) {
       sendJSON(socket, {
         type: "error",
@@ -661,7 +870,7 @@ function handleMessage(socket, message) {
     const { room, request, member } = joined.value;
     if (member) {
       attach(socket, room, member);
-      sendJSON(socket, welcomeFor(room, member, true));
+      sendJSON(socket, welcomeFor(room, member, true, state?.binaryChunks === true));
       broadcast(room, { type: "members", members: memberList(room) }, socket);
       schedulePersist();
       return;
@@ -680,6 +889,10 @@ function handleMessage(socket, message) {
   }
 
   if (message.type === "resume") {
+    const state = socketStates.get(socket);
+    if (state) {
+      state.binaryChunks = message.binaryChunks === true;
+    }
     const resumed = rooms.resume(
       stringField(message, "roomId"),
       stringField(message, "token"),
@@ -689,8 +902,16 @@ function handleMessage(socket, message) {
       sendJSON(socket, { type: "rejected", reason: resumed.code, message: resumed.message });
       return;
     }
-    attach(socket, resumed.value.room, resumed.value.member);
-    sendJSON(socket, welcomeFor(resumed.value.room, resumed.value.member, true));
+    const room = resumed.value.room;
+    const current =
+      message.hasChart === true &&
+      message.revision === room.revision &&
+      message.fingerprint === room.fingerprint;
+    attach(socket, room, resumed.value.member);
+    sendJSON(
+      socket,
+      welcomeFor(room, resumed.value.member, !current, state?.binaryChunks === true, !current),
+    );
     if (resumed.value.member.role === "host") {
       for (const request of resumed.value.room.pending.values()) {
         sendJSON(socket, {
@@ -770,6 +991,39 @@ function handleMessage(socket, message) {
       });
       return;
     }
+    if (message.adopt === true) {
+      const bytes = rooms.blob(hash);
+      if (
+        bytes &&
+        bytes.byteLength === size &&
+        (room.encrypted || matchesAssetMagic(mime, bytes))
+      ) {
+        const adopted = rooms.acceptAsset(
+          connection.memberId,
+          name,
+          hash,
+          size,
+          mime,
+          bytes,
+          plaintextHash || undefined,
+        );
+        if (!adopted.ok) {
+          sendJSON(socket, {
+            type: "asset-rejected",
+            requestId,
+            hash,
+            name,
+            message: adopted.message,
+          });
+          return;
+        }
+        sendJSON(socket, { type: "asset-begin-result", requestId, adopted: true });
+        broadcast(room, { type: "asset-accepted", asset: adopted.value });
+        broadcast(room, { type: "asset-manifest", assets: rooms.assetManifest(room) });
+        schedulePersist();
+        return;
+      }
+    }
     const activeUploads = [...uploads.values()].filter((upload) => upload.socket === socket);
     const totalReserved = [...uploads.values()].reduce((sum, upload) => sum + upload.size, 0);
     if (
@@ -787,6 +1041,7 @@ function handleMessage(socket, message) {
     }
     uploads.set(requestId, {
       socket,
+      binaryChunks: socketStates.get(socket)?.binaryChunks === true,
       memberId: connection.memberId,
       name,
       hash,
@@ -797,54 +1052,35 @@ function handleMessage(socket, message) {
       received: 0,
       nextIndex: 0,
     });
+    if (message.adopt === true) {
+      sendJSON(socket, { type: "asset-begin-result", requestId, adopted: false });
+    }
     return;
   }
 
   if (message.type === "asset-chunk") {
     const requestId = stringField(message, "requestId");
-    const upload = uploads.get(requestId);
     const index = integerField(message, "index");
-    if (
-      !upload ||
-      upload.socket !== socket ||
-      index !== upload.nextIndex ||
-      typeof message.data !== "string"
-    ) {
+    if (typeof message.data !== "string") {
       sendJSON(socket, {
         type: "asset-rejected",
         requestId,
-        hash: upload?.hash,
-        name: upload?.name,
+        hash: uploads.get(requestId)?.hash,
+        name: uploads.get(requestId)?.name,
         message: "Asset chunk is out of order",
       });
       return;
     }
     const chunk = decodeBase64(message.data);
-    if (!chunk || chunk.length === 0 || chunk.length > ASSET_CHUNK_BYTES) {
-      uploads.delete(requestId);
+    if (!chunk) {
       sendJSON(socket, {
         type: "asset-rejected",
         requestId,
-        hash: upload.hash,
-        name: upload.name,
-        message: "Asset chunk has an invalid size",
+        message: "Asset chunk is out of order",
       });
       return;
     }
-    if (upload.received + chunk.length > upload.size) {
-      uploads.delete(requestId);
-      sendJSON(socket, {
-        type: "asset-rejected",
-        requestId,
-        hash: upload.hash,
-        name: upload.name,
-        message: "Asset upload exceeds its declared size",
-      });
-      return;
-    }
-    upload.chunks.push(chunk);
-    upload.received += chunk.length;
-    upload.nextIndex += 1;
+    applyAssetChunk(socket, requestId, index, chunk);
     return;
   }
 
@@ -943,12 +1179,16 @@ function handleMessage(socket, message) {
       }
       const start = index * ASSET_CHUNK_BYTES;
       const data = bytes.subarray(start, Math.min(bytes.byteLength, start + ASSET_CHUNK_BYTES));
-      sendJSON(socket, {
-        type: "asset-download-chunk",
-        requestId,
-        index,
-        data: Buffer.from(data).toString("base64"),
-      });
+      if (socketStates.get(socket)?.binaryChunks === true) {
+        sendBinary(socket, binaryFrame({ type: "asset-download-chunk", requestId, index }, data));
+      } else {
+        sendJSON(socket, {
+          type: "asset-download-chunk",
+          requestId,
+          index,
+          data: Buffer.from(data).toString("base64"),
+        });
+      }
       index += 1;
       setImmediate(sendNext);
     };
@@ -988,7 +1228,10 @@ function handleMessage(socket, message) {
       return;
     }
     attach(pendingSocket, room, joinedMember);
-    sendJSON(pendingSocket, welcomeFor(room, joinedMember, true));
+    sendJSON(
+      pendingSocket,
+      welcomeFor(room, joinedMember, true, socketStates.get(pendingSocket)?.binaryChunks === true),
+    );
     broadcast(room, { type: "members", members: memberList(room) }, pendingSocket);
     return;
   }
@@ -1101,6 +1344,7 @@ function handleMessage(socket, message) {
       type: "presence",
       presence: { memberId: connection.memberId, area: "edit", updatedAt: 0 },
     });
+    broadcast(room, { type: "member-left", memberId: connection.memberId });
     endSocket(socket);
     return;
   }
@@ -1155,7 +1399,7 @@ function handleMessage(socket, message) {
     sendJSON(socket, {
       type: "snapshot",
       revision: room.revision,
-      chart: room.chart,
+      ...chartWire(room),
       fingerprint: room.fingerprint,
       ...(room.encrypted
         ? { encrypted: true, transactions: rooms.encryptedTransactions(room) }
@@ -1166,7 +1410,25 @@ function handleMessage(socket, message) {
 
   if (message.type === "transaction") {
     const transactionId = stringField(message, "transactionId");
-    const changes = room.encrypted ? message.changes : plainChanges(message.changes);
+    const changesEncoding = stringField(message, "changesEncoding") === "gzip" ? "gzip" : undefined;
+    let changes;
+    if (room.encrypted) {
+      changes = message.changes;
+    } else if (changesEncoding === "gzip") {
+      try {
+        changes = decodeChangesWire(message.changes);
+      } catch (error) {
+        sendJSON(socket, {
+          type: "error",
+          code: "invalid_change",
+          message: error instanceof Error ? error.message : String(error),
+          transactionId,
+        });
+        return;
+      }
+    } else {
+      changes = plainChanges(message.changes);
+    }
     const committed = rooms.commit(
       connection.memberId,
       transactionId,
@@ -1174,6 +1436,7 @@ function handleMessage(socket, message) {
       changes,
       typeof message.undoOf === "string" ? message.undoOf : undefined,
       stringList(message.lockIds),
+      room.encrypted ? changesEncoding : undefined,
     );
     if (!committed.ok) {
       if (committed.code === "conflict") {
@@ -1194,7 +1457,8 @@ function handleMessage(socket, message) {
       }
       return;
     }
-    const { replayed, ...payload } = committed.value;
+    const { replayed, ...stored } = committed.value;
+    const payload = room.encrypted ? stored : { ...stored, ...encodeChangesWire(stored.changes) };
     if (replayed) {
       // A retry gets the original result only on the requesting socket; other
       // members have already applied that revision exactly once.
@@ -1267,20 +1531,21 @@ function parseFrames(buffer) {
   return { frames, rest: buffer.subarray(offset), overflow: false };
 }
 
-/** Build the frame header for an unmasked server text frame. */
-function frameHeader(length) {
+/** Build the frame header for an unmasked server frame. */
+function frameHeader(length, opcode = 0x1) {
+  const first = 0x80 | opcode;
   if (length < 126) {
-    return Buffer.from([0x81, length]);
+    return Buffer.from([first, length]);
   }
   if (length < 65536) {
     const header = Buffer.allocUnsafe(4);
-    header[0] = 0x81;
+    header[0] = first;
     header[1] = 126;
     header.writeUInt16BE(length, 2);
     return header;
   }
   const header = Buffer.allocUnsafe(10);
-  header[0] = 0x81;
+  header[0] = first;
   header[1] = 127;
   header.writeBigUInt64BE(BigInt(length), 2);
   return header;
@@ -1427,6 +1692,14 @@ function sendFrame(socket, payload) {
   enqueueFrame(socket, Buffer.concat([frameHeader(payload.length), payload]));
 }
 
+/** Write one binary asset frame through the per-socket queue. */
+function sendBinary(socket, payload) {
+  if (socket.destroyed) {
+    return;
+  }
+  enqueueFrame(socket, Buffer.concat([frameHeader(payload.length, 0x2), payload]));
+}
+
 /** Write one control frame such as ping, pong, or close. */
 function sendControl(socket, opcode, payload = Buffer.alloc(0)) {
   if (socket.destroyed) {
@@ -1519,6 +1792,7 @@ server.on("upgrade", (request, socket) => {
     writeTimer: null,
     readTimer: null,
     joinFailures: 0,
+    binaryChunks: false,
     closeAfterFlush: false,
     closed: false,
   });
@@ -1527,6 +1801,7 @@ server.on("upgrade", (request, socket) => {
   let buffer = Buffer.alloc(0);
   let fragments = [];
   let fragmentBytes = 0;
+  let fragmentOpcode = 0;
   socket.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
     const parsed = parseFrames(buffer);
@@ -1555,14 +1830,17 @@ server.on("upgrade", (request, socket) => {
       if (frame.opcode === 0xa) {
         continue;
       }
-      if (frame.opcode === 0x1 || frame.opcode === 0x0) {
+      if (frame.opcode === 0x1 || frame.opcode === 0x2 || frame.opcode === 0x0) {
         if (
-          (frame.opcode === 0x1 && fragments.length > 0) ||
+          ((frame.opcode === 0x1 || frame.opcode === 0x2) && fragments.length > 0) ||
           (frame.opcode === 0x0 && fragments.length === 0)
         ) {
           sendControl(socket, 0x8, Buffer.from([0x03, 0xea]));
           endSocket(socket);
           return;
+        }
+        if (frame.opcode === 0x1 || frame.opcode === 0x2) {
+          fragmentOpcode = frame.opcode;
         }
         fragmentBytes += frame.payload.length;
         if (fragmentBytes > MAX_MESSAGE) {
@@ -1574,9 +1852,11 @@ server.on("upgrade", (request, socket) => {
         if (!frame.fin) {
           continue;
         }
-        const text = Buffer.concat(fragments).toString("utf8");
+        const payload = Buffer.concat(fragments);
+        const opcode = fragmentOpcode;
         fragments = [];
         fragmentBytes = 0;
+        fragmentOpcode = 0;
         completedMessage = true;
         if (!allowMessage(socket)) {
           sendJSON(socket, {
@@ -1587,9 +1867,13 @@ server.on("upgrade", (request, socket) => {
           endSocket(socket);
           return;
         }
+        if (opcode === 0x2) {
+          handleBinaryMessage(socket, payload);
+          continue;
+        }
         let message;
         try {
-          message = JSON.parse(text);
+          message = JSON.parse(payload.toString("utf8"));
         } catch {
           sendJSON(socket, { type: "error", code: "invalid_json", message: "Message is not JSON" });
           continue;

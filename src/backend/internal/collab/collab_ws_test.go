@@ -24,8 +24,9 @@ import (
 
 // Frame opcodes asserted by the raw test client.
 const (
-	collabWSOpcodeText  = 0x1
-	collabWSOpcodeClose = 0x8
+	collabWSOpcodeText   = 0x1
+	collabWSOpcodeBinary = 0x2
+	collabWSOpcodeClose  = 0x8
 )
 
 type testWS struct {

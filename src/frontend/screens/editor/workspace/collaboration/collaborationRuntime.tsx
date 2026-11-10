@@ -31,6 +31,7 @@ import {
 } from "../../../../../core/edit/state/visibility.ts";
 import { assetPath, resourceReferences } from "../../../../../core/global/document/resources.ts";
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
+import { serverOrigin } from "../../../../../core/global/library/client.ts";
 import { getDrawerState, subscribeDrawer } from "../../../../chrome/drawer/drawerPanes.ts";
 import { preferences, PREFERENCE_SECTIONS } from "../../../../../core/state/preferences.ts";
 import {
@@ -60,12 +61,15 @@ import {
   withAssetProgress,
 } from "../../../../../core/collaboration/progress.ts";
 import { openPane } from "../../inspector/controller.ts";
+import { eventListAt, parseEventKey } from "../../../../../core/edit/events/eventTracks.ts";
 import {
   applyChartChanges,
   diffCharts,
   stableFingerprint,
 } from "../../../../../core/collaboration/changes.ts";
 import { collaborationAccess } from "../../../../../core/collaboration/access.ts";
+import { encodeChartJsonWire } from "../../../../../core/collaboration/chartWire.ts";
+import { serializeChartJsonOffThread } from "../document/save/chartSerializeOffThread.ts";
 import { canPerform, canPublishAsset } from "../../../../../core/collaboration/permissions.ts";
 import {
   buildRoomInviteLink,
@@ -116,6 +120,14 @@ import { currentDocumentStore } from "../../../../platform/documentStoreHandle.t
 import { inspectRoomInvite } from "./roomInvitePreview.ts";
 import { requestRoomInviteConfirmation } from "./roomInvitePrompt.tsx";
 import { bindCollaborationRoomExit } from "./roomExit.ts";
+import {
+  clearRoomSessions,
+  readRoomSession,
+  sameRoomSession,
+  updateRoomSession,
+  type StoredRoomSession,
+  type StoredSessionRole,
+} from "./sessionStore.ts";
 
 /** How a host exposes its room to invitees. */
 export type CollaborationHostMode = "tunnel" | "lan";
@@ -212,54 +224,137 @@ function readSettings(): CollaborationSettings {
   };
 }
 
-/** Host credentials kept across an application restart, separate from user settings. */
-interface StoredHostSession {
-  readonly roomId: string;
-  readonly resumeToken: string;
-  readonly serverUrl: string;
+type StoredHostSession = StoredRoomSession;
+
+/** Read one resumable role from the collaboration preference section. */
+function readStoredSession(role: StoredSessionRole): StoredRoomSession | null {
+  return readRoomSession(preferences.read(PREFERENCE_SECTIONS.collaboration, null), role);
+}
+
+/** Persist or clear one role without disturbing the visible settings. */
+function writeStoredSession(role: StoredSessionRole, session: StoredRoomSession | null): void {
+  preferences.write(
+    PREFERENCE_SECTIONS.collaboration,
+    updateRoomSession(preferences.read(PREFERENCE_SECTIONS.collaboration, null), role, session),
+  );
 }
 
 /** Read the last host session, ignoring a truncated or user-edited record. */
-function readHostSession(): StoredHostSession | null {
-  const raw = preferences.read(PREFERENCE_SECTIONS.collaboration, null);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return null;
-  }
-  const value = (raw as Record<string, unknown>).hostSession;
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    typeof record.roomId !== "string" ||
-    !record.roomId.trim() ||
-    typeof record.resumeToken !== "string" ||
-    !record.resumeToken.trim() ||
-    typeof record.serverUrl !== "string" ||
-    !record.serverUrl.trim()
-  ) {
-    return null;
-  }
-  return {
-    roomId: record.roomId,
-    resumeToken: record.resumeToken,
-    serverUrl: record.serverUrl,
-  };
+function readHostSession(): StoredRoomSession | null {
+  return readStoredSession("host");
 }
 
-/** Persist or clear the host session without disturbing the visible settings. */
-function writeHostSession(session: StoredHostSession | null): void {
-  const raw = preferences.read(PREFERENCE_SECTIONS.collaboration, null);
-  const next =
-    raw && typeof raw === "object" && !Array.isArray(raw)
-      ? { ...(raw as Record<string, unknown>) }
-      : {};
-  if (session) {
-    next.hostSession = session;
-  } else {
-    delete next.hostSession;
+/** Read the last joined guest session, ignoring a truncated record. */
+function readGuestSession(): StoredRoomSession | null {
+  return readStoredSession("guest");
+}
+
+/** Persist or clear the host session. */
+function writeHostSession(session: StoredRoomSession | null): void {
+  writeStoredSession("host", session);
+}
+
+/** Persist or clear the guest session. */
+function writeGuestSession(session: StoredRoomSession | null): void {
+  writeStoredSession("guest", session);
+}
+
+/** Forget both resumable roles after an explicit exit or a terminal rejection. */
+function clearStoredSessions(): void {
+  preferences.write(
+    PREFERENCE_SECTIONS.collaboration,
+    clearRoomSessions(preferences.read(PREFERENCE_SECTIONS.collaboration, null)),
+  );
+}
+
+/** Localized names for the three room roles used by runtime notices. */
+const ROLE_MESSAGE_KEYS = {
+  host: "workspace.collaboration.role.host",
+  editor: "workspace.collaboration.role.editor",
+  viewer: "workspace.collaboration.role.viewer",
+} as const;
+
+/** Localized role label for runtime notices. */
+function collaborationRoleLabel(role: CollaborationRole): string {
+  return t(ROLE_MESSAGE_KEYS[role]);
+}
+
+/** How long a presence sample keeps another member's selection visible. */
+const REMOTE_SELECTION_TTL_MS = 5000;
+
+/** One field of fresh remote presence, excluding the local user. */
+function remoteSelectionIds(
+  presence: readonly MemberPresence[],
+  memberId: string,
+  now: number,
+  select: (entry: MemberPresence) => readonly string[] | undefined,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const entry of presence) {
+    if (entry.memberId === memberId || entry.area !== "edit") {
+      continue;
+    }
+    if (now - entry.updatedAt > REMOTE_SELECTION_TTL_MS) {
+      continue;
+    }
+    for (const id of select(entry) ?? []) {
+      ids.add(id);
+    }
   }
-  preferences.write(PREFERENCE_SECTIONS.collaboration, next);
+  return ids;
+}
+
+/** Union of note ids selected by fresh remote members. */
+function remoteSelectedNoteIds(
+  presence: readonly MemberPresence[],
+  memberId: string,
+  now: number,
+): Set<string> {
+  return remoteSelectionIds(presence, memberId, now, (entry) => entry.selectedNoteIds);
+}
+
+/** Union of event ids selected by fresh remote members. */
+function remoteSelectedEventIds(
+  presence: readonly MemberPresence[],
+  memberId: string,
+  now: number,
+): Set<string> {
+  return remoteSelectionIds(presence, memberId, now, (entry) => entry.selectedEventIds);
+}
+
+/** Stable ids of the local event selection across every visible event panel. */
+function selectedEventIds(session: EditorSession): string[] {
+  const keysByLine = new Map<number, Set<string>>();
+  if (session.eventSelection.size) {
+    keysByLine.set(session.lineIndex, new Set(session.eventSelection));
+  }
+  for (const [lineIndex, keys] of session.multiEventSelection ?? []) {
+    if (!keys.size) {
+      continue;
+    }
+    const bucket = keysByLine.get(lineIndex) ?? new Set<string>();
+    for (const key of keys) {
+      bucket.add(key);
+    }
+    keysByLine.set(lineIndex, bucket);
+  }
+  const ids: string[] = [];
+  for (const [lineIndex, keys] of keysByLine) {
+    for (const key of keys) {
+      const parsed = parseEventKey(key);
+      if (!parsed) {
+        continue;
+      }
+      const event = eventListAt(session, lineIndex, parsed.type, session.eventLayer)[parsed.index];
+      if (event?.id) {
+        ids.push(event.id);
+      }
+      if (ids.length >= 128) {
+        return ids;
+      }
+    }
+  }
+  return ids;
 }
 
 /** The room state and commands the inspector pane consumes. */
@@ -370,6 +465,21 @@ async function localAssetBytes(
     return loaded;
   }
   return (await assets.read?.(path)) ?? null;
+}
+
+/** Read one local-library blob by content hash, or null when it is absent. */
+async function localLibraryAssetByHash(hash: string): Promise<Uint8Array | null> {
+  try {
+    const response = await fetch(`${serverOrigin()}/api/assets/${encodeURIComponent(hash)}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
 }
 
 /** Keep at most two resource streams active so one large asset cannot starve all others. */
@@ -485,8 +595,14 @@ async function requestChartAssets(
     if (!entry) {
       continue;
     }
+    const expected = entry.plaintextHash ?? entry.hash;
     const bytes = await localAssetBytes(assets, name, chartName);
-    if (bytes && (await sha256Hex(bytes)) === (entry.plaintextHash ?? entry.hash)) {
+    if (bytes && (await sha256Hex(bytes)) === expected) {
+      continue;
+    }
+    const libraryBytes = await localLibraryAssetByHash(expected);
+    if (libraryBytes && (await sha256Hex(libraryBytes)) === expected) {
+      document.adoptAsset(name, libraryBytes);
       continue;
     }
     missing.push(name);
@@ -505,6 +621,7 @@ interface HandlerSet {
   assetProgress: (progress: AssetTransferProgress) => void;
   assetReady: (asset: RoomAsset, bytes: Uint8Array) => void;
   assetError: (message: string, assetName?: string) => void;
+  memberLeft: (memberId: string) => void;
   lockDenied: (conflicts: readonly RoomLock[]) => void;
   lockTimeout: () => void;
   transactionRejected: (
@@ -546,6 +663,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [pendingAssets, setPendingAssets] = useState<readonly string[]>([]);
   const [startingRoom, setStartingRoom] = useState(false);
   const [joiningRoom, setJoiningRoom] = useState(false);
+  const [storedSessionRevision, setStoredSessionRevision] = useState(0);
   const [pendingInviteLink, setPendingInviteLink] = useState("");
   useEffect(() => {
     collaborationPreparing.set(startingRoom || joiningRoom);
@@ -575,7 +693,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const roomAttempt = useRef(0);
   const joinedRecoveryFingerprint = useRef<string | null>(null);
   const roomDocumentAdopted = useRef(false);
-  const storedHostSession = useRef<StoredHostSession | null>(readHostSession());
+  const storedHostSession = useRef<StoredHostSession | null>(null);
+  const storedGuestSession = useRef<StoredHostSession | null>(null);
+  const guestResumeAttempted = useRef(false);
   const applied = useRef(new Set<string>());
   const appliedRevision = useRef(0);
   const contextRef = useRef<{
@@ -591,10 +711,41 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     assetProgress: () => {},
     assetReady: () => {},
     assetError: () => {},
+    memberLeft: () => {},
     lockDenied: () => {},
     lockTimeout: () => {},
     transactionRejected: () => {},
   });
+
+  // Remote presence selects notes and events as warning filters in the same
+  // renderer paths as the local selection. The sets only touch the canvas; they
+  // never become chart edits or history entries.
+  useEffect(() => {
+    const timeline = runtime?.timeline;
+    if (!timeline) {
+      return;
+    }
+    const sync = () => {
+      const current = stateCell.get();
+      const now = Date.now();
+      timeline.setRemoteSelectedNoteIds(
+        remoteSelectedNoteIds(current.presence, current.memberId, now),
+      );
+      timeline.setRemoteSelectedEventIds(
+        remoteSelectedEventIds(current.presence, current.memberId, now),
+      );
+    };
+    sync();
+    const unsubscribe = stateCell.subscribe(sync);
+    // Presence expires by age rather than by an explicit removal message.
+    const timer = window.setInterval(sync, 1000);
+    return () => {
+      unsubscribe();
+      window.clearInterval(timer);
+      timeline.setRemoteSelectedNoteIds(new Set());
+      timeline.setRemoteSelectedEventIds(new Set());
+    };
+  }, [runtime, stateCell]);
 
   /** Keep a rejected batch visible so the user can retry or force it later. */
   const rememberUnsent = useCallback(
@@ -809,6 +960,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onAssetProgress: (progress) => handlersRef.current.assetProgress(progress),
       onAssetReady: (asset, bytes) => handlersRef.current.assetReady(asset, bytes),
       onAssetError: (message, assetName) => handlersRef.current.assetError(message, assetName),
+      onMemberLeft: (memberId) => handlersRef.current.memberLeft(memberId),
       onLockDenied: (conflicts) => handlersRef.current.lockDenied(conflicts),
       onLockTimeout: () => handlersRef.current.lockTimeout(),
       onTransactionRejected: (transaction, message, code) =>
@@ -837,6 +989,36 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     void documents?.discardDetachedRecovery();
   }, [runtime]);
 
+  // Preferences attach after the provider mounts, so the first render may not
+  // see a stored room yet. Re-read the section when SQLite adopts it and when
+  // the host/guest role writes a replacement token.
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (!active) {
+        return;
+      }
+      const host = readHostSession();
+      const guest = readGuestSession();
+      if (
+        sameRoomSession(storedHostSession.current, host) &&
+        sameRoomSession(storedGuestSession.current, guest)
+      ) {
+        return;
+      }
+      storedHostSession.current = host;
+      storedGuestSession.current = guest;
+      setStoredSessionRevision((value) => value + 1);
+    };
+    const unsubscribe = preferences.subscribe(PREFERENCE_SECTIONS.collaboration, refresh);
+    void preferences.ready().then(refresh, refresh);
+    refresh();
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
   // Resume the host's last room once a document is mounted. The room server
   // persists its members, so the token keeps the host role and authoritative
   // chart across an application restart. A stale session is cleared on the
@@ -844,7 +1026,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const stored = storedHostSession.current;
     const client = clientRef.current;
-    if (!stored || !client || resumeAttempted.current || !visible.hasDocument) {
+    if (
+      !stored ||
+      !client ||
+      resumeAttempted.current ||
+      !visible.hasDocument ||
+      stateCell.get().roomId ||
+      collaborationPreparing.get()
+    ) {
       return;
     }
     resumeAttempted.current = true;
@@ -895,7 +1084,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           );
         }
       }
-      if (!resuming.current || clientRef.current !== client) {
+      const currentClient = clientRef.current;
+      if (!resuming.current || !currentClient) {
         setStartingRoom(false);
         if (isDesktop()) {
           void invoke("stop_collab_tunnel").catch(() => undefined);
@@ -905,11 +1095,67 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      client.resumeRoom(publicUrl, stored.roomId, stored.resumeToken, {
+      currentClient.resumeRoom(publicUrl, stored.roomId, stored.resumeToken, {
         socketUrl: isDesktop() ? localRoomServerUrl() : publicUrl,
       });
     })();
-  }, [visible.hasDocument, sessionRuntime, ensureSession, settings.hostMode, settings.lanPort]);
+  }, [
+    visible.hasDocument,
+    sessionRuntime,
+    ensureSession,
+    settings.hostMode,
+    settings.lanPort,
+    storedSessionRevision,
+    stateCell,
+  ]);
+
+  // Resume the last joined room from the welcome page. A guest has no local
+  // document after a restart, so the welcome snapshot adopts the room chart and
+  // its assets instead of replacing a library file.
+  useEffect(() => {
+    const stored = storedGuestSession.current;
+    const client = clientRef.current;
+    if (
+      !stored ||
+      !client ||
+      storedHostSession.current ||
+      guestResumeAttempted.current ||
+      stateCell.get().roomId ||
+      collaborationPreparing.get()
+    ) {
+      return;
+    }
+    guestResumeAttempted.current = true;
+    void (async () => {
+      if (!(await ensureSession())) {
+        guestResumeAttempted.current = false;
+        return;
+      }
+      const confirmed = await requestConfirm({
+        title: t("workspace.collaboration.resumeGuestTitle"),
+        description: t("workspace.collaboration.resumeGuestBody"),
+        label: t("workspace.collaboration.resumeAction"),
+      });
+      if (!confirmed) {
+        writeGuestSession(null);
+        if (sessionClaimed.current) {
+          sessionClaimed.current = false;
+          if (isDesktop()) {
+            void invoke("release_collab_session").catch(() => undefined);
+          }
+        }
+        return;
+      }
+      collaborationProgress.set(startRoomProgress("guest", settings.hostMode));
+      setJoiningRoom(true);
+      roomJoinPending.current = true;
+      roomDocumentAdopted.current = false;
+      collaborationRoomDocument.set(true);
+      // The provider may replace its client while the prompt is open; resume
+      // on the current client instead of a disposed capture.
+      clientRef.current?.resumeRoom(stored.serverUrl, stored.roomId, stored.resumeToken);
+    })();
+  }, [stateCell, ensureSession, settings.hostMode, storedSessionRevision]);
 
   // Announce the transitions the panel cannot show in a compact row: the room
   // becoming ready, a guest waiting for approval, and an existing room losing
@@ -1096,7 +1342,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const documents = runtime?.documents ?? currentDocumentStore();
     collaborationRoomDocument.set(false);
     void documents?.discardDetachedRecovery();
-    writeHostSession(null);
+    clearStoredSessions();
     setStartingRoom(false);
     setJoiningRoom(false);
     collaborationPreparing.set(false);
@@ -1220,12 +1466,17 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (initial) {
           applied.current.clear();
         }
-        if (snapshot.role === "host" && snapshot.resumeToken) {
-          writeHostSession({
+        if (snapshot.resumeToken) {
+          const stored = {
             roomId: snapshot.roomId,
             resumeToken: snapshot.resumeToken,
             serverUrl: client.state.get().serverUrl,
-          });
+          };
+          if (snapshot.role === "host") {
+            writeHostSession(stored);
+          } else {
+            writeGuestSession(stored);
+          }
         }
         const chart = snapshot.chart;
         const session = sessionRuntime.current;
@@ -1384,11 +1635,26 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (!client) {
           return;
         }
-        applyRole(sessionRuntime.current, client.state.get());
+        const current = client.state.get();
+        const session = sessionRuntime.current;
+        applyRole(session, current);
+        if (current.roomId && client.resumeTokenValue) {
+          const stored = {
+            roomId: current.roomId,
+            resumeToken: client.resumeTokenValue,
+            serverUrl: current.serverUrl,
+          };
+          if (role === "host") {
+            writeHostSession(stored);
+          } else {
+            writeGuestSession(stored);
+          }
+        }
+        const roleLabel = collaborationRoleLabel(role);
         showToast(
           reason
-            ? t("workspace.collaboration.roleChangedReason", { role, reason })
-            : t("workspace.collaboration.roleChanged", { role }),
+            ? t("workspace.collaboration.roleChangedReason", { role: roleLabel, reason })
+            : t("workspace.collaboration.roleChanged", { role: roleLabel }),
           role === "viewer" ? "warning" : "success",
         );
       },
@@ -1416,7 +1682,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           code === "room_closed" ||
           code === "bad_invite"
         ) {
-          writeHostSession(null);
+          clearStoredSessions();
           if (roomJoinPending.current) {
             roomJoinPending.current = false;
             joinedRecoveryFingerprint.current = null;
@@ -1478,13 +1744,33 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         markGuestAssetError(assetName, message);
         showNotice(message, "error");
       },
+      memberLeft: (memberId) => {
+        const member = clientRef.current?.state
+          .get()
+          .members.find((candidate) => candidate.id === memberId);
+        showToast(
+          t("workspace.collaboration.memberLeft", {
+            name: member?.profile.name ?? t("workspace.collaboration.someone"),
+          }),
+          "info",
+        );
+      },
       lockDenied: (conflicts) => {
         const owners = lockOwners(conflicts, clientRef.current?.state.get().members ?? []);
+        const objects = conflicts.map((lock) => lock.id).join(", ");
+        const earliest = Math.min(...conflicts.map((lock) => lock.expiresAt));
+        const seconds = Math.max(0, Math.ceil((earliest - Date.now()) / 1000));
         showNotice(
-          t("workspace.collaboration.locked", {
-            objects: conflicts.map((lock) => lock.id).join(", "),
-            owners: owners || t("workspace.collaboration.someone"),
-          }),
+          seconds > 0
+            ? t("workspace.collaboration.lockedUntil", {
+                objects,
+                owners: owners || t("workspace.collaboration.someone"),
+                seconds,
+              })
+            : t("workspace.collaboration.locked", {
+                objects,
+                owners: owners || t("workspace.collaboration.someone"),
+              }),
           "warning",
         );
       },
@@ -1698,12 +1984,24 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       const session = runtime.getSession();
       const drawer = getDrawerState();
       const timeline = showsAuthoringRegion(getEditorRegionSnapshot());
+      const selectedNoteIds: string[] = [];
+      for (const entry of session.selectedNoteEntries()) {
+        if (entry.note.id) {
+          selectedNoteIds.push(entry.note.id);
+        }
+        if (selectedNoteIds.length >= 128) {
+          break;
+        }
+      }
+      const selectedEventIdsHere = selectedEventIds(session);
       const base: MemberPresence = {
         memberId: roomState.memberId,
         area: "edit",
         updatedAt: now,
         playheadBeat: runtime.timeline.viewport.origin,
         timeline,
+        ...(selectedNoteIds.length ? { selectedNoteIds } : {}),
+        ...(selectedEventIdsHere.length ? { selectedEventIds: selectedEventIdsHere } : {}),
       };
       if (drawer.open) {
         client.sendPresence({ ...base, section: drawer.pane });
@@ -1906,20 +2204,23 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         ...override,
         serverUrl: publicUrl,
       };
+      const fingerprint = session.history.fingerprint();
+      collaborationProgress.update({ phase: "preparing", detail: "compress" });
+      const chartJson = await serializeChartJsonOffThread(roomChart);
+      const encoded = await encodeChartJsonWire(chartJson);
+      if (roomAttempt.current !== attempt || !collaborationProgress.get().visible) {
+        return;
+      }
       // The host stays on the local authoritative server; only invitees cross
       // the Tunnel or LAN bridge. This avoids waiting for public DNS first.
       client.connect(current.serverUrl, {
         socketUrl: isDesktop() ? localRoomServerUrl() : current.serverUrl,
       });
-      client.createRoom(
-        profile(current),
-        structuredClone(roomChart),
-        session.history.fingerprint(),
-        {
-          autoApproveEditor: override?.autoApproveEditor === true,
-          password: override?.password,
-        },
-      );
+      client.createRoom(profile(current), encoded.chart, fingerprint, {
+        chartEncoding: encoded.chartEncoding,
+        autoApproveEditor: override?.autoApproveEditor === true,
+        password: override?.password,
+      });
       applied.current.clear();
       appliedRevision.current = 0;
       uploading.current.clear();
@@ -1997,7 +2298,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const attempt = ++roomAttempt.current;
     collaborationProgress.set(startRoomProgress("guest", settings.hostMode));
     setJoiningRoom(true);
-    writeHostSession(null);
+    clearStoredSessions();
     // The room chart replaces this document; guard saves before the snapshot
     // arrives, then persist the local edits so closing the app cannot lose them.
     roomJoinPending.current = true;
@@ -2084,7 +2385,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const lockIds = item.lockIds ?? [];
     const connected = client.state.get().status === "connected";
     if (connected && !(await client.acquireLocks(lockIds))) {
-      showToast(t("workspace.collaboration.lockDeniedRetry"), "warning");
+      // The lock-denied or lock-timeout handler explains which member and
+      // object block the retry; a second generic toast would only duplicate it.
       return;
     }
     setUnsent((current) =>
@@ -2107,7 +2409,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const rebaseUnsent = (transactionId: string) => {
     const session = sessionRuntime.current;
     const item = unsent.find((candidate) => candidate.transactionId === transactionId);
-    if (!item || session.readOnly) {
+    if (!item || !session.editable) {
       return;
     }
     const applied = applyChartChanges(session.chart, item.changes, { force: true });
@@ -2149,7 +2451,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   /** Reapply the retained pre-conflict chart as a new local edit. */
   const applyRecovery = () => {
     const session = sessionRuntime.current;
-    if (!recovery || session.readOnly) {
+    if (!recovery || !session.editable) {
       return;
     }
     // A conflict retains the copy before the authoritative snapshot arrives;

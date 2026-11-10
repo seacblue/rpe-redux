@@ -40,6 +40,9 @@ const collabSharedUpgradeLimit = 300
 // Failed join attempts allowed on one socket before it must reconnect.
 const collabMaxJoinAttempts = 10
 
+// collabOpcodeBinary is the WebSocket opcode for an asset chunk frame.
+const collabOpcodeBinary = 0x2
+
 // collabRateWindow counts upgrade attempts for one remote address.
 type collabRateWindow struct {
 	start int64
@@ -277,13 +280,23 @@ func (s *Server) handleUpgrade(w http.ResponseWriter, r *http.Request) {
 	s.serve(socket)
 }
 
-// serve reads JSON messages until the socket closes.
+// serve reads text JSON control messages and binary asset chunks until the
+// socket closes.
 func (s *Server) serve(socket *collabSocket) {
 	for {
 		socket.ArmReadDeadline()
-		payload, err := socket.ReadMessage()
+		opcode, payload, err := socket.ReadFrameMessage()
 		if err != nil {
 			return
+		}
+		if opcode == collabOpcodeBinary {
+			header, body, err := collabParseBinaryFrame(payload)
+			if err != nil {
+				s.sendError(socket, "invalid_binary", err.Error())
+				continue
+			}
+			s.dispatchBinary(socket, header, body)
+			continue
 		}
 		var message map[string]any
 		if err := json.Unmarshal(payload, &message); err != nil || message == nil {
@@ -296,6 +309,22 @@ func (s *Server) serve(socket *collabSocket) {
 		}
 		s.dispatch(socket, message)
 	}
+}
+
+// dispatchBinary handles one binary frame. Only asset upload chunks may use
+// the binary transport; every other header is rejected as malformed control.
+func (s *Server) dispatchBinary(socket *collabSocket, header map[string]any, body []byte) {
+	if collabStringField(header, "type") != "asset-chunk" {
+		s.sendError(socket, "invalid_binary", "Binary frames carry asset chunks only")
+		return
+	}
+	requestID := collabStringField(header, "requestId")
+	index, ok := collabIntField(header, "index")
+	if !ok {
+		s.sendAssetRejected(socket, requestID, "", "", "Asset chunk is out of order")
+		return
+	}
+	s.handleAssetChunkData(socket, requestID, index, body)
 }
 
 // dispatch runs one message handler and reports a panic as a server_error reply.
@@ -342,6 +371,20 @@ func (s *Server) sendWait(socket *collabSocket, value any) bool {
 		return false
 	}
 	if err := socket.WriteTextWait(payload); err != nil {
+		socket.Close()
+		return false
+	}
+	return true
+}
+
+// sendBinaryWait queues one framed binary asset message with backpressure.
+func (s *Server) sendBinaryWait(socket *collabSocket, header map[string]any, chunk []byte) bool {
+	payload, err := collabBinaryFrame(header, chunk)
+	if err != nil {
+		s.logf("encode binary asset: %v", err)
+		return false
+	}
+	if err := socket.WriteBinaryWait(payload); err != nil {
 		socket.Close()
 		return false
 	}
@@ -417,6 +460,33 @@ func (s *Server) welcome(socket *collabSocket, room *collabRoom, member *collabM
 		s.sendError(socket, "no_member", "Member is no longer in the room")
 		return
 	}
+	if socket.binaryChunks {
+		payload["binaryChunks"] = true
+	}
+	payload["assetAdopt"] = true
+	s.send(socket, payload)
+}
+
+// welcomeResumed sends a welcome that skips the chart when the client already
+// applied the room's exact revision.
+func (s *Server) welcomeResumed(socket *collabSocket, room *collabRoom, member *collabMember, message map[string]any) {
+	revision := -1
+	if value, ok := collabIntField(message, "revision"); ok {
+		revision = int(value)
+	}
+	payload, ok := s.rooms.welcomePayloadResumed(room, member.ID, collabResumeView{
+		HasChart:    message["hasChart"] == true,
+		Revision:    revision,
+		Fingerprint: collabStringField(message, "fingerprint"),
+	})
+	if !ok {
+		s.sendError(socket, "no_member", "Member is no longer in the room")
+		return
+	}
+	if socket.binaryChunks {
+		payload["binaryChunks"] = true
+	}
+	payload["assetAdopt"] = true
 	s.send(socket, payload)
 }
 
@@ -491,6 +561,7 @@ func (s *Server) detach(socket *collabSocket) {
 func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 	switch collabStringField(message, "type") {
 	case "create":
+		socket.binaryChunks = message["binaryChunks"] == true
 		if s.connection(socket) != nil {
 			s.sendError(socket, "already_in_room", "Leave the current room before creating another")
 			return
@@ -516,9 +587,20 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		if len(staleRooms) > 0 {
 			s.persistSchedule()
 		}
+		chart := message["chart"]
+		chartWire := ""
+		if collabStringField(message, "chartEncoding") == "gzip" {
+			decoded, err := collabDecodeChart(chart)
+			if err != nil {
+				s.sendError(socket, "invalid_chart", err.Error())
+				return
+			}
+			chart = decoded
+			chartWire = collabStringField(message, "chart")
+		}
 		room, member, failure := s.rooms.create(
 			profile,
-			message["chart"],
+			chart,
 			collabStringField(message, "fingerprint"),
 			collabCreateOptions{
 				Encrypted:         message["encrypted"] == true,
@@ -526,6 +608,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 				Invite:            collabStringField(message, "invite"),
 				Owner:             socket.clientKey,
 				AppVersion:        collabStringField(message, "appVersion"),
+				ChartWire:         chartWire,
 			},
 		)
 		if failure != nil {
@@ -537,6 +620,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		s.persistSchedule()
 		return
 	case "join":
+		socket.binaryChunks = message["binaryChunks"] == true
 		if socket.joinFailures >= collabMaxJoinAttempts {
 			s.sendError(socket, "too_many_joins", "Too many failed join attempts; reconnect to try again.")
 			socket.Close()
@@ -634,13 +718,14 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		s.persistSchedule()
 		return
 	case "resume":
+		socket.binaryChunks = message["binaryChunks"] == true
 		room, member, failure := s.rooms.resume(collabStringField(message, "roomId"), collabStringField(message, "token"), collabStringField(message, "appVersion"))
 		if failure != nil {
 			s.send(socket, map[string]any{"type": "rejected", "reason": failure.Code, "message": failure.Message})
 			return
 		}
 		s.attach(socket, room, member)
-		s.welcome(socket, room, member, true)
+		s.welcomeResumed(socket, room, member, message)
 		if member.Role == "host" {
 			for _, request := range s.rooms.pendingFor(room) {
 				s.send(socket, map[string]any{"type": "pending", "requestId": request.RequestID, "profile": request.Profile})
@@ -717,6 +802,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 			"type":     "presence",
 			"presence": collabPresence{MemberID: connection.memberID, Area: "edit"},
 		}, nil)
+		s.broadcast(room, map[string]any{"type": "member-left", "memberId": connection.memberID}, nil)
 		socket.Close()
 	case "lock-request":
 		s.handleLockRequest(socket, connection, message)
@@ -725,18 +811,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 	case "presence":
 		s.handlePresence(socket, connection, room, message)
 	case "snapshot-request":
-		revision, chart, fingerprint, ok := s.rooms.snapshot(room)
-		if ok {
-			payload := map[string]any{
-				"type":        "snapshot",
-				"revision":    revision,
-				"chart":       chart,
-				"fingerprint": fingerprint,
-			}
-			if room.Encrypted {
-				payload["encrypted"] = true
-				payload["transactions"] = s.rooms.transactionLog(room)
-			}
+		if payload, ok := s.rooms.snapshotPayload(room); ok {
 			s.send(socket, payload)
 		}
 	case "transaction":
@@ -764,6 +839,23 @@ func (s *Server) handleAssetBegin(socket *collabSocket, connection *collabConn, 
 		s.sendAssetRejected(socket, requestID, hash, name, "This member has read-only access")
 		return
 	}
+	if message["adopt"] == true {
+		if asset, adopted, failure := s.rooms.adoptAsset(connection.memberID, name, hash, size, mime, plaintextHash); adopted {
+			if failure != nil {
+				s.sendAssetRejected(socket, requestID, hash, name, failure.Message, failure.Code)
+				return
+			}
+			s.send(socket, map[string]any{
+				"type":      "asset-begin-result",
+				"requestId": requestID,
+				"adopted":   true,
+			})
+			s.broadcast(room, map[string]any{"type": "asset-accepted", "asset": asset}, nil)
+			s.broadcast(room, map[string]any{"type": "asset-manifest", "assets": s.rooms.assetManifest(room)}, nil)
+			s.persistSchedule()
+			return
+		}
+	}
 	s.mu.Lock()
 	active := 0
 	reserved := int64(0)
@@ -788,22 +880,43 @@ func (s *Server) handleAssetBegin(socket *collabSocket, connection *collabConn, 
 		size:          size,
 	}
 	s.mu.Unlock()
+	if message["adopt"] == true {
+		s.send(socket, map[string]any{
+			"type":      "asset-begin-result",
+			"requestId": requestID,
+			"adopted":   false,
+		})
+	}
 }
 
-// handleAssetChunk appends one ordered chunk to an active upload.
+// handleAssetChunk decodes one text asset chunk and appends it to the upload.
 func (s *Server) handleAssetChunk(socket *collabSocket, message map[string]any) {
 	requestID := collabStringField(message, "requestId")
 	index, indexOK := collabIntField(message, "index")
 	data, dataOK := message["data"].(string)
-	s.mu.Lock()
-	upload := s.uploads[requestID]
-	if upload == nil || upload.socket != socket || !indexOK || int64(index) != int64(upload.next) || !dataOK {
-		s.mu.Unlock()
+	if !indexOK || !dataOK {
 		s.sendAssetRejected(socket, requestID, "", "", "Asset chunk is out of order")
 		return
 	}
 	chunk, err := base64.StdEncoding.DecodeString(data)
-	if err != nil || len(chunk) == 0 || len(chunk) > collabAssetChunkBytes {
+	if err != nil {
+		s.sendAssetRejected(socket, requestID, "", "", "Asset chunk is out of order")
+		return
+	}
+	s.handleAssetChunkData(socket, requestID, index, chunk)
+}
+
+// handleAssetChunkData appends one ordered chunk regardless of its wire
+// encoding. The text and binary paths share this bound and quota check.
+func (s *Server) handleAssetChunkData(socket *collabSocket, requestID string, index int64, chunk []byte) {
+	s.mu.Lock()
+	upload := s.uploads[requestID]
+	if upload == nil || upload.socket != socket || index != int64(upload.next) {
+		s.mu.Unlock()
+		s.sendAssetRejected(socket, requestID, "", "", "Asset chunk is out of order")
+		return
+	}
+	if len(chunk) == 0 || len(chunk) > collabAssetChunkBytes {
 		delete(s.uploads, requestID)
 		s.mu.Unlock()
 		s.sendAssetRejected(socket, requestID, upload.hash, upload.name, "Asset chunk has an invalid size")
@@ -903,6 +1016,16 @@ func (s *Server) sendAsset(socket *collabSocket, requestID string, asset collabA
 		}
 		if start > len(bytes) {
 			start = len(bytes)
+		}
+		if socket.binaryChunks {
+			if !s.sendBinaryWait(socket, map[string]any{
+				"type":      "asset-download-chunk",
+				"requestId": requestID,
+				"index":     index,
+			}, bytes[start:end]) {
+				return
+			}
+			continue
 		}
 		if !s.sendWait(socket, map[string]any{
 			"type":      "asset-download-chunk",
@@ -1049,8 +1172,26 @@ func (s *Server) handleTransaction(socket *collabSocket, connection *collabConn,
 		label = "Remote edit"
 	}
 	changePayload := message["changes"]
+	changesEncoding := ""
+	if collabStringField(message, "changesEncoding") == "gzip" {
+		changesEncoding = "gzip"
+	}
 	if !room.Encrypted {
-		changePayload = collabChangesFrom(changePayload)
+		if changesEncoding == "gzip" {
+			decoded, err := collabDecodeChangesWire(changePayload)
+			if err != nil {
+				s.send(socket, map[string]any{
+					"type":          "error",
+					"code":          "invalid_change",
+					"message":       err.Error(),
+					"transactionId": transactionID,
+				})
+				return
+			}
+			changePayload = decoded
+		} else {
+			changePayload = collabChangesFrom(changePayload)
+		}
 	}
 	committed, failure := s.rooms.commit(
 		connection.memberID,
@@ -1080,14 +1221,25 @@ func (s *Server) handleTransaction(socket *collabSocket, connection *collabConn,
 		})
 		return
 	}
+	if room.Encrypted && changesEncoding != "" && !committed.Replay {
+		committed.ChangesEncoding = changesEncoding
+		s.rooms.setChangesEncoding(room, committed.ActorID, committed.TransactionID, changesEncoding)
+	}
+	changes, encoding := committed.Changes, committed.ChangesEncoding
+	if !room.Encrypted {
+		changes, encoding = collabEncodeChangesWire(committed.Changes)
+	}
 	payload := map[string]any{
 		"type":          "committed",
 		"revision":      committed.Revision,
 		"transactionId": committed.TransactionID,
 		"actorId":       committed.ActorID,
 		"label":         committed.Label,
-		"changes":       committed.Changes,
+		"changes":       changes,
 		"fingerprint":   committed.Fingerprint,
+	}
+	if encoding != "" {
+		payload["changesEncoding"] = encoding
 	}
 	if committed.UndoOf != "" {
 		payload["undoOf"] = committed.UndoOf

@@ -48,6 +48,13 @@ export interface InspectorPanelDefinition {
   open?(): void;
   /** The panel-owned walkthrough shown by its header help action. */
   tutorial?: HelpTutorialDefinition;
+  /**
+   * Whether the pane holds chart-editing controls.
+   *
+   * Read-only documents keep the pane visible but make its body inert, so an
+   * inspector field cannot start an edit the session would refuse.
+   */
+  editsChart?: boolean;
 }
 
 /** Lifecycle hooks a feature binds to one pane id. */

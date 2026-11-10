@@ -6,7 +6,6 @@ import { drawShaderEvents } from "../../../frontend/screens/editor/workspace/tim
 const palette = {
   overlayInvalidFill: "#ff000080",
   eventShaderText: "#ffffff",
-  selectionHighlight: "#00ff0040",
 };
 
 function fakeContext() {
@@ -76,9 +75,7 @@ test("shader events draw the skin event bar and keep the shader label", () => {
   ]);
   assert.ok(context.texts.some((entry) => entry.text === "chromatic"));
   assert.ok(
-    context.fills.some(
-      (entry) => entry.style === palette.selectionHighlight && entry.args[0] === 100,
-    ),
+    context.fills.some((entry) => entry.style === "#00C800" && entry.args[0] === 100),
     "the selected shader event keeps the shared selection tint",
   );
 });

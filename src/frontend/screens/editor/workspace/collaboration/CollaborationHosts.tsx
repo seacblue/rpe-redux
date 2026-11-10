@@ -4,7 +4,7 @@ import { RemoteCursors } from "./RemoteCursors.tsx";
 import { RemotePlayheads } from "./RemotePlayheads.tsx";
 import { RoomProgressDialog } from "./RoomProgressDialog.tsx";
 
-/** Mounts the presence cursor, playhead, and room setup layers beside the editor. */
+/** Mounts the presence cursor, playhead, and setup layers. */
 export function CollaborationHosts() {
   return (
     <>

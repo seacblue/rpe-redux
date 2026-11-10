@@ -1,6 +1,7 @@
 // Minimal RFC 6455 server framing shared by the room listener and the editor
-// bridge. Both speak text JSON over loopback, so the codec stays small while
-// still handling masking, fragmentation, ping/pong, and close frames.
+// bridge. Control messages stay text JSON while room asset chunks may use
+// binary frames, so the codec handles masking, fragmentation, ping/pong, and
+// close frames for both payload kinds.
 
 package ws
 
@@ -20,9 +21,9 @@ import (
 
 // Message limits, handshake constant, and frame opcodes for the room socket.
 const (
-	// A room create carries the full chart JSON before assets are streamed.
-	// Large authored charts can be tens of megabytes, so the frame budget is
-	// deliberately above the asset chunk size.
+	// A room create carries the gzip chart before assets are streamed. Gzip
+	// keeps large authored charts well inside this budget; the same cap also
+	// covers asset frames and control messages.
 	maxMessage     = 64 << 20
 	wsGUID         = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 	writeTimeout   = 15 * time.Second
@@ -30,6 +31,7 @@ const (
 	queueSize      = 64
 	opcodeContinue = 0x0
 	opcodeText     = 0x1
+	opcodeBinary   = 0x2
 	opcodeClose    = 0x8
 	opcodePing     = 0x9
 	opcodePong     = 0xa
@@ -156,45 +158,58 @@ func (w *Conn) readFrame() (bool, byte, []byte, error) {
 }
 
 // ReadMessage reassembles a complete text message and handles control frames
-// inline.
+// inline. Binary messages are rejected on this compatibility path.
 func (w *Conn) ReadMessage() ([]byte, error) {
+	opcode, payload, err := w.ReadFrameMessage()
+	if err != nil {
+		return nil, err
+	}
+	if opcode != opcodeText {
+		return nil, errors.New("unsupported websocket opcode")
+	}
+	return payload, nil
+}
+
+// ReadFrameMessage reassembles a complete text or binary message and handles
+// control frames inline. The returned opcode is opcodeText or opcodeBinary.
+func (w *Conn) ReadFrameMessage() (byte, []byte, error) {
 	var fragments []byte
-	started := false
+	messageOpcode := byte(0)
 	for {
 		fin, opcode, payload, err := w.readFrame()
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 		switch opcode {
 		case opcodeClose:
 			_ = w.writeControl(opcodeClose, payload)
-			return nil, ErrClosed
+			return 0, nil, ErrClosed
 		case opcodePing:
 			if err := w.writeControl(opcodePong, payload); err != nil {
-				return nil, err
+				return 0, nil, err
 			}
 			continue
 		case opcodePong:
 			continue
-		case opcodeText:
-			if started {
-				return nil, errors.New("interleaved websocket text frames")
+		case opcodeText, opcodeBinary:
+			if messageOpcode != 0 {
+				return 0, nil, errors.New("interleaved websocket frames")
 			}
-			started = true
+			messageOpcode = opcode
 			fragments = append(fragments, payload...)
 		case opcodeContinue:
-			if !started {
-				return nil, errors.New("unexpected websocket continuation")
+			if messageOpcode == 0 {
+				return 0, nil, errors.New("unexpected websocket continuation")
 			}
 			fragments = append(fragments, payload...)
 		default:
-			return nil, errors.New("unsupported websocket opcode")
+			return 0, nil, errors.New("unsupported websocket opcode")
 		}
 		if len(fragments) > maxMessage {
-			return nil, errors.New("websocket message too large")
+			return 0, nil, errors.New("websocket message too large")
 		}
 		if fin {
-			return fragments, nil
+			return messageOpcode, fragments, nil
 		}
 	}
 }
@@ -278,6 +293,17 @@ func (w *Conn) WriteText(payload []byte) error {
 // without turning the room broadcast path into an unbounded memory queue.
 func (w *Conn) WriteTextWait(payload []byte) error {
 	return w.enqueueWait(opcodeText, payload)
+}
+
+// WriteBinary queues one binary frame.
+func (w *Conn) WriteBinary(payload []byte) error {
+	return w.enqueue(opcodeBinary, payload)
+}
+
+// WriteBinaryWait queues one binary frame with the same backpressure contract
+// as WriteTextWait; asset streams run outside the broadcast path.
+func (w *Conn) WriteBinaryWait(payload []byte) error {
+	return w.enqueueWait(opcodeBinary, payload)
 }
 
 // enqueueWait adds one frame after capacity becomes available or the socket
