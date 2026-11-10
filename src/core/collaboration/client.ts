@@ -48,6 +48,16 @@ export type CommittedMessage = Omit<Extract<ServerMessage, { type: "committed" }
   readonly changes: readonly ChartChange[];
 };
 
+/** One upload or download milestone, used by the room progress dialog. */
+export interface AssetTransferProgress {
+  readonly name: string;
+  readonly direction: "upload" | "download";
+  /** `begin` and `progress` keep the row active; `done` releases it. */
+  readonly state: "begin" | "progress" | "done";
+  readonly received: number;
+  readonly total: number;
+}
+
 /** Options for a collaboration client. */
 export interface CollaborationClientOptions {
   readonly socketFactory?: CollaborationSocketFactory;
@@ -62,7 +72,8 @@ export interface CollaborationClientOptions {
   readonly onRole?: (role: CollaborationRole, reason?: string) => void;
   readonly onError?: (message: string, code?: string) => void;
   readonly onAssetReady?: (asset: RoomAsset, bytes: Uint8Array) => void;
-  readonly onAssetError?: (message: string) => void;
+  readonly onAssetProgress?: (progress: AssetTransferProgress) => void;
+  readonly onAssetError?: (message: string, assetName?: string) => void;
   readonly onLockDenied?: (conflicts: readonly RoomLock[]) => void;
   /** A lock request received no answer before its client-side deadline. */
   readonly onLockTimeout?: () => void;
@@ -495,6 +506,40 @@ export class CollaborationClient {
     this.shutdownRoom();
   }
 
+  /**
+   * Abort an in-flight create, join, or asset transfer and release its memory.
+   *
+   * The best-effort wire instruction releases the member slot or closes a room
+   * this client already owns. Timers, socket, outbox, uploads, downloads, and
+   * their buffers are cleared before the observable state returns to idle, so a
+   * cancelled join cannot keep writing into the editor document.
+   */
+  abort(): void {
+    if (this.socket && this.socketOpen) {
+      const state = this.state.get();
+      const type = state.role === "host" && state.roomId ? "close-room" : "leave";
+      try {
+        this.socket.send(JSON.stringify({ type }));
+      } catch {
+        // The socket may already be closing; local cleanup still proceeds.
+      }
+    }
+    this.manualClose = true;
+    this.reconnectWanted = false;
+    this.socketOpen = false;
+    this.clearReconnect();
+    this.clearConnectTimer();
+    this.clearHandshakeTimer();
+    this.heartbeat.stop();
+    this.pendingOpenAction = null;
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close(1000, "abort");
+    this.resetTransportState();
+    this.clearRoom();
+    this.setState({ status: "idle", error: "" });
+  }
+
   /** Host-only close: delete the room for every member and stop reconnecting. */
   closeRoom(): void {
     if (this.state.get().role !== "host") {
@@ -644,6 +689,8 @@ export class CollaborationClient {
       mime,
       plaintextHash,
     });
+    this.reportAssetProgress(name, "upload", "begin", 0, payload.byteLength);
+    let sentBytes = 0;
     for (const range of assetChunkRanges(payload.byteLength)) {
       this.send({
         type: "asset-chunk",
@@ -651,6 +698,8 @@ export class CollaborationClient {
         index: range.index,
         data: bytesToBase64(payload.subarray(range.offset, range.offset + range.length)),
       });
+      sentBytes += range.length;
+      this.reportAssetProgress(name, "upload", "progress", sentBytes, payload.byteLength);
       await yieldToHost();
     }
     this.send({ type: "asset-commit", requestId });
@@ -673,6 +722,17 @@ export class CollaborationClient {
     clearTimeout(waiter.timer);
     this.uploadWaiters.delete(requestId);
     waiter.reject(new Error(message));
+  }
+
+  /** Publish one transfer milestone without making the progress UI poll. */
+  private reportAssetProgress(
+    name: string,
+    direction: "upload" | "download",
+    state: "begin" | "progress" | "done",
+    received: number,
+    total: number,
+  ): void {
+    this.options.onAssetProgress?.({ name, direction, state, received, total });
   }
 
   /** Acquire an all-or-nothing lease set before a transaction. */
@@ -1262,6 +1322,7 @@ export class CollaborationClient {
         for (const [requestId, upload] of this.uploads) {
           if (upload.hash === message.asset.hash && upload.name === message.asset.name) {
             this.uploads.delete(requestId);
+            this.reportAssetProgress(upload.name, "upload", "done", upload.size, upload.size);
             const waiter = this.uploadWaiters.get(requestId);
             if (waiter) {
               clearTimeout(waiter.timer);
@@ -1279,6 +1340,7 @@ export class CollaborationClient {
           asset: message.asset,
           assembler: new AssetAssembler(message.asset.size, message.chunkSize),
         });
+        this.reportAssetProgress(message.asset.name, "download", "begin", 0, message.asset.size);
         return;
       }
       case "asset-download-chunk": {
@@ -1291,14 +1353,28 @@ export class CollaborationClient {
           chunk = base64ToBytes(message.data);
         } catch {
           this.downloads.delete(message.requestId);
-          this.options.onAssetError?.(`Invalid chunk for ${download.asset.name}`);
+          this.options.onAssetError?.(
+            `Invalid chunk for ${download.asset.name}`,
+            download.asset.name,
+          );
           return;
         }
         const accepted = download.assembler.write(message.index, chunk);
         if (!accepted.ok) {
           this.downloads.delete(message.requestId);
-          this.options.onAssetError?.(`Invalid chunk for ${download.asset.name}`);
+          this.options.onAssetError?.(
+            `Invalid chunk for ${download.asset.name}`,
+            download.asset.name,
+          );
+          return;
         }
+        this.reportAssetProgress(
+          download.asset.name,
+          "download",
+          "progress",
+          download.assembler.receivedBytes,
+          download.asset.size,
+        );
         return;
       }
       case "asset-download-end": {
@@ -1309,7 +1385,10 @@ export class CollaborationClient {
         }
         if (!download.assembler.complete) {
           this.requestedHashes.delete(`${download.asset.name}\n${download.asset.hash}`);
-          this.options.onAssetError?.(`${download.asset.name} transfer was incomplete`);
+          this.options.onAssetError?.(
+            `${download.asset.name} transfer was incomplete`,
+            download.asset.name,
+          );
           return;
         }
         const bytes = download.assembler.result();
@@ -1317,26 +1396,42 @@ export class CollaborationClient {
           const hash = await sha256Hex(bytes);
           if (hash !== download.asset.hash) {
             this.requestedHashes.delete(`${download.asset.name}\n${download.asset.hash}`);
-            this.options.onAssetError?.(`${download.asset.name} failed its integrity check`);
+            this.options.onAssetError?.(
+              `${download.asset.name} failed its integrity check`,
+              download.asset.name,
+            );
             return;
           }
           let verified = bytes;
           if (this.encrypted) {
             if (!this.encryptionKey) {
-              this.options.onAssetError?.("Room key is unavailable");
+              this.options.onAssetError?.("Room key is unavailable", download.asset.name);
               return;
             }
             try {
               verified = await decryptBytes(this.encryptionKey, bytes);
             } catch {
-              this.options.onAssetError?.(`${download.asset.name} could not be decrypted`);
+              this.options.onAssetError?.(
+                `${download.asset.name} could not be decrypted`,
+                download.asset.name,
+              );
               return;
             }
             if (!matchesAssetMagic(download.asset.mime, verified)) {
-              this.options.onAssetError?.(`${download.asset.name} has an invalid file type`);
+              this.options.onAssetError?.(
+                `${download.asset.name} has an invalid file type`,
+                download.asset.name,
+              );
               return;
             }
           }
+          this.reportAssetProgress(
+            download.asset.name,
+            "download",
+            "done",
+            download.asset.size,
+            download.asset.size,
+          );
           this.options.onAssetReady?.(download.asset, verified);
         })();
         return;
@@ -1361,7 +1456,7 @@ export class CollaborationClient {
             }
           }
         }
-        this.options.onAssetError?.(message.message);
+        this.options.onAssetError?.(message.message, message.name);
         return;
       }
       case "error": {
