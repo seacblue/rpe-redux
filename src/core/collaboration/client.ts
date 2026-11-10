@@ -245,6 +245,15 @@ export class CollaborationClient {
   /** Queues server messages behind an in-flight gzip payload decode. */
   private decoding = false;
   private queuedData: unknown[] = [];
+  private chartTransfer: {
+    message: ServerMessage;
+    id: string;
+    size: number;
+    count: number;
+    bytes: Uint8Array;
+    seen: Uint8Array;
+    received: number;
+  } | null = null;
   private roomGeneration = 0;
   private readonly outbox = new Outbox<PendingTransaction>({
     maxEntries: 512,
@@ -1123,6 +1132,7 @@ export class CollaborationClient {
   private resetTransportState(): void {
     this.binaryChunks = false;
     this.assetAdopt = false;
+    this.chartTransfer = null;
     for (const [requestId, waiter] of this.beginWaiters) {
       clearTimeout(waiter.timer);
       waiter.reject(
@@ -1218,7 +1228,7 @@ export class CollaborationClient {
 
   /** Queue one server message behind any payload decode already in flight. */
   private enqueueData(raw: unknown): void {
-    if (this.decoding) {
+    if (this.decoding && (typeof raw === "string" || !this.chartTransfer)) {
       this.queuedData.push(raw);
       return;
     }
@@ -1255,6 +1265,10 @@ export class CollaborationClient {
       return;
     }
     this.heartbeat.touch();
+    if ((parsed.type === "welcome" || parsed.type === "snapshot") && parsed.chartChunks === true) {
+      this.startChartTransfer(parsed);
+      return;
+    }
     if (
       (parsed.type === "welcome" || parsed.type === "snapshot") &&
       parsed.chartEncoding === "gzip"
@@ -1293,12 +1307,113 @@ export class CollaborationClient {
     }
     this.heartbeat.touch();
     const { header, body } = decoded;
+    if (header.type === "chart-chunk") {
+      this.acceptChartChunk(header, body);
+      return;
+    }
     if (header.type !== "asset-download-chunk") {
       return;
     }
     const requestId = typeof header.requestId === "string" ? header.requestId : "";
     const index = typeof header.index === "number" ? header.index : Number.NaN;
     this.acceptDownloadChunk(requestId, index, body);
+  }
+
+  /** Start assembling one chunked welcome or snapshot chart. */
+  private startChartTransfer(
+    message: Extract<ServerMessage, { type: "welcome" | "snapshot" }>,
+  ): void {
+    const id = typeof message.chartTransfer === "string" ? message.chartTransfer : "";
+    const size = message.chartSize;
+    const count = message.chartChunkCount;
+    if (
+      !id ||
+      !Number.isSafeInteger(size) ||
+      (size ?? 0) <= 0 ||
+      !Number.isSafeInteger(count) ||
+      (count ?? 0) <= 0
+    ) {
+      this.failInitial("The room chart transfer is malformed.", "invalid_chart");
+      return;
+    }
+    this.chartTransfer = {
+      message,
+      id,
+      size: size as number,
+      count: count as number,
+      bytes: new Uint8Array(size as number),
+      seen: new Uint8Array(count as number),
+      received: 0,
+    };
+    this.decoding = true;
+  }
+
+  /** Accept one binary chart chunk and finish the transfer when complete. */
+  private acceptChartChunk(header: Record<string, unknown>, body: Uint8Array): void {
+    const transfer = this.chartTransfer;
+    if (!transfer) {
+      return;
+    }
+    const id = typeof header.transferId === "string" ? header.transferId : "";
+    const index = typeof header.index === "number" ? header.index : Number.NaN;
+    const count = typeof header.count === "number" ? header.count : Number.NaN;
+    const size = typeof header.size === "number" ? header.size : Number.NaN;
+    const offset = typeof header.offset === "number" ? header.offset : Number.NaN;
+    if (
+      id !== transfer.id ||
+      count !== transfer.count ||
+      size !== transfer.size ||
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index >= transfer.count ||
+      !Number.isInteger(offset) ||
+      offset < 0 ||
+      offset + body.byteLength > transfer.size
+    ) {
+      this.chartTransfer = null;
+      this.decoding = false;
+      this.failInitial("The room chart transfer is malformed.", "invalid_chart");
+      return;
+    }
+    if (transfer.seen[index]) {
+      return;
+    }
+    transfer.seen[index] = 1;
+    transfer.bytes.set(body, offset);
+    transfer.received += 1;
+    if (transfer.received === transfer.count) {
+      this.finishChartTransfer();
+    }
+  }
+
+  /** Decode the assembled gzip chart and dispatch its welcome or snapshot. */
+  private finishChartTransfer(): void {
+    const transfer = this.chartTransfer;
+    if (!transfer) {
+      return;
+    }
+    this.chartTransfer = null;
+    void (async () => {
+      try {
+        const json = new TextDecoder().decode(await gunzipBytes(transfer.bytes));
+        const chart = JSON.parse(json) as unknown;
+        const message = {
+          ...transfer.message,
+          chart,
+          chartChunks: undefined,
+          chartTransfer: undefined,
+          chartSize: undefined,
+          chartChunkCount: undefined,
+        } as ServerMessage;
+        this.decoding = false;
+        this.dispatchMessage(message, chart);
+        this.drainQueuedData();
+      } catch {
+        this.decoding = false;
+        this.failInitial("The room chart could not be decoded.", "invalid_chart");
+        this.drainQueuedData();
+      }
+    })();
   }
 
   /** Decode one gzipped plaintext commit, dispatch it, then resume queued messages. */
@@ -2059,8 +2174,8 @@ export class CollaborationClient {
   }
 
   /** Advertise transport capabilities during create, join, and resume. */
-  private transportFields(): { readonly binaryChunks: boolean } {
-    return { binaryChunks: true };
+  private transportFields(): { readonly binaryChunks: boolean; readonly chartChunks: boolean } {
+    return { binaryChunks: true, chartChunks: true };
   }
 
   /** Tell a resuming server which chart revision this client already applied. */

@@ -362,7 +362,9 @@ export class ChartDocument {
    * their summaries are kept so a later page-in still knows where they belong.
    */
   applyLineSnapshot(lines: readonly JudgeLine[], header: ChartHeader): void {
+    const tempoWasDirty = this.tempoDirty;
     this.setHeader(header);
+    const recomputeAll = tempoWasDirty || this.tempoDirty;
     this.lineCount = lines.length;
     while (this.slots.length < lines.length) {
       const index = this.slots.length;
@@ -379,6 +381,12 @@ export class ChartDocument {
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
       const slot = this.slots[index];
+      // A remote change reuses every untouched line object. Keep its summary
+      // instead of re-hashing the whole chart on each accepted batch.
+      if (!recomputeAll && line === this.lines[index]) {
+        slot.summary = { ...slot.summary, index };
+        continue;
+      }
       if (isPlaceholderLine(line)) {
         this.cachedBytes = Math.max(0, this.cachedBytes - (slot.raw?.length ?? 0));
         slot.line = undefined;

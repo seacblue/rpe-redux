@@ -146,6 +146,23 @@ async function nextType(connection, type) {
   throw new Error(`did not receive ${type}`);
 }
 
+/** Collect one chunked chart transfer and return its gzip bytes. */
+async function collectChartChunks(connection, message) {
+  const bytes = Buffer.alloc(message.chartSize);
+  let received = 0;
+  while (received < message.chartChunkCount) {
+    const frame = await connection.next();
+    if (frame.message?.type !== "chart-chunk") {
+      continue;
+    }
+    assert.equal(frame.message.transferId, message.chartTransfer);
+    assert.equal(frame.message.size, message.chartSize);
+    bytes.set(frame.body, frame.message.offset);
+    received += 1;
+  }
+  return bytes;
+}
+
 async function startServer(port, dataDir = "", env = {}) {
   const child = spawn(
     process.execPath,
@@ -289,6 +306,53 @@ test("a chart above 4MB is gzipped for create and welcomed to a guest", async ()
     assert.equal(restored.judgeLineList[0].notes.length, notes.length);
     host.socket.close();
     guest.socket.close();
+  } finally {
+    await stopServer(running);
+  }
+});
+
+test("a chart snapshot is split into binary chunks for capable clients", async () => {
+  const running = await startServer(0);
+  try {
+    const name = randomBytes(700 * 1024).toString("base64");
+    const largeChart = chart(name);
+    const host = await openFrames(running.url);
+    host.socket.send(
+      JSON.stringify({
+        type: "create",
+        profile: { name: "Host", color: "#ffffff" },
+        chart: largeChart,
+        fingerprint: "chunked",
+        binaryChunks: true,
+        chartChunks: true,
+        autoApproveEditor: true,
+      }),
+    );
+    const hostWelcome = await nextFrameType(host, "welcome");
+    assert.equal(hostWelcome.message.chart, undefined);
+
+    host.socket.send(JSON.stringify({ type: "snapshot-request" }));
+    const snapshot = await nextFrameType(host, "snapshot");
+    assert.equal(snapshot.message.chartChunks, true);
+    assert.ok(snapshot.message.chartChunkCount > 1);
+    const snapshotChart = await collectChartChunks(host, snapshot.message);
+    assert.deepEqual(JSON.parse(gunzipSync(snapshotChart).toString("utf8")), largeChart);
+
+    const guest = await openFrames(running.url);
+    guest.socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId: hostWelcome.message.roomId,
+        invite: hostWelcome.message.invite,
+        profile: { name: "Guest", color: "#ffffff" },
+        binaryChunks: true,
+        chartChunks: true,
+      }),
+    );
+    const guestWelcome = await nextFrameType(guest, "welcome");
+    assert.equal(guestWelcome.message.chartChunks, true);
+    const guestChart = await collectChartChunks(guest, guestWelcome.message);
+    assert.deepEqual(JSON.parse(gunzipSync(guestChart).toString("utf8")), largeChart);
   } finally {
     await stopServer(running);
   }

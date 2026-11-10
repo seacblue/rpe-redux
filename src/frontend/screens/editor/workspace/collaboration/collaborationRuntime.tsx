@@ -1524,6 +1524,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return;
         }
         appliedRevision.current = client.state.get().revision;
+        if (
+          session.chartDocument &&
+          snapshot.fingerprint &&
+          snapshot.fingerprint === session.history.fingerprint()
+        ) {
+          return;
+        }
         if (stableFingerprint(session.chart) === stableFingerprint(parsed)) {
           return;
         }
@@ -2132,8 +2139,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const session = sessionRuntime.current;
     let roomChart: Chart;
     try {
-      // A room snapshot is the full chart; a paged document must materialize
-      // its placeholders before it becomes authoritative room state.
+      // Remote change application is object-addressed, so a paged facade must
+      // expose every line before it becomes authoritative room state.
       roomChart = session.chartDocument
         ? await session.chartDocument.materializeAll()
         : session.chart;

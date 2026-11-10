@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CollaborationClient } from "../../../core/collaboration/client.ts";
-import { encodeChartWire } from "../../../core/collaboration/chartWire.ts";
+import { encodeChartWire, gzipBytes } from "../../../core/collaboration/chartWire.ts";
+import { encodeBinaryAssetFrame } from "../../../core/collaboration/transfer.ts";
 
 /** Minimal socket surface the client consumes. */
 class FakeSocket {
@@ -108,6 +109,87 @@ test("a gzip chart is sent, welcomed, and snapshotted through the same wire form
       fingerprint: "fp-2",
     }),
   });
+  await until(() => snapshots.length === 2);
+  assert.deepEqual(snapshots[1].chart, value);
+  assert.equal(snapshots[1].revision, 2);
+  client.dispose();
+});
+
+test("a chunked welcome and snapshot assemble before the editor sees them", async () => {
+  const sockets = [];
+  const snapshots = [];
+  const client = new CollaborationClient({
+    socketFactory: () => {
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket;
+    },
+    reconnect: false,
+    onSnapshot: (snapshot) => snapshots.push(snapshot),
+  });
+  const value = chart();
+  const bytes = await gzipBytes(new TextEncoder().encode(JSON.stringify(value)));
+  const chunkSize = 7;
+  const count = Math.ceil(bytes.length / chunkSize);
+  const transfer = (index) => {
+    const offset = index * chunkSize;
+    const end = Math.min(bytes.length, offset + chunkSize);
+    return encodeBinaryAssetFrame(
+      {
+        type: "chart-chunk",
+        transferId: "transfer-1",
+        index,
+        offset,
+        count,
+        size: bytes.length,
+      },
+      bytes.subarray(offset, end),
+    );
+  };
+  client.connect("ws://127.0.0.1:47830");
+  client.createRoom({ name: "Host", color: "#ffffff" }, "{}", "fp");
+  const socket = sockets[0];
+  socket.emit("open");
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "welcome",
+      roomId: "ROOM",
+      invite: "INVITE",
+      memberId: "host",
+      hostId: "host",
+      role: "host",
+      revision: 1,
+      chartChunks: true,
+      chartTransfer: "transfer-1",
+      chartSize: bytes.length,
+      chartChunkCount: count,
+      fingerprint: "fp",
+      members: [],
+      presence: [],
+      resumeToken: "token",
+    }),
+  });
+  for (let index = 0; index < count; index += 1) {
+    socket.emit("message", { data: transfer(index) });
+  }
+  await until(() => snapshots.length === 1);
+  assert.deepEqual(snapshots[0].chart, value);
+  assert.equal(snapshots[0].revision, 1);
+
+  socket.emit("message", {
+    data: JSON.stringify({
+      type: "snapshot",
+      revision: 2,
+      chartChunks: true,
+      chartTransfer: "transfer-1",
+      chartSize: bytes.length,
+      chartChunkCount: count,
+      fingerprint: "fp-2",
+    }),
+  });
+  for (let index = 0; index < count; index += 1) {
+    socket.emit("message", { data: transfer(index) });
+  }
   await until(() => snapshots.length === 2);
   assert.deepEqual(snapshots[1].chart, value);
   assert.equal(snapshots[1].revision, 2);

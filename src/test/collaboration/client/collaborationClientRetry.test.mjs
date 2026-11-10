@@ -79,6 +79,7 @@ test("a reconnect resume reports the exact chart this client already applied", (
       roomId: "ROOM",
       token: "secret",
       binaryChunks: true,
+      chartChunks: true,
       hasChart: true,
       revision: 4,
       fingerprint: "fp-4",

@@ -210,6 +210,15 @@ export async function serializeChartOffThread(chart: unknown): Promise<string> {
  * `JSON.stringify` on the main thread so a create can still proceed.
  */
 export async function serializeChartJsonOffThread(chart: unknown): Promise<string> {
+  const document =
+    chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
+  if (document?.serialize) {
+    const chunks: string[] = [];
+    await document.serialize((chunk) => {
+      chunks.push(chunk);
+    });
+    return chunks.join("");
+  }
   return serializeOffThread(chart, "json", false);
 }
 

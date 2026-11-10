@@ -7,6 +7,7 @@ package collab
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net"
@@ -22,6 +23,10 @@ import (
 // Per-socket upload concurrency and the shared upload reservation cap.
 const collabMaxUploadsPerSocket = 2
 const collabMaxUploadReserved = int64(512) << 20
+
+// Chart snapshots travel in bounded binary chunks so one compressed room
+// payload never has to fit the WebSocket text-message ceiling.
+const collabChartChunkBytes = 512 << 10
 
 // Concurrent upgraded sockets. The bound keeps a caller that opens connections
 // without joining from growing per-connection state without limit.
@@ -391,6 +396,50 @@ func (s *Server) sendBinaryWait(socket *collabSocket, header map[string]any, chu
 	return true
 }
 
+// sendChartPayload sends a welcome or snapshot, splitting a gzip chart into
+// binary chunks when the peer advertised chartChunks. Other payloads keep the
+// legacy single text message.
+func (s *Server) sendChartPayload(
+	socket *collabSocket,
+	room *collabRoom,
+	payload map[string]any,
+) {
+	if !socket.chartChunks || payload["chartEncoding"] != "gzip" {
+		s.send(socket, payload)
+		return
+	}
+	bytes, ok := s.rooms.chartBytes(room)
+	if !ok || len(bytes) == 0 {
+		s.send(socket, payload)
+		return
+	}
+	transferID := fmt.Sprintf("%s:%d", room.ID, room.Revision)
+	count := (len(bytes) + collabChartChunkBytes - 1) / collabChartChunkBytes
+	delete(payload, "chart")
+	delete(payload, "chartEncoding")
+	payload["chartChunks"] = true
+	payload["chartTransfer"] = transferID
+	payload["chartSize"] = len(bytes)
+	payload["chartChunkCount"] = count
+	if !s.sendWait(socket, payload) {
+		return
+	}
+	for index := 0; index < count; index++ {
+		start := index * collabChartChunkBytes
+		end := min(start+collabChartChunkBytes, len(bytes))
+		if !s.sendBinaryWait(socket, map[string]any{
+			"type":       "chart-chunk",
+			"transferId": transferID,
+			"index":      index,
+			"offset":     start,
+			"count":      count,
+			"size":       len(bytes),
+		}, bytes[start:end]) {
+			return
+		}
+	}
+}
+
 func (s *Server) sendError(socket *collabSocket, code, message string) {
 	s.send(socket, map[string]any{"type": "error", "code": code, "message": message})
 }
@@ -464,7 +513,7 @@ func (s *Server) welcome(socket *collabSocket, room *collabRoom, member *collabM
 		payload["binaryChunks"] = true
 	}
 	payload["assetAdopt"] = true
-	s.send(socket, payload)
+	s.sendChartPayload(socket, room, payload)
 }
 
 // welcomeResumed sends a welcome that skips the chart when the client already
@@ -487,7 +536,7 @@ func (s *Server) welcomeResumed(socket *collabSocket, room *collabRoom, member *
 		payload["binaryChunks"] = true
 	}
 	payload["assetAdopt"] = true
-	s.send(socket, payload)
+	s.sendChartPayload(socket, room, payload)
 }
 
 // cleanup forgets a closed socket's pending requests, detaches it, and stops
@@ -562,6 +611,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 	switch collabStringField(message, "type") {
 	case "create":
 		socket.binaryChunks = message["binaryChunks"] == true
+		socket.chartChunks = message["chartChunks"] == true
 		if s.connection(socket) != nil {
 			s.sendError(socket, "already_in_room", "Leave the current room before creating another")
 			return
@@ -621,6 +671,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		return
 	case "join":
 		socket.binaryChunks = message["binaryChunks"] == true
+		socket.chartChunks = message["chartChunks"] == true
 		if socket.joinFailures >= collabMaxJoinAttempts {
 			s.sendError(socket, "too_many_joins", "Too many failed join attempts; reconnect to try again.")
 			socket.Close()
@@ -719,6 +770,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		return
 	case "resume":
 		socket.binaryChunks = message["binaryChunks"] == true
+		socket.chartChunks = message["chartChunks"] == true
 		room, member, failure := s.rooms.resume(collabStringField(message, "roomId"), collabStringField(message, "token"), collabStringField(message, "appVersion"))
 		if failure != nil {
 			s.send(socket, map[string]any{"type": "rejected", "reason": failure.Code, "message": failure.Message})
@@ -812,7 +864,7 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 		s.handlePresence(socket, connection, room, message)
 	case "snapshot-request":
 		if payload, ok := s.rooms.snapshotPayload(room); ok {
-			s.send(socket, payload)
+			s.sendChartPayload(socket, room, payload)
 		}
 	case "transaction":
 		s.handleTransaction(socket, connection, room, message)
