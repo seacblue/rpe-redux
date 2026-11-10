@@ -1,21 +1,31 @@
-/** Draws the trajectory preview and shader event bars in the event field. */
+/**
+ * Draws the trajectory preview, the pending event placement, and shader event
+ * bars in the event field.
+ */
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import { type IntervalEntry } from "../../../../../../core/utils/intervalIndex.ts";
 import { eventKey } from "../../../../../../core/edit/events/eventTracks.ts";
+import { placedEvent } from "../../../../../../core/edit/events/eventCommands.ts";
 import { hasNonPositiveRange } from "../../../../../../core/edit/timeline/model.ts";
+import { eventColumnBounds } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { shaderIdentity } from "../../../../../../core/global/chart/shader/shaderEvents.ts";
 import { trajectoryEventValue } from "../../../../../../core/global/chart/trajectory/curveTrajectory.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import type { TimelineEventRect } from "../../../../../../core/edit/timeline/types.ts";
 import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
+import type { EventInteractionHandle } from "../drawing/canvas.ts";
 import type {
   TimelineEventDrawingReceiver,
   TimelineEventOverlayReceiver,
+  TimelinePendingEventReceiver,
 } from "../drawing/timelineReceiver.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
+import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
+import { eventColumnForTrack } from "./eventColumns.ts";
 import { drawEventBar, eventBarOpacity } from "./eventRenderCache.ts";
 import {
+  drawEventOverlapFilter,
   drawEventSelectionFilters,
   drawRemoteEventSelectionFilters,
 } from "./eventSelectionDrawing.ts";
@@ -99,6 +109,80 @@ export function drawTrajectoryEvent(
     }
   }
   context.restore();
+}
+
+/**
+ * Draw the armed placement preview as the committed event-bar skin at half
+ * opacity.
+ *
+ * The preview follows the same column, span, and per-line dimming as a
+ * committed event so it reads as that object rather than a procedural overlay.
+ * A span the placement rules reject borrows the committed-event overlap tint.
+ */
+export function drawPendingEvent(
+  this: TimelinePendingEventReceiver,
+  context: CanvasRenderingContext2D,
+  pending: NonNullable<EventInteractionHandle["pending"]>,
+  width: number,
+): void {
+  const session = this.getSession();
+  const pendingLineIndex = pending.lineIndex ?? session.lineIndex;
+  const eventTypes = this.viewport.eventTypesForLine(pendingLineIndex);
+  const channel = eventColumnForTrack(eventTypes, pending.type);
+  if (channel < 0) {
+    return;
+  }
+  const cursorBeat = this.gestures.eventCursor
+    ? this.viewport.eventBeatAt(this.gestures.eventCursor.y, pending.type, true)
+    : pending.beat;
+  // The endpoint may be earlier than the start. Order the two anchors here so
+  // the preview and the committed event share one span.
+  const startBeat = Math.min(pending.beat, cursorBeat);
+  const endBeat = Math.max(pending.beat, cursorBeat);
+  let valid = true;
+  try {
+    placedEvent(session, pending.type, startBeat, endBeat, undefined, pending.lineIndex);
+  } catch {
+    valid = false;
+  }
+  const vertical =
+    session.multiLineActive && session.multiLineMode === "events"
+      ? (beat: number) => this.viewport.verticalForLine(beat, pendingLineIndex)
+      : (beat: number) => this.viewport.eventVertical(beat, pending.type);
+  const top = Math.min(vertical(startBeat), vertical(endBeat));
+  const height = Math.max(2, Math.abs(vertical(startBeat) - vertical(endBeat)));
+  const panelWidth = this.viewport.panelWidth(width, "events");
+  const panelOffset =
+    this.viewport.panelIndex(pendingLineIndex, "events") *
+      this.viewport.panelStride(width, "events") -
+    this.viewport.multiLineViewportOffset(width, "events");
+  const column = eventColumnBounds(
+    channel,
+    panelWidth,
+    eventTypes.length,
+    this.viewport.eventBarWidth ?? 0.82,
+    this.viewport.eventInset(panelWidth),
+  );
+  const rectangle = { x: panelOffset + column.x, y: top, width: column.width, height };
+  const appearance = this.appearance;
+  const lineOpacity =
+    session.multiLineActive && session.multiLineMode === "events"
+      ? multiLineLineOpacity(
+          pendingLineIndex,
+          session.lineIndex,
+          appearance.multiLineNonCurrentOpacity,
+        )
+      : 1;
+  const previewLineOpacity = lineOpacity / 2;
+  context.save();
+  context.globalAlpha = eventBarOpacity(appearance.eventOpacity, previewLineOpacity);
+  drawEventBar(this, context, rectangle, previewLineOpacity);
+  context.restore();
+  if (!valid) {
+    // Reuse the committed-event overlap tint so a rejected span keeps the
+    // track's existing warning language.
+    drawEventOverlapFilter(context, rectangle, readCanvasPalette());
+  }
 }
 
 /** Draw paint events in their shader lanes with the shared event-bar skin. */

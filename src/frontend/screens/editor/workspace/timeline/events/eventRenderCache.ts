@@ -19,6 +19,9 @@ import { strokeVerticalGrid } from "../drawing/gridDrawing.ts";
 
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
 
+/** The event-bar resources shared by track painting and the placement preview. */
+type EventBarReceiver = Pick<TimelineEventDrawingReceiver, "appearance" | "eventBatch">;
+
 /** Event-bar opacity shared by the canvas fallback and the GPU batch. */
 export function eventBarOpacity(eventOpacity: number | undefined, lineOpacity = 1): number {
   return clamp01((eventOpacity ?? 1) * lineOpacity);
@@ -51,7 +54,7 @@ export function verticalAtBeat(
 
 /** Add a bar to the GPU batch, falling back to the skin's canvas bar. */
 export function drawEventBar(
-  receiver: TimelineEventDrawingReceiver,
+  receiver: EventBarReceiver,
   context: CanvasRenderingContext2D,
   rectangle: EventBarRectangle,
   lineOpacity = 1,

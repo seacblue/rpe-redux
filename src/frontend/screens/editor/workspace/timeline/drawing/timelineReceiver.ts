@@ -171,6 +171,28 @@ export type TimelineEventOverlayReceiver = Pick<
   "appearance" | "cache" | "getSession" | "gestures" | "remoteSelectedEventIds" | "viewport"
 >;
 
+/** The pending event preview contract: placement geometry plus the shared event-bar resources. */
+export type TimelinePendingEventReceiver = Pick<
+  TimelineRuntimeSurface,
+  "appearance" | "eventBatch" | "getSession"
+> & {
+  readonly gestures: Pick<TimelineGestures, "eventCursor">;
+  readonly viewport: Pick<
+    TimelineViewport,
+    | "eventBarWidth"
+    | "eventBeatAt"
+    | "eventInset"
+    | "eventTypesForLine"
+    | "eventVertical"
+    | "multiLineViewportOffset"
+    | "panelIndex"
+    | "panelStride"
+    | "panelWidth"
+    | "verticalForLine"
+    | "viewHeight"
+  >;
+};
+
 /** The event-layer status contract used by the layer-button surface. */
 export type TimelineLayerReceiver = Pick<
   TimelineRuntimeSurface,

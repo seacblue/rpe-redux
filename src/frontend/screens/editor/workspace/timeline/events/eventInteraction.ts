@@ -20,7 +20,6 @@ import {
 } from "../../../../../../core/global/chart/timing/beat.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { EVENT_TYPES } from "../../../../../../core/global/chart/chart.ts";
-import { eventColumnBounds } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { trackLabels } from "../drawing/canvas.ts";
 import { eventTypeAt, SPECIAL_TRACKS, specialTrackLabel } from "../drawing/tracks.ts";
 import { eventColumnForTrack } from "./eventColumns.ts";
@@ -30,26 +29,25 @@ import {
   eventList,
   NOISE_ACTIVE_EVENTS,
 } from "../../../../../../core/edit/events/eventTracks.ts";
-import {
-  placedEvent,
-  placeEventAtTarget,
-} from "../../../../../../core/edit/events/eventCommands.ts";
+import { placeEventAtTarget } from "../../../../../../core/edit/events/eventCommands.ts";
 import type { EventInteractionHandle } from "../drawing/canvas.ts";
 import type {
   TimelineEventDrag,
   TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
-import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { captureEventBaseline, marqueeHistoryKey } from "../selection/rectangleSelection.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
+import { drawPendingEvent } from "./eventOverlayDrawing.ts";
 
 type EventTimeline = Pick<
   TimelineRuntimeSurface,
+  | "appearance"
   | "cache"
+  | "eventBatch"
   | "eventsCanvas"
   | "getSession"
   | "eventTypes"
@@ -681,62 +679,8 @@ export class EventInteraction implements EventInteractionHandle {
 
   /** Draw the pending event placement preview. */
   draw(context: CanvasRenderingContext2D, width: number): void {
-    const pending = this.pending;
-    if (!pending) {
-      return;
+    if (this.pending) {
+      drawPendingEvent.call(this.timeline, context, this.pending, width);
     }
-    const session = this.timeline.getSession();
-    const pendingLineIndex = pending.lineIndex ?? session.lineIndex;
-    const eventTypes = this.timeline.viewport.eventTypesForLine(pendingLineIndex);
-    const channel = eventColumnForTrack(eventTypes, pending.type);
-    if (channel < 0) {
-      return;
-    }
-    const cursorBeat = this.timeline.gestures.eventCursor
-      ? this.timeline.viewport.eventBeatAt(this.timeline.gestures.eventCursor.y, pending.type, true)
-      : pending.beat;
-    // The endpoint may be earlier than the start. Order the two anchors here
-    // so the preview and the committed event share one span.
-    const startBeat = Math.min(pending.beat, cursorBeat);
-    const endBeat = Math.max(pending.beat, cursorBeat);
-    let valid = true;
-    try {
-      placedEvent(
-        this.timeline.getSession(),
-        pending.type,
-        startBeat,
-        endBeat,
-        undefined,
-        pending.lineIndex,
-      );
-    } catch {
-      valid = false;
-    }
-    const lineIndex = pendingLineIndex;
-    const vertical =
-      session.multiLineActive && session.multiLineMode === "events"
-        ? (beat: number) =>
-            this.timeline.viewport.verticalForLine(beat, lineIndex, this.canvas.clientHeight)
-        : (beat: number) => this.timeline.viewport.eventVertical(beat, pending.type);
-    const top = Math.min(vertical(startBeat), vertical(endBeat));
-    const height = Math.max(2, Math.abs(vertical(startBeat) - vertical(endBeat)));
-    const panelWidth = this.timeline.viewport.panelWidth(width, "events");
-    const panelOffset =
-      this.timeline.viewport.panelIndex(lineIndex, "events") *
-        this.timeline.viewport.panelStride(width, "events") -
-      this.timeline.viewport.multiLineViewportOffset(width, "events");
-    const column = eventColumnBounds(
-      channel,
-      panelWidth,
-      eventTypes.length,
-      this.timeline.viewport.eventBarWidth ?? 0.82,
-      this.timeline.viewport.eventInset(panelWidth),
-    );
-    const barX = panelOffset + column.x;
-    const palette = readCanvasPalette();
-    context.fillStyle = valid ? palette.overlayValidFill : palette.overlayInvalidFill;
-    context.strokeStyle = valid ? palette.overlayValidStroke : palette.overlayInvalidStroke;
-    context.fillRect(barX, top, column.width, height);
-    context.strokeRect(barX, top, column.width, height);
   }
 }
