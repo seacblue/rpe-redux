@@ -664,6 +664,7 @@ node test-subpath.mjs
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
 - [`src/frontend/screens/welcome/homeProjectCards.ts`](../../src/frontend/screens/welcome/homeProjectCards.ts)：没有可用 URL 时不生成空封面/音频 URL。
 - [`src/frontend/screens/settings/web/WebStorageSettings.tsx`](../../src/frontend/screens/settings/web/WebStorageSettings.tsx)：Web-only 的“浏览器存储”页，显示配额和持久化状态，支持申请 persistent、下载 `.sqlite` 备份，以及从备份恢复（恢复前先保存当前库，失败会回滚）。
+- `.github/workflows/pages.yml`：`npm run build:web` 后把 `dist/` 发布到 GitHub Pages。
 - 第 1 节的宿主裁剪：窗口按钮、设置行、设置页、更新徽标和标题栏拖拽都已按宿主隐藏或禁用。
 
 ### 8.2 已验证
