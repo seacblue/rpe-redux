@@ -13,4 +13,5 @@ type collabSocket struct {
 	joinFailures int
 	clientKey    string
 	binaryChunks bool
+	chartChunks  bool
 }

@@ -4,176 +4,148 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use two inline annotations: `@name` credits a GitHub user (rendered bold and underlined), and `<red>text</red>` colours a run of text. The tag name is the colour: `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown tag, so the release page still reads as plain words.
 
-## 1.0.7 (2026-11-08)
+## 1.0.8 (2026-11-10)
 
 ### 中文
 
 **新功能**
 
-- 新增时间轴缩放功能快捷键配置，默认 Alt + WheelUp / Alt + WheelDown。
-- 新增“按住仅预览播放（松开返回）”与“按住仅预览播放（松开停留）”功能，使用 RPE 的用户肯定对它不陌生！默认快捷键 T / U。
-- 早在 1.0.6 版本，我们就新增了“镜像粘贴”功能，这是另一处与 RPE 的功能对齐。默认快捷键 Ctrl + B——我去，不早说！
-- 素材库支持对素材的外部修改。
-- 素材库支持 Shader 相关的素材导入与预览。
-- 支持对 Phira GLSL 1.00 接口的兼容。
-- 音符皮肤改用 Phira respack 格式：可以导入 Phira 皮肤包，也可以把当前皮肤导出为标准 Phira 皮肤包。
-- 新增皮肤工作台：按槽位编辑音符、事件条、判定线贴图、打击效果图和打击音，可从其他已安装皮肤复用素材。
+- Hello, GitHub Pages!
+- 多线编辑部分新增对于 X、Y、Rotate、Alpha、Speed 轨道的隐藏功能。这是一项与 RPE 的功能对齐。
+- 按下 Esc 键可以取消仍未放置终点的 Hold 与事件操作。另一项我常用的功能对齐。
+- 改进了自动测量 BPM 与偏移值的功能，并且新增了“BPM 翻倍”“BPM 减半”“偏移值提前一拍”“偏移值延后一拍”的快捷按键。
+- Shader 现在会在选择之后进入预编译，减少预览播放时的卡顿。
+- 新增快捷键“时间轴快退（一整个节拍）”“时间轴快进（一整个节拍）”，默认 Shift + WheelUp / Down。我们知道有的用户想要将它们与时间轴缩放进行交换……
+- 新增快捷键“清空剪贴板”，默认 Ctrl + Shift + Delete。
+- 新增快捷键“应用采样草稿”“跳转到剪贴板开头”“跳转到剪贴板末尾”。
+- 新增设置项“撤销/重做时自动跳转”，撤销或重做后，把播放头/视图自动跳到被改动的位置。
+- 新增设置项“选中事件颜色”“协作选中音符颜色”“协作选中事件颜色”。
+- 新增自动保存设置项。
+- 新增光标渐显设置项，上一次放置的音符或事件，与鼠标附近的横线与竖线会显示，而其他的不显示。<建议来源：大只黄毛狗狗>
+- 为 Code Cell 提供截图功能，可以根据时间或拍数获取到对应谱面的截图。<建议来源：大只黄毛狗狗>
+- 时间轴左右的概览条现在会显示剪贴板与粘贴的区域了。新增设置项“在概览条显示剪贴板与粘贴范围”。
+- 可以通过左上角的 Logo 快速退回到谱面库了，我觉得可能有人还不知道我们可以退回到谱面库……
+- 可以通过欢迎界面右上角的协作按钮，快速加入到其他用户开启的房间。
+- 加入 gzip 压缩策略并已默认在数据库保存、联机协作启用。
+- 加入 HTTP 传输与分块逻辑，由于性能原因暂时不启用。
+- 谱面新增只读模式。
+- 右下角新增“Bug 反馈”按钮，请大家多多宣传 RPE Redux（可怜）。
+
+**联机协作**
+
+- 创建房间会弹出过程模态框，且用户在完整获取到谱面包之前不会进入谱面。
+- 对于除房主之外的成员，谱面将不会保存到本地谱面库。
+- 删除协作 protocolVersion 握手和全部协议版本规则，能否进入房间只取决于与房主的版本是否一致。
+- 其他成员的播放头从进度条上方移动至下方。
+- 允许任意成员上传与修改资源文件。
+- 通过 rperedux:// 协议进入房间时，支持调整用户名和光标颜色。
+- 除房主之外的成员掉线时，重新加入会出现恢复提示且支持自动恢复。
+- 新增共享选中功能。
+- 现在在用户拥有与房间素材 hash 相同的文件时，会复用本地的文件。
+- 协作场景下的冲突与锁提示得到优化。
 
 **改进**
 
-- 多线编辑与音符 / 事件的多线编辑状态切换的快捷键从 F / G 改为 J / K，与 RPE 对齐。
-- 现在程序启动失败时，不会再允许后台的长任务执行。
-- 优化了欢迎界面的列表骨架屏显示。
-- 素材库的排列方式改回列表。
-- 素材库去除了对图片的修改功能，“为什么我们不能使用外部工具修改呢？”
-- 横线与竖线的高亮现在由颜色的叠加实现。
-- 事件在多选时不会有虚线边框了。虽然我们用了实线边框代替，但是下个版本我们会删除的。
-- 现在设置的搜索内容会匹配输入框、滑条与下拉框的内容。
-- 哦对了。在上个版本，设置的搜索内容已经可以在会话内保存，但是我们忘记写进更新日志了。
+- 谱面的渲染、修改与保存现在采用流式模式。打开谱面时的 JSON 解析时长可降低至 50 ~ 100 ms。
+- 对数据库存储规范进行大规模优化。
+- 现在在非桌面应用情况下，右上角的最小化、最大化与关闭按钮将会隐藏。
+- 谱面数据库实现增量更新，减少磁盘占用与复制开销。
+- 下载更新时，与更新相关的按钮都会失效。
+- 下载完成的更新包会缓存在本地，不再重复下载。
+- 后端会分析拖入的文件为谱面、皮肤包或插件包。
+- 改进了 Shader 轨道的渲染，我们将会在之后的大更新中重新优化故事板设计。
+- 音符时间轴与事件时间轴的框选颜色现在已经统一。
+- 删除了事件选择时的边框。
+- 删除了大部分开发者选项。新增“启用音符边框”“导出诊断包”与“一键复制摘要”开发者选项。
+- 优化了关闭应用时的提示框逻辑。
+- 谱面被占用时的提示文案更加清晰易懂。
+- 大谱面的保存不会阻塞 UI。
+- 因为 Esc 太通用，所以我们不会提供 Esc 的改键了，桀桀桀。
+- 移除了相当多的无用文案。
 
 **代码质量**
 
-- 修复了 settings journey 产品断言的返回值错误问题。
+- 现在可以方便地启动浏览器调试功能，而无需重复构建应用。
+- 修改 AGENTS.md 以适应新的解决需求流程。
+- 现在可以在启动时指定 --collab-port 实例端口与 LAN/隧道房间端口。
+- 更新了部分依赖包。
 
 **修复**
 
-- 修复了 Alt + 鼠标滚轮缩放时间轴时的闪烁 Bug。
-- 修复了播放头错误移动的 Bug。
-- 修复了扩展安全模式对特定扩展失效的 Bug。
-- 修复了不显示 Shader 的 Bug。
-- 修复了音符时间轴不显示左边框的 Bug。
-- 修复了竖线的计算不符合预期的 Bug。
-- 修复了在事件时间轴上，横线未正确高亮的 Bug。
-- 修复了使用划线多选与其他多选方案时，错误判断多选意图的 Bug。
-- 修复了无法正确载入 PE 格式谱面的 Bug。
-- 修复了状态栏的拖拽等事件无效且误触发程序内部点击事件的 Bug。
+- 修复了因为长条距离计算错误而导致的渲染 Bug。
+- 修复了协作写谱无法正常创建房间的 Bug。
+- 修复了底部红线层级在音符与事件之上的 Bug。
+- 修复了 RPE 元数据语义 background 与 illustration 混淆的 Bug。
+- 修复了一些下拉框或展开菜单的行为 Bug。
 
 ### English
 
 **Features**
 
-- Added shortcut configuration for timeline zoom, defaulting to Alt + WheelUp / Alt + WheelDown.
-- Added "hold to preview only (release to return)" and "hold to preview only (release to stay)". RPE users will know exactly what this is! Default shortcuts T / U.
-- We added Mirror paste back in 1.0.6 — another step toward RPE feature parity. Default shortcut Ctrl + B — oh wow, why didn't anyone say so earlier.
-- The asset library now supports external edits to assets.
-- The asset library can import and preview shader assets.
-- Added compatibility with the Phira GLSL 1.00 interface.
-- Note skins now use the Phira respack format: import a Phira skin package, or export the current skin as a standard Phira package.
-- Added the skin workbench: edit notes, event bars, judge-line textures, hit-effect images, and hit sounds slot by slot, and reuse assets from other installed skins.
+- Hello, GitHub Pages!
+- Multi-line editing now supports hiding the X, Y, Rotate, Alpha, and Speed tracks. This is another RPE parity feature.
+- Pressing Esc now cancels an in-progress Hold or event before its endpoint is placed. Another feature alignment I use often.
+- Improved automatic BPM and offset detection, and added shortcuts for "Double BPM", "Halve BPM", "Move offset one beat earlier", and "Move offset one beat later".
+- Shaders now begin precompiling after selection, reducing stutter during preview playback.
+- Added "Rewind timeline (one full beat)" and "Advance timeline (one full beat)" shortcuts, defaulting to Shift + WheelUp / Down. We know some users want to swap them with timeline zoom...
+- Added a "Clear clipboard" shortcut, defaulting to Ctrl + Shift + Delete.
+- Added shortcuts for "Apply sampling draft", "Jump to clipboard start", and "Jump to clipboard end".
+- Added the "Jump to the changed time after undo or redo" setting. After an undo or redo, the playhead and view move to the edited position automatically.
+- Added the "Selected event colour", "Collaboration selected note colour", and "Collaboration selected event colour" settings.
+- Added autosave settings.
+- Added a cursor fade-in setting: the most recently placed note or event, plus the horizontal and vertical lines near the pointer, are shown while everything else is hidden.<suggested by 大只黄毛狗狗>
+- Code Cell can now capture chart screenshots by time or beat.<suggested by 大只黄毛狗狗>
+- The overview bars on both sides of the timeline now show the clipboard and paste ranges. Added the "Show clipboard and paste ranges on overview bars" setting.
+- The top-left logo can now return to the chart library quickly. I suspect some people still don't know we can go back to the library...
+- The collaboration button in the top-right corner of the welcome screen can now quickly join rooms opened by other users.
+- Added gzip compression, enabled by default for database saves and collaboration.
+- Added HTTP transport and chunking, currently disabled for performance reasons.
+- Added a read-only mode for charts.
+- Added a "Bug report" button in the bottom-right corner. Please help spread the word about RPE Redux (poor us).
+
+**Collaboration**
+
+- Creating a room now shows a progress modal, and the user does not enter the chart until the full chart bundle has been received.
+- For members other than the host, the chart is no longer saved to the local chart library.
+- Removed the collaboration protocolVersion handshake and all protocol version rules. Admission now depends only on matching the host's version.
+- Other members' playheads have moved from above the progress bar to below it.
+- Any member can now upload and modify asset files.
+- Joining a room through the rperedux:// protocol now supports adjusting the username and cursor colour.
+- When a non-host member disconnects, rejoining shows a recovery prompt and supports automatic recovery.
+- Added shared selection.
+- Local files with the same hash as a room asset are now reused.
+- Improved conflict and lock messages in collaboration.
 
 **Improvements**
 
-- The shortcut for toggling multi-line editing, and multi-line editing of notes / events, changed from F / G to J / K to match RPE.
-- When startup fails, long background tasks are no longer allowed to run.
-- Improved the list skeleton screen on the welcome page.
-- The asset library layout is back to a list.
-- Removed image editing from the asset library — "why can't we just edit with external tools?"
-- Highlighting for horizontal and vertical lines now uses colour blending.
-- Events no longer get a dashed border when multi-selected. We replaced it with a solid border, but we will remove it next version.
-- Settings search now matches the contents of input fields, sliders, and dropdowns.
-- Oh, right: in the previous version, the settings search text already persisted within a session, but we forgot to mention it in the changelog.
+- Chart rendering, editing, and saving now use a streaming mode. JSON parsing time when opening a chart can drop to 50 ~ 100 ms.
+- Large-scale optimization of database storage conventions.
+- The minimize, maximize, and close buttons in the top-right corner are now hidden outside the desktop app.
+- Chart database updates are now incremental, reducing disk usage and copy overhead.
+- Update-related buttons are disabled while an update downloads.
+- Downloaded update packages are cached locally and are no longer downloaded repeatedly.
+- The backend now classifies dropped files as charts, skin packs, or extension packages.
+- Improved Shader track rendering. We will reoptimize the storyboard design in a later major update.
+- Note and event timeline marquee colours are now unified.
+- Removed the border on event selection.
+- Removed most developer options. Added the "Enable note borders", "Export diagnostic bundle", and "Copy summary" developer options.
+- Improved the close-app prompt logic.
+- Occupied-chart messages are clearer and easier to understand.
+- Saving large charts no longer blocks the UI.
+- Because Esc is too ubiquitous, we will not offer rebinding for Esc. Mwahaha.
+- Removed quite a lot of useless copy.
 
 **Code quality**
 
-- Fixed an incorrect return value in a product assertion in the settings journey.
+- Browser debugging can now be started easily without rebuilding the app repeatedly.
+- Updated AGENTS.md for the new request-resolution workflow.
+- The --collab-port instance port and the LAN/tunnel room port can now be specified at startup.
+- Updated some dependencies.
 
 **Fixes**
 
-- Fixed flicker when zooming the timeline with Alt + mouse wheel.
-- Fixed the playhead moving incorrectly.
-- Fixed extension safe mode not applying to certain extensions.
-- Fixed shaders not being displayed.
-- Fixed the note timeline not showing its left border.
-- Fixed vertical-line calculations not behaving as expected.
-- Fixed horizontal lines not highlighting correctly in the event timeline.
-- Fixed misjudging the multi-select intent when mixing sweep selection with other selection methods.
-- Fixed PE-format charts failing to load correctly.
-- Fixed drag and other events on the status bar doing nothing and accidentally triggering the app's internal click events.
-
-## 1.0.6 (2026-11-08)
-
-### 中文
-
-**新功能**
-
-- 新增窗口、全屏和独占（兼容模式）显示设置，以及常用窗口分辨率选项。
-- 编辑器视图支持在完整布局快照之间切换，并保留视图模式历史，方便恢复之前的布局。<inspired by @MatrixBlanchet's suggestion>
-- 使用 Ctrl + 连续数字的快捷键，可以方便地切换线号。<inspired by @MuYan's suggestion>
-- 颜色设置支持透明度编辑与 RGBA 颜色迁移。
-- 支持在启动时指定前端、后端与 AI 功能的端口。
-- 现在按下 Esc 可以取消选中的物件。
-- 新增长按划线与取消功能。
-
-**改进**
-
-- 预览和画布渲染：现在会正确按照可见范围筛选音符。
-- 预览和画布渲染：现在会正确缓存线条高度计算，并复用批量绘制数据。
-- 协作编辑：改进资源传输的背压与限流。
-- 协作编辑：远程修改不再重复执行完整谱面计算。
-- 协作编辑：现在选区会在远程变更后正确映射。
-- X 轴网格恢复支持小数值。
-- 自动更新默认开启；关闭自动更新后，WiFi/流量更新下载策略会同步禁用。
-- 更新下载默认使用 WiFi 策略，避免自动占用移动网络。
-- 现在右上角的进度条终于不再那么靠近边缘。
-- 现在在启动界面失败时，完整的报错信息将不再被折叠。
-- 横线与竖线的高亮逻辑更加对齐 RPE。
-- 在我们录制演示视频时，发现设置界面的启动是同步的，所以现在它变成异步的了。
-- 卸载程序使用了更加精美的图标，以防有人打开软件时不小心点开卸载程序。
-- 修复了一些很明显是由 AI 遗留而极度缺乏人情味的文本内容。
-- 人类历史上曾经有一些关于使用 → 与 > 之间的强烈的争论，而我们已经做出了选择。
-
-**代码质量**
-
-- 将一些文件名从 kebab-case 改为 camelCase。
-- 移除了过时的 MCP 编辑通道。
-- 修改了 Markdown 文件的断行问题，现在它们看起来的效果不会这么可笑了。
-
-**修复**
-
-- 修复了一些原生 tooltip 的错误展示，与我们不知道为什么会改坏的 tooltip 相关代码。
-- 修复了多线编辑下的物件缩放错误的 Bug。
-- 对齐普通 WebView2 启动参数，修复相关桌面启动问题。
-- 修复了卸载程序无法清理数据的 Bug，清理数据按钮一定要能清理数据。
-
-### English
-
-**Features**
-
-- Added Windowed, Fullscreen, and Exclusive (compatibility mode) display settings, plus common window-resolution options.
-- Editor views can now switch between complete layout snapshots and retain view-mode history, making previous layouts easier to restore.<inspired by @MatrixBlanchet's suggestion>
-- Hold Ctrl and type a judge-line number to quickly switch to that line.<inspired by @MuYan's suggestion>
-- Colour settings now support alpha editing and RGBA colour migration.
-- The frontend, backend, and AI feature ports can now be specified at startup.
-- Pressing Esc now deselects the selected objects.
-- Added hold-and-drag sweep selection and deselection.
-
-**Improvements**
-
-- Preview and canvas rendering: notes are now culled correctly by visible range.
-- Preview and canvas rendering: line-floor calculations are now cached correctly, and batch-drawing data is reused.
-- Collaboration: improved backpressure and throttling for asset transfer.
-- Collaboration: remote edits no longer repeat full-chart calculations.
-- Collaboration: selections are now remapped correctly after remote changes.
-- X-axis grids support fractional values again.
-- Automatic updates are now enabled by default; disabling them also disables the Wi-Fi/metered download policy.
-- Update downloads now default to the Wi-Fi policy, avoiding automatic use of metered networks.
-- The progress bar in the top-right corner is finally no longer so close to the edge.
-- When the startup screen fails, the full error message is no longer collapsed.
-- The highlight behaviour for horizontal and vertical lines now aligns more closely with RPE.
-- While recording the demo video, we found that the settings screen opened synchronously, so it now opens asynchronously.
-- The uninstaller now uses a much nicer icon, so nobody opens it by accident when launching the app.
-- Fixed some text that was clearly left over from AI and sorely lacking in human warmth.
-- Human history has seen some fierce debates over using → versus >, and we have made our choice.
-
-**Code quality**
-
-- Renamed some files from kebab-case to camelCase.
-- Removed the obsolete MCP editing transport.
-- Changed line breaking in Markdown files; they no longer look so ridiculous.
-
-**Fixes**
-
-- Fixed some incorrect native tooltip displays, along with the tooltip-related code that we broke without knowing why.
-- Fixed a bug where objects scaled incorrectly in multi-line editing.
-- Aligned normal WebView2 startup arguments, fixing related desktop launch issues.
-- Fixed a bug where the uninstaller could not clean up data; the clear-data button must actually clear data.
+- Fixed a rendering bug caused by incorrect hold distance calculations.
+- Fixed a bug where collaboration chart editing could not create a room.
+- Fixed the bottom red line layer appearing above notes and events.
+- Fixed confusion between the RPE metadata semantics of background and illustration.
+- Fixed behaviour bugs in some dropdowns and expanded menus.

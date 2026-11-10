@@ -95,6 +95,8 @@ export type ClientMessage =
       readonly appVersion?: string;
       /** This client reads and writes binary asset chunks. */
       readonly binaryChunks?: boolean;
+      /** This client accepts chart snapshots split across binary chunks. */
+      readonly chartChunks?: boolean;
       /** Encrypted rooms send an opaque chart envelope. */
       readonly encrypted?: boolean;
       /** Joining members skip host approval and become editors. */
@@ -111,6 +113,8 @@ export type ClientMessage =
       readonly appVersion?: string;
       /** This client reads and writes binary asset chunks. */
       readonly binaryChunks?: boolean;
+      /** This client accepts chart snapshots split across binary chunks. */
+      readonly chartChunks?: boolean;
     }
   | {
       readonly type: "inspect-room";
@@ -126,6 +130,8 @@ export type ClientMessage =
       readonly appVersion?: string;
       /** This client reads and writes binary asset chunks. */
       readonly binaryChunks?: boolean;
+      /** This client accepts chart snapshots split across binary chunks. */
+      readonly chartChunks?: boolean;
       /** The client already applied this exact revision without losing changes. */
       readonly hasChart?: boolean;
       readonly revision?: number;
@@ -238,6 +244,11 @@ export type ServerMessage =
       readonly chart?: unknown;
       /** Set when `chart` is a base64 gzip JSON payload instead of an object. */
       readonly chartEncoding?: "gzip";
+      /** The chart follows as binary `chart-chunk` frames. */
+      readonly chartChunks?: boolean;
+      readonly chartTransfer?: string;
+      readonly chartSize?: number;
+      readonly chartChunkCount?: number;
       readonly fingerprint: string;
       /** The server answers binary asset chunks on this connection. */
       readonly binaryChunks?: boolean;
@@ -306,9 +317,14 @@ export type ServerMessage =
   | {
       readonly type: "snapshot";
       readonly revision: number;
-      readonly chart: unknown;
+      readonly chart?: unknown;
       /** Set when `chart` is a base64 gzip JSON payload instead of an object. */
       readonly chartEncoding?: "gzip";
+      /** The chart follows as binary `chart-chunk` frames. */
+      readonly chartChunks?: boolean;
+      readonly chartTransfer?: string;
+      readonly chartSize?: number;
+      readonly chartChunkCount?: number;
       readonly fingerprint: string;
       readonly encrypted?: boolean;
       readonly transactions?: readonly EncryptedTransaction[];

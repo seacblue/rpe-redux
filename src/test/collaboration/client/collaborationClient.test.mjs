@@ -236,6 +236,7 @@ test("join sends a request and waits for host approval", () => {
     invite: "INVITE",
     profile: { name: "Guest", color: "#00ff00" },
     binaryChunks: true,
+    chartChunks: true,
   });
   socket.emit("message", { data: JSON.stringify({ type: "waiting", roomId: "ROOM" }) });
   assert.equal(client.state.get().status, "waiting");
@@ -881,6 +882,7 @@ test("resumeRoom sends the persisted token before a document is opened", () => {
     roomId: "ROOM",
     token: "saved-token",
     binaryChunks: true,
+    chartChunks: true,
   });
   client.dispose();
 });

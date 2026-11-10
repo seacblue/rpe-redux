@@ -504,24 +504,68 @@ const MAX_CHART_JSON = 512 * 1024 * 1024;
 
 /** One cached gzip chart payload per room revision. */
 const chartWireCache = new WeakMap();
+/** Chart snapshots travel in bounded binary chunks. */
+const CHART_CHUNK_BYTES = 512 * 1024;
 
-/** Encode the current room chart for a welcome or snapshot message. */
+/** Raw gzip chart bytes for the current room revision. */
+function chartWireBytes(room) {
+  const cached = chartWireCache.get(room);
+  if (cached && cached.revision === room.revision) {
+    return cached.bytes;
+  }
+  const bytes = gzipSync(Buffer.from(JSON.stringify(room.chart), "utf8"), { level: 6 });
+  chartWireCache.set(room, { revision: room.revision, bytes });
+  return bytes;
+}
+
+/** Encode the current room chart for a legacy welcome or snapshot message. */
 function chartWire(room) {
   if (room.encrypted) {
     return { chart: room.chart };
   }
-  const cached = chartWireCache.get(room);
-  if (cached && cached.revision === room.revision) {
-    return cached.payload;
-  }
-  const payload = {
-    chart: gzipSync(Buffer.from(JSON.stringify(room.chart), "utf8"), {
-      level: 6,
-    }).toString("base64"),
+  return {
+    chart: chartWireBytes(room).toString("base64"),
     chartEncoding: "gzip",
   };
-  chartWireCache.set(room, { revision: room.revision, payload });
-  return payload;
+}
+
+/** Send a welcome or snapshot, chunking a plaintext gzip chart when supported. */
+function sendChartPayload(socket, room, payload) {
+  const state = socketStates.get(socket);
+  if (!state?.chartChunks || room.encrypted || payload.chartEncoding !== "gzip") {
+    sendJSON(socket, payload);
+    return;
+  }
+  const bytes = chartWireBytes(room);
+  const count = Math.max(1, Math.ceil(bytes.length / CHART_CHUNK_BYTES));
+  const transferId = `${room.id}:${room.revision}`;
+  delete payload.chart;
+  delete payload.chartEncoding;
+  sendJSON(socket, {
+    ...payload,
+    chartChunks: true,
+    chartTransfer: transferId,
+    chartSize: bytes.length,
+    chartChunkCount: count,
+  });
+  for (let index = 0; index < count; index += 1) {
+    const offset = index * CHART_CHUNK_BYTES;
+    const end = Math.min(bytes.length, offset + CHART_CHUNK_BYTES);
+    sendBinary(
+      socket,
+      binaryFrame(
+        {
+          type: "chart-chunk",
+          transferId,
+          index,
+          offset,
+          count,
+          size: bytes.length,
+        },
+        bytes.subarray(offset, end),
+      ),
+    );
+  }
 }
 
 /** Decode one incoming create chart, including the gzip wire form. */
@@ -751,6 +795,7 @@ function handleMessage(socket, message) {
     const capabilityState = socketStates.get(socket);
     if (capabilityState) {
       capabilityState.binaryChunks = message.binaryChunks === true;
+      capabilityState.chartChunks = message.chartChunks === true;
     }
     if (sockets.get(socket)) {
       sendJSON(socket, {
@@ -797,7 +842,7 @@ function handleMessage(socket, message) {
     if (message.chartEncoding === "gzip" && !created.value.room.encrypted) {
       chartWireCache.set(created.value.room, {
         revision: 0,
-        payload: { chart: String(message.chart ?? ""), chartEncoding: "gzip" },
+        bytes: Buffer.from(String(message.chart ?? ""), "base64"),
       });
     }
     attach(socket, created.value.room, created.value.member);
@@ -818,6 +863,7 @@ function handleMessage(socket, message) {
     const state = socketStates.get(socket);
     if (state) {
       state.binaryChunks = message.binaryChunks === true;
+      state.chartChunks = message.chartChunks === true;
     }
     if (state && state.joinFailures >= MAX_JOIN_ATTEMPTS) {
       sendJSON(socket, {
@@ -870,7 +916,7 @@ function handleMessage(socket, message) {
     const { room, request, member } = joined.value;
     if (member) {
       attach(socket, room, member);
-      sendJSON(socket, welcomeFor(room, member, true, state?.binaryChunks === true));
+      sendChartPayload(socket, room, welcomeFor(room, member, true, state?.binaryChunks === true));
       broadcast(room, { type: "members", members: memberList(room) }, socket);
       schedulePersist();
       return;
@@ -892,6 +938,7 @@ function handleMessage(socket, message) {
     const state = socketStates.get(socket);
     if (state) {
       state.binaryChunks = message.binaryChunks === true;
+      state.chartChunks = message.chartChunks === true;
     }
     const resumed = rooms.resume(
       stringField(message, "roomId"),
@@ -908,8 +955,9 @@ function handleMessage(socket, message) {
       message.revision === room.revision &&
       message.fingerprint === room.fingerprint;
     attach(socket, room, resumed.value.member);
-    sendJSON(
+    sendChartPayload(
       socket,
+      room,
       welcomeFor(room, resumed.value.member, !current, state?.binaryChunks === true, !current),
     );
     if (resumed.value.member.role === "host") {
@@ -1228,8 +1276,9 @@ function handleMessage(socket, message) {
       return;
     }
     attach(pendingSocket, room, joinedMember);
-    sendJSON(
+    sendChartPayload(
       pendingSocket,
+      room,
       welcomeFor(room, joinedMember, true, socketStates.get(pendingSocket)?.binaryChunks === true),
     );
     broadcast(room, { type: "members", members: memberList(room) }, pendingSocket);
@@ -1396,7 +1445,7 @@ function handleMessage(socket, message) {
   }
 
   if (message.type === "snapshot-request") {
-    sendJSON(socket, {
+    sendChartPayload(socket, room, {
       type: "snapshot",
       revision: room.revision,
       ...chartWire(room),
@@ -1793,6 +1842,7 @@ server.on("upgrade", (request, socket) => {
     readTimer: null,
     joinFailures: 0,
     binaryChunks: false,
+    chartChunks: false,
     closeAfterFlush: false,
     closed: false,
   });

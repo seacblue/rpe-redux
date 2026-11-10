@@ -65,7 +65,9 @@ import { eventListAt, parseEventKey } from "../../../../../core/edit/events/even
 import {
   applyChartChanges,
   diffCharts,
+  parsePath,
   stableFingerprint,
+  type ChartChange,
 } from "../../../../../core/collaboration/changes.ts";
 import { collaborationAccess } from "../../../../../core/collaboration/access.ts";
 import { encodeChartJsonWire } from "../../../../../core/collaboration/chartWire.ts";
@@ -444,6 +446,56 @@ function missingRequiredRoomAssets(chart: Chart, assets: AssetMap, chartName: st
   return [...new Set(required)].filter((name) => !assetPath(assets, name, chartName));
 }
 
+/**
+ * Materialize only the lines one remote batch addresses.
+ *
+ * A paged document keeps other lines as placeholders; loading the affected
+ * lines first lets the shared change applier see their real objects without
+ * forcing the whole chart into memory.
+ */
+async function ensureChangeLines(
+  session: EditorSession,
+  changes: readonly ChartChange[],
+): Promise<void> {
+  const document = session.chartDocument;
+  if (!document) {
+    return;
+  }
+  const lines = session.chart.judgeLineList ?? [];
+  const indices = new Set<number>();
+  for (const change of changes) {
+    let tokens;
+    try {
+      tokens = parsePath(change.path);
+    } catch {
+      continue;
+    }
+    if (tokens[0]?.kind !== "key" || tokens[0].key !== "judgeLineList") {
+      continue;
+    }
+    const token = tokens[1];
+    if (!token) {
+      await document.materializeAll();
+      return;
+    }
+    if (token.kind === "index") {
+      indices.add(token.index);
+      continue;
+    }
+    if (token.kind === "id") {
+      const index = lines.findIndex((line) => line?.id === token.id);
+      if (index >= 0) {
+        indices.add(index);
+      }
+    }
+  }
+  await Promise.all(
+    [...indices]
+      .filter((index) => !document.isLoaded(index))
+      .map((index) => document.ensureLine(index)),
+  );
+}
+
 /** Joins the display names of the members holding conflicting locks. */
 function lockOwners(conflicts: readonly RoomLock[], members: readonly RoomMember[]): string {
   const names = conflicts.map(
@@ -700,6 +752,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const guestResumeAttempted = useRef(false);
   const applied = useRef(new Set<string>());
   const appliedRevision = useRef(0);
+  /** Serializes remote batches that may need to page in their target lines. */
+  const remoteApply = useRef(Promise.resolve());
   const contextRef = useRef<{
     runtime: EditorRuntime | null;
     documentRuntime: DocumentRuntime | null;
@@ -1543,6 +1597,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return;
         }
         appliedRevision.current = client.state.get().revision;
+        if (
+          session.chartDocument &&
+          snapshot.fingerprint &&
+          snapshot.fingerprint === session.history.fingerprint()
+        ) {
+          return;
+        }
         if (stableFingerprint(session.chart) === stableFingerprint(parsed)) {
           return;
         }
@@ -1559,86 +1620,93 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         appliedRevision.current = client.state.get().revision;
       },
       committed: (message) => {
-        const client = clientRef.current;
-        if (!client) {
-          return;
-        }
-        const session = sessionRuntime.current;
-        const encrypted = client.state.get().encrypted;
-        if (message.actorId === client.state.get().memberId && !encrypted) {
-          // Own plaintext commits were already applied locally. Advancing the
-          // watermark keeps a replayed/duplicate broadcast from being applied
-          // a second time without retaining an unbounded id set.
-          appliedRevision.current = message.revision;
-          return;
-        }
-        if (
-          applied.current.has(`${message.actorId}\u0000${message.transactionId}`) ||
-          message.revision <= appliedRevision.current
-        ) {
-          return;
-        }
-        applied.current.add(`${message.actorId}\u0000${message.transactionId}`);
-        if (applied.current.size > 2048) {
-          for (const id of applied.current) {
-            if (applied.current.size <= 2048) {
-              break;
+        remoteApply.current = remoteApply.current
+          .then(async () => {
+            const client = clientRef.current;
+            if (!client) {
+              return;
             }
-            applied.current.delete(id);
-          }
-        }
-        const strict = encrypted ? applyChartChanges(session.chart, message.changes) : null;
-        const result =
-          encrypted && strict?.conflicts.length
-            ? applyChartChanges(session.chart, message.changes, { force: true })
-            : (strict ?? applyChartChanges(session.chart, message.changes));
-        if (
-          encrypted &&
-          message.actorId === client.state.get().memberId &&
-          stableFingerprint(result.chart) === stableFingerprint(session.chart)
-        ) {
-          appliedRevision.current = message.revision;
-          return;
-        }
-        if (encrypted && strict?.conflicts.length) {
-          // Encrypted rooms cannot compare plaintext server-side; the ordered
-          // batch is last-writer-wins and the displaced local state is retained.
-          retainRecovery(session.chart, session.chartDocument);
-          showNotice(t("workspace.collaboration.e2eOverwrite"), "warning");
-        } else if (!encrypted && result.conflicts.length) {
-          retainRecovery(session.chart, session.chartDocument);
-          showNotice(t("workspace.collaboration.conflictNotice"), "error");
-          client.requestSnapshot();
-          return;
-        }
-        if (result.conflicts.length) {
-          retainRecovery(session.chart, session.chartDocument);
-          showNotice(t("workspace.collaboration.applyFailed"), "error");
-          client.requestSnapshot();
-          return;
-        }
-        try {
-          assertChart(result.chart);
-          const parsed = result.chart as Chart;
-          if (
-            !session.commitRemoteChart(message.label, parsed, {
-              clientId: message.actorId,
-              requestId: message.transactionId,
-              ...(message.undoOf ? { undoOf: message.undoOf } : {}),
-            })
-          ) {
-            showNotice(t("workspace.collaboration.applyFailed"), "error");
-            client.requestSnapshot();
-          }
-          if (chartChangesMayAffectAssets(message.changes)) {
-            void requestMissing(parsed);
-          }
-          appliedRevision.current = message.revision;
-        } catch {
-          retainRecovery(session.chart, session.chartDocument);
-          showNotice(t("workspace.collaboration.invalidRemoteChange"), "error");
-          client.requestSnapshot();
-        }
+            const session = sessionRuntime.current;
+            await ensureChangeLines(session, message.changes);
+            const encrypted = client.state.get().encrypted;
+            if (message.actorId === client.state.get().memberId && !encrypted) {
+              // Own plaintext commits were already applied locally. Advancing the
+              // watermark keeps a replayed/duplicate broadcast from being applied
+              // a second time without retaining an unbounded id set.
+              appliedRevision.current = message.revision;
+              return;
+            }
+            if (
+              applied.current.has(`${message.actorId}\u0000${message.transactionId}`) ||
+              message.revision <= appliedRevision.current
+            ) {
+              return;
+            }
+            applied.current.add(`${message.actorId}\u0000${message.transactionId}`);
+            if (applied.current.size > 2048) {
+              for (const id of applied.current) {
+                if (applied.current.size <= 2048) {
+                  break;
+                }
+                applied.current.delete(id);
+              }
+            }
+            const strict = encrypted ? applyChartChanges(session.chart, message.changes) : null;
+            const result =
+              encrypted && strict?.conflicts.length
+                ? applyChartChanges(session.chart, message.changes, { force: true })
+                : (strict ?? applyChartChanges(session.chart, message.changes));
+            if (
+              encrypted &&
+              message.actorId === client.state.get().memberId &&
+              stableFingerprint(result.chart) === stableFingerprint(session.chart)
+            ) {
+              appliedRevision.current = message.revision;
+              return;
+            }
+            if (encrypted && strict?.conflicts.length) {
+              // Encrypted rooms cannot compare plaintext server-side; the ordered
+              // batch is last-writer-wins and the displaced local state is retained.
+              retainRecovery(session.chart, session.chartDocument);
+              showNotice(t("workspace.collaboration.e2eOverwrite"), "warning");
+            } else if (!encrypted && result.conflicts.length) {
+              retainRecovery(session.chart, session.chartDocument);
+              showNotice(t("workspace.collaboration.conflictNotice"), "error");
+              client.requestSnapshot();
+              return;
+            }
+            if (result.conflicts.length) {
+              retainRecovery(session.chart, session.chartDocument);
+              showNotice(t("workspace.collaboration.applyFailed"), "error");
+              client.requestSnapshot();
+              return;
+            }
+            try {
+              assertChart(result.chart);
+              const parsed = result.chart as Chart;
+              if (
+                !session.commitRemoteChart(message.label, parsed, {
+                  clientId: message.actorId,
+                  requestId: message.transactionId,
+                  ...(message.undoOf ? { undoOf: message.undoOf } : {}),
+                })
+              ) {
+                showNotice(t("workspace.collaboration.applyFailed"), "error");
+                client.requestSnapshot();
+              }
+              if (chartChangesMayAffectAssets(message.changes)) {
+                void requestMissing(parsed);
+              }
+              appliedRevision.current = message.revision;
+            } catch {
+              retainRecovery(session.chart, session.chartDocument);
+              showNotice(t("workspace.collaboration.invalidRemoteChange"), "error");
+              client.requestSnapshot();
+            }
+          })
+          .catch(() => {
+            clientRef.current?.requestSnapshot();
+          });
       },
       conflict: () => {
         const client = clientRef.current;
@@ -2149,22 +2217,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
     const document = contextRef.current.documentRuntime;
     const session = sessionRuntime.current;
-    let roomChart: Chart;
-    try {
-      // A room snapshot is the full chart; a paged document must materialize
-      // its placeholders before it becomes authoritative room state.
-      roomChart = session.chartDocument
-        ? await session.chartDocument.materializeAll()
-        : session.chart;
-    } catch (error) {
-      showToast(
-        t("workspace.collaboration.hostFailed", {
-          detail: error instanceof Error ? error.message : String(error),
-        }),
-        "error",
-      );
-      return;
-    }
+    // A paged document serializes clean lines from its source without
+    // materializing the object graph; the room still receives full JSON.
+    const roomChart = session.chart;
     const missing = document
       ? missingRequiredRoomAssets(roomChart, document.currentAssets(), document.currentChartName())
       : [];

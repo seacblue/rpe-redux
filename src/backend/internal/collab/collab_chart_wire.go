@@ -50,17 +50,26 @@ func collabDecodeChart(value any) (any, error) {
 
 // collabEncodeChart compresses one chart value into base64 gzip JSON.
 func collabEncodeChart(chart any) (string, error) {
+	bytes, err := collabEncodeChartBytes(chart)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(bytes), nil
+}
+
+// collabEncodeChartBytes compresses one chart value into raw gzip JSON.
+func collabEncodeChartBytes(chart any) ([]byte, error) {
 	data, err := json.Marshal(chart)
 	if err != nil {
-		return "", fmt.Errorf("chart could not be serialized: %w", err)
+		return nil, fmt.Errorf("chart could not be serialized: %w", err)
 	}
 	var buffer bytes.Buffer
 	writer := gzip.NewWriter(&buffer)
 	if _, err := writer.Write(data); err != nil {
-		return "", fmt.Errorf("chart could not be compressed: %w", err)
+		return nil, fmt.Errorf("chart could not be compressed: %w", err)
 	}
 	if err := writer.Close(); err != nil {
-		return "", fmt.Errorf("chart could not be compressed: %w", err)
+		return nil, fmt.Errorf("chart could not be compressed: %w", err)
 	}
-	return base64.StdEncoding.EncodeToString(buffer.Bytes()), nil
+	return buffer.Bytes(), nil
 }

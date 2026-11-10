@@ -6,6 +6,7 @@ package collab
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -190,6 +191,7 @@ type collabRoom struct {
 	Owner             string
 	Chart             any
 	ChartWire         string
+	ChartBytes        []byte
 	ChartWireRevision int
 	Fingerprint       string
 	AppVersion        string
@@ -497,10 +499,12 @@ func (r *Rooms) create(profile collabProfile, chart any, fingerprint string, opt
 		chartWire = opts.ChartWire
 	}
 	room := &collabRoom{
-		ID:                collabRandomToken(8),
-		Invite:            invite,
-		Owner:             opts.Owner,
-		Chart:             collabClone(chart),
+		ID:     collabRandomToken(8),
+		Invite: invite,
+		Owner:  opts.Owner,
+		// The decoded transport payload is not retained elsewhere, so the room
+		// takes ownership instead of cloning a second full chart copy.
+		Chart:             chart,
 		ChartWire:         chartWire,
 		ChartWireRevision: 0,
 		Fingerprint:       fingerprint,
@@ -997,6 +1001,9 @@ func (r *Rooms) commit(
 	}
 	if room.Encrypted {
 		room.Revision++
+		room.ChartWire = ""
+		room.ChartBytes = nil
+		room.ChartWireRevision = room.Revision
 		room.Fingerprint = collabFingerprint(map[string]any{"chart": room.Chart, "revision": room.Revision})
 	} else {
 		applied, conflicts := collabApplyChanges(room.Chart, changes)
@@ -1010,6 +1017,9 @@ func (r *Rooms) commit(
 		}
 		room.Chart = applied
 		room.Revision++
+		room.ChartWire = ""
+		room.ChartBytes = nil
+		room.ChartWireRevision = room.Revision
 		room.Fingerprint = collabFingerprint(room.Chart)
 	}
 	committed := &collabCommitted{
@@ -1603,6 +1613,17 @@ func (r *Rooms) transactionLog(room *collabRoom) []collabCommitted {
 	return r.transactionLogLocked(room)
 }
 
+// chartBytes returns raw gzip chart bytes for a chunked transport.
+func (r *Rooms) chartBytes(room *collabRoom) ([]byte, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if room == nil {
+		return nil, false
+	}
+	bytes, err := room.chartBytesLocked()
+	return bytes, err == nil
+}
+
 // snapshot returns the current revision, chart, and fingerprint.
 func (r *Rooms) snapshot(room *collabRoom) (int, any, string, bool) {
 	r.mu.Lock()
@@ -1639,19 +1660,41 @@ func (r *Rooms) snapshotPayload(room *collabRoom) (map[string]any, bool) {
 	return payload, true
 }
 
-// chartWireLocked returns the gzip chart for the current revision, caching it
-// until the next accepted transaction. The caller holds r.mu.
+// chartWireLocked returns the base64 gzip chart for the current revision,
+// caching it until the next accepted transaction. The caller holds r.mu.
 func (room *collabRoom) chartWireLocked() (string, error) {
 	if room.ChartWire != "" && room.ChartWireRevision == room.Revision {
 		return room.ChartWire, nil
 	}
-	encoded, err := collabEncodeChart(room.Chart)
+	bytes, err := room.chartBytesLocked()
 	if err != nil {
 		return "", err
 	}
-	room.ChartWire = encoded
+	room.ChartWire = base64.StdEncoding.EncodeToString(bytes)
+	return room.ChartWire, nil
+}
+
+// chartBytesLocked returns raw gzip chart bytes for chunked transports.
+func (room *collabRoom) chartBytesLocked() ([]byte, error) {
+	if len(room.ChartBytes) > 0 && room.ChartWireRevision == room.Revision {
+		return room.ChartBytes, nil
+	}
+	if room.ChartWire != "" && room.ChartWireRevision == room.Revision {
+		bytes, err := base64.StdEncoding.DecodeString(room.ChartWire)
+		if err == nil {
+			room.ChartBytes = bytes
+			room.ChartWire = ""
+			return bytes, nil
+		}
+	}
+	bytes, err := collabEncodeChartBytes(room.Chart)
+	if err != nil {
+		return nil, err
+	}
+	room.ChartBytes = bytes
+	room.ChartWire = ""
 	room.ChartWireRevision = room.Revision
-	return encoded, nil
+	return bytes, nil
 }
 
 // pendingFor returns the join requests waiting on a room.
