@@ -659,7 +659,7 @@ node test-subpath.mjs
 
 - 依赖：`@sqlite.org/sqlite-wasm@3.54.1-build1`。
 - [`src/core/platform/browser/library/db.worker.ts`](../../src/core/platform/browser/library/db.worker.ts)：`opfs-sahpool`、v1 schema、项目/资源/修订/偏好、`baseRevision` 冲突检查、`VACUUM INTO` 导出。
-- [`src/core/platform/browser/library/browserLibrary.ts`](../../src/core/platform/browser/library/browserLibrary.ts)：`LocalLibrary` 子类、串行 Worker RPC、资源 blob URL 缓存、浏览器内 instance/occupancy 的 no-op 实现。
+- [`src/core/platform/browser/library/browserLibrary.ts`](../../src/core/platform/browser/library/browserLibrary.ts)：`LocalLibrary` 子类、Web Locks 选主 + BroadcastChannel follower 转发、串行 Worker RPC、资源 blob URL 缓存、浏览器内 instance/occupancy 的 no-op 实现。
 - [`src/core/global/library/service.ts`](../../src/core/global/library/service.ts)：Web standalone 打开 `BrowserLibrary`；桌面和 `npm run dev` 继续走 HTTP。
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
 - [`src/frontend/screens/welcome/homeProjectCards.ts`](../../src/frontend/screens/welcome/homeProjectCards.ts)：没有可用 URL 时不生成空封面/音频 URL。
@@ -672,11 +672,13 @@ node test-subpath.mjs
 - 导出的 1×1 PNG 资源通过 `asset` 读回，PNG header 正确；`background` 自动从 `cover.png` 推导。
 - 刷新页面后项目仍在；`revision`、`group`、`background` 保留。
 - 构建后的 `dist` 以 `/repo/` 子路径托管、没有 sidecar 时：首页谱面库可用；New chart 创建并保存 “Untitled chart”；返回首页能看到项目；刷新后项目仍在，并恢复编辑器会话。
+- 两个标签页：只有一个标签页持有 `db.worker`；follower 能读取 leader 写入的项目；关闭 leader 后 follower 获得 Web Lock、启动自己的 worker、继续创建并保存项目。
 - `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
 
 ### 8.3 已知限制
 
-- **单标签页。** 还没有接 Web Locks 选主；第二个标签页初始化 `opfs-sahpool` 会失败，表现为谱面库不可用。技术验证已经证明选主可行，但产品代码尚未合并。
+- **follower 大资源走 BroadcastChannel。** 选主已经可用，但 follower 的请求和资源字节仍通过 BroadcastChannel 复制；大音乐会有额外拷贝。正式版应交换 `MessagePort` 并使用 transfer。
+- **接管期间的在途请求没有自动重试。** leader 关闭时，follower 的未完成请求会等到 15 秒超时；调用方需要重试。
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
 - **持久化 UI 只完成一半。** 已有 `navigator.storage.persist()`、容量显示和 `.sqlite` 下载；还没有 OPFS 备份轮换、`.sqlite` 恢复/导入、配额错误和损坏恢复。
@@ -687,7 +689,7 @@ node test-subpath.mjs
 
 ### 8.4 下一步
 
-1. Web Locks 选主 + `MessagePort` 传大资源，支持多标签页。
+1. 把 follower 资源传输改成 `MessagePort` + transferable，并给接管期间的请求加重试。
 2. 补齐持久化：`.sqlite` 恢复/导入、OPFS 备份轮换、配额错误和损坏恢复。
 3. 按需资源 URL：只预取图片，音乐走字节/分块；首页封面限量预取。
 4. 把 Playwright 验证迁成仓库内回归测试，并补 schema 迁移测试。
