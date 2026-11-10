@@ -62,7 +62,7 @@ export function ChartLoading() {
             for the error, so the body only reports the problem. */}
         {!failed && (
           <p className="redux-loading-stage" aria-live="polite">
-            {t(`workspace.loading.${shown?.stage ?? "read"}`)}
+            {t(`workspace.loading.${shown?.stage ?? "read"}`)}...
           </p>
         )}
         {/* A failed load keeps the modal focused on the error, without a
