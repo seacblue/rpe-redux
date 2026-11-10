@@ -378,6 +378,9 @@ export default {
     "Both devices must run the same RPE Redux version to join this room.",
   "workspace.collaboration.hostMustClose":
     "The host cannot leave the room. Close the room instead.",
+  "workspace.collaboration.roomLimit":
+    "This device has reached its collaboration room limit. Close an old room and try again.",
+  "workspace.collaboration.roomFull": "This room is full.",
   "workspace.collaboration.removed": "You were dismissed from the room.",
   "workspace.collaboration.left": "Left the room. The temporary room chart was deleted.",
   "workspace.collaboration.connectionTimeout":

@@ -4,6 +4,7 @@ package ws
 
 import (
 	"bufio"
+	"encoding/binary"
 	"io"
 	"net"
 	"sync"
@@ -44,6 +45,34 @@ type netAddr struct{}
 
 func (netAddr) Network() string { return "test" }
 func (netAddr) String() string  { return "test" }
+
+// TestLargeTextMessageAcceptsRoomChartPayloads guards the room-create path:
+// authored charts can exceed the 4 MiB asset-chunk budget. A masked frame just
+// over 5 MiB must arrive intact instead of closing the socket.
+func TestLargeTextMessageAcceptsRoomChartPayloads(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+	socket := newConn(serverConn, bufio.NewReader(serverConn))
+	defer socket.Close()
+
+	const payloadSize = 5 << 20
+	frame := make([]byte, 14+payloadSize)
+	frame[0] = 0x81
+	frame[1] = 0x80 | 127
+	binary.BigEndian.PutUint64(frame[2:10], payloadSize)
+	// Mask bytes stay zero, so the payload passes through unchanged.
+	go func() {
+		_, _ = clientConn.Write(frame)
+	}()
+
+	payload, err := socket.ReadMessage()
+	if err != nil {
+		t.Fatalf("read large message: %v", err)
+	}
+	if len(payload) != payloadSize {
+		t.Fatalf("payload length = %d, want %d", len(payload), payloadSize)
+	}
+}
 
 func TestWriteTextWaitBackpressuresInsteadOfDropping(t *testing.T) {
 	raw := &blockingWriteConn{

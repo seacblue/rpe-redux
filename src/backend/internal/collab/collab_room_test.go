@@ -685,6 +685,33 @@ func TestCollabCustomInviteMinimumLeavesLegacyRoomsJoinable(t *testing.T) {
 	}
 }
 
+func TestCloseOwnedRoomsReplacesPreviousHostSession(t *testing.T) {
+	rooms := NewRooms()
+	for index := 0; index < 2; index++ {
+		room, _, failure := rooms.create(
+			collabProfile{Name: "Host", Color: "#ffffff"},
+			collabTestChart(),
+			"",
+			collabCreateOptions{Owner: "client:a"},
+		)
+		if failure != nil {
+			t.Fatalf("create room %d: %v", index, failure)
+		}
+		if room.Owner != "client:a" {
+			t.Fatalf("room owner = %q", room.Owner)
+		}
+	}
+	if closed := rooms.closeOwnedRooms("client:a"); len(closed) != 2 {
+		t.Fatalf("closed rooms = %d, want 2", len(closed))
+	}
+	if count := rooms.roomCount(); count != 0 {
+		t.Fatalf("room count = %d, want 0", count)
+	}
+	if closed := rooms.closeOwnedRooms("client:a"); len(closed) != 0 {
+		t.Fatalf("second close = %d, want 0", len(closed))
+	}
+}
+
 func TestCollabRoomCreationLimits(t *testing.T) {
 	rooms := NewRooms()
 	for index := 0; index < collabMaxRoomsPerOwner; index++ {

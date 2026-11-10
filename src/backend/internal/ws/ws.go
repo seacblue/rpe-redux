@@ -20,7 +20,10 @@ import (
 
 // Message limits, handshake constant, and frame opcodes for the room socket.
 const (
-	maxMessage     = 4 << 20
+	// A room create carries the full chart JSON before assets are streamed.
+	// Large authored charts can be tens of megabytes, so the frame budget is
+	// deliberately above the asset chunk size.
+	maxMessage     = 64 << 20
 	wsGUID         = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 	writeTimeout   = 15 * time.Second
 	readTimeout    = 75 * time.Second

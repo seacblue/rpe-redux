@@ -500,6 +500,22 @@ func (s *Server) handleMessage(socket *collabSocket, message map[string]any) {
 			s.sendError(socket, "invalid_profile", "A display name is required")
 			return
 		}
+		staleRooms := s.rooms.closeOwnedRooms(socket.clientKey)
+		for _, stale := range staleRooms {
+			s.broadcast(stale.room, map[string]any{
+				"type":    "room-closed",
+				"reason":  "host_replaced",
+				"message": "The host started a new room",
+			}, nil)
+			for _, memberID := range stale.memberIDs {
+				if target := s.socketFor(memberID); target != nil {
+					target.CloseAfterFlush()
+				}
+			}
+		}
+		if len(staleRooms) > 0 {
+			s.persistSchedule()
+		}
 		room, member, failure := s.rooms.create(
 			profile,
 			message["chart"],

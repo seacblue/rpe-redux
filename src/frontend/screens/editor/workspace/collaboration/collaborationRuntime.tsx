@@ -1180,6 +1180,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return t("workspace.collaboration.hostMustClose");
         case "removed":
           return t("workspace.collaboration.removed");
+        case "owner_rooms_full":
+        case "rooms_full":
+          return t("workspace.collaboration.roomLimit");
+        case "room_full":
+          return t("workspace.collaboration.roomFull");
         default:
           return message;
       }

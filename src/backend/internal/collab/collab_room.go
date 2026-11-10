@@ -166,6 +166,12 @@ func collabRoomInvite(value string) (string, *collabError) {
 	return invite, nil
 }
 
+// collabClosedRoom is one evicted owned room plus its member ids.
+type collabClosedRoom struct {
+	room      *collabRoom
+	memberIDs []string
+}
+
 // collabRoom is the authoritative state of one collaboration session.
 type collabRoom struct {
 	ID                string
@@ -735,6 +741,30 @@ func (r *Rooms) leave(memberID string) *collabRoom {
 		}
 	}
 	return room
+}
+
+// closeOwnedRooms deletes every room owned by one client and reports the rooms
+// and members that must be notified. A host starting a new room replaces the
+// persisted rooms left by earlier sessions instead of accumulating them.
+func (r *Rooms) closeOwnedRooms(owner string) []collabClosedRoom {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if owner == "" {
+		return nil
+	}
+	var closed []collabClosedRoom
+	for id, room := range r.rooms {
+		if room.Owner != owner {
+			continue
+		}
+		memberIDs := make([]string, 0, len(room.Members))
+		for memberID := range room.Members {
+			memberIDs = append(memberIDs, memberID)
+		}
+		delete(r.rooms, id)
+		closed = append(closed, collabClosedRoom{room: room, memberIDs: memberIDs})
+	}
+	return closed
 }
 
 // closeRoom deletes a room after a host request and reports the members that

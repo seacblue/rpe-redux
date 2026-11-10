@@ -146,7 +146,7 @@ function envInteger(name, fallback, minimum, maximum) {
   return value;
 }
 
-const MAX_MESSAGE = 4 * 1024 * 1024;
+const MAX_MESSAGE = 64 * 1024 * 1024;
 const MAX_UPLOADS_PER_SOCKET = 2;
 const MAX_TOTAL_UPLOAD_BYTES = 512 * 1024 * 1024;
 const MAX_OUTBOUND_FRAMES = envInteger("REDUX_COLLAB_SEND_QUEUE_FRAMES", 64, 1, 100_000);

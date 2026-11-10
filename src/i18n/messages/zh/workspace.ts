@@ -347,6 +347,8 @@ export default {
   "workspace.collaboration.connectionFailed": "无法连接联机服务器。",
   "workspace.collaboration.versionMismatch": "双方必须使用相同版本的 RPE Redux 才能加入房间。",
   "workspace.collaboration.hostMustClose": "房主不能离开房间，请关闭房间。",
+  "workspace.collaboration.roomLimit": "这台设备的协作房间数量已达上限，请先关闭旧房间后重试。",
+  "workspace.collaboration.roomFull": "房间人数已满。",
   "workspace.collaboration.removed": "您已被请离房间。",
   "workspace.collaboration.left": "已离开房间，临时房间谱面已删除。",
   "workspace.collaboration.connectionTimeout": "连接联机服务器超时，请检查地址和网络。",
