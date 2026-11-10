@@ -198,6 +198,61 @@ func TestSnapshotRestoreAndCompact(t *testing.T) {
 	}
 }
 
+func TestBackupSettingsControlPolicy(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "redux.db")
+	live, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	if _, err := live.CreateProject(ctx, store.CreateProjectInput{Name: "Chart", Chart: testChart("A")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := live.PutPreferences(ctx, json.RawMessage(`{
+        "settings": {
+            "library-backup-auto": false,
+            "library-backup-interval-seconds": 45
+        }
+    }`)); err != nil {
+		t.Fatal(err)
+	}
+	service, err := Open(dbPath, filepath.Join(dir, "library-history"), "test", "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	policy := service.Policy()
+	if policy.Auto {
+		t.Fatal("automatic snapshots should be disabled by the setting")
+	}
+	if policy.MaxDelaySeconds != 45 || policy.DebounceSeconds != 20 {
+		t.Fatalf("policy = %+v", policy)
+	}
+
+	hook := make(chan struct{}, 1)
+	live.SetPreferenceHook(func() { hook <- struct{}{} })
+	if _, err := live.PutPreferences(ctx, json.RawMessage(`{
+        "settings": {
+            "library-backup-auto": true,
+            "library-backup-interval-seconds": 90
+        }
+    }`)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-hook:
+	case <-time.After(2 * time.Second):
+		t.Fatal("preference hook did not run")
+	}
+	service.RefreshPolicy()
+	policy = service.Policy()
+	if !policy.Auto || policy.MaxDelaySeconds != 90 {
+		t.Fatalf("updated policy = %+v", policy)
+	}
+}
+
 func TestOpenResumesADirtyMarkerAfterCrash(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

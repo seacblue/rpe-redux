@@ -81,6 +81,7 @@ export default {
   // ------------------------------------------------------- row group headings
   "settings.group.files": "Files & data",
   "settings.group.webStorage": "Browser storage",
+  "settings.group.libraryBackup": "Library backup",
   "settings.group.display": "Display",
   "settings.group.pointer": "Pointer & input",
   "settings.group.advancedEditing": "Advanced editing",
@@ -500,6 +501,12 @@ export default {
   "settings.field.open-data-folder.label": "Open application data folder",
   "settings.field.open-data-folder.description":
     "Open the folder that contains the database, logs, and cached resources.",
+  "settings.field.library-backup-auto.label": "Automatic snapshots",
+  "settings.field.library-backup-auto.description":
+    "Write whole-library snapshots while you work. Turning this off stops the background timer completely; manual snapshots still work.",
+  "settings.field.library-backup-interval-seconds.label": "Snapshot interval (seconds)",
+  "settings.field.library-backup-interval-seconds.description":
+    "The longest wait between automatic snapshots while editing. Shorter intervals use more disk space.",
   // -------------------------------------------------------- select options
   // ------------------------------------------------------ skins & appearance
 

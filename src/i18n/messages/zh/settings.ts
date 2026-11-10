@@ -57,6 +57,7 @@ export default {
 
   "settings.group.files": "文件与数据",
   "settings.group.webStorage": "浏览器存储",
+  "settings.group.libraryBackup": "谱面库备份",
   "settings.group.display": "显示",
   "settings.group.pointer": "指针与输入",
   "settings.group.advancedEditing": "高级编辑",
@@ -427,6 +428,12 @@ export default {
   "settings.field.autosave-limit.label": "每谱保留备份数",
   "settings.field.open-data-folder.label": "打开应用数据文件夹",
   "settings.field.open-data-folder.description": "打开包含数据库、日志和缓存资源的目录。",
+  "settings.field.library-backup-auto.label": "自动快照",
+  "settings.field.library-backup-auto.description":
+    "编辑时写入整库快照。关闭后会完全停止后台计时器；手动快照仍然可用。",
+  "settings.field.library-backup-interval-seconds.label": "快照间隔（秒）",
+  "settings.field.library-backup-interval-seconds.description":
+    "编辑时两次自动快照之间的最长等待时间。间隔越短，占用空间越多。",
   "settings.reset.label": "将{name}恢复为默认值",
   "settings.reset.tooltip": "恢复默认值",
   "settings.webStorage.description":

@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -126,6 +127,9 @@ type RevisionSummary struct {
 type Store struct {
 	db   *sql.DB
 	Path string
+
+	preferenceHookMu sync.RWMutex
+	preferenceHook   func()
 }
 
 // Open opens (creating if needed) the SQLite database at path, applying the
@@ -179,6 +183,24 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+// SetPreferenceHook registers a callback after a preference document is
+// committed. The callback runs asynchronously so a settings save never waits
+// for the backup service.
+func (s *Store) SetPreferenceHook(hook func()) {
+	s.preferenceHookMu.Lock()
+	s.preferenceHook = hook
+	s.preferenceHookMu.Unlock()
+}
+
+func (s *Store) notifyPreferenceHook() {
+	s.preferenceHookMu.RLock()
+	hook := s.preferenceHook
+	s.preferenceHookMu.RUnlock()
+	if hook != nil {
+		go hook()
+	}
 }
 
 // initSchema creates the current library schema when it is absent and applies
@@ -1807,5 +1829,6 @@ func (s *Store) PutPreferences(ctx context.Context, values json.RawMessage) (jso
 		trimmed, nowString()); err != nil {
 		return nil, fmt.Errorf("save preferences: %w", err)
 	}
+	s.notifyPreferenceHook()
 	return json.RawMessage(trimmed), nil
 }

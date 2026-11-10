@@ -105,6 +105,7 @@ func run(args []string, stdout io.Writer) error {
 	if backupErr != nil {
 		fmt.Fprintf(os.Stderr, "library history unavailable: %v\n", backupErr)
 	} else {
+		data.SetPreferenceHook(backup.RefreshPolicy)
 		backup.Start(context.Background())
 		defer backup.Close()
 	}

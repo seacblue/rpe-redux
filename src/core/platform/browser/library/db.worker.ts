@@ -80,6 +80,8 @@ const BACKUP_EXCLUDED_SETTINGS = new Set([
   "update-verify",
   "help-docs",
   "open-data-folder",
+  "library-backup-auto",
+  "library-backup-interval-seconds",
 ]);
 
 const BACKUP_POLICY = {
@@ -610,7 +612,7 @@ let backupDirtySince = 0;
 let backupLastChange = 0;
 let backupRunning = false;
 let backupLastError = "";
-let backupLoopStarted = false;
+let backupTimer: ReturnType<typeof setInterval> | null = null;
 let recoveryError = "";
 let operationTail: Promise<unknown> = Promise.resolve();
 
@@ -1589,11 +1591,42 @@ async function maybeRunBackup(): Promise<void> {
   }
 }
 
-async function startBackupLoop(): Promise<void> {
-  if (backupLoopStarted || !db) {
+/**
+ * Read the two settings-backed snapshot controls. Missing values keep the
+ * defaults; the interval is clamped to a sane range.
+ */
+async function refreshBackupPolicy(startTimer = true): Promise<void> {
+  if (!db) {
     return;
   }
-  backupLoopStarted = true;
+  const row = requireDb().selectObject("SELECT data FROM preferences WHERE id = 1");
+  const document = parseJson(row?.data, {});
+  const settings = isRecord(document) && isRecord(document.settings) ? document.settings : {};
+  const auto = settings["library-backup-auto"] !== false;
+  const rawInterval = Number(settings["library-backup-interval-seconds"]);
+  const interval =
+    Number.isFinite(rawInterval) && rawInterval > 0
+      ? Math.min(3600, Math.max(30, Math.trunc(rawInterval)))
+      : 120;
+  BACKUP_POLICY.auto = auto;
+  BACKUP_POLICY.maxDelayMs = interval * 1000;
+  BACKUP_POLICY.debounceMs = Math.min(20, interval) * 1000;
+  if (!auto) {
+    if (backupTimer !== null) {
+      clearInterval(backupTimer);
+      backupTimer = null;
+    }
+    return;
+  }
+  if (startTimer && backupTimer === null) {
+    await startBackupLoop();
+  }
+}
+
+async function startBackupLoop(): Promise<void> {
+  if (backupTimer !== null || !db || !BACKUP_POLICY.auto) {
+    return;
+  }
   try {
     const head = await backupHead();
     const hasData = Number(requireDb().selectValue("SELECT COUNT(*) FROM projects")) > 0;
@@ -1606,11 +1639,11 @@ async function startBackupLoop(): Promise<void> {
       backupDirtySince = Date.now() - BACKUP_POLICY.maxDelayMs;
       backupLastChange = Date.now();
     }
-    setInterval(() => {
+    backupTimer = setInterval(() => {
       void maybeRunBackup();
     }, BACKUP_POLICY.pollMs);
   } catch (error) {
-    backupLoopStarted = false;
+    backupTimer = null;
     throw error;
   }
 }
@@ -1631,6 +1664,7 @@ async function init(): Promise<Record<string, unknown>> {
     run("PRAGMA synchronous = FULL");
     await migrateSchema();
     try {
+      await refreshBackupPolicy(false);
       await startBackupLoop();
     } catch (error) {
       backupLastError = error instanceof Error ? error.message : String(error);
@@ -2105,13 +2139,14 @@ function preferences(): Record<string, unknown> {
   return { values: row ? parseJson(row.data, {}) : {} };
 }
 
-function savePreferences(params: Record<string, unknown>): Record<string, unknown> {
+async function savePreferences(params: Record<string, unknown>): Promise<Record<string, unknown>> {
   const values = isRecord(params.values) ? params.values : {};
   run(
     `INSERT INTO preferences (id, data, updated_at) VALUES (1, ?, ?)
      ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
     [JSON.stringify(values), nowString()],
   );
+  await refreshBackupPolicy(true);
   return { values };
 }
 
@@ -2175,6 +2210,7 @@ async function importDb(params: Record<string, unknown>): Promise<Record<string,
     await migrateSchema();
     recoveryError = "";
     try {
+      await refreshBackupPolicy(false);
       await startBackupLoop();
     } catch (error) {
       backupLastError = error instanceof Error ? error.message : String(error);

@@ -26,6 +26,12 @@ const (
 	PreferencePolicy  = "portable-v1"
 )
 
+// Preference keys that control the automatic snapshot loop.
+const (
+	BackupAutoKey     = "library-backup-auto"
+	BackupIntervalKey = "library-backup-interval-seconds"
+)
+
 // Encoding identifies how an object payload is stored.
 type Encoding string
 

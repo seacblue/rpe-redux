@@ -31,17 +31,18 @@ type Service struct {
 	objects    *objectStore
 	readDB     *sql.DB
 
-	mu          sync.Mutex
-	policy      Policy
-	cancel      context.CancelFunc
-	done        chan struct{}
-	lastVersion int64
-	dirty       bool
-	dirtySince  time.Time
-	lastChange  time.Time
-	lastError   string
-	failures    int
-	nextAttempt time.Time
+	mu            sync.Mutex
+	policy        Policy
+	policyChanged chan struct{}
+	cancel        context.CancelFunc
+	done          chan struct{}
+	lastVersion   int64
+	dirty         bool
+	dirtySince    time.Time
+	lastChange    time.Time
+	lastError     string
+	failures      int
+	nextAttempt   time.Time
 }
 
 // Open creates the backup store beside a library database. A malformed store
@@ -65,16 +66,18 @@ func Open(dbPath, backupDir, appVersion, sourceHost string) (*Service, error) {
 	readDB.SetMaxOpenConns(1)
 	readDB.SetMaxIdleConns(1)
 	service := &Service{
-		dbPath:     absolute,
-		backupDir:  backupDir,
-		appVersion: appVersion,
-		sourceHost: sourceHost,
-		objects:    objects,
-		readDB:     readDB,
-		policy:     DefaultPolicy(),
-		done:       make(chan struct{}),
+		dbPath:        absolute,
+		backupDir:     backupDir,
+		appVersion:    appVersion,
+		sourceHost:    sourceHost,
+		objects:       objects,
+		readDB:        readDB,
+		policy:        DefaultPolicy(),
+		policyChanged: make(chan struct{}, 1),
+		done:          make(chan struct{}),
 	}
 	service.policy = service.loadPolicy()
+	service.RefreshPolicy()
 	service.lastVersion = service.currentDataVersion()
 	if service.dirtyMarkerExists() {
 		// A previous process stopped after a write but before its snapshot.
@@ -147,7 +150,75 @@ func (s *Service) SetPolicy(policy Policy) error {
 	s.mu.Lock()
 	s.policy = policy
 	s.mu.Unlock()
+	s.signalPolicy()
 	return s.writeJSON("policy.json", policy)
+}
+
+// RefreshPolicy reads the settings-backed automatic snapshot controls from the
+// live preference document. It is called at startup and after every preference
+// save, so turning the toggle off stops the timer completely.
+func (s *Service) RefreshPolicy() {
+	policy := s.Policy()
+	var raw string
+	if err := s.readDB.QueryRow(`SELECT data FROM preferences WHERE id = 1`).Scan(&raw); err == nil {
+		policy = policyFromPreferences(raw, policy)
+	}
+	s.mu.Lock()
+	changed := policy != s.policy
+	if changed {
+		s.policy = policy
+	}
+	s.mu.Unlock()
+	if changed {
+		s.signalPolicy()
+		_ = s.writeJSON("policy.json", policy)
+	}
+}
+
+// policyFromPreferences overlays the two user-facing controls on a fallback
+// policy. Missing or malformed values keep the fallback.
+func policyFromPreferences(raw string, fallback Policy) Policy {
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &document); err != nil {
+		return fallback
+	}
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal(document["settings"], &settings); err != nil {
+		return fallback
+	}
+	var auto bool
+	if value, ok := settings[BackupAutoKey]; ok {
+		if err := json.Unmarshal(value, &auto); err == nil {
+			fallback.Auto = auto
+		}
+	}
+	var interval int
+	if value, ok := settings[BackupIntervalKey]; ok {
+		if err := json.Unmarshal(value, &interval); err == nil && interval > 0 {
+			if interval < 30 {
+				interval = 30
+			}
+			if interval > 3600 {
+				interval = 3600
+			}
+			fallback.MaxDelaySeconds = interval
+			fallback.DebounceSeconds = interval
+			if fallback.DebounceSeconds > 20 {
+				fallback.DebounceSeconds = 20
+			}
+		}
+	}
+	return fallback
+}
+
+func (s *Service) signalPolicy() {
+	if s.policyChanged == nil {
+		return
+	}
+	select {
+	case s.policyChanged <- struct{}{}:
+	default:
+	}
 }
 
 // Status reports the current head and store size.
@@ -309,18 +380,32 @@ func (s *Service) Compact(ctx context.Context, keep int) (CompactReport, error) 
 // postponing a backup forever.
 func (s *Service) loop(ctx context.Context) {
 	defer close(s.done)
-	policy := s.Policy()
-	interval := time.Duration(policy.PollSeconds) * time.Second
-	if interval <= 0 {
-		interval = 10 * time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 	for {
+		policy := s.Policy()
+		if !policy.Auto {
+			// Turning automatic snapshots off removes the timer entirely; the
+			// loop only waits for a settings change or shutdown.
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.policyChanged:
+				continue
+			}
+		}
+		interval := time.Duration(policy.PollSeconds) * time.Second
+		if interval <= 0 {
+			interval = 10 * time.Second
+		}
+		ticker := time.NewTicker(interval)
 		select {
 		case <-ctx.Done():
+			ticker.Stop()
 			return
+		case <-s.policyChanged:
+			ticker.Stop()
+			continue
 		case <-ticker.C:
+			ticker.Stop()
 			if err := s.runOnce(ctx, time.Now()); err != nil {
 				log.Printf("library backup: %v", err)
 			}
