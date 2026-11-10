@@ -660,6 +660,7 @@ node test-subpath.mjs
 - 依赖：`@sqlite.org/sqlite-wasm@3.54.1-build1`。
 - [`src/core/platform/browser/library/db.worker.ts`](../../src/core/platform/browser/library/db.worker.ts)：`opfs-sahpool`、v2 schema（`application_id`、`user_version=2`、`revisions.chart_hash`、`library_meta`）、v0/v1 增量迁移、迁移前 OPFS 副本、项目/资源/修订/偏好、`baseRevision` 冲突检查、`VACUUM INTO` 导出；以及同一对象格式的 OPFS 快照存储、20 秒去抖 + 120 秒最大延迟的自动快照、手动快照/恢复/校验/压缩、损坏 live DB 时的恢复模式。
 - [`src/backend/internal/librarybackup/`](../../src/backend/internal/librarybackup/)：桌面和远程 Go 服务的同一套对象/提交/ref、快照、事务恢复、校验、保留/GC 和自动快照循环；HTTP 路由在 [`src/backend/internal/httpapi/backup_api.go`](../../src/backend/internal/httpapi/backup_api.go)。
+- [`src/core/settings/features/libraryBackup.ts`](../../src/core/settings/features/libraryBackup.ts)：设置 → 通用 → “谱面库备份”里的自动快照开关和 30–3600 秒间隔；关闭开关会禁用间隔并停止后台计时器。
 - [`src/core/platform/browser/library/browserLibrary.ts`](../../src/core/platform/browser/library/browserLibrary.ts)：`LocalLibrary` 子类、Web Locks 选主 + BroadcastChannel follower 转发、串行 Worker RPC、资源 blob URL 缓存、浏览器内 instance/occupancy 的 no-op 实现。
 - [`src/core/global/library/service.ts`](../../src/core/global/library/service.ts)：Web standalone 打开 `BrowserLibrary`；桌面和 `npm run dev` 继续走 HTTP。
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
@@ -679,6 +680,7 @@ node test-subpath.mjs
 - schema 迁移：把 v1 `.sqlite`（`user_version=1`、无 `application_id`、无 `chart_hash`）从浏览器存储页恢复；迁移后 `application_id=1380992338`、`user_version=2`、`revisions.chart_hash` 和 `library_meta` 存在，项目和修订保留。
 - 浏览器自动备份：创建谱面后等待去抖，OPFS `library-history/` 出现 ref/commit/objects；第二次修改后 ref 递增；提交对象是 gzip 封装的合法快照。
 - 浏览器手动快照/恢复：两个命名谱面各写一个手动快照，校验无缺失对象，恢复到旧快照后首页只保留旧谱面；压缩后只保留最新提交。
+- 浏览器快照设置：关闭“自动快照”后间隔输入被禁用、后台不再写入 ref；重新开启并设为 30 秒后，ref 恢复增长。
 - Go 自动备份：20 秒去抖 + 120 秒最大延迟的策略在持续编辑测试中按最大延迟触发；快照、资产去重、偏好过滤、恢复、recovery 表保留、校验、压缩测试通过。
 - `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
 
@@ -688,7 +690,7 @@ node test-subpath.mjs
 - **接管期间的在途请求没有自动重试。** leader 关闭时，follower 的未完成请求会等到 15 秒超时；调用方需要重试。
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
-- **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复、恢复失败回滚、迁移前原始副本和自动快照；还没有库历史设置页、自动轮换/空间阈值、配额错误提示和完整的损坏检测入口。
+- **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复、恢复失败回滚、迁移前原始副本、自动快照和自动快照开关；还没有库历史列表页、自动轮换/空间阈值、配额错误提示和完整的损坏检测入口。
 - **未引用资源不回收。** 删除项目或提交新 manifest 后，孤立 BLOB 仍留在 SQLite 里；后续需要 GC 和 staging lease。
 - **迁移器只覆盖 v0/v1 → v2。** 当前是加法迁移；后续 schema 需要继续追加步骤，并保持旧应用可读。
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例；Go store 和 Rust 备份已有迁移测试。
