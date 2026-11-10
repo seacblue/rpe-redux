@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createChart,
+  createEvent,
   createLine,
   createNote,
   parseChart,
@@ -105,6 +106,26 @@ test("paged dirty tracking ignores loading a clean line", async () => {
   assert.equal(session.history.dirty, false);
   await document.ensureLine(10);
   assert.equal(session.history.dirty, false);
+});
+
+test("paged tempo edits invalidate unloaded time summaries", async () => {
+  const chart = pagedChart();
+  for (const [index, line] of chart.judgeLineList.entries()) {
+    line.notes[0] = createNote(1, index, index + 1);
+    line.notes[0].visibleTime = 0;
+    line.eventLayers[0].alphaEvents = [createEvent(255, 0, index, index + 1)];
+  }
+  const document = documentFromText(serializeChart(chart));
+  const session = EditorSession.fromDocument(document);
+  await document.ensureLine(0);
+  const next = {
+    ...session.chart,
+    BPMList: [{ bpm: 60, startTime: [0, 0, 1] }],
+  };
+  session.commitChart("tempo", next);
+  const loaded = await document.ensureTime(0, 0, { maxLines: 1 });
+  assert.equal(loaded.length, document.lineCount);
+  assert.equal(document.summary(39).endSeconds, 40);
 });
 
 test("paged materialization keeps the same fingerprint as the source", async () => {

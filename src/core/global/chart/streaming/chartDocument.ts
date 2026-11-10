@@ -165,6 +165,7 @@ export class ChartDocument {
   private fingerprintCache: string | null = null;
   private materialized: Chart | null = null;
   private materializing = false;
+  private tempoDirty = false;
 
   /** Build a document over a header, index, and line provider. */
   constructor(options: ChartDocumentOptions) {
@@ -296,28 +297,41 @@ export class ChartDocument {
     const windowStart = seconds - Math.max(0, windowSeconds);
     const windowEnd = seconds + Math.max(0, windowSeconds);
     const candidates: number[] = [];
-    for (const slot of this.slots) {
-      const summary = slot.summary;
-      const intervals = summary.intervals;
-      const intersects =
-        intervals && intervals.length
-          ? intervals.some(
-              ([intervalStart, intervalEnd]) =>
-                intervalEnd >= windowStart && intervalStart <= windowEnd,
-            )
-          : summary.startSeconds === null ||
-            summary.endSeconds === null ||
-            (summary.endSeconds >= windowStart && summary.startSeconds <= windowEnd);
-      if (intersects) {
-        candidates.push(summary.index);
+    // A tempo edit invalidates every unloaded summary. Load the whole chart
+    // once so later windows use the new time map instead of stale intervals.
+    if (this.tempoDirty) {
+      for (const slot of this.slots) {
+        candidates.push(slot.summary.index);
+      }
+    } else {
+      for (const slot of this.slots) {
+        const summary = slot.summary;
+        const intervals = summary.intervals;
+        const intersects =
+          intervals && intervals.length
+            ? intervals.some(
+                ([intervalStart, intervalEnd]) =>
+                  intervalEnd >= windowStart && intervalStart <= windowEnd,
+              )
+            : summary.startSeconds === null ||
+              summary.endSeconds === null ||
+              (summary.endSeconds >= windowStart && summary.startSeconds <= windowEnd);
+        if (intersects) {
+          candidates.push(summary.index);
+        }
       }
     }
-    const limit = options.maxLines ?? Number.POSITIVE_INFINITY;
+    const limit = this.tempoDirty
+      ? Number.POSITIVE_INFINITY
+      : (options.maxLines ?? Number.POSITIVE_INFINITY);
     const pending = candidates.filter((index) => !this.slots[index]?.line);
     if (pending.length > limit) {
       throw new ChartPagingLimitError(pending.length, limit);
     }
     await this.ensureLines(pending, options.signal);
+    if (this.tempoDirty) {
+      this.tempoDirty = false;
+    }
     return candidates;
   }
 
@@ -538,6 +552,15 @@ export class ChartDocument {
       slot.summary.flags & LINE_FLAG_IDS
         ? (value as unknown as JudgeLine)
         : this.normalizeLine(value as unknown as JudgeLine);
+    if (this.tempoDirty) {
+      slot.summary = summarizeChartLine(
+        line,
+        index,
+        this.tempo,
+        slot.summary.byteOffset,
+        slot.summary.byteLength,
+      );
+    }
     if (slot.summary.flags & LINE_FLAG_IDS) {
       for (const object of this.lineObjects(line)) {
         const id = object.id;
@@ -586,10 +609,14 @@ export class ChartDocument {
 
   /** Update the header and mirror it onto the facade chart. */
   private setHeader(header: ChartHeader): void {
+    const tempoChanged = JSON.stringify(header.BPMList) !== JSON.stringify(this.header.BPMList);
     this.header = header;
     this.tempo = new TempoMap(
       header.BPMList.length ? header.BPMList : ([{ bpm: 120, startTime: [0, 0, 1] }] as BpmEntry[]),
     );
+    if (tempoChanged) {
+      this.tempoDirty = true;
+    }
     Object.assign(this.chart, headerValues(header));
   }
 
