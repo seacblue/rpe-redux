@@ -79,6 +79,7 @@ export default {
 
   // ------------------------------------------------------- row group headings
   "settings.group.files": "Files & data",
+  "settings.group.webStorage": "Browser storage",
   "settings.group.display": "Display",
   "settings.group.pointer": "Pointer & input",
   "settings.group.advancedEditing": "Advanced editing",
@@ -505,6 +506,25 @@ export default {
 
   "settings.reset.label": "Reset {name} to its default",
   "settings.reset.tooltip": "Reset to default",
+  "settings.webStorage.description":
+    "Charts, assets, revisions, and preferences are stored in this browser's private file system. Clearing site data or using a private window removes them.",
+  "settings.webStorage.mode": "Storage mode",
+  "settings.webStorage.persistent": "Persistent",
+  "settings.webStorage.bestEffort": "Best-effort",
+  "settings.webStorage.usage": "Usage",
+  "settings.webStorage.request": "Request persistent storage",
+  "settings.webStorage.requestGranted":
+    "Persistent storage granted. The browser will keep this data unless you clear it.",
+  "settings.webStorage.requestDenied":
+    "The browser kept best-effort storage. Download a backup regularly.",
+  "settings.webStorage.download": "Download backup",
+  "settings.webStorage.downloaded": "Backup downloaded.",
+  "settings.webStorage.refresh": "Refresh",
+  "settings.webStorage.backupNote":
+    "The backup is a standalone .sqlite file. It opens in the desktop app or any SQLite browser.",
+  "settings.webStorage.unsupported": "The browser library is not available in this window.",
+  "settings.search.webStorageKeywords":
+    "browser storage persist persistent backup sqlite opfs quota",
   "settings.search.heading": "Search “{query}”",
   "settings.search.emptyTitle": "No matching settings",
   "settings.search.emptyDescription": "Try a different word or clear the search.",

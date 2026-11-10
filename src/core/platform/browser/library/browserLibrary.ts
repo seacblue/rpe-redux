@@ -396,6 +396,28 @@ export class BrowserLibrary extends LocalLibrary {
   override checkpoint(_options: RequestOptions = {}): Promise<{ ok: boolean }> {
     return this.result("checkpoint");
   }
+
+  /** Snapshot the whole library as a standalone SQLite file. */
+  exportDatabase(): Promise<Uint8Array> {
+    return this.bytes("export");
+  }
+
+  /** Current browser quota and persistent-storage state. */
+  async storageStatus(): Promise<{ persisted: boolean; usage: number; quota: number }> {
+    const storage = navigator.storage;
+    const persisted = storage?.persisted ? await storage.persisted() : false;
+    const estimate = storage?.estimate ? await storage.estimate() : {};
+    return {
+      persisted,
+      usage: estimate.usage ?? 0,
+      quota: estimate.quota ?? 0,
+    };
+  }
+
+  /** Ask the browser for persistent storage; the browser decides the answer. */
+  async requestPersistence(): Promise<boolean> {
+    return navigator.storage?.persist ? navigator.storage.persist() : false;
+  }
 }
 
 let opened: Promise<BrowserLibrary> | null = null;

@@ -9,6 +9,7 @@ import "./appearance/ThemeControl.tsx";
 import "./language/LanguageControl.tsx";
 import "./skin/SkinSettings.tsx";
 import "./files/FilesSettingsPage.tsx";
+import "./web/WebStorageSettings.tsx";
 import "./extensions/ExtensionManager.tsx";
 import "./shortcuts/ShortcutsSettings.tsx";
 import "./help/UpdateVerifyControl.tsx";
