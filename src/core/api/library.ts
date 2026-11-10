@@ -186,6 +186,11 @@ export type LibraryHandle = typeof library;
 
 export type {
   LibraryAssetSummary,
+  LibraryBackupCompactReport,
+  LibraryBackupPolicy,
+  LibraryBackupStatus,
+  LibraryBackupSummary,
+  LibraryBackupVerifyReport,
   LibraryProject,
   LibraryProjectSummary,
   LibraryRevision,

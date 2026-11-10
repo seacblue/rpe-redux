@@ -12,6 +12,10 @@ import {
   type BackendInstance,
   type InstanceList,
   type LibraryAssetSummary,
+  type LibraryBackupCompactReport,
+  type LibraryBackupStatus,
+  type LibraryBackupSummary,
+  type LibraryBackupVerifyReport,
   type LibraryCommitInput,
   type LibraryCommitResult,
   type LibraryProject,
@@ -602,6 +606,45 @@ export class BrowserLibrary extends LocalLibrary {
 
   override checkpoint(_options: RequestOptions = {}): Promise<{ ok: boolean }> {
     return this.result("checkpoint");
+  }
+
+  override backupStatus(_options: RequestOptions = {}): Promise<LibraryBackupStatus> {
+    return this.result("backupStatus");
+  }
+
+  override backupSnapshot(
+    reason = "manual",
+    _options: RequestOptions = {},
+  ): Promise<LibraryBackupSummary> {
+    return this.result("backupSnapshot", { reason });
+  }
+
+  override backupHistory(
+    { limit = 50 }: { limit?: number } = {},
+    _options: RequestOptions = {},
+  ): Promise<{ commits: LibraryBackupSummary[] }> {
+    return this.result("backupHistory", { limit });
+  }
+
+  override backupRestore(
+    commitId = "",
+    _options: RequestOptions = {},
+  ): Promise<LibraryBackupSummary> {
+    return this.result("backupRestore", { commitId });
+  }
+
+  override backupVerify(
+    commitId = "",
+    _options: RequestOptions = {},
+  ): Promise<LibraryBackupVerifyReport> {
+    return this.result("backupVerify", { commitId });
+  }
+
+  override backupCompact(
+    keep = 0,
+    _options: RequestOptions = {},
+  ): Promise<LibraryBackupCompactReport> {
+    return this.result("backupCompact", { keep });
   }
 
   /** Snapshot the whole library as a standalone SQLite file. */

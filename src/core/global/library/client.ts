@@ -97,6 +97,63 @@ export interface LibraryRevision extends LibraryRevisionSummary {
   chart: unknown;
 }
 
+/** Automatic snapshot policy shared by desktop, web, and remote services. */
+export interface LibraryBackupPolicy {
+  auto: boolean;
+  pollSeconds: number;
+  debounceSeconds: number;
+  maxDelaySeconds: number;
+  keepCommits: number;
+}
+
+/** One whole-library snapshot returned by the backup service. */
+export interface LibraryBackupSummary {
+  id: string;
+  parent?: string;
+  reason: string;
+  createdAt: string;
+  stats: {
+    projects: number;
+    assets: number;
+    revisions: number;
+    objects: number;
+    rawBytes: number;
+  };
+  sourceHost: string;
+}
+
+/** Current backup store state. */
+export interface LibraryBackupStatus {
+  enabled: boolean;
+  head: string | null;
+  healthy: boolean;
+  commits: number;
+  objects: number;
+  bytes: number;
+  liveBytes: number;
+  lastBackupAt: string | null;
+  lastError: string | null;
+  policy: LibraryBackupPolicy;
+}
+
+/** Full object verification result. */
+export interface LibraryBackupVerifyReport {
+  checkedCommits: number;
+  checkedObjects: number;
+  missing: string[];
+  corrupt: string[];
+}
+
+/** Retention pass result. */
+export interface LibraryBackupCompactReport {
+  beforeCommits: number;
+  afterCommits: number;
+  deletedCommits: number;
+  deletedObjects: number;
+  beforeBytes?: number;
+  afterBytes?: number;
+}
+
 /** One live editor copy registered with the shared backend. */
 export interface BackendInstance {
   id: string;
@@ -781,6 +838,56 @@ export class LocalLibrary {
     return request(this.origin, "/api/maintenance/checkpoint", {
       ...options,
       method: "POST",
+    });
+  }
+
+  /** Read the automatic snapshot store state. */
+  backupStatus(options: RequestOptions = {}): Promise<LibraryBackupStatus> {
+    return request(this.origin, "/api/library/backups/status", options);
+  }
+
+  /** Write one snapshot immediately. */
+  backupSnapshot(reason = "manual", options: RequestOptions = {}): Promise<LibraryBackupSummary> {
+    return request(this.origin, "/api/library/backups/snapshots", {
+      ...options,
+      method: "POST",
+      body: { reason },
+    });
+  }
+
+  /** List recent snapshots, newest first. */
+  backupHistory(
+    { limit = 50 }: { limit?: number } = {},
+    options: RequestOptions = {},
+  ): Promise<{ commits: LibraryBackupSummary[] }> {
+    const search = new URLSearchParams({ limit: String(limit) });
+    return request(this.origin, `/api/library/backups/commits?${search.toString()}`, options);
+  }
+
+  /** Restore the newest snapshot, or one explicit commit. */
+  backupRestore(commitId = "", options: RequestOptions = {}): Promise<LibraryBackupSummary> {
+    return request(this.origin, "/api/library/backups/restore", {
+      ...options,
+      method: "POST",
+      body: { commitId },
+    });
+  }
+
+  /** Verify every object reachable from one snapshot, or HEAD. */
+  backupVerify(commitId = "", options: RequestOptions = {}): Promise<LibraryBackupVerifyReport> {
+    return request(this.origin, "/api/library/backups/verify", {
+      ...options,
+      method: "POST",
+      body: { commitId },
+    });
+  }
+
+  /** Prune history and unreachable objects. */
+  backupCompact(keep = 0, options: RequestOptions = {}): Promise<LibraryBackupCompactReport> {
+    return request(this.origin, "/api/library/backups/compact", {
+      ...options,
+      method: "POST",
+      body: { keep },
     });
   }
 
