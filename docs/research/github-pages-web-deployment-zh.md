@@ -13,7 +13,7 @@
 | 环境识别 | 现有的 `isDesktop()`（检测 `__TAURI_INTERNALS__`）已经足够，不要用 User-Agent。普通浏览器标签页和 PWA 独立窗口都按 Web 宿主处理。 |
 | 窗口按钮 | 在 Web 宿主不渲染 `WindowControls`，并把标题栏右侧预留给窗口按钮的 138px 槽位归零。桌面构建保持不变。 |
 | 分辨率/全屏设置 | 给设置 schema 增加宿主能力字段（`hosts` 或 `requires`），在 `settingsFields()` 和 `searchSettings()` 两处过滤。只隐藏 `window-display-mode`、`window-resolution` 不够，更新、文件、运行时端口、扩展安装等桌面项也应一起审计。 |
-| 后端选型 | 不选 IndexedDB。用 SQLite 官方 WASM 构建（`@sqlite.org/sqlite-wasm`）+ OPFS `opfs-sahpool` VFS，在专用 Worker 中运行；跨标签页用 Web Locks 选主。需要把 Go 的 store 层和 HTTP 门面移植成 TypeScript 的 `LibraryBackend`，约 4–6 周。最小验证已通过，见第 7 节。 |
+| 后端选型 | 不选 IndexedDB。用 SQLite 官方 WASM 构建（`@sqlite.org/sqlite-wasm`）+ OPFS `opfs-sahpool` VFS，在专用 Worker 中运行；跨标签页用 Web Locks 选主。需要把 Go 的 store 层和 HTTP 门面移植成 TypeScript 的 `LibraryBackend`，约 4–6 周。最小验证已通过，且第一版 `BrowserLibrary` 已落地，见第 7、8 节。 |
 | 持久化 | OPFS + `navigator.storage.persist()` + 定期备份/导出，是“尽力而为”的持久化；静态托管无法给出硬保证。硬保证只有两种：服务端 SQLite，或用户自己持有的 `.sqlite` 文件。 |
 | GitHub Pages | 现有构建已经具备条件：`base: "./"`、生成 `.nojekyll`、`dist` 约 30 MB。加一个 Pages workflow 即可。不能设置 COOP/COEP，所以不要用需要 `SharedArrayBuffer` 的 `opfs` VFS。 |
 
@@ -651,7 +651,48 @@ node test-subpath.mjs
 
 依赖：`@sqlite.org/sqlite-wasm`、`playwright-core`，浏览器使用本机 Edge。
 
-## 8. 来源
+## 8. 当前实现状态（分支 `research/github-pages`）
+
+这一节记录已经落地的代码，不是完整 Web 版的验收结论。
+
+### 8.1 已落地
+
+- 依赖：`@sqlite.org/sqlite-wasm@3.54.1-build1`。
+- [`src/core/platform/browser/library/db.worker.ts`](../../src/core/platform/browser/library/db.worker.ts)：`opfs-sahpool`、v1 schema、项目/资源/修订/偏好、`baseRevision` 冲突检查、`VACUUM INTO` 导出。
+- [`src/core/platform/browser/library/browserLibrary.ts`](../../src/core/platform/browser/library/browserLibrary.ts)：`LocalLibrary` 子类、串行 Worker RPC、资源 blob URL 缓存、浏览器内 instance/occupancy 的 no-op 实现。
+- [`src/core/global/library/service.ts`](../../src/core/global/library/service.ts)：Web standalone 打开 `BrowserLibrary`；桌面和 `npm run dev` 继续走 HTTP。
+- [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
+- [`src/frontend/screens/welcome/homeProjectCards.ts`](../../src/frontend/screens/welcome/homeProjectCards.ts)：没有可用 URL 时不生成空封面/音频 URL。
+- 第 1 节的宿主裁剪：窗口按钮、设置行、设置页、更新徽标和标题栏拖拽都已按宿主隐藏或禁用。
+
+### 8.2 已验证
+
+- Vite dev 的 `window.redux.library`：create、addAsset、assets、asset 字节、update、duplicate（含资源）、createRevision、revisions、revision、removeRevision、remove、list 全部通过。
+- 导出的 1×1 PNG 资源通过 `asset` 读回，PNG header 正确；`background` 自动从 `cover.png` 推导。
+- 刷新页面后项目仍在；`revision`、`group`、`background` 保留。
+- 构建后的 `dist` 以 `/repo/` 子路径托管、没有 sidecar 时：首页谱面库可用；New chart 创建并保存 “Untitled chart”；返回首页能看到项目；刷新后项目仍在，并恢复编辑器会话。
+- `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
+
+### 8.3 已知限制
+
+- **单标签页。** 还没有接 Web Locks 选主；第二个标签页初始化 `opfs-sahpool` 会失败，表现为谱面库不可用。技术验证已经证明选主可行，但产品代码尚未合并。
+- **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
+- **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
+- **没有持久化 UI。** 还没有 `navigator.storage.persist()`、容量显示、OPFS 备份轮换、`.sqlite` 下载/恢复、配额错误和损坏恢复。
+- **没有迁移器。** 只写了 `user_version = 1`；后续 schema 升级需要事务迁移和迁移前备份。
+- **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例。
+- **浏览器覆盖有限。** 只在 Edge/Chromium 验证；Firefox/Safari 无痕模式、配额和大资源仍未测。
+- **`serverOrigin()` 语义变化。** Web standalone 下返回 `opfs://rpe-redux`；任何假定它一定是 HTTP URL 的新代码都需要检查。
+
+### 8.4 下一步
+
+1. Web Locks 选主 + `MessagePort` 传大资源，支持多标签页。
+2. 存储状态面板：persist、estimate、备份/恢复、配额错误。
+3. 按需资源 URL：只预取图片，音乐走字节/分块；首页封面限量预取。
+4. 把 Playwright 验证迁成仓库内回归测试，并补 schema 迁移测试。
+5. 真实 GitHub Pages 部署和 Firefox/Safari 手测。
+
+## 9. 来源
 
 ### 仓库
 
