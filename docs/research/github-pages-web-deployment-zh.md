@@ -658,7 +658,7 @@ node test-subpath.mjs
 ### 8.1 已落地
 
 - 依赖：`@sqlite.org/sqlite-wasm@3.54.1-build1`。
-- [`src/core/platform/browser/library/db.worker.ts`](../../src/core/platform/browser/library/db.worker.ts)：`opfs-sahpool`、v1 schema、项目/资源/修订/偏好、`baseRevision` 冲突检查、`VACUUM INTO` 导出。
+- [`src/core/platform/browser/library/db.worker.ts`](../../src/core/platform/browser/library/db.worker.ts)：`opfs-sahpool`、v2 schema（`application_id`、`user_version=2`、`revisions.chart_hash`、`library_meta`）、v0/v1 增量迁移、迁移前 OPFS 副本、项目/资源/修订/偏好、`baseRevision` 冲突检查、`VACUUM INTO` 导出。
 - [`src/core/platform/browser/library/browserLibrary.ts`](../../src/core/platform/browser/library/browserLibrary.ts)：`LocalLibrary` 子类、Web Locks 选主 + BroadcastChannel follower 转发、串行 Worker RPC、资源 blob URL 缓存、浏览器内 instance/occupancy 的 no-op 实现。
 - [`src/core/global/library/service.ts`](../../src/core/global/library/service.ts)：Web standalone 打开 `BrowserLibrary`；桌面和 `npm run dev` 继续走 HTTP。
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
@@ -675,6 +675,7 @@ node test-subpath.mjs
 - 构建后的 `dist` 以 `/repo/` 子路径托管、没有 sidecar 时：首页谱面库可用；New chart 创建并保存 “Untitled chart”；返回首页能看到项目；刷新后项目仍在，并恢复编辑器会话。
 - 两个标签页：只有一个标签页持有 `db.worker`；follower 能读取 leader 写入的项目；关闭 leader 后 follower 获得 Web Lock、启动自己的 worker、继续创建并保存项目。
 - 备份/恢复：下载空库备份 → 创建 “Untitled chart” → 从空库备份恢复 → 刷新后谱面库回到空状态；备份文件通过 SQLite integrity check。
+- schema 迁移：把 v1 `.sqlite`（`user_version=1`、无 `application_id`、无 `chart_hash`）从浏览器存储页恢复；迁移后 `application_id=1380992338`、`user_version=2`、`revisions.chart_hash` 和 `library_meta` 存在，项目和修订保留。
 - `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
 
 ### 8.3 已知限制
@@ -683,10 +684,10 @@ node test-subpath.mjs
 - **接管期间的在途请求没有自动重试。** leader 关闭时，follower 的未完成请求会等到 15 秒超时；调用方需要重试。
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
-- **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复和恢复失败回滚；还没有自动 OPFS 备份轮换、配额错误提示、损坏检测入口和迁移前自动备份。
+- **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复、恢复失败回滚和迁移前原始副本；还没有自动 OPFS 备份轮换、配额错误提示和损坏检测入口。
 - **未引用资源不回收。** 删除项目或提交新 manifest 后，孤立 BLOB 仍留在 SQLite 里；后续需要 GC 和 staging lease。
-- **没有迁移器。** 只写了 `user_version = 1`；后续 schema 升级需要事务迁移和迁移前备份。
-- **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例。
+- **迁移器只覆盖 v0/v1 → v2。** 当前是加法迁移；后续 schema 需要继续追加步骤，并保持旧应用可读。
+- **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例；Go store 和 Rust 备份已有迁移测试。
 - **浏览器覆盖有限。** 只在 Edge/Chromium 验证；Firefox/Safari 无痕模式、配额和大资源仍未测。
 - **`serverOrigin()` 语义变化。** Web standalone 下返回 `opfs://rpe-redux`；任何假定它一定是 HTTP URL 的新代码都需要检查。
 - **同源页面可访问浏览器库。** OPFS 和 BroadcastChannel 都以源为边界；`github.io` 同账号下的其他项目页可以读取 OPFS，也可以加入 leader 通道发 RPC。不要把不可信页面放在同一账号下；需要隔离时使用独立自定义域名。
@@ -694,12 +695,12 @@ node test-subpath.mjs
 ### 8.4 下一步
 
 1. 把 follower 资源传输改成 `MessagePort` + transferable，并给接管期间的请求加重试。
-2. 补齐持久化运维：自动 OPFS 备份轮换、配额错误提示、损坏检测和迁移前备份。
+2. 补齐持久化运维：自动 OPFS 备份轮换、配额错误提示和损坏检测。
 3. 按需资源 URL：只预取图片，音乐走字节/分块；首页封面限量预取。
-4. 把 Playwright 验证迁成仓库内回归测试，并补 schema 迁移测试。
+4. 把 Playwright 验证迁成仓库内回归测试，并补更多跨版本迁移回归。
 5. 真实 GitHub Pages 部署和 Firefox/Safari 手测。
 
-自动备份的类 Git 对象存储、squash、崩溃恢复和 gzip 设计见 [浏览器自动备份：类 Git 快照存储设计](browser-backup-git-design-zh.md)。
+跨宿主的自动备份对象存储、squash、崩溃恢复、gzip 和迁移设计见 [谱面库自动备份：跨宿主快照存储与迁移设计](library-backup-snapshots-zh.md)。
 
 ## 9. 来源
 
