@@ -153,11 +153,17 @@ class LibraryChartLineProvider implements ChartLineProvider {
     const count = Math.min(this.batch, this.lineCount - start);
     const batch = await this.library.chartLines(this.id, start, count);
     const ranges = scanJsonArrayRanges(batch.raw);
+    let requested: string | undefined;
     for (let offset = 0; offset < ranges.length; offset++) {
       const range = ranges[offset];
-      this.cacheLine(batch.start + offset, batch.raw.slice(range.start, range.end));
+      const lineIndex = batch.start + offset;
+      const raw = batch.raw.slice(range.start, range.end);
+      if (lineIndex === index) {
+        requested = raw;
+      }
+      this.cacheLine(lineIndex, raw);
     }
-    return this.cache.get(index);
+    return requested ?? this.cache.get(index);
   }
 
   /** Store one raw line and trim the oldest entries past the cache budget. */

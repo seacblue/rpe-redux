@@ -40,31 +40,72 @@ export interface NativeChartStream {
   readonly document: ChartDocument;
 }
 
-/** Largest batch the native provider asks for before splitting a line. */
-const MAX_BATCH_BYTES = 32 * 1024 * 1024;
+/** Largest line batch the native provider asks for. */
+const MAX_BATCH_BYTES = 16 * 1024 * 1024;
 /** Largest slice returned by one `read_chart_line_chunk` call. */
 const MAX_LINE_CHUNK_BYTES = 4 * 1024 * 1024;
 /** Raw-line cache bounds; the document keeps its own working set. */
 const MAX_CACHED_LINES = 512;
 const MAX_CACHED_CHARS = 8 * 1024 * 1024;
+/** Upper bound on lines per native batch before the byte budget applies. */
+const MAX_BATCH_LINES = 64;
 
-/** Read one line from a native document in bounded batches. */
+/** One contiguous native line batch. */
+interface LineWindow {
+  start: number;
+  count: number;
+}
+
+/** Decoded raw text and ranges for one native line batch. */
+interface LineBatch {
+  start: number;
+  count: number;
+  raw: string;
+  ranges: readonly { start: number; end: number }[];
+}
+
+/** Split line summaries into byte-bounded windows used for batch reads. */
+function buildLineWindows(lines: readonly ChartLineSummary[]): LineWindow[] {
+  const windows: LineWindow[] = [];
+  let start = 0;
+  while (start < lines.length) {
+    let count = 0;
+    let bytes = 2;
+    while (start + count < lines.length && count < MAX_BATCH_LINES) {
+      const extra = (lines[start + count]?.byteLength ?? 0) + (count > 0 ? 1 : 0);
+      if (count > 0 && bytes + extra > MAX_BATCH_BYTES) {
+        break;
+      }
+      bytes += extra;
+      count += 1;
+    }
+    const actual = Math.max(1, count);
+    windows.push({ start, count: actual });
+    start += actual;
+  }
+  return windows;
+}
+
+/** Read one line from a native document in bounded, shared batches. */
 class NativeChartLineProvider implements ChartLineProvider {
   readonly lineCount: number;
   private readonly id: string;
   private readonly lines: readonly ChartLineSummary[];
+  private readonly windows: readonly LineWindow[];
   private readonly cache = new Map<number, string>();
+  private readonly pendingBatches = new Map<string, Promise<LineBatch>>();
+  private readonly recentBatches = new Map<string, LineBatch>();
   private cachedChars = 0;
-  private readonly batch = 64;
 
   /** Bind the provider to one native streaming document. */
   constructor(id: string, lines: readonly ChartLineSummary[]) {
     this.id = id;
     this.lines = lines;
     this.lineCount = lines.length;
+    this.windows = buildLineWindows(lines);
   }
 
-  /** Read one raw line, fetching its surrounding batch on first use. */
+  /** Read one raw line, sharing an in-flight batch with other readers. */
   async readLine(index: number): Promise<string | undefined> {
     const cached = this.cache.get(index);
     if (cached !== undefined) {
@@ -76,35 +117,87 @@ class NativeChartLineProvider implements ChartLineProvider {
     if (!summary) {
       return undefined;
     }
-    const start = Math.floor(index / this.batch) * this.batch;
-    const count = Math.min(this.batch, this.lineCount - start);
-    let batchBytes = 2;
-    for (let offset = 0; offset < count; offset++) {
-      batchBytes += (this.lines[start + offset]?.byteLength ?? 0) + (offset > 0 ? 1 : 0);
-    }
-    if (summary.byteLength > MAX_BATCH_BYTES || batchBytes > MAX_BATCH_BYTES) {
+    if (summary.byteLength > MAX_BATCH_BYTES) {
       return this.readChunkedLine(index, summary);
     }
+    const window = this.windowFor(index);
+    const batch = await this.readBatch(window);
+    const range = batch.ranges[index - batch.start];
+    if (!range) {
+      return undefined;
+    }
+    const raw = batch.raw.slice(range.start, range.end);
+    this.cacheLine(index, raw);
+    return raw;
+  }
+
+  /** Find the byte-bounded window containing one line. */
+  private windowFor(index: number): LineWindow {
+    let low = 0;
+    let high = this.windows.length - 1;
+    while (low <= high) {
+      const middle = (low + high) >> 1;
+      const window = this.windows[middle];
+      if (index < window.start) {
+        high = middle - 1;
+      } else if (index >= window.start + window.count) {
+        low = middle + 1;
+      } else {
+        return window;
+      }
+    }
+    return { start: index, count: 1 };
+  }
+
+  /** Fetch one batch, reusing an in-flight or recently decoded result. */
+  private async readBatch(window: LineWindow): Promise<LineBatch> {
+    const key = `${window.start}:${window.count}`;
+    const recent = this.recentBatches.get(key);
+    if (recent) {
+      return recent;
+    }
+    let pending = this.pendingBatches.get(key);
+    if (!pending) {
+      pending = this.fetchBatch(window);
+      this.pendingBatches.set(key, pending);
+      void pending.then(
+        () => this.pendingBatches.delete(key),
+        () => this.pendingBatches.delete(key),
+      );
+    }
+    return pending;
+  }
+
+  /** Read one batch frame from the native host. */
+  private async fetchBatch(window: LineWindow): Promise<LineBatch> {
     const response = await invoke<ArrayBuffer | number[]>("read_chart_lines", {
       id: this.id,
-      start,
-      count,
+      start: window.start,
+      count: window.count,
     });
     const bytes =
       response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response);
-    const decoder = new ChartFrameDecoder();
-    const frames = decoder.push(bytes);
+    const frames = new ChartFrameDecoder().push(bytes);
     const frame = frames.find((entry) => entry.kind === CHART_FRAME.lines);
     if (!frame) {
-      return undefined;
+      throw new Error("Chart line batch was not returned");
     }
     const batch = decodeLinesFrame(frame);
-    const ranges = scanJsonArrayRanges(batch.raw);
-    for (let offset = 0; offset < ranges.length; offset++) {
-      const range = ranges[offset];
-      this.cacheLine(batch.start + offset, batch.raw.slice(range.start, range.end));
+    const decoded: LineBatch = {
+      start: batch.start,
+      count: batch.count,
+      raw: batch.raw,
+      ranges: scanJsonArrayRanges(batch.raw),
+    };
+    this.recentBatches.set(`${window.start}:${window.count}`, decoded);
+    while (this.recentBatches.size > 2) {
+      const oldest = this.recentBatches.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.recentBatches.delete(oldest);
     }
-    return this.cache.get(index);
+    return decoded;
   }
 
   /** Store one raw line and trim the oldest entries past the cache budget. */

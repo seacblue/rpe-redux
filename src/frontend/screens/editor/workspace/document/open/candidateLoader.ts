@@ -150,16 +150,15 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
         }
       }
       if (!chartDocumentForSession) {
-        let materialized;
         try {
-          materialized = await chartDocument.materializeAll();
-        } finally {
+          chart = await chartDocument.materializeAll();
+          // Keep the document for streamed saves and canonical fingerprints.
+          // Its worker/source is released with the session, not here.
+          chartDocumentForSession = chartDocument;
+        } catch (error) {
           candidate.disposeDocument?.();
+          throw error;
         }
-        chart = {
-          ...materialized,
-          judgeLineList: [...(materialized.judgeLineList ?? [])],
-        } as Chart;
       }
     } else {
       // Parsed candidates already passed the whole-chart gate in the parser or
@@ -216,10 +215,10 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
 
     task.update("textures");
     await loadingPaint();
-    const textureChart = chartDocumentForSession
+    const textureChart = chartDocumentForSession?.index
       ? {
           ...chart,
-          judgeLineList: (chartDocumentForSession.index?.assetNames ?? [])
+          judgeLineList: chartDocumentForSession.index.assetNames
             .filter((name) => /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(name))
             .map((name) => ({ Texture: name })),
         }

@@ -475,6 +475,11 @@ export class ChartDocument {
       return this.fingerprintCache;
     }
     const digests = this.slots.map((slot) => {
+      // A clean line's index digest already describes its content and ignores
+      // editor-only ids, so loading it does not require another full walk.
+      if (slot.state !== "dirty" && slot.summary.digest) {
+        return slot.summary.digest;
+      }
       if (slot.line) {
         return lineContentFingerprint(slot.line);
       }
