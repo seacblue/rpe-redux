@@ -100,6 +100,22 @@ export function openControlColor(input: HTMLInputElement): void {
 }
 
 /**
+ * Toggles the colour picker for one native colour input.
+ *
+ * A second activation closes the open picker and returns focus to the input.
+ * Reopening the same control would replace the popup snapshot and replay its
+ * enter animation.
+ */
+export function toggleControlColor(input: HTMLInputElement): void {
+  const current = getPopup();
+  if (current?.kind === "color" && current.element === input) {
+    closeControlPopup(true);
+    return;
+  }
+  openControlColor(input);
+}
+
+/**
  * Handle the shared Escape contract for an open control popup.
  *
  * Returns `true` when the event was Escape and has been consumed, so callers
