@@ -343,11 +343,24 @@ export function createEditorAssembly(
   );
   scope.add(bindCurveActions(curveEditor));
   scope.add(bindTrajectoryAction(() => trajectoryPanel.open()));
+  // The document runtime is created after playback because it consumes the
+  // autosave clock, so browser backups resolve through this late-bound seam.
+  let libraryBackup: ((onProgress?: (value: number) => void) => Promise<unknown>) | null = null;
   const playbackRuntime = createPlaybackRuntime({
     session,
     preview: previewRuntime,
     timeline,
     documents,
+    ...(documents
+      ? {}
+      : {
+          backup: (onProgress?: (value: number) => void) => {
+            if (!libraryBackup) {
+              throw new Error(t("editor.app.notice.desktopOnlyBackup"));
+            }
+            return libraryBackup(onProgress);
+          },
+        }),
     assets: () => documentState.assets,
     setLastDraftDocument,
     notify,
@@ -756,6 +769,7 @@ export function createEditorAssembly(
     waitForFirstRender: frameRuntime.waitForFirstRender,
   });
   const { documentSaver } = documentRuntime;
+  libraryBackup = documentRuntime.backup;
   /** Runs a document action after the unsaved-changes confirmation. */
   function guardReplace(action: () => unknown, title?: string): void {
     documentRuntime.guardReplace(action, title);

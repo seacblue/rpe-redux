@@ -77,6 +77,8 @@ export function createPlaybackRuntime(options: {
   preview: PreviewRuntime;
   timeline: TimelineRuntime["timeline"];
   documents: TauriDocumentStore | null;
+  /** Browser-host library backup; desktop uses the native recovery store. */
+  backup?: (onProgress?: (value: number) => void) => Promise<unknown>;
   assets(): AssetMap;
   setLastDraftDocument(chart: Chart): void;
   notify(message: string, severity?: string): void;
@@ -249,18 +251,22 @@ export function createPlaybackRuntime(options: {
       const document = current.chart;
       const snapshot = { ...document };
       delete snapshot.chartTime;
-      if (!options.documents) {
-        throw new Error(t("editor.app.notice.desktopOnlyBackup"));
-      }
       const progress = showProgressToast(t("editor.app.notice.backupSaving"), "info");
       progress.setProgress(0.05);
+      const onProgress = (value: number) => progress.setProgress(0.05 + value * 0.9);
       try {
-        await options.documents.recover(
-          snapshot,
-          new Map(options.assets()),
-          { lineIndex: current.lineIndex },
-          (value) => progress.setProgress(0.05 + value * 0.9),
-        );
+        if (options.backup) {
+          await options.backup(onProgress);
+        } else if (options.documents) {
+          await options.documents.recover(
+            snapshot,
+            new Map(options.assets()),
+            { lineIndex: current.lineIndex },
+            onProgress,
+          );
+        } else {
+          throw new Error(t("editor.app.notice.desktopOnlyBackup"));
+        }
         if (current === options.session.current) {
           options.setLastDraftDocument(document);
           progress.finish(t("editor.app.notice.backupSaved"), "success");

@@ -7,7 +7,10 @@
  * document store remains the import and export transport.
  */
 import { t } from "../../../../../../i18n/index.ts";
-import { showProgressToast } from "../../../../../../design/patterns/ToastHost.tsx";
+import {
+  showProgressToast,
+  type ToastHandle,
+} from "../../../../../../design/patterns/ToastHost.tsx";
 import { serializeChartOffThread, serializeChartStream } from "./chartSerializeOffThread.ts";
 import { registeredChartDocument } from "../../../../../../core/global/chart/streaming/chartDocumentRegistry.ts";
 import { projectChartForExport } from "../../../../../../core/global/chart/exportProjection.ts";
@@ -55,6 +58,24 @@ export interface DocumentSaverDependencies {
   ) => void;
 }
 
+/** Persistence side effects a background backup can suppress. */
+export interface SaveOptions {
+  /** Keep the saver from clearing the dirty baseline or showing its own toast. */
+  quiet?: boolean;
+  /** Report save progress to a caller that already owns a progress surface. */
+  onProgress?: (value: number) => void;
+}
+
+/** A no-op toast handle for background saves that report elsewhere. */
+const quietToast: ToastHandle = {
+  id: 0,
+  update() {},
+  setProgress() {},
+  finish() {},
+  fail() {},
+  dismiss() {},
+};
+
 /** Save a stable snapshot into the library, or export it when a path is given. */
 export function createDocumentSaver(deps: DocumentSaverDependencies) {
   let saving: Promise<SaveResult | null> | null = null;
@@ -62,7 +83,11 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
   const library = deps.openLibrary ?? (async () => (await localService())?.library ?? null);
 
   /** Saves one snapshot; concurrent callers share the in-flight promise. */
-  const save = async (saveAs = false, path?: string): Promise<SaveResult | null> => {
+  const save = async (
+    saveAs = false,
+    path?: string,
+    options: SaveOptions = {},
+  ): Promise<SaveResult | null> => {
     if (saving) {
       return saving;
     }
@@ -80,12 +105,19 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
     const metaName = typeof snapshot.META?.name === "string" ? snapshot.META.name.trim() : "";
     const backgroundPath = assetPath(captured, snapshot.META?.background, deps.currentChartName());
     const background = backgroundPath ? captured.uri?.(backgroundPath) : undefined;
-    const progressToast = showProgressToast(
-      t("workspace.document.saving"),
-      "info",
-      background ? { kind: "image", src: background } : undefined,
-    );
-    progressToast.setProgress(0.05);
+    const progressToast = options.quiet
+      ? quietToast
+      : showProgressToast(
+          t("workspace.document.saving"),
+          "info",
+          background ? { kind: "image", src: background } : undefined,
+        );
+    /** Mirrors save progress to the owned toast and any background caller. */
+    const reportProgress = (value: number): void => {
+      progressToast.setProgress(value);
+      options.onProgress?.(value);
+    };
+    reportProgress(0.05);
 
     saving = (async () => {
       const chartDocument = registeredChartDocument(snapshot as object);
@@ -100,7 +132,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
             )
           : "";
       const chartChunks = !path && chartDocument ? serializeChartStream(snapshot) : undefined;
-      progressToast.setProgress(0.2);
+      reportProgress(0.2);
 
       // An explicit path is an export. It never becomes the live document.
       if (path) {
@@ -168,7 +200,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
               }),
             }
           : {}),
-        onProgress: (value) => progressToast.setProgress(0.2 + value * 0.75),
+        onProgress: (value) => reportProgress(0.2 + value * 0.75),
       });
       // Cache the committed hashes on the live map. A document first imported
       // from a file (or a brand-new chart) otherwise re-uploads every unchanged
@@ -224,6 +256,9 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           return result;
         }
         if (result.status === "save_conflict") {
+          if (options.quiet) {
+            throw new Error(t("workspace.document.error.saveConflict"));
+          }
           progressToast.finish(
             `${t("workspace.document.error.saveConflict")} ${t("workspace.document.solutionLabel")}: ${t("workspace.document.solution.saveConflict")}`,
             "warning",
@@ -235,6 +270,12 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           current !== deps.currentSession()
         ) {
           progressToast.dismiss();
+          return result;
+        }
+        // A background backup commits a room-safe library revision without
+        // clearing the editor's unsaved baseline. The user still decides when
+        // to mark the document saved.
+        if (options.quiet) {
           return result;
         }
         current.history.markSaved(snapshot);

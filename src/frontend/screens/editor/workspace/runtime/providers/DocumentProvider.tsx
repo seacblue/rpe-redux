@@ -136,6 +136,12 @@ export interface DocumentRuntime {
   ) => Promise<void>;
   readonly save: () => Promise<SaveResult | null>;
   readonly saveAs: () => Promise<SaveResult | null>;
+  /**
+   * Commit a background library revision for crash recovery without marking the
+   * live session saved. The browser host uses it because it has no native
+   * recovery store.
+   */
+  readonly backup: (onProgress?: (value: number) => void) => Promise<SaveResult | null>;
   readonly documentSaver: ReturnType<typeof createDocumentSaver>;
   readonly currentAssets: () => AssetMap;
   readonly currentChartName: () => string;
@@ -612,12 +618,19 @@ export function createDocumentRuntime(options: {
     },
   });
   /** Saves through the change coordinator, honoring the before-save hook. */
-  const runSave = (saveAs: boolean, path?: string) => {
+  const runSave = (
+    saveAs: boolean,
+    path?: string,
+    backup = false,
+    onProgress?: (value: number) => void,
+  ) => {
     if (!getSession().editable) {
       return Promise.resolve(null);
     }
     if (!path && collaborationRoomDocument.get()) {
-      showToast(t("workspace.collaboration.roomChartSaveBlocked"), "warning");
+      if (!backup) {
+        showToast(t("workspace.collaboration.roomChartSaveBlocked"), "warning");
+      }
       return Promise.resolve(null);
     }
     const payload = { saveAs, cancel: false };
@@ -631,8 +644,17 @@ export function createDocumentRuntime(options: {
         kind: "save",
         expected: { generation },
         run: async ({ state }) => {
-          const value = await documentSaver.save(saveAs, path);
+          const value = await documentSaver.save(
+            saveAs,
+            path,
+            backup ? { quiet: true, ...(onProgress ? { onProgress } : {}) } : {},
+          );
           if (value?.status !== "saved") {
+            return { status: "accepted", value };
+          }
+          // A background backup keeps the live unsaved baseline and revision
+          // state untouched; only an explicit save publishes the fingerprint.
+          if (backup) {
             return { status: "accepted", value };
           }
           // The saver has already marked the history baseline. This is the
@@ -655,10 +677,10 @@ export function createDocumentRuntime(options: {
           return null;
         }
         const result = admitted.value ?? null;
-        if (result?.status === "saved") {
+        if (!backup && result?.status === "saved") {
           void diskObserver?.rescan();
         }
-        if (result?.status === "saved" && extensionRegistry.hasEvent("document:saved")) {
+        if (!backup && result?.status === "saved" && extensionRegistry.hasEvent("document:saved")) {
           extensionRegistry.emitEvent("document:saved", {
             name: getChartName(),
             path: result.path,
@@ -670,6 +692,8 @@ export function createDocumentRuntime(options: {
   };
   const save = () => runSave(false);
   const saveAs = () => runSave(true);
+  const backup = (onProgress?: (value: number) => void) =>
+    runSave(false, undefined, true, onProgress);
   conversionSaver.current = save;
 
   const diskResolver = createDiskChangeResolver({
@@ -1271,6 +1295,7 @@ export function createDocumentRuntime(options: {
     loadCandidate,
     save,
     saveAs,
+    backup,
     documentSaver,
     guardReplace,
     installBlankChart,
