@@ -10,6 +10,12 @@ export const CHART_STREAM_MAGIC = "RPE1";
 /** Frame protocol version carried by the header frame. */
 export const CHART_STREAM_VERSION = 1;
 
+/** Paged document working-set budget used by editor hosts. */
+export const PAGED_DOCUMENT_MAX_LINES = 32_000;
+export const PAGED_DOCUMENT_MAX_BYTES = 256 * 1024 * 1024;
+/** Maximum lines one time-window preload may load. */
+export const PAGED_PRELOAD_MAX_LINES = 30_000;
+
 /** Frame kinds exchanged between a host, a parser worker, and a chart document. */
 export const CHART_FRAME = {
   header: 1,

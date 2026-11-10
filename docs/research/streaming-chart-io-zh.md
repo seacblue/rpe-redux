@@ -22,7 +22,7 @@
 
 这里的“完全替换”指**所有打开/保存入口都走同一套流式管线**：文件、库项目、PEZ、浏览器 File 都通过 `ChartSource` + frame parser；普通谱面只是在这条管线上选择“全量物化”策略，而不是保留另一条整文件读写路径。整图 `JSON.parse` / `JSON.stringify` 仅作为扩展钩子或异常输入的回退。
 
-> 实现状态（本分支）：核心扫描器、行索引、分块文档、帧协议、浏览器 worker、库流式 GET/commit、native `open_document_stream`/`read_chart_lines` 已落地。编辑器对超过 10,000 行的谱面启用 paged 会话（无已启用扩展、无 Code Cell、无协作房间时），按时间窗口加载行，行树只渲染活动行附近的窗口；其余谱面仍 eager 物化。paged 行级历史、保存回放、渲染等价性均有测试覆盖。
+> 实现状态（本分支）：核心扫描器、行索引（含不相交活动区间）、分块文档、帧协议、浏览器 worker、库流式 GET/commit、native `open_document_stream`/`read_chart_lines` 已落地。编辑器对超过 10,000 行的谱面启用 paged 会话（无已启用扩展、无 Code Cell、无协作房间时），按时间窗口加载行，行树只渲染活动行附近的窗口；其余谱面仍 eager 物化。库打开默认只取 header/index，行通过 `GET /chart/lines` 按需读取，不再把整图原始行留在内存；单行超过批帧上限时，native 通过 `read_chart_line_chunk` 分片读取；paged 保存经有界异步队列逐行输出，不再先收集整串。协作开始或加入前会物化当前 paged 文档，保证房间快照与恢复副本完整。paged 行级历史、保存回放、渲染等价性均有测试覆盖。
 
 ---
 

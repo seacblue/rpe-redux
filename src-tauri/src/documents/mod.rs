@@ -27,7 +27,7 @@ mod recovery_store;
 mod save;
 mod watch;
 
-pub use chart_stream::{open_document_stream, read_chart_lines};
+pub use chart_stream::{open_document_stream, read_chart_line_chunk, read_chart_lines};
 pub use library::{import_library_project, inspect_library};
 pub use media::media_response;
 pub use open::{close_document, open_document, read_asset};

@@ -11,6 +11,8 @@ import { beginBackendTrace } from "../../diagnostics/backendTrace.ts";
 import { PREFERENCE_SECTIONS, preferences } from "../../state/preferences.ts";
 import { browserDevPorts, getRuntimePorts } from "../../platform/runtimePorts.ts";
 import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
+import { ChartFrameDecoder, decodeLinesFrame } from "../chart/streaming/chartStreamCodec.ts";
+import { CHART_FRAME } from "../chart/streaming/chartStreamTypes.ts";
 import type { LibraryViewState } from "./types.ts";
 import type { DropClassification } from "../document/dropIntake.ts";
 
@@ -460,17 +462,24 @@ export class LocalLibrary {
    * The caller decodes the frame protocol; this method only owns the HTTP
    * transport and the response body lifetime.
    */
-  async *chartStream(id: string, options: RequestOptions = {}): AsyncIterable<Uint8Array> {
+  async *chartStream(
+    id: string,
+    options: RequestOptions & { includeLines?: boolean } = {},
+  ): AsyncIterable<Uint8Array> {
     const signal =
       options.timeoutMs && typeof globalThis.AbortSignal?.timeout === "function"
         ? AbortSignal.timeout(options.timeoutMs)
         : undefined;
+    const includeLines = options.includeLines === false ? "?includeLines=false" : "";
     let response: Response;
     try {
-      response = await fetch(`${this.origin}/api/projects/${encodeURIComponent(id)}/chart/stream`, {
-        signal,
-        headers: options.headers,
-      });
+      response = await fetch(
+        `${this.origin}/api/projects/${encodeURIComponent(id)}/chart/stream${includeLines}`,
+        {
+          signal,
+          headers: options.headers,
+        },
+      );
     } catch (error) {
       throw new LocalLibraryError(
         t("system.library.unreachable", {
@@ -504,6 +513,55 @@ export class LocalLibrary {
     } finally {
       reader.releaseLock();
     }
+  }
+
+  /**
+   * Read one bounded line batch as a decoded frame.
+   *
+   * The service verifies the requested range against its cached index and
+   * returns one `lines` frame containing the raw JSON array text.
+   */
+  async chartLines(
+    id: string,
+    start: number,
+    count: number,
+    options: RequestOptions = {},
+  ): Promise<{ start: number; count: number; raw: string }> {
+    const signal =
+      options.timeoutMs && typeof globalThis.AbortSignal?.timeout === "function"
+        ? AbortSignal.timeout(options.timeoutMs)
+        : undefined;
+    const query = new URLSearchParams({ start: String(start), count: String(count) });
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.origin}/api/projects/${encodeURIComponent(id)}/chart/lines?${query}`,
+        { signal, headers: options.headers },
+      );
+    } catch (error) {
+      throw new LocalLibraryError(
+        t("system.library.unreachable", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+    if (!response.ok) {
+      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+        status: response.status,
+        code: "chart_lines",
+      });
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const frame = new ChartFrameDecoder()
+      .push(bytes)
+      .find((entry) => entry.kind === CHART_FRAME.lines);
+    if (!frame) {
+      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+        status: response.status,
+        code: "chart_lines",
+      });
+    }
+    return decodeLinesFrame(frame);
   }
 
   /** Create a project from a parsed chart. */

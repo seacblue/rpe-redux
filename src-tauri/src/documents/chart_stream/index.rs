@@ -64,7 +64,8 @@ const EVENT_TRACKS: [&str; 12] = [
 /// File suffixes the document host treats as shader resources.
 const SHADER_SUFFIXES: [&str; 6] = [".glsl", ".frag", ".vert", ".vsh", ".fsh", ".shader"];
 
-/// One line's index entry; it never contains note or event objects.
+/// One line's index entry; it never contains note or event objects. Intervals
+/// are disjoint activity ranges used by paged time windows.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ChartLineSummary {
@@ -77,6 +78,9 @@ pub(crate) struct ChartLineSummary {
     start_seconds: Option<f64>,
     #[serde(serialize_with = "serialize_optional_js_number")]
     end_seconds: Option<f64>,
+    /// Disjoint activity ranges used by paged time windows.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    intervals: Vec<[f64; 2]>,
     digest: String,
     flags: u32,
     #[serde(serialize_with = "serialize_js_number")]
@@ -307,6 +311,7 @@ fn summarize_line(
             event_count: 0,
             start_seconds: None,
             end_seconds: None,
+            intervals: Vec::new(),
             digest,
             flags: LINE_FLAG_INVALID | LINE_FLAG_UNBOUNDED,
             group: 0.0,
@@ -321,6 +326,7 @@ fn summarize_line(
         end: f64::NEG_INFINITY,
         timed: false,
     };
+    let mut intervals: Vec<[f64; 2]> = Vec::new();
     let notes = object.get("notes").and_then(Value::as_array);
     let note_count = notes.map_or(0, |notes| notes.len() as u64);
     if let Some(notes) = notes {
@@ -339,6 +345,9 @@ fn summarize_line(
             if let Some(start) = start {
                 if visible_time.is_finite() {
                     extend(&mut bounds, Some(start - visible_time));
+                    add_interval(&mut intervals, Some(start - visible_time), end);
+                } else {
+                    add_interval(&mut intervals, Some(start), end);
                 }
             }
         }
@@ -377,6 +386,7 @@ fn summarize_line(
                 let end = seconds_of(event.get("endTime"), tempo, factor);
                 extend(&mut bounds, start);
                 extend(&mut bounds, end);
+                add_interval(&mut intervals, start, end);
                 if track == "alphaEvents" {
                     has_alpha_events = true;
                     if let Some(end) = end {
@@ -408,6 +418,12 @@ fn summarize_line(
     if object.contains_key("_reduxNoiseLine") {
         flags |= LINE_FLAG_NOISE;
     }
+    if unbounded {
+        intervals.push([
+            last_alpha_end.map_or(0.0, |end| end.max(0.0)),
+            MAX_SAFE_INTEGER,
+        ]);
+    }
 
     ChartLineSummary {
         index,
@@ -425,6 +441,7 @@ fn summarize_line(
         } else {
             Some(bounds.start.max(bounds.end))
         },
+        intervals: merge_intervals(intervals),
         digest,
         flags,
         group: object
@@ -459,6 +476,41 @@ fn extend(bounds: &mut Bounds, seconds: Option<f64>) {
     bounds.start = bounds.start.min(seconds);
     bounds.end = bounds.end.max(seconds);
     bounds.timed = true;
+}
+
+/// Add one finite activity interval.
+fn add_interval(intervals: &mut Vec<[f64; 2]>, start: Option<f64>, end: Option<f64>) {
+    let (Some(start), Some(end)) = (start, end) else {
+        return;
+    };
+    if !start.is_finite() || !end.is_finite() {
+        return;
+    }
+    intervals.push([start.max(0.0), start.max(end)]);
+}
+
+/// Sort and merge overlapping activity intervals.
+fn merge_intervals(mut intervals: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
+    if intervals.len() <= 1 {
+        return intervals;
+    }
+    intervals.sort_by(|left, right| {
+        left[0]
+            .partial_cmp(&right[0])
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left[1].partial_cmp(&right[1]).unwrap_or(Ordering::Equal))
+    });
+    let mut merged: Vec<[f64; 2]> = Vec::with_capacity(intervals.len());
+    for interval in intervals {
+        if let Some(current) = merged.last_mut() {
+            if interval[0] <= current[1] {
+                current[1] = current[1].max(interval[1]);
+                continue;
+            }
+        }
+        merged.push(interval);
+    }
+    merged
 }
 
 /// Seconds for one beat value, or null when it is malformed.
@@ -800,7 +852,7 @@ mod tests {
         build_chart_index, combine_content_fingerprint, header_content_fingerprint,
         js_number_string, line_content_fingerprint, summarize_line, ChartLineSummary, TempoMap,
         LINE_FLAG_INVALID, LINE_FLAG_NOISE, LINE_FLAG_SHADER, LINE_FLAG_STATIC,
-        LINE_FLAG_UNBOUNDED,
+        LINE_FLAG_UNBOUNDED, MAX_SAFE_INTEGER,
     };
     use crate::documents::chart_stream::json_scan::scan_chart_json;
     use serde_json::{json, Map, Value};
@@ -942,10 +994,46 @@ mod tests {
         assert_eq!(summary.event_count, 2);
         assert_eq!(summary.start_seconds, Some(0.0));
         assert_eq!(summary.end_seconds, Some(1.0));
+        assert_eq!(summary.intervals, vec![[0.0, 1.0]]);
         assert_eq!(summary.flags, LINE_FLAG_SHADER);
         assert_eq!(summary.group, 2.0);
         assert_eq!(summary.father, 1.0);
         assert_eq!(summary.id.as_deref(), Some("line-id"));
+    }
+
+    #[test]
+    fn line_summary_merges_activity_intervals() {
+        let header = header(json!({
+            "BPMList": [{"bpm": 60, "startTime": [0, 0, 1]}]
+        }));
+        let tempo = tempo(&header);
+        let early = summarize_line(
+            &json!({
+                "notes": [{"startTime": [0, 0, 1], "endTime": [1, 0, 1], "visibleTime": 0}],
+                "eventLayers": [
+                    {"alphaEvents": [{"startTime": [0, 0, 1], "endTime": [4, 0, 1], "end": 0}]},
+                ],
+            }),
+            0,
+            &tempo,
+            0,
+            2,
+        );
+        assert_eq!(early.intervals, vec![[0.0, 4.0]]);
+
+        let late = summarize_line(
+            &json!({
+                "notes": [{"startTime": [100, 0, 1], "endTime": [101, 0, 1], "visibleTime": 0}],
+                "eventLayers": [
+                    {"alphaEvents": [{"startTime": [100, 0, 1], "endTime": [104, 0, 1], "end": 0}]},
+                ],
+            }),
+            1,
+            &tempo,
+            4,
+            6,
+        );
+        assert_eq!(late.intervals, vec![[100.0, 104.0]]);
     }
 
     #[test]
@@ -957,6 +1045,7 @@ mod tests {
         assert_eq!(static_line.flags, LINE_FLAG_STATIC | LINE_FLAG_UNBOUNDED);
         assert_eq!(static_line.start_seconds, None);
         assert_eq!(static_line.end_seconds, None);
+        assert_eq!(static_line.intervals, vec![[0.0, MAX_SAFE_INTEGER]]);
 
         let invalid = summarize_line(&Value::Null, 1, &tempo, 2, 4);
         assert_eq!(invalid.flags, LINE_FLAG_INVALID | LINE_FLAG_UNBOUNDED);
@@ -1026,6 +1115,7 @@ mod tests {
             event_count: 0,
             start_seconds: Some(1.0),
             end_seconds: None,
+            intervals: Vec::new(),
             digest: "00000000".into(),
             flags: 0,
             group: 2.0,

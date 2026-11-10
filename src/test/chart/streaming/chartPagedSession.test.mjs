@@ -71,6 +71,10 @@ test("paged session edits one line and undo/redo restores the document", async (
   assert.equal(document.line(5), edited);
   assert.equal(session.history.document, document.chart);
   assert.notEqual(session.history.fingerprint(), beforeFingerprint);
+  const entry = session.history.undoStack.at(-1);
+  assert.notEqual(entry.before, entry.after);
+  assert.equal(entry.before.judgeLineList[5].notes.length, line.notes.length);
+  assert.equal(entry.after.judgeLineList[5].notes.length, edited.notes.length);
 
   assert.equal(session.history.undo(), true);
   assert.equal(document.line(5), line);
@@ -91,6 +95,16 @@ test("paged session line insertion and removal stay in the document", async () =
   assert.equal(session.history.undo(), true);
   assert.equal(document.lineCount, beforeCount);
   assert.equal(session.chart.judgeLineList.length, beforeCount);
+});
+
+test("paged dirty tracking ignores loading a clean line", async () => {
+  const chart = pagedChart();
+  const document = documentFromText(serializeChart(chart));
+  const session = EditorSession.fromDocument(document);
+  session.history.markSaved();
+  assert.equal(session.history.dirty, false);
+  await document.ensureLine(10);
+  assert.equal(session.history.dirty, false);
 });
 
 test("paged materialization keeps the same fingerprint as the source", async () => {

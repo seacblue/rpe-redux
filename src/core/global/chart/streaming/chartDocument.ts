@@ -154,7 +154,7 @@ export class ChartDocument {
   dispose?: () => void;
   private readonly lines: JudgeLine[];
   private readonly slots: LineSlot[];
-  private readonly tempo: TempoMap;
+  private tempo: TempoMap;
   private readonly identityFactory = createChartIdentityFactory();
   private readonly usedIds = new Set<string>();
   private readonly maxCachedLines: number;
@@ -164,6 +164,7 @@ export class ChartDocument {
   private revision = 0;
   private fingerprintCache: string | null = null;
   private materialized: Chart | null = null;
+  private materializing = false;
 
   /** Build a document over a header, index, and line provider. */
   constructor(options: ChartDocumentOptions) {
@@ -312,10 +313,11 @@ export class ChartDocument {
       }
     }
     const limit = options.maxLines ?? Number.POSITIVE_INFINITY;
-    if (candidates.length > limit) {
-      throw new ChartPagingLimitError(candidates.length, limit);
+    const pending = candidates.filter((index) => !this.slots[index]?.line);
+    if (pending.length > limit) {
+      throw new ChartPagingLimitError(pending.length, limit);
     }
-    await this.ensureLines(candidates, options.signal);
+    await this.ensureLines(pending, options.signal);
     return candidates;
   }
 
@@ -354,6 +356,9 @@ export class ChartDocument {
       this.lines.push(placeholderLine(emptySummary(index)));
     }
     if (this.slots.length > lines.length) {
+      for (const slot of this.slots.slice(lines.length)) {
+        this.cachedBytes = Math.max(0, this.cachedBytes - (slot.raw?.length ?? 0));
+      }
       this.slots.splice(lines.length);
       this.lines.splice(lines.length);
     }
@@ -361,6 +366,7 @@ export class ChartDocument {
       const line = lines[index];
       const slot = this.slots[index];
       if (isPlaceholderLine(line)) {
+        this.cachedBytes = Math.max(0, this.cachedBytes - (slot.raw?.length ?? 0));
         slot.line = undefined;
         slot.state = "missing";
         slot.raw = undefined;
@@ -406,7 +412,8 @@ export class ChartDocument {
     if (index < 0 || index >= this.slots.length) {
       return;
     }
-    this.slots.splice(index, 1);
+    const [removed] = this.slots.splice(index, 1);
+    this.cachedBytes = Math.max(0, this.cachedBytes - (removed?.raw?.length ?? 0));
     this.lines.splice(index, 1);
     this.reindex(index);
     this.changed();
@@ -425,10 +432,17 @@ export class ChartDocument {
 
   /** Materialize every line and return a plain snapshot. */
   async materializeAll(options: { signal?: AbortSignal } = {}): Promise<Chart> {
-    await this.ensureLines(
-      this.slots.map((slot) => slot.summary.index),
-      options.signal,
-    );
+    // The snapshot needs every line at once, so the paged working-set budget
+    // must not evict lines while it is being assembled.
+    this.materializing = true;
+    try {
+      await this.ensureLines(
+        this.slots.map((slot) => slot.summary.index),
+        options.signal,
+      );
+    } finally {
+      this.materializing = false;
+    }
     if (this.materialized) {
       return this.materialized;
     }
@@ -573,6 +587,9 @@ export class ChartDocument {
   /** Update the header and mirror it onto the facade chart. */
   private setHeader(header: ChartHeader): void {
     this.header = header;
+    this.tempo = new TempoMap(
+      header.BPMList.length ? header.BPMList : ([{ bpm: 120, startTime: [0, 0, 1] }] as BpmEntry[]),
+    );
     Object.assign(this.chart, headerValues(header));
   }
 
@@ -597,7 +614,7 @@ export class ChartDocument {
 
   /** Drop least-recently-used clean lines when the cache exceeds its budget. */
   private evict(): void {
-    if (!this.maxCachedLines && !this.maxCachedBytes) {
+    if (this.materializing || (!this.maxCachedLines && !this.maxCachedBytes)) {
       return;
     }
     const candidates = this.slots

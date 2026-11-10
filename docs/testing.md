@@ -86,7 +86,7 @@ Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and `co
 | `chartStreaming.test.mjs` | Scanner ranges, line summaries, paged loading, frame parsing, fingerprint equality, and serialization round trips. |
 | `chartStreamingRenderEquivalence.test.mjs` | A paged scene matches the full scene for line state and visible notes, including static lines, judge-line events, and zero/low/negative note speeds. |
 | `chartFiles.test.mjs` | A single JSON file reaches the document loader with a streaming document. |
-| `chartLibraryStreaming.test.mjs` | Library summary + asset manifest + chart frames become a paged document. |
+| `chartLibraryStreaming.test.mjs` | Library summary + asset manifest + header/index frames become a paged document; line batches are fetched on demand. |
 | `chartPagedSession.test.mjs` | Paged edits, line insertion/removal, undo/redo, and save stream round trips. |
 
 The render-equivalence suite is the correctness gate for paging: it compares `SceneRuntime` sampling and `visibleNotes` against the full chart for deterministic tricky and randomized corpora. Do not replace it with a pixel snapshot; the scene data is the renderer's shared input.

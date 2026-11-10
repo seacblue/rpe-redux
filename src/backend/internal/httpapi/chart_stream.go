@@ -27,8 +27,9 @@ const (
 	defaultLineBatch = 64
 	// maxLineBatch caps one random-access response.
 	maxLineBatch = 1024
-	// chartCacheVersion identifies the persisted cache envelope layout.
-	chartCacheVersion = 1
+	// chartCacheVersion identifies the persisted cache envelope layout and the
+	// line-summary schema; a bump rebuilds indexes that predate new fields.
+	chartCacheVersion = 2
 )
 
 // Errors that map to distinct HTTP responses on the streaming routes.
@@ -240,6 +241,7 @@ func (a *API) handleChartStream(w http.ResponseWriter, r *http.Request) {
 	if err := chartstream.WriteJSONFrame(writer, chartstream.KindIndex, artifact.Index); err != nil {
 		return
 	}
+	includeLines := r.URL.Query().Get("includeLines") != "false"
 	digests := make([]string, len(artifact.Index.Lines))
 	for offset, summary := range artifact.Index.Lines {
 		if summary.Index != offset {
@@ -256,6 +258,10 @@ func (a *API) handleChartStream(w http.ResponseWriter, r *http.Request) {
 			_ = writer.Flush()
 			return
 		}
+		digests[offset] = summary.Digest
+		if !includeLines {
+			continue
+		}
 		raw := text[start:end]
 		if !utf8.Valid(raw) {
 			_ = writer.Flush()
@@ -266,7 +272,6 @@ func (a *API) handleChartStream(w http.ResponseWriter, r *http.Request) {
 		if err := chartstream.WriteLineFrame(writer, uint32(offset), raw); err != nil {
 			return
 		}
-		digests[offset] = summary.Digest
 	}
 	endPayload := map[string]any{
 		"digest": chartstream.CombineContentFingerprint(artifact.Index.HeaderDigest, digests),

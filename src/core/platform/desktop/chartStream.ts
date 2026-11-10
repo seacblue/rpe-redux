@@ -13,9 +13,12 @@ import {
 import { scanJsonArrayRanges } from "../../global/chart/streaming/chartJsonScanner.ts";
 import {
   CHART_FRAME,
+  PAGED_DOCUMENT_MAX_BYTES,
+  PAGED_DOCUMENT_MAX_LINES,
   type ChartHeader,
   type ChartIndex,
   type ChartLineProvider,
+  type ChartLineSummary,
 } from "../../global/chart/streaming/chartStreamTypes.ts";
 import type { AssetEntry } from "../../global/document/desktopTypes.ts";
 
@@ -37,27 +40,51 @@ export interface NativeChartStream {
   readonly document: ChartDocument;
 }
 
+/** Largest batch the native provider asks for before splitting a line. */
+const MAX_BATCH_BYTES = 32 * 1024 * 1024;
+/** Largest slice returned by one `read_chart_line_chunk` call. */
+const MAX_LINE_CHUNK_BYTES = 4 * 1024 * 1024;
+/** Raw-line cache bounds; the document keeps its own working set. */
+const MAX_CACHED_LINES = 512;
+const MAX_CACHED_CHARS = 8 * 1024 * 1024;
+
 /** Read one line from a native document in bounded batches. */
 class NativeChartLineProvider implements ChartLineProvider {
   readonly lineCount: number;
   private readonly id: string;
+  private readonly lines: readonly ChartLineSummary[];
   private readonly cache = new Map<number, string>();
+  private cachedChars = 0;
   private readonly batch = 64;
 
   /** Bind the provider to one native streaming document. */
-  constructor(id: string, lineCount: number) {
+  constructor(id: string, lines: readonly ChartLineSummary[]) {
     this.id = id;
-    this.lineCount = lineCount;
+    this.lines = lines;
+    this.lineCount = lines.length;
   }
 
   /** Read one raw line, fetching its surrounding batch on first use. */
   async readLine(index: number): Promise<string | undefined> {
     const cached = this.cache.get(index);
     if (cached !== undefined) {
+      this.cache.delete(index);
+      this.cache.set(index, cached);
       return cached;
+    }
+    const summary = this.lines[index];
+    if (!summary) {
+      return undefined;
     }
     const start = Math.floor(index / this.batch) * this.batch;
     const count = Math.min(this.batch, this.lineCount - start);
+    let batchBytes = 2;
+    for (let offset = 0; offset < count; offset++) {
+      batchBytes += (this.lines[start + offset]?.byteLength ?? 0) + (offset > 0 ? 1 : 0);
+    }
+    if (summary.byteLength > MAX_BATCH_BYTES || batchBytes > MAX_BATCH_BYTES) {
+      return this.readChunkedLine(index, summary);
+    }
     const response = await invoke<ArrayBuffer | number[]>("read_chart_lines", {
       id: this.id,
       start,
@@ -75,9 +102,56 @@ class NativeChartLineProvider implements ChartLineProvider {
     const ranges = scanJsonArrayRanges(batch.raw);
     for (let offset = 0; offset < ranges.length; offset++) {
       const range = ranges[offset];
-      this.cache.set(batch.start + offset, batch.raw.slice(range.start, range.end));
+      this.cacheLine(batch.start + offset, batch.raw.slice(range.start, range.end));
     }
     return this.cache.get(index);
+  }
+
+  /** Store one raw line and trim the oldest entries past the cache budget. */
+  private cacheLine(index: number, raw: string): void {
+    this.cache.set(index, raw);
+    this.cachedChars += raw.length;
+    while (
+      this.cache.size > 1 &&
+      (this.cache.size > MAX_CACHED_LINES || this.cachedChars > MAX_CACHED_CHARS)
+    ) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      const removed = this.cache.get(oldest);
+      this.cache.delete(oldest);
+      this.cachedChars -= removed?.length ?? 0;
+    }
+  }
+
+  /** Read one line that is too large for the batch frame ceiling. */
+  private async readChunkedLine(
+    index: number,
+    summary: ChartLineSummary,
+  ): Promise<string | undefined> {
+    const decoder = new TextDecoder();
+    let raw = "";
+    let offset = 0;
+    while (offset < summary.byteLength) {
+      const length = Math.min(MAX_LINE_CHUNK_BYTES, summary.byteLength - offset);
+      const response = await invoke<ArrayBuffer | number[]>("read_chart_line_chunk", {
+        id: this.id,
+        index,
+        offset,
+        length,
+      });
+      const bytes =
+        response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response);
+      if (!bytes.length) {
+        break;
+      }
+      raw += decoder.decode(bytes, { stream: true });
+      offset += bytes.length;
+    }
+    raw += decoder.decode();
+    this.cacheLine(index, raw);
+    return raw;
   }
 }
 
@@ -146,9 +220,15 @@ export async function openNativeChartStream(
     await invoke("close_document", { id: opened.id }).catch(() => undefined);
     throw new Error(`Chart stream did not produce a header for ${opened.chart_name}`);
   }
-  const provider = new NativeChartLineProvider(opened.id, resolvedIndex.lines.length);
+  const provider = new NativeChartLineProvider(opened.id, resolvedIndex.lines);
   return {
     opened,
-    document: new ChartDocument({ header: resolvedHeader, index: resolvedIndex, provider }),
+    document: new ChartDocument({
+      header: resolvedHeader,
+      index: resolvedIndex,
+      provider,
+      maxCachedLines: PAGED_DOCUMENT_MAX_LINES,
+      maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
+    }),
   };
 }

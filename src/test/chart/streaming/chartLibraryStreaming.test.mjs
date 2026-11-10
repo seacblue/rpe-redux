@@ -49,6 +49,7 @@ test("library chart document opens from summary and chart frames", async () => {
     ),
     encodeJsonFrame(CHART_FRAME.end, {}),
   ];
+  let omittedLines = false;
   const library = {
     async summary() {
       return {
@@ -74,14 +75,26 @@ test("library chart document opens from summary and chart frames", async () => {
     assetUrl() {
       return "";
     },
-    async *chartStream() {
+    async *chartStream(_id, options = {}) {
+      omittedLines = options.includeLines === false;
       for (const frame of frames) {
+        if (omittedLines && (frame[4] === CHART_FRAME.line || frame[4] === CHART_FRAME.lines)) {
+          continue;
+        }
         yield frame;
       }
+    },
+    async chartLines(_id, start, count) {
+      const raw = scan.lineRanges
+        .slice(start, start + count)
+        .map((range) => scan.text.slice(range.start, range.end))
+        .join(",");
+      return { start, count, raw: `[${raw}]` };
     },
   };
   const opened = await openLibraryChartDocument(library, "project-1");
   assert.equal(opened.project.id, "project-1");
+  assert.equal(omittedLines, true);
   assert.equal(opened.chartDocument.lineCount, 1);
   const materialized = await opened.chartDocument.materializeAll();
   assert.equal(chartFingerprint(materialized), chartFingerprint(chart));

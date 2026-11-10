@@ -9,6 +9,7 @@ import { idleScheduler } from "../../document/save/idleScheduler.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
+import { PAGED_PRELOAD_MAX_LINES } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import type { PreviewRuntime } from "./PreviewProvider.tsx";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
@@ -96,8 +97,11 @@ export function createPlaybackRuntime(options: {
     }
     preloadAt = seconds;
     preloadPending = true;
+    // A very dense window can exceed the preload cap; retry with a narrower
+    // window so playback still gets the nearest lines.
     void document
-      .ensureTime(seconds, 30, { maxLines: 100_000 })
+      .ensureTime(seconds, 30, { maxLines: PAGED_PRELOAD_MAX_LINES })
+      .catch(() => document.ensureTime(seconds, 10, { maxLines: PAGED_PRELOAD_MAX_LINES }))
       .then(async () => {
         await options.preview.hitSounds.prepare().catch(() => undefined);
         options.session.current.notify();

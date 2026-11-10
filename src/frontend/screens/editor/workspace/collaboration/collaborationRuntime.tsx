@@ -1000,7 +1000,22 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   };
 
   /** Keeps a displaced chart in the panel and in the crash-recovery store. */
-  const retainRecovery = (chart: unknown): void => {
+  const retainRecovery = (chart: unknown, chartDocument?: EditorSession["chartDocument"]): void => {
+    if (chartDocument) {
+      // A paged facade cannot be used as a recovery copy; persist the complete
+      // chart once its remaining lines are materialized.
+      void chartDocument.materializeAll().then(
+        (full) => {
+          setRecovery(full);
+          void writeRecovery(full);
+        },
+        () => {
+          setRecovery(chart);
+          void writeRecovery(chart);
+        },
+      );
+      return;
+    }
     setRecovery(chart);
     void writeRecovery(chart);
   };
@@ -1241,12 +1256,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           // The first authoritative snapshot of a join replaces the guest's
           // document; merging it into the old history would keep the old target.
           appliedRevision.current = client.state.get().revision;
-          if (
-            initial &&
-            session.history.dirty &&
-            stableFingerprint(session.chart) !== joinedRecoveryFingerprint.current
-          ) {
-            retainRecovery(session.chart);
+          if (initial && session.history.dirty && joinedRecoveryFingerprint.current === null) {
+            retainRecovery(session.chart, session.chartDocument);
           }
           joinedRecoveryFingerprint.current = null;
           roomJoinPending.current = false;
@@ -1265,10 +1276,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (stableFingerprint(session.chart) === stableFingerprint(parsed)) {
           return;
         }
-        if (initial && session.history.dirty) {
+        if (initial && session.history.dirty && joinedRecoveryFingerprint.current === null) {
           // A reconnect snapshot is authoritative, but an unconfirmed local
           // edit still deserves a recovery copy before it is replaced.
-          retainRecovery(session.chart);
+          retainRecovery(session.chart, session.chartDocument);
         }
         if (!session.commitRemoteChart(t("workspace.collaboration.remoteSnapshot"), parsed)) {
           showNotice(t("workspace.collaboration.applyFailed"), "error");
@@ -1322,16 +1333,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (encrypted && strict?.conflicts.length) {
           // Encrypted rooms cannot compare plaintext server-side; the ordered
           // batch is last-writer-wins and the displaced local state is retained.
-          retainRecovery(session.chart);
+          retainRecovery(session.chart, session.chartDocument);
           showNotice(t("workspace.collaboration.e2eOverwrite"), "warning");
         } else if (!encrypted && result.conflicts.length) {
-          retainRecovery(session.chart);
+          retainRecovery(session.chart, session.chartDocument);
           showNotice(t("workspace.collaboration.conflictNotice"), "error");
           client.requestSnapshot();
           return;
         }
         if (result.conflicts.length) {
-          retainRecovery(session.chart);
+          retainRecovery(session.chart, session.chartDocument);
           showNotice(t("workspace.collaboration.applyFailed"), "error");
           client.requestSnapshot();
           return;
@@ -1354,7 +1365,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           }
           appliedRevision.current = message.revision;
         } catch {
-          retainRecovery(session.chart);
+          retainRecovery(session.chart, session.chartDocument);
           showNotice(t("workspace.collaboration.invalidRemoteChange"), "error");
           client.requestSnapshot();
         }
@@ -1364,7 +1375,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (!client) {
           return;
         }
-        retainRecovery(sessionRuntime.current.chart);
+        retainRecovery(sessionRuntime.current.chart, sessionRuntime.current.chartDocument);
         showNotice(t("workspace.collaboration.conflictNotice"), "error");
         client.requestSnapshot();
       },
@@ -1434,7 +1445,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           code === "missing_lock" ||
           code === "invalid_change"
         ) {
-          retainRecovery(sessionRuntime.current.chart);
+          retainRecovery(sessionRuntime.current.chart, sessionRuntime.current.chartDocument);
           clientRef.current?.requestSnapshot();
         }
         showNotice(connectionErrorText(message, code), "error");
@@ -1820,12 +1831,25 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       return;
     }
     const document = contextRef.current.documentRuntime;
+    const session = sessionRuntime.current;
+    let roomChart: Chart;
+    try {
+      // A room snapshot is the full chart; a paged document must materialize
+      // its placeholders before it becomes authoritative room state.
+      roomChart = session.chartDocument
+        ? await session.chartDocument.materializeAll()
+        : session.chart;
+    } catch (error) {
+      showToast(
+        t("workspace.collaboration.hostFailed", {
+          detail: error instanceof Error ? error.message : String(error),
+        }),
+        "error",
+      );
+      return;
+    }
     const missing = document
-      ? missingRequiredRoomAssets(
-          sessionRuntime.current.chart,
-          document.currentAssets(),
-          document.currentChartName(),
-        )
+      ? missingRequiredRoomAssets(roomChart, document.currentAssets(), document.currentChartName())
       : [];
     if (missing.length) {
       showModalNotice({
@@ -1882,7 +1906,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         ...override,
         serverUrl: publicUrl,
       };
-      const session = sessionRuntime.current;
       // The host stays on the local authoritative server; only invitees cross
       // the Tunnel or LAN bridge. This avoids waiting for public DNS first.
       client.connect(current.serverUrl, {
@@ -1890,7 +1913,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       });
       client.createRoom(
         profile(current),
-        structuredClone(session.chart),
+        structuredClone(roomChart),
         session.history.fingerprint(),
         {
           autoApproveEditor: override?.autoApproveEditor === true,
@@ -1962,7 +1985,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (!confirmed) {
         return;
       }
-      recoverySnapshot = structuredClone(sessionRuntime.current.chart);
+      const currentSession = sessionRuntime.current;
+      const recoveryChart = currentSession.chartDocument
+        ? await currentSession.chartDocument.materializeAll()
+        : currentSession.chart;
+      recoverySnapshot = structuredClone(recoveryChart);
     }
     if (!(await ensureSession())) {
       return;

@@ -89,9 +89,15 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
 
     saving = (async () => {
       const chartDocument = registeredChartDocument(snapshot as object);
+      // A file export projects and serializes the complete chart. A paged
+      // document must materialize its placeholders first; library saves keep
+      // the streamed path below.
+      const exportSource = path && chartDocument ? await chartDocument.materializeAll() : snapshot;
       const chartJson =
         path || !chartDocument
-          ? await serializeChartOffThread(path ? projectChartForExport(snapshot, path) : snapshot)
+          ? await serializeChartOffThread(
+              path ? projectChartForExport(exportSource, path) : snapshot,
+            )
           : "";
       const chartChunks = !path && chartDocument ? serializeChartStream(snapshot) : undefined;
       progressToast.setProgress(0.2);

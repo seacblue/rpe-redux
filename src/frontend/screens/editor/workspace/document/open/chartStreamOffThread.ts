@@ -13,10 +13,12 @@ import type {
   ChartWorkerRequest,
   ChartWorkerResponse,
 } from "../../../../../../core/global/chart/streaming/chartStreamWorkerProtocol.ts";
-import type {
-  ChartHeader,
-  ChartIndex,
-  ChartLineProvider,
+import {
+  PAGED_DOCUMENT_MAX_BYTES,
+  PAGED_DOCUMENT_MAX_LINES,
+  type ChartHeader,
+  type ChartIndex,
+  type ChartLineProvider,
 } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
 import { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 
@@ -117,7 +119,13 @@ function localDocument(bytes: ArrayBuffer): OpenedChartStream {
     },
   };
   return {
-    document: new ChartDocument({ header, index, provider }),
+    document: new ChartDocument({
+      header,
+      index,
+      provider,
+      maxCachedLines: PAGED_DOCUMENT_MAX_LINES,
+      maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
+    }),
     dispose() {},
   };
 }
@@ -227,7 +235,13 @@ export async function openChartStreamFromChunks(
     worker.terminate();
     throw new Error(`Chart stream did not produce a header for ${name}`);
   }
-  const document = new ChartDocument({ header, index, provider });
+  const document = new ChartDocument({
+    header,
+    index,
+    provider,
+    maxCachedLines: PAGED_DOCUMENT_MAX_LINES,
+    maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
+  });
   const dispose = () => {
     provider?.close();
     worker.postMessage({ id: sessionId, kind: "close" });

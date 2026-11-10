@@ -150,6 +150,7 @@ test("paged document materializes to the same content fingerprint", async () => 
   await document.ensureLine(1);
   assert.equal(isPlaceholderLine(document.chart.judgeLineList[1]), false);
   const materialized = await document.materializeAll();
+  assert.equal(materialized.judgeLineList.some(isPlaceholderLine), false);
   assert.equal(chartFingerprint(materialized), chartFingerprint(chart));
   assert.equal(await document.fingerprint(), chartFingerprint(chart));
 });
@@ -184,12 +185,12 @@ test("ensureTime loads candidates and rejects an explicit cap", async () => {
   const text = serializeChart(chart);
   const scan = scanChartJson(text);
   const document = documentFromScan(scan);
-  const loaded = await document.ensureTime(0, 1);
-  assert.ok(loaded.length >= 2);
   await assert.rejects(
     () => document.ensureTime(0, 1, { maxLines: 1 }),
     (error) => error instanceof ChartPagingLimitError,
   );
+  const loaded = await document.ensureTime(0, 1);
+  assert.ok(loaded.length >= 2);
 });
 
 test("ensureTime uses disjoint intervals instead of one min/max span", async () => {

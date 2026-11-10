@@ -23,6 +23,7 @@ import {
 import { attachExternalEffects } from "../../../../../../core/global/document/effects.ts";
 import { type AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
+import { PAGED_PRELOAD_MAX_LINES } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
 import { extensionRuntime } from "../../../../../../core/extensions/extensionRuntime.ts";
 import { codeExecutionEnabled } from "../../../../../../core/codecell/enabled.ts";
 import { collaborationRoomDocument } from "../../../../../../core/collaboration/ui.ts";
@@ -141,7 +142,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
         !collaborationRoomDocument.get();
       if (chartDocument.lineCount > 10_000 && pagedAllowed) {
         try {
-          await chartDocument.ensureTime(0, 60, { maxLines: 100_000 });
+          await chartDocument.ensureTime(0, 60, { maxLines: PAGED_PRELOAD_MAX_LINES });
           chart = chartDocument.chart;
           chartDocumentForSession = chartDocument;
         } catch {

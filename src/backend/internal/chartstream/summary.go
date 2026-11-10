@@ -31,12 +31,12 @@ var eventTracks = []string{
 	"inclineEvents", "gifEvents",
 }
 
-// maxSafeInteger is the largest exactly representable integer in a JavaScript
-// number, used when validating beat triples.
-const maxSafeInteger = 1 << 53
+// maxSafeInteger is JavaScript's Number.MAX_SAFE_INTEGER, used when validating
+// beat triples and marking an unbounded activity interval.
+const maxSafeInteger = 1<<53 - 1
 
 // LineSummary is one line's index entry; it never contains note or event
-// objects.
+// objects. Intervals are disjoint activity ranges used by paged time windows.
 type LineSummary struct {
 	Index        int      `json:"index"`
 	ByteOffset   int      `json:"byteOffset"`
@@ -45,11 +45,13 @@ type LineSummary struct {
 	EventCount   int      `json:"eventCount"`
 	StartSeconds *float64 `json:"startSeconds"`
 	EndSeconds   *float64 `json:"endSeconds"`
-	Digest       string   `json:"digest"`
-	Flags        int      `json:"flags"`
-	Group        float64  `json:"group"`
-	Father       float64  `json:"father"`
-	ID           string   `json:"id,omitempty"`
+	// Intervals are disjoint activity ranges used by paged time windows.
+	Intervals [][2]float64 `json:"intervals,omitempty"`
+	Digest    string       `json:"digest"`
+	Flags     int          `json:"flags"`
+	Group     float64      `json:"group"`
+	Father    float64      `json:"father"`
+	ID        string       `json:"id,omitempty"`
 }
 
 // Index is the complete line index for one chart source.
@@ -331,6 +333,39 @@ func (b *bounds) extend(seconds float64, ok bool) {
 	b.end = math.Max(b.end, seconds)
 }
 
+// addInterval records one finite activity range.
+func addInterval(intervals *[][2]float64, start float64, startOK bool, end float64, endOK bool) {
+	if !startOK || !endOK || math.IsNaN(start) || math.IsInf(start, 0) ||
+		math.IsNaN(end) || math.IsInf(end, 0) {
+		return
+	}
+	*intervals = append(*intervals, [2]float64{math.Max(0, start), math.Max(start, end)})
+}
+
+// mergeIntervals sorts and merges overlapping activity ranges.
+func mergeIntervals(intervals [][2]float64) [][2]float64 {
+	if len(intervals) <= 1 {
+		return intervals
+	}
+	ordered := append([][2]float64(nil), intervals...)
+	sort.Slice(ordered, func(left, right int) bool {
+		if ordered[left][0] != ordered[right][0] {
+			return ordered[left][0] < ordered[right][0]
+		}
+		return ordered[left][1] < ordered[right][1]
+	})
+	merged := [][2]float64{ordered[0]}
+	for _, interval := range ordered[1:] {
+		current := &merged[len(merged)-1]
+		if interval[0] <= current[1] {
+			current[1] = math.Max(current[1], interval[1])
+			continue
+		}
+		merged = append(merged, interval)
+	}
+	return merged
+}
+
 // lineFactor reads the line's bpmfactor with the tempo map's fallback rule.
 func lineFactor(line map[string]any) float64 {
 	value, ok := toNumber(line["bpmfactor"])
@@ -364,6 +399,7 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 
 	factor := lineFactor(record)
 	var lineBounds bounds
+	intervals := make([][2]float64, 0)
 	noteCount := 0
 	eventCount := 0
 	hasAlphaEvents := false
@@ -390,6 +426,9 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 		}
 		if startOK && visibleOK && !math.IsNaN(visibleTime) && !math.IsInf(visibleTime, 0) {
 			lineBounds.extend(start-visibleTime, true)
+			addInterval(&intervals, start-visibleTime, true, end, endOK)
+		} else {
+			addInterval(&intervals, start, startOK, end, endOK)
 		}
 	}
 
@@ -423,6 +462,7 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 				end, endOK := secondsOfField(eventRecord, "endTime", tempo, factor)
 				lineBounds.extend(start, startOK)
 				lineBounds.extend(end, endOK)
+				addInterval(&intervals, start, startOK, end, endOK)
 				if track == "alphaEvents" {
 					hasAlphaEvents = true
 					if endOK && (!lastAlphaEndSet || end >= lastAlphaEnd) {
@@ -466,6 +506,13 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 		value := math.Max(lineBounds.start, lineBounds.end)
 		endSeconds = &value
 	}
+	if unbounded {
+		from := 0.0
+		if lastAlphaEndSet {
+			from = math.Max(0, lastAlphaEnd)
+		}
+		intervals = append(intervals, [2]float64{from, float64(maxSafeInteger)})
+	}
 
 	group := 0.0
 	if value, ok := toNumber(record["Group"]); ok && !math.IsNaN(value) && !math.IsInf(value, 0) {
@@ -495,6 +542,7 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 		EventCount:   eventCount,
 		StartSeconds: startSeconds,
 		EndSeconds:   endSeconds,
+		Intervals:    mergeIntervals(intervals),
 		Digest:       digest,
 		Flags:        flags,
 		Group:        group,

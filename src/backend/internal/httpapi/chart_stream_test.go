@@ -127,6 +127,39 @@ func TestChartStreamSendsHeaderIndexLinesAndEnd(t *testing.T) {
 	}
 }
 
+func TestChartStreamCanOmitLineFrames(t *testing.T) {
+	data := testStore(t)
+	chart := streamTestChart()
+	project := createChartProject(t, data, chart)
+	server := httptest.NewServer(NewAPI(data))
+	defer server.Close()
+
+	response, err := http.Get(
+		server.URL + "/api/projects/" + project.ID + "/chart/stream?includeLines=false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames := decodeFrames(t, response)
+	if len(frames) != 3 {
+		t.Fatalf("frames = %d, want header+index+end", len(frames))
+	}
+	if frames[0].Kind != chartstream.KindHeader ||
+		frames[1].Kind != chartstream.KindIndex ||
+		frames[2].Kind != chartstream.KindEnd {
+		t.Fatalf("frame order = %d/%d/%d", frames[0].Kind, frames[1].Kind, frames[2].Kind)
+	}
+	var end struct {
+		Digest string `json:"digest"`
+		Bytes  int    `json:"bytes"`
+	}
+	if err := chartstream.DecodeJSONFrame(frames[2], &end); err != nil {
+		t.Fatal(err)
+	}
+	if end.Digest == "" || end.Bytes != len(chart) {
+		t.Fatalf("end frame = %#v", end)
+	}
+}
+
 func TestChartLinesReturnsOnlyTheRequestedRange(t *testing.T) {
 	data := testStore(t)
 	chart := streamTestChart()

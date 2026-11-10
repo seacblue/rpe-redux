@@ -49,6 +49,8 @@ const MAX_STREAM_BATCH_BYTES: usize = 1024 * 1024;
 const MAX_STREAM_BATCH_LINES: usize = 256;
 /// Largest line range returned by one `read_chart_lines` call.
 const MAX_LINE_READ_BYTES: u64 = 64 * 1024 * 1024;
+/// Largest slice returned by one `read_chart_line_chunk` call.
+const MAX_LINE_CHUNK_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Random-access state for one streaming document.
 ///
@@ -89,6 +91,22 @@ impl ChartStreamDocument {
         let start = u32::try_from(start).map_err(|_| "chart_line_index_overflow".to_string())?;
         let count = u32::try_from(count).map_err(|_| "chart_line_index_overflow".to_string())?;
         encode_lines_frame(start, count, &raw)
+    }
+
+    /// Read one UTF-8 byte slice of a line, capped to the chunk size.
+    fn line_chunk(&self, index: usize, offset: u64, length: u64) -> Result<Vec<u8>> {
+        let range = self
+            .line_ranges
+            .get(index)
+            .ok_or_else(|| "invalid_line_range".to_string())?;
+        let line_length = range.len() as u64;
+        if offset > line_length {
+            return Err("invalid_line_range".into());
+        }
+        let take = length.min(MAX_LINE_CHUNK_BYTES).min(line_length - offset);
+        let start = range.start + offset as usize;
+        let end = start + take as usize;
+        Ok(self.bytes[start..end].to_vec())
     }
 }
 
@@ -398,6 +416,34 @@ pub fn read_chart_lines(
     ))
 }
 
+/// Serve one UTF-8 byte slice of a single line for sources whose line exceeds
+/// the batch frame ceiling. The caller concatenates slices before decoding.
+#[tauri::command]
+pub fn read_chart_line_chunk(
+    token: State<'_, crate::app::ipc_guard::HostToken>,
+    request: Request<'_>,
+    state: State<'_, DocumentHost>,
+    id: String,
+    index: u32,
+    offset: u64,
+    length: u64,
+) -> Result<Response> {
+    crate::app::ipc_guard::HostToken::require(token.inner(), request.headers())?;
+    let (bytes, line_ranges) = {
+        let streams = state.streams.lock().map_err(error)?;
+        let stream = streams
+            .get(&id)
+            .ok_or_else(|| "Document is not streaming.".to_string())?;
+        (stream.bytes.clone(), stream.line_ranges.clone())
+    };
+    let stream = ChartStreamDocument { bytes, line_ranges };
+    Ok(Response::new(stream.line_chunk(
+        index as usize,
+        offset,
+        length,
+    )?))
+}
+
 /// Send header, index, optional line batches, and the end frame.
 fn send_frames(
     channel: &Channel<InvokeResponseBody>,
@@ -703,6 +749,27 @@ mod tests {
         assert_eq!(&payload[..4], &1u32.to_le_bytes());
         assert_eq!(&payload[4..8], &2u32.to_le_bytes());
         assert_eq!(&payload[8..], br#"[{"b":[2,3]},{"c":"x"}]"#);
+    }
+
+    #[test]
+    fn line_chunks_cover_a_line_and_reject_invalid_offsets() {
+        let bytes = br#"{"META":{},"BPMList":[],"judgeLineList":[{"text":"abcdef"}]}"#.to_vec();
+        let document = stream(bytes.clone());
+        let range = &document.line_ranges[0];
+        let expected = &bytes[range.start..range.end];
+        let mut assembled = Vec::new();
+        let mut offset = 0u64;
+        while offset < range.len() as u64 {
+            assembled.extend(document.line_chunk(0, offset, 4).unwrap());
+            offset += 4;
+        }
+        assert_eq!(assembled, expected);
+        assert!(document
+            .line_chunk(0, range.len() as u64, 4)
+            .unwrap()
+            .is_empty());
+        assert!(document.line_chunk(0, range.len() as u64 + 1, 4).is_err());
+        assert!(document.line_chunk(1, 0, 4).is_err());
     }
 
     #[test]

@@ -37,6 +37,18 @@ export interface ParsedChartFrames {
 export interface ParseChartFramesOptions {
   readonly materialize?: boolean;
   readonly signal?: AbortSignal;
+  /**
+   * Build the line provider after the header and index are known. Hosts that
+   * omit line frames use this to fetch lines from their own source on demand.
+   */
+  readonly provider?: (context: {
+    header: ChartHeader;
+    index: ChartIndex;
+    lineCount: number;
+  }) => ChartLineProvider;
+  /** Working-set bounds for a paged document. */
+  readonly maxCachedLines?: number;
+  readonly maxCachedBytes?: number;
 }
 
 /** Header fields without the document-only line count. */
@@ -176,10 +188,16 @@ export async function parseChartFrames(
   }
   const lineCount = Math.max(header.lineCount, maxIndex + 1, index?.lines.length ?? 0);
   const resolvedIndex = index ?? indexFromRaw(header, raw, lineCount);
+  const resolvedHeader = { ...header, lineCount };
+  const provider =
+    options.provider?.({ header: resolvedHeader, index: resolvedIndex, lineCount }) ??
+    rawProvider(raw, lineCount);
   const chartDocument = new ChartDocument({
-    header: { ...header, lineCount },
+    header: resolvedHeader,
     index: resolvedIndex,
-    provider: rawProvider(raw, lineCount),
+    provider,
+    ...(options.maxCachedLines !== undefined ? { maxCachedLines: options.maxCachedLines } : {}),
+    ...(options.maxCachedBytes !== undefined ? { maxCachedBytes: options.maxCachedBytes } : {}),
   });
   const chart = options.materialize
     ? await chartDocument.materializeAll({ signal: options.signal })

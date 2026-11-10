@@ -103,6 +103,35 @@ func TestBuildChartIndexSummarizesLines(t *testing.T) {
 	}
 }
 
+func TestLineSummaryMergesActivityIntervals(t *testing.T) {
+	text := []byte(`{
+        "judgeLineList":[
+            {
+                "notes":[{"startTime":[0,0,1],"endTime":[1,0,1],"visibleTime":0}],
+                "eventLayers":[{"alphaEvents":[{"startTime":[0,0,1],"endTime":[4,0,1],"end":0}]}]
+            },
+            {
+                "notes":[{"startTime":[100,0,1],"endTime":[101,0,1],"visibleTime":0}],
+                "eventLayers":[{"alphaEvents":[{"startTime":[100,0,1],"endTime":[104,0,1],"end":0}]}]
+            }
+        ],
+        "META":{},
+        "BPMList":[{"bpm":60,"startTime":[0,0,1]}]
+    }`)
+	artifact, err := Build(text)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	first := artifact.Index.Lines[0]
+	if want := [][2]float64{{0, 4}}; !reflect.DeepEqual(first.Intervals, want) {
+		t.Fatalf("first intervals = %#v, want %#v", first.Intervals, want)
+	}
+	second := artifact.Index.Lines[1]
+	if want := [][2]float64{{100, 104}}; !reflect.DeepEqual(second.Intervals, want) {
+		t.Fatalf("second intervals = %#v, want %#v", second.Intervals, want)
+	}
+}
+
 func TestBuildChartIndexUsesTempoChangesAndBPMFactor(t *testing.T) {
 	tempo, err := NewTempoMap([]BpmEntry{{BPM: 120, Beat: 0}, {BPM: 240, Beat: 4}})
 	if err != nil {

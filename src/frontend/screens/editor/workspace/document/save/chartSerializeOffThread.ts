@@ -81,22 +81,91 @@ function workerInstance(): Worker | null {
   }
 }
 
+/** Bounded producer/consumer queue for serialization chunks. */
+class ChunkQueue {
+  private readonly values: string[] = [];
+  private queuedChars = 0;
+  private closed = false;
+  private failure: unknown;
+  private reader: (() => void) | null = null;
+  private writer: (() => void) | null = null;
+  private readonly maxChunks = 8;
+  private readonly maxChars = 4 * 1024 * 1024;
+
+  /** Append one chunk, waiting while the consumer is behind. */
+  async push(chunk: string): Promise<void> {
+    if (this.closed) {
+      throw new Error("Serialization stream closed");
+    }
+    this.values.push(chunk);
+    this.queuedChars += chunk.length;
+    this.reader?.();
+    this.reader = null;
+    while (
+      !this.closed &&
+      (this.values.length >= this.maxChunks || this.queuedChars >= this.maxChars)
+    ) {
+      await new Promise<void>((resolve) => {
+        this.writer = resolve;
+      });
+    }
+  }
+
+  /** Mark the producer finished, or fail the stream. */
+  close(error?: unknown): void {
+    this.closed = true;
+    this.failure = error;
+    this.reader?.();
+    this.reader = null;
+    this.writer?.();
+    this.writer = null;
+  }
+
+  /** Yield chunks as they arrive, with backpressure on the producer. */
+  async *drain(): AsyncIterable<string> {
+    try {
+      while (true) {
+        const chunk = this.values.shift();
+        if (chunk !== undefined) {
+          this.queuedChars -= chunk.length;
+          this.writer?.();
+          this.writer = null;
+          yield chunk;
+          continue;
+        }
+        if (this.closed) {
+          if (this.failure) {
+            throw this.failure;
+          }
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          this.reader = resolve;
+        });
+      }
+    } finally {
+      this.close();
+    }
+  }
+}
+
 /**
  * Serialize a save snapshot as JSON chunks. A document-backed facade uses its
- * line store; other charts use the existing whole-chart worker path.
+ * line store and streams through a bounded queue; other charts use the existing
+ * whole-chart worker path.
  */
 export async function* serializeChartStream(chart: unknown): AsyncIterable<string> {
   const document =
     chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
   if (document?.serialize) {
-    const chunks: string[] = [];
-    await document.serialize((chunk) => {
-      chunks.push(chunk);
-    });
-    for (const chunk of chunks) {
-      yield chunk;
-      await yieldToHost();
-    }
+    const queue = new ChunkQueue();
+    void document
+      .serialize((chunk) => queue.push(chunk))
+      .then(
+        () => queue.close(),
+        (error) => queue.close(error),
+      );
+    yield* queue.drain();
     return;
   }
   yield await serializeChartOffThread(chart);
