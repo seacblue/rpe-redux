@@ -663,7 +663,7 @@ node test-subpath.mjs
 - [`src/core/global/library/service.ts`](../../src/core/global/library/service.ts)：Web standalone 打开 `BrowserLibrary`；桌面和 `npm run dev` 继续走 HTTP。
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
 - [`src/frontend/screens/welcome/homeProjectCards.ts`](../../src/frontend/screens/welcome/homeProjectCards.ts)：没有可用 URL 时不生成空封面/音频 URL。
-- [`src/frontend/screens/settings/web/WebStorageSettings.tsx`](../../src/frontend/screens/settings/web/WebStorageSettings.tsx)：Web-only 的“浏览器存储”页，显示配额和持久化状态，支持申请 persistent 和下载 `.sqlite` 备份。
+- [`src/frontend/screens/settings/web/WebStorageSettings.tsx`](../../src/frontend/screens/settings/web/WebStorageSettings.tsx)：Web-only 的“浏览器存储”页，显示配额和持久化状态，支持申请 persistent、下载 `.sqlite` 备份，以及从备份恢复（恢复前先保存当前库，失败会回滚）。
 - 第 1 节的宿主裁剪：窗口按钮、设置行、设置页、更新徽标和标题栏拖拽都已按宿主隐藏或禁用。
 
 ### 8.2 已验证
@@ -673,6 +673,7 @@ node test-subpath.mjs
 - 刷新页面后项目仍在；`revision`、`group`、`background` 保留。
 - 构建后的 `dist` 以 `/repo/` 子路径托管、没有 sidecar 时：首页谱面库可用；New chart 创建并保存 “Untitled chart”；返回首页能看到项目；刷新后项目仍在，并恢复编辑器会话。
 - 两个标签页：只有一个标签页持有 `db.worker`；follower 能读取 leader 写入的项目；关闭 leader 后 follower 获得 Web Lock、启动自己的 worker、继续创建并保存项目。
+- 备份/恢复：下载空库备份 → 创建 “Untitled chart” → 从空库备份恢复 → 刷新后谱面库回到空状态；备份文件通过 SQLite integrity check。
 - `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
 
 ### 8.3 已知限制
@@ -681,7 +682,7 @@ node test-subpath.mjs
 - **接管期间的在途请求没有自动重试。** leader 关闭时，follower 的未完成请求会等到 15 秒超时；调用方需要重试。
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
-- **持久化 UI 只完成一半。** 已有 `navigator.storage.persist()`、容量显示和 `.sqlite` 下载；还没有 OPFS 备份轮换、`.sqlite` 恢复/导入、配额错误和损坏恢复。
+- **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复和恢复失败回滚；还没有自动 OPFS 备份轮换、配额错误提示、损坏检测入口和迁移前自动备份。
 - **没有迁移器。** 只写了 `user_version = 1`；后续 schema 升级需要事务迁移和迁移前备份。
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例。
 - **浏览器覆盖有限。** 只在 Edge/Chromium 验证；Firefox/Safari 无痕模式、配额和大资源仍未测。
@@ -690,7 +691,7 @@ node test-subpath.mjs
 ### 8.4 下一步
 
 1. 把 follower 资源传输改成 `MessagePort` + transferable，并给接管期间的请求加重试。
-2. 补齐持久化：`.sqlite` 恢复/导入、OPFS 备份轮换、配额错误和损坏恢复。
+2. 补齐持久化运维：自动 OPFS 备份轮换、配额错误提示、损坏检测和迁移前备份。
 3. 按需资源 URL：只预取图片，音乐走字节/分块；首页封面限量预取。
 4. 把 Playwright 验证迁成仓库内回归测试，并补 schema 迁移测试。
 5. 真实 GitHub Pages 部署和 Firefox/Safari 手测。
