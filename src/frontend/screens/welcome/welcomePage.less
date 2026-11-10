@@ -38,7 +38,7 @@
 .redux-welcome-header {
   position: absolute;
   z-index: var(--z-content-overlay);
-  inset-block-start: var(--space-1-5);
+  inset-block-start: calc(var(--space-1-5) + var(--space-1) / 2);
   inset-inline-start: var(--space-3);
   display: flex;
   flex: none;
@@ -59,7 +59,29 @@
   height: var(--tool-cell);
   min-height: var(--tool-cell);
   padding: 0;
-  color: var(--foreground-muted);
+
+  .redux-icon {
+    --icon-color: currentColor;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--foreground);
+  }
+}
+
+.redux-welcome-join {
+  position: absolute;
+  z-index: var(--z-content-overlay);
+  inset-block-start: calc(var(--space-1-5) + var(--space-1) / 2);
+  inset-inline-end: var(--space-3);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-join .redux-icon-button {
+  width: var(--theme-toolbar-cell, 41px);
+  min-width: var(--theme-toolbar-cell, 41px);
+  height: var(--theme-toolbar-cell, 41px);
+  min-height: var(--theme-toolbar-cell, 41px);
+  padding: 0;
 
   .redux-icon {
     --icon-color: currentColor;
@@ -112,7 +134,7 @@
 .redux-welcome-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--theme-toolbar-gap, var(--space-1));
   min-width: 0;
 }
 
