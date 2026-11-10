@@ -601,7 +601,7 @@ GitHub Pages 不支持自定义响应头。因此：
 | 多标签页 | 第二个标签页作为 follower 通过 BroadcastChannel 调用 leader；关闭 leader 后 follower 在 Web Lock 释放后接管 |
 | 子路径 | 在 `/repo/` 路径下加载，Worker、`sqlite3.wasm`、模块导入全部走相对路径 |
 | 导出 | `VACUUM INTO` + `pool.exportFile()` 生成 139,264 字节文件；SQLite header 正确 |
-| 桌面兼容 | 导出的 `.sqlite` 被 Go sidecar 通过 `/api/projects` 读取，项目和 chart 内容完整 |
+| 桌面兼容 | 导出的 `.sqlite` 被 Go sidecar 通过 `/api/projects` 读取，项目和 chart 内容完整；sidecar 的 additive schema 升级也能直接应用到该文件 |
 | 存储 API | `navigator.storage.estimate()` 返回约 10 GB quota；headless 下 `persist()` 返回 false |
 
 ### 7.3 当前 Web 构建的基线探针
