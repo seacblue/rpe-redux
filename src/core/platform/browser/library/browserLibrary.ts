@@ -54,30 +54,148 @@ function browserError(error: WorkerResponse["error"]): LocalLibraryError {
   });
 }
 
+const LEADER_LOCK = "rpe-redux-browser-library-leader";
+const LEADER_CHANNEL = "rpe-redux-browser-library";
+
+type LeaderMessage =
+  | { type: "who-is-leader" }
+  | { type: "leader-ready"; tabId: string }
+  | { type: "rpc"; id: number; method: string; params?: Record<string, unknown> }
+  | { type: "result"; response: WorkerResponse };
+
 /** The in-browser SQLite library. */
 export class BrowserLibrary extends LocalLibrary {
-  private readonly worker: Worker;
+  private worker: Worker | null = null;
+  private workerReady: Promise<void> | null = null;
+  private workerReadyResolve: (() => void) | null = null;
+  private workerReadyReject: ((error: Error) => void) | null = null;
+  private workerReadyDone = false;
+  private leader = false;
+  private readonly tabId = crypto.randomUUID();
+  private readonly channel = new BroadcastChannel(LEADER_CHANNEL);
   private readonly pending = new Map<number, PendingCall>();
-  private readonly ready: Promise<WorkerResponse>;
+  private readonly leaderReady: Promise<void>;
+  private leaderReadyResolve: (() => void) | null = null;
+  private leaderReadyReject: ((error: Error) => void) | null = null;
+  private leaderReadySettled = false;
+  private pollTimer = 0;
+  private releaseHold: (() => void) | null = null;
   private nextId = 1;
   private tail: Promise<void> = Promise.resolve();
 
   private constructor() {
     super(BROWSER_LIBRARY_ORIGIN);
-    this.worker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module" });
-    this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => this.receive(event.data);
-    this.worker.onerror = (event) => this.fail(new Error(event.message || "library worker failed"));
-    this.ready = this.send("init");
+    this.leaderReady = new Promise((resolve, reject) => {
+      this.leaderReadyResolve = resolve;
+      this.leaderReadyReject = reject;
+    });
+    this.channel.onmessage = (event: MessageEvent<LeaderMessage>) => {
+      void this.receiveLeader(event.data);
+    };
+    this.pollTimer = window.setInterval(
+      () => this.channel.postMessage({ type: "who-is-leader" }),
+      250,
+    );
+    this.channel.postMessage({ type: "who-is-leader" });
+    window.addEventListener("pagehide", () => this.close(), { once: true });
+    if (!navigator.locks?.request) {
+      void this.becomeLeader().catch((error) => this.failLeaderReady(error));
+      return;
+    }
+    void navigator.locks
+      .request(LEADER_LOCK, { mode: "exclusive" }, async () => {
+        const hold = new Promise<void>((resolve) => {
+          this.releaseHold = resolve;
+        });
+        await this.becomeLeader();
+        await hold;
+      })
+      .catch((error) => this.failLeaderReady(error));
   }
 
-  /** Open the browser library and wait for the SQLite schema to be ready. */
+  /** Open the browser library and wait for a leader's SQLite schema. */
   static async open(): Promise<BrowserLibrary> {
     const library = new BrowserLibrary();
-    await library.ready;
+    await library.leaderReady;
     return library;
   }
 
-  /** Resolve one worker response into the pending caller. */
+  /** Mark one leader ready for followers that are already waiting. */
+  private markLeaderReady(): void {
+    if (this.leaderReadySettled) {
+      return;
+    }
+    this.leaderReadySettled = true;
+    if (this.pollTimer) {
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = 0;
+    }
+    this.leaderReadyResolve?.();
+  }
+
+  /** Fail the open barrier when this tab cannot become the leader. */
+  private failLeaderReady(error: unknown): void {
+    if (this.leaderReadySettled) {
+      return;
+    }
+    this.leaderReadySettled = true;
+    if (this.pollTimer) {
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = 0;
+    }
+    this.leaderReadyReject?.(error instanceof Error ? error : new Error(String(error)));
+  }
+
+  /** Start this tab's worker and publish it as the leader. */
+  private async becomeLeader(): Promise<void> {
+    if (this.leader) {
+      return;
+    }
+    this.leader = true;
+    this.startWorker();
+    try {
+      await this.workerReady;
+      this.workerReadyDone = true;
+      this.markLeaderReady();
+      this.channel.postMessage({ type: "leader-ready", tabId: this.tabId });
+    } catch (error) {
+      this.failLeaderReady(error);
+      throw error;
+    }
+  }
+
+  /** Create the dedicated SQLite worker and its init barrier. */
+  private startWorker(): void {
+    this.workerReadyDone = false;
+    this.workerReady = new Promise((resolve, reject) => {
+      this.workerReadyResolve = resolve;
+      this.workerReadyReject = reject;
+    });
+    this.worker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module" });
+    this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => this.receiveWorker(event.data);
+    this.worker.onerror = (event) => {
+      const error = new Error(event.message || "library worker failed");
+      this.workerReadyReject?.(error);
+      this.fail(error);
+    };
+    this.worker.postMessage({ id: 0, method: "init", params: {} });
+  }
+
+  /** Route worker responses, including the one-shot init response. */
+  private receiveWorker(response: WorkerResponse): void {
+    if (response.id === 0) {
+      if (response.ok) {
+        this.workerReadyDone = true;
+        this.workerReadyResolve?.();
+      } else {
+        this.workerReadyReject?.(browserError(response.error));
+      }
+      return;
+    }
+    this.receive(response);
+  }
+
+  /** Resolve one worker or leader response into the pending caller. */
   private receive(response: WorkerResponse): void {
     const entry = this.pending.get(response.id);
     if (!entry) {
@@ -91,7 +209,7 @@ export class BrowserLibrary extends LocalLibrary {
     }
   }
 
-  /** Reject every in-flight call when the worker fails. */
+  /** Reject every in-flight call when the worker or leader fails. */
   private fail(error: Error): void {
     for (const entry of this.pending.values()) {
       entry.reject(error);
@@ -99,23 +217,107 @@ export class BrowserLibrary extends LocalLibrary {
     this.pending.clear();
   }
 
-  /** Send one request without queueing; only init and the queue itself use it. */
-  private send(method: string, params?: Record<string, unknown>): Promise<WorkerResponse> {
+  /** Handle one leader-election or follower-RPC message. */
+  private async receiveLeader(message: LeaderMessage): Promise<void> {
+    if (!message || typeof message !== "object") {
+      return;
+    }
+    if (message.type === "leader-ready") {
+      this.markLeaderReady();
+      return;
+    }
+    if (message.type === "who-is-leader") {
+      if (this.leader && this.workerReadyDone) {
+        this.channel.postMessage({ type: "leader-ready", tabId: this.tabId });
+      }
+      return;
+    }
+    if (message.type === "result") {
+      this.receive(message.response);
+      return;
+    }
+    if (message.type === "rpc" && this.leader && this.workerReadyDone) {
+      try {
+        const response = await this.call(message.method, message.params);
+        this.channel.postMessage({ type: "result", response: { ...response, id: message.id } });
+      } catch (error) {
+        this.channel.postMessage({
+          type: "result",
+          response: {
+            id: message.id,
+            ok: false,
+            error: {
+              code: error instanceof LocalLibraryError ? error.code : "browser_library_error",
+              message: error instanceof Error ? error.message : String(error),
+            },
+          },
+        });
+      }
+    }
+  }
+
+  /** Send one request to this tab's worker without queueing. */
+  private sendToWorker(method: string, params?: Record<string, unknown>): Promise<WorkerResponse> {
+    if (!this.worker) {
+      return Promise.reject(new Error("library worker is not running"));
+    }
     return new Promise((resolve, reject) => {
       const id = this.nextId++;
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, method, params });
+      this.worker?.postMessage({ id, method, params });
     });
+  }
+
+  /** Forward one request to the leader tab. */
+  private sendToLeader(method: string, params?: Record<string, unknown>): Promise<WorkerResponse> {
+    return new Promise((resolve, reject) => {
+      const id = this.nextId++;
+      const timer = window.setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("the browser library leader did not answer"));
+      }, 15000);
+      this.pending.set(id, {
+        resolve: (response) => {
+          window.clearTimeout(timer);
+          resolve(response);
+        },
+        reject: (error) => {
+          window.clearTimeout(timer);
+          reject(error);
+        },
+      });
+      this.channel.postMessage({ type: "rpc", id, method, params });
+    });
+  }
+
+  /** Wait for a leader, then send through the worker or the leader channel. */
+  private async request(method: string, params?: Record<string, unknown>): Promise<WorkerResponse> {
+    await this.leaderReady;
+    if (this.leader) {
+      await this.workerReady;
+      return this.sendToWorker(method, params);
+    }
+    return this.sendToLeader(method, params);
   }
 
   /** Serialize requests so one worker connection never runs two operations at once. */
   private call(method: string, params?: Record<string, unknown>): Promise<WorkerResponse> {
-    const run = this.tail.then(() => this.send(method, params));
+    const run = this.tail.then(() => this.request(method, params));
     this.tail = run.then(
       () => undefined,
       () => undefined,
     );
     return run;
+  }
+
+  /** Release the leader lock and stop this tab's worker. */
+  private close(): void {
+    this.releaseHold?.();
+    this.releaseHold = null;
+    this.channel.close();
+    this.worker?.terminate();
+    this.worker = null;
+    this.fail(new Error("the browser library closed"));
   }
 
   /** Read the result of one queued request. */
