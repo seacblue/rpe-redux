@@ -1,9 +1,9 @@
-/* eslint-disable max-lines -- the v1 schema, row mapping, and SQL operations share one worker transaction surface. */
+/* eslint-disable max-lines -- the v2 schema, row mapping, and SQL operations share one worker transaction surface. */
 /**
  * Browser chart-library worker.
  *
  * SQLite WASM runs in a dedicated worker because the OPFS SyncAccessHandle VFS
- * is worker-only. The worker owns one connection, applies the same v1 schema as
+ * is worker-only. The worker owns one connection, applies the same v2 schema as
  * the Go sidecar, and exposes the library operations the frontend calls.
  */
 import sqlite3InitModule, { type Sqlite3Static } from "@sqlite.org/sqlite-wasm";
@@ -19,6 +19,8 @@ import type {
 const DB_PATH = "/redux.db";
 const POOL_DIR = "/rpe-redux-pool";
 const POOL_NAME = "rpe-redux-browser";
+const LIBRARY_APPLICATION_ID = 1380992338;
+const LIBRARY_SCHEMA_VERSION = 2;
 
 const PROJECT_COLUMNS = `id, name, grp, archived, charter, composer, level, background, song,
   note_count, revision, view_state, asset_folders, created_at, updated_at, size`;
@@ -53,6 +55,7 @@ CREATE TABLE IF NOT EXISTS revisions (
     label      TEXT NOT NULL DEFAULT '',
     chart      TEXT NOT NULL DEFAULT '{}',
     size       INTEGER NOT NULL DEFAULT 0,
+    chart_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_revisions_project ON revisions(project_id, created_at DESC);
@@ -61,6 +64,11 @@ CREATE TABLE IF NOT EXISTS preferences (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     data       TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS library_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -331,6 +339,115 @@ function run(sql: string, bind?: readonly unknown[]): void {
   requireDb().exec(sql);
 }
 
+/** Add one additive column when an older library lacks it. */
+function ensureColumn(table: string, name: string, ddl: string): void {
+  const count = Number(
+    requireDb().selectValue(`SELECT COUNT(*) FROM pragma_table_info('${table}') WHERE name = ?`, [
+      name,
+    ]),
+  );
+  if (!count) {
+    run(ddl);
+  }
+}
+
+/** Keep the newest pre-migration copies and remove older ones. */
+async function prunePreMigrationCopies(
+  directory: FileSystemDirectoryHandle,
+  keep: number,
+): Promise<void> {
+  const names: string[] = [];
+  for await (const [name] of directory.entries()) {
+    if (name.startsWith("pre-migration-v") && name.endsWith(".sqlite")) {
+      names.push(name);
+    }
+  }
+  names.sort();
+  for (const name of names.slice(0, Math.max(0, names.length - keep))) {
+    await directory.removeEntry(name);
+  }
+}
+
+/**
+ * Copy a pre-v2 library to OPFS before any additive migration runs.
+ *
+ * The copy is a standalone SQLite file outside the database pool, so a failed
+ * migration cannot damage the only rollback copy.
+ */
+async function copyBeforeMigration(version: number): Promise<void> {
+  if (version >= LIBRARY_SCHEMA_VERSION) {
+    return;
+  }
+  const hasProjects = Number(
+    requireDb().selectValue(
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'projects'",
+    ),
+  );
+  if (!hasProjects) {
+    return;
+  }
+  if (!pool) {
+    throw new DbError("not_ready", "the browser library is not open");
+  }
+  const stamp = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const poolName = `/pre-migration-v${version}-${stamp}.db`;
+  const fileName = `pre-migration-v${version}-${stamp}.sqlite`;
+  try {
+    run(`VACUUM INTO '${poolName}'`);
+    const bytes = pool.exportFile(poolName);
+    const root = await navigator.storage.getDirectory();
+    const history = await root.getDirectoryHandle("library-history", { create: true });
+    const directory = await history.getDirectoryHandle("pre-migration", { create: true });
+    const file = await directory.getFileHandle(fileName, { create: true });
+    const writable = await file.createWritable();
+    await writable.write(new Uint8Array(bytes).buffer as ArrayBuffer);
+    await writable.close();
+    await prunePreMigrationCopies(directory, 3);
+  } catch (error) {
+    throw new DbError(
+      "pre_migration_backup_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    pool.unlink(poolName);
+  }
+}
+
+/**
+ * Create the current schema and migrate a v0/v1 browser library additively.
+ *
+ * The application id is the file-level ownership marker; a foreign or newer
+ * database is rejected before any table is changed.
+ */
+async function migrateSchema(): Promise<void> {
+  const application = Number(requireDb().selectValue("PRAGMA application_id")) || 0;
+  if (application !== 0 && application !== LIBRARY_APPLICATION_ID) {
+    throw new DbError("library_not_recognized", "the database is not an RPE Redux library");
+  }
+  const version = Number(requireDb().selectValue("PRAGMA user_version")) || 0;
+  if (version > LIBRARY_SCHEMA_VERSION) {
+    throw new DbError(
+      "library_schema_too_new",
+      `library schema ${version} is newer than supported ${LIBRARY_SCHEMA_VERSION}`,
+    );
+  }
+  await copyBeforeMigration(version);
+  run(SCHEMA);
+  ensureColumn(
+    "revisions",
+    "chart_hash",
+    "ALTER TABLE revisions ADD COLUMN chart_hash TEXT NOT NULL DEFAULT ''",
+  );
+  const now = nowString();
+  run(`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('database_id', ?)`, [
+    crypto.randomUUID(),
+  ]);
+  run(`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('created_at', ?)`, [now]);
+  run(`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('schema_origin', 'browser')`);
+  run(`PRAGMA application_id = ${LIBRARY_APPLICATION_ID}`);
+  run(`PRAGMA user_version = ${LIBRARY_SCHEMA_VERSION}`);
+}
+
 async function init(): Promise<Record<string, unknown>> {
   const initModule = sqlite3InitModule as unknown as (options: {
     locateFile: (path: string) => string;
@@ -344,12 +461,10 @@ async function init(): Promise<Record<string, unknown>> {
   db = new pool.OpfsSAHPoolDb(DB_PATH) as unknown as Db;
   run("PRAGMA foreign_keys = ON");
   run("PRAGMA synchronous = FULL");
-  run(SCHEMA);
-  if (requireDb().selectValue("PRAGMA user_version") === 0) {
-    run("PRAGMA user_version = 1");
-  }
+  await migrateSchema();
   return {
     sqliteVersion: sqlite3.version.libVersion,
+    applicationId: requireDb().selectValue("PRAGMA application_id"),
     userVersion: requireDb().selectValue("PRAGMA user_version"),
     vfs: requireDb().dbVfsName(),
     path: DB_PATH,
@@ -688,9 +803,9 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
       const revisionId = crypto.randomUUID();
       const label = input.label?.trim() || "revision";
       run(
-        `INSERT INTO revisions (id, project_id, label, chart, size, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [revisionId, id, label, input.chartJson, input.chartJson.length, nowString()],
+        `INSERT INTO revisions (id, project_id, label, chart, size, chart_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [revisionId, id, label, input.chartJson, input.chartJson.length, hash, nowString()],
       );
       if (input.assets) {
         for (const entry of input.assets) {
@@ -735,18 +850,19 @@ function revisions(params: Record<string, unknown>): Record<string, unknown> {
   return { revisions: result };
 }
 
-function createRevision(params: Record<string, unknown>): Record<string, unknown> {
+async function createRevision(params: Record<string, unknown>): Promise<Record<string, unknown>> {
   const id = stringParam(params, "id");
   const label = typeof params.label === "string" ? params.label : "";
   const chart = params.chart ?? {};
   const chartJson = JSON.stringify(chart);
+  const chartHash = await sha256Hex(chartJson);
   const revisionId = crypto.randomUUID();
   const now = nowString();
   projectRow(id);
   run(
-    `INSERT INTO revisions (id, project_id, label, chart, size, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [revisionId, id, label, chartJson, chartJson.length, now],
+    `INSERT INTO revisions (id, project_id, label, chart, size, chart_hash, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [revisionId, id, label, chartJson, chartJson.length, chartHash, now],
   );
   const manifest = assets({ id }) as { assets: LibraryAssetSummary[] };
   for (const entry of manifest.assets) {
@@ -820,6 +936,7 @@ function checkpoint(): Record<string, unknown> {
 function stats(): Record<string, unknown> {
   return {
     integrity: requireDb().selectValue("PRAGMA integrity_check"),
+    applicationId: requireDb().selectValue("PRAGMA application_id"),
     userVersion: requireDb().selectValue("PRAGMA user_version"),
     projects: requireDb().selectValue("SELECT COUNT(*) FROM projects"),
     revisions: requireDb().selectValue("SELECT COUNT(*) FROM revisions"),
@@ -842,7 +959,7 @@ function exportDb(): Uint8Array {
   return bytes.slice();
 }
 
-function importDb(params: Record<string, unknown>): Record<string, unknown> {
+async function importDb(params: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (!pool || !db) {
     throw new DbError("not_ready", "the browser library is not open");
   }
@@ -866,9 +983,7 @@ function importDb(params: Record<string, unknown>): Record<string, unknown> {
     if (!hasProjects) {
       throw new DbError("invalid_backup", "backup is not an RPE Redux library");
     }
-    if (requireDb().selectValue("PRAGMA user_version") === 0) {
-      run("PRAGMA user_version = 1");
-    }
+    await migrateSchema();
   } catch (error) {
     if (db) {
       db.close();
