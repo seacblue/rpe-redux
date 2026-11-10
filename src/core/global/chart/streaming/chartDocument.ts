@@ -508,20 +508,20 @@ export class ChartDocument {
         await sink(",");
       }
       const slot = this.slots[index];
+      if (slot.state === "invalid" || (slot.summary.flags & LINE_FLAG_INVALID) !== 0) {
+        throw new Error(`Invalid chart line ${index}`);
+      }
       if (slot.state === "dirty" && slot.line) {
         await sink(stringifyChartValue(slot.line));
         continue;
       }
-      if (slot.raw !== undefined) {
-        await sink(slot.raw);
-        continue;
+      // Clean lines are copied from the source without parsing or assigning
+      // ids; the index already validated their structure when it was built.
+      const raw = slot.raw ?? (await this.provider.readLine(index));
+      if (raw === undefined) {
+        throw new Error(`Missing chart line ${index}`);
       }
-      const line = await this.ensureLine(index);
-      if (slot.raw !== undefined) {
-        await sink(slot.raw);
-        continue;
-      }
-      await sink(stringifyChartValue(line));
+      await sink(raw);
     }
     await sink("]}");
   }
