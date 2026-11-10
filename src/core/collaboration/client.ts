@@ -915,6 +915,19 @@ export class CollaborationClient {
       this.scheduleReconnect();
       return;
     }
+    // A create/join can lose its socket before the first welcome. Retry the
+    // retained create/join intent a few times instead of failing the whole
+    // operation on one transient close.
+    if (
+      !hasRoom &&
+      this.reconnectWanted &&
+      this.options.reconnect !== false &&
+      this.reconnectBackoff.attempts < 3
+    ) {
+      this.setState({ status: "connecting", error: "" });
+      this.scheduleReconnect();
+      return;
+    }
     this.failInitial(
       "The collaboration connection closed before the room was ready.",
       "connection_closed",

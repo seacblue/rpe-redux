@@ -3,8 +3,6 @@ export default {
   "workspace.collaboration.progress.hostTitle": "正在创建房间",
   "workspace.collaboration.progress.guestTitle": "正在加入房间",
   "workspace.collaboration.progress.title": "房间准备进度",
-  "workspace.collaboration.progress.abort": "中止并关闭",
-  "workspace.collaboration.progress.close": "关闭",
   "workspace.collaboration.progress.status.preparing": "正在准备谱面",
   "workspace.collaboration.progress.status.bridgeTunnel": "正在启动 Cloudflare Tunnel",
   "workspace.collaboration.progress.status.bridgeLan": "正在启动局域网桥接",

@@ -7,7 +7,6 @@
  * clear transfer buffers.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";
 import { Progress } from "../../../../../design/components/progress/Progress.tsx";
@@ -195,15 +194,8 @@ export function RoomProgressDialog() {
           : "workspace.collaboration.progress.guestTitle",
       )}
       className="redux-prompt-dialog collab-progress-dialog"
-      actions={
-        <Button variant="danger" className="urgent" onClick={close}>
-          {t(
-            progress.ready
-              ? "workspace.collaboration.progress.close"
-              : "workspace.collaboration.progress.abort",
-          )}
-        </Button>
-      }
+      dismissOnScrim={false}
+      onCancel={(event) => event.preventDefault()}
     >
       <div className="collab-progress-overall" role="status" data-state={progress.phase}>
         <p className="collab-progress-stage" aria-live="polite">

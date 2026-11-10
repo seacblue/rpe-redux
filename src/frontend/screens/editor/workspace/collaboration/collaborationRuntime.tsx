@@ -567,6 +567,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   );
   const clientRef = useRef<CollaborationClient | null>(null);
   const hostBusy = useRef(false);
+  const joinBusy = useRef(false);
   const sessionClaimed = useRef(false);
   const resuming = useRef(false);
   const resumeAttempted = useRef(false);
@@ -1823,14 +1824,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       });
       return;
     }
+    hostBusy.current = true;
     if (!(await ensureSession())) {
+      hostBusy.current = false;
       return;
     }
     roomJoinPending.current = false;
     joinedRecoveryFingerprint.current = null;
     roomDocumentAdopted.current = false;
     collaborationRoomDocument.set(false);
-    hostBusy.current = true;
     setStartingRoom(true);
     const mode = override?.hostMode === "lan" ? "lan" : "tunnel";
     const attempt = ++roomAttempt.current;
@@ -1910,7 +1912,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   };
 
   /** Joins a room from an invite link or explicit server and password. */
-  const joinRoom = async (
+  const joinRoomInternal = async (
     input: string | { serverUrl: string; invite: string; roomId?: string },
     override?: Partial<CollaborationSettings>,
   ) => {
@@ -1990,6 +1992,22 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setPendingAssets([]);
     collaborationPendingAssets.set([]);
     openPane("collaboration");
+  };
+
+  /** Serialize join attempts so a double click cannot open two sockets. */
+  const joinRoom = async (
+    input: string | { serverUrl: string; invite: string; roomId?: string },
+    override?: Partial<CollaborationSettings>,
+  ) => {
+    if (joinBusy.current) {
+      return;
+    }
+    joinBusy.current = true;
+    try {
+      await joinRoomInternal(input, override);
+    } finally {
+      joinBusy.current = false;
+    }
   };
 
   /** Leaves the room and releases the host bridge and session claim. */
