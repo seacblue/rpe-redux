@@ -252,6 +252,9 @@ export default {
   "workspace.collaboration.joinMethod.custom": "自定义地址",
   "workspace.collaboration.serverUrl": "服务器地址",
   "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
+  "workspace.collaboration.serverUrlWebPlaceholder": "wss://room.example.com",
+  "workspace.collaboration.serverUrlWebHint":
+    "GitHub Pages 只托管静态文件。请使用可通过 wss:// 访问的房间服务器；此 HTTPS 页面无法连接本机或局域网的 ws:// 地址。",
   "workspace.collaboration.changePassword": "更新房间密码",
   "workspace.collaboration.changePasswordHint":
     "设置新的房间密码。已在房间里的成员不会被断开，但旧邀请链接会失效。",

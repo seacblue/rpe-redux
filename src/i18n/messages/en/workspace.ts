@@ -278,6 +278,9 @@ export default {
   "workspace.collaboration.joinMethod.custom": "Custom address",
   "workspace.collaboration.serverUrl": "Server address",
   "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
+  "workspace.collaboration.serverUrlWebPlaceholder": "wss://room.example.com",
+  "workspace.collaboration.serverUrlWebHint":
+    "GitHub Pages only serves static files. Use a room server reachable over wss://; this HTTPS page cannot connect to a local or LAN ws:// address.",
   "workspace.collaboration.changePassword": "Change room password",
   "workspace.collaboration.changePasswordHint":
     "Set a new room password. Members already in the room stay connected, but the old invitation link stops working.",
