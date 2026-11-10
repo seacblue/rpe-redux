@@ -110,6 +110,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     getEditorVisibility,
   );
   const emptySlot = themeUi.slots["inspector.empty"];
+  const readOnly = visibility.readOnly;
   const availableItems = navigation.entries.filter(
     (entry): entry is SidebarNavigationItem => entry.kind === "item",
   );
@@ -210,9 +211,10 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     <aside
       id="inspector"
       ref={mergeRefs(inspector, surface.attach.inspector, onboardingAnchorRef("inspector"))}
-      className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}`}
+      className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}${readOnly ? " is-readonly" : ""}`}
       tabIndex={-1}
       aria-label={t("chrome.inspector.label")}
+      aria-readonly={readOnly || undefined}
       hidden={hidden}
     >
       {showHeader && (
@@ -248,16 +250,22 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           )}
         </div>
         {inspectorRuntime &&
-          panels.map(({ id, component: Panel }) => (
-            <div
-              key={id}
-              ref={onboardingAnchorRef(`inspector-panel-${id}`)}
-              data-panel={id}
-              hidden={activeDrawerPane !== null || activePane !== id}
-            >
-              <Panel />
-            </div>
-          ))}
+          panels.map(({ id, component: Panel, editsChart }) => {
+            const locked = readOnly && editsChart === true;
+            return (
+              <div
+                key={id}
+                ref={onboardingAnchorRef(`inspector-panel-${id}`)}
+                data-panel={id}
+                data-readonly={locked ? "true" : undefined}
+                inert={locked || undefined}
+                aria-disabled={locked || undefined}
+                hidden={activeDrawerPane !== null || activePane !== id}
+              >
+                <Panel />
+              </div>
+            );
+          })}
         {activeDrawerPane && <DrawerPaneView key={activeDrawerPane.id} pane={activeDrawerPane} />}
       </div>
     </aside>

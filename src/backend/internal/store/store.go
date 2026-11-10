@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS projects (
     level         TEXT NOT NULL DEFAULT '',
     note_count    INTEGER NOT NULL DEFAULT 0,
     chart         TEXT NOT NULL DEFAULT '{}',
+    chart_index   TEXT NOT NULL DEFAULT '',
     size          INTEGER NOT NULL DEFAULT 0,
     revision      INTEGER NOT NULL DEFAULT 1,
     chart_hash    TEXT NOT NULL DEFAULT '',
@@ -243,6 +244,7 @@ CREATE TABLE IF NOT EXISTS revisions (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     label      TEXT NOT NULL DEFAULT '',
     chart      TEXT NOT NULL DEFAULT '{}',
+    chart_index TEXT NOT NULL DEFAULT '',
     size       INTEGER NOT NULL DEFAULT 0,
     chart_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
@@ -289,6 +291,9 @@ CREATE INDEX IF NOT EXISTS idx_revision_assets_hash ON revision_assets(hash);`
 		return fmt.Errorf("create v%d schema: %w", schemaVersion, err)
 	}
 	if err := s.ensureAssetStagingColumn(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureChartIndexColumns(ctx); err != nil {
 		return err
 	}
 	if err := s.ensureRevisionChartHashColumn(ctx); err != nil {
@@ -415,13 +420,13 @@ func (s *Store) ensureAssetStagingColumn(ctx context.Context) error {
 // ensureAssetColumn reports whether it added a missing column. A concurrent
 // upgrade that wins the ALTER is treated as success once the column is visible.
 func (s *Store) ensureAssetColumn(ctx context.Context, name, ddl string) (bool, error) {
-	return s.ensureColumn(ctx, "assets", name, ddl)
+	return s.ensureTableColumn(ctx, "assets", name, ddl)
 }
 
 // ensureRevisionChartHashColumn adds the content hash used by incremental
 // snapshots. Existing rows stay empty and are backfilled lazily.
 func (s *Store) ensureRevisionChartHashColumn(ctx context.Context) error {
-	_, err := s.ensureColumn(ctx, "revisions", "chart_hash",
+	_, err := s.ensureTableColumn(ctx, "revisions", "chart_hash",
 		`ALTER TABLE revisions ADD COLUMN chart_hash TEXT NOT NULL DEFAULT ''`)
 	return err
 }
@@ -451,10 +456,34 @@ func (s *Store) ensureLibraryMeta(ctx context.Context) error {
 	return nil
 }
 
-// ensureColumn reports whether it added a missing column. A concurrent upgrade
-// that wins the ALTER is treated as success once the column is visible.
-func (s *Store) ensureColumn(ctx context.Context, table, name, ddl string) (bool, error) {
-	columnQuery := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = ?", table)
+// ensureChartIndexColumns adds the rebuildable line-index cache columns to
+// libraries created before they existed. The columns hold a cache only; an
+// empty or stale value is rebuilt on demand, and existing chart payloads are
+// never rewritten.
+func (s *Store) ensureChartIndexColumns(ctx context.Context) error {
+	if _, err := s.ensureTableColumn(ctx, "projects", "chart_index",
+		`ALTER TABLE projects ADD COLUMN chart_index TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("add projects.chart_index: %w", err)
+	}
+	if _, err := s.ensureTableColumn(ctx, "revisions", "chart_index",
+		`ALTER TABLE revisions ADD COLUMN chart_index TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("add revisions.chart_index: %w", err)
+	}
+	return nil
+}
+
+// ensureTableColumn reports whether it added a missing column. A concurrent
+// upgrade that wins the ALTER is treated as success once the column is visible.
+func (s *Store) ensureTableColumn(ctx context.Context, table, name, ddl string) (bool, error) {
+	// Table names are internal constants; rejecting anything else keeps the
+	// interpolated pragma argument from becoming a query injection point.
+	switch table {
+	case "assets", "projects", "revisions":
+	default:
+		return false, fmt.Errorf("unsupported table %q", table)
+	}
+	columnQuery := fmt.Sprintf(
+		`SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = ?`, table)
 	var count int
 	if err := s.db.QueryRowContext(ctx, columnQuery, name).Scan(&count); err != nil {
 		return false, fmt.Errorf("inspect %s schema: %w", table, err)
@@ -1227,6 +1256,21 @@ func (s *Store) OpenProjectAsset(ctx context.Context, projectID, name string) (*
 		return nil, nil, fmt.Errorf("read project asset: %w", err)
 	}
 	return &asset, &AssetReader{db: s.db, hash: asset.Hash, size: int64(asset.Size)}, nil
+}
+
+// OpenAssetByHash returns a range-capable reader for any locally stored blob
+// whose content hash matches. Collaboration uses it to reuse an asset already
+// present in the library before downloading it from a room.
+func (s *Store) OpenAssetByHash(ctx context.Context, hash string) (*AssetReader, int64, error) {
+	var size int64
+	err := s.db.QueryRowContext(ctx, `SELECT size FROM assets WHERE hash = ?`, hash).Scan(&size)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, 0, ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("read asset by hash: %w", err)
+	}
+	return &AssetReader{db: s.db, hash: hash, size: size}, size, nil
 }
 
 // assetChunkBytes is the SQL read size behind AssetReader. It is larger than

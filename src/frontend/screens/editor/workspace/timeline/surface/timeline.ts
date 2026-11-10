@@ -55,6 +55,45 @@ export class Timeline {
    */
   getSession: () => EditorSession;
 
+  /**
+   * Note ids selected by other room members, rendered with the collaboration tint.
+   *
+   * Presence owns the set; the timeline only reads it while drawing so remote
+   * selection never enters document history.
+   */
+  remoteSelectedNoteIds: ReadonlySet<string> = new Set();
+
+  /** Event ids selected by other room members, rendered with the collaboration tint. */
+  remoteSelectedEventIds: ReadonlySet<string> = new Set();
+
+  /** Replace the remote note-selection set and repaint when it changed. */
+  setRemoteSelectedNoteIds(ids: ReadonlySet<string>): void {
+    if (this.disposed) {
+      this.remoteSelectedNoteIds = new Set();
+      return;
+    }
+    const previous = this.remoteSelectedNoteIds;
+    if (previous.size === ids.size && [...ids].every((id) => previous.has(id))) {
+      return;
+    }
+    this.remoteSelectedNoteIds = new Set(ids);
+    this.changed();
+  }
+
+  /** Replace the remote event-selection set and repaint when it changed. */
+  setRemoteSelectedEventIds(ids: ReadonlySet<string>): void {
+    if (this.disposed) {
+      this.remoteSelectedEventIds = new Set();
+      return;
+    }
+    const previous = this.remoteSelectedEventIds;
+    if (previous.size === ids.size && [...ids].every((id) => previous.has(id))) {
+      return;
+    }
+    this.remoteSelectedEventIds = new Set(ids);
+    this.changed();
+  }
+
   changed: () => void;
 
   /** The injected live session, kept apart so the preview cannot replace it. */

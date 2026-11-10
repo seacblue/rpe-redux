@@ -38,7 +38,13 @@ groups are:
   whether a local path is an RPE/PEC/official chart, an Extension package, or a
   Phira note-skin package.
 - `/api/projects/*` for project summaries, chart commits, assets, duplication,
-  and revisions.
+  and revisions. Streaming reads use `GET /api/projects/{id}/chart/stream`
+  (header, index, line, and end frames) and
+  `GET /api/projects/{id}/chart/lines?start=N&count=M` (one line-batch frame).
+  Large saves use a streamed commit session:
+  `POST .../commit/begin`, `PUT .../commit/{sessionId}/chart` for bounded raw
+  chunks (512 MiB total), and `POST .../commit/{sessionId}/finish`. The existing
+  single-request `POST .../commit` remains unchanged.
 - `/api/revisions/*` for revision reads and deletion.
 - `/api/preferences` for the durable preference blob. `GET` is a normal read;
   `PUT` requires the per-process token from `preferences-endpoint.json` beside
@@ -48,7 +54,10 @@ groups are:
 - `/api/maintenance/checkpoint` for a WAL checkpoint before native backup.
 
 Request bodies are capped at 64 MiB; a single staged asset is capped at 256 MiB.
-Clients use the TypeScript library client instead of constructing URLs.
+Clients use the TypeScript library client instead of constructing URLs. The
+`projects` and `revisions` tables carry an additive `chart_index` cache column;
+an empty or stale index is rebuilt from the stored chart and never replaces the
+chart payload.
 
 ## Collaboration
 

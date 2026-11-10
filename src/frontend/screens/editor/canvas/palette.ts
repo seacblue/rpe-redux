@@ -28,6 +28,8 @@ export interface CanvasPalette {
   noteFallback: string;
   selectionHighlight: string;
   selectionHighlightStroke: string;
+  remoteSelectionHighlight: string;
+  remoteEventSelectionHighlight: string;
   selectionNotesFill: string;
   selectionNotesStroke: string;
   selectionEventsFill: string;
@@ -53,7 +55,7 @@ export interface CanvasPalette {
 
 let cachedPalette: CanvasPalette | null = null;
 let listeningForTheme = false;
-let cachedSelectionColor = "";
+let cachedSelectionColors = "";
 
 /** User-configured selection colors, with defaults available before settings register. */
 export function selectionColor(key: string, fallback: string): string {
@@ -79,7 +81,10 @@ export function readCanvasPalette(): CanvasPalette {
     window.addEventListener("redux-theme", invalidateCanvasPalette, { passive: true });
   }
   const selectedColor = selectionColor("selected-note-color", "#00C800");
-  if (cachedPalette && cachedSelectionColor === selectedColor) {
+  const remoteNoteColor = selectionColor("collaboration-selected-note-color", "#FFCC66");
+  const remoteEventColor = selectionColor("collaboration-selected-event-color", "#FFCC66");
+  const selectionColors = `${selectedColor}|${remoteNoteColor}|${remoteEventColor}`;
+  if (cachedPalette && cachedSelectionColors === selectionColors) {
     return cachedPalette;
   }
   const style = getComputedStyle(document.documentElement);
@@ -112,6 +117,8 @@ export function readCanvasPalette(): CanvasPalette {
     noteFallback: read("--canvas-note-fallback"),
     selectionHighlight: read("--canvas-selection-highlight"),
     selectionHighlightStroke: selectedColor,
+    remoteSelectionHighlight: remoteNoteColor,
+    remoteEventSelectionHighlight: remoteEventColor,
     selectionNotesFill: read("--canvas-selection-notes-fill"),
     selectionNotesStroke: read("--canvas-selection-notes-stroke"),
     selectionEventsFill: read("--canvas-selection-events-fill"),
@@ -135,7 +142,7 @@ export function readCanvasPalette(): CanvasPalette {
     inspectorMarker: read("--canvas-inspector-marker"),
   };
   cachedPalette = palette;
-  cachedSelectionColor = selectedColor;
+  cachedSelectionColors = selectionColors;
   return palette;
 }
 
@@ -162,6 +169,13 @@ export function selectionHighlightColor(
   palette: Pick<CanvasPalette, "selectionHighlightStroke">,
 ): CanvasRgb {
   return rgbChannels(palette.selectionHighlightStroke) ?? [0, 200, 0];
+}
+
+/** Resolve the configured colour used to render another member's note selection. */
+export function remoteSelectionHighlightColor(
+  palette: Pick<CanvasPalette, "remoteSelectionHighlight">,
+): CanvasRgb {
+  return rgbChannels(palette.remoteSelectionHighlight) ?? [255, 204, 102];
 }
 
 /** The theme colour for a note type; unknown types use the fallback. */

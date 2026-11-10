@@ -8,7 +8,8 @@
  */
 import { t } from "../../../../../../i18n/index.ts";
 import { showProgressToast } from "../../../../../../design/patterns/ToastHost.tsx";
-import { serializeChartOffThread } from "./chartSerializeOffThread.ts";
+import { serializeChartOffThread, serializeChartStream } from "./chartSerializeOffThread.ts";
+import { registeredChartDocument } from "../../../../../../core/global/chart/streaming/chartDocumentRegistry.ts";
 import { projectChartForExport } from "../../../../../../core/global/chart/exportProjection.ts";
 import {
   assetNames,
@@ -87,9 +88,18 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
     progressToast.setProgress(0.05);
 
     saving = (async () => {
-      const chartJson = await serializeChartOffThread(
-        path ? projectChartForExport(snapshot, path) : snapshot,
-      );
+      const chartDocument = registeredChartDocument(snapshot as object);
+      // A file export projects and serializes the complete chart. A paged
+      // document must materialize its placeholders first; library saves keep
+      // the streamed path below.
+      const exportSource = path && chartDocument ? await chartDocument.materializeAll() : snapshot;
+      const chartJson =
+        path || !chartDocument
+          ? await serializeChartOffThread(
+              path ? projectChartForExport(exportSource, path) : snapshot,
+            )
+          : "";
+      const chartChunks = !path && chartDocument ? serializeChartStream(snapshot) : undefined;
       progressToast.setProgress(0.2);
 
       // An explicit path is an export. It never becomes the live document.
@@ -141,6 +151,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
         ...(target && Number.isFinite(target.revision) ? { baseRevision: target.revision } : {}),
         chart: snapshot,
         chartJson,
+        ...(chartChunks ? { chartChunks } : {}),
         name: projectName,
         assets: captured,
         ...(target?.viewState ? { viewState: target.viewState } : {}),

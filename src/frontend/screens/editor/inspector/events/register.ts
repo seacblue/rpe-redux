@@ -14,6 +14,7 @@ const unregister = registerInspectorPanel({
   label: "chrome.pane.events",
   icon: "sliders",
   tutorial: INSPECTOR_TUTORIALS.events,
+  editsChart: true,
 });
 
 if (import.meta.hot) {

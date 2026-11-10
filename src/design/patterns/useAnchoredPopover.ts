@@ -123,8 +123,16 @@ export function useAnchoredPopover({
       if (!anchorElement || !node) {
         return;
       }
+      if (
+        !anchorElement.isConnected ||
+        anchorElement.checkVisibility?.({ checkVisibilityCSS: true }) === false
+      ) {
+        close.current();
+        return;
+      }
       const box = anchorElement.getBoundingClientRect();
       if (box.width <= 0 || box.height <= 0) {
+        close.current();
         return;
       }
       const measuredWidth = node.offsetWidth;
@@ -198,6 +206,27 @@ export function useAnchoredPopover({
       observer?.disconnect();
     };
   }, [align, anchor, closeOnScroll, gap, matchAnchorWidth, maxHeight, open, panel]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    // Parent panels can close, collapse, or unmount without a scroll or resize
+    // event. The poll is the lifecycle signal that keeps a portalled popover
+    // from outliving the control it belongs to.
+    const check = () => {
+      const anchorElement = anchor.current;
+      if (
+        !anchorElement ||
+        !anchorElement.isConnected ||
+        anchorElement.checkVisibility?.({ checkVisibilityCSS: true }) === false
+      ) {
+        close.current();
+      }
+    };
+    const timer = window.setInterval(check, 120);
+    return () => window.clearInterval(timer);
+  }, [anchor, open]);
 
   useEffect(() => {
     if (!open) {

@@ -12,7 +12,9 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { beginLoading, loadingPaint } from "../../global/document/loading.ts";
 import { projectChartForExport } from "../../global/chart/exportProjection.ts";
+import { registeredChartDocument } from "../../global/chart/streaming/chartDocumentRegistry.ts";
 import { dialogDefaultPath, rememberDialogFile } from "./dialogPath.ts";
+import { openNativeChartStream } from "./chartStream.ts";
 import { AssetStore } from "../../media/assetStore.ts";
 import { values } from "../../state/values.ts";
 import type {
@@ -354,6 +356,44 @@ export class TauriDocumentStore {
     try {
       await loadingPaint();
       const revision = ++this.openRevision;
+      task.update("read", 1, 1);
+      try {
+        const streamed = await openNativeChartStream(path, options);
+        if (revision !== this.openRevision) {
+          await invoke("close_document", { id: streamed.opened.id });
+          throw Object.assign(new Error(t("system.document.loadCancelled")), {
+            name: "AbortError",
+          });
+        }
+        task.update("parse", 1, 1);
+        const opened = streamed.opened as OpenedDocument;
+        delete opened.chart;
+        const previous = this.current;
+        this.current = opened;
+        this.recoveryDetached = false;
+        this.assets?.release();
+        this.assets = new DesktopAssetStore(opened);
+        if (previous) {
+          await invoke("close_document", { id: previous.id });
+        }
+        await this.assets.materialize(/(?:info\.txt|extra\.json|\.(?:glsl|vsh))$/i);
+        return {
+          candidate: {
+            chart: streamed.document.chart,
+            chartDocument: streamed.document,
+            name: opened.chart_name,
+            desktop: opened,
+          },
+          assets: this.assets.assets,
+          task,
+        };
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw error;
+        }
+        // Older native builds and unsupported sources fall back to the
+        // whole-chart open command.
+      }
       const onProgress = new Channel<{ completed: number; total: number }>();
       onProgress.onmessage = ({ completed, total }) => task.update("unpack", completed, total);
       const onChart = new Channel<ChartStreamMessage>();
@@ -466,6 +506,13 @@ export class TauriDocumentStore {
   ): Promise<SaveResult | null> {
     const current = this.current,
       store = this.assets;
+    const chartDocument =
+      chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
+    if (chartDocument) {
+      // A native file export needs the complete projected chart. The library
+      // path keeps its streamed save; this fallback is only for file output.
+      chart = await chartDocument.materializeAll();
+    }
     // File documents are export containers even when saved in place. Project
     // editor-only noise-line settings, preserve the declared RPE version, and
     // write the Redux export marker before the native host serializes the chart;

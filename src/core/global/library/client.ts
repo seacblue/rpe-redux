@@ -13,6 +13,8 @@ import { browserDevPorts, getRuntimePorts } from "../../platform/runtimePorts.ts
 import { isDesktop } from "../../platform/environment.ts";
 import { cachedProjectAssetUrl } from "./assetUrlCache.ts";
 import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
+import { ChartFrameDecoder, decodeLinesFrame } from "../chart/streaming/chartStreamCodec.ts";
+import { CHART_FRAME } from "../chart/streaming/chartStreamTypes.ts";
 import type { LibraryViewState } from "./types.ts";
 import type { DropClassification } from "../document/dropIntake.ts";
 
@@ -523,6 +525,119 @@ export class LocalLibrary {
     return request(this.origin, `/api/projects/${encodeURIComponent(id)}`, options);
   }
 
+  /** Load project metadata without the chart payload. */
+  summary(id: string, options: RequestOptions = {}): Promise<{ project: LibraryProjectSummary }> {
+    return request(this.origin, `/api/projects/${encodeURIComponent(id)}/summary`, options);
+  }
+
+  /**
+   * Stream one project's chart frames.
+   *
+   * The caller decodes the frame protocol; this method only owns the HTTP
+   * transport and the response body lifetime.
+   */
+  async *chartStream(
+    id: string,
+    options: RequestOptions & { includeLines?: boolean } = {},
+  ): AsyncIterable<Uint8Array> {
+    const signal =
+      options.timeoutMs && typeof globalThis.AbortSignal?.timeout === "function"
+        ? AbortSignal.timeout(options.timeoutMs)
+        : undefined;
+    const includeLines = options.includeLines === false ? "?includeLines=false" : "";
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.origin}/api/projects/${encodeURIComponent(id)}/chart/stream${includeLines}`,
+        {
+          signal,
+          headers: options.headers,
+        },
+      );
+    } catch (error) {
+      throw new LocalLibraryError(
+        t("system.library.unreachable", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+    if (!response.ok) {
+      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+        status: response.status,
+        code: "chart_stream",
+      });
+    }
+    if (!response.body) {
+      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+        status: response.status,
+        code: "chart_stream",
+      });
+    }
+    const reader = response.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        if (value?.length) {
+          yield value;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
+   * Read one bounded line batch as a decoded frame.
+   *
+   * The service verifies the requested range against its cached index and
+   * returns one `lines` frame containing the raw JSON array text.
+   */
+  async chartLines(
+    id: string,
+    start: number,
+    count: number,
+    options: RequestOptions = {},
+  ): Promise<{ start: number; count: number; raw: string }> {
+    const signal =
+      options.timeoutMs && typeof globalThis.AbortSignal?.timeout === "function"
+        ? AbortSignal.timeout(options.timeoutMs)
+        : undefined;
+    const query = new URLSearchParams({ start: String(start), count: String(count) });
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.origin}/api/projects/${encodeURIComponent(id)}/chart/lines?${query}`,
+        { signal, headers: options.headers },
+      );
+    } catch (error) {
+      throw new LocalLibraryError(
+        t("system.library.unreachable", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+    if (!response.ok) {
+      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+        status: response.status,
+        code: "chart_lines",
+      });
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const frame = new ChartFrameDecoder()
+      .push(bytes)
+      .find((entry) => entry.kind === CHART_FRAME.lines);
+    if (!frame) {
+      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+        status: response.status,
+        code: "chart_lines",
+      });
+    }
+    return decodeLinesFrame(frame);
+  }
+
   /** Create a project from a parsed chart. */
   create(
     { name, group, chart }: { name: string; group?: string; chart: unknown },
@@ -786,6 +901,69 @@ export class LocalLibrary {
       bodyText: `{${fields.join(",")}}`,
       timeoutMs: options.timeoutMs ?? 30_000,
     });
+  }
+
+  /**
+   * Commit a chart from a chunk stream.
+   *
+   * The begin request carries only metadata; chart text arrives as raw PUT
+   * chunks, so a chart larger than the 64 MiB JSON body cap still commits.
+   */
+  async commitStream(
+    id: string,
+    input: Omit<LibraryCommitInput, "chartJson">,
+    chunks: AsyncIterable<string>,
+    options: RequestOptions = {},
+  ): Promise<LibraryCommitResult> {
+    const begin = await request<{ sessionId: string }>(
+      this.origin,
+      `/api/projects/${encodeURIComponent(id)}/commit/begin`,
+      {
+        ...options,
+        method: "POST",
+        body: {
+          ...(input.baseRevision !== undefined ? { baseRevision: input.baseRevision } : {}),
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          assets: input.assets,
+          ...(input.viewState !== undefined ? { viewState: input.viewState } : {}),
+          ...(input.assetFolders !== undefined ? { assetFolders: input.assetFolders } : {}),
+          ...(input.label !== undefined ? { label: input.label } : {}),
+          ...(input.snapshot !== undefined ? { snapshot: input.snapshot } : {}),
+        },
+        timeoutMs: 30_000,
+      },
+    );
+    const sessionPath = `/api/projects/${encodeURIComponent(id)}/commit/${encodeURIComponent(
+      begin.sessionId,
+    )}/chart`;
+    for await (const chunk of chunks) {
+      const response = await fetch(`${this.origin}${sessionPath}`, {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream", "x-redux-client": "1" },
+        body: chunk,
+      });
+      if (!response.ok) {
+        let message = t("system.library.requestFailed", { status: response.status });
+        try {
+          const payload = (await response.json()) as { error?: { message?: string } };
+          message = payload.error?.message ?? message;
+        } catch {
+          // Keep the status-based message when the body is not JSON.
+        }
+        throw new LocalLibraryError(message, { status: response.status, code: "commit_chunk" });
+      }
+    }
+    return request<LibraryCommitResult>(
+      this.origin,
+      `/api/projects/${encodeURIComponent(id)}/commit/${encodeURIComponent(
+        begin.sessionId,
+      )}/finish`,
+      {
+        ...options,
+        method: "POST",
+        timeoutMs: options.timeoutMs ?? 300_000,
+      },
+    );
   }
 
   /** List stored revisions, newest first. */

@@ -9,11 +9,12 @@ import type {
   EditorCandidate,
   UnvalidatedChart,
 } from "../../../../../../core/global/document/types.ts";
+import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
 import type { LibraryViewState } from "../../../../../../core/global/library/types.ts";
 
 interface LibraryProjectSource {
   name?: string;
-  chart: unknown;
+  chart?: unknown;
   revision?: number;
   group?: string;
   background?: string;
@@ -27,6 +28,29 @@ export function libraryCandidate(project: LibraryProjectSource, id: string): Edi
     project.name || String((project.chart as UnvalidatedChart | null)?.META?.name ?? "chart.json");
   return {
     chart: project.chart,
+    name,
+    project: {
+      id,
+      ...(project.revision !== undefined ? { revision: project.revision } : {}),
+      ...(project.name ? { name: project.name } : {}),
+      ...(project.group ? { group: project.group } : {}),
+      ...(project.background ? { background: project.background } : {}),
+      ...(project.assetFolders ? { assetFolders: project.assetFolders } : {}),
+      ...(project.viewState ? { viewState: project.viewState } : {}),
+    },
+  };
+}
+
+/** Maps a streamed library document to an editor candidate. */
+export function libraryDocumentCandidate(
+  project: LibraryProjectSource,
+  id: string,
+  document: ChartDocument,
+): EditorCandidate {
+  const name = project.name || String(document.header.META.name ?? "") || "chart.json";
+  return {
+    chart: document.chart,
+    chartDocument: document,
     name,
     project: {
       id,

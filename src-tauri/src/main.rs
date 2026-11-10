@@ -19,9 +19,10 @@ use documents::{
     begin_recovery, begin_save_document, cancel_recovery, cancel_save_document, close_document,
     delete_recovery, document_disk_snapshot, finish_recovery, finish_save_document,
     import_library_project, inspect_library, list_recovery, media_response, open_asset_external,
-    open_document, read_asset, read_dropped_asset_files, read_picked_file, read_recovery,
-    startup_files, write_export_bytes, write_export_text, write_recovery, write_recovery_asset,
-    write_recovery_chart, write_save_asset, write_save_chart, DocumentHost,
+    open_document, open_document_stream, read_asset, read_chart_line_chunk, read_chart_lines,
+    read_dropped_asset_files, read_picked_file, read_recovery, startup_files, write_export_bytes,
+    write_export_text, write_recovery, write_recovery_asset, write_recovery_chart,
+    write_save_asset, write_save_chart, DocumentHost,
 };
 use tauri::Manager;
 
@@ -132,6 +133,9 @@ fn main() {
             chart::rpe::scan_rpe_root,
             io::external::scan_external_chart,
             open_document,
+            open_document_stream,
+            read_chart_lines,
+            read_chart_line_chunk,
             open_asset_external,
             read_asset,
             read_dropped_asset_files,

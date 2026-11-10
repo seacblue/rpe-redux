@@ -25,6 +25,7 @@ const disposePanel = registerInspectorPanel({
   label: "chrome.pane.metadata",
   icon: "info",
   tutorial: INSPECTOR_TUTORIALS.metadata,
+  editsChart: true,
 });
 const disposeSidebar = registerInspectorSidebar({
   id: "metadata",

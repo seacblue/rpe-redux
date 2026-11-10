@@ -11,6 +11,7 @@ import {
 import { openFiles } from "../../../../../../core/global/document/import.ts";
 import type { OpenCandidate } from "../../../../../../core/global/document/types.ts";
 import { parseChartEntriesOffThread } from "./chartParseOffThread.ts";
+import { openChartStreamFromChunks } from "./chartStreamOffThread.ts";
 import { readZipOffThread } from "./zipReadOffThread.ts";
 
 interface ChartFileOpenOptions {
@@ -40,6 +41,25 @@ export async function openChartFiles(
   const task = beginLoading(files[0].name);
   try {
     await loadingPaint();
+    if (files.length === 1 && /\.json$/i.test(files[0].name)) {
+      try {
+        const opened = await openChartStreamFromChunks(files[0].stream(), files[0].name);
+        const candidate: OpenCandidate = {
+          name: files[0].name,
+          chart: opened.document.chart,
+          chartDocument: opened.document,
+          disposeDocument: () => opened.dispose(),
+        };
+        loadingProgress.dismiss();
+        options.guardReplace(() => {
+          options.loadCandidate(candidate, new Map()).catch(options.reportError);
+        });
+        return;
+      } catch {
+        // Fall through to the whole-entry parser so diagnostics and malformed
+        // JSON still get the existing explanation.
+      }
+    }
     const loaded = await openFiles([...files], task, parseChartEntriesOffThread, readZipOffThread);
     if (!loaded) {
       loadingProgress.dismiss();

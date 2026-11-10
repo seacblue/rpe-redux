@@ -8,6 +8,54 @@
  */
 import { ASSET_CHUNK_BYTES } from "./assets.ts";
 
+/** Largest JSON header accepted before a binary asset chunk. */
+const MAX_BINARY_HEADER_BYTES = 16 * 1024;
+
+/** One decoded binary asset message: JSON header plus raw chunk bytes. */
+export interface BinaryAssetFrame {
+  readonly header: Record<string, unknown>;
+  readonly body: Uint8Array;
+}
+
+const binaryEncoder = new TextEncoder();
+const binaryDecoder = new TextDecoder();
+
+/** Build one binary asset frame: 4-byte header length, JSON header, raw bytes. */
+export function encodeBinaryAssetFrame(
+  header: Record<string, unknown>,
+  body: Uint8Array,
+): ArrayBuffer {
+  const encoded = binaryEncoder.encode(JSON.stringify(header));
+  if (encoded.byteLength === 0 || encoded.byteLength > MAX_BINARY_HEADER_BYTES) {
+    throw new Error("Binary asset header is invalid");
+  }
+  const output = new Uint8Array(4 + encoded.byteLength + body.byteLength);
+  new DataView(output.buffer).setUint32(0, encoded.byteLength, false);
+  output.set(encoded, 4);
+  output.set(body, 4 + encoded.byteLength);
+  return output.buffer;
+}
+
+/** Split one binary asset frame into its JSON header and chunk bytes. */
+export function decodeBinaryAssetFrame(frame: ArrayBuffer): BinaryAssetFrame {
+  if (frame.byteLength < 4) {
+    throw new Error("Binary asset frame is too short");
+  }
+  const view = new DataView(frame);
+  const length = view.getUint32(0, false);
+  if (length === 0 || length > MAX_BINARY_HEADER_BYTES || 4 + length > frame.byteLength) {
+    throw new Error("Binary asset header is invalid");
+  }
+  const parsed: unknown = JSON.parse(binaryDecoder.decode(new Uint8Array(frame, 4, length)));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Binary asset header is not JSON");
+  }
+  return {
+    header: parsed as Record<string, unknown>,
+    body: new Uint8Array(frame, 4 + length),
+  };
+}
+
 /** One fixed-size slice of an asset. */
 export interface AssetChunkRange {
   readonly index: number;

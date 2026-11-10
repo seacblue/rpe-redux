@@ -232,7 +232,7 @@ export class EventInteraction implements EventInteractionHandle {
   /** Arm placement of a new event, or commit it when placement is already pending. */
   place(type?: string | null, beat?: number, easingType?: number | null, inst = false): boolean {
     const session = this.timeline.getSession();
-    if (!session.line) {
+    if (!session.editable || !session.line) {
       return false;
     }
     const point = this.timeline.gestures.eventCursor;

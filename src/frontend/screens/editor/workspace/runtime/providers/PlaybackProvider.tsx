@@ -9,6 +9,7 @@ import { idleScheduler } from "../../document/save/idleScheduler.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
+import { PAGED_PRELOAD_MAX_LINES } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import type { PreviewRuntime } from "./PreviewProvider.tsx";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
@@ -86,12 +87,38 @@ export function createPlaybackRuntime(options: {
 }): PlaybackRuntime {
   const { audio, hitSounds, realtimePreview } = options.preview;
   const chartSeconds = () => audio.time - options.offsetSeconds();
+  let preloadAt = Number.NEGATIVE_INFINITY;
+  let preloadPending = false;
+  /** Keep the paged line window ahead of a seek or playback start. */
+  const preloadAround = (seconds: number): void => {
+    const document = options.session.current.chartDocument;
+    if (!document || preloadPending || Math.abs(seconds - preloadAt) < 4) {
+      return;
+    }
+    preloadAt = seconds;
+    preloadPending = true;
+    // A very dense window can exceed the preload cap; retry with a narrower
+    // window so playback still gets the nearest lines.
+    void document
+      .ensureTime(seconds, 30, { maxLines: PAGED_PRELOAD_MAX_LINES })
+      .catch(() => document.ensureTime(seconds, 10, { maxLines: PAGED_PRELOAD_MAX_LINES }))
+      .then(async () => {
+        await options.preview.hitSounds.prepare().catch(() => undefined);
+        options.session.current.notify();
+        options.invalidate();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        preloadPending = false;
+      });
+  };
   const currentBeat = () =>
     options.tempo().beat(chartSeconds(), options.session.current.line?.bpmfactor ?? 1);
   const playback = new EditorPlayback(audio, hitSounds, () => {
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
     options.timeline.viewport.setOrigin(currentBeat(), "seek");
     realtimePreview.effectsSince = chartSeconds();
+    preloadAround(chartSeconds());
     options.invalidate();
   });
   const playbackMetrics = new PlaybackMetrics();
@@ -272,8 +299,9 @@ export function createPlaybackRuntime(options: {
     cancelWheelSeek();
     const starting = !audio.playing && !playback.pending;
     options.timeline.viewport.setPlaybackActive(starting);
-    if (!audio.playing && !playback.pending) {
+    if (starting) {
       realtimePreview.effectsSince = chartSeconds() - 0.001;
+      preloadAround(chartSeconds() + 10);
     }
     await playback.toggle(options.session.current.chart);
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);

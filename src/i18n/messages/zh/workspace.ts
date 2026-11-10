@@ -318,6 +318,8 @@ export default {
   "workspace.collaboration.resumeBody":
     "上次主持的房间仍在这台设备上。恢复后将以房间谱面为准，并替换当前文档。",
   "workspace.collaboration.resumeAction": "恢复房间",
+  "workspace.collaboration.resumeGuestTitle": "重新加入协作房间？",
+  "workspace.collaboration.resumeGuestBody": "上次加入的房间仍可用。重新加入会恢复房间谱面和素材。",
   "workspace.collaboration.lockDeniedRetry": "房间无法保留这次编辑，请等其他成员释放后重试。",
   "workspace.collaboration.rebaseLabel": "重新应用：{label}",
   "workspace.collaboration.unsent": "未发送的修改",
@@ -332,6 +334,7 @@ export default {
   "workspace.collaboration.roomChartSaveBlocked":
     "房间谱面不会保存到本地谱面库，离开房间时会被删除。如需保留，请导出谱面。",
   "workspace.collaboration.joined": "已加入联机房间。",
+  "workspace.collaboration.memberLeft": "{name} 离开了房间。",
   "workspace.collaboration.waitingApproval": "已连接，等待房主批准…",
   "workspace.collaboration.reconnecting": "连接中断，正在重连…",
   "workspace.collaboration.reconnected": "已重新连接联机房间。",
@@ -381,6 +384,13 @@ export default {
   "workspace.collaboration.assetSyncing": "同步中",
   "workspace.collaboration.locks": "编辑锁",
   "workspace.collaboration.locked": "{owners} 正在编辑 {objects}，请等待或让对方先完成。",
+  "workspace.collaboration.lockedUntil":
+    "{owners} 正在编辑 {objects}。最早的锁约 {seconds} 秒后释放。",
+  "workspace.collaboration.lockReleases": "约 {seconds} 秒后释放",
+  "workspace.collaboration.lockExpired": "已释放",
+  "workspace.collaboration.lockObject.chart": "谱面",
+  "workspace.collaboration.lockObject.line": "判定线 {name}",
+  "workspace.collaboration.lockObject.note": "音符 {name}",
   "workspace.collaboration.lockTimeout":
     "房间未响应编辑锁请求，本次修改尚未发送；连接稳定后请重试。",
   "workspace.collaboration.queueFull":

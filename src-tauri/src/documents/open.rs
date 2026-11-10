@@ -33,13 +33,13 @@ enum ChartStreamMessage {
 
 const CHART_STREAM_LINES: usize = 12;
 /// Largest number of entries accepted from one PEZ archive.
-const MAX_PEZ_ENTRIES: usize = 16_384;
+pub(crate) const MAX_PEZ_ENTRIES: usize = 16_384;
 /// Largest number of JSON chart candidates parsed from one PEZ archive.
-const MAX_PEZ_CHART_CANDIDATES: usize = 64;
+pub(crate) const MAX_PEZ_CHART_CANDIDATES: usize = 64;
 /// Cumulative bytes allowed for chart JSON candidates inside one PEZ archive.
-const MAX_PEZ_CHART_BYTES: u64 = MAX_CHART_BYTES;
+pub(crate) const MAX_PEZ_CHART_BYTES: u64 = MAX_CHART_BYTES;
 /// Cumulative bytes allowed for Info.txt sidecars inside one PEZ archive.
-const MAX_PEZ_INFO_BYTES: u64 = 8 * 1024 * 1024;
+pub(crate) const MAX_PEZ_INFO_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Deliver the chart header first, then line batches, then a done marker.
 async fn stream_chart(mut chart: Value, channel: Channel<ChartStreamMessage>) -> Result<()> {
@@ -64,11 +64,61 @@ async fn stream_chart(mut chart: Value, channel: Channel<ChartStreamMessage>) ->
 }
 
 /// First `key: value` line in an Info.txt body, matched case-insensitively.
-fn info_field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+pub(crate) fn info_field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     text.lines().find_map(|line| {
         let (name, value) = line.split_once(':')?;
         name.trim().eq_ignore_ascii_case(key).then(|| value.trim())
     })
+}
+
+/// Normalize one PEZ-relative reference for case-insensitive comparison.
+pub(crate) fn normalize_pez_path(path: &str) -> String {
+    let path = path.replace('\\', "/");
+    let mut parts = Vec::new();
+    for part in path.split('/') {
+        if part == ".." {
+            parts.pop();
+        } else if !part.is_empty() && part != "." {
+            parts.push(part);
+        }
+    }
+    parts.join("/").to_lowercase()
+}
+
+/// Choose the chart entry named by Info.txt, or the only candidate.
+pub(crate) fn select_pez_chart(candidates: &[String], infos: &[(String, String)]) -> Result<usize> {
+    let mut preferred = Vec::new();
+    for (name, info) in infos {
+        for row in info.lines() {
+            if let Some((key, value)) = row.split_once(':') {
+                if key.trim().eq_ignore_ascii_case("Chart") {
+                    let parent = name
+                        .rsplit_once('/')
+                        .map(|(parent, _)| format!("{parent}/"))
+                        .unwrap_or_default();
+                    let reference = normalize_pez_path(&format!("{parent}{}", value.trim()));
+                    if let Some(index) = candidates
+                        .iter()
+                        .position(|candidate| normalize_pez_path(candidate) == reference)
+                    {
+                        preferred.push(index);
+                    }
+                }
+            }
+        }
+    }
+    preferred.sort_unstable();
+    preferred.dedup();
+    if preferred.len() == 1 {
+        Ok(preferred[0])
+    } else if candidates.len() == 1 {
+        Ok(0)
+    } else {
+        Err(format!(
+            "PEZ contains multiple charts. Select one with info.txt Chart: {}",
+            candidates.join(", ")
+        ))
+    }
 }
 
 /// Fill metadata gaps from the selected package's Info.txt without replacing
@@ -77,6 +127,11 @@ fn apply_info_metadata(chart: &mut Value, info: &str) {
     let Some(meta) = chart.get_mut("META").and_then(Value::as_object_mut) else {
         return;
     };
+    apply_info_metadata_to_meta(meta, info);
+}
+
+/// Fill metadata gaps in one `META` object from an Info.txt body.
+pub(crate) fn apply_info_metadata_to_meta(meta: &mut serde_json::Map<String, Value>, info: &str) {
     for (source, target) in [
         ("Name", "name"),
         ("Composer", "composer"),
@@ -181,55 +236,12 @@ pub(crate) fn read_pez_progress<R: Read + Seek>(
     if candidates.is_empty() {
         return Err("No RPE chart found in the PEZ archive.".into());
     }
-    let normalize = |path: &str| {
-        let path = path.replace('\\', "/");
-        let mut parts = Vec::new();
-        for part in path.split('/') {
-            if part == ".." {
-                parts.pop();
-            } else if !part.is_empty() && part != "." {
-                parts.push(part);
-            }
-        }
-        parts.join("/").to_lowercase()
-    };
-    let mut preferred = Vec::new();
-    for (name, info) in &infos {
-        for row in info.lines() {
-            if let Some((key, value)) = row.split_once(':') {
-                if key.trim().eq_ignore_ascii_case("Chart") {
-                    let parent = name
-                        .rsplit_once('/')
-                        .map(|(parent, _)| format!("{parent}/"))
-                        .unwrap_or_default();
-                    let reference = normalize(&format!("{parent}{}", value.trim()));
-                    if let Some(index) = candidates
-                        .iter()
-                        .position(|(name, _)| normalize(name) == reference)
-                    {
-                        preferred.push(index);
-                    }
-                }
-            }
-        }
-    }
-    preferred.sort_unstable();
-    preferred.dedup();
+    let candidate_names = candidates
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
     // Do not silently choose an autosave or another difficulty in an ambiguous package.
-    let index = if preferred.len() == 1 {
-        preferred[0]
-    } else if candidates.len() == 1 {
-        0
-    } else {
-        return Err(format!(
-            "PEZ contains multiple charts. Select one with info.txt Chart: {}",
-            candidates
-                .iter()
-                .map(|(name, _)| name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    };
+    let index = select_pez_chart(&candidate_names, &infos)?;
     let selected_info = infos.iter().find(|(info_name, text)| {
         let Some(reference) = info_field(text, "Chart") else {
             return false;
@@ -238,7 +250,8 @@ pub(crate) fn read_pez_progress<R: Read + Seek>(
             .rsplit_once('/')
             .map(|(parent, _)| format!("{parent}/"))
             .unwrap_or_default();
-        normalize(&format!("{parent}{reference}")) == normalize(&candidates[index].0)
+        normalize_pez_path(&format!("{parent}{reference}"))
+            == normalize_pez_path(&candidate_names[index])
     });
     let (name, mut chart) = candidates.swap_remove(index);
     if let Some((_, info)) = selected_info {
@@ -513,6 +526,7 @@ pub fn read_asset(state: State<'_, DocumentHost>, id: String, name: String) -> R
 #[tauri::command]
 pub fn close_document(state: State<'_, DocumentHost>, id: String) -> Result<()> {
     state.watchers.lock().map_err(error)?.remove(&id);
+    state.streams.lock().map_err(error)?.remove(&id);
     state.documents.lock().map_err(error)?.remove(&id);
     Ok(())
 }

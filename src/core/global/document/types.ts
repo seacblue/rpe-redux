@@ -5,6 +5,7 @@
  * to open, and `EditorCandidate` the pre-validation shape handed to the editor.
  */
 import { type Chart } from "../chart/chart.ts";
+import type { ChartDocument } from "../chart/streaming/chartDocument.ts";
 import type { ChartDiagnostic } from "../chart/diagnostics.ts";
 import type { LibraryProjectRef, LibraryViewState } from "../library/types.ts";
 
@@ -25,6 +26,10 @@ export interface AssetMap extends Map<string, Uint8Array> {
 export interface OpenCandidate {
   name: string;
   chart: Chart;
+  /** Paged document backing `chart`; its facade may contain placeholders. */
+  chartDocument?: ChartDocument;
+  /** Release a worker or source held only for this candidate. */
+  disposeDocument?: () => void;
   info?: Record<string, string>;
   desktop?: boolean;
   project?: { assetFolders?: string[]; viewState?: LibraryViewState } | null;
@@ -35,6 +40,10 @@ export interface OpenCandidate {
 /** A chart candidate handed to the editor before chart validation and loading. */
 export interface EditorCandidate {
   chart: unknown;
+  /** Paged document backing `chart`; present when the source was streamed. */
+  chartDocument?: ChartDocument;
+  /** Release a worker or source held only for this candidate. */
+  disposeDocument?: () => void;
   name: string;
   info?: Record<string, string>;
   desktop?: unknown;

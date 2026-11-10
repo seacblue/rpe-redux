@@ -234,7 +234,7 @@ export function selectiveUndo(
     if (
       !entry ||
       entry.before === entry.after ||
-      session.readOnly ||
+      !session.editable ||
       entry.origin?.kind === "collaboration-remote" ||
       entry.origin?.kind === "collaborative-undo" ||
       entry.origin?.compensated

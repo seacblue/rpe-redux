@@ -10,6 +10,7 @@
  */
 import { useState, type MouseEvent } from "react";
 import { markerTargetFromMarker } from "../../../core/edit/timeline/contextMenuTarget.ts";
+import { getEditorVisibility } from "../../../core/edit/state/visibility.ts";
 import type { ContextMenuTarget } from "../../../core/shell/registries/toolbar.ts";
 import { hasOpenModal } from "../../../design/components/modal/Modal.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
@@ -85,12 +86,14 @@ export function useProgressContextMenu(): ProgressContextMenuHandle {
           id: "transport.jump",
           label: t("chrome.transport.menu.jump"),
           icon: "jump",
+          enabled: () => !getEditorVisibility().readOnly,
           run: () => openMarkerDialog("jump"),
         },
         {
           id: "transport.markers",
           label: t("chrome.transport.menu.manageMarkers"),
           icon: "clock",
+          enabled: () => !getEditorVisibility().readOnly,
           run: () => openMarkerDialog("manager"),
         },
       ],

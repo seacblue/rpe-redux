@@ -17,6 +17,7 @@ const disposePanel = registerInspectorPanel({
   icon: "curve",
   tutorial: INSPECTOR_TUTORIALS.curve,
   open: () => curveActions.openCurveNotes(),
+  editsChart: true,
 });
 const disposeTool = registerInspectorTool({
   panelId: "curve",

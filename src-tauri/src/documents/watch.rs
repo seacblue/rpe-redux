@@ -97,7 +97,7 @@ pub(crate) fn disk_snapshot(document: &Document) -> Result<String> {
             append_file(&mut hasher, name, path)?;
         }
     }
-    Ok(format!("sha256:{:x}", hasher.finalize()))
+    Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
 /// Whether an event kind can change document content.

@@ -15,6 +15,7 @@ const disposePanel = registerInspectorPanel({
   label: "chrome.pane.multiLine",
   icon: "layers",
   tutorial: INSPECTOR_TUTORIALS["multi-line"],
+  editsChart: true,
 });
 const disposeTool = registerInspectorTool({
   panelId: "multi-line",

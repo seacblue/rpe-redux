@@ -5,7 +5,7 @@ import type { TimelineNoteInsertionReceiver } from "../drawing/timelineReceiver.
 
 /** Place a note of `type` at the cursor; returns false when nothing can be placed. */
 export function addAtCursor(this: TimelineNoteInsertionReceiver, type: number): boolean {
-  if (!this.gestures.cursor) {
+  if (!this.getSession().editable || !this.gestures.cursor) {
     return false;
   }
   const requestedLine =

@@ -230,6 +230,7 @@ test("t easing changes the generating event values, not the beat grid", () => {
   const generate = (tEasing) => {
     const session = {
       readOnly: false,
+      editable: true,
       chart: {
         META: { offset: 0 },
         BPMList: [{ bpm: 120, startTime: [0, 0, 1] }],

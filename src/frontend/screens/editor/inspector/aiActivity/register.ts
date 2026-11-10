@@ -28,6 +28,7 @@ const disposePanel = registerInspectorPanel({
   label: "editorPanels.aiActivity.title",
   icon: "bot",
   tutorial: INSPECTOR_TUTORIALS["code-cell"],
+  editsChart: true,
 });
 const disposeTool = registerInspectorTool({
   panelId: "code-cell",

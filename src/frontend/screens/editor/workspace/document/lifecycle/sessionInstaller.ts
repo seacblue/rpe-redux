@@ -31,9 +31,11 @@ export interface DocumentInstallOptions {
 
 /** Own the listener transfer and new document setup; getters follow later replacements. */
 export function createSessionInstaller(options: DocumentInstallOptions) {
-  return (document: DocumentReplacement): void => {
+  return (replacement: DocumentReplacement): void => {
     options.session.current().removeEventListener("change", options.history.onChange);
-    const session = new EditorSession(document.chart, document.readOnly);
+    const session = replacement.chartDocument
+      ? EditorSession.fromDocument(replacement.chartDocument, replacement.readOnly)
+      : new EditorSession(replacement.chart, replacement.readOnly);
     session.setMutationGate(options.mutationGate);
     options.session.replace(session);
     options.history.clipboard.attach(session);
@@ -43,11 +45,11 @@ export function createSessionInstaller(options: DocumentInstallOptions) {
     options.recovery.clearDraft();
     options.recovery.autoSave.reset(performance.now());
     options.resetCurveDraft();
-    options.installRecord(document);
+    options.installRecord(replacement);
     options.resetEditClock();
-    options.hitSounds.setProject(document.chart, document.assets, document.name);
-    if (document.loadImages) {
-      options.images.load(document.chart, document.assets, document.name);
+    options.hitSounds.setProject(replacement.chart, replacement.assets, replacement.name);
+    if (replacement.loadImages) {
+      options.images.load(replacement.chart, replacement.assets, replacement.name);
     }
   };
 }

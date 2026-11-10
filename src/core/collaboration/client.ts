@@ -12,15 +12,31 @@ import { Backoff } from "../runtime/backoff.ts";
 import { Heartbeat } from "../runtime/heartbeat.ts";
 import { applyChartChanges, type ChartChange } from "./changes.ts";
 import { MAX_ASSET_BYTES, matchesAssetMagic, mimeForAsset } from "./assets.ts";
-import { AssetAssembler, assetChunkRanges } from "./transfer.ts";
+import {
+  AssetAssembler,
+  assetChunkRanges,
+  decodeBinaryAssetFrame,
+  encodeBinaryAssetFrame,
+} from "./transfer.ts";
 import { Outbox } from "./outbox.ts";
 import { base64ToBytes, bytesToBase64, randomToken, sha256Hex } from "./digest.ts";
+import {
+  CHANGES_GZIP_THRESHOLD_BYTES,
+  decodeChartWire,
+  decodeGzipJson,
+  encodeGzipJson,
+  gzipBytes,
+  gunzipBytes,
+  type ChartWireEncoding,
+} from "./chartWire.ts";
 import { yieldToHost } from "../utils/yieldToHost.ts";
 import {
   createRoomKey,
   decryptBytes,
+  decryptEnvelopeBytes,
   decryptJson,
   encryptBytes,
+  encryptEnvelopeBytes,
   encryptJson,
   importRoomKey,
   isEncryptedPayload,
@@ -75,6 +91,7 @@ export interface CollaborationClientOptions {
   readonly onAssetReady?: (asset: RoomAsset, bytes: Uint8Array) => void;
   readonly onAssetProgress?: (progress: AssetTransferProgress) => void;
   readonly onAssetError?: (message: string, assetName?: string) => void;
+  readonly onMemberLeft?: (memberId: string) => void;
   readonly onLockDenied?: (conflicts: readonly RoomLock[]) => void;
   /** A lock request received no answer before its client-side deadline. */
   readonly onLockTimeout?: () => void;
@@ -105,8 +122,12 @@ export interface TransactionInput {
 
 interface PendingTransaction extends TransactionInput {
   readonly transactionId: string;
-  /** Prepared ciphertext; plaintext rooms keep the original change list. */
-  wireChanges?: readonly ChartChange[] | EncryptedPayload;
+  /** Prepared wire payload; plaintext rooms keep an array or a gzip string. */
+  wireChanges?: readonly ChartChange[] | EncryptedPayload | string;
+  /** Set when the prepared wire payload is gzip-encoded. */
+  wireEncoding?: "gzip";
+  /** True while an async encryption or compression step is still running. */
+  preparing: boolean;
   /** Whether the lease set was granted in this connection generation. */
   locksHeld: boolean;
   /** A lease request is already in flight for this batch. */
@@ -198,13 +219,22 @@ export class CollaborationClient {
   private readonly appVersion: string;
   private socket: CollaborationSocket | null = null;
   private socketOpen = false;
+  private binaryChunks = false;
+  private assetAdopt = false;
   private serverUrl = "";
   private socketUrl = "";
   private resumeToken = "";
+  /** Revision and fingerprint this client has actually applied to its document. */
+  private appliedRevision = -1;
+  private appliedFingerprint = "";
   /** Room and token supplied before the first socket open, for restart recovery. */
   private resumeTarget: { readonly roomId: string; readonly token: string } | null = null;
   private profile: CollaborationProfile = { name: "", color: "#77b7ff" };
-  private hostChart: { chart: unknown; fingerprint: string } | null = null;
+  private hostChart: {
+    chart: unknown;
+    fingerprint: string;
+    chartEncoding?: ChartWireEncoding;
+  } | null = null;
   private invitedRoom: { roomId: string; invite: string } | null = null;
   private encrypted = false;
   private roomKey = "";
@@ -212,6 +242,9 @@ export class CollaborationClient {
   private roomInvite = "";
   private encryptionKey: CryptoKey | null = null;
   private encryptedCommitQueue: Promise<void> = Promise.resolve();
+  /** Queues server messages behind an in-flight gzip payload decode. */
+  private decoding = false;
+  private queuedData: unknown[] = [];
   private roomGeneration = 0;
   private readonly outbox = new Outbox<PendingTransaction>({
     maxEntries: 512,
@@ -219,6 +252,14 @@ export class CollaborationClient {
     now: () => Date.now(),
   });
   private uploads = new Map<string, PendingUpload>();
+  private readonly beginWaiters = new Map<
+    string,
+    {
+      resolve(adopted: boolean): void;
+      reject(error: Error): void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private readonly uploadWaiters = new Map<
     string,
     {
@@ -333,6 +374,8 @@ export class CollaborationClient {
       readonly encrypted?: boolean;
       readonly roomKey?: string;
       readonly autoApproveEditor?: boolean;
+      /** Set when the caller already gzip-encoded the chart for the wire. */
+      readonly chartEncoding?: ChartWireEncoding;
       /** User-visible room password; empty lets the server generate one. */
       readonly password?: string;
     } = {},
@@ -369,14 +412,16 @@ export class CollaborationClient {
       roomKey: this.roomKey,
     });
     if (!encrypted) {
-      this.hostChart = { chart, fingerprint };
+      this.hostChart = { chart, fingerprint, chartEncoding: options.chartEncoding };
       this.sendWhenOpen(() => {
         this.send({
           type: "create",
           profile,
           chart,
           fingerprint,
+          ...(options.chartEncoding ? { chartEncoding: options.chartEncoding } : {}),
           ...this.appVersionFields(),
+          ...this.transportFields(),
           autoApproveEditor: this.autoApproveEditor,
           ...(this.roomInvite ? { invite: this.roomInvite } : {}),
         });
@@ -409,6 +454,7 @@ export class CollaborationClient {
         fingerprint: "",
         encrypted: true,
         ...this.appVersionFields(),
+        ...this.transportFields(),
         autoApproveEditor: this.autoApproveEditor,
         ...(this.roomInvite ? { invite: this.roomInvite } : {}),
       });
@@ -444,6 +490,7 @@ export class CollaborationClient {
         invite,
         profile,
         ...this.appVersionFields(),
+        ...this.transportFields(),
       });
     };
     if (!normalized) {
@@ -570,12 +617,15 @@ export class CollaborationClient {
     if (this.outbox.has(transactionId)) {
       return transactionId;
     }
+    const serialized = JSON.stringify(input.changes);
+    const large = new TextEncoder().encode(serialized).byteLength > CHANGES_GZIP_THRESHOLD_BYTES;
     const pending: PendingTransaction = {
       ...input,
       transactionId,
+      preparing: this.encrypted || large,
       locksHeld: options.locksHeld === true,
       locksPending: false,
-      ...(this.encrypted ? {} : { wireChanges: input.changes }),
+      ...(this.encrypted || large ? {} : { wireChanges: input.changes }),
     };
     const queued = this.outbox.put(transactionId, pending, {
       priority: input.undoOf ? "critical" : "high",
@@ -595,34 +645,71 @@ export class CollaborationClient {
     }
     this.setState({ queued: this.outbox.size });
     if (this.encrypted) {
-      void this.prepareEncryptedTransaction(pending);
+      void this.prepareEncryptedTransaction(pending, serialized);
+    } else if (large) {
+      void this.preparePlainTransaction(pending, serialized);
     } else {
       this.flushTransaction(pending);
     }
     return transactionId;
   }
 
-  /** Encrypt one queued batch, then flush it if it is still current. */
-  private async prepareEncryptedTransaction(pending: PendingTransaction): Promise<void> {
+  /** Drop one batch that could not be prepared and report why. */
+  private rejectPreparedTransaction(
+    pending: PendingTransaction,
+    message: string,
+    code: string,
+  ): void {
+    this.outbox.delete(pending.transactionId);
+    this.releaseLocks(pending.lockIds ?? []);
+    this.setState({ queued: this.outbox.size });
+    this.options.onTransactionRejected?.(pending, message, code);
+    this.options.onError?.(message);
+  }
+
+  /** Gzip one large plaintext batch, then flush it if it is still current. */
+  private async preparePlainTransaction(
+    pending: PendingTransaction,
+    serialized: string,
+  ): Promise<void> {
+    try {
+      pending.wireChanges = await encodeGzipJson(serialized);
+      pending.wireEncoding = "gzip";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.rejectPreparedTransaction(pending, message, "compression_failed");
+      return;
+    }
+    pending.preparing = false;
+    if (this.outbox.value(pending.transactionId) === pending) {
+      this.flushTransaction(pending);
+    }
+  }
+
+  /** Encrypt one queued batch, compressing large plaintext before encryption. */
+  private async prepareEncryptedTransaction(
+    pending: PendingTransaction,
+    serialized: string,
+  ): Promise<void> {
     if (!this.encryptionKey) {
-      this.outbox.delete(pending.transactionId);
-      this.releaseLocks(pending.lockIds ?? []);
-      this.setState({ queued: this.outbox.size, error: "Room key is unavailable" });
-      this.options.onTransactionRejected?.(pending, "Room key is unavailable", "room_key_required");
-      this.options.onError?.("Room key is unavailable");
+      this.rejectPreparedTransaction(pending, "Room key is unavailable", "room_key_required");
       return;
     }
     try {
-      pending.wireChanges = await encryptJson(this.encryptionKey, pending.changes);
+      const key = this.encryptionKey;
+      const bytes = new TextEncoder().encode(serialized);
+      if (bytes.byteLength > CHANGES_GZIP_THRESHOLD_BYTES) {
+        pending.wireChanges = await encryptEnvelopeBytes(key, await gzipBytes(bytes));
+        pending.wireEncoding = "gzip";
+      } else {
+        pending.wireChanges = await encryptJson(key, pending.changes);
+      }
     } catch (error) {
-      this.outbox.delete(pending.transactionId);
-      this.releaseLocks(pending.lockIds ?? []);
-      this.setState({ queued: this.outbox.size });
       const message = error instanceof Error ? error.message : String(error);
-      this.options.onTransactionRejected?.(pending, message, "encryption_failed");
-      this.options.onError?.(message);
+      this.rejectPreparedTransaction(pending, message, "encryption_failed");
       return;
     }
+    pending.preparing = false;
     if (this.outbox.value(pending.transactionId) === pending) {
       this.flushTransaction(pending);
     }
@@ -689,16 +776,31 @@ export class CollaborationClient {
       size: payload.byteLength,
       mime,
       plaintextHash,
+      ...(this.assetAdopt ? { adopt: true } : {}),
     });
     this.reportAssetProgress(name, "upload", "begin", 0, payload.byteLength);
+    if (this.assetAdopt && (await this.waitForAssetBegin(requestId))) {
+      if (this.uploads.delete(requestId)) {
+        this.reportAssetProgress(name, "upload", "done", payload.byteLength, payload.byteLength);
+      }
+      return hash;
+    }
+    if (!this.uploads.has(requestId)) {
+      return null;
+    }
     let sentBytes = 0;
     for (const range of assetChunkRanges(payload.byteLength)) {
-      this.send({
-        type: "asset-chunk",
-        requestId,
-        index: range.index,
-        data: bytesToBase64(payload.subarray(range.offset, range.offset + range.length)),
-      });
+      const chunk = payload.subarray(range.offset, range.offset + range.length);
+      if (this.binaryChunks) {
+        this.sendBinary({ type: "asset-chunk", requestId, index: range.index }, chunk);
+      } else {
+        this.send({
+          type: "asset-chunk",
+          requestId,
+          index: range.index,
+          data: bytesToBase64(chunk),
+        });
+      }
       sentBytes += range.length;
       this.reportAssetProgress(name, "upload", "progress", sentBytes, payload.byteLength);
       await yieldToHost();
@@ -711,6 +813,17 @@ export class CollaborationClient {
         reject(new Error(`${name} upload timed out`));
       }, ASSET_ACK_TIMEOUT_MS);
       this.uploadWaiters.set(requestId, { resolve, reject, timer });
+    });
+  }
+
+  /** Wait for the server's adoption decision before streaming more chunks. */
+  private waitForAssetBegin(requestId: string): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.beginWaiters.delete(requestId);
+        resolve(false);
+      }, 10_000);
+      this.beginWaiters.set(requestId, { resolve, reject, timer });
     });
   }
 
@@ -794,6 +907,11 @@ export class CollaborationClient {
     return this.reconnectBackoff.attempts;
   }
 
+  /** Current membership token, used to persist host or guest resume state. */
+  get resumeTokenValue(): string {
+    return this.resumeToken;
+  }
+
   private pendingOpenAction: (() => void) | null = null;
 
   /** Create a socket, arm the connect timeout, and route its events. */
@@ -813,6 +931,9 @@ export class CollaborationClient {
       return;
     }
     this.socket = socket;
+    if ("binaryType" in socket) {
+      socket.binaryType = "arraybuffer";
+    }
     this.setState({
       status: this.state.get().status === "reconnecting" ? "reconnecting" : "connecting",
       error: "",
@@ -826,7 +947,7 @@ export class CollaborationClient {
     });
     socket.addEventListener("message", (event) => {
       if (isCurrent()) {
-        this.handleData((event as MessageEvent).data);
+        this.enqueueData((event as MessageEvent).data);
       }
     });
     socket.addEventListener("close", () => {
@@ -859,6 +980,8 @@ export class CollaborationClient {
         roomId: resume.roomId,
         token: resume.token,
         ...this.appVersionFields(),
+        ...this.transportFields(),
+        ...this.resumeChartFields(),
       });
       this.armHandshakeTimer();
       return;
@@ -869,6 +992,8 @@ export class CollaborationClient {
         roomId: this.state.get().roomId,
         token: this.resumeToken,
         ...this.appVersionFields(),
+        ...this.transportFields(),
+        ...this.resumeChartFields(),
       });
       this.armHandshakeTimer();
       return;
@@ -880,6 +1005,7 @@ export class CollaborationClient {
         invite: this.invitedRoom.invite,
         profile: this.profile,
         ...this.appVersionFields(),
+        ...this.transportFields(),
       });
       this.armHandshakeTimer();
       return;
@@ -890,7 +1016,9 @@ export class CollaborationClient {
         profile: this.profile,
         chart: this.hostChart.chart,
         fingerprint: this.hostChart.fingerprint,
+        ...(this.hostChart.chartEncoding ? { chartEncoding: this.hostChart.chartEncoding } : {}),
         ...this.appVersionFields(),
+        ...this.transportFields(),
         ...(this.encrypted ? { encrypted: true } : {}),
         autoApproveEditor: this.autoApproveEditor,
         ...(this.roomInvite ? { invite: this.roomInvite } : {}),
@@ -993,6 +1121,15 @@ export class CollaborationClient {
 
   /** Drop pending uploads, downloads, and lock waiters for the closed transport. */
   private resetTransportState(): void {
+    this.binaryChunks = false;
+    this.assetAdopt = false;
+    for (const [requestId, waiter] of this.beginWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(
+        new Error("The collaboration connection closed before the asset transfer began."),
+      );
+      this.beginWaiters.delete(requestId);
+    }
     for (const [requestId, waiter] of this.uploadWaiters) {
       clearTimeout(waiter.timer);
       waiter.reject(
@@ -1079,14 +1216,38 @@ export class CollaborationClient {
     }
   }
 
-  /** Parse and dispatch one server message. */
-  private handleData(raw: unknown): void {
+  /** Queue one server message behind any payload decode already in flight. */
+  private enqueueData(raw: unknown): void {
+    if (this.decoding) {
+      this.queuedData.push(raw);
+      return;
+    }
+    this.processData(raw);
+  }
+
+  /** Dispatch queued messages until another async decode takes over. */
+  private drainQueuedData(): void {
+    while (!this.decoding) {
+      const next = this.queuedData.shift();
+      if (next === undefined) {
+        return;
+      }
+      this.processData(next);
+    }
+  }
+
+  /** Parse one message and start an async decode only for a gzip payload. */
+  private processData(raw: unknown): void {
     if (this.disposed) {
+      return;
+    }
+    if (typeof raw !== "string") {
+      this.processBinary(raw);
       return;
     }
     let parsed: unknown;
     try {
-      parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      parsed = JSON.parse(raw);
     } catch {
       return;
     }
@@ -1094,7 +1255,105 @@ export class CollaborationClient {
       return;
     }
     this.heartbeat.touch();
-    const message = parsed;
+    if (
+      (parsed.type === "welcome" || parsed.type === "snapshot") &&
+      parsed.chartEncoding === "gzip"
+    ) {
+      this.decodeChartMessage(parsed);
+      return;
+    }
+    if (
+      parsed.type === "committed" &&
+      parsed.changesEncoding === "gzip" &&
+      !this.encrypted &&
+      typeof parsed.changes === "string"
+    ) {
+      this.decodeCommittedMessage(parsed);
+      return;
+    }
+    this.dispatchMessage(parsed);
+  }
+
+  /** Decode one binary asset chunk delivered by a capable server. */
+  private processBinary(raw: unknown): void {
+    let frame: ArrayBuffer;
+    if (raw instanceof ArrayBuffer) {
+      frame = raw;
+    } else if (ArrayBuffer.isView(raw)) {
+      frame = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength).slice().buffer;
+    } else {
+      return;
+    }
+    let decoded: ReturnType<typeof decodeBinaryAssetFrame>;
+    try {
+      decoded = decodeBinaryAssetFrame(frame);
+    } catch {
+      this.options.onAssetError?.("The room sent an invalid asset chunk");
+      return;
+    }
+    this.heartbeat.touch();
+    const { header, body } = decoded;
+    if (header.type !== "asset-download-chunk") {
+      return;
+    }
+    const requestId = typeof header.requestId === "string" ? header.requestId : "";
+    const index = typeof header.index === "number" ? header.index : Number.NaN;
+    this.acceptDownloadChunk(requestId, index, body);
+  }
+
+  /** Decode one gzipped plaintext commit, dispatch it, then resume queued messages. */
+  private decodeCommittedMessage(message: Extract<ServerMessage, { type: "committed" }>): void {
+    this.decoding = true;
+    void (async () => {
+      try {
+        const changes = await decodeGzipJson(message.changes as string);
+        if (!this.disposed) {
+          this.dispatchMessage({ ...message, changes: changes as ChartChange[] });
+        }
+      } catch {
+        if (!this.disposed) {
+          this.options.onError?.("The room sent an invalid change batch", "invalid_changes");
+        }
+      } finally {
+        this.decoding = false;
+        if (!this.disposed) {
+          this.drainQueuedData();
+        }
+      }
+    })();
+  }
+
+  /** Decode one gzip chart, dispatch it, then resume queued messages. */
+  private decodeChartMessage(
+    message: Extract<ServerMessage, { type: "welcome" | "snapshot" }>,
+  ): void {
+    this.decoding = true;
+    void (async () => {
+      try {
+        const chart = await decodeChartWire(message.chart, message.chartEncoding);
+        if (!this.disposed) {
+          this.dispatchMessage(message as ServerMessage, chart);
+        }
+      } catch (error) {
+        if (!this.disposed) {
+          const text =
+            error instanceof Error ? error.message : "The room chart could not be decoded.";
+          this.failInitial(text, "invalid_chart");
+        }
+      } finally {
+        this.decoding = false;
+        if (!this.disposed) {
+          this.drainQueuedData();
+        }
+      }
+    })();
+  }
+
+  /** Handle one already parsed server message. */
+  private dispatchMessage(message: ServerMessage, decodedChart?: unknown): void {
+    if (this.disposed) {
+      return;
+    }
     if (
       message.type === "welcome" ||
       message.type === "waiting" ||
@@ -1117,6 +1376,8 @@ export class CollaborationClient {
         this.resumeToken = message.resumeToken;
         this.resumeTarget = null;
         this.reconnectBackoff.reset();
+        this.binaryChunks = message.binaryChunks === true;
+        this.assetAdopt = message.assetAdopt === true;
         this.encrypted = message.encrypted === true;
         if (this.encrypted && !this.encryptionKey) {
           this.setState({
@@ -1126,6 +1387,11 @@ export class CollaborationClient {
           });
           this.reportError("Room key is required", "room_key_required");
           return;
+        }
+        const chart = decodedChart ?? message.chart;
+        if (!this.encrypted && (chart !== undefined || this.hostChart)) {
+          this.appliedRevision = message.revision;
+          this.appliedFingerprint = message.fingerprint;
         }
         this.lastReportedError = "";
         this.heartbeat.start();
@@ -1148,12 +1414,12 @@ export class CollaborationClient {
           encrypted: this.encrypted,
           roomKey: this.roomKey,
         });
-        if (message.chart !== undefined) {
+        if (chart !== undefined) {
           if (this.encrypted) {
             const generation = this.roomGeneration;
             this.enqueueEncrypted(() =>
               this.applyEncryptedSnapshot(
-                message.chart,
+                chart,
                 message.transactions ?? [],
                 message,
                 true,
@@ -1163,7 +1429,7 @@ export class CollaborationClient {
               ),
             );
           } else {
-            this.emitSnapshotFromWelcome(message, message.chart, true);
+            this.emitSnapshotFromWelcome(message, chart, true);
           }
         }
         this.retryPending();
@@ -1244,6 +1510,10 @@ export class CollaborationClient {
         this.setState({ members: message.members });
         return;
       }
+      case "member-left": {
+        this.options.onMemberLeft?.(message.memberId);
+        return;
+      }
       case "room-settings": {
         this.setState({
           maxMembers: message.maxMembers,
@@ -1283,6 +1553,10 @@ export class CollaborationClient {
           this.outbox.delete(message.transactionId);
         }
         this.releaseLocks(pending?.lockIds ?? []);
+        if (!this.encrypted) {
+          this.appliedRevision = message.revision;
+          this.appliedFingerprint = message.fingerprint;
+        }
         this.setState({ revision: message.revision, error: "", queued: this.outbox.size });
         if (this.encrypted) {
           const generation = this.roomGeneration;
@@ -1308,12 +1582,17 @@ export class CollaborationClient {
         return;
       }
       case "snapshot": {
+        const chart = decodedChart ?? message.chart;
+        if (!this.encrypted) {
+          this.appliedRevision = message.revision;
+          this.appliedFingerprint = message.fingerprint;
+        }
         this.setState({ revision: message.revision });
         if (this.encrypted) {
           const generation = this.roomGeneration;
           this.enqueueEncrypted(() =>
             this.applyEncryptedSnapshot(
-              message.chart,
+              chart,
               message.transactions ?? [],
               undefined,
               false,
@@ -1323,7 +1602,16 @@ export class CollaborationClient {
             ),
           );
         } else {
-          this.emitSnapshotFromState(message.chart, message.revision, message.fingerprint, false);
+          this.emitSnapshotFromState(chart, message.revision, message.fingerprint, false);
+        }
+        return;
+      }
+      case "asset-begin-result": {
+        const waiter = this.beginWaiters.get(message.requestId);
+        if (waiter) {
+          clearTimeout(waiter.timer);
+          this.beginWaiters.delete(message.requestId);
+          waiter.resolve(message.adopted);
         }
         return;
       }
@@ -1359,37 +1647,21 @@ export class CollaborationClient {
         return;
       }
       case "asset-download-chunk": {
-        const download = this.downloads.get(message.requestId);
-        if (!download) {
-          return;
-        }
         let chunk: Uint8Array;
         try {
           chunk = base64ToBytes(message.data);
         } catch {
-          this.downloads.delete(message.requestId);
-          this.options.onAssetError?.(
-            `Invalid chunk for ${download.asset.name}`,
-            download.asset.name,
-          );
+          const download = this.downloads.get(message.requestId);
+          if (download) {
+            this.downloads.delete(message.requestId);
+            this.options.onAssetError?.(
+              `Invalid chunk for ${download.asset.name}`,
+              download.asset.name,
+            );
+          }
           return;
         }
-        const accepted = download.assembler.write(message.index, chunk);
-        if (!accepted.ok) {
-          this.downloads.delete(message.requestId);
-          this.options.onAssetError?.(
-            `Invalid chunk for ${download.asset.name}`,
-            download.asset.name,
-          );
-          return;
-        }
-        this.reportAssetProgress(
-          download.asset.name,
-          "download",
-          "progress",
-          download.assembler.receivedBytes,
-          download.asset.size,
-        );
+        this.acceptDownloadChunk(message.requestId, message.index, chunk);
         return;
       }
       case "asset-download-end": {
@@ -1453,6 +1725,12 @@ export class CollaborationClient {
       }
       case "asset-rejected": {
         if (message.requestId) {
+          const begin = this.beginWaiters.get(message.requestId);
+          if (begin) {
+            clearTimeout(begin.timer);
+            this.beginWaiters.delete(message.requestId);
+            begin.reject(new Error(message.message));
+          }
           this.uploads.delete(message.requestId);
           this.downloads.delete(message.requestId);
           this.rejectUpload(message.requestId, message.message);
@@ -1497,6 +1775,27 @@ export class CollaborationClient {
       default:
         return;
     }
+  }
+
+  /** Accept one decoded download chunk from the text or binary transport. */
+  private acceptDownloadChunk(requestId: string, index: number, chunk: Uint8Array): void {
+    const download = this.downloads.get(requestId);
+    if (!download) {
+      return;
+    }
+    const accepted = download.assembler.write(index, chunk);
+    if (!accepted.ok) {
+      this.downloads.delete(requestId);
+      this.options.onAssetError?.(`Invalid chunk for ${download.asset.name}`, download.asset.name);
+      return;
+    }
+    this.reportAssetProgress(
+      download.asset.name,
+      "download",
+      "progress",
+      download.assembler.receivedBytes,
+      download.asset.size,
+    );
   }
 
   /** Build a snapshot callback from the current collaboration state. */
@@ -1563,13 +1862,30 @@ export class CollaborationClient {
     let chart = await decryptJson(this.encryptionKey, rawChart);
     const ordered = [...transactions].sort((left, right) => left.revision - right.revision);
     for (const transaction of ordered) {
-      const changes = await decryptJson(this.encryptionKey, transaction.changes);
-      if (!Array.isArray(changes)) {
-        throw new Error("Encrypted transaction does not contain changes");
-      }
-      chart = applyChartChanges(chart, changes as ChartChange[], { force: true }).chart;
+      const changes = await this.decodeEncryptedChanges(
+        transaction.changes,
+        transaction.changesEncoding,
+      );
+      chart = applyChartChanges(chart, changes, { force: true }).chart;
     }
     return chart;
+  }
+
+  /** Decrypt one committed change envelope, expanding it when gzip-tagged. */
+  private async decodeEncryptedChanges(
+    payload: EncryptedPayload,
+    encoding?: string,
+  ): Promise<readonly ChartChange[]> {
+    if (!this.encryptionKey) {
+      throw new Error("Room key is unavailable");
+    }
+    const bytes = await decryptEnvelopeBytes(this.encryptionKey, payload);
+    const plaintext = encoding === "gzip" ? await gunzipBytes(bytes) : bytes;
+    const changes: unknown = JSON.parse(new TextDecoder().decode(plaintext));
+    if (!Array.isArray(changes)) {
+      throw new Error("Encrypted transaction does not contain changes");
+    }
+    return changes as ChartChange[];
   }
 
   /** Serialize decryption work so encrypted messages deliver in order. */
@@ -1594,6 +1910,8 @@ export class CollaborationClient {
       if (generation !== this.roomGeneration) {
         return;
       }
+      this.appliedRevision = revision;
+      this.appliedFingerprint = fingerprint;
       if (welcome) {
         this.emitSnapshotFromWelcome(welcome, chart, initial);
       } else {
@@ -1609,19 +1927,18 @@ export class CollaborationClient {
     message: Extract<ServerMessage, { type: "committed" }>,
     generation: number,
   ): Promise<void> {
-    if (!this.encryptionKey || !isEncryptedPayload(message.changes)) {
+    if (!isEncryptedPayload(message.changes)) {
       throw new Error("Encrypted commit is malformed");
     }
-    const changes = await decryptJson(this.encryptionKey, message.changes);
-    if (!Array.isArray(changes)) {
-      throw new Error("Encrypted commit does not contain changes");
-    }
+    const changes = await this.decodeEncryptedChanges(message.changes, message.changesEncoding);
     if (generation !== this.roomGeneration) {
       return;
     }
+    this.appliedRevision = message.revision;
+    this.appliedFingerprint = message.fingerprint;
     this.options.onCommitted?.({
       ...message,
-      changes: changes as ChartChange[],
+      changes,
     } as CommittedMessage);
   }
 
@@ -1656,7 +1973,7 @@ export class CollaborationClient {
     if (this.disposed || this.state.get().status !== "connected") {
       return;
     }
-    if (this.encrypted && !pending.wireChanges) {
+    if (pending.preparing || pending.wireChanges === undefined) {
       return;
     }
     // A reconnect invalidates every lease this connection held. Acquire the
@@ -1729,6 +2046,7 @@ export class CollaborationClient {
       transactionId: pending.transactionId,
       label: pending.label,
       changes,
+      ...(pending.wireEncoding ? { changesEncoding: pending.wireEncoding } : {}),
       affectedObjectIds: pending.affectedObjectIds,
       ...(pending.lockIds?.length ? { lockIds: pending.lockIds } : {}),
       ...(pending.undoOf ? { undoOf: pending.undoOf } : {}),
@@ -1738,6 +2056,27 @@ export class CollaborationClient {
   /** Include product metadata when this host has a bundled build version. */
   private appVersionFields(): { readonly appVersion?: string } {
     return this.appVersion ? { appVersion: this.appVersion } : {};
+  }
+
+  /** Advertise transport capabilities during create, join, and resume. */
+  private transportFields(): { readonly binaryChunks: boolean } {
+    return { binaryChunks: true };
+  }
+
+  /** Tell a resuming server which chart revision this client already applied. */
+  private resumeChartFields(): {
+    readonly hasChart?: boolean;
+    readonly revision?: number;
+    readonly fingerprint?: string;
+  } {
+    if (this.appliedRevision < 0 || !this.appliedFingerprint) {
+      return {};
+    }
+    return {
+      hasChart: true,
+      revision: this.appliedRevision,
+      fingerprint: this.appliedFingerprint,
+    };
   }
 
   /** Serialize and send one client message when the socket is open. */
@@ -1752,9 +2091,25 @@ export class CollaborationClient {
     }
   }
 
+  /** Send one binary asset chunk when the socket is open. */
+  private sendBinary(header: Record<string, unknown>, body: Uint8Array): void {
+    if (!this.socket || !this.socketOpen) {
+      return;
+    }
+    try {
+      this.socket.send(encodeBinaryAssetFrame(header, body));
+    } catch (error) {
+      this.handleSocketFailure(error);
+    }
+  }
+
   /** Reset every room-scoped field and invalidate in-flight decryptions. */
   private clearRoom(): void {
     this.roomGeneration += 1;
+    this.binaryChunks = false;
+    this.assetAdopt = false;
+    this.appliedRevision = -1;
+    this.appliedFingerprint = "";
     this.resumeToken = "";
     this.resumeTarget = null;
     this.invitedRoom = null;
@@ -1767,6 +2122,13 @@ export class CollaborationClient {
     this.encryptedCommitQueue = Promise.resolve();
     this.pendingOpenAction = null;
     this.outbox.clear();
+    for (const [requestId, waiter] of this.beginWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(
+        new Error("The collaboration room was closed before the asset transfer began."),
+      );
+      this.beginWaiters.delete(requestId);
+    }
     for (const [requestId, waiter] of this.uploadWaiters) {
       clearTimeout(waiter.timer);
       waiter.reject(new Error("The collaboration room was closed before the asset was accepted."));

@@ -133,6 +133,15 @@ export function registerEditActions() {
         if (visibility.atHome || !visibility.hasDocument) {
           return false;
         }
+        const readOnlyAction =
+          action.shortcutId === "edit.cut" ||
+          action.shortcutId === "edit.paste" ||
+          action.shortcutId === "edit.delete" ||
+          action.shortcutId === "edit.undo" ||
+          action.shortcutId === "edit.redo";
+        if (readOnlyAction && visibility.readOnly) {
+          return false;
+        }
         const history = getEditorHistorySnapshot();
         return action.shortcutId === "edit.undo"
           ? history.canUndo

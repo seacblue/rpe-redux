@@ -29,7 +29,7 @@ export function allocateScriptJudgeLine(options: {
   readonly name: string;
 }): ScriptJudgeLineAllocation | null {
   const session = getSelectionSession();
-  if (!session || session.readOnly) {
+  if (!session || !session.editable) {
     return null;
   }
   const lines = session.chart.judgeLineList ?? [];
@@ -60,7 +60,7 @@ export function allocateScriptJudgeLine(options: {
 /** Delete scratch lines that are still empty, highest index first. */
 export function releaseScriptJudgeLines(allocations: readonly ScriptJudgeLineAllocation[]): void {
   const session = getSelectionSession();
-  if (!session || session.readOnly) {
+  if (!session || !session.editable) {
     return;
   }
   const unique = new Map<string, ScriptJudgeLineAllocation>();

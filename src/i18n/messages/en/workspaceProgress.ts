@@ -27,4 +27,9 @@ export default {
   "workspace.collaboration.progress.status.publish": "Publishing the chart and assets",
   "workspace.collaboration.progress.status.ready": "Room ready",
   "workspace.collaboration.progress.aborted": "Room setup was aborted.",
+  "workspace.collaboration.memberActions": "Member actions for {name}",
+  "workspace.collaboration.changeAccess": "Change access",
+  "workspace.collaboration.changeAccessTitle": "Change access for {name}",
+  "workspace.collaboration.changeAccessField": "Access",
+  "workspace.collaboration.changeAccessSave": "Save access",
 };

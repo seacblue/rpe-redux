@@ -30,7 +30,11 @@ import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.t
 import { readCanvasPalette, type CanvasPalette } from "../../../canvas/palette.ts";
 import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
 import { drawEventCurve, drawEventCurveBatch, eventCurveStroke } from "./eventCurve.ts";
-import { drawEventOverlapFilter, drawEventSelectionFilters } from "./eventSelectionDrawing.ts";
+import {
+  drawEventOverlapFilter,
+  drawEventSelectionFilters,
+  drawRemoteEventSelectionFilters,
+} from "./eventSelectionDrawing.ts";
 import {
   drawEventBar,
   drawMultiLineEventChrome,
@@ -233,6 +237,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     }
     const ranges = cached.ranges[channel];
     const selectedRectangles: EventBarRectangle[] = [];
+    const remoteSelectedRectangles: EventBarRectangle[] = [];
     const selectedValues: SelectedEventValue[] = [];
     const drawCurves =
       this.appearance.eventCurvesEnabled !== false && shouldDrawEventCurves(entries.length, height);
@@ -260,6 +265,8 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
           top: vertical,
           bottom,
         });
+      } else if (entry.item.id !== undefined && this.remoteSelectedEventIds.has(entry.item.id)) {
+        remoteSelectedRectangles.push(rectangle);
       }
       context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity);
       drawEventBar(this, context, rectangle);
@@ -283,7 +290,8 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         drawEventCurve(context, entry.item, ranges.get(entry.index), rectangle, bottom, vertical);
       }
     }
-    drawEventSelectionFilters(context, selectedRectangles, palette);
+    drawEventSelectionFilters(context, selectedRectangles);
+    drawRemoteEventSelectionFilters(context, remoteSelectedRectangles, palette);
     context.strokeStyle = palette.eventStroke;
     context.lineWidth = 1;
     const formatValue = (value: unknown) =>
@@ -457,6 +465,7 @@ export function drawMultiLineEvents(
         this.viewport.gridCount,
       );
       const selectedRectangles: EventBarRectangle[] = [];
+      const remoteSelectedRectangles: EventBarRectangle[] = [];
       const selectedValues: SelectedEventValue[] = [];
       const lineSelection =
         session.multiEventSelection?.get(lineIndex) ??
@@ -500,6 +509,8 @@ export function drawMultiLineEvents(
           if (type !== "paintEvents") {
             selectedValues.push({ start: event.start, end: event.end, top, bottom });
           }
+        } else if (event.id !== undefined && this.remoteSelectedEventIds.has(event.id)) {
+          remoteSelectedRectangles.push(rectangle);
         }
         context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, lineOpacity);
         drawEventBar(this, context, rectangle, lineOpacity);
@@ -529,7 +540,8 @@ export function drawMultiLineEvents(
         }
       }
       context.globalAlpha = lineOpacity;
-      drawEventSelectionFilters(context, selectedRectangles, palette);
+      drawEventSelectionFilters(context, selectedRectangles);
+      drawRemoteEventSelectionFilters(context, remoteSelectedRectangles, palette);
       context.strokeStyle = palette.eventStroke;
       for (const [selected, curveEntries] of curveEntriesBySelection.entries()) {
         if (!curveEntries.length) {

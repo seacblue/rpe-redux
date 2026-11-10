@@ -28,6 +28,7 @@ import {
 import { CONTROL_TRACKS, type ControlTrackProperty } from "../chartTracks.ts";
 import { trajectoryHasRotation } from "../trajectory/curveTrajectory.ts";
 import { beatValue, isOrderedBeatRange } from "../timing/beat.ts";
+import { isPlaceholderLine } from "../streaming/chartDocument.ts";
 import type { JudgeLine, JudgeLineEvent, LineEventValue } from "../chart.ts";
 import type { ControlPoint } from "../chart.ts";
 import type { Chart } from "../chart.ts";
@@ -726,6 +727,25 @@ export class LineRuntime {
   }
 }
 
+/** A zeroed line state used while a paged line is not materialized. */
+const EMPTY_LINE_STATE: SampledLineState = Object.freeze({
+  x: 0,
+  y: 0,
+  rotation: 0,
+  alpha: 0,
+  scaleX: 1,
+  scaleY: 1,
+  color: Object.freeze([...DEFAULT_LINE_COLOR]) as unknown as number[],
+  text: "",
+  incline: 0,
+  floor: 0,
+}) as SampledLineState;
+
+/** Return the shared empty state for an unmaterialized line. */
+function emptyLineState(): SampledLineState {
+  return EMPTY_LINE_STATE;
+}
+
 /** Copy a sampled line state into `target`, or into a new object. */
 function copyLineState(
   target: SampledLineState | undefined,
@@ -937,6 +957,9 @@ export class SceneRuntime {
     const previousById = this.runtimeById;
     this.runtimeById = new Map();
     this.lines = sourceLines.map((line) => {
+      if (isPlaceholderLine(line)) {
+        return undefined as unknown as LineRuntime;
+      }
       let runtime = this.cache.get(line);
       if (!runtime) {
         const previous = typeof line.id === "string" ? previousById.get(line.id) : undefined;
@@ -998,6 +1021,11 @@ export class SceneRuntime {
       }
       status[index] = 1;
       const runtime = this.lines[index];
+      if (!runtime) {
+        states[index] = emptyLineState();
+        status[index] = 2;
+        return true;
+      }
       const line = runtime.line;
       const parent = lineParentIndex(line.father);
       const cached = this.lineSamples.get(runtime);
@@ -1037,8 +1065,11 @@ export class SceneRuntime {
       return true;
     };
     return (index: number) => {
-      if (!this.lines[index]) {
+      if (index < 0 || index >= this.lines.length) {
         throw new RangeError(`Line index out of range: ${index}`);
+      }
+      if (!this.lines[index]) {
+        return emptyLineState();
       }
       resolve(index);
       const state = states[index];
@@ -1073,6 +1104,10 @@ export class SceneRuntime {
     }
     const sample = this.sampler(seconds, target, this.sampleStatus);
     for (let index = 0; index < this.lines.length; index++) {
+      if (!this.lines[index]) {
+        target[index] = emptyLineState();
+        continue;
+      }
       sample(index);
     }
     this.sampledSeconds = seconds;

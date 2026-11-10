@@ -170,6 +170,15 @@
   border-left: 1px solid var(--border-subtle);
 }
 
+// Read-only drawers keep their list navigable, but the property forms and
+// footer mutations cannot start an edit the session would refuse.
+.inspector-drawer[data-readonly="true"] .drawer-split-properties,
+.inspector-drawer[data-readonly="true"] .line-tree-footer,
+.inspector-drawer[data-readonly="true"] .redux-footer-actions {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .inspector.is-drawer {
     transition: none;

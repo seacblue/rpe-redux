@@ -28,6 +28,7 @@ const definition: DrawerPaneDefinition = {
   body: TimingDrawerBody,
   requiresDocument: true,
   tutorial: GLOBAL_DRAWER_TUTORIALS.timing,
+  editsChart: true,
 };
 
 const dispose = registerDrawerPane(definition);

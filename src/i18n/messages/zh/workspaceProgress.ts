@@ -21,4 +21,9 @@ export default {
   "workspace.collaboration.progress.status.publish": "正在发布谱面与素材",
   "workspace.collaboration.progress.status.ready": "房间已就绪",
   "workspace.collaboration.progress.aborted": "已中止房间准备。",
+  "workspace.collaboration.memberActions": "{name} 的成员操作",
+  "workspace.collaboration.changeAccess": "修改权限",
+  "workspace.collaboration.changeAccessTitle": "修改 {name} 的权限",
+  "workspace.collaboration.changeAccessField": "权限",
+  "workspace.collaboration.changeAccessSave": "保存权限",
 };

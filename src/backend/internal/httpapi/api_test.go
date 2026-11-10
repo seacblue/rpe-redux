@@ -128,6 +128,17 @@ func TestAssetAPIStagesCommitsAndServesRanges(t *testing.T) {
 		t.Fatalf("range status = %d body = %q", response.StatusCode, body)
 	}
 
+	request, _ = http.NewRequest(http.MethodGet, server.URL+"/api/assets/"+asset.Hash, nil)
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || !bytes.Equal(body, payload) {
+		t.Fatalf("hash read status = %d body = %q", response.StatusCode, body)
+	}
+
 	request, err = http.NewRequest(
 		http.MethodPost,
 		server.URL+"/api/projects/"+project.ID+"/commit",

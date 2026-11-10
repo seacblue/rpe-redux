@@ -139,7 +139,7 @@ export function generateCurveEvents(
   session: EditorSession,
   options: GenerateOptions,
 ): GenerateResult {
-  if (session.readOnly || session.collaborationReadOnly) {
+  if (!session.editable) {
     throw new Error("curve.readonly");
   }
   if (options.endBeat <= options.startBeat) {

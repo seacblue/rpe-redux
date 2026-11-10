@@ -17,7 +17,12 @@ import {
   nearestVerticalPosition,
   strokeVerticalGrid,
 } from "../drawing/gridDrawing.ts";
-import { noteColor, readCanvasPalette, selectionHighlightColor } from "../../../canvas/palette.ts";
+import {
+  noteColor,
+  readCanvasPalette,
+  remoteSelectionHighlightColor,
+  selectionHighlightColor,
+} from "../../../canvas/palette.ts";
 import { canvasFont } from "../../../canvas/text.ts";
 import { TimelineLabelCuller } from "../drawing/labelCulling.ts";
 import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
@@ -44,6 +49,8 @@ interface NotePaintOptions {
   opacityMultiplier?: number;
   /** Render the note body in the editor's selected-note colour. */
   selected?: boolean;
+  /** Render the note body in the collaboration tint for another member's selection. */
+  remoteSelected?: boolean;
   /** Horizontal shear from the line's sampled skew, matching the preview. */
   shear?: number;
 }
@@ -63,11 +70,21 @@ export function drawNote(
   const shear = note.type === 2 ? 0 : (options.shear ?? 0);
   context.globalAlpha = alpha;
   const selected = options.selected === true;
-  const selectedTint = selected ? selectionHighlightColor(palette) : null;
-  context.fillStyle = selected ? palette.selectionHighlightStroke : noteColor(palette, note.type);
-  const tint = selectedTint ?? note.tint ?? note.color;
+  const remoteSelected = !selected && options.remoteSelected === true;
+  const selectionTint = selected
+    ? selectionHighlightColor(palette)
+    : remoteSelected
+      ? remoteSelectionHighlightColor(palette)
+      : null;
+  context.fillStyle =
+    selected || remoteSelected
+      ? selected
+        ? palette.selectionHighlightStroke
+        : palette.remoteSelectionHighlight
+      : noteColor(palette, note.type);
+  const tint = selectionTint ?? note.tint ?? note.color;
   const noteColorStyle = tint
-    ? { mode: selected ? ("selected" as const) : ("tint" as const), color: tint }
+    ? { mode: selected || remoteSelected ? ("selected" as const) : ("tint" as const), color: tint }
     : undefined;
   const batched =
     note.type === 2
@@ -226,6 +243,8 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
         (left, right) => Number(right.item.type === 2) - Number(left.item.type === 2),
       )) {
     const selected = session.selection.has(entry.index);
+    const remoteSelected =
+      !selected && entry.item.id !== undefined && this.remoteSelectedNoteIds.has(entry.item.id);
     const note = selected ? this.movedNote(entry.item) : entry.item;
     if (!isTimelineNoteRenderable(note)) {
       continue;
@@ -248,6 +267,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
       noteWidth,
       height,
       selected,
+      remoteSelected,
       shear: noteSkewShear(noteSkewAtHit(skewCurve, note)),
     });
     if (note.type === 2 && range.invalid) {
@@ -492,6 +512,8 @@ export function drawMultiLineNotes(
       const vertical = this.viewport.noteVerticalForLine(beat, lineIndex, height, "notes");
       const endVertical = this.viewport.noteVerticalForLine(endBeat, lineIndex, height, "notes");
       const selected = selectedSet.has(index);
+      const remoteSelected =
+        !selected && note.id !== undefined && this.remoteSelectedNoteIds.has(note.id);
       drawNote.call(this, context, {
         note,
         horizontal: rendered,
@@ -500,6 +522,7 @@ export function drawMultiLineNotes(
         noteWidth,
         height,
         selected,
+        remoteSelected,
         opacityMultiplier: lineOpacity,
         shear: noteSkewShear(noteSkewAtHit(skewCurve, note)),
       });

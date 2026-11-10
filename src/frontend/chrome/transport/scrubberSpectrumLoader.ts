@@ -42,7 +42,8 @@ const defaultAnalyze = (buffer: AnalysisBuffer, options: AnalysisOptions = ANALY
 /** Runs the task when the host is idle, or after a short timeout otherwise. */
 function scheduleIdle(task: () => void): void {
   if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(task);
+    // A busy first render must not starve the waveform forever.
+    window.requestIdleCallback(task, { timeout: 1000 });
   } else {
     setTimeout(task, 16);
   }

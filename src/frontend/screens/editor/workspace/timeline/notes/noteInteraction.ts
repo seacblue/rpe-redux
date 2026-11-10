@@ -364,6 +364,11 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       session.selection.size > 0 ||
       [...session.multiLineSelection.values()].some((selection) => selection.size > 0);
     session.selectionMode = !hasSelection ? "none" : event.ctrlKey ? "multi" : "single";
+    if (!session.editable) {
+      session.notify();
+      this.changed();
+      return;
+    }
     const hitVertical = (beat: number) =>
       session.multiLineActive
         ? this.viewport.noteVerticalForLine(beat, hit.lineIndex, this.notesCanvas.clientHeight)

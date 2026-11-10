@@ -8,7 +8,9 @@
  * canonical chart fingerprint, so replacing the document with equal content
  * does not mark it dirty.
  */
-import { normalizeChartObjectIds, type Chart } from "../../global/chart/chart.ts";
+import { normalizeChartObjectIds, type Chart, type JudgeLine } from "../../global/chart/chart.ts";
+import type { ChartDocument } from "../../global/chart/streaming/chartDocument.ts";
+import type { ChartHeader } from "../../global/chart/streaming/chartStreamTypes.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
 import { invalidateChartLocations } from "../transaction/locations.ts";
@@ -107,6 +109,11 @@ export interface HistoryCommand {
   afterSelection?: SelectionState;
   /** The edited beat span, when an owner supplied or the session derived one. */
   beatRange?: HistoryBeatRange;
+  /** Paged history snapshots: line references and header at each revision. */
+  beforeLines?: readonly JudgeLine[];
+  afterLines?: readonly JudgeLine[];
+  beforeHeader?: ChartHeader;
+  afterHeader?: ChartHeader;
 }
 
 /** A read-only history row for surfaces that render the undo and redo stacks. */
@@ -154,11 +161,16 @@ export class History {
   private discardedEntries: HistoryEntryDetail[];
   private entriesSnapshot: HistoryEntries;
   private readonly listeners = new Set<() => void>();
+  /** Paged document backing a streamed chart facade. */
+  readonly chartDocument?: ChartDocument;
 
   /** Starts from a normalized document with empty stacks. */
-  constructor(document: Chart, limit = 150) {
-    this.document = normalizeChartObjectIds(document);
-    this.savedFingerprint = chartFingerprint(this.document);
+  constructor(document: Chart, limit = 150, chartDocument?: ChartDocument) {
+    this.chartDocument = chartDocument;
+    this.document = chartDocument ? document : normalizeChartObjectIds(document);
+    this.savedFingerprint = chartDocument
+      ? chartDocument.fingerprint()
+      : chartFingerprint(this.document);
     this.undoStack = [];
     this.redoStack = [];
     this.limit = limit;
@@ -228,6 +240,40 @@ export class History {
     if (next === this.document) {
       return false;
     }
+    if (this.chartDocument) {
+      const beforeLines = [...(this.document.judgeLineList ?? [])];
+      // The facade's line array is mutated in place, so history keeps detached
+      // header snapshots rather than aliases of the current document.
+      const before = { ...this.document, judgeLineList: beforeLines } as Chart;
+      const beforeHeader = this.chartDocument.header;
+      const beforeFingerprint = this.chartDocument.fingerprint();
+      const afterLines = [...(next.judgeLineList ?? [])];
+      this.chartDocument.syncFromChart(next);
+      const after = { ...this.chartDocument.chart, judgeLineList: afterLines } as Chart;
+      invalidateChartLocations(this.chartDocument.chart);
+      const command: HistoryCommand = {
+        id: this.nextId,
+        at: Date.now(),
+        label,
+        before,
+        after,
+        bytes: options.estimatedBytes ?? Math.max(64, afterLines.length * 8),
+        beforeFingerprint,
+        afterFingerprint: this.chartDocument.fingerprint(),
+        affectedObjectIds: Object.freeze([...(metadata.affectedObjectIds ?? [])]),
+        issues: Object.freeze([...(metadata.issues ?? [])]),
+        origin: metadata.origin ? structuredClone(metadata.origin) : undefined,
+        recipe: metadata.recipe ? structuredClone(metadata.recipe) : undefined,
+        beforeLines,
+        afterLines,
+        beforeHeader,
+        afterHeader: this.chartDocument.header,
+        ...(options.beatRange ? { beatRange: Object.freeze({ ...options.beatRange }) } : {}),
+        ...selectionState,
+      };
+      this.pushCommand(command, this.chartDocument.chart);
+      return true;
+    }
     // Every committed chart is a persistence boundary; normalize ids here so
     // derived events (for example trajectory fragments) carry a stable identity.
     // The previous document lets unchanged line objects and notes keep their
@@ -258,13 +304,25 @@ export class History {
       ...(options.beatRange ? { beatRange: Object.freeze({ ...options.beatRange }) } : {}),
       ...selectionState,
     };
+    this.pushCommand(command);
+    return true;
+  }
+
+  /**
+   * Push one command, discard redo, trim, and publish the committed document.
+   *
+   * A paged session passes its live facade so history keeps the document object
+   * that owns the line slots, while the command retains detached snapshots for
+   * selective undo.
+   */
+  private pushCommand(command: HistoryCommand, liveDocument: Chart = command.after): void {
     // A new entry makes the redo branch unreachable. Drop its accounting
     // before trimming so it cannot evict valid undo entries.
     this.retainedBytes -= this.redoStack.reduce((sum, entry) => sum + entry.bytes, 0);
     this.redoStack = [];
     this.nextId += 1;
     this.undoStack.push(command);
-    this.retainedBytes += bytes;
+    this.retainedBytes += command.bytes;
     // The newest operation must remain undoable even if it alone exceeds the
     // byte budget; the budget is consequently soft for that one entry.
     while (
@@ -283,9 +341,8 @@ export class History {
         this.discardedEntries.splice(0, this.discardedEntries.length - retainedDiscardedLimit);
       }
     }
-    this.document = next;
+    this.document = liveDocument;
     this.notify();
-    return true;
   }
 
   /** Record a selection-only transition without marking the chart dirty. */
@@ -339,7 +396,12 @@ export class History {
       return false;
     }
     this.redoStack.push(command);
-    this.document = command.before;
+    if (this.chartDocument && command.beforeLines && command.beforeHeader) {
+      this.chartDocument.applyLineSnapshot(command.beforeLines, command.beforeHeader);
+      this.document = this.chartDocument.chart;
+    } else {
+      this.document = command.before;
+    }
     invalidateChartLocations(this.document);
     this.notify();
     return true;
@@ -352,7 +414,12 @@ export class History {
       return false;
     }
     this.undoStack.push(command);
-    this.document = command.after;
+    if (this.chartDocument && command.afterLines && command.afterHeader) {
+      this.chartDocument.applyLineSnapshot(command.afterLines, command.afterHeader);
+      this.document = this.chartDocument.chart;
+    } else {
+      this.document = command.after;
+    }
     invalidateChartLocations(this.document);
     this.notify();
     return true;
@@ -360,7 +427,10 @@ export class History {
 
   /** Marks a document as the saved baseline for dirty tracking. */
   markSaved(document: Chart = this.document): void {
-    this.savedFingerprint = chartFingerprint(document);
+    this.savedFingerprint =
+      this.chartDocument && document === this.document
+        ? this.chartDocument.fingerprint()
+        : chartFingerprint(document);
   }
   /** Marks the session as requiring an initial save. */
   markUnsaved(): void {
@@ -378,7 +448,7 @@ export class History {
    * commit gets the value the commit already derived.
    */
   fingerprint(): string {
-    return chartFingerprint(this.document);
+    return this.chartDocument ? this.chartDocument.fingerprint() : chartFingerprint(this.document);
   }
 
   /** Refreshes the read model and notifies subscribers after a transition. */

@@ -5,6 +5,7 @@
  * live here; the type-only module names no operations.
  */
 import type { Chart } from "../chart/chart.ts";
+import type { ChartDocument } from "../chart/streaming/chartDocument.ts";
 
 import { type LoadTask } from "./loading.ts";
 import type { AssetMap } from "./types.ts";
@@ -49,6 +50,8 @@ export const DOCUMENT_DISK_CHANGE_EVENT = "redux-document-disk-change";
 /** A chart selected for opening together with the document that will back it. */
 export interface OpenedCandidate {
   chart: unknown;
+  /** Paged document backing a streamed native open. */
+  chartDocument?: ChartDocument;
   name: string;
   desktop: OpenedDocument;
   info?: Record<string, string>;

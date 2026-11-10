@@ -100,15 +100,17 @@ export function isEncryptedPayload(value: unknown): value is EncryptedPayload {
   );
 }
 
-/** Encrypt a JSON value into a fresh-IV envelope. */
-export async function encryptJson(key: CryptoKey, value: unknown): Promise<EncryptedPayload> {
+/** Encrypt bytes into a fresh-IV JSON envelope. */
+export async function encryptEnvelopeBytes(
+  key: CryptoKey,
+  bytes: Uint8Array,
+): Promise<EncryptedPayload> {
   const iv = new Uint8Array(E2E_IV_BYTES);
   globalThis.crypto.getRandomValues(iv);
-  const plaintext = new TextEncoder().encode(JSON.stringify(value));
   const ciphertext = await globalThis.crypto.subtle.encrypt(
     { name: "AES-GCM", iv: e2eBuffer(iv), additionalData: E2E_AAD },
     key,
-    e2eBuffer(plaintext),
+    e2eBuffer(bytes),
   );
   return {
     v: E2E_VERSION,
@@ -118,19 +120,33 @@ export async function encryptJson(key: CryptoKey, value: unknown): Promise<Encry
   };
 }
 
-/** Decrypt and parse one JSON envelope; throws when malformed or unauthentic. */
-export async function decryptJson(key: CryptoKey, payload: EncryptedPayload): Promise<unknown> {
+/** Decrypt one envelope into its bytes; throws when malformed or unauthentic. */
+export async function decryptEnvelopeBytes(
+  key: CryptoKey,
+  payload: EncryptedPayload,
+): Promise<Uint8Array> {
   if (!isEncryptedPayload(payload)) {
     throw new Error("Encrypted payload is malformed");
   }
   const iv = base64UrlDecode(payload.iv);
   const ciphertext = base64UrlDecode(payload.data);
-  const plaintext = await globalThis.crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: e2eBuffer(iv), additionalData: E2E_AAD },
-    key,
-    e2eBuffer(ciphertext),
+  return new Uint8Array(
+    await globalThis.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: e2eBuffer(iv), additionalData: E2E_AAD },
+      key,
+      e2eBuffer(ciphertext),
+    ),
   );
-  return JSON.parse(new TextDecoder().decode(plaintext));
+}
+
+/** Encrypt a JSON value into a fresh-IV envelope. */
+export async function encryptJson(key: CryptoKey, value: unknown): Promise<EncryptedPayload> {
+  return encryptEnvelopeBytes(key, new TextEncoder().encode(JSON.stringify(value)));
+}
+
+/** Decrypt and parse one JSON envelope; throws when malformed or unauthentic. */
+export async function decryptJson(key: CryptoKey, payload: EncryptedPayload): Promise<unknown> {
+  return JSON.parse(new TextDecoder().decode(await decryptEnvelopeBytes(key, payload)));
 }
 
 /** Encrypt one asset into `iv || ciphertext` so the server can hash/store it. */

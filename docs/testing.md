@@ -9,6 +9,7 @@ For everyday behavior checks, use the browser loop (`npm run dev`) and let hot r
 - [Suites at a glance](#suites-at-a-glance)
 - [Source gate](#source-gate)
 - [Unit suite](#unit-suite)
+- [Streaming chart pipeline](#streaming-chart-pipeline)
 - [Desktop smoke suite](#desktop-smoke-suite)
 - [Quick audio check](#quick-audio-check)
 - [Platform checks](#platform-checks)
@@ -74,6 +75,34 @@ Each file owns one contract and starts with a header comment naming it. Tests ar
 | `e2eJourneySmoke.mjs` | The smoke command-line entry point; `scripts/smoke.mjs` drives it. |
 
 Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and `codeCellTransport.test.mjs`. They skip when `src-tauri/resources/redux-service` is absent; build it with `npm run build:server` to include them. Both start the sidecar on ephemeral ports (`--port 0 --collab-port 0 --ai-port 0`), so they do not collide with a running desktop build. The rest of the unit suite does not touch the window or native APIs; the suites that start a room server use loopback sockets.
+
+### Streaming chart pipeline
+
+`src/test/chart/streaming/` owns the streaming contract:
+
+| File | Contract |
+| --- | --- |
+| `chartStreamCodec.test.mjs` | Length-prefixed frames survive arbitrary chunk boundaries; line batches preserve raw JSON. |
+| `chartStreaming.test.mjs` | Scanner ranges, line summaries, paged loading, frame parsing, fingerprint equality, and serialization round trips. |
+| `chartStreamingRenderEquivalence.test.mjs` | A paged scene matches the full scene for line state and visible notes, including static lines, judge-line events, and zero/low/negative note speeds. |
+| `chartFiles.test.mjs` | A single JSON file reaches the document loader with a streaming document. |
+| `chartLibraryStreaming.test.mjs` | Library summary + asset manifest + header/index frames become a paged document; line batches are fetched on demand. |
+| `chartPagedSession.test.mjs` | Paged edits, line insertion/removal, undo/redo, and save stream round trips. |
+
+The render-equivalence suite is the correctness gate for paging: it compares `SceneRuntime` sampling and `visibleNotes` against the full chart for deterministic tricky and randomized corpora. Do not replace it with a pixel snapshot; the scene data is the renderer's shared input.
+
+`chartPagedSession.test.mjs` covers paged edits, line insertion/removal, undo/redo, and save-stream round trips. The editor enables the paged session above 10,000 lines only when no Extension, Code Cell, or collaboration session needs the synchronous full chart; those features keep the eager path.
+
+Use the benchmark for scale comparisons, not as a unit test:
+
+```powershell
+npm run benchmark:streaming -- --lines 2000 --notes 20
+npm run benchmark:streaming -- --lines 10000 --notes 20 --visible-time 1
+```
+
+`--visible-time` controls the note pre-roll window used by the generated corpus. A large value (the default) makes every line a conservative paging candidate; a bounded value demonstrates the time-window working set. Both runs are useful: the first measures conservative correctness, the second measures paged loading.
+
+It reports whole-chart parse, scan/index, eager materialization, paged time-window loading, and chunked serialization with heap/RSS. The numbers are machine-specific; compare runs on the same host.
 
 ## Desktop smoke suite
 

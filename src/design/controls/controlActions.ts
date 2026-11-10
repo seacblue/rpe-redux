@@ -46,6 +46,20 @@ export function popupDialogBoxOf(element: Element): {
     : null;
 }
 
+/**
+ * Whether a control popup's anchor is still rendered and visible.
+ *
+ * A panel can be hidden or unmounted without changing the popup store, so the
+ * host and scroll handler both use this check before repositioning or closing.
+ */
+export function popupAnchorVisible(element: Element): boolean {
+  return (
+    element.isConnected &&
+    element.getClientRects().length > 0 &&
+    element.checkVisibility?.({ checkVisibilityCSS: true }) !== false
+  );
+}
+
 /** Measure an element as a viewport-relative popup anchor. */
 export function popupAnchorOf(element: Element): PopupAnchor {
   const box = element.getBoundingClientRect();
@@ -100,6 +114,22 @@ export function openControlColor(input: HTMLInputElement): void {
 }
 
 /**
+ * Toggles the colour picker for one native colour input.
+ *
+ * A second activation closes the open picker and returns focus to the input.
+ * Reopening the same control would replace the popup snapshot and replay its
+ * enter animation.
+ */
+export function toggleControlColor(input: HTMLInputElement): void {
+  const current = getPopup();
+  if (current?.kind === "color" && current.element === input) {
+    closeControlPopup(true);
+    return;
+  }
+  openControlColor(input);
+}
+
+/**
  * Handle the shared Escape contract for an open control popup.
  *
  * Returns `true` when the event was Escape and has been consumed, so callers
@@ -129,9 +159,14 @@ export function closeControlPopup(restoreFocus = false): void {
 /** Keeps an open panel aligned with its control during viewport movement. */
 export function repositionControlPopup(): void {
   const popup = getPopup();
-  if (popup) {
-    openPopup({ ...popup, anchor: popupAnchorOf(popup.element) });
+  if (!popup) {
+    return;
   }
+  if (!popupAnchorVisible(popup.element)) {
+    closeControlPopup();
+    return;
+  }
+  openPopup({ ...popup, anchor: popupAnchorOf(popup.element) });
 }
 
 let openPopupSequence = 0;

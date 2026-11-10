@@ -22,6 +22,11 @@ import {
 } from "../../../../../../core/global/document/resources.ts";
 import { attachExternalEffects } from "../../../../../../core/global/document/effects.ts";
 import { type AssetMap } from "../../../../../../core/global/document/types.ts";
+import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
+import { PAGED_PRELOAD_MAX_LINES } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
+import { extensionRuntime } from "../../../../../../core/extensions/extensionRuntime.ts";
+import { codeExecutionEnabled } from "../../../../../../core/codecell/enabled.ts";
+import { collaborationRoomDocument } from "../../../../../../core/collaboration/ui.ts";
 import { loadingPaint, type LoadTask } from "../../../../../../core/global/document/loading.ts";
 import { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import { ProjectImages } from "../../../../../../core/media/images.ts";
@@ -95,6 +100,7 @@ export interface CandidateLoaderDependencies {
     loadImages: boolean,
     diagnostics?: EditorCandidate["diagnostics"],
     readOnly?: boolean,
+    document?: ChartDocument,
   ) => void;
   setLibraryProject: (project: LibraryProjectRef | null) => void;
   currentChart: () => Chart;
@@ -113,38 +119,92 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
   return async (candidate: EditorCandidate, nextAssets: AssetMap, task: LoadTask) => {
     task.update("notes");
     await loadingPaint();
-    // Parsed candidates already passed the whole-chart gate in the parser or
-    // worker and carry their diagnostics, so the main thread does not need to
-    // strip, collect, or validate them again.
-    const parsedAndValidated =
-      candidate.diagnostics !== undefined &&
-      candidate.diagnostics.length === 0 &&
-      isChartObjectIdsNormalized(candidate.chart as Chart);
-    if (!parsedAndValidated) {
-      stripLegacyTrajectory(candidate.chart);
-      stripReduxExportVersion(candidate.chart);
+    const chartDocument = candidate.chartDocument;
+    let chart: Chart | undefined;
+    let chartDocumentForSession: ChartDocument | undefined;
+    let diagnostics: NonNullable<EditorCandidate["diagnostics"]> = [];
+    if (chartDocument) {
+      const initialLine = candidate.project?.viewState?.lineIndex ?? 0;
+      if (
+        Number.isInteger(initialLine) &&
+        initialLine >= 0 &&
+        initialLine < chartDocument.lineCount
+      ) {
+        await chartDocument.ensureAncestors(initialLine);
+      }
+      // Large documents keep their paged session; normal documents materialize
+      // eagerly so every existing surface sees a complete object graph.
+      // Extensions and collaboration still consume the synchronous full chart,
+      // so they force eager mode rather than seeing paged placeholders.
+      const pagedAllowed =
+        !extensionRuntime.hasEnabled() &&
+        !codeExecutionEnabled() &&
+        !collaborationRoomDocument.get();
+      if (chartDocument.lineCount > 10_000 && pagedAllowed) {
+        try {
+          await chartDocument.ensureTime(0, 60, { maxLines: PAGED_PRELOAD_MAX_LINES });
+          chart = chartDocument.chart;
+          chartDocumentForSession = chartDocument;
+        } catch {
+          // A conservative window exceeded its cap; fall through to eager mode.
+        }
+      }
+      if (!chartDocumentForSession) {
+        try {
+          await chartDocument.materializeAll();
+          // The session must hold the document facade, not the detached
+          // materialized snapshot, so later resource loading sees the same
+          // chart identity. The facade now contains every materialized line.
+          chart = chartDocument.chart;
+          // Keep the document for streamed saves and canonical fingerprints.
+          // Its worker/source is released with the session, not here.
+          chartDocumentForSession = chartDocument;
+        } catch (error) {
+          candidate.disposeDocument?.();
+          throw error;
+        }
+      }
+    } else {
+      // Parsed candidates already passed the whole-chart gate in the parser or
+      // worker and carry their diagnostics, so the main thread does not need to
+      // strip, collect, or validate them again.
+      const parsedAndValidated =
+        candidate.diagnostics !== undefined &&
+        candidate.diagnostics.length === 0 &&
+        isChartObjectIdsNormalized(candidate.chart as Chart);
+      if (!parsedAndValidated) {
+        stripLegacyTrajectory(candidate.chart);
+        stripReduxExportVersion(candidate.chart);
+      }
+      const collected = candidate.diagnostics ?? collectChartDiagnostics(candidate.chart);
+      diagnostics =
+        candidate.diagnostics ??
+        collected.map((entry) => ({
+          ...entry,
+          path: `${candidate.name}:${entry.path}`,
+        }));
+      const resolved = (
+        diagnostics.length ? sanitizeChartForReadOnly(candidate.chart) : candidate.chart
+      ) as Chart | null;
+      if (!resolved) {
+        throw new ChartLoadError(
+          diagnostics,
+          `${candidate.name}: ${t("model.chart.invalidDocument")}`,
+        );
+      }
+      if (!parsedAndValidated) {
+        assertChart(resolved);
+      }
+      await reportChartObjectProgress(resolved, task);
+      attachExternalEffects([{ name: candidate.name, chart: resolved }], nextAssets);
+      chart = resolved;
     }
-    const collected = candidate.diagnostics ?? collectChartDiagnostics(candidate.chart);
-    const diagnostics =
-      candidate.diagnostics ??
-      collected.map((entry) => ({
-        ...entry,
-        path: `${candidate.name}:${entry.path}`,
-      }));
-    const chart = (
-      diagnostics.length ? sanitizeChartForReadOnly(candidate.chart) : candidate.chart
-    ) as Chart | null;
     if (!chart) {
       throw new ChartLoadError(
         diagnostics,
         `${candidate.name}: ${t("model.chart.invalidDocument")}`,
       );
     }
-    if (!parsedAndValidated) {
-      assertChart(chart);
-    }
-    await reportChartObjectProgress(chart, task);
-    attachExternalEffects([{ name: candidate.name, chart }], nextAssets);
     deps.replaceChart(
       chart,
       candidate.name,
@@ -153,13 +213,22 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       false,
       diagnostics,
       Boolean(candidate.readOnly || diagnostics.length),
+      chartDocumentForSession,
     );
     deps.setLibraryProject(candidate.project ?? null);
 
     task.update("textures");
     await loadingPaint();
+    const textureChart = chartDocumentForSession?.index
+      ? {
+          ...chart,
+          judgeLineList: chartDocumentForSession.index.assetNames
+            .filter((name) => /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(name))
+            .map((name) => ({ Texture: name })),
+        }
+      : chart;
     await deps.images.load(
-      chart,
+      textureChart,
       deps.currentAssets(),
       deps.currentChartName(),
       candidate.info,

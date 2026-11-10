@@ -14,11 +14,15 @@
  * `data-drawer-expanded` so host styles and theme surfaces can read the drawer
  * without depending on the class names alone.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { useHoverReveal } from "../useHoverReveal.ts";
 import { drawerPaneDomId, useDrawerPaneHeld, type DrawerPaneDefinition } from "./drawerPanes.ts";
 import { mergeRefs } from "../../platform/mergeRefs.ts";
 import { onboardingAnchorRef } from "../../onboarding/anchors.ts";
+import {
+  getEditorVisibility,
+  subscribeToEditorVisibility,
+} from "../../../core/edit/state/visibility.ts";
 
 /** Pointer dwell before a collapsed drawer reveals its list column. */
 const EXPAND_DELAY_MS = 350;
@@ -30,6 +34,12 @@ export function DrawerPaneView({ pane }: { pane: DrawerPaneDefinition }) {
   const [expanded, setExpanded] = useState(true);
   const inspector = useRef<HTMLElement | null>(null);
   const heldOpen = useDrawerPaneHeld(pane.id);
+  const readOnly = useSyncExternalStore(
+    subscribeToEditorVisibility,
+    () => getEditorVisibility().readOnly,
+    () => getEditorVisibility().readOnly,
+  );
+  const locked = readOnly && pane.editsChart === true;
 
   // The pointer contract belongs to the whole inspector panel, not just the
   // body: the shared header is part of the same reveal area.
@@ -56,6 +66,8 @@ export function DrawerPaneView({ pane }: { pane: DrawerPaneDefinition }) {
       data-drawer-pane={pane.id}
       data-drawer-open="true"
       data-drawer-expanded={expanded ? "true" : "false"}
+      data-readonly={locked ? "true" : undefined}
+      aria-disabled={locked || undefined}
     >
       <pane.body />
     </div>

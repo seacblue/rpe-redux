@@ -14,6 +14,7 @@ const disposePanel = registerInspectorPanel({
   label: "workspace.history.title",
   icon: "clock",
   tutorial: INSPECTOR_TUTORIALS.history,
+  editsChart: true,
 });
 const disposeTool = registerInspectorTool({
   panelId: "history",

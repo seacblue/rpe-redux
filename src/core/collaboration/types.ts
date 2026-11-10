@@ -52,6 +52,10 @@ export interface MemberPresence {
   readonly timeline?: boolean;
   /** The timeline surface the pointer is over. */
   readonly timelineArea?: "notes" | "events";
+  /** Stable selected note ids, capped by the publisher. */
+  readonly selectedNoteIds?: readonly string[];
+  /** Stable selected event ids, capped by the publisher. */
+  readonly selectedEventIds?: readonly string[];
   readonly playheadBeat?: number;
   readonly updatedAt: number;
 }
@@ -84,9 +88,13 @@ export type ClientMessage =
       readonly type: "create";
       readonly profile: CollaborationProfile;
       readonly chart: unknown;
+      /** Set when `chart` is a base64 gzip JSON payload instead of an object. */
+      readonly chartEncoding?: "gzip";
       readonly fingerprint: string;
       /** Product version used to create the room, when the client reports it. */
       readonly appVersion?: string;
+      /** This client reads and writes binary asset chunks. */
+      readonly binaryChunks?: boolean;
       /** Encrypted rooms send an opaque chart envelope. */
       readonly encrypted?: boolean;
       /** Joining members skip host approval and become editors. */
@@ -101,6 +109,8 @@ export type ClientMessage =
       readonly profile: CollaborationProfile;
       /** Product version used by the joining client, when available. */
       readonly appVersion?: string;
+      /** This client reads and writes binary asset chunks. */
+      readonly binaryChunks?: boolean;
     }
   | {
       readonly type: "inspect-room";
@@ -114,6 +124,12 @@ export type ClientMessage =
       readonly token: string;
       /** Product version used by the reconnecting client, when available. */
       readonly appVersion?: string;
+      /** This client reads and writes binary asset chunks. */
+      readonly binaryChunks?: boolean;
+      /** The client already applied this exact revision without losing changes. */
+      readonly hasChart?: boolean;
+      readonly revision?: number;
+      readonly fingerprint?: string;
     }
   | {
       readonly type: "approve";
@@ -135,7 +151,10 @@ export type ClientMessage =
       readonly type: "transaction";
       readonly transactionId: string;
       readonly label: string;
-      readonly changes: readonly ChartChange[] | EncryptedPayload;
+      /** A gzip change batch travels as a base64 string. */
+      readonly changes: readonly ChartChange[] | EncryptedPayload | string;
+      /** Set when `changes` is a base64 gzip JSON payload. */
+      readonly changesEncoding?: "gzip";
       readonly affectedObjectIds: readonly string[];
       /** Leases the client holds; encrypted rooms cannot derive paths. */
       readonly lockIds?: readonly string[];
@@ -160,6 +179,8 @@ export type ClientMessage =
       readonly mime: string;
       /** Plaintext digest; the stored hash is over ciphertext in encrypted rooms. */
       readonly plaintextHash?: string;
+      /** Wait for a begin result so the server can reuse an existing blob. */
+      readonly adopt?: boolean;
     }
   | {
       readonly type: "asset-chunk";
@@ -183,6 +204,8 @@ export interface EncryptedTransaction {
   readonly actorId: string;
   readonly label: string;
   readonly changes: EncryptedPayload;
+  /** The encrypted plaintext was gzipped before encryption. */
+  readonly changesEncoding?: "gzip";
   readonly undoOf?: string;
   readonly fingerprint: string;
 }
@@ -213,7 +236,13 @@ export type ServerMessage =
       /** Product version advertised by this room, when available. */
       readonly appVersion?: string;
       readonly chart?: unknown;
+      /** Set when `chart` is a base64 gzip JSON payload instead of an object. */
+      readonly chartEncoding?: "gzip";
       readonly fingerprint: string;
+      /** The server answers binary asset chunks on this connection. */
+      readonly binaryChunks?: boolean;
+      /** The server reuses a stored blob after an `adopt` asset begin. */
+      readonly assetAdopt?: boolean;
       readonly maxMembers?: number;
       readonly members: readonly RoomMember[];
       readonly presence: readonly MemberPresence[];
@@ -240,6 +269,7 @@ export type ServerMessage =
     }
   | { readonly type: "room-closed"; readonly reason: string; readonly message?: string }
   | { readonly type: "members"; readonly members: readonly RoomMember[] }
+  | { readonly type: "member-left"; readonly memberId: string }
   | { readonly type: "room-settings"; readonly maxMembers: number; readonly invite?: string }
   | {
       readonly type: "permission";
@@ -260,7 +290,9 @@ export type ServerMessage =
       readonly transactionId: string;
       readonly actorId: string;
       readonly label: string;
-      readonly changes: readonly ChartChange[] | EncryptedPayload;
+      readonly changes: readonly ChartChange[] | EncryptedPayload | string;
+      /** Set when `changes` is a base64 gzip JSON payload. */
+      readonly changesEncoding?: "gzip";
       readonly undoOf?: string;
       readonly fingerprint: string;
     }
@@ -275,12 +307,19 @@ export type ServerMessage =
       readonly type: "snapshot";
       readonly revision: number;
       readonly chart: unknown;
+      /** Set when `chart` is a base64 gzip JSON payload instead of an object. */
+      readonly chartEncoding?: "gzip";
       readonly fingerprint: string;
       readonly encrypted?: boolean;
       readonly transactions?: readonly EncryptedTransaction[];
     }
   | { readonly type: "asset-manifest"; readonly assets: readonly RoomAsset[] }
   | { readonly type: "asset-accepted"; readonly asset: RoomAsset }
+  | {
+      readonly type: "asset-begin-result";
+      readonly requestId: string;
+      readonly adopted: boolean;
+    }
   | {
       readonly type: "asset-download-begin";
       readonly requestId: string;
@@ -343,8 +382,10 @@ export interface CollaborationState {
 
 /** Structural socket surface; the browser WebSocket satisfies it. */
 export interface CollaborationSocket {
-  send(data: string): void;
+  send(data: string | ArrayBuffer | ArrayBufferView): void;
   close(code?: number, reason?: string): void;
+  /** Browser sockets accept `arraybuffer` so binary chunks arrive as bytes. */
+  binaryType?: string;
   addEventListener(type: string, listener: (event: Event) => void): void;
   removeEventListener?(type: string, listener: (event: Event) => void): void;
 }

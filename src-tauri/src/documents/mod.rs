@@ -18,6 +18,7 @@ use tauri::{ipc::Request, AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 use zip::ZipArchive;
 
+mod chart_stream;
 mod library;
 mod media;
 mod open;
@@ -26,6 +27,7 @@ mod recovery_store;
 mod save;
 mod watch;
 
+pub use chart_stream::{open_document_stream, read_chart_line_chunk, read_chart_lines};
 pub use library::{import_library_project, inspect_library};
 pub use media::media_response;
 pub use open::{close_document, open_document, read_asset};
@@ -146,6 +148,8 @@ pub struct DocumentHost {
     pub(crate) saves: Mutex<HashMap<String, SaveSession>>,
     pub(crate) recoveries: Mutex<HashMap<String, RecoverySession>>,
     pub(crate) watchers: Mutex<HashMap<String, notify::RecommendedWatcher>>,
+    /// Random-access chart bytes and line ranges for streaming opens.
+    pub(crate) streams: Mutex<HashMap<String, chart_stream::ChartStreamDocument>>,
 }
 
 /// Open document and the resolved paths of its chart and referenced resources.
@@ -725,13 +729,25 @@ pub(crate) fn resolve_references(
     chart: &Value,
     authorized: &ExternalResources,
 ) -> Result<ResolvedReferences> {
+    resolve_named_references(path, resource_names(chart), authorized)
+}
+
+/// Resolve an explicit list of resource names against the chart's folder.
+///
+/// This is the streaming-open entry point: the header and line index already
+/// name every resource, so the chart object graph does not have to be rebuilt.
+pub(crate) fn resolve_named_references(
+    path: &Path,
+    names: impl IntoIterator<Item = String>,
+    authorized: &ExternalResources,
+) -> Result<ResolvedReferences> {
     let root = fs::canonicalize(path.parent().unwrap_or(Path::new("."))).map_err(error)?;
     let mut resolved = ResolvedReferences {
         allowed: HashMap::new(),
         external: HashMap::new(),
         rejected: Vec::new(),
     };
-    for name in resource_names(chart) {
+    for name in names {
         if reference_is_absolute(&name) {
             let candidate = match external_candidate(&name) {
                 Ok(candidate) => candidate,
