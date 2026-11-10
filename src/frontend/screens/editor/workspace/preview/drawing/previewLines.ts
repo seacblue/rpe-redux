@@ -293,6 +293,7 @@ function drawPreviewNoteEntry(
   highlight: boolean,
 ): boolean {
   const isHold = entry.note.type === 2;
+  const holdRotation = rotation + (noteIsAbove(entry.note) ? Math.PI : 0);
   if (surface.collectGeometry) {
     appendPreviewNoteHitArea(
       surface,
@@ -323,7 +324,7 @@ function drawPreviewNoteEntry(
         position.showHead,
         noteAlpha,
         noteColorStyle,
-        rotation + (noteIsAbove(entry.note) ? Math.PI : 0),
+        holdRotation,
       )
     : surface.noteBatch.addHead(
         surface.skin ?? null,
@@ -362,6 +363,7 @@ function drawPreviewNoteEntry(
     noteAlpha,
     tint,
     skewShear,
+    holdRotation,
   );
   if (restoreBatchTransform) {
     context.restore();
@@ -389,6 +391,7 @@ function paintPreviewNoteFallback(
   alpha: number,
   tint: number[] | undefined,
   skewShear: number,
+  holdRotation: number,
 ): void {
   context.save();
   context.globalAlpha = alpha;
@@ -402,6 +405,8 @@ function paintPreviewNoteFallback(
       : noteColor(palette, noteType);
   let drawnHold = false;
   if (noteType === 2) {
+    const axis = position.tail - position.y;
+    const holdAxisRotation = Math.abs(axis) < 1e-6 ? holdRotation : Math.atan2(0, -axis);
     drawnHold =
       surface.skin?.hold(
         context,
@@ -412,7 +417,7 @@ function paintPreviewNoteFallback(
         highlight,
         position.showHead,
         noteColorStyle,
-        Math.atan2(0, -position.tail + position.y),
+        holdAxisRotation,
       ) ?? false;
   }
   if (noteType === 2 && !drawnHold) {

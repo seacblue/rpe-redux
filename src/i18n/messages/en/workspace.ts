@@ -251,8 +251,6 @@ export default {
   "workspace.welcome.menu.label": "Chart menu",
 
   "workspace.collaboration.title": "Collaboration",
-  "workspace.collaboration.description":
-    "Create a room for this chart, or paste an invitation link to join.",
   "workspace.collaboration.defaultName": "Member",
   "workspace.collaboration.createTab": "Create room",
   "workspace.collaboration.joinTab": "Join room",
@@ -308,8 +306,6 @@ export default {
   "workspace.collaboration.sessionClaimFailed":
     "Could not verify the room session. Close other Redux windows and try again.",
   "workspace.collaboration.startingRoom": "Starting room…",
-  "workspace.collaboration.joinHint":
-    "Paste the invitation link. The host approves the join unless the room allows editors automatically.",
   "workspace.collaboration.joinInviteTitle": "Join this room?",
   "workspace.collaboration.joinInviteMembers": "People in this room",
   "workspace.collaboration.joinInviteCapacity": "{count} of {max} members",

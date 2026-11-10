@@ -5,6 +5,7 @@
 //! temporary `trycloudflare.com` HTTPS endpoint and reports the URL to the
 //! frontend.
 
+use serde::Serialize;
 use std::{
     io::{BufRead, BufReader, Read},
     path::PathBuf,
@@ -12,7 +13,7 @@ use std::{
     sync::{mpsc, Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Bundled tunnel client file name for the host platform.
 const CLOUDFLARED_FILE: &str = if cfg!(windows) {
@@ -22,6 +23,22 @@ const CLOUDFLARED_FILE: &str = if cfg!(windows) {
 };
 /// How long the client may take to report a public URL.
 const START_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Progress payload sent to the room setup dialog.
+#[derive(Clone, Serialize)]
+struct CollabProgressEvent {
+    stage: String,
+}
+
+/// Publish one tunnel stage without making the frontend poll process output.
+fn report_progress(app: &AppHandle, stage: &str) {
+    let _ = app.emit(
+        "redux-collab-progress",
+        CollabProgressEvent {
+            stage: stage.to_owned(),
+        },
+    );
+}
 
 /// Managed Cloudflare Tunnel process.
 pub struct TunnelProcess {
@@ -161,6 +178,7 @@ fn start(app: &AppHandle) -> Result<String, String> {
             .is_none()
         {
             if !guard.url.is_empty() {
+                report_progress(app, "reuse");
                 return Ok(guard.url.clone());
             }
         } else {
@@ -169,6 +187,7 @@ fn start(app: &AppHandle) -> Result<String, String> {
         }
     }
 
+    report_progress(app, "resolve");
     let binary = cloudflared_path(app)?;
     crate::storage::ensure_executable(&binary)
         .map_err(|error| format!("Cloudflare Tunnel client is not executable: {error}"))?;
@@ -200,6 +219,7 @@ fn start(app: &AppHandle) -> Result<String, String> {
     let mut child = command
         .spawn()
         .map_err(|error| format!("Cloudflare Tunnel failed to start: {error}"))?;
+    report_progress(app, "start");
     let (sender, receiver) = mpsc::channel::<Option<String>>();
     let log = Arc::new(Mutex::new(Vec::new()));
     if let Some(stream) = child.stdout.take() {
@@ -210,6 +230,7 @@ fn start(app: &AppHandle) -> Result<String, String> {
     }
     drop(sender);
 
+    report_progress(app, "wait");
     let deadline = Instant::now() + START_TIMEOUT;
     loop {
         if let Some(code) = child.try_wait().map_err(|error| error.to_string())? {
@@ -235,6 +256,7 @@ fn start(app: &AppHandle) -> Result<String, String> {
             Ok(Some(url)) => {
                 guard.child = Some(child);
                 guard.url = url.clone();
+                report_progress(app, "ready");
                 return Ok(url);
             }
             Ok(None) => {}
@@ -254,9 +276,16 @@ fn start(app: &AppHandle) -> Result<String, String> {
 /// Start the tunnel and return the public URL guests should use.
 #[tauri::command]
 pub async fn start_collab_tunnel(app: AppHandle) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || start(&app))
-        .await
-        .map_err(|error| error.to_string())?
+    let worker = app.clone();
+    tauri::async_runtime::spawn_blocking(move || match start(&worker) {
+        Ok(url) => Ok(url),
+        Err(error) => {
+            report_progress(&worker, "error");
+            Err(error)
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// Stop the temporary tunnel; the room server stays available on loopback.
