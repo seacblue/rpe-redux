@@ -684,7 +684,7 @@ export class RpeSkin {
     const headRect = headPicture ? this.bounds(headName, headPicture) : null;
     const headLength = showHead && headRect ? width * (headRect.height / headRect.width) : 0;
     const tailLength = endRect ? width * (endRect.height / endRect.width) : 0;
-    const layout = holdLayout(0, 0, 0, span, headLength, tailLength);
+    const layout = holdLayout(0, 0, 0, span, headLength, tailLength, { x: 0, y: 1 });
     context.save();
     context.translate(horizontal, head);
     context.rotate(axisRotation);

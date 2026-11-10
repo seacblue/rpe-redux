@@ -446,7 +446,8 @@ export class NoteBatch {
     }
     const headLength = head ? width * (textures.headRatio ?? 0) : 0;
     const tailLength = width * textures.endRatio;
-    const layout = holdLayout(headX, headY, tailX, tailY, headLength, tailLength);
+    const direction = { x: -Math.sin(rotation), y: Math.cos(rotation) };
+    const layout = holdLayout(headX, headY, tailX, tailY, headLength, tailLength, direction);
     const bodyAdded =
       layout.bodyLength <= 0.5 ||
       this.add(

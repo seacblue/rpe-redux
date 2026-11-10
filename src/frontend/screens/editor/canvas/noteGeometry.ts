@@ -44,9 +44,9 @@ export interface HoldUsefulInterval {
 /**
  * The painted span of a Hold.
  *
- * A Hold's caps fit inside its head-to-tail anchors: the head cap starts at the
- * head anchor and the tail cap ends at the tail anchor. The anchors are
- * therefore the outermost painted points, with no half-cap extension.
+ * A Hold's caps are centred half a cap beyond each anchor, so the painted
+ * span extends past the head by the head cap and past the tail by the tail
+ * cap. The anchors remain the interpolation endpoints for picking.
  */
 export function holdUsefulInterval(area: {
   readonly head: { x: number; y: number };
@@ -94,29 +94,29 @@ export function alignedTextureQuad(
 
 /** Fitted cap and body geometry for one Hold, in the anchors' coordinate space. */
 export interface HoldLayout {
-  /** Centre of the head cap after fitting it inside the anchor span. */
+  /** Centre of the head cap, half a cap beyond the head anchor. */
   readonly headCap: { x: number; y: number };
-  /** Centre of the tail cap after fitting it inside the anchor span. */
+  /** Centre of the tail cap, half a cap beyond the tail anchor. */
   readonly tailCap: { x: number; y: number };
-  /** Body start, meeting the head cap's inner edge. */
+  /** Body start at the head anchor. */
   readonly bodyHead: { x: number; y: number };
-  /** Body end, meeting the tail cap's inner edge. */
+  /** Body end at the tail anchor. */
   readonly bodyTail: { x: number; y: number };
-  /** Longitudinal cap lengths after fitting; zero when that cap is hidden. */
+  /** Longitudinal cap lengths outside the anchors; zero when hidden. */
   readonly headCapLength: number;
   readonly tailCapLength: number;
-  /** Distance between the body endpoints. */
+  /** Full head-to-tail span painted by the body. */
   readonly bodyLength: number;
 }
 
 /**
- * Fit a Hold's head cap, body, and tail cap inside its head-to-tail anchors.
+ * Resolve a Hold's cap anchors and full body span.
  *
- * The caps occupy the ends of the anchor span and the body fills the middle, so
- * the painted Hold never extends past the note's start or end. When the caps
- * together are longer than the span, both shrink proportionally. A Hold shorter
- * than half a CSS pixel has no room to fit them and keeps its authored caps on
- * the anchors instead.
+ * Each cap is centred half a cap length beyond its anchor, matching the
+ * recorder and the upstream Phira layout. The body covers the whole
+ * head-to-tail span, so overlapping or nested Holds cannot expose a short
+ * Hold's cap through the middle of a longer body. A zero-length Hold has no
+ * head-to-tail axis, so its caller supplies the fall direction for the caps.
  */
 export function holdLayout(
   headX: number,
@@ -125,37 +125,23 @@ export function holdLayout(
   tailY: number,
   headCapLength: number,
   tailCapLength = headCapLength,
+  fallbackDirection?: { readonly x: number; readonly y: number },
 ): HoldLayout {
   const deltaX = tailX - headX;
   const deltaY = tailY - headY;
   const length = Math.hypot(deltaX, deltaY);
-  const requestedHead = Math.max(0, headCapLength);
-  const requestedTail = Math.max(0, tailCapLength);
-  const requestedTotal = requestedHead + requestedTail;
-  if (length <= 0.5) {
-    return {
-      headCap: { x: headX, y: headY },
-      tailCap: { x: tailX, y: tailY },
-      bodyHead: { x: headX, y: headY },
-      bodyTail: { x: tailX, y: tailY },
-      headCapLength: requestedHead,
-      tailCapLength: requestedTail,
-      bodyLength: 0,
-    };
-  }
-  const scale = requestedTotal > length ? length / requestedTotal : 1;
-  const head = requestedHead * scale;
-  const tail = requestedTail * scale;
-  const unitX = deltaX / length;
-  const unitY = deltaY / length;
+  const head = Math.max(0, headCapLength);
+  const tail = Math.max(0, tailCapLength);
+  const unitX = length > 0 ? deltaX / length : (fallbackDirection?.x ?? 0);
+  const unitY = length > 0 ? deltaY / length : (fallbackDirection?.y ?? 0);
   return {
-    headCap: { x: headX + unitX * (head / 2), y: headY + unitY * (head / 2) },
-    tailCap: { x: tailX - unitX * (tail / 2), y: tailY - unitY * (tail / 2) },
-    bodyHead: { x: headX + unitX * head, y: headY + unitY * head },
-    bodyTail: { x: tailX - unitX * tail, y: tailY - unitY * tail },
+    headCap: { x: headX - unitX * (head / 2), y: headY - unitY * (head / 2) },
+    tailCap: { x: tailX + unitX * (tail / 2), y: tailY + unitY * (tail / 2) },
+    bodyHead: { x: headX, y: headY },
+    bodyTail: { x: tailX, y: tailY },
     headCapLength: head,
     tailCapLength: tail,
-    bodyLength: Math.max(0, length - head - tail),
+    bodyLength: length,
   };
 }
 
