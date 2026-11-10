@@ -28,6 +28,7 @@ import {
   type EncryptedPayload,
 } from "./e2e.ts";
 import { EMPTY_COLLABORATION_STATE } from "./ui.ts";
+import { versionMismatchCode, versionMismatchMessage } from "./version.ts";
 import {
   type ClientMessage,
   type CollaborationProfile,
@@ -1107,10 +1108,9 @@ export class CollaborationClient {
       case "welcome": {
         const roomVersion = message.appVersion?.trim() ?? "";
         if (roomVersion !== this.appVersion) {
-          const version = (value: string) => value || "unknown";
           this.failInitial(
-            `This room uses RPE Redux ${version(roomVersion)}; this client is ${version(this.appVersion)}. Both copies must use the same version.`,
-            "version_mismatch",
+            versionMismatchMessage(roomVersion, this.appVersion),
+            versionMismatchCode(roomVersion, this.appVersion),
           );
           return;
         }
@@ -1200,6 +1200,8 @@ export class CollaborationClient {
           "no_room",
           "bad_invite",
           "version_mismatch",
+          "version_mismatch_client_newer",
+          "version_mismatch_client_older",
         ].includes(message.reason);
         if (terminal) {
           this.manualClose = true;

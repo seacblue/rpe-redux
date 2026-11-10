@@ -338,6 +338,10 @@ export default {
   "workspace.collaboration.connectionLost": "联机连接已断开。",
   "workspace.collaboration.connectionFailed": "无法连接联机服务器。",
   "workspace.collaboration.versionMismatch": "双方必须使用相同版本的 RPE Redux 才能加入房间。",
+  "workspace.collaboration.versionNewerThanHost":
+    "你的 RPE Redux 版本比房主的新。可以请房主升级 RPE Redux，或改用房主的版本加入房间。",
+  "workspace.collaboration.versionOlderThanHost":
+    "你的 RPE Redux 版本比房主的旧，请更新 RPE Redux 后再加入房间。",
   "workspace.collaboration.hostMustClose": "房主不能离开房间，请关闭房间。",
   "workspace.collaboration.roomLimit": "这台设备的协作房间数量已达上限，请先关闭旧房间后重试。",
   "workspace.collaboration.roomFull": "房间人数已满。",

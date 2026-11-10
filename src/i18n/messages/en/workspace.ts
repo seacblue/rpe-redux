@@ -368,6 +368,10 @@ export default {
   "workspace.collaboration.connectionFailed": "Could not connect to the collaboration server.",
   "workspace.collaboration.versionMismatch":
     "Both devices must run the same RPE Redux version to join this room.",
+  "workspace.collaboration.versionNewerThanHost":
+    "Your RPE Redux version is newer than the host's. Ask the host to update RPE Redux, or use the host's version to join.",
+  "workspace.collaboration.versionOlderThanHost":
+    "Your RPE Redux version is older than the host's. Update RPE Redux to join this room.",
   "workspace.collaboration.hostMustClose":
     "The host cannot leave the room. Close the room instead.",
   "workspace.collaboration.roomLimit":

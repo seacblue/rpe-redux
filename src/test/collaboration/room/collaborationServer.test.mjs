@@ -601,7 +601,21 @@ test("handshakes need no protocol revision and require the same product version"
     );
     const rejected = await guest.next();
     assert.equal(rejected.type, "rejected");
-    assert.equal(rejected.reason, "version_mismatch");
+    assert.equal(rejected.reason, "version_mismatch_client_newer");
+
+    const olderGuest = await open(running.url);
+    olderGuest.socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId: welcome.roomId,
+        invite: welcome.invite,
+        profile: { name: "Older guest", color: "#0000ff" },
+        appVersion: "1.0.6",
+      }),
+    );
+    const olderRejected = await olderGuest.next();
+    assert.equal(olderRejected.type, "rejected");
+    assert.equal(olderRejected.reason, "version_mismatch_client_older");
 
     const inspector = await open(running.url);
     inspector.socket.send(
@@ -614,10 +628,11 @@ test("handshakes need no protocol revision and require the same product version"
     );
     const preview = await inspector.next();
     assert.equal(preview.type, "rejected");
-    assert.equal(preview.reason, "version_mismatch");
+    assert.equal(preview.reason, "version_mismatch_client_newer");
 
     host.socket.close();
     guest.socket.close();
+    olderGuest.socket.close();
     inspector.socket.close();
   } finally {
     await stopServer(running);

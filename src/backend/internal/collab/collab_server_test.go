@@ -42,10 +42,18 @@ func TestCollabVersionRequiresExactProductMatch(t *testing.T) {
 	if failure := collabVersionFailure(room, "1.0.7"); failure != nil {
 		t.Fatalf("same version = %v", failure)
 	}
-	for _, clientVersion := range []string{"1.0.6", "1.0.8", ""} {
-		failure := collabVersionFailure(room, clientVersion)
-		if failure == nil || failure.Code != "version_mismatch" {
-			t.Fatalf("client %q = %v", clientVersion, failure)
+	cases := []struct {
+		clientVersion string
+		code          string
+	}{
+		{"1.0.6", "version_mismatch_client_older"},
+		{"1.0.8", "version_mismatch_client_newer"},
+		{"preview", "version_mismatch"},
+	}
+	for _, testCase := range cases {
+		failure := collabVersionFailure(room, testCase.clientVersion)
+		if failure == nil || failure.Code != testCase.code {
+			t.Fatalf("client %q = %v", testCase.clientVersion, failure)
 		}
 	}
 	if failure := collabVersionFailure(&collabRoom{}, ""); failure != nil {
@@ -92,8 +100,11 @@ func TestCollabWebSocketNeedsNoProtocolVersionButRequiresSameProductVersion(t *t
 		})
 		return socket.readUntil(t, "rejected")
 	}
-	if rejected := join("1.0.8"); rejected["reason"] != "version_mismatch" {
-		t.Fatalf("join mismatch = %v", rejected)
+	if rejected := join("1.0.8"); rejected["reason"] != "version_mismatch_client_newer" {
+		t.Fatalf("newer join mismatch = %v", rejected)
+	}
+	if rejected := join("1.0.6"); rejected["reason"] != "version_mismatch_client_older" {
+		t.Fatalf("older join mismatch = %v", rejected)
 	}
 	matching := dialTestWS(t, httpServer.URL)
 	defer matching.close()
@@ -119,8 +130,11 @@ func TestCollabWebSocketNeedsNoProtocolVersionButRequiresSameProductVersion(t *t
 		})
 		return socket.readUntil(t, "rejected")
 	}
-	if rejected := resume("1.0.6"); rejected["reason"] != "version_mismatch" {
+	if rejected := resume("1.0.6"); rejected["reason"] != "version_mismatch_client_older" {
 		t.Fatalf("resume mismatch = %v", rejected)
+	}
+	if rejected := resume("1.0.8"); rejected["reason"] != "version_mismatch_client_newer" {
+		t.Fatalf("newer resume mismatch = %v", rejected)
 	}
 
 	inspect := func(version string) map[string]any {
@@ -134,7 +148,10 @@ func TestCollabWebSocketNeedsNoProtocolVersionButRequiresSameProductVersion(t *t
 		})
 		return socket.readUntil(t, "rejected")
 	}
-	if rejected := inspect("1.0.8"); rejected["reason"] != "version_mismatch" {
+	if rejected := inspect("1.0.8"); rejected["reason"] != "version_mismatch_client_newer" {
 		t.Fatalf("inspect mismatch = %v", rejected)
+	}
+	if rejected := inspect("1.0.6"); rejected["reason"] != "version_mismatch_client_older" {
+		t.Fatalf("older inspect mismatch = %v", rejected)
 	}
 }

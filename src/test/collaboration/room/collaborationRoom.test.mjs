@@ -73,14 +73,30 @@ test("a join and resume require the room's exact product version", () => {
   );
   assert.equal(created.ok, true);
   const { room, member: host } = created.value;
-  const mismatchedJoin = rooms.requestJoin(
+  const newerJoin = rooms.requestJoin(
     room.id,
     room.invite,
-    { name: "Guest", color: "#00ff00" },
+    { name: "Newer guest", color: "#00ff00" },
     "1.0.8",
   );
-  assert.equal(mismatchedJoin.ok, false);
-  assert.equal(mismatchedJoin.code, "version_mismatch");
+  assert.equal(newerJoin.ok, false);
+  assert.equal(newerJoin.code, "version_mismatch_client_newer");
+  const olderJoin = rooms.requestJoin(
+    room.id,
+    room.invite,
+    { name: "Older guest", color: "#0000ff" },
+    "1.0.6",
+  );
+  assert.equal(olderJoin.ok, false);
+  assert.equal(olderJoin.code, "version_mismatch_client_older");
+  const unparsableJoin = rooms.requestJoin(
+    room.id,
+    room.invite,
+    { name: "Unknown guest", color: "#ff0000" },
+    "preview",
+  );
+  assert.equal(unparsableJoin.ok, false);
+  assert.equal(unparsableJoin.code, "version_mismatch");
   const matchedJoin = rooms.requestJoin(
     room.id,
     room.invite,
@@ -89,9 +105,12 @@ test("a join and resume require the room's exact product version", () => {
   );
   assert.equal(matchedJoin.ok, true);
   assert.equal(matchedJoin.value.member.role, "editor");
-  const mismatchedResume = rooms.resume(room.id, host.token, "1.0.6");
-  assert.equal(mismatchedResume.ok, false);
-  assert.equal(mismatchedResume.code, "version_mismatch");
+  const newerResume = rooms.resume(room.id, host.token, "1.0.8");
+  assert.equal(newerResume.ok, false);
+  assert.equal(newerResume.code, "version_mismatch_client_newer");
+  const olderResume = rooms.resume(room.id, host.token, "1.0.6");
+  assert.equal(olderResume.ok, false);
+  assert.equal(olderResume.code, "version_mismatch_client_older");
   const matchedResume = rooms.resume(room.id, host.token, "1.0.7");
   assert.equal(matchedResume.ok, true);
 });

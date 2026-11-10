@@ -33,6 +33,7 @@ import {
 } from "./leases.ts";
 import { canPerform } from "./permissions.ts";
 import { deleteUndo, recordUndo, validateUndo } from "./undoLedger.ts";
+import { versionMismatchCode, versionMismatchMessage } from "./version.ts";
 import type {
   CollaborationProfile,
   CollaborationRole,
@@ -155,11 +156,10 @@ function versionMismatch(room: RoomRecord, clientVersion: string): RoomFailure |
   if (expected === actual) {
     return null;
   }
-  const label = (value: string) => value || "unknown";
   return {
     ok: false,
-    code: "version_mismatch",
-    message: `This room uses RPE Redux ${label(expected)}; this client is ${label(actual)}. Both copies must use the same version.`,
+    code: versionMismatchCode(expected, actual),
+    message: versionMismatchMessage(expected, actual),
   };
 }
 

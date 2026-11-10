@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -229,14 +230,81 @@ func collabVersionFailure(room *collabRoom, clientVersion string) *collabError {
 		}
 		return value
 	}
-	return collabFailure(
-		"version_mismatch",
-		fmt.Sprintf(
-			"This room uses RPE Redux %s; this client is %s. Both copies must use the same version.",
+	code := "version_mismatch"
+	message := fmt.Sprintf(
+		"This room uses RPE Redux %s; this client is %s. Both copies must use the same version.",
+		label(expected),
+		label(actual),
+	)
+	switch collabCompareVersions(expected, actual) {
+	case -1:
+		code = "version_mismatch_client_newer"
+		message = fmt.Sprintf(
+			"This room uses RPE Redux %s, but this client is newer (%s). Ask the host to update RPE Redux, or use the host's version to join.",
 			label(expected),
 			label(actual),
-		),
-	)
+		)
+	case 1:
+		code = "version_mismatch_client_older"
+		message = fmt.Sprintf(
+			"This room uses RPE Redux %s, but this client is older (%s). Update RPE Redux to join.",
+			label(expected),
+			label(actual),
+		)
+	}
+	return collabFailure(code, message)
+}
+
+// collabCompareVersions compares dotted numeric versions. A non-numeric or
+// empty value compares as equal so it keeps the generic exact-version rejection.
+func collabCompareVersions(left, right string) int {
+	parse := func(value string) ([]int, bool) {
+		numeric := strings.TrimSpace(value)
+		if len(numeric) > 0 && (numeric[0] == 'v' || numeric[0] == 'V') {
+			numeric = numeric[1:]
+		}
+		if at := strings.IndexAny(numeric, "-+"); at >= 0 {
+			numeric = numeric[:at]
+		}
+		if numeric == "" {
+			return nil, false
+		}
+		fields := strings.Split(numeric, ".")
+		parts := make([]int, 0, len(fields))
+		for _, field := range fields {
+			part, err := strconv.Atoi(field)
+			if err != nil {
+				return nil, false
+			}
+			parts = append(parts, part)
+		}
+		return parts, true
+	}
+	leftParts, leftOK := parse(left)
+	rightParts, rightOK := parse(right)
+	if !leftOK || !rightOK {
+		return 0
+	}
+	length := len(leftParts)
+	if len(rightParts) > length {
+		length = len(rightParts)
+	}
+	for index := 0; index < length; index++ {
+		a, b := 0, 0
+		if index < len(leftParts) {
+			a = leftParts[index]
+		}
+		if index < len(rightParts) {
+			b = rightParts[index]
+		}
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+	}
+	return 0
 }
 
 // Rooms owns every room and the shared asset blobs.

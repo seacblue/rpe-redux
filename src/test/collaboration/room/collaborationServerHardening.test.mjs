@@ -316,7 +316,7 @@ test("joins, resumes, and previews require the same product version", async () =
     );
     const joinRejected = await guest.next();
     assert.equal(joinRejected.type, "rejected");
-    assert.equal(joinRejected.reason, "version_mismatch");
+    assert.equal(joinRejected.reason, "version_mismatch_client_newer");
 
     guest.socket.send(
       JSON.stringify({
@@ -328,7 +328,7 @@ test("joins, resumes, and previews require the same product version", async () =
     );
     const previewRejected = await guest.next();
     assert.equal(previewRejected.type, "rejected");
-    assert.equal(previewRejected.reason, "version_mismatch");
+    assert.equal(previewRejected.reason, "version_mismatch_client_newer");
 
     const resume = await open(running.url);
     resume.socket.send(
@@ -341,7 +341,7 @@ test("joins, resumes, and previews require the same product version", async () =
     );
     const resumeRejected = await resume.next();
     assert.equal(resumeRejected.type, "rejected");
-    assert.equal(resumeRejected.reason, "version_mismatch");
+    assert.equal(resumeRejected.reason, "version_mismatch_client_older");
     resume.socket.close();
 
     guest.socket.send(
