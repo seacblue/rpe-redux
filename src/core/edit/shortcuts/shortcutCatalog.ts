@@ -157,31 +157,18 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     passive: true,
   },
   {
-    id: TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious,
-    category: SHORTCUT_CATEGORIES.editorNavigation.id,
-    title: "shortcuts.editor.previousJudgeLine",
-    scope: "editor",
-    defaults: [
-      { key: "WHEELUP", modifiers: ["CTRL"] },
-      { key: "WHEELUP", modifiers: ["CTRL", "SHIFT"] },
-    ],
-  },
-  {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.lineNext,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.nextJudgeLine",
     scope: "editor",
-    defaults: [
-      { key: "WHEELDOWN", modifiers: ["CTRL"] },
-      { key: "WHEELDOWN", modifiers: ["CTRL", "SHIFT"] },
-    ],
+    defaults: [{ key: "WHEELUP", modifiers: ["CTRL"] }],
   },
   {
-    id: TIMELINE_WHEEL_SHORTCUT_IDS.fastPrevious,
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
-    title: "shortcuts.editor.timelineFastBackward",
+    title: "shortcuts.editor.previousJudgeLine",
     scope: "editor",
-    defaults: [{ key: "WHEELDOWN", modifiers: ["SHIFT"] }],
+    defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.fastNext,
@@ -191,11 +178,11 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "WHEELUP", modifiers: ["SHIFT"] }],
   },
   {
-    id: TIMELINE_WHEEL_SHORTCUT_IDS.timePrevious,
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.fastPrevious,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
-    title: "shortcuts.editor.timelineBackward",
+    title: "shortcuts.editor.timelineFastBackward",
     scope: "editor",
-    defaults: [{ key: "WHEELDOWN" }],
+    defaults: [{ key: "WHEELDOWN", modifiers: ["SHIFT"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.timeNext,
@@ -205,14 +192,11 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "WHEELUP" }],
   },
   {
-    id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut,
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.timePrevious,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
-    title: "shortcuts.editor.timelineZoomOut",
+    title: "shortcuts.editor.timelineBackward",
     scope: "editor",
-    defaults: [
-      { key: "WHEELDOWN", modifiers: ["ALT"] },
-      { key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] },
-    ],
+    defaults: [{ key: "WHEELDOWN" }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn,
@@ -222,6 +206,16 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [
       { key: "WHEELUP", modifiers: ["ALT"] },
       { key: "WHEELUP", modifiers: ["ALT", "SHIFT"] },
+    ],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut,
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
+    title: "shortcuts.editor.timelineZoomOut",
+    scope: "editor",
+    defaults: [
+      { key: "WHEELDOWN", modifiers: ["ALT"] },
+      { key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] },
     ],
   },
 ];
