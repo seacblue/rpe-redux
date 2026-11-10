@@ -1778,6 +1778,16 @@ export class ExtensionRuntime {
       }
     }
   }
+
+  /** True when at least one package is currently enabled. */
+  hasEnabled(): boolean {
+    for (const record of this.records.values()) {
+      if (record.status === "enabled") {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 /** The application-wide runtime; host entry points share this instance. */

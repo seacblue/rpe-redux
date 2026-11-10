@@ -280,6 +280,7 @@ export function createDocumentRuntime(options: {
       clearSpectrum: timeline.scrubberSpectrumLoader.clear,
       hitSounds: preview.hitSounds,
       images: preview.images,
+      disposeChartDocument: () => getSession().chartDocument?.dispose?.(),
       clearLibraryProject: () => {
         assignLibraryProject(null);
       },

@@ -22,7 +22,7 @@
 
 这里的“完全替换”指**所有打开/保存入口都走同一套流式管线**：文件、库项目、PEZ、浏览器 File 都通过 `ChartSource` + frame parser；普通谱面只是在这条管线上选择“全量物化”策略，而不是保留另一条整文件读写路径。整图 `JSON.parse` / `JSON.stringify` 仅作为扩展钩子或异常输入的回退。
 
-> 实现状态（本分支）：核心扫描器、行索引、分块文档、帧协议、浏览器 worker、库流式 GET/commit、native `open_document_stream`/`read_chart_lines` 已落地；编辑器目前以流式加载 + eager 物化接入，paged 会话仍是下一阶段。正确性测试已覆盖整图/流式指纹、保存回放，以及分页场景与完整场景的 line state/visible-note 等价。
+> 实现状态（本分支）：核心扫描器、行索引、分块文档、帧协议、浏览器 worker、库流式 GET/commit、native `open_document_stream`/`read_chart_lines` 已落地。编辑器对超过 10,000 行的谱面启用 paged 会话（无已启用扩展、无 Code Cell、无协作房间时），按时间窗口加载行，行树只渲染活动行附近的窗口；其余谱面仍 eager 物化。paged 行级历史、保存回放、渲染等价性均有测试覆盖。
 
 ---
 

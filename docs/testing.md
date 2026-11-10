@@ -87,8 +87,11 @@ Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and `co
 | `chartStreamingRenderEquivalence.test.mjs` | A paged scene matches the full scene for line state and visible notes, including static lines, judge-line events, and zero/low/negative note speeds. |
 | `chartFiles.test.mjs` | A single JSON file reaches the document loader with a streaming document. |
 | `chartLibraryStreaming.test.mjs` | Library summary + asset manifest + chart frames become a paged document. |
+| `chartPagedSession.test.mjs` | Paged edits, line insertion/removal, undo/redo, and save stream round trips. |
 
 The render-equivalence suite is the correctness gate for paging: it compares `SceneRuntime` sampling and `visibleNotes` against the full chart for deterministic tricky and randomized corpora. Do not replace it with a pixel snapshot; the scene data is the renderer's shared input.
+
+`chartPagedSession.test.mjs` covers paged edits, line insertion/removal, undo/redo, and save-stream round trips. The editor enables the paged session above 10,000 lines only when no Extension, Code Cell, or collaboration session needs the synchronous full chart; those features keep the eager path.
 
 Use the benchmark for scale comparisons, not as a unit test:
 

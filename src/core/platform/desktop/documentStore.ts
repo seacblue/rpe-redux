@@ -12,6 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { beginLoading, loadingPaint } from "../../global/document/loading.ts";
 import { projectChartForExport } from "../../global/chart/exportProjection.ts";
+import { registeredChartDocument } from "../../global/chart/streaming/chartDocumentRegistry.ts";
 import { dialogDefaultPath, rememberDialogFile } from "./dialogPath.ts";
 import { openNativeChartStream } from "./chartStream.ts";
 import { AssetStore } from "../../media/assetStore.ts";
@@ -505,6 +506,13 @@ export class TauriDocumentStore {
   ): Promise<SaveResult | null> {
     const current = this.current,
       store = this.assets;
+    const chartDocument =
+      chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
+    if (chartDocument) {
+      // A native file export needs the complete projected chart. The library
+      // path keeps its streamed save; this fallback is only for file output.
+      chart = await chartDocument.materializeAll();
+    }
     // File documents are export containers even when saved in place. Project
     // editor-only noise-line settings, preserve the declared RPE version, and
     // write the Redux export marker before the native host serializes the chart;

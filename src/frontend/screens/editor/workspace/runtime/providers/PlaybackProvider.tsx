@@ -86,12 +86,35 @@ export function createPlaybackRuntime(options: {
 }): PlaybackRuntime {
   const { audio, hitSounds, realtimePreview } = options.preview;
   const chartSeconds = () => audio.time - options.offsetSeconds();
+  let preloadAt = Number.NEGATIVE_INFINITY;
+  let preloadPending = false;
+  /** Keep the paged line window ahead of a seek or playback start. */
+  const preloadAround = (seconds: number): void => {
+    const document = options.session.current.chartDocument;
+    if (!document || preloadPending || Math.abs(seconds - preloadAt) < 4) {
+      return;
+    }
+    preloadAt = seconds;
+    preloadPending = true;
+    void document
+      .ensureTime(seconds, 30, { maxLines: 100_000 })
+      .then(async () => {
+        await options.preview.hitSounds.prepare().catch(() => undefined);
+        options.session.current.notify();
+        options.invalidate();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        preloadPending = false;
+      });
+  };
   const currentBeat = () =>
     options.tempo().beat(chartSeconds(), options.session.current.line?.bpmfactor ?? 1);
   const playback = new EditorPlayback(audio, hitSounds, () => {
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
     options.timeline.viewport.setOrigin(currentBeat(), "seek");
     realtimePreview.effectsSince = chartSeconds();
+    preloadAround(chartSeconds());
     options.invalidate();
   });
   const playbackMetrics = new PlaybackMetrics();
@@ -272,8 +295,9 @@ export function createPlaybackRuntime(options: {
     cancelWheelSeek();
     const starting = !audio.playing && !playback.pending;
     options.timeline.viewport.setPlaybackActive(starting);
-    if (!audio.playing && !playback.pending) {
+    if (starting) {
       realtimePreview.effectsSince = chartSeconds() - 0.001;
+      preloadAround(chartSeconds() + 10);
     }
     await playback.toggle(options.session.current.chart);
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);

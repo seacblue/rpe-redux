@@ -339,6 +339,8 @@ export default {
   "editorPanels.linePanel.deleteGroupLabel": "Delete group",
   "editorPanels.linePanel.duplicateGroupName": "A group with this name already exists",
   "editorPanels.linePanel.emptyGroup": "This group has no judgement lines",
+  "editorPanels.linePanel.largeChartWindow":
+    "Large chart: showing {shown} of {total} lines. Use line jump to navigate.",
   "editorPanels.linePanel.folder.title": "Folder",
   "editorPanels.linePanel.folder.name": "Name",
   "editorPanels.linePanel.folder.bulkType": "Set type for all",

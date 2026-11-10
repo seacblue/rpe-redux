@@ -728,19 +728,22 @@ export class LineRuntime {
 }
 
 /** A zeroed line state used while a paged line is not materialized. */
+const EMPTY_LINE_STATE: SampledLineState = Object.freeze({
+  x: 0,
+  y: 0,
+  rotation: 0,
+  alpha: 0,
+  scaleX: 1,
+  scaleY: 1,
+  color: Object.freeze([...DEFAULT_LINE_COLOR]) as unknown as number[],
+  text: "",
+  incline: 0,
+  floor: 0,
+}) as SampledLineState;
+
+/** Return the shared empty state for an unmaterialized line. */
 function emptyLineState(): SampledLineState {
-  return {
-    x: 0,
-    y: 0,
-    rotation: 0,
-    alpha: 0,
-    scaleX: 1,
-    scaleY: 1,
-    color: [...DEFAULT_LINE_COLOR],
-    text: "",
-    incline: 0,
-    floor: 0,
-  };
+  return EMPTY_LINE_STATE;
 }
 
 /** Copy a sampled line state into `target`, or into a new object. */

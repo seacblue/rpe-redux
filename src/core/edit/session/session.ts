@@ -773,7 +773,7 @@ export class EditorSession extends EventTarget {
       this.selection = new Set(this.multiLineSelection.get(index) ?? []);
       this.eventSelection = new Set(this.multiEventSelection.get(index) ?? []);
     }
-    if (this.chartDocument && !this.chartDocument.isLoaded(index)) {
+    if (this.chartDocument) {
       void this.chartDocument
         .ensureAncestors(index)
         .then(() => this.notify())

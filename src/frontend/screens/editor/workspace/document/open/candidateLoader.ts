@@ -23,6 +23,9 @@ import {
 import { attachExternalEffects } from "../../../../../../core/global/document/effects.ts";
 import { type AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
+import { extensionRuntime } from "../../../../../../core/extensions/extensionRuntime.ts";
+import { codeExecutionEnabled } from "../../../../../../core/codecell/enabled.ts";
+import { collaborationRoomDocument } from "../../../../../../core/collaboration/ui.ts";
 import { loadingPaint, type LoadTask } from "../../../../../../core/global/document/loading.ts";
 import { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import { ProjectImages } from "../../../../../../core/media/images.ts";
@@ -116,7 +119,8 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
     task.update("notes");
     await loadingPaint();
     const chartDocument = candidate.chartDocument;
-    let chart: Chart;
+    let chart: Chart | undefined;
+    let chartDocumentForSession: ChartDocument | undefined;
     let diagnostics: NonNullable<EditorCandidate["diagnostics"]> = [];
     if (chartDocument) {
       const initialLine = candidate.project?.viewState?.lineIndex ?? 0;
@@ -127,19 +131,35 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       ) {
         await chartDocument.ensureAncestors(initialLine);
       }
-      // Phase 1 installs a plain eager snapshot. The document still avoids a
-      // whole-file JSON.parse and keeps line parsing out of the open path; the
-      // paged session path will consume the document directly in Phase 2.
-      let materialized;
-      try {
-        materialized = await chartDocument.materializeAll();
-      } finally {
-        candidate.disposeDocument?.();
+      // Large documents keep their paged session; normal documents materialize
+      // eagerly so every existing surface sees a complete object graph.
+      // Extensions and collaboration still consume the synchronous full chart,
+      // so they force eager mode rather than seeing paged placeholders.
+      const pagedAllowed =
+        !extensionRuntime.hasEnabled() &&
+        !codeExecutionEnabled() &&
+        !collaborationRoomDocument.get();
+      if (chartDocument.lineCount > 10_000 && pagedAllowed) {
+        try {
+          await chartDocument.ensureTime(0, 60, { maxLines: 100_000 });
+          chart = chartDocument.chart;
+          chartDocumentForSession = chartDocument;
+        } catch {
+          // A conservative window exceeded its cap; fall through to eager mode.
+        }
       }
-      chart = {
-        ...materialized,
-        judgeLineList: [...(materialized.judgeLineList ?? [])],
-      } as Chart;
+      if (!chartDocumentForSession) {
+        let materialized;
+        try {
+          materialized = await chartDocument.materializeAll();
+        } finally {
+          candidate.disposeDocument?.();
+        }
+        chart = {
+          ...materialized,
+          judgeLineList: [...(materialized.judgeLineList ?? [])],
+        } as Chart;
+      }
     } else {
       // Parsed candidates already passed the whole-chart gate in the parser or
       // worker and carry their diagnostics, so the main thread does not need to
@@ -175,6 +195,12 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       attachExternalEffects([{ name: candidate.name, chart: resolved }], nextAssets);
       chart = resolved;
     }
+    if (!chart) {
+      throw new ChartLoadError(
+        diagnostics,
+        `${candidate.name}: ${t("model.chart.invalidDocument")}`,
+      );
+    }
     deps.replaceChart(
       chart,
       candidate.name,
@@ -183,14 +209,22 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       false,
       diagnostics,
       Boolean(candidate.readOnly || diagnostics.length),
-      undefined,
+      chartDocumentForSession,
     );
     deps.setLibraryProject(candidate.project ?? null);
 
     task.update("textures");
     await loadingPaint();
+    const textureChart = chartDocumentForSession
+      ? {
+          ...chart,
+          judgeLineList: (chartDocumentForSession.index?.assetNames ?? [])
+            .filter((name) => /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(name))
+            .map((name) => ({ Texture: name })),
+        }
+      : chart;
     await deps.images.load(
-      chart,
+      textureChart,
       deps.currentAssets(),
       deps.currentChartName(),
       candidate.info,

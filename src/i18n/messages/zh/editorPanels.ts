@@ -326,6 +326,8 @@ export default {
   "editorPanels.linePanel.deleteGroupLabel": "删除分组",
   "editorPanels.linePanel.duplicateGroupName": "已存在同名分组",
   "editorPanels.linePanel.emptyGroup": "该分组暂无判定线",
+  "editorPanels.linePanel.largeChartWindow":
+    "大谱面：显示 {total} 行中的 {shown} 行。使用行跳转导航。",
   "editorPanels.linePanel.folder.title": "分组",
   "editorPanels.linePanel.folder.name": "名称",
   "editorPanels.linePanel.folder.bulkType": "批量设置类型",

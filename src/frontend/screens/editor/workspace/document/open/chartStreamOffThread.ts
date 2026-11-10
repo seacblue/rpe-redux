@@ -227,12 +227,12 @@ export async function openChartStreamFromChunks(
     worker.terminate();
     throw new Error(`Chart stream did not produce a header for ${name}`);
   }
-  return {
-    document: new ChartDocument({ header, index, provider }),
-    dispose() {
-      provider?.close();
-      worker.postMessage({ id: sessionId, kind: "close" });
-      worker.terminate();
-    },
+  const document = new ChartDocument({ header, index, provider });
+  const dispose = () => {
+    provider?.close();
+    worker.postMessage({ id: sessionId, kind: "close" });
+    worker.terminate();
   };
+  document.dispose = dispose;
+  return { document, dispose };
 }

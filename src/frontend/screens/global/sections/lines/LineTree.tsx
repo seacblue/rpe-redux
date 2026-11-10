@@ -127,6 +127,22 @@ export function LineTree({
     () => new Map(lines.map((line, index) => [lineTreeKey(lines, index), index])),
     [lines],
   );
+  // A paged chart can hold far more rows than a DOM list can mount. Show a
+  // window around the active line and leave navigation to line jump.
+  const LARGE_TREE_LIMIT = 400;
+  const largeTree = lines.length > 10_000;
+  const windowed = (indices: readonly number[]): readonly number[] => {
+    if (!largeTree || indices.length <= LARGE_TREE_LIMIT) {
+      return indices;
+    }
+    const active = indices.indexOf(session.lineIndex);
+    const center = active >= 0 ? active : 0;
+    const start = Math.max(
+      0,
+      Math.min(indices.length - LARGE_TREE_LIMIT, center - Math.floor(LARGE_TREE_LIMIT / 2)),
+    );
+    return indices.slice(start, start + LARGE_TREE_LIMIT);
+  };
 
   const selected = new Set<string>(folderSelected ? [] : selectedLineIds);
   if (!folderSelected && !selected.size) {
@@ -548,7 +564,7 @@ export function LineTree({
                 </header>
                 <div className="line-grid-cards">
                   {buckets[group]?.length ? (
-                    buckets[group].map((index) => {
+                    windowed(buckets[group]).map((index) => {
                       const line = lines[index];
                       if (!line) {
                         return null;
@@ -579,6 +595,14 @@ export function LineTree({
                       {t("editorPanels.linePanel.emptyGroup")}
                     </p>
                   )}
+                  {largeTree && (buckets[group]?.length ?? 0) > LARGE_TREE_LIMIT ? (
+                    <p className="line-list-group-empty">
+                      {t("editorPanels.linePanel.largeChartWindow", {
+                        shown: LARGE_TREE_LIMIT,
+                        total: buckets[group]?.length ?? 0,
+                      })}
+                    </p>
+                  ) : null}
                 </div>
               </FolderDropSection>
             ))}
@@ -668,7 +692,7 @@ export function LineTree({
                 collapseLabel={t("editorPanels.linePanel.collapseGroup", { name: label })}
               >
                 {buckets[group]?.length ? (
-                  buckets[group].map((index) => renderRow(index, lines[index], group))
+                  windowed(buckets[group]).map((index) => renderRow(index, lines[index], group))
                 ) : (
                   <EmptyState
                     variant="inline"
@@ -676,6 +700,14 @@ export function LineTree({
                     className="line-list-group-empty"
                   />
                 )}
+                {largeTree && (buckets[group]?.length ?? 0) > LARGE_TREE_LIMIT ? (
+                  <p className="line-list-group-empty">
+                    {t("editorPanels.linePanel.largeChartWindow", {
+                      shown: LARGE_TREE_LIMIT,
+                      total: buckets[group]?.length ?? 0,
+                    })}
+                  </p>
+                ) : null}
               </LineFolderSection>
             );
           })

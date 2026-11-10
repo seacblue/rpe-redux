@@ -33,35 +33,40 @@ export function playbackSnapshot(
   const sample = scene.sampler(seconds);
   return {
     seconds,
-    lines: scene.lines.map((runtime, lineIndex) => {
+    lines: scene.lines.flatMap((runtime, lineIndex) => {
+      if (!runtime) {
+        return [];
+      }
       const state = sample(lineIndex);
       const visible = new Set(
         runtime.visibleNotes(seconds, state, 1600 + Math.hypot(state.x, state.y)),
       );
-      return {
-        lineIndex,
-        state,
-        texture: runtime.line.Texture ?? "line.png",
-        notes: runtime.notes.map((entry, noteIndex) => {
-          const local = runtime.noteState(entry, state, seconds);
-          const head = noteWorld(state, local);
-          const tail = noteWorld(state, { x: local.x, y: local.tail });
-          return {
-            lineIndex,
-            noteIndex,
-            type: entry.note.type,
-            startSeconds: entry.start,
-            endSeconds: entry.end,
-            floor: entry.floor,
-            tailFloor: entry.tail,
-            distance: entry.floor - state.floor,
-            local,
-            head,
-            tail,
-            visible: visible.has(entry) && local.alpha > 0 && local.size !== 0,
-          };
-        }),
-      };
+      return [
+        {
+          lineIndex,
+          state,
+          texture: runtime.line.Texture ?? "line.png",
+          notes: runtime.notes.map((entry, noteIndex) => {
+            const local = runtime.noteState(entry, state, seconds);
+            const head = noteWorld(state, local);
+            const tail = noteWorld(state, { x: local.x, y: local.tail });
+            return {
+              lineIndex,
+              noteIndex,
+              type: entry.note.type,
+              startSeconds: entry.start,
+              endSeconds: entry.end,
+              floor: entry.floor,
+              tailFloor: entry.tail,
+              distance: entry.floor - state.floor,
+              local,
+              head,
+              tail,
+              visible: visible.has(entry) && local.alpha > 0 && local.size !== 0,
+            };
+          }),
+        },
+      ];
     }),
   };
 }

@@ -23,6 +23,8 @@ export interface DocumentReleaseOptions {
   hitSounds: Pick<HitSounds, "stop" | "onlyCurrentLine">;
   images: Pick<ProjectImages, "clear">;
   clearLibraryProject(): void;
+  /** Release a stream worker or source owned by the outgoing document. */
+  disposeChartDocument(): void;
 }
 
 /** Release resource owners before the current session is replaced. */
@@ -40,6 +42,7 @@ export function createDocumentRelease(options: DocumentReleaseOptions): () => vo
     options.hitSounds.stop();
     options.hitSounds.onlyCurrentLine = false;
     options.images.clear();
+    options.disposeChartDocument();
     options.clearLibraryProject();
   };
 }

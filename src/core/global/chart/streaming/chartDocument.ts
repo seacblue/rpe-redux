@@ -136,13 +136,22 @@ function visitLineObjects(line: JudgeLine, visit: (value: Record<string, unknown
   }
 }
 
+/** One line replacement between two document revisions. */
+export interface ChartLinePatch {
+  readonly index: number;
+  readonly before?: JudgeLine;
+  readonly after?: JudgeLine;
+}
+
 /** A paged or eager chart document. */
 export class ChartDocument {
-  readonly header: ChartHeader;
+  header: ChartHeader;
   readonly index: ChartIndex | null;
   readonly provider: ChartLineProvider;
-  readonly lineCount: number;
+  lineCount: number;
   readonly chart: Chart;
+  /** Optional release hook for a worker or source owned by the opener. */
+  dispose?: () => void;
   private readonly lines: JudgeLine[];
   private readonly slots: LineSlot[];
   private readonly tempo: TempoMap;
@@ -326,8 +335,59 @@ export class ChartDocument {
 
   /** Replace one line after an edit and mark it dirty. */
   replaceLine(index: number, line: JudgeLine): void {
-    this.installLine(index, this.normalizeLine(line), "dirty");
+    this.installLine(index, this.normalizeLine(line, true), "dirty");
     this.changed();
+  }
+
+  /**
+   * Restore a line snapshot from history.
+   *
+   * The array may contain placeholders for lines that were not materialized;
+   * their summaries are kept so a later page-in still knows where they belong.
+   */
+  applyLineSnapshot(lines: readonly JudgeLine[], header: ChartHeader): void {
+    this.setHeader(header);
+    this.lineCount = lines.length;
+    while (this.slots.length < lines.length) {
+      const index = this.slots.length;
+      this.slots.push({ summary: emptySummary(index), state: "missing", lastUsed: 0 });
+      this.lines.push(placeholderLine(emptySummary(index)));
+    }
+    if (this.slots.length > lines.length) {
+      this.slots.splice(lines.length);
+      this.lines.splice(lines.length);
+    }
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      const slot = this.slots[index];
+      if (isPlaceholderLine(line)) {
+        slot.line = undefined;
+        slot.state = "missing";
+        slot.raw = undefined;
+        slot.summary = { ...slot.summary, index };
+        this.lines[index] = line;
+        continue;
+      }
+      const normalized = this.normalizeLine(line, true);
+      slot.summary = summarizeChartLine(
+        normalized,
+        index,
+        this.tempo,
+        slot.summary.byteOffset,
+        slot.summary.byteLength,
+      );
+      this.installLine(index, normalized, "dirty");
+    }
+    this.changed();
+  }
+
+  /** Replace the header and line slots from a committed chart. */
+  syncFromChart(next: Chart): void {
+    if (next === this.chart) {
+      return;
+    }
+    const lines = next.judgeLineList ?? [];
+    this.applyLineSnapshot(lines, chartHeader(next, lines.length));
   }
 
   /** Insert a line at `index`, shifting later summaries and slots. */
@@ -510,11 +570,17 @@ export class ChartDocument {
     this.materialized = null;
   }
 
+  /** Update the header and mirror it onto the facade chart. */
+  private setHeader(header: ChartHeader): void {
+    this.header = header;
+    Object.assign(this.chart, headerValues(header));
+  }
+
   /** Assign stable ids to one line and its owned objects. */
-  private normalizeLine(line: JudgeLine): JudgeLine {
+  private normalizeLine(line: JudgeLine, reuseIds = false): JudgeLine {
     for (const object of this.lineObjects(line)) {
       const existing = object.id;
-      if (!isChartObjectId(existing) || this.usedIds.has(existing)) {
+      if (!isChartObjectId(existing) || (!reuseIds && this.usedIds.has(existing))) {
         object.id = this.identityFactory.next();
       }
       this.usedIds.add(object.id as string);

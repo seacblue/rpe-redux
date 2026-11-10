@@ -8,8 +8,9 @@
  * canonical chart fingerprint, so replacing the document with equal content
  * does not mark it dirty.
  */
-import { normalizeChartObjectIds, type Chart } from "../../global/chart/chart.ts";
+import { normalizeChartObjectIds, type Chart, type JudgeLine } from "../../global/chart/chart.ts";
 import type { ChartDocument } from "../../global/chart/streaming/chartDocument.ts";
+import type { ChartHeader } from "../../global/chart/streaming/chartStreamTypes.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
 import { invalidateChartLocations } from "../transaction/locations.ts";
@@ -108,6 +109,11 @@ export interface HistoryCommand {
   afterSelection?: SelectionState;
   /** The edited beat span, when an owner supplied or the session derived one. */
   beatRange?: HistoryBeatRange;
+  /** Paged history snapshots: line references and header at each revision. */
+  beforeLines?: readonly JudgeLine[];
+  afterLines?: readonly JudgeLine[];
+  beforeHeader?: ChartHeader;
+  afterHeader?: ChartHeader;
 }
 
 /** A read-only history row for surfaces that render the undo and redo stacks. */
@@ -234,6 +240,38 @@ export class History {
     if (next === this.document) {
       return false;
     }
+    if (this.chartDocument) {
+      const before = this.document;
+      const beforeLines = [...(before.judgeLineList ?? [])];
+      const beforeHeader = this.chartDocument.header;
+      const beforeFingerprint = this.chartDocument.fingerprint();
+      const afterLines = [...(next.judgeLineList ?? [])];
+      this.chartDocument.syncFromChart(next);
+      const after = this.chartDocument.chart;
+      invalidateChartLocations(after);
+      const command: HistoryCommand = {
+        id: this.nextId,
+        at: Date.now(),
+        label,
+        before,
+        after,
+        bytes: options.estimatedBytes ?? Math.max(64, afterLines.length * 8),
+        beforeFingerprint,
+        afterFingerprint: this.chartDocument.fingerprint(),
+        affectedObjectIds: Object.freeze([...(metadata.affectedObjectIds ?? [])]),
+        issues: Object.freeze([...(metadata.issues ?? [])]),
+        origin: metadata.origin ? structuredClone(metadata.origin) : undefined,
+        recipe: metadata.recipe ? structuredClone(metadata.recipe) : undefined,
+        beforeLines,
+        afterLines,
+        beforeHeader,
+        afterHeader: this.chartDocument.header,
+        ...(options.beatRange ? { beatRange: Object.freeze({ ...options.beatRange }) } : {}),
+        ...selectionState,
+      };
+      this.pushCommand(command);
+      return true;
+    }
     // Every committed chart is a persistence boundary; normalize ids here so
     // derived events (for example trajectory fragments) carry a stable identity.
     // The previous document lets unchanged line objects and notes keep their
@@ -264,13 +302,19 @@ export class History {
       ...(options.beatRange ? { beatRange: Object.freeze({ ...options.beatRange }) } : {}),
       ...selectionState,
     };
+    this.pushCommand(command);
+    return true;
+  }
+
+  /** Push one command, discard redo, trim, and publish the committed document. */
+  private pushCommand(command: HistoryCommand): void {
     // A new entry makes the redo branch unreachable. Drop its accounting
     // before trimming so it cannot evict valid undo entries.
     this.retainedBytes -= this.redoStack.reduce((sum, entry) => sum + entry.bytes, 0);
     this.redoStack = [];
     this.nextId += 1;
     this.undoStack.push(command);
-    this.retainedBytes += bytes;
+    this.retainedBytes += command.bytes;
     // The newest operation must remain undoable even if it alone exceeds the
     // byte budget; the budget is consequently soft for that one entry.
     while (
@@ -289,9 +333,8 @@ export class History {
         this.discardedEntries.splice(0, this.discardedEntries.length - retainedDiscardedLimit);
       }
     }
-    this.document = next;
+    this.document = command.after;
     this.notify();
-    return true;
   }
 
   /** Record a selection-only transition without marking the chart dirty. */
@@ -345,7 +388,12 @@ export class History {
       return false;
     }
     this.redoStack.push(command);
-    this.document = command.before;
+    if (this.chartDocument && command.beforeLines && command.beforeHeader) {
+      this.chartDocument.applyLineSnapshot(command.beforeLines, command.beforeHeader);
+      this.document = this.chartDocument.chart;
+    } else {
+      this.document = command.before;
+    }
     invalidateChartLocations(this.document);
     this.notify();
     return true;
@@ -358,7 +406,12 @@ export class History {
       return false;
     }
     this.undoStack.push(command);
-    this.document = command.after;
+    if (this.chartDocument && command.afterLines && command.afterHeader) {
+      this.chartDocument.applyLineSnapshot(command.afterLines, command.afterHeader);
+      this.document = this.chartDocument.chart;
+    } else {
+      this.document = command.after;
+    }
     invalidateChartLocations(this.document);
     this.notify();
     return true;
