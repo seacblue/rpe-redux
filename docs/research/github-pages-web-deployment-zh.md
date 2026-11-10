@@ -699,6 +699,8 @@ node test-subpath.mjs
 4. 把 Playwright 验证迁成仓库内回归测试，并补 schema 迁移测试。
 5. 真实 GitHub Pages 部署和 Firefox/Safari 手测。
 
+自动备份的类 Git 对象存储、squash、崩溃恢复和 gzip 设计见 [浏览器自动备份：类 Git 快照存储设计](browser-backup-git-design-zh.md)。
+
 ## 9. 来源
 
 ### 仓库
