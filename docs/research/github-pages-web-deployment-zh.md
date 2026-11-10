@@ -13,7 +13,7 @@
 | 环境识别 | 现有的 `isDesktop()`（检测 `__TAURI_INTERNALS__`）已经足够，不要用 User-Agent。普通浏览器标签页和 PWA 独立窗口都按 Web 宿主处理。 |
 | 窗口按钮 | 在 Web 宿主不渲染 `WindowControls`，并把标题栏右侧预留给窗口按钮的 138px 槽位归零。桌面构建保持不变。 |
 | 分辨率/全屏设置 | 给设置 schema 增加宿主能力字段（`hosts` 或 `requires`），在 `settingsFields()` 和 `searchSettings()` 两处过滤。只隐藏 `window-display-mode`、`window-resolution` 不够，更新、文件、运行时端口、扩展安装等桌面项也应一起审计。 |
-| 后端选型 | 不选 IndexedDB。用 SQLite 官方 WASM 构建（`@sqlite.org/sqlite-wasm`）+ OPFS `opfs-sahpool` VFS，在专用 Worker 中运行；跨标签页用 Web Locks 选主。需要把 Go 的 store 层和 HTTP 门面移植成 TypeScript 的 `LibraryBackend`，约 4–6 周。 |
+| 后端选型 | 不选 IndexedDB。用 SQLite 官方 WASM 构建（`@sqlite.org/sqlite-wasm`）+ OPFS `opfs-sahpool` VFS，在专用 Worker 中运行；跨标签页用 Web Locks 选主。需要把 Go 的 store 层和 HTTP 门面移植成 TypeScript 的 `LibraryBackend`，约 4–6 周。最小验证已通过，见第 7 节。 |
 | 持久化 | OPFS + `navigator.storage.persist()` + 定期备份/导出，是“尽力而为”的持久化；静态托管无法给出硬保证。硬保证只有两种：服务端 SQLite，或用户自己持有的 `.sqlite` 文件。 |
 | GitHub Pages | 现有构建已经具备条件：`base: "./"`、生成 `.nojekyll`、`dist` 约 30 MB。加一个 Pages workflow 即可。不能设置 COOP/COEP，所以不要用需要 `SharedArrayBuffer` 的 `opfs` VFS。 |
 
@@ -528,6 +528,8 @@ GitHub Pages 不支持自定义响应头。因此：
 
 ### 阶段 1：SQLite 技术验证
 
+> 这一阶段已用一次性 spike 验证，结果见第 7 节；正式落地时仍需在仓库内补自动化测试。
+
 - 在独立分支加 `@sqlite.org/sqlite-wasm`。
 - 一个专用 Worker：`installOpfsSAHPoolVfs()` + 建 v1 schema + 插入/读取/删除。
 - 一个最小 `BrowserLibrary`：`list/get/create/commit` 四个方法。
@@ -571,7 +573,85 @@ GitHub Pages 不支持自定义响应头。因此：
 6. **协作/扩展/Code Cell 是否要在 Web 版保留**？这些是桌面 sidecar 的能力，Web 版首版建议关闭。
 7. **数据规模**：典型谱面的音乐/背景有多大？这决定是否需要分块 BLOB I/O 和更低的浏览器上限。
 
-## 7. 来源
+## 7. 实测记录（2026-11-10）
+
+这一节记录的是一次性技术验证，不是产品集成。验证代码放在仓库外的临时目录，未纳入提交。
+
+### 7.1 环境
+
+| 项          | 值                                                    |
+| ----------- | ----------------------------------------------------- |
+| OS          | Windows 11                                            |
+| 浏览器      | Microsoft Edge（Chromium，Playwright 启动，headless） |
+| Node        | 25.2.1                                                |
+| SQLite WASM | `@sqlite.org/sqlite-wasm` 3.54.1-build1               |
+| Go          | 1.25.3                                                |
+| 静态服务器  | 自写 Node HTTP server，不发送 COOP/COEP               |
+
+### 7.2 已验证
+
+| 验证 | 结果 |
+| --- | --- |
+| 无 COOP/COEP | `crossOriginIsolated === false`，`typeof SharedArrayBuffer === "undefined"`；`opfs-sahpool` 正常打开数据库 |
+| v1 schema | `PRAGMA user_version = 1`；projects/revisions/preferences/assets 等表创建成功 |
+| CRUD | create/list/get/commit 正常；`baseRevision` 过期时返回 `revision_conflict` |
+| 完整性 | `PRAGMA integrity_check` 返回 `ok` |
+| 刷新 | 页面 reload 后项目仍存在，revision 保留 |
+| 浏览器重启 | 关闭并重新启动同一 profile 后数据仍在 |
+| 多标签页 | 第二个标签页作为 follower 通过 BroadcastChannel 调用 leader；关闭 leader 后 follower 在 Web Lock 释放后接管 |
+| 子路径 | 在 `/repo/` 路径下加载，Worker、`sqlite3.wasm`、模块导入全部走相对路径 |
+| 导出 | `VACUUM INTO` + `pool.exportFile()` 生成 139,264 字节文件；SQLite header 正确 |
+| 桌面兼容 | 导出的 `.sqlite` 被 Go sidecar 通过 `/api/projects` 读取，项目和 chart 内容完整 |
+| 存储 API | `navigator.storage.estimate()` 返回约 10 GB quota；headless 下 `persist()` 返回 false |
+
+### 7.3 当前 Web 构建的基线探针
+
+把现有 `dist` 以 `/repo/` 子路径静态托管（没有本地服务），用同一浏览器加载：
+
+- 页面能挂载，首页显示 “The chart library is unavailable / The local service is not running”。
+- 右上角仍有 3 个窗口按钮（最小化/最大化/关闭），容器宽 138px，标题栏右内边距 150px。
+- 设置 → General → Interface 仍显示 `window-display-mode` 和 `window-resolution`；搜索能命中。
+- 首次运行会弹出 onboarding 选择对话框；关闭后界面可交互。
+
+这验证了第 1 节的判断：当前 Web 构建缺的不是“能不能渲染”，而是宿主裁剪和谱面库后端。
+
+### 7.4 没有验证
+
+- Firefox、Safari、移动端。
+- 大资源：没有测试 256 MB 音乐/背景的内存峰值和 BLOB 分块。
+- 崩溃/强杀：只测了正常关闭标签页，没有测事务中途杀进程。
+- 配额耗尽、无痕模式、Safari ITP 清理。
+- 真实 GitHub Pages 部署；只用了本地静态服务器和 `/repo/` 子路径模拟。
+- 生产集成：没有把 spike 接进 `LocalLibrary`，也没有改产品代码。
+
+### 7.5 复现方式
+
+验证目录（一次性，未提交）：
+
+```text
+C:\Users\Administrator\AppData\Local\Temp\opencode\sqlite-pages-spike
+```
+
+关键文件：
+
+- `public/db.worker.mjs`：`opfs-sahpool` + v1 schema + CRUD/导出 RPC。
+- `public/main.mjs`：Web Locks 选主 + BroadcastChannel 转发。
+- `server.mjs`：无 COOP/COEP 的静态服务器，支持子路径。
+- `test-solo.mjs`、`test-multi.mjs`、`test-subpath.mjs`：Playwright 验证。
+- `spike-export.db`：导出的 SQLite 文件。
+
+运行：
+
+```powershell
+cd C:\Users\Administrator\AppData\Local\Temp\opencode\sqlite-pages-spike
+node test-solo.mjs
+node test-multi.mjs
+node test-subpath.mjs
+```
+
+依赖：`@sqlite.org/sqlite-wasm`、`playwright-core`，浏览器使用本机 Edge。
+
+## 8. 来源
 
 ### 仓库
 
