@@ -663,6 +663,7 @@ node test-subpath.mjs
 - [`src/core/global/library/service.ts`](../../src/core/global/library/service.ts)：Web standalone 打开 `BrowserLibrary`；桌面和 `npm run dev` 继续走 HTTP。
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
 - [`src/frontend/screens/welcome/homeProjectCards.ts`](../../src/frontend/screens/welcome/homeProjectCards.ts)：没有可用 URL 时不生成空封面/音频 URL。
+- [`src/frontend/screens/settings/web/WebStorageSettings.tsx`](../../src/frontend/screens/settings/web/WebStorageSettings.tsx)：Web-only 的“浏览器存储”页，显示配额和持久化状态，支持申请 persistent 和下载 `.sqlite` 备份。
 - 第 1 节的宿主裁剪：窗口按钮、设置行、设置页、更新徽标和标题栏拖拽都已按宿主隐藏或禁用。
 
 ### 8.2 已验证
@@ -678,7 +679,7 @@ node test-subpath.mjs
 - **单标签页。** 还没有接 Web Locks 选主；第二个标签页初始化 `opfs-sahpool` 会失败，表现为谱面库不可用。技术验证已经证明选主可行，但产品代码尚未合并。
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
-- **没有持久化 UI。** 还没有 `navigator.storage.persist()`、容量显示、OPFS 备份轮换、`.sqlite` 下载/恢复、配额错误和损坏恢复。
+- **持久化 UI 只完成一半。** 已有 `navigator.storage.persist()`、容量显示和 `.sqlite` 下载；还没有 OPFS 备份轮换、`.sqlite` 恢复/导入、配额错误和损坏恢复。
 - **没有迁移器。** 只写了 `user_version = 1`；后续 schema 升级需要事务迁移和迁移前备份。
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例。
 - **浏览器覆盖有限。** 只在 Edge/Chromium 验证；Firefox/Safari 无痕模式、配额和大资源仍未测。
@@ -687,7 +688,7 @@ node test-subpath.mjs
 ### 8.4 下一步
 
 1. Web Locks 选主 + `MessagePort` 传大资源，支持多标签页。
-2. 存储状态面板：persist、estimate、备份/恢复、配额错误。
+2. 补齐持久化：`.sqlite` 恢复/导入、OPFS 备份轮换、配额错误和损坏恢复。
 3. 按需资源 URL：只预取图片，音乐走字节/分块；首页封面限量预取。
 4. 把 Playwright 验证迁成仓库内回归测试，并补 schema 迁移测试。
 5. 真实 GitHub Pages 部署和 Firefox/Safari 手测。

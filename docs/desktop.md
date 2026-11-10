@@ -61,6 +61,8 @@ Disk snapshots stream files through SHA-256 instead of reading them whole, and p
 
 `npm run build` produces the platform packages and stages the portable folder at `release/RPE-Redux-portable/RPE-Redux/`. Windows produces the NSIS installer; Linux produces deb, rpm, and AppImage packages. `npm run build -- --portable` skips the installer. The staging step preserves `RPE-Redux/user-data`, so the library and settings survive a rebuild. `npm run build -- --debug` produces the debug executable used by `npm run smoke`. `npm run build -- --fast` uses thin LTO and parallel codegen for local acceptance; publish with the normal build. Local release builds check the executable's embedded entry page before staging the portable folder; cross-target builds require verification on the target host. `npm run build -- --help` lists every mode.
 
+`npm run build:web` produces the static web edition in `dist/`. GitHub Pages deploys that directory through `.github/workflows/pages.yml`; the web edition keeps its library in browser OPFS, not `user-data/redux.db`.
+
 Every desktop build stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cloudflare Tunnel client through `scripts/prepareCloudflared.mjs`. For offline builds, set `REDUX_FFMPEG_ARCHIVE` to the pinned archive before running the preparation script; the archive must match the selected platform and architecture plan, and its checksum is verified.
 
 ### Architectures

@@ -29,6 +29,8 @@ npm run check          # the source gate before you report work
 
 The browser loop uses `.scratch/dev/data/` as its profile, so experiments do not touch the desktop library. Native file dialogs, OS file drops, update installation, Extension installation, and the collaboration tunnel still need the desktop window. Export and chart import have browser paths; use `npm run dev:desktop` when the change touches the native host.
 
+`npm run dev:web` runs Vite without the Go sidecar. With no injected development runtime the page selects the browser SQLite library in `src/core/platform/browser/library/` and keeps charts in OPFS. Use it for the static web edition; `npm run build:web` produces the same page for GitHub Pages, and `.github/workflows/pages.yml` deploys `dist/`.
+
 `npm run dev:desktop` stages the Go sidecar and media helpers, then opens the Tauri window. Both loops keep one fixed port set per checkout in `.scratch/dev/ports.json`, so parallel checkouts and AI runs do not fight over the backend address. The first run chooses free ports below the Windows ephemeral range; later runs reuse them. Pass `--new-ports` to rotate the set, or pin one value with a flag:
 
 ```powershell
