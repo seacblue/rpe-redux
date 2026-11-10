@@ -106,13 +106,17 @@ export class HomeProjectCardsAdapter {
       return;
     }
     const origin = serverOrigin();
-    const libraryProjects = this.projects.map((project): HomeLibraryProject => ({
-      ...project,
-      ...(project.background
-        ? { coverUrl: projectAssetUrl(origin, project.id, project.background) }
-        : {}),
-      ...(project.song ? { audioUrl: projectAssetUrl(origin, project.id, project.song) } : {}),
-    }));
+    const libraryProjects = this.projects.map((project): HomeLibraryProject => {
+      const coverUrl = project.background
+        ? projectAssetUrl(origin, project.id, project.background)
+        : "";
+      const audioUrl = project.song ? projectAssetUrl(origin, project.id, project.song) : "";
+      return {
+        ...project,
+        ...(coverUrl ? { coverUrl } : {}),
+        ...(audioUrl ? { audioUrl } : {}),
+      };
+    });
     setHomeProjectCardsSnapshot({
       ...this.status,
       libraryProjects,

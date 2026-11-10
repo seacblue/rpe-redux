@@ -10,6 +10,8 @@ import { t } from "../../../i18n/index.ts";
 import { beginBackendTrace } from "../../diagnostics/backendTrace.ts";
 import { PREFERENCE_SECTIONS, preferences } from "../../state/preferences.ts";
 import { browserDevPorts, getRuntimePorts } from "../../platform/runtimePorts.ts";
+import { isDesktop } from "../../platform/environment.ts";
+import { cachedProjectAssetUrl } from "./assetUrlCache.ts";
 import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
 import type { LibraryViewState } from "./types.ts";
 import type { DropClassification } from "../document/dropIntake.ts";
@@ -18,6 +20,9 @@ export { LocalLibraryError, type RequestOptions } from "./http.ts";
 
 /** Default loopback origin of the local service. */
 export const DEFAULT_SERVER_ORIGIN = "http://127.0.0.1:47821";
+
+/** Synthetic origin used by the in-browser SQLite library. */
+export const BROWSER_LIBRARY_ORIGIN = "opfs://rpe-redux";
 
 /** Origin of the configured local Code Cell listener. */
 export function aiServiceOrigin(): string {
@@ -80,7 +85,7 @@ export interface LibraryProject extends LibraryProjectSummary {
 
 /** Stored revision without its chart document. */
 export interface LibraryRevisionSummary {
-  id: number;
+  id: string;
   projectId: string;
   label: string;
   createdAt: string;
@@ -143,6 +148,11 @@ export interface OccupancyConflict {
  * otherwise returns `DEFAULT_SERVER_ORIGIN`.
  */
 export function serverOrigin(): string {
+  // A static web page has no sidecar. Its browser library owns the same
+  // asset/URL contract through a synthetic origin.
+  if (!isDesktop() && !browserDevPorts()) {
+    return BROWSER_LIBRARY_ORIGIN;
+  }
   // The browser development server owns the worktree's service port. A stored
   // server preference belongs to the durable desktop profile and must not
   // redirect the development page to a different checkout's service.
@@ -181,6 +191,13 @@ const query = (values: Record<string, unknown>): string =>
  * constructing a client or querying the service.
  */
 export function projectAssetUrl(origin: string, id: string, name: string): string {
+  const cached = cachedProjectAssetUrl(origin, id, name);
+  if (cached) {
+    return cached;
+  }
+  if (origin === BROWSER_LIBRARY_ORIGIN) {
+    return "";
+  }
   const encoded = name
     .replaceAll("\\", "/")
     .split("/")

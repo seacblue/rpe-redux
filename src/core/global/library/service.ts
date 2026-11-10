@@ -7,6 +7,9 @@
 
 import { t } from "../../../i18n/index.ts";
 import { Backoff } from "../../runtime/backoff.ts";
+import { isDesktop } from "../../platform/environment.ts";
+import { browserDevPorts } from "../../platform/runtimePorts.ts";
+import { openBrowserLibrary } from "../../platform/browser/library/browserLibrary.ts";
 import { detectLocalLibrary, LocalLibrary } from "./client.ts";
 import { registerLibraryInstance } from "./instances.ts";
 
@@ -31,6 +34,25 @@ export function localServiceStatus(): LocalServiceStatus {
 export function localService({
   refresh = false,
 }: { refresh?: boolean } = {}): Promise<LocalService | null> {
+  // A production web page has no sidecar to probe. Open the OPFS-backed SQLite
+  // library in its place; the browser development loop keeps using Vite's
+  // injected local service above this branch.
+  if (!isDesktop() && !browserDevPorts()) {
+    if (refresh || !probe) {
+      status = "checking";
+      probe = openBrowserLibrary().then(
+        (library) => {
+          status = "available";
+          return { library, health: { ok: true } };
+        },
+        () => {
+          status = "unavailable";
+          return null;
+        },
+      );
+    }
+    return probe;
+  }
   if (refresh || !probe) {
     status = "checking";
     // Probe up to three times, then cache the answer until a refresh is requested.
