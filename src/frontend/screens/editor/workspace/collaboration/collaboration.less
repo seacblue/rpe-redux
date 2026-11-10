@@ -422,3 +422,44 @@
   margin: 0;
   color: var(--foreground-muted);
 }
+
+.collab-invite-identity {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+// Room setup mirrors the chart-loading surface: one status line, one bar, and
+// one percentage. The urgent action stays available so a transfer can be
+// aborted without waiting for completion.
+.collab-progress-dialog {
+  width: min(580px, calc(100vw - 32px));
+}
+
+.collab-progress-overall {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.collab-progress-stage,
+.collab-progress-percent {
+  margin: 0;
+  text-align: center;
+}
+
+.collab-progress-stage {
+  color: var(--foreground);
+  font-size: var(--type-label);
+  line-height: var(--line-body);
+}
+
+.collab-progress-percent {
+  color: var(--foreground-muted);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.collab-progress-error {
+  margin-top: var(--space-4);
+}

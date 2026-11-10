@@ -35,6 +35,7 @@ import { getDrawerState, subscribeDrawer } from "../../../../chrome/drawer/drawe
 import { preferences, PREFERENCE_SECTIONS } from "../../../../../core/state/preferences.ts";
 import {
   CollaborationClient,
+  type AssetTransferProgress,
   type CommittedMessage,
   type TransactionInput,
 } from "../../../../../core/collaboration/client.ts";
@@ -47,6 +48,17 @@ import {
   EMPTY_COLLABORATION_STATE,
   roomExitClosesRoom,
 } from "../../../../../core/collaboration/ui.ts";
+import {
+  collaborationProgress,
+  EMPTY_COLLABORATION_PROGRESS,
+  guestProgressReady,
+  markAssetDone,
+  markAssetError,
+  markPresentAssetsDone,
+  requiredRoomAssetRows,
+  startRoomProgress,
+  withAssetProgress,
+} from "../../../../../core/collaboration/progress.ts";
 import { openPane } from "../../inspector/controller.ts";
 import {
   applyChartChanges,
@@ -260,7 +272,13 @@ export interface CollaborationApi {
   readonly startingRoom: boolean;
   readonly joiningRoom: boolean;
   readonly pendingInviteLink: string;
+  /** Whether the editor has a document that can become the room chart. */
+  readonly canHost: boolean;
   updateSettings(next: Partial<CollaborationSettings>): void;
+  /** Stop an in-flight create/join, cancel transfers, and clear their buffers. */
+  abortRoomProgress(): void;
+  /** Hide a completed progress dialog without disturbing the room. */
+  dismissRoomProgress(): void;
   createRoom(
     override?: Partial<CollaborationSettings> & {
       readonly autoApproveEditor?: boolean;
@@ -484,8 +502,9 @@ interface HandlerSet {
   conflict: (conflict: Extract<ServerMessage, { type: "conflict" }>) => void;
   role: (role: CollaborationRole, reason?: string) => void;
   error: (message: string, code?: string) => void;
+  assetProgress: (progress: AssetTransferProgress) => void;
   assetReady: (asset: RoomAsset, bytes: Uint8Array) => void;
-  assetError: (message: string) => void;
+  assetError: (message: string, assetName?: string) => void;
   lockDenied: (conflicts: readonly RoomLock[]) => void;
   lockTimeout: () => void;
   transactionRejected: (
@@ -501,6 +520,27 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const runtime = useEditorRuntime();
   const documentRuntime = useDocumentRuntime();
   const [settings, setSettings] = useState<CollaborationSettings>(readSettings);
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  /** Merge and persist settings; the ref keeps sequential callers in sync. */
+  const updateSettings = (next: Partial<CollaborationSettings>) => {
+    const merged = { ...settingsRef.current, ...next };
+    settingsRef.current = merged;
+    setSettings(merged);
+    // An empty port means "use this launch's suggestion"; it is not a stored
+    // choice, so leave it out of the preference document.
+    const persisted: Record<string, unknown> = { ...merged };
+    if (!merged.lanPort.trim()) {
+      delete persisted.lanPort;
+    }
+    const raw = preferences.read(PREFERENCE_SECTIONS.collaboration, null);
+    const stored =
+      raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    preferences.write(PREFERENCE_SECTIONS.collaboration, { ...stored, ...persisted });
+  };
   const [recovery, setRecovery] = useState<unknown | null>(null);
   const [unsent, setUnsent] = useState<readonly UnsentChange[]>([]);
   const [pendingAssets, setPendingAssets] = useState<readonly string[]>([]);
@@ -531,6 +571,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const resuming = useRef(false);
   const resumeAttempted = useRef(false);
   const roomJoinPending = useRef(false);
+  const roomAttempt = useRef(0);
   const joinedRecoveryFingerprint = useRef<string | null>(null);
   const roomDocumentAdopted = useRef(false);
   const storedHostSession = useRef<StoredHostSession | null>(readHostSession());
@@ -546,6 +587,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     conflict: () => {},
     role: () => {},
     error: () => {},
+    assetProgress: () => {},
     assetReady: () => {},
     assetError: () => {},
     lockDenied: () => {},
@@ -610,6 +652,59 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     contextRef.current = { runtime, documentRuntime };
   }, [runtime, documentRuntime]);
 
+  /** Keep the current phase visible but stop auto-close and surface the reason. */
+  const failProgress = (detail: string): void => {
+    const current = collaborationProgress.get();
+    if (!current.visible) {
+      return;
+    }
+    collaborationProgress.set({ ...current, error: detail, ready: false });
+  };
+
+  /** Re-evaluate guest readiness after the chart or one asset settles. */
+  const refreshGuestProgress = (): void => {
+    const current = collaborationProgress.get();
+    if (!current.visible || current.role !== "guest" || current.error) {
+      return;
+    }
+    if (guestProgressReady(current)) {
+      if (!current.ready || current.phase !== "ready") {
+        collaborationProgress.set({ ...current, ready: true, phase: "ready" });
+      }
+      return;
+    }
+    if (current.chartReady && current.phase !== "assets") {
+      collaborationProgress.set({ ...current, phase: "assets" });
+    }
+  };
+
+  /** Record one verified guest asset and release the dialog when all arrived. */
+  const markGuestAssetDone = (name: string): void => {
+    const current = collaborationProgress.get();
+    if (!current.visible || current.role !== "guest") {
+      return;
+    }
+    collaborationProgress.set({
+      ...current,
+      assets: markAssetDone(current.assets, name),
+    });
+    refreshGuestProgress();
+  };
+
+  /** Keep a failed required asset visible so the dialog cannot auto-close. */
+  const markGuestAssetError = (name: string | undefined, message: string): void => {
+    const current = collaborationProgress.get();
+    if (!current.visible || current.role !== "guest") {
+      return;
+    }
+    collaborationProgress.set({
+      ...current,
+      ...(name ? { assets: markAssetError(current.assets, name) } : {}),
+      error: message,
+      ready: false,
+    });
+  };
+
   // A second launch receives the invitation as a process argument; the first
   // launch reads the pending value once the provider mounts.
   useEffect(() => {
@@ -629,9 +724,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       }
       if (visible.atHome) {
         const preview = await inspectRoomInvite(parsed).catch(() => null);
-        if (disposed || !(await requestRoomInviteConfirmation(preview))) {
+        const identity = await requestRoomInviteConfirmation(preview, {
+          name: settingsRef.current.displayName,
+          color: settingsRef.current.color,
+        });
+        if (disposed || !identity) {
           return;
         }
+        updateSettings({ displayName: identity.name, color: identity.color });
       }
       setPendingInviteLink(link);
       openPane("collaboration");
@@ -655,6 +755,44 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
   }, [visible.atHome]);
 
+  // The native tunnel reports resolve/start/wait/ready stages while the host
+  // waits for its public URL. Only the visible host bridge step consumes them.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<{ stage?: unknown }>("redux-collab-progress", (event) => {
+      if (disposed) {
+        return;
+      }
+      const stage = event.payload?.stage;
+      const current = collaborationProgress.get();
+      if (
+        typeof stage !== "string" ||
+        !current.visible ||
+        current.role !== "host" ||
+        current.phase !== "bridge"
+      ) {
+        return;
+      }
+      collaborationProgress.update({ detail: stage });
+    }).then(
+      (dispose) => {
+        unlisten = dispose;
+        if (disposed) {
+          dispose();
+        }
+      },
+      () => undefined,
+    );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   // The client is an external subscription, not render state. It is created
   // once and teardown is scoped to this provider.
   useEffect(() => {
@@ -667,8 +805,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onConflict: (conflict) => handlersRef.current.conflict(conflict),
       onRole: (role, reason) => handlersRef.current.role(role, reason),
       onError: (message, code) => handlersRef.current.error(message, code),
+      onAssetProgress: (progress) => handlersRef.current.assetProgress(progress),
       onAssetReady: (asset, bytes) => handlersRef.current.assetReady(asset, bytes),
-      onAssetError: (message) => handlersRef.current.assetError(message),
+      onAssetError: (message, assetName) => handlersRef.current.assetError(message, assetName),
       onLockDenied: (conflicts) => handlersRef.current.lockDenied(conflicts),
       onLockTimeout: () => handlersRef.current.lockTimeout(),
       onTransactionRejected: (transaction, message, code) =>
@@ -787,6 +926,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         setStartingRoom(false);
         setJoiningRoom(false);
       }
+      const progress = collaborationProgress.get();
+      if (next === "waiting" && progress.visible && progress.role === "guest") {
+        collaborationProgress.update({ phase: "waiting", error: "" });
+      }
       if ((next === "error" || next === "idle" || next === "offline") && roomJoinPending.current) {
         // A join that never produced a snapshot leaves the local document intact.
         roomJoinPending.current = false;
@@ -813,11 +956,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [stateCell]);
 
   /** Requests assets for the newly applied chart and publishes the pending list. */
-  const requestMissing = (chart: unknown): void => {
+  const requestMissing = (
+    chart: unknown,
+    onResolved?: (missing: readonly string[]) => void,
+  ): void => {
     void requestChartAssets(clientRef.current, contextRef.current.documentRuntime, chart).then(
       (missing) => {
         setPendingAssets(missing);
         collaborationPendingAssets.set(missing);
+        onResolved?.(missing);
       },
     );
   };
@@ -886,12 +1033,33 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     });
     setPendingAssets(pending);
     collaborationPendingAssets.set(pending);
+    const requiredAssets = requiredRoomAssetRows(chart, roomAssets);
+    collaborationProgress.set({
+      ...collaborationProgress.get(),
+      visible: true,
+      role: "guest",
+      phase: "assets",
+      chartReady: true,
+      ready: false,
+      error: "",
+      assets: requiredAssets,
+    });
     // A joined chart is a temporary document with no durable local identity.
     // A 32-byte random value gives it a 64-hex-character name no local chart
     // can collide with, even when the chart metadata or song name matches.
     document.adoptChart(chart, randomToken(32));
     roomDocumentAdopted.current = true;
-    void requestMissing(chart);
+    void requestMissing(chart, (missing) => {
+      const current = collaborationProgress.get();
+      if (!current.visible || current.role !== "guest" || current.error) {
+        return;
+      }
+      collaborationProgress.set({
+        ...current,
+        assets: markPresentAssetsDone(current.assets, missing),
+      });
+      refreshGuestProgress();
+    });
     // Future recovery writes belong to the pre-join draft, never the room copy.
     documents?.detachRecoveryTarget();
     if (documents?.current) {
@@ -965,6 +1133,24 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /** Abort the visible setup, stop transport, and release transfer buffers. */
+  const abortRoomProgress = () => {
+    if (!collaborationProgress.get().visible) {
+      return;
+    }
+    hostBusy.current = false;
+    clientRef.current?.abort();
+    roomAttempt.current += 1;
+    finishRoomExit();
+    collaborationProgress.set(EMPTY_COLLABORATION_PROGRESS);
+    showToast(t("workspace.collaboration.progress.aborted"), "info");
+  };
+
+  /** Hide a completed progress dialog without touching the live room. */
+  const dismissRoomProgress = useCallback(() => {
+    collaborationProgress.update({ visible: false });
+  }, []);
+
   // Callbacks read the latest editor closures; installing them after each
   // commit keeps the client independent of React's render cycle.
   useEffect(() => {
@@ -1022,9 +1208,17 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           assertChart(chart);
           parsed = normalizeChartObjectIds(chart);
         } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          if (collaborationProgress.get().visible) {
+            failProgress(
+              t("workspace.collaboration.invalidSnapshot", {
+                detail,
+              }),
+            );
+          }
           showNotice(
             t("workspace.collaboration.invalidSnapshot", {
-              detail: error instanceof Error ? error.message : String(error),
+              detail,
             }),
             "error",
           );
@@ -1045,6 +1239,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           }
           joinedRecoveryFingerprint.current = null;
           roomJoinPending.current = false;
+          const progress = collaborationProgress.get();
+          if (progress.visible && progress.role === "guest") {
+            collaborationProgress.update({ phase: "chart", error: "" });
+          }
           adoptJoinedRoomChart(parsed);
           return;
         }
@@ -1173,6 +1371,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         );
       },
       error: (message, code) => {
+        const progress = collaborationProgress.get();
+        if (progress.visible && !progress.ready) {
+          failProgress(connectionErrorText(message, code));
+        }
         if (code === "removed") {
           finishRoomExit();
           showNotice(connectionErrorText(message, code), "warning");
@@ -1224,6 +1426,21 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         }
         showNotice(connectionErrorText(message, code), "error");
       },
+      assetProgress: (event) => {
+        const current = collaborationProgress.get();
+        if (
+          !current.visible ||
+          current.role !== "guest" ||
+          !current.assets.some((asset) => asset.name === event.name)
+        ) {
+          return;
+        }
+        collaborationProgress.set({
+          ...current,
+          assets: withAssetProgress(current.assets, event),
+        });
+        refreshGuestProgress();
+      },
       assetReady: (asset, bytes) => {
         contextRef.current.documentRuntime?.adoptAsset(asset.name, bytes);
         setPendingAssets((current) => {
@@ -1231,8 +1448,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           collaborationPendingAssets.set(next);
           return next;
         });
+        markGuestAssetDone(asset.name);
       },
-      assetError: (message) => {
+      assetError: (message, assetName) => {
+        markGuestAssetError(assetName, message);
         showNotice(message, "error");
       },
       lockDenied: (conflicts) => {
@@ -1347,6 +1566,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (state.status !== "connected" || !state.roomId) {
       return;
     }
+    {
+      const progress = collaborationProgress.get();
+      if (progress.visible && progress.role === "host" && !progress.ready) {
+        collaborationProgress.update({ phase: "publishing", chartReady: true, error: "" });
+      }
+    }
     void publishChartAssets(
       clientRef.current,
       contextRef.current.documentRuntime,
@@ -1355,6 +1580,20 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     ).then((ok) => {
       if (!ok) {
         showToast(t("workspace.collaboration.assetUploadFailed"), "error");
+        const progress = collaborationProgress.get();
+        if (progress.visible && progress.role === "host") {
+          failProgress(t("workspace.collaboration.assetUploadFailed"));
+        }
+        return;
+      }
+      const progress = collaborationProgress.get();
+      if (progress.visible && progress.role === "host" && !progress.ready) {
+        collaborationProgress.set({
+          ...progress,
+          phase: "ready",
+          chartReady: true,
+          ready: true,
+        });
       }
     });
   }, [sessionRuntime, state.role, state.roomId, state.status]);
@@ -1535,22 +1774,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
   }, [runtime, stateCell]);
 
-  /** Merges and persists settings, omitting an unset LAN port. */
-  const updateSettings = (next: Partial<CollaborationSettings>) => {
-    const merged = { ...settings, ...next };
-    setSettings(merged);
-    // An empty port means "use this launch's suggestion"; it is not a stored
-    // choice, so leave it out of the preference document.
-    const persisted: Record<string, unknown> = { ...merged };
-    if (!merged.lanPort.trim()) {
-      delete persisted.lanPort;
-    }
-    const raw = preferences.read(PREFERENCE_SECTIONS.collaboration, null);
-    const stored =
-      raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-    preferences.write(PREFERENCE_SECTIONS.collaboration, { ...stored, ...persisted });
-  };
-
   /** Builds the profile sent with room requests, falling back to a fresh name. */
   const profile = (source: CollaborationSettings): CollaborationProfile => ({
     name: source.displayName.trim() || defaultName(),
@@ -1580,6 +1803,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!client || hostBusy.current || resuming.current) {
       return;
     }
+    if (!getEditorVisibility().hasDocument) {
+      return;
+    }
     const document = contextRef.current.documentRuntime;
     const missing = document
       ? missingRequiredRoomAssets(
@@ -1606,20 +1832,26 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     collaborationRoomDocument.set(false);
     hostBusy.current = true;
     setStartingRoom(true);
+    const mode = override?.hostMode === "lan" ? "lan" : "tunnel";
+    const attempt = ++roomAttempt.current;
+    collaborationProgress.set(startRoomProgress("host", mode));
     try {
-      const mode = override?.hostMode === "lan" ? "lan" : "tunnel";
       let publicUrl = "";
       if (isDesktop()) {
         if (mode === "tunnel") {
+          collaborationProgress.update({ phase: "bridge", detail: "resolve", error: "" });
           await invoke("stop_lan_bridge").catch(() => undefined);
           publicUrl = normalizeRoomServerUrl(await invoke<string>("start_collab_tunnel"));
+          collaborationProgress.update({ detail: "ready" });
         } else {
+          collaborationProgress.update({ phase: "bridge", detail: "lan", error: "" });
           await invoke("stop_collab_tunnel").catch(() => undefined);
           const requested = (
             override && "lanPort" in override ? (override.lanPort ?? "") : settings.lanPort
           ).trim();
           const lanPort = Number(requested || suggestedLanPort);
           publicUrl = await invoke<string>("start_lan_bridge", { port: lanPort });
+          collaborationProgress.update({ detail: "lan" });
         }
       } else {
         publicUrl = normalizeRoomServerUrl(settings.serverUrl);
@@ -1627,6 +1859,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (!publicUrl) {
         throw new Error(t("workspace.collaboration.invalidServerUrl"));
       }
+      if (roomAttempt.current !== attempt || !collaborationProgress.get().visible) {
+        return;
+      }
+      collaborationProgress.update({ phase: "connecting" });
       const current = {
         ...settings,
         ...override,
@@ -1662,12 +1898,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         void invoke("release_collab_session").catch(() => undefined);
       }
       setStartingRoom(false);
-      showToast(
-        t("workspace.collaboration.hostFailed", {
-          detail: error instanceof Error ? error.message : String(error),
-        }),
-        "error",
-      );
+      const detail = error instanceof Error ? error.message : String(error);
+      if (attempt === roomAttempt.current && collaborationProgress.get().visible) {
+        failProgress(t("workspace.collaboration.hostFailed", { detail }));
+      } else {
+        showToast(t("workspace.collaboration.hostFailed", { detail }), "error");
+      }
     } finally {
       hostBusy.current = false;
     }
@@ -1717,6 +1953,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!(await ensureSession())) {
       return;
     }
+    const attempt = ++roomAttempt.current;
+    collaborationProgress.set(startRoomProgress("guest", settings.hostMode));
     setJoiningRoom(true);
     writeHostSession(null);
     // The room chart replaces this document; guard saves before the snapshot
@@ -1733,10 +1971,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         collaborationRoomDocument.set(false);
         setJoiningRoom(false);
         showToast(t("workspace.collaboration.recoveryWriteFailed"), "error");
+        failProgress(t("workspace.collaboration.recoveryWriteFailed"));
         return;
       }
       // The snapshot handler can then skip a second write for the same chart.
       joinedRecoveryFingerprint.current = stableFingerprint(recoverySnapshot);
+    }
+    if (roomAttempt.current !== attempt || !collaborationProgress.get().visible) {
+      return;
     }
     const current = { ...settings, ...override, serverUrl: parsed.serverUrl };
     client.connect(current.serverUrl);
@@ -1903,7 +2145,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     startingRoom,
     joiningRoom,
     pendingInviteLink,
+    canHost: visible.hasDocument,
     updateSettings,
+    abortRoomProgress,
+    dismissRoomProgress,
     createRoom,
     joinRoom,
     leaveRoom,
