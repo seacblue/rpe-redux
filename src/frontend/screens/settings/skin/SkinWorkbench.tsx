@@ -349,10 +349,11 @@ export function SkinWorkbench({
     [importDroppedPackage],
   );
 
-  /** Open the slot menu at the clicked tile without replaying an open menu. */
+  /** Toggle the slot menu at the clicked tile; a second click closes it. */
   const openSlotMenu = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>, definition: WorkbenchSlotDefinition) => {
       if (menu.get()?.slot === definition.slot) {
+        menu.set(null);
         return;
       }
       const rect = event.currentTarget.getBoundingClientRect();

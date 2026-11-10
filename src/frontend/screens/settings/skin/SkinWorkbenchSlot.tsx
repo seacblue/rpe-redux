@@ -51,7 +51,7 @@ export function WorkbenchSlotView({
   asset: PhiraWorkbenchAsset | undefined;
   dragActive: boolean;
   onOpenMenu(event: ReactMouseEvent<HTMLButtonElement>): void;
-  /** True while this slot's menu is already open, so a second click must not replay it. */
+  /** True while this slot's menu is open; a second click closes it. */
   isMenuOpen(): boolean;
   onDropTransfer(transfer: DataTransfer): void;
   onDragOver(event: ReactDragEvent<HTMLElement>): void;
@@ -105,7 +105,6 @@ export function WorkbenchSlotView({
         onClickCapture={(event) => {
           if (isMenuOpen()) {
             event.preventDefault();
-            event.stopPropagation();
           }
         }}
         onClick={onOpenMenu}
