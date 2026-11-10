@@ -666,6 +666,8 @@ node test-subpath.mjs
 - [`src/core/global/library/assetUrlCache.ts`](../../src/core/global/library/assetUrlCache.ts)：浏览器资源 blob URL 的注册、查询和释放；`projectAssetUrl` 先查缓存。
 - [`src/frontend/screens/welcome/homeProjectCards.ts`](../../src/frontend/screens/welcome/homeProjectCards.ts)：没有可用 URL 时不生成空封面/音频 URL。
 - [`src/frontend/screens/settings/web/WebStorageSettings.tsx`](../../src/frontend/screens/settings/web/WebStorageSettings.tsx)：Web-only 的“浏览器存储”页，显示配额和持久化状态，支持申请 persistent、下载 `.sqlite` 备份，以及从备份恢复（恢复前先保存当前库，失败会回滚）。
+- [`src/frontend/screens/editor/workspace/document/save/saver.ts`](../../src/frontend/screens/editor/workspace/document/save/saver.ts) 与 [`PlaybackProvider.tsx`](../../src/frontend/screens/editor/workspace/runtime/providers/PlaybackProvider.tsx)：桌面自动保存继续写 native recovery 表；Web 自动保存改为向当前谱面库提交一个安静的后台修订，不显示保存 toast、不清除未保存标记，成功后仍可手动保存。
+- [`src/frontend/screens/editor/workspace/collaboration/RoomPanel.tsx`](../../src/frontend/screens/editor/workspace/collaboration/RoomPanel.tsx)：Web 宿主建房时显示“服务器地址”，不再显示只适用于桌面的 Tunnel/LAN 选项；Web 邀请链接生成当前页面 URL（`?join=1&server=…&invite=…&room=…`），浏览器可直接打开。
 - `.github/workflows/pages.yml`：`npm run build:web` 后把 `dist/` 发布到 GitHub Pages。
 - 第 1 节的宿主裁剪：窗口按钮、设置行、设置页、更新徽标和标题栏拖拽都已按宿主隐藏或禁用。
 
@@ -681,6 +683,8 @@ node test-subpath.mjs
 - 浏览器自动备份：创建谱面后等待去抖，OPFS `library-history/` 出现 ref/commit/objects；第二次修改后 ref 递增；提交对象是 gzip 封装的合法快照。
 - 浏览器手动快照/恢复：两个命名谱面各写一个手动快照，校验无缺失对象，恢复到旧快照后首页只保留旧谱面；压缩后只保留最新提交。
 - 浏览器快照设置：关闭“自动快照”后间隔输入被禁用、后台不再写入 ref；重新开启并设为 30 秒后，ref 恢复增长。
+- 浏览器自动保存：把 `autosave-seconds` 设为 1 秒后编辑谱面，出现“Automatic backup saved”，未保存标记仍为真，刷新后编辑内容恢复；不再出现“仅桌面版支持自动备份”。
+- Web 协作：两个独立 Chrome 配置连接本地 room server；Web 宿主填写服务器地址并建房，访客打开 `?join=1…` 邀请链接、确认身份并加入，收到同一谱面；访客放置 note 后宿主侧计数同步增加。
 - Go 自动备份：20 秒去抖 + 120 秒最大延迟的策略在持续编辑测试中按最大延迟触发；快照、资产去重、偏好过滤、恢复、recovery 表保留、校验、压缩测试通过。
 - `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
 
@@ -691,6 +695,7 @@ node test-subpath.mjs
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
 - **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复、恢复失败回滚、迁移前原始副本、自动快照和自动快照开关；还没有库历史列表页、自动轮换/空间阈值、配额错误提示和完整的损坏检测入口。
+- **Web 建房需要外部 room server。** Pages 只托管静态文件，不提供 WebSocket；建房时必须填写可达的 `ws://`/`wss://` 地址，且服务端要把 Pages 源加入 `REDUX_COLLAB_ALLOWED_ORIGINS`。加入别人房间不受此限制，只需邀请链接里的服务器可达。
 - **未引用资源不回收。** 删除项目或提交新 manifest 后，孤立 BLOB 仍留在 SQLite 里；后续需要 GC 和 staging lease。
 - **迁移器只覆盖 v0/v1 → v2。** 当前是加法迁移；后续 schema 需要继续追加步骤，并保持旧应用可读。
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例；Go store 和 Rust 备份已有迁移测试。
