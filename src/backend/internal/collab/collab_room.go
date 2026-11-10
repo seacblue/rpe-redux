@@ -230,7 +230,7 @@ func collabVersionFailure(room *collabRoom, clientVersion string) *collabError {
 		}
 		return value
 	}
-	code := "version_mismatch"
+	code := "version_mismatch_unknown"
 	message := fmt.Sprintf(
 		"This room uses RPE Redux %s; this client is %s. Both copies must use the same version.",
 		label(expected),

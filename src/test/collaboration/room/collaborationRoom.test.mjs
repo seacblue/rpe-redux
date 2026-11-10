@@ -96,7 +96,7 @@ test("a join and resume require the room's exact product version", () => {
     "preview",
   );
   assert.equal(unparsableJoin.ok, false);
-  assert.equal(unparsableJoin.code, "version_mismatch");
+  assert.equal(unparsableJoin.code, "version_mismatch_unknown");
   const matchedJoin = rooms.requestJoin(
     room.id,
     room.invite,

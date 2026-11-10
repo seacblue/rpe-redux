@@ -1175,12 +1175,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return t("workspace.collaboration.queueFull");
         case "room_closed":
           return t("workspace.collaboration.roomClosed");
-        case "version_mismatch":
-          return t("workspace.collaboration.versionMismatch");
         case "version_mismatch_client_newer":
           return t("workspace.collaboration.versionNewerThanHost");
         case "version_mismatch_client_older":
           return t("workspace.collaboration.versionOlderThanHost");
+        case "version_mismatch_unknown":
+          return t("workspace.collaboration.versionMismatch");
         case "host_must_close":
           return t("workspace.collaboration.hostMustClose");
         case "removed":
@@ -1399,9 +1399,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (
           code === "no_room" ||
           code === "bad_resume" ||
-          code === "version_mismatch" ||
           code === "version_mismatch_client_newer" ||
           code === "version_mismatch_client_older" ||
+          code === "version_mismatch_unknown" ||
           code === "room_closed" ||
           code === "bad_invite"
         ) {

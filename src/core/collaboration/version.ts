@@ -6,16 +6,16 @@
  * versions differ; it never relaxes the exact-match rule.
  */
 
-/** Rejection codes that explain which side is newer. */
+/** Rejection codes that explain which side is newer, when the direction is known. */
 export type VersionMismatchCode =
-  "version_mismatch" | "version_mismatch_client_newer" | "version_mismatch_client_older";
+  "version_mismatch_client_newer" | "version_mismatch_client_older" | "version_mismatch_unknown";
 
 /**
  * Compare dotted numeric product versions.
  *
  * Pre-release and build suffixes are ignored for the direction check. A value
- * that cannot be parsed compares as equal, which keeps the generic
- * exact-version rejection.
+ * that cannot be parsed compares as equal, so admission never invents an order
+ * it cannot prove; callers report the unknown-direction code instead.
  */
 export function compareProductVersions(left: string, right: string): -1 | 0 | 1 {
   const parts = (value: string): number[] | null => {
@@ -61,7 +61,7 @@ export function versionMismatchCode(expected: string, actual: string): VersionMi
   if (direction > 0) {
     return "version_mismatch_client_older";
   }
-  return "version_mismatch";
+  return "version_mismatch_unknown";
 }
 
 /** English diagnostic message; the UI translates the code at its boundary. */

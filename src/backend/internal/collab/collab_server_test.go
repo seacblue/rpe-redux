@@ -48,7 +48,8 @@ func TestCollabVersionRequiresExactProductMatch(t *testing.T) {
 	}{
 		{"1.0.6", "version_mismatch_client_older"},
 		{"1.0.8", "version_mismatch_client_newer"},
-		{"preview", "version_mismatch"},
+		{"preview", "version_mismatch_unknown"},
+		{"", "version_mismatch_unknown"},
 	}
 	for _, testCase := range cases {
 		failure := collabVersionFailure(room, testCase.clientVersion)

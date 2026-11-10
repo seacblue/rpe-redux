@@ -1199,9 +1199,9 @@ export class CollaborationClient {
           "bad_resume",
           "no_room",
           "bad_invite",
-          "version_mismatch",
           "version_mismatch_client_newer",
           "version_mismatch_client_older",
+          "version_mismatch_unknown",
         ].includes(message.reason);
         if (terminal) {
           this.manualClose = true;

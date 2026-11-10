@@ -21,10 +21,10 @@ test("pre-release and build suffixes do not change the direction", () => {
   assert.equal(compareProductVersions("1.0.6+42", "1.0.7"), -1);
 });
 
-test("unparsable versions fall back to the generic mismatch", () => {
+test("unparsable versions report an unknown direction", () => {
   assert.equal(compareProductVersions("preview", "1.0.7"), 0);
-  assert.equal(versionMismatchCode("1.0.7", "preview"), "version_mismatch");
-  assert.equal(versionMismatchCode("1.0.7", ""), "version_mismatch");
+  assert.equal(versionMismatchCode("1.0.7", "preview"), "version_mismatch_unknown");
+  assert.equal(versionMismatchCode("1.0.7", ""), "version_mismatch_unknown");
 });
 
 test("mismatch codes name which client is out of date", () => {
