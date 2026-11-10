@@ -688,6 +688,7 @@ node test-subpath.mjs
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例。
 - **浏览器覆盖有限。** 只在 Edge/Chromium 验证；Firefox/Safari 无痕模式、配额和大资源仍未测。
 - **`serverOrigin()` 语义变化。** Web standalone 下返回 `opfs://rpe-redux`；任何假定它一定是 HTTP URL 的新代码都需要检查。
+- **同源页面可访问浏览器库。** OPFS 和 BroadcastChannel 都以源为边界；`github.io` 同账号下的其他项目页可以读取 OPFS，也可以加入 leader 通道发 RPC。不要把不可信页面放在同一账号下；需要隔离时使用独立自定义域名。
 
 ### 8.4 下一步
 
