@@ -91,6 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_revision_assets_hash ON revision_assets(hash);
 `;
 
 interface Db {
+  close(): void;
   exec(sql: string): unknown;
   exec(options: { sql: string; bind?: readonly unknown[] }): unknown;
   selectObject(sql: string, bind?: readonly unknown[]): Record<string, unknown> | undefined;
@@ -102,6 +103,7 @@ interface Db {
 interface Pool {
   OpfsSAHPoolDb: new (name: string) => unknown;
   exportFile(name: string): Uint8Array;
+  importDb(name: string, bytes: Uint8Array): number;
   unlink(name: string): boolean;
 }
 
@@ -840,6 +842,53 @@ function exportDb(): Uint8Array {
   return bytes.slice();
 }
 
+function importDb(params: Record<string, unknown>): Record<string, unknown> {
+  if (!pool || !db) {
+    throw new DbError("not_ready", "the browser library is not open");
+  }
+  const bytes = bytesParam(params, "bytes");
+  const backup = `/restore-${Date.now()}.db`;
+  run(`VACUUM INTO '${backup}'`);
+  const previous = pool.exportFile(backup);
+  db.close();
+  db = null;
+  try {
+    pool.importDb(DB_PATH, bytes);
+    db = new pool.OpfsSAHPoolDb(DB_PATH) as unknown as Db;
+    run("PRAGMA foreign_keys = ON");
+    run("PRAGMA synchronous = FULL");
+    if (requireDb().selectValue("PRAGMA integrity_check") !== "ok") {
+      throw new DbError("invalid_backup", "backup failed the SQLite integrity check");
+    }
+    const hasProjects = requireDb().selectValue(
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'projects'",
+    );
+    if (!hasProjects) {
+      throw new DbError("invalid_backup", "backup is not an RPE Redux library");
+    }
+    if (requireDb().selectValue("PRAGMA user_version") === 0) {
+      run("PRAGMA user_version = 1");
+    }
+  } catch (error) {
+    if (db) {
+      db.close();
+      db = null;
+    }
+    try {
+      pool.importDb(DB_PATH, previous);
+      db = new pool.OpfsSAHPoolDb(DB_PATH) as unknown as Db;
+      run("PRAGMA foreign_keys = ON");
+      run("PRAGMA synchronous = FULL");
+    } catch {
+      db = null;
+    }
+    pool.unlink(backup);
+    throw error;
+  }
+  pool.unlink(backup);
+  return { ok: true };
+}
+
 function stringParam(params: Record<string, unknown>, key: string): string {
   const value = params[key];
   if (typeof value !== "string") {
@@ -885,6 +934,7 @@ const handlers: Record<
   checkpoint,
   stats,
   export: exportDb,
+  import: importDb,
 };
 
 scope.onmessage = async (event: MessageEvent<Request>) => {

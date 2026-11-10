@@ -440,6 +440,11 @@ export default {
   "settings.webStorage.requestDenied": "浏览器只提供尽力而为的存储。请定期下载备份。",
   "settings.webStorage.download": "下载备份",
   "settings.webStorage.downloaded": "备份已下载。",
+  "settings.webStorage.restore": "恢复备份",
+  "settings.webStorage.restoreConfirmTitle": "替换浏览器谱面库？",
+  "settings.webStorage.restoreConfirmDescription":
+    "这会用选中的备份替换当前浏览器里的所有谱面、资源、修订和偏好。",
+  "settings.webStorage.restoreDone": "备份已恢复，正在重新加载…",
   "settings.webStorage.refresh": "刷新",
   "settings.webStorage.backupNote":
     "备份是一个独立的 .sqlite 文件，可在桌面版或任意 SQLite 工具中打开。",

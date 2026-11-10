@@ -604,6 +604,11 @@ export class BrowserLibrary extends LocalLibrary {
     return this.bytes("export");
   }
 
+  /** Replace the library with a previously downloaded SQLite file. */
+  importDatabase(bytes: Uint8Array): Promise<{ ok: boolean }> {
+    return this.result("import", { bytes });
+  }
+
   /** Current browser quota and persistent-storage state. */
   async storageStatus(): Promise<{ persisted: boolean; usage: number; quota: number }> {
     const storage = navigator.storage;

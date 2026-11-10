@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- the settings catalog is one translation table. */
 /**
  * The settings window: categories, every field label and description, its own
  * pages, plus the start-up view.
@@ -519,6 +520,11 @@ export default {
     "The browser kept best-effort storage. Download a backup regularly.",
   "settings.webStorage.download": "Download backup",
   "settings.webStorage.downloaded": "Backup downloaded.",
+  "settings.webStorage.restore": "Restore backup",
+  "settings.webStorage.restoreConfirmTitle": "Replace the browser library?",
+  "settings.webStorage.restoreConfirmDescription":
+    "This replaces every chart, asset, revision, and preference in this browser with the selected backup.",
+  "settings.webStorage.restoreDone": "Backup restored. Reloading…",
   "settings.webStorage.refresh": "Refresh",
   "settings.webStorage.backupNote":
     "The backup is a standalone .sqlite file. It opens in the desktop app or any SQLite browser.",

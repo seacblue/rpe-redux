@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { localService } from "../../../../core/global/library/service.ts";
+import { requestConfirm } from "../../../overlays/modals/prompts.ts";
+import { pickFiles } from "../../../platform/filePicker.ts";
 import { download } from "../../../platform/download.ts";
 import type { BrowserLibrary } from "../../../../core/platform/browser/library/browserLibrary.ts";
 import { registerSettingsPage } from "../settingsContributions.ts";
@@ -100,6 +102,40 @@ export function WebStorageSettings() {
     }
   };
 
+  /** Replace the browser library with a downloaded SQLite backup. */
+  const restoreBackup = async () => {
+    if (!library) {
+      return;
+    }
+    const files = await pickFiles({ accept: ".sqlite,.db,application/vnd.sqlite3" });
+    const file = files?.[0];
+    if (!file) {
+      return;
+    }
+    const accepted = await requestConfirm({
+      title: t("settings.webStorage.restoreConfirmTitle"),
+      description: t("settings.webStorage.restoreConfirmDescription"),
+      label: t("settings.webStorage.restore"),
+      cancelLabel: t("common.action.cancel"),
+      destructive: true,
+    });
+    if (!accepted) {
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      await library.importDatabase(new Uint8Array(await file.arrayBuffer()));
+      setMessage(t("settings.webStorage.restoreDone"));
+      window.location.reload();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Write the current library as a portable SQLite file. */
   const downloadBackup = async () => {
     if (!library) {
@@ -155,6 +191,9 @@ export function WebStorageSettings() {
             </Button>
             <Button variant="solid" disabled={busy} onClick={() => void downloadBackup()}>
               {t("settings.webStorage.download")}
+            </Button>
+            <Button variant="outlined" disabled={busy} onClick={() => void restoreBackup()}>
+              {t("settings.webStorage.restore")}
             </Button>
             <Button variant="plain" disabled={busy} onClick={() => void refresh()}>
               {t("settings.webStorage.refresh")}
