@@ -1,6 +1,7 @@
 /** The title-bar entry point to the changelog. */
 import { ChipButton } from "../../../../design/components/chip/ChipButton.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
+import { isDesktop } from "../../../../core/platform/environment.ts";
 import { openUpdateChangelog } from "./changelog.ts";
 import { shouldShowUpdateBadge } from "./updatePresentation.ts";
 import { useUpdateState } from "./useUpdateState.ts";
@@ -9,7 +10,7 @@ import { useUpdateState } from "./useUpdateState.ts";
 export function UpdateBadge() {
   const { t } = useTranslation();
   const state = useUpdateState();
-  if (!shouldShowUpdateBadge(state) || !state.latest) {
+  if (!isDesktop() || !shouldShowUpdateBadge(state) || !state.latest) {
     return null;
   }
   return (

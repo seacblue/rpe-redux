@@ -8,20 +8,28 @@ import { CATALOGS } from "../../../i18n/messages/index.ts";
 import { t, tRaw, type MessageKey } from "../../../i18n/index.ts";
 import type {
   SettingDefinition,
+  SettingHost,
   SettingText,
   SettingsNavigation,
 } from "../../../core/settings/types.ts";
+import { hostKind } from "../../../core/platform/environment.ts";
 import { settingsRegistry } from "../../../core/settings/settings.ts";
 import { values } from "../../../core/state/values.ts";
 import "../../../core/settings/features/index.ts";
 import { settingsPageFor } from "./settingsContributions.ts";
 import { matchesSettingsSearch } from "./settingsSearch.ts";
 
-/** Registry navigation and definition readers bound for the settings UI. */
-export const settingsNavigations = settingsRegistry.navigations.bind(settingsRegistry);
-/** Child navigation entries for one category key. */
-export const settingsNavigationChildren =
-  settingsRegistry.navigationChildren.bind(settingsRegistry);
+/** Whether a schema row or page has an effect on the current host. */
+function availableOnHost(hosts: readonly SettingHost[] | undefined): boolean {
+  return hosts === undefined || hosts.includes(hostKind());
+}
+
+/** Registry navigation readers bound for the settings UI and current host. */
+export const settingsNavigations = (): readonly SettingsNavigation[] =>
+  settingsRegistry.navigations().filter((entry) => availableOnHost(entry.hosts));
+/** Child navigation entries for one category key on the current host. */
+export const settingsNavigationChildren = (key: string): readonly SettingsNavigation[] =>
+  settingsRegistry.navigationChildren(key).filter((entry) => availableOnHost(entry.hosts));
 /** Every registered setting definition. */
 export const settingsDefinitions = settingsRegistry.definitions.bind(settingsRegistry);
 /** Subscribe to catalog registration changes. */
@@ -123,11 +131,11 @@ export function settingsPageSearchText(key: string): string[] {
 
 /** Resolve a navigation key to its first page, or the key itself when it is a page. */
 export function settingsNavigationTarget(key: string): string {
-  const navigation = settingsRegistry.navigations().find((entry) => entry.key === key);
+  const navigation = settingsNavigations().find((entry) => entry.key === key);
   if (!navigation) {
     return key;
   }
-  return settingsRegistry.navigationChildren(key)[0]?.key ?? navigation.key;
+  return settingsNavigationChildren(key)[0]?.key ?? navigation.key;
 }
 
 /** Walk a navigation list from a key to its root, root first. */
@@ -146,7 +154,7 @@ export function navigationPathFrom(
 
 /** The root-first path from the registry for one navigation key. */
 export function settingsNavigationPath(key: string): SettingsNavigation[] {
-  return navigationPathFrom(settingsRegistry.navigations(), key);
+  return navigationPathFrom(settingsNavigations(), key);
 }
 
 /** One translated breadcrumb segment for a search result. */
@@ -184,17 +192,21 @@ export function settingsSearchPath(definition: SettingDefinition): SettingsSearc
 export function settingsFields(navigation: string): SettingDefinition[] {
   return settingsRegistry
     .definitions()
-    .filter((definition) => definition.navigation === navigation);
+    .filter(
+      (definition) => definition.navigation === navigation && availableOnHost(definition.hosts),
+    );
 }
 
 /** Search the translated text and control values visible to the user. */
 export function searchSettings(query: unknown): SettingDefinition[] {
   const text = String(query ?? "");
-  const definitions = settingsRegistry.definitions();
+  const definitions = settingsRegistry
+    .definitions()
+    .filter((definition) => availableOnHost(definition.hosts));
   if (!text.trim()) {
     return [...definitions];
   }
-  const navigations = settingsRegistry.navigations();
+  const navigations = settingsNavigations();
   return definitions.filter((definition) => {
     const navigation = navigations.find((entry) => entry.key === definition.navigation);
     const parent = navigation?.parent

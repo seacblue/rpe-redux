@@ -105,6 +105,11 @@
   --window-controls-reserved: calc(var(--window-control-size) + 2 * var(--window-control-padding));
 }
 
+// The browser supplies the caption controls, so a web host reserves no gutter.
+:root[data-host="web"] .redux-titlebar {
+  --window-controls-reserved: 0px;
+}
+
 .redux-titlebar-left {
   display: flex;
   flex: none;

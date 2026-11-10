@@ -19,6 +19,9 @@ export type SettingText = MessageKey | "" | ExtensionText;
 /** A value a setting control reads or writes; toggle rows use a real boolean. */
 export type SettingValue = string | number | boolean;
 
+/** Hosts on which a setting has an effect. */
+export type SettingHost = "desktop" | "web";
+
 /** Navigation item contributed by a settings feature or extension. */
 export interface SettingsNavigation {
   key: string;
@@ -26,6 +29,8 @@ export interface SettingsNavigation {
   icon?: string;
   parent?: string;
   order?: number;
+  /** Show this page only on the listed hosts; omitted means every host. */
+  hosts?: readonly SettingHost[];
 }
 
 /** Consent copy for a toggle that crosses a trust boundary. */
@@ -49,6 +54,8 @@ interface SettingDefinitionBase {
   default?: string | number | boolean;
   /** Ask for explicit consent before a toggle changes a trust boundary. */
   confirm?: SettingConfirm;
+  /** Show this row only on the listed hosts; omitted means every host. */
+  hosts?: readonly SettingHost[];
   /** Show this row only while another setting holds the given value (true by default). */
   visibleWhen?: { key: string; equals?: SettingValue };
   /** Enable this row only while another setting holds the given value (true by default). */

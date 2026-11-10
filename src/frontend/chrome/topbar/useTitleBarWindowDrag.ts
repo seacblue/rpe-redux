@@ -40,6 +40,9 @@ const MODAL_SCRIM_SELECTOR = ".redux-modal-scrim";
  */
 export function useTitleBarWindowDrag(titleBar: RefObject<HTMLElement | null>): void {
   useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
     let gesture: WindowDragGesture = IDLE_WINDOW_DRAG;
     let suppressClick = false;
     let suppressionTimer = 0;

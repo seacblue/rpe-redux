@@ -26,6 +26,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     label: "settings.updates.autoCheck.label",
     control: "toggle",
     default: DEFAULT_UPDATE_AUTO_CHECK,
+    hosts: ["desktop"],
   },
   {
     key: UPDATE_SETTING_KEYS.downloadPolicy,
@@ -35,6 +36,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     description: "settings.updates.downloadPolicy.description",
     control: "select",
     default: DEFAULT_UPDATE_DOWNLOAD_POLICY,
+    hosts: ["desktop"],
     enabledWhen: { key: UPDATE_SETTING_KEYS.autoCheck, equals: true },
     options: [
       { value: "all", label: "settings.updates.downloadPolicy.all" },
@@ -49,6 +51,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     label: "settings.updates.prereleases.label",
     control: "toggle",
     default: false,
+    hosts: ["desktop"],
     enabledWhen: { key: UPDATE_SETTING_KEYS.autoCheck, equals: true },
   },
   {
@@ -57,6 +60,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     group: "",
     label: "settings.updates.verify.label",
     control: "custom",
+    hosts: ["desktop"],
   },
   {
     key: "help-survey",
@@ -74,6 +78,7 @@ const UpdatesSettingsSchema: SettingDefinition[] = [
     group: "",
     label: "settings.field.docs.label",
     control: "custom",
+    hosts: ["desktop"],
   },
 ];
 

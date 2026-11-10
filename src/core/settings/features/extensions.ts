@@ -12,6 +12,7 @@ const ExtensionsSettingsNavigation: SettingsNavigation = {
   label: "settings.category.extensions.label",
   icon: "extension",
   order: 60,
+  hosts: ["desktop"],
 };
 
 const ExtensionsSettingsSchema: SettingDefinition[] = [
@@ -23,6 +24,7 @@ const ExtensionsSettingsSchema: SettingDefinition[] = [
     description: "settings.extensions.disclaimer.description",
     control: "toggle",
     default: false,
+    hosts: ["desktop"],
   },
 ];
 

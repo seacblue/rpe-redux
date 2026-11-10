@@ -21,3 +21,12 @@ export function isApplePlatform(): boolean {
 type TauriGlobal = { __TAURI_INTERNALS__?: unknown };
 /** True when the page runs inside the Tauri desktop host. */
 export const isDesktop = (): boolean => Boolean((globalThis as TauriGlobal).__TAURI_INTERNALS__);
+
+/** The host that owns the page, for capability and chrome decisions. */
+export type HostKind = "desktop" | "web";
+
+/** True when the page runs outside the Tauri desktop host. */
+export const isWebHost = (): boolean => !isDesktop();
+
+/** The host that owns the page. */
+export const hostKind = (): HostKind => (isDesktop() ? "desktop" : "web");
