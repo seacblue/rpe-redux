@@ -2260,49 +2260,62 @@ function bytesParam(params: Record<string, unknown>, key: string): Uint8Array {
   throw new DbError("invalid_request", `${key} must be bytes`);
 }
 
-const handlers: Record<
-  string,
-  (
-    params: Record<string, unknown>,
-  ) => Record<string, unknown> | Uint8Array | Promise<Record<string, unknown>>
-> = {
-  init: () => init(),
-  list,
-  get,
-  create,
-  update,
-  remove,
-  duplicate,
-  assets,
-  stageAsset,
-  asset,
-  commit,
-  revisions,
-  createRevision,
-  revision,
-  removeRevision,
-  preferences,
-  savePreferences,
-  checkpoint,
-  stats,
-  export: exportDb,
-  import: importDb,
-  backupStatus: () => backupStatus(),
-  backupSnapshot: async (params) => ({
-    ...(await backupSnapshot(typeof params.reason === "string" ? params.reason : "manual")),
-  }),
-  backupHistory: async (params) => ({
-    commits: await backupHistory(typeof params.limit === "number" ? params.limit : 50),
-  }),
-  backupRestore: async (params) => ({
-    ...(await backupRestore(typeof params.commitId === "string" ? params.commitId : "")),
-  }),
-  backupRestoreLatest: async () => ({ ...(await backupRestoreLatest()) }),
-  backupVerify: (params) =>
-    backupVerify(typeof params.commitId === "string" ? params.commitId : ""),
-  backupCompact: (params) =>
-    backupCompact(typeof params.keep === "number" ? params.keep : BACKUP_POLICY.keepCommits),
-};
+type Handler = (
+  params: Record<string, unknown>,
+) => Record<string, unknown> | Uint8Array | Promise<Record<string, unknown>>;
+
+const handlers = new Map<string, Handler>([
+  ["init", () => init()],
+  ["list", list],
+  ["get", get],
+  ["create", create],
+  ["update", update],
+  ["remove", remove],
+  ["duplicate", duplicate],
+  ["assets", assets],
+  ["stageAsset", stageAsset],
+  ["asset", asset],
+  ["commit", commit],
+  ["revisions", revisions],
+  ["createRevision", createRevision],
+  ["revision", revision],
+  ["removeRevision", removeRevision],
+  ["preferences", preferences],
+  ["savePreferences", savePreferences],
+  ["checkpoint", checkpoint],
+  ["stats", stats],
+  ["export", exportDb],
+  ["import", importDb],
+  ["backupStatus", () => backupStatus()],
+  [
+    "backupSnapshot",
+    async (params) => ({
+      ...(await backupSnapshot(typeof params.reason === "string" ? params.reason : "manual")),
+    }),
+  ],
+  [
+    "backupHistory",
+    async (params) => ({
+      commits: await backupHistory(typeof params.limit === "number" ? params.limit : 50),
+    }),
+  ],
+  [
+    "backupRestore",
+    async (params) => ({
+      ...(await backupRestore(typeof params.commitId === "string" ? params.commitId : "")),
+    }),
+  ],
+  ["backupRestoreLatest", async () => ({ ...(await backupRestoreLatest()) })],
+  [
+    "backupVerify",
+    (params) => backupVerify(typeof params.commitId === "string" ? params.commitId : ""),
+  ],
+  [
+    "backupCompact",
+    (params) =>
+      backupCompact(typeof params.keep === "number" ? params.keep : BACKUP_POLICY.keepCommits),
+  ],
+]);
 
 const MUTATING_METHODS = new Set([
   "create",
@@ -2319,11 +2332,8 @@ const MUTATING_METHODS = new Set([
 scope.onmessage = async (event: MessageEvent<Request>) => {
   const request = event.data;
   try {
-    if (!Object.prototype.hasOwnProperty.call(handlers, request.method)) {
-      throw new DbError("unsupported", `unknown method: ${request.method}`);
-    }
-    const handler = handlers[request.method];
-    if (typeof handler !== "function") {
+    const handler = handlers.get(request.method);
+    if (!handler) {
       throw new DbError("unsupported", `unknown method: ${request.method}`);
     }
     const result = await runExclusive(() => handler(request.params ?? {}));
