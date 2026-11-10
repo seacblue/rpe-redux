@@ -24,10 +24,8 @@ export interface DesktopLifecycleBindings {
   /** Persist the last workspace state and flush durable preferences before exit. */
   persistSession(): Promise<void>;
   pendingSave(): Promise<void> | null;
-  isDirty(): boolean;
-  confirmExit(): Promise<boolean>;
-  /** Confirm leaving any active or connecting collaboration session. */
-  confirmCollaborationExit(): Promise<boolean>;
+  /** One prompt that combines unsaved edits and any active room exit. */
+  confirmClose(): Promise<boolean>;
   dispose(): void;
   reportError(error: unknown): void;
   notifyUnsupported(): void;
@@ -100,15 +98,12 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
           if (!(await confirmDesktopExitGuards())) {
             return;
           }
-          if (!(await bindings.confirmCollaborationExit())) {
+          if (!(await bindings.confirmClose())) {
             return;
           }
           const pending = bindings.pendingSave();
           if (pending) {
             await pending;
-          }
-          if (bindings.isDirty() && !(await bindings.confirmExit())) {
-            return;
           }
           try {
             await bindings.persistSession();

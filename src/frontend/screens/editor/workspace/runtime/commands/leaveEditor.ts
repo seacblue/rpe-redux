@@ -26,6 +26,8 @@ export type LeaveEditorRoom = "none" | "host" | "guest" | "pending";
 export interface LeaveEditorPlan {
   readonly titleKey: MessageKey;
   readonly descriptionKey: MessageKey;
+  /** Additional reasons rendered under the title when one key is not enough. */
+  readonly descriptionKeys?: readonly MessageKey[];
   /** Collaboration work the chosen action must end. */
   readonly room: LeaveEditorRoom;
   /** Whether the open document is a guest's temporary room chart. */
@@ -214,5 +216,70 @@ export function planLeaveEditor(snapshot: LeaveEditorSnapshot): LeaveEditorPlan 
       "editor.app.dialog.saveAndReturn",
       "editor.app.dialog.discardAndReturn",
     ),
+  };
+}
+
+/**
+ * Plans one application-close confirmation from the same document and room
+ * snapshot the library trip uses.
+ *
+ * A quit has one prompt instead of a room prompt followed by an unsaved prompt.
+ * The description lists every reason that blocks the close, and the footer offers
+ * Keep editing, Discard and quit, and Save and quit when saving is possible.
+ */
+export function planAppClose(snapshot: LeaveEditorSnapshot): LeaveEditorPlan {
+  const room = roomMode(snapshot);
+  const dirty = snapshot.dirty;
+  const temporaryDocument = snapshot.roomDocument && room === "guest";
+  const reasons: MessageKey[] = [];
+  if (dirty) {
+    reasons.push("editor.app.dialog.exitDirtyBody");
+  }
+  if (room === "host") {
+    reasons.push("editor.app.dialog.exitHostBody");
+  } else if (room === "guest") {
+    reasons.push("editor.app.dialog.exitGuestBody");
+  } else if (room === "pending") {
+    reasons.push("editor.app.dialog.exitPendingBody");
+  }
+  if (!reasons.length) {
+    reasons.push("editor.app.dialog.exitBody");
+  }
+  const choices: LeaveEditorChoice[] = [
+    {
+      action: "cancel",
+      labelKey: "editor.app.dialog.exitKeep",
+      variant: "outlined",
+    },
+  ];
+  if (dirty) {
+    choices.push({
+      action: "discard",
+      labelKey: "editor.app.dialog.exitDiscard",
+      variant: "danger",
+    });
+    if (!temporaryDocument) {
+      choices.push({
+        action: "save",
+        labelKey: "editor.app.dialog.exitSave",
+        variant: "solid",
+      });
+    }
+  } else {
+    choices.push({
+      action: "exit",
+      labelKey: "editor.app.dialog.exitConfirm",
+      variant: "danger",
+    });
+  }
+  return {
+    titleKey: "editor.app.dialog.exitTitle",
+    descriptionKey: reasons[0] ?? "editor.app.dialog.exitBody",
+    descriptionKeys: reasons,
+    room,
+    temporaryDocument,
+    hasDocument: snapshot.hasDocument,
+    dirty,
+    choices,
   };
 }

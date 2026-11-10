@@ -2,7 +2,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EMPTY_COLLABORATION_STATE } from "../../../core/collaboration/ui.ts";
-import { planLeaveEditor } from "../../../frontend/screens/editor/workspace/runtime/commands/leaveEditor.ts";
+import {
+  planAppClose,
+  planLeaveEditor,
+} from "../../../frontend/screens/editor/workspace/runtime/commands/leaveEditor.ts";
 
 /** Builds the editor snapshot the planner reads. */
 function snapshot(overrides = {}) {
@@ -132,4 +135,59 @@ test("an idle or failed room does not decorate the document prompt", () => {
     assert.equal(plan.room, "none");
     assert.equal(plan.titleKey, "editor.app.dialog.returnHomeTitle");
   }
+});
+
+test("application close combines unsaved changes and hosting into one prompt", () => {
+  const plan = planAppClose(
+    snapshot({
+      dirty: true,
+      collaboration: {
+        ...EMPTY_COLLABORATION_STATE,
+        status: "connected",
+        roomId: "room-1",
+        role: "host",
+      },
+    }),
+  );
+  assert.equal(plan.titleKey, "editor.app.dialog.exitTitle");
+  assert.deepEqual(plan.descriptionKeys, [
+    "editor.app.dialog.exitDirtyBody",
+    "editor.app.dialog.exitHostBody",
+  ]);
+  assert.deepEqual(actions(plan), ["cancel", "discard", "save"]);
+  assert.equal(plan.choices[1].labelKey, "editor.app.dialog.exitDiscard");
+  assert.equal(plan.choices[2].labelKey, "editor.app.dialog.exitSave");
+});
+
+test("a temporary guest room chart cannot offer Save on quit", () => {
+  const plan = planAppClose(
+    snapshot({
+      dirty: true,
+      roomDocument: true,
+      collaboration: {
+        ...EMPTY_COLLABORATION_STATE,
+        status: "connected",
+        roomId: "room-1",
+        role: "editor",
+      },
+    }),
+  );
+  assert.equal(plan.temporaryDocument, true);
+  assert.deepEqual(actions(plan), ["cancel", "discard"]);
+  assert.deepEqual(plan.descriptionKeys, [
+    "editor.app.dialog.exitDirtyBody",
+    "editor.app.dialog.exitGuestBody",
+  ]);
+});
+
+test("a pending room connection is part of the quit prompt", () => {
+  const plan = planAppClose(
+    snapshot({
+      collaboration: { ...EMPTY_COLLABORATION_STATE, status: "connecting" },
+      collaborationPreparing: true,
+    }),
+  );
+  assert.equal(plan.room, "pending");
+  assert.deepEqual(plan.descriptionKeys, ["editor.app.dialog.exitPendingBody"]);
+  assert.deepEqual(actions(plan), ["cancel", "exit"]);
 });

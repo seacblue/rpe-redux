@@ -1084,6 +1084,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     writeHostSession(null);
     setStartingRoom(false);
     setJoiningRoom(false);
+    collaborationPreparing.set(false);
     setRecovery(null);
     setUnsent([]);
     applied.current.clear();

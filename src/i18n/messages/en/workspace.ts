@@ -286,14 +286,6 @@ export default {
   "workspace.collaboration.updatePassword": "Update password",
   "workspace.collaboration.showSecret": "Show",
   "workspace.collaboration.hideSecret": "Hide",
-  "workspace.collaboration.exitTitle": "Exit while in a room?",
-  "workspace.collaboration.exitBody":
-    "Exiting disconnects you from the room. Other members may be affected if you are the host.",
-  "workspace.collaboration.exitConfirm": "Exit anyway",
-  "workspace.collaboration.exitTemporaryTitle": "Exit and delete the room chart?",
-  "workspace.collaboration.exitTemporaryBody":
-    "This temporary room chart and its unsaved changes will be deleted. Export the chart first if you need to keep a copy.",
-  "workspace.collaboration.exitTemporaryConfirm": "Exit and delete",
   "workspace.collaboration.password": "Room password",
   "workspace.collaboration.invalidServerUrl": "Enter a ws:// or wss:// server address.",
   "workspace.collaboration.hostFailed": "Could not create the room: {detail}",

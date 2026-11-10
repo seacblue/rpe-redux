@@ -129,8 +129,14 @@ export default {
     "Imported {count} charts. A multi-chart drop is not opened automatically; choose one in the library.",
   "editor.app.dialog.exitDiscard": "Discard and quit",
   "editor.app.dialog.exitKeep": "Keep editing",
-  "editor.app.dialog.exitUnsavedBody": "This chart has unsaved changes. Discard them and quit?",
-  "editor.app.dialog.exitUnsavedTitle": "Unsaved changes",
+  "editor.app.dialog.exitConfirm": "Quit",
+  "editor.app.dialog.exitSave": "Save and quit",
+  "editor.app.dialog.exitTitle": "Quit RPE Redux?",
+  "editor.app.dialog.exitBody": "The editor will close.",
+  "editor.app.dialog.exitDirtyBody": "This chart has unsaved changes.",
+  "editor.app.dialog.exitHostBody": "You are hosting a room. Quitting closes it for everyone.",
+  "editor.app.dialog.exitGuestBody": "You are in a room. Quitting leaves it.",
+  "editor.app.dialog.exitPendingBody": "A room connection is in progress. Quitting cancels it.",
   "editor.app.dialog.multipleCharts":
     "The archive holds several RPE charts; the other files are kept when exporting a PEZ.",
 

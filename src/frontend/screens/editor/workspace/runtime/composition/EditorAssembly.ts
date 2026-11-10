@@ -11,7 +11,6 @@ import {
   collaborationPreparing,
   collaborationRoom,
   collaborationRoomDocument,
-  roomNeedsExitConfirmation,
 } from "../../../../../../core/collaboration/ui.ts";
 import { createTimelineEventAction } from "../../timeline/events/eventActions.ts";
 import { createTimelineMarkers, createTimelineOverview } from "../providers/TimelineProvider.tsx";
@@ -25,7 +24,7 @@ import type { EditorSurfaces } from "./editorSurfaces.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import { disposeProperties } from "../../../inspector/notes/noteInspector.ts";
-import { requestConfirm, requestExitChoice } from "../../../../../overlays/modals/prompts.ts";
+import { requestActionChoice, requestExitChoice } from "../../../../../overlays/modals/prompts.ts";
 import { MODAL_PRIORITY } from "../../../../../overlays/modals/modalQueue.ts";
 import { registerEditorShortcuts } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
 import { t } from "../../../../../../i18n/index.ts";
@@ -36,6 +35,8 @@ import { createEditorHomeRuntime } from "../../../../welcome/editorHome.ts";
 import { connectRpeImport } from "../../../../welcome/rpeImportService.ts";
 import { connectExternalImport } from "../../../../welcome/externalImportService.ts";
 import { bindWorkspaceNavigation } from "../commands/workspaceNavigation.ts";
+import { planAppClose } from "../commands/leaveEditor.ts";
+import { collaborationRoomExit } from "../../collaboration/roomExit.ts";
 import {
   getEditorRegionSnapshot,
   showsAuthoringRegion,
@@ -953,24 +954,59 @@ export function createEditorAssembly(
 
   let disposePlayback = () => {};
   let disposeSelection = () => {};
-  const confirmExit = () =>
-    collaborationRoomDocument.get()
-      ? requestConfirm({
-          title: t("workspace.collaboration.exitTemporaryTitle"),
-          description: t("workspace.collaboration.exitTemporaryBody"),
-          label: t("workspace.collaboration.exitTemporaryConfirm"),
-          cancelLabel: t("editor.app.dialog.exitKeep"),
-          destructive: true,
-          priority: MODAL_PRIORITY.closePrompt,
-        })
-      : requestConfirm({
-          title: t("editor.app.dialog.exitUnsavedTitle"),
-          description: t("editor.app.dialog.exitUnsavedBody"),
-          label: t("editor.app.dialog.exitDiscard"),
-          cancelLabel: t("editor.app.dialog.exitKeep"),
-          destructive: true,
-          priority: MODAL_PRIORITY.closePrompt,
-        });
+  /**
+   * One quit confirmation for every close barrier.
+   *
+   * The plan composes unsaved changes and room ownership into one prompt, so a
+   * dirty host sees one decision instead of a room prompt followed by a save
+   * prompt. Saving runs before the room is closed or left; a failed save keeps
+   * the window open.
+   */
+  const confirmClose = async (): Promise<boolean> => {
+    const plan = planAppClose({
+      hasDocument: getEditorVisibility().hasDocument,
+      dirty: session.current.history.dirty || documentState.assetDirty,
+      roomDocument: collaborationRoomDocument.get(),
+      collaboration: collaborationRoom.get(),
+      collaborationPreparing: collaborationPreparing.get(),
+    });
+    if (plan.room === "none" && !plan.dirty) {
+      return true;
+    }
+    const answer = await requestActionChoice({
+      title: t(plan.titleKey),
+      description: (plan.descriptionKeys ?? [plan.descriptionKey]).map((key) => t(key)).join(" "),
+      entries: plan.choices.map((choice) => ({
+        value: choice.action,
+        label: t(choice.labelKey),
+        variant: choice.variant,
+      })),
+      cancelValue: "cancel",
+      priority: MODAL_PRIORITY.closePrompt,
+    });
+    if (answer === "cancel") {
+      return false;
+    }
+    if (answer === "save") {
+      try {
+        const result = await documentRuntime.save();
+        if (!result || result.status !== "saved") {
+          return false;
+        }
+        if (session.current.history.dirty || documentState.assetDirty) {
+          reportError(new Error(t("editor.app.error.stillUnsaved")));
+          return false;
+        }
+      } catch (failure) {
+        reportError(failure);
+        return false;
+      }
+    }
+    if (plan.room !== "none") {
+      collaborationRoomExit.exit();
+    }
+    return true;
+  };
   scope.add(clearToasts);
   scope.add(() => disposePlayback());
   scope.add(() => disposeSelection());
@@ -1080,20 +1116,7 @@ export function createEditorAssembly(
         await preferences.flush();
       },
       pendingSave: () => documentSaver.pending?.then(() => undefined) ?? null,
-      isDirty: () => session.current.history.dirty || documentState.assetDirty,
-      confirmExit,
-      confirmCollaborationExit: () => {
-        if (!roomNeedsExitConfirmation(collaborationRoom.get(), collaborationPreparing.get())) {
-          return Promise.resolve(true);
-        }
-        return requestConfirm({
-          title: t("workspace.collaboration.exitTitle"),
-          description: t("workspace.collaboration.exitBody"),
-          label: t("workspace.collaboration.exitConfirm"),
-          destructive: true,
-          priority: MODAL_PRIORITY.closePrompt,
-        });
-      },
+      confirmClose,
       dispose,
       reportError,
       notifyUnsupported: () => notify(t("editor.app.notice.desktopEnvironment"), "warning"),

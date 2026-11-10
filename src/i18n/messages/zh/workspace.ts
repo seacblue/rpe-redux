@@ -260,14 +260,6 @@ export default {
   "workspace.collaboration.updatePassword": "更新密码",
   "workspace.collaboration.showSecret": "显示",
   "workspace.collaboration.hideSecret": "隐藏",
-  "workspace.collaboration.exitTitle": "退出并断开联机？",
-  "workspace.collaboration.exitBody":
-    "退出程序会断开房间连接。如果你是房主，其他成员也可能受到影响。",
-  "workspace.collaboration.exitConfirm": "退出程序",
-  "workspace.collaboration.exitTemporaryTitle": "退出并删除房间谱面？",
-  "workspace.collaboration.exitTemporaryBody":
-    "临时房间谱面和其中的未保存修改都会被删除。如需保留，请先导出谱面。",
-  "workspace.collaboration.exitTemporaryConfirm": "退出并删除",
   "workspace.collaboration.password": "房间密码",
   "workspace.collaboration.invalidServerUrl": "请填写 ws:// 或 wss:// 服务器地址。",
   "workspace.collaboration.hostFailed": "无法创建房间：{detail}",
