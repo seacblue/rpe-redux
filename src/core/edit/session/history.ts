@@ -9,6 +9,7 @@
  * does not mark it dirty.
  */
 import { normalizeChartObjectIds, type Chart } from "../../global/chart/chart.ts";
+import type { ChartDocument } from "../../global/chart/streaming/chartDocument.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
 import { invalidateChartLocations } from "../transaction/locations.ts";
@@ -154,11 +155,16 @@ export class History {
   private discardedEntries: HistoryEntryDetail[];
   private entriesSnapshot: HistoryEntries;
   private readonly listeners = new Set<() => void>();
+  /** Paged document backing a streamed chart facade. */
+  readonly chartDocument?: ChartDocument;
 
   /** Starts from a normalized document with empty stacks. */
-  constructor(document: Chart, limit = 150) {
-    this.document = normalizeChartObjectIds(document);
-    this.savedFingerprint = chartFingerprint(this.document);
+  constructor(document: Chart, limit = 150, chartDocument?: ChartDocument) {
+    this.chartDocument = chartDocument;
+    this.document = chartDocument ? document : normalizeChartObjectIds(document);
+    this.savedFingerprint = chartDocument
+      ? chartDocument.fingerprint()
+      : chartFingerprint(this.document);
     this.undoStack = [];
     this.redoStack = [];
     this.limit = limit;

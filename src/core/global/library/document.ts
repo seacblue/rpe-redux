@@ -9,7 +9,14 @@
  */
 import type { AssetMap } from "../document/types.ts";
 import { assetNames } from "../document/resources.ts";
-import type { LibraryAssetSummary, LibraryProject, LocalLibrary } from "./client.ts";
+import { parseChartByteStream } from "../chart/streaming/chartFrameParser.ts";
+import type { ChartDocument } from "../chart/streaming/chartDocument.ts";
+import type {
+  LibraryAssetSummary,
+  LibraryProject,
+  LibraryProjectSummary,
+  LocalLibrary,
+} from "./client.ts";
 
 /** A lazy asset map that remembers which content hash each name already has. */
 export interface LibraryAssetMap extends AssetMap {
@@ -99,6 +106,37 @@ export async function openLibraryProject(
     library.assets(id, { timeoutMs: 10_000 }),
   ]);
   return { project, assets: createLibraryAssetMap(library, id, assets) };
+}
+
+/** A streamed library chart document plus its project metadata and asset map. */
+export interface OpenedLibraryChartDocument {
+  readonly project: LibraryProjectSummary;
+  readonly chartDocument: ChartDocument;
+  readonly assets: LibraryAssetMap;
+}
+
+/**
+ * Open a library project through the chart stream.
+ *
+ * Metadata comes from the summary endpoint, the chart arrives as frames, and
+ * assets stay lazy behind the existing manifest map.
+ */
+export async function openLibraryChartDocument(
+  library: LocalLibrary,
+  id: string,
+): Promise<OpenedLibraryChartDocument> {
+  const [{ project }, { assets }] = await Promise.all([
+    library.summary(id, { timeoutMs: 30_000 }),
+    library.assets(id, { timeoutMs: 10_000 }),
+  ]);
+  const parsed = await parseChartByteStream(library.chartStream(id, { timeoutMs: 300_000 }), {
+    materialize: false,
+  });
+  return {
+    project,
+    chartDocument: parsed.chartDocument,
+    assets: createLibraryAssetMap(library, id, assets),
+  };
 }
 
 /** The parts of a save that need the network: known manifest and pending bytes. */

@@ -17,6 +17,8 @@ RPE Redux reads and writes RPE charts and PEZ packages, and imports/exports Phig
 
 Keep unknown fields, empty event layers, array ordering, and untouched beat strings. Derived indexes and editor-only metadata belong outside the serialized source object. JSON and PEZ round trips compare semantic content and leave the reference input unchanged.
 
+The editor opens and saves charts through a framed chart stream. The on-disk format is still the same JSON/PEZ document: frames carry a header, a line index, and raw line JSON, and the index is a rebuildable cache rather than a second chart format. A streamed line is parsed only when the document materializes it, so opening a large chart does not require one whole-file `JSON.parse` on the UI thread. The chart stream's line digests ignore editor-only object ids; `META.id` and all authored chart fields remain part of the fingerprint.
+
 Chart math and serialization changes need coverage of exact beat boundaries, defaults, event-layer stacking, parent-line behavior, note counts, resource references, and Next trajectory extensions.
 
 Speed events integrate the eased speed value. Events are sorted by time before integration, and accumulated distance uses RPE's 120 px per speed unit per second.

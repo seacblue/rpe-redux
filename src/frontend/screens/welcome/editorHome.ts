@@ -19,13 +19,20 @@ import { openSettings } from "../settings/settingsWindowController.ts";
 import type { AssetMap, EditorCandidate } from "../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../core/global/library/types.ts";
 import type { Chart } from "../../../core/global/chart/chart.ts";
-import { libraryCandidate } from "../editor/workspace/document/open/libraryCandidate.ts";
+import {
+  libraryCandidate,
+  libraryDocumentCandidate,
+} from "../editor/workspace/document/open/libraryCandidate.ts";
 import {
   catalogIdFor,
   catalogPathFor,
   rememberCatalogPath,
 } from "../../../core/global/library/libraryCatalog.ts";
-import { materializeAssets, openLibraryProject } from "../../../core/global/library/document.ts";
+import {
+  materializeAssets,
+  openLibraryProject,
+  openLibraryChartDocument,
+} from "../../../core/global/library/document.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
 import { createChartExport, createChartTextExport } from "../../../core/global/document/export.ts";
 import { download } from "../../platform/download.ts";
@@ -118,6 +125,16 @@ export function createEditorHomeRuntime(deps: {
     const found = await localService();
     if (!found) {
       throw libraryMissing();
+    }
+    try {
+      const opened = await openLibraryChartDocument(found.library, id);
+      await deps.loadCandidate(
+        libraryDocumentCandidate(opened.project, id, opened.chartDocument),
+        opened.assets,
+      );
+      return;
+    } catch {
+      // Older services or malformed streams use the whole-project fallback.
     }
     const opened = await openLibraryProject(found.library, id);
     await deps.loadCandidate(libraryCandidate(opened.project, id), opened.assets);

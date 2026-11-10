@@ -53,12 +53,14 @@ type CollabHealth struct {
 
 // API wires the store into an http.Handler.
 type API struct {
-	store     *store.Store
-	instances *instances.Hub
-	collab    CollabHealth
-	shutdown  func()
-	origins   map[string]bool
-	docs      *docsHandler
+	store          *store.Store
+	instances      *instances.Hub
+	collab         CollabHealth
+	shutdown       func()
+	origins        map[string]bool
+	docs           *docsHandler
+	chartIndexes   *chartIndexCache
+	commitSessions *commitSessionManager
 }
 
 // NewAPI builds the HTTP handler tree. extraOrigins adds CORS origins on top of
@@ -108,12 +110,14 @@ func newAPI(
 	extraOrigins ...string,
 ) http.Handler {
 	a := &API{
-		store:     data,
-		instances: hub,
-		collab:    collab,
-		shutdown:  shutdown,
-		origins:   originSet(extraOrigins),
-		docs:      newDocsHandler(docsDir),
+		store:          data,
+		instances:      hub,
+		collab:         collab,
+		shutdown:       shutdown,
+		origins:        originSet(extraOrigins),
+		docs:           newDocsHandler(docsDir),
+		chartIndexes:   newChartIndexCache(),
+		commitSessions: newCommitSessionManager(),
 	}
 	mux := http.NewServeMux()
 
@@ -134,9 +138,15 @@ func newAPI(
 	mux.HandleFunc("GET /api/projects", a.handleListProjects)
 	mux.HandleFunc("POST /api/projects", a.handleCreateProject)
 	mux.HandleFunc("GET /api/projects/{id}", a.handleGetProject)
+	mux.HandleFunc("GET /api/projects/{id}/summary", a.handleGetProjectSummary)
 	mux.HandleFunc("PATCH /api/projects/{id}", a.handlePatchProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", a.handleDeleteProject)
 	mux.HandleFunc("POST /api/projects/{id}/commit", a.handleCommitProject)
+	mux.HandleFunc("POST /api/projects/{id}/commit/begin", a.handleBeginCommit)
+	mux.HandleFunc("PUT /api/projects/{id}/commit/{sessionId}/chart", a.handleCommitChunk)
+	mux.HandleFunc("POST /api/projects/{id}/commit/{sessionId}/finish", a.handleCommitFinish)
+	mux.HandleFunc("GET /api/projects/{id}/chart/stream", a.handleChartStream)
+	mux.HandleFunc("GET /api/projects/{id}/chart/lines", a.handleChartLines)
 	mux.HandleFunc("POST /api/projects/{id}/duplicate", a.handleDuplicateProject)
 	mux.HandleFunc("GET /api/projects/{id}/assets", a.handleListAssets)
 	mux.HandleFunc("POST /api/projects/{id}/assets", a.handleStageAsset)
@@ -167,8 +177,10 @@ func methodGuard(next http.Handler) http.Handler {
 		// buffering recorder exists only to rewrite framework 404/405 text, and
 		// assets are already served by an application handler with JSON errors.
 		// The documentation handler writes its own JSON errors and must stream
-		// files instead of buffering them.
-		if strings.Contains(r.URL.Path, "/assets/") || isDocsPath(r.URL.Path) {
+		// files instead of buffering them. Chart stream and line responses are
+		// also unbounded binary payloads, so they bypass the recorder too.
+		if strings.Contains(r.URL.Path, "/assets/") || isDocsPath(r.URL.Path) ||
+			((r.Method == http.MethodGet || r.Method == http.MethodHead) && isChartStreamPath(r.URL.Path)) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -514,6 +526,16 @@ func (a *API) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 // handleGetProject returns one project with its chart.
 func (a *API) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	project, err := a.store.GetProject(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"project": project})
+}
+
+// handleGetProjectSummary returns project metadata without the chart payload.
+func (a *API) handleGetProjectSummary(w http.ResponseWriter, r *http.Request) {
+	project, err := a.store.GetProjectSummary(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeStoreError(w, err)
 		return

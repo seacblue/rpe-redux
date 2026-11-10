@@ -2,6 +2,7 @@
 /** Owns mutable editing state for one open chart, including history and selections. */
 import { t } from "../../../i18n/index.ts";
 import { warmChartFingerprintAsync } from "../document/chartRevision.ts";
+import type { ChartDocument } from "../../global/chart/streaming/chartDocument.ts";
 import {
   History,
   type HistoryBeatRange,
@@ -134,6 +135,8 @@ export class EditorSession extends EventTarget {
   /** Beat span of the most recent paste, for the overview strip marker. */
   lastPasteBeatRange: HistoryBeatRange | null;
   readonly readOnly: boolean;
+  /** Paged document backing this session, when the source was streamed. */
+  readonly chartDocument?: ChartDocument;
   /** The active room role can make an otherwise writable document read-only. */
   collaborationReadOnly = false;
   /** Remote entries are applied through the room and must not be undone locally. */
@@ -154,10 +157,15 @@ export class EditorSession extends EventTarget {
   declare visibleTimeUnit?: string;
 
   /** Creates a session over a normalized chart, optionally read-only. */
-  constructor(chart: Chart = createChart(), readOnly = false) {
+  constructor(chart: Chart = createChart(), readOnly = false, chartDocument?: ChartDocument) {
     super();
     this.readOnly = readOnly;
-    this.history = new History(normalizeChartObjectIds(chart));
+    this.chartDocument = chartDocument;
+    this.history = new History(
+      chartDocument ? chart : normalizeChartObjectIds(chart),
+      150,
+      chartDocument,
+    );
     this.lineIndex = 0;
     this.selection = new Set();
     this.selectionRevision = 0;
@@ -189,11 +197,15 @@ export class EditorSession extends EventTarget {
     this.lastPasteBeatRange = null;
   }
 
+  /** Create a session over a paged document facade. */
+  static fromDocument(chartDocument: ChartDocument, readOnly = false): EditorSession {
+    return new EditorSession(chartDocument.chart, readOnly, chartDocument);
+  }
+
   /** The committed chart held by history. */
   get chart(): Chart {
     return this.history.document;
-  }
-  /** Expose the immutable history read model to editor-owned surfaces. */
+  } /** Expose the immutable history read model to editor-owned surfaces. */
   historyEntries(): HistoryEntries {
     return this.history.entries();
   }
@@ -760,6 +772,12 @@ export class EditorSession extends EventTarget {
       // without leaving a stale set from another panel.
       this.selection = new Set(this.multiLineSelection.get(index) ?? []);
       this.eventSelection = new Set(this.multiEventSelection.get(index) ?? []);
+    }
+    if (this.chartDocument && !this.chartDocument.isLoaded(index)) {
+      void this.chartDocument
+        .ensureAncestors(index)
+        .then(() => this.notify())
+        .catch(() => undefined);
     }
     this.normalizeMultiLine();
     this.notify();

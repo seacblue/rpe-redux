@@ -22,6 +22,7 @@ import {
 } from "../../../../../../core/global/document/resources.ts";
 import { attachExternalEffects } from "../../../../../../core/global/document/effects.ts";
 import { type AssetMap } from "../../../../../../core/global/document/types.ts";
+import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
 import { loadingPaint, type LoadTask } from "../../../../../../core/global/document/loading.ts";
 import { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import { ProjectImages } from "../../../../../../core/media/images.ts";
@@ -95,6 +96,7 @@ export interface CandidateLoaderDependencies {
     loadImages: boolean,
     diagnostics?: EditorCandidate["diagnostics"],
     readOnly?: boolean,
+    document?: ChartDocument,
   ) => void;
   setLibraryProject: (project: LibraryProjectRef | null) => void;
   currentChart: () => Chart;
@@ -113,38 +115,66 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
   return async (candidate: EditorCandidate, nextAssets: AssetMap, task: LoadTask) => {
     task.update("notes");
     await loadingPaint();
-    // Parsed candidates already passed the whole-chart gate in the parser or
-    // worker and carry their diagnostics, so the main thread does not need to
-    // strip, collect, or validate them again.
-    const parsedAndValidated =
-      candidate.diagnostics !== undefined &&
-      candidate.diagnostics.length === 0 &&
-      isChartObjectIdsNormalized(candidate.chart as Chart);
-    if (!parsedAndValidated) {
-      stripLegacyTrajectory(candidate.chart);
-      stripReduxExportVersion(candidate.chart);
+    const chartDocument = candidate.chartDocument;
+    let chart: Chart;
+    let diagnostics: NonNullable<EditorCandidate["diagnostics"]> = [];
+    if (chartDocument) {
+      const initialLine = candidate.project?.viewState?.lineIndex ?? 0;
+      if (
+        Number.isInteger(initialLine) &&
+        initialLine >= 0 &&
+        initialLine < chartDocument.lineCount
+      ) {
+        await chartDocument.ensureAncestors(initialLine);
+      }
+      // Phase 1 installs a plain eager snapshot. The document still avoids a
+      // whole-file JSON.parse and keeps line parsing out of the open path; the
+      // paged session path will consume the document directly in Phase 2.
+      let materialized;
+      try {
+        materialized = await chartDocument.materializeAll();
+      } finally {
+        candidate.disposeDocument?.();
+      }
+      chart = {
+        ...materialized,
+        judgeLineList: [...(materialized.judgeLineList ?? [])],
+      } as Chart;
+    } else {
+      // Parsed candidates already passed the whole-chart gate in the parser or
+      // worker and carry their diagnostics, so the main thread does not need to
+      // strip, collect, or validate them again.
+      const parsedAndValidated =
+        candidate.diagnostics !== undefined &&
+        candidate.diagnostics.length === 0 &&
+        isChartObjectIdsNormalized(candidate.chart as Chart);
+      if (!parsedAndValidated) {
+        stripLegacyTrajectory(candidate.chart);
+        stripReduxExportVersion(candidate.chart);
+      }
+      const collected = candidate.diagnostics ?? collectChartDiagnostics(candidate.chart);
+      diagnostics =
+        candidate.diagnostics ??
+        collected.map((entry) => ({
+          ...entry,
+          path: `${candidate.name}:${entry.path}`,
+        }));
+      const resolved = (
+        diagnostics.length ? sanitizeChartForReadOnly(candidate.chart) : candidate.chart
+      ) as Chart | null;
+      if (!resolved) {
+        throw new ChartLoadError(
+          diagnostics,
+          `${candidate.name}: ${t("model.chart.invalidDocument")}`,
+        );
+      }
+      if (!parsedAndValidated) {
+        assertChart(resolved);
+      }
+      await reportChartObjectProgress(resolved, task);
+      attachExternalEffects([{ name: candidate.name, chart: resolved }], nextAssets);
+      chart = resolved;
     }
-    const collected = candidate.diagnostics ?? collectChartDiagnostics(candidate.chart);
-    const diagnostics =
-      candidate.diagnostics ??
-      collected.map((entry) => ({
-        ...entry,
-        path: `${candidate.name}:${entry.path}`,
-      }));
-    const chart = (
-      diagnostics.length ? sanitizeChartForReadOnly(candidate.chart) : candidate.chart
-    ) as Chart | null;
-    if (!chart) {
-      throw new ChartLoadError(
-        diagnostics,
-        `${candidate.name}: ${t("model.chart.invalidDocument")}`,
-      );
-    }
-    if (!parsedAndValidated) {
-      assertChart(chart);
-    }
-    await reportChartObjectProgress(chart, task);
-    attachExternalEffects([{ name: candidate.name, chart }], nextAssets);
     deps.replaceChart(
       chart,
       candidate.name,
@@ -153,6 +183,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       false,
       diagnostics,
       Boolean(candidate.readOnly || diagnostics.length),
+      undefined,
     );
     deps.setLibraryProject(candidate.project ?? null);
 

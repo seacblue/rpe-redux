@@ -4,6 +4,7 @@
  * owns snapshot timing; this module only returns the chart text.
  */
 import { serializeChart } from "../../../../../../core/global/chart/chart.ts";
+import { registeredChartDocument } from "../../../../../../core/global/chart/streaming/chartDocumentRegistry.ts";
 import { extensionRegistry } from "../../../../../../core/extensions/runtime.ts";
 import { yieldToHost } from "../../../../../../core/utils/yieldToHost.ts";
 
@@ -81,6 +82,27 @@ function workerInstance(): Worker | null {
 }
 
 /**
+ * Serialize a save snapshot as JSON chunks. A document-backed facade uses its
+ * line store; other charts use the existing whole-chart worker path.
+ */
+export async function* serializeChartStream(chart: unknown): AsyncIterable<string> {
+  const document =
+    chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
+  if (document?.serialize) {
+    const chunks: string[] = [];
+    await document.serialize((chunk) => {
+      chunks.push(chunk);
+    });
+    for (const chunk of chunks) {
+      yield chunk;
+      await yieldToHost();
+    }
+    return;
+  }
+  yield await serializeChartOffThread(chart);
+}
+
+/**
  * Serializes the save snapshot away from the UI thread.
  *
  * The worker receives the immutable snapshot and returns the exact
@@ -88,6 +110,15 @@ function workerInstance(): Worker | null {
  * serializers, fall back to the main-thread path.
  */
 export async function serializeChartOffThread(chart: unknown): Promise<string> {
+  const document =
+    chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
+  if (document?.serialize) {
+    const chunks: string[] = [];
+    await document.serialize((chunk) => {
+      chunks.push(chunk);
+    });
+    return chunks.join("");
+  }
   const hasCustomSerializer =
     extensionRegistry.hasHook("chart:serialize") || extensionRegistry.hasHook("chart:validate");
   if (hasCustomSerializer) {

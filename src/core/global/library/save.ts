@@ -17,6 +17,8 @@ export interface LibrarySaveInput {
   baseRevision?: number;
   chart: unknown;
   chartJson: string;
+  /** Chunked chart text; when present, the save uses the streamed commit. */
+  chartChunks?: AsyncIterable<string>;
   name: string;
   group?: string;
   assets: AssetMap;
@@ -63,7 +65,7 @@ export async function saveLibraryDocument(input: LibrarySaveInput): Promise<Libr
       {
         name: input.duplicate ? copyName : input.name,
         group: input.group,
-        chartJson: input.chartJson,
+        chartJson: input.chartChunks ? "{}" : input.chartJson,
       },
       { timeoutMs: 30_000 },
     );
@@ -87,14 +89,16 @@ export async function saveLibraryDocument(input: LibrarySaveInput): Promise<Libr
   manifest.sort((left, right) => left.name.localeCompare(right.name));
   progress(0.7);
 
-  const result = await input.library.commit(projectId, {
+  const commitInput = {
     baseRevision: revision,
     ...(input.duplicate ? {} : { name: input.name }),
-    chartJson: input.chartJson,
     assets: manifest,
     ...(input.viewState ? { viewState: input.viewState } : {}),
     ...(input.assetFolders ? { assetFolders: input.assetFolders } : {}),
-  });
+  };
+  const result = input.chartChunks
+    ? await input.library.commitStream(projectId, commitInput, input.chartChunks)
+    : await input.library.commit(projectId, { ...commitInput, chartJson: input.chartJson });
   progress(1);
   return {
     projectId,

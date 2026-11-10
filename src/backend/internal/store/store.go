@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS projects (
     level         TEXT NOT NULL DEFAULT '',
     note_count    INTEGER NOT NULL DEFAULT 0,
     chart         TEXT NOT NULL DEFAULT '{}',
+    chart_index   TEXT NOT NULL DEFAULT '',
     size          INTEGER NOT NULL DEFAULT 0,
     revision      INTEGER NOT NULL DEFAULT 1,
     chart_hash    TEXT NOT NULL DEFAULT '',
@@ -203,6 +204,7 @@ CREATE TABLE IF NOT EXISTS revisions (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     label      TEXT NOT NULL DEFAULT '',
     chart      TEXT NOT NULL DEFAULT '{}',
+    chart_index TEXT NOT NULL DEFAULT '',
     size       INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
@@ -245,6 +247,9 @@ CREATE INDEX IF NOT EXISTS idx_revision_assets_hash ON revision_assets(hash);`
 	if err := s.ensureAssetStagingColumn(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureChartIndexColumns(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -279,10 +284,40 @@ func (s *Store) ensureAssetStagingColumn(ctx context.Context) error {
 // ensureAssetColumn reports whether it added a missing column. A concurrent
 // upgrade that wins the ALTER is treated as success once the column is visible.
 func (s *Store) ensureAssetColumn(ctx context.Context, name, ddl string) (bool, error) {
-	const columnQuery = `SELECT COUNT(*) FROM pragma_table_info('assets') WHERE name = ?`
+	return s.ensureTableColumn(ctx, "assets", name, ddl)
+}
+
+// ensureChartIndexColumns adds the rebuildable line-index cache columns to
+// libraries created before they existed. The columns hold a cache only; an
+// empty or stale value is rebuilt on demand, and existing chart payloads are
+// never rewritten.
+func (s *Store) ensureChartIndexColumns(ctx context.Context) error {
+	if _, err := s.ensureTableColumn(ctx, "projects", "chart_index",
+		`ALTER TABLE projects ADD COLUMN chart_index TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("add projects.chart_index: %w", err)
+	}
+	if _, err := s.ensureTableColumn(ctx, "revisions", "chart_index",
+		`ALTER TABLE revisions ADD COLUMN chart_index TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("add revisions.chart_index: %w", err)
+	}
+	return nil
+}
+
+// ensureTableColumn reports whether it added a missing column. A concurrent
+// upgrade that wins the ALTER is treated as success once the column is visible.
+func (s *Store) ensureTableColumn(ctx context.Context, table, name, ddl string) (bool, error) {
+	// Table names are internal constants; rejecting anything else keeps the
+	// interpolated pragma argument from becoming a query injection point.
+	switch table {
+	case "assets", "projects", "revisions":
+	default:
+		return false, fmt.Errorf("unsupported table %q", table)
+	}
+	columnQuery := fmt.Sprintf(
+		`SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = ?`, table)
 	var count int
 	if err := s.db.QueryRowContext(ctx, columnQuery, name).Scan(&count); err != nil {
-		return false, fmt.Errorf("inspect asset schema: %w", err)
+		return false, fmt.Errorf("inspect %s schema: %w", table, err)
 	}
 	if count > 0 {
 		return false, nil
@@ -292,10 +327,10 @@ func (s *Store) ensureAssetColumn(ctx context.Context, name, ddl string) (bool, 
 		// ALTER; only report the failure when the column is still absent.
 		var exists int
 		if probeErr := s.db.QueryRowContext(ctx, columnQuery, name).Scan(&exists); probeErr != nil {
-			return false, fmt.Errorf("inspect asset schema: %w", probeErr)
+			return false, fmt.Errorf("inspect %s schema: %w", table, probeErr)
 		}
 		if exists == 0 {
-			return false, fmt.Errorf("add asset column %s: %w", name, err)
+			return false, fmt.Errorf("add %s column %s: %w", table, name, err)
 		}
 		return false, nil
 	}

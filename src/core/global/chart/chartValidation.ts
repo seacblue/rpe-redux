@@ -14,7 +14,7 @@ import { sampleCurveTrajectory } from "./trajectory/curveTrajectory.ts";
 import { trajectorySplitSettings } from "./trajectory/trajectorySimplify.ts";
 import { EVENT_TRACKS, isNoteType } from "./chartVocabulary.ts";
 import { CONTROL_TRACKS } from "./chartTracks.ts";
-import type { Chart, JudgeLineEvent, JudgeLineNote, LineEventValue } from "./chart.ts";
+import type { Chart, JudgeLine, JudgeLineEvent, JudgeLineNote, LineEventValue } from "./chart.ts";
 
 /** Whether one event endpoint follows the track's value type. */
 function validEventValue(entry: LineEventValue, type: string): boolean {
@@ -159,8 +159,8 @@ export function assertEventTrackStructure(
   }
 }
 
-/** Throws a descriptive error when a chart fails the format's structural rules. */
-export function assertChartStructure(value: Chart): void {
+/** Throws a descriptive error when the chart header fails structural rules. */
+export function assertChartHeaderStructure(value: Chart): void {
   if (
     !value ||
     typeof value !== "object" ||
@@ -177,55 +177,65 @@ export function assertChartStructure(value: Chart): void {
   if (value.META.offset !== undefined && !Number.isFinite(value.META.offset)) {
     throw new Error(t("model.chart.offsetNotFinite"));
   }
+}
+
+/** Throws a descriptive error when one judge line fails structural rules. */
+export function assertJudgeLineStructure(line: JudgeLine, lineIndex: number): void {
+  const path = `judgeLineList[${lineIndex}]`;
+  if (!line || typeof line !== "object") {
+    throw new Error(t("model.chart.invalidJudgeLine", { path }));
+  }
+  if (line.bpmfactor !== undefined && (!Number.isFinite(line.bpmfactor) || line.bpmfactor <= 0)) {
+    throw new Error(t("model.chart.bpmFactorPositive", { path }));
+  }
+  if (line.notes != null && !Array.isArray(line.notes)) {
+    throw new Error(t("model.validation.mustBeArray", { target: `${path}.notes` }));
+  }
+  const notes = line.notes ?? [];
+  for (let index = 0; index < notes.length; index++) {
+    const note = notes[index];
+    if (!note || typeof note !== "object") {
+      throw new Error(t("model.chart.invalidNote", { path: `${path}.notes[${index}]` }));
+    }
+    assertNoteStructure(note, path, index);
+  }
+  if (line.eventLayers != null && !Array.isArray(line.eventLayers)) {
+    throw new Error(t("model.validation.mustBeArray", { target: `${path}.eventLayers` }));
+  }
+  for (const layer of [...(line.eventLayers ?? []), line.extended]) {
+    if (!layer) {
+      continue;
+    }
+    for (const type of EVENT_TRACKS) {
+      const events = layer[type];
+      if (events != null && !Array.isArray(events)) {
+        throw new Error(t("model.validation.mustBeArray", { target: `${path}.${type}` }));
+      }
+      assertEventTrackStructure(events, type, `${path}.${type}`);
+    }
+  }
+  for (const { field, property } of CONTROL_TRACKS) {
+    const list = line[field];
+    if (list == null) {
+      continue;
+    }
+    if (!Array.isArray(list)) {
+      throw new Error(t("model.validation.mustBeArray", { target: `${path}.${field}` }));
+    }
+    for (const [index, point] of list.entries()) {
+      if (!Number.isFinite(point?.x) || !Number.isFinite(point?.[property])) {
+        throw new Error(
+          t("model.chart.invalidControlPoint", { path: `${path}.${field}[${index}]` }),
+        );
+      }
+    }
+  }
+}
+
+/** Throws a descriptive error when a chart fails the format's structural rules. */
+export function assertChartStructure(value: Chart): void {
+  assertChartHeaderStructure(value);
   (value.judgeLineList ?? []).forEach((line, lineIndex) => {
-    const path = `judgeLineList[${lineIndex}]`;
-    if (!line || typeof line !== "object") {
-      throw new Error(t("model.chart.invalidJudgeLine", { path }));
-    }
-    if (line.bpmfactor !== undefined && (!Number.isFinite(line.bpmfactor) || line.bpmfactor <= 0)) {
-      throw new Error(t("model.chart.bpmFactorPositive", { path }));
-    }
-    if (line.notes != null && !Array.isArray(line.notes)) {
-      throw new Error(t("model.validation.mustBeArray", { target: `${path}.notes` }));
-    }
-    const notes = line.notes ?? [];
-    for (let index = 0; index < notes.length; index++) {
-      const note = notes[index];
-      if (!note || typeof note !== "object") {
-        throw new Error(t("model.chart.invalidNote", { path: `${path}.notes[${index}]` }));
-      }
-      assertNoteStructure(note, path, index);
-    }
-    if (line.eventLayers != null && !Array.isArray(line.eventLayers)) {
-      throw new Error(t("model.validation.mustBeArray", { target: `${path}.eventLayers` }));
-    }
-    for (const layer of [...(line.eventLayers ?? []), line.extended]) {
-      if (!layer) {
-        continue;
-      }
-      for (const type of EVENT_TRACKS) {
-        const events = layer[type];
-        if (events != null && !Array.isArray(events)) {
-          throw new Error(t("model.validation.mustBeArray", { target: `${path}.${type}` }));
-        }
-        assertEventTrackStructure(events, type, `${path}.${type}`);
-      }
-    }
-    for (const { field, property } of CONTROL_TRACKS) {
-      const list = line[field];
-      if (list == null) {
-        continue;
-      }
-      if (!Array.isArray(list)) {
-        throw new Error(t("model.validation.mustBeArray", { target: `${path}.${field}` }));
-      }
-      for (const [index, point] of list.entries()) {
-        if (!Number.isFinite(point?.x) || !Number.isFinite(point?.[property])) {
-          throw new Error(
-            t("model.chart.invalidControlPoint", { path: `${path}.${field}[${index}]` }),
-          );
-        }
-      }
-    }
+    assertJudgeLineStructure(line, lineIndex);
   });
 }

@@ -7,13 +7,16 @@
 import { values, type ValueCell } from "../../../../../core/state/values.ts";
 import { loadingProgress } from "../../../../../core/global/document/loading.ts";
 import { localService } from "../../../../../core/global/library/service.ts";
-import { openLibraryProject } from "../../../../../core/global/library/document.ts";
+import {
+  openLibraryProject,
+  openLibraryChartDocument,
+} from "../../../../../core/global/library/document.ts";
 import type { AssetMap, EditorCandidate } from "../../../../../core/global/document/types.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { TauriDocumentStore } from "../../../../../core/platform/desktop/documentStore.ts";
 import type { WorkspaceDocumentState } from "../runtime/providers/DocumentProvider.tsx";
 import type { TimelineViewport } from "../timeline/viewport/timelineViewport.ts";
-import { libraryCandidate } from "../document/open/libraryCandidate.ts";
+import { libraryCandidate, libraryDocumentCandidate } from "../document/open/libraryCandidate.ts";
 import { createExternalResourceOpenSession } from "../document/open/externalResourceOpen.ts";
 import {
   clearWorkspaceSession,
@@ -132,6 +135,17 @@ export function createWorkspaceSessionRuntime(
     const found = await localService();
     if (!found) {
       return false;
+    }
+    try {
+      const opened = await openLibraryChartDocument(found.library, reference.id);
+      await deps.loadCandidate(
+        libraryDocumentCandidate(opened.project, reference.id, opened.chartDocument),
+        opened.assets,
+      );
+      return true;
+    } catch {
+      // Older services and malformed streams fall back to the whole-project
+      // read so session restore keeps its existing recovery path.
     }
     const opened = await openLibraryProject(found.library, reference.id);
     if (!opened.project) {

@@ -4,12 +4,15 @@
  * feature-owned; this module fixes the order between them.
  */
 import { assertChart, type Chart } from "../../../../../../core/global/chart/chart.ts";
+import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { ChartDiagnostic } from "../../../../../../core/global/chart/diagnostics.ts";
 
 /** One validated document ready to replace the current one. */
 export interface DocumentReplacement {
   chart: Chart;
+  /** Paged document backing `chart`; its facade may contain placeholders. */
+  chartDocument?: ChartDocument;
   name: string;
   assets: AssetMap;
   folders: Set<string>;
@@ -34,11 +37,17 @@ export function createDocumentReplacer(steps: DocumentReplacementSteps) {
     loadImages = true,
     diagnostics: readonly ChartDiagnostic[] = [],
     readOnly = false,
+    chartDocument?: ChartDocument,
   ): void {
-    assertChart(chart);
+    // A paged facade contains placeholders; its document validated each loaded
+    // line as it was parsed, so the whole-chart walk would inspect placeholders.
+    if (!chartDocument) {
+      assertChart(chart);
+    }
     steps.releasePrevious();
     steps.install({
       chart,
+      ...(chartDocument ? { chartDocument } : {}),
       name,
       assets,
       folders: new Set(folders ?? []),
