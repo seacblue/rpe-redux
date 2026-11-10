@@ -141,6 +141,7 @@ function RoomPanelBody() {
     startingRoom,
     joiningRoom,
     pendingInviteLink,
+    canHost,
     recovery,
     clearRecovery,
     applyRecovery,
@@ -151,6 +152,9 @@ function RoomPanelBody() {
     updateRoomPassword,
   } = useCollaboration();
   const [mode, setMode] = useState<"create" | "join">(pendingInviteLink ? "join" : "create");
+  // Without a document there is no chart to host; the welcome-page entry can
+  // only join an existing room.
+  const effectiveMode = canHost ? mode : "join";
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [color, setColor] = useState(settings.color);
   const [hostMode, setHostMode] = useState(settings.hostMode);
@@ -507,19 +511,21 @@ function RoomPanelBody() {
               className={`collab-status is-${startingRoom || joiningRoom ? "connecting" : state.status}`}
               role="status"
             >
-              {joiningRoom ? t("workspace.collaboration.joiningRoom") : statusText}
+              {joiningRoom ? t("workspace.collaboration.joiningRoom") : statusText}...
             </p>
           )}
-          <Segmented<"create" | "join">
-            className="is-block collab-mode-switch"
-            ariaLabel={t("workspace.collaboration.title")}
-            value={mode}
-            options={[
-              { value: "create", label: t("workspace.collaboration.createTab") },
-              { value: "join", label: t("workspace.collaboration.joinTab") },
-            ]}
-            onChange={setMode}
-          />
+          {canHost && (
+            <Segmented<"create" | "join">
+              className="is-block collab-mode-switch"
+              ariaLabel={t("workspace.collaboration.title")}
+              value={effectiveMode}
+              options={[
+                { value: "create", label: t("workspace.collaboration.createTab") },
+                { value: "join", label: t("workspace.collaboration.joinTab") },
+              ]}
+              onChange={setMode}
+            />
+          )}
           <FieldRow
             label={t("workspace.collaboration.displayName")}
             control={(id) => (
@@ -535,7 +541,7 @@ function RoomPanelBody() {
             control={<ColorField value={color} onChange={setColor} />}
           />
           {state.error && <InlineAlert className="collab-error">{state.error}</InlineAlert>}
-          {mode === "create" ? (
+          {effectiveMode === "create" ? (
             <>
               <FieldRow
                 label={t("workspace.collaboration.hostMode")}
@@ -645,7 +651,6 @@ function RoomPanelBody() {
                       />
                     )}
                   />
-                  <p className="hint">{t("workspace.collaboration.joinHint")}</p>
                 </>
               ) : (
                 <>

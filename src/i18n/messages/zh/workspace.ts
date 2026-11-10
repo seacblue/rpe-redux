@@ -225,7 +225,6 @@ export default {
   "workspace.welcome.menu.label": "谱面菜单",
 
   "workspace.collaboration.title": "联机协作",
-  "workspace.collaboration.description": "为当前谱面创建房间，或粘贴邀请链接加入。",
   "workspace.collaboration.defaultName": "成员",
   "workspace.collaboration.createTab": "创建房间",
   "workspace.collaboration.joinTab": "加入房间",
@@ -280,8 +279,6 @@ export default {
   "workspace.collaboration.sessionClaimFailed":
     "无法确认房间会话状态。请关闭其他 Redux 窗口后重试。",
   "workspace.collaboration.startingRoom": "正在启动房间……",
-  "workspace.collaboration.joinHint":
-    "粘贴邀请链接加入。除非房间允许自动编辑，否则仍需要房主批准。",
   "workspace.collaboration.joinInviteTitle": "加入这个房间？",
   "workspace.collaboration.joinInviteMembers": "房间成员",
   "workspace.collaboration.joinInviteCapacity": "{count}/{max} 人",

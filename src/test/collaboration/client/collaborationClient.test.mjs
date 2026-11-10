@@ -321,10 +321,12 @@ test("an old socket closing cannot tear down a replacement connection", () => {
 test("asset uploads are chunked and downloads verify their hash", async () => {
   const harness = socketHarness();
   const ready = [];
+  const transfers = [];
   const client = new CollaborationClient({
     socketFactory: harness.factory,
     reconnect: false,
     onAssetReady: (asset, bytes) => ready.push({ asset, bytes }),
+    onAssetProgress: (progress) => transfers.push(progress),
   });
   client.connect("ws://127.0.0.1:47830");
   const socket = harness.sockets[0];
@@ -367,6 +369,10 @@ test("asset uploads are chunked and downloads verify their hash", async () => {
     }),
   });
   assert.equal(await upload, hash);
+  assert.deepEqual(
+    transfers.filter((entry) => entry.direction === "upload").map((entry) => entry.state),
+    ["begin", "progress", "done"],
+  );
 
   socket.emit("message", {
     data: JSON.stringify({
@@ -393,6 +399,12 @@ test("asset uploads are chunked and downloads verify their hash", async () => {
   }
   assert.equal(ready.length, 1);
   assert.deepEqual([...ready[0].bytes], [...bytes]);
+  assert.deepEqual(
+    transfers.filter((entry) => entry.direction === "download").map((entry) => entry.state),
+    ["begin", "progress", "done"],
+  );
+  assert.equal(transfers.at(-1).name, "cover.png");
+  assert.equal(transfers.at(-1).received, bytes.length);
   client.dispose();
 });
 
