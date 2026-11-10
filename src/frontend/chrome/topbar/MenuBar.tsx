@@ -181,9 +181,18 @@ export function MenuBar() {
     }, HOVER_CLOSE_MS);
   };
 
-  /** Opens the sheet; clicking its trigger never closes an already open sheet. */
-  const openMenu = () => {
+  /**
+   * Toggles the click-only sheet. Expanded sections own their hover contract:
+   * their trigger clicks are no-ops while the section is already open.
+   */
+  const toggleMenu = () => {
     cancelHover();
+    cancelClose();
+    if (open) {
+      setOpen(false);
+      setOpenSection(null);
+      return;
+    }
     setOpen(true);
   };
 
@@ -282,7 +291,7 @@ export function MenuBar() {
           aria-expanded={open}
           data-active={open}
           data-tip-title={t("chrome.menu.label")}
-          onClick={openMenu}
+          onClick={toggleMenu}
         >
           <ThemeUiNodeView
             tree={template}
@@ -297,7 +306,7 @@ export function MenuBar() {
           active={open}
           aria-haspopup="menu"
           aria-expanded={open}
-          onClick={openMenu}
+          onClick={toggleMenu}
         />
       )}
       {open && (
