@@ -345,6 +345,16 @@ export class LocalLibrary {
   }
 
   /**
+   * Report whether this host can serve the paged chart stream.
+   *
+   * The HTTP service exposes frames and random line access. A host that keeps
+   * the whole chart locally reports false so callers load the project directly.
+   */
+  supportsChartStream(): boolean {
+    return true;
+  }
+
+  /**
    * Bind one project id and return handles that never accept a different one.
    *
    * The id is validated once here; later calls cannot change the target. The

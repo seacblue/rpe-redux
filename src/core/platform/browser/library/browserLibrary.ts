@@ -468,6 +468,11 @@ export class BrowserLibrary extends LocalLibrary {
     });
   }
 
+  /** The browser worker keeps whole charts in SQLite and has no frame endpoints. */
+  override supportsChartStream(): boolean {
+    return false;
+  }
+
   override list(
     query: ListQuery = {},
     _options: RequestOptions = {},

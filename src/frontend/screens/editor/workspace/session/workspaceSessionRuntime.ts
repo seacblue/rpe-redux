@@ -136,16 +136,18 @@ export function createWorkspaceSessionRuntime(
     if (!found) {
       return false;
     }
-    try {
-      const opened = await openLibraryChartDocument(found.library, reference.id);
-      await deps.loadCandidate(
-        libraryDocumentCandidate(opened.project, reference.id, opened.chartDocument),
-        opened.assets,
-      );
-      return true;
-    } catch {
-      // Older services and malformed streams fall back to the whole-project
-      // read so session restore keeps its existing recovery path.
+    if (found.library.supportsChartStream()) {
+      try {
+        const opened = await openLibraryChartDocument(found.library, reference.id);
+        await deps.loadCandidate(
+          libraryDocumentCandidate(opened.project, reference.id, opened.chartDocument),
+          opened.assets,
+        );
+        return true;
+      } catch {
+        // Older services and malformed streams fall back to the whole-project
+        // read so session restore keeps its existing recovery path.
+      }
     }
     const opened = await openLibraryProject(found.library, reference.id);
     if (!opened.project) {

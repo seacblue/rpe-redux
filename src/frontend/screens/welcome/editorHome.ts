@@ -126,15 +126,17 @@ export function createEditorHomeRuntime(deps: {
     if (!found) {
       throw libraryMissing();
     }
-    try {
-      const opened = await openLibraryChartDocument(found.library, id);
-      await deps.loadCandidate(
-        libraryDocumentCandidate(opened.project, id, opened.chartDocument),
-        opened.assets,
-      );
-      return;
-    } catch {
-      // Older services or malformed streams use the whole-project fallback.
+    if (found.library.supportsChartStream()) {
+      try {
+        const opened = await openLibraryChartDocument(found.library, id);
+        await deps.loadCandidate(
+          libraryDocumentCandidate(opened.project, id, opened.chartDocument),
+          opened.assets,
+        );
+        return;
+      } catch {
+        // Older services or malformed streams use the whole-project fallback.
+      }
     }
     const opened = await openLibraryProject(found.library, id);
     await deps.loadCandidate(libraryCandidate(opened.project, id), opened.assets);
