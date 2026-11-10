@@ -50,6 +50,10 @@ npm run build         # NSIS installer on Windows; deb, rpm, and AppImage on Lin
 
 > Windows ships x64, x86, and ARM64 NSIS installers. Linux ships x64 deb, rpm, and AppImage packages. Only the AppImage replaces itself through the in-app updater; deb and rpm users upgrade through their package manager.
 
+## Web edition
+
+`npm run dev:web` runs the static page with the browser SQLite library; `npm run build:web` produces `dist/`, and the GitHub Pages workflow deploys that directory. Charts live in the browser's OPFS. **Settings → General → Browser storage** requests persistent storage and downloads or restores a `.sqlite` backup. The desktop app remains the full editor: updates, Extensions, Code Cell, collaboration hosting, and native file access stay desktop-only.
+
 ## Development
 
 `npm run dev` is the browser development loop: it starts the Go service and Vite together, uses one fixed port set per checkout, and reloads the page on source edits. `npm run dev:desktop` opens the Tauri window for native-host work. Each checkout chooses its own random port set in `.scratch/dev/ports.json`; keep that record worktree-local so parallel checkouts and AI sessions do not share a backend. Start with [Development](docs/development.md) for the workflow, commands, and a repository tour, and [Testing](docs/testing.md) for the test suites, fixtures, and where a new test belongs. Ownership rules, contribution patterns, and the code conventions are in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).

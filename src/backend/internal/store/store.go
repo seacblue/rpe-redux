@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -26,6 +27,12 @@ import (
 
 // ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("not found")
+
+// ErrLibraryNotRecognized reports a SQLite file owned by another application.
+var ErrLibraryNotRecognized = errors.New("library database is not recognized")
+
+// ErrLibrarySchemaTooNew reports a library written by a newer application.
+var ErrLibrarySchemaTooNew = errors.New("library schema is newer than this application")
 
 // RevisionConflictError reports an optimistic-concurrency miss. The caller can
 // retry against CurrentRevision after deciding how to merge the local chart.
@@ -38,10 +45,14 @@ func (e *RevisionConflictError) Error() string {
 	return fmt.Sprintf("chart revision changed (%d)", e.CurrentRevision)
 }
 
+// applicationID marks a SQLite file as an RPE Redux library. It is stored in
+// the database header so an import can reject an unrelated SQLite file before
+// reading any table.
+const applicationID = 1380992338
+
 // schemaVersion is the library layout this build creates and expects. Older
-// databases are not migrated wholesale, but initSchema adds columns that can
-// be introduced without rewriting existing rows.
-const schemaVersion = 1
+// databases are migrated additively; no existing row is rewritten.
+const schemaVersion = 2
 
 // timeLayout is the canonical timestamp format (RFC3339, UTC).
 const timeLayout = time.RFC3339
@@ -116,6 +127,9 @@ type RevisionSummary struct {
 type Store struct {
 	db   *sql.DB
 	Path string
+
+	preferenceHookMu sync.RWMutex
+	preferenceHook   func()
 }
 
 // Open opens (creating if needed) the SQLite database at path, applying the
@@ -171,9 +185,35 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// initSchema creates the v1 library schema when it is absent and applies the
-// additive columns this build expects. It does not migrate an older layout.
+// SetPreferenceHook registers a callback after a preference document is
+// committed. The callback runs asynchronously so a settings save never waits
+// for the backup service.
+func (s *Store) SetPreferenceHook(hook func()) {
+	s.preferenceHookMu.Lock()
+	s.preferenceHook = hook
+	s.preferenceHookMu.Unlock()
+}
+
+func (s *Store) notifyPreferenceHook() {
+	s.preferenceHookMu.RLock()
+	hook := s.preferenceHook
+	s.preferenceHookMu.RUnlock()
+	if hook != nil {
+		go hook()
+	}
+}
+
+// initSchema creates the current library schema when it is absent and applies
+// the additive columns this build expects. It refuses a foreign database or a
+// schema written by a newer build instead of modifying it.
 func (s *Store) initSchema(ctx context.Context) error {
+	version, err := s.checkSchemaCompatibility(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.backupBeforeMigration(ctx, version); err != nil {
+		return err
+	}
 	const schema = `
 CREATE TABLE IF NOT EXISTS projects (
     id            TEXT PRIMARY KEY,
@@ -206,6 +246,7 @@ CREATE TABLE IF NOT EXISTS revisions (
     chart      TEXT NOT NULL DEFAULT '{}',
     chart_index TEXT NOT NULL DEFAULT '',
     size       INTEGER NOT NULL DEFAULT 0,
+    chart_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_revisions_project ON revisions(project_id, created_at DESC);
@@ -214,6 +255,11 @@ CREATE TABLE IF NOT EXISTS preferences (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     data       TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS library_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -250,7 +296,97 @@ CREATE INDEX IF NOT EXISTS idx_revision_assets_hash ON revision_assets(hash);`
 	if err := s.ensureChartIndexColumns(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureRevisionChartHashColumn(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureLibraryMeta(ctx); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx,
+		fmt.Sprintf("PRAGMA application_id = %d", applicationID)); err != nil {
+		return fmt.Errorf("set library application id: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
+		return fmt.Errorf("set library schema version: %w", err)
+	}
 	return nil
+}
+
+// checkSchemaCompatibility rejects a foreign SQLite file and a schema written
+// by a newer build. A zero application id is the legacy layout, which the
+// additive migration below stamps with the current id and version.
+func (s *Store) checkSchemaCompatibility(ctx context.Context) (int, error) {
+	var application, version int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA application_id").Scan(&application); err != nil {
+		return 0, fmt.Errorf("read library application id: %w", err)
+	}
+	if application != 0 && application != applicationID {
+		return 0, fmt.Errorf("%w: application id %d, want %d",
+			ErrLibraryNotRecognized, application, applicationID)
+	}
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return 0, fmt.Errorf("read library schema version: %w", err)
+	}
+	if version > schemaVersion {
+		return 0, fmt.Errorf("%w: schema version %d, supported %d",
+			ErrLibrarySchemaTooNew, version, schemaVersion)
+	}
+	return version, nil
+}
+
+// backupBeforeMigration writes a standalone copy of a pre-v2 library before
+// any additive migration runs. A fresh database has no projects table and
+// needs no copy. The copy lives beside the live files, not in the backup
+// history store, because the history store may not be initialized yet.
+func (s *Store) backupBeforeMigration(ctx context.Context, version int) error {
+	if version >= schemaVersion {
+		return nil
+	}
+	var hasProjects int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'projects'`).
+		Scan(&hasProjects); err != nil {
+		return fmt.Errorf("inspect pre-migration database: %w", err)
+	}
+	if hasProjects == 0 {
+		return nil
+	}
+	directory := filepath.Join(filepath.Dir(s.Path), "backups", "pre-migration")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		return fmt.Errorf("create pre-migration backup directory: %w", err)
+	}
+	target := filepath.Join(directory,
+		fmt.Sprintf("pre-migration-v%d-%d.sqlite", version, time.Now().UnixNano()))
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?1", target); err != nil {
+		return fmt.Errorf("write pre-migration backup: %w", err)
+	}
+	prunePreMigrationBackups(directory, 3)
+	return nil
+}
+
+// prunePreMigrationBackups keeps the newest copies and ignores other files.
+func prunePreMigrationBackups(directory string, keep int) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, "pre-migration-v") && strings.HasSuffix(name, ".sqlite") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	if len(names) > keep {
+		for _, name := range names[:len(names)-keep] {
+			_ = os.Remove(filepath.Join(directory, name))
+		}
+	}
 }
 
 // ensureAssetStagingColumn adds the staging lease fields to libraries created
@@ -285,6 +421,39 @@ func (s *Store) ensureAssetStagingColumn(ctx context.Context) error {
 // upgrade that wins the ALTER is treated as success once the column is visible.
 func (s *Store) ensureAssetColumn(ctx context.Context, name, ddl string) (bool, error) {
 	return s.ensureTableColumn(ctx, "assets", name, ddl)
+}
+
+// ensureRevisionChartHashColumn adds the content hash used by incremental
+// snapshots. Existing rows stay empty and are backfilled lazily.
+func (s *Store) ensureRevisionChartHashColumn(ctx context.Context) error {
+	_, err := s.ensureTableColumn(ctx, "revisions", "chart_hash",
+		`ALTER TABLE revisions ADD COLUMN chart_hash TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+// ensureLibraryMeta records stable library identity and the origin of the
+// schema. The values are advisory for snapshots and imports; the live database
+// remains the source of truth.
+func (s *Store) ensureLibraryMeta(ctx context.Context) error {
+	databaseID, err := newID()
+	if err != nil {
+		return fmt.Errorf("generate database id: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('database_id', ?)`,
+		databaseID); err != nil {
+		return fmt.Errorf("record database id: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('created_at', ?)`,
+		nowString()); err != nil {
+		return fmt.Errorf("record database creation time: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('schema_origin', 'go')`); err != nil {
+		return fmt.Errorf("record schema origin: %w", err)
+	}
+	return nil
 }
 
 // ensureChartIndexColumns adds the rebuildable line-index cache columns to
@@ -1326,8 +1495,8 @@ func (s *Store) CommitProject(ctx context.Context, in CommitProjectInput) (proje
 			label = "revision"
 		}
 		if _, err := tx.ExecContext(ctx, `
-            INSERT INTO revisions (id, project_id, label, chart, size, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)`, id, in.ProjectID, label, string(chart), len(chart), now); err != nil {
+            INSERT INTO revisions (id, project_id, label, chart, size, chart_hash, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`, id, in.ProjectID, label, string(chart), len(chart), hash, now); err != nil {
 			return nil, fmt.Errorf("insert revision: %w", err)
 		}
 		if in.Assets != nil {
@@ -1550,6 +1719,7 @@ func (s *Store) CreateRevision(ctx context.Context, in CreateRevisionInput) (*Re
 		}
 		label = fmt.Sprintf("revision %d", count+1)
 	}
+	hash := sha256Hex(chart)
 
 	id, err := newID()
 	if err != nil {
@@ -1562,9 +1732,9 @@ func (s *Store) CreateRevision(ctx context.Context, in CreateRevisionInput) (*Re
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `
-        INSERT INTO revisions (id, project_id, label, chart, size, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-		id, in.ProjectID, label, string(chart), len(chart), now); err != nil {
+        INSERT INTO revisions (id, project_id, label, chart, size, chart_hash, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, in.ProjectID, label, string(chart), len(chart), hash, now); err != nil {
 		return nil, fmt.Errorf("insert revision: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -1703,5 +1873,6 @@ func (s *Store) PutPreferences(ctx context.Context, values json.RawMessage) (jso
 		trimmed, nowString()); err != nil {
 		return nil, fmt.Errorf("save preferences: %w", err)
 	}
+	s.notifyPreferenceHook()
 	return json.RawMessage(trimmed), nil
 }

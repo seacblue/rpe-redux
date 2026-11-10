@@ -49,6 +49,7 @@ import { ScriptGuideHost } from "../platform/ScriptGuideHost.tsx";
 import { OnboardingHost } from "../onboarding/OnboardingHost.tsx";
 import { ExtensionOverlays } from "../platform/ExtensionOverlays.tsx";
 import { WindowControls } from "../chrome/topbar/windowControls/WindowControls.tsx";
+import { isDesktop } from "../../core/platform/environment.ts";
 import "../../design/styles/index.less";
 import { actionShortcuts, toolbar } from "../../core/shell/registries/toolbar.ts";
 import { shortcutChips } from "../../design/components/keyboardHint/shortcutChips.ts";
@@ -95,7 +96,7 @@ installNoteSkinBridge();
 export function App() {
   return (
     <>
-      <WindowControls />
+      {isDesktop() && <WindowControls />}
       <StartupBoundary>
         <EditorSessionProvider>
           <AppContent />

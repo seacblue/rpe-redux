@@ -38,6 +38,7 @@ const InterfaceSettings: SettingDefinition[] = [
     label: "settings.field.window-display-mode.label",
     control: "select",
     default: "windowed",
+    hosts: ["desktop"],
     options: [
       { value: "windowed", label: "settings.option.window-display-mode.windowed" },
       { value: "fullscreen", label: "settings.option.window-display-mode.fullscreen" },
@@ -51,6 +52,7 @@ const InterfaceSettings: SettingDefinition[] = [
     label: "settings.field.window-resolution.label",
     control: "select",
     default: "auto",
+    hosts: ["desktop"],
     options: [
       { value: "auto", label: "settings.option.window-resolution.auto" },
       { value: "1280x720", label: "settings.option.window-resolution.1280x720" },

@@ -13,6 +13,7 @@ const navigation: SettingsNavigation = {
   label: "settings.group.localAi",
   icon: "external",
   order: 30,
+  hosts: ["desktop"],
 };
 
 const fields: SettingDefinition[] = [
@@ -24,6 +25,7 @@ const fields: SettingDefinition[] = [
     description: "settings.field.code-execution-enabled.description",
     control: "toggle",
     default: false,
+    hosts: ["desktop"],
     // The source changes every run, so consent is bound to this profile and the
     // sandbox rather than to a package fingerprint.
     confirm: {
@@ -40,6 +42,7 @@ const fields: SettingDefinition[] = [
     label: "settings.field.code-cell-access.label",
     control: "custom",
     fullWidth: true,
+    hosts: ["desktop"],
     enabledWhen: { key: "code-execution-enabled", equals: true },
   },
 ];

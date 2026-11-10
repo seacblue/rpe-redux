@@ -50,6 +50,10 @@ npm run build         # Windows 生成 NSIS 安装包；Linux 生成 deb、rpm �
 
 > Windows 提供 x64、x86 和 ARM64 的 NSIS 安装包。Linux 提供 x64 的 deb、rpm 和 AppImage 包。只有 AppImage 能通过应用内更新替换自身；deb 和 rpm 用户通过包管理器升级。
 
+## 网页版
+
+`npm run dev:web` 使用浏览器 SQLite 库运行静态页面；`npm run build:web` 生成 `dist/`，GitHub Pages workflow 会部署该目录。谱面保存在浏览器的 OPFS 中；**设置 → 通用 → 浏览器存储**可以申请持久化存储，并下载或恢复 `.sqlite` 备份。桌面版仍是完整编辑器：更新、扩展、Code Cell、协作房间托管和原生文件访问只在桌面版提供。
+
 ## 开发
 
 `npm run dev` 是浏览器开发循环：同时启动 Go 服务和 Vite，每个工作树使用一组固定端口，源码修改后页面热更新。需要原生宿主能力时使用 `npm run dev:desktop` 打开 Tauri 窗口。每个工作树会在 `.scratch/dev/ports.json` 中随机选择自己的端口组；请让该记录只留在当前工作树，避免并行的工作树和 AI 会话共用一个后端。先读[开发说明](docs/development.md)（工作流、命令、仓库导览）和[测试说明 ](docs/testing.md)（测试套件、fixture、新测试放哪里）。归属规则、贡献方式和代码约定见 [AGENTS.md](AGENTS.md) 与[贡献指南](CONTRIBUTING-zh.md)。

@@ -5,6 +5,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -341,5 +342,189 @@ func TestDuplicateAndDeleteKeepTheBlobStoreConsistent(t *testing.T) {
 	}
 	if blobs != 0 {
 		t.Fatalf("blobs after deleting both projects = %d, want 0", blobs)
+	}
+}
+
+// legacyLibrary writes the pre-v2 library layout without an application id or
+// schema version. It leaves the revision chart hash column absent.
+func legacyLibrary(t *testing.T, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open legacy database: %v", err)
+	}
+	defer db.Close()
+	const schema = `
+CREATE TABLE projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    grp TEXT NOT NULL DEFAULT '',
+    archived INTEGER NOT NULL DEFAULT 0,
+    charter TEXT NOT NULL DEFAULT '',
+    composer TEXT NOT NULL DEFAULT '',
+    level TEXT NOT NULL DEFAULT '',
+    note_count INTEGER NOT NULL DEFAULT 0,
+    chart TEXT NOT NULL DEFAULT '{}',
+    size INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    chart_hash TEXT NOT NULL DEFAULT '',
+    view_state TEXT NOT NULL DEFAULT '{}',
+    asset_folders TEXT NOT NULL DEFAULT '[]',
+    background TEXT NOT NULL DEFAULT '',
+    song TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE revisions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    label TEXT NOT NULL DEFAULT '',
+    chart TEXT NOT NULL DEFAULT '{}',
+    size INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE preferences (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE assets (
+    hash TEXT PRIMARY KEY,
+    size INTEGER NOT NULL,
+    bytes BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE project_assets (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL REFERENCES assets(hash),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(project_id, name)
+);
+CREATE TABLE revision_assets (
+    revision_id TEXT NOT NULL REFERENCES revisions(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL REFERENCES assets(hash),
+    PRIMARY KEY(revision_id, name)
+);
+INSERT INTO projects (id, name, created_at, updated_at)
+VALUES ('project', 'legacy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+INSERT INTO revisions (id, project_id, label, chart, size, created_at)
+VALUES ('revision', 'project', 'v1', '{}', 2, '2026-01-01T00:00:00Z');
+PRAGMA user_version = 1;
+`
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatalf("create legacy database: %v", err)
+	}
+}
+
+func TestOpenMigratesLegacySchemaAndStampsIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	legacyLibrary(t, path)
+	store, err := Open(path)
+	if err != nil {
+		t.Fatalf("open migrated store: %v", err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+
+	var application, version int
+	if err := store.db.QueryRowContext(ctx, "PRAGMA application_id").Scan(&application); err != nil {
+		t.Fatal(err)
+	}
+	if application != applicationID {
+		t.Fatalf("application id = %d, want %d", application, applicationID)
+	}
+	if err := store.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != schemaVersion {
+		t.Fatalf("user version = %d, want %d", version, schemaVersion)
+	}
+	var hashColumns int
+	if err := store.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM pragma_table_info('revisions') WHERE name = 'chart_hash'`).
+		Scan(&hashColumns); err != nil {
+		t.Fatal(err)
+	}
+	if hashColumns != 1 {
+		t.Fatal("revisions.chart_hash was not added")
+	}
+	var databaseID string
+	if err := store.db.QueryRowContext(ctx,
+		`SELECT value FROM library_meta WHERE key = 'database_id'`).Scan(&databaseID); err != nil {
+		t.Fatalf("read database id: %v", err)
+	}
+	if databaseID == "" {
+		t.Fatal("database id is empty")
+	}
+	var revisions int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM revisions`).Scan(&revisions); err != nil {
+		t.Fatal(err)
+	}
+	if revisions != 1 {
+		t.Fatalf("revisions = %d, want 1", revisions)
+	}
+	copies, err := filepath.Glob(filepath.Join(filepath.Dir(path), "backups", "pre-migration",
+		"pre-migration-v1-*.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(copies) != 1 {
+		t.Fatalf("pre-migration copies = %d, want 1", len(copies))
+	}
+}
+
+func TestOpenRejectsForeignApplicationAndNewerSchema(t *testing.T) {
+	foreign := filepath.Join(t.TempDir(), "foreign.db")
+	db, err := sql.Open("sqlite", foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA application_id = 12345`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if _, err := Open(foreign); !errors.Is(err, ErrLibraryNotRecognized) {
+		t.Fatalf("foreign database error = %v, want ErrLibraryNotRecognized", err)
+	}
+
+	newer := filepath.Join(t.TempDir(), "newer.db")
+	db, err = sql.Open("sqlite", newer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA application_id = 1380992338`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 99`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if _, err := Open(newer); !errors.Is(err, ErrLibrarySchemaTooNew) {
+		t.Fatalf("newer database error = %v, want ErrLibrarySchemaTooNew", err)
+	}
+}
+
+func TestCreateRevisionStoresChartHash(t *testing.T) {
+	store := testStore(t)
+	project := createTestProject(t, store)
+	ctx := context.Background()
+	chart := testChart("revision")
+	revision, err := store.CreateRevision(ctx, CreateRevisionInput{
+		ProjectID: project.ID,
+		Chart:     chart,
+		Label:     "v1",
+	})
+	if err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+	var hash string
+	if err := store.db.QueryRowContext(ctx,
+		`SELECT chart_hash FROM revisions WHERE id = ?`, revision.ID).Scan(&hash); err != nil {
+		t.Fatal(err)
+	}
+	if hash != sha256Hex(chart) {
+		t.Fatalf("revision hash = %q, want %q", hash, sha256Hex(chart))
 	}
 }

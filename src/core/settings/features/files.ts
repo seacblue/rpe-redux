@@ -16,6 +16,7 @@ const FilesSettingsNavigation: SettingsNavigation = {
   label: "settings.group.files",
   icon: "save",
   order: 20,
+  hosts: ["desktop"],
 };
 
 const AUTOSAVE_ENABLED = { key: "autosave-enabled", equals: true } as const;
@@ -28,6 +29,7 @@ const FilesSettingsSchema: SettingDefinition[] = [
     label: "settings.field.session-restore.label",
     control: "toggle",
     default: true,
+    hosts: ["desktop"],
   },
   {
     key: "autosave-enabled",
@@ -36,6 +38,7 @@ const FilesSettingsSchema: SettingDefinition[] = [
     label: "settings.field.autosave-enabled.label",
     control: "toggle",
     default: true,
+    hosts: ["desktop"],
   },
   {
     key: "autosave-seconds",
@@ -44,6 +47,7 @@ const FilesSettingsSchema: SettingDefinition[] = [
     label: "settings.field.autosave-seconds.label",
     control: "number",
     default: 60,
+    hosts: ["desktop"],
     min: 1,
     max: 3600,
     step: 1,
@@ -56,6 +60,7 @@ const FilesSettingsSchema: SettingDefinition[] = [
     label: "settings.field.autosave-limit.label",
     control: "number",
     default: 10,
+    hosts: ["desktop"],
     min: 1,
     max: 100,
     step: 1,
@@ -68,6 +73,7 @@ const FilesSettingsSchema: SettingDefinition[] = [
     label: "settings.field.open-data-folder.label",
     control: "action",
     tooltip: false,
+    hosts: ["desktop"],
     action: { kind: "action", actionId: "files.openAppData" },
   },
 ];

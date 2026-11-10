@@ -17,6 +17,8 @@ import "./timeline.ts";
 import "./audio.ts";
 import "./preview.ts";
 import "./files.ts";
+import "./webStorage.ts";
+import "./libraryBackup.ts";
 import "./codeCell.ts";
 import "./updates.ts";
 import "./extensions.ts";

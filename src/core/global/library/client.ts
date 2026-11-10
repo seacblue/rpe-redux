@@ -10,6 +10,8 @@ import { t } from "../../../i18n/index.ts";
 import { beginBackendTrace } from "../../diagnostics/backendTrace.ts";
 import { PREFERENCE_SECTIONS, preferences } from "../../state/preferences.ts";
 import { browserDevPorts, getRuntimePorts } from "../../platform/runtimePorts.ts";
+import { isDesktop } from "../../platform/environment.ts";
+import { cachedProjectAssetUrl } from "./assetUrlCache.ts";
 import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
 import { ChartFrameDecoder, decodeLinesFrame } from "../chart/streaming/chartStreamCodec.ts";
 import { CHART_FRAME } from "../chart/streaming/chartStreamTypes.ts";
@@ -20,6 +22,9 @@ export { LocalLibraryError, type RequestOptions } from "./http.ts";
 
 /** Default loopback origin of the local service. */
 export const DEFAULT_SERVER_ORIGIN = "http://127.0.0.1:47821";
+
+/** Synthetic origin used by the in-browser SQLite library. */
+export const BROWSER_LIBRARY_ORIGIN = "opfs://rpe-redux";
 
 /** Origin of the configured local Code Cell listener. */
 export function aiServiceOrigin(): string {
@@ -82,7 +87,7 @@ export interface LibraryProject extends LibraryProjectSummary {
 
 /** Stored revision without its chart document. */
 export interface LibraryRevisionSummary {
-  id: number;
+  id: string;
   projectId: string;
   label: string;
   createdAt: string;
@@ -92,6 +97,63 @@ export interface LibraryRevisionSummary {
 /** Stored revision including its chart document. */
 export interface LibraryRevision extends LibraryRevisionSummary {
   chart: unknown;
+}
+
+/** Automatic snapshot policy shared by desktop, web, and remote services. */
+export interface LibraryBackupPolicy {
+  auto: boolean;
+  pollSeconds: number;
+  debounceSeconds: number;
+  maxDelaySeconds: number;
+  keepCommits: number;
+}
+
+/** One whole-library snapshot returned by the backup service. */
+export interface LibraryBackupSummary {
+  id: string;
+  parent?: string;
+  reason: string;
+  createdAt: string;
+  stats: {
+    projects: number;
+    assets: number;
+    revisions: number;
+    objects: number;
+    rawBytes: number;
+  };
+  sourceHost: string;
+}
+
+/** Current backup store state. */
+export interface LibraryBackupStatus {
+  enabled: boolean;
+  head: string | null;
+  healthy: boolean;
+  commits: number;
+  objects: number;
+  bytes: number;
+  liveBytes: number;
+  lastBackupAt: string | null;
+  lastError: string | null;
+  policy: LibraryBackupPolicy;
+}
+
+/** Full object verification result. */
+export interface LibraryBackupVerifyReport {
+  checkedCommits: number;
+  checkedObjects: number;
+  missing: string[];
+  corrupt: string[];
+}
+
+/** Retention pass result. */
+export interface LibraryBackupCompactReport {
+  beforeCommits: number;
+  afterCommits: number;
+  deletedCommits: number;
+  deletedObjects: number;
+  beforeBytes?: number;
+  afterBytes?: number;
 }
 
 /** One live editor copy registered with the shared backend. */
@@ -145,6 +207,11 @@ export interface OccupancyConflict {
  * otherwise returns `DEFAULT_SERVER_ORIGIN`.
  */
 export function serverOrigin(): string {
+  // A static web page has no sidecar. Its browser library owns the same
+  // asset/URL contract through a synthetic origin.
+  if (!isDesktop() && !browserDevPorts()) {
+    return BROWSER_LIBRARY_ORIGIN;
+  }
   // The browser development server owns the worktree's service port. A stored
   // server preference belongs to the durable desktop profile and must not
   // redirect the development page to a different checkout's service.
@@ -183,6 +250,13 @@ const query = (values: Record<string, unknown>): string =>
  * constructing a client or querying the service.
  */
 export function projectAssetUrl(origin: string, id: string, name: string): string {
+  const cached = cachedProjectAssetUrl(origin, id, name);
+  if (cached) {
+    return cached;
+  }
+  if (origin === BROWSER_LIBRARY_ORIGIN) {
+    return "";
+  }
   const encoded = name
     .replaceAll("\\", "/")
     .split("/")
@@ -942,6 +1016,56 @@ export class LocalLibrary {
     return request(this.origin, "/api/maintenance/checkpoint", {
       ...options,
       method: "POST",
+    });
+  }
+
+  /** Read the automatic snapshot store state. */
+  backupStatus(options: RequestOptions = {}): Promise<LibraryBackupStatus> {
+    return request(this.origin, "/api/library/backups/status", options);
+  }
+
+  /** Write one snapshot immediately. */
+  backupSnapshot(reason = "manual", options: RequestOptions = {}): Promise<LibraryBackupSummary> {
+    return request(this.origin, "/api/library/backups/snapshots", {
+      ...options,
+      method: "POST",
+      body: { reason },
+    });
+  }
+
+  /** List recent snapshots, newest first. */
+  backupHistory(
+    { limit = 50 }: { limit?: number } = {},
+    options: RequestOptions = {},
+  ): Promise<{ commits: LibraryBackupSummary[] }> {
+    const search = new URLSearchParams({ limit: String(limit) });
+    return request(this.origin, `/api/library/backups/commits?${search.toString()}`, options);
+  }
+
+  /** Restore the newest snapshot, or one explicit commit. */
+  backupRestore(commitId = "", options: RequestOptions = {}): Promise<LibraryBackupSummary> {
+    return request(this.origin, "/api/library/backups/restore", {
+      ...options,
+      method: "POST",
+      body: { commitId },
+    });
+  }
+
+  /** Verify every object reachable from one snapshot, or HEAD. */
+  backupVerify(commitId = "", options: RequestOptions = {}): Promise<LibraryBackupVerifyReport> {
+    return request(this.origin, "/api/library/backups/verify", {
+      ...options,
+      method: "POST",
+      body: { commitId },
+    });
+  }
+
+  /** Prune history and unreachable objects. */
+  backupCompact(keep = 0, options: RequestOptions = {}): Promise<LibraryBackupCompactReport> {
+    return request(this.origin, "/api/library/backups/compact", {
+      ...options,
+      method: "POST",
+      body: { keep },
     });
   }
 

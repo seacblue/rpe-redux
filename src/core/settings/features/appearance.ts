@@ -167,6 +167,7 @@ const AppearanceSettingsSchema: SettingDefinition[] = [
     default: "",
     accept: "image/*",
     storage: "application-data",
+    hosts: ["desktop"],
   },
   {
     key: "default-line-thickness",

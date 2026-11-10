@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- the settings catalog is one translation table. */
 /**
  * The settings window: categories, every field label and description, its own
  * pages, plus the start-up view.
@@ -79,6 +80,8 @@ export default {
 
   // ------------------------------------------------------- row group headings
   "settings.group.files": "Files & data",
+  "settings.group.webStorage": "Browser storage",
+  "settings.group.libraryBackup": "Library backup",
   "settings.group.display": "Display",
   "settings.group.pointer": "Pointer & input",
   "settings.group.advancedEditing": "Advanced editing",
@@ -501,6 +504,12 @@ export default {
   "settings.field.open-data-folder.label": "Open application data folder",
   "settings.field.open-data-folder.description":
     "Open the folder that contains the database, logs, and cached resources.",
+  "settings.field.library-backup-auto.label": "Automatic snapshots",
+  "settings.field.library-backup-auto.description":
+    "Write whole-library snapshots while you work. Turning this off stops the background timer completely; manual snapshots still work.",
+  "settings.field.library-backup-interval-seconds.label": "Snapshot interval (seconds)",
+  "settings.field.library-backup-interval-seconds.description":
+    "The longest wait between automatic snapshots while editing. Shorter intervals use more disk space.",
   // -------------------------------------------------------- select options
   // ------------------------------------------------------ skins & appearance
 
@@ -508,6 +517,30 @@ export default {
 
   "settings.reset.label": "Reset {name} to its default",
   "settings.reset.tooltip": "Reset to default",
+  "settings.webStorage.description":
+    "Charts, assets, revisions, and preferences are stored in this browser's private file system. Clearing site data or using a private window removes them.",
+  "settings.webStorage.mode": "Storage mode",
+  "settings.webStorage.persistent": "Persistent",
+  "settings.webStorage.bestEffort": "Best-effort",
+  "settings.webStorage.usage": "Usage",
+  "settings.webStorage.request": "Request persistent storage",
+  "settings.webStorage.requestGranted":
+    "Persistent storage granted. The browser will keep this data unless you clear it.",
+  "settings.webStorage.requestDenied":
+    "The browser kept best-effort storage. Download a backup regularly.",
+  "settings.webStorage.download": "Download backup",
+  "settings.webStorage.downloaded": "Backup downloaded.",
+  "settings.webStorage.restore": "Restore backup",
+  "settings.webStorage.restoreConfirmTitle": "Replace the browser library?",
+  "settings.webStorage.restoreConfirmDescription":
+    "This replaces every chart, asset, revision, and preference in this browser with the selected backup.",
+  "settings.webStorage.restoreDone": "Backup restored. Reloading…",
+  "settings.webStorage.refresh": "Refresh",
+  "settings.webStorage.backupNote":
+    "The backup is a standalone .sqlite file. It opens in the desktop app or any SQLite browser.",
+  "settings.webStorage.unsupported": "The browser library is not available in this window.",
+  "settings.search.webStorageKeywords":
+    "browser storage persist persistent backup sqlite opfs quota",
   "settings.search.heading": "Search “{query}”",
   "settings.search.emptyTitle": "No matching settings",
   "settings.search.emptyDescription": "Try a different word or clear the search.",

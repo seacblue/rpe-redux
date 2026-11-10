@@ -25,6 +25,10 @@ type Result<T> = std::result::Result<T, String>;
 const BACKUP_FORMAT: &str = "rpe-redux-app-backup";
 /// Current bundle layout version.
 const BACKUP_VERSION: u32 = 2;
+/// SQLite `application_id` that marks a library database.
+const LIBRARY_APPLICATION_ID: i64 = 1_380_992_338;
+/// Newest library schema this build can promote and then migrate.
+const LIBRARY_SCHEMA_VERSION: i64 = 2;
 
 // Import limits. The database is streamed to a staging file; the remaining
 // parts are small documents and theme files.
@@ -75,6 +79,7 @@ const ERROR_DATABASE_INVALID_HEADER: &str = "backup_database_invalid_header";
 const ERROR_DATABASE_UNREADABLE: &str = "backup_database_unreadable";
 const ERROR_DATABASE_INTEGRITY: &str = "backup_database_integrity_failed";
 const ERROR_DATABASE_NOT_LIBRARY: &str = "backup_database_not_library";
+const ERROR_DATABASE_SCHEMA_TOO_NEW: &str = "backup_database_schema_too_new";
 
 /// Library tables the local service creates and this build expects.
 const LIBRARY_TABLES: [&str; 6] = [
@@ -225,6 +230,26 @@ fn validate_staged_database(path: &Path) -> Result<()> {
                 problems.join("; "),
             ));
         }
+    }
+    let application_id: i64 = connection
+        .query_row("PRAGMA application_id", [], |row| row.get(0))
+        .map_err(|error| database_error(ERROR_DATABASE_UNREADABLE, error))?;
+    if application_id != 0 && application_id != LIBRARY_APPLICATION_ID {
+        return Err(database_error(
+            ERROR_DATABASE_NOT_LIBRARY,
+            format!("application id {application_id} is not an RPE Redux library"),
+        ));
+    }
+    let schema_version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|error| database_error(ERROR_DATABASE_UNREADABLE, error))?;
+    if schema_version > LIBRARY_SCHEMA_VERSION {
+        return Err(database_error(
+            ERROR_DATABASE_SCHEMA_TOO_NEW,
+            format!(
+                "schema version {schema_version} is newer than the supported {LIBRARY_SCHEMA_VERSION}"
+            ),
+        ));
     }
     let names = connection
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -1316,6 +1341,31 @@ mod tests {
             assert!(!root.join(STAGED_DATABASE).exists(), "{case}");
             assert!(!root.join(IMPORT_READY).exists(), "{case}");
         }
+    }
+
+    #[test]
+    fn import_rejects_a_newer_library_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("user-data");
+        fs::create_dir_all(&root).unwrap();
+        let live = library_bytes("live");
+        fs::write(root.join("redux.db"), &live).unwrap();
+
+        let source_dir = dir.path().join("source");
+        fs::create_dir_all(&source_dir).unwrap();
+        let source = source_dir.join("newer.db");
+        let connection = Connection::open(&source).unwrap();
+        connection.execute_batch(LIBRARY_SCHEMA).unwrap();
+        connection
+            .execute_batch("PRAGMA application_id = 1380992338; PRAGMA user_version = 99;")
+            .unwrap();
+        drop(connection);
+
+        let bundle = dir.path().join("newer.zip");
+        write_database_bundle(&bundle, &fs::read(&source).unwrap());
+        let error = import_database(&root, &bundle).expect_err("newer schema");
+        assert!(error.starts_with(ERROR_DATABASE_SCHEMA_TOO_NEW), "{error}");
+        assert_eq!(fs::read(root.join("redux.db")).unwrap(), live);
     }
 
     #[test]

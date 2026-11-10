@@ -13,7 +13,7 @@
  *   - a registration declares the setting's value, so a key exists before the
  *     first read of it and no read has to carry a fallback of its own.
  */
-import type { SettingDefinition, SettingsNavigation } from "./types.ts";
+import type { SettingDefinition, SettingHost, SettingsNavigation } from "./types.ts";
 import { defineValue, values } from "../state/values.ts";
 import { PREFERENCE_SECTIONS, readPreference, writePreference } from "../state/preferences.ts";
 import { Contributions } from "../state/contributions.ts";
@@ -49,6 +49,7 @@ export class SettingsRegistry {
     if (typeof navigation?.label !== "string" || navigation.label.trim().length === 0) {
       throw new TypeError("Settings navigation label must be non-empty");
     }
+    validateHosts(navigation.hosts, "Settings navigation");
     const order = navigation.order ?? this.nextNavigationOrder;
     this.nextNavigationOrder = Math.max(this.nextNavigationOrder + 1, order + 1);
     const registeredNavigation = owner ? this.scopeNavigation(owner, navigation) : navigation;
@@ -102,6 +103,7 @@ export class SettingsRegistry {
     if (definition.label === undefined || definition.label === null) {
       throw new TypeError("Setting label is required");
     }
+    validateHosts(definition.hosts, "Setting");
     validateSettingDefinition(definition);
     const registeredDefinition = owner
       ? this.scopeSettingDefinition(owner, definition)
@@ -380,6 +382,20 @@ function localizeSettingDefinition(
  * Checking the few fields the renderer assumes keeps one bad definition from
  * throwing inside the settings window or creating an unreachable value.
  */
+/** Reject host lists that cannot match either supported host. */
+function validateHosts(hosts: readonly SettingHost[] | undefined, label: string): void {
+  if (hosts === undefined) {
+    return;
+  }
+  if (
+    !Array.isArray(hosts) ||
+    hosts.length === 0 ||
+    hosts.some((host) => host !== "desktop" && host !== "web")
+  ) {
+    throw new TypeError(`${label} hosts must list desktop or web`);
+  }
+}
+
 function validateSettingDefinition(definition: SettingDefinition): void {
   const value = definition as unknown as Record<string, unknown>;
   const control = value.control;

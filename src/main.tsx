@@ -26,7 +26,7 @@ import { connectCodeCellGuide } from "./core/edit/codecell/guide.ts";
 import codeCellGuide from "../sdk/llm-guide.md?raw";
 import { createExtensionSandbox } from "./frontend/platform/extensionSandbox.tsx";
 import { extensionRuntime } from "./core/extensions/extensionRuntime.ts";
-import { isDesktop } from "./core/platform/environment.ts";
+import { hostKind, isDesktop } from "./core/platform/environment.ts";
 import { invoke } from "@tauri-apps/api/core";
 import { isPerformanceHudWindow } from "./core/platform/desktop/performanceHudWindow.ts";
 import { PerformanceHudWindow } from "./frontend/overlays/performance/PerformanceHudWindow.tsx";
@@ -37,6 +37,8 @@ import { setLongTaskBootState } from "./core/state/longTasks.ts";
 // Keep background operations behind the workspace boot barrier. The barrier is
 // opened only after the editor assembly has published a usable workspace.
 setLongTaskBootState("loading");
+// Host-scoped chrome and settings read this before the first frame.
+document.documentElement.dataset.host = hostKind();
 
 /**
  * Pick the language before the first paint.

@@ -25,6 +25,7 @@ import (
 	"rperedux/server/internal/config"
 	"rperedux/server/internal/httpapi"
 	"rperedux/server/internal/instances"
+	"rperedux/server/internal/librarybackup"
 	"rperedux/server/internal/preferences"
 	"rperedux/server/internal/store"
 )
@@ -90,6 +91,23 @@ func run(args []string, stdout io.Writer) error {
 	absDB, err := filepath.Abs(cfg.DB)
 	if err != nil {
 		return err
+	}
+	sourceHost := "desktop"
+	if cfg.Host != "127.0.0.1" && cfg.Host != "localhost" && cfg.Host != "::1" {
+		sourceHost = "remote"
+	}
+	backup, backupErr := librarybackup.Open(
+		absDB,
+		filepath.Join(filepath.Dir(absDB), "library-history"),
+		version,
+		sourceHost,
+	)
+	if backupErr != nil {
+		fmt.Fprintf(os.Stderr, "library history unavailable: %v\n", backupErr)
+	} else {
+		data.SetPreferenceHook(backup.RefreshPolicy)
+		backup.Start(context.Background())
+		defer backup.Close()
 	}
 	cellServer := codecell.NewServer(absDB)
 	defer cellServer.CloseAll()
@@ -219,6 +237,12 @@ func run(args []string, stdout io.Writer) error {
 	root.Handle("/api/cell/bridge", cellServer)
 	root.Handle("/api/cell/guide", cellServer)
 	root.Handle("/api/cell/run", cellServer)
+	if backup != nil {
+		root.Handle("/api/library/backups/", http.StripPrefix(
+			"/api/library/backups",
+			httpapi.NewBackupHandler(backup, cfg.Origins...),
+		))
+	}
 	root.Handle("/", apiHandler)
 	handler := http.Handler(root)
 	server := &http.Server{

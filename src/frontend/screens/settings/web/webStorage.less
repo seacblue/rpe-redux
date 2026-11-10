@@ -1,0 +1,55 @@
+// Browser storage page: quota readout, persistent-storage request, and backup.
+
+.redux-web-storage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 760px;
+}
+
+.redux-web-storage-copy,
+.redux-web-storage-note {
+  color: var(--foreground-muted);
+  margin: 0;
+}
+
+.redux-web-storage-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.redux-web-storage-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.redux-web-storage-grid dd {
+  margin: 0;
+}
+
+.redux-web-storage-label {
+  color: var(--foreground-muted);
+}
+
+.redux-web-storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.redux-web-storage-error {
+  color: var(--danger);
+  margin: 0;
+}
+
+.redux-web-storage-message {
+  color: var(--foreground-muted);
+  margin: 0;
+}
