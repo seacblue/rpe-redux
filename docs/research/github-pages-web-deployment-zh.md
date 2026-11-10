@@ -684,6 +684,7 @@ node test-subpath.mjs
 - **资源全量预取。** `BrowserLibrary.assets()` 为了给 `assets.uri` 提供同步值，会把项目里的所有资源读成 blob URL；大音乐会有内存峰值。正式版应改为按需解析或分块 BLOB I/O。
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
 - **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复和恢复失败回滚；还没有自动 OPFS 备份轮换、配额错误提示、损坏检测入口和迁移前自动备份。
+- **未引用资源不回收。** 删除项目或提交新 manifest 后，孤立 BLOB 仍留在 SQLite 里；后续需要 GC 和 staging lease。
 - **没有迁移器。** 只写了 `user_version = 1`；后续 schema 升级需要事务迁移和迁移前备份。
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例。
 - **浏览器覆盖有限。** 只在 Edge/Chromium 验证；Firefox/Safari 无痕模式、配额和大资源仍未测。

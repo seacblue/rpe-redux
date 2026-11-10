@@ -345,13 +345,18 @@ export class BrowserLibrary extends LocalLibrary {
         if (cachedProjectAssetUrl(this.origin, id, asset.name)) {
           return;
         }
-        const bytes = await this.asset(id, asset.name);
-        cacheProjectAssetUrl(
-          this.origin,
-          id,
-          asset.name,
-          URL.createObjectURL(new Blob([bytes.slice().buffer])),
-        );
+        try {
+          const bytes = await this.asset(id, asset.name);
+          cacheProjectAssetUrl(
+            this.origin,
+            id,
+            asset.name,
+            URL.createObjectURL(new Blob([bytes.slice().buffer])),
+          );
+        } catch {
+          // One unreadable blob must not make the whole project unopenable; the
+          // media layer reports the missing asset when it actually needs it.
+        }
       }),
     );
   }
