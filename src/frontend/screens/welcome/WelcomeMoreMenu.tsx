@@ -1,16 +1,17 @@
 /**
  * The home screen's overflow menu.
  *
- * It carries home actions that have no dedicated control: the RPE migration
- * dialog, the application-data folder, and About. The rows come from the shared
- * context-menu renderer, so their anatomy matches every other menu; the popup
- * stays the app's standard anchored menu, with identical focus, Escape, and
- * outside-click dismissal.
+ * It carries home actions that have no dedicated control: the desktop RPE
+ * migration dialog, the desktop application-data folder, and About. The rows
+ * come from the shared context-menu renderer, so their anatomy matches every
+ * other menu; the popup stays the app's standard anchored menu, with identical
+ * focus, Escape, and outside-click dismissal.
  */
 import { useSyncExternalStore, type MouseEvent } from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import { toolbar } from "../../../core/shell/registries/toolbar.ts";
+import { isDesktop } from "../../../core/platform/environment.ts";
 import { onboardingAnchorRef } from "../../onboarding/anchors.ts";
 import {
   ContextMenuPopup,
@@ -36,29 +37,37 @@ export function WelcomeMoreMenu() {
       return;
     }
     const rect = event.currentTarget.getBoundingClientRect();
-    moreMenu.set({
-      owner: event.currentTarget,
-      x: rect.right,
-      y: rect.bottom + 4,
-      align: "end",
-      actions: [
-        {
+    // RPE migration and the data folder are native-host workflows. The web
+    // build keeps the chart-file import button and its own storage page.
+    const rpeAction = isDesktop()
+      ? {
           id: "welcome.import-rpe",
           label: t("workspace.welcome.importRpe"),
-          icon: "folder",
+          icon: "folder" as const,
           run: openWelcomeImportDialog,
-        },
-        {
+        }
+      : null;
+    const dataFolderAction = isDesktop()
+      ? {
           id: "welcome.open-data-folder",
           label: t("settings.field.open-data-folder.label"),
-          icon: "open",
+          icon: "open" as const,
           run: () => {
             const action = toolbar.node("files.openAppData");
             if (action?.kind === "action") {
               action.run?.();
             }
           },
-        },
+        }
+      : null;
+    moreMenu.set({
+      owner: event.currentTarget,
+      x: rect.right,
+      y: rect.bottom + 4,
+      align: "end",
+      actions: [
+        ...(rpeAction ? [rpeAction] : []),
+        ...(dataFolderAction ? [dataFolderAction] : []),
         {
           id: "welcome.about",
           label: t("chrome.menu.help.about"),
