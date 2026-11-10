@@ -2319,8 +2319,11 @@ const MUTATING_METHODS = new Set([
 scope.onmessage = async (event: MessageEvent<Request>) => {
   const request = event.data;
   try {
+    if (!Object.prototype.hasOwnProperty.call(handlers, request.method)) {
+      throw new DbError("unsupported", `unknown method: ${request.method}`);
+    }
     const handler = handlers[request.method];
-    if (!handler) {
+    if (typeof handler !== "function") {
       throw new DbError("unsupported", `unknown method: ${request.method}`);
     }
     const result = await runExclusive(() => handler(request.params ?? {}));
