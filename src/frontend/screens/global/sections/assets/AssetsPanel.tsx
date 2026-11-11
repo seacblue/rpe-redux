@@ -9,6 +9,7 @@ import { Spinner } from "../../../../../design/components/spinner/Spinner.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { useTranslation } from "../../../../../i18n/react.ts";
+import { AssetAudioPreviewProvider } from "./assetAudioPreview.tsx";
 import { AssetLibraryView } from "./AssetLibraryView.tsx";
 import { useEditorRuntimeValue } from "../../../editor/workspace/runtime/composition/EditorRuntime.tsx";
 import type { AssetLibraryPanelState } from "./model.ts";
@@ -63,7 +64,9 @@ export function AssetsPanel({
         </InlineAlert>
       )}
       {state?.status === "ready" && (
-        <AssetLibraryView {...state.snapshot} {...state.actions} variant={variant} />
+        <AssetAudioPreviewProvider>
+          <AssetLibraryView {...state.snapshot} {...state.actions} variant={variant} />
+        </AssetAudioPreviewProvider>
       )}
     </>
   );

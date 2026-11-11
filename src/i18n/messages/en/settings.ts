@@ -503,10 +503,10 @@ export default {
   "settings.hitsound.offset.drag": "Drag hit-sound offset (ms)",
   "settings.hitsound.offset.flick": "Flick hit-sound offset (ms)",
   "settings.hitsound.offset.custom": "Custom hit-sound offset (ms)",
-  "settings.field.audio-analysis-enabled.label": "Show waveform in the note area",
-  "settings.field.audio-analysis-alpha.label": "Waveform opacity",
-  "settings.field.audio-analysis-width.label": "Waveform width",
-  "settings.field.audio-analysis-curve.label": "Waveform emphasis",
+  "settings.field.audio-analysis-enabled.label": "Show heatmap in the note area",
+  "settings.field.audio-analysis-alpha.label": "Heatmap opacity",
+  "settings.field.audio-analysis-width.label": "Heatmap width",
+  "settings.field.audio-analysis-curve.label": "Heatmap emphasis",
 
   // ----------------------------------------------------- files & saving (3 rows)
   "settings.field.session-restore.label": "Recover the last chart after a crash or update",

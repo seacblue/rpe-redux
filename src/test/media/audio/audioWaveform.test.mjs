@@ -1,8 +1,11 @@
-/** Signed stereo min/max analysis and the perceptual waveform curve. */
+/** Signed stereo analysis, the perceptual curve, and the spectrum heatmaps. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { analyzeAudioBuffer, shapeWaveform } from "../../../core/media/audioAnalysis.ts";
-import { paintSpectrumPixels } from "../../../core/media/spectrumPixels.ts";
+import {
+  paintSpectrogramPixels,
+  paintVerticalSpectrogramPixels,
+} from "../../../core/media/spectrumPixels.ts";
 
 function buffer(channels) {
   const length = channels[0].length;
@@ -36,30 +39,49 @@ test("waveform curve lifts quiet detail while preserving sign and order", () => 
   assert.ok(shapeWaveform(0.5, 1.5) < shapeWaveform(0.8, 1.5));
 });
 
-test("the progress spectrum separates the two channel envelopes at the centre", () => {
+function heatmapData() {
+  // Frame 0 is low-band energy; frame 1 is high-band energy.
+  return {
+    duration: 1,
+    channels: 1,
+    left: { min: new Float32Array(4), max: new Float32Array(4) },
+    right: { min: new Float32Array(4), max: new Float32Array(4) },
+    spectrum: new Float32Array([1, 0, 0, 1]),
+    bands: 2,
+    frameCount: 2,
+  };
+}
+
+test("the horizontal heatmap puts time on x and low frequencies at the bottom", () => {
   const width = 2;
-  const height = 4;
+  const height = 2;
   const pixels = new Uint8ClampedArray(width * height * 4);
-  const levels = new Float32Array([1, 1, 1, 1]);
-  const silence = new Float32Array([0, 0, 0, 0]);
-  paintSpectrumPixels(
-    pixels,
-    width,
-    height,
-    {
-      duration: 1,
-      channels: 2,
-      left: { min: levels, max: levels },
-      right: { min: silence, max: silence },
-      spectrum: new Float32Array(16 * 4),
-      bands: 16,
-      frameCount: 4,
-    },
-    [90, 169, 255],
-    1.5,
-  );
+  paintSpectrogramPixels(pixels, width, height, heatmapData(), {
+    low: [90, 169, 255],
+    high: [237, 240, 244],
+    curve: 1,
+  });
   const alpha = (row, column) => pixels[(row * width + column) * 4 + 3];
-  // Left channel occupies the upper half; the silent right channel stays empty.
-  assert.ok(alpha(0, 0) > alpha(3, 0));
-  assert.equal(alpha(3, 0), 0);
+  assert.ok(alpha(1, 0) > 0, "the first time column should carry the low band");
+  assert.equal(alpha(0, 0), 0, "the first time column has no high band");
+  assert.ok(alpha(0, 1) > 0, "the second time column should carry the high band");
+  assert.equal(alpha(1, 1), 0, "the second time column has no low band");
+});
+
+test("the vertical heatmap mirrors low frequencies around the centre", () => {
+  const width = 3;
+  const height = 2;
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  paintVerticalSpectrogramPixels(pixels, width, height, heatmapData(), {
+    low: [90, 169, 255],
+    high: [237, 240, 244],
+    curve: 1,
+  });
+  const alpha = (row, column) => pixels[(row * width + column) * 4 + 3];
+  assert.ok(alpha(0, 1) > 0, "the centre column carries the low band at the first frame");
+  assert.equal(alpha(0, 0), 0, "the edge column has no high band at the first frame");
+  assert.ok(alpha(1, 0) > 0, "the edge column carries the high band at the second frame");
+  assert.equal(alpha(1, 1), 0, "the centre column has no low band at the second frame");
+  // Both edges mirror the same high band.
+  assert.equal(alpha(1, 0), alpha(1, 2));
 });

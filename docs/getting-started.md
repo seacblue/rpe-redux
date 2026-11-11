@@ -72,7 +72,7 @@ The window has one authoring surface:
 - **Stage** — the centred preview of the chart, with in-game UI and hit effects. Judge lines can be moved and rotated directly on it.
 - **Timeline** — notes and events on the current judge line; scroll to move, drag to edit, and use the region switches to change what it shows.
 - **Inspector** — the fields of the selected object, or the inspector page chosen in the sidebar.
-- **Sidebar** — one ordered list of destinations: chart information, timing, judge line, note and event editing, asset library, waveform/spectrum, curve note fill, curve trajectory generation, multi-line editing, multi editing, chart issues, collaboration, and render chart.
+- **Sidebar** — one ordered list of destinations: chart information, timing, judge line, note and event editing, asset library, audio heatmap, curve note fill, curve trajectory generation, multi-line editing, multi editing, chart issues, collaboration, and render chart.
 - **Status bar and transport** — playback position, chart readouts, and transport controls.
 
 The most useful view shortcuts:

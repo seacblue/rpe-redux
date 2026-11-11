@@ -1,6 +1,6 @@
 /**
  * The audio settings category: master volume, per-hitsound levels and offsets,
- * waveform analysis, and speed/pitch policy.
+ * spectrum heatmap analysis, and speed/pitch policy.
  *
  * Every row answers the same question — what will the user hear? — so the root
  * is one scrolling page with two section headings. Rows are registered under the
@@ -84,7 +84,7 @@ const AudioSettingsSchema: SettingDefinition[] = [
     group: "settings.group.audioPlayback",
     label: "settings.field.audio-analysis-alpha.label",
     control: "range",
-    default: 0.2,
+    default: 0.3,
     min: 0.02,
     max: 1,
     step: 0.01,

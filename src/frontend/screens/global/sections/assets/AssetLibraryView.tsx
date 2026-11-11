@@ -20,7 +20,9 @@ import { tokenizeShader } from "./shaderSyntax.ts";
 import { FILE_DRAG_EVENT } from "../../../../../core/shell/shellEventNames.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import type { GlobalView } from "../../globalView.ts";
+import { AssetAudioHeatmap } from "./AssetAudioHeatmap.tsx";
 import { AssetDialogs } from "./AssetDialogs.tsx";
+import { useAssetAudioPreview } from "./assetAudioPreview.tsx";
 import type {
   AssetLibraryViewProps,
   AssetViewFile,
@@ -197,18 +199,43 @@ function AssetFileRow({
   file,
   onSelect,
   onRename,
+  onPreviewAudio,
 }: {
   file: AssetViewFile;
   onSelect(name: string): void;
   onRename(name: string): void;
+  onPreviewAudio?: () => void;
 }): React.JSX.Element {
+  const previewAudio = file.kind === "audio" && file.selected ? onPreviewAudio : undefined;
   return (
     <Button
       type="button"
       variant="plain"
       className={`asset-row${file.selected ? " is-selected" : ""}`}
       data-asset-name={file.name}
+      data-local-shortcut={previewAudio ? "SPACE" : undefined}
+      aria-keyshortcuts={previewAudio ? "Space" : undefined}
       onClick={() => onSelect(file.name)}
+      onKeyDown={
+        previewAudio
+          ? (event) => {
+              if (
+                event.key !== " " ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.altKey ||
+                event.shiftKey
+              ) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              if (!event.repeat) {
+                previewAudio();
+              }
+            }
+          : undefined
+      }
     >
       <AssetThumb url={file.url} alt={file.file} kind={file.kind} />
       <span
@@ -232,6 +259,7 @@ function AssetFolderView({
   onToggle,
   onSelect,
   onRename,
+  onPreviewAudio,
   onSelectFolder,
   empty = false,
 }: {
@@ -241,6 +269,7 @@ function AssetFolderView({
   onToggle(path: string): void;
   onSelect(name: string): void;
   onRename(name: string): void;
+  onPreviewAudio?: () => void;
   onSelectFolder(path: string): void;
   empty?: boolean;
 }): React.JSX.Element {
@@ -275,7 +304,13 @@ function AssetFolderView({
       {folder.files.length > 0 && (
         <div className="asset-folder-items">
           {folder.files.map((file) => (
-            <AssetFileRow key={file.name} file={file} onSelect={onSelect} onRename={onRename} />
+            <AssetFileRow
+              key={file.name}
+              file={file}
+              onSelect={onSelect}
+              onRename={onRename}
+              onPreviewAudio={onPreviewAudio}
+            />
           ))}
         </div>
       )}
@@ -295,6 +330,7 @@ function AssetFolderView({
           onToggle={onToggle}
           onSelect={onSelect}
           onRename={onRename}
+          onPreviewAudio={onPreviewAudio}
           onSelectFolder={onSelectFolder}
         />
       ))}
@@ -338,6 +374,7 @@ export function AssetLibraryView({
   variant = "all",
 }: AssetLibraryViewProps): React.JSX.Element {
   const { t } = useTranslation();
+  const audioPreview = useAssetAudioPreview();
   const view: GlobalView = "list";
   const [importDragging, setImportDragging] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
@@ -415,6 +452,7 @@ export function AssetLibraryView({
               onToggle={toggleFolder}
               onSelect={onSelect}
               onRename={onRename}
+              onPreviewAudio={audioPreview?.toggle}
               onSelectFolder={onSelectFolder}
               empty={folder.path === "" ? empty : false}
             />
@@ -471,7 +509,14 @@ export function AssetLibraryView({
       <div className="asset-details">
         <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
         {selected.kind === "audio" ? (
-          <AudioPlayer src={selected.url} label={assetLabel(selected.name)} />
+          <AudioPlayer
+            ref={audioPreview?.player}
+            src={selected.url}
+            label={assetLabel(selected.name)}
+            visualizer={({ progress }) => (
+              <AssetAudioHeatmap src={selected.url} progress={progress} />
+            )}
+          />
         ) : selected.kind === "shader" ? (
           <>
             <div className="asset-shader-preview">
