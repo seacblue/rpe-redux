@@ -29,6 +29,7 @@ import { CONTROL_TRACKS, type ControlTrackProperty } from "../chartTracks.ts";
 import { trajectoryHasRotation } from "../trajectory/curveTrajectory.ts";
 import { beatValue, isOrderedBeatRange } from "../timing/beat.ts";
 import { isPlaceholderLine } from "../streaming/chartDocument.ts";
+import { noteAlpha } from "../optionalFeatures.ts";
 import type { JudgeLine, JudgeLineEvent, LineEventValue } from "../chart.ts";
 import type { ControlPoint } from "../chart.ts";
 import type { Chart } from "../chart.ts";
@@ -752,8 +753,7 @@ export class LineRuntime {
     target.size =
       (note.size ?? 1) * (isHold || !this.hasSizeControl ? 1 : this.controls.size.value(distance));
     target.alpha =
-      ((note.alpha ?? 255) / 255) *
-      (this.hasAlphaControl ? this.controls.alpha.value(distance) : 1);
+      noteAlpha(note) * (this.hasAlphaControl ? this.controls.alpha.value(distance) : 1);
     target.skew =
       isHold || !this.hasSkewControl ? 0 : positionX * this.controls.skew.value(distance);
     // Match the gameplay renderer: the head disappears once the Hold arrives.

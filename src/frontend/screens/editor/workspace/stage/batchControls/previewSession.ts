@@ -61,7 +61,7 @@ export function previewSession(live: EditorSession, result: SelectionEditResult)
   preview.shaderAutoAlign = live.shaderAutoAlign;
   preview.liveBeatEdit = live.liveBeatEdit;
   preview.liveEventEdit = live.liveEventEdit;
-  preview.liveNoteEdit = live.liveNoteEdit;
+  preview.noteDraftActive = live.noteDraftActive;
   preview.visibleTimeUnit = live.visibleTimeUnit;
 
   return preview;

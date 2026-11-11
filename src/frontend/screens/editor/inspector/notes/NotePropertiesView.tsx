@@ -29,6 +29,7 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
   const focusValue = useRef<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(field.value);
+  const preservesDraft = field.preservesDraft;
   useEffect(() => {
     const element = input.current;
     if (!element || element instanceof HTMLSelectElement || field.kind === "select") {
@@ -64,7 +65,11 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             accepts={field.accepts}
             disabled={field.disabled}
             dataField={field.key}
-            onFocusChange={(isFocused) => (isFocused ? field.focus() : field.blur())}
+            onFocusChange={
+              preservesDraft
+                ? (isFocused) => (isFocused ? field.focus?.() : field.blur?.())
+                : undefined
+            }
           />
         }
       />
@@ -108,8 +113,6 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             disabled={field.disabled}
             data-inspector-field={field.key}
             onChange={(event) => field.apply?.({ value: event.currentTarget.checked ? "1" : "0" })}
-            onFocus={field.focus}
-            onBlur={field.blur}
           />
         }
       />
@@ -139,8 +142,6 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             }
             aria-label={field.label}
             onChange={(event) => field.apply?.(event.currentTarget)}
-            onFocus={field.focus}
-            onBlur={field.blur}
           />
         }
       />
@@ -176,7 +177,9 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
     onFocus: () => {
       focusValue.current = input.current?.value ?? null;
       setFocused(true);
-      field.focus();
+      if (preservesDraft) {
+        field.focus?.();
+      }
     },
     onBlur: () => {
       const control = input.current;
@@ -188,7 +191,9 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
       }
       focusValue.current = null;
       setFocused(false);
-      field.blur();
+      if (preservesDraft) {
+        field.blur?.();
+      }
     },
   };
 
@@ -208,8 +213,8 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             data-inspector-field={field.key}
             defaultValue={field.value}
             onChange={(event) => field.apply?.(event.currentTarget)}
-            onFocus={field.focus}
-            onBlur={field.blur}
+            onFocus={preservesDraft ? field.focus : undefined}
+            onBlur={preservesDraft ? field.blur : undefined}
           >
             {field.options?.map(([value, label]) => (
               <option value={value} key={value}>
