@@ -102,6 +102,8 @@ type ProjectManifest struct {
 	Background   string          `json:"background"`
 	Song         string          `json:"song"`
 	NoteCount    int             `json:"noteCount"`
+	EventCount   int             `json:"eventCount"`
+	EditSeconds  int             `json:"editSeconds"`
 	Revision     int             `json:"revision"`
 	ViewState    json.RawMessage `json:"viewState,omitempty"`
 	AssetFolders json.RawMessage `json:"assetFolders,omitempty"`

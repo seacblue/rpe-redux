@@ -21,6 +21,8 @@ type projectRow struct {
 	Background   string
 	Song         string
 	NoteCount    int
+	EventCount   int
+	EditSeconds  int
 	Revision     int
 	ViewState    json.RawMessage
 	AssetFolders json.RawMessage
@@ -189,6 +191,8 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 			Background:   project.Background,
 			Song:         project.Song,
 			NoteCount:    project.NoteCount,
+			EventCount:   project.EventCount,
+			EditSeconds:  project.EditSeconds,
 			Revision:     project.Revision,
 			ViewState:    validJSON(project.ViewState, "{}"),
 			AssetFolders: validJSON(project.AssetFolders, "[]"),
@@ -257,8 +261,8 @@ func (s *Service) preferences(ctx context.Context, tx *sql.Tx) []byte {
 func (s *Service) projectRows(ctx context.Context, tx *sql.Tx) ([]projectRow, error) {
 	rows, err := tx.QueryContext(ctx, `
         SELECT id, name, grp, archived, charter, composer, level, background, song,
-               note_count, revision, view_state, asset_folders, created_at, updated_at,
-               chart_hash
+               note_count, event_count, edit_seconds, revision, view_state, asset_folders,
+               created_at, updated_at, chart_hash
           FROM projects ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects for snapshot: %w", err)
@@ -271,8 +275,9 @@ func (s *Service) projectRows(ctx context.Context, tx *sql.Tx) ([]projectRow, er
 		var viewState, assetFolders string
 		if err := rows.Scan(&project.ID, &project.Name, &project.Group, &archived,
 			&project.Charter, &project.Composer, &project.Level, &project.Background,
-			&project.Song, &project.NoteCount, &project.Revision, &viewState,
-			&assetFolders, &project.CreatedAt, &project.UpdatedAt, &project.ChartHash); err != nil {
+			&project.Song, &project.NoteCount, &project.EventCount, &project.EditSeconds,
+			&project.Revision, &viewState, &assetFolders, &project.CreatedAt,
+			&project.UpdatedAt, &project.ChartHash); err != nil {
 			return nil, fmt.Errorf("scan project for snapshot: %w", err)
 		}
 		project.Archived = archived != 0

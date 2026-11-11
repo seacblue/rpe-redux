@@ -51,8 +51,8 @@ func (e *RevisionConflictError) Error() string {
 const applicationID = 1380992338
 
 // schemaVersion is the library layout this build creates and expects. Older
-// databases are migrated additively; no existing row is rewritten.
-const schemaVersion = 2
+// databases are migrated additively; derived counts may be backfilled.
+const schemaVersion = 4
 
 // timeLayout is the canonical timestamp format (RFC3339, UTC).
 const timeLayout = time.RFC3339
@@ -77,6 +77,8 @@ type Project struct {
 	Background   string          `json:"background"`
 	Song         string          `json:"song"`
 	NoteCount    int             `json:"noteCount"`
+	EventCount   int             `json:"eventCount"`
+	EditSeconds  int             `json:"editSeconds"`
 	Revision     int             `json:"revision"`
 	CreatedAt    string          `json:"createdAt"`
 	UpdatedAt    string          `json:"updatedAt"`
@@ -224,6 +226,8 @@ CREATE TABLE IF NOT EXISTS projects (
     composer      TEXT NOT NULL DEFAULT '',
     level         TEXT NOT NULL DEFAULT '',
     note_count    INTEGER NOT NULL DEFAULT 0,
+    event_count   INTEGER NOT NULL DEFAULT 0,
+    edit_seconds  INTEGER NOT NULL DEFAULT 0,
     chart         TEXT NOT NULL DEFAULT '{}',
     chart_index   TEXT NOT NULL DEFAULT '',
     size          INTEGER NOT NULL DEFAULT 0,
@@ -294,6 +298,12 @@ CREATE INDEX IF NOT EXISTS idx_revision_assets_hash ON revision_assets(hash);`
 		return err
 	}
 	if err := s.ensureChartIndexColumns(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureEventCountColumn(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureEditSecondsColumn(ctx); err != nil {
 		return err
 	}
 	if err := s.ensureRevisionChartHashColumn(ctx); err != nil {
@@ -472,6 +482,56 @@ func (s *Store) ensureChartIndexColumns(ctx context.Context) error {
 	return nil
 }
 
+// ensureEventCountColumn adds the derived event total used by the home library
+// summary. Existing rows are backfilled once so old charts get the same stat.
+func (s *Store) ensureEventCountColumn(ctx context.Context) error {
+	added, err := s.ensureTableColumn(ctx, "projects", "event_count",
+		`ALTER TABLE projects ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0`)
+	if err != nil || !added {
+		return err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, chart FROM projects`)
+	if err != nil {
+		return fmt.Errorf("list projects for event backfill: %w", err)
+	}
+	type backfill struct {
+		id    string
+		count int
+	}
+	var updates []backfill
+	for rows.Next() {
+		var id string
+		var chart []byte
+		if err := rows.Scan(&id, &chart); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan project for event backfill: %w", err)
+		}
+		updates = append(updates, backfill{id: id, count: extractMeta(chart).EventCount})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate projects for event backfill: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close event backfill rows: %w", err)
+	}
+	for _, update := range updates {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE projects SET event_count = ? WHERE id = ?`, update.count, update.id); err != nil {
+			return fmt.Errorf("backfill event count for %s: %w", update.id, err)
+		}
+	}
+	return nil
+}
+
+// ensureEditSecondsColumn adds the accumulated charting time used by the home
+// library summary. Existing projects start at zero.
+func (s *Store) ensureEditSecondsColumn(ctx context.Context) error {
+	_, err := s.ensureTableColumn(ctx, "projects", "edit_seconds",
+		`ALTER TABLE projects ADD COLUMN edit_seconds INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
 // ensureTableColumn reports whether it added a missing column. A concurrent
 // upgrade that wins the ALTER is treated as success once the column is visible.
 func (s *Store) ensureTableColumn(ctx context.Context, table, name, ddl string) (bool, error) {
@@ -615,6 +675,15 @@ type chartMeta struct {
 	Background string
 	Song       string
 	NoteCount  int
+	EventCount int
+}
+
+// chartEventTracks mirrors the chart vocabulary's event arrays counted for the
+// library summary.
+var chartEventTracks = []string{
+	"moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents", "speedEvents",
+	"scaleXEvents", "scaleYEvents", "colorEvents", "paintEvents", "textEvents",
+	"inclineEvents", "gifEvents",
 }
 
 // metaString tolerates numbers and other scalars in string-valued fields.
@@ -674,19 +743,24 @@ func extractMeta(chart json.RawMessage) chartMeta {
 	lineList, _ := root["judgeLineList"].([]any)
 
 	sum := 0
+	eventCount := 0
 	found := false
 	for _, line := range lineList {
 		lm, ok := line.(map[string]any)
 		if !ok {
 			continue
 		}
-		notes, ok := lm["notes"].([]any)
-		if !ok {
-			continue
+		if notes, ok := lm["notes"].([]any); ok {
+			found = true
+			sum += len(notes)
 		}
-		found = true
-		sum += len(notes)
+		for _, track := range chartEventTracks {
+			if events, ok := lm[track].([]any); ok {
+				eventCount += len(events)
+			}
+		}
 	}
+	m.EventCount = eventCount
 	if found {
 		m.NoteCount = sum
 	} else if meta != nil {
@@ -700,6 +774,13 @@ func extractMeta(chart json.RawMessage) chartMeta {
 		m.Song = metaString(meta["song"])
 	}
 	return m
+}
+
+// CountChartEvents returns the number of event objects in a chart document.
+// Backup restore uses it so a restored project carries a current count even
+// when the backup predates the stored field.
+func CountChartEvents(chart json.RawMessage) int {
+	return extractMeta(chart).EventCount
 }
 
 // imageAssetPattern matches the formats the library can draw as a cover.
@@ -780,11 +861,12 @@ func (s *Store) CreateProject(ctx context.Context, in CreateProjectInput) (*Proj
 
 	if _, err := tx.ExecContext(ctx, `
         INSERT INTO projects
-            (id, name, grp, archived, charter, composer, level, background, song, note_count, chart,
-             size, revision, chart_hash, view_state, asset_folders, created_at, updated_at)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+            (id, name, grp, archived, charter, composer, level, background, song, note_count,
+             event_count, chart, size, revision, chart_hash, view_state, asset_folders,
+             created_at, updated_at)
+        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 		id, strings.TrimSpace(in.Name), in.Group, meta.Charter, meta.Composer,
-		meta.Level, background, song, meta.NoteCount, string(chart), len(chart), hash,
+		meta.Level, background, song, meta.NoteCount, meta.EventCount, string(chart), len(chart), hash,
 		string(viewState), string(assetFolders), now, now); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
 	}
@@ -807,7 +889,8 @@ func nonNilStrings(values []string) []string {
 
 // projectColumns is the metadata column list shared by every project query.
 const projectColumns = `id, name, grp, archived, charter, composer, level, background, song,
-    note_count, revision, size, view_state, asset_folders, created_at, updated_at`
+    note_count, event_count, edit_seconds, revision, size, view_state, asset_folders,
+    created_at, updated_at`
 
 // scanProject scans a project row. When withChart is true the query must also
 // select the chart column, which is returned verbatim.
@@ -820,8 +903,8 @@ func scanProject(sc interface{ Scan(...any) error }, withChart bool) (*Project, 
 		chart        []byte
 	)
 	dest := []any{&p.ID, &p.Name, &p.Group, &archived, &p.Charter, &p.Composer,
-		&p.Level, &p.Background, &p.Song, &p.NoteCount, &p.Revision, &p.Size, &viewState,
-		&assetFolders, &p.CreatedAt, &p.UpdatedAt}
+		&p.Level, &p.Background, &p.Song, &p.NoteCount, &p.EventCount, &p.EditSeconds,
+		&p.Revision, &p.Size, &viewState, &assetFolders, &p.CreatedAt, &p.UpdatedAt}
 	if withChart {
 		dest = append(dest, &chart)
 	}
@@ -1125,10 +1208,10 @@ func (s *Store) UpdateProject(ctx context.Context, id string, in UpdateProjectIn
 		meta := extractMeta(chart)
 		sets = append(sets,
 			"chart = ?", "size = ?", "charter = ?", "composer = ?", "level = ?",
-			"background = ?", "song = ?", "note_count = ?", "chart_hash = ?",
+			"background = ?", "song = ?", "note_count = ?", "event_count = ?", "chart_hash = ?",
 			"revision = revision + 1")
 		args = append(args, string(chart), len(chart), meta.Charter, meta.Composer, meta.Level,
-			meta.Background, meta.Song, meta.NoteCount, sha256Hex(chart))
+			meta.Background, meta.Song, meta.NoteCount, meta.EventCount, sha256Hex(chart))
 	}
 	if len(sets) == 0 {
 		return nil, errors.New("no fields to update")
@@ -1354,8 +1437,11 @@ type CommitProjectInput struct {
 	Assets       *[]AssetMapping
 	ViewState    *json.RawMessage
 	AssetFolders *[]string
-	Label        string
-	Snapshot     bool
+	// EditSeconds is active charting time since the previous commit, added to
+	// the project's stored total.
+	EditSeconds int
+	Label       string
+	Snapshot    bool
 }
 
 // CommitProject updates a chart and its manifest in one transaction. A failed
@@ -1461,10 +1547,25 @@ func (s *Store) CommitProject(ctx context.Context, in CommitProjectInput) (proje
 	changed := manifestChanged || hash != currentHash || string(chart) != string(currentChart) ||
 		nextView != compactOr(currentView, "{}") || nextFolders != currentFolders ||
 		nextName != currentName
+	editSeconds := in.EditSeconds
+	if editSeconds < 0 {
+		editSeconds = 0
+	}
 	if !changed && !in.Snapshot {
-		// Release the single connection before reading the summary; the pool is
-		// intentionally capped at one writer.
-		_ = tx.Rollback()
+		if editSeconds > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE projects SET edit_seconds = edit_seconds + ? WHERE id = ?`,
+				editSeconds, in.ProjectID); err != nil {
+				return nil, fmt.Errorf("update edit seconds: %w", err)
+			}
+			if err := tx.Commit(); err != nil {
+				return nil, fmt.Errorf("commit edit seconds: %w", err)
+			}
+		} else {
+			// Release the single connection before reading the summary; the pool
+			// is intentionally capped at one writer.
+			_ = tx.Rollback()
+		}
 		return s.GetProjectSummary(ctx, in.ProjectID)
 	}
 
@@ -1477,12 +1578,13 @@ func (s *Store) CommitProject(ctx context.Context, in CommitProjectInput) (proje
 	if _, err := tx.ExecContext(ctx, `
         UPDATE projects SET
             name = ?, chart = ?, size = ?, charter = ?, composer = ?, level = ?,
-            background = ?, song = ?, note_count = ?, chart_hash = ?, revision = ?, view_state = ?,
-            asset_folders = ?, updated_at = ?
+            background = ?, song = ?, note_count = ?, event_count = ?,
+            edit_seconds = edit_seconds + ?, chart_hash = ?, revision = ?,
+            view_state = ?, asset_folders = ?, updated_at = ?
         WHERE id = ?`,
 		nextName, string(chart), len(chart), meta.Charter, meta.Composer, meta.Level,
-		nextBackground, nextSong, meta.NoteCount, hash, revision, nextView, nextFolders, now,
-		in.ProjectID); err != nil {
+		nextBackground, nextSong, meta.NoteCount, meta.EventCount, editSeconds, hash, revision,
+		nextView, nextFolders, now, in.ProjectID); err != nil {
 		return nil, fmt.Errorf("update project: %w", err)
 	}
 	if in.Snapshot {
@@ -1651,10 +1753,11 @@ func (s *Store) DuplicateProject(ctx context.Context, id, name string) (*Project
 
 	res, err := tx.ExecContext(ctx, `
         INSERT INTO projects
-            (id, name, grp, archived, charter, composer, level, background, song, note_count, chart,
-             size, revision, chart_hash, view_state, asset_folders, created_at, updated_at)
-        SELECT ?, ?, grp, archived, charter, composer, level, background, song, note_count, chart,
-               size, 1, chart_hash, view_state, asset_folders, ?, ?
+            (id, name, grp, archived, charter, composer, level, background, song, note_count,
+             event_count, chart, size, revision, chart_hash, view_state, asset_folders,
+             created_at, updated_at)
+        SELECT ?, ?, grp, archived, charter, composer, level, background, song, note_count,
+               event_count, chart, size, 1, chart_hash, view_state, asset_folders, ?, ?
         FROM projects WHERE id = ?`, newProjectID, name, now, now, id)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate project: %w", err)

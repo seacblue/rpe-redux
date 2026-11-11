@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   canOperateOnLibraryEntry,
   libraryDetailState,
+  nextLibrarySelection,
   resolveLibrarySelection,
 } from "../../../frontend/screens/welcome/library/libraryDetailState.ts";
 
@@ -48,4 +49,15 @@ test("selection never falls back to the first chart", () => {
 test("only a real entry can run export, delete, or open", () => {
   assert.equal(canOperateOnLibraryEntry(null), false);
   assert.equal(canOperateOnLibraryEntry(entry("project:a")), true);
+});
+
+test("clicking the selected chart again returns to the welcome panel", () => {
+  assert.equal(nextLibrarySelection("project:a", "project:a", true), null);
+  assert.equal(nextLibrarySelection("project:a", "project:b", true), "project:b");
+  assert.equal(nextLibrarySelection(null, "project:a", true), "project:a");
+});
+
+test("context-menu selection never toggles the current chart", () => {
+  assert.equal(nextLibrarySelection("project:a", "project:a", false), "project:a");
+  assert.equal(nextLibrarySelection(null, "project:a", false), "project:a");
 });

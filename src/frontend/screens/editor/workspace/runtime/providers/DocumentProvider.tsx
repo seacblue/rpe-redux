@@ -224,6 +224,8 @@ export function createDocumentRuntime(options: {
   scheduleRenderSession?(): void;
   resetSelectionView(): void;
   resetEditClock(): void;
+  /** Active seconds on the editor clock, used to accumulate charting time. */
+  currentEditSeconds(): number;
   setHasDocument(value: boolean): void;
   hasDocument(): boolean;
   setHome(value: boolean): void;
@@ -589,6 +591,7 @@ export function createDocumentRuntime(options: {
     currentLibraryProject: () => options.document.libraryProject,
     currentSourcePath: () => options.documents?.current?.path ?? null,
     currentAssetFolders: () => [...options.document.assetFolders],
+    currentEditSeconds: options.currentEditSeconds,
     setAssetDirty: (dirty) => {
       options.document.assetDirty = dirty;
     },

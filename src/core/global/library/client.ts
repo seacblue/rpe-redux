@@ -45,6 +45,9 @@ export interface LibraryProjectSummary {
   /** Audio asset name, resolved by the service when the chart was written. */
   song?: string;
   noteCount: number;
+  eventCount: number;
+  /** Accumulated active charting time, in seconds. */
+  editSeconds: number;
   /** Optimistic-concurrency token; advances only when the chart or assets change. */
   revision: number;
   createdAt: string;
@@ -71,6 +74,8 @@ export interface LibraryCommitInput {
   assets: readonly { name: string; hash: string }[];
   viewState?: LibraryViewState;
   assetFolders?: readonly string[];
+  /** Active charting seconds since the previous commit; added to the total. */
+  editSeconds?: number;
   label?: string;
   snapshot?: boolean;
 }

@@ -450,6 +450,15 @@ func TestOpenMigratesLegacySchemaAndStampsIdentity(t *testing.T) {
 	if hashColumns != 1 {
 		t.Fatal("revisions.chart_hash was not added")
 	}
+	var eventColumns int
+	if err := store.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'event_count'`).
+		Scan(&eventColumns); err != nil {
+		t.Fatal(err)
+	}
+	if eventColumns != 1 {
+		t.Fatal("projects.event_count was not added")
+	}
 	var databaseID string
 	if err := store.db.QueryRowContext(ctx,
 		`SELECT value FROM library_meta WHERE key = 'database_id'`).Scan(&databaseID); err != nil {
@@ -526,5 +535,48 @@ func TestCreateRevisionStoresChartHash(t *testing.T) {
 	}
 	if hash != sha256Hex(chart) {
 		t.Fatalf("revision hash = %q, want %q", hash, sha256Hex(chart))
+	}
+}
+
+func TestExtractMetaCountsNotesAndEvents(t *testing.T) {
+	chart := json.RawMessage(`{
+        "META": {"charter": "charter", "composer": "composer", "level": "15"},
+        "judgeLineList": [
+            {"notes": [{}, {}, {}], "moveXEvents": [{}, {}], "alphaEvents": [{}]},
+            {"notes": [{}], "speedEvents": [{}, {}, {}]}
+        ]
+    }`)
+	meta := extractMeta(chart)
+	if meta.NoteCount != 4 {
+		t.Fatalf("note count = %d, want 4", meta.NoteCount)
+	}
+	if meta.EventCount != 6 {
+		t.Fatalf("event count = %d, want 6", meta.EventCount)
+	}
+}
+
+func TestCommitAccumulatesEditSeconds(t *testing.T) {
+	store := testStore(t)
+	project := createTestProject(t, store)
+	ctx := context.Background()
+	chart := testChart("edit-seconds")
+	for _, seconds := range []int{61, 59} {
+		if _, err := store.CommitProject(ctx, CommitProjectInput{
+			ProjectID:   project.ID,
+			Chart:       chart,
+			EditSeconds: seconds,
+		}); err != nil {
+			t.Fatalf("commit edit seconds: %v", err)
+		}
+	}
+	summary, err := store.GetProjectSummary(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.EditSeconds != 120 {
+		t.Fatalf("edit seconds = %d, want 120", summary.EditSeconds)
+	}
+	if summary.Revision != project.Revision+1 {
+		t.Fatalf("revision = %d, want %d", summary.Revision, project.Revision+1)
 	}
 }

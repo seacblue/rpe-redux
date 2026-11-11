@@ -606,6 +606,7 @@ type commitProjectRequest struct {
 	Assets       *[]store.AssetMapping `json:"assets"`
 	ViewState    *json.RawMessage      `json:"viewState"`
 	AssetFolders *[]string             `json:"assetFolders"`
+	EditSeconds  int                   `json:"editSeconds"`
 	Label        string                `json:"label"`
 	Snapshot     bool                  `json:"snapshot"`
 }
@@ -630,6 +631,7 @@ func (a *API) handleCommitProject(w http.ResponseWriter, r *http.Request) {
 		Assets:       req.Assets,
 		ViewState:    req.ViewState,
 		AssetFolders: req.AssetFolders,
+		EditSeconds:  req.EditSeconds,
 		Label:        req.Label,
 		Snapshot:     req.Snapshot,
 	})

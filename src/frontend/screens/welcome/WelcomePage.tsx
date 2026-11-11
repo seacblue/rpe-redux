@@ -1,14 +1,15 @@
 /**
  * The home screen.
  *
- * It composes the page header, the permanent selected-chart column, and the
- * chart library. The detail column stays mounted through loading, empty, and
- * failed reads, so the two-column grid never collapses or snaps in after the
- * first read; it prompts until the user selects a chart. Selection is owned
- * here because the detail pane and the list are siblings, while opening,
- * exporting, and deleting stay with the published card actions. Files dropped
- * on the window are imported by the desktop lifecycle, which broadcasts its
- * drag state here for the drop overlay.
+ * It composes the page header, the permanent detail column, and the chart
+ * library. The detail column stays mounted through loading, empty, and failed
+ * reads, so the two-column grid never collapses or snaps in after the first
+ * read; it shows the borderless welcome panel until the user selects a chart.
+ * Selection is owned here because the detail pane and the list are siblings,
+ * while opening, exporting, and deleting stay with the published card actions.
+ * Clicking the selected chart again clears it and restores the welcome panel.
+ * Files dropped on the window are imported by the desktop lifecycle, which
+ * broadcasts its drag state here for the drop overlay.
  */
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "../../../i18n/react.ts";
@@ -22,7 +23,11 @@ import { RpeImportReviewDialog } from "./RpeImportReviewDialog.tsx";
 import { LibraryPanel } from "./library/LibraryPanel.tsx";
 import { LibraryDetail } from "./library/LibraryDetail.tsx";
 import { buildLibraryEntries, type LibraryEntry } from "./library/libraryEntries.ts";
-import { libraryDetailState, resolveLibrarySelection } from "./library/libraryDetailState.ts";
+import {
+  libraryDetailState,
+  nextLibrarySelection,
+  resolveLibrarySelection,
+} from "./library/libraryDetailState.ts";
 import { getHomeProjectCardsSnapshot, subscribeHomeProjectCards } from "./homeProjectCards.ts";
 import {
   getEditorVisibility,
@@ -55,9 +60,9 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
     setSelectedKey(`project:${removeFailure.projectId}`);
     setArmedKey(null);
   }
-  // Selection stays explicit: a populated library starts on a prompt rather
-  // than an implied first chart. Preview audio also waits for an explicit click
-  // so entering the home screen never starts sound on its own.
+  // Selection stays explicit: a populated library starts on the welcome panel
+  // rather than an implied first chart. Preview audio also waits for an
+  // explicit click so entering the home screen never starts sound on its own.
   const selected = useMemo(
     () => resolveLibrarySelection(entries, selectedKey),
     [entries, selectedKey],
@@ -103,6 +108,8 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
           <div className="redux-welcome-side">
             <LibraryDetail
               entry={selected}
+              entries={entries}
+              loading={!cards || cards.phase === "loading"}
               visible={editorVisibility.atHome}
               preview={previewArmed}
               onOpen={openEntry}
@@ -113,8 +120,9 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
           <LibraryPanel
             selectedKey={selected?.key ?? null}
             onSelect={(key, preview) => {
-              setSelectedKey(key);
-              setArmedKey(preview ? key : null);
+              const nextKey = nextLibrarySelection(selected?.key ?? null, key, preview);
+              setSelectedKey(nextKey);
+              setArmedKey(nextKey !== null && preview ? nextKey : null);
             }}
           />
         </div>

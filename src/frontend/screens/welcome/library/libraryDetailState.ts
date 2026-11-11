@@ -2,9 +2,9 @@
  * Presentation rules for the home library's detail column.
  *
  * The column is permanent: it shows the selected chart when that selection is
- * still in the current list, and the explicit prompt otherwise. Keeping it
- * mounted through loading, empty, and failed reads gives the library one stable
- * width instead of collapsing to a single column after the first read.
+ * still in the current list, and the borderless welcome panel otherwise.
+ * Keeping it mounted through loading, empty, and failed reads gives the library
+ * one stable width instead of collapsing to a single column after the first read.
  */
 import type { LibraryEntry } from "./libraryEntries.ts";
 
@@ -29,7 +29,8 @@ export function resolveLibrarySelection(
 }
 
 /**
- * The permanent detail column prompts until a current entry is selected.
+ * The permanent detail column shows the welcome panel until a current entry is
+ * selected.
  *
  * The column never hides, including for an empty library, so the page keeps
  * its two-column frame from the first paint through every read phase.
@@ -41,6 +42,21 @@ export function libraryDetailState(
   return selected !== null && entries.some((entry) => entry.key === selected.key)
     ? "detail"
     : "prompt";
+}
+
+/**
+ * Resolves the selection after a library card interaction.
+ *
+ * An explicit click on the already selected chart clears the selection, which
+ * returns the detail column to its welcome panel. A context-menu interaction
+ * never toggles: right-clicking the same chart keeps it selected.
+ */
+export function nextLibrarySelection(
+  currentKey: string | null,
+  key: string,
+  preview: boolean,
+): string | null {
+  return preview && currentKey === key ? null : key;
 }
 
 /** A real entry is the only object export, delete, and open may act on. */

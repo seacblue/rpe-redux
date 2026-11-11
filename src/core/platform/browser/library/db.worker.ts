@@ -20,7 +20,7 @@ const DB_PATH = "/redux.db";
 const POOL_DIR = "/rpe-redux-pool";
 const POOL_NAME = "rpe-redux-browser";
 const LIBRARY_APPLICATION_ID = 1380992338;
-const LIBRARY_SCHEMA_VERSION = 2;
+const LIBRARY_SCHEMA_VERSION = 4;
 
 const BACKUP_DIR = "library-history";
 const BACKUP_OBJECT_MAGIC = "RPEB";
@@ -117,6 +117,8 @@ interface BackupProjectManifest {
   background: string;
   song: string;
   noteCount: number;
+  eventCount: number;
+  editSeconds: number;
   revision: number;
   viewState: unknown;
   assetFolders: unknown;
@@ -177,7 +179,8 @@ interface BackupSummary {
 }
 
 const PROJECT_COLUMNS = `id, name, grp, archived, charter, composer, level, background, song,
-  note_count, revision, view_state, asset_folders, created_at, updated_at, size`;
+  note_count, event_count, edit_seconds, revision, view_state, asset_folders, created_at,
+  updated_at, size`;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -189,6 +192,8 @@ CREATE TABLE IF NOT EXISTS projects (
     composer      TEXT NOT NULL DEFAULT '',
     level         TEXT NOT NULL DEFAULT '',
     note_count    INTEGER NOT NULL DEFAULT 0,
+    event_count   INTEGER NOT NULL DEFAULT 0,
+    edit_seconds  INTEGER NOT NULL DEFAULT 0,
     chart         TEXT NOT NULL DEFAULT '{}',
     size          INTEGER NOT NULL DEFAULT 0,
     revision      INTEGER NOT NULL DEFAULT 1,
@@ -309,6 +314,7 @@ interface ChartMeta {
   background: string;
   song: string;
   noteCount: number;
+  eventCount: number;
 }
 
 class DbError extends Error {
@@ -356,6 +362,22 @@ function metaInt(value: unknown): number {
   return 0;
 }
 
+/** Chart event arrays counted in the home library's created-event total. */
+const EVENT_TRACKS = [
+  "moveXEvents",
+  "moveYEvents",
+  "rotateEvents",
+  "alphaEvents",
+  "speedEvents",
+  "scaleXEvents",
+  "scaleYEvents",
+  "colorEvents",
+  "paintEvents",
+  "textEvents",
+  "inclineEvents",
+  "gifEvents",
+];
+
 function extractMeta(chart: unknown): ChartMeta {
   const meta: ChartMeta = {
     charter: "",
@@ -364,6 +386,7 @@ function extractMeta(chart: unknown): ChartMeta {
     background: "",
     song: "",
     noteCount: 0,
+    eventCount: 0,
   };
   if (!isRecord(chart)) {
     return meta;
@@ -372,12 +395,22 @@ function extractMeta(chart: unknown): ChartMeta {
   const lines = Array.isArray(chart.judgeLineList) ? chart.judgeLineList : null;
   if (lines) {
     let count = 0;
+    let events = 0;
     for (const line of lines) {
-      if (isRecord(line) && Array.isArray(line.notes)) {
+      if (!isRecord(line)) {
+        continue;
+      }
+      if (Array.isArray(line.notes)) {
         count += line.notes.length;
+      }
+      for (const track of EVENT_TRACKS) {
+        if (Array.isArray(line[track])) {
+          events += line[track].length;
+        }
       }
     }
     meta.noteCount = count;
+    meta.eventCount = events;
   } else if (metaObject.numOfNotes !== undefined) {
     meta.noteCount = metaInt(metaObject.numOfNotes);
   }
@@ -466,6 +499,8 @@ function summary(row: Record<string, unknown>): LibraryProjectSummary {
     ...(String(row.background ?? "") ? { background: String(row.background) } : {}),
     ...(String(row.song ?? "") ? { song: String(row.song) } : {}),
     noteCount: Number(row.note_count ?? 0),
+    eventCount: Number(row.event_count ?? 0),
+    editSeconds: Number(row.edit_seconds ?? 0),
     revision: Number(row.revision ?? 1),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),
@@ -610,6 +645,28 @@ async function migrateSchema(): Promise<void> {
     "revisions",
     "chart_hash",
     "ALTER TABLE revisions ADD COLUMN chart_hash TEXT NOT NULL DEFAULT ''",
+  );
+  const hasEventCount =
+    Number(
+      requireDb().selectValue(
+        `SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'event_count'`,
+      ),
+    ) > 0;
+  ensureColumn(
+    "projects",
+    "event_count",
+    "ALTER TABLE projects ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0",
+  );
+  if (!hasEventCount) {
+    for (const row of requireDb().selectObjects(`SELECT id, chart FROM projects`)) {
+      const meta = extractMeta(parseJson(row.chart, {}));
+      run(`UPDATE projects SET event_count = ? WHERE id = ?`, [meta.eventCount, String(row.id)]);
+    }
+  }
+  ensureColumn(
+    "projects",
+    "edit_seconds",
+    "ALTER TABLE projects ADD COLUMN edit_seconds INTEGER NOT NULL DEFAULT 0",
   );
   const now = nowString();
   run(`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('database_id', ?)`, [
@@ -1054,8 +1111,8 @@ async function backupSnapshot(reason: string): Promise<BackupSummary> {
   const data = requireDb();
   const projectRows = data.selectObjects(`
     SELECT id, name, grp, archived, charter, composer, level, background, song,
-           note_count, revision, view_state, asset_folders, created_at, updated_at,
-           chart_hash
+           note_count, event_count, edit_seconds, revision, view_state, asset_folders,
+           created_at, updated_at, chart_hash
       FROM projects ORDER BY id`);
   const projectAssets = data.selectObjects(
     `SELECT project_id, name, hash FROM project_assets ORDER BY project_id, name`,
@@ -1174,6 +1231,8 @@ async function backupSnapshot(reason: string): Promise<BackupSummary> {
       background: String(row.background ?? ""),
       song: String(row.song ?? ""),
       noteCount: Number(row.note_count ?? 0),
+      eventCount: Number(row.event_count ?? 0),
+      editSeconds: Number(row.edit_seconds ?? 0),
       revision: Number(row.revision ?? 1),
       viewState: parseJson(row.view_state, {}),
       assetFolders: parseJson(row.asset_folders, []),
@@ -1464,12 +1523,13 @@ async function backupRestoreCommit(target: { id: string; commit: BackupCommit })
       const chart = new TextDecoder().decode(
         await readBackupObject(BACKUP_KIND_CHART, manifest.chart),
       );
+      const eventCount = extractMeta(parseJson(chart, {})).eventCount;
       restoreDb.exec({
         sql: `INSERT INTO projects
-          (id, name, grp, archived, charter, composer, level, note_count, chart, size,
-           revision, chart_hash, view_state, asset_folders, background, song,
-           created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, name, grp, archived, charter, composer, level, note_count, event_count,
+           edit_seconds, chart, size, revision, chart_hash, view_state, asset_folders,
+           background, song, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         bind: [
           manifest.id,
           manifest.name,
@@ -1479,6 +1539,8 @@ async function backupRestoreCommit(target: { id: string; commit: BackupCommit })
           manifest.composer,
           manifest.level,
           manifest.noteCount,
+          eventCount,
+          manifest.editSeconds ?? 0,
           chart,
           chart.length,
           manifest.revision,
@@ -1809,9 +1871,10 @@ async function create(params: Record<string, unknown>): Promise<Record<string, u
   const hash = await sha256Hex(chartJson);
   run(
     `INSERT INTO projects
-      (id, name, grp, archived, charter, composer, level, background, song, note_count, chart,
-       size, revision, chart_hash, view_state, asset_folders, created_at, updated_at)
-      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '{}', '[]', ?, ?)`,
+      (id, name, grp, archived, charter, composer, level, background, song, note_count,
+       event_count, chart, size, revision, chart_hash, view_state, asset_folders, created_at,
+       updated_at)
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '{}', '[]', ?, ?)`,
     [
       id,
       name,
@@ -1822,6 +1885,7 @@ async function create(params: Record<string, unknown>): Promise<Record<string, u
       meta.background,
       meta.song,
       meta.noteCount,
+      meta.eventCount,
       chartJson,
       chartJson.length,
       hash,
@@ -1866,6 +1930,7 @@ async function update(params: Record<string, unknown>): Promise<Record<string, u
       "background = ?",
       "song = ?",
       "note_count = ?",
+      "event_count = ?",
       "chart_hash = ?",
       "revision = revision + 1",
     );
@@ -1878,6 +1943,7 @@ async function update(params: Record<string, unknown>): Promise<Record<string, u
       meta.background,
       meta.song,
       meta.noteCount,
+      meta.eventCount,
       await sha256Hex(chartJson),
     );
   }
@@ -1908,10 +1974,11 @@ function duplicate(params: Record<string, unknown>): Record<string, unknown> {
   const now = nowString();
   run(
     `INSERT INTO projects
-      (id, name, grp, archived, charter, composer, level, background, song, note_count, chart,
-       size, revision, chart_hash, view_state, asset_folders, created_at, updated_at)
-      SELECT ?, ?, grp, archived, charter, composer, level, background, song, note_count, chart,
-             size, 1, chart_hash, view_state, asset_folders, ?, ?
+      (id, name, grp, archived, charter, composer, level, background, song, note_count,
+       event_count, chart, size, revision, chart_hash, view_state, asset_folders, created_at,
+       updated_at)
+      SELECT ?, ?, grp, archived, charter, composer, level, background, song, note_count,
+             event_count, chart, size, 1, chart_hash, view_state, asset_folders, ?, ?
         FROM projects WHERE id = ?`,
     [target, name, now, now, id],
   );
@@ -2172,6 +2239,7 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
     (input.assets ? chartBackground(meta, input.assets) : String(current.background ?? ""));
   const nextSong =
     meta.song || (input.assets ? chartSong(meta, input.assets) : String(current.song ?? ""));
+  const editSeconds = Math.max(0, Math.floor(Number(input.editSeconds ?? 0)));
 
   if (input.assets) {
     const currentManifest = assets({ id }) as { assets: LibraryAssetSummary[] };
@@ -2190,6 +2258,9 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
       nextView === String(current.view_state) &&
       nextFolders === String(current.asset_folders)
     ) {
+      if (editSeconds > 0) {
+        run(`UPDATE projects SET edit_seconds = edit_seconds + ? WHERE id = ?`, [editSeconds, id]);
+      }
       return { project: projectSummary(id) };
     }
   }
@@ -2216,7 +2287,8 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
     run(
       `UPDATE projects
           SET name = ?, chart = ?, size = ?, charter = ?, composer = ?, level = ?,
-              background = ?, song = ?, note_count = ?, chart_hash = ?, revision = ?,
+              background = ?, song = ?, note_count = ?, event_count = ?,
+              edit_seconds = edit_seconds + ?, chart_hash = ?, revision = ?,
               view_state = ?, asset_folders = ?, updated_at = ?
         WHERE id = ?`,
       [
@@ -2229,6 +2301,8 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
         nextBackground,
         nextSong,
         meta.noteCount,
+        meta.eventCount,
+        editSeconds,
         hash,
         currentRevision + 1,
         nextView,
