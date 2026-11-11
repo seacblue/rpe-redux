@@ -19,8 +19,8 @@ export {
 
 /** Host callbacks the home library needs to open, import, export, and report. */
 interface ProjectHomeOptions {
-  /** Open a project stored in the local SQLite library. */
-  openProject: (id: string) => Promise<unknown>;
+  /** Open a project stored in the local SQLite library; false when cancelled. */
+  openProject: (id: string) => Promise<boolean>;
   /** Open an imported project after the caller already handled unsaved changes. */
   openImported?: (id: string) => Promise<unknown>;
   /** Read a chart file into the library without opening it. */
@@ -68,7 +68,7 @@ export class ProjectHome {
     path: string,
     details?: DropClassification["details"],
   ) => Promise<readonly string[] | null>;
-  private readonly openProject: (id: string) => Promise<unknown>;
+  private readonly openProjectAction: (id: string) => Promise<boolean>;
   private readonly openImported?: (id: string) => Promise<unknown>;
   private readonly importExternalPath?: (path: string) => Promise<string | null>;
   private readonly classifyPaths?: (
@@ -104,7 +104,7 @@ export class ProjectHome {
     this.importFile = importFile;
     this.importRpePath = importRpePath;
     this.importRpeInstallation = importRpeInstallation;
-    this.openProject = openProject;
+    this.openProjectAction = openProject;
     this.openImported = openImported;
     this.importExternalPath = importExternalPath;
     this.classifyPaths = classifyPaths;
@@ -116,7 +116,9 @@ export class ProjectHome {
     this.chooseExternal = chooseExternalImport;
     this.reportError = reportError;
     this.cards = new HomeProjectCardsAdapter({
-      onOpenProject: (id) => openProject(id).catch(reportError),
+      onOpenProject: (id) => {
+        void this.openProject(id).catch(reportError);
+      },
       onExportProject: (id) => exportProject(id).catch(reportError),
       onRenameProject: (project) => this.library.edit(project),
       onDelete: (project) => this.library.remove(project),
@@ -132,6 +134,16 @@ export class ProjectHome {
       changed: (update) => this.cards.updateProjects(update),
       changedProject: changed,
     });
+  }
+
+  /**
+   * Open one library project.
+   *
+   * Returns false when the replace guard was cancelled; the caller can then
+   * leave the address bar on the document that is actually open.
+   */
+  openProject(id: string): Promise<boolean> {
+    return this.openProjectAction(id);
   }
 
   /** Reloads the library listing into the published card snapshot. */
@@ -280,7 +292,7 @@ export class ProjectHome {
 
   /** Opens one library project after an import; the caller handled unsaved work. */
   async open(id: string): Promise<void> {
-    await (this.openImported ?? this.openProject)(id);
+    await (this.openImported ?? this.openProjectAction)(id);
   }
 
   /** Releases the controller and the card adapter. */

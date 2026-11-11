@@ -114,7 +114,7 @@ function offerPackageSettings(item: DropClassification, kind: "extension" | "ski
 /** Connects the home view's open and rename actions to the live editor session. */
 export function createEditorHomeRuntime(deps: {
   documents: TauriDocumentStore | null;
-  guardReplace(action: () => unknown): unknown;
+  guardReplace(action: () => unknown): Promise<boolean>;
   loadCandidate(candidate: EditorCandidate, assets: AssetMap, task?: LoadTask): Promise<void>;
   reportError(error: unknown): void;
   getLibraryProject(): LibraryProjectRef | null;

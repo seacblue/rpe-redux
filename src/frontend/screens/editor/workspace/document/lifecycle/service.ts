@@ -45,7 +45,7 @@ const PROJECT_IMAGE_PATTERN = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
 export interface DocumentServiceBindings {
   documents: TauriDocumentStore | null;
   openNativeDocument(): Promise<void>;
-  guardReplace(action: () => unknown, title?: string): unknown;
+  guardReplace(action: () => unknown, title?: string): Promise<boolean>;
   /** Create a blank chart; timing detection waits for its first audio file. */
   createBlankChart(trigger?: NewChartDetectionTrigger): Promise<void>;
   hasUnsavedChanges(): boolean;

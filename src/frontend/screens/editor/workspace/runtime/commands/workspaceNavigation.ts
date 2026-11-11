@@ -72,11 +72,15 @@ export function createWorkspaceNavigation(options: WorkspaceNavigationOptions) {
    *
    * Every path asks first, even a saved document. The prompt gains Save and
    * Discard only when the document is dirty, and it names the room outcome when
-   * returning would also close or leave a collaboration session.
+   * returning would also close or leave a collaboration session. Returns true
+   * when the library is showing and false when the user stayed.
    */
-  const openLibrary = async () => {
-    if (options.atHome() || leaving) {
-      return;
+  const openLibrary = async (): Promise<boolean> => {
+    if (options.atHome()) {
+      return true;
+    }
+    if (leaving) {
+      return false;
     }
     leaving = true;
     try {
@@ -101,7 +105,7 @@ export function createWorkspaceNavigation(options: WorkspaceNavigationOptions) {
         priority: MODAL_PRIORITY.closePrompt,
       });
       if (answer === "cancel") {
-        return;
+        return false;
       }
       try {
         if (answer === "save") {
@@ -116,15 +120,42 @@ export function createWorkspaceNavigation(options: WorkspaceNavigationOptions) {
           collaborationRoomExit.exit();
         }
         setHome(true);
+        return true;
       } catch (failure) {
         options.reportError(failure);
+        return false;
       }
     } finally {
       leaving = false;
     }
   };
 
-  return { setHome, openLibrary };
+  /**
+   * Leave for an address change without prompting when nothing blocks it.
+   *
+   * History navigation is not an explicit quit gesture, so a clean document
+   * with no room hides the workspace directly. Dirty edits and room ownership
+   * still use the one library prompt, which can save, discard, or cancel.
+   */
+  const leaveForRoute = async (): Promise<boolean> => {
+    if (options.atHome()) {
+      return true;
+    }
+    const plan = planLeaveEditor({
+      hasDocument: options.hasDocument(),
+      dirty: options.hasUnsavedChanges(),
+      roomDocument: collaborationRoomDocument.get(),
+      collaboration: collaborationRoom.get(),
+      collaborationPreparing: collaborationPreparing.get(),
+    });
+    if (!plan.dirty && plan.room === "none" && !plan.temporaryDocument) {
+      setHome(true);
+      return true;
+    }
+    return openLibrary();
+  };
+
+  return { setHome, openLibrary, leaveForRoute };
 }
 
 // ------------------------------------------------------------ the library trip

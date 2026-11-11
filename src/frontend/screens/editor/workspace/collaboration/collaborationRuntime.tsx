@@ -122,6 +122,7 @@ import {
 import { useEditorSession } from "../runtime/providers/SessionProvider.tsx";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
+import { takePendingDesktopInvite } from "../../../../platform/desktopDeepLink.ts";
 import { inspectRoomInvite } from "./roomInvitePreview.ts";
 import { requestRoomInviteConfirmation } from "./roomInvitePrompt.tsx";
 import { bindCollaborationRoomExit } from "./roomExit.ts";
@@ -962,11 +963,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         disposed = true;
       };
     }
-    void invoke<string | null>("take_collab_invite").then((link) => {
-      if (link) {
-        void openInvite(link);
-      }
-    });
+    const startupInvite = takePendingDesktopInvite();
+    if (startupInvite) {
+      void openInvite(startupInvite);
+    }
     void listen<string>("redux-collab-invite", (event) => void openInvite(event.payload)).then(
       (dispose) => {
         unlisten = dispose;
@@ -2566,7 +2566,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
     const link = isDesktop()
       ? buildRoomInviteLink(invite)
-      : buildWebRoomInviteLink(invite, location.href);
+      : buildWebRoomInviteLink(invite, document.baseURI);
     try {
       await navigator.clipboard.writeText(link);
       showToast(t("workspace.collaboration.inviteLinkCopied"), "success");

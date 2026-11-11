@@ -21,6 +21,9 @@ if (flags.help) {
 }
 
 const { mode, fast } = flags;
+// The desktop bundle is served from the app root; a web deployment base must
+// not leak into the packaged build.
+delete process.env.REDUX_WEB_BASE;
 console.log(`Building RPE Redux ${productVersion}`);
 if (fast) {
   // Fast profile: the release feature set with thin LTO and parallel codegen.

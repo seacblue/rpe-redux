@@ -115,6 +115,12 @@ import { createPreviewFrameCapture } from "../../preview/frame/frameCapture.ts";
 import { createEditorRuntime, type EditorRuntime } from "./EditorRuntime.tsx";
 import { createEditorUiState } from "./editorUiState.ts";
 import type { EditorSessionRuntime } from "../providers/SessionProvider.tsx";
+import {
+  bindRouteDocumentActions,
+  getBootRoute,
+  markBootSettled,
+  resetBootSettled,
+} from "../../../../../contracts/appRoute.ts";
 registerEditorShortcuts();
 
 /** Builds the editor's services, bindings, and providers for one mounted session. */
@@ -122,6 +128,7 @@ export function createEditorAssembly(
   surfaces: EditorSurfaces,
   session: EditorSessionRuntime,
 ): { runtime: EditorRuntime } {
+  resetBootSettled();
   const documents = isDesktop() ? new TauriDocumentStore(serializeChartOffThread) : null;
   const scope = new ResourceScope();
   scope.add(bindCurrentDocumentStore(documents));
@@ -579,6 +586,22 @@ export function createEditorAssembly(
       documentState.libraryProject = project;
     },
   });
+  /**
+   * Open one address-named project.
+   *
+   * A dead link is a normal outcome for a stale address, so it becomes a
+   * notice rather than the full diagnostic dialog. The caller sees `false` and
+   * the URL mirror falls back to the state that is actually on screen.
+   */
+  const openRouteProject = async (projectId: string): Promise<boolean> => {
+    try {
+      return await home.openProject(projectId);
+    } catch (error) {
+      console.warn("Unable to open the chart route", error);
+      notify(t("editor.app.error.projectMissing"), "warning", 6000);
+      return false;
+    }
+  };
   scope.add(connectRpeImport(() => home.chooseRpeImport()));
   scope.add(connectExternalImport(() => home.chooseExternalImport()));
   // Debug and automation builds expose the same drop entry point the window
@@ -613,6 +636,13 @@ export function createEditorAssembly(
   });
   scope.add(workspaceNavigationBinding.dispose);
   const workspaceNavigation = workspaceNavigationBinding.navigation;
+  scope.add(
+    bindRouteDocumentActions({
+      openProject: openRouteProject,
+      leaveEditor: () => workspaceNavigation.leaveForRoute(),
+      showEditor: () => workspaceNavigation.setHome(false),
+    }),
+  );
 
   /** Forwards a context-menu request to the marker controller when it exists. */
   function openTimelineContextMenu(event: MouseEvent, canvas: HTMLCanvasElement | null = null) {
@@ -772,8 +802,8 @@ export function createEditorAssembly(
   const { documentSaver } = documentRuntime;
   libraryBackup = documentRuntime.backup;
   /** Runs a document action after the unsaved-changes confirmation. */
-  function guardReplace(action: () => unknown, title?: string): void {
-    documentRuntime.guardReplace(action, title);
+  function guardReplace(action: () => unknown, title?: string): Promise<boolean> {
+    return documentRuntime.guardReplace(action, title);
   }
   /** Loads a parsed candidate through the document runtime. */
   async function loadCandidate(
@@ -1071,6 +1101,30 @@ export function createEditorAssembly(
   });
   scope.add(workspaceSession.dispose);
 
+  /**
+   * Apply the address that was present before the first render.
+   *
+   * A chart route replaces the last-session restore because the address is the
+   * explicit request. A settings-only route leaves the editor at home; every
+   * other boot keeps the existing reopen-last-document behavior. The settled
+   * flag lets the URL mirror wait until this work finishes.
+   */
+  const restoreLastSession = async (): Promise<void> => {
+    try {
+      const boot = getBootRoute();
+      if (boot?.kind === "chart") {
+        await openRouteProject(boot.projectId);
+        return;
+      }
+      if (boot?.kind === "home" && boot.settings !== null) {
+        return;
+      }
+      await workspaceSession.restore();
+    } finally {
+      markBootSettled();
+    }
+  };
+
   if (documents) {
     bindDesktopLifecycle({
       documents,
@@ -1127,7 +1181,8 @@ export function createEditorAssembly(
         }
         await home.open(target);
       },
-      restoreLastSession: workspaceSession.restore,
+      restoreLastSession,
+      markBootSettled,
       persistSession: async () => {
         // A normal close clears the record so the next launch starts empty; only
         // periodic samples survive a crash or update restart.
@@ -1143,7 +1198,7 @@ export function createEditorAssembly(
     });
   } else {
     bindBrowserLifecycle({
-      restoreLastSession: workspaceSession.restore,
+      restoreLastSession,
       reportError,
     });
   }

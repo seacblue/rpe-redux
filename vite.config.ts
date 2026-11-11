@@ -3,11 +3,21 @@ import react from "@vitejs/plugin-react";
 import { cp, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { readProductVersion } from "./scripts/productVersion.mjs";
+import { normalizeRouteBase } from "./src/core/shell/route.ts";
 
 // The browser build has no host to ask for the product version, so the build
 // bakes the validated desktop version in as a compile-time constant. The host
 // must use the same version because it starts the matching sidecar.
 const packageVersion = readProductVersion();
+
+// The app uses real paths, so a static host must serve the shell at the same
+// base it built with. The desktop host and a root web deployment use `/`;
+// GitHub Pages sets `REDUX_WEB_BASE` to its repository subpath.
+const configuredWebBase = process.env.REDUX_WEB_BASE?.trim() || "/";
+if (configuredWebBase.includes("://") || /[?#]/.test(configuredWebBase)) {
+  throw new Error("REDUX_WEB_BASE must be a path, not an absolute URL or query");
+}
+const webBase = normalizeRouteBase(configuredWebBase);
 
 /**
  * Browser-development settings injected by `scripts/dev.mjs`.
@@ -109,6 +119,28 @@ function themeBootstrap() {
   };
 }
 
+/**
+ * Pin `document.baseURI` to the served root.
+ *
+ * Runtime asset helpers resolve against `document.baseURI`. On `/chart/<id>`
+ * that would otherwise look under `/chart/assets/...`; one base tag keeps every
+ * public asset at the deployment root while the visible path stays a route.
+ */
+function documentBase() {
+  return {
+    name: "redux-document-base",
+    transformIndexHtml() {
+      return [
+        {
+          tag: "base",
+          attrs: { href: webBase },
+          injectTo: "head-prepend" as const,
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
   define: {
     __REDUX_VERSION__: JSON.stringify(packageVersion),
@@ -123,6 +155,7 @@ export default defineConfig({
     react(),
     devRuntimeBootstrap(),
     themeBootstrap(),
+    documentBase(),
     {
       name: "redux-static-assets",
       async closeBundle() {
@@ -134,10 +167,13 @@ export default defineConfig({
         await cp("src/assets/extensions", "dist/extensions", { recursive: true });
         // Keep static asset paths intact in hosted builds and portable archives.
         await writeFile("dist/.nojekyll", "");
+        // GitHub Pages has no SPA fallback. A shell copy at 404.html lets a
+        // direct `/chart/<id>` load boot the same route-aware document.
+        await cp("dist/index.html", "dist/404.html");
       },
     },
   ],
-  base: "./",
+  base: webBase,
   clearScreen: false,
   server: {
     host: "127.0.0.1",
