@@ -693,7 +693,7 @@ export function LibraryWelcome({
                 </div>
               )
             ) : (
-              <>
+              <div className="redux-library-welcome-checkin-prompt">
                 <p className="redux-library-welcome-checkin-copy">
                   {t("workspace.welcome.library.checkIn.description")}
                 </p>
@@ -706,7 +706,7 @@ export function LibraryWelcome({
                   <Icon name="check" size={16} />
                   {t("workspace.welcome.library.checkIn.action")}
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </section>
