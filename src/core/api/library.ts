@@ -2,10 +2,10 @@
  * Owns the chart library handle a plugin sees.
  *
  * A project is one stored chart: `create` writes a new one into the library,
- * `list` returns the summaries the home page draws as cards, and
- * `get`/`update`/`remove` work on one id. The library is the editor's source of
- * truth; JSON and PEZ files are import containers, and PEZ is the export
- * container.
+ * `list` returns the summaries the home page draws as cards, and one project's
+ * reads and writes live on the handle returned by `scope(id)` or `current`.
+ * The library is the editor's source of truth; JSON and PEZ files are import
+ * containers, and PEZ is the export container.
  *
  * Every method probes the local service on demand and returns the shared result
  * envelope. Creating a chart, opening one into the editor, and saving a
@@ -16,7 +16,8 @@
  * ```js
  * const listed = await redux.library.list({ limit: 5 });
  * if (listed.ok) {
- *   const { project } = await redux.library.get(listed.value.projects[0].id);
+ *   const project = redux.library.scope(listed.value.projects[0].id);
+ *   const read = await project.get();
  * }
  * ```
  */
@@ -127,47 +128,12 @@ export const library = Object.freeze({
   /** List project summaries, paged and filtered by the supplied query. */
   list: (...args: Parameters<LocalLibrary["list"]>) =>
     libraryCall((library) => library.list(...args)),
-  /** Read one project including its chart document. */
-  get: (...args: Parameters<LocalLibrary["get"]>) => libraryCall((library) => library.get(...args)),
   /** Create a project from a chart value. */
   create: (...args: Parameters<LocalLibrary["create"]>) =>
     libraryCall((library) => library.create(...args)),
   /** Create a project from already serialized chart text. */
   createRaw: (...args: Parameters<LocalLibrary["createRaw"]>) =>
     libraryCall((library) => library.createRaw(...args)),
-  /** Patch a project's name, group, archived flag, or chart. */
-  update: (...args: Parameters<LocalLibrary["update"]>) =>
-    libraryCall((library) => library.update(...args)),
-  /** Delete one project. */
-  remove: (...args: Parameters<LocalLibrary["remove"]>) =>
-    libraryCall((library) => library.remove(...args)),
-  /** Copy one project under a new name. */
-  duplicate: (...args: Parameters<LocalLibrary["duplicate"]>) =>
-    libraryCall((library) => library.duplicate(...args)),
-  /** List the asset manifest of one project. */
-  assets: (...args: Parameters<LocalLibrary["assets"]>) =>
-    libraryCall((library) => library.assets(...args)),
-  /** Read one project asset as bytes. */
-  asset: (...args: Parameters<LocalLibrary["asset"]>) =>
-    libraryCall((library) => library.asset(...args)),
-  /** Upload and attach one project asset. */
-  addAsset: (...args: Parameters<LocalLibrary["addAsset"]>) =>
-    libraryCall((library) => library.addAsset(...args)),
-  /** Remove one project asset from the manifest. */
-  removeAsset: (...args: Parameters<LocalLibrary["removeAsset"]>) =>
-    libraryCall((library) => library.removeAsset(...args)),
-  /** List the revisions of one project. */
-  revisions: (...args: Parameters<LocalLibrary["revisions"]>) =>
-    libraryCall((library) => library.revisions(...args)),
-  /** Store a new revision of one project. */
-  createRevision: (...args: Parameters<LocalLibrary["createRevision"]>) =>
-    libraryCall((library) => library.createRevision(...args)),
-  /** Read one revision including its chart document. */
-  revision: (...args: Parameters<LocalLibrary["revision"]>) =>
-    libraryCall((library) => library.revision(...args)),
-  /** Delete one revision. */
-  removeRevision: (...args: Parameters<LocalLibrary["removeRevision"]>) =>
-    libraryCall((library) => library.removeRevision(...args)),
   /**
    * Bind one project id and return a handle whose methods no longer take an id.
    *

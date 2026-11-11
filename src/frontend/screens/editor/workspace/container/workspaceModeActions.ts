@@ -11,7 +11,7 @@ import { closeWorkspaceMode, openWorkspaceMode } from "./workspaceModes.ts";
 import { closeInspector, openInspector } from "../../inspector/controller.ts";
 
 /**
- * Expands one inspector page into its workspace mode.
+ * Expands one inspector page into its wide panel.
  *
  * The pane is closed so the same page never mounts both as an inspector column
  * and as a full workspace. Its id is remembered for the return trip. An unknown

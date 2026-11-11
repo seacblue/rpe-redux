@@ -1,5 +1,9 @@
 # FAQ
 
+## How do I add or edit notes?
+
+Read the chart with `context.api.chart`, then submit one `context.api.transaction` request. `chart.placeNote` and direct object mutation are not part of the current contract. The [Chart operations](place-note.md) page has a complete plugin, selected-note updates, and result handling.
+
 ## Why are `document` and `window` unavailable?
 
 An Extension runs in an opaque-origin iframe. It cannot access the host DOM, Tauri IPC, the network, or `window.redux`. Use declarative nodes for UI and `context.api` for host operations.

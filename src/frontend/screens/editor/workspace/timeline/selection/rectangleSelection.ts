@@ -24,6 +24,7 @@ import type {
   SweepDrag,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineSelectionReceiver } from "../drawing/timelineReceiver.ts";
+import { noteOverlapRotation } from "../notes/noteRotation.ts";
 
 /** Returns whether the requested timeline area still contains a selection. */
 function hasAreaSelection(
@@ -222,7 +223,7 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
         this.refreshIndex(lineIndex);
         return this.cache.noteIndex(lineIndex);
       },
-      bounds: (note, lineIndex) => {
+      bounds: (note, lineIndex, index) => {
         const x =
           this.viewport.noteHorizontal(note.positionX, lineIndex) +
           this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
@@ -238,12 +239,32 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
           this.notesCanvas.clientHeight,
           "notes",
         );
+        if (note.type === 2) {
+          const halfWidth = this.viewport.noteWidth(note) / 2;
+          return {
+            left: x - halfWidth,
+            right: x + halfWidth,
+            top: Math.min(start, end) - 4,
+            bottom: Math.max(start, end) + 4,
+          };
+        }
+        const notes = this.cache.noteIndex(lineIndex)?.notes;
+        const rotation = noteOverlapRotation(
+          notes
+            ? this.cache.noteOverlapRanks(notes, this.appearance.overlapThreshold).get(index)
+            : undefined,
+        );
         const halfWidth = this.viewport.noteWidth(note) / 2;
+        const halfHeight = 4;
+        const cosine = Math.abs(Math.cos(rotation));
+        const sine = Math.abs(Math.sin(rotation));
+        const extentX = halfWidth * cosine + halfHeight * sine;
+        const extentY = halfWidth * sine + halfHeight * cosine;
         return {
-          left: x - halfWidth,
-          right: x + halfWidth,
-          top: Math.min(start, end) - 4,
-          bottom: Math.max(start, end) + 4,
+          left: x - extentX,
+          right: x + extentX,
+          top: start - extentY,
+          bottom: start + extentY,
         };
       },
     });

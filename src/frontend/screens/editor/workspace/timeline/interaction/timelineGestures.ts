@@ -23,6 +23,15 @@ import type { EventInteractionHandle } from "../drawing/canvas.ts";
 
 const EMPTY_EVENT_RECTS: readonly TimelineEventRect[] = [];
 
+/** The note or event row under the pointer in an open overlap picker. */
+export interface TimelineOverlapHover {
+  kind: "notes" | "events";
+  lineIndex: number;
+  index: number;
+  /** Event track key; absent for notes. */
+  eventType?: string;
+}
+
 /** Current editing mode and transient gestures; reset together when a document changes. */
 export class TimelineGestures {
   readonly eventInteraction: EventInteractionHandle;
@@ -44,6 +53,10 @@ export class TimelineGestures {
   previewMarquee: { start: TimelinePoint; current: TimelinePoint } | null = null;
   /** Apply the latest preview marquee sample at the workspace frame boundary. */
   previewRefresh?: () => void;
+  /** Transient selection-colour highlight for the overlap picker's hovered row. */
+  overlapHover: TimelineOverlapHover | null = null;
+  /** True while the overlap picker is open; selection paint is suppressed. */
+  overlapMenuOpen = false;
   eventRects: TimelineEventRect[] = [];
   eventPlacementType?: string;
   clipboardMode: { mirror?: boolean; keepTime?: boolean } = {};
@@ -84,6 +97,25 @@ export class TimelineGestures {
   /** True when the session layer selects the synthetic extended event map. */
   get extended(): boolean {
     return this.layer === EXTENDED_EVENT_LAYER;
+  }
+
+  /** Whether one note is the row the open overlap picker is hovering. */
+  isNoteOverlapHovered(lineIndex: number, index: number): boolean {
+    return (
+      this.overlapHover?.kind === "notes" &&
+      this.overlapHover.lineIndex === lineIndex &&
+      this.overlapHover.index === index
+    );
+  }
+
+  /** Whether one event is the row the open overlap picker is hovering. */
+  isEventOverlapHovered(lineIndex: number, type: string, index: number): boolean {
+    return (
+      this.overlapHover?.kind === "events" &&
+      this.overlapHover.lineIndex === lineIndex &&
+      this.overlapHover.eventType === type &&
+      this.overlapHover.index === index
+    );
   }
 
   /** Return only the event rectangles in the panel under the pointer. */
@@ -192,5 +224,7 @@ export class TimelineGestures {
     this.scaleAxis = null;
     this.scaleAxisLine = null;
     this.clipboardMode = {};
+    this.overlapHover = null;
+    this.overlapMenuOpen = false;
   }
 }

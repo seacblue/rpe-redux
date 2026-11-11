@@ -71,7 +71,9 @@ export async function openResourceChart(runner) {
     (project) => !beforeSave.value.projects.some((entry) => entry.id === project.id),
   );
   runner.assert(Boolean(created), "PEZ library save did not create a project");
-  const stored = await runner.callApi(`window.redux.library.assets(${expression(created.id)})`);
+  const stored = await runner.callApi(
+    `window.redux.library.scope(${expression(created.id)}).assets()`,
+  );
   const storedNames = stored.value.assets.map((asset) => asset.name);
   runner.assert(
     storedNames.length > 0,

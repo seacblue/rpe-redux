@@ -13,7 +13,6 @@ export type { SandboxReduxApi as ReduxApi } from "../extensions/sandbox.ts";
 export type {
   ChartHandle as ChartApi,
   ChartEventReadRef,
-  ChartNoteType,
   ChartObjectId,
   ChartReadCollection,
   ChartReadEvent,
@@ -27,8 +26,6 @@ export type {
   ChartReadSnapshot,
   ChartReadState,
   ChartResourceReference,
-  ChartTarget,
-  ChartTargetPoint,
 } from "./chart.ts";
 export type {
   CreateDocumentOptions,

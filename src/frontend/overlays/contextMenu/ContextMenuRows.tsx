@@ -31,6 +31,10 @@ export interface ContextMenuRowAction extends ContextMenuAction {
   shortcutId?: string;
   /** Secondary text drawn before the shortcut, such as a chooser's timing. */
   detail?: ReactNode;
+  /** Preview this row's object while the pointer is on it. */
+  onHover?(): void;
+  /** Remove the preview when the pointer leaves or the row is chosen. */
+  onLeave?(): void;
 }
 
 /** What one menu site passes to the shared row renderer. */
@@ -123,7 +127,10 @@ export function ContextMenuRows({
         shortcut={siteShortcut(action)}
         danger={action.danger === true}
         disabled={disabled}
+        onPointerEnter={disabled ? undefined : action.onHover}
+        onPointerLeave={disabled ? undefined : action.onLeave}
         onClick={() => {
+          action.onLeave?.();
           close();
           action.run();
         }}

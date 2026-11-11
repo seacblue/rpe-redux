@@ -1,82 +1,12 @@
 /**
  * The theme chrome recipe vocabulary and parser.
  *
- * Every member is a closed preset or a bounded integer. The renderer maps these
- * names onto host-authored CSS and React slots; a package never supplies style
- * text, markup, or executable values. Keeping the vocabulary in its own module
- * also keeps the package schema file focused on the document-level contract.
+ * The recipe covers presentation only: surface material, motion budget, and
+ * caption/menu framing. The host owns the window layout, so a package cannot
+ * move the inspector, rail, toolbar, transport, or status bar. Every member is a
+ * closed preset or a bounded integer; a package never supplies style text,
+ * markup, or executable values.
  */
-
-/** Panel rhythm selected by a theme. */
-export const THEME_DENSITIES = ["compact", "comfortable", "spacious"] as const;
-export type ThemeDensity = (typeof THEME_DENSITIES)[number];
-
-/** How the inspector participates in the workbench grid. */
-export const THEME_INSPECTOR_LAYOUTS = ["docked", "floating", "overlay"] as const;
-export type ThemeInspectorLayout = (typeof THEME_INSPECTOR_LAYOUTS)[number];
-
-/** Which side the inspector reads from. */
-export const THEME_INSPECTOR_SIDES = ["left", "right"] as const;
-export type ThemeInspectorSide = (typeof THEME_INSPECTOR_SIDES)[number];
-
-/**
- * Which way the document drawer grows.
- *
- * `auto` follows the stage: a right-hand inspector expands left and a left-hand
- * inspector expands right. `left` and `right` force that direction regardless
- * of the inspector side.
- */
-export const THEME_DRAWER_SIDES = ["auto", "left", "right"] as const;
-export type ThemeDrawerSide = (typeof THEME_DRAWER_SIDES)[number];
-
-/** Whether the rail sits on the right, on top, or inside the inspector. */
-export const THEME_SIDEBAR_LAYOUTS = ["rail", "floating", "top", "inspector"] as const;
-export type ThemeSidebarLayout = (typeof THEME_SIDEBAR_LAYOUTS)[number];
-
-/** Whether the toolbar is flush or a raised card. */
-export const THEME_TOOLBAR_LAYOUTS = ["docked", "floating"] as const;
-export type ThemeToolbarLayout = (typeof THEME_TOOLBAR_LAYOUTS)[number];
-
-/** Where the toolbar sits in the window frame. */
-export const THEME_TOOLBAR_PLACEMENTS = ["top", "left"] as const;
-export type ThemeToolbarPlacement = (typeof THEME_TOOLBAR_PLACEMENTS)[number];
-
-/** How registered toolbar rows become a visual flow. */
-export const THEME_TOOLBAR_FLOWS = ["rows", "single", "grid"] as const;
-export type ThemeToolbarFlow = (typeof THEME_TOOLBAR_FLOWS)[number];
-
-/** Column count for the grid toolbar flow. */
-export const THEME_TOOLBAR_COLUMNS = [2, 3, 4] as const;
-export type ThemeToolbarColumns = (typeof THEME_TOOLBAR_COLUMNS)[number];
-
-/** Title-row rhythm. */
-export const THEME_TITLEBAR_DENSITIES = ["compact", "normal", "tall"] as const;
-export type ThemeTitlebarDensity = (typeof THEME_TITLEBAR_DENSITIES)[number];
-
-/** Caption-button framing for minimize, maximize, and close. */
-export const THEME_WINDOW_CONTROL_STYLES = ["system", "compact", "capsule"] as const;
-export type ThemeWindowControlStyle = (typeof THEME_WINDOW_CONTROL_STYLES)[number];
-
-/** Application-menu presentation: one hamburger or expanded section triggers. */
-export const THEME_MENU_STYLES = ["hamburger", "expanded"] as const;
-export type ThemeMenuStyle = (typeof THEME_MENU_STYLES)[number];
-
-/** Whether the transport card stays in the toolbar or floats above the window. */
-export const THEME_TRANSPORT_LAYOUTS = ["toolbar", "floating"] as const;
-export type ThemeTransportLayout = (typeof THEME_TRANSPORT_LAYOUTS)[number];
-
-/** Which corner a floating transport card starts in. */
-export const THEME_TRANSPORT_ANCHORS = [
-  "top-left",
-  "top-right",
-  "bottom-left",
-  "bottom-right",
-] as const;
-export type ThemeTransportAnchor = (typeof THEME_TRANSPORT_ANCHORS)[number];
-
-/** Status-bar presence and framing. */
-export const THEME_STATUS_BAR_LAYOUTS = ["docked", "floating", "hidden"] as const;
-export type ThemeStatusBarLayout = (typeof THEME_STATUS_BAR_LAYOUTS)[number];
 
 /** Corner scale. */
 export const THEME_SHAPES = ["square", "soft", "round"] as const;
@@ -110,26 +40,13 @@ export type ThemeHoverEffect = (typeof THEME_HOVER_EFFECTS)[number];
 export const THEME_ENTRANCES = ["none", "fade", "rise", "slide"] as const;
 export type ThemeEntrance = (typeof THEME_ENTRANCES)[number];
 
-/** Layout presets the theme picks for the window frame. */
-export interface ThemeChromeLayout {
-  density: ThemeDensity;
-  inspector: ThemeInspectorLayout;
-  inspectorSide: ThemeInspectorSide;
-  /** Direction the document drawer opens; `auto` grows toward the stage. */
-  drawerSide: ThemeDrawerSide;
-  sidebar: ThemeSidebarLayout;
-  toolbar: ThemeToolbarLayout;
-  toolbarPlacement: ThemeToolbarPlacement;
-  toolbarFlow: ThemeToolbarFlow;
-  /** Column count when `toolbarFlow` is `grid`. */
-  toolbarColumns: ThemeToolbarColumns;
-  /** Registered action ids in the order the theme wants them drawn. */
-  toolbarOrder: readonly string[];
-  transport: ThemeTransportLayout;
-  transportAnchor: ThemeTransportAnchor;
-  transportDraggable: boolean;
-  statusBar: ThemeStatusBarLayout;
-}
+/** Caption-button framing for minimize, maximize, and close. */
+export const THEME_WINDOW_CONTROL_STYLES = ["system", "compact", "capsule"] as const;
+export type ThemeWindowControlStyle = (typeof THEME_WINDOW_CONTROL_STYLES)[number];
+
+/** Application-menu presentation: one hamburger or expanded section triggers. */
+export const THEME_MENU_STYLES = ["hamburger", "expanded"] as const;
+export type ThemeMenuStyle = (typeof THEME_MENU_STYLES)[number];
 
 /** Surface presets the theme picks for panel paint. */
 export interface ThemeChromeSurface {
@@ -149,81 +66,28 @@ export interface ThemeChromeMotion {
   entrance: ThemeEntrance;
 }
 
-/** Title-row framing: height rhythm and caption-button grouping. */
+/** Title-bar framing: caption-button grouping and menu presentation. */
 export interface ThemeChromeTitlebar {
-  density: ThemeTitlebarDensity;
   windowControls: ThemeWindowControlStyle;
   /** One hamburger sheet or the section labels as a classic menu bar. */
   menu: ThemeMenuStyle;
 }
 
 /**
- * Bounded numeric overrides for the frame.
- *
- * Every value is a plain integer in CSS pixels except `fieldControlWidth`,
- * which is a percentage of the field row. An omitted value keeps the preset
- * default, so a package opts into only the measurements it wants to change.
- */
-export interface ThemeChromeMetrics {
-  /** Gap between floating panels and the window edge. */
-  panelGap?: number;
-  /** Gap between toolbar cells. */
-  toolbarGap?: number;
-  /** Square toolbar cell edge. */
-  toolbarCell?: number;
-  /** Width of the left toolbar column. */
-  toolbarWidth?: number;
-  /** Docked or floating inspector column width; the drawer's property column. */
-  inspectorWidth?: number;
-  /** Document drawer list column width; added to `inspectorWidth` when open. */
-  drawerListWidth?: number;
-  /** Collapsed rail width. */
-  sidebarWidth?: number;
-  /** Expanded rail width. */
-  sidebarExpandedWidth?: number;
-  /** Title-row height. */
-  titlebarHeight?: number;
-  /** Minimize, maximize, and close button edge. */
-  windowControlSize?: number;
-  /** Control column share of a labelled field row. */
-  fieldControlWidth?: number;
-  /** Column gap between a field label and its control. */
-  fieldGap?: number;
-}
-
-/**
  * The validated chrome recipe carried by a theme package.
  *
  * Every member is a closed preset. The renderer maps these names onto CSS and
- * React slots that ship with the host, so a package can reshape the frame
- * without supplying any executable or style text of its own.
+ * React slots that ship with the host. Window placement and measurements are
+ * host-owned, so the recipe cannot resize or rearrange the frame.
  */
 export interface ThemeChrome {
-  layout: ThemeChromeLayout;
   surface: ThemeChromeSurface;
   motion: ThemeChromeMotion;
   titlebar: ThemeChromeTitlebar;
-  metrics: ThemeChromeMetrics;
 }
 
-/** The recipe used by packages that predate the chrome schema. */
+/** The chrome recipe used when a package omits the optional block. */
 export const DEFAULT_THEME_CHROME: ThemeChrome = Object.freeze({
-  layout: Object.freeze({
-    density: "comfortable",
-    inspector: "docked",
-    inspectorSide: "right",
-    drawerSide: "auto",
-    sidebar: "rail",
-    toolbar: "docked",
-    toolbarPlacement: "top",
-    toolbarFlow: "rows",
-    toolbarColumns: 2,
-    toolbarOrder: Object.freeze([]),
-    transport: "toolbar",
-    transportAnchor: "bottom-right",
-    transportDraggable: true,
-    statusBar: "docked",
-  }),
   surface: Object.freeze({
     shape: "soft",
     material: "solid",
@@ -238,36 +102,26 @@ export const DEFAULT_THEME_CHROME: ThemeChrome = Object.freeze({
     entrance: "fade",
   }),
   titlebar: Object.freeze({
-    density: "normal",
     windowControls: "system",
     menu: "expanded",
   }),
-  metrics: Object.freeze({}),
 });
 
 const MAX_BACKDROP_BLUR = 24;
+
+/**
+ * Keys the chrome block accepts.
+ *
+ * `layout` and `metrics` are retired layout controls. They stay accepted so an
+ * installed package that still carries them keeps its palette and surface, but
+ * their values are ignored.
+ */
 const CHROME_KEYS: ReadonlySet<string> = new Set([
-  "layout",
   "surface",
   "motion",
   "titlebar",
+  "layout",
   "metrics",
-]);
-const CHROME_LAYOUT_KEYS: ReadonlySet<string> = new Set([
-  "density",
-  "inspector",
-  "inspectorSide",
-  "drawerSide",
-  "sidebar",
-  "toolbar",
-  "toolbarPlacement",
-  "toolbarFlow",
-  "toolbarColumns",
-  "toolbarOrder",
-  "transport",
-  "transportAnchor",
-  "transportDraggable",
-  "statusBar",
 ]);
 const CHROME_SURFACE_KEYS: ReadonlySet<string> = new Set([
   "shape",
@@ -277,22 +131,8 @@ const CHROME_SURFACE_KEYS: ReadonlySet<string> = new Set([
   "ambient",
 ]);
 const CHROME_MOTION_KEYS: ReadonlySet<string> = new Set(["level", "speed", "hover", "entrance"]);
-const CHROME_TITLEBAR_KEYS: ReadonlySet<string> = new Set(["density", "windowControls", "menu"]);
-const METRIC_RANGES: Readonly<Record<keyof ThemeChromeMetrics, readonly [number, number]>> = {
-  panelGap: [0, 32],
-  toolbarGap: [0, 16],
-  toolbarCell: [28, 56],
-  toolbarWidth: [200, 480],
-  inspectorWidth: [280, 720],
-  drawerListWidth: [160, 560],
-  sidebarWidth: [40, 120],
-  sidebarExpandedWidth: [160, 320],
-  titlebarHeight: [32, 56],
-  windowControlSize: [28, 56],
-  fieldControlWidth: [24, 72],
-  fieldGap: [8, 32],
-};
-const METRIC_KEYS: ReadonlySet<string> = new Set(Object.keys(METRIC_RANGES));
+/** `density` is a retired title-bar height control and is accepted but ignored. */
+const CHROME_TITLEBAR_KEYS: ReadonlySet<string> = new Set(["windowControls", "menu", "density"]);
 
 /** Read an unknown value as a plain object, or null for arrays and primitives. */
 function record(value: unknown): Record<string, unknown> | null {
@@ -322,32 +162,6 @@ function hasOnlyKeys(input: Record<string, unknown>, allowed: ReadonlySet<string
   return Object.keys(input).every((key) => allowed.has(key));
 }
 
-/**
- * Parse bounded frame metrics.
- *
- * Unknown keys reject the package so a misspelled knob is visible instead of
- * silently doing nothing. Omitted keys stay absent, which keeps the density and
- * title-bar presets in charge of their own defaults.
- */
-function parseMetrics(value: unknown): ThemeChromeMetrics | null {
-  if (value === undefined) {
-    return {};
-  }
-  const input = record(value);
-  if (!input || !hasOnlyKeys(input, METRIC_KEYS)) {
-    return null;
-  }
-  const metrics: ThemeChromeMetrics = {};
-  for (const [key, raw] of Object.entries(input)) {
-    const range = METRIC_RANGES[key as keyof ThemeChromeMetrics];
-    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < range[0] || raw > range[1]) {
-      return null;
-    }
-    metrics[key as keyof ThemeChromeMetrics] = raw;
-  }
-  return metrics;
-}
-
 /** Parse the title-row presets; absent keeps the documented frame. */
 function parseTitlebar(value: unknown): ThemeChromeTitlebar | null {
   if (value === undefined) {
@@ -357,12 +171,6 @@ function parseTitlebar(value: unknown): ThemeChromeTitlebar | null {
   if (!input || !hasOnlyKeys(input, CHROME_TITLEBAR_KEYS)) {
     return null;
   }
-  const density = chromeEnum(
-    input,
-    "density",
-    THEME_TITLEBAR_DENSITIES,
-    DEFAULT_THEME_CHROME.titlebar.density,
-  );
   const windowControls = chromeEnum(
     input,
     "windowControls",
@@ -370,44 +178,7 @@ function parseTitlebar(value: unknown): ThemeChromeTitlebar | null {
     DEFAULT_THEME_CHROME.titlebar.windowControls,
   );
   const menu = chromeEnum(input, "menu", THEME_MENU_STYLES, DEFAULT_THEME_CHROME.titlebar.menu);
-  return density && windowControls && menu ? { density, windowControls, menu } : null;
-}
-
-const MAX_TOOLBAR_ORDER = 64;
-const TOOLBAR_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-
-/** Parse the grid column count; only the published values are accepted. */
-function parseToolbarColumns(value: unknown): ThemeToolbarColumns | null {
-  if (value === undefined) {
-    return DEFAULT_THEME_CHROME.layout.toolbarColumns;
-  }
-  return typeof value === "number" && (THEME_TOOLBAR_COLUMNS as readonly number[]).includes(value)
-    ? (value as ThemeToolbarColumns)
-    : null;
-}
-
-/**
- * Parse a toolbar order override.
- *
- * The list only reorders registered entries; it cannot add, remove, or rename
- * one. Unknown ids are harmless because the host keeps every unlisted entry in
- * its registry position.
- */
-function parseToolbarOrder(value: unknown): readonly string[] | null {
-  if (value === undefined) {
-    return DEFAULT_THEME_CHROME.layout.toolbarOrder;
-  }
-  if (!Array.isArray(value) || value.length > MAX_TOOLBAR_ORDER) {
-    return null;
-  }
-  const seen = new Set<string>();
-  for (const id of value) {
-    if (typeof id !== "string" || !TOOLBAR_ID_PATTERN.test(id) || seen.has(id)) {
-      return null;
-    }
-    seen.add(id);
-  }
-  return Object.freeze([...value]);
+  return windowControls && menu ? { windowControls, menu } : null;
 }
 
 /** Parse the optional chrome recipe; absent means the documented defaults. */
@@ -417,103 +188,6 @@ export function parseChrome(value: unknown): ThemeChrome | null {
   }
   const input = record(value);
   if (!input || !hasOnlyKeys(input, CHROME_KEYS)) {
-    return null;
-  }
-
-  const layoutInput = input.layout === undefined ? {} : record(input.layout);
-  if (layoutInput === null || !hasOnlyKeys(layoutInput, CHROME_LAYOUT_KEYS)) {
-    return null;
-  }
-  const density = chromeEnum(
-    layoutInput,
-    "density",
-    THEME_DENSITIES,
-    DEFAULT_THEME_CHROME.layout.density,
-  );
-  const inspector = chromeEnum(
-    layoutInput,
-    "inspector",
-    THEME_INSPECTOR_LAYOUTS,
-    DEFAULT_THEME_CHROME.layout.inspector,
-  );
-  const inspectorSide = chromeEnum(
-    layoutInput,
-    "inspectorSide",
-    THEME_INSPECTOR_SIDES,
-    DEFAULT_THEME_CHROME.layout.inspectorSide,
-  );
-  const drawerSide = chromeEnum(
-    layoutInput,
-    "drawerSide",
-    THEME_DRAWER_SIDES,
-    DEFAULT_THEME_CHROME.layout.drawerSide,
-  );
-  const sidebar = chromeEnum(
-    layoutInput,
-    "sidebar",
-    THEME_SIDEBAR_LAYOUTS,
-    DEFAULT_THEME_CHROME.layout.sidebar,
-  );
-  const toolbar = chromeEnum(
-    layoutInput,
-    "toolbar",
-    THEME_TOOLBAR_LAYOUTS,
-    DEFAULT_THEME_CHROME.layout.toolbar,
-  );
-  const toolbarPlacement = chromeEnum(
-    layoutInput,
-    "toolbarPlacement",
-    THEME_TOOLBAR_PLACEMENTS,
-    DEFAULT_THEME_CHROME.layout.toolbarPlacement,
-  );
-  const toolbarFlow = chromeEnum(
-    layoutInput,
-    "toolbarFlow",
-    THEME_TOOLBAR_FLOWS,
-    DEFAULT_THEME_CHROME.layout.toolbarFlow,
-  );
-  const toolbarColumns = parseToolbarColumns(layoutInput.toolbarColumns);
-  const toolbarOrder = parseToolbarOrder(layoutInput.toolbarOrder);
-  const transport = chromeEnum(
-    layoutInput,
-    "transport",
-    THEME_TRANSPORT_LAYOUTS,
-    DEFAULT_THEME_CHROME.layout.transport,
-  );
-  const transportAnchor = chromeEnum(
-    layoutInput,
-    "transportAnchor",
-    THEME_TRANSPORT_ANCHORS,
-    DEFAULT_THEME_CHROME.layout.transportAnchor,
-  );
-  const transportDraggable =
-    layoutInput.transportDraggable === undefined
-      ? DEFAULT_THEME_CHROME.layout.transportDraggable
-      : layoutInput.transportDraggable;
-  if (typeof transportDraggable !== "boolean") {
-    return null;
-  }
-  const statusBar = chromeEnum(
-    layoutInput,
-    "statusBar",
-    THEME_STATUS_BAR_LAYOUTS,
-    DEFAULT_THEME_CHROME.layout.statusBar,
-  );
-  if (
-    !density ||
-    !inspector ||
-    !inspectorSide ||
-    !drawerSide ||
-    !sidebar ||
-    !toolbar ||
-    !toolbarPlacement ||
-    !toolbarFlow ||
-    !toolbarColumns ||
-    !toolbarOrder ||
-    !transport ||
-    !transportAnchor ||
-    !statusBar
-  ) {
     return null;
   }
 
@@ -585,31 +259,13 @@ export function parseChrome(value: unknown): ThemeChrome | null {
   }
 
   const titlebar = parseTitlebar(input.titlebar);
-  const metrics = parseMetrics(input.metrics);
-  if (!titlebar || !metrics) {
+  if (!titlebar) {
     return null;
   }
 
   return {
-    layout: {
-      density,
-      inspector,
-      inspectorSide,
-      drawerSide,
-      sidebar,
-      toolbar,
-      toolbarPlacement,
-      toolbarFlow,
-      toolbarColumns,
-      toolbarOrder,
-      transport,
-      transportAnchor,
-      transportDraggable,
-      statusBar,
-    },
     surface: { shape, material, backdropBlur, pattern, ambient },
     motion: { level, speed, hover, entrance },
     titlebar,
-    metrics,
   };
 }

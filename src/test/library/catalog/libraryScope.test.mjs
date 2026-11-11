@@ -112,13 +112,10 @@ test("a gated library rejects asset writes to another project", () => {
   );
 
   assert.throws(
-    () => gated.library.addAsset("project-b", "other.png", new Uint8Array([1])),
-    (error) => error?.code === "capabilityDenied" && error?.capability === "assets.write",
-  );
-  assert.throws(
     () => gated.library.scope("project-b"),
     (error) => error?.code === "capabilityDenied" && error?.capability === "library.read",
   );
+  assert.equal("addAsset" in gated.library, false);
   assert.deepEqual(calls, []);
 });
 
@@ -140,7 +137,7 @@ test("the current project stays writable through its scoped handle", async () =>
   assert.equal(added.ok, true);
   assert.equal(added.value.asset.name, "cover.png");
 
-  const removed = await gated.library.removeAsset("project-a", "old.png");
+  const removed = await current.removeAsset("old.png");
   assert.equal(removed.ok, true);
   assert.deepEqual(calls, [
     { op: "addAsset", id: "project-a", name: "cover.png" },

@@ -52,7 +52,7 @@ function publish(next: WorkspaceModeState): void {
   notify();
 }
 
-/** Adds one workspace mode and returns the disposer that removes it. */
+/** Adds one expanded-inspector mode and returns the disposer that removes it. */
 export function registerWorkspaceMode(mode: WorkspaceModeDefinition): () => void {
   return modes.register(mode);
 }
@@ -77,7 +77,7 @@ export function workspaceModeById(id: string): WorkspaceModeDefinition | null {
 }
 
 /**
- * Opens one workspace mode.
+ * Opens one expanded-inspector mode.
  *
  * The id must be registered. Opening a mode that is already active keeps the
  * stored return pane; opening a different mode replaces the active page without

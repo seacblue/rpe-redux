@@ -2,8 +2,8 @@
  * Publishes the design tokens the host has actually applied to the document.
  *
  * The snapshot is read from the root element's computed custom properties, so
- * it follows the active theme package, chrome shape, density, and motion recipe
- * without a second token table. A theme repaint announces itself through the
+ * it follows the active theme package, chrome shape, and motion recipe without
+ * a second token table. A theme repaint announces itself through the
  * `redux-theme` event owned by `core/platform/browser/themeSurface.ts`.
  */
 import {
@@ -25,7 +25,6 @@ function readIdentity(): ExtensionThemeIdentity {
     id,
     name: (definition && packageName(definition.name, getLanguage())) || id,
     appearance: root.dataset.theme === "light" ? "light" : "dark",
-    density: root.dataset.chromeDensity || "comfortable",
   };
 }
 

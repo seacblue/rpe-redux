@@ -5,9 +5,9 @@
  * The wrapper is deliberately narrow: reads, library access, and history stay
  * on the gated facade. `transaction.apply`, `transaction.preview`, and
  * `transaction.cancel` add the AI policy and a per-cell audit origin;
- * `chart.placeNote` and `transaction.undo/redo` are withheld because the cell
- * profile exposes only atomic chart transactions. The transaction handle stays
- * lazy so a read-profile cell never evaluates the `chart.write` getter.
+ * `transaction.undo/redo` are withheld because the cell profile exposes only
+ * atomic chart transactions. The transaction handle stays lazy so a read-profile
+ * cell never evaluates the `chart.write` getter.
  */
 import type { ReduxApi } from "../api/index.ts";
 import type { ApiResult } from "../api/contract.ts";
@@ -87,7 +87,7 @@ function rejectedApply(
   api: ReduxApi,
   issues: readonly TransactionIssue[],
 ): ApiResult<ChartTransactionResult> {
-  const fingerprint = api.document.fingerprint();
+  const fingerprint = api.document.state().fingerprint;
   return {
     ok: true,
     value: Object.freeze({
@@ -245,23 +245,8 @@ export function restrictCodeCellApi(
     return conflicts.length ? [staleRevision(conflicts)] : [];
   };
 
-  let chartView: ReduxApi["chart"] | null = null;
   let transactionView: ReduxApi["transaction"] | null = null;
   let baseTransaction: ReduxApi["transaction"] | null = null;
-
-  /** Build the chart handle once, removing the direct note-placement write. */
-  const chart = (): ReduxApi["chart"] => {
-    if (chartView) {
-      return chartView;
-    }
-    chartView = Object.freeze({
-      ...api.chart,
-      get placeNote(): never {
-        return withheld("chart.placeNote");
-      },
-    }) as ReduxApi["chart"];
-    return chartView;
-  };
 
   /** Build the transaction handle only when the cell asks for it. */
   const transaction = (): ReduxApi["transaction"] => {
@@ -362,9 +347,6 @@ export function restrictCodeCellApi(
     get(target, property, receiver) {
       if (property === "capabilities") {
         return () => capabilities;
-      }
-      if (property === "chart") {
-        return chart();
       }
       if (property === "transaction") {
         return transaction();

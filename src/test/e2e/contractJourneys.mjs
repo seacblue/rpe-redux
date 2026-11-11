@@ -545,13 +545,13 @@ export async function replacePolicy(runner) {
     edited.ok === true && edited.value.status === "committed",
     "replacement guard edit did not commit",
   );
-  const before = await runner.callApi("window.redux.document.fingerprint()");
+  const before = await runner.callApi("window.redux.document.state().fingerprint");
   const rejected = await runner.callApi(
     `window.redux.document.openPath(${expression(paths.json)}, { replace: "reject" })`,
   );
   runner.assert(rejected.ok === false, "dirty replacement with reject policy was accepted");
   runner.assert(
-    (await runner.callApi("window.redux.document.fingerprint()")) === before,
+    (await runner.callApi("window.redux.document.state().fingerprint")) === before,
     "rejected replacement changed the current document",
   );
   const discarded = await runner.callApi(
@@ -609,7 +609,7 @@ export async function apiContract(runner) {
   runner.assert(value.sameHandle, "getHandle did not return the registered handle");
 
   const directHandles = await runner.evaluate(`({
-    workspace: typeof window.redux.workspace?.newChart === "function",
+    workspace: typeof window.redux.workspace?.drawerPane === "function",
     help: typeof window.redux.help?.openChangelog === "function",
   })`);
   runner.assert(

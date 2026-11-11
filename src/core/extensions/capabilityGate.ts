@@ -194,14 +194,6 @@ function projectRunner(
   return (target?: ContextMenuTarget) => run(projectContextMenuTarget(target, granted));
 }
 
-/** Chart handle with `placeNote` gated on `chart.write`. */
-export function chartView(api: ReduxApi, granted: Granted, owner?: string): ReduxApi["chart"] {
-  return Object.freeze({
-    ...api.chart,
-    placeNote: wrapMethod(granted, "chart.write", "chart.placeNote", api.chart.placeNote, owner),
-  });
-}
-
 /** Selection handle whose every method keeps its own read or write check. */
 export function selectionView(
   selection: ReduxApi["selection"],
@@ -241,8 +233,6 @@ function documentView(api: ReduxApi, granted: Granted, owner?: string): ReduxApi
   return {
     availability: read("document.availability", api.document.availability),
     state: read("document.state", api.document.state),
-    snapshot: read("document.snapshot", api.document.snapshot),
-    fingerprint: read("document.fingerprint", api.document.fingerprint),
     create: write("document.create", api.document.create),
     openPath: write("document.openPath", api.document.openPath),
     openBytes: write("document.openBytes", api.document.openBytes),
@@ -306,27 +296,9 @@ function requireCurrentProject(
   }
 }
 
-/** Bind one project through the scope factory, or through the root methods on a partial facade. */
+/** Bind one project through the root scope factory. */
 function scopedProjectHandle(api: ReduxApi, id: string): LibraryProjectHandle {
-  if (typeof api.library.scope === "function") {
-    return api.library.scope(id);
-  }
-  const handle: LibraryProjectHandle = {
-    id,
-    get: (options) => api.library.get(id, options),
-    update: (patch, options) => api.library.update(id, patch, options),
-    remove: (options) => api.library.remove(id, options),
-    duplicate: (name, options) => api.library.duplicate(id, name, options),
-    assets: (options) => api.library.assets(id, options),
-    asset: (name, options) => api.library.asset(id, name, options),
-    addAsset: (name, bytes, options) => api.library.addAsset(id, name, bytes, options),
-    removeAsset: (name, options) => api.library.removeAsset(id, name, options),
-    revisions: (query, options) => api.library.revisions(id, query, options),
-    createRevision: (input, options) => api.library.createRevision(id, input, options),
-    revision: (revisionId, options) => api.library.revision(revisionId, options),
-    removeRevision: (revisionId, options) => api.library.removeRevision(revisionId, options),
-  };
-  return handle;
+  return api.library.scope(id);
 }
 
 /** One project-bound handle whose calls stay inside the granted capabilities. */
@@ -407,8 +379,6 @@ function libraryView(
     wrapMethod(granted, "library.read", action, method, owner);
   const write = <T extends (...args: never[]) => unknown>(action: string, method: T): T =>
     wrapMethod(granted, "library.write", action, method, owner);
-  const assetWrite = <T extends (...args: never[]) => unknown>(action: string, method: T): T =>
-    wrapMethod(granted, "assets.write", action, method, owner);
   const project = (
     capability: ExtensionCapability,
     action: string,
@@ -437,47 +407,8 @@ function libraryView(
       const projects = result.value.projects.filter((entry) => entry.id === id);
       return { ok: true, value: { projects, total: projects.length } };
     }),
-    get: read("library.get", (id: string, requestOptions) =>
-      project("library.read", "library.get", id).get(requestOptions),
-    ),
     create: write("library.create", api.library.create),
     createRaw: write("library.createRaw", api.library.createRaw),
-    update: write("library.update", (id: string, patch, requestOptions) =>
-      project("library.write", "library.update", id).update(patch, requestOptions),
-    ),
-    remove: write("library.remove", (id: string, requestOptions) =>
-      project("library.write", "library.remove", id).remove(requestOptions),
-    ),
-    duplicate: write("library.duplicate", (id: string, name, requestOptions) =>
-      project("library.write", "library.duplicate", id).duplicate(name, requestOptions),
-    ),
-    assets: read("library.assets", (id: string, requestOptions) =>
-      project("library.read", "library.assets", id).assets(requestOptions),
-    ),
-    asset: read("library.asset", (id: string, name, requestOptions) =>
-      project("library.read", "library.asset", id).asset(name, requestOptions),
-    ),
-    addAsset: assetWrite("assets.add", (id: string, name, bytes, requestOptions) =>
-      project("assets.write", "assets.add", id).addAsset(name, bytes, requestOptions),
-    ),
-    removeAsset: assetWrite("assets.remove", (id: string, name, requestOptions) =>
-      project("assets.write", "assets.remove", id).removeAsset(name, requestOptions),
-    ),
-    revisions: read("library.revisions", (id: string, query, requestOptions) =>
-      project("library.read", "library.revisions", id).revisions(query, requestOptions),
-    ),
-    createRevision: write("library.createRevision", (id: string, input, requestOptions) =>
-      project("library.write", "library.createRevision", id).createRevision(input, requestOptions),
-    ),
-    revision: read("library.revision", (revisionId, requestOptions) =>
-      currentHandle("library.read", "library.revision").revision(revisionId, requestOptions),
-    ),
-    removeRevision: write("library.removeRevision", (revisionId, requestOptions) =>
-      currentHandle("library.write", "library.removeRevision").removeRevision(
-        revisionId,
-        requestOptions,
-      ),
-    ),
   };
   return Object.freeze(view);
 }
@@ -1092,7 +1023,7 @@ export function gateExtensionApi(
     });
   };
 
-  allow("chart", "chart.read", chartView(api, granted, owner));
+  allow("chart", "chart.read", api.chart);
   allow("transaction", "chart.write", api.transaction);
   if (granted.has("selection.read")) {
     allow("selection", "selection.read", selectionView(api.selection, granted, owner));
@@ -1126,11 +1057,9 @@ export function gateExtensionApi(
   allow("preview", "preview.read", api.preview);
   allow("layout", "preview.read", api.layout);
   allow("theme", "styles", themeView(api, granted, owner, options));
-  denyHandle("workspace", "document.write");
   allow("help", "ui.guide", owner ? createHelpApi(owner) : api.help);
-  // Extension management is host-only: a package already has the explicit
-  // lifecycle callbacks and may not enable or unload another package.
-  denyHandle("extensions", null);
+  // Workspace drawer navigation and Extension management stay host-only: they
+  // are omitted from the package facade rather than exposed as denied getters.
 
   return Object.freeze(gated) as unknown as ReduxApi;
 }

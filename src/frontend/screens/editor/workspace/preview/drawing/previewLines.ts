@@ -28,6 +28,7 @@ import type {
   PreviewHitArea,
   PreviewLineFrame,
   PreviewNoteSelection,
+  PreviewOverlapHighlight,
   PreviewTextureSurface,
 } from "../scene/previewTypes.ts";
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
@@ -122,6 +123,10 @@ export interface PreviewLineSurface extends PreviewTextureSurface {
   selectedLines: readonly number[];
   selectedLineColor: readonly number[];
   selectedNotes: PreviewNoteSelection;
+  /** Transient highlight driven by the overlap picker's hovered row. */
+  overlapHighlight: PreviewOverlapHighlight | null;
+  /** True while the overlap picker is open; ordinary selection paint is hidden. */
+  overlapMenuOpen: boolean;
   highlight?: boolean;
   /** Isolate one judge line and its notes; see `Preview.soloLine`. */
   soloLine?: number | null;
@@ -657,10 +662,11 @@ export function drawLinePasses(
           surface.samplingFocus?.lineIndex === index ? surface.samplingFocus : null;
         // Sampling owns the only selected-line tint: another line already in a
         // multi-line selection keeps its normal paint while the sampler runs.
+        const hoveredLine = surface.overlapHighlight?.line;
         const selected =
           surface.samplingFocus == null &&
           surface.selectedLineColor.length >= 3 &&
-          surface.selectedLines.includes(index);
+          (surface.overlapMenuOpen ? hoveredLine === index : surface.selectedLines.includes(index));
         drawLine(
           surface,
           context,
@@ -711,9 +717,13 @@ export function drawLinePasses(
           if (!previewNoteInViewport(geometry, noteWidth, viewport)) {
             continue;
           }
-          const selected =
-            entry.noteIndex !== undefined &&
-            isPreviewNoteSelected(surface.selectedNotes, index, entry.noteIndex);
+          const hoveredNote = surface.overlapHighlight?.note;
+          const selected = surface.overlapMenuOpen
+            ? hoveredNote !== undefined &&
+              hoveredNote.lineIndex === index &&
+              hoveredNote.noteIndex === entry.noteIndex
+            : entry.noteIndex !== undefined &&
+              isPreviewNoteSelected(surface.selectedNotes, index, entry.noteIndex);
           const highlight = shouldHighlightPreviewNote(surface, entry);
           if (
             drawPreviewNoteEntry(

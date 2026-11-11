@@ -35,9 +35,10 @@
 :root {
   --inspector-width: 400px;
   // The document drawer adds this list column beyond the resting inspector
-  // width. The property column keeps `--inspector-width`; both are theme
-  // metrics (`inspectorWidth`, `drawerListWidth`) and fall back to these values.
+  // width. The property column keeps `--inspector-width`.
   --drawer-list-width: 240px;
+  // The trailing rail column beside the inspector.
+  --chrome-sidebar-track: 56px;
   // Dense desktop-editor type roles. Pick the role the text plays, never a px
   // value: this block is the only place a CSS font size is written, and
   // `scripts/checkStyleRules.mjs` rejects raw sizes elsewhere. Canvas text

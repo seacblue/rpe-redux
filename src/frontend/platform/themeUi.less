@@ -310,21 +310,11 @@
 }
 
 // The rail clips to its peek width and the content column is right-aligned. A
-// themed item therefore occupies only the visible cell; the top rail sizes to
-// its content and keeps the label visible.
-.redux-app-root .sidebar:not(.is-top) .sidebar-item {
+// themed item therefore occupies only the visible cell.
+.redux-app-root .sidebar .sidebar-item {
   justify-content: flex-end;
 }
 
-.redux-app-root .sidebar:not(.is-top) .theme-rail-item {
+.redux-app-root .sidebar .theme-rail-item {
   width: var(--sidebar-peek-width);
-}
-
-.redux-app-root .sidebar.is-top .theme-rail-item {
-  width: auto;
-  padding: 0 var(--space-1);
-}
-
-.redux-app-root .sidebar.is-top .theme-rail-item > .theme-ui-node {
-  justify-content: flex-start;
 }

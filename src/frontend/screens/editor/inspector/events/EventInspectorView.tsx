@@ -29,7 +29,7 @@ import {
   type EasingCurvePatch,
 } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
 import { displayValue, applyEventTransform, EventField } from "./EventField.tsx";
-import type { FieldKey, ValueKind } from "./EventField.tsx";
+import type { FieldKey, ValueKind } from "./eventFieldModel.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { eventHasLinkGroup } from "../../../../../core/global/chart/optionalFeatures.ts";
 import { samplingAxisForEventType } from "../../../../../core/edit/sampling/sampling.ts";

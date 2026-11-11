@@ -1,6 +1,6 @@
 /**
- * Theme chrome recipes: closed preset parsing, legacy packages, bounded values,
- * and the built-in packages that ship the new contract.
+ * Theme chrome recipes: closed surface/motion/title-bar presets, retired layout
+ * blocks that stay ignored, legacy packages, and the built-in packages.
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -37,22 +37,6 @@ test("chrome accepts every documented preset group", () => {
   const parsed = parseThemePackage(
     basePackage({
       chrome: {
-        layout: {
-          density: "spacious",
-          inspector: "floating",
-          inspectorSide: "left",
-          drawerSide: "right",
-          sidebar: "top",
-          toolbar: "floating",
-          toolbarPlacement: "left",
-          toolbarFlow: "grid",
-          toolbarColumns: 3,
-          toolbarOrder: ["toolbar.playback", "toolbar.line"],
-          transport: "floating",
-          transportAnchor: "bottom-left",
-          transportDraggable: false,
-          statusBar: "floating",
-        },
         surface: {
           shape: "round",
           material: "glass",
@@ -67,23 +51,8 @@ test("chrome accepts every documented preset group", () => {
           entrance: "rise",
         },
         titlebar: {
-          density: "compact",
           windowControls: "capsule",
-          menu: "expanded",
-        },
-        metrics: {
-          panelGap: 12,
-          toolbarGap: 6,
-          toolbarCell: 38,
-          toolbarWidth: 240,
-          inspectorWidth: 460,
-          drawerListWidth: 280,
-          sidebarWidth: 64,
-          sidebarExpandedWidth: 240,
-          titlebarHeight: 44,
-          windowControlSize: 36,
-          fieldControlWidth: 52,
-          fieldGap: 20,
+          menu: "hamburger",
         },
       },
     }),
@@ -92,22 +61,6 @@ test("chrome accepts every documented preset group", () => {
 
   assert.ok(parsed);
   assert.deepEqual(parsed.chrome, {
-    layout: {
-      density: "spacious",
-      inspector: "floating",
-      inspectorSide: "left",
-      drawerSide: "right",
-      sidebar: "top",
-      toolbar: "floating",
-      toolbarPlacement: "left",
-      toolbarFlow: "grid",
-      toolbarColumns: 3,
-      toolbarOrder: ["toolbar.playback", "toolbar.line"],
-      transport: "floating",
-      transportAnchor: "bottom-left",
-      transportDraggable: false,
-      statusBar: "floating",
-    },
     surface: {
       shape: "round",
       material: "glass",
@@ -122,124 +75,49 @@ test("chrome accepts every documented preset group", () => {
       entrance: "rise",
     },
     titlebar: {
-      density: "compact",
       windowControls: "capsule",
-      menu: "expanded",
-    },
-    metrics: {
-      panelGap: 12,
-      toolbarGap: 6,
-      toolbarCell: 38,
-      toolbarWidth: 240,
-      inspectorWidth: 460,
-      drawerListWidth: 280,
-      sidebarWidth: 64,
-      sidebarExpandedWidth: 240,
-      titlebarHeight: 44,
-      windowControlSize: 36,
-      fieldControlWidth: 52,
-      fieldGap: 20,
+      menu: "hamburger",
     },
   });
   assert.equal(parsed.schemaVersion, THEME_SCHEMA_VERSION);
 });
 
-test("frame metrics are bounded integers with a fixed vocabulary", () => {
-  for (const [key, value] of [
-    ["panelGap", -1],
-    ["toolbarGap", 17],
-    ["toolbarCell", 27],
-    ["toolbarWidth", 199],
-    ["inspectorWidth", 279],
-    ["drawerListWidth", 159],
-    ["drawerListWidth", 561],
-    ["drawerListWidth", 240.5],
-    ["drawerListWidth", "240"],
-    ["sidebarWidth", 39],
-    ["sidebarExpandedWidth", 159],
-    ["titlebarHeight", 31],
-    ["windowControlSize", 57],
-    ["fieldControlWidth", 73],
-    ["fieldGap", 7],
-    ["fieldGap", 1.5],
-    ["fieldGap", "16"],
-  ]) {
-    assert.equal(
-      parseThemePackage(basePackage({ chrome: { metrics: { [key]: value } } }), "user"),
-      null,
-      `${key}=${value}`,
-    );
-  }
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { metrics: { unknown: 1 } } }), "user"),
-    null,
-  );
-  const parsed = parseThemePackage(
-    basePackage({ chrome: { metrics: { fieldControlWidth: 72, panelGap: 0 } } }),
-    "user",
-  );
-  assert.equal(parsed?.chrome.metrics.fieldControlWidth, 72);
-  assert.equal(parsed?.chrome.metrics.panelGap, 0);
-  assert.equal(parsed?.chrome.metrics.toolbarCell, undefined);
-  assert.equal(parsed?.chrome.metrics.drawerListWidth, undefined);
-  for (const drawerListWidth of [160, 560]) {
-    assert.equal(
-      parseThemePackage(basePackage({ chrome: { metrics: { drawerListWidth } } }), "user")?.chrome
-        .metrics.drawerListWidth,
-      drawerListWidth,
-    );
-  }
-});
-
-test("toolbar order only accepts unique registered-id-shaped names", () => {
-  assert.equal(
-    parseThemePackage(
-      basePackage({
-        chrome: { layout: { toolbarOrder: ["toolbar.playback", "toolbar.playback"] } },
-      }),
-      "user",
-    ),
-    null,
-  );
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { toolbarOrder: ["Bad Id"] } } }), "user"),
-    null,
-  );
-  assert.equal(
-    parseThemePackage(
-      basePackage({ chrome: { layout: { toolbarOrder: Array(65).fill("toolbar.playback") } } }),
-      "user",
-    ),
-    null,
-  );
+test("retired layout and metric blocks are ignored without rejecting the package", () => {
   const parsed = parseThemePackage(
     basePackage({
-      chrome: { layout: { toolbarOrder: ["toolbar.playback", "toolbar.line"] } },
+      chrome: {
+        layout: {
+          density: "spacious",
+          inspector: "overlay",
+          toolbarPlacement: "left",
+          transport: "floating",
+          statusBar: "hidden",
+        },
+        metrics: {
+          inspectorWidth: 460,
+          titlebarHeight: 44,
+          fieldControlWidth: 52,
+        },
+      },
     }),
     "user",
   );
-  assert.deepEqual(parsed?.chrome.layout.toolbarOrder, ["toolbar.playback", "toolbar.line"]);
+  assert.ok(parsed);
+  assert.deepEqual(parsed.chrome, DEFAULT_THEME_CHROME);
+  assert.equal("layout" in parsed.chrome, false);
+  assert.equal("metrics" in parsed.chrome, false);
 });
 
-test("title-bar presets and toolbar flow are closed enums", () => {
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { toolbarFlow: "carousel" } } }), "user"),
-    null,
+test("a title-bar density is ignored because the host owns the row height", () => {
+  const parsed = parseThemePackage(
+    basePackage({ chrome: { titlebar: { density: "tall" } } }),
+    "user",
   );
-  for (const value of [1, 5, 2.5, "2"]) {
-    assert.equal(
-      parseThemePackage(
-        basePackage({ chrome: { layout: { toolbarFlow: "grid", toolbarColumns: value } } }),
-        "user",
-      ),
-      null,
-      String(value),
-    );
-  }
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { titlebar: { density: "huge" } } }), "user"),
-    null,
-  );
+  assert.ok(parsed);
+  assert.deepEqual(parsed.chrome.titlebar, DEFAULT_THEME_CHROME.titlebar);
+});
+
+test("title-bar presets are closed enums", () => {
   assert.equal(
     parseThemePackage(basePackage({ chrome: { titlebar: { windowControls: "hidden" } } }), "user"),
     null,
@@ -250,63 +128,39 @@ test("title-bar presets and toolbar flow are closed enums", () => {
   );
   assert.equal(
     parseThemePackage(
-      basePackage({
-        chrome: {
-          titlebar: {
-            menu: "expanded",
-            density: "tall",
-            windowControls: "compact",
-          },
-        },
-      }),
+      basePackage({ chrome: { titlebar: { menu: "expanded", windowControls: "compact" } } }),
       "user",
-    )?.chrome.titlebar.menu,
-    "expanded",
+    )?.chrome.titlebar.windowControls,
+    "compact",
   );
-  const parsed = parseThemePackage(
-    basePackage({
-      chrome: {
-        layout: { toolbarFlow: "single" },
-        titlebar: { density: "tall", windowControls: "compact" },
-      },
-    }),
-    "user",
-  );
-  assert.equal(parsed?.chrome.layout.toolbarFlow, "single");
-  assert.equal(parsed?.chrome.titlebar.density, "tall");
-  assert.equal(parsed?.chrome.titlebar.windowControls, "compact");
 });
 
 test("a partial chrome group keeps defaults for omitted fields", () => {
   const parsed = parseThemePackage(
-    basePackage({ chrome: { layout: { inspector: "overlay" } } }),
+    basePackage({ chrome: { surface: { material: "raised" } } }),
     "user",
   );
   assert.ok(parsed);
-  assert.equal(parsed.chrome.layout.inspector, "overlay");
-  assert.equal(parsed.chrome.layout.density, DEFAULT_THEME_CHROME.layout.density);
-  assert.equal(parsed.chrome.layout.drawerSide, "auto");
-  assert.equal(parsed.chrome.layout.sidebar, DEFAULT_THEME_CHROME.layout.sidebar);
-  assert.deepEqual(parsed.chrome.surface, DEFAULT_THEME_CHROME.surface);
+  assert.equal(parsed.chrome.surface.material, "raised");
+  assert.equal(parsed.chrome.surface.shape, DEFAULT_THEME_CHROME.surface.shape);
   assert.deepEqual(parsed.chrome.motion, DEFAULT_THEME_CHROME.motion);
   assert.deepEqual(parsed.chrome.titlebar, DEFAULT_THEME_CHROME.titlebar);
-  assert.deepEqual(parsed.chrome.metrics, DEFAULT_THEME_CHROME.metrics);
 });
 
 test("an unknown chrome key rejects the package", () => {
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { dock: "left" } } }), "user"),
-    null,
-  );
   assert.equal(parseThemePackage(basePackage({ chrome: { shadow: "huge" } }), "user"), null);
   assert.equal(parseThemePackage(basePackage({ chrome: [] }), "user"), null);
+  assert.equal(
+    parseThemePackage(basePackage({ chrome: { titlebar: { position: "left" } } }), "user"),
+    null,
+  );
+  assert.equal(
+    parseThemePackage(basePackage({ chrome: { surface: { sheen: "high" } } }), "user"),
+    null,
+  );
 });
 
 test("an unknown preset value rejects the package", () => {
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { inspector: "detached" } } }), "user"),
-    null,
-  );
   assert.equal(
     parseThemePackage(basePackage({ chrome: { motion: { level: "cinematic" } } }), "user"),
     null,
@@ -316,37 +170,13 @@ test("an unknown preset value rejects the package", () => {
     null,
   );
   assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { toolbarPlacement: "right" } } }), "user"),
+    parseThemePackage(basePackage({ chrome: { surface: { pattern: "stripes" } } }), "user"),
     null,
   );
   assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { transport: "window" } } }), "user"),
+    parseThemePackage(basePackage({ chrome: { motion: { entrance: "zoom" } } }), "user"),
     null,
   );
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { transportAnchor: "center" } } }), "user"),
-    null,
-  );
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { transportDraggable: "yes" } } }), "user"),
-    null,
-  );
-  assert.equal(
-    parseThemePackage(basePackage({ chrome: { layout: { drawerSide: "up" } } }), "user"),
-    null,
-  );
-});
-
-test("the drawer side is a closed enum with an automatic default", () => {
-  const fallback = parseThemePackage(basePackage(), "user");
-  assert.equal(fallback?.chrome.layout.drawerSide, "auto");
-  for (const drawerSide of ["auto", "left", "right"]) {
-    assert.equal(
-      parseThemePackage(basePackage({ chrome: { layout: { drawerSide } } }), "user")?.chrome.layout
-        .drawerSide,
-      drawerSide,
-    );
-  }
 });
 
 test("backdrop blur is a bounded integer", () => {

@@ -25,7 +25,7 @@ interface ApiAvailability {
 context.api.chart.state(): Promise<ApiResult<ChartReadState>>;
 context.api.theme.tokens(): Promise<ExtensionThemeTokens>;
 context.api.values.byId.get<T>(id: string): Promise<T>;
-context.api.transaction.apply(request): Promise<ApiResult<TransactionResult>>;
+context.api.transaction.apply(request): Promise<ApiResult<ChartTransactionResult>>;
 
 context.hooks.register(name, handler, schema, priority?): () => void;
 context.hooks.invoke(name, payload, options?): Promise<PublicHookInvocationResult>;

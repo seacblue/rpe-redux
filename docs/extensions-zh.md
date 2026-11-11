@@ -189,7 +189,7 @@ const off = context.services.onDataChange("example.summary", (next) => {
 
 `ui.registerOverlay` 会在编辑画布之上、外壳通知之下挂载一个元素。叠加层默认只有舞台大小；传入 `scope: "window"` 后会覆盖整个应用窗口，因此也可以把内容放到工具栏或检查器上。窗口叠加层位于模态遮罩之下。宿主层默认不接收指针事件；需要交互时在声明树的样式中设置 `pointer-events: auto`。`registerPanel` 使用同样的声明树；交互节点带稳定 id，通过消息桥上报点击和输入。节点不会拿到宿主 DOM、React 组件或文件句柄，全部由宿主渲染。内置 `builtin.preview-pet` 使用这些接口：它在预览或整个窗口上绘制实时宠物，并把图片保存在扩展设置中，侧栏面板可以调整图片、大小和阴影。请在 **设置 → 扩展** 中启用它。
 
-扩展 UI 只拥有自己的面板、叠加层、侧栏路由和工具栏条目。它不能替换宿主标题栏、应用菜单、工具栏框架、检查器框架或窗口按钮；这些是主题专属的表现契约。需要完整窗口皮肤时，扩展应附带一个纯数据主题包，由用户在外观设置中单独安装并确认自定义 UI。 `styles` capability 只作用于扩展自己的面板与叠加层挂载点；选择器无法触达宿主 chrome。样式表会按挂载点上的 owner 属性包进 `@scope`，因此 `.redux-titlebar` 这类规则在包外匹配不到任何元素。文档级 at-rule（`@keyframes`、`@font-face`、`@property`、 `@counter-style`、`@page`）会被拒绝，因为它们的名字不受挂载点作用域限制； `@import`、`@namespace` 和嵌套 `@scope` 同样被拒绝。
+扩展 UI 只拥有自己的面板、叠加层、侧栏路由和工具栏条目。它不能替换宿主标题栏、应用菜单、工具栏框架、检查器框架、窗口按钮或窗口布局；这些是宿主拥有的表现契约。需要完整窗口皮肤时，扩展应附带一个纯数据主题包，由用户在外观设置中单独安装并确认自定义 UI。 `styles` capability 只作用于扩展自己的面板与叠加层挂载点；选择器无法触达宿主 chrome。样式表会按挂载点上的 owner 属性包进 `@scope`，因此 `.redux-titlebar` 这类规则在包外匹配不到任何元素。文档级 at-rule（`@keyframes`、`@font-face`、`@property`、 `@counter-style`、`@page`）会被拒绝，因为它们的名字不受挂载点作用域限制； `@import`、`@namespace` 和嵌套 `@scope` 同样被拒绝。
 
 ```js
 const marker = ui.registerOverlay({
@@ -232,24 +232,24 @@ const card = context.ui.registerPanel({
       padding: tokens.spacing["3"],
       fontFamily: tokens.fonts.family,
     },
-    text: `${tokens.theme.name}，${tokens.theme.appearance}，${tokens.theme.density}`,
+    text: `${tokens.theme.name}，${tokens.theme.appearance}`,
   },
 });
 
-// 主题或密度变化后重新读取 token，并重绘一次。
+// 主题变化后重新读取 token，并重绘一次。
 context.api.theme.subscribe(() => {
   void context.api.theme.tokens().then((next) => {
     card.update({
       kind: "element",
       tag: "div",
       style: { color: next.colors.foreground, padding: next.spacing["2"] },
-      text: `${next.theme.name}，${next.theme.density}`,
+      text: `${next.theme.name}，${next.theme.appearance}`,
     });
   });
 });
 ```
 
-快照包含 `theme`（`id`、`name`、`appearance`、`density`）、语义颜色 `colors` （`foreground`、`background`、`panel`、`border`、`accent`、`danger`、`warning`、 `success`、`muted`）、`radii`、`spacing`、`fonts`（`family`、`monoFamily`、`sizes`）、 `shadows` 和 `motion`（`durations`、`easings`）。每个叶子值都是从文档实际应用 token 读出的字符串。扩展自己的声明树和样式使用这些字段即可跟随活动主题。
+快照包含 `theme`（`id`、`name`、`appearance`）、语义颜色 `colors` （`foreground`、`background`、`panel`、`border`、`accent`、`danger`、`warning`、 `success`、`muted`）、`radii`、`spacing`、`fonts`（`family`、`monoFamily`、`sizes`）、 `shadows` 和 `motion`（`durations`、`easings`）。每个叶子值都是从文档实际应用 token 读出的字符串。扩展自己的声明树和样式使用这些字段即可跟随活动主题。
 
 **权限与上限：** 需要 `styles`，与 `context.styles` 共用同一个 capability。主题监听器与事件订阅共用 128 条预算，并随激活一起释放；`subscribe` 没有取消 hook。监听器抛错会计入包的 failure budget，但不会中断其他监听器。
 
@@ -343,9 +343,35 @@ const dispose = context.ui.registerDesignPanel({
 
 提供者/消费者、公开 Hook 和设计 slot 的完整组合示例见 [`sdk/examples/composition.ts`](../sdk/examples/composition.ts)，该文件会使用发布的 SDK 类型进行检查。
 
-## 事务
+## 谱面操作
 
-谱面写入走文档事务适配器。事务会被校验、只应用一次，并进入撤销历史。预览使用 dry-run 结果，不要直接修改谱面对象。
+谱面写入是一个原子 `transaction` 请求，需要 `chart.write`。先用 `api.chart` 或 `api.selection` 读取，再组装请求并调用 `api.transaction.preview` 或 `api.transaction.apply`。不要直接修改读取快照；用快照里的 id 和值组装事务。
+
+```js
+const lines = await api.chart.lines();
+if (lines.ok && lines.value.length > 0) {
+  const result = await api.transaction.apply({
+    label: "添加 Tap",
+    notes: {
+      insert: [
+        {
+          lineIndex: 0,
+          note: { type: 1, startTime: [0, 0, 1], endTime: [0, 0, 1], positionX: 0, above: 1 },
+        },
+      ],
+    },
+  });
+  if (result.ok && result.value.status === "committed") {
+    ui.notice("Tap 已插入。", { level: "success" });
+  }
+}
+```
+
+请求可以更新谱面 `metadata`、通过 `timing.bpmList` 替换速度表、插入或更新判定线，以及按 id 插入、更新或删除音符和事件。音符和事件时间是约分后的拍三元组，不是秒。`lines` 没有删除操作。
+
+`preview(request)` 先做 dry-run 校验，只有状态为 `previewed` 时才返回 preview id；把 id 传给 `apply(previewId)`，或用 `cancel(previewId)` 丢弃。`apply` 的状态是 `committed`、`unchanged`、`rejected`、`conflict` 或 `unavailable`，`value` 里包含 issues、受影响对象 id 和撤销历史。分页 `chart.read` 用旧游标时返回 `stale_read`；提交前谱面变化时 `apply` 返回 `conflict`。这时应重新读取并重建请求，不要盲目重试。
+
+公开的[谱面操作](../docs-sdk/zh/place-note.md)指南包含完整插件、选中音符更新、事件和结果处理。
 
 ## 信任
 

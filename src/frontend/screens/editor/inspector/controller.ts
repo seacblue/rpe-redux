@@ -49,10 +49,10 @@ export interface InspectorPanelDefinition {
   /** The panel-owned walkthrough shown by its header help action. */
   tutorial?: HelpTutorialDefinition;
   /**
-   * The Workspace mode this page expands into.
+   * The wide Inspector mode this page expands into.
    *
    * Set only for large pages: the header then offers a single explicit expansion
-   * action that promotes the page and leaves the inspector on its companion.
+   * action that grows the inspector over the workspace.
    */
   workspaceMode?: string;
   /**
