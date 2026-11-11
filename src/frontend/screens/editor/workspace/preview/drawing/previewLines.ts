@@ -241,6 +241,8 @@ function appendPreviewNoteHitArea(
   noteWidth: number,
   highlight: boolean,
   rotation: number,
+  showHead: boolean,
+  holdCapScale: number,
 ): void {
   const isHold = entry.note.type === 2;
   const holdHeadTexture = isHold ? surface.skin?.holdHeadTexture(highlight) : null;
@@ -250,10 +252,10 @@ function appendPreviewNoteHitArea(
     : Math.max(8, noteWidth * 0.25);
   const holdEndTexture = isHold ? surface.skin?.holdEndTexture(highlight) : null;
   const holdHeadLength = holdHeadTexture
-    ? (noteWidth * holdHeadTexture.useful.height) / holdHeadTexture.useful.width
+    ? (noteWidth * holdHeadTexture.useful.height * holdCapScale) / holdHeadTexture.useful.width
     : 0;
   const holdTailLength = holdEndTexture
-    ? (noteWidth * holdEndTexture.useful.height) / holdEndTexture.useful.width
+    ? (noteWidth * holdEndTexture.useful.height * holdCapScale) / holdEndTexture.useful.width
     : 0;
   surface.noteHitAreas.push({
     noteIndex: entry.noteIndex,
@@ -268,6 +270,7 @@ function appendPreviewNoteHitArea(
     height: isHold ? undefined : noteHeight,
     headLength: isHold ? holdHeadLength : undefined,
     tailLength: isHold ? holdTailLength : undefined,
+    showHead: isHold ? showHead : undefined,
     rotation,
   });
 }
@@ -284,6 +287,7 @@ function drawPreviewNoteEntry(
   geometry: PreviewNoteScreenGeometry,
   noteWidth: number,
   scaleY: number,
+  holdCapScale: number,
   rotation: number,
   lineRotation: number,
   lineCenterX: number,
@@ -303,6 +307,8 @@ function drawPreviewNoteEntry(
       noteWidth,
       highlight,
       lineRotation,
+      position.showHead,
+      holdCapScale,
     );
   }
   const noteOpacity = lineIndex === selectedLine ? 1 : clamp01(surface.noteOpacity);
@@ -325,6 +331,7 @@ function drawPreviewNoteEntry(
         noteAlpha,
         noteColorStyle,
         holdRotation,
+        holdCapScale,
       )
     : surface.noteBatch.addHead(
         surface.skin ?? null,
@@ -364,6 +371,7 @@ function drawPreviewNoteEntry(
     tint,
     skewShear,
     holdRotation,
+    holdCapScale,
   );
   if (restoreBatchTransform) {
     context.restore();
@@ -392,6 +400,7 @@ function paintPreviewNoteFallback(
   tint: number[] | undefined,
   skewShear: number,
   holdRotation: number,
+  holdCapScale: number,
 ): void {
   context.save();
   context.globalAlpha = alpha;
@@ -418,6 +427,7 @@ function paintPreviewNoteFallback(
         position.showHead,
         noteColorStyle,
         holdAxisRotation,
+        holdCapScale,
       ) ?? false;
   }
   if (noteType === 2 && !drawnHold) {
@@ -608,6 +618,13 @@ export function drawLinePasses(
         context.translate(lineCenterX, lineCenterY);
       }
       const { rotation, cosine, sine } = prepared;
+      // The preview can scale X and Y independently. A Hold cap runs along the
+      // line's local Y axis, so scale its length by that axis instead of the
+      // note's horizontal width scale; otherwise caps shorter than the note
+      // spacing leave gaps on static lines.
+      const localXScale = Math.hypot(cosine * scaleX, sine * scaleY);
+      const localYScale = Math.hypot(sine * scaleX, cosine * scaleY);
+      const holdCapScale = localXScale > 0 ? localYScale / localXScale : 1;
       if (usesCanvasLineTransform) {
         context.rotate(rotation);
       }
@@ -710,6 +727,7 @@ export function drawLinePasses(
               geometry,
               noteWidth,
               scaleY,
+              holdCapScale,
               rotation,
               state.rotation,
               lineCenterX,

@@ -67,6 +67,12 @@ export interface PreviewObject {
   readonly width: number;
   /** Oriented box length in CSS pixels; hold length, note height, or line height. */
   readonly height: number;
+  /** Useful longitudinal size of a Hold's head cap in CSS pixels. */
+  readonly headLength?: number;
+  /** Useful longitudinal size of a Hold's tail cap in CSS pixels. */
+  readonly tailLength?: number;
+  /** Whether the painted Hold includes its head cap. */
+  readonly showHead?: boolean;
   /** Clockwise rotation in degrees. */
   readonly rotation: number;
   /** Preview pick radius in CSS pixels; zero for judge lines. */

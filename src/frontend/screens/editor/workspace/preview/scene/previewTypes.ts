@@ -90,6 +90,7 @@ export interface PreviewSkin extends NoteBatchSkin {
     showHead: boolean,
     color?: NoteColor | null,
     rotation?: number,
+    capScale?: number,
   ): boolean;
   noteTexture(
     type: number,
@@ -147,6 +148,8 @@ export interface PreviewHitArea {
   /** Useful longitudinal size of the Hold head/tail cap in CSS pixels. */
   headLength?: number;
   tailLength?: number;
+  /** Whether the painted Hold includes its head cap. */
+  showHead?: boolean;
   rotation?: number;
 }
 
