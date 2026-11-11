@@ -7,7 +7,7 @@
  * the setting is off or no image URL is available, so the window keeps its
  * normal surface.
  */
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   COVER_BACKGROUND_DEFAULTS,
   COVER_BACKGROUND_KEYS,
@@ -49,20 +49,42 @@ export function CoverBackdrop({ scope, url }: { scope: CoverBackdropScope; url: 
     // exists to cross-fade between two live images.
     setImages({ current: target, previous: target ? images.current : "" });
   }
-  if (!images.current && !images.previous) {
-    return null;
-  }
   const fallbackBlur = welcome
     ? COVER_BACKGROUND_DEFAULTS.welcomeBlur
     : COVER_BACKGROUND_DEFAULTS.editorWindowBlur;
   const fallbackBrightness = welcome
     ? COVER_BACKGROUND_DEFAULTS.welcomeBrightness
     : COVER_BACKGROUND_DEFAULTS.editorWindowBrightness;
+  const blurValue = Number.isFinite(blur) ? blur : fallbackBlur;
+  const brightnessValue = Number.isFinite(brightness) ? brightness : fallbackBrightness;
+  const currentImage = images.current;
+  // Surfaces outside this layer (the expanded Inspector) reuse the same image
+  // and filter through root variables, so their glass matches the compact
+  // panels exactly instead of sampling whatever happens to be behind them.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (currentImage) {
+      root.style.setProperty(
+        "--cover-backdrop-image",
+        `url("${currentImage.replaceAll('"', '\\"')}")`,
+      );
+    } else {
+      root.style.removeProperty("--cover-backdrop-image");
+    }
+    root.style.setProperty("--cover-backdrop-blur", `${blurValue}px`);
+    root.style.setProperty("--cover-backdrop-brightness", String(brightnessValue));
+    return () => {
+      root.style.removeProperty("--cover-backdrop-image");
+      root.style.removeProperty("--cover-backdrop-blur");
+      root.style.removeProperty("--cover-backdrop-brightness");
+    };
+  }, [brightnessValue, blurValue, currentImage]);
+  if (!images.current && !images.previous) {
+    return null;
+  }
   const style = {
-    "--cover-backdrop-blur": `${Number.isFinite(blur) ? blur : fallbackBlur}px`,
-    "--cover-backdrop-brightness": String(
-      Number.isFinite(brightness) ? brightness : fallbackBrightness,
-    ),
+    "--cover-backdrop-blur": `${blurValue}px`,
+    "--cover-backdrop-brightness": String(brightnessValue),
   } as CSSProperties;
   return (
     <div className={`cover-backdrop cover-backdrop-${scope}`} style={style} aria-hidden="true">
