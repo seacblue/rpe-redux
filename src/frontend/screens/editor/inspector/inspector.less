@@ -98,8 +98,12 @@
 }
 
 // A document task owns the inspector body. The panel keeps its header and
-// scrolls inside the task page instead of the outer inspector column.
+// scrolls inside the task page instead of the outer inspector column. The
+// expanded panel spans the full width, so its header uses equal side insets and
+// the content drops the scrollbar gutter that would otherwise shift the studio
+// to the left.
 .inspector[data-mode-surface="true"] .inspector-status {
+  padding-right: var(--space-3);
   border-bottom-color: var(--edge-divider);
 }
 
@@ -107,6 +111,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  scrollbar-gutter: auto;
 }
 
 .inspector-mode-surface {
