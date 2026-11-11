@@ -9,6 +9,7 @@ import { numericWheel } from "../../../../../design/controls/numericWheel.ts";
 import { InspectorEmpty } from "../InspectorEmpty.tsx";
 import { BeatField } from "../beat/BeatField.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { ColorField } from "../../../../../design/components/input/ColorField.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
@@ -269,7 +270,7 @@ export function NotePropertiesView({
   return empty ? (
     <InspectorEmpty>{emptyHint}</InspectorEmpty>
   ) : (
-    <>
+    <FieldRows>
       {visibleFields.map((field) => (
         <PropertyControlView
           field={field}
@@ -277,6 +278,6 @@ export function NotePropertiesView({
           liveValue={field.key === "positionX" ? livePosition : null}
         />
       ))}
-    </>
+    </FieldRows>
   );
 }

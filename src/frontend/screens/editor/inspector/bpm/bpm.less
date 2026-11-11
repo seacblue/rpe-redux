@@ -20,7 +20,7 @@
   gap: var(--space-2);
   margin-top: auto;
   padding-top: var(--space-4);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .bpm-detect-action {
@@ -50,7 +50,7 @@
   display: grid;
   margin-bottom: var(--space-4);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--edge-divider);
 }
 
 .bpm-attributes-head {
@@ -75,7 +75,7 @@
 
 .bpm-tool {
   margin-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .bpm-tool-title {
@@ -148,7 +148,7 @@
   gap: var(--space-4);
   margin-top: var(--space-3);
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--surface-muted);
 }
@@ -169,19 +169,19 @@
 
 .bpm-metronome-body {
   fill: var(--surface-raised);
-  stroke: var(--border-strong);
+  stroke: var(--edge-emphasis);
   stroke-width: 2;
 }
 
 .bpm-metronome-face {
   fill: var(--surface);
-  stroke: var(--border-subtle);
+  stroke: var(--edge-divider);
   stroke-width: 1.5;
 }
 
 .bpm-metronome-base {
   fill: var(--panel-header);
-  stroke: var(--border-strong);
+  stroke: var(--edge-emphasis);
   stroke-width: 2;
 }
 
@@ -233,14 +233,12 @@
   }
 
   small {
-    color: var(--foreground-muted);
-    font-size: var(--type-caption);
+    .meta-text();
     font-weight: 400;
   }
 
   span {
-    color: var(--foreground-muted);
-    font-size: var(--type-caption);
+    .meta-text();
     line-height: var(--line-body);
   }
 }

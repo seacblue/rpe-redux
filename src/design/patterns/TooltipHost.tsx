@@ -75,6 +75,29 @@ interface TipPosition {
 }
 
 /**
+ * Whether a control already owns an open surface.
+ *
+ * A trigger that has expanded its popover, or that controls an element still
+ * present and visible, must not explain itself with a tooltip: the tip would
+ * cover the very surface the control just opened.
+ */
+function isEngaged(element: HTMLElement): boolean {
+  if (element.getAttribute("aria-expanded") === "true") {
+    return true;
+  }
+  const controls = element.getAttribute("aria-controls");
+  if (!controls) {
+    return false;
+  }
+  return controls.split(/\s+/).some((id) => {
+    const target = element.ownerDocument.getElementById(id);
+    return Boolean(
+      target?.isConnected && target.checkVisibility?.({ checkVisibilityCSS: true }) === true,
+    );
+  });
+}
+
+/**
  * The single tooltip broker.
  *
  * There is exactly one tooltip element, in the top layer, positioned from the
@@ -116,8 +139,10 @@ export function useTooltipHost() {
         ? event.target.closest<HTMLElement>("[data-tip-title], [data-tip-desc]")
         : null;
     // A modal makes the layers below it inert. Their controls must not publish
-    // a tip even if a stray focus or synthetic pointer event reaches them.
-    const next = candidate && !candidate.closest("[inert]") ? candidate : null;
+    // a tip even if a stray focus or synthetic pointer event reaches them. An
+    // engaged trigger owns an open surface, so its tip would cover that surface.
+    const next =
+      candidate && !candidate.closest("[inert]") && !isEngaged(candidate) ? candidate : null;
     if (target.current === next) {
       return;
     }
@@ -132,6 +157,7 @@ export function useTooltipHost() {
         // when a transient control unmounts).
         if (
           !next.isConnected ||
+          isEngaged(next) ||
           (!next.hasAttribute("data-tip-title") && !next.hasAttribute("data-tip-desc"))
         ) {
           return;
@@ -233,6 +259,25 @@ export function useTooltipHost() {
       showTransient = null;
     };
   }, []);
+  // A trigger can expand while its tip is already visible: focus lands before
+  // the click's state update. Dismiss the tip the moment the anchor reports an
+  // open surface, so a focus- or hover-triggered tip never covers its panel.
+  useEffect(() => {
+    const anchor = tip?.anchor;
+    if (!anchor) {
+      return undefined;
+    }
+    const observer = new MutationObserver(() => {
+      if (isEngaged(anchor)) {
+        dismiss();
+      }
+    });
+    observer.observe(anchor, {
+      attributes: true,
+      attributeFilter: ["aria-expanded", "aria-controls"],
+    });
+    return () => observer.disconnect();
+  }, [tip]);
   useLayoutEffect(() => {
     const node = popup.current;
     if (!node) {

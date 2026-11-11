@@ -8,6 +8,7 @@
 import type { RefCallback } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { t } from "../../../../../i18n/index.ts";
 import type { Beat } from "../../../../../core/global/chart/timing/beat.ts";
@@ -84,34 +85,36 @@ export function TrajectoryPanelView({
           optionsRevision={optionsRevision}
           onChange={onFieldsChange}
         />
-        <FieldRow
-          layout="inline"
-          density="compact"
-          label={t("editorPanels.trajectory.field.enabled")}
-          control={(id) => (
-            <Input
-              id={id}
-              data-key="enabled"
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => onEnabledChange(event.currentTarget.checked)}
-            />
-          )}
-        />
-        <FieldRow
-          layout="inline"
-          density="compact"
-          label={t("editorPanels.trajectory.field.animate")}
-          control={(id) => (
-            <Input
-              id={id}
-              data-key="animate"
-              type="checkbox"
-              checked={animate}
-              onChange={(event) => onAnimateChange(event.currentTarget.checked)}
-            />
-          )}
-        />
+        <FieldRows>
+          <FieldRow
+            layout="inline"
+            density="compact"
+            label={t("editorPanels.trajectory.field.enabled")}
+            control={(id) => (
+              <Input
+                id={id}
+                data-key="enabled"
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) => onEnabledChange(event.currentTarget.checked)}
+              />
+            )}
+          />
+          <FieldRow
+            layout="inline"
+            density="compact"
+            label={t("editorPanels.trajectory.field.animate")}
+            control={(id) => (
+              <Input
+                id={id}
+                data-key="animate"
+                type="checkbox"
+                checked={animate}
+                onChange={(event) => onAnimateChange(event.currentTarget.checked)}
+              />
+            )}
+          />
+        </FieldRows>
         <canvas
           ref={previewCanvasRef}
           width={500}

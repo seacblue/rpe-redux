@@ -221,7 +221,7 @@ export default {
 
   "editor.home.duplicateNameSuffix": "{name} 副本",
   "editor.home.editBody": "只修改本机谱面库中的信息；磁盘上的原始文件不变。",
-  "editor.home.editTitle": "项目名称与分组",
+  "editor.home.editTitle": "谱面信息",
   "editor.home.error.libraryServiceDown": "本地服务未运行，无法修改谱面库",
 
   "editor.home.error.nameRequired": "请输入项目名称",

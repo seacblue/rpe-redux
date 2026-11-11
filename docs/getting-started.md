@@ -27,7 +27,7 @@ Building from source instead is described in the [README](../README.md#build). T
 
 ## First launch: the chart library
 
-The application opens on the chart library. The list on the right holds one card per library chart; the left column shows the selected chart's details and its Open, Export, and Delete actions. Selecting a card does not start preview audio; that waits for an explicit play.
+The application opens on the chart library. The list on the right holds one card per library chart; the left column shows the selected chart's details and its Open, Export, and Delete actions. Selecting a card does not start preview audio; that waits for an explicit play. Right-click a card for the same actions, plus Rename, which edits the name, composer, charter, and difficulty shown on the detail card. `Q` and `E` move the selection through the visible rows; a just-imported chart keeps a short **NEW** marker, and a confirmed delete replaces its card with a skeleton until the service answers.
 
 The library is empty on a fresh install, so start with one of:
 

@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { parseEventKey } from "../../../../../core/edit/events/eventTracks.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
@@ -161,89 +162,91 @@ export function MultiLineEventTracks({
       <span className="multi-line-event-tracks-label">
         {t("editorPanels.multiLine.eventTracks")}
       </span>
-      {xyBinding ? (
-        <FieldRow
-          layout="inline"
-          density="compact"
-          label={t("editorPanels.multiLine.showXY")}
-          control={(id) => (
-            <Input
-              id={id}
-              type="checkbox"
-              checked={xyVisible}
-              onChange={(event) => setEventTrackVisible("x", event.currentTarget.checked)}
-            />
-          )}
-        />
-      ) : (
-        <>
+      <FieldRows>
+        {xyBinding ? (
           <FieldRow
             layout="inline"
             density="compact"
-            label={t("editorPanels.multiLine.showX")}
+            label={t("editorPanels.multiLine.showXY")}
             control={(id) => (
               <Input
                 id={id}
                 type="checkbox"
-                checked={showXEvents}
+                checked={xyVisible}
                 onChange={(event) => setEventTrackVisible("x", event.currentTarget.checked)}
               />
             )}
           />
-          <FieldRow
-            layout="inline"
-            density="compact"
-            label={t("editorPanels.multiLine.showY")}
-            control={(id) => (
-              <Input
-                id={id}
-                type="checkbox"
-                checked={showYEvents}
-                onChange={(event) => setEventTrackVisible("y", event.currentTarget.checked)}
-              />
-            )}
-          />
-        </>
-      )}
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.multiLine.showRotate")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={showRotateEvents}
-            onChange={(event) => setEventTrackVisible("rotate", event.currentTarget.checked)}
-          />
+        ) : (
+          <>
+            <FieldRow
+              layout="inline"
+              density="compact"
+              label={t("editorPanels.multiLine.showX")}
+              control={(id) => (
+                <Input
+                  id={id}
+                  type="checkbox"
+                  checked={showXEvents}
+                  onChange={(event) => setEventTrackVisible("x", event.currentTarget.checked)}
+                />
+              )}
+            />
+            <FieldRow
+              layout="inline"
+              density="compact"
+              label={t("editorPanels.multiLine.showY")}
+              control={(id) => (
+                <Input
+                  id={id}
+                  type="checkbox"
+                  checked={showYEvents}
+                  onChange={(event) => setEventTrackVisible("y", event.currentTarget.checked)}
+                />
+              )}
+            />
+          </>
         )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.multiLine.showAlpha")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={showAlphaEvents}
-            onChange={(event) => setEventTrackVisible("alpha", event.currentTarget.checked)}
-          />
-        )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.multiLine.showSpeed")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={showSpeedEvents}
-            onChange={(event) => setEventTrackVisible("speed", event.currentTarget.checked)}
-          />
-        )}
-      />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.multiLine.showRotate")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={showRotateEvents}
+              onChange={(event) => setEventTrackVisible("rotate", event.currentTarget.checked)}
+            />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.multiLine.showAlpha")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={showAlphaEvents}
+              onChange={(event) => setEventTrackVisible("alpha", event.currentTarget.checked)}
+            />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.multiLine.showSpeed")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={showSpeedEvents}
+              onChange={(event) => setEventTrackVisible("speed", event.currentTarget.checked)}
+            />
+          )}
+        />
+      </FieldRows>
     </div>
   );
 }

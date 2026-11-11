@@ -24,6 +24,9 @@ export default {
   "shortcuts.category.editorSelection": "选中物件与多线",
   "shortcuts.category.sampling": "采样",
 
+  "shortcuts.library.previous": "上一张谱面",
+  "shortcuts.library.next": "下一张谱面",
+
   "shortcuts.editor.save": "保存谱面",
   "shortcuts.editor.undo": "撤销",
   "shortcuts.editor.redo": "重做",

@@ -15,6 +15,13 @@ import {
 } from "../../../core/global/library/client.ts";
 import type { LibrarySort } from "./librarySort.ts";
 
+/** A confirmed delete that failed, tagged so the surface can reselect its chart. */
+export interface HomeLibraryRemoveFailure {
+  readonly projectId: string;
+  /** Monotonic id; a repeated failure for the same chart must still reach the UI. */
+  readonly nonce: number;
+}
+
 /** A library project with its media resolved for the card grid. */
 export interface HomeLibraryProject extends LibraryProjectSummary {
   /** Server URL for the project's stored cover, when it has one. */
@@ -34,8 +41,13 @@ export interface HomeLibraryStatus {
 /** Published home cards plus the actions each card invokes. */
 export interface HomeProjectCardsSnapshot extends HomeLibraryStatus {
   libraryProjects: HomeLibraryProject[];
+  /** Project whose delete has been confirmed and is still in flight. */
+  removingProjectId: string | null;
+  /** The last failed delete; cleared when the next delete starts. */
+  removeFailure: HomeLibraryRemoveFailure | null;
   onOpenProject(id: string): void;
   onExportProject(id: string): void;
+  onRenameProject(project: LibraryProjectSummary): void;
   onDelete(project: LibraryProjectSummary): void;
   onSort(sort: LibrarySort): void;
   onRetry(): void;
@@ -45,6 +57,7 @@ export interface HomeProjectCardsSnapshot extends HomeLibraryStatus {
 export interface HomeProjectCardsActions {
   onOpenProject(id: string): void;
   onExportProject(id: string): void;
+  onRenameProject(project: LibraryProjectSummary): void;
   onDelete(project: LibraryProjectSummary): void;
   onSort(sort: LibrarySort): void;
   onRetry(): void;
@@ -53,6 +66,8 @@ export interface HomeProjectCardsActions {
 /** List and load state handed from the controller to the adapter. */
 export interface HomeProjectCardsUpdate extends HomeLibraryStatus {
   readonly projects: readonly LibraryProjectSummary[];
+  readonly removingProjectId?: string | null;
+  readonly removeFailure?: HomeLibraryRemoveFailure | null;
 }
 
 const cards = createValue<HomeProjectCardsSnapshot | null>({ initial: null });
@@ -63,6 +78,8 @@ export const setHomeProjectCardsSnapshot = cards.set;
 /** Publishes the sidecar's project list in its requested sort order. */
 export class HomeProjectCardsAdapter {
   private projects: LibraryProjectSummary[] = [];
+  private removingProjectId: string | null = null;
+  private removeFailure: HomeLibraryRemoveFailure | null = null;
   private status: HomeLibraryStatus = Object.freeze({
     phase: "loading",
     error: "",
@@ -86,6 +103,12 @@ export class HomeProjectCardsAdapter {
       ? { projects: update, phase: "ready", error: "", stale: false }
       : (update as HomeProjectCardsUpdate);
     this.projects = [...next.projects];
+    if (next.removingProjectId !== undefined) {
+      this.removingProjectId = next.removingProjectId;
+    }
+    if (next.removeFailure !== undefined) {
+      this.removeFailure = next.removeFailure;
+    }
     this.status = Object.freeze({
       phase: next.phase,
       error: next.error,
@@ -120,6 +143,8 @@ export class HomeProjectCardsAdapter {
     setHomeProjectCardsSnapshot({
       ...this.status,
       libraryProjects,
+      removingProjectId: this.removingProjectId,
+      removeFailure: this.removeFailure,
       ...this.actions,
     });
   }

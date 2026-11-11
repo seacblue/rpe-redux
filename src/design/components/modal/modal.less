@@ -11,7 +11,7 @@ dialog {
   padding: 0;
   overflow: hidden;
   overscroll-behavior: contain;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
   color: var(--foreground);
@@ -30,7 +30,7 @@ dialog::backdrop {
   gap: var(--space-4);
   min-height: 56px;
   padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--edge-divider);
   background: var(--panel-header);
 }
 
@@ -154,7 +154,7 @@ dialog select,
 dialog textarea {
   color: var(--foreground);
   background: var(--input-surface);
-  border-color: var(--input-border);
+  border-color: var(--edge-control);
 }
 
 // Every dialog joins the shared modal layer. The stack sets a zero-based
@@ -215,7 +215,7 @@ dialog[data-redux-modal="true"] {
   &[open] {
     @starting-style {
       opacity: 0;
-      transform: translateY(5px) scale(0.97);
+      transform: translateY(5px) scale(0.94);
     }
   }
 }

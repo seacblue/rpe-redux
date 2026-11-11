@@ -1,6 +1,39 @@
 // Shared labelled field rows (`FieldRow.tsx`). Features supply the label and
 // control; this sheet owns the label/control split, density, disabled state,
 // dividers, and hides. Panels do not restyle these internals.
+//
+// `FieldRows` is the list container: it owns the gap between rows, and a row
+// inside it carries no block margin. A surface that stacks field rows uses the
+// container instead of writing its own spacing.
+
+.redux-field-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--field-rows-gap, var(--space-2));
+
+  &[data-gap="none"] {
+    --field-rows-gap: 0;
+  }
+
+  &[data-gap="compact"] {
+    --field-rows-gap: var(--space-1);
+  }
+
+  &[data-gap="roomy"] {
+    --field-rows-gap: var(--space-4);
+  }
+
+  // A row inside the list reads its block margin from the container, so a
+  // wrapper component (`Field`, a conditional group) inherits the reset too.
+  .redux-field-row {
+    --field-row-margin-block: 0;
+  }
+
+  &[data-divided="true"] > .redux-field-row + .redux-field-row {
+    border-top: 1px solid var(--edge-divider);
+    padding-top: var(--field-rows-gap);
+  }
+}
 
 .redux-field-row {
   position: relative;
@@ -48,7 +81,7 @@
   &[data-divided="true"] {
     margin: 0;
     padding: var(--space-1) var(--space-3);
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--edge-divider);
     border-radius: 0;
   }
 
@@ -79,7 +112,9 @@
       opacity: 0.72;
     }
 
-    .redux-field-control {
+    // A control that can style its own disabled state keeps full opacity; the
+    // row only dims a control that has no disabled answer of its own.
+    .redux-field-control:not(:has(:is(input, select, textarea, button):disabled)) {
       opacity: 0.55;
     }
 
@@ -280,7 +315,7 @@
   gap: var(--space-1-5);
   min-height: var(--control-height-compact);
   padding: 0 var(--space-2);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--foreground);
@@ -292,7 +327,7 @@
     border-color var(--design-dur-tint) ease;
 
   &[data-tone="accent"] {
-    border-color: color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--edge-divider));
   }
 
   &:not(:has(input:disabled)):hover {
@@ -300,7 +335,7 @@
   }
 
   &:has(input:checked) {
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--edge-divider));
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
 

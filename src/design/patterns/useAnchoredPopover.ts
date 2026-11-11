@@ -2,8 +2,14 @@
  * Anchored popover behaviour shared by menus, pickers, and task panels.
  *
  * The hook owns viewport placement, outside dismissal, Escape handling, focus
- * restoration, and resize/scroll tracking. Callers own the panel surface and its
- * content; they should not repeat the same placement and dismissal effects.
+ * restoration, and frame-tracked anchor following. Callers own the panel surface
+ * and its content; they should not repeat the same placement and dismissal
+ * effects.
+ *
+ * Anchor movement is not an event: a panel animates, a list scrolls under the
+ * control, or playback shifts the row. `floatingAnchor.ts` measures every open
+ * surface on one shared frame loop, so this hook never installs its own scroll,
+ * resize, or lifecycle poll.
  */
 import {
   useEffect,
@@ -13,6 +19,7 @@ import {
   type CSSProperties,
   type RefObject,
 } from "react";
+import { trackFloatingAnchor } from "./floatingAnchor.ts";
 import { useHoldFloatingSurface } from "./floatingSurface.ts";
 
 export type PopoverAlign = "start" | "center" | "end";
@@ -37,7 +44,7 @@ export interface AnchoredPopoverOptions {
   focusTarget?: RefObject<HTMLElement | null>;
   /** A trigger that toggles the panel; pressing it must reach its own handler. */
   toggle?: RefObject<HTMLElement | null>;
-  /** Close on page scroll instead of repositioning. */
+  /** Close on page scroll instead of following it; scrolls inside the panel are ignored. */
   closeOnScroll?: boolean;
   /** Consume the outside pointerdown so a modal behind the popover does not also close. */
   blockOutsidePointer?: boolean;
@@ -111,28 +118,18 @@ export function useAnchoredPopover({
   } | null>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  const anchorBox = useRef<DOMRectReadOnly | null>(null);
 
   useLayoutEffect(() => {
     if (!open) {
       // Keep the last placement so a mounted panel animates out where it opened.
       return;
     }
+    /** Place the panel from the last measured anchor box. */
     const place = () => {
-      const anchorElement = anchor.current;
       const node = panel.current;
-      if (!anchorElement || !node) {
-        return;
-      }
-      if (
-        !anchorElement.isConnected ||
-        anchorElement.checkVisibility?.({ checkVisibilityCSS: true }) === false
-      ) {
-        close.current();
-        return;
-      }
-      const box = anchorElement.getBoundingClientRect();
-      if (box.width <= 0 || box.height <= 0) {
-        close.current();
+      const box = anchorBox.current;
+      if (!node || !box) {
         return;
       }
       const measuredWidth = node.offsetWidth;
@@ -178,55 +175,49 @@ export function useAnchoredPopover({
           : next,
       );
     };
-    place();
-    const update = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Node && panel.current?.contains(target)) {
-        return;
-      }
-      if (closeOnScroll) {
-        close.current();
-        return;
-      }
-      place();
-    };
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", update, true);
-    const observer =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => place());
-    if (panel.current) {
-      observer?.observe(panel.current);
+    const releases: Array<() => void> = [];
+    const anchorElement = anchor.current;
+    if (anchorElement) {
+      releases.push(
+        trackFloatingAnchor(anchorElement, (box, change, event) => {
+          anchorBox.current = box;
+          if (!box) {
+            close.current();
+            return;
+          }
+          if (change === "scroll") {
+            const target = event?.target;
+            if (target instanceof Node && panel.current?.contains(target)) {
+              return;
+            }
+            if (closeOnScroll) {
+              close.current();
+              return;
+            }
+          }
+          place();
+        }),
+      );
     }
-    if (anchor.current) {
-      observer?.observe(anchor.current);
+    const panelElement = panel.current;
+    if (panelElement) {
+      // The panel's own size is measured on the same loop: a message row that
+      // wraps or a picker that loads more options re-places without its own
+      // ResizeObserver. Its internal scroll is not a placement change.
+      releases.push(
+        trackFloatingAnchor(panelElement, (_box, change) => {
+          if (change !== "scroll") {
+            place();
+          }
+        }),
+      );
     }
     return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", update, true);
-      observer?.disconnect();
-    };
-  }, [align, anchor, closeOnScroll, gap, matchAnchorWidth, maxHeight, open, panel]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    // Parent panels can close, collapse, or unmount without a scroll or resize
-    // event. The poll is the lifecycle signal that keeps a portalled popover
-    // from outliving the control it belongs to.
-    const check = () => {
-      const anchorElement = anchor.current;
-      if (
-        !anchorElement ||
-        !anchorElement.isConnected ||
-        anchorElement.checkVisibility?.({ checkVisibilityCSS: true }) === false
-      ) {
-        close.current();
+      for (const release of releases) {
+        release();
       }
     };
-    const timer = window.setInterval(check, 120);
-    return () => window.clearInterval(timer);
-  }, [anchor, open]);
+  }, [align, anchor, closeOnScroll, gap, matchAnchorWidth, maxHeight, open, panel]);
 
   useEffect(() => {
     if (!open) {

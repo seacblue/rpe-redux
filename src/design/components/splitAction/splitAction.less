@@ -7,7 +7,7 @@
   height: var(--design-control-height);
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control);
   // Clip the whole split control, including hover fills painted by either
   // half, to the same four rounded corners. `overflow: hidden` alone can leave
@@ -41,12 +41,11 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: -2px;
+    .focus-ring(-2px);
   }
 
   &:disabled {
-    opacity: 0.45;
+    color: var(--placeholder-text);
     cursor: var(--app-cursor-default);
   }
 }

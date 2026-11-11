@@ -24,15 +24,43 @@
 }
 
 .redux-segmented-options {
+  position: relative;
   display: flex;
   flex: none;
   overflow: hidden;
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control);
   background: var(--input-surface);
 }
 
+// The selected fill is one element, so switching between options slides a single
+// surface instead of cross-fading two backgrounds. Its geometry is written by
+// `Segmented.tsx`; the sheet owns only the look and the motion. The transparent
+// border insets the painted fill from the track's edge, so the thumb reads as an
+// inset pill inside the control instead of a hard block against the border.
+.redux-segmented-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--active-accent-fill);
+  background-clip: padding-box;
+  pointer-events: none;
+  // The thumb travels as one block and settles with a hair of overshoot. The
+  // curve stays shallow because a wide target can move hundreds of pixels; the
+  // width finishes first so unequal labels resize before the slide settles, and
+  // the last part of the motion is a pure translation.
+  transition:
+    transform var(--design-dur-overlay) var(--design-ease-settle),
+    width var(--design-dur-tint) var(--design-ease-move);
+}
+
 .redux-segmented-option {
+  position: relative;
+  z-index: 1;
   min-height: calc(var(--design-control-height) - 2px);
   padding-inline: var(--space-3);
   // The shared `button` baseline gives every button a radius, a border and a
@@ -49,9 +77,12 @@
   font-size: var(--type-label);
   white-space: nowrap;
   cursor: var(--app-cursor-pointer);
+  transition:
+    background-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
 
   & + & {
-    border-left: 1px solid var(--outline);
+    border-left: 1px solid var(--edge-control);
   }
 
   &:hover:not(:disabled):not(.is-selected) {
@@ -59,13 +90,16 @@
     color: var(--foreground);
   }
 
+  // The sliding thumb paints the fill; the option keeps only its ink. A solid
+  // block would put a second primary action on every panel that carries a
+  // segmented control.
   &.is-selected {
-    background: var(--accent);
-    color: var(--on-accent);
+    color: var(--active-accent);
+    background: transparent;
   }
 
   &:disabled {
-    opacity: 0.45;
+    color: var(--placeholder-text);
     cursor: var(--app-cursor-disabled);
   }
 }

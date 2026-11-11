@@ -19,6 +19,7 @@ import {
   getProjectPrompt,
   subscribeProjectPrompt,
   type ProjectEditPrompt,
+  type ProjectEditValues,
   type ProjectRemovePrompt,
 } from "./projectPrompts.ts";
 
@@ -65,14 +66,19 @@ function ProjectRemoveDialog({ request, open }: { request: ProjectRemovePrompt; 
   );
 }
 
-/** Dialog that renames a project and moves it between groups. */
+/** Dialog that edits the library metadata shown on the detail card. */
 function ProjectEditDialog({ request, open }: { request: ProjectEditPrompt; open: boolean }) {
   const { t } = useTranslation();
   const action = usePromptAction(closeProjectPrompt);
-  const [name, setName] = useState(request.name);
-  const [group, setGroup] = useState(request.group);
+  const [value, setValue] = useState<ProjectEditValues>({
+    name: request.name,
+    composer: request.composer,
+    charter: request.charter,
+    level: request.level,
+    group: request.group,
+  });
   /** Submits the fields currently shown in the dialog. */
-  const apply = () => action.run(() => request.submit(name, group));
+  const apply = () => action.run(() => request.submit(value));
   return (
     <PromptDialog
       requestId={`project:${request.id}`}
@@ -87,15 +93,7 @@ function ProjectEditDialog({ request, open }: { request: ProjectEditPrompt; open
       cancelLabel={t("workspace.dialogs.dismiss")}
       onSubmit={apply}
     >
-      <HomeProjectDialogView
-        name={name}
-        group={group}
-        onChange={(nextName, nextGroup) => {
-          setName(nextName);
-          setGroup(nextGroup);
-        }}
-        onEnter={apply}
-      />
+      <HomeProjectDialogView value={value} onChange={setValue} onEnter={apply} />
     </PromptDialog>
   );
 }

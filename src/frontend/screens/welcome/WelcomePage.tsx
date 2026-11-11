@@ -45,6 +45,15 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [armedKey, setArmedKey] = useState<string | null>(null);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [handledRemoveFailure, setHandledRemoveFailure] = useState(0);
+  const removeFailure = cards?.removeFailure ?? null;
+  if (removeFailure && removeFailure.nonce !== handledRemoveFailure) {
+    // A refused delete leaves the chart in place. Put the selection back on it
+    // so the failure has a visible target and the user can retry in place.
+    setHandledRemoveFailure(removeFailure.nonce);
+    setSelectedKey(`project:${removeFailure.projectId}`);
+    setArmedKey(null);
+  }
   // Selection stays explicit: a populated library starts on a prompt rather
   // than an implied first chart. Preview audio also waits for an explicit click
   // so entering the home screen never starts sound on its own.
@@ -102,9 +111,9 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
           </div>
           <LibraryPanel
             selectedKey={selected?.key ?? null}
-            onSelect={(key) => {
+            onSelect={(key, preview) => {
               setSelectedKey(key);
-              setArmedKey(key);
+              setArmedKey(preview ? key : null);
             }}
           />
         </div>

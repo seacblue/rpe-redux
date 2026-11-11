@@ -20,6 +20,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
@@ -589,66 +590,68 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
         }}
       />
       <MultiLineEventTracks session={session} timeline={timeline} renderSession={renderSession} />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.multiLine.mergeNotes")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={multiLineMergeNotes}
-            disabled={session.multiLineMode !== "notes"}
-            onChange={(event) => {
-              const enabled = event.currentTarget.checked;
-              displayValues.multiLineMergeNotes.set(enabled);
-              session.setMultiLineMerge(enabled);
-              renderSession();
-            }}
-          />
-        )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("settings.field.multi-line-note-line-numbers.label")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={multiLineNoteLineNumbers}
-            disabled={session.multiLineMode !== "notes" || !multiLineMergeNotes}
-            onChange={(event) => {
-              displayValues.multiLineNoteLineNumbers.set(event.currentTarget.checked);
-              renderSession();
-            }}
-          />
-        )}
-      />
-      {timeline && session.multiLineActive ? (
+      <FieldRows>
         <FieldRow
           layout="inline"
           density="compact"
-          label={t("settings.field.multi-line-event-window-count.label")}
+          label={t("editorPanels.multiLine.mergeNotes")}
           control={(id) => (
             <Input
               id={id}
-              type="number"
-              min={1}
-              max={100}
-              step={1}
-              inputMode="numeric"
-              value={eventWindowCountValue}
-              onChange={(event) => setEventWindowCountDraft(event.currentTarget.value)}
-              onBlur={(event) => {
-                commitEventWindowCount(event.currentTarget.value, event.currentTarget);
-                setEventWindowCountDraft(null);
+              type="checkbox"
+              checked={multiLineMergeNotes}
+              disabled={session.multiLineMode !== "notes"}
+              onChange={(event) => {
+                const enabled = event.currentTarget.checked;
+                displayValues.multiLineMergeNotes.set(enabled);
+                session.setMultiLineMerge(enabled);
+                renderSession();
               }}
-              onNumericWheel={(nextValue, target) => commitEventWindowCount(nextValue, target)}
             />
           )}
         />
-      ) : null}
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("settings.field.multi-line-note-line-numbers.label")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={multiLineNoteLineNumbers}
+              disabled={session.multiLineMode !== "notes" || !multiLineMergeNotes}
+              onChange={(event) => {
+                displayValues.multiLineNoteLineNumbers.set(event.currentTarget.checked);
+                renderSession();
+              }}
+            />
+          )}
+        />
+        {timeline && session.multiLineActive ? (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            label={t("settings.field.multi-line-event-window-count.label")}
+            control={(id) => (
+              <Input
+                id={id}
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                inputMode="numeric"
+                value={eventWindowCountValue}
+                onChange={(event) => setEventWindowCountDraft(event.currentTarget.value)}
+                onBlur={(event) => {
+                  commitEventWindowCount(event.currentTarget.value, event.currentTarget);
+                  setEventWindowCountDraft(null);
+                }}
+                onNumericWheel={(nextValue, target) => commitEventWindowCount(nextValue, target)}
+              />
+            )}
+          />
+        ) : null}
+      </FieldRows>
     </>
   );
 }

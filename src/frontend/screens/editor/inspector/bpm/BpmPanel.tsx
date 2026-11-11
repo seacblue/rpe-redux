@@ -18,6 +18,7 @@ import { t } from "../../../../../i18n/index.ts";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { InspectorEmpty } from "../InspectorEmpty.tsx";
@@ -378,44 +379,46 @@ function BpmAttributes({ session, chart }: Pick<BpmForm, "session" | "chart">) {
       <div className="bpm-attributes-head">
         <span>{t("editorPanels.inspector.form.bpm.attributes")}</span>
       </div>
-      <FieldRow
-        layout="inline"
-        label={t("editorPanels.inspector.form.bpm.time")}
-        control={(id) => (
-          <BeatField
-            id={id}
-            value={entry.startTime}
-            onCommit={applyTime}
-            className="bpm-attribute-beat"
-            dataField="bpm-time"
-          />
-        )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        htmlFor="bpm-attribute-value"
-        label={t("editorPanels.inspector.form.bpm.value")}
-        control={
-          <Input
-            id="bpm-attribute-value"
-            type="number"
-            step="any"
-            value={bpm}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setDraft({ source: entry, bpm: value });
-            }}
-            onBlur={applyBpm}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                event.currentTarget.blur();
-              }
-            }}
-          />
-        }
-      />
+      <FieldRows>
+        <FieldRow
+          layout="inline"
+          label={t("editorPanels.inspector.form.bpm.time")}
+          control={(id) => (
+            <BeatField
+              id={id}
+              value={entry.startTime}
+              onCommit={applyTime}
+              className="bpm-attribute-beat"
+              dataField="bpm-time"
+            />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          htmlFor="bpm-attribute-value"
+          label={t("editorPanels.inspector.form.bpm.value")}
+          control={
+            <Input
+              id="bpm-attribute-value"
+              type="number"
+              step="any"
+              value={bpm}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setDraft({ source: entry, bpm: value });
+              }}
+              onBlur={applyBpm}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+          }
+        />
+      </FieldRows>
       {error && <InlineAlert className="bpm-error">{error}</InlineAlert>}
     </div>
   );

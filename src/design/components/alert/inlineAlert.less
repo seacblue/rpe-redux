@@ -7,7 +7,7 @@
   gap: var(--space-2);
   min-width: 0;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface-muted);
   color: var(--foreground);
@@ -17,19 +17,19 @@
 }
 
 .redux-inline-alert[data-tone="danger"] {
-  border-color: color-mix(in srgb, var(--danger) 48%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--edge-divider));
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   color: var(--danger);
 }
 
 .redux-inline-alert[data-tone="warning"] {
-  border-color: color-mix(in srgb, var(--warning) 48%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--warning) 48%, var(--edge-divider));
   background: color-mix(in srgb, var(--warning) 8%, transparent);
   color: var(--warning);
 }
 
 .redux-inline-alert[data-tone="success"] {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--edge-divider));
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
 }

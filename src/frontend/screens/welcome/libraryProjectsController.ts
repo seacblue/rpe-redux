@@ -16,10 +16,14 @@ import type {
 import { ResourceState } from "../../../core/io/resourceState.ts";
 import { t } from "../../../i18n/index.ts";
 import { getLibrarySort, setLibrarySort, type LibrarySort } from "./librarySort.ts";
-import { openProjectPrompt } from "./library/projectPrompts.ts";
+import { openProjectPrompt, closeProjectPrompt } from "./library/projectPrompts.ts";
+import type { ProjectEditValues } from "./library/projectPrompts.ts";
 import type { HomeProjectCardsUpdate } from "./homeProjectCards.ts";
 
 const GROUP_FALLBACK = () => t("editor.home.ungrouped");
+
+/** Monotonic so a recreated controller still reports a fresh failure to the page. */
+let nextRemoveFailureNonce = 0;
 
 /** Callbacks the controller uses to report failures and publish the list. */
 export interface LibraryProjectsControllerOptions {
@@ -35,6 +39,8 @@ export class LibraryProjectsController {
   private disposed = false;
   private library: LocalLibrary | null = null;
   private sort: LibrarySort = getLibrarySort();
+  private removingProjectId: string | null = null;
+  private removeFailure: HomeProjectCardsUpdate["removeFailure"] = null;
   private readonly options: LibraryProjectsControllerOptions;
 
   /** Stores the host callbacks and starts from the persisted sort. */
@@ -120,15 +126,18 @@ export class LibraryProjectsController {
     });
   }
 
-  /** Opens the prompt that renames a project and changes its group. */
+  /** Opens the prompt that edits the chart metadata shown on the detail card. */
   edit(project: LibraryProjectSummary): void {
     openProjectPrompt({
       kind: "edit",
       title: t("editor.home.editTitle"),
       description: t("editor.home.editBody"),
       name: project.name,
+      composer: project.composer,
+      charter: project.charter,
+      level: project.level,
       group: project.group || GROUP_FALLBACK(),
-      submit: (name, group) => this.submitEdit(project, name, group),
+      submit: (values) => this.submitEdit(project, values),
     });
   }
 
@@ -141,26 +150,64 @@ export class LibraryProjectsController {
 
   /** Deletes the project once the prompt is confirmed. */
   private async submitRemove(project: LibraryProjectSummary): Promise<void> {
-    await this.withLibrary(async (library) => {
-      const result = await library.remove(project.id);
-      forgetCatalogProject(project.id);
-      return result;
-    });
+    // The prompt is already answered. Publish the pending state before the
+    // request so the card becomes a skeleton immediately, then keep the failure
+    // for the page to reselect that chart when the service refuses.
+    closeProjectPrompt();
+    this.removingProjectId = project.id;
+    this.removeFailure = null;
+    this.publish();
+    try {
+      await this.withLibrary(async (library) => {
+        const result = await library.remove(project.id);
+        forgetCatalogProject(project.id);
+        return result;
+      });
+    } catch (error) {
+      this.removeFailure = {
+        projectId: project.id,
+        nonce: (nextRemoveFailureNonce += 1),
+      };
+      this.options.reportError(error);
+    } finally {
+      this.removingProjectId = null;
+      this.publish();
+    }
   }
 
-  /** Applies the trimmed name and group, rejecting an empty name. */
+  /** Applies the edited library metadata, patching the chart's META when needed. */
   private async submitEdit(
     project: LibraryProjectSummary,
-    raw: string,
-    rawGroup: string,
+    values: ProjectEditValues,
   ): Promise<void> {
-    const name = raw.trim();
+    const name = values.name.trim();
     if (!name) {
       throw new Error(t("editor.home.error.nameRequired"));
     }
-    const updated = await this.withLibrary((library) =>
-      library.update(project.id, { name, group: rawGroup.trim() || GROUP_FALLBACK() }),
-    );
+    const composer = values.composer.trim();
+    const charter = values.charter.trim();
+    const level = values.level.trim();
+    const group = values.group.trim() || GROUP_FALLBACK();
+    const metadataChanged =
+      composer !== project.composer || charter !== project.charter || level !== project.level;
+    const updated = await this.withLibrary(async (library) => {
+      const patch: ProjectPatch = { name, group };
+      if (metadataChanged) {
+        // The service derives composer, charter, and level from the chart META;
+        // a metadata-only edit therefore patches the chart it already stores.
+        const { project: full } = await library.get(project.id);
+        const chart =
+          typeof full.chart === "object" && full.chart !== null ? structuredClone(full.chart) : {};
+        const writable = chart as Record<string, unknown>;
+        const meta =
+          typeof writable.META === "object" && writable.META !== null
+            ? (writable.META as Record<string, unknown>)
+            : {};
+        writable.META = { ...meta, composer, charter, level };
+        patch.chart = writable;
+      }
+      return library.update(project.id, patch);
+    });
     this.options.changedProject?.({ ...project, ...updated.project });
   }
 
@@ -175,6 +222,8 @@ export class LibraryProjectsController {
       phase: snapshot.phase === "idle" ? "loading" : snapshot.phase,
       error: snapshot.error,
       stale: snapshot.stale,
+      removingProjectId: this.removingProjectId,
+      removeFailure: this.removeFailure,
     });
   }
 }

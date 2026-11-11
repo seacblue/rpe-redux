@@ -13,14 +13,14 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  min-height: 32px;
-  padding: 0 var(--space-2);
+  min-height: var(--control-height-compact);
+  padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: 0;
   background: transparent;
   color: var(--foreground);
   font: inherit;
-  font-size: var(--type-body);
+  font-size: var(--type-label);
   line-height: 1;
   text-align: left;
   white-space: nowrap;
@@ -32,13 +32,11 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: -2px;
+    .focus-ring(-2px);
   }
 
   &:disabled {
-    color: var(--foreground-muted);
-    opacity: 0.55;
+    color: var(--placeholder-text);
     cursor: var(--app-cursor-default);
   }
 
@@ -47,7 +45,7 @@
 
     &:hover:not(:disabled),
     &:focus-visible {
-      background: color-mix(in srgb, var(--danger) 16%, var(--surface-raised));
+      background: color-mix(in srgb, var(--danger) 12%, transparent);
       color: var(--danger);
     }
   }

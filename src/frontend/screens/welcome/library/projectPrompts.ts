@@ -23,16 +23,22 @@ export interface ProjectRemovePrompt {
   submit(): Promise<void>;
 }
 
-/** Renaming asks for two fields, so the answer is a pair rather than nothing. */
-export interface ProjectEditPrompt {
+/** The editable library metadata shown in the rename dialog. */
+export interface ProjectEditValues {
+  name: string;
+  composer: string;
+  charter: string;
+  level: string;
+  group: string;
+}
+
+/** Renaming asks for the chart's library metadata, so the answer is the field set. */
+export interface ProjectEditPrompt extends ProjectEditValues {
   kind: "edit";
   id: number;
   title: string;
   description: string;
-  /** Starting text: the name and group already on the card. */
-  name: string;
-  group: string;
-  submit(name: string, group: string): Promise<void>;
+  submit(values: ProjectEditValues): Promise<void>;
 }
 
 export type ProjectPrompt = ProjectRemovePrompt | ProjectEditPrompt;

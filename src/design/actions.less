@@ -14,6 +14,19 @@
 
 @import "design.less";
 
+// ------------------------------------------------------------ button baseline
+//
+// Every design button shares one box: a centred label, one icon gap, one
+// weight, and one disabled answer.
+.redux-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  font-weight: 500;
+  line-height: var(--line-label);
+}
+
 // ------------------------------------------------------------ action surface
 //
 // The surface owns its fill; the shared button baseline supplies its transition.
@@ -150,17 +163,17 @@
 .redux-button-outlined {
   min-height: var(--design-control-height);
   padding-inline: var(--space-3);
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-control);
   background: var(--surface-raised);
 
   &:hover:not(:disabled) {
-    border-color: var(--accent);
+    border-color: var(--input-border-hover);
     background: var(--surface-hover);
   }
 
   &:active:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--surface-hover);
+    border-color: var(--input-border-hover);
+    background: var(--design-fill-pressed);
     color: var(--foreground);
   }
 
@@ -170,8 +183,9 @@
   }
 
   &:disabled {
-    border-color: var(--border-subtle);
+    border-color: var(--edge-divider);
     background: transparent;
+    color: var(--foreground-muted);
   }
 }
 
@@ -216,14 +230,14 @@
 .redux-button-danger {
   min-height: var(--design-control-height);
   padding-inline: var(--space-3);
-  border: 1px solid color-mix(in oklab, var(--danger) 62%, var(--outline));
+  border: 1px solid color-mix(in oklab, var(--danger) 40%, var(--edge-control));
   border-radius: var(--radius-control);
-  background: color-mix(in oklab, var(--danger) 16%, var(--surface-raised));
+  background: transparent;
   color: var(--danger);
 
   &:hover:not(:disabled) {
     border-color: var(--danger);
-    background: color-mix(in oklab, var(--danger) 28%, var(--surface-raised));
+    background: color-mix(in oklab, var(--danger) 12%, transparent);
     color: var(--danger);
   }
 
@@ -243,6 +257,30 @@
   --icon-color: var(--foreground-muted);
 }
 
+// A press compresses the control by a fraction and releases on the base
+// transition. Dense rows, menu rows, and text actions keep their geometry
+// still; only a real action target answers the press this way.
+.redux-action:active:not(:disabled),
+.redux-button-solid:active:not(:disabled),
+.redux-button-outlined:active:not(:disabled),
+.redux-button-danger:active:not(:disabled) {
+  transform: scale(0.975);
+  transition-duration: var(--design-dur-press);
+}
+
+.redux-icon-button:active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: var(--design-dur-press);
+}
+
+// A disabled action is not just quiet ink: the whole target fades, so a dense
+// toolbar reads availability at a glance. Surfaces that already paint their own
+// disabled fill (outlined, solid, danger) keep it and only lose presence here.
+.redux-action:disabled,
+.redux-icon-button:disabled {
+  opacity: 0.42;
+}
+
 // Size and layout presets. The feature sheet may still override a dimension
 // when the control lives in a fixed chrome cell, but it no longer has to invent
 // the padding, height, width, or icon gap.
@@ -256,6 +294,7 @@
   min-height: var(--control-height-lg);
   padding-inline: var(--space-4);
   font-size: var(--type-body);
+  font-weight: 600;
 }
 
 :where(.redux-button).redux-button-dense {
@@ -282,6 +321,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--accent);
+  justify-content: flex-start;
   text-align: left;
   text-decoration: none;
 
@@ -302,6 +342,7 @@
   border-radius: 0;
   background: transparent;
   color: inherit;
+  justify-content: flex-start;
 }
 
 // A button that carries a visible label keeps the label on one line and lets
@@ -401,7 +442,7 @@
   border-radius: var(--radius-panel);
   background: var(--tooltip-surface);
   color: var(--tooltip-ink);
-  box-shadow: 0 10px 30px var(--shadow-color);
+  box-shadow: var(--shadow-overlay-tooltip);
   transform-origin: var(--tooltip-origin, 50%) 0%;
   animation: redux-tooltip-in var(--design-dur-tint) var(--design-ease-enter);
   // It hangs below the button, which in a vertical rail means it covers the next

@@ -156,10 +156,10 @@ export function Popconfirm({
       )}
       {children}
       <div className="redux-popconfirm-actions">
-        <Button ref={cancelRef} variant="outlined" onClick={onCancel}>
+        <Button ref={cancelRef} variant="outlined" size="sm" onClick={onCancel}>
           {cancelLabel ?? t("common.action.cancel")}
         </Button>
-        <Button variant={destructive ? "danger" : "solid"} onClick={onConfirm}>
+        <Button variant={destructive ? "danger" : "solid"} size="sm" onClick={onConfirm}>
           {confirmLabel ?? t("common.action.confirm")}
         </Button>
       </div>

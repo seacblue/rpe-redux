@@ -5,13 +5,13 @@
   flex: none;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface-muted);
 }
 
 .redux-tree-folder.is-selected {
-  border-color: color-mix(in oklab, var(--accent) 42%, var(--border-subtle));
+  border-color: color-mix(in oklab, var(--accent) 42%, var(--edge-divider));
 }
 
 .redux-tree-folder.is-dragging {
@@ -33,7 +33,7 @@
   gap: 3px;
   min-height: 26px;
   padding: 1px 3px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--edge-divider);
   background: var(--panel-header);
 }
 
@@ -62,7 +62,7 @@
   }
 
   .redux-icon {
-    transition: transform var(--design-dur-tint) ease;
+    transition: transform var(--design-dur-disclosure) var(--design-ease-spring);
   }
 
   &[aria-expanded="false"] .redux-icon {
@@ -84,7 +84,7 @@
   cursor: grab;
 
   &:hover {
-    border-color: var(--border-subtle);
+    border-color: var(--edge-divider);
     background: var(--surface-hover);
     color: var(--foreground);
   }
@@ -176,13 +176,13 @@
   cursor: var(--app-cursor-pointer);
 
   &:hover:not(:disabled) {
-    border-color: var(--border-subtle);
+    border-color: var(--edge-divider);
     background: var(--surface-hover);
     color: var(--foreground);
   }
 
   &:disabled {
-    opacity: 0.3;
+    color: var(--placeholder-text);
     cursor: var(--app-cursor-default);
   }
 }
@@ -220,7 +220,7 @@
   margin-left: 18px;
   padding: 2px 2px 2px var(--space-2);
   overflow: hidden;
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--edge-divider);
 }
 
 @media (prefers-reduced-motion: reduce) {

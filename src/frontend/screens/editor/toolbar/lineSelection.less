@@ -99,7 +99,7 @@
   // The picker reads as the same line list the multi-line pane embeds, not as
   // a second raised surface. The shared background and border also give the
   // selection wash the same final colour in both places.
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--foreground);
@@ -145,7 +145,7 @@
 .line-selection-group + .line-selection-group {
   margin-top: var(--space-1);
   padding-top: var(--space-2);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
 }
 
 // A click on the folder row toggles every line in the group; the disclosure is
@@ -291,10 +291,7 @@
 }
 
 .line-selection-group-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
 }
 
 .line-selection-children {
@@ -302,7 +299,7 @@
   gap: var(--space-1);
   margin-left: var(--space-3);
   padding-left: var(--space-2);
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--edge-divider);
 }
 
 // Rows are selectable pills rather than a continuous table: selection fills the

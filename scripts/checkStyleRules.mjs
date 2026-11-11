@@ -16,6 +16,11 @@
  * `--design-radius-*`, and the common spacing steps from `--space-*`. The
  * colour picker's hue model is the single documented raw-colour exception.
  *
+ * Design sheets name one of three edge roles — `--edge-control`,
+ * `--edge-divider`, or `--edge-emphasis` — instead of a legacy hairline token.
+ * The same rule now covers the business layer: only the token sheet and theme
+ * packages still read the legacy names.
+ *
  * Frontend actions come from the design system too. A raw `<button>` in
  * `src/frontend/` bypasses the shared variants, pressed states, focus ring, and
  * tooltip contract, so it is rejected in favour of `Button` or `IconButton`.
@@ -48,6 +53,7 @@ const rawButtonFailures = [];
 const fieldRhythmFailures = [];
 const zIndexFailures = [];
 const cssIdSelectorFailures = [];
+const edgeRoleFailures = [];
 const usedZIndexTokens = new Set();
 const definedZIndexTokens = new Set();
 const allowedSize = /^var\(--(?:type|glyph-size)-[a-z0-9-]+\)$/u;
@@ -68,6 +74,10 @@ const zIndexTokenUsage = /--z-[a-z0-9-]+/gu;
 const allowedZIndexDeclaration = /^(?:Z|calc\(Z(?:\s*[+-]\s*(?:\d+|L))+\)|-1|[0-9])$/u;
 const allowedZIndexTokenValue = /^(?:\d+|calc\(Z(?:\s*[+-]\s*\d+)+\))$/u;
 const zIndexTokenMax = 2000;
+// Design sheets name a role, not a legacy hairline token. The business layer
+// still reads the legacy names until its own sheets migrate.
+const legacyEdgeToken =
+  /var\(--(?:panel-border|border-subtle|border-strong|outline|input-border)\)/u;
 
 /** Drop same-line Less comments so declarations inside them are ignored. */
 function stripComments(line) {
@@ -106,6 +116,16 @@ function visit(directory) {
         const location = `${relativePath}:${index + 1}`;
         if (line.includes("!important")) {
           importantFailures.push(`${location}: ${line.trim()}`);
+        }
+        if (
+          (relativePath.startsWith("src/design/") || relativePath.startsWith("src/frontend/")) &&
+          relativePath !== tokenSheet
+        ) {
+          if (legacyEdgeToken.test(stripComments(line))) {
+            edgeRoleFailures.push(
+              `${location}: ${line.trim()} (use --edge-control, --edge-divider, or --edge-emphasis)`,
+            );
+          }
         }
         if (relativePath === tokenSheet) {
           const code = stripComments(line);
@@ -289,6 +309,16 @@ if (spacingFailures.length) {
   process.exitCode = 1;
 } else {
   console.log("PASS style rules: spacing uses tokens");
+}
+
+if (edgeRoleFailures.length) {
+  console.error(
+    "Design sheets must name an edge role (control, divider, emphasis):\n" +
+      edgeRoleFailures.join("\n"),
+  );
+  process.exitCode = 1;
+} else {
+  console.log("PASS style rules: edges use the three role tokens");
 }
 
 if (rawButtonFailures.length) {

@@ -65,8 +65,7 @@
 
 .collab-status {
   margin: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   line-height: var(--line-body);
 }
 
@@ -88,7 +87,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .collab-section h3 {
@@ -141,15 +140,11 @@
 .collab-member-name {
   display: grid;
   flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
 }
 
 .collab-member-location {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .collab-member-swatch {
@@ -160,8 +155,7 @@
 }
 
 .collab-member-role {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 // Match the access dropdown beside it so the dismiss action reads as one row
@@ -192,7 +186,7 @@
   z-index: var(--z-popover);
   min-width: 176px;
   padding: var(--space-1);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
   box-shadow: var(--shadow-overlay-popover);
@@ -239,7 +233,7 @@
   display: grid;
   gap: var(--space-1);
   padding: var(--space-2);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
 }
 
@@ -250,15 +244,11 @@
 }
 
 .collab-unsent-text small {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .collab-pending > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
 }
 
 .collab-cursors {
@@ -388,10 +378,7 @@
 }
 
 .collab-secret-value .collab-field-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
 }
 
 .collab-secret-input {
@@ -427,8 +414,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .collab-invite-preview-heading strong {
@@ -442,8 +428,7 @@
 }
 
 .collab-invite-preview-status {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .collab-invite-preview-empty {

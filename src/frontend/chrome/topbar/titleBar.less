@@ -95,7 +95,7 @@
   // gutter follows them instead of assuming the native 3 × 46px strip.
   padding: 0 calc(var(--window-controls-reserved, 138px) + var(--space-3)) 0 var(--space-3);
   background: var(--panel-header);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--edge-divider);
 }
 
 // Fullscreen modes retain one close button at the frame edge, so the title-bar
@@ -262,7 +262,7 @@
   top: calc(100% + var(--space-1));
   left: 0;
   width: 220px;
-  padding: var(--space-1);
+  padding: var(--space-1) 0;
   border: 1px solid var(--popover-border);
   border-radius: var(--radius-panel);
   background: var(--popover-surface);
@@ -281,7 +281,7 @@
 }
 
 .redux-app-menu-section-button .redux-menu-row-chevron {
-  transition: transform var(--design-dur-disclosure) var(--design-ease-enter);
+  transition: transform var(--design-dur-disclosure) var(--design-ease-spring);
 }
 
 .redux-app-menu-section-button[aria-expanded="true"] .redux-menu-row-chevron {
@@ -294,7 +294,7 @@
   top: calc(100% + var(--space-1));
   left: 0;
   min-width: 250px;
-  padding: var(--space-1);
+  padding: var(--space-1) 0;
   border: 1px solid var(--popover-border);
   border-radius: var(--radius-panel);
   background: var(--popover-surface);
@@ -333,6 +333,42 @@
   to {
     opacity: 1;
     transform: translateX(0) scale(1);
+  }
+}
+
+// The trigger reports `aria-expanded=false` before the surface unmounts, so a
+// closing menu keeps its last section and leaves with a short exit.
+.redux-app-menu-sheet[data-state="closing"],
+.redux-app-menu-popup[data-state="closing"] {
+  animation: redux-app-menu-out var(--design-dur-exit) var(--design-ease-exit) forwards;
+  pointer-events: none;
+}
+
+.redux-app-menu-submenu[data-state="closing"] {
+  animation-name: redux-app-submenu-out;
+}
+
+@keyframes redux-app-menu-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes redux-app-submenu-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-4px) scale(0.98);
   }
 }
 

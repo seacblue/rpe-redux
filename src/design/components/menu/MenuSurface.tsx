@@ -13,11 +13,14 @@ import { Icon } from "../icon/Icon.tsx";
 export function MenuSurface({
   label,
   className = "",
+  state,
   children,
   onKeyDown,
 }: {
   label: string;
   className?: string;
+  /** `closing` keeps the surface mounted for its exit animation. */
+  state?: "open" | "closing";
   children: ReactNode;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
 }) {
@@ -26,6 +29,7 @@ export function MenuSurface({
       className={`redux-menu-surface${className ? ` ${className}` : ""}`}
       role="menu"
       aria-label={label}
+      data-state={state}
       onKeyDown={onKeyDown}
     >
       {children}

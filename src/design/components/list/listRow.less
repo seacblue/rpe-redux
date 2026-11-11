@@ -7,6 +7,9 @@
   border-radius: var(--radius-control);
   color: var(--foreground);
   cursor: var(--app-cursor-pointer);
+  transition:
+    background-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
 }
 
 .redux-list-row:hover:not(.is-selected):not([aria-selected="true"]) {
@@ -15,7 +18,7 @@
 
 .redux-list-row.is-selected,
 .redux-list-row[aria-selected="true"] {
-  background: var(--active-accent-fill);
+  .selected-surface();
 }
 
 .redux-list-row.is-selected:hover,
@@ -33,6 +36,5 @@
 }
 
 .redux-list-row:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  .focus-ring(-2px);
 }

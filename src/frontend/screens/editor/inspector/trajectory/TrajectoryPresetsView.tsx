@@ -8,6 +8,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Disclosure } from "../../../../../design/components/disclosure/Disclosure.tsx";
 import { SchemaControl } from "../../../../../design/components/field/SchemaControl.tsx";
 import { Textarea } from "../../../../../design/components/input/Textarea.tsx";
@@ -245,7 +246,7 @@ function PresetEditor({
           </Button>
         </div>
       )}
-      <div>
+      <FieldRows>
         {preset.parameters.map((entry) => (
           <PresetField
             key={entry.key}
@@ -258,8 +259,8 @@ function PresetEditor({
             onValue={(value) => changeParameter(entry.key, value)}
           />
         ))}
-      </div>
-      <div>
+      </FieldRows>
+      <FieldRows>
         {COMMON_FIELDS.map(([key, label, type, minimum, maximum, step]) => (
           <PresetField
             key={key}
@@ -281,7 +282,7 @@ function PresetEditor({
             onValue={(value) => changeCommon(key, value)}
           />
         ))}
-      </div>
+      </FieldRows>
       <canvas
         ref={canvasRef}
         width={500}

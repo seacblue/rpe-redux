@@ -9,6 +9,7 @@ import { EditorBackdrop } from "./EditorBackdrop.tsx";
 import { useTooltipHost, setShortcutLookup } from "../../design/patterns/TooltipHost.tsx";
 import { ControlHost } from "../../design/controls/ControlHost.tsx";
 import { SettingsWindow } from "../screens/settings/SettingsWindow.tsx";
+import { openSettings } from "../screens/settings/settingsWindowController.ts";
 import { initializeUpdates } from "../screens/settings/updates/updateStore.ts";
 import { preferences } from "../../core/state/preferences.ts";
 import { values } from "../../core/state/values.ts";
@@ -84,6 +85,7 @@ import {
   showDesktopWindow,
   type WindowDisplayMode,
 } from "../platform/desktop/windowDisplay.ts";
+import { readShortcutContext } from "../platform/shortcuts/shortcutContext.ts";
 
 // Install the note-skin bridge at module load so the media layer can resolve
 // bundled skins and announce changes before any skin is read.
@@ -274,6 +276,33 @@ function AppContent() {
     if (ready) {
       window.dispatchEvent(new Event("resize"));
     }
+  }, [ready]);
+
+  // Escape is the last-resort settings entry point. Menus, dialogs, control
+  // popups, onboarding, and text fields all answer first; when none of them
+  // owns the key, the home screen or editor opens Settings.
+  useEffect(() => {
+    if (!ready) {
+      return undefined;
+    }
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) {
+        return;
+      }
+      const context = readShortcutContext(event.target);
+      if (
+        context.modal !== "none" ||
+        context.capturing ||
+        context.textEntry ||
+        context.surface !== null
+      ) {
+        return;
+      }
+      event.preventDefault();
+      openSettings();
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
   }, [ready]);
 
   // The native window starts hidden so the first visible frame already has its

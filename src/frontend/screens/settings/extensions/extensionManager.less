@@ -9,7 +9,7 @@
   .redux-setting[data-setting="extensions-disclaimer-accepted"] {
   margin-bottom: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--panel-border));
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--edge-divider));
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--warning) 8%, transparent);
 }
@@ -17,7 +17,7 @@
 .redux-extension-risk {
   max-width: 720px;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--panel-border));
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--edge-divider));
   border-radius: var(--radius-control);
   color: var(--warning);
   line-height: var(--line-body);
@@ -86,7 +86,7 @@
 
 .redux-extension-install-version {
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   color: var(--accent);
   font-size: var(--type-caption);
@@ -102,8 +102,7 @@
 
 .redux-extension-install-facts dt,
 .redux-extension-error-facts dt {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-extension-install-facts dd,
@@ -127,13 +126,12 @@
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-control);
   background: var(--input-surface);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-extension-install-risk {
   padding: var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--panel-border));
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--edge-divider));
   border-radius: var(--radius-control);
   color: var(--warning);
 }
@@ -143,7 +141,7 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--input-surface);
 }
@@ -170,8 +168,7 @@
 
 .redux-extension-consent-group h5 {
   margin: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   font-weight: 600;
 }
 
@@ -189,16 +186,16 @@
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
 }
 
 .redux-extension-consent-row[data-risk="write"] {
-  border-color: color-mix(in srgb, var(--warning) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--edge-divider));
 }
 
 .redux-extension-consent-row[data-risk="sensitive"] {
-  border-color: color-mix(in srgb, var(--danger) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--edge-divider));
 }
 
 .redux-extension-consent-check {
@@ -230,19 +227,18 @@
 .redux-extension-consent-badge {
   flex: none;
   padding: 0 var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: 999px;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-extension-consent-badge[data-risk="write"] {
-  border-color: color-mix(in srgb, var(--warning) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--edge-divider));
   color: var(--warning);
 }
 
 .redux-extension-consent-badge[data-risk="sensitive"] {
-  border-color: color-mix(in srgb, var(--danger) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--edge-divider));
   color: var(--danger);
 }
 
@@ -260,15 +256,14 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--panel-border));
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--edge-divider));
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
 
 .redux-extension-error-label {
   margin: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   font-weight: 600;
 }
 
@@ -292,7 +287,7 @@
 
 .redux-extension-card {
   padding: var(--space-4);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
 }
@@ -335,7 +330,7 @@
 .redux-extension-drag-handle:hover:not(:disabled) {
   color: var(--foreground);
   background: var(--surface-hover);
-  border-color: var(--panel-border);
+  border-color: var(--edge-divider);
 }
 
 .redux-extension-drag-handle:focus-visible {
@@ -413,27 +408,26 @@
 
 .redux-extension-capability {
   padding: 2px var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: 999px;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 /* Capability badges are display-only; colour is not a trust grant. */
 .redux-extension-capability[data-tone="positive"] {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--edge-divider));
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
 
 .redux-extension-capability[data-tone="warning"] {
-  border-color: color-mix(in srgb, var(--warning) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--edge-divider));
   background: color-mix(in srgb, var(--warning) 10%, transparent);
   color: var(--warning);
 }
 
 .redux-extension-capability[data-tone="danger"] {
-  border-color: color-mix(in srgb, var(--danger) 55%, var(--panel-border));
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--edge-divider));
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: var(--danger);
 }
@@ -456,7 +450,7 @@
   gap: var(--space-3);
   margin-top: var(--space-3);
   padding-top: var(--space-3);
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .redux-extension-details h3 {
@@ -481,7 +475,7 @@
 .redux-extension-review {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .redux-extension-review > summary {
@@ -502,8 +496,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   margin: var(--space-1) 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   overflow-wrap: anywhere;
 }
 
@@ -523,23 +516,21 @@
 
 .redux-extension-review-capabilities code {
   padding: 1px var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: 999px;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-extension-review-file {
   margin-top: var(--space-2);
   padding: var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
 }
 
 .redux-extension-review-file > summary {
   cursor: pointer;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   overflow-wrap: anywhere;
 }
 

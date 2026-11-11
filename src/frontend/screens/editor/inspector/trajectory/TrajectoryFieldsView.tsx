@@ -9,6 +9,7 @@ import { useState, type ChangeEvent } from "react";
 import { t, type MessageKey } from "../../../../../i18n/index.ts";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
 import { BeatField } from "../beat/BeatField.tsx";
@@ -216,150 +217,152 @@ export function TrajectoryFieldsView({
   };
   return (
     <div className="trajectory-fields">
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.inspector.field.startTime")}
-        control={(id) => (
-          <BeatField
-            id={id}
-            value={startTime}
-            dataField="startTime"
-            onCommit={(beat) => update("startTime", beat)}
-          />
-        )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.inspector.field.endTime")}
-        control={(id) => (
-          <BeatField
-            id={id}
-            value={endTime}
-            dataField="endTime"
-            onCommit={(beat) => update("endTime", beat)}
-          />
-        )}
-      />
-      <Field
-        fieldKey="mode"
-        label={t("editorPanels.trajectory.field.mode")}
-        value={values.mode}
-        onChange={(value) => update("mode", value)}
-        choices={[
-          ["parametric", t("editorPanels.trajectory.mode.parametric")],
-          ["polar", t("editorPanels.trajectory.mode.polar")],
-        ]}
-      />
-      {EXPRESSION_FIELDS.map(([key, labelKey]) => {
-        return (
-          <Field
-            key={key}
-            fieldKey={key}
-            label={t(labelKey)}
-            value={values[key]}
-            onChange={(value) => update(key, value)}
-            hidden={
-              key === "xExpression" ||
-              key === "yExpression" ||
-              key === "parameterStart" ||
-              key === "parameterEnd"
-                ? options.mode === "polar"
-                : key === "radiusExpression" || key === "angleStart" || key === "angleEnd"
-                  ? options.mode !== "polar"
-                  : false
-            }
-            disabled={key === "rotationExpression" && Boolean(options.tangentRotation)}
-          />
-        );
-      })}
-      <Field
-        fieldKey="tangentRotation"
-        label={t("editorPanels.trajectory.field.tangentRotation")}
-        value={values.tangentRotation}
-        type="checkbox"
-        onChange={(value) => update("tangentRotation", value)}
-      />
-      {EASING_FIELDS.map(([key, labelKey]) => {
-        return (
-          <Field
-            key={key}
-            fieldKey={key}
-            label={t(labelKey)}
-            value={values[key]}
-            type="number"
-            min={1}
-            max={29}
-            step={1}
-            onChange={(value) => update(key, value)}
-          />
-        );
-      })}
-      {COMMON_FIELDS.map(([key, labelKey, type, min, max, step]) => {
-        return key === "seed" ? (
-          <SeedField
-            key={key}
-            label={t(labelKey)}
-            value={values[key]}
-            onChange={(value) => update(key, value)}
-          />
-        ) : (
-          <Field
-            key={key}
-            fieldKey={key}
-            label={t(labelKey)}
-            value={values[key]}
-            type={type}
-            min={min}
-            max={max}
-            step={step}
-            onChange={(value) => update(key, value)}
-          />
-        );
-      })}
-      <Field
-        fieldKey="parametersJson"
-        label={t("editorPanels.trajectory.field.parametersJson")}
-        value={values.parametersJson}
-        tipDescription={t("editorPanels.trajectory.parametersJsonHint")}
-        onChange={(value) => update("parametersJson", value)}
-      />
-      <Field
-        fieldKey="segments"
-        label={t("editorPanels.trajectory.field.segments")}
-        value={values.segments}
-        type="number"
-        min={4}
-        max={8192}
-        step={1}
-        onChange={(value) => update("segments", value)}
-      />
-      <Field
-        fieldKey="simplify"
-        label={t("editorPanels.trajectory.field.simplify")}
-        value={values.simplify}
-        type="checkbox"
-        onChange={(value) => update("simplify", value)}
-      />
-      <Field
-        fieldKey="tolerance"
-        label={t("editorPanels.trajectory.field.tolerance")}
-        value={values.tolerance}
-        type="number"
-        min={0.001}
-        max={10000}
-        step={0.1}
-        disabled={!splitSettings.simplify}
-        onChange={(value) => update("tolerance", value)}
-      />
-      <Field
-        fieldKey="replace"
-        label={t("editorPanels.trajectory.field.replace")}
-        value={values.replace}
-        type="checkbox"
-        onChange={(value) => update("replace", value)}
-      />
+      <FieldRows>
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.inspector.field.startTime")}
+          control={(id) => (
+            <BeatField
+              id={id}
+              value={startTime}
+              dataField="startTime"
+              onCommit={(beat) => update("startTime", beat)}
+            />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.inspector.field.endTime")}
+          control={(id) => (
+            <BeatField
+              id={id}
+              value={endTime}
+              dataField="endTime"
+              onCommit={(beat) => update("endTime", beat)}
+            />
+          )}
+        />
+        <Field
+          fieldKey="mode"
+          label={t("editorPanels.trajectory.field.mode")}
+          value={values.mode}
+          onChange={(value) => update("mode", value)}
+          choices={[
+            ["parametric", t("editorPanels.trajectory.mode.parametric")],
+            ["polar", t("editorPanels.trajectory.mode.polar")],
+          ]}
+        />
+        {EXPRESSION_FIELDS.map(([key, labelKey]) => {
+          return (
+            <Field
+              key={key}
+              fieldKey={key}
+              label={t(labelKey)}
+              value={values[key]}
+              onChange={(value) => update(key, value)}
+              hidden={
+                key === "xExpression" ||
+                key === "yExpression" ||
+                key === "parameterStart" ||
+                key === "parameterEnd"
+                  ? options.mode === "polar"
+                  : key === "radiusExpression" || key === "angleStart" || key === "angleEnd"
+                    ? options.mode !== "polar"
+                    : false
+              }
+              disabled={key === "rotationExpression" && Boolean(options.tangentRotation)}
+            />
+          );
+        })}
+        <Field
+          fieldKey="tangentRotation"
+          label={t("editorPanels.trajectory.field.tangentRotation")}
+          value={values.tangentRotation}
+          type="checkbox"
+          onChange={(value) => update("tangentRotation", value)}
+        />
+        {EASING_FIELDS.map(([key, labelKey]) => {
+          return (
+            <Field
+              key={key}
+              fieldKey={key}
+              label={t(labelKey)}
+              value={values[key]}
+              type="number"
+              min={1}
+              max={29}
+              step={1}
+              onChange={(value) => update(key, value)}
+            />
+          );
+        })}
+        {COMMON_FIELDS.map(([key, labelKey, type, min, max, step]) => {
+          return key === "seed" ? (
+            <SeedField
+              key={key}
+              label={t(labelKey)}
+              value={values[key]}
+              onChange={(value) => update(key, value)}
+            />
+          ) : (
+            <Field
+              key={key}
+              fieldKey={key}
+              label={t(labelKey)}
+              value={values[key]}
+              type={type}
+              min={min}
+              max={max}
+              step={step}
+              onChange={(value) => update(key, value)}
+            />
+          );
+        })}
+        <Field
+          fieldKey="parametersJson"
+          label={t("editorPanels.trajectory.field.parametersJson")}
+          value={values.parametersJson}
+          tipDescription={t("editorPanels.trajectory.parametersJsonHint")}
+          onChange={(value) => update("parametersJson", value)}
+        />
+        <Field
+          fieldKey="segments"
+          label={t("editorPanels.trajectory.field.segments")}
+          value={values.segments}
+          type="number"
+          min={4}
+          max={8192}
+          step={1}
+          onChange={(value) => update("segments", value)}
+        />
+        <Field
+          fieldKey="simplify"
+          label={t("editorPanels.trajectory.field.simplify")}
+          value={values.simplify}
+          type="checkbox"
+          onChange={(value) => update("simplify", value)}
+        />
+        <Field
+          fieldKey="tolerance"
+          label={t("editorPanels.trajectory.field.tolerance")}
+          value={values.tolerance}
+          type="number"
+          min={0.001}
+          max={10000}
+          step={0.1}
+          disabled={!splitSettings.simplify}
+          onChange={(value) => update("tolerance", value)}
+        />
+        <Field
+          fieldKey="replace"
+          label={t("editorPanels.trajectory.field.replace")}
+          value={values.replace}
+          type="checkbox"
+          onChange={(value) => update("replace", value)}
+        />
+      </FieldRows>
     </div>
   );
 }

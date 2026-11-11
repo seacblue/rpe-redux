@@ -9,6 +9,7 @@ import { useLayoutEffect, useMemo, useState } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { FieldReset } from "../../../../../design/components/field/FieldReset.tsx";
 import { SchemaControl } from "../../../../../design/components/field/SchemaControl.tsx";
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
@@ -188,78 +189,80 @@ export function MultiEditForm({
   return (
     <div className="multi-edit-form">
       {noiseActivation && <p className="hint">{t("editorPanels.linePanel.noiseActiveHint")}</p>}
-      <Field
-        title={t("editorPanels.multiEdit.field")}
-        value={values.field}
-        options={fields}
-        onChange={(field) => update({ field })}
-      />
-      <Field
-        title={t("editorPanels.multiEdit.operation")}
-        value={values.operation}
-        options={operations}
-        onChange={(operation) => update({ operation })}
-      />
-      <Field
-        title={t("editorPanels.multiEdit.distribution.lower")}
-        value={values.lower}
-        onChange={(lower) => update({ lower })}
-      />
-      <Field
-        title={t("editorPanels.multiEdit.distribution.upper")}
-        value={values.upper}
-        onChange={(upper) => update({ upper })}
-      />
-      <EasingField
-        label={t("editorPanels.multiEdit.distribution.easingType")}
-        value={Number(values.easingType) || 1}
-        onChange={(easingType) => update({ easingType })}
-      />
-      <Field
-        title={t("editorPanels.multiEdit.distribution.cycle")}
-        value={values.cycle}
-        onChange={(cycle) => update({ cycle })}
-      />
-      <Field
-        title={t("editorPanels.multiEdit.distribution.disturbance")}
-        value={values.disturbance}
-        onChange={(disturbance) => update({ disturbance })}
-      />
-      {multiEventEdit && (
+      <FieldRows>
         <Field
-          title={t("editorPanels.multiEdit.applicationMode")}
-          value={values.eventApplicationMode ?? "per-line"}
-          options={[
-            ["per-line", t("editorPanels.multiEdit.applicationMode.perLine")],
-            ["global", t("editorPanels.multiEdit.applicationMode.global")],
-          ]}
-          onChange={(eventApplicationMode) => update({ eventApplicationMode })}
+          title={t("editorPanels.multiEdit.field")}
+          value={values.field}
+          options={fields}
+          onChange={(field) => update({ field })}
         />
-      )}
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.multiEdit.previewToggle")}
-        reset={
-          <FieldReset
-            field="result-ghost"
-            label={t("editorPanels.multiEdit.previewToggle")}
-            dirty={!previewEnabled}
-            onReset={() => setPreviewEnabled(true)}
-          />
-        }
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={previewEnabled}
-            onChange={(event) => {
-              setPreviewEnabled(event.currentTarget.checked);
-              onChange(values);
-            }}
+        <Field
+          title={t("editorPanels.multiEdit.operation")}
+          value={values.operation}
+          options={operations}
+          onChange={(operation) => update({ operation })}
+        />
+        <Field
+          title={t("editorPanels.multiEdit.distribution.lower")}
+          value={values.lower}
+          onChange={(lower) => update({ lower })}
+        />
+        <Field
+          title={t("editorPanels.multiEdit.distribution.upper")}
+          value={values.upper}
+          onChange={(upper) => update({ upper })}
+        />
+        <EasingField
+          label={t("editorPanels.multiEdit.distribution.easingType")}
+          value={Number(values.easingType) || 1}
+          onChange={(easingType) => update({ easingType })}
+        />
+        <Field
+          title={t("editorPanels.multiEdit.distribution.cycle")}
+          value={values.cycle}
+          onChange={(cycle) => update({ cycle })}
+        />
+        <Field
+          title={t("editorPanels.multiEdit.distribution.disturbance")}
+          value={values.disturbance}
+          onChange={(disturbance) => update({ disturbance })}
+        />
+        {multiEventEdit && (
+          <Field
+            title={t("editorPanels.multiEdit.applicationMode")}
+            value={values.eventApplicationMode ?? "per-line"}
+            options={[
+              ["per-line", t("editorPanels.multiEdit.applicationMode.perLine")],
+              ["global", t("editorPanels.multiEdit.applicationMode.global")],
+            ]}
+            onChange={(eventApplicationMode) => update({ eventApplicationMode })}
           />
         )}
-      />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.multiEdit.previewToggle")}
+          reset={
+            <FieldReset
+              field="result-ghost"
+              label={t("editorPanels.multiEdit.previewToggle")}
+              dirty={!previewEnabled}
+              onReset={() => setPreviewEnabled(true)}
+            />
+          }
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={previewEnabled}
+              onChange={(event) => {
+                setPreviewEnabled(event.currentTarget.checked);
+                onChange(values);
+              }}
+            />
+          )}
+        />
+      </FieldRows>
       {/* The row mounts only with a message, so no empty hint reserves space. */}
       {resultMessage !== "" && (
         <InlineAlert

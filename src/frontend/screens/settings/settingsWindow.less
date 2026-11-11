@@ -55,7 +55,7 @@
   gap: var(--space-5);
   padding: var(--space-4) var(--space-5);
   background: var(--panel-header);
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--edge-divider);
   overflow: hidden;
 }
 
@@ -180,7 +180,7 @@
 .redux-settings-panel:not([hidden]) ~ .redux-settings-panel:not([hidden]) {
   margin-top: var(--space-7);
   padding-top: var(--space-6);
-  border-top: 1px solid var(--border-strong);
+  border-top: 1px solid var(--edge-emphasis);
 }
 
 @keyframes redux-settings-panel-in {
@@ -218,7 +218,7 @@
 .redux-app-root .redux-settings {
   width: min(1120px, calc(100vw - 64px));
   height: min(810px, calc(100vh - 64px));
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-emphasis);
   box-shadow: var(--shadow-panel);
 }
 

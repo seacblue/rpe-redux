@@ -9,6 +9,7 @@ import { groupedSettings, settingText, settingsSearchPath } from "./settingsCata
 import type { SettingsSearchPathEntry } from "./settingsCatalog.ts";
 import type { SettingDefinition, SettingValue } from "../../../core/settings/types.ts";
 import { FieldRow } from "../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../design/components/field/FieldRows.tsx";
 import { SettingControl } from "./SettingControl.tsx";
 import { SettingReset } from "./SettingReset.tsx";
 import { settingControlFor, settingGroupColumnsFor } from "./settingsContributions.ts";
@@ -172,15 +173,17 @@ export function SettingsFields({
                 {Columns && <Columns />}
               </>
             )}
-            {group.entries.map((field) => (
-              <SettingRow
-                key={field.key}
-                field={field}
-                shown={shown}
-                controlFor={controlFor}
-                onCommitValue={onCommitValue}
-              />
-            ))}
+            <FieldRows gap="none" className="redux-setting-rows">
+              {group.entries.map((field) => (
+                <SettingRow
+                  key={field.key}
+                  field={field}
+                  shown={shown}
+                  controlFor={controlFor}
+                  onCommitValue={onCommitValue}
+                />
+              ))}
+            </FieldRows>
           </div>
         );
       })}

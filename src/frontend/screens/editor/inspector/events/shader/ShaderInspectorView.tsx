@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { InlineAlert } from "../../../../../../design/components/alert/InlineAlert.tsx";
 import { FieldRow } from "../../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../../design/components/input/Input.tsx";
 import { Button } from "../../../../../../design/components/button/Button.tsx";
 import { compareBeats, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
@@ -273,106 +274,110 @@ export function ShaderInspectorView({
 
   return (
     <div className="shader-inspector">
-      {beatInput(
-        t("editorPanels.inspector.field.startTime"),
-        event.startTime,
-        (startTime) => {
-          change(
-            t("editorPanels.inspector.shader.modify", {
-              field: t("editorPanels.inspector.field.startTime"),
-            }),
-            (current) => ({
-              ...current,
-              startTime,
-            }),
-          );
-        },
-        { dataField: "startTime" },
-      )}
-      {beatInput(
-        t("editorPanels.inspector.field.endTime"),
-        event.endTime,
-        (endTime) => {
-          change(
-            t("editorPanels.inspector.shader.modify", {
-              field: t("editorPanels.inspector.field.endTime"),
-            }),
-            (current) => ({
-              ...current,
-              endTime,
-            }),
-          );
-        },
-        { dataField: "endTime" },
-      )}
-      <SelectField
-        title={t("editorPanels.inspector.field.type")}
-        value={identity}
-        options={shaderChoices}
-        onChange={(name) =>
-          safely(() => {
-            setParameterState("");
-            setParameter("");
-            setOpenState(false);
-            setOpen(false);
-            change(t("editorPanels.inspector.shader.modifyType"), (current) => ({
-              ...current,
-              ...(shaderAssetPath(name) ? { shader: name, clone: false } : shaderTypeFields(name)),
-              vars: {},
-            }));
-          })
-        }
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.inspector.shader.global")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={Boolean(event.global)}
-            onChange={(changeEvent) =>
-              safely(() =>
-                change(t("editorPanels.inspector.shader.modifyGlobal"), (current) => ({
-                  ...current,
-                  global: changeEvent.currentTarget.checked,
-                })),
-              )
-            }
-          />
+      <FieldRows>
+        {beatInput(
+          t("editorPanels.inspector.field.startTime"),
+          event.startTime,
+          (startTime) => {
+            change(
+              t("editorPanels.inspector.shader.modify", {
+                field: t("editorPanels.inspector.field.startTime"),
+              }),
+              (current) => ({
+                ...current,
+                startTime,
+              }),
+            );
+          },
+          { dataField: "startTime" },
         )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.inspector.shader.autoAlign")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={session.shaderAutoAlign !== false}
-            onChange={(changeEvent) => {
-              setAutoAlign(changeEvent.currentTarget.checked);
-            }}
-          />
+        {beatInput(
+          t("editorPanels.inspector.field.endTime"),
+          event.endTime,
+          (endTime) => {
+            change(
+              t("editorPanels.inspector.shader.modify", {
+                field: t("editorPanels.inspector.field.endTime"),
+              }),
+              (current) => ({
+                ...current,
+                endTime,
+              }),
+            );
+          },
+          { dataField: "endTime" },
         )}
-      />
-      {input(
-        t("editorPanels.inspector.shader.order"),
-        Number(event.order ?? 0),
-        (text) => {
-          if (!text.trim() || !Number.isFinite(Number(text))) {
-            throw new Error(t("editorPanels.inspector.shader.orderNumber"));
+        <SelectField
+          title={t("editorPanels.inspector.field.type")}
+          value={identity}
+          options={shaderChoices}
+          onChange={(name) =>
+            safely(() => {
+              setParameterState("");
+              setParameter("");
+              setOpenState(false);
+              setOpen(false);
+              change(t("editorPanels.inspector.shader.modifyType"), (current) => ({
+                ...current,
+                ...(shaderAssetPath(name)
+                  ? { shader: name, clone: false }
+                  : shaderTypeFields(name)),
+                vars: {},
+              }));
+            })
           }
-          const value = clamp(Math.round(Number(text)), 0, 10000);
-          change(t("editorPanels.inspector.shader.modifyOrder"), (current) => ({
-            ...current,
-            order: value,
-          }));
-        },
-        { kind: "number", step: 1, min: 0, max: 10000 },
-      )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.inspector.shader.global")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={Boolean(event.global)}
+              onChange={(changeEvent) =>
+                safely(() =>
+                  change(t("editorPanels.inspector.shader.modifyGlobal"), (current) => ({
+                    ...current,
+                    global: changeEvent.currentTarget.checked,
+                  })),
+                )
+              }
+            />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          label={t("editorPanels.inspector.shader.autoAlign")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={session.shaderAutoAlign !== false}
+              onChange={(changeEvent) => {
+                setAutoAlign(changeEvent.currentTarget.checked);
+              }}
+            />
+          )}
+        />
+        {input(
+          t("editorPanels.inspector.shader.order"),
+          Number(event.order ?? 0),
+          (text) => {
+            if (!text.trim() || !Number.isFinite(Number(text))) {
+              throw new Error(t("editorPanels.inspector.shader.orderNumber"));
+            }
+            const value = clamp(Math.round(Number(text)), 0, 10000);
+            change(t("editorPanels.inspector.shader.modifyOrder"), (current) => ({
+              ...current,
+              order: value,
+            }));
+          },
+          { kind: "number", step: 1, min: 0, max: 10000 },
+        )}
+      </FieldRows>
       {loading && (
         <p className="hint shader-loading" role="status">
           {t("editorPanels.inspector.shader.loading")}
@@ -459,71 +464,73 @@ export function ShaderInspectorView({
                     index: index + 1,
                   })}
                 </strong>
-                {fields.map(([key, fieldTitle]) => {
-                  if (key === "startTime" || key === "endTime") {
-                    const segmentStart = segment.startTime;
-                    const segmentEnd = segment.endTime;
-                    return beatInput(
+                <FieldRows>
+                  {fields.map(([key, fieldTitle]) => {
+                    if (key === "startTime" || key === "endTime") {
+                      const segmentStart = segment.startTime;
+                      const segmentEnd = segment.endTime;
+                      return beatInput(
+                        t("editorPanels.inspector.shader.parameterField", { field: fieldTitle }),
+                        segment[key] as Beat,
+                        (beat) => {
+                          updateTrack(
+                            t("editorPanels.inspector.shader.modifyParameter", {
+                              field: fieldTitle,
+                            }),
+                            (segments) =>
+                              segments.map((entry, position) =>
+                                position === index ? { ...entry, [key]: beat } : entry,
+                              ),
+                          );
+                        },
+                        // The parameter's end cannot precede its start.
+                        key === "endTime"
+                          ? {
+                              accepts: (beat) => compareBeats(beat, segmentStart) >= 0,
+                              dataField: key,
+                            }
+                          : {
+                              accepts: (beat) => compareBeats(segmentEnd, beat) >= 0,
+                              dataField: key,
+                            },
+                      );
+                    }
+                    const raw = segment[key];
+                    const isArray = Array.isArray(raw);
+                    return input(
                       t("editorPanels.inspector.shader.parameterField", { field: fieldTitle }),
-                      segment[key] as Beat,
-                      (beat) => {
+                      isArray ? raw.join(", ") : typeof raw === "number" ? raw : String(raw ?? ""),
+                      (text) => {
+                        const value = parseShaderValue(text, definition.dimensions);
                         updateTrack(
-                          t("editorPanels.inspector.shader.modifyParameter", {
-                            field: fieldTitle,
-                          }),
+                          t("editorPanels.inspector.shader.modifyParameter", { field: fieldTitle }),
                           (segments) =>
                             segments.map((entry, position) =>
-                              position === index ? { ...entry, [key]: beat } : entry,
+                              position === index ? { ...entry, [key]: value } : entry,
                             ),
                         );
                       },
-                      // The parameter's end cannot precede its start.
-                      key === "endTime"
-                        ? {
-                            accepts: (beat) => compareBeats(beat, segmentStart) >= 0,
-                            dataField: key,
-                          }
-                        : {
-                            accepts: (beat) => compareBeats(segmentEnd, beat) >= 0,
-                            dataField: key,
-                          },
+                      {
+                        kind: definition.dimensions === 1 ? "number" : "text",
+                      },
                     );
-                  }
-                  const raw = segment[key];
-                  const isArray = Array.isArray(raw);
-                  return input(
-                    t("editorPanels.inspector.shader.parameterField", { field: fieldTitle }),
-                    isArray ? raw.join(", ") : typeof raw === "number" ? raw : String(raw ?? ""),
-                    (text) => {
-                      const value = parseShaderValue(text, definition.dimensions);
-                      updateTrack(
-                        t("editorPanels.inspector.shader.modifyParameter", { field: fieldTitle }),
-                        (segments) =>
-                          segments.map((entry, position) =>
-                            position === index ? { ...entry, [key]: value } : entry,
-                          ),
-                      );
-                    },
-                    {
-                      kind: definition.dimensions === 1 ? "number" : "text",
-                    },
-                  );
-                })}
-                <EasingField
-                  label={t("editorPanels.inspector.shader.parameterEasing")}
-                  value={Number(segment.easingType ?? 1)}
-                  onChange={(easing) =>
-                    safely(() => {
-                      updateTrack(
-                        t("editorPanels.inspector.shader.modifyParameterEasing"),
-                        (entries) =>
-                          entries.map((entry, position) =>
-                            position === index ? { ...entry, easingType: easing } : entry,
-                          ),
-                      );
-                    })
-                  }
-                />
+                  })}
+                  <EasingField
+                    label={t("editorPanels.inspector.shader.parameterEasing")}
+                    value={Number(segment.easingType ?? 1)}
+                    onChange={(easing) =>
+                      safely(() => {
+                        updateTrack(
+                          t("editorPanels.inspector.shader.modifyParameterEasing"),
+                          (entries) =>
+                            entries.map((entry, position) =>
+                              position === index ? { ...entry, easingType: easing } : entry,
+                            ),
+                        );
+                      })
+                    }
+                  />
+                </FieldRows>
                 <EasingPreview event={segment} />
                 <Button
                   type="button"

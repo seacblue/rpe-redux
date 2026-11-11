@@ -22,7 +22,7 @@
 
 .redux-script-card {
   background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   padding: var(--space-2-5);
 }
@@ -61,7 +61,7 @@
 .redux-parameter-fields {
   display: grid;
   gap: 0;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   overflow: hidden;
 }
@@ -93,8 +93,7 @@
 }
 
 .redux-parameter-line-hint {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   line-height: var(--line-body);
 }
 
@@ -119,7 +118,7 @@
   gap: var(--space-2);
   margin-top: var(--space-3);
   padding: var(--space-3) 0 var(--space-5);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
   background: var(--surface-raised);
 }
 

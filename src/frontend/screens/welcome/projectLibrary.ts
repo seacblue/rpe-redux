@@ -107,6 +107,7 @@ export class ProjectHome {
     this.cards = new HomeProjectCardsAdapter({
       onOpenProject: (id) => openProject(id).catch(reportError),
       onExportProject: (id) => exportProject(id).catch(reportError),
+      onRenameProject: (project) => this.library.edit(project),
       onDelete: (project) => this.library.remove(project),
       onSort: (sort: LibrarySort) => {
         void this.library.setSort(sort).catch(reportError);

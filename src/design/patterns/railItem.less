@@ -38,8 +38,7 @@
   &.is-selected,
   &[aria-pressed="true"],
   &[aria-current="page"] {
-    background: var(--active-accent-fill);
-    color: var(--active-accent);
+    .selected-surface();
 
     .redux-icon {
       --icon-color: var(--active-accent);
@@ -47,8 +46,7 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: -2px;
+    .focus-ring(-2px);
   }
 
   &:disabled {

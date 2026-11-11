@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { EasingCurveEditor } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
@@ -134,157 +135,159 @@ export function SamplingInspector() {
 
   return (
     <>
-      <FieldRow
-        layout="inline"
-        density="compact"
-        label={t("editorPanels.sampling.guides")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={settings.guidesEnabled}
-            onChange={(event) =>
-              updateSamplingSettings({ guidesEnabled: event.currentTarget.checked })
-            }
-          />
-        )}
-      />
-      <FieldRow
-        layout="inline"
-        density="compact"
-        htmlFor="sampling-guide-opacity"
-        label={t("editorPanels.sampling.guideOpacity")}
-        disabled={!settings.guidesEnabled}
-        control={
-          <SliderField
-            id="sampling-guide-opacity"
-            min={SAMPLING_GUIDE_OPACITY_MIN}
-            max={SAMPLING_GUIDE_OPACITY_MAX}
-            step={1}
-            value={settings.guideOpacity}
-            percentage
-            disabled={!settings.guidesEnabled}
-            aria-label={t("editorPanels.sampling.guideOpacity")}
-            onChange={(event) =>
-              updateSamplingSettings({ guideOpacity: Number(event.currentTarget.value) })
-            }
-          />
-        }
-      />
-      {(axis === "x" || axis === "y") && (
+      <FieldRows>
         <FieldRow
           layout="inline"
           density="compact"
-          htmlFor="sampling-guide-step"
-          label={t("editorPanels.sampling.guideStep")}
+          label={t("editorPanels.sampling.guides")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={settings.guidesEnabled}
+              onChange={(event) =>
+                updateSamplingSettings({ guidesEnabled: event.currentTarget.checked })
+              }
+            />
+          )}
+        />
+        <FieldRow
+          layout="inline"
+          density="compact"
+          htmlFor="sampling-guide-opacity"
+          label={t("editorPanels.sampling.guideOpacity")}
           disabled={!settings.guidesEnabled}
           control={
             <SliderField
-              id="sampling-guide-step"
-              min={SAMPLING_GUIDE_MIN}
-              max={SAMPLING_GUIDE_MAX}
+              id="sampling-guide-opacity"
+              min={SAMPLING_GUIDE_OPACITY_MIN}
+              max={SAMPLING_GUIDE_OPACITY_MAX}
               step={1}
-              value={settings.guideStep}
+              value={settings.guideOpacity}
+              percentage
               disabled={!settings.guidesEnabled}
-              aria-label={t("editorPanels.sampling.guideStep")}
+              aria-label={t("editorPanels.sampling.guideOpacity")}
               onChange={(event) =>
-                updateSamplingSettings({ guideStep: Number(event.currentTarget.value) })
+                updateSamplingSettings({ guideOpacity: Number(event.currentTarget.value) })
               }
             />
           }
         />
-      )}
-      {axis === "rotation" && (
-        <FieldRow
-          layout="inline"
-          density="compact"
-          htmlFor="sampling-angle-guide"
-          label={t("editorPanels.sampling.angleGuide")}
-          disabled={!settings.guidesEnabled}
-          control={
-            <SliderField
-              id="sampling-angle-guide"
-              min={SAMPLING_ANGLE_MIN}
-              max={SAMPLING_ANGLE_MAX}
-              step={1}
-              value={settings.angleGuideStep}
-              disabled={!settings.guidesEnabled}
-              aria-label={t("editorPanels.sampling.angleGuide")}
-              onChange={(event) =>
-                updateSamplingSettings({ angleGuideStep: Number(event.currentTarget.value) })
-              }
-            />
-          }
-        />
-      )}
-      {axis === "alpha" && (
-        <FieldRow
-          layout="inline"
-          density="compact"
-          htmlFor="sampling-alpha-guide"
-          label={t("editorPanels.sampling.alphaGuide")}
-          disabled={!settings.guidesEnabled}
-          control={
-            <SliderField
-              id="sampling-alpha-guide"
-              min={SAMPLING_ALPHA_MIN}
-              max={SAMPLING_ALPHA_MAX}
-              step={1}
-              value={settings.alphaGuideStep}
-              disabled={!settings.guidesEnabled}
-              aria-label={t("editorPanels.sampling.alphaGuide")}
-              onChange={(event) =>
-                updateSamplingSettings({ alphaGuideStep: Number(event.currentTarget.value) })
-              }
-            />
-          }
-        />
-      )}
-      {axis === "speed" && (
-        <FieldRow
-          layout="inline"
-          density="compact"
-          htmlFor="sampling-speed-guide"
-          label={t("editorPanels.sampling.speedGuide")}
-          disabled={!settings.guidesEnabled}
-          control={
-            <SliderField
-              id="sampling-speed-guide"
-              min={SAMPLING_SPEED_MIN}
-              max={SAMPLING_SPEED_MAX}
-              step={0.1}
-              value={settings.speedGuideStep}
-              disabled={!settings.guidesEnabled}
-              aria-label={t("editorPanels.sampling.speedGuide")}
-              onChange={(event) =>
-                updateSamplingSettings({ speedGuideStep: Number(event.currentTarget.value) })
-              }
-            />
-          }
-        />
-      )}
-      {(axis === "x" || axis === "y") && (
-        <>
+        {(axis === "x" || axis === "y") && (
           <FieldRow
             layout="inline"
             density="compact"
-            label={t("editorPanels.sampling.xyBinding")}
-            description={t("editorPanels.sampling.xyBindingHint")}
-            disabled={globalXYBinding}
-            control={(id) => (
-              <Input
-                id={id}
-                type="checkbox"
-                checked={globalXYBinding || settings.xyBinding}
-                disabled={globalXYBinding}
+            htmlFor="sampling-guide-step"
+            label={t("editorPanels.sampling.guideStep")}
+            disabled={!settings.guidesEnabled}
+            control={
+              <SliderField
+                id="sampling-guide-step"
+                min={SAMPLING_GUIDE_MIN}
+                max={SAMPLING_GUIDE_MAX}
+                step={1}
+                value={settings.guideStep}
+                disabled={!settings.guidesEnabled}
+                aria-label={t("editorPanels.sampling.guideStep")}
                 onChange={(event) =>
-                  updateSamplingSettings({ xyBinding: event.currentTarget.checked })
+                  updateSamplingSettings({ guideStep: Number(event.currentTarget.value) })
                 }
               />
-            )}
+            }
           />
-        </>
-      )}
+        )}
+        {axis === "rotation" && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="sampling-angle-guide"
+            label={t("editorPanels.sampling.angleGuide")}
+            disabled={!settings.guidesEnabled}
+            control={
+              <SliderField
+                id="sampling-angle-guide"
+                min={SAMPLING_ANGLE_MIN}
+                max={SAMPLING_ANGLE_MAX}
+                step={1}
+                value={settings.angleGuideStep}
+                disabled={!settings.guidesEnabled}
+                aria-label={t("editorPanels.sampling.angleGuide")}
+                onChange={(event) =>
+                  updateSamplingSettings({ angleGuideStep: Number(event.currentTarget.value) })
+                }
+              />
+            }
+          />
+        )}
+        {axis === "alpha" && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="sampling-alpha-guide"
+            label={t("editorPanels.sampling.alphaGuide")}
+            disabled={!settings.guidesEnabled}
+            control={
+              <SliderField
+                id="sampling-alpha-guide"
+                min={SAMPLING_ALPHA_MIN}
+                max={SAMPLING_ALPHA_MAX}
+                step={1}
+                value={settings.alphaGuideStep}
+                disabled={!settings.guidesEnabled}
+                aria-label={t("editorPanels.sampling.alphaGuide")}
+                onChange={(event) =>
+                  updateSamplingSettings({ alphaGuideStep: Number(event.currentTarget.value) })
+                }
+              />
+            }
+          />
+        )}
+        {axis === "speed" && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="sampling-speed-guide"
+            label={t("editorPanels.sampling.speedGuide")}
+            disabled={!settings.guidesEnabled}
+            control={
+              <SliderField
+                id="sampling-speed-guide"
+                min={SAMPLING_SPEED_MIN}
+                max={SAMPLING_SPEED_MAX}
+                step={0.1}
+                value={settings.speedGuideStep}
+                disabled={!settings.guidesEnabled}
+                aria-label={t("editorPanels.sampling.speedGuide")}
+                onChange={(event) =>
+                  updateSamplingSettings({ speedGuideStep: Number(event.currentTarget.value) })
+                }
+              />
+            }
+          />
+        )}
+        {(axis === "x" || axis === "y") && (
+          <>
+            <FieldRow
+              layout="inline"
+              density="compact"
+              label={t("editorPanels.sampling.xyBinding")}
+              description={t("editorPanels.sampling.xyBindingHint")}
+              disabled={globalXYBinding}
+              control={(id) => (
+                <Input
+                  id={id}
+                  type="checkbox"
+                  checked={globalXYBinding || settings.xyBinding}
+                  disabled={globalXYBinding}
+                  onChange={(event) =>
+                    updateSamplingSettings({ xyBinding: event.currentTarget.checked })
+                  }
+                />
+              )}
+            />
+          </>
+        )}
+      </FieldRows>
       <EasingCurveEditor
         mode={curveMode}
         easingType={easingType}

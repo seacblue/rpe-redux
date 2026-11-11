@@ -42,7 +42,7 @@
   margin: 0;
   padding: var(--space-2);
   overflow: hidden;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
   color: var(--foreground);
@@ -91,7 +91,7 @@
 }
 
 .long-task-row + .long-task-row {
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .long-task-row .long-task-row-remove {
@@ -108,18 +108,14 @@
 
 .long-task-row-title {
   display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
   font-size: var(--type-label);
   font-weight: 600;
 }
 
 .long-task-progress-line {
   margin: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   overflow-wrap: anywhere;
 }
 

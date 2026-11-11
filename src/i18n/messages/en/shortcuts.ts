@@ -25,6 +25,9 @@ export default {
   "shortcuts.category.editorSelection": "Selection and multi-line",
   "shortcuts.category.sampling": "Sampling",
 
+  "shortcuts.library.previous": "Previous chart",
+  "shortcuts.library.next": "Next chart",
+
   "shortcuts.editor.save": "Save chart",
   "shortcuts.editor.undo": "Undo",
   "shortcuts.editor.redo": "Redo",

@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { Popconfirm } from "../../../../../design/components/popconfirm/Popconfirm.tsx";
@@ -214,25 +215,27 @@ export function EventInspectorView({
   if (eventType === NOISE_ACTIVE_EVENTS) {
     return (
       <>
-        {(["startTime", "endTime"] as const).map((field) => (
-          <EventField
-            key={`${entry.index}:${field}:${displayValue(event, field)}`}
-            session={session}
-            eventType={eventType}
-            event={event}
-            field={field}
-            title={t(
-              field === "startTime"
-                ? "editorPanels.inspector.field.startTime"
-                : "editorPanels.inspector.field.endTime",
-            )}
-            kind="beat"
-            reportError={reportError}
-            refresh={refresh}
-            setLiveEventEdit={setLiveEventEdit}
-            onNudge={onNudge}
-          />
-        ))}
+        <FieldRows>
+          {(["startTime", "endTime"] as const).map((field) => (
+            <EventField
+              key={`${entry.index}:${field}:${displayValue(event, field)}`}
+              session={session}
+              eventType={eventType}
+              event={event}
+              field={field}
+              title={t(
+                field === "startTime"
+                  ? "editorPanels.inspector.field.startTime"
+                  : "editorPanels.inspector.field.endTime",
+              )}
+              kind="beat"
+              reportError={reportError}
+              refresh={refresh}
+              setLiveEventEdit={setLiveEventEdit}
+              onNudge={onNudge}
+            />
+          ))}
+        </FieldRows>
         <p className="hint">{t("editorPanels.linePanel.noiseActiveHint")}</p>
       </>
     );
@@ -364,49 +367,51 @@ export function EventInspectorView({
 
   return (
     <>
-      {fields.map(([field, title, kind]) => (
-        <EventField
-          key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}:${displayValue(event, field)}`}
-          session={session}
-          eventType={eventType}
-          event={event}
-          field={field}
-          title={title}
-          kind={kind}
-          reportError={reportError}
-          refresh={refresh}
-          setLiveEventEdit={setLiveEventEdit}
-          onNudge={onNudge}
-          disabled={Boolean(event.inst) && field === "end"}
-        />
-      ))}
-      <FieldRow
-        layout="inline"
-        density="compact"
-        htmlFor="event-field-inst"
-        label={t("editorPanels.inspector.event.hook")}
-        control={(id) => (
-          <Input
-            id={id}
-            type="checkbox"
-            checked={Boolean(event.inst)}
-            onChange={(input) => {
-              const checked = input.currentTarget.checked;
-              safely(() =>
-                applyEventTransform(
-                  session,
-                  t("editorPanels.inspector.event.modifyHook"),
-                  (current) => ({
-                    ...current,
-                    inst: checked ? 1 : 0,
-                    ...(checked ? { end: structuredClone(current.start) } : {}),
-                  }),
-                ),
-              );
-            }}
+      <FieldRows>
+        {fields.map(([field, title, kind]) => (
+          <EventField
+            key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}:${displayValue(event, field)}`}
+            session={session}
+            eventType={eventType}
+            event={event}
+            field={field}
+            title={title}
+            kind={kind}
+            reportError={reportError}
+            refresh={refresh}
+            setLiveEventEdit={setLiveEventEdit}
+            onNudge={onNudge}
+            disabled={Boolean(event.inst) && field === "end"}
           />
-        )}
-      />
+        ))}
+        <FieldRow
+          layout="inline"
+          density="compact"
+          htmlFor="event-field-inst"
+          label={t("editorPanels.inspector.event.hook")}
+          control={(id) => (
+            <Input
+              id={id}
+              type="checkbox"
+              checked={Boolean(event.inst)}
+              onChange={(input) => {
+                const checked = input.currentTarget.checked;
+                safely(() =>
+                  applyEventTransform(
+                    session,
+                    t("editorPanels.inspector.event.modifyHook"),
+                    (current) => ({
+                      ...current,
+                      inst: checked ? 1 : 0,
+                      ...(checked ? { end: structuredClone(current.start) } : {}),
+                    }),
+                  ),
+                );
+              }}
+            />
+          )}
+        />
+      </FieldRows>
       {link > 0 && (
         <Button
           type="button"

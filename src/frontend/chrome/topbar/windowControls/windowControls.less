@@ -79,6 +79,13 @@
   border-radius: var(--window-control-radius, 0);
 }
 
+// Caption controls sit at fixed screen corners. A press must not move the
+// target under the pointer, so the shared icon-button press scale is cleared.
+.redux-app-root .redux-window-controls .redux-icon-button:active:not(:disabled),
+.redux-app-root .redux-window-controls .theme-window-control:active:not(:disabled) {
+  transform: none;
+}
+
 .redux-app-root .redux-window-controls button.urgent:hover:not(:disabled) {
   background: var(--window-close-hover);
   color: var(--on-window-close);
@@ -90,7 +97,7 @@
   right: var(--space-1);
   width: 300px;
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
   color: var(--danger);

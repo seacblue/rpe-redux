@@ -4,7 +4,9 @@
 .redux-menu-popup {
   position: fixed;
   margin: 0;
-  padding: var(--space-1);
+  // Rows fill the popup edge to edge, like a select option. The inset lives in
+  // the row, not in the surface, so a hover highlight reaches both borders.
+  padding: var(--space-1) 0;
   border-radius: var(--radius-panel);
   background: var(--popover-surface);
   color: var(--foreground);
@@ -22,6 +24,17 @@
   }
 }
 
+// A menu grows out of the edge it is anchored to, not always out of its top-left
+// corner. The context menu publishes its alignment, so the scale and fade follow
+// the trigger's side.
+.redux-menu-popup[data-align="end"] {
+  transform-origin: top right;
+}
+
+.redux-menu-popup[data-align="center"] {
+  transform-origin: top center;
+}
+
 .redux-menu-scroll {
   max-height: var(--redux-menu-max-height, calc(100vh - 16px));
   // The menu owns the wheel while the pointer is over it; a long action list
@@ -29,16 +42,16 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  // Reserve the scrollbar on both sides so a row's hover highlight keeps equal
-  // margins whether or not the action list overflows.
-  scrollbar-gutter: stable both-edges;
+  // No gutter: a row's highlight reaches the popup edge whether or not the
+  // action list overflows, matching the select popup's option rows.
+  scrollbar-gutter: auto;
 }
 
 .redux-menu-submenu {
   position: absolute;
   top: var(--space-1);
   width: 304px;
-  padding: var(--space-1);
+  padding: var(--space-1) 0;
   border-radius: var(--radius-panel);
   background: var(--popover-surface);
   color: var(--foreground);
@@ -96,7 +109,7 @@
 @keyframes redux-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-2px) scale(0.99);
+    transform: translateY(-4px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -114,6 +127,4 @@
 .redux-rich-tooltip {
   position: fixed;
   margin: 0;
-  // The shared tooltip joins the overlay elevation family at its own weight.
-  box-shadow: var(--shadow-overlay-tooltip);
 }

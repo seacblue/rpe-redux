@@ -5,7 +5,7 @@
  * controls, and asks the welcome page to select or open an entry. The selection
  * itself lives one level up because the detail pane is its sibling.
  */
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { LibrarySortField } from "../../../../core/global/library/client.ts";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { Button } from "../../../../design/components/button/Button.tsx";
@@ -19,7 +19,8 @@ import { LibraryCards } from "./LibraryCards.tsx";
 import { getHomeProjectCardsSnapshot, subscribeHomeProjectCards } from "../homeProjectCards.ts";
 import { getLibraryView, setLibraryView, type LibraryView } from "../libraryView.ts";
 import { getLibrarySort, type LibrarySort } from "../librarySort.ts";
-import { buildLibraryEntries, matchesLibraryQuery } from "./libraryEntries.ts";
+import { buildLibraryEntries, matchesLibraryQuery, type LibraryEntry } from "./libraryEntries.ts";
+import { registerLibraryShortcuts } from "./libraryShortcuts.ts";
 
 /**
  * Placeholder counts for the first library read. They cover the card region of
@@ -29,6 +30,31 @@ import { buildLibraryEntries, matchesLibraryQuery } from "./libraryEntries.ts";
 const LIBRARY_SKELETON_ROWS = 20;
 /** Wider tiles leave fewer rows visible; extra tiles fill a tall grid view. */
 const LIBRARY_SKELETON_TILES = 30;
+
+/** The live list walk behind Q/E; the ref is refreshed after every commit. */
+interface LibraryNavigation {
+  entries: readonly LibraryEntry[];
+  selectedKey: string | null;
+  select(key: string, preview: boolean): void;
+}
+
+/** Moves the selection one visible row, stopping at either end. */
+function stepLibrarySelection(state: LibraryNavigation, direction: -1 | 1): void {
+  const { entries, selectedKey, select } = state;
+  if (!entries.length) {
+    return;
+  }
+  const current = entries.findIndex((entry) => entry.key === selectedKey);
+  const next =
+    current < 0
+      ? direction > 0
+        ? 0
+        : entries.length - 1
+      : Math.min(entries.length - 1, Math.max(0, current + direction));
+  if (next !== current) {
+    select(entries[next].key, true);
+  }
+}
 
 /** Placeholder rows shown while the first library page is read. */
 function LibrarySkeleton({ view }: { view: LibraryView }) {
@@ -56,7 +82,7 @@ export function LibraryPanel({
   onSelect,
 }: {
   selectedKey: string | null;
-  onSelect(key: string): void;
+  onSelect(key: string, preview: boolean): void;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -70,6 +96,26 @@ export function LibraryPanel({
   const entries = useMemo(() => buildLibraryEntries(cards), [cards]);
   const needle = query.trim().toLocaleLowerCase();
   const visibleEntries = entries.filter((entry) => matchesLibraryQuery(entry, needle));
+  // Q/E walk the rows the search currently shows. The registry registration is
+  // stable, so the handler reads the latest list and selection from a ref that
+  // commits after each render instead of re-registering (and resetting a
+  // user's custom key) on every change.
+  const navigate = useRef<LibraryNavigation>({
+    entries: [],
+    selectedKey: null,
+    select: () => undefined,
+  });
+  useLayoutEffect(() => {
+    navigate.current = { entries: visibleEntries, selectedKey, select: onSelect };
+  });
+  useEffect(
+    () =>
+      registerLibraryShortcuts({
+        previous: () => stepLibrarySelection(navigate.current, -1),
+        next: () => stepLibrarySelection(navigate.current, 1),
+      }),
+    [],
+  );
   // The empty state owns the creation actions, so the footer does not repeat
   // them underneath. A ready empty library is the only state that moves them.
   const libraryEmpty =
@@ -178,10 +224,17 @@ export function LibraryPanel({
       )}
       {cards && (
         <LibraryCards
-          entries={visibleEntries}
+          entries={entries}
+          query={needle}
+          loaded={cards.phase === "ready" || cards.phase === "degraded"}
           selectedKey={selectedKey}
           view={view}
-          onActivate={(entry) => onSelect(entry.key)}
+          removingProjectId={cards.removingProjectId}
+          onSelect={(entry, preview) => onSelect(entry.key, preview)}
+          onOpen={(entry) => cards.onOpenProject(entry.source.project.id)}
+          onExport={(entry) => cards.onExportProject(entry.source.project.id)}
+          onRename={(entry) => cards.onRenameProject(entry.source.project)}
+          onDelete={(entry) => cards.onDelete(entry.source.project)}
         />
       )}
       {libraryEmpty && (

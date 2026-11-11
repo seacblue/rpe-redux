@@ -316,23 +316,68 @@ function closeModal(dialog: HTMLDialogElement, value?: string) {
  * Place the modal's transform origin at the centre of the element that opened
  * it, clamped inside the modal box. The CSS vars are local to the dialog.
  */
-function placeTransformOrigin(dialog: HTMLDialogElement, source: HTMLElement | null) {
+function placeTransformOrigin(dialog: HTMLDialogElement, source: DOMRect | null) {
   const rect = dialog.getBoundingClientRect();
   if (!source || rect.width <= 0 || rect.height <= 0) {
     dialog.style.removeProperty("--modal-origin-x");
     dialog.style.removeProperty("--modal-origin-y");
     return;
   }
-  const anchor = source.getBoundingClientRect();
-  if (anchor.width <= 0 || anchor.height <= 0) {
+  if (source.width <= 0 || source.height <= 0) {
     dialog.style.removeProperty("--modal-origin-x");
     dialog.style.removeProperty("--modal-origin-y");
     return;
   }
-  const x = Math.min(Math.max(anchor.left + anchor.width / 2 - rect.left, 12), rect.width - 12);
-  const y = Math.min(Math.max(anchor.top + anchor.height / 2 - rect.top, 12), rect.height - 12);
+  const x = Math.min(Math.max(source.left + source.width / 2 - rect.left, 12), rect.width - 12);
+  const y = Math.min(Math.max(source.top + source.height / 2 - rect.top, 12), rect.height - 12);
   dialog.style.setProperty("--modal-origin-x", `${x}px`);
   dialog.style.setProperty("--modal-origin-y", `${y}px`);
+}
+
+/**
+ * The control the next dialog should grow from.
+ *
+ * A menu row can unmount in the same click that opens the dialog, so the
+ * pointer path keeps a rect rather than an element reference. The focused
+ * control wins; the pointer rect covers rows and other sources that are gone by
+ * the time the dialog is installed.
+ */
+const CONTROL_SELECTOR =
+  "button, [role='button'], [role='menuitem'], a, input, select, textarea, [data-modal-source]";
+let lastPointerRect: DOMRect | null = null;
+let lastPointerAt = 0;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      const target =
+        event.target instanceof Element
+          ? (event.target.closest(CONTROL_SELECTOR) ?? event.target)
+          : null;
+      lastPointerRect = target ? target.getBoundingClientRect() : null;
+      lastPointerAt = performance.now();
+    },
+    true,
+  );
+}
+
+/** The rect a dialog should scale from, or `null` for the default heading origin. */
+function modalSourceRect(): DOMRect | null {
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLElement &&
+    active !== document.body &&
+    active.matches(CONTROL_SELECTOR)
+  ) {
+    const rect = active.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return rect;
+    }
+  }
+  if (lastPointerRect && performance.now() - lastPointerAt < 1000) {
+    return lastPointerRect;
+  }
+  return null;
 }
 
 /** Show a dialog, insert it into the stack, and move focus into it. */
@@ -379,10 +424,24 @@ export function openModal(dialog: HTMLDialogElement, priority = 0) {
   // Ascending: `activeEntry` reads the last item, so higher priority and later
   // requests sit at the end of the stack and draw the highest z-index.
   stack.sort((a, b) => a.priority - b.priority || a.sequence - b.sequence);
+  // Capture the trigger before `show()` moves focus into the dialog.
+  const source = modalSourceRect();
   if (!dialog.open) {
     dialog.show();
   }
-  placeTransformOrigin(dialog, document.activeElement as HTMLElement | null);
+  placeTransformOrigin(dialog, source);
+  if (source) {
+    // A dialog can be moved after it opens (the settings window restores its own
+    // position). Recompute once the surface has settled so the origin still
+    // points at the control that opened it.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (dialog.open) {
+          placeTransformOrigin(dialog, source);
+        }
+      });
+    });
+  }
   refreshModal();
   const focus = dialog.querySelector<HTMLElement>(
     "[autofocus], button, input, select, textarea, [tabindex]",

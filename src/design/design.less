@@ -35,7 +35,6 @@
 
   --design-ink-quiet: var(--foreground-muted);
   --design-ink-faint: color-mix(in oklab, var(--foreground-muted) 62%, transparent);
-  --design-hairline-soft: color-mix(in oklab, var(--panel-border) 72%, transparent);
   --design-fill-hover: var(--surface-hover);
   --design-fill-pressed: color-mix(in oklab, var(--foreground) 12%, transparent);
   --design-fill-urgent: var(--danger);
@@ -58,17 +57,55 @@
   --design-dur-disclosure: calc(
     170ms * var(--chrome-motion-speed, 1) * var(--chrome-motion-level, 1)
   );
+  // A press must answer before the pointer is released, so it is the shortest
+  // duration in the system and the only one that may run while the button is held.
+  --design-dur-press: calc(90ms * var(--chrome-motion-speed, 1) * var(--chrome-motion-level, 1));
   --design-ease-move: cubic-bezier(0.22, 0.8, 0.28, 1);
   --design-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --design-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  // A shallow spring for small state changes: enough overshoot to feel alive,
+  // not enough to bounce a dense editor row.
+  --design-ease-spring: cubic-bezier(0.3, 1.25, 0.5, 1);
+  // A long-travel selector crosses its target by a hair, then settles. The
+  // shallower curve keeps a 200px segment from pressing through its track edge.
+  --design-ease-settle: cubic-bezier(0.3, 1.18, 0.5, 1);
   --design-ease-bounce: cubic-bezier(0.2, 1.6, 0.4, 1);
   --design-action-transition:
     background-color var(--design-dur-tint) ease, border-color var(--design-dur-tint) ease,
     color var(--design-dur-tint) ease, box-shadow var(--design-dur-tint) ease,
-    transform var(--design-dur-tint) ease;
+    transform var(--design-dur-tint) var(--design-ease-spring);
 }
 
 // ---------------------------------------------------------------- mixins
+// One focus answer: a 2px token ring. `offset` is positive for a ring outside
+// the control and negative for rows that keep the ring inside their box.
+.focus-ring(@offset: 2px) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: @offset;
+}
+
+// One selected answer for rows, segments, and toggles. A solid accent surface
+// stays reserved for the single primary action on a screen.
+.selected-surface() {
+  background: var(--active-accent-fill);
+  color: var(--active-accent);
+}
+
+// One metadata line: quiet ink at the caption role. A surface with two or more
+// of these should not repeat the pair.
+.meta-text() {
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+// One truncating line: the box is allowed to shrink and the text ellipsizes.
+.truncate() {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 // One action surface: no border, and a fill that only appears while the pointer
 // is on the control (or it is held, or toggled on).
 .action-surface() {
@@ -98,7 +135,8 @@
   }
 
   &:disabled {
-    opacity: 0.4;
+    color: var(--foreground-muted);
+    background: transparent;
   }
 }
 
@@ -110,5 +148,6 @@
     --design-dur-enter: 1ms;
     --design-dur-exit: 1ms;
     --design-dur-disclosure: 1ms;
+    --design-dur-press: 1ms;
   }
 }

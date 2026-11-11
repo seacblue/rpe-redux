@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from "react";
 import { createValue } from "../../../core/state/values.ts";
+import { trackFloatingAnchor } from "../../../design/patterns/floatingAnchor.ts";
 import { POPOVER_EDGE, type PopoverAlign } from "../../../design/patterns/useAnchoredPopover.ts";
 
 /** One command offered by a context menu. */
@@ -98,6 +99,22 @@ function unmeasuredStyle(snapshot: ContextMenuAnchor): CSSProperties {
 /** Width of a submenu's floating preview card, mirrored by `contextMenu.less`. */
 const SUBMENU_PREVIEW_WIDTH = 180;
 
+/** How long a type-ahead prefix survives before the next key starts a new one. */
+const TYPE_AHEAD_WINDOW = 600;
+
+/** Per-menu type-ahead buffer, kept beside the menu element it belongs to. */
+const typeAhead = new WeakMap<Element, { text: string; at: number }>();
+
+/** The type-ahead state of one menu root. */
+function typedBufferFor(root: Element): { text: string; at: number } {
+  let entry = typeAhead.get(root);
+  if (!entry) {
+    entry = { text: "", at: 0 };
+    typeAhead.set(root, entry);
+  }
+  return entry;
+}
+
 /** Focuses the first visible, enabled item of an open menu. */
 function focusFirstItem(menu: HTMLElement): void {
   const items = [...menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
@@ -125,6 +142,31 @@ export function navigateMenu(event: KeyboardEvent<HTMLElement>, close: () => voi
             : (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
       items[next]?.focus();
     }
+    return;
+  }
+  // Type-ahead matches the select popup: a printable key jumps to the next row
+  // whose label starts with the typed text. State is per menu, and a pause
+  // longer than the shared window starts a new search.
+  if (
+    event.nativeEvent.isComposing ||
+    event.key.length !== 1 ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey
+  ) {
+    return;
+  }
+  const typed = typedBufferFor(root);
+  const now = Date.now();
+  typed.text = now - typed.at > TYPE_AHEAD_WINDOW ? event.key : typed.text + event.key;
+  typed.at = now;
+  const needle = typed.text.toLocaleLowerCase();
+  const match = items.find((item) =>
+    (item.textContent ?? "").trim().toLocaleLowerCase().startsWith(needle),
+  );
+  if (match) {
+    event.preventDefault();
+    match.focus();
   }
 }
 
@@ -228,11 +270,10 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
     if (!menu.matches(":popover-open")) {
       menu.showPopover();
     }
-    const anchor = snapshot.owner?.getBoundingClientRect();
+    const ownerElement = snapshot.owner;
+    const anchor = ownerElement?.getBoundingClientRect();
     const offsetX = anchor ? snapshot.x - anchor.left : 0;
     const offsetY = anchor ? snapshot.y - anchor.bottom : 0;
-    let frame = 0;
-    let focused = false;
     /** Re-place the menu from the owner's current position and parent bounds. */
     const place = () => {
       if (!menu.matches(":popover-open")) {
@@ -263,32 +304,36 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
         left: `${left}px`,
         top: `${top}px`,
       });
-      if (!focused) {
-        focused = true;
+    };
+    // The owner and the menu are both tracked elements: the shared floating
+    // loop reports the owner moving under the pointer, the menu resizing while a
+    // submenu loads, and a viewport resize through the same callback.
+    const releases: Array<() => void> = [];
+    if (ownerElement) {
+      releases.push(trackFloatingAnchor(ownerElement, place));
+    }
+    releases.push(trackFloatingAnchor(menu, place));
+    return () => {
+      for (const release of releases) {
+        release();
+      }
+    };
+  }, [snapshot]);
+
+  // A top-layer menu has no measurable rows on the frame it opens. Focus the
+  // first enabled row after layout so arrow keys, Enter, and type-ahead work;
+  // a snapshot refresh while focus is already inside must not steal it back.
+  useEffect(() => {
+    const menu = popup.current;
+    if (!snapshot || !menu) {
+      return undefined;
+    }
+    const frame = requestAnimationFrame(() => {
+      if (menu.matches(":popover-open") && !menu.contains(document.activeElement)) {
         focusFirstItem(menu);
       }
-    };
-    /** Coalesce scroll and resize events into the next frame. */
-    const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(place);
-    };
-    const onScroll = (event: Event) => {
-      if (event.target !== menu) {
-        schedule();
-      }
-    };
-    frame = requestAnimationFrame(place);
-    const resize = new ResizeObserver(schedule);
-    resize.observe(menu);
-    document.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", schedule);
-    return () => {
-      cancelAnimationFrame(frame);
-      resize.disconnect();
-      document.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", schedule);
-    };
+    });
+    return () => cancelAnimationFrame(frame);
   }, [snapshot]);
 
   const measured = placement?.snapshot === snapshot ? placement : null;
@@ -299,6 +344,7 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
       role="menu"
       aria-labelledby={labelId}
       className={`redux-menu-popup ${className}`.trim()}
+      data-align={snapshot?.align ?? "start"}
       style={
         measured
           ? { left: measured.left, top: measured.top }
@@ -360,7 +406,6 @@ export function ContextMenuSubmenu({
     if (!node || !parent) {
       return undefined;
     }
-    let frame = 0;
     /** Choose the roomier side and cap the submenu inside the parent's dialog. */
     const place = () => {
       const bounds = contextMenuBounds(parent);
@@ -396,21 +441,13 @@ export function ContextMenuSubmenu({
       setTop(Math.max(0, anchorTop - parentRect.top));
       setMaxHeight(Math.max(0, bounds.bottom - anchorTop - 2 * POPOVER_EDGE));
     };
-    /** Coalesce scroll and resize events into the next frame. */
-    const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(place);
-    };
-    place();
-    const resize = new ResizeObserver(schedule);
-    resize.observe(node);
-    document.addEventListener("scroll", schedule, true);
-    window.addEventListener("resize", schedule);
+    // The submenu follows the parent menu and its own content through the shared
+    // floating loop, so it owns no scroll, resize, or observer of its own.
+    const releases = [trackFloatingAnchor(node, place), trackFloatingAnchor(parent, place)];
     return () => {
-      cancelAnimationFrame(frame);
-      resize.disconnect();
-      document.removeEventListener("scroll", schedule, true);
-      window.removeEventListener("resize", schedule);
+      for (const release of releases) {
+        release();
+      }
     };
   }, []);
 

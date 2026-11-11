@@ -22,8 +22,7 @@ dialog.redux-changelog-dialog {
 
 .redux-changelog-hint {
   margin: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   line-height: var(--line-label);
 }
 
@@ -59,8 +58,7 @@ dialog.redux-changelog-dialog {
    title text. It is inline content of the modal heading, not a separate row. */
 .redux-changelog-title-meta {
   margin-inline-start: var(--space-2);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }

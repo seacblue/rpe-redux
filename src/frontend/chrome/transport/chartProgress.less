@@ -1,7 +1,6 @@
 // Progress card styles: the scrubber, its spectrum canvas, and the timeline
 // marker layer.
 
-@import (reference) "../../../design/styles/palette.less";
 .transport-clock {
   min-width: 72px;
   color: var(--foreground);
@@ -138,10 +137,7 @@
 }
 
 .redux-status-line > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
 }
 
 .redux-status-line > span:nth-child(2) {
@@ -163,7 +159,7 @@
 }
 
 .transport .transport-clock {
-  color: @accent;
+  color: var(--accent);
 }
 
 .redux-app-root .redux-status-card {

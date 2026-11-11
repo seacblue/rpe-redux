@@ -55,7 +55,7 @@
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--outline);
+  background: var(--edge-emphasis);
 
   > span {
     display: block;
@@ -97,7 +97,7 @@
   min-height: 38px;
   padding: 7px var(--space-3) var(--space-2);
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-left: 2px solid var(--toast-accent);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
@@ -110,7 +110,7 @@
   transform-origin: left bottom;
   transition:
     opacity var(--design-dur-exit) ease,
-    transform var(--design-dur-disclosure) var(--design-ease-enter);
+    transform var(--design-dur-disclosure) var(--design-ease-spring);
   pointer-events: auto;
   cursor: var(--app-cursor-pointer);
 }
@@ -121,8 +121,7 @@
 }
 
 .toast:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  .focus-ring(1px);
 }
 
 .toast.visible {
@@ -167,7 +166,7 @@
 }
 
 .toast-media.is-empty {
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
 }
 
 .toast-body {

@@ -98,15 +98,17 @@ Play/pause and undo/redo use workspace scope because they belong to the open doc
 
 ## File and application keys
 
-| Action             | Default        |
-| ------------------ | -------------- |
-| New chart          | `Ctrl+N`       |
-| Open chart         | `Ctrl+O`       |
-| Save chart         | `Ctrl+S`       |
-| Settings           | `Ctrl+K`       |
-| Show chart library | `Ctrl+Shift+H` |
+| Action                                    | Default        |
+| ----------------------------------------- | -------------- |
+| New chart                                 | `Ctrl+N`       |
+| Open chart                                | `Ctrl+O`       |
+| Save chart                                | `Ctrl+S`       |
+| Settings                                  | `Ctrl+K`       |
+| Settings fallback                         | `Esc`          |
+| Show chart library                        | `Ctrl+Shift+H` |
+| Previous / next chart on the library page | `Q` / `E`      |
 
-New chart, open, and settings work on the chart library page before a chart is open. Save requires an open document. The show-library action requires an open document and is enabled away from the library page.
+New chart, open, and settings work on the chart library page before a chart is open. Save requires an open document. The show-library action requires an open document and is enabled away from the library page. `Q` and `E` move the selection through the visible library rows, including the current search result. `Esc` opens Settings only when the library or editor has nothing else to cancel; a dialog, menu, control popup, onboarding step, text field, or active gesture keeps the key.
 
 ## Developer mode
 
@@ -123,4 +125,4 @@ The performance monitor's `F3` binding is available in ordinary builds. DevTools
 
 Bindings are registered in one of these scopes: `emergency`, `modal`, `surface`, `editor`, `workspace`, `app`, or `instrument`. Capture and urgent dialogs own the keyboard; editor shortcuts take first refusal while the edit workspace is active, and the most specific available scope wins when two commands share a binding. Text entry and open menus keep their native keys.
 
-`Esc` is a fixed system cancel key rather than a registered shortcut: the surface that owns the current gesture consumes it, and it never appears in the shortcut editor.
+`Esc` is a fixed system cancel key rather than a registered shortcut: the surface that owns the current gesture consumes it, and it never appears in the shortcut editor. When no surface owns it, the library and editor open Settings.

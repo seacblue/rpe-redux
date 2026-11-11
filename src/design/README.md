@@ -7,6 +7,7 @@
 - `src/design/styles/tokens.less` owns colours, font families, spacing, surface radii, line heights, and type roles.
 - `src/design/styles/tokens.less` also owns the ordered `--z-*` paint ladder. A floating surface names its rung; only children inside one component's own stacking context may use a local integer in -1…9. The style gate rejects any other raw z-index value, undefined `--z-*` names, and inline `zIndex` styles.
 - `scripts/checkStyleRules.mjs` rejects raw colours, raw font families, raw surface radii, common raw spacing steps, and raw CSS font sizes. The colour picker's hue model and the colour field's computed contrast ink are the documented raw-colour exceptions.
+- Every app sheet names one of three edge roles: `--edge-control` for an interactive control's edge, `--edge-divider` for a structural line between regions or rows, and `--edge-emphasis` for a floating surface, alert, or selected state. The legacy hairline names stay in the token sheet and theme packages; `check:style` rejects them under `src/design/` and `src/frontend/`.
 - Use a token for every surface, border, focus ring, warning state, and text role. A component may keep a local layout value when no token owns it.
 - Maintain dark and light appearances only.
 - A theme package may choose layout, surface, and motion presets from the closed `chrome` vocabulary; it cannot supply CSS or free-form values. The preset styles are authored in `src/frontend/app/themeChrome.less`; placement slots that move the rail, toolbar, or transport are owned by `Workbench`, `Sidebar`, and `TransportHost`. Declarative theme UI uses the host primitives rendered by `frontend/platform/themeUi.tsx`; a package tree cannot supply classes, styles, tags, or handlers. `prefers-reduced-motion` always overrides the motion presets.
@@ -34,13 +35,16 @@ Canvas surfaces resolve the same roles through `canvasFont(role)` and `canvasTyp
 ## Fields and navigation
 
 - `FieldRow` is the one label/description/control/reset row. Settings, script parameters, inspector forms, and prompt fields use its `inline` or `split` layout instead of rebuilding the grid. A function `control` receives the control id and the generated description id.
+- `FieldRows` owns the vertical rhythm of consecutive field rows. Pass `gap="none" | "compact" | "normal" | "roomy"` and optionally `divided`; a row inside the container carries no block margin, so a surface never re-derives spacing or patches it per screen.
+- `Segmented` paints its selected fill with one measured thumb that slides between options. The selected option keeps only its ink; do not add a second selected background.
 - `FieldRow` exposes its row geometry through `--field-row-*` variables. The inspector sets one default for every pane in `inspectorDesign.less`; a pane may choose a layout but must not redeclare the padding, gap, min-height, or margin. `check:style` rejects a feature-sheet declaration.
 - `SchemaControl` dispatches the shared value kinds: text, number, range, toggle, select, colour, and beat. `CheckboxChip` is the compact labelled checkbox for one on/off companion permission. `Textarea` owns the multiline field surface; do not open-code `redux-input redux-field-textarea`.
 - `Input` and `FieldRow` map `tipDescription` to `data-tip-desc` for content-only guidance; `title` maps to the short `data-tip-title` label.
 - `SearchField` owns the search shell, the leading glyph, the clear action, and the native search-cancel suppression.
 - `Disclosure` owns the native `<details>/<summary>` pattern; features supply the summary content and an `onOpenChange` callback.
-- `MenuSurface` / `MenuItem` own menu row anatomy; `RailNavItem` owns the right-hand navigation row. Feature menus and rails supply actions only.
-- `useAnchoredPopover` owns placement, outside dismissal, Escape, focus return, and resize/scroll tracking for pickers and floating panels. Its `align: "start" | "center" | "end"` field defines the horizontal baseline: `end` puts the measured panel's right edge on the anchor's right edge. Menus that share the context-menu popup accept the same field on their anchor snapshot instead of a caller-computed left offset.
+- `MenuSurface` / `MenuItem` own menu row anatomy; `RailNavItem` owns the right-hand navigation row. Feature menus and rails supply actions only. A menu row fills the popup edge to edge — the inset lives in the row's own padding, never in the surface — so its hover and focus fill reach both borders, exactly like a select option.
+- `useAnchoredPopover` owns placement, outside dismissal, Escape, focus return, and frame-tracked anchor following for pickers and floating panels. Its `align: "start" | "center" | "end"` field defines the horizontal baseline: `end` puts the measured panel's right edge on the anchor's right edge. Menus that share the context-menu popup accept the same field on their anchor snapshot instead of a caller-computed left offset.
+- `floatingAnchor.ts` is the one measurement loop for open floating surfaces. A control, menu, or picker registers the elements it depends on; the loop reports a changed box once per frame and `null` when the element leaves the document. Do not add a per-surface scroll listener, resize observer, or presence poll.
 - A floating surface acquires `useHoldFloatingSurface` while it is open. `floatingSurface.ts` publishes that activity for chrome that opts into it; the document drawer deliberately follows only pointer dwells, so leaving it collapses the list even when one of its pickers is still open.
 - `TreeFolder` owns the folder header, reorder grip slot, disclosure, icon, name slot, count, hover actions, drop-target states, and grid-row fold animation. The asset tree and judge-line tree pass data and row content only.
 - `ListRow` owns hover, selected, current, dragging, and focus feedback for list, tree, and picker rows; `useListbox` adds roving focus, arrow/Home/End movement, and `aria-activedescendant` to a single-select listbox.
@@ -80,6 +84,8 @@ The media column is fixed at 56×36 CSS pixels; clips loop, stay muted, and use 
 
 A tooltip title is a short label with no trailing punctuation. Content is optional: omit it when the title already says everything, never repeat the title, and keep one short line (at most 35 Chinese characters or roughly 20 English words). A visible label that is already clear gets no tooltip; an ambiguous text label may use `data-tip-desc` alone. Every icon-only control carries a title, except sidebar rail items, which reveal their labels instead. Keep requirements, consequences, and input formats visible as field descriptions or validation messages, and associate them with their controls. Tooltip-only details must also be reachable from keyboard focus; tooltips do not replace visible instructions or accessible names.
 
+An engaged trigger does not show a tip. `aria-expanded="true"` or a live `aria-controls` target suppresses it, and a tip already on screen is dismissed when its anchor expands. This keeps a tip from covering the panel the control just opened.
+
 Tips inside a dialog stay in the browser top layer above the modal stack. The modal stack broadcasts `MODAL_STACK_EVENT`, so a layer change dismisses the tip that belonged to the previous surface; anchors inside an inert subtree cannot publish a tip at all.
 
 ## Accessibility
@@ -103,6 +109,8 @@ Tips inside a dialog stay in the browser top layer above the modal stack. The mo
 - `IconButton` owns icon-only controls; `compact` is the in-field 18px box, and the string sizes are `small` 24, `md` 32, and `caption` 46 (window chrome).
 - Product code renders actions through `Button` or `IconButton`. `check:style` rejects a raw `<button>` under `src/frontend/`; a new control belongs in the design system first.
 - A page or section primary action belongs in the section footer or a list toolbar, never in the heading row. Destructive actions use `danger` and ask for confirmation unless the same surface offers a reliable undo.
+
+Every design button shares one box: a centred label at weight 500 (`size="lg"` uses 600), one icon gap, and one disabled answer. A disabled control keeps `--foreground-muted` ink; a filled variant swaps to `--surface-muted`, a bordered one drops to `--border-subtle`, and no variant fades the whole control. `outlined` and form fields share `--input-border` at rest and `--input-border-hover` on hover, so accent is never a hover colour. A toggled or selected control uses `--active-accent-fill` under `--active-accent` ink; `solid` remains the only full-accent surface on a screen.
 
 ## Prompts
 

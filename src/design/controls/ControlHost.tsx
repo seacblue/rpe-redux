@@ -5,14 +5,16 @@
  * reusable panel and portals it above clipped surfaces. It does not own control
  * values or decide which product field opened the popup.
  */
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   closeControlPopup,
   getPopup,
   popupAnchorVisible,
+  repositionControlPopup,
   subscribePopup,
 } from "./controlActions.ts";
+import { trackFloatingAnchor } from "../patterns/floatingAnchor.ts";
 import { useHoldFloatingSurface } from "../patterns/floatingSurface.ts";
 import { SelectPopup } from "./SelectPopup.tsx";
 import { ColorPopup } from "./ColorPopup.tsx";
@@ -33,21 +35,22 @@ export function ControlHost() {
   const popup = useSyncExternalStore(subscribePopup, getPopup);
   const attached = Boolean(popup && popupAnchorVisible(popup.element));
   useHoldFloatingSurface(attached);
-  useEffect(() => {
-    if (!popup) {
-      return;
+  const anchorElement = popup?.element ?? null;
+  useLayoutEffect(() => {
+    if (!anchorElement) {
+      return undefined;
     }
-    // The popup store does not change when its parent panel is closed, so a
-    // short poll notices an unmounted or hidden anchor and dismisses the list.
-    const check = () => {
-      if (!popupAnchorVisible(popup.element)) {
+    // The shared floating loop re-measures the native control every frame, so a
+    // panel closing, a row scrolling, or playback moving the control is the
+    // same signal. The popup store survives a hidden anchor; `null` closes it.
+    return trackFloatingAnchor(anchorElement, (box) => {
+      if (!box) {
         closeControlPopup();
+        return;
       }
-    };
-    check();
-    const timer = window.setInterval(check, 120);
-    return () => window.clearInterval(timer);
-  }, [popup]);
+      repositionControlPopup();
+    });
+  }, [anchorElement]);
   if (!popup || !attached) {
     return null;
   }

@@ -55,7 +55,7 @@
 
 .inspector.is-drawer .inspector-status {
   background: var(--drawer-surface);
-  border-bottom-color: var(--border-subtle);
+  border-bottom-color: var(--edge-divider);
 }
 
 // The inner surface keeps the resting inspector width plus the list column at
@@ -105,7 +105,7 @@
   flex-direction: column;
   width: var(--drawer-list-width);
   background: var(--drawer-list-surface);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--edge-divider);
 }
 
 // Drawer list pages keep their scrolling content and action footer as sibling
@@ -145,7 +145,7 @@
 }
 
 :root[data-chrome-drawer-side="left"] .inspector.is-drawer .drawer-split-list {
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--edge-divider);
   border-left: 0;
 }
 
@@ -167,7 +167,7 @@
 
 :root[data-chrome-drawer-side="right"] .inspector.is-drawer .drawer-split-list {
   border-right: 0;
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--edge-divider);
 }
 
 // Read-only drawers keep their list navigable, but the property forms and

@@ -182,18 +182,20 @@ export function LibraryDetail({
           <DetailCover url={entry.cover} />
         </div>
         <div className="redux-library-card-body">
-          <h2 className="redux-library-card-title">{entry.title}</h2>
-          <p className="redux-library-card-composer">{entry.composer || "—"}</p>
-          <dl className="redux-library-card-meta">
-            <div>
-              <dt>{t("workspace.welcome.library.field.charter")}</dt>
-              <dd>{entry.charter || "—"}</dd>
-            </div>
-            <div>
-              <dt>{t("workspace.welcome.library.field.level")}</dt>
-              <dd>{entry.level || "—"}</dd>
-            </div>
-          </dl>
+          <div className="redux-library-card-summary" key={entry.key}>
+            <h2 className="redux-library-card-title">{entry.title}</h2>
+            <p className="redux-library-card-composer">{entry.composer || "—"}</p>
+            <dl className="redux-library-card-meta">
+              <div>
+                <dt>{t("workspace.welcome.library.field.charter")}</dt>
+                <dd>{entry.charter || "—"}</dd>
+              </div>
+              <div>
+                <dt>{t("workspace.welcome.library.field.level")}</dt>
+                <dd>{entry.level || "—"}</dd>
+              </div>
+            </dl>
+          </div>
           <DetailActions entry={entry} onOpen={onOpen} onExport={onExport} onDelete={onDelete} />
         </div>
       </article>

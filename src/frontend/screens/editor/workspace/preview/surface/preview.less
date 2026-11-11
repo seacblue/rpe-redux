@@ -83,7 +83,7 @@
   max-height: 220px;
   overflow: auto;
   padding: var(--space-3);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
   color: var(--foreground);
@@ -98,7 +98,7 @@
   gap: var(--space-3);
   margin-bottom: var(--space-2);
   padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--edge-divider);
 }
 
 .preview-note-border-panel-header strong {
@@ -125,8 +125,7 @@
 }
 
 .preview-note-border-panel-rows dt {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .preview-note-border-panel-rows dd {

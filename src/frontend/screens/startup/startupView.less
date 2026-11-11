@@ -1,7 +1,6 @@
 // Failure screen styles: the explanation, Extension evidence, technical report,
 // actions, and the stacking that keeps the independent window controls reachable.
 
-@import (reference) "../../../design/styles/palette.less";
 .redux-app-shell {
   display: flex;
   flex: 1;
@@ -123,11 +122,10 @@ body:has(.redux-app-root dialog.redux-startup-safe-mode[open]) > .redux-modal-sc
   padding: var(--space-2);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--input-surface);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   line-height: var(--line-body);
   font-family: var(--font-mono);
   text-align: left;
@@ -138,7 +136,7 @@ body:has(.redux-app-root dialog.redux-startup-safe-mode[open]) > .redux-modal-sc
   width: min(840px, calc(100% - 64px));
   margin: var(--space-3) auto 0;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
   text-align: left;
@@ -169,8 +167,7 @@ body:has(.redux-app-root dialog.redux-startup-safe-mode[open]) > .redux-modal-sc
   }
   small {
     flex-basis: 100%;
-    color: var(--foreground-muted);
-    font-size: var(--type-caption);
+    .meta-text();
     overflow-wrap: anywhere;
   }
 }
@@ -190,16 +187,14 @@ body:has(.redux-app-root dialog.redux-startup-safe-mode[open]) > .redux-modal-sc
 
 .redux-startup-extensions-hint {
   margin: var(--space-2) 0 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   line-height: var(--line-body);
 }
 
 .redux-startup-log-guide {
   width: min(840px, calc(100% - 64px));
   margin: var(--space-2-5) auto 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   text-align: center;
   p {
     margin: 0 0 var(--space-1-5);

@@ -19,6 +19,7 @@ import {
   MenuSeparator,
   MenuSurface,
 } from "../../../design/components/menu/MenuSurface.tsx";
+import { usePresence } from "../../../design/patterns/usePresence.ts";
 import {
   getEditorVisibility,
   subscribeToEditorVisibility,
@@ -68,6 +69,12 @@ export function MenuBar() {
   const byId = useMemo(() => actionMap(entries), [entries]);
   const [open, setOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
+  // The section id survives its state so the popup can play its exit after the
+  // trigger has already reported `aria-expanded=false`.
+  const [renderedSection, setRenderedSection] = useState<string | null>(null);
+  const sheetPresence = usePresence(open);
+  const sectionPresence = usePresence(openSection !== null);
+  const activeSection = openSection ?? renderedSection;
   const root = useRef<HTMLDivElement>(null);
   const hoverTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
@@ -80,6 +87,15 @@ export function MenuBar() {
     setOpen(false);
     setOpenSection(null);
   }, [expandedMenu]);
+
+  // Keep the last expanded section for its exit; the trigger itself reports
+  // `aria-expanded=false` as soon as the state clears.
+  useEffect(() => {
+    if (openSection !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRenderedSection(openSection);
+    }
+  }, [openSection]);
 
   /** Cancels a pending hover expansion. */
   const cancelHover = () => {
@@ -263,10 +279,11 @@ export function MenuBar() {
               >
                 {t(menu.label)}
               </Button>
-              {sectionOpen && (
+              {sectionPresence.mounted && activeSection === menu.id && (
                 <MenuSurface
                   label={t(menu.label)}
                   className="redux-app-menu-popup redux-titlebar-menubar-popup"
+                  state={sectionPresence.closing ? "closing" : "open"}
                 >
                   {actionRows(menu)}
                 </MenuSurface>
@@ -309,8 +326,12 @@ export function MenuBar() {
           onClick={toggleMenu}
         />
       )}
-      {open && (
-        <MenuSurface label={t("chrome.menu.label")} className="redux-app-menu-sheet">
+      {sheetPresence.mounted && (
+        <MenuSurface
+          label={t("chrome.menu.label")}
+          className="redux-app-menu-sheet"
+          state={sheetPresence.closing ? "closing" : "open"}
+        >
           {menus.map((menu) => {
             const expanded = openSection === menu.id;
             return (
@@ -333,10 +354,11 @@ export function MenuBar() {
                   }}
                   onFocus={() => showSection(menu.id, true)}
                 />
-                {expanded && (
+                {sectionPresence.mounted && activeSection === menu.id && (
                   <MenuSurface
                     label={t(menu.label)}
                     className="redux-app-menu-popup redux-app-menu-submenu"
+                    state={sectionPresence.closing ? "closing" : "open"}
                   >
                     {actionRows(menu)}
                   </MenuSurface>

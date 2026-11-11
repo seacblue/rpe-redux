@@ -12,7 +12,7 @@
 // Applied parameter sets, newest first. The strip scrolls instead of growing:
 // a long history must not push the form's controls off screen.
 .batch-history {
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
   padding-top: var(--space-2);
 }
 
@@ -27,11 +27,10 @@
 .batch-history-tab {
   max-width: 100%;
   padding: 2px var(--space-2);
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-control);
   background: var(--input-surface);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

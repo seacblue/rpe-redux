@@ -48,8 +48,7 @@
 }
 
 .code-cell-access-title {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   font-weight: 600;
 }
 
@@ -70,15 +69,14 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, var(--settings-control-width, 320px));
   align-items: center;
   gap: var(--space-2);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .code-cell-access-line code {
   min-width: 0;
   padding: var(--space-1) var(--space-2);
   overflow-wrap: anywhere;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--foreground);
@@ -101,7 +99,7 @@
   overflow-y: auto;
   overflow-wrap: anywhere;
   resize: none;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control);
   background: var(--input-surface);
   color: var(--foreground);
@@ -136,8 +134,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-theme-preview-heading strong {
@@ -187,7 +184,7 @@
   gap: var(--space-1);
   min-height: 112px;
   padding: var(--space-1);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--preview-radius);
   background: var(--surface-sunken);
   overflow: hidden;
@@ -259,7 +256,7 @@
 .redux-theme-preview-workspace,
 .redux-theme-preview-inspector,
 .redux-theme-preview-sidebar {
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--preview-radius);
   background: var(--surface-raised);
 }
@@ -318,8 +315,7 @@
   gap: var(--space-1);
   min-width: 0;
   padding: var(--space-1);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-theme-preview-workspace {
@@ -401,10 +397,10 @@
 
 .redux-theme-preview-layout[data-pattern="grid"] {
   background-image:
-    linear-gradient(color-mix(in srgb, var(--panel-border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--edge-divider) 55%, transparent) 1px, transparent 1px),
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--panel-border) 55%, transparent) 1px,
+      color-mix(in srgb, var(--edge-divider) 55%, transparent) 1px,
       transparent 1px
     );
   background-size: var(--space-4) var(--space-4);
@@ -412,7 +408,7 @@
 
 .redux-theme-preview-layout[data-pattern="dots"] {
   background-image: radial-gradient(
-    color-mix(in srgb, var(--panel-border) 70%, transparent) 1px,
+    color-mix(in srgb, var(--edge-divider) 70%, transparent) 1px,
     transparent 1px
   );
   background-size: var(--space-2) var(--space-2);
@@ -421,7 +417,7 @@
 .redux-theme-preview-layout[data-pattern="scanlines"] {
   background-image: repeating-linear-gradient(
     0deg,
-    color-mix(in srgb, var(--panel-border) 45%, transparent) 0 1px,
+    color-mix(in srgb, var(--edge-divider) 45%, transparent) 0 1px,
     transparent 1px var(--space-1)
   );
 }
@@ -562,8 +558,7 @@
 }
 
 .redux-theme-preview-trait-label {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-theme-preview-trait-values {
@@ -574,7 +569,7 @@
 
 .redux-theme-preview-trait {
   padding: 1px var(--space-2);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--surface-muted);
   color: var(--foreground);
@@ -743,7 +738,7 @@
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px dashed var(--border-subtle);
+  border: 1px dashed var(--edge-divider);
   border-radius: var(--radius-control);
   background: var(--input-surface);
   color: var(--foreground-muted);
@@ -755,7 +750,7 @@
 
 .redux-app-root .redux-setting-image-picker-strip:hover:not(:disabled),
 .redux-app-root .redux-setting-image-picker-strip:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--edge-divider));
   color: var(--foreground);
 }
 
@@ -765,7 +760,7 @@
 }
 
 .redux-app-root .redux-setting-image-picker-strip[data-error="true"] {
-  border-color: color-mix(in srgb, var(--danger) 55%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--edge-divider));
   color: var(--danger);
 }
 

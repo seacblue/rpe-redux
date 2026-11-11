@@ -70,6 +70,61 @@
   min-height: 0;
 }
 
+@keyframes library-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes library-card-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+}
+
+@keyframes library-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes library-summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes project-new-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .redux-library-card {
   position: relative;
   display: flex;
@@ -79,9 +134,10 @@
   // The cover keeps its ratio while the body fills the responsive height floor
   // shared with the placeholder card.
   min-height: var(--welcome-detail-min-height);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
+  animation: library-detail-in var(--design-dur-disclosure) var(--design-ease-spring) both;
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent) inset,
     0 14px 34px color-mix(in srgb, var(--shadow-color) 46%, transparent);
@@ -92,7 +148,7 @@
   flex: none;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--edge-divider);
   border-radius: calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px) 0 0;
   background: var(--surface-muted);
 }
@@ -138,6 +194,15 @@
   padding: var(--space-5);
 }
 
+// Selection swaps the metadata as one block. The keyed wrapper remounts, so the
+// new title and credits enter instead of snapping while the old ones vanish.
+.redux-library-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  animation: library-summary-in var(--design-dur-tint) var(--design-ease-enter) both;
+}
+
 // At the minimum supported height the card body trades breathing room for a
 // wrapped title, so the action row still fits inside the column.
 @media (max-height: 720px) {
@@ -179,8 +244,7 @@
   dt {
     flex: none;
     min-width: 56px;
-    color: var(--foreground-muted);
-    font-size: var(--type-caption);
+    .meta-text();
     white-space: nowrap;
   }
 
@@ -335,15 +399,32 @@
   transition:
     background-color var(--design-dur-tint) ease,
     border-color var(--design-dur-tint) ease,
-    box-shadow var(--design-dur-tint) ease;
+    box-shadow var(--design-dur-tint) ease,
+    opacity var(--design-dur-tint) ease,
+    transform var(--design-dur-tint) var(--design-ease-spring);
+
+  // Only a chart that arrives after the first settled read animates in. A
+  // populated library opening for the first time stays still.
+  &[data-entering="true"] {
+    animation: library-card-in var(--design-dur-disclosure) var(--design-ease-spring) backwards;
+  }
 
   &:hover {
     background: var(--surface-hover);
   }
 
   &[data-selected="true"] {
-    border-color: var(--border-subtle);
+    border-color: var(--edge-divider);
     background: var(--surface-raised);
+  }
+
+  // The presence hook keeps a removed card mounted for one exit. It plays an
+  // animation rather than a transition: the leaving flag is present on the
+  // element's first render after removal, so there is no previous style to
+  // transition from.
+  &[data-leaving="true"] {
+    animation: library-card-out var(--design-dur-tint) var(--design-ease-exit) forwards;
+    pointer-events: none;
   }
 
   &:focus-visible {
@@ -357,6 +438,8 @@
     align-items: center;
     gap: var(--space-3);
     min-width: 0;
+    // The row fills the card so the trailing level badge sits on the far edge.
+    width: 100%;
   }
 
   .project-cover-frame {
@@ -364,7 +447,7 @@
     width: 72px;
     aspect-ratio: 16 / 9;
     overflow: hidden;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--edge-divider);
     border-radius: calc(var(--radius-control) - 1px);
     background: var(--surface-muted);
   }
@@ -411,8 +494,7 @@
 
   .project-composer {
     overflow: hidden;
-    color: var(--foreground-muted);
-    font-size: var(--type-caption);
+    .meta-text();
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -446,7 +528,7 @@
   }
 
   &[data-selected="true"] .project-level {
-    border-color: var(--border-strong);
+    border-color: var(--edge-emphasis);
     color: var(--foreground);
   }
 }
@@ -459,7 +541,7 @@
   min-width: 30px;
   height: 20px;
   padding: 0 var(--space-2);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: 999px;
   background: var(--surface-muted);
   color: var(--foreground-muted);
@@ -469,9 +551,31 @@
   line-height: 1;
 }
 
+// A just-imported chart keeps a short-lived marker over its cover. It sits on
+// the card rather than in the level badge so it does not read as chart data.
+.project-new {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--design-radius-chip);
+  background: var(--active-accent-fill);
+  color: var(--active-accent);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  pointer-events: none;
+  animation: project-new-in var(--design-dur-tint) var(--design-ease-enter) both;
+}
+
 .redux-app-root .redux-home-page .redux-library-cards[data-view="grid"] .project-card {
   padding: var(--space-2);
-  border-color: var(--border-subtle);
+  border-color: var(--edge-divider);
   background: var(--surface-raised);
 
   .project-information {
@@ -490,7 +594,7 @@
   }
 
   &[data-selected="true"] {
-    border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--edge-emphasis));
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
   }
 }
@@ -533,8 +637,7 @@
 
 .redux-library-empty-copy {
   max-width: 34ch;
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
   line-height: 1.55;
 }
 
@@ -579,7 +682,7 @@
   gap: var(--space-2);
   margin-top: auto;
   padding-top: var(--space-4);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--edge-divider);
 }
 
 .redux-app-root .redux-home-page .redux-library-action {
@@ -646,5 +749,11 @@
   .redux-library-detail-cover-layer {
     animation: none;
     opacity: 1;
+  }
+
+  .project-card[data-entering="true"],
+  .project-new,
+  .redux-library-card-summary {
+    animation: none;
   }
 }

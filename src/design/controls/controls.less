@@ -24,15 +24,28 @@
 // outranks the theme sheet's id selectors.
 
 // --------------------------------------------------------------- text fields
-// One 28px box for every text-ish input, `select` and `textarea`. The resting
+// One 34px box for every text-ish input, `select` and `textarea`. The resting
 // state is a hairline; only the edge reacts to hover and focus, so a hovered
 // row reads as one control instead of a tinted patch.
+//
+// The field selector is one `:not()` list rather than a chain of them: every
+// rule below repeats it, so a new non-text input type is added once per rule
+// instead of once per guard.
 
 .redux-app-root
   input:where(
-    :not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(
-        [type="file"]
-      ):not([type="button"]):not([type="submit"]):not([type="reset"])
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="hidden"],
+      [type="image"]
+    )
   ),
 .redux-app-root select,
 .redux-app-root textarea {
@@ -42,12 +55,12 @@
   font-size: var(--type-body);
   color: var(--foreground);
   background: var(--input-surface);
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control, 6px);
   padding: 0 var(--space-2);
   // A field that draws something inside its right edge asks for the room by
   // setting the variable; matching the base rule's own specificity would mean
-  // repeating eight `:not()` guards.
+  // repeating the guard list.
   padding-right: var(--redux-field-inset, var(--space-2));
   min-height: var(--control-height);
   transition:
@@ -60,9 +73,18 @@
 // name another edge; the attribute rules below are that explicit request.
 .redux-app-root
   input:where(
-    :not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(
-        [type="file"]
-      ):not([type="button"]):not([type="submit"]):not([type="reset"])
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="hidden"],
+      [type="image"]
+    )
   ) {
   text-align: right;
 }
@@ -87,12 +109,46 @@
 }
 
 .redux-app-root
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
-    [type="color"]
+  input:where(
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="hidden"],
+      [type="image"]
+    )
   ):hover:not(:disabled),
 .redux-app-root select:hover:not(:disabled),
 .redux-app-root textarea:hover:not(:disabled) {
   border-color: var(--input-border-hover);
+}
+
+// The focus answer is one ring plus one edge colour. The ring is shared with
+// buttons and lives in styles/index.less; the edge colour is the field's own
+// token, so focus is not a hover that happened to stay.
+.redux-app-root
+  input:where(
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="hidden"],
+      [type="image"]
+    )
+  ):focus-visible,
+.redux-app-root select:focus-visible,
+.redux-app-root textarea:focus-visible {
+  border-color: var(--input-border-focus);
 }
 
 .redux-app-root input::placeholder,
@@ -104,11 +160,26 @@
   font-family: inherit;
 }
 
-.redux-app-root input:disabled,
+.redux-app-root
+  input:where(
+    :not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="hidden"],
+      [type="image"]
+    )
+  ):disabled,
 .redux-app-root select:disabled,
 .redux-app-root textarea:disabled {
   background: var(--input-surface-disabled);
-  opacity: 0.6;
+  border-color: var(--edge-divider);
+  color: var(--foreground-muted);
 }
 
 // A field whose owner refused the text it holds. `aria-invalid` is the state;
@@ -171,7 +242,7 @@
 
 .redux-stepper-button:disabled {
   cursor: var(--app-cursor-default);
-  opacity: 0.4;
+  color: var(--placeholder-text);
 }
 
 // One glyph, two directions: the asset is a chevron that points down.
@@ -235,7 +306,7 @@
   min-height: 0;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--design-radius-micro);
   background: var(--input-surface);
   cursor: var(--app-cursor-pointer);
@@ -245,7 +316,7 @@
 }
 
 .redux-app-root input[type="checkbox"]:hover:not(:disabled) {
-  border-color: var(--input-border);
+  border-color: var(--input-border-hover);
 }
 
 .redux-app-root input[type="checkbox"]:checked {
@@ -255,7 +326,13 @@
 
 .redux-app-root input[type="checkbox"]:disabled {
   cursor: var(--app-cursor-default);
-  opacity: 0.5;
+  border-color: var(--edge-divider);
+  background: var(--input-surface-disabled);
+}
+
+.redux-app-root input[type="checkbox"]:disabled:checked {
+  border-color: var(--edge-divider);
+  background: color-mix(in srgb, var(--accent) 45%, var(--input-surface-disabled));
 }
 
 // The tick. The mask carries the shape and `background-color` carries the ink,
@@ -286,18 +363,25 @@
   margin: auto;
   pointer-events: none;
   opacity: 0;
+  // The tick scales in from a little under its final size, so a toggle reads as
+  // one gesture instead of an instant swap.
+  transform: scale(0.55);
   --icon-color: var(--on-accent);
-  transition: opacity var(--design-dur-tint);
+  transition:
+    opacity var(--design-dur-tint) ease,
+    transform var(--design-dur-disclosure) var(--design-ease-spring);
 }
 
 input[type="checkbox"]:checked:not(:indeterminate) ~ .redux-check-tick {
   opacity: 1;
+  transform: scale(1);
 }
 
 // A partial folder swaps the tick for the design's minus; the box stays the
 // same, which is what makes the tri-state read as one control.
 input[type="checkbox"]:indeterminate ~ .redux-check-minus {
   opacity: 1;
+  transform: scale(1);
 }
 
 // A disabled control fades itself; the glyph is a sibling and must fade with it,
@@ -315,11 +399,11 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 .redux-app-root input[type="color"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 30px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   min-height: 0;
   padding: 2px;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control, 6px);
   background: var(--redux-swatch, var(--input-surface));
   cursor: var(--app-cursor-pointer);
@@ -362,7 +446,7 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   margin: 0;
   padding: 0;
   font: inherit;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control, 6px);
   background: var(--input-surface-disabled);
   cursor: var(--app-cursor-pointer);
@@ -374,7 +458,7 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 .redux-app-root input[type="range"][data-redux-slider]:disabled {
   cursor: var(--app-cursor-default);
   opacity: 1;
-  border-color: var(--border-subtle);
+  border-color: var(--edge-divider);
   // The disabled state changes the two regions of the track, not only its
   // outline: the unfilled rail and the filled portion both lose the accent.
   background: var(--surface-hover);
@@ -407,8 +491,8 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 // level slider, and clicking anywhere jumps to that value.
 .redux-app-root input[type="range"][data-redux-slider="level"] {
   height: var(--control-height);
-  border: 1px solid var(--input-border);
-  border-radius: var(--design-radius-inline);
+  border: 1px solid var(--edge-control);
+  border-radius: var(--radius-control);
   background: var(--input-surface-disabled);
 }
 
@@ -428,8 +512,8 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   background: transparent;
 }
 
-// Range: a squared thumb that sits on the rail. The track is 20px tall and the
-// thumb 12px, so the 4px offset is what centres it.
+// Range: a squared thumb that sits on the rail. The 28px box keeps a 1px border
+// on each side, so the 26px content box centres the 12px thumb at 7px.
 .redux-app-root input[type="range"][data-redux-slider="range"] {
   height: var(--control-height-compact);
 }
@@ -439,14 +523,22 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
-  margin-top: var(--space-1-5);
+  margin-top: 7px;
   border: 1px solid var(--input-border-focus);
   border-radius: var(--design-radius-micro);
   background: var(--foreground);
+  transition:
+    transform var(--design-dur-tint) var(--design-ease-spring),
+    background-color var(--design-dur-tint) ease;
 }
 
 .redux-app-root input[type="range"][data-redux-slider="range"]:hover::-webkit-slider-thumb {
   background: var(--accent);
+  transform: scale(1.15);
+}
+
+.redux-app-root input[type="range"][data-redux-slider="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.05);
 }
 
 .redux-app-root input[type="range"][data-redux-slider="range"]::-moz-range-thumb {
@@ -455,6 +547,18 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   border: 1px solid var(--input-border-focus);
   border-radius: var(--design-radius-micro);
   background: var(--foreground);
+  transition:
+    transform var(--design-dur-tint) var(--design-ease-spring),
+    background-color var(--design-dur-tint) ease;
+}
+
+.redux-app-root input[type="range"][data-redux-slider="range"]:hover::-moz-range-thumb {
+  background: var(--accent);
+  transform: scale(1.15);
+}
+
+.redux-app-root input[type="range"][data-redux-slider="range"]:active::-moz-range-thumb {
+  transform: scale(1.05);
 }
 
 // Input.tsx owns this sibling tree and positions it over the native input's
@@ -584,25 +688,25 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 
 .redux-control-popup {
   position: fixed;
-  z-index: var(--z-floating);
+  z-index: var(--z-menu);
   padding: var(--space-1);
   background: var(--surface-raised);
   color: var(--foreground);
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-panel);
   box-shadow: 0 16px 44px var(--shadow-color);
   transform-origin: var(--control-origin-x, 50%) var(--control-origin-y, 0%);
-  animation: redux-control-in var(--design-dur-tint) var(--design-ease-enter);
+  animation: redux-control-in var(--design-dur-overlay) var(--design-ease-enter);
 }
 
 @keyframes redux-control-in {
   from {
     opacity: 0;
-    transform: translateY(-3px);
+    transform: translateY(-2px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -630,6 +734,9 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   white-space: nowrap;
   width: 100%;
   cursor: var(--app-cursor-pointer);
+  transition:
+    background-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
 }
 
 .redux-select-group {
@@ -650,7 +757,7 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 }
 
 .redux-select-option[aria-disabled="true"] {
-  opacity: 0.4;
+  color: var(--placeholder-text);
   cursor: var(--app-cursor-default);
 }
 
@@ -695,7 +802,7 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
 .redux-color-current-swatch {
   width: var(--space-4);
   height: var(--space-4);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--design-radius-micro);
 }
 
@@ -716,7 +823,7 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   position: relative;
   flex: 1;
   height: 160px;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control);
   cursor: var(--app-cursor-pointer);
 }
@@ -757,7 +864,7 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
   position: relative;
   width: 18px;
   height: 160px;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--edge-control);
   border-radius: var(--radius-control);
   cursor: var(--app-cursor-pointer);
   background: linear-gradient(

@@ -126,6 +126,16 @@
   --media-ink: #ffffff;
   --border-subtle: color-mix(in oklab, var(--panel-border) 72%, transparent);
   --border-strong: var(--outline);
+  // --------------------------------------------------------------- edge roles
+  // Design sheets name one of these three roles, never a legacy hairline token:
+  //   control  — the edge of an interactive control (field, button, menu row)
+  //   divider  — a structural line between regions, rows, or groups
+  //   emphasis — a floating surface, alert, or selected state
+  // The legacy names stay for the business layer and for the state tokens that
+  // derive from them (`--input-border-hover`, `--input-border-focus`).
+  --edge-control: var(--input-border);
+  --edge-divider: var(--panel-border);
+  --edge-emphasis: var(--border-strong);
   --shadow-panel: 0 20px 64px var(--shadow-color);
   // Overlay surfaces cast their shadow toward the content they cover, so a
   // sidebar or drawer reads as a removable layer instead of a wider grid track.
@@ -139,9 +149,9 @@
   // Popover surfaces share one edge, fill, elevation, and divider so a context
   // menu, an application menu, and an overflow menu read as the same layer.
   --popover-surface: var(--surface-raised);
-  --popover-border: var(--border-strong);
+  --popover-border: var(--edge-emphasis);
   --popover-shadow: var(--shadow-overlay-popover);
-  --popover-divider: var(--border-strong);
+  --popover-divider: var(--edge-divider);
   --muted: var(--foreground-muted);
   // The resting surface a text field takes while its owner refuses the text it
   // holds. The danger colour is mixed into the same surface both themes already

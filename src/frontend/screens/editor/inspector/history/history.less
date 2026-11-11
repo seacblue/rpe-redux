@@ -23,7 +23,7 @@
 // The shared divider defaults to the stronger panel border; history rows use
 // the subtler hairline so separators stay quiet beside hover fills.
 .redux-history-sections > .redux-divider {
-  background: var(--border-subtle);
+  background: var(--edge-divider);
 }
 
 // Each row is a quiet surface until the pointer enters it; the revert action
@@ -65,8 +65,7 @@
 }
 
 .redux-history-row small {
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
+  .meta-text();
 }
 
 .redux-history-discarded {
@@ -74,7 +73,7 @@
 }
 
 .redux-history-origin {
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-control);
   color: var(--foreground-muted);
   flex: none;

@@ -13,6 +13,7 @@ import { EasingField } from "../../../../../design/components/easing/EasingField
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { EasingPreview } from "../../../../../design/components/easing/EasingPreview.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { FieldReset } from "../../../../../design/components/field/FieldReset.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
@@ -175,50 +176,56 @@ export function CurveFieldsView({
 
   return (
     <>
-      <FieldRow
-        layout="inline"
-        label={labels.startTime}
-        control={(id) => beatInput("startTime", id)}
-      />
-      <FieldRow layout="inline" label={labels.endTime} control={(id) => beatInput("endTime", id)} />
-      <FieldRow
-        layout="inline"
-        label={labels.startX}
-        control={(id, describedBy) => numberInput("startX", 1, id, describedBy)}
-      />
-      <FieldRow
-        layout="inline"
-        label={labels.endX}
-        control={(id, describedBy) => numberInput("endX", 1, id, describedBy)}
-      />
-      <FieldRow
-        layout="inline"
-        label={labels.density}
-        control={(id, describedBy) => numberInput("density", 0.25, id, describedBy)}
-      />
-      <FieldRow
-        layout="inline"
-        label={labels.type}
-        control={(id) => (
-          <Select
-            id={id}
-            ref={(input) => {
-              fields.current.type = input;
-            }}
-            value={draft.type}
-            onInput={(event) => apply({ ...draft, type: event.currentTarget.value })}
-          >
-            <option value="1">{t("editorPanels.inspector.noteType.tap")}</option>
-            <option value="3">{t("editorPanels.inspector.noteType.flick")}</option>
-            <option value="4">{t("editorPanels.inspector.noteType.drag")}</option>
-          </Select>
-        )}
-      />
-      <EasingField
-        label={labels.easing}
-        value={values.easingType}
-        onChange={(easingType) => apply({ ...draft, easingType: String(easingType) })}
-      />
+      <FieldRows>
+        <FieldRow
+          layout="inline"
+          label={labels.startTime}
+          control={(id) => beatInput("startTime", id)}
+        />
+        <FieldRow
+          layout="inline"
+          label={labels.endTime}
+          control={(id) => beatInput("endTime", id)}
+        />
+        <FieldRow
+          layout="inline"
+          label={labels.startX}
+          control={(id, describedBy) => numberInput("startX", 1, id, describedBy)}
+        />
+        <FieldRow
+          layout="inline"
+          label={labels.endX}
+          control={(id, describedBy) => numberInput("endX", 1, id, describedBy)}
+        />
+        <FieldRow
+          layout="inline"
+          label={labels.density}
+          control={(id, describedBy) => numberInput("density", 0.25, id, describedBy)}
+        />
+        <FieldRow
+          layout="inline"
+          label={labels.type}
+          control={(id) => (
+            <Select
+              id={id}
+              ref={(input) => {
+                fields.current.type = input;
+              }}
+              value={draft.type}
+              onInput={(event) => apply({ ...draft, type: event.currentTarget.value })}
+            >
+              <option value="1">{t("editorPanels.inspector.noteType.tap")}</option>
+              <option value="3">{t("editorPanels.inspector.noteType.flick")}</option>
+              <option value="4">{t("editorPanels.inspector.noteType.drag")}</option>
+            </Select>
+          )}
+        />
+        <EasingField
+          label={labels.easing}
+          value={values.easingType}
+          onChange={(easingType) => apply({ ...draft, easingType: String(easingType) })}
+        />
+      </FieldRows>
       <EasingPreview event={{ easingType: values.easingType }} />
       <FieldRow
         layout="inline"

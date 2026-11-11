@@ -66,7 +66,6 @@
 @import "../components/modal/modal.less";
 @import "../components/confirm/confirm.less";
 @import "../components/popconfirm/popconfirm.less";
-@import "../buttonStates.less";
 @import "./cursors.less";
 
 // The product uses pointer-driven controls for most navigation, but keyboard
@@ -77,15 +76,13 @@
 }
 
 .redux-app-root :where(.redux-button):focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  .focus-ring(2px);
 }
 
 // Text fields replace the platform focus ring, which is near-black on the dark
 // theme, with the same token the button ring uses.
 .redux-app-root :where(input, select, textarea):focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  .focus-ring(1px);
 }
 
 // A composite field (leading icon, borderless input, optional clear action) is
@@ -99,8 +96,7 @@
 :root[data-input-mode="tab"]
   .redux-app-root
   .redux-input-shell:has(:is(input, select, textarea):focus-visible) {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  .focus-ring(1px);
 }
 
 // Pointer clicks and keyboard activation (Space/Enter/Escape) leave DOM focus
@@ -121,10 +117,10 @@
 :root[data-input-mode="keyboard"] :is(input, select, textarea):focus {
   outline: none;
   box-shadow: none;
-  border-color: var(--input-border);
+  border-color: var(--edge-control);
 }
 
 .redux-app-root :where(input, select, textarea):focus,
 .redux-app-root :where(input, select, textarea):focus-visible {
-  border-color: var(--input-border);
+  border-color: var(--edge-control);
 }

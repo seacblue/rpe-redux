@@ -4,7 +4,7 @@
 .inspector {
   --inspector-gutter: var(--design-space-5);
   --inspector-section-gap: var(--design-space-4);
-  --inspector-subtle-border: var(--border-subtle);
+  --inspector-subtle-border: var(--edge-divider);
   // The panel is its own width container: a rail-expanded strip or a narrow
   // theme can leave the form too little room for two columns.
   container-type: inline-size;
@@ -18,8 +18,14 @@
 .inspector .redux-field-row:not([data-layout="block"]):not([data-divided="true"]) {
   gap: var(--space-1) var(--theme-field-gap, var(--space-3));
   min-height: var(--control-height-compact);
-  margin: 0 0 var(--space-1-5);
+  margin: 0 0 var(--field-row-margin-block, var(--space-1-5));
   padding: 0;
+}
+
+// A field-row list inside the inspector keeps the pane's 6px rhythm; the list
+// owns the gap and the rows stop carrying a margin.
+.inspector .redux-field-rows {
+  --field-rows-gap: var(--space-1-5);
 }
 
 .inspector-content > [data-panel]:not([hidden]),
@@ -42,10 +48,7 @@
 }
 
 .inspector-pane-meta small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  .truncate();
 }
 
 .inspector .panel-title {
@@ -131,11 +134,6 @@
   margin-inline: 0;
 }
 
-.inspector .action-grid {
-  margin-inline: 0;
-  padding-inline: 0;
-}
-
 // Panel actions read as one block of buttons, so every label is centered and
 // the grid sits on the panel gutter instead of carrying its own inset.
 .inspector .action-grid {
@@ -164,21 +162,6 @@
 // Raw feature buttons get a control silhouette. Shared buttons, numeric
 // steppers, segmented options, and line-selection rows own their surfaces and
 // dimensions in the design primitives.
-.inspector
-  button:not(.redux-action):not(.redux-button):not(.redux-stepper-button):not(
-    .redux-close-button
-  ):not(.redux-segmented-option):not(.line-texture-trigger):not(.line-selection-row):not(
-    .line-selection-group-name
-  ) {
-  min-height: var(--design-control-height);
-  border: 1px solid var(--outline);
-  background: var(--surface-raised);
-
-  &:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--surface-hover);
-  }
-}
 
 // A reset affordance is an extra strip beside the control. Give the control
 // column that strip back so the input keeps its full width instead of the reset

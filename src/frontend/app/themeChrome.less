@@ -167,7 +167,7 @@
 
 :root[data-chrome-inspector="floating"] .redux-app-root .workbench-inspector > .inspector,
 :root[data-chrome-inspector="overlay"] .redux-app-root .workbench-inspector > .inspector {
-  border: 1px solid var(--outline);
+  border: 1px solid var(--edge-emphasis);
   border-radius: var(--radius-panel);
   box-shadow: var(--chrome-panel-shadow);
 }
@@ -185,7 +185,7 @@
 // themes can reveal the workspace behind it.
 .redux-app-root .workbench-inspector > .inspector.is-drawer {
   background: var(--drawer-surface);
-  border-color: var(--panel-border);
+  border-color: var(--edge-divider);
 }
 
 // An overlay inspector leaves the grid entirely and floats over the workspace.
@@ -268,7 +268,7 @@
 :root[data-chrome-inspector="docked"][data-chrome-inspector-side="left"]
   .redux-app-root
   .inspector.panel {
-  border-right: 1px solid var(--outline);
+  border-right: 1px solid var(--edge-emphasis);
   border-left: 0;
 }
 
@@ -335,7 +335,7 @@
 :root[data-chrome-sidebar="floating"] .redux-app-root .workbench-body > .sidebar {
   width: calc(var(--sidebar-peek-width) - var(--chrome-panel-gap));
   margin: var(--chrome-panel-gap) var(--chrome-panel-gap) var(--chrome-panel-gap) 0;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   box-shadow: var(--chrome-panel-shadow);
 }
@@ -357,7 +357,7 @@
   margin: var(--space-2) var(--space-3);
   padding: var(--space-1) var(--space-2);
   background: var(--chrome-panel-surface);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   box-shadow: var(--chrome-panel-shadow);
   overflow-x: auto;
@@ -423,7 +423,7 @@
 // --------------------------------------------------------------- bar framing
 :root[data-chrome-toolbar="floating"] .redux-app-root .redux-toolbar {
   margin: var(--chrome-panel-gap) var(--chrome-panel-gap) 0;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--chrome-panel-surface);
   box-shadow: var(--chrome-panel-shadow);
@@ -437,7 +437,7 @@
   height: auto;
   min-height: 0;
   padding: var(--space-2);
-  border-right: 1px solid var(--panel-border);
+  border-right: 1px solid var(--edge-divider);
   border-bottom: 0;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -711,7 +711,7 @@
   .redux-status-card {
   margin: 0;
   padding: var(--space-2);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--chrome-panel-surface);
   box-shadow: var(--shadow-panel);
@@ -761,7 +761,7 @@
 
 :root[data-chrome-statusbar="floating"] .redux-app-root .shell-body > footer {
   margin: 0 var(--chrome-panel-gap) var(--chrome-panel-gap);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--chrome-panel-surface);
   box-shadow: var(--chrome-panel-shadow);
@@ -794,10 +794,10 @@
 
 :root[data-chrome-pattern="grid"] .redux-app-root .shell-content {
   background-image:
-    linear-gradient(color-mix(in srgb, var(--panel-border) 48%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--edge-divider) 48%, transparent) 1px, transparent 1px),
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--panel-border) 48%, transparent) 1px,
+      color-mix(in srgb, var(--edge-divider) 48%, transparent) 1px,
       transparent 1px
     );
   background-size: var(--space-7) var(--space-7);
@@ -805,7 +805,7 @@
 
 :root[data-chrome-pattern="dots"] .redux-app-root .shell-content {
   background-image: radial-gradient(
-    color-mix(in srgb, var(--panel-border) 68%, transparent) 1px,
+    color-mix(in srgb, var(--edge-divider) 68%, transparent) 1px,
     transparent 1px
   );
   background-size: var(--space-4) var(--space-4);
@@ -814,7 +814,7 @@
 :root[data-chrome-pattern="scanlines"] .redux-app-root .shell-content {
   background-image: repeating-linear-gradient(
     0deg,
-    color-mix(in srgb, var(--panel-border) 38%, transparent) 0 1px,
+    color-mix(in srgb, var(--edge-divider) 38%, transparent) 0 1px,
     transparent 1px var(--space-1-5)
   );
 }

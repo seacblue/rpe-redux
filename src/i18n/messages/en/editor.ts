@@ -234,7 +234,7 @@ export default {
   "editor.home.duplicateNameSuffix": "{name} copy",
   "editor.home.editBody":
     "This only changes what the local chart library records; the files on disk stay as they are.",
-  "editor.home.editTitle": "Project name and group",
+  "editor.home.editTitle": "Chart information",
   "editor.home.error.libraryServiceDown":
     "The local service is not running, so the chart library cannot be changed",
 
