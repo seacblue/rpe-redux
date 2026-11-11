@@ -59,6 +59,8 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 
 `Z`/`X` step between lines when nothing is selected and nudge the selection when something is selected. Multi-line shortcuts apply while the editor workspace has an open document.
 
+While multi-line editing shows more than one panel, dragging empty timeline space with the primary button pans the panels horizontally instead of starting a sweep. Both sweep gestures are unavailable in that layout, so neither the primary-button sweep-select nor the right-button sweep-deselect starts a sweep, and a `Shift`+drag marquee takes over additive and subtractive selection; a primary click that does not drag clears the selection. Single-panel layouts keep both sweeps.
+
 Hold `Ctrl`, type a judge-line number, and release `Ctrl` to jump to that line and switch the timeline to a single-line selection. Line numbers are 0-based. An existing `Ctrl+number` command takes precedence over the gesture; an unavailable line number leaves the current line unchanged and shows a warning.
 
 The stage drag handles remain; the same transforms are also available from the keyboard:
@@ -94,7 +96,7 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
-`T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior.
+`T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
 
 Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` / `Ctrl+Y` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys. A focused local control may also declare a bare key as its own: the selected audio row and the audio preview in the asset library claim `Space`, so the key drives that preview instead of the chart transport; modified chords such as `Ctrl+Space` stay global.
 

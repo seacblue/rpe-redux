@@ -140,3 +140,51 @@ test("a staying preview audition keeps the release time", async () => {
     editorAuditioning.set(false);
   }
 });
+
+test("a hold during playback only hides the authoring surfaces", () => {
+  const runtime = createAuditionRuntime();
+  const disposeView = connectViewControls(runtime.viewRuntime);
+  const disposeTransport = connectTransport(runtime.transportBindings);
+  try {
+    runtime.audio.playing = true;
+    runtime.audio.time = 12;
+    assert.equal(transport.beginAudition({ previewOnly: true }), true);
+    assert.equal(runtime.audio.playing, true);
+    assert.equal(runtime.audio.time, 12);
+    assert.equal(editorAuditioning.get(), false);
+    assert.equal(getEditorRegionSnapshot().showNotes, false);
+    assert.equal(getEditorRegionSnapshot().showEvents, false);
+    assert.equal(getEditorRegionSnapshot().showPreview, true);
+
+    runtime.audio.time = 16;
+    transport.endAudition();
+
+    assert.equal(runtime.audio.playing, true);
+    assert.equal(runtime.audio.time, 16);
+    assert.equal(getEditorRegionSnapshot().showNotes, true);
+    assert.equal(getEditorRegionSnapshot().showEvents, true);
+    assert.equal(getEditorRegionSnapshot().showPreview, true);
+  } finally {
+    disposeTransport();
+    disposeView();
+    editorAuditioning.set(false);
+  }
+});
+
+test("a second hold or a non-preview audition is refused while playback runs", () => {
+  const runtime = createAuditionRuntime();
+  const disposeView = connectViewControls(runtime.viewRuntime);
+  const disposeTransport = connectTransport(runtime.transportBindings);
+  try {
+    runtime.audio.playing = true;
+    assert.equal(transport.beginAudition({ previewOnly: false }), false);
+    assert.equal(transport.beginAudition({ previewOnly: true }), true);
+    assert.equal(transport.beginAudition({ previewOnly: true }), false);
+    transport.endAudition();
+    assert.equal(runtime.audio.playing, true);
+  } finally {
+    disposeTransport();
+    disposeView();
+    editorAuditioning.set(false);
+  }
+});
