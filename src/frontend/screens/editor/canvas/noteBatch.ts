@@ -6,26 +6,22 @@
 import { sizeCanvasBackingStore } from "./canvas2d.ts";
 import { holdLayout, holdRenderRotation } from "./noteGeometry.ts";
 import {
+  HOLD_PAINT_LAYER,
+  INSTANCE_STRIDE,
+  NoteSpriteGroups,
+  notePaintLayer,
+  type NoteColor,
+  type NotePaintLayer,
+  type SpriteGroup,
+  type TextureDescriptor,
+} from "./noteSpriteGroups.ts";
+import {
   bindInstanceAttribute,
   configureTextureSampling,
   createCornerBuffer,
   installContextLossHandlers,
   linkProgram,
 } from "./webgl.ts";
-
-/** A note's authored multiply tint or its selected-state recoloring. */
-export type NoteColor = { mode: "tint" | "selected"; color: number[] };
-
-/** One decoded skin bitmap and the useful rectangle inside it. */
-interface TextureDescriptor {
-  readonly source: HTMLImageElement;
-  readonly useful: {
-    readonly x: number;
-    readonly y: number;
-    readonly width: number;
-    readonly height: number;
-  };
-}
 
 /** Resolved Hold textures and skin-specific cap ratios for the current skin. */
 interface HoldTextureSet {
@@ -45,17 +41,12 @@ export interface NoteBatchSkin {
   holdEndTexture(highlight: boolean): TextureDescriptor | null;
 }
 
-/** Instances sharing one texture, with their packed vertex data. */
-interface SpriteGroup {
-  descriptor: TextureDescriptor;
-  instances: Float32Array;
-  count: number;
-}
-
-/** Floats per instance: transform, rotation, shear, UV rect, alpha, tint, and colorize mode. */
-const INSTANCE_STRIDE = 15;
-
-/** GPU batch for preview note skins; geometry and hit testing stay on the CPU. */
+/**
+ * GPU batch for preview note skins; geometry and hit testing stay on the CPU.
+ *
+ * Holds paint beneath Tap/Drag/Flick heads (see `notePaintLayer`); selected
+ * instances paint last so an overlap cannot hide the selection.
+ */
 export class NoteBatch {
   private readonly canvas: HTMLCanvasElement;
   private readonly gl: WebGL2RenderingContext | null;
@@ -75,9 +66,7 @@ export class NoteBatch {
   private colorizeLocation = -1;
   private width = 0;
   private height = 0;
-  private groups = new Map<HTMLImageElement, SpriteGroup>();
-  /** Selected instances render as a foreground pass so overlap cannot hide the selection. */
-  private selectedGroups = new Map<HTMLImageElement, SpriteGroup>();
+  private readonly groups = new NoteSpriteGroups();
   private descriptorSkin: NoteBatchSkin | null = null;
   private descriptorRevision: number | undefined;
   private readonly descriptorCache = new Map<string, TextureDescriptor | null>();
@@ -139,7 +128,6 @@ export class NoteBatch {
     this.colorizeLocation = -1;
     this.textures.clear();
     this.groups.clear();
-    this.selectedGroups.clear();
     this.descriptorCache.clear();
     this.clearHoldDescriptorCache();
     this.instanceBufferCapacity = 0;
@@ -153,7 +141,6 @@ export class NoteBatch {
     this.descriptorCache.clear();
     this.clearHoldDescriptorCache();
     this.groups.clear();
-    this.selectedGroups.clear();
     this.textures.clear();
     this.instanceBufferCapacity = 0;
     this.initializeResources();
@@ -335,9 +322,7 @@ export class NoteBatch {
       this.descriptorRevision = skin?.textureRevision;
       this.resetTextureCache();
     }
-    for (const group of [...this.groups.values(), ...this.selectedGroups.values()]) {
-      group.count = 0;
-    }
+    this.groups.reset();
     this.rotationCache.clear();
     if (this.isContextLost()) {
       this.contextLost = true;
@@ -402,6 +387,7 @@ export class NoteBatch {
       alpha,
       false,
       color,
+      notePaintLayer(type),
     );
   }
 
@@ -461,6 +447,7 @@ export class NoteBatch {
         alpha,
         true,
         color,
+        HOLD_PAINT_LAYER,
       );
     return (
       bodyAdded &&
@@ -499,11 +486,23 @@ export class NoteBatch {
     color?: NoteColor | null,
   ): boolean {
     return descriptor
-      ? this.add(descriptor, centerX, centerY, width, height, rotation, 0, alpha, true, color)
+      ? this.add(
+          descriptor,
+          centerX,
+          centerY,
+          width,
+          height,
+          rotation,
+          0,
+          alpha,
+          true,
+          color,
+          HOLD_PAINT_LAYER,
+        )
       : true;
   }
 
-  /** Upload the queued instance data and draw every group. */
+  /** Upload the queued instance data and draw every group in layer order. */
   finish(): void {
     if (!this.active || this.isContextLost() || !this.gl || !this.program || !this.instanceBuffer) {
       return;
@@ -549,9 +548,12 @@ export class NoteBatch {
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, group.count);
       }
     };
-    drawGroups(this.groups.values());
-    // Keep the selection in the foreground without introducing a canvas overlay.
-    drawGroups(this.selectedGroups.values());
+    // Ascending layer order keeps Holds beneath Tap/Drag/Flick heads; the
+    // selection paints last so an overlap cannot hide it.
+    for (const layer of this.groups.layers) {
+      drawGroups(layer.values());
+    }
+    drawGroups(this.groups.selected.values());
     gl.disable(gl.SCISSOR_TEST);
   }
 
@@ -579,7 +581,6 @@ export class NoteBatch {
     this.textures.clear();
     this.clear();
     this.groups.clear();
-    this.selectedGroups.clear();
     this.descriptorCache.clear();
     this.clearHoldDescriptorCache();
     this.instanceBufferCapacity = 0;
@@ -593,9 +594,7 @@ export class NoteBatch {
   /** Cancel queued uploads, reset instance counts, and clear the canvas. */
   clear(): void {
     this.cancelPrewarm();
-    for (const group of [...this.groups.values(), ...this.selectedGroups.values()]) {
-      group.count = 0;
-    }
+    this.groups.reset();
     if (this.gl && !this.isContextLost()) {
       this.gl.disable(this.gl.SCISSOR_TEST);
       this.gl.clearColor(0, 0, 0, 0);
@@ -609,7 +608,6 @@ export class NoteBatch {
     this.descriptorCache.clear();
     this.clearHoldDescriptorCache();
     this.groups.clear();
-    this.selectedGroups.clear();
     if (this.gl && !this.isContextLost()) {
       for (const texture of this.textures.values()) {
         this.gl.deleteTexture(texture);
@@ -672,8 +670,9 @@ export class NoteBatch {
   /**
    * Write one aligned, rotated quad into its texture group's instance buffer.
    *
-   * This is the hot path, so it avoids temporary objects. Returns false when the
-   * instance cannot be drawn.
+   * `layer` selects the paint layer (see `notePaintLayer`); a selected instance
+   * always joins the foreground pass. This is the hot path, so it avoids
+   * temporary objects. Returns false when the instance cannot be drawn.
    */
   private add(
     descriptor: TextureDescriptor,
@@ -684,8 +683,9 @@ export class NoteBatch {
     rotation: number,
     shear: number,
     alpha: number,
-    flipV = false,
-    color?: NoteColor | null,
+    flipV: boolean,
+    color: NoteColor | null | undefined,
+    layer: NotePaintLayer,
   ): boolean {
     if (!this.active || this.isContextLost() || !width || !height) {
       return false;
@@ -696,17 +696,7 @@ export class NoteBatch {
       return false;
     }
     const colorize = color?.mode === "selected";
-    const groups = colorize ? this.selectedGroups : this.groups;
-    let group = groups.get(descriptor.source);
-    if (!group) {
-      group = {
-        descriptor,
-        instances: new Float32Array(INSTANCE_STRIDE * 64),
-        count: 0,
-      };
-      groups.set(descriptor.source, group);
-    }
-    group.descriptor = descriptor;
+    const group = this.groups.group(descriptor, layer, colorize);
     const offset = group.count * INSTANCE_STRIDE;
     if (offset + INSTANCE_STRIDE > group.instances.length) {
       const next = new Float32Array(group.instances.length * 2);

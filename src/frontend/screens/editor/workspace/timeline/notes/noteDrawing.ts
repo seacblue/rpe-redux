@@ -23,6 +23,7 @@ import {
   remoteSelectionHighlightColor,
   selectionHighlightColor,
 } from "../../../canvas/palette.ts";
+import { notePaintLayer } from "../../../canvas/noteSpriteGroups.ts";
 import { canvasFont } from "../../../canvas/text.ts";
 import { TimelineLabelCuller } from "../drawing/labelCulling.ts";
 import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
@@ -247,10 +248,11 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
       entries.set(index, { item: checkedNote(session.notes[index]), index });
     }
   }
+  // Holds paint before the note heads so a Hold body never covers one.
   for (const entry of multiNotes
     ? []
     : [...entries.values()].sort(
-        (left, right) => Number(right.item.type === 2) - Number(left.item.type === 2),
+        (left, right) => notePaintLayer(left.item.type) - notePaintLayer(right.item.type),
       )) {
     const selected = session.selection.has(entry.index);
     const hovered = this.gestures.isNoteOverlapHovered(session.lineIndex, entry.index);
@@ -507,10 +509,16 @@ export function drawMultiLineNotes(
       this.appearance.overlapThreshold,
     );
     const selectedSet = selectedNoteIndices(session, lineIndex);
+    // Paint layer first so Holds stay beneath note heads; author order keeps
+    // the original index order inside one layer.
     const entries = noteIndex.index
       .query(bottomBeat, topBeat)
       .filter((entry) => isTimelineNoteRenderable(entry.item))
-      .sort((left, right) => left.index - right.index);
+      .sort(
+        (left, right) =>
+          notePaintLayer(left.item.type) - notePaintLayer(right.item.type) ||
+          left.index - right.index,
+      );
     for (const { index, item: sourceNote } of entries) {
       const note =
         selectedSet.has(index) &&

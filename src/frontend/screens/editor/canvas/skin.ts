@@ -22,7 +22,7 @@ import { toBlobPart } from "../../../../core/utils/bytes.ts";
 import { HIT_FRAME_COUNT } from "./hitFrame.ts";
 import { holdLayout } from "./noteGeometry.ts";
 import { splitPhiraHitFx, splitPhiraHoldAtlas } from "./phiraAtlas.ts";
-import type { NoteColor } from "./noteBatch.ts";
+import type { NoteColor } from "./noteSpriteGroups.ts";
 
 /** Note type → normal texture name. */
 const names: Record<number, string> = { 1: "tap", 2: "hold_head", 3: "flick", 4: "drag" };

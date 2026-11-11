@@ -1,8 +1,9 @@
-/** Verifies render-cache, opacity, and WebGL context-recovery contracts. */
+/** Verifies render-cache, paint-order, opacity, and WebGL context-recovery contracts. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { measureCanvas } from "../../../frontend/screens/editor/canvas/canvas2d.ts";
 import { NoteBatch } from "../../../frontend/screens/editor/canvas/noteBatch.ts";
+import { notePaintLayer } from "../../../frontend/screens/editor/canvas/noteSpriteGroups.ts";
 import {
   noteSkewAtHit,
   noteSkewCurve,
@@ -12,6 +13,7 @@ import {
   drawLinePasses,
   holdFallbackAlpha,
   isPreviewNoteSelected,
+  linePasses,
   previewNoteTint,
   shouldHighlightPreviewNote,
 } from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
@@ -22,11 +24,14 @@ import {
 import { TimelineEventBatch } from "../../../frontend/screens/editor/workspace/timeline/events/timelineEventBatch.ts";
 import { EditorRenderScheduler } from "../../../frontend/screens/editor/workspace/runtime/frame/renderScheduler.ts";
 
-/** A canvas and WebGL2 stub that tracks listeners and draw calls. */
+/** A canvas and WebGL2 stub that tracks listeners, draw calls, and drawn textures. */
 function fakeWebGLCanvas() {
   const listeners = new Map();
   let lost = false;
-  const calls = { draws: 0, uploads: [] };
+  const calls = { draws: 0, uploads: [], drawSources: [] };
+  const textureSources = new Map();
+  let pendingTexture = null;
+  let boundTexture = null;
   const noop = () => {};
   const gl = new Proxy(
     {
@@ -61,9 +66,21 @@ function fakeWebGLCanvas() {
       createShader: () => ({}),
       createProgram: () => ({}),
       createBuffer: () => ({}),
-      createTexture: () => ({}),
+      createTexture: () => {
+        pendingTexture = {};
+        return pendingTexture;
+      },
+      texImage2D: (_target, _level, _internal, _format, _type, source) => {
+        if (pendingTexture) {
+          textureSources.set(pendingTexture, source);
+        }
+      },
+      bindTexture: (_target, texture) => {
+        boundTexture = texture;
+      },
       drawArraysInstanced: () => {
         calls.draws += 1;
+        calls.drawSources.push(textureSources.get(boundTexture) ?? null);
       },
       bufferSubData: (_target, _offset, data) => {
         calls.uploads.push(Array.from(data));
@@ -127,6 +144,19 @@ const descriptor = {
   source: textureSource,
   useful: { x: 0, y: 0, width: 8, height: 8 },
 };
+
+/** A texture descriptor whose source carries a label for draw-order assertions. */
+function labeledDescriptor(label) {
+  return {
+    source: { label, naturalWidth: 8, naturalHeight: 8, width: 8, height: 8 },
+    useful: { x: 0, y: 0, width: 8, height: 8 },
+  };
+}
+
+/** The source label of every texture the batch painted, in draw order. */
+function paintedSources(calls) {
+  return calls.drawSources.map((source) => source?.label ?? null);
+}
 
 test("GPU event bars carry the per-line opacity alongside the global alpha", () => {
   const { canvas, calls } = fakeWebGLCanvas();
@@ -402,6 +432,63 @@ test("selected note instances render after ordinary instances", () => {
   assert.equal(calls.uploads.length, 2);
   assert.equal(calls.uploads[0][14], 0);
   assert.equal(calls.uploads[1][14], 1);
+});
+
+test("note batch paints Holds beneath note heads even after a head texture was used first", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const sources = {
+    tap: labeledDescriptor("tap"),
+    holdBody: labeledDescriptor("hold-body"),
+    holdEnd: labeledDescriptor("hold-end"),
+    holdHead: labeledDescriptor("hold-head"),
+  };
+  const skin = {
+    noteTexture: () => sources.tap,
+    holdBodyTexture: () => sources.holdBody,
+    holdEndTexture: () => sources.holdEnd,
+    holdHeadTexture: () => sources.holdHead,
+  };
+  const batch = new NoteBatch(canvas);
+
+  // First frame: only a Tap, so its texture group exists before any Hold part.
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addHead(skin, 1, false, 50, 50, 8, 0, 0, 1), true);
+  batch.finish();
+  assert.deepEqual(paintedSources(calls), ["tap"]);
+
+  calls.drawSources.length = 0;
+  // A later frame submits the Hold first; the existing head group must not
+  // float above it just because it was created in an earlier frame.
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addHold(skin, false, 50, 50, 50, 20, 8, true, 1), true);
+  assert.equal(batch.addHead(skin, 1, false, 50, 50, 8, 0, 0, 1), true);
+  batch.finish();
+  assert.deepEqual(paintedSources(calls), ["hold-body", "hold-end", "hold-head", "tap"]);
+});
+
+test("Holds keep the low paint layer for every Tap, Drag, and Flick head", () => {
+  assert.equal(notePaintLayer(2), 0);
+  for (const headType of [1, 3, 4]) {
+    assert.ok(
+      notePaintLayer(2) < notePaintLayer(headType),
+      `Hold layer ${notePaintLayer(2)} must be below head type ${headType}`,
+    );
+  }
+  assert.deepEqual(
+    [1, 2, 3, 4].sort((left, right) => notePaintLayer(left) - notePaintLayer(right)),
+    [2, 1, 3, 4],
+  );
+});
+
+test("preview draw passes paint Holds before note heads", () => {
+  const passes = linePasses([{ zOrder: 5 }, { zOrder: 1 }], [0, 1]);
+  assert.deepEqual(
+    passes.map((pass) => pass.kind),
+    ["line", "line", "hold", "note"],
+  );
+  const hold = passes.find((pass) => pass.kind === "hold");
+  const note = passes.find((pass) => pass.kind === "note");
+  assert.ok(hold.depth < note.depth);
 });
 
 test("authored green tint stays in multiply mode while selected green uses recoloring", () => {

@@ -9,6 +9,7 @@
  */
 import { beatValue, isOrderedBeatRange } from "../../../../../../core/global/chart/timing/beat.ts";
 import { noteColor, readCanvasPalette } from "../../../canvas/palette.ts";
+import { notePaintLayer } from "../../../canvas/noteSpriteGroups.ts";
 import type { TimelineCurveGhostReceiver } from "../drawing/timelineReceiver.ts";
 import type { TimelineNote } from "../../../../../../core/edit/timeline/types.ts";
 
@@ -39,7 +40,12 @@ export function drawCurveGhost(
   context.lineWidth = 2.5;
 
   // Draw real skin notes first; the dashed path stays on top of their bodies.
-  for (const note of renderableGhost) {
+  // Holds paint before heads so a ghost Hold body never covers a ghost head;
+  // the copy keeps the dashed path in the authored curve order.
+  const paintOrder = [...renderableGhost].sort(
+    (left, right) => notePaintLayer(left.type) - notePaintLayer(right.type),
+  );
+  for (const note of paintOrder) {
     if (note.existing) {
       continue;
     }

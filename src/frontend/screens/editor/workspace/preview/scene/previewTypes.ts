@@ -13,7 +13,8 @@ import type { TempoSource } from "../../../../../../core/global/chart/timing/eve
 import type { PreviewViewport } from "./viewport.ts";
 import type { TextureImage } from "../render/background.ts";
 import type { ShaderPass } from "../render/shaderPipeline.ts";
-import type { NoteBatchSkin, NoteColor } from "../../../canvas/noteBatch.ts";
+import type { NoteBatchSkin } from "../../../canvas/noteBatch.ts";
+import type { NoteColor } from "../../../canvas/noteSpriteGroups.ts";
 import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
 
 /** Which host mounts the preview: the workspace underlay or a dedicated surface. */

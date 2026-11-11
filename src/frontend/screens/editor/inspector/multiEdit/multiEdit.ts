@@ -12,7 +12,10 @@ import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks
 import { captureSelection } from "../../../../../core/edit/selection/snapshot.ts";
 import { commitSelectionEdit } from "../../../../../core/edit/selection/edits.ts";
 import { previewMultiEdit } from "../../../../../core/edit/multiEdit/plan.ts";
-import type { MultiEditResult } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
+import type {
+  BatchChange,
+  MultiEditResult,
+} from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import { beatValue } from "../../../../../core/global/chart/timing/beat.ts";
 import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import { normalizeChartObjectIds } from "../../../../../core/global/chart/chart.ts";
@@ -20,6 +23,7 @@ import { isChartObjectId, type ChartObjectId } from "../../../../../core/global/
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { eventColumnBounds } from "../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { noteColor, readCanvasPalette } from "../../canvas/palette.ts";
+import { notePaintLayer } from "../../canvas/noteSpriteGroups.ts";
 import { canvasFont } from "../../canvas/text.ts";
 import {
   MultiEditParameters,
@@ -54,6 +58,11 @@ function recipeName(values: Pick<MultiEditFormValues, "operation">): string {
 /** Compares two batch items by their serialized form. */
 function sameBatchItem(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** Paint layer of one planned note edit; the item may omit its type. */
+function batchPaintLayer(change: BatchChange): number {
+  return notePaintLayer(typeof change.after.type === "number" ? change.after.type : 1);
 }
 
 /** Finds the chart line that currently owns a note or event object. */
@@ -447,7 +456,13 @@ export class MultiEditPanel {
         ranges.set(rangeKey, range);
       }
     }
-    for (const change of result.changes) {
+    // Ghosts follow the real note paint order, so a ghost Hold body stays
+    // beneath the ghost heads it would otherwise cover.
+    const changes =
+      this.kind === "notes"
+        ? [...result.changes].sort((left, right) => batchPaintLayer(left) - batchPaintLayer(right))
+        : result.changes;
+    for (const change of changes) {
       const item = change.after;
       const lineIndex = Number.isInteger(change.lineIndex) ? change.lineIndex : session.lineIndex;
       const multiArea = session.multiLineActive && session.multiLineMode === this.kind;

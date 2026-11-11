@@ -82,7 +82,13 @@ function lineGeometry(
 export type RenderPass =
   { kind: "line"; index: number; depth: number } | { kind: "hold" | "note"; depth: number };
 
-/** Depth-sorted draw order: judge lines by `zOrder`, notes and holds on top. */
+/**
+ * Depth-sorted draw order: judge lines by `zOrder`, then Holds, then note heads.
+ *
+ * The Hold pass runs before the note pass so the Canvas fallback paints Holds
+ * beneath Tap/Drag/Flick heads; the GPU batch enforces the same order through
+ * `notePaintLayer`.
+ */
 export function linePasses(lines: readonly JudgeLine[], order: readonly number[]): RenderPass[] {
   const passes: RenderPass[] = order.map((index) => ({
     kind: "line",
