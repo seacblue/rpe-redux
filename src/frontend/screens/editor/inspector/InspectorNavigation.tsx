@@ -14,6 +14,10 @@ import { Divider } from "../../../../design/components/divider/Divider.tsx";
 import { Icon, iconName } from "../../../../design/components/icon/Icon.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { bindDrawerPaneTrigger, closeDrawer } from "../../../chrome/drawer/drawerPanes.ts";
+import {
+  closeWorkspaceMode,
+  useActiveWorkspaceModeId,
+} from "../workspace/container/workspaceModes.ts";
 import type {
   SidebarNavigationDivider,
   SidebarNavigationEntry,
@@ -86,6 +90,7 @@ function planVisibleEntries(
 function NavigationButton({ item }: { item: SidebarNavigationItem }) {
   const { tRaw } = useTranslation();
   const trigger = useRef<HTMLButtonElement>(null);
+  const activeWorkspaceMode = useActiveWorkspaceModeId();
   useEffect(() => {
     if (!item.drawerPaneId) {
       return;
@@ -102,6 +107,9 @@ function NavigationButton({ item }: { item: SidebarNavigationItem }) {
       onClick={() => {
         if (item.drawerPaneId === undefined) {
           closeDrawer();
+        }
+        if (item.panelId !== undefined && activeWorkspaceMode) {
+          closeWorkspaceMode();
         }
         item.onActivate();
       }}

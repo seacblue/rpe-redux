@@ -557,10 +557,11 @@ export default {
   "guide.section.multiEdit.tip2":
     "只有选择中共有的字段才会显示；不同值会显示为混合状态，直到你选择新的值。",
   "guide.section.multiEdit.tip3": "先检查预览再一次性提交；整批修改会作为一条可撤销的历史记录。",
-  "guide.section.audio.title": "音频、波形与频谱",
+  "guide.section.audio.title": "音频与热力图",
   "guide.section.audio.summary":
     "音频相关表面帮助你让谱面和歌曲对齐、观察瞬态，但它们本身不会直接修改谱面对象。",
-  "guide.section.audio.tip1": "波形和频谱会跟随当前谱面音频及时间范围，用来定位起音和安静片段。",
+  "guide.section.audio.tip1":
+    "热力图会跟随当前谱面音频及时间范围，用频段层次定位起音、持续音和安静片段。",
   "guide.section.audio.tip2": "音频分析只是视觉参考；提交密集音符前仍应结合播放和时值点确认。",
   "guide.section.audio.tip3": "音频显示异常时先检查谱面信息和资源面板；修改音符不能修复缺失资源。",
   "guide.section.scripts.title": "扩展与脚本",

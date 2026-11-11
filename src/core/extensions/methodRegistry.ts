@@ -120,10 +120,10 @@ type HandleSeedTable = {
 /**
  * Methods reachable through `context.api`, grouped by facade handle.
  *
- * `placeNote`, `transaction`, and the document/library write methods check
+ * `transaction`, the document/library write methods, and asset writes check
  * their own capability inside the gated view even when the handle itself was
  * granted through a read capability. Project-bound library methods share the
- * names and capabilities registered for the root library handle.
+ * names and capabilities registered for the scoped project handle.
  */
 const HANDLE_METHODS = {
   chart: [
@@ -140,7 +140,6 @@ const HANDLE_METHODS = {
     ["note", "chart.read", "read", false],
     ["events", "chart.read", "read", false],
     ["event", "chart.read", "read", false],
-    ["placeNote", "chart.write", "write", true],
   ],
   transaction: [
     ["availability", "chart.write", "read", false],
@@ -168,8 +167,6 @@ const HANDLE_METHODS = {
   document: [
     ["availability", "document.read", "read", false],
     ["state", "document.read", "read", false],
-    ["snapshot", "document.read", "read", false],
-    ["fingerprint", "document.read", "read", false],
     ["create", "document.write", "sensitive", true],
     ["openPath", "document.write", "sensitive", true],
     ["openBytes", "document.write", "sensitive", true],
@@ -179,21 +176,21 @@ const HANDLE_METHODS = {
   library: [
     ["availability", "library.read", "read", false],
     ["list", "library.read", "read", false],
-    ["get", "library.read", "read", false],
     ["scope", "library.read", "read", false],
     ["create", "library.write", "sensitive", true],
     ["createRaw", "library.write", "sensitive", true],
-    ["update", "library.write", "sensitive", true],
-    ["remove", "library.write", "sensitive", true],
-    ["duplicate", "library.write", "sensitive", true],
-    ["assets", "library.read", "read", false],
-    ["asset", "library.read", "read", false],
-    ["addAsset", "assets.write", "sensitive", true],
-    ["removeAsset", "assets.write", "sensitive", true],
-    ["revisions", "library.read", "read", false],
-    ["createRevision", "library.write", "sensitive", true],
-    ["revision", "library.read", "read", false],
-    ["removeRevision", "library.write", "sensitive", true],
+    ["current.get", "library.read", "read", false],
+    ["current.update", "library.write", "sensitive", true],
+    ["current.remove", "library.write", "sensitive", true],
+    ["current.duplicate", "library.write", "sensitive", true],
+    ["current.assets", "library.read", "read", false],
+    ["current.asset", "library.read", "read", false],
+    ["current.addAsset", "assets.write", "sensitive", true],
+    ["current.removeAsset", "assets.write", "sensitive", true],
+    ["current.revisions", "library.read", "read", false],
+    ["current.createRevision", "library.write", "sensitive", true],
+    ["current.revision", "library.read", "read", false],
+    ["current.removeRevision", "library.write", "sensitive", true],
   ],
   playback: [
     ["availability", "playback.read", "read", false],

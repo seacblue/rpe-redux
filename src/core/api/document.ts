@@ -5,7 +5,8 @@
  * automation, and the internal document API can choose a target. The Extension
  * capability gate drops that path before a package call reaches this facade.
  * Replacement policy is explicit, and unsaved data is reported as a structured
- * result.
+ * result. Whole-chart reads live on `chart.snapshot()`; this handle owns
+ * lifecycle state only.
  */
 import { getDocumentApi } from "../edit/document/api.ts";
 import { availabilityFor, unavailableResult } from "./support.ts";
@@ -46,17 +47,9 @@ export const document = Object.freeze({
   availability(): ApiAvailability {
     return availabilityFor(api(), "No editor document runtime connected");
   },
-  /** The current document descriptor and dirty state. */
+  /** The current document descriptor, committed fingerprint, and dirty state. */
   state(): DocumentState {
     return api()?.state() ?? emptyState;
-  },
-  /** A detached copy of the current chart, or null when none is open. */
-  snapshot(): DocumentSnapshot["chart"] {
-    return api()?.snapshot() ?? null;
-  },
-  /** The committed chart fingerprint, or null when none is available. */
-  fingerprint(): string | null {
-    return api()?.fingerprint() ?? null;
   },
   /** Create a document from a new or supplied chart. */
   create(options?: CreateDocumentOptions): Promise<ApiResult<DocumentSnapshot>> {

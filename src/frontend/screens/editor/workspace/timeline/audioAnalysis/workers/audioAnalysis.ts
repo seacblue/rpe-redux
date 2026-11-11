@@ -1,6 +1,6 @@
 /**
  * Worker entry point that accumulates streamed channel chunks and runs the core
- * waveform and spectrum analysis off the main thread.
+ * audio analysis off the main thread.
  *
  * It owns the worker message protocol only; the algorithms stay in
  * `core/media/audioAnalysis.ts`.

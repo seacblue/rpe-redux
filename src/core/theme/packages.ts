@@ -3,7 +3,7 @@
  *
  * A theme is data, not code: an id, the appearance family it belongs to, a map
  * of CSS custom properties, optional PNG glyphs, and an optional chrome recipe.
- * The chrome recipe selects host-authored layout, surface, and motion presets;
+ * The chrome recipe selects host-authored surface, motion, and title-bar presets;
  * it never carries CSS, JavaScript, URLs, or free-form values. The built-in
  * looks ship as packages under `src/assets/themes/`, and a user package is the
  * same document dropped into one of the `themes/` roots — so there is exactly

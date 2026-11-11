@@ -35,7 +35,7 @@
 }
 
 .inspector-status-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--foreground);
@@ -46,9 +46,20 @@
   white-space: nowrap;
 }
 
+// The trailing actions form one edge-aligned group. The help glyph stays beside
+// the name; expansion and closing keep the same slots when the page moves into
+// its Workspace mode.
+.inspector-status-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 // The shared icon button is a 32px box; the status bar uses the compact
 // control height so the close affordance sits inside the bar's derived row.
-.redux-app-root .inspector .inspector-status > .inspector-status-close {
+.redux-app-root .inspector .inspector-status-actions > .inspector-status-close {
   flex: none;
   width: var(--control-height-compact);
   height: var(--control-height-compact);
@@ -57,7 +68,8 @@
   padding: 0;
 }
 
-.redux-app-root .inspector .inspector-status > .inspector-status-help {
+.redux-app-root .inspector .inspector-status > .inspector-status-help,
+.redux-app-root .inspector .inspector-status-actions > .inspector-status-expand {
   flex: none;
   width: var(--control-height-compact);
   height: var(--control-height-compact);
@@ -67,8 +79,60 @@
   color: var(--foreground-muted);
 }
 
-.redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled) {
+.redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled),
+.redux-app-root
+  .inspector
+  .inspector-status-actions
+  > .inspector-status-expand:hover:not(:disabled) {
   color: var(--accent);
+}
+
+// The same expand control becomes the return control in place: the panel is
+// already open, so the glyph turns around rather than moving to another bar.
+.redux-app-root
+  .inspector
+  .inspector-status-actions
+  > .inspector-status-expand.is-expanded
+  .redux-icon {
+  transform: rotate(180deg);
+}
+
+// A document task owns the inspector body. The panel keeps its header and
+// scrolls inside the task page instead of the outer inspector column.
+.inspector[data-mode-surface="true"] .inspector-status {
+  border-bottom-color: var(--edge-divider);
+}
+
+.inspector[data-mode-surface="true"] .inspector-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inspector-mode-surface {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: min(900px, calc(100vw - var(--workbench-side-track)));
+  min-height: 0;
+  overflow: hidden;
+  animation: inspector-mode-surface-in 160ms var(--design-ease-enter) both;
+}
+
+.inspector-mode-surface > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+@keyframes inspector-mode-surface-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .inspector-content {

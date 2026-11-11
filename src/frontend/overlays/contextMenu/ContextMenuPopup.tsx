@@ -139,7 +139,11 @@ export function navigateMenu(event: KeyboardEvent<HTMLElement>, close: () => voi
           ? 0
           : event.key === "End"
             ? items.length - 1
-            : (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
+            : index < 0
+              ? event.key === "ArrowUp"
+                ? items.length - 1
+                : 0
+              : (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
       items[next]?.focus();
     }
     return;
@@ -188,6 +192,7 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
   label,
   className = "",
   submenu,
+  initialFocus = "first",
   children,
 }: {
   store: ContextMenuStore<T>;
@@ -196,6 +201,15 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
   className?: string;
   /** A sibling menu that opens beside this one, inside the same popover. */
   submenu?: ReactNode;
+  /**
+   * Where focus lands when the popup opens.
+   *
+   * `first` keeps keyboard-driven menus ready to arrow through rows. `container`
+   * focuses the popup itself so a pointer-driven picker does not paint its first
+   * row as if the pointer were already over it; the first arrow key enters the
+   * rows.
+   */
+  initialFocus?: "first" | "container";
   children(snapshot: T, close: () => void): ReactNode;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.get, store.get);
@@ -330,11 +344,15 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
     }
     const frame = requestAnimationFrame(() => {
       if (menu.matches(":popover-open") && !menu.contains(document.activeElement)) {
-        focusFirstItem(menu);
+        if (initialFocus === "container") {
+          menu.focus();
+        } else {
+          focusFirstItem(menu);
+        }
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [snapshot]);
+  }, [snapshot, initialFocus]);
 
   const measured = placement?.snapshot === snapshot ? placement : null;
   return (
@@ -342,6 +360,7 @@ export function ContextMenuPopup<T extends ContextMenuAnchor>({
       ref={popup}
       popover="auto"
       role="menu"
+      tabIndex={-1}
       aria-labelledby={labelId}
       className={`redux-menu-popup ${className}`.trim()}
       data-align={snapshot?.align ?? "start"}

@@ -112,15 +112,15 @@
 // column would leave a 9px gap on the leading side and 6px on the trailing one,
 // which reads as a pill that is off-centre against the rail. The slot keeps its
 // 41px hit size and centres itself inside the column instead.
-.redux-app-root .sidebar:not(.is-top) .redux-rail-item {
+.redux-app-root .sidebar .redux-rail-item {
   grid-template-columns: minmax(0, 1fr) var(--sidebar-peek-content-width);
 }
 
-.redux-app-root .sidebar:not(.is-top) .redux-rail-item::before {
+.redux-app-root .sidebar .redux-rail-item::before {
   width: var(--sidebar-peek-content-width);
 }
 
-.redux-app-root .sidebar:not(.is-top) .redux-rail-item-icon {
+.redux-app-root .sidebar .redux-rail-item-icon {
   justify-self: center;
 }
 

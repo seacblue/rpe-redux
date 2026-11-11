@@ -7,7 +7,6 @@
  */
 import { ensureFixtures } from "./fixtures.mjs";
 import { delay, restartWithSameProfile } from "./journeySupport.mjs";
-import { drawerSdkState } from "./drawerSupport.mjs";
 
 async function waitForDocument(runner) {
   await runner.waitFor("document open", () =>
@@ -26,19 +25,14 @@ async function playbackValue(runner, label) {
   return result.value;
 }
 
-const drawerLinesOpen = (runner) =>
+const linesInspectorOpen = (runner) =>
   runner.evaluate(`(() => {
     const inspector = document.querySelector('#inspector');
-    const page = inspector?.querySelector('[data-drawer-pane="lines"]');
-    const trigger = document.querySelector('.sidebar [data-drawer-pane="lines"]');
+    const panel = inspector?.querySelector('[data-panel="lines"]:not([hidden])');
+    const trigger = document.querySelector('.sidebar [data-pane="lines"]');
     const heading = inspector?.querySelector('.inspector-status-name')?.textContent?.trim();
     const expected = trigger?.getAttribute('aria-label')?.trim();
-    return (
-      inspector?.classList.contains('is-drawer') === true &&
-      Boolean(page) &&
-      Boolean(heading) &&
-      heading === expected
-    );
+    return Boolean(panel) && Boolean(heading) && heading === expected;
   })()`);
 
 const chartInfoExpanded = (runner) =>
@@ -75,10 +69,8 @@ export async function sessionRestore(runner) {
       "Boolean(document.querySelector('#inspector [data-panel=history]:not([hidden])'))",
     ),
   );
-  await runner.evaluate(
-    "document.querySelector('.sidebar [data-drawer-pane=lines]')?.click(); true",
-  );
-  await runner.waitFor("drawer lines pane open", () => drawerLinesOpen(runner));
+  await runner.evaluate("document.querySelector('.sidebar [data-pane=lines]')?.click(); true");
+  await runner.waitFor("lines inspector open", () => linesInspectorOpen(runner));
   await runner.waitFor("chart info expanded", () => chartInfoExpanded(runner));
 
   // The keeper samples periodically and the preference push is debounced, so
@@ -100,22 +92,14 @@ export async function sessionRestore(runner) {
       ),
     );
     await restarted.waitFor("restored chart info", () => chartInfoExpanded(restarted));
-    await restarted.waitFor("restored drawer", () => drawerLinesOpen(restarted));
+    await restarted.waitFor("restored lines inspector", () => linesInspectorOpen(restarted));
     const restored = await playbackValue(restarted, "restored playback state");
     runner.assert(
       Math.abs(restored.chartSeconds - seekTarget) < 0.05,
       `restored playhead moved: ${JSON.stringify({ seekTarget, restored })}`,
     );
     runner.assert(await chartInfoExpanded(restarted), "restored chart info is collapsed");
-    runner.assert(await drawerLinesOpen(restarted), "restored drawer pane is missing");
-    const restoredDrawer = await drawerSdkState(restarted);
-    runner.assert(
-      restoredDrawer.selected === "lines" &&
-        restoredDrawer.open &&
-        restoredDrawer.split &&
-        restoredDrawer.pane === "lines",
-      `restored SDK selection and visible drawer disagree: ${JSON.stringify(restoredDrawer)}`,
-    );
+    runner.assert(await linesInspectorOpen(restarted), "restored lines inspector is missing");
   } finally {
     await restarted.close();
   }

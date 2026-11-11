@@ -1,21 +1,26 @@
 /**
  * Sidebar rail at the window's right edge, beside the inspector.
  *
- * The rail is the window's only navigation surface. Inspector panes and
- * document-wide drawer pages share one ordered entry list from
- * `navigation.ts`; every route replaces the inspector's content. Drawer pages
- * are the inspector's drawer mode, not a second surface beside it.
+ * The rail is the window's only navigation surface. Inspector pages and any
+ * extension-owned drawer pages share one ordered entry list from
+ * `navigation.ts`; every route replaces the inspector's content. A built-in
+ * document page opens a compact Inspector page and can expand into a wide
+ * Inspector; drawer pages remain an extension content mode, not a second surface.
  *
  * The rail is permanently compact: it never widens over the inspector, and each
- * entry reveals its name through the shared tooltip layer. The top placement is
- * a separate horizontal bar that keeps its labels visible; it is not an
- * expansion of the rail.
+ * entry reveals its name through the shared tooltip layer. Its placement is
+ * host-owned, so a theme cannot turn it into a top bar or move it into the
+ * inspector.
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Divider } from "../../../design/components/divider/Divider.tsx";
 import { iconName } from "../../../design/components/icon/Icon.tsx";
 import { ThemeRailItem } from "./ThemeRailItem.tsx";
 import { bindDrawerPaneTrigger, type DrawerState } from "../drawer/drawerPanes.ts";
+import {
+  closeWorkspaceMode,
+  useActiveWorkspaceModeId,
+} from "../../screens/editor/workspace/container/workspaceModes.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import type { MessageKey } from "../../../i18n/index.ts";
 import { useEditorHostValue } from "../../contracts/editorHostReact.tsx";
@@ -53,6 +58,7 @@ function SidebarEntry({
   const { tRaw } = useTranslation();
   const trigger = useRef<HTMLButtonElement>(null);
   const activePanel = useEditorHostValue((runtime) => runtime.ui.activeInspector, "");
+  const activeWorkspaceMode = useActiveWorkspaceModeId();
   useEffect(() => {
     if (!item.drawerPaneId) {
       return;
@@ -88,7 +94,9 @@ function SidebarEntry({
   const active = drawer.open
     ? item.drawerPaneId !== undefined && drawer.pane === item.drawerPaneId
     : item.drawerPaneId === undefined &&
-      (featureActive || (item.panelId !== undefined && activePanel === item.panelId));
+      (featureActive ||
+        (item.panelId !== undefined &&
+          (activePanel === item.panelId || activeWorkspaceMode === item.panelId)));
   return (
     <div className="sidebar-item">
       <ThemeRailItem
@@ -102,7 +110,15 @@ function SidebarEntry({
         statusDot={indicator}
         data-pane={item.drawerPaneId === undefined ? (item.panelId ?? item.id) : undefined}
         data-drawer-pane={item.drawerPaneId}
-        onClick={item.onActivate}
+        onClick={() => {
+          // Sidebar destinations belong to the compact shell. Choosing any of
+          // them while a document task is expanded returns to the compact
+          // inspector first, so the selected page is actually visible.
+          if (activeWorkspaceMode) {
+            closeWorkspaceMode();
+          }
+          item.onActivate();
+        }}
       />
       {badge > 0 && (
         <span className="redux-sidebar-badge" aria-hidden="true">
@@ -123,45 +139,29 @@ function SidebarRule({ item }: { item: SidebarNavigationDivider }) {
   return visible ? <Divider axis="x" /> : null;
 }
 
-/** Where the frame renders the rail. */
-export type SidebarPlacement = "rail" | "floating" | "top" | "inspector";
-
 /**
- * Renders the merged inspector and drawer navigation.
- *
- * `top` turns the rail into a horizontal bar with visible labels. Every other
- * placement renders the same compact, tooltip-only rail.
+ * Renders the merged inspector and drawer navigation in the window's trailing
+ * column.
  */
-export function Sidebar({
-  placement = "rail",
-  sidebar,
-}: {
-  placement?: SidebarPlacement;
-  /** Rail name and semantics from the surface that owns the entries. */
-  sidebar: SidebarDescriptor;
-}) {
+export function Sidebar({ sidebar }: { sidebar: SidebarDescriptor }) {
   const { t } = useTranslation();
-  const horizontal = placement === "top";
   const { entries, drawer } = useSidebarNavigation();
   const anchor = onboardingAnchorRef("sidebar");
   return (
     <aside
       ref={anchor}
-      className={`sidebar${horizontal ? " is-top" : ""}`}
+      className="sidebar"
       aria-label={t(sidebar.label)}
-      data-tip-placement={horizontal ? "bottom" : "left"}
-      data-placement={placement}
+      data-tip-placement="left"
       role={sidebar.role}
-      aria-orientation={
-        horizontal ? "horizontal" : sidebar.role === "toolbar" ? "vertical" : undefined
-      }
+      aria-orientation={sidebar.role === "toolbar" ? "vertical" : undefined}
     >
       <div className="sidebar-content">
         {entries.map((entry) =>
           entry.kind === "divider" ? (
             <SidebarRule item={entry} key={entry.id} />
           ) : (
-            <SidebarEntry item={entry} expanded={horizontal} drawer={drawer} key={entry.id} />
+            <SidebarEntry item={entry} expanded={false} drawer={drawer} key={entry.id} />
           ),
         )}
       </div>

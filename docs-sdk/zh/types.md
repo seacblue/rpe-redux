@@ -33,20 +33,44 @@ interface ApiAvailability {
 }
 ```
 
-## ActionResult
+## ChartTransactionRequest
 
-放置音符、事件和事务提交会返回 `ActionResult<T>`。`status` 有四种：
+谱面写入请求，传给 `transaction.preview` 或 `transaction.apply`：
 
-| status        | 含义                   |
-| ------------- | ---------------------- |
-| `committed`   | 已写入                 |
-| `unchanged`   | 没有需要写入的内容     |
-| `rejected`    | 输入不合法或被规则拒绝 |
-| `unavailable` | 运行时未连接           |
+```ts
+interface ChartTransactionRequest {
+  label?: string;
+  metadata?: Partial<ChartMeta>;
+  timing?: { bpmList: BpmEntry[] };
+  lines?: { insert?: LineInsert[]; update?: LineUpdate[] };
+  notes?: { insert?: NoteInsert[]; update?: NoteUpdate[]; delete?: ChartObjectId[] };
+  events?: { insert?: EventInsert[]; update?: EventUpdate[]; delete?: ChartObjectId[] };
+}
+```
+
+## ChartTransactionResult
+
+`ChartTransactionResult` 包含 `status`、`affectedObjectIds`、`issues`、`history` 和 `conflict`。`TransactionIssue` 用 `code` 和可选的 `path` 描述校验问题。
 
 ## ChartObjectId
 
-判定线、音符和事件的稳定字符串 id。读取方法通常用它查找对象。
+判定线、音符和事件的稳定字符串 id。读取方法通常用它查找对象；插入新对象时不要自己生成 id。
+
+## Beat
+
+`Beat` 是约分后的拍三元组 `[whole, numerator, denominator]`，例如 `[0, 1, 2]` 表示 `0.5` 拍。音符和事件都使用这种表示，而不是秒。
+
+## 音符字段
+
+`JudgeLineNote` 的关键字段：
+
+| 字段                    | 说明                                                   |
+| ----------------------- | ------------------------------------------------------ |
+| `type`                  | `1` Tap、`2` Hold、`3` Flick、`4` Drag。               |
+| `startTime` / `endTime` | 起止拍三元组；Hold 的 `endTime` 必须晚于 `startTime`。 |
+| `positionX`             | 横向谱面坐标，`0` 表示判定线中心。                     |
+| `above`                 | `1` 在线上方，`0` 或 `2` 在线下方。                    |
+| `isFake`                | `1` 为假音符，`0` 为真实音符。                         |
 
 ## ChartReadCollection
 
@@ -64,42 +88,13 @@ interface ApiAvailability {
 
 谱面 `META` 的安全只读投影，常用字段包括 `name`、`song`、`composer`、`charter`、`level` 和 `offset`。
 
-## ChartTarget
-
-`chart.placeNote` 的放置目标：
-
-| 字段        | 必填 | 说明                             |
-| ----------- | ---- | -------------------------------- |
-| `lineIndex` | 是   | 判定线索引，从 0 开始            |
-| `from`      | 是   | 音符头坐标 `{ beat, positionX }` |
-| `to`        | 否   | Hold 尾部坐标                    |
-| `layer`     | 否   | 事件层编号                       |
-| `eventType` | 否   | 事件驱动的放置类型               |
-
-`beat` 是拍位置，`positionX` 是横向谱面坐标；0 表示判定线中心。
-
-## ChartTargetPoint
-
-`ChartTarget.from` 和 `ChartTarget.to` 的坐标形状：`{ beat: number, positionX: number }`。
-
-## ChartNoteType
-
-`chart.placeNote` 的第一个参数，只有四个值：
-
-| 值  | 类型  |
-| --- | ----- |
-| `1` | Tap   |
-| `2` | Hold  |
-| `3` | Flick |
-| `4` | Drag  |
-
 ## ChartReadLine
 
 一条判定线的只读快照，包含 id、音符、事件层和基础几何信息。完整字段以类型定义为准。
 
 ## ChartReadNote
 
-一个音符的只读快照。放置成功后，`chart.placeNote` 的 `value.value` 就是它。
+一个音符的只读快照。要修改它，先读 `note.id`，再走 `notes.update`。
 
 ## ChartReadEvent
 
@@ -111,7 +106,7 @@ interface ApiAvailability {
 
 ## ChartReadState
 
-谱面指纹和修订代数。事务预览或应用前可以用它判断谱面是否已经变化。
+谱面指纹和修订代数。可以用它判断谱面是否已经变化；事务本身会在提交时校验当前谱面。
 
 ## ExtensionThemeTokens
 
@@ -123,6 +118,6 @@ interface ApiAvailability {
 
 ## 下一步
 
-- 想放第一个音符：[放一个音符](place-note.md)
+- 想改谱面：[谱面操作](place-note.md)
 - 想知道 `ui`、`storage`、`scripts` 放在哪：[扩展上下文](context.md)
 - 想读完整方法列表：[API 总览](api:)

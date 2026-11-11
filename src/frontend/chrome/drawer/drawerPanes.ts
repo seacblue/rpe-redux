@@ -1,11 +1,12 @@
 /**
- * The document drawer: an inspector content mode for document-wide pages.
+ * The generic document drawer: an inspector content mode for extension-owned
+ * pages.
  *
- * The drawer has no rail of its own: its pane entries live in the window's
- * single sidebar beside the inspector. This module owns the registered panes,
- * their order, and the published open/pane state. Opening a pane replaces the
- * inspector body with that page, so a programmatic entry never changes a hidden
- * state the user cannot see.
+ * Built-in document pages use the compact Inspector page plus the wide
+ * Inspector expansion under `screens/global/sections/<name>/page.tsx`. This
+ * registry remains for packages that contribute an `editor.drawer` page and for
+ * compatibility with existing drawer state. The drawer has no rail of its own:
+ * its pane entries live in the window's single sidebar beside the inspector.
  *
  * The open/pane record here is the only drawer selection state. Core reads it
  * through the late-bound reader in `core/shell/drawerPane.ts`; no second copy is

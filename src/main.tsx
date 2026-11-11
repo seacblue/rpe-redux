@@ -29,6 +29,9 @@ import { extensionRuntime } from "./core/extensions/extensionRuntime.ts";
 import { hostKind, isDesktop } from "./core/platform/environment.ts";
 import { invoke } from "@tauri-apps/api/core";
 import { isPerformanceHudWindow } from "./core/platform/desktop/performanceHudWindow.ts";
+import { setBootRoute } from "./frontend/contracts/appRoute.ts";
+import { initializeBootRoute } from "./frontend/app/routing/bootRoute.ts";
+import { initializeLocationRoute } from "./frontend/app/routing/routeLocation.ts";
 import { PerformanceHudWindow } from "./frontend/overlays/performance/PerformanceHudWindow.tsx";
 import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.ts";
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
@@ -93,5 +96,17 @@ if (isPerformanceHudWindow()) {
   installLoadingPaint();
   installInteractionPolicy();
   void initializeDeveloperMode();
-  createRoot(container).render(<App />);
+  const renderApp = () => createRoot(container).render(<App />);
+  // A desktop chart link has to become the boot route before the editor
+  // assembly decides whether to restore the last session.
+  void initializeBootRoute()
+    .then((route) => {
+      setBootRoute(route);
+      renderApp();
+    })
+    .catch((error: unknown) => {
+      console.warn("Unable to resolve the boot route", error);
+      setBootRoute(initializeLocationRoute());
+      renderApp();
+    });
 }

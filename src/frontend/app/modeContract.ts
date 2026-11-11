@@ -2,10 +2,10 @@
  * The single authoring surface the window frame renders.
  *
  * The shell no longer swaps between top-level modes: the stage is always the
- * editor, the inspector shows the selected object, and the document-wide pages
- * open in the drawer. What remains configurable is the pieces of that one
- * surface — the workspace, the inspector, the rail, and the editor-only toolbar
- * rows — so the frame still names a slot instead of a component.
+ * editor, the inspector shows the selected object, and a large document page can
+ * expand the inspector over the workspace. What remains configurable is the pieces of that
+ * one surface — the workspace, the inspector, the rail, and the editor-only
+ * toolbar rows — so the frame still names a slot instead of a component.
  */
 import type { ComponentType } from "react";
 import type { ToolbarEntry } from "../../core/shell/registries/toolbar.ts";

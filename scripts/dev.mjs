@@ -17,6 +17,9 @@ import { loadOrCreateDevPorts } from "./devPorts.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const backendDirectory = join(root, "src", "backend");
+// The browser loop is served from its own root; a web deployment base belongs
+// to `build:web`, not to the development origin.
+delete process.env.REDUX_WEB_BASE;
 const PREFERENCE_TOKEN_HEADER = "X-Redux-Preference-Token";
 const READY_TIMEOUT_MS = 120_000;
 const SHUTDOWN_TIMEOUT_MS = 5_000;

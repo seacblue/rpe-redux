@@ -54,7 +54,7 @@
 
 - `values` 是可声明、可写、可持久化、可订阅的命名值；扩展可以把自己的设置放进去。
 - `theme.tokens()` 是宿主已经应用到文档的只读派生快照，来源是当前 CSS token surface；它没有 `set`、没有持久化 key，也不能被扩展声明覆盖。
-- `theme.subscribe()` 监听的是主题/密度变化，不能替代某个值的变更订阅。把它伪装成 `values` 会让扩展误以为能写主题或把主题 token 当成用户设置。
+- `theme.subscribe()` 监听的是主题变化，不能替代某个值的变更订阅。把它伪装成 `values` 会让扩展误以为能写主题或把主题 token 当成用户设置。
 
 ## 为什么 layout、theme、ui 没有合并
 
@@ -68,8 +68,13 @@
 
 {{CONTEXT_METHODS_TABLE}}
 
+## 谱面写入
+
+通过 `context.api.chart` 和 `context.api.selection` 读当前谱面；谱面修改统一走一个 `context.api.transaction` 请求，不要直接修改读取快照。见[谱面操作](place-note.md)。
+
 ## 相关接口
 
+- [谱面操作](place-note.md)
 - [数据持久化](persistence.md)
 - [面板与菜单](panels-and-menus.md)
 - [声明式 UI](ui-reference.md)

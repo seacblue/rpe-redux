@@ -11,7 +11,6 @@
  * purpose edit.
  */
 import { useId, useRef, useState, type RefObject } from "react";
-import { Button } from "../../../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
@@ -22,12 +21,8 @@ import {
   type JudgeLine,
 } from "../../../../../core/global/chart/chart.ts";
 import { lineGroupIndex } from "../../../../../core/global/chart/line/lineGroups.ts";
-import {
-  combineJudgeLineTraits,
-  judgeLineTraits,
-} from "../../../../../core/global/chart/line/lineTraits.ts";
+import { combineJudgeLineTraits } from "../../../../../core/global/chart/line/lineTraits.ts";
 import { lineGroupLabels } from "../../../editor/workspace/lineLabels.ts";
-import { GAME_UI_BINDING_LABELS } from "../../../editor/workspace/preview/drawing/gameUi.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { t } from "../../../../../i18n/index.ts";
 import {
@@ -41,11 +36,14 @@ import type { LineField } from "./lineFieldEdits.ts";
 import type { LinePurposeTarget } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
 import { InspectorEmpty } from "../../../editor/inspector/InspectorEmpty.tsx";
 import { LineFolderPanel } from "./LineFolderPanel.tsx";
+import { LineControlCurves } from "./LineControlCurves.tsx";
 import { LineTree } from "./LineTree.tsx";
+import { LineTypeSection } from "./LineTypeSection.tsx";
 import { lineTreeKey } from "./lineTreeModel.ts";
 import { TextureBrowser, TextureField } from "./TexturePicker.tsx";
 import type { GlobalView } from "../../globalView.ts";
 import { lineNoiseConflicts } from "../../../../../core/global/chart/noise/lineNoiseConflicts.ts";
+import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import { createLineResets } from "./linePanelResets.tsx";
 import {
   noiseAreaForLine,
@@ -97,14 +95,11 @@ export interface LinePanelViewProps extends LinePanelProps {
   /** The drawer renders the tree without its editor title. */
   showTitle?: boolean;
   /** Split the tree and properties into separate workspace/inspector surfaces. */
-  variant?: "all" | "tree" | "properties";
+  variant?: "all" | "tree" | "properties" | "stacked" | "split";
 }
 
 /** A select value that cannot collide with a real group, mask, or binding. */
 const MIXED_VALUE = "__mixed__";
-
-/** The three purposes the bulk type selector can write. */
-const LINE_PURPOSE_TARGETS: readonly LinePurposeTarget[] = ["standard", "noise", "inverted"];
 
 /** The bulk target that matches one line's current purpose. */
 function linePurposeTarget(line: JudgeLine): LinePurposeTarget {
@@ -327,109 +322,6 @@ export function LinePanelView({
    * purpose enables. A multi-line selection writes the chosen purpose to every
    * selected line immediately; destructive targets confirm inside the controller.
    */
-  const renderLineType = () => {
-    if (!selectedLine) {
-      return null;
-    }
-    if (multi) {
-      return (
-        <section className="line-panel-type">
-          <h3 className="line-panel-section-title">
-            {t("editorPanels.linePanel.folder.bulkType")}
-          </h3>
-          <Segmented<LinePurposeTarget>
-            className="is-block"
-            ariaLabel={t("editorPanels.linePanel.folder.bulkType")}
-            value={batchPurposeValue}
-            options={LINE_PURPOSE_TARGETS.map((purpose) => ({
-              value: purpose,
-              label:
-                purpose === "standard"
-                  ? t("editorPanels.linePanel.type.standard")
-                  : purpose === "noise"
-                    ? t("editorPanels.linePanel.noise")
-                    : t("editorPanels.linePanel.noiseInvert"),
-            }))}
-            onChange={(target) => void applyBatchPurpose(target)}
-          />
-        </section>
-      );
-    }
-    const lineTraits = judgeLineTraits(selectedLine);
-    const settings = noiseLineSettings(selectedLine);
-    const noiseMode = settings ? (settings.invert ? "inverted" : "normal") : "off";
-    const binding = (
-      <Select
-        id="line-field-attach-ui"
-        name="attachUI"
-        defaultValue={attachUI}
-        onChange={() => commitField("attachUI")}
-      >
-        <option value="">{t("editorPanels.linePanel.noBinding")}</option>
-        {GAME_UI_BINDING_LABELS.map(([key, label]) => (
-          <option value={key} key={key}>
-            {t(label)}
-          </option>
-        ))}
-        {attachUI && !GAME_UI_BINDING_LABELS.some(([key]) => key === attachUI) ? (
-          <option value={attachUI}>
-            {t("editorPanels.linePanel.retained", { name: attachUI })}
-          </option>
-        ) : null}
-      </Select>
-    );
-    return (
-      <section className="line-panel-type">
-        <h3 className="line-panel-section-title">{t("editorPanels.linePanel.type")}</h3>
-        {lineTraits.isText ? (
-          <p className="hint">{t("editorPanels.linePanel.typeTextHint")}</p>
-        ) : lineTraits.isTexture ? (
-          <>
-            <p className="hint">{t("editorPanels.linePanel.typeTextureHint")}</p>
-            <Button variant="outlined" onClick={() => onSetTexture("line.png")}>
-              {t("editorPanels.linePanel.typeTextureRestore")}
-            </Button>
-          </>
-        ) : (
-          <>
-            {lineTraits.allowsNoiseMode && (
-              <Segmented<"off" | "normal" | "inverted">
-                className="is-block line-panel-type-switch"
-                ariaLabel={t("editorPanels.linePanel.type")}
-                value={noiseMode}
-                options={[
-                  { value: "off", label: t("editorPanels.linePanel.type.standard") },
-                  { value: "normal", label: t("editorPanels.linePanel.noise") },
-                  { value: "inverted", label: t("editorPanels.linePanel.noiseInvert") },
-                ]}
-                onChange={(next) =>
-                  void changeNoiseMode(next === "inverted" ? "inverted" : "normal", next !== "off")
-                }
-              />
-            )}
-            {lineTraits.allowsUiBinding && (lineExtendedEnabled || Boolean(attachUI)) && (
-              <FieldRow
-                layout="inline"
-                density="compact"
-                htmlFor="line-field-attach-ui"
-                label={t("editorPanels.linePanel.attachUi")}
-                reset={resets.field(
-                  "attachUI",
-                  t("editorPanels.linePanel.attachUi"),
-                  attachUI !== "",
-                )}
-                control={binding}
-              />
-            )}
-            {lineTraits.isNoise && (
-              <p className="hint">{t("editorPanels.linePanel.typeNoiseHint")}</p>
-            )}
-            {lineTraits.isUi && <p className="hint">{t("editorPanels.linePanel.typeUiHint")}</p>}
-          </>
-        )}
-      </section>
-    );
-  };
 
   /** Renders the editable property fields for the current selection. */
   const renderLineProperties = () => {
@@ -465,7 +357,18 @@ export function LinePanelView({
             }
           />
         )}
-        {renderLineType()}
+        <LineTypeSection
+          selectedLine={selectedLine}
+          multi={multi}
+          batchPurposeValue={batchPurposeValue}
+          onBatchPurpose={applyBatchPurpose}
+          changeNoiseMode={changeNoiseMode}
+          attachUI={attachUI}
+          lineExtendedEnabled={lineExtendedEnabled}
+          resets={resets}
+          commitField={commitField}
+          onSetTexture={onSetTexture}
+        />
         {showAnchor && (
           <div className="line-panel-pair">
             <FieldRow
@@ -714,14 +617,85 @@ export function LinePanelView({
       </section>
     );
   };
-  const showTree = variant !== "properties" && lineView === "lines";
+  const stacked = variant === "stacked";
+  const split = variant === "split";
+  const emptyLineList = lines.length === 0 && folderGroup === null;
+  const showTree = variant !== "properties" && (split || stacked || lineView === "lines");
   const showProperties =
-    variant !== "tree" && (variant === "properties" || lineView === "properties");
+    variant !== "tree" &&
+    (variant === "properties" || split || stacked || lineView === "properties");
+  const treeFace = showTree ? (
+    <LineTree
+      session={session}
+      chart={chart}
+      showGroups={showGroups}
+      selectedLineIds={selectedLineIds}
+      folderGroup={folderGroup}
+      collapsedGroups={collapsedLineGroups}
+      onToggleGroup={onToggleLineGroup}
+      scrollTopRef={scrollTopRef}
+      treeLayout={treeLayout}
+      onSelectionChange={onLineSelectionChange}
+      onSelectLine={onSelectLine}
+      onSelectFolder={onSelectFolder}
+      onCommit={onCommit}
+      onNotify={notify}
+    />
+  ) : null;
+  const propertyFace = showProperties ? (
+    folderGroup !== null ? (
+      <section
+        className="line-panel-properties"
+        aria-label={t("editorPanels.linePanel.properties")}
+        key={`folder-properties:${folderGroup}:${folderLabel}`}
+      >
+        <LineFolderPanel
+          chart={chart}
+          group={folderGroup}
+          label={folderLabel}
+          onRename={(name) => onRenameGroup(folderGroup, name)}
+          onApplyPurpose={(target) => onApplyLinePurpose(folderGroup, target)}
+        />
+      </section>
+    ) : (
+      <>
+        <section
+          className="line-panel-properties"
+          aria-label={t("editorPanels.linePanel.properties")}
+          key={`properties:${selectionKey}:${session.lineIndex}`}
+        >
+          {renderLineProperties()}
+        </section>
+        {renderCombination()}
+        {!multi && selectedLine && (
+          <LineControlCurves
+            chart={chart}
+            line={selectedLine}
+            lineIndex={session.lineIndex}
+            onCommit={onCommit}
+            notify={notify}
+          />
+        )}
+        {textureBrowserOpen && showTexture && (
+          <TextureBrowser
+            id={textureBrowserId}
+            textures={textures}
+            value={sharedTexture ?? ""}
+            onChange={commitTexture}
+            onAddTexture={onAddTexture}
+            onClose={() => onTextureBrowserOpen(false)}
+            triggerRef={textureTriggerRef}
+          />
+        )}
+      </>
+    )
+  ) : null;
   return (
     <form
       ref={formRef}
       className="line-panel"
       data-view={lineView}
+      data-variant={variant}
       aria-label={t("editorPanels.linePanel.title")}
       autoComplete="off"
       onSubmit={(event) => event.preventDefault()}
@@ -739,62 +713,32 @@ export function LinePanelView({
           onChange={onLineViewChange}
         />
       )}
-      {showTree && (
-        <LineTree
-          session={session}
-          chart={chart}
-          showGroups={showGroups}
-          selectedLineIds={selectedLineIds}
-          folderGroup={folderGroup}
-          collapsedGroups={collapsedLineGroups}
-          onToggleGroup={onToggleLineGroup}
-          scrollTopRef={scrollTopRef}
-          treeLayout={treeLayout}
-          onSelectionChange={onLineSelectionChange}
-          onSelectLine={onSelectLine}
-          onSelectFolder={onSelectFolder}
-          onCommit={onCommit}
-          onNotify={notify}
-        />
-      )}
-      {showProperties &&
-        (folderGroup !== null ? (
-          <section
-            className="line-panel-properties"
-            aria-label={t("editorPanels.linePanel.properties")}
-            key={`folder-properties:${folderGroup}:${folderLabel}`}
-          >
-            <LineFolderPanel
-              chart={chart}
-              group={folderGroup}
-              label={folderLabel}
-              onRename={(name) => onRenameGroup(folderGroup, name)}
-              onApplyPurpose={(target) => onApplyLinePurpose(folderGroup, target)}
-            />
-          </section>
+      {split ? (
+        emptyLineList ? (
+          <div className="line-panel-single">{treeFace}</div>
         ) : (
-          <>
-            <section
-              className="line-panel-properties"
-              aria-label={t("editorPanels.linePanel.properties")}
-              key={`properties:${selectionKey}:${session.lineIndex}`}
-            >
-              {renderLineProperties()}
-            </section>
-            {renderCombination()}
-            {textureBrowserOpen && showTexture && (
-              <TextureBrowser
-                id={textureBrowserId}
-                textures={textures}
-                value={sharedTexture ?? ""}
-                onChange={commitTexture}
-                onAddTexture={onAddTexture}
-                onClose={() => onTextureBrowserOpen(false)}
-                triggerRef={textureTriggerRef}
-              />
-            )}
-          </>
-        ))}
+          <div className="line-panel-split">
+            <div className="line-panel-split-tree">{treeFace}</div>
+            <div className="line-panel-split-properties">{propertyFace}</div>
+          </div>
+        )
+      ) : stacked ? (
+        emptyLineList ? (
+          <div className="line-panel-single">{treeFace}</div>
+        ) : (
+          <InspectorPageSplit
+            topLabel={t("editorPanels.linePanel.title")}
+            bottomLabel={t("editorPanels.linePanel.properties")}
+            top={treeFace}
+            bottom={propertyFace}
+          />
+        )
+      ) : (
+        <>
+          {treeFace}
+          {propertyFace}
+        </>
+      )}
     </form>
   );
 }

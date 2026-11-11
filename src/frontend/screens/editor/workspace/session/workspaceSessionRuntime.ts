@@ -29,7 +29,6 @@ import {
 import { createWorkspaceSessionKeeper } from "./workspaceSessionKeeper.ts";
 import { closeInspector, openInspector } from "../../inspector/controller.ts";
 import { setChartInfoExpanded } from "../../../../chrome/statusbar/chartInfoPresenter.ts";
-import { getDrawerState, openDrawerPane } from "../../../../chrome/drawer/drawerPanes.ts";
 
 /** Editor services the workspace-session record reads and restores. */
 export interface WorkspaceSessionRuntimeDependencies {
@@ -93,12 +92,9 @@ export function createWorkspaceSessionRuntime(
 
   /** Captures the open panel state to persist. */
   const panels = (): WorkspaceSessionPanels => {
-    const drawer = getDrawerState();
     return {
       activeInspector: deps.activeInspector.get(),
       chartInfoExpanded: deps.getChartInfoExpanded(),
-      drawerPane: drawer.open ? drawer.pane : undefined,
-      drawerOpen: drawer.open,
     };
   };
 
@@ -186,16 +182,11 @@ export function createWorkspaceSessionRuntime(
       closeInspector(deps.activeInspector);
     }
     const savedDrawerPane = saved.panels.drawerPane;
-    // Chart metadata used to be a drawer page. A session written before that
-    // move still names it here; restore the visible intent as its inspector page
-    // instead of leaving the inspector empty or selecting an unknown drawer id.
-    const legacyMetadataDrawer = saved.panels.drawerOpen && savedDrawerPane === "metadata";
-    if (legacyMetadataDrawer) {
-      openInspector("metadata", deps.activeInspector);
-    } else if (saved.panels.drawerOpen && savedDrawerPane) {
-      // A restored drawer reopens visibly through the one drawer write entry;
-      // a pane id that is no longer registered leaves it closed.
-      openDrawerPane(savedDrawerPane);
+    // Document pages used to be drawer panes. Sessions written before that move
+    // still name one here; restore the visible intent as the matching Inspector
+    // page instead of leaving the inspector empty or selecting an unknown pane.
+    if (saved.panels.drawerOpen && savedDrawerPane) {
+      openInspector(savedDrawerPane, deps.activeInspector);
     }
     setChartInfoExpanded(true);
     deps.invalidate();

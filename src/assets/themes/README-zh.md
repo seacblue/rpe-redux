@@ -1,6 +1,6 @@
 # 主题包
 
-主题包是数据，不是代码。它提供一组 CSS 自定义属性、可选的 PNG 图标覆盖，以及可选的 **外观配方（chrome recipe）**，用来选择窗口框架的布局、表面和动效预设。 `src/core/theme/packages.ts` 负责模式与校验，`src/core/theme/registry.ts` 负责注册， `src/core/theme/applyTheme.ts` 解析当前主题，`src/frontend/app/themeChrome.less` 把预设渲染为样式。宿主只读写文档，从不执行主题包。
+主题包是数据，不是代码。它提供一组 CSS 自定义属性、可选的 PNG 图标覆盖，以及可选的 **外观配方（chrome recipe）**，用来选择窗口框架的表面和动效预设。窗口布局与尺寸由宿主持有；主题不能移动或调整检查器、侧栏、工具栏、进度条和状态栏。 `src/core/theme/packages.ts` 负责模式与校验，`src/core/theme/registry.ts` 负责注册， `src/core/theme/applyTheme.ts` 解析当前主题，`src/frontend/app/themeChrome.less` 把预设渲染为样式。宿主只读写文档，从不执行主题包。
 
 随应用发布的主题是构建期源目录；可分发的主题或拖入的主题是单个 JSON 文档。英文指南见 [README.md](README.md)。
 
@@ -28,18 +28,6 @@ light/                随应用发布的亮色参考主题
   "colors": { "--accent": "#a8c7fa" },
   "icons": {},
   "chrome": {
-    "layout": {
-      "density": "spacious",
-      "inspector": "floating",
-      "inspectorSide": "right",
-      "sidebar": "floating",
-      "toolbar": "floating",
-      "toolbarPlacement": "left",
-      "transport": "floating",
-      "transportAnchor": "bottom-right",
-      "transportDraggable": true,
-      "statusBar": "floating"
-    },
     "surface": {
       "shape": "round",
       "material": "glass",
@@ -69,34 +57,14 @@ light/                随应用发布的亮色参考主题
 | `actionForeground` | 可选，把 `resting`、`hover`、`focus`、`pressed`、`disabled`、`emphasized` 映射到 `normal` 或 `inverse`。 |
 | `colors` | 已发布的颜色 token 词汇表（`src/core/theme/colorTokens.ts`）；值只能是十六进制、`rgb`/`hsl` 形式或 `transparent`。 |
 | `icons` | 可选的图标名到 PNG 映射。随应用发布的源主题使用相对 `.png` 路径；分发文档使用 PNG data URL。 |
-| `chrome` | 可选的布局、表面、动效配方。每个成员都是封闭预设；省略的成员使用下方默认值。 |
+| `chrome` | 可选的表面、动效配方与标题栏框架。每个成员都是封闭预设；省略的成员使用下方默认值。已退役的 `layout`、`metrics` 和 `titlebar.density` 会被忽略。 |
 | `ui` | 可选的声明式槽位/组件树。树使用宿主原语和绑定字段，不包含 HTML、CSS 或代码。 |
 
 未指定的颜色继承声明外观对应的内置调色板，因此只改强调色的主题不会破坏其余界面的可读性。动作前景按声明的 normal 或 inverse 选择；对比度低于 4.5:1 时回退到更可读的候选颜色。
 
 ## 外观配方
 
-配方只控制表现。它选择宿主提供的槽位、表面和有界尺寸；不能提供标记、隐藏标题栏、菜单、工具栏或检查器，不能改变窗口行为，也不能注入样式表。渲染器把每个名字映射到宿主自带的 CSS 和 React 槽位。`toolbarOrder` 只按 ID 重排已注册命令，不能新增、删除或改名。
-
-### 布局
-
-| 字段 | 值 | 默认 | 效果 |
-| --- | --- | --- | --- |
-| `density` | `compact`、`comfortable`、`spacious` | `comfortable` | 控件高度与设计间距节奏。 |
-| `inspector` | `docked`、`floating`、`overlay` | `docked` | 检查器保留列、变成内缩卡片，或浮在工作区上方（不超过窗口一半宽度）。 |
-| `inspectorSide` | `left`、`right` | `right` | 检查器停靠在哪一侧。 |
-| `sidebar` | `rail`、`floating`、`top`、`inspector` | `rail` | 右侧栏贴边、变成卡片、变成顶部横条，或把注册按钮移进检查器空态做双栏文字网格。 |
-| `toolbar` | `docked`、`floating` | `docked` | 工具栏贴边或变成抬升卡片。 |
-| `toolbarPlacement` | `top`、`left` | `top` | 顶部工具栏位于工作区上方；左侧工具栏变成纵向工具面板。 |
-| `toolbarFlow` | `rows`、`single`、`grid` | `rows` | 按注册行分开绘制、合并成一条连续流，或排成网格。网格里的图标按钮保持正方形；分隔线整行跨列，复合字段跨两格。 |
-| `toolbarColumns` | `2`、`3`、`4` | `2` | `grid` 流的列数。 |
-| `toolbarOrder` | 已注册 ID 数组 | `[]` | 先按给定顺序绘制列出的命令，未列出的命令保持注册表顺序。 |
-| `transport` | `toolbar`、`floating` | `toolbar` | 进度条留在工具栏或浮在窗口上方。 |
-| `transportAnchor` | `top-left`、`top-right`、`bottom-left`、`bottom-right` | `bottom-right` | 浮动进度条初始所在的角。 |
-| `transportDraggable` | 布尔值 | `true` | 浮动进度条能否通过把手拖动。 |
-| `statusBar` | `docked`、`floating`、`hidden` | `docked` | 状态栏贴边、变成卡片或隐藏。 |
-
-`sidebar: "top"` 和 `sidebar: "inspector"` 只作用于使用注册侧栏项且拥有检查器的编辑器表面。文档级页面位于 drawer，因此主题不会删除它无法重建的页面导航。
+配方只控制表现。它选择宿主提供的表面与动效，以及标题栏的窗口按钮和应用菜单框架；窗口位置和尺寸不属于主题包契约。不能提供标记、隐藏标题栏、菜单、工具栏或检查器，不能改变窗口行为，也不能注入样式表。渲染器把每个名字映射到宿主自带的 CSS 和 React 槽位。
 
 ### 表面
 
@@ -117,16 +85,14 @@ light/                随应用发布的亮色参考主题
 | `hover` | `none`、`lift`、`glow` | `none` | 动作按钮的指针反馈。 |
 | `entrance` | `none`、`fade`、`rise`、`slide` | `fade` | 工作区面板与设置页的入场动画。 |
 
-### 标题栏与尺寸
+### 标题栏
 
 | 分组 | 值 | 默认 | 效果 |
 | --- | --- | --- | --- |
-| `titlebar.density` | `compact`、`normal`、`tall` | `normal` | 标题行高度节奏。 |
 | `titlebar.windowControls` | `system`、`compact`、`capsule` | `system` | 窗口按钮的尺寸与分组；最小化、最大化、关闭仍由宿主执行。 |
 | `titlebar.menu` | `hamburger`、`expanded` | `expanded` | 单个应用菜单触发器，或把分区标签展开成经典菜单栏；命令集合相同。 |
-| `metrics` | 有界整数 | 缺省 | 可选的像素/百分比覆盖；省略的值保持当前预设。 |
 
-`metrics` 支持 `panelGap`（0–32）、`toolbarGap`（0–16）、`toolbarCell`（28–56）、 `toolbarWidth`（200–480）、`inspectorWidth`（280–720）、`sidebarWidth`（40–120）、 `sidebarExpandedWidth`（160–320）、`titlebarHeight`（32–56）、`windowControlSize`（28–56）、 `fieldControlWidth`（24–72，百分比）、`fieldGap`（8–32）。所有值必须是整数。 `fieldControlWidth` 作用于每个带标签字段行的控件列；设置页保留自己更紧的分栏。
+`titlebar.density` 原本控制标题行高度，现在会被忽略；标题行高度由宿主持有。
 
 `prefers-reduced-motion: reduce` 始终优先：共享时长 token 会收缩，`reset.less` 会禁用过渡与动画，无论配方写了什么。`level: "none"` 的配方不需要系统偏好也能得到同样的抑制。
 
@@ -206,7 +172,7 @@ light/                随应用发布的亮色参考主题
 | `dark`  | 参考暗色调色板、完整图标集、默认外观配方。 |
 | `light` | 参考亮色调色板与视觉更轻的图标集。         |
 
-选择 `dark` 也是布局不顺手时的重置路径：标题栏、菜单和工具栏不能被主题隐藏，所以设置窗口始终可达。
+选择 `dark` 也是表面不顺手时的重置路径：标题栏、菜单、工具栏和布局都由宿主持有，不能被主题隐藏，所以设置窗口始终可达。
 
 ## 安全性
 
@@ -225,13 +191,13 @@ light/                随应用发布的亮色参考主题
 - **纯数据，且只作用于前端。** 没有 JavaScript、CSS 文本、HTML、SVG、远程 URL 或包外文件路径。没有可被沙箱执行的代码入口，主题也没有 SDK、后端、数据库、网络、文件系统或宿主 DOM 句柄。它只能改变前端表现。
 - **不能发明动作。** 声明式 `action` 只能出现在注册侧栏项的 repeat 模板里；它读取条目的标签、图标和激活动作，主题不能创建自己的回调或调用 API。组件模板完全不能包含 action 或 repeat。
 - **边界可见。** 导入带声明式 UI 的主题包时，会列出被替换的表面并要求确认；选择器会标记 `自定义 UI`。
-- **封闭词汇表。** 每个外观值都是枚举或有界整数。未知键和非法值会让整个主题包被拒绝，不会被强制转换为默认值；拼写错误不会悄悄应用半个配方。
+- **封闭词汇表。** 每个生效的外观值都是枚举或有界整数。未知键和非法值会让整个主题包被拒绝，不会被强制转换为默认值；拼写错误不会悄悄应用半个配方。已退役的 `layout`、`metrics` 和 `titlebar.density` 只为兼容已安装主题而接受，取值会被丢弃。
 - **封闭颜色通道。** 调色板只能设置已发布颜色 token 列表中的名字。布局、动效、圆角、z-index 和组件局部变量由宿主拥有，因此颜色值不能被塞进网格或过渡。`--on-accent-*` 是动作墨色解析器的受检输入；生成的 `--action-foreground-*` 名字不会被接受。
 - **有界集合。** 最多 512 个颜色 token 和 512 个图标覆盖；token 名最多 64 字符，值最多 240 字符，版本和作者字符串最多 200 字符，单个图标源最多 512 KiB，全部图标数据最多 4 MiB。桌面宿主还会把主题文档限制在 4 MiB。
 - **不提供任意绘制。** 调色板只接受十六进制、数字 `rgb`/`hsl` 或 `transparent`。图标只接受 PNG data URL 或安全的包内相对 `.png` 路径；远程 URL、SVG 数据、绝对路径和路径穿越都会被拒绝。字体、图标几何和语义 token 词汇表由宿主拥有；主题不能加载字体或添加 CSS 规则。
-- **关键框架保持可见。** 主题不能隐藏标题栏、应用菜单、工具栏或检查器，覆盖模式下的检查器最多占窗口一半。它不能改变窗口行为或动作含义。
-- **侧栏可以移动，目的地不变。** 检查器文字网格复用注册的侧栏项及其标签；主题不能凭空创建按钮。移动进度条只是有界的表现手势：卡片始终留在视口内，拖动不会替换编辑器捕获的同一组 DOM 节点。
-- **尺寸有界，不是自由 CSS。** `metrics` 只接受整数范围，最终夹取由宿主掌握；主题包不能提供选择器、单位或任意长度。视口限制和关键最小尺寸仍然优先。
+- **关键框架保持可见。** 主题不能隐藏标题栏、应用菜单、工具栏或检查器，不能移动面板，也不能改变动作含义。
+- **目的地不移动。** 检查器空态网格复用注册的侧栏项及其标签；主题不能凭空创建按钮，也不能移动侧栏、工具栏或进度条。
+- **没有自由尺寸。** 面板宽高、间距和标题行高度由宿主持有；主题包不能提供选择器、单位或任意长度。
 - **无障碍优先。** 动作前景解析强制执行 4.5:1 下限，减少动态效果偏好会覆盖所有主题动画。
 
 ## 亮色调色板

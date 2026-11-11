@@ -1,43 +1,17 @@
 /**
- * Owns direct workspace actions for extensions and automation.
+ * Owns the host-only drawer navigation handle exposed to automation.
  *
  * The window has one authoring surface: the editor. Document-wide pages open in
  * the drawer, and its selection is the one piece of shell state this handle
- * exposes; the mounted frontend owns it and supplies a reader. Document and
- * inspector operations are supplied by the mounted frontend as well.
+ * exposes. The mounted frontend owns that state and supplies a reader; package
+ * code receives no capability for this handle, so it never reaches the gated
+ * Extension facade.
  */
-import { availabilityFor } from "./support.ts";
-import type { ApiAvailability } from "./contract.ts";
-import { createLateBound } from "../utils/lateBound.ts";
 import { readDrawerPane } from "../shell/drawerPane.ts";
 import { openDrawer } from "../shell/drawerOpen.ts";
 
-/** Host operations supplied by the mounted editor workspace. */
-export interface WorkspaceHost {
-  /** Create a new chart document. */
-  newChart(): void;
-  /** Open one inspector pane; false when the pane id is unknown. */
-  openInspector(id: string): boolean;
-}
-
-/** The mounted workspace runtime, or null while unbound. */
-const host = createLateBound<WorkspaceHost>();
-
-/**
- * Bind the mounted workspace runtime.
- *
- * Returns a disposer that clears this binding without affecting a newer one.
- */
-export function connectWorkspaceApi(value: WorkspaceHost): () => void {
-  return host.bind(value);
-}
-
-/** Drawer navigation and document actions exposed to plugins. */
+/** Drawer navigation exposed to the development facade and automation. */
 export const workspace = Object.freeze({
-  /** Report whether an editor workspace runtime is connected. */
-  availability(): ApiAvailability {
-    return availabilityFor(host.value(), "No editor workspace runtime connected");
-  },
   /** The drawer pane selected most recently. */
   drawerPane: (): string => readDrawerPane(),
   /**
@@ -51,15 +25,7 @@ export const workspace = Object.freeze({
     const value = id.trim();
     return Boolean(value) && openDrawer(value);
   },
-  /** Create a new chart; false when no runtime is connected. */
-  newChart: (): boolean => {
-    const create = host.value()?.newChart;
-    create?.();
-    return create !== undefined;
-  },
-  /** Open one inspector pane; false when no runtime or no such pane. */
-  openInspector: (id: string): boolean => host.value()?.openInspector(id) ?? false,
 });
 
-/** The public workspace handle: drawer navigation plus document actions. */
+/** The host-only workspace handle: drawer navigation for automation. */
 export type WorkspaceApi = typeof workspace;

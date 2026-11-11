@@ -125,6 +125,78 @@
   color: var(--foreground);
 }
 
+// Expanded workspace: the tree and the property form are two persistent columns,
+// so a bulk selection stays visible while its shared fields are edited.
+.line-panel-split {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.1fr);
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.line-panel-split-tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid var(--edge-divider);
+  overflow: hidden;
+}
+
+.line-panel-split-properties {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.line-panel-split .line-tree {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
+// With no judge lines and no selected folder, the tree is the whole page. The
+// add-line footer stays pinned at the bottom and the empty form is not mounted.
+.line-panel-single {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.line-panel-single > .line-tree {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
+// The inspector wrapper is a flex column; the mounted line form must fill it so
+// the split's two faces can size against the available height.
+.inspector .line-panel {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+// Compact stack: the tree owns the upper face, the form the lower one. Neither
+// is a switch away from the other.
+.line-panel[data-variant="stacked"] .inspector-page-split-top > .line-tree {
+  height: auto;
+  max-height: none;
+}
+
+.line-panel[data-variant="stacked"] .inspector-page-split-bottom {
+  padding-right: var(--space-3);
+}
+
 // The drawer gives the tree its own column, so the panel fills that column and
 // the tree scrolls inside it while the add/delete footer stays pinned.
 .drawer-split-list .line-panel {
@@ -645,4 +717,135 @@
 .line-panel .hint {
   margin: 0;
   color: var(--foreground-muted);
+}
+
+// ------------------------------------------------------- control curves
+// The five note-control tracks are distance curves, so the graph's horizontal
+// axis is floor distance and the vertical axis is the track's own value. The
+// graph is intentionally plain SVG: the editor owns only point dragging and the
+// numeric fields below, while the chart stores the same control points RPE does.
+.line-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--edge-divider);
+}
+
+.line-controls-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+
+  .line-panel-section-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  small {
+    color: var(--foreground-muted);
+    font-size: var(--type-micro);
+    font-weight: 400;
+  }
+}
+
+.line-controls-hint {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  line-height: 1.4;
+}
+
+.line-control-graph-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+}
+
+.line-control-graph {
+  display: block;
+  width: 100%;
+  height: 150px;
+  overflow: hidden;
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  touch-action: none;
+}
+
+.line-panel-split .line-control-graph {
+  height: 210px;
+}
+
+.line-control-grid {
+  stroke: var(--edge-divider);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.line-control-neutral {
+  stroke: var(--foreground-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.line-control-curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.line-control-hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.line-control-handle {
+  fill: var(--surface-raised);
+  stroke: var(--accent);
+  stroke-width: 2;
+  cursor: grab;
+  vector-effect: non-scaling-stroke;
+
+  &.is-selected {
+    fill: var(--accent);
+  }
+
+  &:focus {
+    outline: none;
+    stroke-width: 3;
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.line-control-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.line-control-points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
 }

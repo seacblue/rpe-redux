@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildOnboardingSteps } from "../../../frontend/onboarding/steps.ts";
 import { INSPECTOR_TUTORIALS } from "../../../frontend/screens/editor/inspector/tutorials.ts";
-import { GLOBAL_DRAWER_TUTORIALS } from "../../../frontend/screens/global/tutorials.ts";
+import { GLOBAL_PAGE_TUTORIALS } from "../../../frontend/screens/global/tutorials.ts";
 
 const translate = (key) => key;
 
@@ -29,9 +29,14 @@ test("inspector tutorials declare their surface and target field anchors", () =>
   assert.ok(INSPECTOR_TUTORIALS.events.steps[0].targets?.includes("events"));
 });
 
-test("drawer tutorials declare the drawer page they teach", () => {
-  for (const [id, tutorial] of Object.entries(GLOBAL_DRAWER_TUTORIALS)) {
-    assert.equal(tutorial.activate?.kind, "drawer", `${id} must open a drawer`);
-    assert.ok(tutorial.activate?.id, `${id} must name its drawer pane`);
+test("large document pages declare the inspector page they teach", () => {
+  for (const [id, tutorial] of Object.entries(GLOBAL_PAGE_TUTORIALS)) {
+    assert.equal(tutorial.activate?.kind, "inspector", `${id} must open an inspector page`);
+    assert.ok(tutorial.activate?.id, `${id} must name its inspector panel`);
+    assert.deepEqual(
+      tutorial.steps[0].targets,
+      [`inspector-panel-${tutorial.activate?.id}`],
+      `${id} must anchor to its mounted panel`,
+    );
   }
 });

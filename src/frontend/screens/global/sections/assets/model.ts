@@ -92,8 +92,8 @@ export interface AssetLibraryPanelSnapshot {
 
 /** Complete props received by the view: data plus callbacks. */
 export interface AssetLibraryViewProps extends AssetLibraryPanelSnapshot, AssetLibraryViewActions {
-  /** Global pages split the tree and the selected-image inspector. */
-  variant?: "all" | "tree" | "details";
+  /** Tree/detail composition: page, single face, split workspace, or stacked inspector. */
+  variant?: "all" | "tree" | "details" | "split" | "stacked";
 }
 
 /**

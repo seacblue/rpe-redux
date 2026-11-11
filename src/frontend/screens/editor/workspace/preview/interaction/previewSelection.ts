@@ -19,7 +19,6 @@ import { holdUsefulInterval as getHoldUsefulInterval } from "../../../canvas/not
 import { distanceSquaredToSegment, previewNoteGrid } from "./previewSpatialIndex.ts";
 import { previewNoteContains } from "./previewHitGeometry.ts";
 import { t } from "../../../../../../i18n/index.ts";
-import { formatBeat } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
@@ -414,27 +413,28 @@ function noteMenuActions(
 ): OverlapMenuAction[] {
   const chart = preview.chart;
   return candidates.map((candidate) => {
-    const line = chart?.judgeLineList?.[candidate.lineIndex];
-    const note = line?.notes?.[candidate.noteIndex ?? -1];
-    const type = noteTypeLabel(note?.type);
-    const start = note ? formatBeat(note.startTime) : "—";
-    const end = note?.type === 2 ? ` – ${formatBeat(note.endTime)}` : "";
-    const position = note ? Number(note.positionX).toFixed(2) : "—";
+    const note = chart?.judgeLineList?.[candidate.lineIndex]?.notes?.[candidate.noteIndex ?? -1];
+    const noteIndex = candidate.noteIndex ?? -1;
     return {
-      id: `note:${candidate.lineIndex}:${candidate.noteIndex ?? -1}`,
-      label: `${type}, ${
-        line?.Name ?? t("editorPanels.overlap.line", { index: candidate.lineIndex })
-      }`,
-      detail: `${t("editorPanels.overlap.beat", {
-        value: `${start}${end}`,
-      })}, X ${position}, #${candidate.noteIndex ?? -1}`,
+      id: `note:${candidate.lineIndex}:${noteIndex}`,
+      label: noteTypeLabel(note?.type),
+      detail: `${t("editorPanels.overlap.line", {
+        index: candidate.lineIndex,
+      })} · #${noteIndex}`,
+      onHover: () => {
+        preview.setOverlapHighlight({
+          note: { lineIndex: candidate.lineIndex, noteIndex },
+        });
+      },
+      onLeave: () => {
+        const current = preview.overlapHighlight?.note;
+        if (current?.lineIndex === candidate.lineIndex && current.noteIndex === noteIndex) {
+          preview.setOverlapHighlight(null);
+        }
+      },
       run: () => {
         const before = session.selectionState();
-        applySelection(
-          session,
-          new Map([[candidate.lineIndex, new Set([candidate.noteIndex ?? -1])]]),
-          false,
-        );
+        applySelection(session, new Map([[candidate.lineIndex, new Set([noteIndex])]]), false);
         session.selectionRevision += 1;
         session.recordSelection(undefined, before, true);
       },
@@ -448,20 +448,23 @@ function lineMenuActions(
   session: EditorSession,
   candidates: readonly number[],
 ): OverlapMenuAction[] {
-  const chart = preview.chart;
   const before = session.selectionState();
-  return candidates.map((lineIndex) => {
-    const line = chart?.judgeLineList?.[lineIndex];
-    return {
-      id: `line:${lineIndex}`,
-      label: line?.Name ?? t("editorPanels.overlap.line", { index: lineIndex }),
-      detail: `${t("editorPanels.overlap.line", { index: lineIndex })}, ${line?.Group ?? 0}`,
-      run: () => {
-        session.selectLine(lineIndex);
-        session.recordSelection(undefined, before, true);
-      },
-    };
-  });
+  return candidates.map((lineIndex) => ({
+    id: `line:${lineIndex}`,
+    label: t("editorPanels.overlap.line", { index: lineIndex }),
+    onHover: () => {
+      preview.setOverlapHighlight({ line: lineIndex });
+    },
+    onLeave: () => {
+      if (preview.overlapHighlight?.line === lineIndex) {
+        preview.setOverlapHighlight(null);
+      }
+    },
+    run: () => {
+      session.selectLine(lineIndex);
+      session.recordSelection(undefined, before, true);
+    },
+  }));
 }
 
 /** Deep-copies a line-indexed note selection. */
@@ -636,12 +639,17 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
     const notes = noteCandidates(options.preview, point);
     const exactNotes = notes.filter((note) => previewNoteContains(note, point));
     if (exactNotes.length > 1) {
+      options.preview.setOverlapMenuOpen(true);
       openOverlapMenu(
         options.stage,
         event.clientX,
         event.clientY,
         t("editor.overlap.title"),
         noteMenuActions(options.preview, session, exactNotes),
+        () => {
+          options.preview.setOverlapMenuOpen(false);
+          options.preview.setOverlapHighlight(null);
+        },
       );
       event.preventDefault();
       event.stopPropagation();
@@ -650,12 +658,17 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
     const lines = lineCandidates(options.preview, point);
     const exactLines = lineCandidates(options.preview, point, true);
     if (!notes.length && exactLines.length > 1) {
+      options.preview.setOverlapMenuOpen(true);
       openOverlapMenu(
         options.stage,
         event.clientX,
         event.clientY,
         t("editor.overlap.title"),
         lineMenuActions(options.preview, session, exactLines),
+        () => {
+          options.preview.setOverlapMenuOpen(false);
+          options.preview.setOverlapHighlight(null);
+        },
       );
       event.preventDefault();
       event.stopPropagation();

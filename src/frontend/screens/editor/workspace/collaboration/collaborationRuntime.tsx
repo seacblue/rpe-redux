@@ -33,6 +33,7 @@ import { assetPath, resourceReferences } from "../../../../../core/global/docume
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
 import { serverOrigin } from "../../../../../core/global/library/client.ts";
 import { getDrawerState, subscribeDrawer } from "../../../../chrome/drawer/drawerPanes.ts";
+import { getWorkspaceModeState } from "../container/workspaceModes.ts";
 import { preferences, PREFERENCE_SECTIONS } from "../../../../../core/state/preferences.ts";
 import {
   CollaborationClient,
@@ -121,6 +122,7 @@ import {
 import { useEditorSession } from "../runtime/providers/SessionProvider.tsx";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
+import { takePendingDesktopInvite } from "../../../../platform/desktopDeepLink.ts";
 import { inspectRoomInvite } from "./roomInvitePreview.ts";
 import { requestRoomInviteConfirmation } from "./roomInvitePrompt.tsx";
 import { bindCollaborationRoomExit } from "./roomExit.ts";
@@ -961,11 +963,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         disposed = true;
       };
     }
-    void invoke<string | null>("take_collab_invite").then((link) => {
-      if (link) {
-        void openInvite(link);
-      }
-    });
+    const startupInvite = takePendingDesktopInvite();
+    if (startupInvite) {
+      void openInvite(startupInvite);
+    }
     void listen<string>("redux-collab-invite", (event) => void openInvite(event.payload)).then(
       (dispose) => {
         unlisten = dispose;
@@ -2070,6 +2071,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       }
       const session = runtime.getSession();
       const drawer = getDrawerState();
+      const workspaceMode = getWorkspaceModeState().id;
+      const activeSection = workspaceMode || (drawer.open ? drawer.pane : "");
       const timeline = showsAuthoringRegion(getEditorRegionSnapshot());
       const selectedNoteIds: string[] = [];
       for (const entry of session.selectedNoteEntries()) {
@@ -2090,8 +2093,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         ...(selectedNoteIds.length ? { selectedNoteIds } : {}),
         ...(selectedEventIdsHere.length ? { selectedEventIds: selectedEventIdsHere } : {}),
       };
-      if (drawer.open) {
-        client.sendPresence({ ...base, section: drawer.pane });
+      if (activeSection) {
+        client.sendPresence({ ...base, section: activeSection });
         lastSent = now;
         return;
       }
@@ -2563,7 +2566,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
     const link = isDesktop()
       ? buildRoomInviteLink(invite)
-      : buildWebRoomInviteLink(invite, location.href);
+      : buildWebRoomInviteLink(invite, document.baseURI);
     try {
       await navigator.clipboard.writeText(link);
       showToast(t("workspace.collaboration.inviteLinkCopied"), "success");

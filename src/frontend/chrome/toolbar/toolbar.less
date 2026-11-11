@@ -46,6 +46,16 @@
   padding: 2px 0;
 }
 
+// The transport host is a stable mount point: it contributes its child to the
+// toolbar grid without adding a box of its own.
+.transport-host {
+  display: contents;
+}
+
+.transport-host[hidden] {
+  display: none;
+}
+
 .redux-app-root .redux-toolbar .transport-host .redux-status-card {
   grid-column: 2;
   grid-row: 1;
@@ -235,10 +245,6 @@
 .redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
-}
-
-:root[data-chrome-toolbar-placement="left"] .redux-app-root .redux-toolbar-scroll-affordance {
-  display: none;
 }
 
 // The fade belongs to the row content, not to a coloured overlay. The toolbar

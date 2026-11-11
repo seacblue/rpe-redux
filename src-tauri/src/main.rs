@@ -115,7 +115,7 @@ fn main() {
             services::lan::stop_lan_bridge,
             services::session::claim_collab_session,
             services::session::release_collab_session,
-            app::deep_link::take_collab_invite,
+            app::deep_link::take_deep_link,
             diagnostics::bundle::export_diagnostic_bundle,
             diagnostics::developer::developer_mode,
             diagnostics::developer::developer_toggle_devtools,
@@ -209,7 +209,7 @@ fn main() {
         .manage(services::tunnel::TunnelProcess::default())
         .manage(services::lan::LanBridge::default())
         .manage(services::session::CollabSession::default())
-        .manage(app::deep_link::PendingInvite::default())
+        .manage(app::deep_link::PendingDeepLink::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -228,10 +228,10 @@ fn main() {
                 eprintln!("Could not migrate recovery drafts: {error}");
             }
             app::deep_link::register();
-            if let Some(invite) = app::deep_link::invite_from_args(std::env::args()) {
-                if let Some(state) = app.try_state::<app::deep_link::PendingInvite>() {
+            if let Some(link) = app::deep_link::deep_link_from_args(std::env::args()) {
+                if let Some(state) = app.try_state::<app::deep_link::PendingDeepLink>() {
                     if let Ok(mut pending) = state.0.lock() {
-                        *pending = Some(invite);
+                        *pending = Some(link);
                     }
                 }
             }

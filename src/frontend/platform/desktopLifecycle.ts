@@ -21,6 +21,8 @@ export interface DesktopLifecycleBindings {
   dropPaths(paths: string[]): Promise<void>;
   /** Reopen the last document and restore its view/panel state. */
   restoreLastSession(): Promise<void>;
+  /** Release the route mirror once startup files or a restored session settle. */
+  markBootSettled(): void;
   /** Persist the last workspace state and flush durable preferences before exit. */
   persistSession(): Promise<void>;
   pendingSave(): Promise<void> | null;
@@ -76,6 +78,7 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
   if (!documents) {
     document.body.dataset.environment = "unsupported";
     bindings.notifyUnsupported();
+    bindings.markBootSettled();
     return;
   }
 
@@ -140,5 +143,6 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
         await bindings.restoreLastSession();
       }
     })
-    .catch(bindings.reportError);
+    .catch(bindings.reportError)
+    .finally(() => bindings.markBootSettled());
 }

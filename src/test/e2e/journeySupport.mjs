@@ -59,7 +59,7 @@ export function readStateExpression() {
     };
     return {
       document: window.redux.document.state(),
-      fingerprint: window.redux.document.fingerprint(),
+      fingerprint: window.redux.document.state().fingerprint,
       chart: value(window.redux.chart.snapshot()),
       metadata: value(window.redux.chart.metadata()),
       resources: value(window.redux.chart.resources()),

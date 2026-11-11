@@ -55,6 +55,7 @@ export function MenuItem({
   onClick,
   onFocus,
   onPointerEnter,
+  onPointerLeave,
 }: {
   label: ReactNode;
   icon?: ReactNode;
@@ -73,6 +74,7 @@ export function MenuItem({
   onClick?(): void;
   onFocus?(event: FocusEvent<HTMLButtonElement>): void;
   onPointerEnter?(event: PointerEvent<HTMLButtonElement>): void;
+  onPointerLeave?(event: PointerEvent<HTMLButtonElement>): void;
 }) {
   return (
     <Button
@@ -88,6 +90,7 @@ export function MenuItem({
       onClick={onClick}
       onFocus={onFocus}
       onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       {icon && <span className="redux-menu-row-icon">{icon}</span>}
       <span className="redux-menu-row-label">{label}</span>

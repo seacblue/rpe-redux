@@ -1,4 +1,4 @@
-//! `rperedux://` invitation links.
+//! `rperedux://` links for charts and collaboration rooms.
 //!
 //! Windows registers the scheme under HKCU on every launch, so both installed
 //! and portable copies work without an installer step. The URL is kept as a
@@ -7,12 +7,12 @@
 use std::sync::Mutex;
 use tauri::State;
 
-/// Invitation URL received before the frontend asks for it.
+/// Scheme URL received before the frontend asks for it.
 #[derive(Default)]
-pub struct PendingInvite(pub Mutex<Option<String>>);
+pub struct PendingDeepLink(pub Mutex<Option<String>>);
 
 /// Return the first `rperedux://` argument from a process invocation.
-pub fn invite_from_args<I>(args: I) -> Option<String>
+pub fn deep_link_from_args<I>(args: I) -> Option<String>
 where
     I: IntoIterator<Item = String>,
 {
@@ -32,11 +32,7 @@ fn register_with_reg_exe(executable: &str) -> std::io::Result<()> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let root = r"HKCU\Software\Classes\rperedux";
     let entries = [
-        (
-            root.to_owned(),
-            None,
-            "URL:RPE Redux collaboration room".to_owned(),
-        ),
+        (root.to_owned(), None, "URL:RPE Redux link".to_owned()),
         (root.to_owned(), Some("URL Protocol"), String::new()),
         (
             format!(r"{root}\DefaultIcon"),
@@ -89,7 +85,7 @@ pub fn register() {
             let permissions = KEY_READ | KEY_WRITE;
             let (root, _) =
                 classes.create_subkey_with_flags(r"Software\Classes\rperedux", permissions)?;
-            root.set_value("", &"URL:RPE Redux collaboration room")?;
+            root.set_value("", &"URL:RPE Redux link")?;
             root.set_value("URL Protocol", &"")?;
             let (icon, _) = root.create_subkey_with_flags("DefaultIcon", permissions)?;
             icon.set_value("", &format!("\"{executable}\",0"))?;
@@ -105,8 +101,35 @@ pub fn register() {
     }
 }
 
-/// Consume the invite once the collaboration provider is mounted.
+/// Consume the launch link once the frontend resolves its boot route.
 #[tauri::command]
-pub fn take_collab_invite(state: State<'_, PendingInvite>) -> Option<String> {
+pub fn take_deep_link(state: State<'_, PendingDeepLink>) -> Option<String> {
     state.0.lock().ok().and_then(|mut pending| pending.take())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::deep_link_from_args;
+
+    #[test]
+    fn picks_the_first_scheme_argument_case_insensitively() {
+        let args = vec![
+            "rperedux.exe".to_owned(),
+            "RPERedux://chart/abc".to_owned(),
+            "rperedux://join?server=x".to_owned(),
+        ];
+        assert_eq!(
+            deep_link_from_args(args).as_deref(),
+            Some("RPERedux://chart/abc")
+        );
+    }
+
+    #[test]
+    fn ignores_plain_paths_and_other_schemes() {
+        let args = vec![
+            "app.exe".to_owned(),
+            "https://example.test/chart/abc".to_owned(),
+        ];
+        assert_eq!(deep_link_from_args(args), None);
+    }
 }

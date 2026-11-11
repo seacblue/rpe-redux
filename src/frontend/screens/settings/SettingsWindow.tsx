@@ -41,7 +41,11 @@ import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { EmptyState } from "../../../design/components/empty-state/EmptyState.tsx";
 import { Modal } from "../../../design/components/modal/Modal.tsx";
 import type { Theme } from "../../../core/theme/themes.ts";
-import { CLOSE_SETTINGS_EVENT, OPEN_SETTINGS_EVENT } from "./settingsWindowController.ts";
+import {
+  CLOSE_SETTINGS_EVENT,
+  OPEN_SETTINGS_EVENT,
+  publishSettingsWindowState,
+} from "./settingsWindowController.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import { CATALOGS } from "../../../i18n/messages/index.ts";
 import { values } from "../../../core/state/values.ts";
@@ -127,6 +131,11 @@ export function SettingsWindow({
     }
     return expanded;
   });
+  // The route adapter mirrors this snapshot into the address query, so a
+  // reload or a history step can restore the page the user was reading.
+  useEffect(() => {
+    publishSettingsWindowState(open, open ? category : "");
+  }, [open, category]);
   // Search survives close/open, so the field keeps its text and the same result
   // set. Filtering reads a deferred copy so a long query cannot make typing
   // wait for the whole catalog to be re-matched.

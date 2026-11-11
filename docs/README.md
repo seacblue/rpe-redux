@@ -8,6 +8,10 @@ The generated public documentation is sourced from [`docs-sdk/`](../docs-sdk/) a
 
 - [Getting started](getting-started.md) — install, first chart, workspace tour, save/export, and where the application keeps its data.
 
+## Product direction
+
+- [Workspace space model (Chinese draft)](product/space-model-zh.md) — discussion draft for Inspector width, workspace promotion, and studios. It is not a current engineering contract.
+
 ## Engineering contracts
 
 - [Architecture](architecture.md) — ownership, runtime direction, and module boundaries.
@@ -22,7 +26,7 @@ The generated public documentation is sourced from [`docs-sdk/`](../docs-sdk/) a
 - [Extensions](extensions.md) — package model, capabilities, and host boundary.
 - [Extension quickstart](extensions-quickstart.md) — the smallest installable package.
 
-The Chinese extension references are the only translated documents retained in this directory: [Chinese extension platform guide](extensions-zh.md) and [Chinese extension quickstart](extensions-quickstart-zh.md). All other internal documents use English only.
+The Chinese extension references and product drafts are the only translated documents retained in this directory: [Chinese extension platform guide](extensions-zh.md), [Chinese extension quickstart](extensions-quickstart-zh.md), and the [workspace space model draft](product/space-model-zh.md). All other internal documents use English only.
 
 ## Repository-level guidance
 

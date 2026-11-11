@@ -14,12 +14,15 @@ import { Input } from "../../../../../design/components/input/Input.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { TreeFolder } from "../../../../../design/patterns/tree/TreeFolder.tsx";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
+import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import type { ShaderParameterOverrides } from "../../../../../core/global/chart/shader/shaderEvents.ts";
 import { tokenizeShader } from "./shaderSyntax.ts";
 import { FILE_DRAG_EVENT } from "../../../../../core/shell/shellEventNames.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import type { GlobalView } from "../../globalView.ts";
+import { AssetAudioHeatmap } from "./AssetAudioHeatmap.tsx";
 import { AssetDialogs } from "./AssetDialogs.tsx";
+import { useAssetAudioPreview } from "./assetAudioPreview.tsx";
 import type {
   AssetLibraryViewProps,
   AssetViewFile,
@@ -196,18 +199,43 @@ function AssetFileRow({
   file,
   onSelect,
   onRename,
+  onPreviewAudio,
 }: {
   file: AssetViewFile;
   onSelect(name: string): void;
   onRename(name: string): void;
+  onPreviewAudio?: () => void;
 }): React.JSX.Element {
+  const previewAudio = file.kind === "audio" && file.selected ? onPreviewAudio : undefined;
   return (
     <Button
       type="button"
       variant="plain"
       className={`asset-row${file.selected ? " is-selected" : ""}`}
       data-asset-name={file.name}
+      data-local-shortcut={previewAudio ? "SPACE" : undefined}
+      aria-keyshortcuts={previewAudio ? "Space" : undefined}
       onClick={() => onSelect(file.name)}
+      onKeyDown={
+        previewAudio
+          ? (event) => {
+              if (
+                event.key !== " " ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.altKey ||
+                event.shiftKey
+              ) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              if (!event.repeat) {
+                previewAudio();
+              }
+            }
+          : undefined
+      }
     >
       <AssetThumb url={file.url} alt={file.file} kind={file.kind} />
       <span
@@ -231,6 +259,7 @@ function AssetFolderView({
   onToggle,
   onSelect,
   onRename,
+  onPreviewAudio,
   onSelectFolder,
   empty = false,
 }: {
@@ -240,6 +269,7 @@ function AssetFolderView({
   onToggle(path: string): void;
   onSelect(name: string): void;
   onRename(name: string): void;
+  onPreviewAudio?: () => void;
   onSelectFolder(path: string): void;
   empty?: boolean;
 }): React.JSX.Element {
@@ -274,7 +304,13 @@ function AssetFolderView({
       {folder.files.length > 0 && (
         <div className="asset-folder-items">
           {folder.files.map((file) => (
-            <AssetFileRow key={file.name} file={file} onSelect={onSelect} onRename={onRename} />
+            <AssetFileRow
+              key={file.name}
+              file={file}
+              onSelect={onSelect}
+              onRename={onRename}
+              onPreviewAudio={onPreviewAudio}
+            />
           ))}
         </div>
       )}
@@ -294,6 +330,7 @@ function AssetFolderView({
           onToggle={onToggle}
           onSelect={onSelect}
           onRename={onRename}
+          onPreviewAudio={onPreviewAudio}
           onSelectFolder={onSelectFolder}
         />
       ))}
@@ -337,6 +374,7 @@ export function AssetLibraryView({
   variant = "all",
 }: AssetLibraryViewProps): React.JSX.Element {
   const { t } = useTranslation();
+  const audioPreview = useAssetAudioPreview();
   const view: GlobalView = "list";
   const [importDragging, setImportDragging] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
@@ -351,8 +389,14 @@ export function AssetLibraryView({
       return next;
     });
   };
+  const stacked = variant === "stacked";
+  const split = variant === "split";
+  // In the compact stack and the workspace split, no selected asset means there
+  // is nothing to preview below/right. Let the tree take the full surface instead
+  // of showing an empty skeleton.
+  const compactEmpty = (stacked || split) && !selected;
   const showTree = variant !== "details";
-  const showDetails = variant !== "tree";
+  const showDetails = variant !== "tree" && !compactEmpty;
 
   useEffect(() => {
     if (!showTree) {
@@ -381,122 +425,156 @@ export function AssetLibraryView({
     });
   }
 
-  return (
-    <>
-      {showTree && (
-        <div className="asset-tree-shell">
-          <input
-            ref={addInputRef}
-            type="file"
-            accept="image/*,audio/*,.glsl,.frag,.vert,.vsh,.fsh,.shader"
-            multiple
-            hidden
-            onChange={(event) => onFiles(event.currentTarget.files)}
-          />
-          {blank ? (
-            <EmptyState
-              icon="folder"
-              title={t("editorPanels.assetLibrary.emptyState.title")}
-              description={t("editorPanels.assetLibrary.emptyState.description")}
+  const treeFace = showTree ? (
+    <div className="asset-tree-shell">
+      <input
+        ref={addInputRef}
+        type="file"
+        accept="image/*,audio/*,.glsl,.frag,.vert,.vsh,.fsh,.shader"
+        multiple
+        hidden
+        onChange={(event) => onFiles(event.currentTarget.files)}
+      />
+      {blank ? (
+        <EmptyState
+          icon="folder"
+          title={t("editorPanels.assetLibrary.emptyState.title")}
+          description={t("editorPanels.assetLibrary.emptyState.description")}
+        />
+      ) : (
+        <div className="asset-tree" data-layout={view}>
+          {orderedFolders.map((folder) => (
+            <AssetFolderView
+              key={folder.path || "root"}
+              folder={folder}
+              selectedFolder={selectedFolder}
+              collapsedFolders={collapsedFolders}
+              onToggle={toggleFolder}
+              onSelect={onSelect}
+              onRename={onRename}
+              onPreviewAudio={audioPreview?.toggle}
+              onSelectFolder={onSelectFolder}
+              empty={folder.path === "" ? empty : false}
             />
-          ) : (
-            <div className="asset-tree" data-layout={view}>
-              {orderedFolders.map((folder) => (
-                <AssetFolderView
-                  key={folder.path || "root"}
-                  folder={folder}
-                  selectedFolder={selectedFolder}
-                  collapsedFolders={collapsedFolders}
-                  onToggle={toggleFolder}
-                  onSelect={onSelect}
-                  onRename={onRename}
-                  onSelectFolder={onSelectFolder}
-                  empty={folder.path === "" ? empty : false}
-                />
-              ))}
-            </div>
-          )}
-          {importDragging && (
-            <div className="asset-drop-overlay" role="status" aria-live="polite">
-              <div className="asset-drop-card">
-                <span className="asset-drop-icon" aria-hidden="true">
-                  <Icon name="open" size={24} />
-                </span>
-                <strong>{t("editorPanels.assetLibrary.drop.title")}</strong>
-                <small>{t("editorPanels.assetLibrary.drop.folder", { folder: folderName })}</small>
-              </div>
-            </div>
-          )}
-          <div className="asset-tree-footer redux-footer-bar redux-footer-bar-compact">
-            <Button type="button" variant="solid" block onClick={onAdd}>
-              <Icon name="plus" size={14} />
-              <span className="redux-button-label">{t("editorPanels.assetLibrary.addImages")}</span>
-            </Button>
-            <div className="asset-tree-footer-actions redux-footer-actions">
-              <Button type="button" variant="outlined" onClick={() => onCreateFolder()}>
-                <Icon name="plus" size={14} />
-                <span className="redux-button-label">
-                  {t("editorPanels.assetLibrary.newFolderButton")}
-                </span>
-              </Button>
-              {(selected || (selectedFolderExists && !blank)) && (
-                <Button
-                  type="button"
-                  variant="danger"
-                  disabled={!selected && selectedFolderCount > 0}
-                  data-tip-title={
-                    !selected && selectedFolderCount > 0
-                      ? t("editorPanels.assetLibrary.deleteFolder.notEmpty", {
-                          count: selectedFolderCount,
-                        })
-                      : deleteLabel
-                  }
-                  onClick={selected ? onDelete : () => onDeleteFolder(selectedFolder)}
-                >
-                  <Icon name="trash" size={14} />
-                  <span className="redux-button-label">{deleteLabel}</span>
-                </Button>
-              )}
-            </div>
+          ))}
+        </div>
+      )}
+      {importDragging && (
+        <div className="asset-drop-overlay" role="status" aria-live="polite">
+          <div className="asset-drop-card">
+            <span className="asset-drop-icon" aria-hidden="true">
+              <Icon name="open" size={24} />
+            </span>
+            <strong>{t("editorPanels.assetLibrary.drop.title")}</strong>
+            <small>{t("editorPanels.assetLibrary.drop.folder", { folder: folderName })}</small>
           </div>
         </div>
       )}
-      {showDetails &&
-        (selected ? (
-          <div className="asset-details">
-            <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
-            {selected.kind === "audio" ? (
-              <AudioPlayer src={selected.url} label={assetLabel(selected.name)} />
-            ) : selected.kind === "shader" ? (
-              <>
-                <div className="asset-shader-preview">
-                  <ShaderSourcePreview source={selected.text ?? ""} />
-                </div>
-                <ShaderParameterConfiguration selected={selected} onChange={onConfigureShader} />
-              </>
-            ) : (
-              <AssetThumb url={selected.url} alt={selected.name} kind={selected.kind} />
+      <div className="asset-tree-footer redux-footer-bar redux-footer-bar-compact">
+        <Button type="button" variant="solid" block onClick={onAdd}>
+          <Icon name="plus" size={14} />
+          <span className="redux-button-label">{t("editorPanels.assetLibrary.addImages")}</span>
+        </Button>
+        <div className="asset-tree-footer-actions redux-footer-actions">
+          <Button type="button" variant="outlined" onClick={() => onCreateFolder()}>
+            <Icon name="plus" size={14} />
+            <span className="redux-button-label">
+              {t("editorPanels.assetLibrary.newFolderButton")}
+            </span>
+          </Button>
+          {(selected || (selectedFolderExists && !blank)) && (
+            <Button
+              type="button"
+              variant="danger"
+              disabled={!selected && selectedFolderCount > 0}
+              data-tip-title={
+                !selected && selectedFolderCount > 0
+                  ? t("editorPanels.assetLibrary.deleteFolder.notEmpty", {
+                      count: selectedFolderCount,
+                    })
+                  : deleteLabel
+              }
+              onClick={selected ? onDelete : () => onDeleteFolder(selectedFolder)}
+            >
+              <Icon name="trash" size={14} />
+              <span className="redux-button-label">{deleteLabel}</span>
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+  const detailsFace = showDetails ? (
+    selected ? (
+      <div className="asset-details">
+        <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
+        {selected.kind === "audio" ? (
+          <AudioPlayer
+            ref={audioPreview?.player}
+            src={selected.url}
+            label={assetLabel(selected.name)}
+            visualizer={({ progress }) => (
+              <AssetAudioHeatmap src={selected.url} progress={progress} />
             )}
-            <div className="asset-detail-actions">
-              <Button type="button" variant="outlined" onClick={() => onRename()}>
-                {t("common.action.rename")}
-              </Button>
-              <Button type="button" variant="outlined" onClick={onOpenExternal}>
-                <Icon name="external" size={14} />
-                {t("editorPanels.assetLibrary.openExternal")}
-              </Button>
-            </div>
-          </div>
-        ) : (
+          />
+        ) : selected.kind === "shader" ? (
           <>
-            {/* The visible pane is a layout skeleton; the action hint stays in the
-                accessibility tree so the empty pane is still explained aloud. */}
-            <p className="redux-visually-hidden">
-              {t("editorPanels.assetLibrary.selectForDetails")}
-            </p>
-            <AssetDetailsSkeleton />
+            <div className="asset-shader-preview">
+              <ShaderSourcePreview source={selected.text ?? ""} />
+            </div>
+            <ShaderParameterConfiguration selected={selected} onChange={onConfigureShader} />
           </>
-        ))}
+        ) : (
+          <AssetThumb url={selected.url} alt={selected.name} kind={selected.kind} />
+        )}
+        <div className="asset-detail-actions">
+          <Button type="button" variant="outlined" onClick={() => onRename()}>
+            {t("common.action.rename")}
+          </Button>
+          <Button type="button" variant="outlined" onClick={onOpenExternal}>
+            <Icon name="external" size={14} />
+            {t("editorPanels.assetLibrary.openExternal")}
+          </Button>
+        </div>
+      </div>
+    ) : (
+      <>
+        {/* The visible pane is a layout skeleton; the action hint stays in the
+            accessibility tree so the empty pane is still explained aloud. */}
+        <p className="redux-visually-hidden">{t("editorPanels.assetLibrary.selectForDetails")}</p>
+        <AssetDetailsSkeleton />
+      </>
+    )
+  ) : null;
+
+  return (
+    <>
+      {split ? (
+        compactEmpty ? (
+          treeFace
+        ) : (
+          <div className="asset-library-split">
+            {treeFace}
+            <div className="asset-library-split-details">{detailsFace}</div>
+          </div>
+        )
+      ) : stacked ? (
+        compactEmpty ? (
+          treeFace
+        ) : (
+          <InspectorPageSplit
+            topLabel={t("editorPanels.assetLibrary.title")}
+            bottomLabel={t("editorPanels.assetLibrary.details")}
+            top={treeFace}
+            bottom={detailsFace}
+          />
+        )
+      ) : (
+        <>
+          {treeFace}
+          {detailsFace}
+        </>
+      )}
       {showDetails && <AssetDialogs />}
     </>
   );

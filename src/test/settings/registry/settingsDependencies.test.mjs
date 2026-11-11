@@ -32,7 +32,7 @@ test("every dependency names a registered setting value", () => {
   }
 });
 
-test("waveform controls follow the waveform toggle", () => {
+test("heatmap controls follow the heatmap toggle", () => {
   for (const key of ["audio-analysis-alpha", "audio-analysis-width", "audio-analysis-curve"]) {
     assert.equal(settingsRegistry.definition(key)?.enabledWhen?.key, "audio-analysis-enabled", key);
   }

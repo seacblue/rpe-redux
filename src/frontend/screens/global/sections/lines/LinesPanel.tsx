@@ -58,7 +58,7 @@ export function LinesPanel({
   variant = "all",
 }: {
   showTitle?: boolean;
-  variant?: "all" | "tree" | "properties";
+  variant?: "all" | "tree" | "properties" | "stacked" | "split";
 } = {}) {
   const linePanel = useEditorRuntimeValue(
     (runtime) => runtime.ui.linePanel,

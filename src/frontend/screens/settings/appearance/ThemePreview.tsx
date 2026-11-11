@@ -3,10 +3,11 @@
  *
  * Colours, icon sources, action styling, and the chrome recipe come from the
  * package, so the appearance page shows a theme before it is applied. The
- * blueprint mirrors the selected layout presets, and the trait rows name every
- * surface and motion choice. The sample follows the same two ink rules as the
- * live shell: an accent button uses the resolved action ink, and an active icon
- * button uses the active ink and its faint fill.
+ * blueprint uses the host's fixed layout and mirrors only the package's surface
+ * and motion choices; the trait rows name those choices plus the two title-bar
+ * presets. The sample follows the same two ink rules as the live shell: an
+ * accent button uses the resolved action ink, and an active icon button uses the
+ * active ink and its faint fill.
  */
 import { type CSSProperties } from "react";
 import { Button } from "../../../../design/components/button/Button.tsx";
@@ -35,49 +36,6 @@ function previewIconSource(theme: ThemePackage, name: IconName): string | undefi
  * catalog in sync; a new preset without a label is a compile error.
  */
 const TRAIT_KEYS = {
-  density: {
-    compact: "settings.theme.trait.density.compact",
-    comfortable: "settings.theme.trait.density.comfortable",
-    spacious: "settings.theme.trait.density.spacious",
-  },
-  inspector: {
-    docked: "settings.theme.trait.inspector.docked",
-    floating: "settings.theme.trait.inspector.floating",
-    overlay: "settings.theme.trait.inspector.overlay",
-  },
-  side: {
-    left: "settings.theme.trait.side.left",
-    right: "settings.theme.trait.side.right",
-  },
-  sidebar: {
-    rail: "settings.theme.trait.sidebar.rail",
-    floating: "settings.theme.trait.sidebar.floating",
-    top: "settings.theme.trait.sidebar.top",
-    inspector: "settings.theme.trait.sidebar.inspector",
-  },
-  toolbar: {
-    docked: "settings.theme.trait.toolbar.docked",
-    floating: "settings.theme.trait.toolbar.floating",
-  },
-  toolbarPlacement: {
-    top: "settings.theme.trait.toolbarPlacement.top",
-    left: "settings.theme.trait.toolbarPlacement.left",
-  },
-  toolbarFlow: {
-    rows: "settings.theme.trait.toolbarFlow.rows",
-    single: "settings.theme.trait.toolbarFlow.single",
-    grid: "settings.theme.trait.toolbarFlow.grid",
-  },
-  toolbarColumns: {
-    2: "settings.theme.trait.toolbarColumns.two",
-    3: "settings.theme.trait.toolbarColumns.three",
-    4: "settings.theme.trait.toolbarColumns.four",
-  },
-  titlebar: {
-    compact: "settings.theme.trait.titlebar.compact",
-    normal: "settings.theme.trait.titlebar.normal",
-    tall: "settings.theme.trait.titlebar.tall",
-  },
   windowControls: {
     system: "settings.theme.trait.windowControls.system",
     compact: "settings.theme.trait.windowControls.compact",
@@ -86,25 +44,6 @@ const TRAIT_KEYS = {
   menu: {
     hamburger: "settings.theme.trait.menu.hamburger",
     expanded: "settings.theme.trait.menu.expanded",
-  },
-  transport: {
-    toolbar: "settings.theme.trait.transport.toolbar",
-    floating: "settings.theme.trait.transport.floating",
-  },
-  transportAnchor: {
-    "top-left": "settings.theme.trait.transportAnchor.topLeft",
-    "top-right": "settings.theme.trait.transportAnchor.topRight",
-    "bottom-left": "settings.theme.trait.transportAnchor.bottomLeft",
-    "bottom-right": "settings.theme.trait.transportAnchor.bottomRight",
-  },
-  transportDrag: {
-    true: "settings.theme.trait.transportDraggable",
-    false: "settings.theme.trait.transportFixed",
-  },
-  statusBar: {
-    docked: "settings.theme.trait.statusbar.docked",
-    floating: "settings.theme.trait.statusbar.floating",
-    hidden: "settings.theme.trait.statusbar.hidden",
   },
   shape: {
     square: "settings.theme.trait.shape.square",
@@ -167,37 +106,23 @@ export function ThemePreview({ theme }: { theme: ThemePackage }) {
   const { t, language } = useTranslation();
   const base = getThemePackage(theme.appearance === "light" ? "light" : "dark")?.colors ?? {};
   const colors = resolveThemeColors(base, theme.colors, theme.actionForeground);
-  const { layout, surface, motion } = theme.chrome;
+  const { surface, motion, titlebar } = theme.chrome;
   const style = {
     ...Object.fromEntries(Object.entries(colors)),
     "--theme-backdrop-blur": `${surface.backdropBlur}px`,
   } as CSSProperties;
   const playSource = previewIconSource(theme, "playbackPlay");
   const settingsSource = previewIconSource(theme, "settings");
-  const layoutTraits = [
-    t(TRAIT_KEYS.density[layout.density]),
-    t(TRAIT_KEYS.toolbarPlacement[layout.toolbarPlacement]),
-    t(TRAIT_KEYS.toolbarFlow[layout.toolbarFlow]),
-    ...(layout.toolbarFlow === "grid" ? [t(TRAIT_KEYS.toolbarColumns[layout.toolbarColumns])] : []),
-    t(TRAIT_KEYS.titlebar[theme.chrome.titlebar.density]),
-    t(TRAIT_KEYS.windowControls[theme.chrome.titlebar.windowControls]),
-    t(TRAIT_KEYS.menu[theme.chrome.titlebar.menu]),
-    t(TRAIT_KEYS.inspector[layout.inspector]),
-    t(TRAIT_KEYS.side[layout.inspectorSide]),
-    t(TRAIT_KEYS.sidebar[layout.sidebar]),
-    t(TRAIT_KEYS.toolbar[layout.toolbar]),
-    t(TRAIT_KEYS.statusBar[layout.statusBar]),
-    t(TRAIT_KEYS.transport[layout.transport]),
-    ...(layout.transport === "floating"
-      ? [
-          t(TRAIT_KEYS.transportAnchor[layout.transportAnchor]),
-          t(TRAIT_KEYS.transportDrag[layout.transportDraggable ? "true" : "false"]),
-        ]
-      : []),
+  const customTraits = [
     ...(theme.ui.slots["inspector.empty"] ? [t("settings.theme.trait.customEmpty")] : []),
     ...(theme.ui.components.railItem ? [t("settings.theme.trait.customRail")] : []),
     ...(theme.ui.components.menuTrigger ? [t("settings.theme.trait.customMenu")] : []),
     ...(theme.ui.components.windowControl ? [t("settings.theme.trait.customWindow")] : []),
+  ];
+  const windowTraits = [
+    t(TRAIT_KEYS.windowControls[titlebar.windowControls]),
+    t(TRAIT_KEYS.menu[titlebar.menu]),
+    ...customTraits,
   ];
   const surfaceTraits = [
     t(TRAIT_KEYS.shape[surface.shape]),
@@ -225,15 +150,6 @@ export function ThemePreview({ theme }: { theme: ThemePackage }) {
       </div>
       <div
         className="redux-theme-preview-layout"
-        data-inspector={layout.inspector}
-        data-inspector-side={layout.inspectorSide}
-        data-sidebar={layout.sidebar}
-        data-toolbar={layout.toolbar}
-        data-toolbar-placement={layout.toolbarPlacement}
-        data-transport={layout.transport}
-        data-transport-anchor={layout.transportAnchor}
-        data-statusbar={layout.statusBar}
-        data-density={layout.density}
         data-shape={surface.shape}
         data-material={surface.material}
         data-pattern={surface.pattern}
@@ -248,11 +164,10 @@ export function ThemePreview({ theme }: { theme: ThemePackage }) {
         <span className="redux-theme-preview-inspector">
           {t("settings.theme.preview.inspector")}
         </span>
-        <span className="redux-theme-preview-transport" aria-hidden="true" />
         <span className="redux-theme-preview-status">{t("settings.theme.preview.status")}</span>
       </div>
       <ul className="redux-theme-preview-traits">
-        <TraitGroup label={t("settings.theme.group.layout")} values={layoutTraits} />
+        <TraitGroup label={t("settings.theme.group.window")} values={windowTraits} />
         <TraitGroup label={t("settings.theme.group.surface")} values={surfaceTraits} />
         <TraitGroup label={t("settings.theme.group.motion")} values={motionTraits} />
       </ul>

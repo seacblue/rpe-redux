@@ -3,11 +3,20 @@ import react from "@vitejs/plugin-react";
 import { cp, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { readProductVersion } from "./scripts/productVersion.mjs";
+import { normalizeRouteBase } from "./src/core/shell/route.ts";
 
 // The browser build has no host to ask for the product version, so the build
 // bakes the validated desktop version in as a compile-time constant. The host
 // must use the same version because it starts the matching sidecar.
 const packageVersion = readProductVersion();
+
+// Static assets use the deployment base; app destinations stay in the hash so
+// the desktop host and GitHub Pages never need an SPA fallback.
+const configuredWebBase = process.env.REDUX_WEB_BASE?.trim() || "/";
+if (configuredWebBase.includes("://") || /[?#]/.test(configuredWebBase)) {
+  throw new Error("REDUX_WEB_BASE must be a path, not an absolute URL or query");
+}
+const webBase = normalizeRouteBase(configuredWebBase);
 
 /**
  * Browser-development settings injected by `scripts/dev.mjs`.
@@ -109,6 +118,28 @@ function themeBootstrap() {
   };
 }
 
+/**
+ * Pin `document.baseURI` to the served asset root.
+ *
+ * Runtime asset helpers resolve against `document.baseURI`. One base tag keeps
+ * every public asset at the deployment root while the visible route stays in
+ * the hash.
+ */
+function documentBase() {
+  return {
+    name: "redux-document-base",
+    transformIndexHtml() {
+      return [
+        {
+          tag: "base",
+          attrs: { href: webBase },
+          injectTo: "head-prepend" as const,
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
   define: {
     __REDUX_VERSION__: JSON.stringify(packageVersion),
@@ -123,6 +154,7 @@ export default defineConfig({
     react(),
     devRuntimeBootstrap(),
     themeBootstrap(),
+    documentBase(),
     {
       name: "redux-static-assets",
       async closeBundle() {
@@ -137,7 +169,7 @@ export default defineConfig({
       },
     },
   ],
-  base: "./",
+  base: webBase,
   clearScreen: false,
   server: {
     host: "127.0.0.1",

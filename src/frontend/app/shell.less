@@ -61,29 +61,6 @@
   min-width: 0;
 }
 
-// The toolbar owns the left column only while it is actually visible. The home
-// page has no toolbar, so its content must span the full width.
-:root[data-chrome-toolbar-placement="left"] .shell-body {
-  display: grid;
-  grid-template-columns: var(--chrome-toolbar-width) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "toolbar content"
-    "toolbar status";
-}
-
-:root[data-chrome-toolbar-placement="left"] .shell-body > .redux-toolbar {
-  grid-area: toolbar;
-}
-
-:root[data-chrome-toolbar-placement="left"] .shell-body > .shell-content {
-  grid-area: content;
-}
-
-:root[data-chrome-toolbar-placement="left"] .shell-body > footer {
-  grid-area: status;
-}
-
 .redux-app-root .redux-app-shell[data-at-home="true"] .shell-body {
   display: flex;
   flex-direction: column;
@@ -104,11 +81,10 @@
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns:
-    minmax(0, 1fr) minmax(260px, min(var(--inspector-width), 57%))
-    var(--chrome-sidebar-track);
+  grid-template-columns: minmax(0, 1fr) auto var(--chrome-sidebar-track);
   grid-template-areas: "workspace inspector sidebar";
   gap: 0;
+  --workbench-side-track: var(--chrome-sidebar-track);
 }
 
 .workbench-workspace,
@@ -119,9 +95,76 @@
   min-height: 0;
 }
 
+.workbench-inspector {
+  width: clamp(260px, var(--inspector-width), 57vw);
+  overflow: hidden;
+}
+
+// The panel owns its width transition so the wrapper can keep its compact grid
+// track while a document task grows over the workspace.
+.workbench-inspector > .inspector {
+  flex: 1;
+  width: 100%;
+  min-width: 260px;
+  min-height: 0;
+  transition: width 220ms var(--design-ease-enter);
+}
+
+// A document task expands the inspector itself. The wrapper stays in its grid
+// track and the panel is pinned to the same edge, growing across the workspace.
+// The workspace never resizes behind it.
+.workbench-inspector:has(> .inspector[data-mode-surface="true"]) {
+  position: relative;
+  overflow: visible;
+  z-index: var(--z-content-overlay);
+}
+
+.workbench-inspector > .inspector[data-mode-surface="true"] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--chrome-panel-shadow);
+}
+
+// The chrome presets paint the compact inspector transparent so only its fields
+// carry a surface. The expanded task owns its area, so it restores the panel
+// surface; the cover artwork may make that surface translucent.
+.redux-app-root .workbench-inspector > .inspector[data-mode-surface="true"] {
+  background: var(--surface);
+  border-color: var(--edge-divider);
+}
+
+.workbench-inspector > .inspector[data-mode-surface="true"][data-mode-expanded="true"] {
+  width: calc(100vw - var(--workbench-side-track));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-inspector > .inspector {
+    transition: none;
+  }
+}
+
 .workbench-workspace {
   grid-area: workspace;
   position: relative;
+}
+
+// The panel is a translucent lens over the artwork, not a second opaque window.
+// Fade the canvas itself so the cover image — not the timeline drawing — shows
+// through. The wrapper keeps its entrance animation; only the framed surface
+// fades.
+.workbench[data-workspace-mode="true"] .workbench-workspace > .workspace {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .workbench-inspector {
@@ -131,6 +174,7 @@
 .workbench-workspace > .workspace {
   flex: 1;
   min-height: 0;
+  transition: opacity 160ms ease;
 }
 
 .workbench-inspector > .inspector {
@@ -140,13 +184,4 @@
 
 .workbench-body > .sidebar {
   grid-area: sidebar;
-}
-
-// A top rail is a separate row above the body; the body only has the workspace
-// and inspector columns. Moving the rail into the inspector removes its track
-// in the same way.
-.workbench[data-sidebar="top"] > .workbench-body,
-.workbench[data-sidebar="inspector"] > .workbench-body {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, min(var(--inspector-width), 57%));
-  grid-template-areas: "workspace inspector";
 }

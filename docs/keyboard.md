@@ -96,7 +96,7 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior.
 
-Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` / `Ctrl+Y` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
+Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` / `Ctrl+Y` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys. A focused local control may also declare a bare key as its own: the selected audio row and the audio preview in the asset library claim `Space`, so the key drives that preview instead of the chart transport; modified chords such as `Ctrl+Space` stay global.
 
 ## File and application keys
 

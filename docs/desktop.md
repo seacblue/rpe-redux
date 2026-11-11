@@ -61,7 +61,7 @@ Disk snapshots stream files through SHA-256 instead of reading them whole, and p
 
 `npm run build` produces the platform packages and stages the portable folder at `release/RPE-Redux-portable/RPE-Redux/`. Windows produces the NSIS installer; Linux produces deb, rpm, and AppImage packages. `npm run build -- --portable` skips the installer. The staging step preserves `RPE-Redux/user-data`, so the library and settings survive a rebuild. `npm run build -- --debug` produces the debug executable used by `npm run smoke`. `npm run build -- --fast` uses thin LTO and parallel codegen for local acceptance; publish with the normal build. Local release builds check the executable's embedded entry page before staging the portable folder; cross-target builds require verification on the target host. `npm run build -- --help` lists every mode.
 
-`npm run build:web` produces the static web edition in `dist/`. GitHub Pages deploys that directory through `.github/workflows/pages.yml`; the web edition keeps its library in browser OPFS, not `user-data/redux.db`.
+`npm run build:web` produces the static web edition in `dist/`. GitHub Pages deploys that directory through `.github/workflows/pages.yml`; the web edition keeps its library in browser OPFS, not `user-data/redux.db`. The workflow passes the `configure-pages` base path to `REDUX_WEB_BASE` (empty for a user site or custom domain, `/repo` for a project site). Hash routes such as `#/chart/<id>` load directly without a `404.html` fallback. The desktop bundle uses base `/` and Tauri's own `index.html` fallback for its static assets.
 
 Every desktop build stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cloudflare Tunnel client through `scripts/prepareCloudflared.mjs`. For offline builds, set `REDUX_FFMPEG_ARCHIVE` to the pinned archive before running the preparation script; the archive must match the selected platform and architecture plan, and its checksum is verified.
 
@@ -137,7 +137,7 @@ Portable builds carry `portable.marker`, show the published release notes when a
 
 ## Session and window state
 
-Files → Startup controls crash and update recovery. When enabled, a launch after an unexpected exit or an update restart reopens the last file or library project and restores its playhead, timeline origin, active line, multi-line selection, active inspector pane, drawer section and open state, and chart-info expansion. A normal close clears the record, so reopening the application starts empty. The record lives in the `session` preference section and is sampled every two seconds; only the sampled record survives an abnormal exit.
+Files → Startup controls crash and update recovery. When enabled, a launch after an unexpected exit or an update restart reopens the last file or library project and restores its playhead, timeline origin, active line, multi-line selection, active inspector page and chart-info expansion. A transient expanded inspector is not restored; the editor returns to the timeline. A normal close clears the record, so reopening the application starts empty. The record lives in the `session` preference section and is sampled every two seconds; only the sampled record survives an abnormal exit.
 
 Window geometry is always stored in `user-data/window-state.json`; when that file is missing, an existing Roaming `window-state.json` is imported once. The last size, position, and maximized state are restored on the next launch when the rectangle is still visible on a connected monitor.
 

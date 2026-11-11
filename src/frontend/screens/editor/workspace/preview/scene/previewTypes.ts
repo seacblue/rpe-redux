@@ -156,6 +156,12 @@ export interface PreviewHitArea {
 /** Note indices grouped by judge line, shared by preview and timeline rendering. */
 export type PreviewNoteSelection = ReadonlyMap<number, ReadonlySet<number>>;
 
+/** The note or judge line under the pointer in the preview overlap picker. */
+export interface PreviewOverlapHighlight {
+  note?: { lineIndex: number; noteIndex: number };
+  line?: number;
+}
+
 /** Geometry and data shared by one frame's four draw steps. */
 export interface PreviewFrame {
   context: CanvasRenderingContext2D;

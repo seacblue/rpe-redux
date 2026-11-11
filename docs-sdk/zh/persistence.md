@@ -190,8 +190,8 @@ const handle = context.api.values.define({
 
 图片、音频、完整谱面和二进制文件使用 library/package 资产，不放 `context.storage`：
 
-- `api.library.addAsset` / `removeAsset` 需要 `assets.write`（敏感）。
-- `api.library` 的读取、创建、更新和修订需要对应能力。
+- `api.library.current.addAsset` / `removeAsset` 需要 `assets.write`（敏感）。
+- 指定项目时先用 `api.library.scope(id)` 取得项目句柄；项目读取、更新和修订需要对应能力。
 - 扩展包内大文件随包分发；通用 package 资源读取仍在 P3 计划中。
 
 ## 权限与上限

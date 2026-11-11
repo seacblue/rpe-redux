@@ -13,6 +13,8 @@ export interface NoteHitGeometry {
   halfHeight?(note: TimelineNote, width: number): number;
   visible(horizontal: number, width: number, lineIndex: number): boolean;
   vertical(beat: number, lineIndex: number): number;
+  /** Paint rotation in radians for this note; Holds remain axis-aligned. */
+  rotation?(index: number, lineIndex: number): number;
 }
 
 /** Returns every note under the point, nearest first and non-holds before holds. */
@@ -28,14 +30,25 @@ export function timelineNoteCandidates(
     const startY = geometry.vertical(entry.start, entry.lineIndex);
     const endY = geometry.vertical(entry.end, entry.lineIndex);
     const padding = precise ? Math.max(0, geometry.halfHeight?.(entry.item, width) ?? 4) : 9;
+    if (!geometry.visible(x, width, entry.lineIndex)) {
+      return false;
+    }
+    const rotation =
+      entry.item.type === 2 ? 0 : (geometry.rotation?.(entry.index, entry.lineIndex) ?? 0);
+    if (rotation !== 0) {
+      // Picking follows the rotated head, so the visible end of each note in a
+      // stack selects that note instead of the whole stack's bounding box.
+      const cosine = Math.cos(rotation);
+      const sine = Math.sin(rotation);
+      const offsetX = point.x - x;
+      const offsetY = point.y - startY;
+      const localX = offsetX * cosine + offsetY * sine;
+      const localY = -offsetX * sine + offsetY * cosine;
+      return Math.abs(localX) <= width / 2 && Math.abs(localY) <= padding;
+    }
     const top = Math.min(startY, endY) - padding;
     const bottom = Math.max(startY, endY) + padding;
-    return (
-      geometry.visible(x, width, entry.lineIndex) &&
-      Math.abs(x - point.x) <= width / 2 &&
-      point.y >= top &&
-      point.y <= bottom
-    );
+    return Math.abs(x - point.x) <= width / 2 && point.y >= top && point.y <= bottom;
   };
   // Same-beat notes may overlap each other. The pointer picks the note whose
   // centre is nearest; ties keep chart order, with non-holds before holds.

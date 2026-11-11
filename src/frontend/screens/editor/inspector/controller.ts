@@ -49,6 +49,13 @@ export interface InspectorPanelDefinition {
   /** The panel-owned walkthrough shown by its header help action. */
   tutorial?: HelpTutorialDefinition;
   /**
+   * The wide Inspector mode this page expands into.
+   *
+   * Set only for large pages: the header then offers a single explicit expansion
+   * action that grows the inspector over the workspace.
+   */
+  workspaceMode?: string;
+  /**
    * Whether the pane holds chart-editing controls.
    *
    * Read-only documents keep the pane visible but make its body inert, so an
