@@ -98,25 +98,92 @@
 }
 
 // A document task owns the inspector body. The panel keeps its header and
-// scrolls inside the task page instead of the outer inspector column.
+// scrolls inside the task page instead of the outer inspector column. The
+// expanded panel spans the full width, so its header uses equal side insets and
+// the content drops the scrollbar gutter that would otherwise shift the studio
+// to the left.
 .inspector[data-mode-surface="true"] .inspector-status {
+  padding-right: var(--space-3);
   border-bottom-color: var(--edge-divider);
 }
 
 .inspector[data-mode-surface="true"] .inspector-content {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+// The compact page stays mounted at its original width and right edge. It
+// fades out as the studio fades in, then returns while the studio leaves, so
+// the two arrangements crossfade inside the shrinking panel. The studio is
+// laid out at its final width from the first frame and anchored to the right
+// edge, so growing the panel reveals a stable layout instead of reflowing it.
+.inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: calc(var(--inspector-compact-width) - 1px);
+  z-index: 0;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 120ms ease 140ms;
+}
+
+.inspector[data-mode-surface="true"][data-mode-expanded="true"]
+  .inspector-content
+  > [data-mode-underlay="true"]:not([hidden]) {
+  opacity: 0;
+  transition: opacity 80ms ease;
 }
 
 .inspector-mode-surface {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
   display: flex;
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: min(900px, calc(100vw - var(--workbench-side-track)));
-  min-height: 0;
+  width: var(--inspector-expanded-width);
   overflow: hidden;
-  animation: inspector-mode-surface-in 160ms var(--design-ease-enter) both;
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: top right;
+  animation: inspector-mode-surface-in 200ms var(--design-ease-enter) both;
+}
+
+// Collapsing swaps the entry keyframe for an exit keyframe so the task fades
+// out while the panel shrinks and the compact page returns underneath it.
+.inspector-mode-surface[data-mode-leaving="true"] {
+  opacity: 0;
+  transform: scale(0.997);
+  animation: inspector-mode-surface-out 200ms ease both;
+}
+
+@keyframes inspector-mode-surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.997);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes inspector-mode-surface-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.997);
+  }
 }
 
 .inspector-mode-surface > * {
@@ -125,13 +192,15 @@
   min-height: 0;
 }
 
-@keyframes inspector-mode-surface-in {
-  from {
-    opacity: 0;
+@media (prefers-reduced-motion: reduce) {
+  .inspector-mode-surface,
+  .inspector-mode-surface[data-mode-leaving="true"] {
+    animation: none;
+    transition: none;
   }
 
-  to {
-    opacity: 1;
+  .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
+    transition: none;
   }
 }
 

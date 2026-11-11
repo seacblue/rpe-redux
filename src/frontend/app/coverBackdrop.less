@@ -101,6 +101,16 @@
   background: color-mix(in srgb, var(--surface) 50%, transparent);
 }
 
+// An expanded Inspector covers the workspace with the same cover image and
+// tint as the compact panel. The opaque task surface underneath guarantees the
+// workspace never shows through when the cover background is disabled.
+.redux-app-root
+  .redux-app-shell:has(> .cover-backdrop-editor)
+  .workbench-inspector
+  > .inspector[data-mode-surface="true"] {
+  background: var(--surface);
+}
+
 .redux-app-root .redux-app-shell:has(> .cover-backdrop-editor) .workbench-body > .sidebar {
   background: color-mix(in srgb, var(--panel-header) 55%, transparent);
 }

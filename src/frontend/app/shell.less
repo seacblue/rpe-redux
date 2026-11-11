@@ -85,6 +85,9 @@
   grid-template-areas: "workspace inspector sidebar";
   gap: 0;
   --workbench-side-track: var(--chrome-sidebar-track);
+  --inspector-compact-width: clamp(260px, var(--inspector-width), 57vw);
+  --inspector-expanded-width: calc(100vw - var(--workbench-side-track) - 1px);
+  --cover-backdrop-workbench-top: calc(var(--titlebar-height) + 106px);
 }
 
 .workbench-workspace,
@@ -96,7 +99,7 @@
 }
 
 .workbench-inspector {
-  width: clamp(260px, var(--inspector-width), 57vw);
+  width: var(--inspector-compact-width);
   overflow: hidden;
 }
 
@@ -107,7 +110,7 @@
   width: 100%;
   min-width: 260px;
   min-height: 0;
-  transition: width 220ms var(--design-ease-enter);
+  transition: width 260ms var(--design-ease-enter);
 }
 
 // A document task expands the inspector itself. The wrapper stays in its grid
@@ -129,15 +132,46 @@
   min-width: 0;
   max-width: none;
   overflow: hidden;
+  isolation: isolate;
   background: var(--surface);
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--chrome-panel-shadow);
+  border: 0;
+  border-left: 1px solid var(--edge-emphasis);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+// The expanded panel reuses the current cover image and its configured blur and
+// brightness. Painting it inside the panel means the workspace never shows
+// through, while the tint stays at the same 50% step as the compact Inspector.
+.workbench-inspector > .inspector[data-mode-surface="true"]::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--cover-backdrop-workbench-top, 0px) - 10vh);
+  left: -10vw;
+  width: 120vw;
+  height: 120vh;
+  z-index: -1;
+  background-image: var(--cover-backdrop-image, none);
+  background-position: center;
+  background-size: cover;
+  filter: blur(var(--cover-backdrop-blur, 24px)) brightness(var(--cover-backdrop-brightness, 0.55));
+  transform: scale(1.03);
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.workbench-inspector > .inspector[data-mode-surface="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+  pointer-events: none;
 }
 
 // The chrome presets paint the compact inspector transparent so only its fields
 // carry a surface. The expanded task owns its area, so it restores the panel
-// surface; the cover artwork may make that surface translucent.
+// surface and covers the workspace directly.
 .redux-app-root .workbench-inspector > .inspector[data-mode-surface="true"] {
   background: var(--surface);
   border-color: var(--edge-divider);
@@ -158,15 +192,6 @@
   position: relative;
 }
 
-// The panel is a translucent lens over the artwork, not a second opaque window.
-// Fade the canvas itself so the cover image — not the timeline drawing — shows
-// through. The wrapper keeps its entrance animation; only the framed surface
-// fades.
-.workbench[data-workspace-mode="true"] .workbench-workspace > .workspace {
-  opacity: 0;
-  pointer-events: none;
-}
-
 .workbench-inspector {
   grid-area: inspector;
 }
@@ -174,7 +199,6 @@
 .workbench-workspace > .workspace {
   flex: 1;
   min-height: 0;
-  transition: opacity 160ms ease;
 }
 
 .workbench-inspector > .inspector {
