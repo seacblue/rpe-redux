@@ -703,7 +703,7 @@ export function LibraryWelcome({
                   iconText
                   onClick={checkIn}
                 >
-                  <Icon name="check" size={16} />
+                  <Icon name="rotate" size={16} />
                   {t("workspace.welcome.library.checkIn.action")}
                 </Button>
               </div>
