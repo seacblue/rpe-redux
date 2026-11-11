@@ -699,11 +699,12 @@ export function LibraryWelcome({
                 </p>
                 <Button
                   variant="outlined"
+                  size="lg"
                   className="redux-library-welcome-checkin-action"
                   iconText
                   onClick={checkIn}
                 >
-                  <Icon name="rotate" size={16} />
+                  <Icon name="calendar" size={18} />
                   {t("workspace.welcome.library.checkIn.action")}
                 </Button>
               </div>

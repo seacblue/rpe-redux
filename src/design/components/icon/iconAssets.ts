@@ -93,6 +93,7 @@ export const ICON_ASSETS = {
   layers: "icons/layers.png",
   search: "icons/search.png",
   zoom: "icons/zoom.png",
+  calendar: "icons/calendar.png",
   clock: "icons/clock.png",
   sun: "icons/sun.png",
   moon: "icons/moon.png",
