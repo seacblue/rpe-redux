@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "../../../../../i18n/react.ts";
-import { Button } from "../../../../../design/components/button/Button.tsx";
+import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
 import {
   getEditorVisibility,
@@ -164,26 +164,24 @@ export function Workspace({ hidden = false }: { hidden?: boolean }) {
 function WorkspaceModeBar({ mode }: { mode: WorkspaceModeDefinition }) {
   const { t } = useTranslation();
   const runtime = useEditorRuntime();
-  const back = useRef<HTMLButtonElement>(null);
+  const title = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    back.current?.focus({ preventScroll: true });
+    // Focus the mode name, not the exit button. Keyboard users still land inside
+    // the new mode, but no button ring appears while the layer fades in.
+    title.current?.focus({ preventScroll: true });
   }, []);
   return (
     <div className="workspace-mode-bar">
-      <Button
-        ref={back}
-        type="button"
-        variant="outlined"
-        className="workspace-mode-back"
-        onClick={() => collapseWorkspaceMode(runtime)}
-      >
-        <Icon name="chevronLeft" size={14} />
-        <span className="redux-button-label">{t("chrome.workspace.backToTimeline")}</span>
-      </Button>
-      <div className="workspace-mode-title">
+      <div className="workspace-mode-title" ref={title} tabIndex={-1}>
         <Icon name={mode.icon} size={16} />
         <strong>{t(mode.label)}</strong>
       </div>
+      <IconButton
+        className="workspace-mode-back"
+        icon="external"
+        label={t("chrome.workspace.backToTimeline")}
+        onClick={() => collapseWorkspaceMode(runtime)}
+      />
     </div>
   );
 }

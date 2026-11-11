@@ -78,37 +78,61 @@
   animation: workspace-mode-in 220ms var(--design-ease-enter, ease) both;
 }
 
+// The studio header continues the inspector status row: same height, insets,
+// title weight, and a compact action on the trailing edge. The return control
+// therefore lands where the inspector's action cluster was, instead of jumping
+// to the far left when the mode opens.
 .workspace-mode-bar {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: 0 var(--space-4);
+  gap: var(--space-2);
+  height: calc(var(--control-height) + var(--space-1-5));
+  padding: 0 var(--space-2) 0 var(--space-3);
   border-bottom: 1px solid var(--edge-divider);
   background: var(--chrome-panel-surface, var(--surface-raised));
 }
 
-.workspace-mode-back {
-  flex: none;
-}
-
 .workspace-mode-title {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
   color: var(--foreground);
+  outline: none;
 
   .redux-icon {
     flex: none;
-    --icon-color: var(--accent);
+    --icon-color: var(--foreground-muted);
   }
 
   strong {
     .truncate();
-    font-size: var(--type-body);
+    font-size: var(--type-heading);
     font-weight: 600;
+  }
+}
+
+// The expand and return controls are the same glyph, rotated: the studio writes
+// the page back into the inspector. Keeping the same artwork and slot makes the
+// two actions read as one toggle across the transition.
+.redux-app-root .workspace-mode-bar > .workspace-mode-back.redux-icon-button {
+  flex: none;
+  width: var(--control-height-compact);
+  height: var(--control-height-compact);
+  min-width: var(--control-height-compact);
+  min-height: var(--control-height-compact);
+  margin-left: auto;
+  padding: 0;
+  color: var(--foreground-muted);
+
+  .redux-icon {
+    transform: rotate(180deg);
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--accent);
   }
 }
 

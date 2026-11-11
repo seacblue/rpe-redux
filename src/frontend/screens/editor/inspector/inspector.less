@@ -35,7 +35,7 @@
 }
 
 .inspector-status-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--foreground);
@@ -46,9 +46,20 @@
   white-space: nowrap;
 }
 
+// The trailing actions form one edge-aligned group. The help glyph stays beside
+// the name; expansion and closing keep the same slots when the page moves into
+// its Workspace mode.
+.inspector-status-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 // The shared icon button is a 32px box; the status bar uses the compact
 // control height so the close affordance sits inside the bar's derived row.
-.redux-app-root .inspector .inspector-status > .inspector-status-close {
+.redux-app-root .inspector .inspector-status-actions > .inspector-status-close {
   flex: none;
   width: var(--control-height-compact);
   height: var(--control-height-compact);
@@ -58,7 +69,7 @@
 }
 
 .redux-app-root .inspector .inspector-status > .inspector-status-help,
-.redux-app-root .inspector .inspector-status > .inspector-status-expand {
+.redux-app-root .inspector .inspector-status-actions > .inspector-status-expand {
   flex: none;
   width: var(--control-height-compact);
   height: var(--control-height-compact);
@@ -69,7 +80,10 @@
 }
 
 .redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled),
-.redux-app-root .inspector .inspector-status > .inspector-status-expand:hover:not(:disabled) {
+.redux-app-root
+  .inspector
+  .inspector-status-actions
+  > .inspector-status-expand:hover:not(:disabled) {
   color: var(--accent);
 }
 
