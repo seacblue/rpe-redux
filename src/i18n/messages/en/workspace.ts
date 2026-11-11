@@ -620,11 +620,11 @@ export default {
     "Only fields shared by the selection are offered. A mixed value is shown as mixed until you choose a replacement.",
   "guide.section.multiEdit.tip3":
     "Review the preview and apply once; the whole batch becomes one undoable history entry.",
-  "guide.section.audio.title": "Audio and heatmaps",
+  "guide.section.audio.title": "Audio, waveform, and spectrum",
   "guide.section.audio.summary":
     "Audio surfaces help align the chart with the song and inspect transients without changing chart objects by themselves.",
   "guide.section.audio.tip1":
-    "The heatmaps follow the current chart audio and time range; use the frequency layers to spot attacks, sustained tones, and quiet sections.",
+    "The waveform and spectrum follow the current chart audio and time range; use them to spot attacks and quiet sections.",
   "guide.section.audio.tip2":
     "Audio analysis is visual reference. Confirm a beat against playback and timing points before committing dense note patterns.",
   "guide.section.audio.tip3":

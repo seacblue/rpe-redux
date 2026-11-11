@@ -4,9 +4,7 @@
  * One capture-phase listener evaluates the live context, lets editor commands
  * take first refusal when the editor workspace is active, then falls back to
  * registered app, instrument, workspace, and extension commands. Individual
- * modules declare scopes instead of installing their own window listeners; a
- * focused local control may also mark a bare key as its own so a media preview
- * keeps that key while it is in use.
+ * modules declare scopes instead of installing their own window listeners.
  */
 import type { ResourceScope } from "../../../core/utils/resourceScope.ts";
 import {
@@ -25,12 +23,7 @@ import {
   type PrefixDigitSequenceSubmission,
 } from "../../../core/shortcuts/prefixDigitSequence.ts";
 import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
-import {
-  claimsLocalShortcut,
-  isWindowBlur,
-  releaseShortcutFocus,
-  type ShortcutTarget,
-} from "./focus.ts";
+import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
   fixedCancelAction,
   runEditorKeyboardAction,
@@ -164,13 +157,6 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
     (event) => {
       const context = readShortcutContext(event.target);
       if (context.capturing || context.modal === "urgent") {
-        prefixDigitState = createPrefixDigitSequenceState();
-        return;
-      }
-      // A focused media or local control that declares the key owns it. Leaving
-      // the event untouched lets its React handler run and keeps the key on the
-      // surface the user is looking at instead of the workspace transport.
-      if (claimsLocalShortcut(event.target as ShortcutTarget | null, event)) {
         prefixDigitState = createPrefixDigitSequenceState();
         return;
       }
