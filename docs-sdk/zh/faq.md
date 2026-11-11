@@ -1,5 +1,9 @@
 # 常见问题
 
+## 怎么添加或修改音符？
+
+先用 `context.api.chart` 读谱面，再提交一个 `context.api.transaction` 请求。当前契约没有 `chart.placeNote`，也不允许直接修改读取到的对象。[谱面操作](place-note.md)里有完整插件、选中音符更新和结果处理。
+
 ## 为什么 `document` / `window` 是未定义？
 
 扩展运行在不透明源的 iframe 里，没有宿主 DOM。用声明式树注册界面，用 `context.api` 读写数据，用 `context.ui` 显示通知和对话框。任何 `document.querySelector`、`innerHTML` 或事件监听器都不属于扩展契约。

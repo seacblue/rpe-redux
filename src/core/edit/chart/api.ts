@@ -18,7 +18,6 @@ import {
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { createLateBound } from "../../utils/lateBound.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
-import type { ActionResult, ActionTarget } from "../operations/result.ts";
 
 export type ReadonlyChart<T> = T extends (...args: never[]) => unknown
   ? T
@@ -103,8 +102,6 @@ export interface ChartResourceReference {
 export interface ChartApiHost {
   chart(): Chart | null;
   revision?: () => Partial<ChartReadState>;
-  /** Place one note at chart coordinates; omitted hosts report unavailable. */
-  placeNote?(type: 1 | 2 | 3 | 4, target: ActionTarget): ActionResult<JudgeLineNote>;
 }
 
 export interface ChartApi {
@@ -124,7 +121,6 @@ export interface ChartApi {
   note(id: ChartObjectId): ChartNoteReadRef | null;
   events(): readonly ChartEventReadRef[];
   event(id: ChartObjectId): ChartEventReadRef | null;
-  placeNote(type: 1 | 2 | 3 | 4, target: ActionTarget): ActionResult<JudgeLineNote>;
 }
 
 /** Recursively freezes an object graph, tolerating cycles. */
@@ -462,14 +458,6 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     },
     event(id: ChartObjectId): ChartEventReadRef | null {
       return this.events().find((event) => event.id === id) ?? null;
-    },
-    placeNote(type, target) {
-      return (
-        host.placeNote?.(type, target) ?? {
-          status: "unavailable",
-          reason: "not_registered",
-        }
-      );
     },
   };
 }

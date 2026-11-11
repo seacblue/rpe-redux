@@ -14,9 +14,8 @@
   --drawer-surface: color-mix(in srgb, var(--chrome-panel-surface) 78%, transparent);
   --drawer-list-surface: var(--drawer-surface);
 
-  // The drawer grows toward `data-chrome-drawer-side`. A leftward reveal is the
-  // resting contract, so the base rules below also cover the frame before the
-  // theme surface writes the attribute.
+  // The drawer always reveals toward the stage, keeping the inspector's right
+  // edge on its grid track.
   --drawer-edge-shadow: var(--shadow-drawer-edge);
 
   // Stay above the stage's local layers but below the sidebar rail, which owns
@@ -126,48 +125,6 @@
   // this column rather than the whole drawer surface.
   container-type: inline-size;
   container-name: drawer-properties;
-}
-
-// A leftward reveal keeps the inspector's right edge on its grid track and
-// exposes the list column on the left, toward the stage.
-:root[data-chrome-drawer-side="left"] .inspector.is-drawer {
-  --drawer-edge-shadow: var(--shadow-drawer-edge);
-  align-self: flex-end;
-}
-
-:root[data-chrome-drawer-side="left"] .inspector.is-drawer .inspector-drawer {
-  right: 0;
-  left: auto;
-}
-
-:root[data-chrome-drawer-side="left"] .inspector.is-drawer .drawer-split {
-  flex-direction: row;
-}
-
-:root[data-chrome-drawer-side="left"] .inspector.is-drawer .drawer-split-list {
-  border-right: 1px solid var(--edge-divider);
-  border-left: 0;
-}
-
-// A rightward reveal mirrors the contract: it keeps the left edge on the grid
-// track and exposes the list column on the right, toward the stage.
-:root[data-chrome-drawer-side="right"] .inspector.is-drawer {
-  --drawer-edge-shadow: var(--shadow-drawer-edge-inline);
-  align-self: flex-start;
-}
-
-:root[data-chrome-drawer-side="right"] .inspector.is-drawer .inspector-drawer {
-  right: auto;
-  left: 0;
-}
-
-:root[data-chrome-drawer-side="right"] .inspector.is-drawer .drawer-split {
-  flex-direction: row-reverse;
-}
-
-:root[data-chrome-drawer-side="right"] .inspector.is-drawer .drawer-split-list {
-  border-right: 0;
-  border-left: 1px solid var(--edge-divider);
 }
 
 // Read-only drawers keep their list navigable, but the property forms and

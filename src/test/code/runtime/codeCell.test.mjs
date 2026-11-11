@@ -103,8 +103,8 @@ test("the cell host exposes chart writes but denies document writes and UI surfa
   assert.throws(() => api.document.save(), /document\.write|capability/i);
   assert.throws(() => api.document.openPath("x"), /document\.write|capability/i);
   assert.equal(typeof api.transaction.apply, "function");
-  assert.equal(typeof api.library.addAsset, "function");
-  assert.throws(() => api.library.remove("x"), /library\.write|capability/i);
+  assert.equal(typeof api.library.scope, "function");
+  assert.equal("get" in api.library, false);
   assert.throws(() => capture.input.context.ui.notice("x"), /do not expose ui\.notice/);
   assert.throws(() => capture.input.context.settings.get("x"), /do not expose settings/);
   assert.equal(capture.input.manifest.capabilities.includes("chart.write"), true);
@@ -114,7 +114,6 @@ test("the read profile runs and denies the transaction handle lazily", async () 
   const capture = {};
   let capabilitiesValue;
   let transactionError;
-  let placeNoteError;
   const runtime = runtimeFor((input) => {
     capture.input = input;
     return {
@@ -125,11 +124,6 @@ test("the read profile runs and denies the transaction handle lazily", async () 
           input.context.api.transaction;
         } catch (error) {
           transactionError = error;
-        }
-        try {
-          input.context.api.chart.placeNote(1, {});
-        } catch (error) {
-          placeNoteError = error;
         }
         return { ok: true, value: { read: true }, logs: [], durationMs: 1, truncated: false };
       },
@@ -149,23 +143,15 @@ test("the read profile runs and denies the transaction handle lazily", async () 
   assert.deepEqual(capture.input.manifest.capabilities, result.capabilities);
   assert.equal(transactionError?.code, "capabilityDenied");
   assert.equal(transactionError?.capability, "chart.write");
-  assert.equal(placeNoteError?.code, "capabilityDenied");
-  assert.equal(placeNoteError?.capability, "chart.write");
 });
 
-test("the write profile withholds direct note placement and history undo/redo", async () => {
-  let placeNoteError;
+test("the write profile withholds history undo/redo", async () => {
   let undoError;
   let redoError;
   const runtime = runtimeFor((input) => ({
     start: async () => {},
     runCell: async () => {
       const api = input.context.api;
-      try {
-        api.chart.placeNote(1, {});
-      } catch (error) {
-        placeNoteError = error;
-      }
       try {
         api.transaction.undo;
       } catch (error) {
@@ -190,8 +176,6 @@ test("the write profile withholds direct note placement and history undo/redo", 
 
   assert.equal(result.ok, true);
   assert.equal(result.value, "function");
-  assert.equal(placeNoteError?.code, "capabilityDenied");
-  assert.equal(placeNoteError?.capability, "chart.write");
   assert.equal(undoError?.code, "capabilityDenied");
   assert.equal(undoError?.capability, "chart.write");
   assert.equal(redoError?.code, "capabilityDenied");

@@ -10,12 +10,26 @@ const disposePanel = context.ui.registerPanel({
   label: "Example",
   tree: { tag: "p", text: "Ready" },
 });
-const disposeToolbar = context.api.toolbar.register({
+const disposeSidebar = context.ui.registerSidebar({
+  id: "open-example",
+  panelId: "example.panel",
+  icon: { name: "sliders", label: "Example" },
+  order: 900,
+});
+const disposeToolbar = await context.api.toolbar.register({
+  kind: "action",
   id: "example.open",
+  row: 2,
+  order: 920,
+  group: "example",
   label: "Open example",
-  run: () => context.api.ui.open("example.panel"),
+  tooltip: "Open the example panel",
+  icon: "sliders",
+  run: () => context.api.sidebar.open("open-example"),
 });
 ```
+
+This package requests `scripts`, `ui.panel`, `ui.sidebar`, `ui.toolbar`, and `ui.notice`.
 
 ## Settings and JSON storage
 
@@ -26,15 +40,88 @@ await context.storage.setJSON("config", config);
 
 Use `values.define` when the setting must be observable by several package surfaces. Use package storage for private cached data.
 
-## Transaction write
+## Chart operation plugin
+
+This package shifts the selected notes by a number the user enters. The manifest requests scripts, chart read/write, selection read, and notices:
+
+```json
+{
+  "kind": "extension",
+  "id": "example.shift",
+  "name": "Shift Notes",
+  "version": "1.0.0",
+  "engines": { "rpe-redux": 1 },
+  "entry": "index.js",
+  "capabilities": ["scripts", "chart.read", "selection.read", "chart.write", "ui.notice"]
+}
+```
 
 ```js
-const preview = await context.api.transaction.preview({
-  label: "Move note",
-  notes: { update: [{ id: "note-id", patch: { positionX: 100 } }] },
-});
-if (preview.ok) await context.api.transaction.apply(preview.value.previewId);
+export default {
+  activate(context) {
+    context.scripts.register({
+      id: "shift-right",
+      label: "Shift selection right",
+      parameters: {
+        parameters: {
+          delta: {
+            kind: "number",
+            default: 10,
+            min: -675,
+            max: 675,
+            step: 1,
+            label: "Distance",
+          },
+        },
+        order: ["delta"],
+      },
+
+      async run({ api, params, ui }) {
+        const selection = await api.selection.state();
+        if (!selection.ok) {
+          ui.notice(selection.error.message, { level: "error" });
+          return;
+        }
+        if (selection.value.notes.length === 0) {
+          ui.notice("Select some notes first.", { level: "warning" });
+          return;
+        }
+
+        const lines = await api.chart.lines();
+        if (!lines.ok) {
+          ui.notice(lines.error.message, { level: "error" });
+          return;
+        }
+
+        const delta = Number(params.delta) || 0;
+        const updates = [];
+        for (const reference of selection.value.notes) {
+          const note = lines.value[reference.lineIndex]?.notes?.[reference.index];
+          if (!note?.id || !Number.isFinite(note.positionX)) continue;
+          updates.push({ id: note.id, patch: { positionX: note.positionX + delta } });
+        }
+        if (updates.length === 0) return;
+
+        const preview = await api.transaction.preview({
+          label: "Shift notes",
+          notes: { update: updates },
+        });
+        if (!preview.ok || preview.value.status !== "previewed" || !preview.value.previewId) {
+          ui.notice("Preview failed.", { level: "error" });
+          return;
+        }
+
+        const applied = await api.transaction.apply(preview.value.previewId);
+        if (applied.ok && applied.value.status === "committed") {
+          ui.notice(`Moved ${updates.length} notes.`, { level: "success" });
+        }
+      },
+    });
+  },
+};
 ```
+
+A chart write uses `transaction.preview` then `apply`. A chart that changed before the commit returns `conflict`; a paged `chart.read` with an old cursor returns `stale_read`.
 
 ## Provider and consumer
 

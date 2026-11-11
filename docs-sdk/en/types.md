@@ -8,14 +8,28 @@ An API **handle** is a grouped entry such as `context.api.chart`. `context` is t
 
 ## Results
 
-`ApiResult<T>` is either `{ ok: true, value: T }` or `{ ok: false, error }`. `ActionResult<T>` describes the domain status of an operation such as note placement. Test both layers when an API returns an action result inside an API result.
+`ApiResult<T>` is either `{ ok: true, value: T }` or `{ ok: false, error }`. Test `ok` before reading `value`. A transaction returns `ApiResult<ChartTransactionResult>`; the domain status is inside `value.status`.
 
-## Chart targets
+## ChartTransactionRequest
 
-- `ChartTarget` identifies a line and one or two beat positions.
-- `ChartTargetPoint` contains `beat` and `positionX`.
-- `ChartNoteType` uses `1` Tap, `2` Hold, `3` Flick, and `4` Drag.
+`ChartTransactionRequest` is the request accepted by `transaction.preview` and `transaction.apply`.
+
 - `ChartObjectId` is a stable string id read from the chart.
+- `Beat` is a reduced triple `[whole, numerator, denominator]`; `[0, 1, 2]` is beat `0.5`.
+
+Transaction groups:
+
+| Group      | Shape                                                         |
+| ---------- | ------------------------------------------------------------- |
+| `metadata` | Partial chart metadata.                                       |
+| `timing`   | `{ bpmList }`; replaces the complete tempo map.               |
+| `lines`    | `insert` and `update`; no delete.                             |
+| `notes`    | `insert`, `update`, and `delete`.                             |
+| `events`   | `insert`, `update`, and `delete`, grouped by track and layer. |
+
+## ChartTransactionResult
+
+`ChartTransactionResult` carries `status`, `affectedObjectIds`, `issues`, `history`, and `conflict`. `TransactionIssue` names a validation problem with a `code` and optional `path`.
 
 ## Read snapshots
 

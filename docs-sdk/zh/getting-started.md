@@ -102,10 +102,10 @@ export default {
 
 下一步：
 
-- 只想先放一个音符：读[放一个音符](place-note.md)。
+- 想改谱面：读[谱面操作](place-note.md)，里面有完整的“读取 → 事务 → 结果”流程和插音符示例。
 - 做界面前读[设计系统](design-system.md)，按组件和 token 选择写法。
 - 需要面板、侧栏、工具栏和右键菜单时读[面板与菜单](panels-and-menus.md)。
 - 需要保存配置时读[数据持久化](persistence.md)。
 - 不清楚 `context`、`ui`、`scripts`、`storage` 分别是什么：读[扩展上下文](context.md)。
-- 遇到 `ChartTarget`、`ApiResult` 这类类型名：查[类型与术语](types.md)。
+- 遇到 `ChartTransactionRequest`、`ChartObjectId`、`ApiResult` 这类类型名：查[类型与术语](types.md)。
 - 需要确认某个方法是否登记、需要什么能力时，在左侧 **API** 树按 handle 查方法页；异步约定见[API 约定](api-reference.md)。

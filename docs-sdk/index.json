@@ -7,29 +7,22 @@
           "slug": "getting-started",
           "title": "快速开始",
           "file": "zh/getting-started.md",
-          "keywords": [
-            "安装",
-            "启用",
-            "manifest",
-            "activate",
-            "沙箱",
-            "调试",
-            "失败预算"
-          ],
+          "keywords": ["安装", "启用", "manifest", "activate", "沙箱", "调试", "失败预算"],
           "order": 10
         },
         {
           "slug": "place-note",
-          "title": "放一个音符",
+          "title": "谱面操作",
           "file": "zh/place-note.md",
           "keywords": [
+            "谱面",
+            "事务",
+            "transaction",
+            "chart.write",
             "音符",
-            "placeNote",
-            "ChartTarget",
-            "Tap",
-            "Hold",
-            "Flick",
-            "Drag",
+            "事件",
+            "BPM",
+            "撤销",
             "第一次"
           ],
           "order": 15
@@ -38,14 +31,7 @@
           "slug": "faq",
           "title": "常见问题",
           "file": "zh/faq.md",
-          "keywords": [
-            "FAQ",
-            "问题",
-            "样式",
-            "面板",
-            "调试",
-            "性能"
-          ],
+          "keywords": ["FAQ", "问题", "样式", "面板", "调试", "性能"],
           "order": 20
         }
       ]
@@ -57,73 +43,35 @@
           "slug": "ui-reference",
           "title": "声明式 UI",
           "file": "zh/ui-reference.md",
-          "keywords": [
-            "声明式树",
-            "标签",
-            "属性",
-            "事件",
-            "节点上限",
-            "sandbox",
-            "input type"
-          ],
+          "keywords": ["声明式树", "标签", "属性", "事件", "节点上限", "sandbox", "input type"],
           "order": 30
         },
         {
           "slug": "panels-and-menus",
           "title": "面板与菜单",
           "file": "zh/panels-and-menus.md",
-          "keywords": [
-            "panel",
-            "sidebar",
-            "toolbar",
-            "contextMenu",
-            "overlay",
-            "open",
-            "close"
-          ],
+          "keywords": ["panel", "sidebar", "toolbar", "contextMenu", "overlay", "open", "close"],
           "order": 40
         },
         {
           "slug": "persistence",
           "title": "数据持久化",
           "file": "zh/persistence.md",
-          "keywords": [
-            "storage",
-            "设置",
-            "settings",
-            "values",
-            "迁移",
-            "版本",
-            "JSON",
-            "library"
-          ],
+          "keywords": ["storage", "设置", "settings", "values", "迁移", "版本", "JSON", "library"],
           "order": 50
         },
         {
           "slug": "security",
           "title": "安全模型",
           "file": "zh/security.md",
-          "keywords": [
-            "沙箱",
-            "安全",
-            "信任",
-            "预算",
-            "样式作用域",
-            "供应链"
-          ],
+          "keywords": ["沙箱", "安全", "信任", "预算", "样式作用域", "供应链"],
           "order": 60
         },
         {
           "slug": "api-reference",
           "title": "API 约定",
           "file": "zh/api-reference.md",
-          "keywords": [
-            "API",
-            "AsyncApi",
-            "ApiResult",
-            "methodNotRegistered",
-            "capabilityDenied"
-          ],
+          "keywords": ["API", "AsyncApi", "ApiResult", "methodNotRegistered", "capabilityDenied"],
           "order": 65
         },
         {
@@ -146,13 +94,7 @@
           "slug": "hooks",
           "title": "公开 Hooks",
           "file": "zh/hooks.md",
-          "keywords": [
-            "hooks",
-            "register",
-            "invoke",
-            "schema",
-            "跨扩展"
-          ],
+          "keywords": ["hooks", "register", "invoke", "schema", "跨扩展"],
           "order": 66.5
         },
         {
@@ -160,8 +102,8 @@
           "title": "类型与术语",
           "file": "zh/types.md",
           "keywords": [
-            "ChartTarget",
-            "ChartNoteType",
+            "ChartTransactionRequest",
+            "ChartObjectId",
             "ApiResult",
             "ActionResult",
             "类型",
@@ -182,14 +124,7 @@
           "slug": "capabilities",
           "title": "能力清单",
           "file": "zh/capabilities.md",
-          "keywords": [
-            "capability",
-            "能力",
-            "授权",
-            "consent",
-            "风险",
-            "host.patch"
-          ],
+          "keywords": ["capability", "能力", "授权", "consent", "风险", "host.patch"],
           "order": 70
         }
       ]
@@ -225,15 +160,7 @@
           "slug": "examples",
           "title": "完整示例",
           "file": "zh/examples.md",
-          "keywords": [
-            "示例",
-            "面板",
-            "设置",
-            "事务",
-            "工具栏",
-            "存储",
-            "recipe"
-          ],
+          "keywords": ["示例", "面板", "设置", "事务", "工具栏", "存储", "recipe"],
           "order": 90
         }
       ]

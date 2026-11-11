@@ -17,8 +17,6 @@ export interface ExtensionThemeIdentity {
   readonly name: string;
   /** Painted light/dark family. */
   readonly appearance: "light" | "dark";
-  /** Active chrome density preset. */
-  readonly density: string;
 }
 
 /** Colour roles a package should use instead of raw colour values. */
@@ -35,7 +33,7 @@ export type ExtensionThemeColorRole =
 
 /** Official token snapshot handed to a package. */
 export interface ExtensionThemeTokens {
-  /** Theme id, name, appearance, and density. */
+  /** Theme id, name, and appearance. */
   readonly theme: ExtensionThemeIdentity;
   /** Semantic colour values as CSS colour strings. */
   readonly colors: Readonly<Record<ExtensionThemeColorRole, string>>;
@@ -62,7 +60,7 @@ export interface ExtensionThemeTokens {
 export interface ExtensionThemeTokenHost {
   /** Build a fresh snapshot from the values currently applied to the document. */
   tokens(): ExtensionThemeTokens;
-  /** Observe theme or density changes; returns a host-only disposer. */
+  /** Observe theme changes; returns a host-only disposer. */
   subscribe(listener: () => void): ExtensionDisposer;
 }
 
@@ -176,7 +174,6 @@ export function buildExtensionThemeTokens(
       id: token(identity.id),
       name: token(identity.name),
       appearance,
-      density: token(identity.density),
     }),
     colors: tokenTable(COLOR_TOKENS, read) as Readonly<Record<ExtensionThemeColorRole, string>>,
     radii: tokenTable(RADIUS_TOKENS, read),
@@ -221,6 +218,6 @@ function requireTokenHost(): ExtensionThemeTokenHost {
 export const theme = Object.freeze({
   /** Read the token values currently applied to the document. */
   tokens: (): ExtensionThemeTokens => requireTokenHost().tokens(),
-  /** Observe theme and density changes; returns a host-only disposer. */
+  /** Observe theme changes; returns a host-only disposer. */
   subscribe: (listener: () => void): (() => void) => requireTokenHost().subscribe(listener),
 });

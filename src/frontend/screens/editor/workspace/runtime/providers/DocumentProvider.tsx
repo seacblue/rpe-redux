@@ -29,7 +29,6 @@ import { readZipOffThread } from "../../document/open/zipReadOffThread.ts";
 import type { SaveResult } from "../../../../../../core/global/document/desktopTypes.ts";
 import { connectDocumentApi } from "../../../../../../core/edit/document/api.ts";
 import { connectChartApi } from "../../../../../../core/edit/chart/api.ts";
-import { placeNoteAtTarget } from "../../../../../../core/edit/timeline/noteCommands.ts";
 import { connectTransactionApi } from "../../../../../../core/edit/transaction/service.ts";
 import { getEditorVisibility } from "../../../../../../core/edit/state/visibility.ts";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
@@ -1149,10 +1148,6 @@ export function createDocumentRuntime(options: {
         chartFingerprint: documentCoordinator.snapshot().revisions.chartFingerprint,
         generation: documentCoordinator.snapshot().revisions.generation,
       }),
-      placeNote: (type, target) =>
-        options.hasDocument()
-          ? placeNoteAtTarget(getSession(), type, target)
-          : { status: "unavailable", reason: "not_registered" },
     }),
   );
   options.scope.add(

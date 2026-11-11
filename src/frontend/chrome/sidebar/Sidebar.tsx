@@ -7,9 +7,9 @@
  * are the inspector's drawer mode, not a second surface beside it.
  *
  * The rail is permanently compact: it never widens over the inspector, and each
- * entry reveals its name through the shared tooltip layer. The top placement is
- * a separate horizontal bar that keeps its labels visible; it is not an
- * expansion of the rail.
+ * entry reveals its name through the shared tooltip layer. Its placement is
+ * host-owned, so a theme cannot turn it into a top bar or move it into the
+ * inspector.
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Divider } from "../../../design/components/divider/Divider.tsx";
@@ -123,45 +123,29 @@ function SidebarRule({ item }: { item: SidebarNavigationDivider }) {
   return visible ? <Divider axis="x" /> : null;
 }
 
-/** Where the frame renders the rail. */
-export type SidebarPlacement = "rail" | "floating" | "top" | "inspector";
-
 /**
- * Renders the merged inspector and drawer navigation.
- *
- * `top` turns the rail into a horizontal bar with visible labels. Every other
- * placement renders the same compact, tooltip-only rail.
+ * Renders the merged inspector and drawer navigation in the window's trailing
+ * column.
  */
-export function Sidebar({
-  placement = "rail",
-  sidebar,
-}: {
-  placement?: SidebarPlacement;
-  /** Rail name and semantics from the surface that owns the entries. */
-  sidebar: SidebarDescriptor;
-}) {
+export function Sidebar({ sidebar }: { sidebar: SidebarDescriptor }) {
   const { t } = useTranslation();
-  const horizontal = placement === "top";
   const { entries, drawer } = useSidebarNavigation();
   const anchor = onboardingAnchorRef("sidebar");
   return (
     <aside
       ref={anchor}
-      className={`sidebar${horizontal ? " is-top" : ""}`}
+      className="sidebar"
       aria-label={t(sidebar.label)}
-      data-tip-placement={horizontal ? "bottom" : "left"}
-      data-placement={placement}
+      data-tip-placement="left"
       role={sidebar.role}
-      aria-orientation={
-        horizontal ? "horizontal" : sidebar.role === "toolbar" ? "vertical" : undefined
-      }
+      aria-orientation={sidebar.role === "toolbar" ? "vertical" : undefined}
     >
       <div className="sidebar-content">
         {entries.map((entry) =>
           entry.kind === "divider" ? (
             <SidebarRule item={entry} key={entry.id} />
           ) : (
-            <SidebarEntry item={entry} expanded={horizontal} drawer={drawer} key={entry.id} />
+            <SidebarEntry item={entry} expanded={false} drawer={drawer} key={entry.id} />
           ),
         )}
       </div>

@@ -61,29 +61,6 @@
   min-width: 0;
 }
 
-// The toolbar owns the left column only while it is actually visible. The home
-// page has no toolbar, so its content must span the full width.
-:root[data-chrome-toolbar-placement="left"] .shell-body {
-  display: grid;
-  grid-template-columns: var(--chrome-toolbar-width) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "toolbar content"
-    "toolbar status";
-}
-
-:root[data-chrome-toolbar-placement="left"] .shell-body > .redux-toolbar {
-  grid-area: toolbar;
-}
-
-:root[data-chrome-toolbar-placement="left"] .shell-body > .shell-content {
-  grid-area: content;
-}
-
-:root[data-chrome-toolbar-placement="left"] .shell-body > footer {
-  grid-area: status;
-}
-
 .redux-app-root .redux-app-shell[data-at-home="true"] .shell-body {
   display: flex;
   flex-direction: column;
@@ -140,13 +117,4 @@
 
 .workbench-body > .sidebar {
   grid-area: sidebar;
-}
-
-// A top rail is a separate row above the body; the body only has the workspace
-// and inspector columns. Moving the rail into the inspector removes its track
-// in the same way.
-.workbench[data-sidebar="top"] > .workbench-body,
-.workbench[data-sidebar="inspector"] > .workbench-body {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, min(var(--inspector-width), 57%));
-  grid-template-areas: "workspace inspector";
 }

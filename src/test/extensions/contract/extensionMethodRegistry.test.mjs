@@ -97,7 +97,7 @@ test("the completeness check accepts a facade built from the registry", () => {
   const facade = facadeFrom(EXTENSION_METHODS);
   assert.doesNotThrow(() => assertRegistryComplete(facade));
   assert.equal(lookupMethod("chart", "notes")?.capability, "chart.read");
-  assert.equal(lookupMethod("chart", "placeNote")?.capability, "chart.write");
+  assert.equal(lookupMethod("library", "current.createRevision")?.capability, "library.write");
   assert.equal(lookupMethod("", "ui.notice")?.capability, "ui.notice");
 });
 

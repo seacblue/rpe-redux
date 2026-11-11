@@ -251,7 +251,7 @@ These interfaces form the Extension design kit: a package reads the active desig
 
 ### `api.theme.tokens()` and `api.theme.subscribe(listener)`
 
-Read the design tokens the host currently applies, and receive a callback when the theme or density changes.
+Read the design tokens the host currently applies, and receive a callback when the theme changes.
 
 ```ts
 api.theme.tokens(): Promise<ExtensionThemeTokens>;
@@ -274,24 +274,24 @@ const card = context.ui.registerPanel({
       padding: tokens.spacing["3"],
       fontFamily: tokens.fonts.family,
     },
-    text: `${tokens.theme.name}, ${tokens.theme.appearance}, ${tokens.theme.density}`,
+    text: `${tokens.theme.name}, ${tokens.theme.appearance}`,
   },
 });
 
-// Re-read tokens after a theme or density change and redraw once.
+// Re-read tokens after a theme change and redraw once.
 context.api.theme.subscribe(() => {
   void context.api.theme.tokens().then((next) => {
     card.update({
       kind: "element",
       tag: "div",
       style: { color: next.colors.foreground, padding: next.spacing["2"] },
-      text: `${next.theme.name}, ${next.theme.density}`,
+      text: `${next.theme.name}, ${next.theme.appearance}`,
     });
   });
 });
 ```
 
-The snapshot contains `theme` (`id`, `name`, `appearance`, `density`), semantic `colors` (`foreground`, `background`, `panel`, `border`, `accent`, `danger`, `warning`, `success`, `muted`), `radii`, `spacing`, `fonts` (`family`, `monoFamily`, `sizes`), `shadows`, and `motion` (`durations`, `easings`). Every leaf is a string read from the document's applied tokens. Use these fields for extension-owned trees and styles so the surface follows the active theme.
+The snapshot contains `theme` (`id`, `name`, `appearance`), semantic `colors` (`foreground`, `background`, `panel`, `border`, `accent`, `danger`, `warning`, `success`, `muted`), `radii`, `spacing`, `fonts` (`family`, `monoFamily`, `sizes`), `shadows`, and `motion` (`durations`, `easings`). Every leaf is a string read from the document's applied tokens. Use these fields for extension-owned trees and styles so the surface follows the active theme.
 
 **Permission and limits:** `styles`, shared with `context.styles`. Theme listeners share the 128 event-subscription budget and are released with the activation; `subscribe` has no cancellation hook. A listener that throws is charged to the package failure budget and does not interrupt other listeners.
 
@@ -381,7 +381,7 @@ dispose();
 
 A row's `contexts` names the menu surfaces that draw it. The timeline renders `notes` and `events`; the remaining names are reserved for the menu sites that own them. Every sandbox call is asynchronous, so the handle returns promises even when the host operation itself is synchronous.
 
-Extension UI owns its own panels, overlays, sidebar routes, and toolbar entries. It cannot replace the host title bar, application menu, toolbar frame, inspector frame, or window controls; those are theme-only presentation contracts. A package that needs a full window skin ships a data-only theme package, which the user installs separately through Appearance and confirms before its custom UI applies. The `styles` capability is scoped to the package's own panel and overlay mounts; selectors cannot reach host chrome. A style sheet is wrapped in an owner-scoped `@scope` against the mount attribute, so a rule such as `.redux-titlebar` matches nothing outside that package's surfaces. Document-global at-rules (`@keyframes`, `@font-face`, `@property`, `@counter-style`, and `@page`) are rejected because their names are not scoped to the mount; `@import`, `@namespace`, and nested `@scope` are rejected as well.
+Extension UI owns its own panels, overlays, sidebar routes, and toolbar entries. It cannot replace the host title bar, application menu, toolbar frame, inspector frame, window controls, or window layout; those are host-owned presentation contracts. A package that needs a full window skin ships a data-only theme package, which the user installs separately through Appearance and confirms before its custom UI applies. The `styles` capability is scoped to the package's own panel and overlay mounts; selectors cannot reach host chrome. A style sheet is wrapped in an owner-scoped `@scope` against the mount attribute, so a rule such as `.redux-titlebar` matches nothing outside that package's surfaces. Document-global at-rules (`@keyframes`, `@font-face`, `@property`, `@counter-style`, and `@page`) are rejected because their names are not scoped to the mount; `@import`, `@namespace`, and nested `@scope` are rejected as well.
 
 ## Versioned design components
 
@@ -409,11 +409,35 @@ The host validates the slot, component version, closed props schema, tree depth,
 
 The complete provider/consumer, hook, and design-slot example is in [`sdk/examples/composition.ts`](../sdk/examples/composition.ts). It is type-checked with the published SDK surface.
 
-## Transactions
+## Chart operations
 
-Chart writes go through `api.transaction` and require `chart.write`. A request may update chart `metadata`, judge-line fields under `lines.update`, and individual notes or events under `notes` and `events`. The transaction is validated, applied once, and recorded in undo history.
+Chart writes are one atomic `transaction` request and require `chart.write`. Read with `api.chart` or `api.selection`, build a request, then call `api.transaction.preview` or `api.transaction.apply`. Do not mutate a read snapshot; use the ids and values it returns.
 
-`preview(request)` returns a preview id when the result is `previewed`; pass that id to `apply(previewId)` or discard it with `cancel(previewId)`. `apply` status is `committed`, `unchanged`, `rejected`, `conflict`, or `unavailable`, with issues, affected object ids, and history metadata inside `value`. Do not mutate chart objects directly.
+```js
+const lines = await api.chart.lines();
+if (lines.ok && lines.value.length > 0) {
+  const result = await api.transaction.apply({
+    label: "Add tap",
+    notes: {
+      insert: [
+        {
+          lineIndex: 0,
+          note: { type: 1, startTime: [0, 0, 1], endTime: [0, 0, 1], positionX: 0, above: 1 },
+        },
+      ],
+    },
+  });
+  if (result.ok && result.value.status === "committed") {
+    ui.notice("Tap inserted.", { level: "success" });
+  }
+}
+```
+
+A request may update chart `metadata`, replace the tempo map under `timing.bpmList`, insert or update judge lines, and insert, update, or delete notes and events by id. Notes and events use reduced beat triples, not seconds. `lines` has no delete operation.
+
+`preview(request)` validates a dry run and returns a preview id only when the status is `previewed`; pass that id to `apply(previewId)` or discard it with `cancel(previewId)`. `apply` status is `committed`, `unchanged`, `rejected`, `conflict`, or `unavailable`, with issues, affected object ids, and history metadata inside `value`. A read page with an old cursor returns `stale_read`; a commit after the chart changed returns `conflict`. Re-read and rebuild instead of retrying blindly.
+
+The public [Chart operations](../docs-sdk/en/place-note.md) guide walks through a complete plugin, selected-note updates, events, and result handling.
 
 ## Trust
 

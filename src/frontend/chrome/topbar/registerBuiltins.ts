@@ -16,10 +16,8 @@ import { registerTransportControls } from "../transport/register.ts";
 import { registerDeveloperActions } from "./actions/developerActions.ts";
 import { registerHelpActions } from "./actions/helpActions.ts";
 import { registerFileSettingsActions } from "../../screens/settings/files/fileSettingsActions.ts";
-import { connectWorkspaceApi } from "../../../core/api/workspace.ts";
 import { connectSettingsOpen } from "../../../core/api/settings.ts";
 import { connectHelpApi } from "../../../core/api/help.ts";
-import { editorChromeCommands } from "../../contracts/editorCommands.ts";
 import { openSettings } from "../../screens/settings/settingsWindowController.ts";
 import { openChangelog } from "../../screens/settings/updates/changelog.ts";
 import { openOnboardingGuide } from "../../overlays/help/onboardingGuide.ts";
@@ -27,10 +25,6 @@ import { openOnboardingGuide } from "../../overlays/help/onboardingGuide.ts";
 /** Registers shared built-in actions, shortcuts, and host API handles; returns their disposer. */
 export function registerBuiltins(): () => void {
   const remove = [
-    connectWorkspaceApi({
-      newChart: () => editorChromeCommands()?.documents.newDocument(),
-      openInspector: (id) => editorChromeCommands()?.inspector.openPane(id) ?? false,
-    }),
     connectSettingsOpen((page) => openSettings(page)),
     connectHelpApi({
       changelog: () => openChangelog(),

@@ -21,6 +21,9 @@ const result = await context.api.transaction.preview({
   notes: { update: [{ id: "note-id", patch: { positionX: 100 } }] },
 });
 if (!result.ok) throw new Error(result.error.message);
+if (result.value.status !== "previewed" || !result.value.previewId) {
+  throw new Error(`Nothing to apply: ${result.value.status}`);
+}
 const committed = await context.api.transaction.apply(result.value.previewId);
 ```
 

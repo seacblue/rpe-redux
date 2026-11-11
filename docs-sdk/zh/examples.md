@@ -237,4 +237,4 @@ export default {
 };
 ```
 
-谱面写入使用 `transaction.preview` → `apply`；文档变化会返回 `stale_read` 或 `conflict`。相关接口见左侧 **API** 树与[数据持久化](persistence.md)。
+谱面写入使用 `transaction.preview` → `apply`；提交前谱面发生变化时 `apply` 返回 `conflict`，分页 `chart.read` 使用旧游标时返回 `stale_read`。相关接口见左侧 **API** 树与[谱面操作](place-note.md)。

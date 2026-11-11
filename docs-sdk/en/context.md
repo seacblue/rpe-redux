@@ -19,6 +19,10 @@ The generated context method table is available below.
 
 {{CONTEXT_METHODS_TABLE}}
 
+## Chart writes
+
+Read the open chart through `context.api.chart` and `context.api.selection`. Chart changes go through one `context.api.transaction` request; do not mutate read snapshots. See [Chart operations](place-note.md).
+
 ## Isolation
 
 The context contains no host DOM, Tauri object, network client, or raw chart object. Data crossing the bridge is cloned and bounded. Use [Public hooks](hooks.md) or a versioned service for cross-Extension communication.

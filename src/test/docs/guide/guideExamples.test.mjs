@@ -45,10 +45,7 @@ const PRELUDE = `import type {
 type CellApi = {
   readonly version: string;
   capabilities(): Promise<readonly ExtensionCapability[]>;
-  readonly document: Pick<
-    ReduxApi["document"],
-    "availability" | "state" | "snapshot" | "fingerprint"
-  >;
+  readonly document: Pick<ReduxApi["document"], "availability" | "state">;
   readonly chart: Pick<
     ReduxApi["chart"],
     | "availability"
@@ -73,15 +70,7 @@ type CellApi = {
   >;
   readonly library: Pick<
     ReduxApi["library"],
-    | "availability"
-    | "list"
-    | "get"
-    | "assets"
-    | "asset"
-    | "addAsset"
-    | "removeAsset"
-    | "revisions"
-    | "revision"
+    "availability" | "list" | "create" | "createRaw" | "scope" | "current"
   >;
 };
 

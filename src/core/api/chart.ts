@@ -18,35 +18,6 @@ import type {
   ChartResourceReference,
 } from "../edit/chart/api.ts";
 import type { ChartObjectId } from "../global/chart/identity.ts";
-import type { ActionResult } from "../edit/operations/result.ts";
-
-type ChartResult = ActionResult<ChartReadNote>;
-
-/** A point on a judge line in chart coordinates. */
-export interface ChartTargetPoint {
-  /** Beat position, using the chart's beat grid. */
-  beat: number;
-  /** Horizontal chart coordinate; 0 is the centre. */
-  positionX: number;
-}
-
-/**
- * Where `chart.placeNote` inserts a note.
- *
- * `lineIndex` is the zero-based position in `chart.lines()`. `from` is the
- * note head; `to` is only needed for a Hold body. `layer` and `eventType`
- * select an event layer when the placement is event-driven.
- */
-export interface ChartTarget {
-  lineIndex: number;
-  from: ChartTargetPoint;
-  to?: ChartTargetPoint;
-  layer?: number;
-  eventType?: string;
-}
-
-/** Numeric note types accepted by `chart.placeNote`. */
-export type ChartNoteType = 1 | 2 | 3 | 4;
 
 /** Run one facade call against the connected chart runtime. */
 function withChart<T>(run: (api: ChartApi) => T): ApiResult<T> {
@@ -110,10 +81,6 @@ export const chart = Object.freeze({
   /** One event reference by id, or null when the id is unknown. */
   event(id: ChartObjectId): ApiResult<ChartEventReadRef | null> {
     return withChart((api) => api.event(id));
-  },
-  /** Insert one note through the editor's place action. */
-  placeNote(type: ChartNoteType, target: ChartTarget): ApiResult<ChartResult> {
-    return withChart((api) => api.placeNote(type, target));
   },
 });
 

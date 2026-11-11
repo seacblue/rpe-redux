@@ -97,7 +97,7 @@ const API_HANDLE_DESCRIPTIONS = Object.freeze({
 });
 const API_HANDLE_WHEN = Object.freeze({
   chart: "查找或展示谱面对象；不要直接改谱面，写入用 transaction。",
-  transaction: "批量移动、修改或删除对象；单次放置也可先用 chart.placeNote。",
+  transaction: "批量插入、移动、修改或删除对象；谱面写入统一走事务。",
   selection: "对用户已经选中的对象做操作，或替用户建立选择。",
   document: "做文件入口、打开/保存流程，或读取当前文档身份。",
   library: "做曲库列表、导入导出和资源管理。",
@@ -121,16 +121,14 @@ const TYPE_LINKS = Object.freeze({
   ChartReadPage: "chartreadpage",
   ChartReadItem: "chartreaditem",
   ChartReadMeta: "chartreadmeta",
-  ChartTarget: "charttarget",
-  ChartTargetPoint: "charttargetpoint",
-  ChartNoteType: "chartnotetype",
   ChartObjectId: "chartobjectid",
+  ChartTransactionRequest: "charttransactionrequest",
+  ChartTransactionResult: "charttransactionresult",
   ChartReadLine: "chartreadline",
   ChartReadNote: "chartreadnote",
   ChartReadEvent: "chartreadevent",
   ChartReadSnapshot: "chartreadsnapshot",
   ChartReadState: "chartreadstate",
-  ActionResult: "actionresult",
   ApiResult: "apiresult",
   ApiAvailability: "apiavailability",
   ExtensionThemeTokens: "extensionthemetokens",
@@ -164,30 +162,24 @@ const TYPE_DETAILS = Object.freeze({
     definition:
       "{ name?: string; song?: string; composer?: string; charter?: string; level?: string; ... }",
   },
-  charttarget: {
-    name: "ChartTarget",
-    summary: "chart.placeNote 使用的判定线与头尾拍坐标。",
-    source: "src/core/api/chart.ts",
-    definition:
-      "{ lineIndex: number; from: ChartTargetPoint; to?: ChartTargetPoint; layer?: number; eventType?: string }",
-  },
-  charttargetpoint: {
-    name: "ChartTargetPoint",
-    summary: "以拍和横向坐标表示的谱面位置。",
-    source: "src/core/api/chart.ts",
-    definition: "{ beat: number; positionX: number }",
-  },
-  chartnotetype: {
-    name: "ChartNoteType",
-    summary: "放置音符时使用的稳定数字类型。",
-    source: "src/core/api/chart.ts",
-    definition: "1 | 2 | 3 | 4 // Tap | Hold | Flick | Drag",
-  },
   chartobjectid: {
     name: "ChartObjectId",
     summary: "判定线、音符和事件的稳定字符串标识。",
     source: "src/core/api/chart.ts",
     definition: "string",
+  },
+  charttransactionrequest: {
+    name: "ChartTransactionRequest",
+    summary: "一次原子谱面写入的请求；metadata、timing、lines、notes 和 events 可同时出现。",
+    source: "src/core/edit/transaction/contract.ts",
+    definition: "{ label?: string; metadata?; timing?; lines?; notes?; events? }",
+  },
+  charttransactionresult: {
+    name: "ChartTransactionResult",
+    summary: "事务提交结果；status 为 committed、unchanged、rejected、conflict 或 unavailable。",
+    source: "src/core/edit/transaction/contract.ts",
+    definition:
+      "{ status; beforeFingerprint; afterFingerprint; affectedObjectIds; issues; history; conflict }",
   },
   chartreadline: {
     name: "ChartReadLine",
@@ -200,7 +192,7 @@ const TYPE_DETAILS = Object.freeze({
     summary: "音符的只读快照，可用于构造 id 地址化 patch。",
     source: "src/core/api/chart.ts",
     definition:
-      "{ id: ChartObjectId; type: ChartNoteType; startBeat: number; positionX: number; ... }",
+      "{ id: ChartObjectId; type: 1 | 2 | 3 | 4; startTime: Beat; endTime: Beat; positionX?: number; ... }",
   },
   chartreadevent: {
     name: "ChartReadEvent",
@@ -220,13 +212,6 @@ const TYPE_DETAILS = Object.freeze({
     summary: "用于判断读写是否基于同一谱面修订的指纹与代数。",
     source: "src/core/api/chart.ts",
     definition: "{ chartFingerprint: string; generation: number }",
-  },
-  actionresult: {
-    name: "ActionResult<T>",
-    summary: "放置或提交动作的领域结果。",
-    source: "src/core/edit/operations/result.ts",
-    definition:
-      '{ status: "committed" | "unchanged" | "rejected" | "unavailable"; value?: T; issues?: ... }',
   },
   apiresult: {
     name: "ApiResult<T>",
@@ -318,10 +303,6 @@ const PARAM_RULES = Object.freeze({
   parentId: [["id", "ChartObjectId", "", "是", "音符、事件或判定线 id"]],
   note: [["id", "ChartObjectId", "", "是", "音符 id"]],
   event: [["id", "ChartObjectId", "", "是", "事件 id"]],
-  placeNote: [
-    ["type", "ChartNoteType", "", "是", "1 = Tap，2 = Hold，3 = Flick，4 = Drag"],
-    ["target", "ChartTarget", "", "是", "放置目标：判定线、起点、终点和可选层级"],
-  ],
   apply: [["request", "ChartTransactionRequest | string", "", "是", "事务请求或 previewId"]],
   preview: [["request", "ChartTransactionRequest", "", "是", "事务请求"]],
   cancel: [["previewId", "string", "", "是", "预览 id"]],
@@ -498,8 +479,6 @@ const RETURN_RULES = Object.freeze({
   "chart.note": "`value` 是音符引用；id 未知时为 `null`。",
   "chart.events": "`value` 是带所属线和轨道的能量事件引用数组。",
   "chart.event": "`value` 是事件引用；id 未知时为 `null`。",
-  "chart.placeNote":
-    "`value.status` 为 `committed` 时表示音符已写入；`unchanged`、`rejected`、`unavailable` 时没有写入。",
   "transaction.preview":
     "`value.status` 为 `previewed` 时，才能把 `previewId` 交给 `transaction.apply`。",
   "transaction.apply": "`value.status` 为 `committed` 时表示已提交并进入撤销历史。",
@@ -525,7 +504,6 @@ const RETURN_TYPES = Object.freeze({
   "chart.note": "ApiResult<ChartNoteReadRef | null>",
   "chart.events": "ApiResult<readonly ChartEventReadRef[]>",
   "chart.event": "ApiResult<ChartEventReadRef | null>",
-  "chart.placeNote": "ApiResult<ActionResult<ChartReadNote>>",
   "transaction.preview": "ApiResult<ChartTransactionPreviewResult>",
   "transaction.apply": "ApiResult<ChartTransactionResult>",
   "values.byId.get": "Promise<T>",
@@ -540,8 +518,6 @@ const RETURN_TYPES = Object.freeze({
 const SAMPLE_VALUES = Object.freeze({
   id: '"item-id"',
   collection: '"lines"',
-  type: "1",
-  target: "{ lineIndex: 0, from: { beat: 0, positionX: 0 } }",
   request: "{}",
   previewId: '"preview-id"',
   options: "{}",
@@ -1718,7 +1694,6 @@ function apiSummaryOf(entry) {
       availability: "Reports whether this API is available.",
       state: `Reads the current ${subject} state.`,
       snapshot: `Reads a ${subject} snapshot.`,
-      placeNote: "Places one note at the requested target.",
       preview: "Previews a transaction without committing it.",
       apply: "Applies a previously previewed transaction.",
       cancel: "Cancels a transaction preview.",
@@ -1756,7 +1731,6 @@ function apiSummaryOf(entry) {
     note: "按 id 读取一个音符引用。",
     events: "读取全部事件引用。",
     event: "按 id 读取一个事件引用。",
-    placeNote: "在指定判定线放置一个音符。",
     apply: "应用一次事务。",
     preview: "预览一次事务。",
     cancel: "取消一次事务预览。",
@@ -1945,23 +1919,6 @@ function apiExampleOf(entry) {
   const { storage } = context;
   // 保存带版本号的 JSON 配置
   await storage.setJSON("config", { version: 1, data: { quality: 80 } });
-}`;
-  }
-  if (full === "chart.placeNote") {
-    return `async function example(context) {
-  const { api, ui } = context;
-  // 1 = Tap，2 = Hold，3 = Flick，4 = Drag
-  const result = await api.chart.placeNote(1, {
-    lineIndex: 0,
-    from: { beat: 0, positionX: 0 },
-  });
-  if (!result.ok) {
-    ui.notice(result.error.message, { level: "error" });
-    return;
-  }
-  if (result.value.status === "committed") {
-    ui.notice("已放置 Tap", { level: "success" });
-  }
 }`;
   }
   if (full === "transaction.preview") {

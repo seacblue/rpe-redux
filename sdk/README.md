@@ -27,6 +27,10 @@ import type { TrustedExtensionContext, TrustedExtensionDefinition } from "@rpe-r
 
 `sdk/examples/` contains a TypeScript package, a JSDoc JavaScript package, a data-only package, a code-cell example, and `composition.ts`, which type-checks provider/consumer, hook, and design-slot composition against the same public surface. A package registers as many scripts as it needs; data-only packages list them under `scripts` in the manifest.
 
+## Chart operations
+
+Chart writes are one atomic `context.api.transaction` request. Read with `context.api.chart` or `context.api.selection`, then call `transaction.preview` or `transaction.apply`. The current contract has no `chart.placeNote` and no direct mutation of chart snapshots. The task guide with a complete note-insert plugin, selected-note updates, events, and result handling is [`docs-sdk/en/place-note.md`](../docs-sdk/en/place-note.md) (Chinese: [`docs-sdk/zh/place-note.md`](../docs-sdk/zh/place-note.md)).
+
 ## Themes and note skins
 
 Themes and note skins are data packages, not Extension code. Use the reference guides in [`src/assets/themes/README.md`](../src/assets/themes/README.md) and [`src/assets/skins/README.md`](../src/assets/skins/README.md) when packaging visual assets:

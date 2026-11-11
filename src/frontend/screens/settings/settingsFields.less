@@ -198,16 +198,6 @@
   --preview-radius: var(--space-2-5);
 }
 
-.redux-theme-preview-layout[data-density="compact"] {
-  gap: var(--space-1);
-  min-height: 96px;
-}
-
-.redux-theme-preview-layout[data-density="spacious"] {
-  gap: var(--space-2);
-  min-height: 128px;
-}
-
 .redux-theme-preview-layout::before {
   content: "";
   position: absolute;
@@ -336,65 +326,6 @@
   background: var(--panel-header);
 }
 
-.redux-theme-preview-layout[data-inspector-side="left"] {
-  grid-template-columns: 34% minmax(0, 1fr);
-  grid-template-areas:
-    "toolbar toolbar"
-    "inspector workspace"
-    "status status";
-}
-
-.redux-theme-preview-layout[data-inspector="floating"] .redux-theme-preview-inspector {
-  margin: var(--space-1);
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.redux-theme-preview-layout[data-inspector="overlay"] {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "toolbar"
-    "workspace"
-    "status";
-}
-
-.redux-theme-preview-layout[data-inspector="overlay"] .redux-theme-preview-inspector {
-  position: absolute;
-  z-index: 2;
-  top: calc(var(--space-1) + var(--space-2) + var(--space-1));
-  right: var(--space-4);
-  bottom: calc(var(--space-1) + var(--space-2) + var(--space-1));
-  width: 34%;
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.redux-theme-preview-layout[data-inspector="overlay"][data-inspector-side="left"]
-  .redux-theme-preview-inspector {
-  right: auto;
-  left: var(--space-4);
-}
-
-.redux-theme-preview-layout[data-sidebar="floating"] .redux-theme-preview-sidebar {
-  top: calc(var(--space-1) + var(--space-2) + var(--space-1));
-  right: var(--space-1);
-  bottom: calc(var(--space-1) + var(--space-2) + var(--space-1));
-  border-radius: var(--preview-radius);
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.redux-theme-preview-layout[data-toolbar="floating"] .redux-theme-preview-toolbar {
-  margin: var(--space-1);
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.redux-theme-preview-layout[data-statusbar="floating"] .redux-theme-preview-status {
-  margin: var(--space-1);
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.redux-theme-preview-layout[data-statusbar="hidden"] .redux-theme-preview-status {
-  visibility: hidden;
-}
-
 .redux-theme-preview-layout[data-pattern="grid"] {
   background-image:
     linear-gradient(color-mix(in srgb, var(--edge-divider) 55%, transparent) 1px, transparent 1px),
@@ -455,91 +386,6 @@
     opacity: 0.55;
     transform: scale(1.04);
   }
-}
-
-// Advanced placements: a left toolbar becomes the first column, a top rail adds
-// a row, and a floating transport is a small card in the chosen corner.
-.redux-theme-preview-layout[data-toolbar-placement="left"] {
-  grid-template-columns: 22% minmax(0, 1fr) 34%;
-  grid-template-rows: minmax(48px, 1fr) auto;
-  grid-template-areas:
-    "toolbar workspace inspector"
-    "toolbar status status";
-}
-
-.redux-theme-preview-layout[data-toolbar-placement="left"] .redux-theme-preview-toolbar {
-  width: 100%;
-  height: 100%;
-}
-
-.redux-theme-preview-layout[data-sidebar="top"] {
-  grid-template-rows: auto auto minmax(48px, 1fr) auto;
-  grid-template-areas:
-    "toolbar toolbar"
-    "sidebar sidebar"
-    "workspace inspector"
-    "status status";
-}
-
-.redux-theme-preview-layout[data-sidebar="top"] .redux-theme-preview-sidebar {
-  position: static;
-  width: 100%;
-  height: var(--space-2);
-  border-radius: var(--preview-radius);
-  background: var(--panel-header);
-}
-
-.redux-theme-preview-layout[data-toolbar-placement="left"][data-sidebar="top"] {
-  grid-template-columns: 22% minmax(0, 1fr) 34%;
-  grid-template-rows: auto minmax(48px, 1fr) auto;
-  grid-template-areas:
-    "toolbar sidebar sidebar"
-    "toolbar workspace inspector"
-    "toolbar status status";
-}
-
-.redux-theme-preview-layout[data-sidebar="inspector"] .redux-theme-preview-sidebar {
-  display: none;
-}
-
-.redux-theme-preview-transport {
-  display: none;
-}
-
-.redux-theme-preview-layout[data-transport="floating"] .redux-theme-preview-transport {
-  position: absolute;
-  z-index: 2;
-  display: block;
-  width: 28%;
-  height: var(--space-4);
-  border: 1px solid var(--accent);
-  border-radius: var(--preview-radius);
-  background: var(--surface-raised);
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.redux-theme-preview-layout[data-transport="floating"][data-transport-anchor="bottom-right"]
-  .redux-theme-preview-transport {
-  right: var(--space-1);
-  bottom: var(--space-1);
-}
-
-.redux-theme-preview-layout[data-transport="floating"][data-transport-anchor="bottom-left"]
-  .redux-theme-preview-transport {
-  left: var(--space-1);
-  bottom: var(--space-1);
-}
-
-.redux-theme-preview-layout[data-transport="floating"][data-transport-anchor="top-right"]
-  .redux-theme-preview-transport {
-  top: var(--space-1);
-  right: var(--space-1);
-}
-
-.redux-theme-preview-layout[data-transport="floating"][data-transport-anchor="top-left"]
-  .redux-theme-preview-transport {
-  top: var(--space-1);
-  left: var(--space-1);
 }
 
 .redux-theme-preview-traits {

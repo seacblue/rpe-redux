@@ -69,10 +69,7 @@ function themeSnapshot() {
       "font-family": "Saira, sans-serif",
       "--font-mono": "Consolas, monospace",
     })[variable] ?? "";
-  return buildExtensionThemeTokens(
-    { id: "dark", name: "Dark", appearance: "dark", density: "comfortable" },
-    read,
-  );
+  return buildExtensionThemeTokens({ id: "dark", name: "Dark", appearance: "dark" }, read);
 }
 
 /** Assert every leaf is JSON scalar data rather than a host object. */
@@ -154,7 +151,6 @@ test("theme.tokens publishes the official token shape as JSON scalars", () => {
     id: "dark",
     name: "Dark",
     appearance: "dark",
-    density: "comfortable",
   });
   assert.equal(tokens.colors.foreground, "#f0f0f0");
   assert.equal(tokens.colors.success, "#5ee08a");

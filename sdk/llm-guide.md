@@ -173,7 +173,7 @@ interface ApiError {
 }
 ```
 
-`ok: true` only means the call completed. For `chart.read` and transaction calls, also inspect `value.status`. `redux.document.state()`, `redux.document.snapshot()`, `redux.document.fingerprint()`, and `redux.capabilities()` resolve to their values directly through the bridge.
+`ok: true` only means the call completed. For `chart.read` and transaction calls, also inspect `value.status`. `redux.document.state()`, `redux.chart.snapshot()`, and `redux.capabilities()` resolve to their values directly through the bridge.
 
 The request and result types are exported by the SDK as `CodeCellRequest`, `CodeCellResult`, `CodeCellError`, `CodeCellErrorCode`, `CodeCellLog`, `CodeCellProfile`, and `CodeCellRevisions`:
 
@@ -248,21 +248,22 @@ interface CodeCellResult {
 
 `read` can call:
 
-- `redux.document.availability/state/snapshot/fingerprint`
+- `redux.document.availability/state`
 - `redux.chart.availability/state/read/snapshot/metadata/resources/lines/line/parentId/notes/note/events/event`
 - `redux.selection.availability/state/subscribe`
 - `redux.preview.availability/snapshot/frame`
 - `redux.capabilities()`
 
-`read` cannot call or even access `redux.transaction`, `redux.library`, `redux.playback`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.workspace`, `redux.help`, `redux.extensions`, `redux.chart.placeNote`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
+`read` cannot call or even access `redux.transaction`, `redux.library`, `redux.playback`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.help`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
 
 `write` adds:
 
 - `redux.transaction.availability/preview/apply/cancel/history`
-- `redux.library.availability/list/get/assets/asset/revisions/revision`
-- `redux.library.addAsset/removeAsset` (`assets.write`)
+- `redux.library.availability/list/scope/current`
+- `redux.library.current.get/assets/asset/revisions/revision`
+- `redux.library.current.addAsset/removeAsset` (`assets.write`)
 
-`write` still cannot use `redux.chart.placeNote`, `redux.transaction.undo`, `redux.transaction.redo`, document writes, `redux.library.create/createRaw/ update/remove/duplicate/createRevision/removeRevision`, playback, layout, settings, values, toolbar, sidebar, workspace, help, or extensions. Use `redux.transaction.apply` for every chart edit.
+`write` still cannot use `redux.transaction.undo`, `redux.transaction.redo`, document writes, `redux.library.create/createRaw/current.update/current.remove/current.duplicate/current.createRevision/current.removeRevision`, playback, layout, settings, values, toolbar, sidebar, help, or extensions. Use `redux.transaction.apply` for every chart edit.
 
 The types below describe the full chart and transaction format. They do not grant permission: a field present in a type can still be rejected with `ai.feature.restricted` when its AI switch is off. The rejecting transaction returns `status: "rejected"`, `issues[].code: "ai.feature.restricted"`, and `issues[].path` naming the field.
 
@@ -278,13 +279,13 @@ A capability denial is a normal cell error:
 
 The host raises `ExtensionCapabilityError`, but the cell result usually reports `name: "Error"` because the bridge carries the message and code rather than the host class. A bridged call can also prefix the message with its path, for example `document.save: Extension capability is not granted: document.write (document.save)`. Always test `error.code === "capabilityDenied"`; never match the full message or the name.
 
-The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.values`, `redux.settings`, `redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.workspace`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles. `redux.preview` is available because both profiles hold `preview.read`; use it to inspect visible objects or render a frame.
+The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.values`, `redux.settings`, `redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles. `redux.preview` is available because both profiles hold `preview.read`; use it to inspect visible objects or render a frame.
 
 ### Exact signatures
 
 All methods cross the asynchronous bridge, so `await` every call except the synchronous `redux.version` string. `capabilities()` is cell-only; the SDK exports the `CodeCellApi` type, and the host implementation is the restricted Code Cell host implementation.
 
-Chart object ids are `ChartObjectId` (`string & { readonly __chartObjectId: unique symbol }`) in the SDK; runtime values are UUID-shaped strings. Read ids from `chart.lines()`, `chart.notes()`, and `chart.events()` and pass them back; do not synthesize them. `redux.chart.snapshot()` returns a recursively frozen detached chart. `redux.chart.read()` pages and the `redux.chart.lines()/notes()/events()` arrays are detached read-only views; do not mutate them. `redux.document.snapshot()` returns a detached mutable copy.
+Chart object ids are `ChartObjectId` (`string & { readonly __chartObjectId: unique symbol }`) in the SDK; runtime values are UUID-shaped strings. Read ids from `chart.lines()`, `chart.notes()`, and `chart.events()` and pass them back; do not synthesize them. `redux.chart.snapshot()` returns a recursively frozen detached chart. `redux.chart.read()` pages and the `redux.chart.lines()/notes()/events()` arrays are detached read-only views; do not mutate them.
 
 ```ts
 redux.version: string; // synchronous, not a promise
@@ -293,8 +294,6 @@ redux.capabilities(): Promise<readonly ExtensionCapability[]>;
 // Document reads.
 redux.document.availability(): Promise<ApiAvailability>;
 redux.document.state(): Promise<DocumentState>;
-redux.document.snapshot(): Promise<Chart | null>;
-redux.document.fingerprint(): Promise<string | null>;
 
 interface DocumentState {
   status: "empty" | "open";
@@ -457,39 +456,53 @@ redux.library.list(
   },
   options?: RequestOptions,
 ): Promise<ApiResult<{ projects: LibraryProjectSummary[]; total: number }>>;
-redux.library.get(
-  id: string,
+redux.library.create(
+  input: { name: string; group?: string; chart: Chart },
   options?: RequestOptions,
-): Promise<ApiResult<{ project: LibraryProject }>>;
-redux.library.assets(
-  id: string,
-  options?: RequestOptions,
-): Promise<ApiResult<{ assets: LibraryAssetSummary[] }>>;
-redux.library.asset(
-  id: string,
-  name: string,
-  options?: RequestOptions,
-): Promise<ApiResult<Uint8Array>>;
-redux.library.addAsset(
-  id: string,
-  name: string,
-  bytes: Uint8Array,
-  options?: RequestOptions,
-): Promise<ApiResult<{ asset: LibraryAssetSummary; project: LibraryProjectSummary }>>;
-redux.library.removeAsset(
-  id: string,
-  name: string,
-  options?: RequestOptions,
-): Promise<ApiResult<{ removed: boolean; project: LibraryProjectSummary }>>;
-redux.library.revisions(
-  id: string,
-  query?: { limit?: number },
-  options?: RequestOptions,
-): Promise<ApiResult<{ revisions: LibraryRevisionSummary[] }>>;
-redux.library.revision(
-  id: string,
-  options?: RequestOptions,
-): Promise<ApiResult<{ revision: LibraryRevision }>>;
+): Promise<ApiResult<{ project: LibraryProjectSummary }>>;
+redux.library.scope(id: string): Promise<LibraryProjectHandle>;
+redux.library.current: LibraryProjectHandle;
+
+interface LibraryProjectHandle {
+  readonly id: string;
+  get(options?: RequestOptions): Promise<ApiResult<{ project: LibraryProject }>>;
+  update(
+    patch: { name?: string; group?: string; archived?: boolean; chart?: Chart },
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ project: LibraryProject }>>;
+  remove(options?: RequestOptions): Promise<ApiResult<{ deleted: boolean }>>;
+  duplicate(
+    name: string,
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ project: LibraryProject }>>;
+  assets(options?: RequestOptions): Promise<ApiResult<{ assets: LibraryAssetSummary[] }>>;
+  asset(name: string, options?: RequestOptions): Promise<ApiResult<Uint8Array>>;
+  addAsset(
+    name: string,
+    bytes: Uint8Array,
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ asset: LibraryAssetSummary; project: LibraryProjectSummary }>>;
+  removeAsset(
+    name: string,
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ removed: boolean; project: LibraryProjectSummary }>>;
+  revisions(
+    query?: { limit?: number },
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ revisions: LibraryRevisionSummary[] }>>;
+  createRevision(
+    input: { chart: Chart; label: string },
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ revision: LibraryRevisionSummary }>>;
+  revision(
+    revisionId: string,
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ revision: LibraryRevision }>>;
+  removeRevision(
+    revisionId: string,
+    options?: RequestOptions,
+  ): Promise<ApiResult<{ deleted: boolean }>>;
+}
 ```
 
 The stable library shapes are:
@@ -871,7 +884,7 @@ The cell result is capped at 1,000,000 bytes, so a large PNG can fail the whole 
 
 `redux.transaction.apply(request)` commits one transaction to the open chart. `redux.transaction.preview(request)` validates it without committing and returns a preview id; pass that id to `apply(previewId)` when the same plan should be committed. A preview id belongs to the cell that created it; a later cell cannot apply or cancel it.
 
-`redux.transaction.undo` and `redux.transaction.redo` are withheld; accessing either property returns `capabilityDenied`. `redux.chart.placeNote` is also unavailable. Every write must go through `preview`/`apply`.
+`redux.transaction.undo` and `redux.transaction.redo` are withheld; accessing either property returns `capabilityDenied`. Every write must go through `preview`/`apply`.
 
 The exact result contracts are:
 
@@ -1316,8 +1329,9 @@ const listed = unwrap(await redux.library.list({ search: input?.project ?? "" })
 const project = listed.projects[0];
 if (!project) return { summary: "project not found" };
 const bytes = new TextEncoder().encode(input?.text ?? "");
-const added = unwrap(await redux.library.addAsset(project.id, "notes.txt", bytes));
-const removed = unwrap(await redux.library.removeAsset(project.id, "old.png"));
+const projectHandle = await redux.library.scope(project.id);
+const added = unwrap(await projectHandle.addAsset("notes.txt", bytes));
+const removed = unwrap(await projectHandle.removeAsset("old.png"));
 return { summary: "assets updated", added: added.asset.name, removed };
 ```
 
