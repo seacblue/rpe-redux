@@ -140,7 +140,7 @@ Two area READMEs go deeper than this table: [src/README.md](../src/README.md) ma
 
 The composition root is `src/frontend/app/App.tsx`. It mounts `frontend/screens/editor/workspace/runtime/composition/EditorProviderTree.tsx`, and `EditorAssembly.ts` connects the document, playback, preview, timeline, inspector, session, and update runtimes. `runtime/bindings/` and `runtime/commands/` expose the operations that toolbar actions, shortcuts, sidebar items, and inspector actions call.
 
-A feature arrives as a registered contribution beside its owner: a toolbar row, inspector pane, workspace mode, sidebar item, settings section, shortcut, or command. To add one, find the owning module, register beside it, and let the existing registry compose it. [Architecture](architecture.md) has the full ownership map and the rules that keep the layers apart.
+A feature arrives as a registered contribution beside its owner: a toolbar row, inspector pane, expanded inspector mode, sidebar item, settings section, shortcut, or command. To add one, find the owning module, register beside it, and let the existing registry compose it. [Architecture](architecture.md) has the full ownership map and the rules that keep the layers apart.
 
 ## Verification
 
@@ -193,7 +193,7 @@ The checked-in build has no update source: `UPDATE_REPOSITORY` and `UPDATE_PUBLI
 
 ## Contribution patterns
 
-Add settings to `src/core/settings/features/` and matching English and Chinese keys to `src/i18n/messages/`. Register shared actions, shortcuts, and sidebar items through their registries at startup; register the surface's toolbar rows, inspector pages, workspace modes, and drawer pages from the owning module. Keep action IDs stable and namespaced.
+Add settings to `src/core/settings/features/` and matching English and Chinese keys to `src/i18n/messages/`. Register shared actions, shortcuts, and sidebar items through their registries at startup; register the surface's toolbar rows, inspector pages, expanded inspector modes, and drawer pages from the owning module. Keep action IDs stable and namespaced.
 
 The screen roots are `frontend/screens/global`, `frontend/screens/editor`, `frontend/screens/welcome`, `frontend/screens/startup`, and `frontend/screens/settings`. `frontend/app` owns the frame, `frontend/chrome` owns persistent chrome, `frontend/overlays` owns shared overlays, and `frontend/platform` owns host bridges.
 

@@ -107,6 +107,14 @@
   grid-template-columns: minmax(0, 1fr) auto var(--chrome-sidebar-track);
   grid-template-areas: "workspace inspector sidebar";
   gap: 0;
+  --workbench-side-track: 0px;
+}
+
+// A side rail occupies a grid track. The expanded Inspector stops at that track
+// instead of covering the navigation.
+.workbench[data-sidebar="rail"] > .workbench-body,
+.workbench[data-sidebar="floating"] > .workbench-body {
+  --workbench-side-track: var(--chrome-sidebar-track);
 }
 
 .workbench-workspace,
@@ -120,31 +128,63 @@
 .workbench-inspector {
   width: clamp(260px, var(--inspector-width), 57vw);
   overflow: hidden;
-  transition:
-    width 220ms var(--design-ease-enter),
-    opacity 80ms ease-out;
 }
 
-// The inner panel keeps its readable minimum while the wrapper collapses. The
-// wrapper clips it instead of reflowing every field into a 70px strip during the
-// transition.
+// The panel owns its width transition so the wrapper can keep its compact grid
+// track while a document task grows over the workspace.
 .workbench-inspector > .inspector {
+  flex: 1;
+  width: 100%;
   min-width: 260px;
+  min-height: 0;
+  transition: width 220ms var(--design-ease-enter);
 }
 
-// A Workspace mode owns the frame, so the inspector collapses instead of
-// leaving an empty companion column beside the studio. The track is auto-sized,
-// which lets the width transition resize the workspace without a second layout
-// frame after the animation.
-.workbench[data-workspace-mode="true"] .workbench-inspector {
-  width: 0;
+// A document task expands the inspector itself. The wrapper stays in its grid
+// track and the panel is pinned to the same edge, growing across the workspace.
+// The workspace never resizes behind it.
+.workbench-inspector:has(> .inspector[data-mode-surface="true"]) {
+  position: relative;
+  overflow: visible;
+  z-index: var(--z-content-overlay);
+}
+
+.workbench-inspector > .inspector[data-mode-surface="true"] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: 100%;
   min-width: 0;
-  opacity: 0;
-  pointer-events: none;
+  max-width: none;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--chrome-panel-shadow);
+}
+
+// The chrome presets paint the compact inspector transparent so only its fields
+// carry a surface. The expanded task owns its area and must be opaque.
+.redux-app-root .workbench-inspector > .inspector[data-mode-surface="true"] {
+  background: var(--surface);
+  border-color: var(--edge-divider);
+}
+
+.workbench-inspector > .inspector[data-mode-surface="true"][data-mode-expanded="true"] {
+  width: calc(100vw - var(--workbench-side-track));
+}
+
+:root[data-chrome-inspector-side="left"]
+  .workbench-inspector
+  > .inspector[data-mode-surface="true"] {
+  right: auto;
+  left: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workbench-inspector {
+  .workbench-inspector > .inspector {
     transition: none;
   }
 }

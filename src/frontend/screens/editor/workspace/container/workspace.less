@@ -13,9 +13,8 @@
   overflow: hidden;
 }
 
-// The timeline and one task page share the workspace rectangle. Both layers are
-// absolutely positioned so neither changing page reflows the frame, and the
-// title bar/inspector/rail never move with a mode change.
+// The expanded Inspector overlays this frame. The stage stays absolutely
+// positioned so opening or returning never reflows the canvas.
 .workspace-mode-stack {
   position: relative;
   flex: 1 1 auto;
@@ -23,131 +22,11 @@
   min-width: 0;
 }
 
-.workspace-timeline-layer,
-.workspace-mode-layer {
+.workspace-timeline-layer {
   position: absolute;
   inset: 0;
-  min-width: 0;
-  min-height: 0;
-}
-
-.workspace-timeline-layer {
   display: flex;
   flex-direction: column;
-  opacity: 1;
-  transform: scale(1);
-  transition:
-    opacity 160ms ease,
-    transform 200ms ease;
-}
-
-.workspace-timeline-layer.is-muted {
-  opacity: 0;
-  transform: scale(0.985);
-  pointer-events: none;
-}
-
-.workspace-mode-layer {
-  display: flex;
-  flex-direction: column;
-  opacity: 0;
-  background: var(--surface);
-  transform: translateY(8px) scale(0.99);
-  pointer-events: none;
-  transition:
-    opacity 180ms var(--design-ease-enter, ease),
-    transform 220ms var(--design-ease-enter, ease);
-}
-
-@keyframes workspace-mode-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.99);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.workspace-mode-layer.is-active {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-  animation: workspace-mode-in 220ms var(--design-ease-enter, ease) both;
-}
-
-// The studio header continues the inspector status row: same height, insets,
-// title weight, and a compact action on the trailing edge. The return control
-// therefore lands where the inspector's action cluster was, instead of jumping
-// to the far left when the mode opens.
-.workspace-mode-bar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-2);
-  height: calc(var(--control-height) + var(--space-1-5));
-  padding: 0 var(--space-2) 0 var(--space-3);
-  border-bottom: 1px solid var(--edge-divider);
-  background: var(--chrome-panel-surface, var(--surface-raised));
-}
-
-.workspace-mode-title {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  color: var(--foreground);
-  outline: none;
-
-  .redux-icon {
-    flex: none;
-    --icon-color: var(--foreground-muted);
-  }
-
-  strong {
-    .truncate();
-    font-size: var(--type-heading);
-    font-weight: 600;
-  }
-}
-
-// The expand and return controls are the same glyph, rotated: the studio writes
-// the page back into the inspector. Keeping the same artwork and slot makes the
-// two actions read as one toggle across the transition.
-.redux-app-root .workspace-mode-bar > .workspace-mode-back.redux-icon-button {
-  flex: none;
-  width: var(--control-height-compact);
-  height: var(--control-height-compact);
-  min-width: var(--control-height-compact);
-  min-height: var(--control-height-compact);
-  margin-left: auto;
-  padding: 0;
-  color: var(--foreground-muted);
-
-  .redux-icon {
-    transform: rotate(180deg);
-  }
-
-  &:hover:not(:disabled) {
-    color: var(--accent);
-  }
-}
-
-.workspace-mode-body {
-  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .workspace-timeline-layer,
-  .workspace-mode-layer {
-    transform: none;
-    transition-duration: 1ms;
-    animation-duration: 1ms;
-  }
 }

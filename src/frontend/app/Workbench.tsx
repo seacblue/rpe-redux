@@ -42,15 +42,15 @@ export function Workbench({ atHome }: { atHome: boolean }) {
     >
       {topSidebar && <Sidebar placement="top" sidebar={surface.sidebar} />}
       <div className="workbench-body">
-        <div className="workbench-workspace">
+        <div
+          className="workbench-workspace"
+          aria-hidden={workspaceMode ? true : undefined}
+          inert={workspaceMode ? true : undefined}
+        >
           <WorkspaceSurface />
         </div>
         {InspectorSurface && (
-          <div
-            className="workbench-inspector"
-            aria-hidden={workspaceMode ? true : undefined}
-            inert={workspaceMode ? true : undefined}
-          >
+          <div className="workbench-inspector">
             <InspectorSurface />
           </div>
         )}

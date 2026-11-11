@@ -113,8 +113,6 @@ export default {
   "chrome.inspector.close": "关闭检查器",
   "chrome.inspector.help": "打开此面板的使用教程",
   "chrome.inspector.expand": "在工作区展开",
-  "chrome.inspector.modeCompanionHint":
-    "此页面已在工作区打开，编辑继续在那里进行；返回时间轴后检查器会恢复。",
   "chrome.workspace.backToTimeline": "返回时间轴",
   "chrome.timingStudio.points": "{count} 个时值点",
   "chrome.timingStudio.offset": "偏移 {offset} ms",

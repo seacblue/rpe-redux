@@ -134,46 +134,6 @@
   margin-inline: 0;
 }
 
-// While a page is expanded into its Workspace mode, the inspector keeps a
-// compact note instead of falling back to the navigation grid. It names the
-// active task so the collapsing column still has coherent content.
-.inspector-mode-companion {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-6) var(--inspector-gutter) var(--inspector-gutter);
-
-  strong {
-    color: var(--foreground);
-    font-size: var(--type-heading);
-    font-weight: 600;
-  }
-
-  p {
-    margin: 0;
-    color: var(--foreground-muted);
-    font-size: var(--type-label);
-    line-height: var(--line-body);
-  }
-}
-
-.inspector-mode-companion-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
-  background: var(--surface-muted);
-  color: var(--accent);
-
-  .redux-icon {
-    --icon-color: var(--accent);
-  }
-}
-
 // Panel actions read as one block of buttons, so every label is centered and
 // the grid sits on the panel gutter instead of carrying its own inset.
 .inspector .action-grid {

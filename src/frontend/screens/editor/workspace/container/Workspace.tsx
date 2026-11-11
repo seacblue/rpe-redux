@@ -1,15 +1,12 @@
 /**
  * Renders the editor's central authoring surface.
  *
- * The timeline stays mounted as the base layer. A registered Workspace mode
- * replaces it inside the same frame: the shell, inspector, and workspace bounds
- * do not move, and only the workspace content crossfades. Playback pauses on
- * entry and resumes on return; both are transport state, never chart edits.
+ * The timeline stays mounted as the base layer. A registered document task opens
+ * as a wide Inspector over this frame, so the canvas neither resizes nor changes
+ * page: playback pauses while the task is open and resumes on return. Both are
+ * transport state, never chart edits.
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { useTranslation } from "../../../../../i18n/react.ts";
-import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
-import { Icon } from "../../../../../design/components/icon/Icon.tsx";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   getEditorVisibility,
   subscribeToEditorVisibility,
@@ -17,19 +14,10 @@ import {
 import { CanvasStage } from "../stage/surface/CanvasStage.tsx";
 import { useEditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import { collapseWorkspaceMode } from "./workspaceModeActions.ts";
-import {
-  closeWorkspaceMode,
-  useActiveWorkspaceMode,
-  useWorkspaceModes,
-  type WorkspaceModeDefinition,
-} from "./workspaceModes.ts";
-
-/** How long a closed mode stays mounted for its exit transition. */
-const MODE_EXIT_MS = 220;
+import { closeWorkspaceMode, useActiveWorkspaceMode } from "./workspaceModes.ts";
 
 /**
- * The editing surface: the merged preview and authoring canvas, or one
- * registered task page in the same frame.
+ * The editing surface: the merged preview and authoring canvas.
  *
  * Every surrounding region, including the top bar, inspector, rail, and status
  * bar, is a sibling of the workspace rather than part of it.
@@ -37,15 +25,6 @@ const MODE_EXIT_MS = 220;
 export function Workspace({ hidden = false }: { hidden?: boolean }) {
   const runtime = useEditorRuntime();
   const activeMode = useActiveWorkspaceMode();
-  const modes = useWorkspaceModes();
-  const [displayedId, setDisplayedId] = useState(() => activeMode?.id ?? "");
-  // Derive the displayed page from the active mode during render; the state only
-  // survives long enough to animate the closed page out.
-  if (activeMode && displayedId !== activeMode.id) {
-    setDisplayedId(activeMode.id);
-  }
-  const displayedMode = activeMode ?? modes.find((mode) => mode.id === displayedId) ?? null;
-  const DisplayedMode = displayedMode?.component;
   const visibility = useSyncExternalStore(
     subscribeToEditorVisibility,
     getEditorVisibility,
@@ -53,18 +32,8 @@ export function Workspace({ hidden = false }: { hidden?: boolean }) {
   );
   const playingBeforeMode = useRef<boolean | null>(null);
 
-  // Keep the last page mounted briefly so its exit transition can finish. The
-  // active id still decides input and visibility immediately.
-  useEffect(() => {
-    if (activeMode || !displayedId) {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => setDisplayedId(""), MODE_EXIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [activeMode, displayedId]);
-
   // Pause on entry and restore the entry transport state on return, so audio
-  // does not keep running behind a page that no longer shows the timeline.
+  // does not keep running behind the expanded Inspector.
   useEffect(() => {
     const playback = runtime?.providers.playback.playback;
     if (!playback) {
@@ -91,7 +60,7 @@ export function Workspace({ hidden = false }: { hidden?: boolean }) {
     }
   }, [activeMode, runtime]);
 
-  // A mode belongs to an open document. Closing the document, or leaving the
+  // A task belongs to an open document. Closing the document, or leaving the
   // editor for the library, returns to the timeline without reopening a pane.
   useEffect(() => {
     if (activeMode && (!visibility.hasDocument || visibility.atHome)) {
@@ -99,7 +68,7 @@ export function Workspace({ hidden = false }: { hidden?: boolean }) {
     }
   }, [activeMode, visibility.atHome, visibility.hasDocument]);
 
-  // Escape is the same spatial gesture as the mode bar's back button. Other
+  // Escape is the same gesture as the expanded header's return control. Other
   // surfaces claim Escape first; only a plain, undhandled press returns.
   useEffect(() => {
     if (!activeMode) {
@@ -138,50 +107,13 @@ export function Workspace({ hidden = false }: { hidden?: boolean }) {
     >
       <div className="workspace-mode-stack">
         <div
-          className={`workspace-timeline-layer${activeMode ? " is-muted" : ""}`}
+          className="workspace-timeline-layer"
           aria-hidden={activeMode ? true : undefined}
           inert={activeMode ? true : undefined}
         >
           <CanvasStage />
         </div>
-        {displayedMode && (
-          <div
-            key={displayedMode.id}
-            className={`workspace-mode-layer${activeMode ? " is-active" : ""}`}
-            aria-hidden={activeMode ? undefined : true}
-            inert={activeMode ? undefined : true}
-          >
-            <WorkspaceModeBar mode={displayedMode} />
-            <div className="workspace-mode-body">{DisplayedMode && <DisplayedMode />}</div>
-          </div>
-        )}
       </div>
     </main>
-  );
-}
-
-/** The mode's one persistent exit point and its current task name. */
-function WorkspaceModeBar({ mode }: { mode: WorkspaceModeDefinition }) {
-  const { t } = useTranslation();
-  const runtime = useEditorRuntime();
-  const title = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    // Focus the mode name, not the exit button. Keyboard users still land inside
-    // the new mode, but no button ring appears while the layer fades in.
-    title.current?.focus({ preventScroll: true });
-  }, []);
-  return (
-    <div className="workspace-mode-bar">
-      <div className="workspace-mode-title" ref={title} tabIndex={-1}>
-        <Icon name={mode.icon} size={16} />
-        <strong>{t(mode.label)}</strong>
-      </div>
-      <IconButton
-        className="workspace-mode-back"
-        icon="external"
-        label={t("chrome.workspace.backToTimeline")}
-        onClick={() => collapseWorkspaceMode(runtime)}
-      />
-    </div>
   );
 }

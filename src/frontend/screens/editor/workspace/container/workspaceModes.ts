@@ -1,9 +1,9 @@
 /**
- * The Workspace mode registry: one large task at a time replaces the timeline
- * inside the workspace frame.
+ * The Workspace mode registry: one document task at a time expands the
+ * inspector over the workspace.
  *
- * A registered mode owns a full-workspace page (a studio). The timeline is the
- * implicit `""` mode and always stays mounted behind it. This module owns the
+ * A registered mode owns the wide Inspector page (a studio). The timeline is
+ * the implicit `""` mode and stays mounted behind it. This module owns the
  * registry, the single active-mode id, and the inspector pane to restore when
  * the mode closes; it never mounts a surface itself.
  */
@@ -12,7 +12,7 @@ import { Contributions } from "../../../../../core/state/contributions.ts";
 import type { IconName } from "../../../../../design/components/icon/Icon.tsx";
 import type { MessageKey } from "../../../../../i18n/index.ts";
 
-/** One full-workspace task page. */
+/** One expanded Inspector task page. */
 export interface WorkspaceModeDefinition {
   /** Stable id shared with the Inspector page that expands into it. */
   id: string;

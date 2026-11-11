@@ -129,8 +129,6 @@ export default {
   "chrome.inspector.close": "Close inspector",
   "chrome.inspector.help": "Open help for this panel",
   "chrome.inspector.expand": "Open in workspace",
-  "chrome.inspector.modeCompanionHint":
-    "This page is open in the workspace. Editing continues there; go back to the timeline to restore the inspector.",
   "chrome.workspace.backToTimeline": "Back to timeline",
   "chrome.timingStudio.points": "{count} timing points",
   "chrome.timingStudio.offset": "Offset {offset} ms",
