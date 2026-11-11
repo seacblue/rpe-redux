@@ -10,6 +10,8 @@ import type { TimelineRuntimeSurface } from "../drawing/timelineReceiver.ts";
 import {
   selectEventsInRectangle,
   shiftSelectedEvents,
+  timelineEmptyPanPress,
+  timelineSweepEnabled,
 } from "../../../../../../core/edit/timeline/selection.ts";
 import { eventDragDelta } from "../../../../../../core/edit/timeline/dragPreview.ts";
 import {
@@ -330,7 +332,24 @@ export class EventInteraction implements EventInteractionHandle {
     }
     const point = this.timeline.viewport.point(event, this.canvas);
     const rectangle = this.hit(point);
-    const sweepMode = timelineSweepMode(session, event, "events");
+    const multiMode = session.multiLineActive;
+    const panelCount = this.timeline.viewport.panelCount("events");
+    const multiPanel = multiMode && panelCount > 1;
+    // Multi-line editing with more than one panel reserves an empty primary-button
+    // drag for panning, so that press must not start an additive sweep.
+    const panBlank = timelineEmptyPanPress({
+      multiLineActive: multiMode,
+      panelCount,
+      button: event.button,
+      hit: Boolean(rectangle),
+      tool: Boolean(this.timeline.gestures.tool),
+      pending: Boolean(this.pending),
+    });
+    // A split multi-line timeline reserves pointer drags for panning and the
+    // marquee, so neither sweep button starts a sweep there.
+    const sweepMode = timelineSweepEnabled({ multiLineActive: multiMode, panelCount })
+      ? timelineSweepMode(session, event, "events")
+      : null;
     if (
       sweepMode &&
       (event.button === 2 ||
@@ -438,7 +457,7 @@ export class EventInteraction implements EventInteractionHandle {
       return;
     }
     session.focus = "events";
-    if (!event.ctrlKey && !event.shiftKey && event.button !== 1) {
+    if (!panBlank && !event.ctrlKey && !event.shiftKey && event.button !== 1) {
       session.selection.clear();
       if (session.multiLineActive && session.multiLineMode === "events") {
         session.multiEventSelection.clear();
@@ -450,8 +469,6 @@ export class EventInteraction implements EventInteractionHandle {
     }
     this.canvas.focus();
     this.canvas.setPointerCapture(event.pointerId);
-    const multiMode = session.multiLineActive;
-    const multiPanel = multiMode && this.timeline.viewport.panelCount("events") > 1;
     if (multiMode && (event.shiftKey || event.button === 1)) {
       const worldX =
         point.x + this.timeline.viewport.multiLineViewportOffset(this.canvas.clientWidth, "events");
@@ -482,6 +499,7 @@ export class EventInteraction implements EventInteractionHandle {
         pointerId: event.pointerId,
         start: point,
         current: point,
+        clearOnClick: !event.ctrlKey && !event.shiftKey,
       };
     } else if (!multiMode && (event.shiftKey || event.button === 1)) {
       this.drag = {
@@ -574,6 +592,7 @@ export class EventInteraction implements EventInteractionHandle {
       if (drag.kind === "multi-pan") {
         const deltaX = point.x - previous.x;
         if (deltaX !== 0) {
+          this.canvas.style.cursor = "grabbing";
           this.timeline.viewport.panMultiLine(this.canvas.clientWidth, deltaX, "events");
           this.timeline.changed();
         }
@@ -605,8 +624,21 @@ export class EventInteraction implements EventInteractionHandle {
       if (current.pointerId !== undefined && current.pointerId !== event.pointerId) {
         return;
       }
+      const moved =
+        Math.hypot(current.current.x - current.start.x, current.current.y - current.start.y) > 2;
       this.drag = null;
       this.canvas.releasePointerCapture?.(event.pointerId);
+      if (!moved && current.clearOnClick) {
+        // A pan that never moved is an empty-field click: it clears the selection
+        // instead of leaving the pre-pan selection untouched.
+        const session = this.timeline.getSession();
+        session.selection.clear();
+        if (session.multiLineActive && session.multiLineMode === "events") {
+          session.multiEventSelection.clear();
+        }
+        session.eventSelection.clear();
+        session.selectionMode = "none";
+      }
       this.timeline.changed();
       return;
     }
