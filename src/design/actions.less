@@ -367,7 +367,8 @@
 }
 
 // Glyph-and-label actions share one optical centre, gap, and line height, so CJK
-// text stays centred against its icon.
+// text stays centred against its icon. `Button` wraps bare label strings in
+// `.redux-button-label` itself, so a caller cannot miss the cell.
 .redux-app-root .redux-button:has(> .redux-icon) {
   display: inline-flex;
   align-items: center;

@@ -434,15 +434,6 @@
   background: color-mix(in srgb, var(--foreground-muted) 45%, transparent);
 }
 
-.redux-library-welcome-title {
-  margin: 0;
-  color: var(--foreground);
-  font-size: var(--type-display);
-  font-weight: 600;
-  line-height: 1.05;
-  text-wrap: balance;
-}
-
 .redux-library-welcome-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -483,12 +474,16 @@
 }
 
 // A soft, borderless block: the accent glow marks the one action without
-// turning the welcome panel into another card.
+// turning the welcome panel into another card. The card doubles as the vessel
+// for the hold-to-draw liquid, so it clips its own fill.
 .redux-library-welcome-checkin {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
+  overflow: hidden;
+  isolation: isolate;
   border-radius: var(--radius-panel);
   background:
     radial-gradient(
@@ -499,27 +494,94 @@
     color-mix(in srgb, var(--surface-raised) 62%, transparent);
 }
 
+// The visible charge: a green body cut to the fill height, with a pair of slow
+// wave surfaces on the meniscus. The height arrives as `--hold-fill` from the
+// press frame loop, so no React state repaints per frame.
+.redux-library-welcome-liquid {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--design-dur-tint) ease;
+}
+
+.redux-library-welcome-checkin[data-hold="true"] .redux-library-welcome-liquid {
+  opacity: 1;
+}
+
+.redux-library-welcome-liquid-fill {
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--hold-fill, 0%);
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--playing-indicator) 62%, transparent),
+    color-mix(in srgb, var(--playing-indicator) 34%, transparent) 48%,
+    color-mix(in srgb, var(--playing-indicator) 26%, transparent)
+  );
+}
+
+// The meniscus: a wave strip twice the card width so it can travel exactly one
+// full period loop without a seam. The SVG path is the shape; `currentColor`
+// carries the theme green so the stylesheet stays token-only.
+.redux-library-welcome-liquid-wave {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--hold-fill, 0%) - 9px);
+  width: 200%;
+  height: 18px;
+  color: color-mix(in srgb, var(--playing-indicator) 46%, transparent);
+  animation: library-liquid-wave 6.2s linear infinite;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  path {
+    fill: currentColor;
+  }
+
+  &.is-back {
+    bottom: calc(var(--hold-fill, 0%) - 12px);
+    height: 24px;
+    color: color-mix(in srgb, var(--playing-indicator) 30%, transparent);
+    animation-duration: 9.4s;
+    animation-delay: -1.8s;
+  }
+}
+
+// Idle liquid costs nothing to paint: the waves only run while the charge is on
+// screen.
+.redux-library-welcome-checkin:not([data-hold="true"]) .redux-library-welcome-liquid-wave {
+  animation-play-state: paused;
+}
+
+@keyframes library-liquid-wave {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redux-library-welcome-liquid-wave {
+    animation: none;
+  }
+}
+
 .redux-library-welcome-checkin-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: calc(var(--space-7) * 7);
-}
-
-.redux-library-welcome-checkin-drawing {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  color: var(--foreground-muted);
-  font-size: var(--type-caption);
-  line-height: var(--line-body);
-  text-align: center;
-}
-
-.redux-library-welcome-checkin-drawing .redux-spinner {
-  padding: var(--space-3);
 }
 
 .redux-library-welcome-checkin-prompt {
@@ -532,30 +594,26 @@
   text-align: center;
 }
 
-.redux-library-welcome-checkin-head {
-  display: flex;
-  align-items: center;
-}
-
-.redux-library-welcome-checkin-title {
-  margin: 0;
-  color: var(--foreground);
-  font-size: var(--type-heading);
-  font-weight: 600;
-  line-height: var(--line-label);
-}
-
 .redux-library-welcome-checkin-copy {
   max-width: 34ch;
   margin: 0;
   color: var(--foreground-muted);
   font-size: var(--type-caption);
   line-height: var(--line-body);
+  text-align: center;
 }
 
 .redux-library-welcome-checkin-action {
   align-self: center;
   min-width: calc(var(--space-7) * 5);
+  touch-action: none;
+  user-select: none;
+}
+
+// The liquid sits behind the copy, so the prompt steps up to full-strength ink
+// while the card is filling.
+.redux-library-welcome-checkin[data-hold="true"] .redux-library-welcome-checkin-copy {
+  color: var(--foreground);
 }
 
 .redux-library-welcome-fortune {
@@ -574,19 +632,16 @@
   text-align: center;
 }
 
+// The fortune is the section's only heading once the day is signed, so it
+// carries the title itself: centred, full-strength text, no icon.
 .redux-library-welcome-fortune-label {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  color: var(--accent);
-  font-size: var(--type-micro);
+  color: var(--foreground);
+  font-size: var(--type-heading);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-
-  .redux-icon {
-    --icon-color: currentColor;
-  }
 }
 
 .redux-library-welcome-fortune-rank {

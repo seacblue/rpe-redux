@@ -2,11 +2,23 @@
  * Local-day check-in state for the home library's welcome panel.
  *
  * This is a playful surface, not an account feature. The browser remembers the
- * last local day the user checked in; the fortune and the welcome title are
- * picked deterministically from that day's seed so a reload shows the same
- * result.
+ * last local day the user checked in. The fortune is drawn from a per-install
+ * seed combined with that day, so one installation keeps the same reading for a
+ * whole day while two installations get different readings on the same day.
  */
 const CHECK_IN_KEY = "rpe-redux.library.check-in";
+const FORTUNE_SEED_KEY = "rpe-redux.library.fortune-seed";
+
+/** Fallback seed when storage is unavailable; keeps one session deterministic. */
+let sessionSeed: string | null = null;
+
+/** Generate a seed; `crypto.randomUUID` keeps installations from colliding. */
+function createSeed(): string {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `seed-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 /** The local calendar day as `YYYY-MM-DD`. */
 export function localDay(date = new Date()): string {
@@ -40,23 +52,54 @@ export function writeCheckInDay(day: string): void {
   }
 }
 
+/**
+ * The per-installation fortune seed.
+ *
+ * Created once and persisted, so reloading the panel, switching language, or
+ * opening it on the next day keeps the same identity. Without storage access the
+ * seed lives for this session only.
+ */
+export function readFortuneSeed(): string {
+  if (typeof window === "undefined") {
+    sessionSeed ??= createSeed();
+    return sessionSeed;
+  }
+  try {
+    const stored = window.localStorage.getItem(FORTUNE_SEED_KEY);
+    if (stored !== null && stored !== "") {
+      return stored;
+    }
+    const created = createSeed();
+    window.localStorage.setItem(FORTUNE_SEED_KEY, created);
+    return created;
+  } catch {
+    sessionSeed ??= createSeed();
+    return sessionSeed;
+  }
+}
+
+/** The deterministic draw seed for one local day on this installation. */
+export function dailyFortuneSeed(day: string): string {
+  return `${readFortuneSeed()}:${day}`;
+}
+
 /** FNV-1a hash of a string as an unsigned 32-bit integer. */
-function hashDay(day: string): number {
+function hashText(text: string): number {
   let hash = 0x811c9dc5;
-  for (let index = 0; index < day.length; index += 1) {
-    hash ^= day.charCodeAt(index);
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash;
 }
 
-/** Stable index into a daily list (fortune ranks, title pools, and so on). */
-export function fortuneIndexForDay(day: string, count: number): number {
+/** Stable index into a daily list (the fortune rank and the daily items). */
+export function fortuneIndexForSeed(seed: string, count: number): number {
   if (count <= 0) {
     return 0;
   }
-  // Hashing the date keeps the result stable across reloads and languages.
-  return hashDay(day) % count;
+  // Hashing the seed keeps the result stable across reloads and languages.
+  return hashText(seed) % count;
 }
 
 /**
@@ -67,7 +110,7 @@ export function fortuneIndexForDay(day: string, count: number): number {
  * returned indices distinct.
  */
 export function dailyFortunePicks(
-  day: string,
+  seed: string,
   count: number,
   poolSize: number,
   salt: string,
@@ -78,7 +121,7 @@ export function dailyFortunePicks(
   const pool = Array.from({ length: poolSize }, (_, index) => index);
   // A linear congruential generator is enough for a daily fortune; the seed
   // makes the shuffle repeatable for the same day and salt.
-  let state = hashDay(`${salt}:${day}`) || 1;
+  let state = hashText(`${salt}:${seed}`) || 1;
   for (let index = pool.length - 1; index > 0; index -= 1) {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
     const swap = state % (index + 1);

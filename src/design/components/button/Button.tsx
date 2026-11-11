@@ -9,8 +9,52 @@
  * `plain` is for rows that paint their own hover surface (menu rows, list rows).
  * `outlined` adds an edge for standalone secondary actions and message boxes.
  * `solid` is the primary action and `danger` is destructive.
+ *
+ * A glyph-plus-text button owns one label cell: bare string children beside an
+ * {@link Icon} are wrapped in `.redux-button-label` here, so every caller gets
+ * the shared optical centring. Without that cell the text ink sits a fraction of
+ * a line above the glyph at some display scales and the icon reads as low.
  */
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import {
+  Children,
+  forwardRef,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
+import { Icon } from "../icon/Icon.tsx";
+
+/** Whether the caller already placed the design glyph among the children. */
+function hasGlyph(children: ReactNode): boolean {
+  return Children.toArray(children).some((child) => isValidElement(child) && child.type === Icon);
+}
+
+/**
+ * Wrap bare label text in the shared label cell.
+ *
+ * `actions.less` optically centres the text cell (CJK font ink is not symmetric
+ * inside its line box) and keys that rule on `.redux-button-label`. A caller
+ * that passes a plain string next to a glyph would otherwise lose the nudge.
+ * Whitespace-only strings stay untouched; they collapse inside the flex row.
+ */
+function withLabelCell(children: ReactNode): ReactNode {
+  let wrapped = false;
+  const items = Children.toArray(children).map((child, index) => {
+    if (typeof child !== "string" && typeof child !== "number") {
+      return child;
+    }
+    if (typeof child === "string" && child.trim() === "") {
+      return child;
+    }
+    wrapped = true;
+    return (
+      <span className="redux-button-label" key={`label-${index}`}>
+        {child}
+      </span>
+    );
+  });
+  return wrapped ? items : children;
+}
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   "data-tip-title"?: string;
   "data-tip-desc"?: string;
@@ -56,6 +100,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ]
     .filter(Boolean)
     .join(" ");
+  const content = iconText || hasGlyph(children) ? withLabelCell(children) : children;
   return (
     <button
       ref={ref}
@@ -64,7 +109,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...props}
       data-tip-title={props["data-tip-title"] ?? title}
     >
-      {children}
+      {content}
     </button>
   );
 });

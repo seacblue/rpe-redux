@@ -1,23 +1,34 @@
 /**
  * Borderless welcome panel for the home library's detail column.
  *
- * It fills the column while no chart is selected: a time-of-day greeting and
- * invitation, the library's running totals, and a local-day check-in that
- * reveals a Luogu-style daily fortune. The fortune pairs each item with a
- * suitable and an avoid note, so the reading keeps the community tone instead
- * of a generic horoscope. The check-in is a small ritual, not an account
- * feature; the day lives in localStorage and the fortune is seeded from it.
+ * It fills the column while no chart is selected: a time-of-day greeting,
+ * the library's running totals, and a local-day draw that reveals a daily
+ * fortune. The fortune pairs each item with a suitable and an avoid note, so the
+ * reading stays concrete and slightly cheeky instead of reading like a generic
+ * horoscope. Drawing is a small ritual rather than a button press: the reader
+ * holds the draw button while green liquid fills the card on an ease-in curve,
+ * and the card trembles harder as the charge builds; letting go drains it back
+ * down. The day lives in localStorage and the fortune is seeded from that day
+ * plus a per-installation seed, so two installations drawing on the same day do
+ * not get the same reading.
  */
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
-import { Spinner } from "../../../../design/components/spinner/Spinner.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
+import {
+  advanceHoldFill,
+  holdFillFraction,
+  holdShake,
+  HOLD_DRAIN_MS,
+  REVEAL_DRAIN_MS,
+} from "./holdToDraw.ts";
 import type { LibraryEntry } from "./libraryEntries.ts";
 import { formatChartingTime, formatCount } from "./libraryFormat.ts";
 import {
   dailyFortunePicks,
-  fortuneIndexForDay,
+  dailyFortuneSeed,
+  fortuneIndexForSeed,
   localDay,
   readCheckInDay,
   writeCheckInDay,
@@ -103,9 +114,9 @@ const FORTUNE_ITEMS = [
     avoid: "workspace.welcome.library.fortune.item.slack.avoid",
   },
   {
-    label: "workspace.welcome.library.fortune.item.bilibili",
-    suitable: "workspace.welcome.library.fortune.item.bilibili.suitable",
-    avoid: "workspace.welcome.library.fortune.item.bilibili.avoid",
+    label: "workspace.welcome.library.fortune.item.pickSong",
+    suitable: "workspace.welcome.library.fortune.item.pickSong.suitable",
+    avoid: "workspace.welcome.library.fortune.item.pickSong.avoid",
   },
   {
     label: "workspace.welcome.library.fortune.item.moments",
@@ -123,14 +134,14 @@ const FORTUNE_ITEMS = [
     avoid: "workspace.welcome.library.fortune.item.actPro.avoid",
   },
   {
-    label: "workspace.welcome.library.fortune.item.worship",
-    suitable: "workspace.welcome.library.fortune.item.worship.suitable",
-    avoid: "workspace.welcome.library.fortune.item.worship.avoid",
+    label: "workspace.welcome.library.fortune.item.studyChart",
+    suitable: "workspace.welcome.library.fortune.item.studyChart.suitable",
+    avoid: "workspace.welcome.library.fortune.item.studyChart.avoid",
   },
   {
-    label: "workspace.welcome.library.fortune.item.copyHomework",
-    suitable: "workspace.welcome.library.fortune.item.copyHomework.suitable",
-    avoid: "workspace.welcome.library.fortune.item.copyHomework.avoid",
+    label: "workspace.welcome.library.fortune.item.oldWork",
+    suitable: "workspace.welcome.library.fortune.item.oldWork.suitable",
+    avoid: "workspace.welcome.library.fortune.item.oldWork.avoid",
   },
   {
     label: "workspace.welcome.library.fortune.item.homework",
@@ -268,9 +279,9 @@ const FORTUNE_ITEMS = [
     avoid: "workspace.welcome.library.fortune.item.ask.avoid",
   },
   {
-    label: "workspace.welcome.library.fortune.item.comments",
-    suitable: "workspace.welcome.library.fortune.item.comments.suitable",
-    avoid: "workspace.welcome.library.fortune.item.comments.avoid",
+    label: "workspace.welcome.library.fortune.item.community",
+    suitable: "workspace.welcome.library.fortune.item.community.suitable",
+    avoid: "workspace.welcome.library.fortune.item.community.avoid",
   },
   {
     label: "workspace.welcome.library.fortune.item.vent",
@@ -314,121 +325,16 @@ const FORTUNE_ITEMS = [
   },
 ] as const;
 
-/** Time-of-day copy: the greeting and a title pool per day kind. */
-const TIME_SLOTS = {
-  morning: {
-    greeting: "workspace.welcome.library.welcome.morning",
-    weekday: [
-      "workspace.welcome.library.welcome.morning.weekday.1",
-      "workspace.welcome.library.welcome.morning.weekday.2",
-      "workspace.welcome.library.welcome.morning.weekday.3",
-    ],
-    friday: [
-      "workspace.welcome.library.welcome.morning.friday.1",
-      "workspace.welcome.library.welcome.morning.friday.2",
-      "workspace.welcome.library.welcome.morning.friday.3",
-    ],
-    saturday: [
-      "workspace.welcome.library.welcome.morning.saturday.1",
-      "workspace.welcome.library.welcome.morning.saturday.2",
-      "workspace.welcome.library.welcome.morning.saturday.3",
-    ],
-    sunday: [
-      "workspace.welcome.library.welcome.morning.sunday.1",
-      "workspace.welcome.library.welcome.morning.sunday.2",
-      "workspace.welcome.library.welcome.morning.sunday.3",
-    ],
-  },
-  afternoon: {
-    greeting: "workspace.welcome.library.welcome.afternoon",
-    weekday: [
-      "workspace.welcome.library.welcome.afternoon.weekday.1",
-      "workspace.welcome.library.welcome.afternoon.weekday.2",
-      "workspace.welcome.library.welcome.afternoon.weekday.3",
-    ],
-    friday: [
-      "workspace.welcome.library.welcome.afternoon.friday.1",
-      "workspace.welcome.library.welcome.afternoon.friday.2",
-      "workspace.welcome.library.welcome.afternoon.friday.3",
-    ],
-    saturday: [
-      "workspace.welcome.library.welcome.afternoon.saturday.1",
-      "workspace.welcome.library.welcome.afternoon.saturday.2",
-      "workspace.welcome.library.welcome.afternoon.saturday.3",
-    ],
-    sunday: [
-      "workspace.welcome.library.welcome.afternoon.sunday.1",
-      "workspace.welcome.library.welcome.afternoon.sunday.2",
-      "workspace.welcome.library.welcome.afternoon.sunday.3",
-    ],
-  },
-  evening: {
-    greeting: "workspace.welcome.library.welcome.evening",
-    weekday: [
-      "workspace.welcome.library.welcome.evening.weekday.1",
-      "workspace.welcome.library.welcome.evening.weekday.2",
-      "workspace.welcome.library.welcome.evening.weekday.3",
-    ],
-    friday: [
-      "workspace.welcome.library.welcome.evening.friday.1",
-      "workspace.welcome.library.welcome.evening.friday.2",
-      "workspace.welcome.library.welcome.evening.friday.3",
-    ],
-    saturday: [
-      "workspace.welcome.library.welcome.evening.saturday.1",
-      "workspace.welcome.library.welcome.evening.saturday.2",
-      "workspace.welcome.library.welcome.evening.saturday.3",
-    ],
-    sunday: [
-      "workspace.welcome.library.welcome.evening.sunday.1",
-      "workspace.welcome.library.welcome.evening.sunday.2",
-      "workspace.welcome.library.welcome.evening.sunday.3",
-    ],
-  },
-  late: {
-    greeting: "workspace.welcome.library.welcome.late",
-    weekday: [
-      "workspace.welcome.library.welcome.late.weekday.1",
-      "workspace.welcome.library.welcome.late.weekday.2",
-      "workspace.welcome.library.welcome.late.weekday.3",
-    ],
-    friday: [
-      "workspace.welcome.library.welcome.late.friday.1",
-      "workspace.welcome.library.welcome.late.friday.2",
-      "workspace.welcome.library.welcome.late.friday.3",
-    ],
-    saturday: [
-      "workspace.welcome.library.welcome.late.saturday.1",
-      "workspace.welcome.library.welcome.late.saturday.2",
-      "workspace.welcome.library.welcome.late.saturday.3",
-    ],
-    sunday: [
-      "workspace.welcome.library.welcome.late.sunday.1",
-      "workspace.welcome.library.welcome.late.sunday.2",
-      "workspace.welcome.library.welcome.late.sunday.3",
-    ],
-  },
+/** Time-of-day greeting shown above the library totals. */
+const TIME_GREETINGS = {
+  morning: "workspace.welcome.library.welcome.morning",
+  afternoon: "workspace.welcome.library.welcome.afternoon",
+  evening: "workspace.welcome.library.welcome.evening",
+  late: "workspace.welcome.library.welcome.late",
 } as const;
 
-/** Which title pool fits the local weekday. */
-type DayKind = "weekday" | "friday" | "saturday" | "sunday";
-
-/** Day kind used to pick the weekend-aware title pool. */
-function dayKind(day: number): DayKind {
-  if (day === 0) {
-    return "sunday";
-  }
-  if (day === 6) {
-    return "saturday";
-  }
-  if (day === 5) {
-    return "friday";
-  }
-  return "weekday";
-}
-
 /** Copy slot for the local hour. */
-function timeSlot(hour: number): keyof typeof TIME_SLOTS {
+function timeSlot(hour: number): keyof typeof TIME_GREETINGS {
   if (hour < 5) {
     return "late";
   }
@@ -441,10 +347,8 @@ function timeSlot(hour: number): keyof typeof TIME_SLOTS {
   return "evening";
 }
 
-/** Returns the random check-in draw delay used after the user starts a draw. */
-function randomDrawDelay(): number {
-  return 1400 + Math.random() * 1400;
-}
+/** A frame longer than this is a wake-up gap, not a real frame. */
+const HOLD_FRAME_CLAMP_MS = 64;
 
 /** Library-wide totals shown in the welcome panel's stat grid. */
 interface LibraryTotals {
@@ -468,7 +372,7 @@ function sumEntries(entries: readonly LibraryEntry[]): LibraryTotals {
   return { charts: entries.length, notes, events, editing };
 }
 
-/** Borderless welcome, statistics, and check-in panel for the empty column. */
+/** Borderless welcome, statistics, and daily draw panel for the empty column. */
 export function LibraryWelcome({
   entries,
   loading,
@@ -484,75 +388,139 @@ export function LibraryWelcome({
   const today = localDay(now);
   const [checkedInDay, setCheckedInDay] = useState(readCheckInDay);
   const checkedIn = checkedInDay === today;
-  const [drawing, setDrawing] = useState(false);
-  const drawTimer = useRef<number | null>(null);
   // Crossing midnight resets the check-in, the date, and the daily draw.
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  // The sign-in draw is a short random spin; leaving the panel must not leave
-  // a timer behind, because the recorded check-in survives the unmount.
-  useEffect(
-    () => () => {
-      if (drawTimer.current !== null) {
-        window.clearTimeout(drawTimer.current);
-      }
-    },
-    [],
-  );
   const totals = useMemo(() => sumEntries(entries), [entries]);
   // Only the first read is unknown; a refresh keeps the settled totals visible.
   const pending = loading && entries.length === 0;
   const hour = now.getHours();
   const slotName = timeSlot(hour);
-  const slot = TIME_SLOTS[slotName];
-  const kind = dayKind(now.getDay());
-  const titleKey =
-    slot[kind][fortuneIndexForDay(`${today}:${slotName}:${kind}`, slot[kind].length)];
   const night = slotName === "evening" || slotName === "late";
   const dateLabel = new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en", {
     weekday: "short",
     month: "long",
     day: "numeric",
   }).format(now);
-  const rank = FORTUNE_RANKS[fortuneIndexForDay(today, FORTUNE_RANKS.length)];
-  // Luogu replaces one side on the two extreme ranks; otherwise a good day
-  // leans toward more do items and a bad day toward more don't items.
+  // One seed per local day for this installation: reloading the panel keeps the
+  // reading while another installation draws its own.
+  const seed = useMemo(() => dailyFortuneSeed(today), [today]);
+  const rank = FORTUNE_RANKS[fortuneIndexForSeed(seed, FORTUNE_RANKS.length)];
+  // The two extreme ranks replace one side; otherwise a good day leans toward
+  // more do items and a bad day toward more don't items.
   const specialSuitable = rank.id === "dire";
   const specialAvoid = rank.id === "great";
   const suitableCount = specialSuitable ? 0 : rank.tone === "good" ? 3 : 2;
   const avoidCount = specialAvoid ? 0 : rank.tone === "bad" || rank.tone === "worst" ? 3 : 2;
-  const draw = dailyFortunePicks(today, suitableCount + avoidCount, FORTUNE_ITEMS.length, "items");
+  const draw = dailyFortunePicks(seed, suitableCount + avoidCount, FORTUNE_ITEMS.length, "items");
   const suitableItems = draw.slice(0, suitableCount).map((index) => FORTUNE_ITEMS[index]);
   const avoidItems = draw.slice(suitableCount).map((index) => FORTUNE_ITEMS[index]);
   const value = (text: string) => (pending ? "…" : text);
-  /** Records today's check-in and spins for a random draw before the reveal. */
-  const checkIn = () => {
+  /** Records today's draw; the liquid drains while the reading appears. */
+  const recordDraw = useCallback(() => {
     writeCheckInDay(today);
     setCheckedInDay(today);
-    setDrawing(true);
-    if (drawTimer.current !== null) {
-      window.clearTimeout(drawTimer.current);
+  }, [today]);
+  const cardRef = useRef<HTMLElement>(null);
+  const fillRef = useRef(0);
+  const holdingRef = useRef(false);
+  const completedRef = useRef(false);
+  const [holding, setHolding] = useState(false);
+  // The press loop writes the eased charge and the card vibration onto the card
+  // through refs, so only the start and end of the press re-render. It also
+  // drains after completion.
+  useEffect(() => {
+    if (!holding) {
+      return;
     }
-    drawTimer.current = window.setTimeout(() => {
-      drawTimer.current = null;
-      setDrawing(false);
-    }, randomDrawDelay());
+    const card = cardRef.current;
+    if (!card) {
+      return;
+    }
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let frame: number | null = null;
+    let last = performance.now();
+    let clock = 0;
+    /** Paint the eased charge and the vibration for this frame. */
+    const paint = (shake: ReturnType<typeof holdShake> | null) => {
+      card.style.setProperty(
+        "--hold-fill",
+        `${(holdFillFraction(fillRef.current) * 100).toFixed(2)}%`,
+      );
+      if (fillRef.current > 0) {
+        card.setAttribute("data-hold", "true");
+      } else {
+        card.removeAttribute("data-hold");
+      }
+      if (shake) {
+        card.style.transform = `translate3d(${shake.x.toFixed(2)}px, ${shake.y.toFixed(2)}px, 0) rotate(${shake.rotate.toFixed(3)}deg)`;
+      } else {
+        card.style.removeProperty("transform");
+      }
+    };
+    const step = (time: number) => {
+      frame = null;
+      const elapsed = Math.min(HOLD_FRAME_CLAMP_MS, Math.max(0, time - last));
+      last = time;
+      clock += elapsed;
+      fillRef.current = advanceHoldFill(
+        fillRef.current,
+        elapsed,
+        holdingRef.current,
+        completedRef.current ? REVEAL_DRAIN_MS : HOLD_DRAIN_MS,
+      );
+      paint(
+        holdingRef.current && fillRef.current > 0 && !reduceMotion
+          ? holdShake(fillRef.current, clock)
+          : null,
+      );
+      if (!completedRef.current && fillRef.current >= 1) {
+        completedRef.current = true;
+        holdingRef.current = false;
+        recordDraw();
+      }
+      if (holdingRef.current || fillRef.current > 0) {
+        frame = requestAnimationFrame(step);
+      } else {
+        setHolding(false);
+      }
+    };
+    paint(null);
+    frame = requestAnimationFrame(step);
+    return () => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      card.style.removeProperty("transform");
+    };
+  }, [holding, recordDraw]);
+  /** Starts the charge; the loop only exists while the liquid is on screen. */
+  const startHold = () => {
+    if (completedRef.current) {
+      return;
+    }
+    holdingRef.current = true;
+    setHolding(true);
+  };
+  /** Ends the press; the loop keeps draining the charge back to zero. */
+  const releaseHold = () => {
+    holdingRef.current = false;
+    if (!holding && fillRef.current > 0) {
+      setHolding(true);
+    }
   };
   return (
     <aside className="redux-library-detail redux-library-welcome" aria-labelledby={panelId}>
       <div className="redux-library-welcome-inner">
         <header className="redux-library-welcome-head">
-          <p className="redux-library-welcome-eyebrow">
+          <p className="redux-library-welcome-eyebrow" id={panelId}>
             <Icon name={night ? "moon" : "sun"} size={14} />
-            <span>{t(slot.greeting)}</span>
+            <span>{t(TIME_GREETINGS[slotName])}</span>
             <span className="redux-library-welcome-dot" aria-hidden="true" />
             <span>{dateLabel}</span>
           </p>
-          <h2 className="redux-library-welcome-title" id={panelId}>
-            {t(titleKey)}
-          </h2>
         </header>
         <dl
           className="redux-library-welcome-stats"
@@ -578,123 +546,122 @@ export function LibraryWelcome({
             </dd>
           </div>
         </dl>
-        <section className="redux-library-welcome-checkin" aria-labelledby={`${panelId}-checkin`}>
-          <div className="redux-library-welcome-checkin-head">
-            <h3 className="redux-library-welcome-checkin-title" id={`${panelId}-checkin`}>
-              {t("workspace.welcome.library.checkIn.title")}
-            </h3>
-          </div>
+        <section
+          ref={cardRef}
+          className="redux-library-welcome-checkin"
+          aria-label={checkedIn ? t("workspace.welcome.library.fortune.title") : undefined}
+          aria-labelledby={checkedIn ? undefined : `${panelId}-checkin`}
+        >
+          <span className="redux-library-welcome-liquid" aria-hidden="true">
+            <span className="redux-library-welcome-liquid-fill" />
+            <span className="redux-library-welcome-liquid-wave is-back">
+              <svg viewBox="0 0 200 16" preserveAspectRatio="none">
+                <path d="M0 8 Q 12.5 -6 25 8 T 50 8 T 75 8 T 100 8 T 125 8 T 150 8 T 175 8 T 200 8 V16 H0 Z" />
+              </svg>
+            </span>
+            <span className="redux-library-welcome-liquid-wave">
+              <svg viewBox="0 0 200 16" preserveAspectRatio="none">
+                <path d="M0 8 Q 12.5 -6 25 8 T 50 8 T 75 8 T 100 8 T 125 8 T 150 8 T 175 8 T 200 8 V16 H0 Z" />
+              </svg>
+            </span>
+          </span>
           <div className="redux-library-welcome-checkin-body">
             {checkedIn ? (
-              drawing ? (
-                <div className="redux-library-welcome-checkin-drawing">
-                  <Spinner label={t("workspace.welcome.library.checkIn.drawing")} />
-                  <span aria-hidden="true">{t("workspace.welcome.library.checkIn.drawing")}</span>
+              <div className="redux-library-welcome-fortune" data-tone={rank.tone} role="status">
+                <div className="redux-library-welcome-fortune-head">
+                  <span className="redux-library-welcome-fortune-label">
+                    {t("workspace.welcome.library.fortune.title")}
+                  </span>
+                  <span className="redux-library-welcome-fortune-rank">{t(rank.label)}</span>
                 </div>
-              ) : (
-                <div className="redux-library-welcome-fortune" data-tone={rank.tone} role="status">
-                  <div className="redux-library-welcome-fortune-head">
-                    <span className="redux-library-welcome-fortune-label">
-                      <Icon name="star" size={12} />
-                      {t("workspace.welcome.library.fortune.title")}
+                <div className="redux-library-welcome-fortune-advice">
+                  <div className="redux-library-welcome-fortune-column is-suitable">
+                    <span className="redux-library-welcome-fortune-column-title" aria-hidden="true">
+                      {t("workspace.welcome.library.fortune.suitable")}
                     </span>
-                    <span className="redux-library-welcome-fortune-rank">{t(rank.label)}</span>
+                    <ul
+                      className="redux-library-welcome-fortune-list"
+                      aria-label={t("workspace.welcome.library.fortune.suitable")}
+                    >
+                      {specialSuitable ? (
+                        <>
+                          <li className="is-special">
+                            <span className="redux-library-welcome-fortune-item">
+                              {t("workspace.welcome.library.fortune.allAvoid")}
+                            </span>
+                            <span className="redux-library-welcome-fortune-note">
+                              {t("workspace.welcome.library.fortune.allAvoidNote")}
+                            </span>
+                          </li>
+                          <li className="is-special">
+                            <span className="redux-library-welcome-fortune-item">
+                              {t("workspace.welcome.library.fortune.allAvoidMore")}
+                            </span>
+                            <span className="redux-library-welcome-fortune-note">
+                              {t("workspace.welcome.library.fortune.allAvoidMoreNote")}
+                            </span>
+                          </li>
+                        </>
+                      ) : (
+                        suitableItems.map((item) => (
+                          <li key={item.label}>
+                            <span className="redux-library-welcome-fortune-item">
+                              {t(item.label)}
+                            </span>
+                            <span className="redux-library-welcome-fortune-note">
+                              {t(item.suitable)}
+                            </span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
                   </div>
-                  <div className="redux-library-welcome-fortune-advice">
-                    <div className="redux-library-welcome-fortune-column is-suitable">
-                      <span
-                        className="redux-library-welcome-fortune-column-title"
-                        aria-hidden="true"
-                      >
-                        {t("workspace.welcome.library.fortune.suitable")}
-                      </span>
-                      <ul
-                        className="redux-library-welcome-fortune-list"
-                        aria-label={t("workspace.welcome.library.fortune.suitable")}
-                      >
-                        {specialSuitable ? (
-                          <>
-                            <li className="is-special">
-                              <span className="redux-library-welcome-fortune-item">
-                                {t("workspace.welcome.library.fortune.allAvoid")}
-                              </span>
-                              <span className="redux-library-welcome-fortune-note">
-                                {t("workspace.welcome.library.fortune.allAvoidNote")}
-                              </span>
-                            </li>
-                            <li className="is-special">
-                              <span className="redux-library-welcome-fortune-item">
-                                {t("workspace.welcome.library.fortune.allAvoidMore")}
-                              </span>
-                              <span className="redux-library-welcome-fortune-note">
-                                {t("workspace.welcome.library.fortune.allAvoidMoreNote")}
-                              </span>
-                            </li>
-                          </>
-                        ) : (
-                          suitableItems.map((item) => (
-                            <li key={item.label}>
-                              <span className="redux-library-welcome-fortune-item">
-                                {t(item.label)}
-                              </span>
-                              <span className="redux-library-welcome-fortune-note">
-                                {t(item.suitable)}
-                              </span>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
-                    <div className="redux-library-welcome-fortune-column is-avoid">
-                      <span
-                        className="redux-library-welcome-fortune-column-title"
-                        aria-hidden="true"
-                      >
-                        {t("workspace.welcome.library.fortune.avoid")}
-                      </span>
-                      <ul
-                        className="redux-library-welcome-fortune-list"
-                        aria-label={t("workspace.welcome.library.fortune.avoid")}
-                      >
-                        {specialAvoid ? (
-                          <>
-                            <li className="is-special">
-                              <span className="redux-library-welcome-fortune-item">
-                                {t("workspace.welcome.library.fortune.allSuitable")}
-                              </span>
-                              <span className="redux-library-welcome-fortune-note">
-                                {t("workspace.welcome.library.fortune.allSuitableNote")}
-                              </span>
-                            </li>
-                            <li className="is-special">
-                              <span className="redux-library-welcome-fortune-item">
-                                {t("workspace.welcome.library.fortune.allSuitableMore")}
-                              </span>
-                              <span className="redux-library-welcome-fortune-note">
-                                {t("workspace.welcome.library.fortune.allSuitableMoreNote")}
-                              </span>
-                            </li>
-                          </>
-                        ) : (
-                          avoidItems.map((item) => (
-                            <li key={item.label}>
-                              <span className="redux-library-welcome-fortune-item">
-                                {t(item.label)}
-                              </span>
-                              <span className="redux-library-welcome-fortune-note">
-                                {t(item.avoid)}
-                              </span>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
+                  <div className="redux-library-welcome-fortune-column is-avoid">
+                    <span className="redux-library-welcome-fortune-column-title" aria-hidden="true">
+                      {t("workspace.welcome.library.fortune.avoid")}
+                    </span>
+                    <ul
+                      className="redux-library-welcome-fortune-list"
+                      aria-label={t("workspace.welcome.library.fortune.avoid")}
+                    >
+                      {specialAvoid ? (
+                        <>
+                          <li className="is-special">
+                            <span className="redux-library-welcome-fortune-item">
+                              {t("workspace.welcome.library.fortune.allSuitable")}
+                            </span>
+                            <span className="redux-library-welcome-fortune-note">
+                              {t("workspace.welcome.library.fortune.allSuitableNote")}
+                            </span>
+                          </li>
+                          <li className="is-special">
+                            <span className="redux-library-welcome-fortune-item">
+                              {t("workspace.welcome.library.fortune.allSuitableMore")}
+                            </span>
+                            <span className="redux-library-welcome-fortune-note">
+                              {t("workspace.welcome.library.fortune.allSuitableMoreNote")}
+                            </span>
+                          </li>
+                        </>
+                      ) : (
+                        avoidItems.map((item) => (
+                          <li key={item.label}>
+                            <span className="redux-library-welcome-fortune-item">
+                              {t(item.label)}
+                            </span>
+                            <span className="redux-library-welcome-fortune-note">
+                              {t(item.avoid)}
+                            </span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
                   </div>
                 </div>
-              )
+              </div>
             ) : (
               <div className="redux-library-welcome-checkin-prompt">
-                <p className="redux-library-welcome-checkin-copy">
+                <p className="redux-library-welcome-checkin-copy" id={`${panelId}-checkin`}>
                   {t("workspace.welcome.library.checkIn.description")}
                 </p>
                 <Button
@@ -702,9 +669,38 @@ export function LibraryWelcome({
                   size="lg"
                   className="redux-library-welcome-checkin-action"
                   iconText
-                  onClick={checkIn}
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) {
+                      return;
+                    }
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    startHold();
+                  }}
+                  onPointerUp={releaseHold}
+                  onPointerCancel={releaseHold}
+                  onLostPointerCapture={releaseHold}
+                  onKeyDown={(event) => {
+                    if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+                      startHold();
+                    }
+                  }}
+                  onKeyUp={(event) => {
+                    if (event.key === " " || event.key === "Enter") {
+                      releaseHold();
+                    }
+                  }}
+                  onBlur={releaseHold}
+                  onContextMenu={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    // Assistive technology activates a button with a click that
+                    // carries no pointer detail; that reader cannot hold, so the
+                    // formal activation draws directly.
+                    if (event.detail === 0) {
+                      recordDraw();
+                    }
+                  }}
                 >
-                  <Icon name="calendar" size={18} />
+                  <Icon name="star" size={18} />
                   {t("workspace.welcome.library.checkIn.action")}
                 </Button>
               </div>
