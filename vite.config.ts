@@ -10,9 +10,8 @@ import { normalizeRouteBase } from "./src/core/shell/route.ts";
 // must use the same version because it starts the matching sidecar.
 const packageVersion = readProductVersion();
 
-// The app uses real paths, so a static host must serve the shell at the same
-// base it built with. The desktop host and a root web deployment use `/`;
-// GitHub Pages sets `REDUX_WEB_BASE` to its repository subpath.
+// Static assets use the deployment base; app destinations stay in the hash so
+// the desktop host and GitHub Pages never need an SPA fallback.
 const configuredWebBase = process.env.REDUX_WEB_BASE?.trim() || "/";
 if (configuredWebBase.includes("://") || /[?#]/.test(configuredWebBase)) {
   throw new Error("REDUX_WEB_BASE must be a path, not an absolute URL or query");
@@ -120,11 +119,11 @@ function themeBootstrap() {
 }
 
 /**
- * Pin `document.baseURI` to the served root.
+ * Pin `document.baseURI` to the served asset root.
  *
- * Runtime asset helpers resolve against `document.baseURI`. On `/chart/<id>`
- * that would otherwise look under `/chart/assets/...`; one base tag keeps every
- * public asset at the deployment root while the visible path stays a route.
+ * Runtime asset helpers resolve against `document.baseURI`. One base tag keeps
+ * every public asset at the deployment root while the visible route stays in
+ * the hash.
  */
 function documentBase() {
   return {
@@ -167,9 +166,6 @@ export default defineConfig({
         await cp("src/assets/extensions", "dist/extensions", { recursive: true });
         // Keep static asset paths intact in hosted builds and portable archives.
         await writeFile("dist/.nojekyll", "");
-        // GitHub Pages has no SPA fallback. A shell copy at 404.html lets a
-        // direct `/chart/<id>` load boot the same route-aware document.
-        await cp("dist/index.html", "dist/404.html");
       },
     },
   ],

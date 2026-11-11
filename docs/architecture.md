@@ -46,22 +46,22 @@ The frontend tree follows the visible interface:
 
 ### Routes
 
-`core/shell/route.ts` owns the address grammar and `frontend/app/routing/` owns the browser history adapter. The address has four forms:
+`core/shell/route.ts` owns the address grammar and `frontend/app/routing/` owns the browser hash adapter. The address has four forms:
 
 | Address | Window destination |
 | --- | --- |
-| `/` | chart library |
-| `/chart/<projectId>` | one library project in the editor |
-| `/editor` | an open document that has no library project (native file or untitled chart) |
-| `?settings=<category>` | the settings page above the current destination |
+| `#/` | chart library |
+| `#/chart/<projectId>` | one library project in the editor |
+| `#/editor` | an open document that has no library project (native file or untitled chart) |
+| `#/?settings=<category>` | the settings page above the current destination |
 
-The live editor remains authoritative while the user works; `RouteRuntime` mirrors document opens, home returns, document closes, and settings pages into history. A `popstate` event goes the other way through the same guarded operations, so a dirty document asks before leaving and a cancelled answer restores the address from the state still on screen. Opening a chart pushes, closing a document replaces, changing a settings page replaces, and opening settings pushes.
+The live editor remains authoritative while the user works; `RouteRuntime` mirrors document opens, home returns, document closes, and settings pages into browser history. `popstate` and `hashchange` go the other way through the same guarded operations, so a dirty document asks before leaving and a cancelled answer restores the address from the state still on screen. Opening a chart pushes, closing a document replaces, changing a settings page replaces, and opening settings pushes.
 
 `main.tsx` reads the boot address after the performance-HUD branch and publishes it through `frontend/contracts/appRoute.ts`. `EditorAssembly` gives an explicit chart address precedence over the last-workspace restore; a settings-only address keeps the editor at home, and every other launch keeps the existing restore-last-document behavior. After the first restore/open settles, the mirror may write history.
 
 Desktop launch links use the same destinations. `src-tauri/src/app/deep_link.rs` stores the first `rperedux://` argument and `take_deep_link` hands it to `frontend/platform/desktopDeepLink.ts`; `rperedux://chart/<id>` (optionally with `?settings=...`) becomes the boot route, while `rperedux://join?...` is held for the collaboration runtime. The browser build has no custom scheme and uses the page address alone.
 
-Vite's `base` is the deployment path. `REDUX_WEB_BASE` sets it for a GitHub Pages project site; the build also writes `dist/404.html` as a copy of the shell, so a direct route load reaches the same document. Tauri serves `/` and falls back to `index.html` for unknown asset paths, so no Rust fallback is required. Library project ids are local to one library; `/chart/<id>` is a local address, not a shareable chart link.
+Vite's `base` is the deployment path for static assets. `REDUX_WEB_BASE` sets it for a GitHub Pages project site; destinations stay in the hash, so a direct link never needs an SPA fallback. Tauri serves `/` and falls back to `index.html` for unknown asset paths, so no Rust fallback is required. Library project ids are local to one library; `#/chart/<id>` is a local address, not a shareable chart link.
 
 ### Authoring surface
 

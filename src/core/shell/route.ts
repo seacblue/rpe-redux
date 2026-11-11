@@ -95,6 +95,21 @@ export function parseRoute(pathname: string, search: string, base: string): AppR
   return null;
 }
 
+/** Parse the hash fragment used by the static web and desktop shells. */
+export function parseHashRoute(hash: string): AppRoute | null {
+  if (!hash.startsWith("#")) {
+    return null;
+  }
+  const raw = hash.slice(1) || "/";
+  if (!raw.startsWith("/")) {
+    return null;
+  }
+  const queryIndex = raw.indexOf("?");
+  const pathname = queryIndex < 0 ? raw : raw.slice(0, queryIndex);
+  const search = queryIndex < 0 ? "" : raw.slice(queryIndex);
+  return parseRoute(pathname, search, "/");
+}
+
 /** The app-relative path for one route, before the served base is applied. */
 export function routePath(route: AppRoute): string {
   switch (route.kind) {
@@ -110,19 +125,23 @@ export function routePath(route: AppRoute): string {
 /**
  * Build the URL for a route.
  *
- * `carry` keeps unrelated query keys that belong to the host or a development
- * probe; the route owns only `settings` and rewrites that one key.
+ * The deployment base stays outside the hash for static assets. The route
+ * itself is always a hash destination, so a static host never needs an SPA
+ * fallback. `carry` keeps unrelated top-level query keys; the route owns only
+ * `settings` and writes it inside the hash.
  */
 export function routeUrl(route: AppRoute, base: string, carry?: URLSearchParams): string {
-  const path = routePath(route).replace(/^\//, "");
-  const params = new URLSearchParams(carry);
-  if (route.settings === null) {
-    params.delete(SETTINGS_ROUTE_PARAM);
-  } else {
-    params.set(SETTINGS_ROUTE_PARAM, route.settings);
+  const outerParams = new URLSearchParams(carry);
+  outerParams.delete(SETTINGS_ROUTE_PARAM);
+  const routeParams = new URLSearchParams();
+  if (route.settings !== null) {
+    routeParams.set(SETTINGS_ROUTE_PARAM, route.settings);
   }
-  const query = params.toString();
-  return `${normalizeRouteBase(base)}${path}${query ? `?${query}` : ""}`;
+  const outerQuery = outerParams.toString();
+  const routeQuery = routeParams.toString();
+  return `${normalizeRouteBase(base)}${outerQuery ? `?${outerQuery}` : ""}#${routePath(route)}${
+    routeQuery ? `?${routeQuery}` : ""
+  }`;
 }
 
 /** Stable identity for comparing two routes without reading their object shape. */

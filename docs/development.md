@@ -31,7 +31,7 @@ The browser loop uses `.scratch/dev/data/` as its profile, so experiments do not
 
 `npm run dev:web` runs Vite without the Go sidecar. With no injected development runtime the page selects the browser SQLite library in `src/core/platform/browser/library/` and keeps charts in OPFS. Use it for the static web edition; `npm run build:web` produces the same page for GitHub Pages, and `.github/workflows/pages.yml` deploys `dist/`.
 
-The app uses real paths (`/chart/<id>`), so the web build needs to know its served base. It defaults to `/`; the Pages workflow passes the `configure-pages` base path to `REDUX_WEB_BASE` (empty for a user site or custom domain, `/repo` for a project site), and the build writes `dist/404.html` as a copy of the shell so a direct route load reaches the same document. Vite's development server already falls back to the shell for unknown paths.
+The app uses hash routes (`#/chart/<id>`), so static hosting never needs an SPA fallback. The web build still needs its served asset base: it defaults to `/`, and the Pages workflow passes the `configure-pages` base path to `REDUX_WEB_BASE` (empty for a user site or custom domain, `/repo` for a project site). Vite's development server serves the shell while the hash selects the destination.
 
 `npm run dev:desktop` stages the Go sidecar and media helpers, then opens the Tauri window. Both loops keep one fixed port set per checkout in `.scratch/dev/ports.json`, so parallel checkouts and AI runs do not fight over the backend address. The first run chooses free ports below the Windows ephemeral range; later runs reuse them. Pass `--new-ports` to rotate the set, or pin one value with a flag:
 

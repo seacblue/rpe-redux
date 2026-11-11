@@ -256,10 +256,16 @@ export function RouteRuntime({ enabled }: { enabled: boolean }) {
     if (!enabled) {
       return;
     }
+    let lastObservedAddress: string | null = null;
     const onPopState = (): void => {
       if (!bootSettled) {
         return;
       }
+      const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (address === lastObservedAddress) {
+        return;
+      }
+      lastObservedAddress = address;
       const target = readLocationRoute();
       if (!target) {
         const synced = syncFromState("replace");
@@ -320,8 +326,10 @@ export function RouteRuntime({ enabled }: { enabled: boolean }) {
         });
     };
     window.addEventListener("popstate", onPopState);
+    window.addEventListener("hashchange", onPopState);
     return () => {
       window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("hashchange", onPopState);
       applyGeneration.current += 1;
     };
   }, [bootSettled, enabled]);

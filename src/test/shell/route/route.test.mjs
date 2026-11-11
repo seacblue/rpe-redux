@@ -3,23 +3,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeRouteBase,
+  parseHashRoute,
   parseRoute,
   routeHistoryMode,
   routeKey,
   routePath,
-  routePathFromLocation,
   routeUrl,
   sameRoute,
   sameRouteDestination,
   withSettings,
 } from "../../../core/shell/route.ts";
 
-test("root and subpath bases resolve the same app-relative path", () => {
-  assert.equal(routePathFromLocation("/chart/abc", "/"), "/chart/abc");
-  assert.equal(routePathFromLocation("/RPE-Redux/chart/abc", "/RPE-Redux/"), "/chart/abc");
-  assert.equal(routePathFromLocation("/RPE-Redux", "/RPE-Redux/"), "/");
-  assert.equal(routePathFromLocation("/RPE-Redux/", "/RPE-Redux/"), "/");
-  assert.equal(routePathFromLocation("/other/chart/abc", "/RPE-Redux/"), null);
+test("hash routes parse independently of the deployment base", () => {
+  assert.deepEqual(parseHashRoute("#/"), { kind: "home", settings: null });
+  assert.deepEqual(parseHashRoute("#/editor"), { kind: "editor", settings: null });
+  assert.deepEqual(parseHashRoute("#/chart/a%20b?settings=general"), {
+    kind: "chart",
+    projectId: "a b",
+    settings: "general",
+  });
+  assert.equal(parseHashRoute("/chart/abc"), null);
 });
 
 test("bases normalize to a leading and trailing slash", () => {
@@ -74,23 +77,23 @@ test("the settings query opens the same destination", () => {
 });
 
 test("route URLs keep the base, encode ids, and rewrite only settings", () => {
-  assert.equal(routeUrl({ kind: "home", settings: null }, "/"), "/");
+  assert.equal(routeUrl({ kind: "home", settings: null }, "/"), "/#/");
   assert.equal(
     routeUrl({ kind: "chart", projectId: "a/b", settings: null }, "/RPE-Redux/"),
-    "/RPE-Redux/chart/a%2Fb",
+    "/RPE-Redux/#/chart/a%2Fb",
   );
   assert.equal(
     routeUrl({ kind: "chart", projectId: "abc", settings: "appearance.skin" }, "/"),
-    "/chart/abc?settings=appearance.skin",
+    "/#/chart/abc?settings=appearance.skin",
   );
   const carry = new URLSearchParams("window=debug&settings=old");
   assert.equal(
     routeUrl({ kind: "chart", projectId: "abc", settings: null }, "/", carry),
-    "/chart/abc?window=debug",
+    "/?window=debug#/chart/abc",
   );
   assert.equal(
     routeUrl({ kind: "home", settings: "" }, "/", new URLSearchParams("window=debug")),
-    "/?window=debug&settings=",
+    "/?window=debug#/?settings=",
   );
 });
 

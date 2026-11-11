@@ -1,13 +1,14 @@
 /**
  * Browser address adapter for the route grammar.
  *
- * Vite bakes the deployment base into the bundle, so the same code reads
- * `/chart/abc` on a root deployment and `/RPE-Redux/chart/abc` on a project
- * Pages site. History writes preserve unrelated query keys.
+ * Vite bakes the deployment base into the bundle for static assets, while the
+ * visible destination stays after `#`. Hash routes therefore work on root and
+ * project Pages sites without a server-side fallback. Top-level query keys not
+ * owned by routing are preserved.
  */
 import {
   normalizeRouteBase,
-  parseRoute,
+  parseHashRoute,
   routeUrl,
   type AppRoute,
 } from "../../../core/shell/route.ts";
@@ -15,9 +16,12 @@ import {
 /** The served base Vite built this bundle for, always slash-terminated. */
 export const ROUTE_BASE = normalizeRouteBase(import.meta.env.BASE_URL);
 
-/** Parse the current address, or null when the path is not a route. */
+/** Parse the current hash address, or null when the fragment is not a route. */
 export function readLocationRoute(): AppRoute | null {
-  return parseRoute(window.location.pathname, window.location.search, ROUTE_BASE);
+  if (!window.location.hash) {
+    return { kind: "home", settings: null };
+  }
+  return parseHashRoute(window.location.hash);
 }
 
 /** The current address as a route; unknown paths read as home. */
@@ -30,7 +34,7 @@ export function urlForRoute(route: AppRoute): string {
   return routeUrl(route, ROUTE_BASE, new URLSearchParams(window.location.search));
 }
 
-/** Write one route into history. */
+/** Write one hash route into browser history. */
 export function writeLocationRoute(route: AppRoute, mode: "push" | "replace"): void {
   const url = urlForRoute(route);
   if (mode === "push") {
@@ -43,14 +47,14 @@ export function writeLocationRoute(route: AppRoute, mode: "push" | "replace"): v
 /**
  * Normalize the first location and return its route.
  *
- * A trailing slash, an old bare `editor` path, or an unknown path is rewritten
- * before React mounts so the first frame and the address agree.
+ * A missing or malformed hash is rewritten before React mounts so the first
+ * frame and the address agree. The pathname remains the deployment root.
  */
 export function initializeLocationRoute(): AppRoute {
   const parsed = readLocationRoute();
   const route = parsed ?? { kind: "home", settings: null };
   const canonical = urlForRoute(route);
-  const current = `${window.location.pathname}${window.location.search}`;
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (parsed === null || current !== canonical) {
     window.history.replaceState(null, "", canonical);
   }
