@@ -18,6 +18,7 @@ import { WelcomeSettings } from "./WelcomeSettings.tsx";
 import { WelcomeJoin } from "./WelcomeJoin.tsx";
 import { WelcomeMoreMenu } from "./WelcomeMoreMenu.tsx";
 import { WelcomeImportDialog } from "./WelcomeImportDialog.tsx";
+import { RpeImportReviewDialog } from "./RpeImportReviewDialog.tsx";
 import { LibraryPanel } from "./library/LibraryPanel.tsx";
 import { LibraryDetail } from "./library/LibraryDetail.tsx";
 import { buildLibraryEntries, type LibraryEntry } from "./library/libraryEntries.ts";
@@ -120,6 +121,7 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
         </div>
       )}
       <WelcomeImportDialog />
+      <RpeImportReviewDialog />
     </main>
   );
 }

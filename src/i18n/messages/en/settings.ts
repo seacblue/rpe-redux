@@ -346,6 +346,19 @@ export default {
   // ------------------------------------------------------- appearance (8 rows)
   "settings.field.appearance-skin.label": "Interface theme",
   "settings.field.realtime-alpha.label": "Overlay preview opacity",
+  // RPE migration writes these keys; the review list labels them even when the
+  // current settings page presents the value through a newer key.
+  "settings.field.background-blur.label": "Background blur",
+  "settings.field.hitsound-tap.label": "Tap / Hold hit-sound volume",
+  "settings.field.hitsound-drag.label": "Drag hit-sound volume",
+  "settings.field.hitsound-flick.label": "Flick hit-sound volume",
+  "settings.field.hitsound-custom.label": "Custom hit-sound volume",
+  "settings.field.hitsound-limit-enabled.label": "Limit simultaneous hit sounds",
+  "settings.field.hitsound-limit.label": "Simultaneous hit-sound limit",
+  "settings.field.preview-ratio-width.label": "Preview aspect width",
+  "settings.field.preview-ratio-height.label": "Preview aspect height",
+  "settings.field.timeline-grid-count.label": "Timeline grid count",
+  "settings.field.history-limit.label": "History limit",
 
   // --------------------------------------------------------- editing (14 rows)
   "settings.field.editor-preview-background-enabled.label": "Editor preview background",

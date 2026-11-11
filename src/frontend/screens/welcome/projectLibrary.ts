@@ -27,6 +27,11 @@ interface ProjectHomeOptions {
   importFile: (path: string) => Promise<string | null>;
   /** Import a dropped/selected RPE root; null when the path is not an RPE folder. */
   importRpePath?: (path: string) => Promise<readonly string[] | null>;
+  /** Open the review for a native RPE installation; null when classification failed. */
+  importRpeInstallation?: (
+    path: string,
+    details?: DropClassification["details"],
+  ) => Promise<readonly string[] | null>;
   /** Import an official/PEC chart path; null when the path is not that format. */
   importExternalPath?: (path: string) => Promise<string | null>;
   /** Ask the backend to classify dropped paths before choosing an importer. */
@@ -59,6 +64,10 @@ export class ProjectHome {
   readonly library: LibraryProjectsController;
   private readonly importFile: (path: string) => Promise<string | null>;
   private readonly importRpePath?: (path: string) => Promise<readonly string[] | null>;
+  private readonly importRpeInstallation?: (
+    path: string,
+    details?: DropClassification["details"],
+  ) => Promise<readonly string[] | null>;
   private readonly openProject: (id: string) => Promise<unknown>;
   private readonly openImported?: (id: string) => Promise<unknown>;
   private readonly importExternalPath?: (path: string) => Promise<string | null>;
@@ -79,6 +88,7 @@ export class ProjectHome {
     openImported,
     importFile,
     importRpePath,
+    importRpeInstallation,
     importExternalPath,
     classifyPaths,
     importExtension,
@@ -93,6 +103,7 @@ export class ProjectHome {
   }: ProjectHomeOptions) {
     this.importFile = importFile;
     this.importRpePath = importRpePath;
+    this.importRpeInstallation = importRpeInstallation;
     this.openProject = openProject;
     this.openImported = openImported;
     this.importExternalPath = importExternalPath;
@@ -200,6 +211,19 @@ export class ProjectHome {
   private async importClassified(item: DropClassification): Promise<readonly string[]> {
     const route = dropRoute(item);
     switch (route.action) {
+      case "rpe-installation": {
+        let ids: readonly string[] | null = null;
+        if (this.importRpeInstallation) {
+          ids = await this.importRpeInstallation(route.path, item.details);
+        } else if (this.importRpePath) {
+          ids = await this.importRpePath(route.path);
+        }
+        if (ids === null) {
+          this.unsupportedDrop?.(item);
+          return [];
+        }
+        return ids;
+      }
       case "chart-rpe": {
         const ids = this.importRpePath ? await this.importRpePath(route.path) : null;
         if (ids !== null) {

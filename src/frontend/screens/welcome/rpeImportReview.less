@@ -1,0 +1,198 @@
+// RPE import review: a folder summary followed by one settings list and one
+// chart list. Every row keeps its label on the left and its checkbox on the
+// right. The dialog body scrolls; its footer stays visible.
+
+.rpe-review-dialog {
+  width: min(1040px, calc(100vw - var(--space-7)));
+}
+
+// The review is a workspace, not a sentence: let both lists take a bounded
+// height and scroll inside their own panels.
+.rpe-review-dialog .modal-content {
+  max-height: 58vh;
+  overflow: hidden;
+}
+
+.rpe-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.rpe-review-root {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  font-size: var(--type-caption);
+}
+
+.rpe-review-root-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--accent);
+}
+
+.rpe-review-root strong {
+  flex: none;
+  color: var(--foreground);
+  font-size: var(--type-label);
+  font-weight: 600;
+}
+
+.rpe-review-root-path {
+  min-width: 0;
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+
+.rpe-review-group {
+  max-height: min(46vh, 370px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.rpe-review-group-head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--panel-header);
+}
+
+.rpe-review-group-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  cursor: var(--app-cursor-pointer);
+}
+
+.rpe-review-group-title {
+  color: var(--foreground);
+  font-size: var(--type-label);
+  font-weight: 600;
+}
+
+.rpe-review-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.rpe-review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  cursor: var(--app-cursor-pointer);
+  transition: background-color var(--design-dur-tint) ease;
+}
+
+.rpe-review-row:first-child {
+  border-top: 0;
+}
+
+.rpe-review-row:hover {
+  background: var(--surface-hover);
+}
+
+.rpe-review-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.rpe-review-row-label {
+  color: var(--foreground);
+  font-size: var(--type-label);
+  overflow-wrap: anywhere;
+}
+
+.rpe-review-row-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  text-align: end;
+}
+
+.rpe-review-swatch {
+  flex: none;
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.rpe-review-chart-title {
+  color: var(--foreground);
+  font-size: var(--type-label);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rpe-review-chart-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.rpe-review-chart-separator {
+  color: var(--border-strong);
+}
+
+.rpe-review-chart-group {
+  flex: none;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  white-space: nowrap;
+}
+
+.rpe-review-empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .rpe-review-dialog .modal-content {
+    overflow: auto;
+  }
+
+  .rpe-review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rpe-review-group {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .rpe-review-group-head {
+    position: static;
+  }
+}

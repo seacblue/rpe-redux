@@ -248,7 +248,8 @@
   border-color: var(--input-border);
 }
 
-.redux-app-root input[type="checkbox"]:checked {
+.redux-app-root input[type="checkbox"]:checked,
+.redux-app-root input[type="checkbox"]:indeterminate {
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -258,10 +259,10 @@
   opacity: 0.5;
 }
 
-// The tick. The mask carries the shape and `background-color` carries the ink,
-// so the mark follows `--on-accent` (and therefore every skin) instead of being
-// baked into an image. `input:checked + .redux-check` is what shows it, so no
-// JavaScript state is involved.
+// The tick and the indeterminate bar. The tick's mask carries the shape and
+// `background-color` carries the ink, so the mark follows `--on-accent` (and
+// therefore every skin) instead of being baked into an image. The bar is a
+// plain thick rule because a partial checkbox should read at a glance.
 //
 // The wrapper is exactly the native control's box, so `inset: 0` plus a centred
 // mask puts the ink in the middle at any size and DPI. Do not reintroduce pixel
@@ -290,20 +291,33 @@
   transition: opacity var(--design-dur-tint);
 }
 
+// A partial folder swaps the tick for a thick horizontal rule. The accent box
+// and the bar are both painted here so the state stays legible in every theme.
+.redux-check-bar {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  inline-size: 10px;
+  block-size: 2px;
+  border-radius: var(--design-radius-micro);
+  background: var(--on-accent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--design-dur-tint);
+}
+
 input[type="checkbox"]:checked:not(:indeterminate) ~ .redux-check-tick {
   opacity: 1;
 }
 
-// A partial folder swaps the tick for the design's minus; the box stays the
-// same, which is what makes the tri-state read as one control.
-input[type="checkbox"]:indeterminate ~ .redux-check-minus {
+input[type="checkbox"]:indeterminate ~ .redux-check-bar {
   opacity: 1;
 }
 
 // A disabled control fades itself; the glyph is a sibling and must fade with it,
 // or a checked-but-disabled row shows full-strength ink on a washed box.
 input[type="checkbox"]:disabled:checked ~ .redux-check-tick,
-input[type="checkbox"]:disabled:indeterminate ~ .redux-check-minus {
+input[type="checkbox"]:disabled:indeterminate ~ .redux-check-bar {
   opacity: 0.5;
 }
 

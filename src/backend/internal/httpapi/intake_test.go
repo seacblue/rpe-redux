@@ -76,6 +76,62 @@ func TestIntakeClassifyRouteReportsChartExtensionAndSkin(t *testing.T) {
 	}
 }
 
+func TestIntakeClassifyRouteIncludesRpeDetails(t *testing.T) {
+	data := testStore(t)
+	server := httptest.NewServer(NewAPI(data))
+	defer server.Close()
+
+	root := t.TempDir()
+	for path, body := range map[string]string{
+		"PhiEdit.exe":                "exe",
+		"Settings.json":              `{"FpsLimit":120}`,
+		"Resources/12345/info.txt":   "Name: Route Song\r\nChart: 12345.json\r\nComposer: Route Composer\r\nCharter: Route Charter\r\n",
+		"Resources/12345/12345.json": `{"META":{"name":"Route Song"},"BPMList":[]}`,
+	} {
+		file := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	body, err := json.Marshal(map[string]any{"paths": []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/intake/classify",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Redux-Client", "1")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := decodeAPI[[]intake.Item](t, response, "items")
+	if len(items) != 1 || items[0].Details == nil {
+		t.Fatalf("items = %#v", items)
+	}
+	details := items[0].Details
+	if !details.Installation || details.SettingsText == nil {
+		t.Fatalf("details = %#v", details)
+	}
+	if len(details.Charts) != 1 {
+		t.Fatalf("charts = %#v", details.Charts)
+	}
+	chart := details.Charts[0]
+	if chart.Name != "Route Song" || chart.Composer != "Route Composer" || chart.Charter != "Route Charter" {
+		t.Fatalf("chart = %#v", chart)
+	}
+}
+
 func TestIntakeClassifyRouteRejectsAnOversizedDrop(t *testing.T) {
 	data := testStore(t)
 	server := httptest.NewServer(NewAPI(data))

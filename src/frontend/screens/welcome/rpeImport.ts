@@ -1,12 +1,19 @@
 /**
  * RPE folder migration for the welcome screen.
  *
- * A scan is confirmed once, then settings/hotkeys are applied and each chart
- * folder is opened through the same temporary document store used by a dropped
- * chart. Every chart failure is collected instead of aborting the rest.
+ * A native installation is reviewed row by row; other scans keep the single
+ * summary confirmation. The approved settings/hotkeys are applied and each
+ * selected chart folder is opened through the same temporary document store
+ * used by a dropped chart. Every chart failure is collected instead of aborting
+ * the rest.
  */
 import { applyRpeMigrationPlan } from "../../../core/migration/apply.ts";
-import { createRpeMigrationPlan, type RpeFolderScan } from "../../../core/migration/rpe.ts";
+import {
+  createRpeMigrationPlan,
+  filterRpeMigrationPlan,
+  type RpeFolderScan,
+  type RpeImportSelection,
+} from "../../../core/migration/rpe.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
 import { catalogIdFor, rememberCatalogPath } from "../../../core/global/library/libraryCatalog.ts";
 import { localService } from "../../../core/global/library/service.ts";
@@ -20,7 +27,8 @@ import { writeRpeHotkeyRecord } from "../settings/shortcuts/rpeHotkeyReport.ts";
 import { openSettings } from "../settings/settingsWindowController.ts";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
 import { requestConfirm } from "../../overlays/modals/prompts.ts";
-import { chooseRpeFolder, scanRpeFolder } from "../../platform/desktop/rpeFolder.ts";
+import { requestRpeImportReview } from "./rpeImportReview.ts";
+import { chooseRpeFolder, readRpeFolder } from "../../platform/desktop/rpeFolder.ts";
 
 /** Host callbacks the migration needs from the mounted editor. */
 export interface RpeImportDeps {
@@ -55,22 +63,32 @@ function summaryText(scan: RpeFolderScan): string {
 }
 
 /**
- * Import every chart in a confirmed scan and apply its settings sidecars.
+ * Import the selected charts and apply the selected settings sidecars.
  *
- * The scan runs as one retained background task, so its progress stays
- * reachable from the task list after the confirmation dialog is gone. The
- * summary stays a normal notice: it is the short answer an import produces, not
- * a job that can still be cancelled.
+ * Without a selection the whole scan is applied, which keeps the smaller
+ * single-folder confirmation working. The scan runs as one retained background
+ * task, so its progress stays reachable from the task list after the review is
+ * gone. The summary stays a normal notice: it is the short answer an import
+ * produces, not a job that can still be cancelled.
  */
 export async function migrateRpeScan(
   scan: RpeFolderScan,
   deps: RpeImportDeps,
+  selection?: RpeImportSelection,
 ): Promise<RpeImportSummary> {
   const plan = createRpeMigrationPlan(scan.settingsText, scan.hotkeysText, scan.uiText);
-  const applied = applyRpeMigrationPlan(plan);
+  const approved = selection ? filterRpeMigrationPlan(plan, selection) : plan;
+  const selectedCharts = selection ? new Set(selection.chartPaths) : null;
+  const charts = selectedCharts
+    ? scan.charts.filter((chart) => selectedCharts.has(chart.path))
+    : scan.charts;
+  const applied = applyRpeMigrationPlan(approved);
   // Keep the hotkey mapping for the shortcut page: applied entries explain the
-  // new bindings, and the rest explain why a familiar key is missing.
-  writeRpeHotkeyRecord(plan.hotkeys.entries);
+  // new bindings, and the rest explain why a familiar key is missing. Skipped
+  // shortcuts leave the previous record alone.
+  if (!selection || selection.applyShortcuts) {
+    writeRpeHotkeyRecord(approved.hotkeys.entries);
+  }
   // Batch-level differences (the folder's own sidecars) have no single chart to
   // attach to; per-chart failures are recorded beside their project instead.
   const batchIssues: ImportIssue[] = [
@@ -78,7 +96,7 @@ export async function migrateRpeScan(
     ...applied.warnings.map((detail) => ({ scope: "", detail })),
   ];
   const issues: ImportIssue[] = [...batchIssues];
-  const total = scan.charts.length;
+  const total = charts.length;
   const documents = deps.documents;
   if (!documents) {
     showToast({ message: t("workspace.welcome.rpe.desktopOnly"), level: "warning" });
@@ -112,7 +130,7 @@ export async function migrateRpeScan(
         const chartReports: ImportReport[] = [];
         const projectIds: string[] = [];
         try {
-          for (const [index, chart] of scan.charts.entries()) {
+          for (const [index, chart] of charts.entries()) {
             report(
               t("workspace.welcome.rpe.importingChart", { name: chart.name }),
               total ? index / total : null,
@@ -200,7 +218,7 @@ export async function migrateRpeScan(
                   },
                 ]
               : [];
-          const hotkeyAction = plan.hotkeys.entries.length
+          const hotkeyAction = approved.hotkeys.entries.length
             ? [
                 {
                   label: t("workspace.welcome.rpe.viewHotkeys"),
@@ -245,25 +263,43 @@ export async function migrateRpeScan(
 }
 
 /**
- * Scan one path and, when it is an RPE root, confirm and import it.
+ * Read one path and, when it is an RPE root, confirm and import it.
  *
- * Returns null when the path has no RPE sidecars or chart folders, which lets the
- * home screen fall back to the ordinary single-file import. An empty list means
- * the migration was declined or imported nothing; otherwise the ids name the
+ * A native installation (PhiEdit.exe plus Resources) opens the row-by-row
+ * review so settings and charts can be selected independently. A drop already
+ * carries the classification details; the folder picker reads them on demand.
+ * Other RPE chart folders keep the smaller summary confirmation. Returns null
+ * when the path has no RPE sidecars or chart folders, which lets the home screen
+ * fall back to the ordinary single-file import. An empty list means the
+ * migration was declined or imported nothing; otherwise the ids name the
  * projects it wrote.
  */
 export async function importRpePath(
   path: string,
   deps: RpeImportDeps,
+  details?: RpeFolderScan,
 ): Promise<readonly string[] | null> {
   let scan: RpeFolderScan;
-  try {
-    scan = await scanRpeFolder(path);
-  } catch {
+  if (details) {
+    scan = details;
+  } else {
+    try {
+      scan = await readRpeFolder(path);
+    } catch {
+      return null;
+    }
+  }
+  if (!scan.charts.length && !scan.settingsText && !scan.hotkeysText && !scan.uiText) {
     return null;
   }
-  if (!scan.charts.length && !scan.settingsText && !scan.hotkeysText) {
-    return null;
+  if (scan.installation) {
+    const plan = createRpeMigrationPlan(scan.settingsText, scan.hotkeysText, scan.uiText);
+    const selection = await requestRpeImportReview(scan, plan);
+    if (!selection) {
+      return [];
+    }
+    const summary = await migrateRpeScan(scan, deps, selection);
+    return summary.projectIds;
   }
   const confirmed = await requestConfirm({
     title: t("workspace.welcome.rpe.confirmTitle"),

@@ -174,7 +174,7 @@ export default {
     "已导入 {charts} 张谱面，迁移 {settings} 项设置和 {shortcuts} 个快捷键，{warnings} 条警告。",
   "workspace.welcome.rpe.desktopOnly": "RPE 导入仅在桌面应用中可用。",
   "workspace.welcome.rpe.notFound":
-    "没有找到 RPE 的 Settings.json、Hotkey.txt 或 Resources 谱面目录。",
+    "没有找到包含 PhiEdit.exe 和 Resources 的 RPE 文件夹、设置、快捷键或谱面目录。",
   "workspace.welcome.external.title": "导入官谱或 PhiEdit 谱面",
   "workspace.welcome.external.importing": "正在导入 {name}…",
   "workspace.welcome.external.done": "已导入 {name}，{warnings} 条警告。",

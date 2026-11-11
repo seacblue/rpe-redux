@@ -195,7 +195,7 @@ export default {
     "Imported {charts} chart(s), migrated {settings} setting(s) and {shortcuts} shortcut(s) with {warnings} warning(s).",
   "workspace.welcome.rpe.desktopOnly": "RPE import is available in the desktop application.",
   "workspace.welcome.rpe.notFound":
-    "No RPE Settings.json, Hotkey.txt, or Resources chart folders were found.",
+    "No PhiEdit.exe with a Resources folder, RPE settings, hotkeys, or chart folders were found.",
   "workspace.welcome.external.title": "Import official or PhiEdit chart",
   "workspace.welcome.external.importing": "Importing {name}…",
   "workspace.welcome.external.done": "Imported {name} with {warnings} warning(s).",

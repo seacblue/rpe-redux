@@ -635,15 +635,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     />
   );
   if (isDecoratedCheckbox) {
-    // The wrapper is exactly the native control's box; the two glyphs are
-    // centred in it and the checked/indeterminate state chooses which one is
-    // visible. Using the shared icon catalog keeps the tick in the same artwork
-    // set as every other control.
+    // The wrapper is exactly the native control's box. The tick and the thick
+    // indeterminate bar are centred in it; checked/indeterminate state chooses
+    // which one is visible.
     return (
       <span className="redux-checkbox">
         {control}
         <Icon name="check" size={16} className="redux-check redux-check-tick" />
-        <Icon name="minus" size={16} className="redux-check redux-check-minus" />
+        <span className="redux-check-bar" aria-hidden="true" />
       </span>
     );
   }

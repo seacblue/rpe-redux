@@ -110,8 +110,39 @@ func TestClassifyRpeRoot(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "Resources/123/chart.json", `{"META":{"name":"Root Song"},"BPMList":[]}`)
 	item := Classify(root)
-	if item.Kind != KindChart || item.Format != FormatRPE || item.Entry != root {
-		t.Fatalf("RPE root = %#v", item)
+	if item.Kind != KindChart || item.Format != FormatRPE || item.Entry != root || item.RPEInstallation {
+		t.Fatalf("RPE chart root = %#v", item)
+	}
+
+	installation := filepath.Join(root, "installation")
+	writeFile(t, installation, "PhiEdit.exe", "exe")
+	writeFile(t, installation, "Settings.json", `{"FpsLimit":120}`)
+	writeFile(t, installation, "Resources/456/info.txt", "Name: Install Song\r\nChart: chart.json\r\nComposer: Install Composer\r\nCharter: Install Charter\r\n")
+	writeFile(t, installation, "Resources/456/chart.json", `{"META":{"name":"Install Song"},"BPMList":[]}`)
+	item = Classify(installation)
+	if item.Kind != KindChart || item.Format != FormatRPE || item.Entry != installation || !item.RPEInstallation {
+		t.Fatalf("RPE installation = %#v", item)
+	}
+	if item.Details == nil || !item.Details.Installation || item.Details.SettingsText == nil {
+		t.Fatalf("RPE installation details = %#v", item.Details)
+	}
+	if len(item.Details.Charts) != 1 || item.Details.Charts[0].Composer != "Install Composer" {
+		t.Fatalf("RPE chart details = %#v", item.Details.Charts)
+	}
+
+	// Resources alone is a chart root, not a native installation.
+	resourcesOnly := filepath.Join(root, "resources-only")
+	writeFile(t, resourcesOnly, "Resources/789/chart.json", `{"META":{"name":"Chart Only"},"BPMList":[]}`)
+	if item = Classify(resourcesOnly); item.RPEInstallation {
+		t.Fatalf("Resources without PhiEdit.exe = %#v", item)
+	}
+
+	wrapped := filepath.Join(root, "game")
+	writeFile(t, wrapped, "rpe/PhiEdit.exe", "exe")
+	writeFile(t, wrapped, "rpe/Resources/1/chart.json", `{"META":{"name":"Wrapped"},"BPMList":[]}`)
+	item = Classify(wrapped)
+	if item.Entry != filepath.Join(wrapped, "rpe") || !item.RPEInstallation {
+		t.Fatalf("wrapped installation = %#v", item)
 	}
 }
 

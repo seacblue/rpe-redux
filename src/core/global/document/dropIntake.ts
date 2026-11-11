@@ -7,6 +7,8 @@
  * live service or a Tauri window.
  */
 
+import type { RpeFolderScan } from "../../migration/rpe.ts";
+
 /** Owners the intake service can identify. */
 export type DropKind = "chart" | "extension" | "skin" | "unknown";
 
@@ -28,6 +30,10 @@ export interface DropClassification {
   candidates?: string[];
   /** Extension manifest id. */
   packageId?: string;
+  /** True when the folder root carries PhiEdit.exe and a Resources folder. */
+  rpeInstallation?: boolean;
+  /** Parsed settings and chart rows for a classified RPE root. */
+  details?: RpeFolderScan;
   /** False when the package shell was recognized but failed basic checks. */
   valid: boolean;
   /** English diagnostic for logs; not shown as a localized message. */
@@ -36,6 +42,7 @@ export interface DropClassification {
 
 /** Consequence of one classification. */
 export type DropRoute =
+  | { action: "rpe-installation"; path: string }
   | { action: "chart-rpe"; path: string; entry: string }
   | { action: "chart-external"; path: string; format: "official" | "pec" }
   | { action: "extension"; item: DropClassification }
@@ -45,10 +52,12 @@ export type DropRoute =
 /**
  * Choose the owning surface for one classification.
  *
- * RPE charts stay with the migration/document opener because the service can
- * return either a chart file or an RPE root. Official and PEC charts use the
- * external importer. Packages stop at their settings surface; the classifier
- * never installs code or writes a skin by itself.
+ * A native RPE installation opens the review dialog, where its settings and
+ * chart folders are selected one by one. Other RPE charts stay with the
+ * migration/document opener because the service can return either a chart file
+ * or an RPE root. Official and PEC charts use the external importer. Packages
+ * stop at their settings surface; the classifier never installs code or writes
+ * a skin by itself.
  */
 export function dropRoute(item: DropClassification): DropRoute {
   if (item.kind === "extension") {
@@ -59,6 +68,9 @@ export function dropRoute(item: DropClassification): DropRoute {
   }
   if (item.kind !== "chart") {
     return { action: "unsupported", item };
+  }
+  if (item.rpeInstallation) {
+    return { action: "rpe-installation", path: item.path };
   }
   const entry = item.entry || item.path;
   if (item.format === "rpe") {

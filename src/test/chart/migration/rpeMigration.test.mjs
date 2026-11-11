@@ -5,7 +5,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { applyRpeMigrationPlan } from "../../../core/migration/apply.ts";
-import { createRpeMigrationPlan, parseRpeHotkeys } from "../../../core/migration/rpe.ts";
+import {
+  createRpeMigrationPlan,
+  filterRpeMigrationPlan,
+  parseRpeHotkeys,
+} from "../../../core/migration/rpe.ts";
 import { shortcutRegistry } from "../../../core/shortcuts/registry.ts";
 import { defineValue, values } from "../../../core/state/values.ts";
 
@@ -149,6 +153,34 @@ test("RPE hotkey parsing is a pure sidecar reader", () => {
     { id: "note.place.tap", bindings: ["A"] },
     { id: "playback.pause", bindings: ["SPACE"] },
   ]);
+});
+
+test("the review keeps only checked settings, shortcuts, and language", () => {
+  const plan = createRpeMigrationPlan(
+    JSON.stringify({ FpsLimit: 120, NoteSize: 175, Language: "zh.txt" }),
+    "AddTap A\r\nPause SPACE",
+  );
+  const filtered = filterRpeMigrationPlan(plan, {
+    settingKeys: ["render-fps"],
+    applyShortcuts: false,
+    applyLanguage: true,
+  });
+  assert.deepEqual(
+    filtered.settings.map((setting) => setting.key),
+    ["render-fps"],
+  );
+  assert.deepEqual(filtered.shortcuts, []);
+  assert.deepEqual(filtered.hotkeys.entries, []);
+  assert.equal(filtered.language, "zh");
+
+  const all = filterRpeMigrationPlan(plan, {
+    settingKeys: plan.settings.map((setting) => setting.key),
+    applyShortcuts: true,
+    applyLanguage: false,
+  });
+  assert.equal(all.settings.length, plan.settings.length);
+  assert.equal(all.shortcuts.length, plan.shortcuts.length);
+  assert.equal(all.language, null);
 });
 
 test("applying a plan writes only declared settings and shortcuts", () => {

@@ -49,6 +49,8 @@ const (
 	maxArchiveChartCandidates = 16
 	// maxWrapperDepth lets a downloaded/extracted folder keep one wrapper.
 	maxWrapperDepth = 2
+	// maxInstallationSiblings bounds the search for an RPE root inside a parent.
+	maxInstallationSiblings = 64
 	// maxPathLength bounds a path accepted from the renderer.
 	maxPathLength = 4096
 )
@@ -78,6 +80,12 @@ type Item struct {
 	Candidates []string `json:"candidates,omitempty"`
 	// PackageID is an Extension manifest id.
 	PackageID string `json:"packageId,omitempty"`
+	// RPEInstallation marks a folder whose root carries PhiEdit.exe and a
+	// Resources folder. The frontend opens its review dialog before importing
+	// the settings and chart folders that classification found.
+	RPEInstallation bool `json:"rpeInstallation,omitempty"`
+	// Details carries the settings and chart rows for a classified RPE root.
+	Details *RpeFolderScan `json:"details,omitempty"`
 	// Valid is false when the package shell was found but failed its basic
 	// shape checks; Kind still names the owner that should explain the error.
 	Valid bool `json:"valid"`
@@ -153,11 +161,16 @@ func classifyFile(file string) Item {
 // identifies an Extension even when it carries JSON data, and a valid chart
 // identifies a chart folder even when an info.yml provides its metadata.
 func classifyDirectory(original, dir string, depth int) Item {
+	if root := rpeInstallationRoot(dir); root != "" {
+		item := chartItem(original, root, FormatRPE, "", nil, "RPE installation")
+		item.RPEInstallation = true
+		return withRpeDetails(item, root)
+	}
 	if manifest := findChild(dir, "manifest.json"); manifest != "" {
 		return classifyExtension(original, manifest, dir)
 	}
 	if hasChartRoot(dir) {
-		return chartItem(original, dir, FormatRPE, "", nil, "RPE chart root")
+		return withRpeDetails(chartItem(original, dir, FormatRPE, "", nil, "RPE chart root"), dir)
 	}
 	chart, format, name, candidates := findChartInDirectory(dir)
 	if chart != "" {
@@ -365,6 +378,57 @@ func classifyExtensionArchive(file, manifestName string, manifest *zip.File, ent
 		}
 	}
 	return item
+}
+
+// rpeInstallationRoot returns the folder that carries PhiEdit.exe plus a
+// Resources folder. A wrapper named `rpe` is accepted so dropping the parent
+// game folder routes to the same installation.
+func rpeInstallationRoot(dir string) string {
+	if isRpeInstallation(dir) {
+		return dir
+	}
+	if preferred := findChild(dir, "rpe"); preferred != "" && isRpeInstallation(preferred) {
+		return preferred
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	visited := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		visited++
+		if visited > maxInstallationSiblings {
+			break
+		}
+		candidate := filepath.Join(dir, entry.Name())
+		if isRpeInstallation(candidate) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// withRpeDetails attaches the parsed rows a review dialog needs. A failed read
+// keeps the classification itself valid, so the owner can still explain why the
+// folder could not be inspected.
+func withRpeDetails(item Item, root string) Item {
+	if scan, err := ReadRpeFolder(root); err == nil {
+		item.Details = &scan
+		item.RPEInstallation = scan.Installation
+	}
+	return item
+}
+
+// isRpeInstallation requires both native markers: a regular PhiEdit.exe file
+// and a Resources directory. Either one alone is not enough.
+func isRpeInstallation(dir string) bool {
+	executable := findChild(dir, "PhiEdit.exe")
+	resources := findChild(dir, "Resources")
+	return executable != "" && isRegularFile(executable) &&
+		resources != "" && isDirectory(resources)
 }
 
 // hasChartRoot reports whether dir carries an RPE Resources or Charts child
