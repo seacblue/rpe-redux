@@ -114,6 +114,7 @@ export default {
   "editor.app.curve.endBeat": "终点拍",
   "editor.app.curve.endX": "终点 X",
   "editor.app.curve.generated": "已生成 {count} 个曲线音符",
+  "editor.app.curve.needEnd": "请先选择曲线终点",
   "editor.app.curve.needStart": "请先选择曲线起点",
   "editor.app.curve.nothingToGenerate": "当前参数没有可生成的中间音符",
   "editor.app.curve.startBeat": "起点拍",

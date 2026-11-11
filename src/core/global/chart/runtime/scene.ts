@@ -251,6 +251,31 @@ export class LineRuntime {
   declare simpleState: boolean;
   declare staticScaleY: number;
   declare staticColor: number[];
+  /** Scratch line states used to anchor an active Hold's tail to its start time. */
+  private readonly holdStartState: LineState = {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    alpha: 0,
+    scaleX: 1,
+    scaleY: 1,
+    color: [255, 255, 255],
+    text: "",
+    incline: 0,
+    floor: 0,
+  };
+  private readonly holdNowState: LineState = {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    alpha: 0,
+    scaleX: 1,
+    scaleY: 1,
+    color: [255, 255, 255],
+    text: "",
+    incline: 0,
+    floor: 0,
+  };
 
   /** Compile the line's layers, controls and note indexes for sampling. */
   constructor(
@@ -713,6 +738,17 @@ export class LineRuntime {
     target.x = horizontal;
     target.y = vertical;
     target.tail = (entry.tail - state.floor) * speed * side;
+    if (activeHold && entry.tail === entry.floor) {
+      const localNow = this.state(seconds, this.holdNowState);
+      const localStart = this.state(entry.start, this.holdStartState);
+      const radians = (state.rotation * Math.PI) / 180;
+      // RPE Recorder anchors a zero-length Hold's tail to the line position
+      // from the Hold's start time. The body therefore spans the line's local
+      // motion instead of collapsing onto the head while the Hold is active.
+      target.tail +=
+        (localStart.x - localNow.x) * Math.sin(radians) +
+        (localStart.y - localNow.y) * Math.cos(radians);
+    }
     target.size =
       (note.size ?? 1) * (isHold || !this.hasSizeControl ? 1 : this.controls.size.value(distance));
     target.alpha =
@@ -720,9 +756,9 @@ export class LineRuntime {
       (this.hasAlphaControl ? this.controls.alpha.value(distance) : 1);
     target.skew =
       isHold || !this.hasSkewControl ? 0 : positionX * this.controls.skew.value(distance);
-    // A zero-length Hold draws only its tail so the two cap sprites do not overlap.
-    const zeroLength = isHold && Math.abs(target.tail - target.y) < 1e-6;
-    target.showHead = !activeHold && !zeroLength;
+    // Match the gameplay renderer: the head disappears once the Hold arrives.
+    // A future zero-length Hold still paints both caps before its start time.
+    target.showHead = !activeHold;
     return target;
   }
 }

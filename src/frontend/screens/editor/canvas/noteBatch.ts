@@ -418,13 +418,13 @@ export class NoteBatch {
     alpha: number,
     color?: NoteColor | null,
     fallbackRotation = 0,
+    capScale = 1,
   ): boolean {
     if (!this.active || this.isContextLost()) {
       return false;
     }
     const textures = this.holdTextures(skin, highlight);
-    const body = textures.body;
-    const end = textures.end;
+    const { body, end } = textures;
     let head = showHead ? textures.head : null;
     if (showHead && head === undefined) {
       head = this.descriptor(
@@ -444,8 +444,8 @@ export class NoteBatch {
     if (showHead && textures.headRatio === undefined) {
       textures.headRatio = head ? head.useful.height / head.useful.width : 0;
     }
-    const headLength = head ? width * (textures.headRatio ?? 0) : 0;
-    const tailLength = width * textures.endRatio;
+    const headLength = head ? width * (textures.headRatio ?? 0) * capScale : 0;
+    const tailLength = width * textures.endRatio * capScale;
     const direction = { x: -Math.sin(rotation), y: Math.cos(rotation) };
     const layout = holdLayout(headX, headY, tailX, tailY, headLength, tailLength, direction);
     const bodyAdded =

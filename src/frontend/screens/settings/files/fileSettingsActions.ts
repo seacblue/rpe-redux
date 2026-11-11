@@ -6,11 +6,14 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { toolbar } from "../../../../core/shell/registries/toolbar.ts";
-import { showToast } from "../../../../design/patterns/ToastHost.tsx";
+import { isDesktop } from "../../../../core/platform/environment.ts";
 import { t } from "../../../../i18n/index.ts";
 
 /** Register the Files-page actions; returns the toolbar disposers. */
 export function registerFileSettingsActions() {
+  if (!isDesktop()) {
+    return [];
+  }
   return [
     toolbar.register({
       kind: "action",
@@ -22,7 +25,8 @@ export function registerFileSettingsActions() {
       tooltip: "settings.field.open-data-folder.description",
       toolbar: false,
       run: () => {
-        void invoke("open_app_data_folder").catch((reason: unknown) => {
+        void invoke("open_app_data_folder").catch(async (reason: unknown) => {
+          const { showToast } = await import("../../../../design/patterns/ToastHost.tsx");
           showToast({
             message: t("settings.action.openDataFolderFailed", {
               message: reason instanceof Error ? reason.message : String(reason),

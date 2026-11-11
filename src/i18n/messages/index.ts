@@ -21,6 +21,7 @@ import enShortcuts from "./en/shortcuts.ts";
 import enChrome from "./en/chrome.ts";
 import enWindowControls from "./en/windowControls.ts";
 import enWorkspace from "./en/workspace.ts";
+import enWelcomeReview from "./en/welcomeReview.ts";
 import enWorkspaceProgress from "./en/workspaceProgress.ts";
 import enDocumentErrors from "./en/documentErrors.ts";
 import enEditor from "./en/editor.ts";
@@ -39,6 +40,7 @@ import zhShortcuts from "./zh/shortcuts.ts";
 import zhChrome from "./zh/chrome.ts";
 import zhWindowControls from "./zh/windowControls.ts";
 import zhWorkspace from "./zh/workspace.ts";
+import zhWelcomeReview from "./zh/welcomeReview.ts";
 import zhWorkspaceProgress from "./zh/workspaceProgress.ts";
 import zhDocumentErrors from "./zh/documentErrors.ts";
 import zhEditor from "./zh/editor.ts";
@@ -59,6 +61,7 @@ export const en = {
   ...enChrome,
   ...enWindowControls,
   ...enWorkspace,
+  ...enWelcomeReview,
   ...enWorkspaceProgress,
   ...enDocumentErrors,
   ...enEditor,
@@ -83,6 +86,7 @@ export const zh: Record<MessageKey, string> = {
   ...zhChrome,
   ...zhWindowControls,
   ...zhWorkspace,
+  ...zhWelcomeReview,
   ...zhWorkspaceProgress,
   ...zhDocumentErrors,
   ...zhEditor,

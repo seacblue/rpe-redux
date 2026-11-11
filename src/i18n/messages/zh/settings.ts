@@ -291,6 +291,17 @@ export default {
 
   "settings.field.appearance-skin.label": "界面主题",
   "settings.field.realtime-alpha.label": "叠层预览不透明度",
+  "settings.field.background-blur.label": "背景模糊",
+  "settings.field.hitsound-tap.label": "Tap / Hold 打击音音量",
+  "settings.field.hitsound-drag.label": "Drag 打击音音量",
+  "settings.field.hitsound-flick.label": "Flick 打击音音量",
+  "settings.field.hitsound-custom.label": "自定义打击音音量",
+  "settings.field.hitsound-limit-enabled.label": "限制同时播放的打击音",
+  "settings.field.hitsound-limit.label": "同时播放打击音上限",
+  "settings.field.preview-ratio-width.label": "预览画幅宽度",
+  "settings.field.preview-ratio-height.label": "预览画幅高度",
+  "settings.field.timeline-grid-count.label": "时间轴网格数量",
+  "settings.field.history-limit.label": "历史记录上限",
 
   "settings.field.editor-preview-background-enabled.label": "编辑器预览背景",
   "settings.field.editor-preview-background-enabled.description":
@@ -587,6 +598,7 @@ export default {
   "settings.skin.warning.missingActive": "无法找到当前正在使用的音符皮肤：{id}。请重新选择皮肤。",
   "settings.skin.error.list": "皮肤库读取失败：{message}",
   "settings.skin.error.action": "皮肤包操作失败：{message}",
+  "settings.skin.error.browserStorage": "浏览器存储不可用，无法保存皮肤包。",
   "settings.skin.error.bundledUnavailable": "内置音符皮肤不可用。",
   "settings.skin.error.bundledAssetUnavailable": "内置音符皮肤资源不可用：{name}",
 

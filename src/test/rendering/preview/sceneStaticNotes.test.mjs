@@ -1,7 +1,10 @@
-/** Verifies speed-zero notes use the visible-time index without changing author order. */
+/**
+ * Verifies zero-speed scene sampling: visible-time ordering, Hold cap hiding,
+ * and the line-motion trail that keeps zero-length Hold bodies continuous.
+ */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart, createNote } from "../../../core/global/chart/chart.ts";
+import { createChart, createEvent, createNote } from "../../../core/global/chart/chart.ts";
 import { SceneRuntime } from "../../../core/global/chart/runtime/scene.ts";
 import { NoteVisibilityDirectory } from "../../../core/global/chart/runtime/noteVisibility.ts";
 import { fromNumber } from "../../../core/global/chart/timing/beat.ts";
@@ -63,6 +66,86 @@ test("yControl lines use the time index instead of scanning every note", () => {
     [1, 3],
     "yControl does not turn the time broad phase back into a full scan",
   );
+});
+
+test("a zero-length Hold hides its head cap while active", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  const hold = createNote(2, 5, 0, 5);
+  hold.speed = 0;
+  line.notes = [hold];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const start = tempo.seconds(5);
+  const state = scene.sample(start + 0.01)[0];
+  const entry = { note: hold, noteIndex: 0, start, end: start, floor: 0, tail: 0 };
+  const sampled = scene.lines[0].noteState(entry, state, start + 0.01);
+
+  assert.ok(Math.abs(sampled.tail - sampled.y) < 1e-9);
+  assert.equal(sampled.showHead, false, "only the tail cap is painted");
+});
+
+test("an active zero-speed Hold spans the line's motion since its start", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  line.eventLayers[0].moveYEvents = [createEvent(100, 0, 0, 10)];
+  line.eventLayers[0].speedEvents = [createEvent(0)];
+  const hold = createNote(2, 2, 0, 4);
+  hold.speed = 0;
+  line.notes = [hold];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const seconds = tempo.seconds(3);
+  const state = scene.sample(seconds)[0];
+  const entry = scene.lines[0].notes[0];
+  const sampled = scene.lines[0].noteState(entry, state, seconds);
+
+  assert.ok(
+    Math.abs(sampled.tail - sampled.y - 10) < 1e-6,
+    "the body reaches back to the line position where the Hold started",
+  );
+  assert.equal(sampled.showHead, false, "only the tail cap is painted");
+});
+
+test("a future zero-length Hold keeps its head cap", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  const hold = createNote(2, 5, 0, 5);
+  hold.speed = 0;
+  line.notes = [hold];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const start = tempo.seconds(5);
+  const state = scene.sample(start - 0.01)[0];
+  const entry = { note: hold, noteIndex: 0, start, end: start, floor: 0, tail: 0 };
+  const sampled = scene.lines[0].noteState(entry, state, start - 0.01);
+
+  assert.ok(Math.abs(sampled.tail - sampled.y) < 1e-9);
+  assert.equal(sampled.showHead, true, "the head is painted before the Hold arrives");
+});
+
+test("an active Hold with a body still hides its head cap", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  const hold = createNote(2, 5, 0, 6);
+  line.notes = [hold];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const start = tempo.seconds(5);
+  const state = scene.sample(start + 0.01)[0];
+  const entry = { note: hold, noteIndex: 0, start, end: tempo.seconds(6), floor: 0, tail: 120 };
+  const sampled = scene.lines[0].noteState(entry, state, start + 0.01);
+
+  assert.notEqual(sampled.tail, sampled.y);
+  assert.equal(sampled.showHead, false);
 });
 
 test("a reversed hold is omitted from the scene runtime", () => {

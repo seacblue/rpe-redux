@@ -165,6 +165,20 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   this.gestures.hoverArea = "notes";
   const hit = this.hit(position);
   const session = this.getSession();
+  // A Ctrl+click on a note is the curve-note quick pick; it must win over the
+  // ordinary additive selection and any sweep shortcut bound to the same press.
+  if (event.button === 0 && event.ctrlKey && !event.shiftKey && !event.altKey && hit) {
+    // The curve is generated on the active line, so a pick on another
+    // multi-line panel must make that line active before the anchor is stored.
+    if (hit.lineIndex !== session.lineIndex) {
+      session.selectLine(hit.lineIndex);
+    }
+    if (this.gestures.curveQuickPick?.(hit.item, hit.index, hit.lineIndex)) {
+      session.focus = "notes";
+      this.changed();
+      return;
+    }
+  }
   const sweepMode = timelineSweepMode(session, event, "notes");
   if (
     sweepMode &&
@@ -203,7 +217,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   } else {
     session.multiSelectionIntent = null;
   }
-  if (event.button === 0 && hit && this.gestures.curvePick?.(hit.item, hit.index)) {
+  if (event.button === 0 && hit && this.gestures.curvePick?.(hit.item, hit.index, hit.lineIndex)) {
     return;
   }
   if (

@@ -38,8 +38,9 @@ function anchorNote(beat, positionX) {
 function editorWithMutableNotes(getNotes) {
   const fields = createValue({ initial: null });
   const pickMode = createValue({ initial: null });
+  const quick = createValue({ initial: null });
   const editor = createCurveEditor({
-    state: { fields, pickMode },
+    state: { fields, pickMode, quick },
     getDivision: () => 100,
     getNotes,
     setPickMode: pickMode.set,

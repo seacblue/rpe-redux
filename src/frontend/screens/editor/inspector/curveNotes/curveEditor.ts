@@ -15,7 +15,7 @@ import {
 import { planCurveNotes } from "../../../../../core/global/chart/editing/curveNotes.ts";
 import { t } from "../../../../../i18n/index.ts";
 import type { JudgeLineNote } from "../../../../../core/global/chart/chart.ts";
-import type { CurveState } from "./model.ts";
+import type { CurveQuickAnchor, CurveQuickPhase, CurveQuickSnapshot, CurveState } from "./model.ts";
 import { DEFAULT_CURVE_FIELD_VALUES } from "./model.ts";
 import type { CurveFieldValues } from "./CurveFieldsView.tsx";
 import { createCurveGhostCache } from "./ghostCache.ts";
@@ -48,6 +48,70 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
   let lastGhostError: string | null = null;
   let previewEnabled = true;
   let values: CurveFieldValues = { ...DEFAULT_CURVE_FIELD_VALUES };
+  let quickActive = false;
+  let quickPhase: CurveQuickPhase = "start";
+  let quickStartLine: number | undefined;
+  let quickEndLine: number | undefined;
+  let quickType = DEFAULT_CURVE_FIELD_VALUES.type;
+  let lastQuickKey = "";
+
+  /** A curve note type, or the pane's current type when it is not a curve type. */
+  function curveQuickType(noteType: number): number {
+    return [1, 2, 3, 4].includes(noteType) ? noteType : values.type;
+  }
+
+  /** Stable identity for one quick anchor in the published snapshot. */
+  function quickAnchorKey(anchor: CurveQuickAnchor | null): string {
+    return anchor
+      ? `${anchor.startTime.join("/")}@${anchor.positionX}#${anchor.lineIndex ?? ""}`
+      : "-";
+  }
+
+  /** Publishes the quick panel read model, skipping an unchanged snapshot. */
+  function publishQuick(): void {
+    const snapshot: CurveQuickSnapshot = {
+      visible: quickActive && open && start !== null && end !== null,
+      phase: quickPhase,
+      start: start
+        ? {
+            startTime: beatCopy(start.startTime),
+            positionX: start.positionX,
+            ...(quickStartLine === undefined ? {} : { lineIndex: quickStartLine }),
+          }
+        : null,
+      end: end
+        ? {
+            startTime: beatCopy(end.startTime),
+            positionX: end.positionX,
+            ...(quickEndLine === undefined ? {} : { lineIndex: quickEndLine }),
+          }
+        : null,
+      type: quickType,
+      easingType: values.easingType,
+    };
+    const key = [
+      snapshot.visible ? 1 : 0,
+      snapshot.phase,
+      quickAnchorKey(snapshot.start),
+      quickAnchorKey(snapshot.end),
+      snapshot.type,
+      snapshot.easingType,
+    ].join("|");
+    if (key === lastQuickKey) {
+      return;
+    }
+    lastQuickKey = key;
+    deps.state.quick.set(snapshot);
+  }
+
+  /** Stops the quick pick without changing the values the pane still shows. */
+  function hideQuick(): void {
+    quickActive = false;
+    quickPhase = "start";
+    quickStartLine = undefined;
+    quickEndLine = undefined;
+    publishQuick();
+  }
 
   /** Publishes the current draft to the pane and repaints the ghost. */
   function updatePanel(): void {
@@ -76,6 +140,7 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
         onPreviewChange: setPreview,
       }),
     );
+    publishQuick();
     deps.invalidate();
   }
 
@@ -113,6 +178,7 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
       type: values.type,
     };
     anchorMode = null;
+    hideQuick();
     deps.setPickMode(null);
     deps.activatePane();
     updatePanel();
@@ -125,6 +191,7 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
     start = null;
     end = null;
     anchorMode = null;
+    hideQuick();
     deps.setPickMode(null);
     deps.closePane();
     deps.invalidate();
@@ -135,6 +202,7 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
     if (!open) {
       openPanel();
     }
+    hideQuick();
     deps.showSingleNoteTimeline();
     anchorMode = endAnchor ? "end" : "start";
     if (endAnchor && !start) {
@@ -146,10 +214,14 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
   }
 
   /** Writes a picked anchor into the draft; returns false when none is pending. */
-  function applyAnchor(anchor: CurveAnchor): boolean {
+  function applyAnchor(anchor: CurveAnchor, lineIndex?: number): boolean {
     if (anchorMode === "start") {
       start = anchor;
+      quickStartLine = lineIndex;
       anchorMode = null;
+      if (quickActive) {
+        quickPhase = start && end ? "complete" : "end";
+      }
       deps.setPickMode(null);
       values.startTime = normalizeBeat(anchor.startTime);
       values.startX = anchor.positionX;
@@ -165,7 +237,11 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
       return true;
     }
     end = anchor;
+    quickEndLine = lineIndex;
     anchorMode = null;
+    if (quickActive) {
+      quickPhase = "complete";
+    }
     deps.setPickMode(null);
     values.endTime = normalizeBeat(anchor.startTime);
     values.endX = anchor.positionX;
@@ -176,15 +252,64 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
   }
 
   /** Uses a timeline note as the pending anchor. */
-  function pick(note: TimelineNote): boolean {
+  function pick(note: TimelineNote, _index?: number, lineIndex?: number): boolean {
     if (!anchorMode) {
       return false;
     }
-    return applyAnchor({
+    return applyAnchor(
+      {
+        startTime: beatCopy(note.startTime),
+        positionX: note.positionX,
+        type: note.type,
+      },
+      lineIndex,
+    );
+  }
+
+  /**
+   * Starts or advances a quick pick from a Ctrl+clicked note.
+   *
+   * The first note is the start and puts the editor in end-pick mode; the next
+   * note completes the draft. A Ctrl+click after both anchors starts a new
+   * curve, so repeated Ctrl+clicks never merge two intended selections.
+   */
+  function quickPick(note: TimelineNote, _index?: number, lineIndex?: number): boolean {
+    if (!open) {
+      openPanel();
+    }
+    deps.showSingleNoteTimeline();
+    const anchor: CurveAnchor = {
       startTime: beatCopy(note.startTime),
       positionX: note.positionX,
       type: note.type,
-    });
+    };
+    quickActive = true;
+    if (quickPhase !== "end" || !start) {
+      quickPhase = "end";
+      start = anchor;
+      quickStartLine = lineIndex;
+      end = null;
+      quickEndLine = undefined;
+      quickType = curveQuickType(anchor.type);
+      values.startTime = normalizeBeat(anchor.startTime);
+      values.startX = anchor.positionX;
+      values.endTime = normalizeBeat(anchor.startTime);
+      values.endX = anchor.positionX;
+      anchorMode = "end";
+      deps.setPickMode("end");
+    } else {
+      quickPhase = "complete";
+      end = anchor;
+      quickEndLine = lineIndex;
+      values.endTime = normalizeBeat(anchor.startTime);
+      values.endX = anchor.positionX;
+      anchorMode = null;
+      deps.setPickMode(null);
+    }
+    ghostCache.invalidate();
+    updatePanel();
+    deps.invalidate();
+    return true;
   }
 
   /** Pick an arbitrary grid point, independent of any existing note. */
@@ -201,9 +326,26 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
 
   /** Generates the curve notes and commits them through the host. */
   function generate(): void {
+    if (quickActive && !end) {
+      deps.notify(t("editor.app.curve.needEnd"), "warning");
+      return;
+    }
+    // Quick picks may be made in either click order. Generation always runs
+    // forward in time, so a start after the end swaps both anchors first.
+    if (compareBeats(values.startTime, values.endTime) > 0) {
+      values = {
+        ...values,
+        startTime: values.endTime,
+        endTime: values.startTime,
+        startX: values.endX,
+        endX: values.startX,
+      };
+      updatePanel();
+    }
     try {
       const plan = planCurveNotes({
         ...values,
+        type: quickActive ? quickType : values.type,
         division: deps.getDivision(),
         existing: deps.getNotes(),
       });
@@ -218,13 +360,60 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
     }
   }
 
+  /** Changes the quick panel's own note type without touching the pane's fields. */
+  function setQuickType(type: number): void {
+    if (![1, 2, 3, 4].includes(type) || type === quickType) {
+      return;
+    }
+    quickType = type;
+    ghostCache.invalidate();
+    publishQuick();
+    deps.invalidate();
+  }
+
+  /** Changes only the easing preset while the quick panel is open. */
+  function setEasing(easingType: number): void {
+    if (
+      !Number.isInteger(easingType) ||
+      easingType < 1 ||
+      easingType > 29 ||
+      easingType === values.easingType
+    ) {
+      return;
+    }
+    values = { ...values, easingType };
+    ghostCache.invalidate();
+    updatePanel();
+    deps.invalidate();
+  }
+
+  /** Drops both quick anchors and returns anchor picking to idle. */
+  function dismissQuick(): void {
+    quickActive = false;
+    quickPhase = "start";
+    quickStartLine = undefined;
+    quickEndLine = undefined;
+    anchorMode = null;
+    start = null;
+    end = null;
+    deps.setPickMode(null);
+    ghostCache.invalidate();
+    updatePanel();
+    deps.invalidate();
+  }
+
   /** Clears the anchors, pick mode, and open flag without notifying the host. */
   function resetDraft(): void {
     anchorMode = null;
     start = null;
     end = null;
     open = false;
+    quickActive = false;
+    quickPhase = "start";
+    quickStartLine = undefined;
+    quickEndLine = undefined;
     ghostCache.invalidate();
+    publishQuick();
   }
 
   /** Returns the preview notes, reporting each new ghost error once. */
@@ -237,7 +426,7 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
       active: open,
       start,
       end,
-      values,
+      values: quickActive ? { ...values, type: quickType } : values,
       division: deps.getDivision(),
       notes: deps.getNotes(),
       onError: (error) => {
@@ -264,8 +453,12 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
     closePanel,
     capture,
     pick,
+    quickPick,
     pickPoint,
     generate,
+    setEasing,
+    setQuickType,
+    dismissQuick,
     resetDraft,
     setPreview,
     deactivate: () => {
@@ -275,7 +468,12 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
       // event can invalidate it.
       open = false;
       anchorMode = null;
+      quickActive = false;
+      quickPhase = "start";
+      quickStartLine = undefined;
+      quickEndLine = undefined;
       ghostCache.invalidate();
+      publishQuick();
       deps.setPickMode(null);
       deps.invalidate();
     },

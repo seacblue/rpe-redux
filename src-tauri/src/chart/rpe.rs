@@ -29,6 +29,10 @@ pub struct RpeChartFolder {
     pub picture: Option<String>,
     /// Chart file name for display; `path` is the path the importer opens.
     pub chart: Option<String>,
+    /// Composer written by RPE Info.txt.
+    pub composer: Option<String>,
+    /// Charter written by RPE Info.txt.
+    pub charter: Option<String>,
     pub last_edit: Option<String>,
     pub autosaves: usize,
 }
@@ -38,6 +42,8 @@ pub struct RpeChartFolder {
 #[serde(rename_all = "camelCase")]
 pub struct RpeFolderScan {
     pub root: String,
+    /// True when the root carries PhiEdit.exe and a Resources folder.
+    pub installation: bool,
     pub settings_text: Option<String>,
     pub hotkeys_text: Option<String>,
     pub ui_text: Option<String>,
@@ -200,6 +206,16 @@ fn chart_entry(folder: &Path) -> Option<RpeChartFolder> {
             .cloned()
             .filter(|value| !value.is_empty()),
         chart: Some(chart_name),
+        composer: info
+            .get("composer")
+            .or_else(|| info.get("artist"))
+            .cloned()
+            .filter(|value| !value.trim().is_empty()),
+        charter: info
+            .get("charter")
+            .or_else(|| info.get("mapper"))
+            .cloned()
+            .filter(|value| !value.trim().is_empty()),
         last_edit: info
             .get("lastedittime")
             .cloned()
@@ -213,6 +229,14 @@ fn has_rpe_marker(directory: &Path) -> bool {
     ["Resources", "Settings.json", "Hotkey.txt"]
         .iter()
         .any(|name| find_child(directory, name).is_some())
+}
+
+/// A native installation carries both PhiEdit.exe and a Resources folder.
+fn has_installation_marker(directory: &Path) -> bool {
+    let executable = find_child(directory, "PhiEdit.exe");
+    let resources = find_child(directory, "Resources");
+    executable.map(|path| path.is_file()).unwrap_or(false)
+        && resources.map(|path| path.is_dir()).unwrap_or(false)
 }
 
 /// Accept a parent such as a game folder and descend one level to its `rpe` root.
@@ -321,6 +345,7 @@ fn scan_rpe_root_unchecked(path: &str) -> Result<RpeFolderScan, String> {
     });
     Ok(RpeFolderScan {
         root: root.to_string_lossy().into_owned(),
+        installation: has_installation_marker(&root),
         settings_text,
         hotkeys_text,
         ui_text,
@@ -340,18 +365,20 @@ mod tests {
         let resources = root.path().join("Resources");
         let folder = resources.join("12345");
         fs::create_dir_all(&folder).expect("chart folder");
+        fs::write(root.path().join("PhiEdit.exe"), "exe").expect("executable");
         fs::write(root.path().join("Settings.json"), "{\"FpsLimit\":120}").expect("settings");
         fs::write(root.path().join("Hotkey.txt"), "AddTap A\n").expect("hotkeys");
         fs::write(root.path().join("UI.txt"), "GridColor1=#FF0000\n").expect("ui");
         fs::write(
             folder.join("info.txt"),
-            "#\r\nName: Test Song\r\nChart: 12345.json\r\nGroup: WIP\r\nSong: song.mp3\r\n",
+            "#\r\nName: Test Song\r\nChart: 12345.json\r\nGroup: WIP\r\nSong: song.mp3\r\nComposer: Composer Name\r\nCharter: Charter Name\r\n",
         )
         .expect("info");
         fs::write(folder.join("12345.json"), "{}").expect("chart");
         fs::write(folder.join("AutoSave_1.json"), "{}").expect("autosave");
 
         let scan = scan_rpe_root_unchecked(&root.path().to_string_lossy()).expect("scan");
+        assert!(scan.installation);
         assert_eq!(scan.settings_text.as_deref(), Some("{\"FpsLimit\":120}"));
         assert_eq!(scan.hotkeys_text.as_deref(), Some("AddTap A\n"));
         assert_eq!(scan.ui_text.as_deref(), Some("GridColor1=#FF0000\n"));
@@ -360,6 +387,8 @@ mod tests {
         assert_eq!(scan.charts[0].group, "WIP");
         assert_eq!(scan.charts[0].autosaves, 1);
         assert_eq!(scan.charts[0].song.as_deref(), Some("song.mp3"));
+        assert_eq!(scan.charts[0].composer.as_deref(), Some("Composer Name"));
+        assert_eq!(scan.charts[0].charter.as_deref(), Some("Charter Name"));
     }
 
     #[test]
@@ -373,6 +402,7 @@ mod tests {
         fs::write(resources.join("Texture").join("line.png"), b"png").expect("texture");
 
         let scan = scan_rpe_root_unchecked(&root.path().to_string_lossy()).expect("scan");
+        assert!(!scan.installation);
         assert_eq!(scan.charts.len(), 1);
         assert_eq!(scan.charts[0].folder, "777");
         assert_eq!(scan.charts[0].name, "777");

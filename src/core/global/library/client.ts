@@ -415,6 +415,7 @@ export class LocalLibrary {
     options: RequestOptions = {},
   ): Promise<{ items: DropClassification[] }> {
     return request(this.origin, "/api/intake/classify", {
+      timeoutMs: 15_000,
       ...options,
       method: "POST",
       body: { paths: [...paths] },

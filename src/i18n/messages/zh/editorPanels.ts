@@ -242,6 +242,9 @@ export default {
   "editorPanels.inspector.event.swapLabel": "交换事件首尾",
 
   "editorPanels.curve.previewToggle": "显示结果虚影",
+  "editorPanels.curve.quickTitle": "曲线音符",
+  "editorPanels.curve.quickCancel": "取消",
+  "editorPanels.curve.quickGenerate": "生成",
 
   "editorPanels.inspector.shader.loadFailed": "无法读取着色器参数定义",
   "editorPanels.inspector.shader.loading": "正在读取着色器参数…",

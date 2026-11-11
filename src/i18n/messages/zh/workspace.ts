@@ -174,7 +174,7 @@ export default {
     "已导入 {charts} 张谱面，迁移 {settings} 项设置和 {shortcuts} 个快捷键，{warnings} 条警告。",
   "workspace.welcome.rpe.desktopOnly": "RPE 导入仅在桌面应用中可用。",
   "workspace.welcome.rpe.notFound":
-    "没有找到 RPE 的 Settings.json、Hotkey.txt 或 Resources 谱面目录。",
+    "没有找到包含 PhiEdit.exe 和 Resources 的 RPE 文件夹、设置、快捷键或谱面目录。",
   "workspace.welcome.external.title": "导入官谱或 PhiEdit 谱面",
   "workspace.welcome.external.importing": "正在导入 {name}…",
   "workspace.welcome.external.done": "已导入 {name}，{warnings} 条警告。",
@@ -256,6 +256,9 @@ export default {
   "workspace.collaboration.joinMethod.custom": "自定义地址",
   "workspace.collaboration.serverUrl": "服务器地址",
   "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
+  "workspace.collaboration.serverUrlWebPlaceholder": "wss://room.example.com",
+  "workspace.collaboration.serverUrlWebHint":
+    "GitHub Pages 只托管静态文件。请使用可通过 wss:// 访问的房间服务器；此 HTTPS 页面无法连接本机或局域网的 ws:// 地址。",
   "workspace.collaboration.changePassword": "更新房间密码",
   "workspace.collaboration.changePasswordHint":
     "设置新的房间密码。已在房间里的成员不会被断开，但旧邀请链接会失效。",

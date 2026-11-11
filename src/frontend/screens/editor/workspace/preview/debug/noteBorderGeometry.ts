@@ -1,9 +1,9 @@
 /**
  * Pure polygons for the developer note-border overlay.
  *
- * A note is one oriented rectangle. A Hold is split into head, body, and tail
- * rectangles so the debug overlay can mark the three painted parts and the
- * pointer can hit-test the same shapes the canvas draws.
+ * A note is one oriented rectangle. A Hold is split into its painted head cap,
+ * full body span, and tail cap using the renderer's actual cap lengths, so the
+ * overlay follows note rotation and zero-length static Holds.
  */
 import type { PreviewObject, PreviewPoint } from "../../../../../../core/edit/preview/api.ts";
 
@@ -16,35 +16,9 @@ export interface NoteBorderPolygon {
   readonly points: readonly PreviewPoint[];
 }
 
-/** Rotate one local offset into the surface's axes. */
-function rotate(dx: number, dy: number, degrees: number): PreviewPoint {
-  const radians = (degrees * Math.PI) / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  return { x: dx * cosine - dy * sine, y: dx * sine + dy * cosine };
-}
-
-/** A rotated rectangle around one centre. */
-function rectangle(
-  center: PreviewPoint,
-  width: number,
-  height: number,
-  rotation: number,
-): readonly PreviewPoint[] {
-  const halfWidth = width / 2;
-  const halfHeight = height / 2;
-  const corners = [
-    rotate(-halfWidth, -halfHeight, rotation),
-    rotate(halfWidth, -halfHeight, rotation),
-    rotate(halfWidth, halfHeight, rotation),
-    rotate(-halfWidth, halfHeight, rotation),
-  ];
-  return corners.map((corner) => ({ x: center.x + corner.x, y: center.y + corner.y }));
-}
-
 /** One Hold segment from `start` to `end` along its head-to-tail axis. */
 function holdSegment(
-  head: PreviewPoint,
+  anchor: PreviewPoint,
   ux: number,
   uy: number,
   width: number,
@@ -54,7 +28,7 @@ function holdSegment(
   const midpoint = (start + end) / 2;
   const halfLength = (end - start) / 2;
   const halfWidth = width / 2;
-  const center = { x: head.x + ux * midpoint, y: head.y + uy * midpoint };
+  const center = { x: anchor.x + ux * midpoint, y: anchor.y + uy * midpoint };
   return [
     {
       x: center.x - ux * halfLength - uy * halfWidth,
@@ -75,6 +49,28 @@ function holdSegment(
   ];
 }
 
+/**
+ * Direction from the Hold head to its tail in surface axes.
+ *
+ * A zero-length Hold has no painted axis, so its caps follow the line's fall
+ * direction: local +Y rotated by the line angle and flipped for a note below
+ * the judge line.
+ */
+function holdAxisDirection(object: PreviewObject, dx: number, dy: number): PreviewPoint {
+  const length = Math.hypot(dx, dy);
+  if (length > 0.5) {
+    return { x: dx / length, y: dy / length };
+  }
+  const above = Number(object.debug?.above ?? 1) === 1;
+  const radians = ((object.rotation + (above ? 180 : 0)) * Math.PI) / 180;
+  return { x: -Math.sin(radians), y: Math.cos(radians) };
+}
+
+/** A painted cap length, or a small fallback when the renderer supplied none. */
+function holdCapLength(length: number | undefined, width: number): number {
+  return length !== undefined && length > 0 ? length : Math.max(1, Math.min(4, width));
+}
+
 /** Every debug border polygon for one preview object. */
 export function noteBorderPolygons(object: PreviewObject): readonly NoteBorderPolygon[] {
   if (object.kind === "note") {
@@ -87,35 +83,31 @@ export function noteBorderPolygons(object: PreviewObject): readonly NoteBorderPo
   const dx = tail.x - head.x;
   const dy = tail.y - head.y;
   const length = Math.hypot(dx, dy);
-  if (length < 0.5) {
-    return [
-      {
-        part: "hold-head",
-        points: rectangle(head, object.width, object.width, object.rotation),
-      },
-    ];
-  }
-  const ux = dx / length;
-  const uy = dy / length;
+  const direction = holdAxisDirection(object, dx, dy);
   const width = Math.max(1, object.width);
-  // A Hold cap is roughly square; short holds keep three visible parts by
-  // splitting evenly instead of letting the body collapse to zero.
-  const cap = Math.max(1, Math.min(width, length / 3));
-  const bodyStart = cap;
-  const bodyEnd = Math.max(cap, length - cap);
-  const polygons: NoteBorderPolygon[] = [
-    { part: "hold-head", points: holdSegment(head, ux, uy, width, 0, cap) },
-  ];
-  if (bodyEnd - bodyStart > 0.01) {
+  const headLength = object.showHead === false ? 0 : holdCapLength(object.headLength, width);
+  const tailLength = holdCapLength(object.tailLength, width);
+  const polygons: NoteBorderPolygon[] = [];
+  // The body spans the anchors; each cap is centred half a cap outside them,
+  // matching the sprite layout in the preview renderer.
+  if (length > 0.5) {
     polygons.push({
       part: "hold-body",
-      points: holdSegment(head, ux, uy, width, bodyStart, bodyEnd),
+      points: holdSegment(head, direction.x, direction.y, width, 0, length),
     });
   }
-  polygons.push({
-    part: "hold-tail",
-    points: holdSegment(head, ux, uy, width, bodyEnd, length),
-  });
+  if (headLength > 0) {
+    polygons.push({
+      part: "hold-head",
+      points: holdSegment(head, direction.x, direction.y, width, -headLength, 0),
+    });
+  }
+  if (tailLength > 0) {
+    polygons.push({
+      part: "hold-tail",
+      points: holdSegment(tail, direction.x, direction.y, width, 0, tailLength),
+    });
+  }
   return polygons;
 }
 

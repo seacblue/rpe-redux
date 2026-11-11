@@ -439,6 +439,7 @@ export class Preview {
         height: area.height,
         headLength: area.headLength,
         tailLength: area.tailLength,
+        showHead: area.showHead,
         rotation: area.rotation ?? 0,
       })),
       lines: this.lineFrames.map((line) => ({

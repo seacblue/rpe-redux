@@ -651,6 +651,7 @@ export class RpeSkin {
     showHead = true,
     color?: NoteColor | null,
     rotation?: number,
+    capScale = 1,
   ): boolean {
     const bodyName =
       highlight && this.images.has("hold_body_highlight") ? "hold_body_highlight" : "hold_body";
@@ -682,8 +683,9 @@ export class RpeSkin {
     const span = Math.abs(tail - head);
     const endRect = end ? this.bounds(endName, end) : null;
     const headRect = headPicture ? this.bounds(headName, headPicture) : null;
-    const headLength = showHead && headRect ? width * (headRect.height / headRect.width) : 0;
-    const tailLength = endRect ? width * (endRect.height / endRect.width) : 0;
+    const headLength =
+      showHead && headRect ? width * (headRect.height / headRect.width) * capScale : 0;
+    const tailLength = endRect ? width * (endRect.height / endRect.width) * capScale : 0;
     const layout = holdLayout(0, 0, 0, span, headLength, tailLength, { x: 0, y: 1 });
     context.save();
     context.translate(horizontal, head);

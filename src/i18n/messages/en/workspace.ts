@@ -195,7 +195,7 @@ export default {
     "Imported {charts} chart(s), migrated {settings} setting(s) and {shortcuts} shortcut(s) with {warnings} warning(s).",
   "workspace.welcome.rpe.desktopOnly": "RPE import is available in the desktop application.",
   "workspace.welcome.rpe.notFound":
-    "No RPE Settings.json, Hotkey.txt, or Resources chart folders were found.",
+    "No PhiEdit.exe with a Resources folder, RPE settings, hotkeys, or chart folders were found.",
   "workspace.welcome.external.title": "Import official or PhiEdit chart",
   "workspace.welcome.external.importing": "Importing {name}…",
   "workspace.welcome.external.done": "Imported {name} with {warnings} warning(s).",
@@ -282,6 +282,9 @@ export default {
   "workspace.collaboration.joinMethod.custom": "Custom address",
   "workspace.collaboration.serverUrl": "Server address",
   "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
+  "workspace.collaboration.serverUrlWebPlaceholder": "wss://room.example.com",
+  "workspace.collaboration.serverUrlWebHint":
+    "GitHub Pages only serves static files. Use a room server reachable over wss://; this HTTPS page cannot connect to a local or LAN ws:// address.",
   "workspace.collaboration.changePassword": "Change room password",
   "workspace.collaboration.changePasswordHint":
     "Set a new room password. Members already in the room stay connected, but the old invitation link stops working.",

@@ -141,6 +141,9 @@ function buildSnapshot(preview: Preview, geometry: HitTestPreviewGeometry): Prev
       surface,
       width: note.width,
       height: noteHeight(note),
+      headLength: note.headLength,
+      tailLength: note.tailLength,
+      showHead: note.showHead,
       rotation: note.rotation,
       radius: note.radius,
       ...(chartNote

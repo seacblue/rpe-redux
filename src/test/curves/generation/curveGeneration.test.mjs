@@ -99,9 +99,10 @@ const planOptions = {
 function editorWithNotes(notes, commitNotes) {
   const fields = createValue({ initial: null });
   const pickMode = createValue({ initial: null });
+  const quick = createValue({ initial: null });
   let committed = null;
   const editor = createCurveEditor({
-    state: { fields, pickMode },
+    state: { fields, pickMode, quick },
     getDivision: () => 4,
     getNotes: () => notes,
     setPickMode: pickMode.set,
@@ -224,6 +225,20 @@ test("a plan inserts anchors the chart does not hold", () => {
   assert.equal(plan.items.at(-1).existing, false);
   assert.equal(plan.notes.length, 8, "seven generated points plus the missing end anchor");
   assert.equal(noteKey(plan.notes.at(-1)), noteKey(anchorNote(3, 100)));
+});
+
+test("a Hold curve gives every generated note one division of body", () => {
+  const plan = planCurveNotes({ ...planOptions, type: 2, division: 4 });
+
+  assert.ok(plan.items.length > 2);
+  for (const { note } of plan.items) {
+    assert.equal(note.type, 2);
+    assert.equal(
+      beatValue(note.endTime) - beatValue(note.startTime),
+      0.25,
+      "one of four horizontal lines in a beat",
+    );
+  }
 });
 
 test("committing reuses existing anchors and the ghost previews the same inserts", () => {

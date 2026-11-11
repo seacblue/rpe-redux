@@ -2,13 +2,20 @@
  * Floating easing editor for a completed sampler drag.
  *
  * The panel is anchored beside the midpoint of the drawn path and stays inside
- * the preview viewport. It edits only the sampled easing preset through the
- * shared session draft and offers only two exits: discard the draft or commit
- * it. Other curve fields remain unchanged. Layout measurement keeps the panel
- * clear of the path midpoint and lets its body scroll when the viewport is
- * short instead of compressing the controls.
+ * the preview viewport until its title row is dragged, after which it stays
+ * inside the stage. It edits only the sampled easing preset through the shared
+ * session draft and offers only two exits: discard the draft or commit it.
+ * Other curve fields remain unchanged. Layout measurement keeps the panel clear
+ * of the path midpoint and lets its body scroll when the viewport is short
+ * instead of compressing the controls.
  */
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Button } from "../../../../../../design/components/button/Button.tsx";
 import { EasingField } from "../../../../../../design/components/easing/EasingField.tsx";
 import { useTranslation } from "../../../../../../i18n/react.ts";
@@ -84,6 +91,8 @@ export function SamplingEasingPanel({
   const { t } = useTranslation();
   const panel = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: PANEL_WIDTH, height: 360 });
+  const [manualPosition, setManualPosition] = useState<{ left: number; top: number } | null>(null);
+  const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const draft = session.draft;
   const easingType = draft.curve.easingType ?? session.easingType;
@@ -98,7 +107,7 @@ export function SamplingEasingPanel({
     ),
   );
   const measured = { width: size.width || width, height: size.height || Math.min(360, maxHeight) };
-  const position = panelPosition(anchor, viewport, measured);
+  const position = manualPosition ?? panelPosition(anchor, viewport, measured);
   const style: CSSProperties = {
     left: position.left,
     top: position.top,
@@ -126,6 +135,55 @@ export function SamplingEasingPanel({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  /** Drag the card by its title row, bounded by the stage overlay. */
+  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    const element = panel.current;
+    const parent = element?.parentElement;
+    if (!element || !parent) {
+      return;
+    }
+    const card = element.getBoundingClientRect();
+    event.preventDefault();
+    const pointerId = event.pointerId;
+    drag.current = {
+      pointerId,
+      offsetX: event.clientX - card.left,
+      offsetY: event.clientY - card.top,
+    };
+    const move = (moveEvent: PointerEvent) => {
+      const current = drag.current;
+      if (!current || moveEvent.pointerId !== current.pointerId) {
+        return;
+      }
+      const currentCard = panel.current;
+      const bounds = currentCard?.parentElement?.getBoundingClientRect();
+      if (!currentCard || !bounds) {
+        return;
+      }
+      const maxLeft = Math.max(0, bounds.width - currentCard.offsetWidth);
+      const maxTop = Math.max(0, bounds.height - currentCard.offsetHeight);
+      setManualPosition({
+        left: Math.min(Math.max(0, moveEvent.clientX - bounds.left - current.offsetX), maxLeft),
+        top: Math.min(Math.max(0, moveEvent.clientY - bounds.top - current.offsetY), maxTop),
+      });
+    };
+    const finish = (finishEvent: PointerEvent) => {
+      if (finishEvent.pointerId !== pointerId) {
+        return;
+      }
+      drag.current = null;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
 
   /** Apply one draft curve change and clear the stale commit error. */
   const changeCurve = (patch: SamplingCurveDraft) => {
@@ -162,8 +220,11 @@ export function SamplingEasingPanel({
       aria-label={t("editorPanels.sampling.title")}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <div className="sampling-float-header">
+      <div className="sampling-float-header" onPointerDown={beginDrag}>
         <span className="sampling-float-title">{t("editorPanels.sampling.title")}</span>
+        <span className="sampling-float-grip" aria-hidden="true">
+          ⠿
+        </span>
       </div>
       <div className="sampling-float-body">
         <EasingField

@@ -4,6 +4,7 @@ import { useSetting } from "../../../../settings/useSetting.ts";
 import { LayerButtonsOverlay } from "../../timeline/layers/LayerButtonsOverlay.tsx";
 import { TimelineThumbnailView } from "../../timeline/overview/TimelineThumbnail.tsx";
 import { TimelineCanvases } from "../../timeline/surface/TimelineCanvases.tsx";
+import { CurveQuickPanel } from "../../../inspector/curveNotes/CurveQuickPanel.tsx";
 import {
   getEditorRegionSnapshot,
   subscribeToEditorRegions,
@@ -82,6 +83,7 @@ export function Editor() {
         <LayerButtonsOverlay />
         <TimelineThumbnailView />
       </div>
+      <CurveQuickPanel />
     </div>
   );
 }

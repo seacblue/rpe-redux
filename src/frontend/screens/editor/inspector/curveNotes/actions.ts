@@ -27,4 +27,7 @@ export const curveActions = Object.freeze({
   captureCurveStart: () => editor?.capture(false),
   captureCurveEnd: () => editor?.capture(true),
   generateCurve: () => editor?.generate(),
+  setCurveEasing: (easingType: number) => editor?.setEasing(easingType),
+  setCurveQuickType: (type: number) => editor?.setQuickType(type),
+  dismissCurveQuick: () => editor?.dismissQuick(),
 });

@@ -18,7 +18,7 @@ export function previewNoteContains(area: HitTestNoteGeometry, point: HitTestPoi
   }
   const tail = project(area.tail);
   // Picking covers the body and both cap overhangs. The full cap length is a
-  // conservative bound because a zero-length Hold only paints half of it.
+  // conservative bound because a zero-length Hold puts one cap on each side.
   const overhang = Math.max(0, area.headLength ?? 0, area.tailLength ?? 0);
   const progress = tail.y === 0 ? 0 : Math.max(0, Math.min(1, cursor.y / tail.y));
   return (

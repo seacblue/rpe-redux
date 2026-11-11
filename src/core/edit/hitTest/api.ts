@@ -45,6 +45,8 @@ export interface HitTestNoteGeometry {
   /** Useful longitudinal size of the Hold head/tail cap in CSS pixels. */
   headLength?: number;
   tailLength?: number;
+  /** Whether the painted Hold includes its head cap. */
+  showHead?: boolean;
   rotation: number;
 }
 

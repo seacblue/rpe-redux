@@ -42,14 +42,14 @@ On the first run the onboarding card asks whether you already know RPE, are new 
 
 | Source | Where | Notes |
 | --- | --- | --- |
-| RPE installation | More → Import from RPE… | Scans the chosen RPE folder, imports its charts, applies `Settings.json`, and offers the `Hotkey.txt` mapping. |
+| RPE installation | More → Import from RPE…, or drag and drop | A folder with `PhiEdit.exe` and a `Resources` folder opens a review listing every parsed setting and chart. Check the settings to overwrite and the charts to import; each chart shows its song title, composer, and charter. |
 | Official Phigros JSON | Import a chart, or drag and drop | Converts to the RPE chart model and reports conversion differences. |
 | PhiEdit PEC package | File → Import chart, or drag and drop | Pairs the chart with its media and reports conversion differences. |
 | RPE JSON / PEZ file | File → Import chart, or drag and drop | Opens the file and adds it to the library on save. |
 
 Imports that lose or approximate data show a **compatibility report** listing the differences. The report is informational; the imported chart is already usable.
 
-A dropped path is classified before an importer runs: RPE, official, and PhiEdit charts go to the matching chart flow, an Extension package offers the Extensions settings page, and a Phira note-skin package offers the note-skin settings page.
+A dropped path is classified before an importer runs: a native RPE installation (`PhiEdit.exe` plus `Resources`) opens the import review, other RPE, official, and PhiEdit charts go to the matching chart flow, an Extension package offers the Extensions settings page, and a Phira note-skin package offers the note-skin settings page.
 
 **File → Return to chart library** closes the current document and returns to the library. **Ctrl+Shift+H** (Show chart library) opens the library without closing the chart, so the chart stays open behind it.
 

@@ -18,6 +18,20 @@ test("an RPE chart keeps its folder and chart entry", () => {
   });
 });
 
+test("an RPE installation opens the review before any importer runs", () => {
+  assert.deepEqual(
+    dropRoute({
+      path: "D:/games/rpe",
+      kind: "chart",
+      format: "rpe",
+      entry: "D:/games/rpe",
+      rpeInstallation: true,
+      valid: true,
+    }),
+    { action: "rpe-installation", path: "D:/games/rpe" },
+  );
+});
+
 test("official and PEC charts route to the external importer", () => {
   assert.deepEqual(
     dropRoute({

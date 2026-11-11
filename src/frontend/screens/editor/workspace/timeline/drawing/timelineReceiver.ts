@@ -133,7 +133,7 @@ export type TimelineNoteDrawingReceiver = Pick<
 /** The minimal contract for rendering curve ghosts above notes. */
 export type TimelineCurveGhostReceiver = Pick<
   TimelineRuntimeSurface,
-  "cache" | "gestures" | "viewport"
+  "appearance" | "cache" | "gestures" | "viewport"
 >;
 
 /** The lightweight moving overlay shared by notes and events timelines. */
@@ -170,6 +170,28 @@ export type TimelineEventOverlayReceiver = Pick<
   TimelineRuntimeSurface,
   "appearance" | "cache" | "getSession" | "gestures" | "remoteSelectedEventIds" | "viewport"
 >;
+
+/** The pending event preview contract: placement geometry plus the shared event-bar resources. */
+export type TimelinePendingEventReceiver = Pick<
+  TimelineRuntimeSurface,
+  "appearance" | "eventBatch" | "getSession"
+> & {
+  readonly gestures: Pick<TimelineGestures, "eventCursor">;
+  readonly viewport: Pick<
+    TimelineViewport,
+    | "eventBarWidth"
+    | "eventBeatAt"
+    | "eventInset"
+    | "eventTypesForLine"
+    | "eventVertical"
+    | "multiLineViewportOffset"
+    | "panelIndex"
+    | "panelStride"
+    | "panelWidth"
+    | "verticalForLine"
+    | "viewHeight"
+  >;
+};
 
 /** The event-layer status contract used by the layer-button surface. */
 export type TimelineLayerReceiver = Pick<

@@ -60,19 +60,37 @@ export interface RpeChartFolder {
   readonly song?: string;
   readonly picture?: string;
   readonly chart?: string;
+  /** Composer from the chart's Info.txt. */
+  readonly composer?: string;
+  /** Charter from the chart's Info.txt. */
+  readonly charter?: string;
   readonly lastEdit?: string;
   readonly autosaves: number;
 }
 
-/** The native folder scan returned by the desktop host. */
+/** The folder scan returned by the local service or the desktop host. */
 export interface RpeFolderScan {
   readonly root: string;
+  /** True when the root carries PhiEdit.exe and a Resources folder. */
+  readonly installation?: boolean;
   readonly settingsText: string | null;
   readonly hotkeysText: string | null;
   /** Editor appearance sidecar (`UI.txt`) when the installation writes one. */
   readonly uiText?: string | null;
   readonly charts: readonly RpeChartFolder[];
   readonly warnings: readonly string[];
+}
+
+/** The items a user kept checked in the import review. */
+export interface RpeImportSelection {
+  /** Setting keys whose parsed values should overwrite the current ones. */
+  readonly settingKeys: readonly string[];
+  /** Apply the parsed Hotkey.txt bindings. */
+  readonly applyShortcuts: boolean;
+  /** Apply the language named by Settings.json. */
+  readonly applyLanguage: boolean;
+  /** Chart folders to import, keyed by `RpeChartFolder.path`. */
+  readonly chartPaths: readonly string[];
 }
 
 /** One RPE `Hotkey.txt` line longer than this is treated as malformed. */
@@ -717,5 +735,30 @@ export function createRpeMigrationPlan(
     hotkeys: readRpeHotkeys(hotkeysText),
     language: languageValue(raw.Language),
     warnings: Object.freeze([]),
+  });
+}
+
+/**
+ * Keep only the parts of a parsed plan the user approved in the review.
+ *
+ * Chart selection stays with the caller because chart folders are scanned
+ * separately from the plan. An empty shortcut or language choice clears the
+ * corresponding write instead of leaving the parser's full list in place.
+ */
+export function filterRpeMigrationPlan(
+  plan: RpeMigrationPlan,
+  selection: Pick<RpeImportSelection, "settingKeys" | "applyShortcuts" | "applyLanguage">,
+): RpeMigrationPlan {
+  const settingKeys = new Set(selection.settingKeys);
+  return Object.freeze({
+    settings: Object.freeze(plan.settings.filter((setting) => settingKeys.has(setting.key))),
+    shortcuts: Object.freeze(selection.applyShortcuts ? [...plan.shortcuts] : []),
+    hotkeys: Object.freeze(
+      selection.applyShortcuts
+        ? { entries: Object.freeze([...plan.hotkeys.entries]) }
+        : { entries: Object.freeze([]) },
+    ),
+    language: selection.applyLanguage ? plan.language : null,
+    warnings: plan.warnings,
   });
 }

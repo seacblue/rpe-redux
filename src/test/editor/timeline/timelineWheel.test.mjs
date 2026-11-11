@@ -23,11 +23,11 @@ test("default wheel bindings step lines with Ctrl and seek time otherwise", () =
   try {
     assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true }), {
       kind: "line",
-      direction: -1,
+      direction: 1,
     });
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true }), {
       kind: "line",
-      direction: 1,
+      direction: -1,
     });
     assert.deepEqual(matchTimelineWheel({ deltaY: -100 }), {
       kind: "seek",
@@ -131,10 +131,8 @@ test("Shift wheel is a separate whole-beat seek binding", () => {
       direction: 1,
       step: "beat",
     });
-    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), {
-      kind: "line",
-      direction: -1,
-    });
+    assert.equal(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), null);
+    assert.equal(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), null);
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,

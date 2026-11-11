@@ -1,14 +1,20 @@
 /**
- * Note-skin packages discovered beside the executable, and the writable library.
+ * Host facade for note-skin packages.
  *
- * This is a host concern: the desktop scanner returns folder summaries and
- * relative file bytes, the guarded installer writes a validated package into the
- * writable root, and removal deletes only that root. `core/media/noteSkin.ts`
- * remains the only parser and validator. The cache is updated by the shell's
- * folder poll so the picker reacts without a manual refresh.
+ * The desktop host discovers and writes packages in its external app-data
+ * folders through the native commands. Only the web host routes these calls to
+ * SQLite app-package tables; the desktop branch never reads that store. This is
+ * the one module feature code calls, so the host split stays here.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { isDesktop } from "../environment.ts";
+import {
+  BUILTIN_NOTE_SKIN_PACKAGE_ID,
+  installBrowserNoteSkin,
+  listBrowserNoteSkins,
+  readBrowserNoteSkin,
+  removeBrowserNoteSkin,
+} from "../browser/noteSkinPackages.ts";
 import {
   activeNoteSkin,
   EXTERNAL_NOTE_SKIN_PREFIX,
@@ -51,12 +57,11 @@ export function externalNoteSkins(): readonly ExternalNoteSkinSummary[] {
 
 /** Re-scan the host skin roots; notify only when the folder set changed. */
 export async function refreshExternalNoteSkins(): Promise<void> {
-  if (!isDesktop()) {
-    return;
-  }
   let next: ExternalNoteSkinSummary[];
   try {
-    next = await invoke<ExternalNoteSkinSummary[]>("list_note_skins");
+    next = isDesktop()
+      ? await invoke<ExternalNoteSkinSummary[]>("list_note_skins")
+      : await listBrowserNoteSkins();
   } catch {
     return;
   }
@@ -101,6 +106,9 @@ export interface ExternalNoteSkinPackage {
 
 /** Read one skin package and decode its base64 file map for the shared parser. */
 export async function readExternalNoteSkin(id: string): Promise<ExternalNoteSkinPackage> {
+  if (!isDesktop()) {
+    return readBrowserNoteSkin(id);
+  }
   const payload = await invoke<{
     files?: { name?: string; data?: string }[];
     source?: string;
@@ -121,7 +129,7 @@ export async function readExternalNoteSkin(id: string): Promise<ExternalNoteSkin
 
 /** The package id the host designates as the built-in note skin. */
 export async function builtinNoteSkinPackageId(): Promise<string> {
-  return invoke<string>("builtin_note_skin_id");
+  return isDesktop() ? invoke<string>("builtin_note_skin_id") : BUILTIN_NOTE_SKIN_PACKAGE_ID;
 }
 
 /** Encode package bytes for the guarded native install command. */
@@ -149,9 +157,13 @@ export async function installPhiraNoteSkin(
   options: { allowIncomplete?: boolean } = {},
 ): Promise<{ id: string; name: PackageName }> {
   const manifest = parseNoteSkin(files, options);
-  const payload = [...files].map(([name, bytes]) => ({ name, data: base64(bytes) }));
   const targetId = id ?? packageSlug(manifest.name);
-  await invoke<string>("install_note_skin", { id: targetId, files: payload });
+  if (isDesktop()) {
+    const payload = [...files].map(([name, bytes]) => ({ name, data: base64(bytes) }));
+    await invoke<string>("install_note_skin", { id: targetId, files: payload });
+  } else {
+    await installBrowserNoteSkin(targetId, manifest.name, files);
+  }
   await refreshExternalNoteSkins();
   // The picker and the runtime cache both compare package ids; a same-id save
   // changes the bytes under an unchanged id, so announce it explicitly.
@@ -166,7 +178,11 @@ export async function installPhiraNoteSkin(
  * re-reads the built-in id and announces the change.
  */
 export async function removeInstalledNoteSkin(id: string): Promise<void> {
-  await invoke<string>("remove_note_skin", { id });
+  if (isDesktop()) {
+    await invoke<string>("remove_note_skin", { id });
+  } else {
+    await removeBrowserNoteSkin(id);
+  }
   await refreshExternalNoteSkins();
   notifyNoteSkinChanged();
 }

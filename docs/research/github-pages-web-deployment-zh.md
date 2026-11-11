@@ -659,6 +659,7 @@ node test-subpath.mjs
 
 - 依赖：`@sqlite.org/sqlite-wasm@3.54.1-build1`。
 - [`src/core/platform/browser/library/db.worker.ts`](../../src/core/platform/browser/library/db.worker.ts)：`opfs-sahpool`、v2 schema（`application_id`、`user_version=2`、`revisions.chart_hash`、`library_meta`）、v0/v1 增量迁移、迁移前 OPFS 副本、项目/资源/修订/偏好、`baseRevision` 冲突检查、`VACUUM INTO` 导出；以及同一对象格式的 OPFS 快照存储、20 秒去抖 + 120 秒最大延迟的自动快照、手动快照/恢复/校验/压缩、损坏 live DB 时的恢复模式。
+- 浏览器 SQLite 新增 `app_packages` / `app_package_files`：音符皮肤按 `kind=skin` 存同一数据库，文件字节随 `.sqlite` 导出和备份一起带走；库快照恢复保留当前已安装包，不会因为回滚谱面历史而卸载皮肤。主题和扩展可复用同一 `kind` 命名空间。桌面端保持不变，仍使用外部目录和 native 命令，不读写这些表。
 - [`src/backend/internal/librarybackup/`](../../src/backend/internal/librarybackup/)：桌面和远程 Go 服务的同一套对象/提交/ref、快照、事务恢复、校验、保留/GC 和自动快照循环；HTTP 路由在 [`src/backend/internal/httpapi/backup_api.go`](../../src/backend/internal/httpapi/backup_api.go)。
 - [`src/core/settings/features/libraryBackup.ts`](../../src/core/settings/features/libraryBackup.ts)：设置 → 通用 → “谱面库备份”里的自动快照开关和 30–3600 秒间隔；关闭开关会禁用间隔并停止后台计时器。
 - [`src/core/platform/browser/library/browserLibrary.ts`](../../src/core/platform/browser/library/browserLibrary.ts)：`LocalLibrary` 子类、Web Locks 选主 + BroadcastChannel follower 转发、串行 Worker RPC、资源 blob URL 缓存、浏览器内 instance/occupancy 的 no-op 实现。浏览器 worker 没有 chart stream/line 端点，`supportsChartStream()` 返回 false，首页打开和会话恢复直接读整包项目。
@@ -685,6 +686,7 @@ node test-subpath.mjs
 - 浏览器快照设置：关闭“自动快照”后间隔输入被禁用、后台不再写入 ref；重新开启并设为 30 秒后，ref 恢复增长。
 - 浏览器自动保存：把 `autosave-seconds` 设为 1 秒后编辑谱面，出现“Automatic backup saved”，未保存标记仍为真，刷新后编辑内容恢复；不再出现“仅桌面版支持自动备份”。
 - Web 协作：两个独立 Chrome 配置连接本地 room server；Web 宿主填写服务器地址并建房，访客打开 `?join=1…` 邀请链接、确认身份并加入，收到同一谱面；访客放置 note 后宿主侧计数同步增加。
+- Web 皮肤：导入 Phira zip、刷新后保留、工作台改名保存、导出 zip、删除都通过；内置皮肤覆盖保存后刷新仍生效。导出的 `.sqlite` 中 `app_packages` / `app_package_files` 含皮肤元数据和全部文件。
 - Go 自动备份：20 秒去抖 + 120 秒最大延迟的策略在持续编辑测试中按最大延迟触发；快照、资产去重、偏好过滤、恢复、recovery 表保留、校验、压缩测试通过。
 - `npm run check` 通过（1393 个单元/契约测试 + Go 测试）。
 
@@ -696,6 +698,7 @@ node test-subpath.mjs
 - **首页封面延迟。** 只有打开过一次的项目才会在本次页面里缓存封面；刷新后首页卡片暂时没有封面 URL。可以在 `list()` 里限量预取，或把封面加载改成异步。
 - **持久化仍缺运维层。** 已有 `navigator.storage.persist()`、容量显示、`.sqlite` 下载/恢复、恢复失败回滚、迁移前原始副本、自动快照和自动快照开关；还没有库历史列表页、自动轮换/空间阈值、配额错误提示和完整的损坏检测入口。
 - **Web 建房需要外部 room server。** Pages 只托管静态文件，不提供 WebSocket；建房时必须填写可达的 `ws://`/`wss://` 地址，且服务端要把 Pages 源加入 `REDUX_COLLAB_ALLOWED_ORIGINS`。加入别人房间不受此限制，只需邀请链接里的服务器可达。
+- **应用包迁移目前覆盖皮肤。** `app_packages` / `app_package_files` 已是通用表，但主题导入 UI 和扩展安装器仍走桌面文件路径；Web 扩展安装仍显式 desktop-only。后续可复用同一 `kind` 命名空间。
 - **未引用资源不回收。** 删除项目或提交新 manifest 后，孤立 BLOB 仍留在 SQLite 里；后续需要 GC 和 staging lease。
 - **迁移器只覆盖 v0/v1 → v2。** 当前是加法迁移；后续 schema 需要继续追加步骤，并保持旧应用可读。
 - **没有自动化 Store 测试。** 本文的 Playwright 验证仍在仓库外的临时目录，尚未转成 `src/test/` 下的回归用例；Go store 和 Rust 备份已有迁移测试。

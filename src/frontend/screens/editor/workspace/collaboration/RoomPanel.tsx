@@ -31,6 +31,7 @@ import { useEditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import { MemberAccessDialog } from "./MemberAccessDialog.tsx";
 import { MemberActionsMenu } from "./MemberActionsMenu.tsx";
 import { RoomLocks } from "./RoomLocks.tsx";
+import { RoomServerField } from "./RoomServerField.tsx";
 import { suggestedLanPort, useCollaboration } from "./collaborationRuntime.tsx";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { MaxMembersControl } from "./MaxMembersControl.tsx";
@@ -179,7 +180,11 @@ function RoomPanelBody() {
   const [accessRole, setAccessRole] = useState<"editor" | "viewer">("editor");
   const [joinMethod, setJoinMethod] = useState<"link" | "custom">("link");
   const [joinLink, setJoinLink] = useState(pendingInviteLink);
-  const [serverUrl, setServerUrl] = useState(settings.serverUrl);
+  // A public page can only open a secure room endpoint. Keep a stored wss://
+  // address, but do not preselect the desktop loopback URL on the web host.
+  const [serverUrl, setServerUrl] = useState(() =>
+    isDesktop() || /^(?:wss|https):\/\//iu.test(settings.serverUrl) ? settings.serverUrl : "",
+  );
   const [joinPassword, setJoinPassword] = useState("");
   const [autoApproveEditor, setAutoApproveEditor] = useState(true);
   const passwordInput = useRef<HTMLInputElement | null>(null);
@@ -587,17 +592,7 @@ function RoomPanelBody() {
                   )}
                 </>
               ) : (
-                <FieldRow
-                  label={t("workspace.collaboration.serverUrl")}
-                  control={(id) => (
-                    <Input
-                      id={id}
-                      value={serverUrl}
-                      placeholder={t("workspace.collaboration.serverUrlPlaceholder")}
-                      onChange={(event) => setServerUrl(event.currentTarget.value)}
-                    />
-                  )}
-                />
+                <RoomServerField value={serverUrl} onChange={setServerUrl} />
               )}
               <FieldRow
                 label={t("workspace.collaboration.password")}
@@ -684,17 +679,7 @@ function RoomPanelBody() {
                 </>
               ) : (
                 <>
-                  <FieldRow
-                    label={t("workspace.collaboration.serverUrl")}
-                    control={(id) => (
-                      <Input
-                        id={id}
-                        value={serverUrl}
-                        placeholder={t("workspace.collaboration.serverUrlPlaceholder")}
-                        onChange={(event) => setServerUrl(event.currentTarget.value)}
-                      />
-                    )}
-                  />
+                  <RoomServerField value={serverUrl} onChange={setServerUrl} />
                   <FieldRow
                     label={t("workspace.collaboration.password")}
                     control={(id) => (

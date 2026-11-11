@@ -370,6 +370,7 @@ export function createEditorHomeRuntime(deps: {
   };
   const home = new ProjectHome({
     importRpePath: (path) => importRpePath(path, rpeDeps),
+    importRpeInstallation: (path, details) => importRpePath(path, rpeDeps, details),
     importExternalPath: (path) => importExternalPath(path, externalDeps),
     classifyPaths,
     importExtension: async (item) => offerPackageSettings(item, "extension"),
