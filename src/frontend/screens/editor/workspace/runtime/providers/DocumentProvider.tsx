@@ -148,7 +148,7 @@ export interface DocumentRuntime {
   readonly coverUrl: () => string;
   /** Install a verified room asset and refresh the surfaces that use it. */
   readonly adoptAsset: (name: string, bytes: Uint8Array) => void;
-  readonly guardReplace: (action: () => unknown, title?: string) => void;
+  readonly guardReplace: (action: () => unknown, title?: string) => Promise<boolean>;
   readonly installBlankChart: () => void;
   readonly closeDocument: () => boolean;
   /** Close the open document without a close hook; used to discard a room copy. */
@@ -831,21 +831,27 @@ export function createDocumentRuntime(options: {
     options.scope.add(diskObserver.dispose);
   }
   /** Runs a document action once the unsaved-changes prompt is accepted. */
-  function guardReplace(action: () => unknown, title = t("editor.app.dialog.switchChart")): void {
-    const run = () => Promise.resolve().then(action).catch(options.reportError);
+  function guardReplace(
+    action: () => unknown,
+    title = t("editor.app.dialog.switchChart"),
+  ): Promise<boolean> {
+    const run = async (): Promise<boolean> => {
+      try {
+        await action();
+        return true;
+      } catch (error) {
+        options.reportError(error);
+        return false;
+      }
+    };
     if (!(getSession().history.dirty || options.document.assetDirty)) {
-      void run();
-      return;
+      return run();
     }
-    void requestConfirm({
+    return requestConfirm({
       title,
       description: t("editor.dialogs.dialog.unsavedChanges"),
       destructive: true,
-    }).then((confirmed) => {
-      if (confirmed) {
-        void run();
-      }
-    });
+    }).then((confirmed) => (confirmed ? run() : false));
   }
   /** Replaces the open document with a blank chart and no name on disk. */
   const installBlankChart = () => replaceChart(createChart(), "chart.json");

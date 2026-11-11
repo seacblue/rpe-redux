@@ -7,6 +7,7 @@ RPE Redux separates host-independent domain logic, reusable visual primitives, a
 - [Layers](#layers)
 - [Screen directories](#screen-directories)
 - [Runtime composition](#runtime-composition)
+- [Routes](#routes)
 - [Authoring surface](#authoring-surface)
 - [Host boundaries](#host-boundaries)
 - [Feature areas](#feature-areas)
@@ -42,6 +43,25 @@ The frontend tree follows the visible interface:
 `frontend/app/App.tsx` mounts the shell and the editor provider tree. `frontend/screens/editor/workspace/runtime/composition/EditorProviderTree.tsx` creates the providers; `EditorAssembly.ts` connects document, playback, preview, timeline, inspector, session, and update runtimes. `runtime/bindings/` and `runtime/commands/` expose the operations used by actions, toolbar, sidebar, shortcuts, and inspector actions.
 
 `EditorProviderTree` publishes the open document's display identity through `frontend/contracts/editorHostReact.tsx`, and `EditorRuntime.tsx` exposes the narrow host runtime the transport card and rail read. `frontend/screens/editor/workspace/runtime/composition/editorChromeHost.ts` binds the editor's document, transport, view, navigation, inspector, and spectrum-worker ports to `frontend/contracts/` before `frontend/app/Shell.tsx` registers built-in actions. Chrome therefore depends on the contract, not on the editor runtime or its commands.
+
+### Routes
+
+`core/shell/route.ts` owns the address grammar and `frontend/app/routing/` owns the browser hash adapter. The address has four forms:
+
+| Address | Window destination |
+| --- | --- |
+| `#/` | chart library |
+| `#/chart/<projectId>` | one library project in the editor |
+| `#/editor` | an open document that has no library project (native file or untitled chart) |
+| `#/?settings=<category>` | the settings page above the current destination |
+
+The live editor remains authoritative while the user works; `RouteRuntime` mirrors document opens, home returns, document closes, and settings pages into browser history. `popstate` and `hashchange` go the other way through the same guarded operations, so a dirty document asks before leaving and a cancelled answer restores the address from the state still on screen. Opening a chart pushes, closing a document replaces, changing a settings page replaces, and opening settings pushes.
+
+`main.tsx` reads the boot address after the performance-HUD branch and publishes it through `frontend/contracts/appRoute.ts`. `EditorAssembly` gives an explicit chart address precedence over the last-workspace restore; a settings-only address keeps the editor at home, and every other launch keeps the existing restore-last-document behavior. After the first restore/open settles, the mirror may write history.
+
+Desktop launch links use the same destinations. `src-tauri/src/app/deep_link.rs` stores the first `rperedux://` argument and `take_deep_link` hands it to `frontend/platform/desktopDeepLink.ts`; `rperedux://chart/<id>` (optionally with `?settings=...`) becomes the boot route, while `rperedux://join?...` is held for the collaboration runtime. The browser build has no custom scheme and uses the page address alone.
+
+Vite's `base` is the deployment path for static assets. `REDUX_WEB_BASE` sets it for a GitHub Pages project site; destinations stay in the hash, so a direct link never needs an SPA fallback. Tauri serves `/` and falls back to `index.html` for unknown asset paths, so no Rust fallback is required. Library project ids are local to one library; `#/chart/<id>` is a local address, not a shareable chart link.
 
 ### Authoring surface
 

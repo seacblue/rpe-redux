@@ -61,6 +61,8 @@ export function buildRoomInviteLink(invite: RoomInvite): string {
 
 /** Build an HTTPS link that opens the same invitation in the static web app. */
 export function buildWebRoomInviteLink(invite: RoomInvite, baseUrl: string): string {
+  // `baseUrl` is the app root, not the current page: a chart address is local
+  // to the sender and must not travel inside a room invitation.
   const url = new URL(baseUrl);
   url.search = "";
   url.hash = "";
@@ -102,7 +104,7 @@ export function parseRoomInviteLink(value: string): RoomInvite | null {
   } catch {
     return null;
   }
-  if (parsed.protocol !== "rperedux:" || parsed.hostname !== "join") {
+  if (parsed.protocol !== "rperedux:" || parsed.hostname.toLowerCase() !== "join") {
     return null;
   }
   const serverUrl = parsed.searchParams.get("server")?.trim() ?? "";

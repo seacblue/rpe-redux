@@ -1705,7 +1705,7 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
       failLoad(error);
       dispose();
     });
-    const source = new URL("extension-sandbox.html", location.href);
+    const source = new URL("extension-sandbox.html", document.baseURI);
     source.searchParams.set("token", token);
     const readyTimeout = cellMode
       ? Math.min(SANDBOX_READY_TIMEOUT_MS, cellTimeout + HOST_CELL_FALLBACK_GRACE_MS)

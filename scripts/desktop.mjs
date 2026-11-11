@@ -14,6 +14,9 @@ import { runTauri } from "./tauriCli.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const argv = process.argv.slice(2);
+// The desktop webview loads from its own root; a web deployment base is not
+// part of the development URL.
+delete process.env.REDUX_WEB_BASE;
 
 if (argv.includes("--help") || argv.includes("-h")) {
   console.log(`Usage: npm run dev:desktop -- [flags]

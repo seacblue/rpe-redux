@@ -80,6 +80,7 @@ import {
   createTransportSurface,
 } from "../chrome/transport/TransportDomSurface.tsx";
 import { useSetting } from "../screens/settings/useSetting.ts";
+import { RouteRuntime } from "./routing/RouteRuntime.tsx";
 import {
   applyWindowDisplaySettings,
   showDesktopWindow,
@@ -342,6 +343,7 @@ function AppContent() {
               onError={handleEditorError}
             >
               <ModalScrimPortal />
+              <RouteRuntime enabled={ready} />
               <div
                 className="redux-app-shell"
                 data-at-home={editorVisibility.atHome}

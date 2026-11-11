@@ -89,6 +89,8 @@ The most useful view shortcuts:
 
 Placement and editing defaults are in [Keyboard](keyboard.md). Every binding is editable in **Settings → Shortcuts**.
 
+The window address names the destination: `#/` is the chart library, `#/chart/<id>` is one library project, `#/editor` is a native or untitled document, and `#/?settings=<category>` opens a settings page above the current destination. Reloading a chart address reopens that project; Back returns to the library or closes settings, and an unsaved chart asks before it leaves.
+
 ## Save, export, and render
 
 Saving and exporting are different operations:

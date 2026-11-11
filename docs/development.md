@@ -31,6 +31,8 @@ The browser loop uses `.scratch/dev/data/` as its profile, so experiments do not
 
 `npm run dev:web` runs Vite without the Go sidecar. With no injected development runtime the page selects the browser SQLite library in `src/core/platform/browser/library/` and keeps charts in OPFS. Use it for the static web edition; `npm run build:web` produces the same page for GitHub Pages, and `.github/workflows/pages.yml` deploys `dist/`.
 
+The app uses hash routes (`#/chart/<id>`), so static hosting never needs an SPA fallback. The web build still needs its served asset base: it defaults to `/`, and the Pages workflow passes the `configure-pages` base path to `REDUX_WEB_BASE` (empty for a user site or custom domain, `/repo` for a project site). Vite's development server serves the shell while the hash selects the destination.
+
 `npm run dev:desktop` stages the Go sidecar and media helpers, then opens the Tauri window. Both loops keep one fixed port set per checkout in `.scratch/dev/ports.json`, so parallel checkouts and AI runs do not fight over the backend address. The first run chooses free ports below the Windows ephemeral range; later runs reuse them. Pass `--new-ports` to rotate the set, or pin one value with a flag:
 
 ```powershell
@@ -173,7 +175,7 @@ The desktop host starts `redux-service`, waits for its JSON listening event, and
 
 ### Collaboration
 
-The sidecar hosts rooms on `ws://127.0.0.1:47830` by default and stores room data under `<database directory>/collaboration`. Creating a room uses the bundled Cloudflare Quick Tunnel or a configurable LAN bridge and returns an `rperedux://` invitation link. Joiners can also enter a custom `ws://` or `wss://` address. On Windows, invitation links register the scheme under HKCU and are consumed by `src-tauri/src/app/deep_link.rs`; Linux builds keep the paste-link path until a desktop-file scheme registration ships.
+The sidecar hosts rooms on `ws://127.0.0.1:47830` by default and stores room data under `<database directory>/collaboration`. Creating a room uses the bundled Cloudflare Quick Tunnel or a configurable LAN bridge and returns an `rperedux://` invitation link. Joiners can also enter a custom `ws://` or `wss://` address. On Windows, `rperedux://` links register the scheme under HKCU; `take_deep_link` hands the launch URL to the frontend, which treats `rperedux://chart/<id>` as the boot route and `rperedux://join?...` as an invitation. Linux builds keep the paste-link path until a desktop-file scheme registration ships.
 
 The room server is authoritative for ordering, locks, undo audit, and asset integrity. The host keeps the app and Tunnel alive while the room is active. Room data contains host resume tokens and uploaded media; treat it as credential material.
 
