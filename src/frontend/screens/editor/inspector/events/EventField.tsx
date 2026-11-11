@@ -8,7 +8,13 @@ import {
   compareBeats,
   type Beat,
 } from "../../../../../core/global/chart/timing/beat.ts";
-import { clamp, clamp01 } from "../../../../../core/utils/numbers.ts";
+import {
+  eventFieldBounds,
+  normalizeEventNumber,
+  parseEventArray,
+  type FieldKey,
+  type ValueKind,
+} from "./eventFieldModel.ts";
 import {
   transformEvents,
   assertMultiEventSelectionStructure,
@@ -24,11 +30,6 @@ import { numericWheel } from "../../../../../design/controls/numericWheel.ts";
 import { EVENT_WHEEL_STEPS } from "../../../../../core/global/chart/editing/noteEditing.ts";
 import { judgeLineTraits } from "../../../../../core/global/chart/line/lineTraits.ts";
 import { t } from "../../../../../i18n/index.ts";
-
-export type FieldKey =
-  "startTime" | "endTime" | "start" | "end" | "easingLeft" | "easingRight" | "linkgroup";
-
-export type ValueKind = "beat" | "array" | "text" | "number";
 
 interface EventFieldProps {
   session: EditorSession;
@@ -105,25 +106,17 @@ export function EventField({
       try {
         let value: number | number[] | string;
         if (kind === "array") {
-          const values = inputValue.split(",").map(Number);
-          if (values.length !== 3 || values.some((number) => !Number.isFinite(number))) {
+          const values = parseEventArray(inputValue);
+          if (!values) {
             throw new Error(t("editorPanels.inspector.event.colorInvalid"));
           }
-          value = values.map((number) => clamp(number, 0, 255));
+          value = values;
         } else if (kind === "number") {
-          value = Number(inputValue);
-          if (!inputValue.trim() || !Number.isFinite(value)) {
+          const parsed = Number(inputValue);
+          if (!inputValue.trim() || !Number.isFinite(parsed)) {
             return;
           }
-          if (eventType === "alphaEvents" && (field === "start" || field === "end")) {
-            value = clamp(value, 0, 255);
-          }
-          if (field === "easingLeft" || field === "easingRight") {
-            value = clamp01(value);
-          }
-          if (field === "linkgroup") {
-            value = Math.max(0, Math.round(value));
-          }
+          value = normalizeEventNumber(field, parsed);
         } else {
           value = inputValue;
         }
@@ -144,7 +137,7 @@ export function EventField({
         }
       }
     },
-    [eventType, field, kind, reportError, session, title],
+    [field, kind, reportError, session, title],
   );
   const updateRef = useRef(update);
 
@@ -199,16 +192,7 @@ export function EventField({
     });
   };
 
-  const minMax =
-    field === "easingLeft" || field === "easingRight"
-      ? { min: 0, max: 1 }
-      : eventType === "alphaEvents" && (field === "start" || field === "end")
-        ? { min: 0, max: 255 }
-        : eventType === "speedEvents" && (field === "start" || field === "end")
-          ? { min: 0 }
-          : field === "linkgroup"
-            ? { min: 0 }
-            : {};
+  const bounds = eventFieldBounds(field);
 
   const input = (
     <Input
@@ -218,8 +202,8 @@ export function EventField({
       type={kind === "number" ? "number" : "text"}
       data-redux-wheel={kind === "number" ? "custom" : undefined}
       step={kind === "number" ? step : "any"}
-      min={minMax.min}
-      max={minMax.max}
+      min={bounds.min}
+      max={bounds.max}
       data-inspector-field={field}
       disabled={disabled}
       defaultValue={displayValue(event, field)}
