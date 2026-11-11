@@ -8,6 +8,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { useEditorRuntime } from "../../../editor/workspace/runtime/composition/EditorRuntime.tsx";
 import { useEditorSession } from "../../../editor/workspace/runtime/providers/SessionProvider.tsx";
 import { BpmPanel } from "../../../editor/inspector/bpm/BpmPanel.tsx";
+import { retainBpmForm } from "../../../editor/inspector/bpm/model.ts";
 import { timingInspectorTarget } from "./timingSelection.ts";
 
 /** Keeps the BPM form bound to the session chart and renders the selected timing target. */
@@ -30,6 +31,7 @@ export function GlobalTimingInspector() {
     if (!runtime) {
       return;
     }
+    const releaseBpmForm = retainBpmForm(runtime.ui.bpmForm, session);
     const show = () => {
       if (session.chart) {
         runtime.ui.bpmForm.show(session);
@@ -39,7 +41,7 @@ export function GlobalTimingInspector() {
     session.addEventListener("change", show);
     return () => {
       session.removeEventListener("change", show);
-      runtime.ui.bpmForm.clear();
+      releaseBpmForm();
     };
   }, [runtime, session]);
   return <BpmPanel showTitle={false} mode={target} />;
