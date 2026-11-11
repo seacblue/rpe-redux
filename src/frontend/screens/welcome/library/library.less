@@ -126,30 +126,52 @@
 }
 
 .redux-library-card {
+  --sleeve-lift: 0px;
+  --sleeve-tilt-x: 0deg;
+  --sleeve-tilt-y: 0deg;
   position: relative;
   display: flex;
   flex: none;
   flex-direction: column;
   min-width: 0;
-  // The cover keeps its ratio while the body fills the responsive height floor
-  // shared with the placeholder card.
+  // The square cover plus one metadata/action body. The prompt uses the same
+  // floor so selecting or clearing a chart does not resize the column.
   min-height: var(--welcome-detail-min-height);
+  overflow: hidden;
   border: 1px solid var(--edge-divider);
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
-  animation: library-detail-in var(--design-dur-disclosure) var(--design-ease-spring) both;
+  // The pointer writes the two tilt variables; the hover lift is a third
+  // variable, so the two motions compose without either overriding the other.
+  transform: perspective(1100px) translateY(var(--sleeve-lift)) rotateX(var(--sleeve-tilt-x))
+    rotateY(var(--sleeve-tilt-y));
+  transform-origin: 50% 50%;
+  // `backwards` lets the composed transform take over once the entrance ends;
+  // a filled entrance animation would keep overriding `transform`.
+  animation: library-detail-in var(--design-dur-disclosure) var(--design-ease-spring) backwards;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent) inset,
+    0 12px 30px color-mix(in srgb, var(--shadow-color) 34%, transparent);
+  transition:
+    transform var(--design-dur-tint) var(--design-ease-move),
+    border-color var(--design-dur-tint) ease,
+    box-shadow var(--design-dur-overlay) var(--design-ease-move);
+}
+
+.redux-library-card:hover,
+.redux-library-card:focus-within {
+  --sleeve-lift: -3px;
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--edge-divider));
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent) inset,
-    0 14px 34px color-mix(in srgb, var(--shadow-color) 46%, transparent);
+    0 18px 38px color-mix(in srgb, var(--shadow-color) 44%, transparent),
+    0 0 26px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .redux-library-card-media {
   position: relative;
   flex: none;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border-bottom: 1px solid var(--edge-divider);
-  border-radius: calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px) 0 0;
+  aspect-ratio: 1 / 1;
   background: var(--surface-muted);
 }
 
@@ -163,16 +185,33 @@
 .redux-library-detail-cover-placeholder {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--surface-muted) 88%, var(--foreground) 5%),
-    var(--surface-muted) 54%,
-    color-mix(in srgb, var(--surface-hover) 72%, var(--foreground) 4%)
-  );
+  background:
+    radial-gradient(
+      circle at 72% 22%,
+      color-mix(in oklab, var(--accent) 18%, transparent),
+      transparent 46%
+    ),
+    linear-gradient(150deg, var(--surface-muted), var(--surface-sunken) 72%);
 }
 
-// Matte artwork: the cover is the only saturated surface, and it is deliberately
-// held back so it does not spill colour into the page.
+.redux-library-detail-cover-letter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--media-ink) 7%, transparent);
+  font-size: var(--type-hero);
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  user-select: none;
+
+  > span {
+    display: block;
+    transform: scale(4);
+  }
+}
+
 .redux-library-detail-cover-layer {
   position: absolute;
   inset: 0;
@@ -181,159 +220,465 @@
   object-fit: cover;
   background-position: center;
   background-size: cover;
-  filter: saturate(0.78) contrast(0.95) brightness(0.97);
+  filter: saturate(0.84) contrast(0.97) brightness(0.98);
+  transform-origin: center;
   animation: library-cover-in var(--design-dur-search) ease both;
+  transition: transform var(--design-dur-overlay) var(--design-ease-move);
 }
 
-.redux-library-card-body {
-  display: flex;
-  flex: 1 0 auto;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-height: 0;
-  padding: var(--space-5);
+.redux-library-card:hover .redux-library-detail-cover-layer,
+.redux-library-card:focus-within .redux-library-detail-cover-layer {
+  transform: scale(1.025);
 }
 
-// Selection swaps the metadata as one block. The keyed wrapper remounts, so the
-// new title and credits enter instead of snapping while the old ones vanish.
-.redux-library-card-summary {
+.redux-library-detail-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to top,
+      color-mix(in srgb, var(--media-surface) 92%, transparent) 0%,
+      color-mix(in srgb, var(--media-surface) 42%, transparent) 32%,
+      transparent 62%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--media-surface) 20%, transparent),
+      transparent 24%
+    );
+}
+
+.redux-library-detail-level {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--media-ink) 22%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--media-surface) 52%, transparent);
+  color: var(--media-ink);
+  font-size: var(--type-label);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+}
+
+.redux-library-detail-caption {
+  position: absolute;
+  right: calc(var(--space-4) + 48px);
+  bottom: var(--space-4);
+  left: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1);
   animation: library-summary-in var(--design-dur-tint) var(--design-ease-enter) both;
 }
 
-// At the minimum supported height the card body trades breathing room for a
-// wrapped title, so the action row still fits inside the column.
-@media (max-height: 720px) {
-  .redux-library-card-body {
-    gap: var(--space-2);
-    padding: var(--space-4);
-  }
-}
-
-.redux-library-card-title {
+.redux-library-detail-title {
   margin: 0;
-  color: var(--foreground);
+  color: var(--media-ink);
   font-size: var(--type-hero);
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.08;
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
-.redux-library-card-composer {
-  margin: calc(var(--space-1) * -1) 0 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-label);
+.redux-library-detail-composer {
+  margin: 0;
+  color: color-mix(in srgb, var(--media-ink) 68%, transparent);
+  font-size: var(--type-caption);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
+.redux-app-root .redux-home-page .redux-library-detail-preview {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--media-ink) 22%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--media-surface) 42%, transparent);
+  color: var(--media-ink);
+  backdrop-filter: blur(8px);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--media-surface) 62%, transparent);
+    color: var(--media-ink);
+  }
+
+  &.active {
+    border-color: color-mix(in srgb, var(--active-accent) 46%, transparent);
+    background: color-mix(in srgb, var(--active-accent-fill) 74%, transparent);
+    color: var(--active-accent);
+  }
+
+  .redux-icon {
+    --icon-color: currentColor;
+  }
+}
+
+.redux-library-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--space-4) var(--space-4) 0;
+}
+
 .redux-library-card-meta {
   display: grid;
-  gap: var(--space-2);
-  margin: var(--space-1) 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4);
+  // The auto bottom margin pushes the action dock to the card floor while
+  // leaving a minimum gap before the divider.
+  margin: 0 0 auto;
+  animation: library-summary-in var(--design-dur-tint) var(--design-ease-enter) both;
 
   > div {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-3);
     min-width: 0;
   }
 
   dt {
+    margin: 0 0 2px;
+    color: var(--foreground-muted);
+    font-size: var(--type-micro);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 0;
+    .truncate();
+    color: var(--foreground);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    line-height: 1.25;
+  }
+}
+
+.redux-library-card-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-3) calc(-1 * var(--space-4)) 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--edge-divider);
+  border-radius: 0 0 calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px);
+  background: color-mix(in srgb, var(--surface-sunken) 34%, transparent);
+}
+
+.redux-library-card-open {
+  flex: 1;
+  min-width: 0;
+}
+
+.redux-app-root .redux-home-page .redux-library-card-action {
+  width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  min-width: var(--control-height-lg);
+  min-height: var(--control-height-lg);
+  padding: 0;
+}
+
+// The empty column is a borderless welcome panel: a greeting, library totals,
+// and a daily check-in that reveals a fortune. The panel reserves the same
+// height as the selected sleeve so checking in never resizes the column.
+.redux-library-welcome-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-height: var(--welcome-detail-min-height);
+  padding-block: var(--space-2);
+  animation: library-detail-in var(--design-dur-disclosure) var(--design-ease-spring) backwards;
+}
+
+.redux-library-welcome-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.redux-library-welcome-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+
+  .redux-icon {
     flex: none;
-    min-width: 56px;
-    .meta-text();
-    white-space: nowrap;
+    --icon-color: var(--accent);
+  }
+}
+
+.redux-library-welcome-dot {
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--foreground-muted) 45%, transparent);
+}
+
+.redux-library-welcome-title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--type-display);
+  font-weight: 600;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.redux-library-welcome-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-5);
+  margin: 0;
+
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  dt {
+    color: var(--foreground-muted);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    line-height: var(--line-label);
   }
 
   dd {
     margin: 0;
     color: var(--foreground);
-    font-size: var(--type-body);
-    font-weight: 500;
-    overflow-wrap: anywhere;
+    font-size: var(--type-title);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: var(--line-label);
+    white-space: nowrap;
+  }
+
+  &[data-pending="true"] dd {
+    color: var(--foreground-muted);
   }
 }
 
-.redux-library-card-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.redux-library-welcome-stat-duration {
+  font-size: var(--type-body);
+}
+
+// A soft, borderless block: the accent glow marks the one action without
+// turning the welcome panel into another card.
+.redux-library-welcome-checkin {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
-  margin-top: auto;
-  padding-top: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(
+      120% 110% at 100% 0%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 58%
+    ),
+    color-mix(in srgb, var(--surface-raised) 62%, transparent);
 }
 
-// Match the footer action gap; the shared glyph rule keeps its own 6px optical
-// gap for compact controls.
-.redux-app-root .redux-home-page .redux-library-card-actions .redux-button {
+.redux-library-welcome-checkin-body {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(var(--space-7) * 7);
+}
+
+.redux-library-welcome-checkin-drawing {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: var(--line-body);
+  text-align: center;
 }
 
-// Without a selected chart the column keeps the card silhouette: the cover and
-// the four fields become neutral rule lines, and the same action row stays
-// visible but disabled.
-.redux-library-card-placeholder {
-  pointer-events: none;
-  user-select: none;
+.redux-library-welcome-checkin-drawing .redux-spinner {
+  padding: var(--space-3);
 }
 
-.redux-library-card-placeholder .redux-library-card-media {
-  background: var(--surface-muted);
-}
-
-.redux-library-placeholder-media {
-  position: relative;
-}
-
-.redux-library-placeholder-title {
+.redux-library-welcome-checkin-head {
   display: flex;
   align-items: center;
-  height: calc(var(--type-hero) * 1.15);
 }
 
-.redux-library-placeholder-composer {
-  display: flex;
-  align-items: center;
-  height: calc(var(--type-label) * 1.35);
-  margin-top: calc(-1 * var(--space-1));
+.redux-library-welcome-checkin-title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--type-heading);
+  font-weight: 600;
+  line-height: var(--line-label);
 }
 
-.redux-library-placeholder-line {
-  display: block;
-  height: var(--space-2);
-  border-radius: 999px;
-  background: var(--surface-muted);
-
-  &.is-title {
-    width: 68%;
-    height: var(--space-3);
-  }
-
-  &.is-composer {
-    width: 42%;
-  }
-
-  &.is-charter {
-    width: 55%;
-  }
-
-  &.is-level {
-    width: 36%;
-  }
+.redux-library-welcome-checkin-copy {
+  max-width: 34ch;
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: var(--line-body);
 }
 
-.redux-library-placeholder-meta {
-  display: grid;
-  gap: var(--space-2);
+.redux-library-welcome-checkin-action {
+  align-self: flex-start;
   margin-top: var(--space-1);
 }
 
-.redux-library-placeholder-meta-row {
+.redux-library-welcome-fortune {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+  animation: library-summary-in var(--design-dur-tint) var(--design-ease-enter) both;
+}
+
+.redux-library-welcome-fortune-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.redux-library-welcome-fortune-label {
+  display: inline-flex;
   align-items: center;
-  height: calc(var(--line-body) * var(--type-body));
+  gap: var(--space-1);
+  color: var(--accent);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+
+  .redux-icon {
+    --icon-color: currentColor;
+  }
+}
+
+.redux-library-welcome-fortune-rank {
+  color: var(--foreground-muted);
+  font-size: var(--type-title);
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.redux-library-welcome-fortune[data-tone="good"] .redux-library-welcome-fortune-rank {
+  color: var(--accent);
+}
+
+.redux-library-welcome-fortune[data-tone="bad"] .redux-library-welcome-fortune-rank {
+  color: var(--warning);
+}
+
+.redux-library-welcome-fortune[data-tone="worst"] .redux-library-welcome-fortune-rank {
+  color: var(--danger);
+}
+
+.redux-library-welcome-fortune-advice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
+
+.redux-library-welcome-fortune-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  text-align: center;
+}
+
+.redux-library-welcome-fortune-column-title {
+  align-self: center;
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.redux-library-welcome-fortune-column.is-suitable .redux-library-welcome-fortune-column-title {
+  color: var(--accent);
+}
+
+.redux-library-welcome-fortune-column.is-avoid .redux-library-welcome-fortune-column-title {
+  color: var(--warning);
+}
+
+.redux-library-welcome-fortune-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: center;
+
+  li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 0;
+    width: 100%;
+    text-align: center;
+  }
+}
+
+.redux-library-welcome-fortune-item {
+  color: var(--foreground);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.redux-library-welcome-fortune-note {
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+// At the minimum supported height the cover keeps its square but the body
+// trades breathing room for the action row.
+@media (max-height: 720px) {
+  .redux-library-card-body {
+    padding: var(--space-3) var(--space-3) 0;
+  }
+
+  .redux-library-card-actions {
+    margin-inline: calc(-1 * var(--space-3));
+    padding: var(--space-2) var(--space-3) var(--space-3);
+  }
 }
 
 // ------------------------------------------------------------- list and grid
@@ -742,18 +1087,5 @@
   }
   to {
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .redux-library-detail-cover-layer {
-    animation: none;
-    opacity: 1;
-  }
-
-  .project-card[data-entering="true"],
-  .project-new,
-  .redux-library-card-summary {
-    animation: none;
   }
 }

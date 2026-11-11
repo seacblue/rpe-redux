@@ -103,9 +103,10 @@
   // viewport guard is inert above the stacking breakpoint: 40vw only drops
   // below 380px beneath 950px, where the page already stacks.
   --welcome-detail-width: min(380px, 40vw);
-  // The selected card and the no-selection prompt share this floor, so the
-  // left column keeps its size instead of shrinking when the selection clears.
-  --welcome-detail-min-height: clamp(420px, 61vh, 540px);
+  // The selected sleeve and the no-selection prompt share this floor. A square
+  // cover plus the metadata/action body keeps the left column from collapsing
+  // when the selection clears.
+  --welcome-detail-min-height: calc(var(--welcome-detail-width) + 180px);
 
   display: grid;
   flex: 1;
@@ -265,6 +266,8 @@ dialog.redux-welcome-import-dialog {
 
   .redux-welcome-side {
     flex: none;
+    width: var(--welcome-detail-width);
+    max-width: 100%;
   }
 
   .redux-app-root .redux-home-page .redux-welcome-library {
