@@ -38,6 +38,15 @@ test("waveform controls follow the waveform toggle", () => {
   }
 });
 
+test("waveform contrast defaults to one and stays within the configured range", () => {
+  const alpha = settingsRegistry.definition("audio-analysis-alpha");
+  const curve = settingsRegistry.definition("audio-analysis-curve");
+  assert.equal(alpha?.default, 0.5);
+  assert.equal(curve?.default, 1);
+  assert.equal(curve?.min, 0.2);
+  assert.equal(curve?.max, 2);
+});
+
 test("autosave timing rows follow autosave-enabled", () => {
   for (const key of ["autosave-seconds", "autosave-limit"]) {
     assert.equal(settingsRegistry.definition(key)?.enabledWhen?.key, "autosave-enabled", key);

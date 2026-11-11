@@ -73,9 +73,9 @@ export class AudioAnalysis {
     this.getAudio = getAudio;
     this.visibility = visibility;
     this.enabled = false;
-    this.alpha = 0.2;
+    this.alpha = 0.5;
     this.width = 0.62;
-    this.curve = 1.5;
+    this.curve = 1;
     this.data = null;
     this.visibility.set(false);
   }

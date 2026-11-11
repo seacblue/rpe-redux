@@ -229,9 +229,9 @@ export function createTimelineRuntime(options: {
   const syncAnalysis = () => {
     if (values.byId.has("audio-analysis-enabled")) {
       audioAnalysis.enabled = values.byId.get<boolean>("audio-analysis-enabled");
-      audioAnalysis.alpha = Number(values.byId.get<string>("audio-analysis-alpha") ?? 0.2);
+      audioAnalysis.alpha = Number(values.byId.get<string>("audio-analysis-alpha") ?? 0.5);
       audioAnalysis.width = Number(values.byId.get<string>("audio-analysis-width") ?? 0.62);
-      audioAnalysis.curve = Number(values.byId.get<string>("audio-analysis-curve") ?? 1.5);
+      audioAnalysis.curve = Number(values.byId.get<string>("audio-analysis-curve") ?? 1);
       scrubberSpectrum.curve = audioAnalysis.curve;
       scrubberSpectrum.draw();
     }

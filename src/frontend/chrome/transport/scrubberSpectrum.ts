@@ -39,7 +39,7 @@ export class ScrubberSpectrum {
   canvas: HTMLCanvasElement;
   data: AudioAnalysisData | null = null;
   /** Perceptual emphasis shared with the timeline waveform. */
-  curve = 1.5;
+  curve = 1;
   painted = "";
   /** Bumped by `setData` so two tracks with identical shapes still repaint. */
   revision = 0;
