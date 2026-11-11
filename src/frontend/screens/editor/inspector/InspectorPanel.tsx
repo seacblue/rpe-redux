@@ -128,20 +128,29 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     activeWorkspaceMode,
   );
   const [modeExpanded, setModeExpanded] = useState(activeWorkspaceMode !== null);
+  const [modeLeaving, setModeLeaving] = useState(false);
   // Keep the task mounted through the collapse transition, then hand the body
-  // back to the compact page. The opening write is deferred one frame so the
-  // panel starts from its compact layout before the width expands; the closing
-  // write starts the shrink immediately and clears the content after it ends.
+  // back to the compact page. The task enters with its own keyframe animation so
+  // the first paint is already the transparent start state; collapsing swaps
+  // that animation for an exit keyframe and clears the task after the panel has
+  // shrunk and the compact page has returned.
   useEffect(() => {
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
         setDisplayedMode(activeWorkspaceMode);
         setModeExpanded(true);
+        setModeLeaving(false);
       }, 0);
       return () => window.clearTimeout(openTimer);
     }
-    const collapseTimer = window.setTimeout(() => setModeExpanded(false), 0);
-    const clearTimer = window.setTimeout(() => setDisplayedMode(null), 220);
+    const collapseTimer = window.setTimeout(() => {
+      setModeExpanded(false);
+      setModeLeaving(true);
+    }, 0);
+    const clearTimer = window.setTimeout(() => {
+      setDisplayedMode(null);
+      setModeLeaving(false);
+    }, 280);
     return () => {
       window.clearTimeout(collapseTimer);
       window.clearTimeout(clearTimer);
@@ -200,7 +209,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       focusDrawerPaneTrigger(activeDrawerPane.id);
       return;
     }
-    if (runtime && activeWorkspaceMode && activePane === "") {
+    if (runtime && activeWorkspaceMode) {
       collapseWorkspaceMode(runtime);
       return;
     }
@@ -328,7 +337,11 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           )}
         </div>
         {modeSurface && DisplayedMode && (
-          <div data-panel="workspace-mode" className="inspector-mode-surface">
+          <div
+            data-panel="workspace-mode"
+            className="inspector-mode-surface"
+            data-mode-leaving={modeLeaving ? "true" : undefined}
+          >
             <DisplayedMode />
           </div>
         )}
@@ -341,9 +354,11 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
                 ref={onboardingAnchorRef(`inspector-panel-${id}`)}
                 data-panel={id}
                 data-readonly={locked ? "true" : undefined}
-                inert={locked || undefined}
+                data-mode-underlay={modeSurface ? "true" : undefined}
+                inert={locked || modeSurface || undefined}
+                aria-hidden={modeSurface || undefined}
                 aria-disabled={locked || undefined}
-                hidden={modeSurface || activeDrawerPane !== null || activePane !== id}
+                hidden={activeDrawerPane !== null || activePane !== id}
               >
                 <Panel />
               </div>

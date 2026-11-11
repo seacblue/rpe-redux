@@ -85,6 +85,9 @@
   grid-template-areas: "workspace inspector sidebar";
   gap: 0;
   --workbench-side-track: var(--chrome-sidebar-track);
+  --inspector-compact-width: clamp(260px, var(--inspector-width), 57vw);
+  --inspector-expanded-width: calc(100vw - var(--workbench-side-track) - 2px);
+  --cover-backdrop-workbench-top: calc(var(--titlebar-height) + 106px);
 }
 
 .workbench-workspace,
@@ -96,7 +99,7 @@
 }
 
 .workbench-inspector {
-  width: clamp(260px, var(--inspector-width), 57vw);
+  width: var(--inspector-compact-width);
   overflow: hidden;
 }
 
@@ -107,7 +110,7 @@
   width: 100%;
   min-width: 260px;
   min-height: 0;
-  transition: width 220ms var(--design-ease-enter);
+  transition: width 260ms var(--design-ease-enter);
 }
 
 // A document task expands the inspector itself. The wrapper stays in its grid
@@ -131,9 +134,10 @@
   overflow: hidden;
   isolation: isolate;
   background: var(--surface);
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--chrome-panel-shadow);
+  border: 0;
+  border-left: 1px solid var(--edge-emphasis);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 // The expanded panel reuses the current cover image and its configured blur and
@@ -142,12 +146,17 @@
 .workbench-inspector > .inspector[data-mode-surface="true"]::before {
   content: "";
   position: absolute;
-  inset: -24px;
+  top: calc(-1 * var(--cover-backdrop-workbench-top, 0px) - 10vh);
+  left: -10vw;
+  width: 120vw;
+  height: 120vh;
   z-index: -1;
   background-image: var(--cover-backdrop-image, none);
   background-position: center;
   background-size: cover;
   filter: blur(var(--cover-backdrop-blur, 24px)) brightness(var(--cover-backdrop-brightness, 0.55));
+  transform: scale(1.03);
+  transform-origin: center;
   pointer-events: none;
 }
 
