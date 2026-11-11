@@ -254,11 +254,13 @@ export default {
   "workspace.collaboration.joinMethod": "加入方式",
   "workspace.collaboration.joinMethod.link": "邀请链接",
   "workspace.collaboration.joinMethod.custom": "自定义地址",
-  "workspace.collaboration.serverUrl": "服务器地址",
-  "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
-  "workspace.collaboration.serverUrlWebPlaceholder": "wss://room.example.com",
-  "workspace.collaboration.serverUrlWebHint":
-    "GitHub Pages 只托管静态文件。请使用可通过 wss:// 访问的房间服务器；此 HTTPS 页面无法连接本机或局域网的 ws:// 地址。",
+  "workspace.collaboration.serverAddress": "服务器地址（IP 或域名）",
+  "workspace.collaboration.serverAddressPlaceholder": "192.168.1.10 或 room.example.com",
+  "workspace.collaboration.serverPort": "服务器端口",
+  "workspace.collaboration.serverPortPlaceholder": "例如 47831",
+  "workspace.collaboration.secureProtocol": "启用安全协议",
+  "workspace.collaboration.serverUrlHint":
+    "内网托管会在本机监听一个协作服务端口。同一局域网内的成员可以通过内网地址加入；如需跨网络访问，请使用 VPN、路由器端口转发或内网穿透服务，将此端口映射到其他成员可以访问的地址。请确保网络转发支持 WebSocket，并让加入者使用映射后的地址和端口。我们不会为您自动配置 NAT、防火墙或内网穿透。",
   "workspace.collaboration.changePassword": "更新房间密码",
   "workspace.collaboration.changePasswordHint":
     "设置新的房间密码。已在房间里的成员不会被断开，但旧邀请链接会失效。",

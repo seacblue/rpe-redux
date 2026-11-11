@@ -134,19 +134,12 @@ import {
   type StoredRoomSession,
   type StoredSessionRole,
 } from "./sessionStore.ts";
-
-/** How a host exposes its room to invitees. */
-export type CollaborationHostMode = "tunnel" | "lan";
-
-/** Locally stored identity and host preferences for collaboration. */
-export interface CollaborationSettings {
-  readonly serverUrl: string;
-  readonly displayName: string;
-  readonly color: string;
-  readonly hostMode: CollaborationHostMode;
-  /** User-chosen LAN bridge port; empty when unset. */
-  readonly lanPort: string;
-}
+import {
+  mergeCollaborationSettings,
+  readCollaborationSettings,
+  type CollaborationSettings,
+} from "./collaborationSettings.ts";
+export type { CollaborationHostMode, CollaborationSettings } from "./collaborationSettings.ts";
 
 const DEFAULT_SETTINGS: CollaborationSettings = Object.freeze({
   serverUrl: `ws://127.0.0.1:${getRuntimePorts().collabPort}`,
@@ -154,6 +147,9 @@ const DEFAULT_SETTINGS: CollaborationSettings = Object.freeze({
   color: "#77b7ff",
   hostMode: "tunnel",
   lanPort: "",
+  joinPassword: "",
+  joinMethod: "link",
+  joinLink: "",
 });
 
 /** The loopback room endpoint owned by this desktop process. */
@@ -201,33 +197,11 @@ function defaultProfile(): { name: string; color: string } {
 
 /** Reads stored collaboration settings, filling missing fields from the profile. */
 function readSettings(): CollaborationSettings {
-  const raw = preferences.read(PREFERENCE_SECTIONS.collaboration, null);
-  const fallback = defaultProfile();
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return {
-      ...DEFAULT_SETTINGS,
-      displayName: fallback.name,
-      color: fallback.color,
-    };
-  }
-  const record = raw as Record<string, unknown>;
-  return {
-    serverUrl:
-      typeof record.serverUrl === "string" && record.serverUrl.trim()
-        ? record.serverUrl
-        : DEFAULT_SETTINGS.serverUrl,
-    displayName:
-      typeof record.displayName === "string" && record.displayName.trim()
-        ? record.displayName
-        : fallback.name,
-    color:
-      typeof record.color === "string" && /^#[0-9a-f]{6}$/i.test(record.color)
-        ? record.color
-        : fallback.color,
-    hostMode: record.hostMode === "lan" ? "lan" : "tunnel",
-    lanPort:
-      typeof record.lanPort === "string" && /^\d{4,5}$/.test(record.lanPort) ? record.lanPort : "",
-  };
+  return readCollaborationSettings(
+    preferences.read(PREFERENCE_SECTIONS.collaboration, null),
+    DEFAULT_SETTINGS,
+    defaultProfile(),
+  );
 }
 
 type StoredHostSession = StoredRoomSession;
@@ -398,6 +372,8 @@ export interface CollaborationApi {
   setMaxMembers(maxMembers: number): void;
   removeMember(memberId: string): void;
   copyInvite(): Promise<void>;
+  /** Copies the endpoint that guests should use to reach the current room. */
+  copyConnectionAddress(): Promise<void>;
   /** Update the host's password and publish a fresh invitation link. */
   updateRoomPassword(password: string): void;
   clearRecovery(): void;
@@ -712,7 +688,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const raw = preferences.read(PREFERENCE_SECTIONS.collaboration, null);
     const stored =
       raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-    preferences.write(PREFERENCE_SECTIONS.collaboration, { ...stored, ...persisted });
+    preferences.write(
+      PREFERENCE_SECTIONS.collaboration,
+      mergeCollaborationSettings(stored, persisted),
+    );
   };
   const [recovery, setRecovery] = useState<unknown | null>(null);
   const [unsent, setUnsent] = useState<readonly UnsentChange[]>([]);
@@ -2575,6 +2554,20 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /** Copies the room endpoint and reports the outcome. */
+  const copyConnectionAddress = async () => {
+    const address = stateCell.get().serverUrl;
+    if (!address) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(address);
+      showToast(t("workspace.collaboration.connectionAddressCopied"), "success");
+    } catch {
+      showToast(t("workspace.collaboration.connectionAddressCopyFailed"), "error");
+    }
+  };
+
   const api: CollaborationApi = {
     state,
     settings,
@@ -2597,6 +2590,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setMaxMembers: (maxMembers) => clientRef.current?.setMaxMembers(maxMembers),
     removeMember: (memberId) => clientRef.current?.removeMember(memberId),
     copyInvite,
+    copyConnectionAddress,
     updateRoomPassword,
     clearRecovery: () => setRecovery(null),
     applyRecovery,

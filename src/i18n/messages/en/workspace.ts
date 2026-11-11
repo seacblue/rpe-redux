@@ -110,7 +110,6 @@ export default {
   /** The dialog's "neither apply nor delete, just get me out" button. */
   "workspace.dialogs.dismiss": "Cancel",
   "workspace.timeline.historyTooltip": "{label}, {count} affected objects",
-
   "workspace.scripts.source": "Provided by {source}",
   "workspace.scripts.run": "Run",
   "workspace.scripts.parameters.title": "Run {script} with parameters",
@@ -143,7 +142,6 @@ export default {
   "workspace.scripts.recipe.staggerEventsDescription": "Offset the selected event values.",
   "workspace.scripts.recipe.fadeNotes": "Fade notes",
   "workspace.scripts.recipe.fadeNotesDescription": "Scale the alpha of selected notes.",
-
   "workspace.history.title": "Edit history",
   "workspace.history.emptyTitle": "No edit history yet",
   "workspace.history.empty": "Undo history appears after your first edit.",
@@ -280,11 +278,13 @@ export default {
   "workspace.collaboration.joinMethod": "Join with",
   "workspace.collaboration.joinMethod.link": "Invitation link",
   "workspace.collaboration.joinMethod.custom": "Custom address",
-  "workspace.collaboration.serverUrl": "Server address",
-  "workspace.collaboration.serverUrlPlaceholder": "ws://192.168.1.10:51234",
-  "workspace.collaboration.serverUrlWebPlaceholder": "wss://room.example.com",
-  "workspace.collaboration.serverUrlWebHint":
-    "GitHub Pages only serves static files. Use a room server reachable over wss://; this HTTPS page cannot connect to a local or LAN ws:// address.",
+  "workspace.collaboration.serverAddress": "Server address (IP or domain)",
+  "workspace.collaboration.serverAddressPlaceholder": "192.168.1.10 or room.example.com",
+  "workspace.collaboration.serverPort": "Server port",
+  "workspace.collaboration.serverPortPlaceholder": "e.g. 47831",
+  "workspace.collaboration.secureProtocol": "Use secure protocol",
+  "workspace.collaboration.serverUrlHint":
+    "When hosting on a LAN, this device listens on a collaboration service port. Members on the same LAN can join through the local address. For access across networks, use a VPN, router port forwarding, or a tunnelling service to map this port to an address reachable by other members. Make sure the forwarding supports WebSocket, and have joiners use the mapped address and port. We do not configure NAT, firewalls, or tunnelling services for you.",
   "workspace.collaboration.changePassword": "Change room password",
   "workspace.collaboration.changePasswordHint":
     "Set a new room password. Members already in the room stay connected, but the old invitation link stops working.",
