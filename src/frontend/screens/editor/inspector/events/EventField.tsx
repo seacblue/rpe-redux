@@ -1,5 +1,5 @@
 /** Owns one editable event field: its draft value, its commit, and its value formatting. */
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BeatField } from "../beat/BeatField.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
@@ -10,8 +10,10 @@ import {
 } from "../../../../../core/global/chart/timing/beat.ts";
 import {
   eventFieldBounds,
+  eventFieldNativeStep,
   normalizeEventNumber,
   parseEventArray,
+  steppedEventValue,
   type FieldKey,
   type ValueKind,
 } from "./eventFieldModel.ts";
@@ -27,6 +29,7 @@ import {
 import type { JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { numericWheel } from "../../../../../design/controls/numericWheel.ts";
+import { writeInputValue } from "../../../../../design/controls/nativeValue.ts";
 import { EVENT_WHEEL_STEPS } from "../../../../../core/global/chart/editing/noteEditing.ts";
 import { judgeLineTraits } from "../../../../../core/global/chart/line/lineTraits.ts";
 import { t } from "../../../../../i18n/index.ts";
@@ -193,6 +196,29 @@ export function EventField({
   };
 
   const bounds = eventFieldBounds(field);
+  // Free event values use `step="any"` so the native control never reports a
+  // step mismatch for a value the author typed. The arrow keys below keep the
+  // same stepping the native control would have provided.
+  const nativeStep = kind === "number" ? eventFieldNativeStep(field, step) : "any";
+  const freeNumeric = kind === "number" && nativeStep === "any";
+
+  /** Steps a free-form event value with the arrow keys without native validation. */
+  const onArrowStep = (keyEvent: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (!freeNumeric || (keyEvent.key !== "ArrowUp" && keyEvent.key !== "ArrowDown")) {
+      return;
+    }
+    keyEvent.preventDefault();
+    const input = keyEvent.currentTarget;
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const multiplier = keyEvent.shiftKey ? 10 : keyEvent.ctrlKey ? 5 : 1;
+    const direction = keyEvent.key === "ArrowUp" ? 1 : -1;
+    writeInputValue(input, String(steppedEventValue(value, step, direction, multiplier)));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
 
   const input = (
     <Input
@@ -201,12 +227,13 @@ export function EventField({
       id={`event-field-${field}`}
       type={kind === "number" ? "number" : "text"}
       data-redux-wheel={kind === "number" ? "custom" : undefined}
-      step={kind === "number" ? step : "any"}
+      step={nativeStep}
       min={bounds.min}
       max={bounds.max}
       data-inspector-field={field}
       disabled={disabled}
       defaultValue={displayValue(event, field)}
+      onKeyDown={onArrowStep}
       onFocus={(focusEvent) => {
         focusValue.current = focusEvent.currentTarget.value;
         setLiveEventEdit(true);

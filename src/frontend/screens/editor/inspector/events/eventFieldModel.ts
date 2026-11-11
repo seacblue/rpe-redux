@@ -27,6 +27,22 @@ export function eventFieldBounds(field: FieldKey): { min?: number; max?: number 
   return {};
 }
 
+/** Native step for one numeric field; free values use `any` so validation never fires. */
+export function eventFieldNativeStep(field: FieldKey, step: number): number | "any" {
+  const { min, max } = eventFieldBounds(field);
+  return min === undefined && max === undefined ? "any" : step;
+}
+
+/** One arrow-key step for a free event value, rounded past floating-point residue. */
+export function steppedEventValue(
+  value: number,
+  step: number,
+  direction: number,
+  multiplier = 1,
+): number {
+  return Number((value + direction * step * multiplier).toFixed(10));
+}
+
 /** Applies the structural domain after parsing; event values pass through unchanged. */
 export function normalizeEventNumber(field: FieldKey, value: number): number {
   if (field === "easingLeft" || field === "easingRight") {
