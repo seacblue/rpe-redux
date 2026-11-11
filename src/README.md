@@ -22,10 +22,10 @@ core/       host-independent domain logic, state, platform seams, and APIs
 design/     shared visual and interaction primitives
 frontend/   product surfaces and runtime composition
   app/      window frame and the active authoring surface
-  chrome/   persistent title bar, toolbar, transport, rail, drawer, and status bar
+  chrome/   persistent title bar, toolbar, transport, rail, inspector page frame, and status bar
   overlays/ shared modals, menus, help, and notices
   platform/ host bridges and frontend adapters
-  screens/  startup, welcome, editor, global drawer pages, and settings
+  screens/  startup, welcome, editor, document pages, and settings
 i18n/       English and Chinese message catalogs
 assets/     build-time packages: Extensions, note skins, and themes
 public/     application-owned runtime resources, served at `assets/`
@@ -34,7 +34,7 @@ test/       full-flow desktop smoke journeys and chart fixtures
 
 ## Ownership
 
-- `frontend/` owns visible surfaces. The editor is the one authoring surface and supplies its workspace, inspector, sidebar, and toolbar rows through `modeContract.ts`; document-wide pages register as drawer panes selected by `core/shell/drawerPane.ts`, and the frame names no concrete page. Editor toolbar controls live under `screens/editor/toolbar/`, the shared transport card under `chrome/transport/`, and global pages under `screens/global/`.
+- `frontend/` owns visible surfaces. The editor is the one authoring surface and supplies its workspace, inspector, sidebar, and toolbar rows through `modeContract.ts`; document-wide pages register as compact inspector pages plus Workspace modes, and the frame names no concrete page. Editor toolbar controls live under `screens/editor/toolbar/`, the shared transport card under `chrome/transport/`, and document pages under `screens/global/`.
 - Canvas hosts are rendered by their feature and passed to the imperative engine through a local surface handle. React keeps node ownership; the engine draws into the handles it receives.
 - `core/` owns chart rules, editor state, document lifecycle, media, settings, platform adapters, and the public API. It imports core modules only and never imports `frontend/` or `design/`.
 - `core/global/chart/` contains chart rules and calculations only; it does not import React, Tauri, storage, or the network.

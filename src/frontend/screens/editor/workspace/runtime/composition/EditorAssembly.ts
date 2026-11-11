@@ -51,6 +51,7 @@ import {
 import { bindEditorWindowEvents } from "../../../../../platform/windowEvents.ts";
 import { preferences } from "../../../../../../core/state/preferences.ts";
 import { getDrawerState } from "../../../../../chrome/drawer/drawerPanes.ts";
+import { getWorkspaceModeState } from "../../container/workspaceModes.ts";
 import { createWorkspaceSessionRuntime } from "../../session/workspaceSessionRuntime.ts";
 import { bindCurveActions } from "../../../inspector/curveNotes/actions.ts";
 import { bindTrajectoryAction } from "../../../inspector/trajectory/actions.ts";
@@ -1084,7 +1085,11 @@ export function createEditorAssembly(
           return;
         }
         const drawer = getDrawerState();
-        if (drawer.open && drawer.pane === "assets") {
+        const assetsOpen =
+          getWorkspaceModeState().id === "assets" ||
+          ui.activeInspector.get() === "assets" ||
+          (drawer.open && drawer.pane === "assets");
+        if (assetsOpen) {
           await assetLibrary.importPaths(paths);
           return;
         }

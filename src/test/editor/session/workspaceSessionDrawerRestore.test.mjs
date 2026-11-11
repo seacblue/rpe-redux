@@ -1,19 +1,17 @@
-/** Session restore reopens a saved drawer through the same single write entry as every other drawer activation. */
+/** Session restore maps a legacy drawer page to the Inspector page that replaced it. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createValue, defineValue } from "../../../core/state/values.ts";
-import { readDrawerPane } from "../../../core/shell/drawerPane.ts";
 import {
   WORKSPACE_SESSION_VERSION,
   writeWorkspaceSession,
 } from "../../../core/edit/session/workspaceSession.ts";
-import { workspace } from "../../../core/api/workspace.ts";
 import {
   closeDrawer,
   getDrawerState,
-  registerDrawerPane,
   subscribeDrawer,
 } from "../../../frontend/chrome/drawer/drawerPanes.ts";
+import { registerInspectorPanel } from "../../../frontend/screens/editor/inspector/controller.ts";
 import { createWorkspaceSessionRuntime } from "../../../frontend/screens/editor/workspace/session/workspaceSessionRuntime.ts";
 
 /** Defines the setting the restore runtime reads before it opens the session. */
@@ -44,7 +42,7 @@ function createSession() {
 }
 
 /** Creates the runtime with one saved path document and a no-op document host. */
-function createRuntime() {
+function createRuntime(activeInspector = createValue({ initial: "" })) {
   const session = createSession();
   const counters = { invalidated: 0, rendered: 0 };
   const runtime = createWorkspaceSessionRuntime({
@@ -68,7 +66,7 @@ function createRuntime() {
       setMultiLineZoom() {},
     },
     chartSeconds: () => 1,
-    activeInspector: createValue({ initial: "" }),
+    activeInspector,
     getChartInfoExpanded: () => true,
     seek() {},
     loadCandidate: async () => {},
@@ -79,16 +77,15 @@ function createRuntime() {
       counters.rendered += 1;
     },
   });
-  return { runtime, counters };
+  return { runtime, counters, activeInspector };
 }
 
-test("session restore reopens the saved drawer with one write", async () => {
-  const disposeDrawer = registerDrawerPane({
+test("session restore opens a legacy document drawer as its Inspector page", async () => {
+  const disposePanel = registerInspectorPanel({
     id: "test:restore-lines",
-    order: 1,
+    component: () => null,
     label: "test.documentPage",
     icon: "grid",
-    body: () => null,
   });
   closeDrawer();
   writeWorkspaceSession({
@@ -108,24 +105,23 @@ test("session restore reopens the saved drawer with one write", async () => {
       drawerOpen: true,
     },
   });
-  let notifications = 0;
+  let drawerNotifications = 0;
   const unsubscribe = subscribeDrawer(() => {
-    notifications += 1;
+    drawerNotifications += 1;
   });
-  const { runtime, counters } = createRuntime();
+  const { runtime, counters, activeInspector } = createRuntime();
   try {
     await runtime.restore();
 
-    assert.deepEqual(getDrawerState(), { open: true, pane: "test:restore-lines" });
-    assert.equal(notifications, 1);
-    assert.equal(readDrawerPane(), "test:restore-lines");
-    assert.equal(workspace.drawerPane(), "test:restore-lines");
+    assert.equal(activeInspector.get(), "test:restore-lines");
+    assert.deepEqual(getDrawerState(), { open: false, pane: "" });
+    assert.equal(drawerNotifications, 0);
     assert.equal(counters.invalidated, 1);
     assert.equal(counters.rendered, 1);
   } finally {
     unsubscribe();
     runtime.dispose();
     closeDrawer();
-    disposeDrawer();
+    disposePanel();
   }
 });

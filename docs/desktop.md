@@ -137,7 +137,7 @@ Portable builds carry `portable.marker`, show the published release notes when a
 
 ## Session and window state
 
-Files → Startup controls crash and update recovery. When enabled, a launch after an unexpected exit or an update restart reopens the last file or library project and restores its playhead, timeline origin, active line, multi-line selection, active inspector pane, drawer section and open state, and chart-info expansion. A normal close clears the record, so reopening the application starts empty. The record lives in the `session` preference section and is sampled every two seconds; only the sampled record survives an abnormal exit.
+Files → Startup controls crash and update recovery. When enabled, a launch after an unexpected exit or an update restart reopens the last file or library project and restores its playhead, timeline origin, active line, multi-line selection, active inspector page and chart-info expansion. A transient Workspace mode is not restored; the editor returns to the timeline. A normal close clears the record, so reopening the application starts empty. The record lives in the `session` preference section and is sampled every two seconds; only the sampled record survives an abnormal exit.
 
 Window geometry is always stored in `user-data/window-state.json`; when that file is missing, an existing Roaming `window-state.json` is imported once. The last size, position, and maximized state are restored on the next launch when the rectangle is still visible on a connected monitor.
 

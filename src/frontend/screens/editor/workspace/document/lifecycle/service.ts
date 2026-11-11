@@ -20,7 +20,7 @@ import { type LoadTask } from "../../../../../../core/global/document/loading.ts
 import type { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
 import type { EditorCandidate } from "../../../../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../../../../core/global/library/types.ts";
-import { openDrawerPane } from "../../../../../chrome/drawer/drawerPanes.ts";
+import { openPane } from "../../../inspector/controller.ts";
 import { OPEN_METADATA_EVENT } from "../../../../../../core/shell/shellEventNames.ts";
 import { CHART_FILE_ACCEPT, openChartFiles } from "../open/chartFiles.ts";
 import { requestChoice, requestConfirm } from "../../../../../overlays/modals/prompts.ts";
@@ -240,7 +240,7 @@ export async function openAssets(): Promise<void> {
         }
       }
     }
-    openDrawerPane("assets");
+    openPane("assets");
     await bound.assetLibrary.render();
   } catch (error) {
     bound.reportError(error);

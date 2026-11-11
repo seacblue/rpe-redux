@@ -33,6 +33,7 @@ import { assetPath, resourceReferences } from "../../../../../core/global/docume
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
 import { serverOrigin } from "../../../../../core/global/library/client.ts";
 import { getDrawerState, subscribeDrawer } from "../../../../chrome/drawer/drawerPanes.ts";
+import { getWorkspaceModeState } from "../container/workspaceModes.ts";
 import { preferences, PREFERENCE_SECTIONS } from "../../../../../core/state/preferences.ts";
 import {
   CollaborationClient,
@@ -2070,6 +2071,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       }
       const session = runtime.getSession();
       const drawer = getDrawerState();
+      const workspaceMode = getWorkspaceModeState().id;
+      const activeSection = workspaceMode || (drawer.open ? drawer.pane : "");
       const timeline = showsAuthoringRegion(getEditorRegionSnapshot());
       const selectedNoteIds: string[] = [];
       for (const entry of session.selectedNoteEntries()) {
@@ -2090,8 +2093,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         ...(selectedNoteIds.length ? { selectedNoteIds } : {}),
         ...(selectedEventIdsHere.length ? { selectedEventIds: selectedEventIdsHere } : {}),
       };
-      if (drawer.open) {
-        client.sendPresence({ ...base, section: drawer.pane });
+      if (activeSection) {
+        client.sendPresence({ ...base, section: activeSection });
         lastSent = now;
         return;
       }

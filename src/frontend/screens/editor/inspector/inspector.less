@@ -57,7 +57,8 @@
   padding: 0;
 }
 
-.redux-app-root .inspector .inspector-status > .inspector-status-help {
+.redux-app-root .inspector .inspector-status > .inspector-status-help,
+.redux-app-root .inspector .inspector-status > .inspector-status-expand {
   flex: none;
   width: var(--control-height-compact);
   height: var(--control-height-compact);
@@ -67,7 +68,8 @@
   color: var(--foreground-muted);
 }
 
-.redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled) {
+.redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled),
+.redux-app-root .inspector .inspector-status > .inspector-status-expand:hover:not(:disabled) {
   color: var(--accent);
 }
 

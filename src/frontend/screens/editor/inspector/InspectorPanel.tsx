@@ -46,6 +46,12 @@ import {
   useDrawerState,
 } from "../../../chrome/drawer/drawerPanes.ts";
 import { DrawerPaneView } from "../../../chrome/drawer/DrawerPaneView.tsx";
+import { Button } from "../../../../design/components/button/Button.tsx";
+import {
+  collapseWorkspaceMode,
+  expandWorkspaceMode,
+} from "../workspace/container/workspaceModeActions.ts";
+import { useActiveWorkspaceMode } from "../workspace/container/workspaceModes.ts";
 import { guideSectionForContext } from "../../../overlays/help/onboardingGuideContent.ts";
 import {
   openOnboardingGuide,
@@ -115,12 +121,15 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     (entry): entry is SidebarNavigationItem => entry.kind === "item",
   );
   const activeDefinition = panels.find(({ id }) => id === activePane);
+  const activeWorkspaceMode = useActiveWorkspaceMode();
   const activeDrawerPane = drawerState.open
     ? (drawerPanes.find(
         (pane) =>
           pane.id === drawerState.pane && (!pane.requiresDocument || visibility.hasDocument),
       ) ?? null)
     : null;
+  const modeCompanion =
+    activeWorkspaceMode !== null && activePane === "" && activeDrawerPane === null;
   const drawerHeld = useDrawerPaneHeld(activeDrawerPane?.id ?? null);
   // A drawer page replaces the inspector body, so the pane it hides must stop
   // publishing previews. Closing it runs the pane's close lifecycle, which
@@ -140,14 +149,18 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
   const headerLabel =
     activeDrawerPane?.label ??
     activeDefinition?.label ??
+    activeWorkspaceMode?.label ??
     navigationEntry?.label ??
     "chrome.inspector.label";
   const headerIcon: IconName = activeDrawerPane?.icon
     ? activeDrawerPane.icon
-    : (activeDefinition?.icon ?? (navigationEntry ? iconName(navigationEntry.icon) : "panelRight"));
-  const showHeader = activeDrawerPane !== null || activePane !== "";
+    : (activeDefinition?.icon ??
+      activeWorkspaceMode?.icon ??
+      (navigationEntry ? iconName(navigationEntry.icon) : "panelRight"));
+  const showHeader = activeDrawerPane !== null || activePane !== "" || modeCompanion;
+  const expandMode = activeDefinition?.workspaceMode;
   const escapeCloseTimer = useRef<number | null>(null);
-  /** Closes the drawer page or the active inspector pane, restoring focus. */
+  /** Closes the drawer page, the active pane, or the workspace companion. */
   const closeActive = useCallback(() => {
     if (activeDrawerPane) {
       // A guided step anchored to this page keeps it open; closing would leave
@@ -162,10 +175,14 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       focusDrawerPaneTrigger(activeDrawerPane.id);
       return;
     }
-    if (runtime) {
+    if (runtime && activePane !== "") {
       closeInspector(runtime.ui.activeInspector);
+      return;
     }
-  }, [activeDrawerPane, drawerHeld, runtime]);
+    if (runtime && modeCompanion) {
+      collapseWorkspaceMode(runtime);
+    }
+  }, [activeDrawerPane, activePane, drawerHeld, modeCompanion, runtime]);
   // Escape is the last resort: an open dialog, popover, capture surface, or
   // menu consumes it first and prevents or stops the event. Only a plain Escape
   // that reaches the window closes the inspector.
@@ -221,12 +238,25 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
         <div className="inspector-status">
           <Icon className="inspector-status-icon" name={headerIcon} size={16} />
           <span className="inspector-status-name">{tRaw(headerLabel)}</span>
+          {expandMode && (
+            <IconButton
+              className="inspector-status-expand"
+              icon="maximize"
+              label={t("chrome.inspector.expand")}
+              tooltip={false}
+              onClick={() => {
+                expandWorkspaceMode(expandMode, runtime);
+              }}
+            />
+          )}
           <IconButton
             className="inspector-status-help"
             icon="help"
             label={t("chrome.inspector.help")}
             tooltip={false}
-            onClick={() => openInspectorGuide(activeDrawerPane?.id ?? activePane)}
+            onClick={() =>
+              openInspectorGuide(activeDrawerPane?.id ?? activePane ?? activeWorkspaceMode?.id)
+            }
           />
           <IconButton
             className="inspector-status-close"
@@ -240,7 +270,10 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
         </div>
       )}
       <div className="inspector-content">
-        <div data-panel="empty" hidden={activeDrawerPane !== null || activePane !== ""}>
+        <div
+          data-panel="empty"
+          hidden={activeDrawerPane !== null || activePane !== "" || modeCompanion}
+        >
           {emptySlot ? (
             <ThemeUiNodeView tree={emptySlot} bindings={{ items: themeItems, expanded: true }} />
           ) : navigation.entries.length > 0 ? (
@@ -249,6 +282,23 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
             <div className="inspector-empty-placeholder">{t("chrome.inspector.empty")}</div>
           )}
         </div>
+        {modeCompanion && activeWorkspaceMode && (
+          <div data-panel="workspace-mode" className="inspector-mode-companion">
+            <span className="inspector-mode-companion-icon">
+              <Icon name={activeWorkspaceMode.icon} size={24} />
+            </span>
+            <strong>{t(activeWorkspaceMode.label)}</strong>
+            <p>{t("chrome.inspector.modeCompanionHint")}</p>
+            <Button
+              type="button"
+              variant="outlined"
+              block
+              onClick={() => collapseWorkspaceMode(runtime)}
+            >
+              {t("chrome.workspace.backToTimeline")}
+            </Button>
+          </div>
+        )}
         {inspectorRuntime &&
           panels.map(({ id, component: Panel, editsChart }) => {
             const locked = readOnly && editsChart === true;

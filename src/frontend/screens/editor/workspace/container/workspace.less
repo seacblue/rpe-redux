@@ -12,3 +12,111 @@
   border-radius: var(--radius-panel);
   overflow: hidden;
 }
+
+// The timeline and one task page share the workspace rectangle. Both layers are
+// absolutely positioned so neither changing page reflows the frame, and the
+// title bar/inspector/rail never move with a mode change.
+.workspace-mode-stack {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.workspace-timeline-layer,
+.workspace-mode-layer {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-timeline-layer {
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 160ms ease,
+    transform 200ms ease;
+}
+
+.workspace-timeline-layer.is-muted {
+  opacity: 0;
+  transform: scale(0.985);
+  pointer-events: none;
+}
+
+.workspace-mode-layer {
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  background: var(--surface);
+  transform: translateY(8px) scale(0.99);
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--design-ease-enter, ease),
+    transform 220ms var(--design-ease-enter, ease);
+}
+
+.workspace-mode-layer.is-active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.workspace-mode-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--edge-divider);
+  background: var(--chrome-panel-surface, var(--surface-raised));
+}
+
+.workspace-mode-back {
+  flex: none;
+}
+
+.workspace-mode-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--foreground);
+
+  .redux-icon {
+    flex: none;
+    --icon-color: var(--accent);
+  }
+
+  strong {
+    .truncate();
+    font-size: var(--type-body);
+    font-weight: 600;
+  }
+}
+
+.workspace-mode-hint {
+  flex: none;
+  margin-left: auto;
+  color: var(--foreground-muted);
+  font-size: var(--type-label);
+}
+
+.workspace-mode-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-timeline-layer,
+  .workspace-mode-layer {
+    transform: none;
+    transition-duration: 1ms;
+  }
+}

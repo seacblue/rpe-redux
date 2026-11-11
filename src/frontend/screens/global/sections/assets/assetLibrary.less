@@ -13,6 +13,41 @@
   width: 100%;
 }
 
+// Expanded workspace: folder tree and a large preview/details face. The tree
+// keeps its pinned import footer while the details column scrolls on its own.
+.asset-library-split {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.1fr);
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.asset-library-split > .asset-tree-shell {
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid var(--edge-divider);
+}
+
+.asset-library-split-details {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asset-library-split-details .asset-details {
+  margin: 0;
+  padding: var(--space-4);
+}
+
+// Compact Inspector: the tree gets the upper face and the details the lower
+// one. The split itself owns scrolling; these rules only keep both faces usable.
+.inspector-page-split-top > .asset-tree-shell {
+  height: 100%;
+}
+
 .asset-drop-overlay {
   position: absolute;
   inset: 0;

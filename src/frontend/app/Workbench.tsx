@@ -7,7 +7,7 @@
  * or into the inspector empty state.
  */
 import { Sidebar, type SidebarPlacement } from "../chrome/sidebar/Sidebar.tsx";
-import "../screens/global/drawerPanes.ts";
+import "../screens/global/pages.ts";
 import { activeSurface } from "./modeRegistry.ts";
 import { useThemeChrome } from "./useThemeChrome.ts";
 

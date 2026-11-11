@@ -1,10 +1,11 @@
 /**
  * Sidebar rail at the window's right edge, beside the inspector.
  *
- * The rail is the window's only navigation surface. Inspector panes and
- * document-wide drawer pages share one ordered entry list from
- * `navigation.ts`; every route replaces the inspector's content. Drawer pages
- * are the inspector's drawer mode, not a second surface beside it.
+ * The rail is the window's only navigation surface. Inspector pages and any
+ * extension-owned drawer pages share one ordered entry list from
+ * `navigation.ts`; every route replaces the inspector's content. A built-in
+ * document page opens a compact Inspector page and can expand into a Workspace
+ * mode; drawer pages remain an extension content mode, not a second surface.
  *
  * The rail is permanently compact: it never widens over the inspector, and each
  * entry reveals its name through the shared tooltip layer. The top placement is
@@ -16,6 +17,10 @@ import { Divider } from "../../../design/components/divider/Divider.tsx";
 import { iconName } from "../../../design/components/icon/Icon.tsx";
 import { ThemeRailItem } from "./ThemeRailItem.tsx";
 import { bindDrawerPaneTrigger, type DrawerState } from "../drawer/drawerPanes.ts";
+import {
+  closeWorkspaceMode,
+  useActiveWorkspaceModeId,
+} from "../../screens/editor/workspace/container/workspaceModes.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import type { MessageKey } from "../../../i18n/index.ts";
 import { useEditorHostValue } from "../../contracts/editorHostReact.tsx";
@@ -53,6 +58,7 @@ function SidebarEntry({
   const { tRaw } = useTranslation();
   const trigger = useRef<HTMLButtonElement>(null);
   const activePanel = useEditorHostValue((runtime) => runtime.ui.activeInspector, "");
+  const activeWorkspaceMode = useActiveWorkspaceModeId();
   useEffect(() => {
     if (!item.drawerPaneId) {
       return;
@@ -88,7 +94,9 @@ function SidebarEntry({
   const active = drawer.open
     ? item.drawerPaneId !== undefined && drawer.pane === item.drawerPaneId
     : item.drawerPaneId === undefined &&
-      (featureActive || (item.panelId !== undefined && activePanel === item.panelId));
+      (featureActive ||
+        (item.panelId !== undefined &&
+          (activePanel === item.panelId || activeWorkspaceMode === item.panelId)));
   return (
     <div className="sidebar-item">
       <ThemeRailItem
@@ -102,7 +110,15 @@ function SidebarEntry({
         statusDot={indicator}
         data-pane={item.drawerPaneId === undefined ? (item.panelId ?? item.id) : undefined}
         data-drawer-pane={item.drawerPaneId}
-        onClick={item.onActivate}
+        onClick={() => {
+          // The same page is open as a workspace mode: pressing its rail entry
+          // brings the compact inspector page back instead of mounting a second
+          // copy beside the studio.
+          if (item.panelId !== undefined && item.panelId === activeWorkspaceMode) {
+            closeWorkspaceMode();
+          }
+          item.onActivate();
+        }}
       />
       {badge > 0 && (
         <span className="redux-sidebar-badge" aria-hidden="true">
