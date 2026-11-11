@@ -146,6 +146,7 @@ export function Workspace({ hidden = false }: { hidden?: boolean }) {
         </div>
         {displayedMode && (
           <div
+            key={displayedMode.id}
             className={`workspace-mode-layer${activeMode ? " is-active" : ""}`}
             aria-hidden={activeMode ? undefined : true}
             inert={activeMode ? undefined : true}
@@ -183,7 +184,6 @@ function WorkspaceModeBar({ mode }: { mode: WorkspaceModeDefinition }) {
         <Icon name={mode.icon} size={16} />
         <strong>{t(mode.label)}</strong>
       </div>
-      <span className="workspace-mode-hint">{t("chrome.workspace.escapeHint")}</span>
     </div>
   );
 }

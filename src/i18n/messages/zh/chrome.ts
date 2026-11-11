@@ -116,7 +116,6 @@ export default {
   "chrome.inspector.modeCompanionHint":
     "此页面已展开到工作区，编辑也在那里进行；返回时间轴后检查器会恢复。",
   "chrome.workspace.backToTimeline": "返回时间轴",
-  "chrome.workspace.escapeHint": "按 Esc 返回时间轴",
   "chrome.timingStudio.points": "{count} 个时值点",
   "chrome.timingStudio.offset": "偏移 {offset} ms",
   "chrome.timingStudio.lastBeat": "最后一点在第 {beat} 拍",

@@ -132,7 +132,6 @@ export default {
   "chrome.inspector.modeCompanionHint":
     "This page is expanded in the workspace. Editing stays there; the inspector returns when you go back to the timeline.",
   "chrome.workspace.backToTimeline": "Back to timeline",
-  "chrome.workspace.escapeHint": "Esc returns to the timeline",
   "chrome.timingStudio.points": "{count} timing points",
   "chrome.timingStudio.offset": "Offset {offset} ms",
   "chrome.timingStudio.lastBeat": "Last point at beat {beat}",
