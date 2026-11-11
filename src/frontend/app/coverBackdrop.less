@@ -101,20 +101,6 @@
   background: color-mix(in srgb, var(--surface) 50%, transparent);
 }
 
-// An expanded Inspector is a task surface, not a lens over the artwork. It must
-// cover the workspace and read as one opaque page.
-.redux-app-root
-  .redux-app-shell:has(> .cover-backdrop-editor)
-  .workbench-inspector
-  > .inspector[data-mode-surface="true"],
-.redux-app-root
-  .redux-app-shell:has(> .cover-backdrop-editor)
-  .workbench-inspector
-  > .inspector[data-mode-surface="true"]
-  .inspector-status {
-  background: var(--surface);
-}
-
 .redux-app-root .redux-app-shell:has(> .cover-backdrop-editor) .workbench-body > .sidebar,
 .redux-app-root .redux-app-shell:has(> .cover-backdrop-editor) .workbench > .sidebar.is-top {
   background: color-mix(in srgb, var(--panel-header) 55%, transparent);

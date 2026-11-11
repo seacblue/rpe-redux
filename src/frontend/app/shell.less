@@ -194,6 +194,15 @@
   position: relative;
 }
 
+// The panel is a translucent lens over the artwork, not a second opaque window.
+// Fade the canvas itself so the cover image — not the timeline drawing — shows
+// through. The wrapper keeps its entrance animation; only the framed surface
+// fades.
+.workbench[data-workspace-mode="true"] .workbench-workspace > .workspace {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .workbench-inspector {
   grid-area: inspector;
 }
@@ -201,6 +210,7 @@
 .workbench-workspace > .workspace {
   flex: 1;
   min-height: 0;
+  transition: opacity 160ms ease;
 }
 
 .workbench-inspector > .inspector {
