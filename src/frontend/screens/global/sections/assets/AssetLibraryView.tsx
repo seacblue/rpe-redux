@@ -352,8 +352,14 @@ export function AssetLibraryView({
       return next;
     });
   };
+  const stacked = variant === "stacked";
+  const split = variant === "split";
+  // In the compact stack and the workspace split, no selected asset means there
+  // is nothing to preview below/right. Let the tree take the full surface instead
+  // of showing an empty skeleton.
+  const compactEmpty = (stacked || split) && !selected;
   const showTree = variant !== "details";
-  const showDetails = variant !== "tree";
+  const showDetails = variant !== "tree" && !compactEmpty;
 
   useEffect(() => {
     if (!showTree) {
@@ -382,8 +388,6 @@ export function AssetLibraryView({
     });
   }
 
-  const stacked = variant === "stacked";
-  const split = variant === "split";
   const treeFace = showTree ? (
     <div className="asset-tree-shell">
       <input
@@ -501,17 +505,25 @@ export function AssetLibraryView({
   return (
     <>
       {split ? (
-        <div className="asset-library-split">
-          {treeFace}
-          <div className="asset-library-split-details">{detailsFace}</div>
-        </div>
+        compactEmpty ? (
+          treeFace
+        ) : (
+          <div className="asset-library-split">
+            {treeFace}
+            <div className="asset-library-split-details">{detailsFace}</div>
+          </div>
+        )
       ) : stacked ? (
-        <InspectorPageSplit
-          topLabel={t("editorPanels.assetLibrary.title")}
-          bottomLabel={t("editorPanels.assetLibrary.details")}
-          top={treeFace}
-          bottom={detailsFace}
-        />
+        compactEmpty ? (
+          treeFace
+        ) : (
+          <InspectorPageSplit
+            topLabel={t("editorPanels.assetLibrary.title")}
+            bottomLabel={t("editorPanels.assetLibrary.details")}
+            top={treeFace}
+            bottom={detailsFace}
+          />
+        )
       ) : (
         <>
           {treeFace}

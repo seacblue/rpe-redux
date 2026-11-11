@@ -10,6 +10,7 @@ import { Sidebar, type SidebarPlacement } from "../chrome/sidebar/Sidebar.tsx";
 import "../screens/global/pages.ts";
 import { activeSurface } from "./modeRegistry.ts";
 import { useThemeChrome } from "./useThemeChrome.ts";
+import { useActiveWorkspaceModeId } from "../screens/editor/workspace/container/workspaceModes.ts";
 
 /**
  * Composes the middle window seam. The `atHome` input hides the assembled
@@ -18,6 +19,7 @@ import { useThemeChrome } from "./useThemeChrome.ts";
 export function Workbench({ atHome }: { atHome: boolean }) {
   const surface = activeSurface;
   const chrome = useThemeChrome();
+  const workspaceMode = useActiveWorkspaceModeId();
   // Advanced sidebar placements need an inspector to hold the registered
   // entries.
   const canMoveSidebar = surface.inspector !== undefined;
@@ -32,14 +34,23 @@ export function Workbench({ atHome }: { atHome: boolean }) {
   const InspectorSurface = surface.inspector;
 
   return (
-    <div className="workbench" hidden={atHome} data-sidebar={sidebarPlacement}>
+    <div
+      className="workbench"
+      hidden={atHome}
+      data-sidebar={sidebarPlacement}
+      data-workspace-mode={workspaceMode ? "true" : undefined}
+    >
       {topSidebar && <Sidebar placement="top" sidebar={surface.sidebar} />}
       <div className="workbench-body">
         <div className="workbench-workspace">
           <WorkspaceSurface />
         </div>
         {InspectorSurface && (
-          <div className="workbench-inspector">
+          <div
+            className="workbench-inspector"
+            aria-hidden={workspaceMode ? true : undefined}
+            inert={workspaceMode ? true : undefined}
+          >
             <InspectorSurface />
           </div>
         )}

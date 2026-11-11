@@ -87,7 +87,7 @@ export function BpmPanel({
  * entry inert when no chart is open; the pending hint still shows if a stale
  * request outlives the chart.
  */
-function TimingDetectFooter({ disabled }: { disabled: boolean }) {
+export function TimingDetectFooter({ disabled }: { disabled: boolean }) {
   const { t } = useTranslation();
   const runtime = useEditorRuntime();
   const pending = useSyncExternalStore(

@@ -22,6 +22,7 @@ import { GlobalTimingInspector } from "./GlobalTimingInspector.tsx";
 import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
 import { TimingMap } from "./TimingMap.tsx";
 import { useGlobalChart } from "../../useGlobalChart.ts";
+import { TimingDetectFooter } from "../../../editor/inspector/bpm/BpmPanel.tsx";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
 
 const hasDocument = {
@@ -32,6 +33,20 @@ const hasDocument = {
 /** The compact page: timing rows above the selected point's properties. */
 function TimingInspectorPage() {
   const { t } = useTranslation();
+  const chart = useGlobalChart();
+  if (!chart?.BPMList.length) {
+    // With no timing points there is no point property to inspect. Keep the
+    // offset/list/add surface full-height, and pin the detector entry below it
+    // so the author can still create the first timing.
+    return (
+      <div className="timing-empty-page">
+        <div className="timing-empty-list">
+          <GlobalTimingWorkspace />
+        </div>
+        <TimingDetectFooter disabled={!chart} />
+      </div>
+    );
+  }
   return (
     <InspectorPageSplit
       topLabel={t("editorPanels.inspector.form.bpm.title")}

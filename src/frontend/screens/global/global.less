@@ -206,6 +206,27 @@
   margin-top: auto;
 }
 
+// No timing points means no point attributes. The list and add action take the
+// page, with only the detector entry pinned underneath.
+.timing-empty-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.timing-empty-list {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.timing-empty-page > .bpm-detect {
+  flex: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
 .global-timing-error {
   margin: 0;
 }
@@ -265,10 +286,20 @@
 // seam the author can drag when a chart has many rows.
 .inspector-page-split {
   display: grid;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   width: 100%;
   min-width: 0;
   min-height: 0;
+}
+
+// A stacked document page owns the inspector body, so the page wrapper must not
+// grow to its content height. The split's two faces scroll inside their own
+// tracks instead; otherwise the inspector column scrolls as one long page and
+// the lower face can sit below the visible frame.
+.inspector-content > [data-panel]:has(.inspector-page-split):not([hidden]) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .inspector-page-split-top,

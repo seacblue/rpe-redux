@@ -104,9 +104,7 @@
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns:
-    minmax(0, 1fr) minmax(260px, min(var(--inspector-width), 57%))
-    var(--chrome-sidebar-track);
+  grid-template-columns: minmax(0, 1fr) auto var(--chrome-sidebar-track);
   grid-template-areas: "workspace inspector sidebar";
   gap: 0;
 }
@@ -117,6 +115,38 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+.workbench-inspector {
+  width: clamp(260px, var(--inspector-width), 57vw);
+  overflow: hidden;
+  transition:
+    width 220ms var(--design-ease-enter),
+    opacity 160ms ease;
+}
+
+// The inner panel keeps its readable minimum while the wrapper collapses. The
+// wrapper clips it instead of reflowing every field into a 70px strip during the
+// transition.
+.workbench-inspector > .inspector {
+  min-width: 260px;
+}
+
+// A Workspace mode owns the frame, so the inspector collapses instead of
+// leaving an empty companion column beside the studio. The track is auto-sized,
+// which lets the width transition resize the workspace without a second layout
+// frame after the animation.
+.workbench[data-workspace-mode="true"] .workbench-inspector {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-inspector {
+    transition: none;
+  }
 }
 
 .workbench-workspace {
@@ -147,6 +177,6 @@
 // in the same way.
 .workbench[data-sidebar="top"] > .workbench-body,
 .workbench[data-sidebar="inspector"] > .workbench-body {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, min(var(--inspector-width), 57%));
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: "workspace inspector";
 }

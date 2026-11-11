@@ -36,6 +36,7 @@ import type { LineField } from "./lineFieldEdits.ts";
 import type { LinePurposeTarget } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
 import { InspectorEmpty } from "../../../editor/inspector/InspectorEmpty.tsx";
 import { LineFolderPanel } from "./LineFolderPanel.tsx";
+import { LineControlCurves } from "./LineControlCurves.tsx";
 import { LineTree } from "./LineTree.tsx";
 import { LineTypeSection } from "./LineTypeSection.tsx";
 import { lineTreeKey } from "./lineTreeModel.ts";
@@ -618,6 +619,7 @@ export function LinePanelView({
   };
   const stacked = variant === "stacked";
   const split = variant === "split";
+  const emptyLineList = lines.length === 0 && folderGroup === null;
   const showTree = variant !== "properties" && (split || stacked || lineView === "lines");
   const showProperties =
     variant !== "tree" &&
@@ -665,6 +667,15 @@ export function LinePanelView({
           {renderLineProperties()}
         </section>
         {renderCombination()}
+        {!multi && selectedLine && (
+          <LineControlCurves
+            chart={chart}
+            line={selectedLine}
+            lineIndex={session.lineIndex}
+            onCommit={onCommit}
+            notify={notify}
+          />
+        )}
         {textureBrowserOpen && showTexture && (
           <TextureBrowser
             id={textureBrowserId}
@@ -703,17 +714,25 @@ export function LinePanelView({
         />
       )}
       {split ? (
-        <div className="line-panel-split">
-          <div className="line-panel-split-tree">{treeFace}</div>
-          <div className="line-panel-split-properties">{propertyFace}</div>
-        </div>
+        emptyLineList ? (
+          <div className="line-panel-single">{treeFace}</div>
+        ) : (
+          <div className="line-panel-split">
+            <div className="line-panel-split-tree">{treeFace}</div>
+            <div className="line-panel-split-properties">{propertyFace}</div>
+          </div>
+        )
       ) : stacked ? (
-        <InspectorPageSplit
-          topLabel={t("editorPanels.linePanel.title")}
-          bottomLabel={t("editorPanels.linePanel.properties")}
-          top={treeFace}
-          bottom={propertyFace}
-        />
+        emptyLineList ? (
+          <div className="line-panel-single">{treeFace}</div>
+        ) : (
+          <InspectorPageSplit
+            topLabel={t("editorPanels.linePanel.title")}
+            bottomLabel={t("editorPanels.linePanel.properties")}
+            top={treeFace}
+            bottom={propertyFace}
+          />
+        )
       ) : (
         <>
           {treeFace}

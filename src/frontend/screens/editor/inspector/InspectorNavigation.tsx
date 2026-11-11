@@ -108,7 +108,7 @@ function NavigationButton({ item }: { item: SidebarNavigationItem }) {
         if (item.drawerPaneId === undefined) {
           closeDrawer();
         }
-        if (item.panelId !== undefined && item.panelId === activeWorkspaceMode) {
+        if (item.panelId !== undefined && activeWorkspaceMode) {
           closeWorkspaceMode();
         }
         item.onActivate();

@@ -1,10 +1,10 @@
 /**
  * Space migration between an Inspector page and its Workspace mode.
  *
- * Expanding a page promotes it into the workspace and leaves the inspector on a
- * compact companion; returning restores the pane the author came from if the
- * inspector is still empty. Both paths keep the single mode record in
- * `workspaceModes.ts` authoritative.
+ * Expanding a page promotes it into the workspace and closes the inspector body;
+ * the inspector column then collapses with the workbench transition. Returning
+ * restores the pane the author came from if the inspector is still empty. Both
+ * paths keep the single mode record in `workspaceModes.ts` authoritative.
  */
 import type { EditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import { closeWorkspaceMode, openWorkspaceMode } from "./workspaceModes.ts";

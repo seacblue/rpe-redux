@@ -111,10 +111,10 @@ function SidebarEntry({
         data-pane={item.drawerPaneId === undefined ? (item.panelId ?? item.id) : undefined}
         data-drawer-pane={item.drawerPaneId}
         onClick={() => {
-          // The same page is open as a workspace mode: pressing its rail entry
-          // brings the compact inspector page back instead of mounting a second
-          // copy beside the studio.
-          if (item.panelId !== undefined && item.panelId === activeWorkspaceMode) {
+          // Sidebar destinations belong to the compact shell. Choosing any of
+          // them while a studio owns the workspace returns to the timeline first,
+          // so the selected inspector page is actually visible.
+          if (activeWorkspaceMode) {
             closeWorkspaceMode();
           }
           item.onActivate();

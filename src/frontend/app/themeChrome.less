@@ -180,6 +180,27 @@
   border-color: transparent;
 }
 
+// A Workspace mode hides the inspector in every chrome preset, including the
+// floating and overlay placements. The wrapper owns the width transition so the
+// docked grid track, the floating margin, and the overlay box all collapse the
+// same way.
+:root[data-chrome-inspector]
+  .redux-app-root
+  .workbench[data-workspace-mode="true"]
+  > .workbench-body
+  > .workbench-inspector,
+:root[data-chrome-inspector]
+  .redux-app-root
+  .workbench[data-workspace-mode="true"]
+  .workbench-body
+  > .workbench-inspector {
+  width: 0;
+  min-width: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 // A drawer is a widened overlay, not an ordinary inspector pane. Keep the
 // material override aligned with its inherited chrome surface so glass and flat
 // themes can reveal the workspace behind it.
@@ -289,7 +310,7 @@
   .workbench[data-sidebar="floating"]
   > .workbench-body {
   grid-template-columns:
-    minmax(260px, min(var(--inspector-width), 57%))
+    auto
     minmax(0, 1fr)
     var(--chrome-sidebar-track);
   grid-template-areas: "inspector workspace sidebar";
@@ -312,7 +333,7 @@
   .workbench[data-sidebar="inspector"]
   > .workbench-body {
   grid-template-columns:
-    minmax(260px, min(var(--inspector-width), 57%))
+    auto
     minmax(0, 1fr);
   grid-template-areas: "inspector workspace";
 }
@@ -324,7 +345,7 @@
   .redux-app-root
   > .workbench-body {
   grid-template-columns:
-    minmax(300px, min(var(--inspector-width), 57%))
+    auto
     minmax(0, 1fr)
     var(--chrome-sidebar-track);
   grid-template-areas: "inspector workspace sidebar";
