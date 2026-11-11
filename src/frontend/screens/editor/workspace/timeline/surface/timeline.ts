@@ -126,7 +126,7 @@ export class Timeline {
     this.notesCanvas = notesCanvas;
     this.notesBackdrop = notesBackdropCanvas;
     this.notesPlayhead = notesPlayheadCanvas;
-    this.noteBatch = new NoteBatch(noteBatchCanvas);
+    this.noteBatch = new NoteBatch(noteBatchCanvas, "timeline");
     this.eventsCanvas = eventsCanvas;
     this.eventsBackdrop = eventsBackdropCanvas;
     this.eventsPlayhead = eventsPlayheadCanvas;

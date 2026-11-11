@@ -610,7 +610,7 @@ export default {
     "在预览中绘制所有音符的红色边框；Hold 会显示头部、身体和尾部三段。点击边框变绿并显示参数。",
   "settings.help.developer.exportBundle": "导出诊断包",
   "settings.help.developer.exportBundleHint":
-    "环境摘要、脱敏诊断快照、最近日志、扩展列表和当前谱面摘要，打包成一个 zip。",
+    "将脱敏环境、无输入内容的操作序列、前后端警告与错误、运行时诊断、清洗后的日志、扩展状态、谱面健康摘要、播放纹理、预览几何信息和渲染器健康指标打包成一个不含谱面像素的 zip。",
   "settings.help.developer.exportBundleBusy": "正在导出…",
   "settings.help.developer.exportBundleSuccess": "诊断包已导出到 {path}。",
   "settings.help.developer.exportBundleFailed": "导出诊断包失败：{message}",

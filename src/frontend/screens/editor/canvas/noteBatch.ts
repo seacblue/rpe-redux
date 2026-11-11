@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- note-batch resource ownership, batching, and fallback share one GPU surface. */
+
 /**
  * WebGL batch shared by the preview and timeline for drawing note and hold skins.
  * Geometry and hit testing stay on the CPU; the batch owns only its GL program,
@@ -5,6 +7,8 @@
  */
 import { sizeCanvasBackingStore } from "./canvas2d.ts";
 import { holdLayout, holdRenderRotation } from "./noteGeometry.ts";
+import { NoteBatchDiagnostics } from "./noteBatchDiagnostics.ts";
+import type { RenderSurface } from "../../../../core/diagnostics/renderMetrics.ts";
 import {
   HOLD_PAINT_LAYER,
   INSTANCE_STRIDE,
@@ -49,6 +53,7 @@ export interface NoteBatchSkin {
  */
 export class NoteBatch {
   private readonly canvas: HTMLCanvasElement;
+  private readonly diagnostics: NoteBatchDiagnostics;
   private readonly gl: WebGL2RenderingContext | null;
   private program: WebGLProgram | null = null;
   private cornerBuffer: WebGLBuffer | null = null;
@@ -84,9 +89,11 @@ export class NoteBatch {
   private uninstallContextLoss: (() => void) | null = null;
 
   /** Create the batch for one canvas; without WebGL2 every submit is a no-op. */
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, surface: RenderSurface = "preview") {
     this.canvas = canvas;
+    this.diagnostics = new NoteBatchDiagnostics(surface);
     this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false });
+    this.reportState();
     if (!this.gl) {
       return;
     }
@@ -95,6 +102,18 @@ export class NoteBatch {
       onRestored: this.handleContextRestored,
     });
     this.initializeResources();
+    this.reportState();
+  }
+
+  /** Publish the bounded WebGL and skin-cache state for diagnostics. */
+  private reportState(): void {
+    this.diagnostics.state(
+      this.gl,
+      this.contextLost,
+      this.active,
+      this.textures.size,
+      this.prewarmQueue.length,
+    );
   }
 
   /** Whether the batch cannot submit GPU work until its context is restored. */
@@ -105,6 +124,7 @@ export class NoteBatch {
   /** Prevent the default loss handling and stop submitting GPU work. */
   private readonly handleContextLost = (event: Event): void => {
     event.preventDefault();
+    this.diagnostics.context("lost");
     this.contextLost = true;
     this.active = false;
     // Some hosts keep the last presented pixels after a loss. Resizing the
@@ -131,10 +151,12 @@ export class NoteBatch {
     this.descriptorCache.clear();
     this.clearHoldDescriptorCache();
     this.instanceBufferCapacity = 0;
+    this.reportState();
   };
 
   /** Recreate every GPU object after the browser restores the context. */
   private readonly handleContextRestored = (): void => {
+    this.diagnostics.context("restored");
     this.contextLost = false;
     this.descriptorSkin = null;
     this.descriptorRevision = undefined;
@@ -144,6 +166,7 @@ export class NoteBatch {
     this.textures.clear();
     this.instanceBufferCapacity = 0;
     this.initializeResources();
+    this.reportState();
   };
 
   /** Compile the shaders and allocate the buffers and attribute slots. */
@@ -265,6 +288,7 @@ export class NoteBatch {
       enqueue(skin.holdEndTexture(highlight));
     }
     this.schedulePrewarm();
+    this.reportState();
   }
 
   /** Schedule the next queued texture upload without blocking the frame. */
@@ -327,10 +351,12 @@ export class NoteBatch {
     if (this.isContextLost()) {
       this.contextLost = true;
       this.active = false;
+      this.reportState();
       return;
     }
     this.active = Boolean(this.gl && this.program && this.instanceBuffer && skin);
     if (!this.gl) {
+      this.reportState();
       return;
     }
     const backing = sizeCanvasBackingStore(this.canvas, { width, height });
@@ -349,6 +375,7 @@ export class NoteBatch {
     } else {
       this.gl.disable(this.gl.SCISSOR_TEST);
     }
+    this.reportState();
   }
 
   /** Queue one note head; returns false when its texture is unavailable. */
@@ -504,7 +531,17 @@ export class NoteBatch {
 
   /** Upload the queued instance data and draw every group in layer order. */
   finish(): void {
+    const batch = {
+      groupCount: 0,
+      instanceCount: 0,
+      bufferSubDataCalls: 0,
+      bufferSubDataBytes: 0,
+      drawCalls: 0,
+      textureBinds: 0,
+      maxInstancesPerGroup: 0,
+    };
     if (!this.active || this.isContextLost() || !this.gl || !this.program || !this.instanceBuffer) {
+      this.diagnostics.submit(batch);
       return;
     }
     const gl = this.gl;
@@ -527,6 +564,9 @@ export class NoteBatch {
         if (!texture) {
           continue;
         }
+        batch.groupCount += 1;
+        batch.instanceCount += group.count;
+        batch.textureBinds += 1;
         gl.bindTexture(gl.TEXTURE_2D, texture);
         if (this.textureUniform) {
           gl.uniform1i(this.textureUniform, 0);
@@ -538,6 +578,9 @@ export class NoteBatch {
           gl.bufferData(gl.ARRAY_BUFFER, this.instanceBufferCapacity, gl.STREAM_DRAW);
         }
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
+        batch.bufferSubDataCalls += 1;
+        batch.bufferSubDataBytes += upload.byteLength;
+        batch.maxInstancesPerGroup = Math.max(batch.maxInstancesPerGroup, group.count);
         bindInstanceAttribute(gl, this.transformLocation, 4, INSTANCE_STRIDE, 0);
         bindInstanceAttribute(gl, this.rotationLocation, 1, INSTANCE_STRIDE, 4);
         bindInstanceAttribute(gl, this.shearLocation, 1, INSTANCE_STRIDE, 5);
@@ -546,6 +589,7 @@ export class NoteBatch {
         bindInstanceAttribute(gl, this.tintLocation, 3, INSTANCE_STRIDE, 11);
         bindInstanceAttribute(gl, this.colorizeLocation, 1, INSTANCE_STRIDE, 14);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, group.count);
+        batch.drawCalls += 1;
       }
     };
     // Ascending layer order keeps Holds beneath Tap/Drag/Flick heads; the
@@ -555,6 +599,8 @@ export class NoteBatch {
     }
     drawGroups(this.groups.selected.values());
     gl.disable(gl.SCISSOR_TEST);
+    this.diagnostics.submit(batch);
+    this.reportState();
   }
 
   /** Release every GL object and cached texture owned by the batch. */
@@ -589,6 +635,7 @@ export class NoteBatch {
     this.instanceBuffer = null;
     this.descriptorSkin = null;
     this.active = false;
+    this.reportState();
   }
 
   /** Cancel queued uploads, reset instance counts, and clear the canvas. */
@@ -771,6 +818,7 @@ export class NoteBatch {
     }
     const texture = this.gl.createTexture();
     if (!texture) {
+      this.diagnostics.upload(false);
       return null;
     }
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
@@ -785,6 +833,8 @@ export class NoteBatch {
       source,
     );
     this.textures.set(source, texture);
+    this.diagnostics.upload(true);
+    this.reportState();
     return texture;
   }
 }
