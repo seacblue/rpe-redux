@@ -21,7 +21,10 @@ import {
   type EventChain,
 } from "../../../../../../core/edit/timeline/eventChains.ts";
 import { shaderEventLanes } from "../../../../../../core/global/chart/shader/shaderEvents.ts";
-import { overlappingNotePositions } from "../../../../../../core/edit/timeline/noteOverlap.ts";
+import {
+  overlappingNoteRanks,
+  type NoteOverlapRanks,
+} from "../../../../../../core/edit/timeline/noteOverlap.ts";
 import {
   checkedNotes,
   isTimelineNoteRenderable,
@@ -80,7 +83,7 @@ export class TimelineCache {
   private validatedNoteArrays = new WeakSet<JudgeLineNote[]>();
   private noteOverlaps = new WeakMap<
     readonly TimelineNote[],
-    { threshold: number; positions: Set<number> }
+    { threshold: number; ranks: NoteOverlapRanks }
   >();
 
   private eventDisplays = new WeakMap<readonly JudgeLineEvent[], TimelineEventDisplay>();
@@ -172,20 +175,20 @@ export class TimelineCache {
   }
 
   /**
-   * Same-beat overlap hints for one immutable note array.
+   * Same-beat overlap ranks for one immutable note array.
    *
    * The sweep is O(n log n); painting runs at the frame cadence and a dense
    * line can hold tens of thousands of notes, so the result is cached until the
    * array or the threshold changes.
    */
-  noteOverlapPositions(notes: readonly TimelineNote[], threshold: number): ReadonlySet<number> {
+  noteOverlapRanks(notes: readonly TimelineNote[], threshold: number): NoteOverlapRanks {
     const cached = this.noteOverlaps.get(notes);
     if (cached?.threshold === threshold) {
-      return cached.positions;
+      return cached.ranks;
     }
-    const positions = overlappingNotePositions(notes, threshold);
-    this.noteOverlaps.set(notes, { threshold, positions });
-    return positions;
+    const ranks = overlappingNoteRanks(notes, threshold);
+    this.noteOverlaps.set(notes, { threshold, ranks });
+    return ranks;
   }
 
   /** Query one line's visible notes once per range shared by hit testing and painting. */

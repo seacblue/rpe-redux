@@ -7,7 +7,9 @@ import type {
   TimelineNoteEntry,
   TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
+import type { NoteOverlapRanks } from "../../../../../../core/edit/timeline/noteOverlap.ts";
 import type { TimelineNoteHitTestReceiver } from "../drawing/timelineReceiver.ts";
+import { noteOverlapRotation } from "./noteRotation.ts";
 
 /** Refresh one line's cached note index from the chart. */
 export function refreshIndex(
@@ -42,8 +44,10 @@ function candidates(
     this.viewport.panelCount("notes") === 1
       ? session.targetLineIndices
       : [this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes")];
+  const entries = lineIndices.flatMap((lineIndex) => this.visible(lineIndex));
+  const rotations = noteRotations.call(this, lineIndices);
   return timelineNoteCandidates(
-    lineIndices.flatMap((lineIndex) => this.visible(lineIndex)),
+    entries,
     position,
     {
       horizontal: (note, lineIndex) => {
@@ -74,9 +78,26 @@ function candidates(
           lineIndex,
         ) !== null,
       vertical: (beat, lineIndex) => this.viewport.noteVerticalForLine(beat, lineIndex),
+      rotation: (index, lineIndex) => noteOverlapRotation(rotations.get(lineIndex)?.get(index)),
     },
     true,
   );
+}
+
+/** Cached overlap ranks for every line a merged note hit test can reach. */
+function noteRotations(
+  this: TimelineNoteHitTestReceiver,
+  lineIndices: readonly number[],
+): Map<number, NoteOverlapRanks> {
+  const rotations = new Map<number, NoteOverlapRanks>();
+  for (const lineIndex of lineIndices) {
+    const notes = this.cache.noteIndex(lineIndex)?.notes;
+    if (!notes) {
+      continue;
+    }
+    rotations.set(lineIndex, this.cache.noteOverlapRanks(notes, this.appearance.overlapThreshold));
+  }
+  return rotations;
 }
 
 /** The topmost note under `position`. */
@@ -84,22 +105,22 @@ export function hit(
   this: TimelineNoteHitTestReceiver,
   position: TimelinePoint,
 ): TimelineNoteEntry | undefined {
-  return hitTimelineNote(
-    this.visible(this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes")),
-    position,
-    {
-      horizontal: (note, lineIndex) => this.viewport.noteHorizontal(note.positionX, lineIndex),
-      width: (note) => this.viewport.noteWidth(note),
-      visible: (horizontal, width, lineIndex) =>
-        this.viewport.clampNoteHorizontal(
-          horizontal,
-          width,
-          this.notesCanvas.clientWidth,
-          lineIndex,
-        ) !== null,
-      vertical: (beat, lineIndex) => this.viewport.noteVerticalForLine(beat, lineIndex),
-    },
-  );
+  const lineIndex = this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes");
+  const entries = this.visible(lineIndex);
+  const rotations = noteRotations.call(this, [lineIndex]);
+  return hitTimelineNote(entries, position, {
+    horizontal: (note, lineIndex) => this.viewport.noteHorizontal(note.positionX, lineIndex),
+    width: (note) => this.viewport.noteWidth(note),
+    visible: (horizontal, width, lineIndex) =>
+      this.viewport.clampNoteHorizontal(
+        horizontal,
+        width,
+        this.notesCanvas.clientWidth,
+        lineIndex,
+      ) !== null,
+    vertical: (beat, lineIndex) => this.viewport.noteVerticalForLine(beat, lineIndex),
+    rotation: (index, lineIndex) => noteOverlapRotation(rotations.get(lineIndex)?.get(index)),
+  });
 }
 
 /** Every note under `position`, used for the overlap picker. */

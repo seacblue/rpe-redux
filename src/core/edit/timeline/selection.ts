@@ -353,6 +353,7 @@ export interface NoteSweepGeometry {
   bounds: (
     note: TimelineNote,
     lineIndex: number,
+    index: number,
   ) => { left: number; top: number; right: number; bottom: number };
 }
 
@@ -377,7 +378,7 @@ export function selectNotesAlongSegment(
     for (const entry of lineIndexData.index
       .query(-Infinity, Infinity)
       .filter((candidate) => isTimelineNoteRenderable(candidate.item))) {
-      const bounds = geometry.bounds(entry.item, lineIndex);
+      const bounds = geometry.bounds(entry.item, lineIndex, entry.index);
       if (
         !segmentTouchesRectangle(sweep, {
           left: bounds.left,

@@ -125,22 +125,29 @@ export function overlapActions(
   entries: readonly TimelineNoteEntry[],
 ): OverlapMenuAction[] {
   const session = receiver.getSession();
-  return entries.map((entry) => {
-    const line = session.chart.judgeLineList?.[entry.lineIndex];
-    const end = entry.item.type === 2 ? ` – ${entry.end.toFixed(3)}` : "";
-    return {
-      id: `note:${entry.lineIndex}:${entry.index}`,
-      label: `${noteTypeLabel(entry.item.type)}, ${
-        line?.Name ?? t("editorPanels.overlap.line", { index: entry.lineIndex })
-      }`,
-      detail: `${t("editorPanels.overlap.beat", {
-        value: `${entry.start.toFixed(3)}${end}`,
-      })}, X ${Number(entry.item.positionX).toFixed(2)}, #${entry.index}`,
-      run: () => {
-        selectOverlappingNote(session, entry, receiver.changed);
-      },
-    };
-  });
+  return entries.map((entry) => ({
+    id: `note:${entry.lineIndex}:${entry.index}`,
+    label: noteTypeLabel(entry.item.type),
+    detail: `${t("editorPanels.overlap.line", { index: entry.lineIndex })} · #${entry.index}`,
+    onHover: () => {
+      receiver.gestures.overlapHover = {
+        kind: "notes",
+        lineIndex: entry.lineIndex,
+        index: entry.index,
+      };
+      receiver.changed();
+    },
+    onLeave: () => {
+      if (!receiver.gestures.isNoteOverlapHovered(entry.lineIndex, entry.index)) {
+        return;
+      }
+      receiver.gestures.overlapHover = null;
+      receiver.changed();
+    },
+    run: () => {
+      selectOverlappingNote(session, entry, receiver.changed);
+    },
+  }));
 }
 
 /** Handle a note-field press: selection, drag start, placement, or marquee. */
@@ -247,7 +254,21 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       canvas.addEventListener(
         "click",
         () => {
-          openOverlapMenu(canvas, event.clientX, event.clientY, t("editor.overlap.title"), actions);
+          this.gestures.overlapMenuOpen = true;
+          this.gestures.overlapHover = null;
+          this.changed();
+          openOverlapMenu(
+            canvas,
+            event.clientX,
+            event.clientY,
+            t("editor.overlap.title"),
+            actions,
+            () => {
+              this.gestures.overlapMenuOpen = false;
+              this.gestures.overlapHover = null;
+              this.changed();
+            },
+          );
         },
         { once: true },
       );

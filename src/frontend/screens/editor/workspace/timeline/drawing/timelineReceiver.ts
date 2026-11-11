@@ -57,6 +57,7 @@ export type TimelineGridReceiver = Pick<
 /** The contract used while resolving a rectangle selection. */
 export type TimelineSelectionReceiver = Pick<
   TimelineRuntimeSurface,
+  | "appearance"
   | "changed"
   | "cache"
   | "eventTypes"

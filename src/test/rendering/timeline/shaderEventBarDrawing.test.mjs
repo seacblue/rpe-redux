@@ -54,8 +54,8 @@ test("shader events draw the skin event bar and keep the shader label", () => {
       eventColumnBounds: () => ({ x: 100, width: 80 }),
       eventVertical: (beat) => 400 - beat * 10,
     },
-    gestures: { eventRects: [] },
-    getSession: () => ({ eventSelection: new Set(["paintEvents:0"]) }),
+    gestures: { eventRects: [], isEventOverlapHovered: () => false },
+    getSession: () => ({ lineIndex: 0, eventSelection: new Set(["paintEvents:0"]) }),
     eventBatch: { add: () => false },
   };
   const entries = [

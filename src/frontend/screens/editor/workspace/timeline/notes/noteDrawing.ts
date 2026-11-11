@@ -28,6 +28,7 @@ import { TimelineLabelCuller } from "../drawing/labelCulling.ts";
 import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
 import {
   checkedNote,
+  checkedNotes,
   isTimelineNoteRenderable,
   timelineRenderRange,
 } from "../../../../../../core/edit/timeline/model.ts";
@@ -38,6 +39,7 @@ import type {
 } from "../drawing/timelineReceiver.ts";
 import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
+import { noteOverlapRotation } from "./noteRotation.ts";
 
 interface NotePaintOptions {
   note: TimelineNote;
@@ -53,6 +55,8 @@ interface NotePaintOptions {
   remoteSelected?: boolean;
   /** Horizontal shear from the line's sampled skew, matching the preview. */
   shear?: number;
+  /** In-place rotation for one note of a same-beat overlap stack. */
+  rotation?: number;
 }
 
 /** Paint one note for both the normal and multi-line timelines. */
@@ -68,6 +72,7 @@ export function drawNote(
     (this.appearance.noteOpacity ?? 1) *
     (options.opacityMultiplier ?? 1);
   const shear = note.type === 2 ? 0 : (options.shear ?? 0);
+  const rotation = note.type === 2 ? 0 : (options.rotation ?? 0);
   context.globalAlpha = alpha;
   const selected = options.selected === true;
   const remoteSelected = !selected && options.remoteSelected === true;
@@ -108,7 +113,7 @@ export function drawNote(
           horizontal,
           vertical,
           noteWidth,
-          0,
+          rotation,
           shear,
           alpha,
           noteColorStyle,
@@ -128,9 +133,10 @@ export function drawNote(
           noteColorStyle,
           undefined,
         ) ?? false;
-    } else if (shear !== 0) {
+    } else if (shear !== 0 || rotation !== 0) {
       context.save();
       context.translate(horizontal, vertical);
+      context.rotate(rotation);
       context.transform(1, 0, shear, 1, 0, 0);
       textured =
         this.appearance.skin?.head(context, note.type, 0, 0, noteWidth, false, noteColorStyle) ??
@@ -165,9 +171,10 @@ export function drawNote(
     context.fillRect(horizontal - noteWidth / 2, endVertical - 3, noteWidth, 6);
   }
   if (!textured && !this.appearance.skin) {
-    if (note.type !== 2 && shear !== 0) {
+    if (note.type !== 2 && (shear !== 0 || rotation !== 0)) {
       context.save();
       context.translate(horizontal, vertical);
+      context.rotate(rotation);
       context.transform(1, 0, shear, 1, 0, 0);
       context.fillRect(-noteWidth / 2, -4, noteWidth, 8);
       context.restore();
@@ -231,6 +238,9 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   const entries = new Map<number, { item: TimelineNote; index: number }>(
     this.visible().map((entry) => [entry.index, entry] as const),
   );
+  const noteSource = this.cache.noteIndex(session.lineIndex)?.notes ?? checkedNotes(session.notes);
+  const overlapRanks = this.cache.noteOverlapRanks(noteSource, this.appearance.overlapThreshold);
+  const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const skewCurve = noteSkewCurve(session.line);
   if (!multiNotes && ["move", "startTime", "endTime"].includes(this.gestures.drag?.kind ?? "")) {
     for (const index of session.selection) {
@@ -243,8 +253,13 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
         (left, right) => Number(right.item.type === 2) - Number(left.item.type === 2),
       )) {
     const selected = session.selection.has(entry.index);
+    const hovered = this.gestures.isNoteOverlapHovered(session.lineIndex, entry.index);
+    const highlightSelected = overlapSelectionSuppressed ? hovered : selected;
     const remoteSelected =
-      !selected && entry.item.id !== undefined && this.remoteSelectedNoteIds.has(entry.item.id);
+      !highlightSelected &&
+      !overlapSelectionSuppressed &&
+      entry.item.id !== undefined &&
+      this.remoteSelectedNoteIds.has(entry.item.id);
     const note = selected ? this.movedNote(entry.item) : entry.item;
     if (!isTimelineNoteRenderable(note)) {
       continue;
@@ -266,9 +281,10 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
       endVertical,
       noteWidth,
       height,
-      selected,
+      selected: highlightSelected,
       remoteSelected,
       shear: noteSkewShear(noteSkewAtHit(skewCurve, note)),
+      rotation: noteOverlapRotation(overlapRanks.get(entry.index)),
     });
     if (note.type === 2 && range.invalid) {
       drawEventOverlapFilter(
@@ -460,6 +476,7 @@ export function drawMultiLineNotes(
   const palette = this.cache.palette() ?? readCanvasPalette();
   const lineLabelCuller = new TimelineLabelCuller();
   const lineIndices = session.targetLineIndices;
+  const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const multiplePanels = this.viewport.panelCount("notes") > 1;
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, "notes");
   const startPanel = multiplePanels ? firstPanel : 0;
@@ -485,6 +502,10 @@ export function drawMultiLineNotes(
     if (!noteIndex) {
       continue;
     }
+    const overlapRanks = this.cache.noteOverlapRanks(
+      noteIndex.notes,
+      this.appearance.overlapThreshold,
+    );
     const selectedSet = selectedNoteIndices(session, lineIndex);
     const entries = noteIndex.index
       .query(bottomBeat, topBeat)
@@ -512,8 +533,13 @@ export function drawMultiLineNotes(
       const vertical = this.viewport.noteVerticalForLine(beat, lineIndex, height, "notes");
       const endVertical = this.viewport.noteVerticalForLine(endBeat, lineIndex, height, "notes");
       const selected = selectedSet.has(index);
+      const hovered = this.gestures.isNoteOverlapHovered(lineIndex, index);
+      const highlightSelected = overlapSelectionSuppressed ? hovered : selected;
       const remoteSelected =
-        !selected && note.id !== undefined && this.remoteSelectedNoteIds.has(note.id);
+        !highlightSelected &&
+        !overlapSelectionSuppressed &&
+        note.id !== undefined &&
+        this.remoteSelectedNoteIds.has(note.id);
       drawNote.call(this, context, {
         note,
         horizontal: rendered,
@@ -521,10 +547,11 @@ export function drawMultiLineNotes(
         endVertical,
         noteWidth,
         height,
-        selected,
+        selected: highlightSelected,
         remoteSelected,
         opacityMultiplier: lineOpacity,
         shear: noteSkewShear(noteSkewAtHit(skewCurve, note)),
+        rotation: noteOverlapRotation(overlapRanks.get(index)),
       });
       if (note.type === 2 && range.invalid) {
         drawEventOverlapFilter(

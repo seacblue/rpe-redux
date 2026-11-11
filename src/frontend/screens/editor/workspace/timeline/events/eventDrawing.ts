@@ -113,6 +113,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   const { context, width, height } = prepareCanvas(this.eventsCanvas);
   this.viewport.syncMultiLineChrome("events", width);
   const session = this.getSession();
+  const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const multiEvents = session.eventsMode === "multi";
   // The event backdrop holds the beat grid and the panel/channel separators.
   // Both are projected from the live origin, so they are rebuilt every frame
@@ -257,15 +258,29 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       };
       this.gestures.eventRects.push(rectangle);
       const selected = this.getSession().eventSelection.has(eventKey(type, entry.index));
-      if (selected) {
+      const hovered = this.gestures.isEventOverlapHovered(
+        this.getSession().lineIndex,
+        type,
+        entry.index,
+      );
+      const highlightSelection = hovered || (!overlapSelectionSuppressed && selected);
+      if (highlightSelection) {
         selectedRectangles.push(rectangle);
+      }
+      if (selected) {
         selectedValues.push({
           start: entry.item.start,
           end: entry.item.end,
           top: vertical,
           bottom,
         });
-      } else if (entry.item.id !== undefined && this.remoteSelectedEventIds.has(entry.item.id)) {
+      }
+      if (
+        !highlightSelection &&
+        !overlapSelectionSuppressed &&
+        entry.item.id !== undefined &&
+        this.remoteSelectedEventIds.has(entry.item.id)
+      ) {
         remoteSelectedRectangles.push(rectangle);
       }
       context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity);
@@ -390,6 +405,7 @@ export function drawMultiLineEvents(
 ): boolean {
   const palette = this.cache.palette() ?? readCanvasPalette();
   const session = this.getSession();
+  const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const context = context2d(this.eventsCanvas);
   const width = this.eventsCanvas.clientWidth;
   const height = this.eventsCanvas.clientHeight;
@@ -504,12 +520,20 @@ export function drawMultiLineEvents(
         };
         this.gestures.eventRects.push(rectangle);
         const selected = lineSelection.has(eventKey(type, index));
-        if (selected) {
+        const hovered = this.gestures.isEventOverlapHovered(lineIndex, type, index);
+        const highlightSelection = hovered || (!overlapSelectionSuppressed && selected);
+        if (highlightSelection) {
           selectedRectangles.push(rectangle);
-          if (type !== "paintEvents") {
-            selectedValues.push({ start: event.start, end: event.end, top, bottom });
-          }
-        } else if (event.id !== undefined && this.remoteSelectedEventIds.has(event.id)) {
+        }
+        if (selected && type !== "paintEvents") {
+          selectedValues.push({ start: event.start, end: event.end, top, bottom });
+        }
+        if (
+          !highlightSelection &&
+          !overlapSelectionSuppressed &&
+          event.id !== undefined &&
+          this.remoteSelectedEventIds.has(event.id)
+        ) {
           remoteSelectedRectangles.push(rectangle);
         }
         context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, lineOpacity);

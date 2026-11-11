@@ -15,19 +15,16 @@ import { eventDragDelta } from "../../../../../../core/edit/timeline/dragPreview
 import {
   beatValue,
   compareBeats,
-  formatBeat,
   type Beat,
 } from "../../../../../../core/global/chart/timing/beat.ts";
 import { t } from "../../../../../../i18n/index.ts";
-import { EVENT_TYPES } from "../../../../../../core/global/chart/chart.ts";
-import { trackLabels } from "../drawing/canvas.ts";
-import { eventTypeAt, SPECIAL_TRACKS, specialTrackLabel } from "../drawing/tracks.ts";
+import type { LineEventValue } from "../../../../../../core/global/chart/chart.ts";
+import { eventTypeAt } from "../drawing/tracks.ts";
 import { eventColumnForTrack } from "./eventColumns.ts";
 import {
   eventKey,
   eventListAt,
   eventList,
-  NOISE_ACTIVE_EVENTS,
 } from "../../../../../../core/edit/events/eventTracks.ts";
 import { placeEventAtTarget } from "../../../../../../core/edit/events/eventCommands.ts";
 import type { EventInteractionHandle } from "../drawing/canvas.ts";
@@ -67,6 +64,9 @@ type EventTimeline = Pick<
     | "clipboardPointer"
     | "tool"
     | "previewPick"
+    | "overlapHover"
+    | "overlapMenuOpen"
+    | "isEventOverlapHovered"
   >;
   viewport: Pick<
     TimelineRuntimeSurface["viewport"],
@@ -110,17 +110,17 @@ interface EventRect {
   lineIndex?: number;
 }
 
-/** Localized display label for an event track type. */
-function eventTypeLabel(type: string): string {
-  if (type === NOISE_ACTIVE_EVENTS) {
-    return t("editorPanels.linePanel.noiseActive");
+/** Formats one event endpoint, keeping numeric values at two decimal places. */
+function formatEventValue(value: LineEventValue): string {
+  if (typeof value === "number") {
+    return value.toFixed(2);
   }
-  const base = EVENT_TYPES.indexOf(type as (typeof EVENT_TYPES)[number]);
-  if (base >= 0) {
-    return trackLabels()[base] ?? type;
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => (typeof part === "number" ? part.toFixed(2) : String(part)))
+      .join(", ");
   }
-  const special = SPECIAL_TRACKS.find((track) => track.key === type);
-  return special ? specialTrackLabel(special) : type;
+  return value == null ? "—" : String(value);
 }
 
 /** Pointer interaction for event bars: hit testing, selection, placement, and marquee drags. */
@@ -179,17 +179,35 @@ export class EventInteraction implements EventInteractionHandle {
       const event = eventListAt(session, targetLine, rectangle.type, this.timeline.gestures.layer)[
         rectangle.index
       ];
+      const range = event
+        ? `${formatEventValue(event.start)} - ${formatEventValue(event.end)}`
+        : "—";
       return {
         id: `event:${targetLine}:${rectangle.type}:${rectangle.index}`,
-        label: `${eventTypeLabel(rectangle.type)}, ${
-          session.chart.judgeLineList?.[targetLine]?.Name ??
-          t("editorPanels.overlap.line", { index: targetLine })
-        }`,
-        detail: `${t("editorPanels.overlap.layer", {
-          value: this.timeline.gestures.layer,
-        })}, ${t("editorPanels.overlap.beat", {
-          value: event ? `${formatBeat(event.startTime)} – ${formatBeat(event.endTime)}` : "—",
-        })}, #${rectangle.index}`,
+        label: t("editorPanels.overlap.line", { index: targetLine }),
+        detail: `#${rectangle.index} · ${range}`,
+        onHover: () => {
+          this.timeline.gestures.overlapHover = {
+            kind: "events",
+            lineIndex: targetLine,
+            index: rectangle.index,
+            eventType: rectangle.type,
+          };
+          this.timeline.changed();
+        },
+        onLeave: () => {
+          if (
+            !this.timeline.gestures.isEventOverlapHovered(
+              targetLine,
+              rectangle.type,
+              rectangle.index,
+            )
+          ) {
+            return;
+          }
+          this.timeline.gestures.overlapHover = null;
+          this.timeline.changed();
+        },
         run: () => {
           session.focus = "events";
           session.marqueeSelection = null;
@@ -366,12 +384,20 @@ export class EventInteraction implements EventInteractionHandle {
         canvas.addEventListener(
           "click",
           () => {
+            this.timeline.gestures.overlapMenuOpen = true;
+            this.timeline.gestures.overlapHover = null;
+            this.timeline.changed();
             openOverlapMenu(
               canvas,
               event.clientX,
               event.clientY,
               t("editor.overlap.title"),
               actions,
+              () => {
+                this.timeline.gestures.overlapMenuOpen = false;
+                this.timeline.gestures.overlapHover = null;
+                this.timeline.changed();
+              },
             );
           },
           { once: true },

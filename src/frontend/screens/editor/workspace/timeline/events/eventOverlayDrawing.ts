@@ -218,6 +218,12 @@ export function drawShaderEvents(
     };
     this.gestures.eventRects.push(rectangle);
     const selected = this.getSession().eventSelection.has(eventKey("paintEvents", entry.index));
+    const hovered = this.gestures.isEventOverlapHovered(
+      this.getSession().lineIndex,
+      "paintEvents",
+      entry.index,
+    );
+    const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
     context.save();
     context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity);
     drawEventBar(this, context, rectangle);
@@ -226,9 +232,13 @@ export function drawShaderEvents(
       context.fillStyle = palette.overlayInvalidFill;
       context.fillRect(rectangle.x, top, rectangle.width, rectangle.height);
     }
-    if (selected) {
+    if (hovered || (!overlapSelectionSuppressed && selected)) {
       drawEventSelectionFilters(context, [rectangle]);
-    } else if (entry.item.id !== undefined && this.remoteSelectedEventIds.has(entry.item.id)) {
+    } else if (
+      !overlapSelectionSuppressed &&
+      entry.item.id !== undefined &&
+      this.remoteSelectedEventIds.has(entry.item.id)
+    ) {
       drawRemoteEventSelectionFilters(context, [rectangle], palette);
     }
     context.beginPath();

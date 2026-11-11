@@ -54,6 +54,7 @@ import type {
   PreviewLineFrame,
   PreviewSkin,
   PreviewNoteSelection,
+  PreviewOverlapHighlight,
 } from "./previewTypes.ts";
 
 /** Per-call switches for one preview paint. */
@@ -185,6 +186,10 @@ export class Preview {
   /** Temporary opacity for the line under the alpha sampler. */
   samplingAlpha: { lineIndex: number; alpha: number } | null = null;
   declare selectedNotes: PreviewNoteSelection;
+  /** Transient selection-colour highlight for the overlap picker's hovered row. */
+  overlapHighlight: PreviewOverlapHighlight | null = null;
+  /** True while the overlap picker is open; selection paint is suppressed. */
+  overlapMenuOpen = false;
   private readonly visibleNoteBuckets: NoteEntry[][] = [];
   private readonly visibleHoldBuckets: NoteEntry[][] = [];
   private readonly sampledStates: SampledLineState[] = [];
@@ -211,6 +216,8 @@ export class Preview {
     this.passes = [];
     this.noteHitAreas.length = 0;
     this.selectedNotes = new Map();
+    this.overlapHighlight = null;
+    this.overlapMenuOpen = false;
     this.visibleNoteBuckets.length = 0;
     this.visibleHoldBuckets.length = 0;
     this.sampledStates.length = 0;
@@ -234,6 +241,30 @@ export class Preview {
     this.shaderRuntime.sourceRevision += 1;
     this.backgroundFrame.clear();
     this.notifyGeometry(null);
+  }
+
+  /** Suppress selection paint while the overlap picker is open. */
+  setOverlapMenuOpen(open: boolean): void {
+    if (this.overlapMenuOpen === open) {
+      return;
+    }
+    this.overlapMenuOpen = open;
+    this.invalidateFrame();
+    this.invalidate?.();
+  }
+
+  /** Paint one overlap-picker row in the selection colour until it leaves. */
+  setOverlapHighlight(highlight: PreviewOverlapHighlight | null): void {
+    if (
+      this.overlapHighlight?.line === highlight?.line &&
+      this.overlapHighlight?.note?.lineIndex === highlight?.note?.lineIndex &&
+      this.overlapHighlight?.note?.noteIndex === highlight?.note?.noteIndex
+    ) {
+      return;
+    }
+    this.overlapHighlight = highlight;
+    this.invalidateFrame();
+    this.invalidate?.();
   }
 
   /** Point the workspace sampler at one line and repaint its focus tint. */
