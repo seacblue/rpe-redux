@@ -26,6 +26,7 @@ import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
 import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
   fixedCancelAction,
+  resolveEditorShortcutArea,
   runEditorKeyboardAction,
   runEditorShortcutRelease,
   type EditorKeyboardActionDependencies,
@@ -173,9 +174,16 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       if (context.documentOpen && context.modal === "none") {
         const { timeline } = deps;
         const session = deps.getSession();
-        const canvas = deps.canvasTarget(event) ?? deps.activeCanvasTarget();
-        area = canvas?.area ?? timeline.gestures.hoverArea ?? session.focus;
-        surface = canvas?.surface;
+        const eventCanvas = deps.canvasTarget(event);
+        const activeCanvas = deps.activeCanvasTarget();
+        const canvas = eventCanvas ?? activeCanvas;
+        area = resolveEditorShortcutArea(
+          eventCanvas?.area,
+          timeline.gestures.hoverArea,
+          activeCanvas?.area,
+          session.focus,
+        );
+        surface = timeline.gestures.hoverArea ? "timeline" : canvas?.surface;
         const hasMultiSelection =
           [...(session.multiLineSelection?.values() ?? [])].some((values) => values.size) ||
           [...(session.multiEventSelection?.values() ?? [])].some((values) => values.size);

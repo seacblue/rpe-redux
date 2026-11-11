@@ -90,6 +90,16 @@ const PAGE_KEYS: Record<string, string> = {
   "selection.nudge.down": "ArrowDown",
 };
 
+/** Resolve placement to the timeline currently under the pointer when known. */
+export function resolveEditorShortcutArea(
+  eventTargetArea: TimelineArea | undefined,
+  hoveredArea: TimelineArea | undefined,
+  activeCanvasArea: TimelineArea | undefined,
+  fallback: TimelineArea,
+): TimelineArea {
+  return hoveredArea ?? eventTargetArea ?? activeCanvasArea ?? fallback;
+}
+
 /** Ctrl+Q/W/E/R/T select base layers 0-3 and the synthetic extended layer. */
 const EVENT_LAYER_ACTIONS: Record<string, number> = {
   "event.layer.0": 0,

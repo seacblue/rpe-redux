@@ -179,6 +179,37 @@ export class TimelineGestures {
     }
   }
 
+  /**
+   * Cancel only a pending selection gesture while preserving placement state.
+   *
+   * A Shift/Ctrl click without movement intentionally survives pointerup as the
+   * first corner of a two-click marquee. An outside click must be able to drop
+   * that corner without also cancelling a pending Hold or event placement.
+   */
+  cancelSelectionGesture(): boolean {
+    const noteDrag = this.drag;
+    const eventDrag = this.eventInteraction.drag;
+    const hasSelectionGesture =
+      noteDrag?.kind === "rectangle" ||
+      noteDrag?.kind === "sweep" ||
+      eventDrag?.kind === "rectangle" ||
+      eventDrag?.kind === "sweep";
+    if (!hasSelectionGesture) {
+      return false;
+    }
+    if (noteDrag?.kind === "rectangle" || noteDrag?.kind === "sweep") {
+      this.drag = null;
+    }
+    if (eventDrag?.kind === "rectangle" || eventDrag?.kind === "sweep") {
+      this.eventInteraction.drag = null;
+    }
+    this.selectionHistoryBaseline = null;
+    this.selectionHistorySession = null;
+    this.selectionHistoryChart = null;
+    this.suppressContextMenu = false;
+    return true;
+  }
+
   /** Drop pending placement, drags, and preview state. */
   cancelPlacement(): void {
     this.pendingHold = null;
