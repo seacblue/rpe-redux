@@ -68,7 +68,16 @@
   padding: 0;
 }
 
-.redux-app-root .inspector .inspector-status > .inspector-status-help,
+.redux-app-root .inspector .inspector-status > .inspector-status-help {
+  flex: none;
+  width: var(--space-6);
+  height: var(--space-6);
+  min-width: var(--space-6);
+  min-height: var(--space-6);
+  padding: 0;
+  color: var(--foreground-muted);
+}
+
 .redux-app-root .inspector .inspector-status-actions > .inspector-status-expand {
   flex: none;
   width: var(--control-height-compact);

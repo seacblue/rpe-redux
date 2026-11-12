@@ -279,6 +279,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           <IconButton
             className="inspector-status-help"
             icon="help"
+            size="small"
             label={t("chrome.inspector.help")}
             tooltip={false}
             onClick={() =>
