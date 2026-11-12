@@ -75,6 +75,27 @@ function openInspectorGuide(context?: string): void {
   openOnboardingGuide(guideSectionForContext(context));
 }
 
+type InspectorModePhase = "compact" | "expanded" | "closing" | "handoff";
+
+/** Converts one computed CSS time value to milliseconds. */
+function cssDurationMs(value: string): number {
+  const match = /^\s*([\d.]+)(ms|s)\s*$/u.exec(value);
+  if (!match) {
+    return 0;
+  }
+  const amount = Number(match[1]);
+  return Number.isFinite(amount) && amount > 0 ? amount * (match[2] === "s" ? 1000 : 1) : 0;
+}
+
+/** Reads the computed duration for one transition property. */
+function transitionDurationMs(element: HTMLElement, property: string): number {
+  const style = getComputedStyle(element);
+  const properties = style.transitionProperty.split(",").map((value) => value.trim());
+  const durations = style.transitionDuration.split(",").map((value) => value.trim());
+  const index = properties.findIndex((value) => value === property || value === "all");
+  return cssDurationMs(durations[index >= 0 ? index : 0] ?? "");
+}
+
 /** Inspector frame and visibility; each pane owns its view and subscriptions. */
 export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
   const { t, tRaw } = useTranslation();
@@ -127,28 +148,89 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
   const [displayedMode, setDisplayedMode] = useState<WorkspaceModeDefinition | null>(
     activeWorkspaceMode,
   );
-  const [modeExpanded, setModeExpanded] = useState(activeWorkspaceMode !== null);
-  // Keep the task mounted through the panel-width transition, then hand the
-  // body back to the compact page without crossfading the two pages.
+  const displayedModeRef = useRef(displayedMode);
+  const [modePhase, setModePhase] = useState<InspectorModePhase>(
+    activeWorkspaceMode ? "expanded" : "compact",
+  );
+  const modeExitTimer = useRef<number | null>(null);
+  const modeHandoffTimer = useRef<number | null>(null);
   useEffect(() => {
+    displayedModeRef.current = displayedMode;
+  }, [displayedMode]);
+
+  // Keep the task mounted while its width returns to the compact track. The
+  // final handoff happens only after the width transition, so the compact pane
+  // can fade in over the already-settled frame instead of appearing by snap.
+  useEffect(() => {
+    if (modeExitTimer.current !== null) {
+      window.clearTimeout(modeExitTimer.current);
+      modeExitTimer.current = null;
+    }
+    if (modeHandoffTimer.current !== null) {
+      window.clearTimeout(modeHandoffTimer.current);
+      modeHandoffTimer.current = null;
+    }
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
         setDisplayedMode(activeWorkspaceMode);
-        setModeExpanded(true);
+        setModePhase("expanded");
       }, 0);
       return () => window.clearTimeout(openTimer);
     }
-    const collapseTimer = window.setTimeout(() => {
-      setModeExpanded(false);
-    }, 0);
-    const clearTimer = window.setTimeout(() => {
-      setDisplayedMode(null);
-    }, 280);
-    return () => {
-      window.clearTimeout(collapseTimer);
-      window.clearTimeout(clearTimer);
-    };
+    if (displayedModeRef.current) {
+      setModePhase("closing");
+    } else {
+      setModePhase("compact");
+    }
   }, [activeWorkspaceMode]);
+
+  // Width is the authoritative exit boundary. A token-based fallback covers
+  // reduced-motion styles and environments that do not emit transitionend.
+  useEffect(() => {
+    if (modePhase !== "closing") {
+      return undefined;
+    }
+    const element = inspector.current;
+    let finished = false;
+    const finishWidthTransition = (): void => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      if (modeExitTimer.current !== null) {
+        window.clearTimeout(modeExitTimer.current);
+        modeExitTimer.current = null;
+      }
+      setModePhase("handoff");
+      const surface = element?.querySelector<HTMLElement>(".inspector-mode-surface");
+      const handoffDuration = surface ? transitionDurationMs(surface, "opacity") : 0;
+      modeHandoffTimer.current = window.setTimeout(() => {
+        modeHandoffTimer.current = null;
+        displayedModeRef.current = null;
+        setDisplayedMode(null);
+        setModePhase("compact");
+      }, handoffDuration + 40);
+    };
+    if (!element) {
+      finishWidthTransition();
+      return undefined;
+    }
+    const onTransitionEnd = (event: TransitionEvent): void => {
+      if (event.target === element && event.propertyName === "width") {
+        finishWidthTransition();
+      }
+    };
+    element.addEventListener("transitionend", onTransitionEnd);
+    const widthDuration = transitionDurationMs(element, "width");
+    modeExitTimer.current = window.setTimeout(finishWidthTransition, widthDuration + 80);
+    return () => {
+      element.removeEventListener("transitionend", onTransitionEnd);
+      if (modeExitTimer.current !== null) {
+        window.clearTimeout(modeExitTimer.current);
+        modeExitTimer.current = null;
+      }
+    };
+  }, [modePhase]);
   const activeDrawerPane = drawerState.open
     ? (drawerPanes.find(
         (pane) =>
@@ -259,7 +341,8 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       ref={mergeRefs(inspector, surface.attach.inspector, onboardingAnchorRef("inspector"))}
       className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}${readOnly ? " is-readonly" : ""}`}
       data-mode-surface={modeSurface ? "true" : undefined}
-      data-mode-expanded={modeSurface && modeExpanded ? "true" : undefined}
+      data-mode-expanded={modeSurface && modePhase === "expanded" ? "true" : undefined}
+      data-mode-handoff={modeSurface && modePhase === "handoff" ? "true" : undefined}
       tabIndex={-1}
       aria-label={t("chrome.inspector.label")}
       aria-readonly={readOnly || undefined}
@@ -317,7 +400,11 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           </div>
         </div>
       )}
-      <div className="inspector-content" data-mode-surface={modeSurface ? "true" : undefined}>
+      <div
+        className="inspector-content"
+        data-mode-surface={modeSurface ? "true" : undefined}
+        data-mode-handoff={modeSurface && modePhase === "handoff" ? "true" : undefined}
+      >
         <div
           data-panel="empty"
           hidden={modeSurface || activeDrawerPane !== null || activePane !== ""}
