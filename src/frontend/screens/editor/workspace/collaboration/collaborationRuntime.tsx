@@ -114,6 +114,10 @@ import {
   showNotice as showModalNotice,
 } from "../../../../overlays/modals/prompts.ts";
 import { t } from "../../../../../i18n/index.ts";
+import {
+  recordPerformanceHudTraffic,
+  setPerformanceHudCollaborationTrafficActive,
+} from "../../../../overlays/performance/performanceHud.ts";
 import { useEditorRuntime, type EditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import {
   useDocumentRuntime,
@@ -1022,6 +1026,17 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   // The client is an external subscription, not render state. It is created
   // once and teardown is scoped to this provider.
   useEffect(() => {
+    const syncTrafficActivity = () => {
+      const status = stateCell.get().status;
+      setPerformanceHudCollaborationTrafficActive(
+        status === "connecting" ||
+          status === "waiting" ||
+          status === "connected" ||
+          status === "reconnecting",
+      );
+    };
+    const unsubscribeTrafficActivity = stateCell.subscribe(syncTrafficActivity);
+    syncTrafficActivity();
     const client = new CollaborationClient({
       appVersion: BUILD_APP_VERSION,
       state: stateCell,
@@ -1032,6 +1047,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onRole: (role, reason) => handlersRef.current.role(role, reason),
       onError: (message, code) => handlersRef.current.error(message, code),
       onAssetProgress: (progress) => handlersRef.current.assetProgress(progress),
+      onTraffic: ({ direction, bytes }) => recordPerformanceHudTraffic(direction, bytes),
       onAssetReady: (asset, bytes) => handlersRef.current.assetReady(asset, bytes),
       onAssetError: (message, assetName) => handlersRef.current.assetError(message, assetName),
       onMemberLeft: (memberId) => handlersRef.current.memberLeft(memberId),
@@ -1042,6 +1058,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     });
     clientRef.current = client;
     return () => {
+      unsubscribeTrafficActivity();
+      setPerformanceHudCollaborationTrafficActive(false);
       clientRef.current = null;
       client.dispose();
       if (sessionClaimed.current && isDesktop()) {

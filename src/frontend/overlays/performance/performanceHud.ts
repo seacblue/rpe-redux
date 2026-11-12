@@ -77,6 +77,11 @@ export interface PerformanceHudSnapshot {
   memorySamplesMb: readonly number[];
   renderLoadPercent: number;
   renderLoadSamples: readonly number[];
+  collaborationTrafficActive: boolean;
+  collaborationUploadKbps: number;
+  collaborationDownloadKbps: number;
+  collaborationUploadSamples: readonly number[];
+  collaborationDownloadSamples: readonly number[];
 }
 
 const snapshot = createValue<PerformanceHudSnapshot>({
@@ -91,6 +96,11 @@ const snapshot = createValue<PerformanceHudSnapshot>({
     memorySamplesMb: [],
     renderLoadPercent: 0,
     renderLoadSamples: [],
+    collaborationTrafficActive: false,
+    collaborationUploadKbps: 0,
+    collaborationDownloadKbps: 0,
+    collaborationUploadSamples: [],
+    collaborationDownloadSamples: [],
   },
 });
 
@@ -160,12 +170,6 @@ registerPerformanceHudBlock({
   value: (value) => `${value.drawTimeMs.toFixed(1)} ms`,
 });
 registerPerformanceHudBlock({
-  id: "frame-time",
-  label: "chrome.performanceHud.frameTime",
-  kind: "bar",
-  values: (value) => value.frameTimesMs,
-});
-registerPerformanceHudBlock({
   id: "memory",
   label: "chrome.performanceHud.memory",
   kind: "text",
@@ -175,28 +179,83 @@ registerPerformanceHudBlock({
       : "—",
 });
 registerPerformanceHudBlock({
-  id: "memory-graph",
-  label: "chrome.performanceHud.memoryGraph",
-  kind: "bar",
-  values: (value) => value.memorySamplesMb,
-});
-registerPerformanceHudBlock({
   id: "cpu",
   label: "chrome.performanceHud.cpu",
   kind: "text",
   value: (value) => `${value.renderLoadPercent.toFixed(0)}%`,
-});
-registerPerformanceHudBlock({
-  id: "cpu-graph",
-  label: "chrome.performanceHud.cpuGraph",
-  kind: "bar",
-  values: (value) => value.renderLoadSamples,
 });
 let lastSnapshotAt = -Infinity;
 const frameTimes: number[] = [];
 const fpsSamples: number[] = [];
 const memorySamplesMb: number[] = [];
 const renderLoadSamples: number[] = [];
+const collaborationUploadSamples: number[] = [];
+const collaborationDownloadSamples: number[] = [];
+let collaborationTrafficActive = false;
+let collaborationTrafficSampleStartedAt = -Infinity;
+let collaborationUploadBytes = 0;
+let collaborationDownloadBytes = 0;
+let collaborationUploadKbps = 0;
+let collaborationDownloadKbps = 0;
+
+const COLLABORATION_TRAFFIC_SAMPLE_MS = 500;
+
+/** Clears the rolling traffic series when a room connection starts or ends. */
+export function setPerformanceHudCollaborationTrafficActive(active: boolean): void {
+  if (collaborationTrafficActive === active) {
+    return;
+  }
+  collaborationTrafficActive = active;
+  collaborationTrafficSampleStartedAt = -Infinity;
+  collaborationUploadBytes = 0;
+  collaborationDownloadBytes = 0;
+  collaborationUploadKbps = 0;
+  collaborationDownloadKbps = 0;
+  collaborationUploadSamples.length = 0;
+  collaborationDownloadSamples.length = 0;
+  snapshot.update({
+    collaborationTrafficActive: active,
+    collaborationUploadKbps: 0,
+    collaborationDownloadKbps: 0,
+    collaborationUploadSamples: [],
+    collaborationDownloadSamples: [],
+  });
+}
+
+/** Adds one successfully sent or received room frame to the rolling series. */
+export function recordPerformanceHudTraffic(direction: "upload" | "download", bytes: number): void {
+  if (!collaborationTrafficActive || !Number.isFinite(bytes) || bytes <= 0) {
+    return;
+  }
+  if (direction === "upload") {
+    collaborationUploadBytes += bytes;
+  } else {
+    collaborationDownloadBytes += bytes;
+  }
+}
+
+/** Finalizes elapsed traffic windows and converts them to kilobytes per second. */
+function publishCollaborationTraffic(timestamp: number): void {
+  if (!collaborationTrafficActive) {
+    return;
+  }
+  if (!Number.isFinite(collaborationTrafficSampleStartedAt)) {
+    collaborationTrafficSampleStartedAt = timestamp;
+    return;
+  }
+  const elapsed = timestamp - collaborationTrafficSampleStartedAt;
+  if (elapsed < COLLABORATION_TRAFFIC_SAMPLE_MS) {
+    return;
+  }
+  const scale = 1000 / elapsed / 1024;
+  collaborationUploadKbps = collaborationUploadBytes * scale;
+  collaborationDownloadKbps = collaborationDownloadBytes * scale;
+  appendSample(collaborationUploadSamples, collaborationUploadKbps);
+  appendSample(collaborationDownloadSamples, collaborationDownloadKbps);
+  collaborationUploadBytes = 0;
+  collaborationDownloadBytes = 0;
+  collaborationTrafficSampleStartedAt = timestamp;
+}
 
 /** Heap figures the WebView exposes through `performance.memory`. */
 interface PerformanceMemory {
@@ -261,6 +320,7 @@ export function publishPerformanceHudFrame({
   // Render load is the share of the 60 FPS frame budget consumed by draw time.
   const renderLoadPercent = Math.min(100, Math.max(0, (drawTimeMs / (1000 / 60)) * 100));
   appendSample(renderLoadSamples, renderLoadPercent);
+  publishCollaborationTraffic(timestamp);
   if (timestamp - lastSnapshotAt < 1000 / 15) {
     return;
   }
@@ -276,6 +336,11 @@ export function publishPerformanceHudFrame({
     memorySamplesMb: [...memorySamplesMb],
     renderLoadPercent,
     renderLoadSamples: [...renderLoadSamples],
+    collaborationTrafficActive,
+    collaborationUploadKbps,
+    collaborationDownloadKbps,
+    collaborationUploadSamples: [...collaborationUploadSamples],
+    collaborationDownloadSamples: [...collaborationDownloadSamples],
   });
   void publishPerformanceHudFrameToWindow(snapshot.get()).catch(() => {});
 }

@@ -50,11 +50,12 @@ export default {
   "chrome.performanceHud.rafFps": "RAF FPS",
   "chrome.performanceHud.fpsGraph": "FPS 图",
   "chrome.performanceHud.drawTime": "绘制耗时",
-  "chrome.performanceHud.frameTime": "帧耗时（60 帧）",
   "chrome.performanceHud.memory": "内存（JS 堆）",
-  "chrome.performanceHud.memoryGraph": "内存图",
-  "chrome.performanceHud.cpu": "CPU（渲染负载）",
-  "chrome.performanceHud.cpuGraph": "CPU 图",
+  "chrome.performanceHud.cpu": "CPU",
+  "chrome.performanceHud.collaborationTraffic": "协作房间流量",
+  "chrome.performanceHud.trafficGraph": "上行与下行流量图",
+  "chrome.performanceHud.upload": "上行",
+  "chrome.performanceHud.download": "下行",
 
   "chrome.sidebar.label": "工作区导航",
 
