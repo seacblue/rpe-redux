@@ -28,16 +28,9 @@
   --field-rows-gap: var(--space-1-5);
 }
 
-.inspector-content
-  > [data-panel]:not([hidden])
-  > .inspector-panel-surface
-  > .inspector-panel-content,
-.inspector-content
-  > .inspector-panel-stack
-  > [data-panel]:not([hidden])
-  > .inspector-panel-surface
-  > .inspector-panel-content,
-.drawer-split-properties > .inspector-panel-surface > .inspector-panel-content {
+.inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface,
+.inspector-content > .inspector-panel-stack > [data-panel]:not([hidden]) > .inspector-panel-surface,
+.drawer-split-properties > .inspector-panel-surface {
   padding: var(--space-4) var(--inspector-gutter) var(--inspector-gutter);
 }
 

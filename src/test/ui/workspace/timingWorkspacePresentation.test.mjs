@@ -32,11 +32,11 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(drawerSplitSource, /className="inspector-panel-content"/u);
   assert.match(
     inspectorDesignStyles,
-    /\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding:/u,
+    /\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding:/u,
   );
   assert.doesNotMatch(
     inspectorDesignStyles,
-    /\.inspector-content > \[data-panel\]:not\(\[hidden\]\),\s*\.inspector-content > \.inspector-panel-stack/u,
+    /\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content\s*,/u,
   );
   assert.doesNotMatch(pageSource, /TimingMap|timing-map/u);
   assert.doesNotMatch(workspaceSource, /global-timing-columns|data-variant/u);
@@ -65,15 +65,15 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   );
   assert.match(
     timingStyles,
-    /\.inspector-content\s*>\s*\[data-panel="timing"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding: 0;/u,
+    /\.inspector-content\s*>\s*\[data-panel="timing"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;/u,
   );
   assert.match(
     lineStyles,
-    /\.inspector-content\s*>\s*\[data-panel="lines"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding: 0;/u,
+    /\.inspector \.inspector-content\s*>\s*\[data-panel="lines"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;/u,
   );
   assert.match(
     assetStyles,
-    /\.inspector-content\s*>\s*\[data-panel="assets"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding: 0;/u,
+    /\.inspector \.inspector-content\s*>\s*\[data-panel="assets"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;/u,
   );
   assert.match(
     lineStyles,
