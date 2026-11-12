@@ -70,10 +70,7 @@ export default {
   "chrome.performanceHud.download": "Download",
   "chrome.audioVolume.title": "Audio volume",
   "chrome.audioVolume.music": "Music",
-  "chrome.audioVolume.tap": "Tap",
-  "chrome.audioVolume.drag": "Drag",
-  "chrome.audioVolume.flick": "Flick",
-  "chrome.audioVolume.custom": "Custom",
+  "chrome.audioVolume.effects": "Sound effects",
 
   "chrome.sidebar.label": "Workspace navigation",
 

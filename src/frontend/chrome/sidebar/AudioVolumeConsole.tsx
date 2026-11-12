@@ -8,13 +8,10 @@
 import { createPortal } from "react-dom";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
-import { Slider } from "../../../design/components/slider/Slider.tsx";
+import { SliderField } from "../../../design/components/slider/SliderField.tsx";
 import { useAnchoredPopover } from "../../../design/patterns/useAnchoredPopover.ts";
-import {
-  AUDIO_VOLUME_METERS,
-  audioMixer,
-  type AudioVolumeMeter,
-} from "../../../core/media/audioMixer.ts";
+import { audioMixer } from "../../../core/media/audioMixer.ts";
+import { HIT_SOUND_KINDS } from "../../../core/media/hitsounds.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import { readFloatingHost } from "../../overlays/floatingHost.ts";
 
@@ -40,6 +37,9 @@ export function AudioVolumeConsole() {
     gap: PANEL_GAP,
     toggle: trigger,
   });
+  const effects =
+    HIT_SOUND_KINDS.reduce((total, meter) => total + snapshot.values[meter], 0) /
+    HIT_SOUND_KINDS.length;
 
   return (
     <div className="sidebar-audio-volume">
@@ -68,15 +68,19 @@ export function AudioVolumeConsole() {
           <header className="audio-volume-console-header">
             <strong>{t("chrome.audioVolume.title")}</strong>
           </header>
-          <div className="audio-volume-console-list">
-            {AUDIO_VOLUME_METERS.map((meter) => (
-              <AudioVolumeRow
-                key={meter}
-                meter={meter}
-                value={snapshot.values[meter]}
-                label={tRaw(`chrome.audioVolume.${meter}`)}
-              />
-            ))}
+          <div className="audio-volume-console-grid">
+            <AudioVolumeColumn
+              id="music"
+              label={tRaw("chrome.audioVolume.music")}
+              value={snapshot.values.music}
+              onChange={(value) => audioMixer.set("music", value)}
+            />
+            <AudioVolumeColumn
+              id="effects"
+              label={tRaw("chrome.audioVolume.effects")}
+              value={effects}
+              onChange={(value) => audioMixer.setEffects(value)}
+            />
           </div>
         </section>,
         readFloatingHost() ?? document.body,
@@ -85,29 +89,31 @@ export function AudioVolumeConsole() {
   );
 }
 
-/** Render one existing audio setting as a labelled slider row. */
-function AudioVolumeRow({
-  meter,
+/** Render one volume group as a labelled design-system slider. */
+function AudioVolumeColumn({
+  id,
   value,
   label,
+  onChange,
 }: {
-  meter: AudioVolumeMeter;
+  id: "music" | "effects";
   value: number;
   label: string;
+  onChange(value: number): void;
 }) {
   return (
-    <label className="audio-volume-console-row">
-      <span className="audio-volume-console-row-label">{label}</span>
-      <output className="audio-volume-console-row-value">{Math.round(value * 100)}%</output>
-      <Slider
-        data-slider="range"
+    <div className="audio-volume-console-column">
+      <span className="audio-volume-console-column-label">{label}</span>
+      <SliderField
+        id={`audio-volume-${id}`}
         min={0}
         max={1}
         step={0.01}
         value={value}
+        percentage
         aria-label={label}
-        onChange={(event) => audioMixer.set(meter, Number(event.currentTarget.value))}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
-    </label>
+    </div>
   );
 }

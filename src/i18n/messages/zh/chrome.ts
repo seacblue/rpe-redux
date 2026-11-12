@@ -58,10 +58,7 @@ export default {
   "chrome.performanceHud.download": "下行",
   "chrome.audioVolume.title": "音量控制",
   "chrome.audioVolume.music": "音乐",
-  "chrome.audioVolume.tap": "Tap",
-  "chrome.audioVolume.drag": "Drag",
-  "chrome.audioVolume.flick": "Flick",
-  "chrome.audioVolume.custom": "自定义",
+  "chrome.audioVolume.effects": "音效",
 
   "chrome.sidebar.label": "工作区导航",
 

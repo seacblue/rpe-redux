@@ -95,6 +95,14 @@ class AudioMixController {
     values.byId.set(id, String(clamp01(Number.isFinite(value) ? value : 0)));
   }
 
+  /** Set every existing hit-sound channel from the sidebar effects control. */
+  setEffects(value: number): void {
+    const next = clamp01(Number.isFinite(value) ? value : 0);
+    for (const kind of HIT_SOUND_KINDS) {
+      this.set(kind, next);
+    }
+  }
+
   /** Release subscriptions when the application host is torn down. */
   dispose(): void {
     for (const dispose of this.settingDisposers.splice(0)) {

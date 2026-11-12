@@ -40,6 +40,20 @@ test("audio mixer changes each existing hitsound setting", () => {
   }
 });
 
+test("audio mixer effects control updates every existing hitsound setting", () => {
+  const previous = new Map(METER_IDS.slice(1).map((id) => [id, values.byId.get(id)]));
+  try {
+    audioMixer.setEffects(0.6);
+    for (const id of METER_IDS.slice(1)) {
+      assert.equal(values.byId.get(id), "0.6");
+    }
+  } finally {
+    for (const [id, value] of previous) {
+      values.byId.set(id, value);
+    }
+  }
+});
+
 test("hit sounds keep their existing per-kind volume path", async () => {
   const { HitSounds } = await import("../../../core/media/hitsounds.ts");
   const transport = { ensureContext() {}, backgroundGain: null };
