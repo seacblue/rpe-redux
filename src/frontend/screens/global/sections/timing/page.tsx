@@ -1,22 +1,24 @@
 /**
- * Timing page: one stable compact Inspector stack.
+ * Timing page: the compact Inspector stack and the expanded timing workspace.
  *
- * The timing workspace experiment is intentionally removed here until its
- * replacement has a stable geometry contract.
+ * Both layouts use the same list and property faces. The compact page stacks
+ * them; the workspace places them side by side at full height.
  */
-import { useTranslation } from "../../../../../i18n/react.ts";
-import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
+import {
+  registerWorkspaceMode,
+  type WorkspaceModeDefinition,
+} from "../../../editor/workspace/container/workspaceModes.ts";
 import { registerInspectorPanel } from "../../../editor/inspector/controller.ts";
 import { registerInspectorSidebar } from "../../../editor/inspector/inspectorShell.ts";
 import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../../../../core/edit/state/visibility.ts";
-import { GlobalTimingInspector } from "./GlobalTimingInspector.tsx";
 import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
 import { useGlobalChart } from "../../useGlobalChart.ts";
 import { TimingDetectFooter } from "../../../editor/inspector/bpm/BpmPanel.tsx";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
+import { TimingPageLayout } from "./TimingPageLayout.tsx";
 
 const hasDocument = {
   get: () => getEditorVisibility().hasDocument,
@@ -25,7 +27,6 @@ const hasDocument = {
 
 /** The compact page: timing rows above the selected point's properties. */
 function TimingInspectorPage() {
-  const { t } = useTranslation();
   const chart = useGlobalChart();
   if (!chart?.BPMList.length) {
     // With no timing points there is no point property to inspect. Keep the
@@ -40,16 +41,22 @@ function TimingInspectorPage() {
       </div>
     );
   }
-  return (
-    <InspectorPageSplit
-      topLabel={t("editorPanels.inspector.form.bpm.title")}
-      bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
-      top={<GlobalTimingWorkspace />}
-      bottom={<GlobalTimingInspector />}
-      resizable={false}
-    />
-  );
+  return <TimingPageLayout layout="compact" />;
 }
+
+/** The expanded workspace: full-height timing list and property faces. */
+function TimingStudio() {
+  return <TimingPageLayout layout="expanded" />;
+}
+
+const mode: WorkspaceModeDefinition = {
+  id: "timing",
+  order: 20,
+  label: "chrome.pane.bpm",
+  icon: "bpm",
+  component: TimingStudio,
+  requiresDocument: true,
+};
 
 const disposePanel = registerInspectorPanel({
   id: "timing",
@@ -57,6 +64,7 @@ const disposePanel = registerInspectorPanel({
   label: "chrome.pane.bpm",
   icon: "bpm",
   tutorial: GLOBAL_PAGE_TUTORIALS.timing,
+  workspaceMode: "timing",
   editsChart: true,
 });
 
@@ -70,8 +78,11 @@ const disposeSidebar = registerInspectorSidebar({
   visibility: hasDocument,
 });
 
+const disposeMode = registerWorkspaceMode(mode);
+
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    disposeMode();
     disposeSidebar();
     disposePanel();
   });

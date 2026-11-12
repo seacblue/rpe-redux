@@ -6,6 +6,7 @@ import test from "node:test";
 const root = new URL("../../../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf8");
 const pageSource = read("frontend/screens/global/sections/timing/page.tsx");
+const timingLayoutSource = read("frontend/screens/global/sections/timing/TimingPageLayout.tsx");
 const linesPageSource = read("frontend/screens/global/sections/lines/LinePanel.tsx");
 const assetsViewSource = read("frontend/screens/global/sections/assets/AssetLibraryView.tsx");
 const workspaceSource = read("frontend/screens/global/sections/timing/GlobalTimingWorkspace.tsx");
@@ -19,8 +20,11 @@ const inspectorDesignStyles = read("frontend/screens/editor/inspector/inspectorD
 const drawerSplitSource = read("frontend/chrome/drawer/DrawerSplit.tsx");
 
 test("timing inspector keeps one stable page and omits deleted extras", () => {
-  assert.match(pageSource, /InspectorPageSplit/u);
-  assert.match(pageSource, /resizable=\{false\}/u);
+  assert.match(pageSource, /TimingPageLayout layout="compact"/u);
+  assert.match(pageSource, /TimingPageLayout layout="expanded"/u);
+  assert.match(pageSource, /registerWorkspaceMode/u);
+  assert.match(timingLayoutSource, /InspectorPageSplit/u);
+  assert.match(timingLayoutSource, /resizable=\{false\}/u);
   assert.match(linesPageSource, /top=\{treeFace\}[\s\S]*?resizable=\{false\}/u);
   assert.match(assetsViewSource, /top=\{treeFace\}[\s\S]*?resizable=\{false\}/u);
   assert.match(inspectorSource, /className="inspector-panel-surface"/u);
@@ -33,10 +37,6 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.doesNotMatch(
     inspectorDesignStyles,
     /\.inspector-content > \[data-panel\]:not\(\[hidden\]\),\s*\.inspector-content > \.inspector-panel-stack/u,
-  );
-  assert.doesNotMatch(
-    pageSource,
-    /TimingPageLayout|TimingStudio|registerWorkspaceMode|workspaceMode:/u,
   );
   assert.doesNotMatch(pageSource, /TimingMap|timing-map/u);
   assert.doesNotMatch(workspaceSource, /global-timing-columns|data-variant/u);

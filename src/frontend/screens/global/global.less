@@ -257,6 +257,57 @@
   opacity: 1;
 }
 
+// The compact copy is the handoff mask. On open both faces travel upward and
+// uncover the wide copy below; on close they return from that same direction.
+.inspector[data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top,
+.inspector[data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom,
+.inspector[data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top,
+.inspector[data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom {
+  transform: translateY(-100%);
+}
+
+.inspector[data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top,
+.inspector[data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom {
+  transform: translateY(0);
+}
+
+.inspector[data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top,
+.inspector[data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom,
+.inspector[data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top,
+.inspector[data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom {
+  transition: transform var(--design-dur-enter) var(--design-ease-move);
+}
+
 // Expanded page layouts: the list/tree takes the left column, the selected
 // object's properties the right. Only the workspace mode uses these.
 .lines-studio,
@@ -390,6 +441,93 @@
     border-right: 0;
     border-bottom: 1px solid var(--edge-divider);
   }
+}
+
+// During the handoff the wide copy must stay a two-column surface even while
+// its container is still the compact Inspector width. The shrinking frame
+// clips the left column naturally; switching to stacked rows here would make
+// the right property face jump vertically instead of moving with the frame.
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .studio-body,
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .studio-body,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .studio-body {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .timing-studio .studio-body,
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .timing-studio .studio-body,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .timing-studio .studio-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .lines-studio .line-panel-split,
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .lines-studio .line-panel-split,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .lines-studio .line-panel-split,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .assets-studio .asset-library-split,
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .assets-studio .asset-library-split,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .assets-studio .asset-library-split {
+  grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .line-panel-split-tree,
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .line-panel-split-tree,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .line-panel-split-tree,
+.inspector[data-mode-phase="opening"]
+  .inspector-mode-surface
+  .asset-library-split
+  > .asset-tree-shell,
+.inspector[data-mode-phase="expanded"]
+  .inspector-mode-surface
+  .asset-library-split
+  > .asset-tree-shell,
+.inspector[data-mode-phase="closing"]
+  .inspector-mode-surface
+  .asset-library-split
+  > .asset-tree-shell {
+  border-right: 1px solid var(--edge-divider);
+  border-bottom: 0;
+}
+
+// The wide copy carries a small directional offset. It settles only after the
+// inspector reaches its target track, so the left face enters from the stage
+// and the right face rises into the full-height property column.
+.inspector-mode-surface .studio-list-pane,
+.inspector-mode-surface .studio-detail-pane,
+.inspector-mode-surface .line-panel-split-tree,
+.inspector-mode-surface .line-panel-split-properties,
+.inspector-mode-surface .asset-library-split > .asset-tree-shell,
+.inspector-mode-surface .asset-library-split-details {
+  transition: transform var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .studio-list-pane,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .line-panel-split-tree,
+.inspector[data-mode-phase="opening"]
+  .inspector-mode-surface
+  .asset-library-split
+  > .asset-tree-shell {
+  transform: translateX(calc(-1 * var(--space-6)));
+}
+
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .studio-detail-pane,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .line-panel-split-properties,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .asset-library-split-details {
+  transform: translateY(var(--space-6));
+}
+
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .studio-list-pane,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .line-panel-split-tree,
+.inspector[data-mode-phase="closing"]
+  .inspector-mode-surface
+  .asset-library-split
+  > .asset-tree-shell {
+  transform: translateX(var(--space-6));
+}
+
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .studio-detail-pane,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .line-panel-split-properties,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .asset-library-split-details {
+  transform: translateY(var(--space-6));
 }
 
 // The compact stacked variants keep the tree and details in one scroll surface,

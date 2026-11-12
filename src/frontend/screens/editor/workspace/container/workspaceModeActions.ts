@@ -13,10 +13,9 @@ import { openInspector } from "../../inspector/controller.ts";
 /**
  * Expands one inspector page into its wide panel.
  *
- * The compact pane stays mounted behind the expanded surface so its layout can
- * crossfade into the studio instead of swapping at full width. Its id is
- * remembered for the return trip. An unknown mode leaves the inspector
- * untouched.
+ * The compact pane stays mounted above the expanded surface while the inspector
+ * moves between its compact and wide tracks. Its id is remembered for the
+ * return trip. An unknown mode leaves the inspector untouched.
  */
 export function expandWorkspaceMode(id: string, runtime: EditorRuntime | null): boolean {
   const pane = runtime?.ui.activeInspector.get() ?? "";

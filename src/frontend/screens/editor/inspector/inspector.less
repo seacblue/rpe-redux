@@ -128,15 +128,22 @@
 }
 
 // The compact page stays mounted at its original width and right edge while the
-// workspace width moves. It remains hidden until the real width transition ends.
+// workspace width moves. During the handoff it sits above the wide copy so its
+// upper and lower faces can leave and return without a content swap.
 .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   width: calc(var(--inspector-compact-width) - 1px);
-  z-index: 0;
+  z-index: 2;
   pointer-events: none;
+  visibility: visible;
+}
+
+.inspector[data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]) {
   visibility: hidden;
 }
 

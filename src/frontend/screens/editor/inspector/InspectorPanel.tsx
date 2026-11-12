@@ -75,7 +75,7 @@ function openInspectorGuide(context?: string): void {
   openOnboardingGuide(guideSectionForContext(context));
 }
 
-type InspectorModePhase = "compact" | "expanded" | "closing";
+type InspectorModePhase = "compact" | "opening" | "expanded" | "closing";
 
 /** Converts one computed CSS time value to milliseconds. */
 function cssDurationMs(value: string): number {
@@ -157,8 +157,9 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     displayedModeRef.current = displayedMode;
   }, [displayedMode]);
 
-  // Keep the task mounted while its width returns to the compact track. The
-  // final page swap happens only after the width transition reaches its endpoint.
+  // Keep both page copies mounted while the inspector moves between tracks.
+  // The compact copy exits through the top face on open and re-enters from the
+  // same edge on close; the expanded copy stays under it until the width settles.
   useEffect(() => {
     if (modeExitTimer.current !== null) {
       window.clearTimeout(modeExitTimer.current);
@@ -167,7 +168,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
         setDisplayedMode(activeWorkspaceMode);
-        setModePhase("expanded");
+        setModePhase("opening");
       }, 0);
       return () => window.clearTimeout(openTimer);
     }
@@ -178,10 +179,11 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     }
   }, [activeWorkspaceMode]);
 
-  // Width is the authoritative exit boundary. A token-based fallback covers
-  // reduced-motion styles and environments that do not emit transitionend.
+  // Width is the authoritative handoff boundary in both directions. A
+  // token-based fallback covers reduced-motion styles and environments that do
+  // not emit transitionend.
   useEffect(() => {
-    if (modePhase !== "closing") {
+    if (modePhase !== "opening" && modePhase !== "closing") {
       return undefined;
     }
     const element = inspector.current;
@@ -194,6 +196,10 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       if (modeExitTimer.current !== null) {
         window.clearTimeout(modeExitTimer.current);
         modeExitTimer.current = null;
+      }
+      if (modePhase === "opening") {
+        setModePhase("expanded");
+        return;
       }
       displayedModeRef.current = null;
       setDisplayedMode(null);
@@ -329,7 +335,8 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       ref={mergeRefs(inspector, surface.attach.inspector, onboardingAnchorRef("inspector"))}
       className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}${readOnly ? " is-readonly" : ""}`}
       data-mode-surface={modeSurface ? "true" : undefined}
-      data-mode-expanded={modeSurface && modePhase === "expanded" ? "true" : undefined}
+      data-mode-phase={modeSurface ? modePhase : undefined}
+      data-mode-expanded={modeSurface && modePhase !== "closing" ? "true" : undefined}
       tabIndex={-1}
       aria-label={t("chrome.inspector.label")}
       aria-readonly={readOnly || undefined}
@@ -387,7 +394,11 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           </div>
         </div>
       )}
-      <div className="inspector-content" data-mode-surface={modeSurface ? "true" : undefined}>
+      <div
+        className="inspector-content"
+        data-mode-surface={modeSurface ? "true" : undefined}
+        data-mode-phase={modeSurface ? modePhase : undefined}
+      >
         <div
           data-panel="empty"
           hidden={modeSurface || activeDrawerPane !== null || activePane !== ""}
