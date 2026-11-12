@@ -10,7 +10,7 @@
 
 import { t } from "../../../i18n/index.ts";
 import { values } from "../../state/values.ts";
-import { EVENT_TYPES } from "../../global/chart/chart.ts";
+import { EVENT_TRACKS, EVENT_TYPES } from "../../global/chart/chartVocabulary.ts";
 import type {
   Chart,
   JudgeLine,
@@ -24,6 +24,9 @@ import type { BlockAreaInterval } from "../../global/chart/noise/blockArea.ts";
 
 /** The virtual event track stored in editor-only noise settings. */
 export const NOISE_ACTIVE_EVENTS = "noiseActiveEvents";
+
+/** Every event track that can appear in a timeline query, including synthetic tracks. */
+export const QUERYABLE_EVENT_TRACKS = [...EVENT_TRACKS, NOISE_ACTIVE_EVENTS] as const;
 
 const BASE_EVENT_TRACKS: readonly string[] = EVENT_TYPES;
 const EMPTY_NOISE_EVENTS: JudgeLineEvent[] = [];

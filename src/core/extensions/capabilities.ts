@@ -41,6 +41,7 @@ export const EXTENSION_CAPABILITIES = Object.freeze([
   "styles",
   "timers",
   "diagnostics",
+  "hitTest.read",
   "preview.read",
   /**
    * @deprecated Host-only gate name kept for installed manifests. It grants no

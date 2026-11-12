@@ -146,8 +146,8 @@ test("the capability vocabulary stays under the charter cap and excludes univers
   }
 });
 
-test("the capability catalog covers all 33 names and consent excludes host.patch", () => {
-  assert.equal(EXTENSION_CAPABILITIES.length, 33);
+test("the capability catalog covers all names and consent excludes host.patch", () => {
+  assert.equal(EXTENSION_CAPABILITIES.length, 34);
   assert.equal(CAPABILITY_CATALOG.length, EXTENSION_CAPABILITIES.length);
   assert.deepEqual(
     CAPABILITY_CATALOG.map((row) => row.capability),
@@ -185,7 +185,7 @@ test("the capability catalog covers all 33 names and consent excludes host.patch
 
   const grantable = EXTENSION_CAPABILITIES.filter((capability) => capability !== "host.patch");
   assert.equal(CAPABILITY_CONSENT_ROWS.length, grantable.length);
-  assert.equal(CAPABILITY_CONSENT_ROWS.length, 32);
+  assert.equal(CAPABILITY_CONSENT_ROWS.length, 33);
   assert.deepEqual(
     CAPABILITY_CONSENT_ROWS.map((row) => row.capability),
     grantable,

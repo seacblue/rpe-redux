@@ -14,6 +14,7 @@ import {
   projectContextMenuTarget,
   projectExtensionEventPayload,
 } from "../../../core/extensions/capabilityGate.ts";
+import { lookupMethod } from "../../../core/extensions/methodRegistry.ts";
 import {
   grantScriptDefaultShortcuts,
   materializeManifest,
@@ -62,6 +63,55 @@ function captureWarnings(fn) {
   }
   return warnings;
 }
+
+test("the async Extension hit-test bridge uses hitTest.read without editor state writes", async () => {
+  assert.equal(lookupMethod("hitTest", "queryAt")?.capability, "hitTest.read");
+  const state = {
+    selection: ["note-1"],
+    focus: "timeline",
+    playbackHead: 2,
+    scroll: { top: 10 },
+    viewport: { scale: 1 },
+    history: { undo: 0, redo: 0 },
+  };
+  const snapshot = structuredClone(state);
+  const temporal = {
+    chartFingerprint: "chart-a",
+    generation: 3,
+    totalHits: 1,
+    truncated: false,
+    ordering: "lineIndex,notes,judgeLine,eventTrack,eventIndex",
+    hits: [],
+  };
+  const api = gateExtensionApi(
+    fakeApi({
+      hitTest: {
+        availability: () => ({ status: "available" }),
+        pick: () => ({ ok: true, value: [] }),
+        queryAt: () => ({ ok: true, value: temporal }),
+        geometry: () => ({ ok: false, error: { code: "unavailable", message: "none" } }),
+      },
+    }),
+    new Set(["hitTest.read"]),
+    "hit-test-bridge",
+  );
+
+  const result = await Promise.resolve().then(() =>
+    api.hitTest.queryAt({ surface: "preview", time: { seconds: 1 }, include: ["note"] }),
+  );
+  assert.deepEqual(result, { ok: true, value: temporal });
+  assert.deepEqual(state, snapshot);
+  assert.throws(
+    () => api.hitTest.pick({}),
+    (error) => error?.code === "capabilityDenied" && error.capability === "preview.read",
+  );
+
+  const denied = gateExtensionApi(fakeApi(), new Set(), "hit-test-denied");
+  assert.throws(
+    () => denied.hitTest,
+    (error) => error?.code === "capabilityDenied" && error.capability === "hitTest.read",
+  );
+});
 
 test("values enumeration stays inside the owner boundary", () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
