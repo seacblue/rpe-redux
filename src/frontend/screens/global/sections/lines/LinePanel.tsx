@@ -80,6 +80,8 @@ export interface LinePanelProps {
 
 /** Controller props plus the view-only chrome owned by the mounted panel. */
 export interface LinePanelViewProps extends LinePanelProps {
+  /** Snapshot revision used to remount uncontrolled property fields after edits. */
+  snapshotRevision: number;
   selectedLineIds: ReadonlySet<string>;
   /** The folder selected in folder mode, or null while lines are selected. */
   selectedFolderGroup: number | null;
@@ -155,6 +157,7 @@ export function LinePanelView({
   onApplySelectionPurpose,
   onAddTexture,
   onTextureBrowserOpen,
+  snapshotRevision,
   showTitle = true,
   variant = "all",
   notify,
@@ -538,7 +541,7 @@ export function LinePanelView({
     return (
       <section
         className="line-panel-combination"
-        key={`combination:${selectionKey}:${session.lineIndex}`}
+        key={`combination:${snapshotRevision}:${selectionKey}:${session.lineIndex}`}
       >
         <h3 className="line-panel-section-title">{t("editorPanels.linePanel.combination")}</h3>
         {showGroups && (
@@ -676,7 +679,7 @@ export function LinePanelView({
         <section
           className="line-panel-properties"
           aria-label={t("editorPanels.linePanel.properties")}
-          key={`properties:${selectionKey}:${session.lineIndex}`}
+          key={`properties:${snapshotRevision}:${selectionKey}:${session.lineIndex}`}
         >
           {renderLineProperties()}
         </section>

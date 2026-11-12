@@ -11,6 +11,7 @@ import {
   editorLineNavigationDisabled,
   editorLineOptions,
   editorLineSelection,
+  editorParentLine,
   editorMultiLineEnabled,
   editorOffset,
   type EditorLineOption,
@@ -48,6 +49,8 @@ export function publishEditorSessionSnapshots(session: EditorSession, totalLines
   }
   editorLineLabels.set(labels);
   editorLine.set(String(session.lineIndex));
+  const parent = session.multiLineActive ? -1 : Number(session.line?.father ?? -1);
+  editorParentLine.set(Number.isInteger(parent) && parent >= 0 ? String(parent) : "");
   editorLineNavigationDisabled.set(totalLines < 1);
   const nextSelectionKey = session.multiLineIndices.join(",");
   if (nextSelectionKey !== selectionKey) {
