@@ -377,7 +377,6 @@
 
 // Expanded page layouts: the list/tree takes the left column, the selected
 // object's properties the right. Only the workspace mode uses these.
-.timing-studio,
 .lines-studio,
 .assets-studio {
   display: flex;
@@ -425,15 +424,6 @@
 .studio-detail-pane > * {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-.timing-studio .studio-body {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.timing-studio .studio-list-pane,
-.timing-studio .studio-detail-pane {
-  grid-row: 1;
 }
 
 .lines-studio .studio-detail-pane,

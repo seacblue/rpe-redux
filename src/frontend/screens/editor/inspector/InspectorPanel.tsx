@@ -75,7 +75,7 @@ function openInspectorGuide(context?: string): void {
   openOnboardingGuide(guideSectionForContext(context));
 }
 
-type InspectorModePhase = "compact" | "opening" | "expanded" | "closing";
+type InspectorModePhase = "compact" | "expanded" | "closing";
 
 /** Converts one computed CSS time value to milliseconds. */
 function cssDurationMs(value: string): number {
@@ -167,17 +167,9 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
         setDisplayedMode(activeWorkspaceMode);
-        setModePhase("opening");
-        const openFrame = window.requestAnimationFrame(() => setModePhase("expanded"));
-        modeExitTimer.current = openFrame;
+        setModePhase("expanded");
       }, 0);
-      return () => {
-        window.clearTimeout(openTimer);
-        if (modeExitTimer.current !== null) {
-          window.cancelAnimationFrame(modeExitTimer.current);
-          modeExitTimer.current = null;
-        }
-      };
+      return () => window.clearTimeout(openTimer);
     }
     if (displayedModeRef.current) {
       setModePhase("closing");
@@ -337,11 +329,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       ref={mergeRefs(inspector, surface.attach.inspector, onboardingAnchorRef("inspector"))}
       className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}${readOnly ? " is-readonly" : ""}`}
       data-mode-surface={modeSurface ? "true" : undefined}
-      data-mode-id={modeSurface ? displayedMode?.id : undefined}
-      data-mode-phase={modeSurface ? modePhase : undefined}
-      data-mode-expanded={
-        modeSurface && modePhase !== "compact" && modePhase !== "closing" ? "true" : undefined
-      }
+      data-mode-expanded={modeSurface && modePhase === "expanded" ? "true" : undefined}
       tabIndex={-1}
       aria-label={t("chrome.inspector.label")}
       aria-readonly={readOnly || undefined}
