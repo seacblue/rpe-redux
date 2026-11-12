@@ -420,17 +420,19 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
         {inspectorRuntime &&
           panels.map(({ id, component: Panel, editsChart }) => {
             const locked = readOnly && editsChart === true;
+            const isModeUnderlay = modeSurface && displayedMode?.id === id;
+            const isActivePanel = activePane === id || isModeUnderlay;
             return (
               <div
                 key={id}
                 ref={onboardingAnchorRef(`inspector-panel-${id}`)}
                 data-panel={id}
                 data-readonly={locked ? "true" : undefined}
-                data-mode-underlay={modeSurface ? "true" : undefined}
+                data-mode-underlay={isModeUnderlay ? "true" : undefined}
                 inert={locked || modeSurface || undefined}
                 aria-hidden={modeSurface || undefined}
                 aria-disabled={locked || undefined}
-                hidden={activeDrawerPane !== null || activePane !== id}
+                hidden={activeDrawerPane !== null || !isActivePanel}
               >
                 <Panel />
               </div>

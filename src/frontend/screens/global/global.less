@@ -146,7 +146,8 @@
   gap: 2px;
   min-height: 0;
   overflow: auto;
-  padding: 0;
+  margin-right: calc(-1 * var(--space-2));
+  padding: 0 var(--space-2) 0 0;
   border: 0;
   background: transparent;
 }
@@ -287,6 +288,19 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+}
+
+.inspector-page-split.is-static .inspector-page-split-seam {
+  min-height: var(--space-3);
+  cursor: default;
+}
+
+.inspector-page-split.is-static .inspector-page-split-seam::before {
+  width: 100%;
+}
+
+.inspector-page-split.is-static .inspector-page-split-grip {
+  display: none;
 }
 
 .inspector-page-split-top {

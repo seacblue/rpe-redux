@@ -17,6 +17,7 @@ export function TimingPageLayout({ layout }: { layout: "compact" | "expanded" })
         bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
         top={list}
         bottom={properties}
+        resizable={false}
       />
     );
   }

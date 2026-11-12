@@ -1,20 +1,12 @@
 /**
  * The compact Inspector page layout: one list face above one property face.
  *
- * Each face scrolls independently. The seam is a real separator that can be
- * dragged, reset with a double click, and moved with the keyboard, so a narrow
- * inspector still reaches every control without becoming a second column.
+ * Each face scrolls independently. The seam is a fixed separator so a narrow
+ * inspector still reaches every control without adding another interaction.
  */
-import {
-  useId,
-  useRef,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent,
-  type PointerEvent,
-} from "react";
+import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
-/** Per-page defaults; the author can resize the split after mount. */
+/** Per-page defaults; pages may opt out of the resize interaction. */
 export interface InspectorPageSplitProps {
   top: React.ReactNode;
   bottom: React.ReactNode;
@@ -26,6 +18,8 @@ export interface InspectorPageSplitProps {
   minBottom?: number;
   /** Initial share of the available height given to the top face. */
   initialRatio?: number;
+  /** Whether the separator exposes the resize interaction. */
+  resizable?: boolean;
 }
 
 /** Default top share; leaves most of the page for the selected object. */
@@ -44,7 +38,7 @@ function clampRatio(ratio: number, height: number, minTop: number, minBottom: nu
   return Math.min(maximum, Math.max(minimum, ratio));
 }
 
-/** A vertically resizable list/properties split for a compact Inspector page. */
+/** A list/properties split for a compact Inspector page. */
 export function InspectorPageSplit({
   top,
   bottom,
@@ -53,6 +47,7 @@ export function InspectorPageSplit({
   minTop = 108,
   minBottom = 148,
   initialRatio = DEFAULT_RATIO,
+  resizable = true,
 }: InspectorPageSplitProps) {
   const container = useRef<HTMLDivElement>(null);
   const [ratio, setRatio] = useState(initialRatio);
@@ -119,13 +114,10 @@ export function InspectorPageSplit({
   return (
     <div
       ref={container}
-      className="inspector-page-split"
-      style={
-        {
-          gridTemplateRows: `minmax(0, ${ratio}fr) 7px minmax(0, ${1 - ratio}fr)`,
-          "--inspector-page-split-top-share": `${ratio * 100}%`,
-        } as CSSProperties
-      }
+      className={`inspector-page-split${resizable ? "" : " is-static"}`}
+      style={{
+        gridTemplateRows: `minmax(0, ${ratio}fr) var(--space-3) minmax(0, ${1 - ratio}fr)`,
+      }}
     >
       <div id={topId} className="inspector-page-split-top" aria-label={topLabel} role="region">
         {top}
@@ -133,16 +125,20 @@ export function InspectorPageSplit({
       <div
         className="inspector-page-split-seam"
         role="separator"
-        tabIndex={0}
         aria-orientation="horizontal"
         aria-label={`${topLabel} / ${bottomLabel}`}
-        aria-controls={`${topId} ${bottomId}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(ratio * 100)}
-        onPointerDown={startDrag}
-        onDoubleClick={reset}
-        onKeyDown={onKeyDown}
+        {...(resizable
+          ? {
+              tabIndex: 0,
+              "aria-controls": `${topId} ${bottomId}`,
+              "aria-valuemin": 0,
+              "aria-valuemax": 100,
+              "aria-valuenow": Math.round(ratio * 100),
+              onPointerDown: startDrag,
+              onDoubleClick: reset,
+              onKeyDown,
+            }
+          : {})}
       >
         <span className="inspector-page-split-grip" aria-hidden="true" />
       </div>
