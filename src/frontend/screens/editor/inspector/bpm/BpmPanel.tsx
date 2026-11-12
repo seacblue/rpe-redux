@@ -41,6 +41,7 @@ import {
   clampTimingSelection,
   timingPointSelection,
 } from "../../../global/sections/timing/timingSelection.ts";
+import { shouldRunMetronome } from "./metronomeVisibility.ts";
 
 /** Renders the selected timing point, or the chart offset when `mode` says so. */
 export function BpmPanel({
@@ -48,6 +49,7 @@ export function BpmPanel({
   mode = "point",
 }: { showTitle?: boolean; mode?: "point" | "offset" } = {}) {
   const bpm = useEditorRuntimeValue((runtime) => runtime.ui.bpmForm, null);
+  const activeInspector = useEditorRuntimeValue((runtime) => runtime.ui.activeInspector, "");
   const { t } = useTranslation();
   const empty = <InspectorEmpty>{t("chrome.inspector.timing.empty")}</InspectorEmpty>;
   let content: ReactNode;
@@ -62,7 +64,7 @@ export function BpmPanel({
             <BpmAttributes session={bpm.session} chart={bpm.chart} />
             <section className="bpm-tool bpm-tool-metronome">
               <h3 className="bpm-tool-title">{t("editorPanels.inspector.metronome.title")}</h3>
-              <Metronome chart={bpm.chart} />
+              <Metronome chart={bpm.chart} enabled={shouldRunMetronome(activeInspector)} />
             </section>
           </>
         ) : (
@@ -150,7 +152,7 @@ function metronomeLabel(bpm: number): string {
  * A real metronome: the pendulum follows the playback beat and the click is
  * generated only while audio is playing. It has no start or tap controls.
  */
-function Metronome({ chart }: { chart: Chart }) {
+function Metronome({ chart, enabled }: { chart: Chart; enabled: boolean }) {
   const { t } = useTranslation();
   const runtime = useEditorRuntime();
   const pendulum = useRef<SVGGElement>(null);
@@ -160,6 +162,9 @@ function Metronome({ chart }: { chart: Chart }) {
   const [bpm, setBpm] = useState(chart.BPMList[0]?.bpm ?? 120);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
     const playback = runtime?.providers.playback;
     const tempo = runtime?.providers.session.tempo.get();
     if (!playback || !tempo) {
@@ -247,7 +252,7 @@ function Metronome({ chart }: { chart: Chart }) {
       audio.current = null;
       lastBeat.current = null;
     };
-  }, [chart, runtime]);
+  }, [chart, enabled, runtime]);
 
   return (
     <div className="bpm-metronome">
