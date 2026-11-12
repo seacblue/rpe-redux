@@ -19,6 +19,9 @@ export const editorLine = defineValue({ id: "editor.line", initial: "0" });
 /** What the toolbar's line field displays: the active line or the compact selection. */
 export const editorLineInput = defineValue({ id: "editor.lineInput", initial: "0" });
 
+/** The active judge line's parent index, or an empty string when it has none. */
+export const editorParentLine = defineValue({ id: "editor.parentLine", initial: "" });
+
 /** A stable, label-ready view of one judge line for the toolbar picker. */
 export interface EditorLineOption {
   index: number;

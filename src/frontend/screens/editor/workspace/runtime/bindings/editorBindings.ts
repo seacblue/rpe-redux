@@ -45,6 +45,7 @@ import {
   createHistoryTravel,
 } from "../../../../../../core/edit/operations/editing.ts";
 import { bindTimelineControlInputs } from "../../../toolbar/timelineControls.ts";
+import { bindParentLineControl } from "../../../toolbar/parentLineControls.ts";
 import { registerEditorKeyboardBindings } from "../../../../../platform/shortcuts/editorKeyboard.ts";
 import { samplingActive, startSamplingForSelection } from "../../../sampling/samplingSession.ts";
 import { claimCurveDraftShortcut } from "../../../curveEvents/undo.ts";
@@ -116,6 +117,7 @@ interface EditorBindingPlayback {
 interface EditorBindingEditing {
   linePanel: {
     commit(label: string, chart: Chart, index?: number): void;
+    render(): void;
   };
   curveEditor: CurveEditorBinding;
   batchControls: BatchControlsBinding;
@@ -150,6 +152,13 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
       updateCurvePanel: deps.curveEditor.updatePanel,
       persistEditor: deps.persistEditor,
       invalidate: deps.invalidate,
+    }),
+  );
+  deps.scope.add(
+    bindParentLineControl({
+      getSession: deps.getSession,
+      commit: (label, chart, index) => deps.linePanel.commit(label, chart, index),
+      render: () => deps.linePanel.render(),
     }),
   );
   // The field is the one place the toolbar shows the line set; multi-line

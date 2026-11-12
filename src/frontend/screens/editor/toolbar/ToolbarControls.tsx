@@ -19,6 +19,7 @@ import {
   editorLineNavigationDisabled,
   editorLineOptions,
   editorLineSelection,
+  editorMultiLineActive,
   editorPreviewRatio,
   editorRate,
 } from "../../../../core/edit/state/publishedValues.ts";
@@ -30,6 +31,7 @@ import { transportControlNode } from "../../../chrome/transport/TransportControl
 import { ExtensionPicker } from "./ExtensionPicker.tsx";
 import { NoiseRenderingToggle } from "./NoiseRenderingToggle.tsx";
 import { freeCameraState, toggleFreeCamera } from "../workspace/stage/freeCamera/freeCamera.ts";
+import { commitParentLine, isParentLineInput } from "./parentLineControls.ts";
 
 /**
  * Register the editor's two toolbar rows.
@@ -271,5 +273,33 @@ const ROW_TWO: readonly ToolbarEntry[] = [
     tooltip: "chrome.toolbar.freeCameraHint",
     checked: () => freeCameraState.get().active,
     run: toggleFreeCamera,
+  },
+  { kind: "divider", id: "toolbar.rule.parentLine", order: 80, row: 2 },
+  {
+    kind: "field",
+    field: "number",
+    id: "toolbar.parentLine",
+    domId: "parent-line-input",
+    row: 2,
+    order: 90,
+    icon: "linePath",
+    className: "parent-line-field",
+    min: 0,
+    max: () => {
+      const options = editorLineOptions.get();
+      return options.length ? options[options.length - 1].index : 0;
+    },
+    step: 1,
+    text: true,
+    textAlign: "center",
+    label: "chrome.toolbar.parentLine",
+    tipTitle: "chrome.toolbar.parentLine",
+    value: "editor.parentLine",
+    disabled: () => editorMultiLineActive.get() || editorLineSelection.get().length > 1,
+    accept: isParentLineInput,
+    commitOnBlur: true,
+    commitEmptyOnBlur: true,
+    input: () => undefined,
+    commit: commitParentLine,
   },
 ];
