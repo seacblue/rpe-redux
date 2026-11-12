@@ -414,7 +414,7 @@
 }
 
 .timing-studio .studio-body {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .timing-studio .studio-list-pane,
@@ -489,28 +489,10 @@
   image-rendering: pixelated;
 }
 
-// As the inspector contracts, keep the workspace page mounted and let its
-// property face move below the list face before the compact page takes over.
-// The container query follows the animated panel width rather than the window,
-// so the change happens during the inspector's own leftward movement.
+// Other workspace modes may stack their faces as the inspector contracts. The
+// timing mode deliberately keeps its two-column copy stable until the compact
+// copy takes over, so no third layout appears during the handoff.
 @container inspector-mode (max-width: 900px) {
-  .timing-studio .studio-body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 0.85fr) minmax(0, 1.15fr) auto;
-  }
-
-  .timing-studio .studio-list-pane {
-    grid-column: 1;
-    grid-row: 1;
-    border-right: 0;
-    border-bottom: 1px solid var(--edge-divider);
-  }
-
-  .timing-studio .studio-detail-pane {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
   .lines-studio .line-panel-split,
   .assets-studio .asset-library-split {
     grid-template-columns: minmax(0, 1fr);

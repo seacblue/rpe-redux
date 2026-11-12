@@ -5,8 +5,6 @@
  * entry. The compact page stacks them so the timeline stays visible; the
  * workspace adds the full-height list and property face.
  */
-import { useTranslation } from "../../../../../i18n/react.ts";
-import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import {
   registerWorkspaceMode,
   type WorkspaceModeDefinition,
@@ -17,11 +15,11 @@ import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../../../../core/edit/state/visibility.ts";
-import { GlobalTimingInspector } from "./GlobalTimingInspector.tsx";
 import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
 import { useGlobalChart } from "../../useGlobalChart.ts";
 import { TimingDetectFooter } from "../../../editor/inspector/bpm/BpmPanel.tsx";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
+import { TimingPageLayout } from "./TimingPageLayout.tsx";
 
 const hasDocument = {
   get: () => getEditorVisibility().hasDocument,
@@ -30,7 +28,6 @@ const hasDocument = {
 
 /** The compact page: timing rows above the selected point's properties. */
 function TimingInspectorPage() {
-  const { t } = useTranslation();
   const chart = useGlobalChart();
   if (!chart?.BPMList.length) {
     // With no timing points there is no point property to inspect. Keep the
@@ -45,30 +42,12 @@ function TimingInspectorPage() {
       </div>
     );
   }
-  return (
-    <InspectorPageSplit
-      topLabel={t("editorPanels.inspector.form.bpm.title")}
-      bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
-      top={<GlobalTimingWorkspace />}
-      bottom={<GlobalTimingInspector />}
-    />
-  );
+  return <TimingPageLayout layout="compact" />;
 }
 
 /** The expanded workspace: full-height list and properties. */
 function TimingStudio() {
-  return (
-    <div className="timing-studio">
-      <div className="studio-body">
-        <div className="studio-list-pane">
-          <GlobalTimingWorkspace />
-        </div>
-        <div className="studio-detail-pane">
-          <GlobalTimingInspector />
-        </div>
-      </div>
-    </div>
-  );
+  return <TimingPageLayout layout="expanded" />;
 }
 
 const mode: WorkspaceModeDefinition = {
