@@ -76,30 +76,27 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 
 ## View and transport
 
-| Action                             | Default                               |
-| ---------------------------------- | ------------------------------------- |
-| Preview only / previous layout     | `Ctrl+Space`                          |
-| Note region                        | `Ctrl+Shift+Q`                        |
-| Event region                       | `Ctrl+Shift+W`                        |
-| Preview region                     | `Ctrl+Shift+E`                        |
-| Notes and events together          | `Ctrl+Shift+R`                        |
-| Reset the view                     | `Ctrl+Shift+F`                        |
-| In-game UI                         | `Ctrl+Shift+G`                        |
-| Play / pause                       | `Space`                               |
-| Hold preview playback, return      | `T`                                   |
-| Hold preview playback, stay        | `U`                                   |
-| Timeline backward / forward        | `Wheel Down` / `Wheel Up`             |
-| Fast seek backward / forward       | `Shift+Wheel Down` / `Shift+Wheel Up` |
-| Next / previous judge line         | `Ctrl+Wheel Up` / `Ctrl+Wheel Down`   |
-| Increase / decrease audio          | `Alt+Wheel Up` / `Alt+Wheel Down`     |
-| Select previous / next audio bus   | `Alt+Left` / `Alt+Right`              |
-| Increase / decrease selected audio | `Alt+Up` / `Alt+Down`                 |
-| Zoom timeline out / in             | `Alt+Wheel Down` / `Alt+Wheel Up`     |
-| Settings                           | `Ctrl+K`                              |
+| Action                         | Default                               |
+| ------------------------------ | ------------------------------------- |
+| Preview only / previous layout | `Ctrl+Space`                          |
+| Note region                    | `Ctrl+Shift+Q`                        |
+| Event region                   | `Ctrl+Shift+W`                        |
+| Preview region                 | `Ctrl+Shift+E`                        |
+| Notes and events together      | `Ctrl+Shift+R`                        |
+| Reset the view                 | `Ctrl+Shift+F`                        |
+| In-game UI                     | `Ctrl+Shift+G`                        |
+| Play / pause                   | `Space`                               |
+| Hold preview playback, return  | `T`                                   |
+| Hold preview playback, stay    | `U`                                   |
+| Timeline backward / forward    | `Wheel Down` / `Wheel Up`             |
+| Fast seek backward / forward   | `Shift+Wheel Down` / `Shift+Wheel Up` |
+| Next / previous judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down`   |
+| Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`     |
+| Settings                       | `Ctrl+K`                              |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
-Outside the timeline, `Alt+Wheel` adjusts the selected existing audio setting; over the timeline it remains timeline zoom. `Alt+Up` / `Alt+Down` adjusts audio anywhere. The transient volume HUD shows Music and each object hitsound setting during adjustment, then hides after one second.
+Audio volume is controlled from the expandable console at the bottom-right of the sidebar. `Alt+Wheel` remains reserved for timeline zoom when the pointer is over the timeline.
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
 

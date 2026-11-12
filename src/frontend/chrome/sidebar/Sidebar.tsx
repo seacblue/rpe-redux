@@ -25,6 +25,7 @@ import { useTranslation } from "../../../i18n/react.ts";
 import type { MessageKey } from "../../../i18n/index.ts";
 import { useEditorHostValue } from "../../contracts/editorHostReact.tsx";
 import { onboardingAnchorRef } from "../../onboarding/anchors.ts";
+import { AudioVolumeConsole } from "./AudioVolumeConsole.tsx";
 import {
   useSidebarNavigation,
   type SidebarNavigationDivider,
@@ -165,6 +166,7 @@ export function Sidebar({ sidebar }: { sidebar: SidebarDescriptor }) {
           ),
         )}
       </div>
+      <AudioVolumeConsole />
     </aside>
   );
 }

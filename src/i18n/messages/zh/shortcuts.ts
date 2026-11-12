@@ -23,7 +23,6 @@ export default {
   "shortcuts.category.editorPlayback": "播放与视图",
   "shortcuts.category.editorSelection": "选中物件与多线",
   "shortcuts.category.sampling": "采样",
-  "shortcuts.category.audioVolume": "音量控制",
 
   "shortcuts.library.previous": "上一张谱面",
   "shortcuts.library.next": "下一张谱面",
@@ -67,10 +66,6 @@ export default {
   "shortcuts.editor.nextJudgeLine": "判定线号递增",
   "shortcuts.editor.timelineZoomOut": "时间轴缩小",
   "shortcuts.editor.timelineZoomIn": "时间轴放大",
-  "shortcuts.audio.volumeUp": "调高当前音量",
-  "shortcuts.audio.volumeDown": "调低当前音量",
-  "shortcuts.audio.previousMeter": "选择上一个音量通道",
-  "shortcuts.audio.nextMeter": "选择下一个音量通道",
   "shortcuts.editor.lineJump": "跳转到指定判定线",
   "shortcuts.editor.timelineBackward": "时间轴后退",
   "shortcuts.editor.timelineForward": "时间轴前进",

@@ -22,8 +22,6 @@ import {
 import { PerformanceHud } from "../overlays/performance/PerformanceHud.tsx";
 import { InputOverlays } from "../screens/editor/workspace/stage/inputOverlays/InputOverlays.tsx";
 import { CoverBackdrop } from "./CoverBackdrop.tsx";
-import { AudioVolumeOverlay } from "../overlays/audioVolume/AudioVolumeOverlay.tsx";
-import "../overlays/audioVolume/audioVolumeOverlay.less";
 
 // Bind the editor's chrome commands before the actions that call them are
 // registered. The rail's own buttons come with the panes: each one registers
@@ -75,7 +73,6 @@ export const Shell = memo(function Shell() {
       <TimelineMenu />
       <InputOverlays />
       <PerformanceHud />
-      <AudioVolumeOverlay />
     </>
   );
 });

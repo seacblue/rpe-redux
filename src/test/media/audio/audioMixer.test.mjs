@@ -1,4 +1,4 @@
-/** The audio HUD writes the existing music and per-object hitsound settings. */
+/** The sidebar audio console writes the existing music and per-object hitsound settings. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import "../../../core/settings/features/audio.ts";

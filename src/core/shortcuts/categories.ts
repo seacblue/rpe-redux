@@ -48,7 +48,6 @@ export const SHORTCUT_CATEGORIES = Object.freeze({
     order: 90,
   },
   sampling: { id: "sampling", title: "shortcuts.category.sampling", order: 100 },
-  audioVolume: { id: "audio.volume", title: "shortcuts.category.audioVolume", order: 110 },
   developer: { id: "developer", title: "shortcuts.category.developer", order: 120 },
 } satisfies Record<string, ShortcutCategory>);
 

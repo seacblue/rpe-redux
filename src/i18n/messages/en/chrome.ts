@@ -74,7 +74,6 @@ export default {
   "chrome.audioVolume.drag": "Drag",
   "chrome.audioVolume.flick": "Flick",
   "chrome.audioVolume.custom": "Custom",
-  "chrome.audioVolume.adjust": "Alt + arrows or wheel to adjust",
 
   "chrome.sidebar.label": "Workspace navigation",
 

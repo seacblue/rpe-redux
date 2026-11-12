@@ -62,7 +62,6 @@ export default {
   "chrome.audioVolume.drag": "Drag",
   "chrome.audioVolume.flick": "Flick",
   "chrome.audioVolume.custom": "自定义",
-  "chrome.audioVolume.adjust": "使用 Alt + 方向键或滚轮调整",
 
   "chrome.sidebar.label": "工作区导航",
 
