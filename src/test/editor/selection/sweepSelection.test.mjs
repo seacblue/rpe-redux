@@ -9,6 +9,8 @@ import {
   selectEventsAlongSegment,
   selectNotesAlongSegment,
   shouldSuppressTimelineContextMenu,
+  timelineEmptyPanPress,
+  timelineSweepEnabled,
 } from "../../../core/edit/timeline/selection.ts";
 
 test("a note sweep selects and then removes the note it crosses", () => {
@@ -66,4 +68,40 @@ test("right-drag menu suppression is consumed once", () => {
   gestures.suppressNextContextMenu();
   gestures.clearContextMenuSuppression();
   assert.equal(gestures.consumeContextMenuSuppression(), false);
+});
+
+test("an empty primary press pans only in a multi-panel multi-line layout", () => {
+  const base = {
+    multiLineActive: true,
+    panelCount: 2,
+    button: 0,
+    hit: false,
+    tool: false,
+    pending: false,
+  };
+  assert.equal(timelineEmptyPanPress(base), true);
+  assert.equal(timelineEmptyPanPress({ ...base, multiLineActive: false }), false);
+  assert.equal(timelineEmptyPanPress({ ...base, panelCount: 1 }), false);
+});
+
+test("panning yields to the right sweep, an object hit, a tool, and a pending note", () => {
+  const base = {
+    multiLineActive: true,
+    panelCount: 2,
+    button: 0,
+    hit: false,
+    tool: false,
+    pending: false,
+  };
+  assert.equal(timelineEmptyPanPress({ ...base, button: 2 }), false);
+  assert.equal(timelineEmptyPanPress({ ...base, hit: true }), false);
+  assert.equal(timelineEmptyPanPress({ ...base, tool: true }), false);
+  assert.equal(timelineEmptyPanPress({ ...base, pending: true }), false);
+});
+
+test("a split multi-line layout disables every sweep button and modifier", () => {
+  assert.equal(timelineSweepEnabled({ multiLineActive: true, panelCount: 2 }), false);
+  assert.equal(timelineSweepEnabled({ multiLineActive: true, panelCount: 5 }), false);
+  assert.equal(timelineSweepEnabled({ multiLineActive: true, panelCount: 1 }), true);
+  assert.equal(timelineSweepEnabled({ multiLineActive: false, panelCount: 3 }), true);
 });

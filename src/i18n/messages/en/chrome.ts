@@ -117,7 +117,7 @@ export default {
   "chrome.pane.metadata": "Chart information",
   "chrome.pane.bpm": "Timing",
   "chrome.pane.assets": "Asset library",
-  "chrome.pane.audio": "Audio heatmap",
+  "chrome.pane.audio": "Waveform / spectrum",
   "chrome.pane.curve": "Fill curve notes",
   "chrome.pane.trajectory": "Curve trajectory generation",
   "chrome.pane.multiLine": "Multi-line editing",

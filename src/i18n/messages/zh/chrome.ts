@@ -101,7 +101,7 @@ export default {
   "chrome.pane.metadata": "谱面信息",
   "chrome.pane.bpm": "时值",
   "chrome.pane.assets": "素材库",
-  "chrome.pane.audio": "音频热力图",
+  "chrome.pane.audio": "波形 / 频谱",
   "chrome.pane.curve": "填充曲线音符",
   "chrome.pane.trajectory": "曲线轨迹生成",
   "chrome.pane.multiLine": "多线编辑",

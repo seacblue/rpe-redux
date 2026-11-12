@@ -1,23 +1,21 @@
 /**
  * Owns the timeline audio-analysis overlay controller: requests decoded audio,
- * streams it through workers, caches the spectrum, and paints the mirrored
- * heatmap against the timeline viewport.
+ * streams it through workers, caches waveform and spectrum results, and paints
+ * the analysis against the timeline viewport.
  *
  * Decoding stays behind the injected audio source and the analysis math lives in
  * `core/media`; this module owns worker lifecycle, overlay drawing, and visibility.
  */
 import {
   analyzeAudioBuffer,
+  shapeWaveform,
   type AudioAnalysisData,
   type AudioBufferLike,
+  type WaveformChannel,
 } from "../../../../../../core/media/audioAnalysis.ts";
-import {
-  paintVerticalSpectrogramPixels,
-  type SpectrogramRgb,
-} from "../../../../../../core/media/spectrumPixels.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import { createValue, type ValueCell } from "../../../../../../core/state/values.ts";
-import { readCanvasPalette, rgbChannels } from "../../../canvas/palette.ts";
+import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { measureElementRect, prepareCanvas } from "../../../canvas/canvas2d.ts";
 import { yieldToHost } from "../../../../../../core/utils/yieldToHost.ts";
 /** Large enough to keep worker traffic low, small enough to keep copying off the frame. */
@@ -51,18 +49,13 @@ export class AudioAnalysis {
   enabled: boolean;
   alpha: number;
   width: number;
-  /** Perceptual emphasis for the heatmap's energy ramp. */
+  /** Perceptual emphasis for the signed min/max envelope. */
   curve: number;
   data: AudioAnalysisData | null;
-  /** Bumped whenever `data` is replaced so the cached image cannot outlive it. */
-  dataRevision: number;
-  /** Mirrored spectrum image at analysis resolution, reused across frames. */
-  heatmap: HTMLCanvasElement | null;
-  heatmapKey: string;
   /** Fields populated by the first cancellation or analysis request. */
   source?: unknown;
   revision?: number;
-  /** The source whose analysis was already requested, so a failure does not retry every frame. */
+  /** The source whose waveform was already requested, so a failure does not retry every frame. */
   requestedSource?: unknown;
   worker?: Worker | null;
   cancelPending?: (() => void) | null;
@@ -80,22 +73,11 @@ export class AudioAnalysis {
     this.getAudio = getAudio;
     this.visibility = visibility;
     this.enabled = false;
-    this.alpha = 0.3;
+    this.alpha = 0.5;
     this.width = 0.62;
-    this.curve = 1.5;
+    this.curve = 1;
     this.data = null;
-    this.dataRevision = 0;
-    this.heatmap = null;
-    this.heatmapKey = "";
     this.visibility.set(false);
-  }
-
-  /** Replace the analysis and invalidate the cached heatmap image. */
-  private replaceData(data: AudioAnalysisData | null): void {
-    this.data = data;
-    this.dataRevision += 1;
-    this.heatmap = null;
-    this.heatmapKey = "";
   }
 
   /** Abort any in-flight analysis, drop the worker, and clear the pending request. */
@@ -112,14 +94,14 @@ export class AudioAnalysis {
   setSource(source: unknown): void {
     this.cancel();
     this.source = source;
-    this.replaceData(null);
+    this.data = null;
     this.draw();
   }
   /** Use an already decoded buffer and analyze it synchronously. */
   setBuffer(buffer: AudioBufferLike | null): void {
     this.cancel();
     this.source = null;
-    this.replaceData(buffer ? analyzeAudioBuffer(buffer) : null);
+    this.data = buffer ? analyzeAudioBuffer(buffer) : null;
     this.draw();
   }
   /** Decode and analyze the current source once, sharing the pending run with later callers. */
@@ -137,7 +119,7 @@ export class AudioAnalysis {
         return;
       }
       if (typeof Worker === "undefined") {
-        this.replaceData(analyzeAudioBuffer(buffer));
+        this.data = analyzeAudioBuffer(buffer);
         this.draw();
         return;
       }
@@ -160,7 +142,7 @@ export class AudioAnalysis {
           event: MessageEvent<{ type: "done"; data: AudioAnalysisData | null }>,
         ) => {
           if (event.data?.type === "done" && revision === this.revision) {
-            this.replaceData(event.data.data);
+            this.data = event.data.data;
           }
           resolve();
         };
@@ -217,42 +199,7 @@ export class AudioAnalysis {
     return pending;
   }
 
-  /** Build or reuse the mirrored spectrum image for the current analysis and palette. */
-  private spectrumImage(
-    data: AudioAnalysisData,
-    low: SpectrogramRgb,
-    high: SpectrogramRgb,
-  ): HTMLCanvasElement | null {
-    if (typeof document === "undefined" || data.bands < 1 || data.frameCount < 1) {
-      return null;
-    }
-    const curve = Number.isFinite(this.curve) ? Math.max(0.25, this.curve) : 1.5;
-    const key = `${this.dataRevision}:${data.bands}:${data.frameCount}:${low.join(
-      ",",
-    )}:${high.join(",")}:${curve}`;
-    if (this.heatmap && this.heatmapKey === key) {
-      return this.heatmap;
-    }
-    const image = document.createElement("canvas");
-    image.width = Math.max(2, data.bands * 2);
-    image.height = Math.max(2, data.frameCount);
-    const context = image.getContext("2d");
-    if (!context) {
-      return null;
-    }
-    const cells = context.createImageData(image.width, image.height);
-    paintVerticalSpectrogramPixels(cells.data, image.width, image.height, data, {
-      low,
-      high,
-      curve,
-    });
-    context.putImageData(cells, 0, 0);
-    this.heatmap = image;
-    this.heatmapKey = key;
-    return image;
-  }
-
-  /** Paint the mirrored spectrum heatmap against the timeline viewport. */
+  /** Paint the waveform against the timeline viewport; `offsetSeconds` shifts the sampled time. */
   draw(offsetSeconds = 0): void {
     const canvas = this.canvas;
     if (!canvas || !this.enabled) {
@@ -267,7 +214,7 @@ export class AudioAnalysis {
     }
     // Loading the decoded data belongs to the graph, not to the settings
     // toggle: a chart opened while the feature was off must still gain its
-    // heatmap when the row is switched on. `pending` prevents a second decode
+    // waveform when the row is switched on. `pending` prevents a second decode
     // from starting on the next frame.
     if (!this.data) {
       if (this.source && !this.pending && this.requestedSource !== this.source) {
@@ -310,48 +257,127 @@ export class AudioAnalysis {
     const source = this.data;
     const palette = readCanvasPalette();
     const alpha = clamp01(this.alpha);
-    const low: SpectrogramRgb = rgbChannels(palette.bottomValue) ?? [90, 169, 255];
-    const high: SpectrogramRgb = rgbChannels(palette.foreground) ?? [255, 255, 255];
-    const image = this.spectrumImage(source, low, high);
-    if (!image || source.duration <= 0 || source.spectrum.length === 0) {
-      this.visibility.set(false);
-      return;
-    }
+    const curve = this.curve;
+    const stereo = source.channels > 1;
     const chartTimeAt = (y: number) => timeline.viewport.timeAt(y - top);
-    const from = chartTimeAt(top) + offsetSeconds;
-    const to = chartTimeAt(bottom) + offsetSeconds;
-    const timeLow = Math.min(from, to);
-    const timeHigh = Math.max(from, to);
-    const span = timeHigh - timeLow;
-    const start = Math.max(0, timeLow);
-    const end = Math.min(source.duration, timeHigh);
-    if (span <= 0 || end <= start) {
-      this.visibility.set(false);
-      return;
+    const sampleChannel = (
+      channel: WaveformChannel,
+      fromSeconds: number,
+      toSeconds: number,
+    ): { min: number; max: number } => {
+      const length = Math.min(channel.min.length, channel.max.length);
+      if (length === 0 || source.duration <= 0) {
+        return { min: 0, max: 0 };
+      }
+      const lowSeconds = Math.min(fromSeconds, toSeconds);
+      const highSeconds = Math.max(fromSeconds, toSeconds);
+      if (highSeconds < 0 || lowSeconds > source.duration) {
+        return { min: 0, max: 0 };
+      }
+      const low = clamp01(lowSeconds / source.duration) * (length - 1);
+      const high = clamp01(highSeconds / source.duration) * (length - 1);
+      const start = Math.floor(low);
+      const end = Math.max(start, Math.min(length - 1, Math.ceil(high)));
+      let minimum = Number.POSITIVE_INFINITY;
+      let maximum = Number.NEGATIVE_INFINITY;
+      for (let index = start; index <= end; index++) {
+        minimum = Math.min(minimum, channel.min[index] ?? 0);
+        maximum = Math.max(maximum, channel.max[index] ?? 0);
+      }
+      if (!Number.isFinite(minimum)) {
+        return { min: 0, max: 0 };
+      }
+      return {
+        min: Math.max(-1, Math.min(1, shapeWaveform(minimum, curve))),
+        max: Math.max(-1, Math.min(1, shapeWaveform(maximum, curve))),
+      };
+    };
+    const points: {
+      y: number;
+      left: { min: number; max: number };
+      right: { min: number; max: number };
+    }[] = [];
+    for (let y = top; y <= bottom; y += 1) {
+      const from = chartTimeAt(y) + offsetSeconds;
+      const to = chartTimeAt(y + 1) + offsetSeconds;
+      points.push({
+        y,
+        left: sampleChannel(source.left, from, to),
+        right: sampleChannel(source.right, from, to),
+      });
     }
-    const screenY = (seconds: number) => top + ((seconds - timeLow) / span) * timelineHeight;
-    const drawTop = Math.min(screenY(start), screenY(end));
-    const drawHeight = Math.abs(screenY(end) - screenY(start));
+    const lanePath = (channel: "left" | "right", laneCenter: number) => {
+      context.beginPath();
+      points.forEach((point, index) => {
+        const value = point[channel];
+        const x = laneCenter + value.max * bandHalf;
+        if (index === 0) {
+          context.moveTo(x, point.y);
+        } else {
+          context.lineTo(x, point.y);
+        }
+      });
+      for (let index = points.length - 1; index >= 0; index--) {
+        const point = points[index];
+        const value = point[channel];
+        context.lineTo(laneCenter + value.min * bandHalf, point.y);
+      }
+      context.closePath();
+    };
+    const stereoPath = (channel: "left" | "right", direction: -1 | 1, close: boolean) => {
+      context.beginPath();
+      points.forEach((point, index) => {
+        const value = point[channel];
+        const amplitude = Math.max(Math.abs(value.min), Math.abs(value.max));
+        const x = center + direction * amplitude * bandHalf;
+        if (index === 0) {
+          context.moveTo(x, point.y);
+        } else {
+          context.lineTo(x, point.y);
+        }
+      });
+      if (close) {
+        context.lineTo(center, bottom);
+        context.lineTo(center, top);
+        context.closePath();
+      }
+    };
 
     context.save();
     context.beginPath();
     context.rect(left, top, right - left, timelineHeight);
     context.clip();
-    context.globalAlpha = alpha;
-    context.imageSmoothingEnabled = true;
-    context.drawImage(
-      image,
-      0,
-      (start / source.duration) * (image.height - 1),
-      image.width,
-      Math.max(1, ((end - start) / source.duration) * (image.height - 1)),
-      center - bandHalf,
-      drawTop,
-      bandHalf * 2,
-      Math.max(1, drawHeight),
-    );
 
-    // The centre line keeps the judge-line axis readable through the heatmap.
+    // A soft signed body with a brighter edge. Stereo is one waveform cut at
+    // the centreline: the left channel fills the left half and the right
+    // channel fills the right half, so the two sources never overlap.
+    context.fillStyle = palette.foreground;
+    context.globalAlpha = alpha * 0.22;
+    if (stereo) {
+      stereoPath("left", -1, true);
+      context.fill();
+      stereoPath("right", 1, true);
+      context.fill();
+    } else {
+      lanePath("left", center);
+      context.fill();
+    }
+
+    context.globalAlpha = alpha * 0.5;
+    context.strokeStyle = palette.foreground;
+    context.lineWidth = 1;
+    if (stereo) {
+      stereoPath("left", -1, false);
+      context.stroke();
+      stereoPath("right", 1, false);
+      context.stroke();
+    } else {
+      lanePath("left", center);
+      context.stroke();
+    }
+
+    // The centre line separates the stereo lanes and remains the timeline's
+    // time axis in mono, where both channels share one lane.
     context.globalAlpha = alpha * 0.25;
     context.strokeStyle = palette.gridMajor;
     context.beginPath();

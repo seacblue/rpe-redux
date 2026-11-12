@@ -18,6 +18,8 @@ export interface NotePropertyField {
   kind: "select" | "beat" | "number" | "duration" | "text" | "color" | "boolean" | "slider";
   /** Text value of a select, number, duration or text control; empty for a beat control. */
   value: string;
+  /** Whether a focused control owns a local draft that a session refresh must preserve. */
+  preservesDraft: boolean;
   /** True when the chart already authors this optional value, so hiding can keep it editable. */
   present?: boolean;
   placeholder?: string;
@@ -42,8 +44,10 @@ export interface NotePropertyField {
   /** Restore this field to its creation default through the owning commit path. */
   reset?: () => void;
   apply?: (control: PropertyControl) => void;
-  focus: () => void;
-  blur: () => void;
+  /** Marks the note draft active when this field gains focus. */
+  focus?: () => void;
+  /** Publishes the note properties after this field loses focus. */
+  blur?: () => void;
   wheel?: (direction: number) => string | null;
 }
 

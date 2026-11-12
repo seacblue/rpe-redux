@@ -4,9 +4,7 @@
  * One capture-phase listener evaluates the live context, lets editor commands
  * take first refusal when the editor workspace is active, then falls back to
  * registered app, instrument, workspace, and extension commands. Individual
- * modules declare scopes instead of installing their own window listeners; a
- * focused local control may also mark a bare key as its own so a media preview
- * keeps that key while it is in use.
+ * modules declare scopes instead of installing their own window listeners.
  */
 import type { ResourceScope } from "../../../core/utils/resourceScope.ts";
 import {
@@ -25,14 +23,10 @@ import {
   type PrefixDigitSequenceSubmission,
 } from "../../../core/shortcuts/prefixDigitSequence.ts";
 import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
-import {
-  claimsLocalShortcut,
-  isWindowBlur,
-  releaseShortcutFocus,
-  type ShortcutTarget,
-} from "./focus.ts";
+import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
   fixedCancelAction,
+  resolveEditorShortcutArea,
   runEditorKeyboardAction,
   runEditorShortcutRelease,
   type EditorKeyboardActionDependencies,
@@ -167,13 +161,6 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         prefixDigitState = createPrefixDigitSequenceState();
         return;
       }
-      // A focused media or local control that declares the key owns it. Leaving
-      // the event untouched lets its React handler run and keeps the key on the
-      // surface the user is looking at instead of the workspace transport.
-      if (claimsLocalShortcut(event.target as ShortcutTarget | null, event)) {
-        prefixDigitState = createPrefixDigitSequenceState();
-        return;
-      }
       const target = event.target as HTMLElement | null;
       if (context.modal === "none" && deps.claimDraftShortcut?.(event)) {
         prefixDigitState = createPrefixDigitSequenceState();
@@ -187,9 +174,16 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       if (context.documentOpen && context.modal === "none") {
         const { timeline } = deps;
         const session = deps.getSession();
-        const canvas = deps.canvasTarget(event) ?? deps.activeCanvasTarget();
-        area = canvas?.area ?? timeline.gestures.hoverArea ?? session.focus;
-        surface = canvas?.surface;
+        const eventCanvas = deps.canvasTarget(event);
+        const activeCanvas = deps.activeCanvasTarget();
+        const canvas = eventCanvas ?? activeCanvas;
+        area = resolveEditorShortcutArea(
+          eventCanvas?.area,
+          timeline.gestures.hoverArea,
+          activeCanvas?.area,
+          session.focus,
+        );
+        surface = timeline.gestures.hoverArea ? "timeline" : canvas?.surface;
         const hasMultiSelection =
           [...(session.multiLineSelection?.values() ?? [])].some((values) => values.size) ||
           [...(session.multiEventSelection?.values() ?? [])].some((values) => values.size);

@@ -15,17 +15,21 @@ import { Modal } from "../../../design/components/modal/Modal.tsx";
 import { Segmented } from "../../../design/components/segmented/Segmented.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import { parseRoomInviteLink, type RoomInvite } from "../../../core/collaboration/invite.ts";
+import { isDesktop } from "../../../core/platform/environment.ts";
 import { useCollaboration } from "../editor/workspace/collaboration/collaborationRuntime.tsx";
+import { RoomServerField } from "../editor/workspace/collaboration/RoomServerField.tsx";
 
 /** Join-only room entry for the home screen header. */
 export function WelcomeJoin() {
   const { t } = useTranslation();
   const { settings, joinRoom, updateSettings, state, pendingInviteLink } = useCollaboration();
   const [open, setOpen] = useState(false);
-  const [method, setMethod] = useState<"link" | "custom">("link");
-  const [link, setLink] = useState("");
-  const [server, setServer] = useState("");
-  const [password, setPassword] = useState("");
+  const [method, setMethod] = useState<"link" | "custom">(settings.joinMethod);
+  const [link, setLink] = useState(settings.joinLink);
+  const storedServer =
+    isDesktop() || /^(?:wss|https):\/\//iu.test(settings.serverUrl) ? settings.serverUrl : "";
+  const [server, setServer] = useState(storedServer);
+  const [password, setPassword] = useState(settings.joinPassword);
   const [name, setName] = useState(settings.displayName);
   const [color, setColor] = useState(settings.color);
   const handledInvite = useRef("");
@@ -38,10 +42,18 @@ export function WelcomeJoin() {
     handledInvite.current = pendingInviteLink;
     setName(settings.displayName);
     setColor(settings.color);
+    setServer(storedServer);
+    setPassword(settings.joinPassword);
     setMethod("link");
     setLink(pendingInviteLink);
     setOpen(true);
-  }, [pendingInviteLink, settings.displayName, settings.color]);
+  }, [
+    pendingInviteLink,
+    settings.displayName,
+    settings.color,
+    settings.joinPassword,
+    storedServer,
+  ]);
   const valid =
     method === "link"
       ? Boolean(parseRoomInviteLink(link))
@@ -49,15 +61,19 @@ export function WelcomeJoin() {
   const close = () => {
     setOpen(false);
     setLink("");
-    setServer("");
-    setPassword("");
   };
   const submit = () => {
     if (!valid || state.roomId) {
       return;
     }
     const displayName = name.trim() || settings.displayName;
-    updateSettings({ displayName, color });
+    updateSettings({
+      displayName,
+      color,
+      joinMethod: method,
+      joinLink: link,
+      ...(method === "custom" ? { serverUrl: server, joinPassword: password } : {}),
+    });
     const input: string | RoomInvite =
       method === "link" ? link : { serverUrl: server, invite: password };
     close();
@@ -71,6 +87,14 @@ export function WelcomeJoin() {
         onClick={() => {
           setName(settings.displayName);
           setColor(settings.color);
+          setMethod(settings.joinMethod);
+          setLink(settings.joinLink);
+          setServer(
+            isDesktop() || /^(?:wss|https):\/\//iu.test(settings.serverUrl)
+              ? settings.serverUrl
+              : "",
+          );
+          setPassword(settings.joinPassword);
           setOpen(true);
         }}
       />
@@ -99,14 +123,26 @@ export function WelcomeJoin() {
                 id={id}
                 value={name}
                 maxLength={48}
-                onChange={(event) => setName(event.currentTarget.value)}
+                onChange={(event) => {
+                  const next = event.currentTarget.value;
+                  setName(next);
+                  updateSettings({ displayName: next });
+                }}
               />
             )}
           />
           <FieldRow
             layout="inline"
             label={t("workspace.collaboration.color")}
-            control={<ColorField value={color} onChange={setColor} />}
+            control={
+              <ColorField
+                value={color}
+                onChange={(next) => {
+                  setColor(next);
+                  updateSettings({ color: next });
+                }}
+              />
+            }
           />
           <Segmented<"link" | "custom">
             className="is-block collab-mode-switch"
@@ -116,7 +152,10 @@ export function WelcomeJoin() {
               { value: "link", label: t("workspace.collaboration.joinMethod.link") },
               { value: "custom", label: t("workspace.collaboration.joinMethod.custom") },
             ]}
-            onChange={setMethod}
+            onChange={(next) => {
+              setMethod(next);
+              updateSettings({ joinMethod: next });
+            }}
           />
           {method === "link" ? (
             <FieldRow
@@ -127,7 +166,11 @@ export function WelcomeJoin() {
                   id={id}
                   value={link}
                   placeholder={t("workspace.collaboration.inviteLinkPlaceholder")}
-                  onChange={(event) => setLink(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    setLink(next);
+                    updateSettings({ joinLink: next });
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
@@ -139,17 +182,13 @@ export function WelcomeJoin() {
             />
           ) : (
             <>
-              <FieldRow
+              <RoomServerField
+                value={server}
+                onChange={(next) => {
+                  setServer(next);
+                  updateSettings({ serverUrl: next });
+                }}
                 layout="inline"
-                label={t("workspace.collaboration.serverUrl")}
-                control={(id) => (
-                  <Input
-                    id={id}
-                    value={server}
-                    placeholder={t("workspace.collaboration.serverUrlPlaceholder")}
-                    onChange={(event) => setServer(event.currentTarget.value)}
-                  />
-                )}
               />
               <FieldRow
                 layout="inline"
@@ -162,7 +201,11 @@ export function WelcomeJoin() {
                     minLength={4}
                     maxLength={64}
                     autoComplete="off"
-                    onChange={(event) => setPassword(event.currentTarget.value)}
+                    onChange={(event) => {
+                      const next = event.currentTarget.value;
+                      setPassword(next);
+                      updateSettings({ joinPassword: next });
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();

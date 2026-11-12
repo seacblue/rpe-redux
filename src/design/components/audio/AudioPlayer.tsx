@@ -7,19 +7,18 @@
  * choose a clip range; the player owns playing, seeking, and looping.
  */
 import {
-  forwardRef,
+  useCallback,
   useEffect,
-  useImperativeHandle,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from "react";
 import { useTranslation } from "../../../i18n/react.ts";
 import { Icon } from "../icon/Icon.tsx";
 import { formatMediaTime, mediaSeconds } from "../media/mediaTime.ts";
 import { useSeekableMediaSource } from "../media/useSeekableMediaSource.ts";
+import { AudioSpectrum } from "./AudioSpectrum.tsx";
 
 export interface AudioPlayerProps {
   /** Audio URL. Bundled assets can be resolved with `assetUrl()`. */
@@ -37,44 +36,22 @@ export interface AudioPlayerProps {
   /** Start muted; callers previewing a sound leave this unset. */
   muted?: boolean;
   className?: string;
-  /**
-   * Optional visual above the transport. It receives the clip progress so a
-   * feature can paint its own overview without the primitive owning the data.
-   */
-  visualizer?: (state: AudioVisualizerState) => ReactNode;
-}
-
-/** The transport state a caller-owned visualizer receives. */
-export interface AudioVisualizerState {
-  /** Progress through the clip, from 0 to 1. */
-  progress: number;
-  /** Whether the clip is currently audible. */
-  playing: boolean;
-}
-
-/** Imperative playback control for owners that place a preview beside the player. */
-export interface AudioPlayerHandle {
-  /** Play or pause the clip, matching the transport button. */
-  toggle(): void;
 }
 
 /** A player with an always-visible transport and an explicit clip range. */
-export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function AudioPlayer(
-  {
-    src,
-    label,
-    startAt,
-    endAt,
-    autoPlay = false,
-    loop = false,
-    muted = false,
-    className = "",
-    visualizer,
-  },
-  ref,
-) {
+export function AudioPlayer({
+  src,
+  label,
+  startAt,
+  endAt,
+  autoPlay = false,
+  loop = false,
+  muted = false,
+  className = "",
+}: AudioPlayerProps) {
   const { t } = useTranslation();
   const media = useRef<HTMLAudioElement>(null);
+  const [mediaElement, setMediaElement] = useState<HTMLAudioElement | null>(null);
   const track = useRef<HTMLDivElement>(null);
   const pendingSeek = useRef(0);
   const autoplayKey = useRef("");
@@ -85,6 +62,10 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
   const [playing, setPlaying] = useState(false);
   const [draggingState, setDraggingState] = useState(false);
   const [failed, setFailed] = useState(false);
+  const setMedia = useCallback((element: HTMLAudioElement | null) => {
+    media.current = element;
+    setMediaElement(element);
+  }, []);
 
   const begin = mediaSeconds(startAt) ?? 0;
   const finish = mediaSeconds(endAt);
@@ -178,10 +159,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
     }
   };
 
-  // A surrounding browser can show the selected asset in this player and let a
-  // Space press on the selected row drive the same transport.
-  useImperativeHandle(ref, () => ({ toggle }));
-
   /** Move the playhead to an offset from the clip start, clamped to the clip. */
   const seek = (value: number) => {
     const element = media.current;
@@ -250,16 +227,14 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
     }
   };
 
-  /** Keep bare Space scoped to this player instead of the editor transport. */
+  /** Keep Space scoped to this player instead of the editor transport. */
   const onPlayerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+    if (event.key !== " ") {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    if (!event.repeat) {
-      toggle();
-    }
+    toggle();
   };
 
   const segment = duration > 0 ? duration : 0;
@@ -270,13 +245,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
     <div
       className={`redux-audio ${className}`.trim()}
       data-failed={failed ? "true" : undefined}
-      data-local-shortcut="SPACE"
       tabIndex={0}
       onKeyDown={onPlayerKeyDown}
     >
       <div className="redux-audio-frame">
         <audio
-          ref={media}
+          ref={setMedia}
           src={playbackSrc}
           crossOrigin="anonymous"
           data-source={src}
@@ -318,7 +292,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
           }}
           onError={() => setFailed(true)}
         />
-        {visualizer?.({ progress: ratio, playing })}
+        <AudioSpectrum media={mediaElement} active={playing} />
         <div
           className="redux-media-controls redux-audio-row"
           data-dragging={draggingState || undefined}
@@ -328,7 +302,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
             className="redux-media-button"
             aria-label={playing ? t("design.audio.pause") : t("design.audio.play")}
             data-tip-title={playing ? t("design.audio.pause") : t("design.audio.play")}
-            data-tip-key="Space"
             onClick={toggle}
           >
             <Icon name={playing ? "playbackPause" : "playbackPlay"} size={17} />
@@ -368,4 +341,4 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(funct
       </div>
     </div>
   );
-});
+}

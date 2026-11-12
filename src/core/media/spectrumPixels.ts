@@ -1,33 +1,31 @@
 /**
- * Paints analysed spectrum data as time-frequency heatmaps into RGBA buffers.
+ * Paints analysed spectrum data into the RGBA buffer the spectrum scrubber uploads.
  *
- * The audio-analysis surface owns the energy grid; this module owns only the
- * display encoding. Horizontal callers get a conventional spectrogram with low
- * frequencies at the bottom. The timeline uses the vertical mirrored form so the
- * low bands hug the judge-line centre and the high bands spread outward.
+ * Owns tone shaping and the body and crest styling of the mirrored strip; canvas
+ * and GPU upload stay in the frontend.
  */
-import { SPECTRUM_GAMMA, type AudioAnalysisData } from "./audioAnalysis.ts";
+import {
+  SPECTRUM_GAMMA,
+  shapeWaveform,
+  type AudioAnalysisData,
+  type WaveformChannel,
+} from "./audioAnalysis.ts";
 import { clamp01 } from "../utils/numbers.ts";
 
-/** An opaque RGB triple in the 0-255 form ImageData consumes. */
-export type SpectrogramRgb = readonly [number, number, number];
+const TEXTURE_ALPHA = 0.58;
 
-/** The ink and contrast of one heatmap. */
-export interface SpectrogramStyle {
-  /** Colour at the quiet end of the ramp. */
-  low: SpectrogramRgb;
-  /** Colour at the loud end of the ramp. */
-  high: SpectrogramRgb;
-  /**
-   * Exponent applied to normalized energy. Values above one suppress quiet
-   * texture; one keeps the analysis encoding unchanged.
-   */
-  curve?: number;
-  /** Maximum alpha written into the buffer; defaults to fully opaque cells. */
-  alpha?: number;
+const BODY_MIN = 0.06;
+
+const BODY_MAX = 0.34;
+
+const CREST_ALPHA = 0.66;
+
+const QUIET_FLOOR = 0.12;
+
+/** Map a waveform level to a brighter display value with a square-root curve. */
+function expand(value: number): number {
+  return Math.sqrt(clamp01(value));
 }
-
-const TONE_FLOOR = 0.06;
 
 const WINDOW_DECIBELS = 20;
 
@@ -42,97 +40,84 @@ function tone(encoded: number): number {
   return clamp01((Math.log10(magnitude) + WINDOW_FLOOR) / WINDOW_FLOOR);
 }
 
-/** Map one normalized cell value onto the styled colour and alpha ramp. */
-function paintCell(
-  pixels: Uint8ClampedArray,
-  offset: number,
-  encoded: number,
-  style: SpectrogramStyle,
-): void {
-  const curve = Number.isFinite(style.curve) ? Math.max(0.25, style.curve as number) : 1.35;
-  const shaped = Math.pow(clamp01(tone(encoded)), curve);
-  const level = clamp01((shaped - TONE_FLOOR) / (1 - TONE_FLOOR));
-  if (level <= 0.006) {
-    return;
+/** Peak level of one channel across a normalized progress span. */
+function channelLevel(channel: WaveformChannel, start: number, end: number, curve: number): number {
+  const length = Math.min(channel.min.length, channel.max.length);
+  if (length === 0) {
+    return 0;
   }
-  const alpha = Math.round(level * 255 * clamp01(style.alpha ?? 1));
-  const lift = level;
-  pixels[offset] = style.low[0] + (style.high[0] - style.low[0]) * lift;
-  pixels[offset + 1] = style.low[1] + (style.high[1] - style.low[1]) * lift;
-  pixels[offset + 2] = style.low[2] + (style.high[2] - style.low[2]) * lift;
-  pixels[offset + 3] = alpha;
-}
-
-/** Average one band's encoded energy across the frames a display column covers. */
-function bandEnergy(
-  spectrum: Float32Array,
-  frameCount: number,
-  bands: number,
-  band: number,
-  firstFrame: number,
-  lastFrame: number,
-): number {
-  let total = 0;
-  for (let frame = firstFrame; frame < lastFrame; frame++) {
-    total += spectrum[frame * bands + band] ?? 0;
+  const low = Math.max(0, Math.min(length - 1, Math.floor(start * (length - 1))));
+  const high = Math.max(low, Math.min(length - 1, Math.ceil(end * (length - 1))));
+  let minimum = 0;
+  let maximum = 0;
+  for (let index = low; index <= high; index++) {
+    minimum = Math.min(minimum, channel.min[index] ?? 0);
+    maximum = Math.max(maximum, channel.max[index] ?? 0);
   }
-  return lastFrame > firstFrame ? total / (lastFrame - firstFrame) : 0;
+  return Math.abs(shapeWaveform(Math.max(Math.abs(minimum), Math.abs(maximum)), curve));
 }
 
 /**
- * Paint a horizontal heatmap: time on the x-axis, frequency on the y-axis.
+ * Paint the stereo spectrum strip into an RGBA buffer.
  *
- * Row zero is the highest band and the last row is the lowest band, which is
- * the conventional spectrogram orientation. A cell averages the frames and band
- * it covers so dense tracks keep stable blocks instead of flickering peaks.
+ * Left levels fill the upper half and right levels the lower half; `red`,
+ * `green`, and `blue` are the base ink. `curve` shapes the waveform envelope.
  */
-export function paintSpectrogramPixels(
+export function paintSpectrumPixels(
   pixels: Uint8ClampedArray,
   width: number,
   height: number,
   data: AudioAnalysisData,
-  style: SpectrogramStyle,
+  [red, green, blue]: [number, number, number],
+  curve = 1,
 ): void {
-  const { bands, frameCount, spectrum } = data;
-  if (width < 1 || height < 1 || bands < 1 || frameCount < 1) {
-    return;
-  }
+  const { bands, frameCount, spectrum, left, right } = data;
+  const center = (height - 1) / 2;
+  const halfHeight = Math.max(1, height / 2);
   for (let column = 0; column < width; column++) {
+    const progress = column / Math.max(1, width - 1);
+    const nextProgress = (column + 1) / Math.max(1, width - 1);
+    // The stereo strip is split at the centre line: left above, right below.
+    const leftLevel = expand(channelLevel(left, progress, nextProgress, curve));
+    const rightLevel = expand(channelLevel(right, progress, nextProgress, curve));
+
+    // --- the texture: box-average the frames this column covers.
     const firstFrame = Math.floor((column * frameCount) / width);
     const lastFrame = Math.max(firstFrame + 1, Math.floor(((column + 1) * frameCount) / width));
-    for (let row = 0; row < height; row++) {
-      const band = Math.min(bands - 1, Math.floor((1 - (row + 0.5) / height) * bands));
-      const energy = bandEnergy(spectrum, frameCount, bands, band, firstFrame, lastFrame);
-      paintCell(pixels, (row * width + column) * 4, energy, style);
-    }
-  }
-}
+    const frameWeight = 1 / (lastFrame - firstFrame);
 
-/**
- * Paint a vertical, mirrored heatmap: time on the y-axis and frequency from the
- * centre outward. The centre is the lowest band, so the timeline's judge-line
- * axis stays in the quiet core and the brighter high bands sit at the edges.
- */
-export function paintVerticalSpectrogramPixels(
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  data: AudioAnalysisData,
-  style: SpectrogramStyle,
-): void {
-  const { bands, frameCount, spectrum } = data;
-  if (width < 1 || height < 1 || bands < 1 || frameCount < 1) {
-    return;
-  }
-  const centre = (width - 1) / 2;
-  for (let row = 0; row < height; row++) {
-    const firstFrame = Math.floor((row * frameCount) / height);
-    const lastFrame = Math.max(firstFrame + 1, Math.floor(((row + 1) * frameCount) / height));
-    for (let column = 0; column < width; column++) {
-      const distance = centre > 0 ? Math.abs(column - centre) / centre : 0;
-      const band = Math.min(bands - 1, Math.floor(distance * (bands - 1)));
-      const energy = bandEnergy(spectrum, frameCount, bands, band, firstFrame, lastFrame);
-      paintCell(pixels, (row * width + column) * 4, energy, style);
+    for (let row = 0; row < height; row++) {
+      const distance = Math.abs(row - center);
+      const depth = distance / halfHeight;
+      const level = row <= center ? leftLevel : rightLevel;
+      const gain = QUIET_FLOOR + (1 - QUIET_FLOOR) * level;
+      const reach = Math.max(1, halfHeight * (0.2 + level * 0.8));
+      // Low frequencies sit in the core and higher frequencies form the finer
+      // outer texture. The two halves keep their own channel envelope.
+      const band = Math.min(bands - 1, Math.floor(depth * bands));
+      let alpha =
+        distance <= reach
+          ? BODY_MIN + (BODY_MAX - BODY_MIN) * Math.pow(1 - Math.min(1, depth), 1.45)
+          : 0;
+      let energy = 0;
+      for (let frame = firstFrame; frame < lastFrame; frame++) {
+        energy += spectrum[frame * bands + band] ?? 0;
+      }
+      alpha += TEXTURE_ALPHA * tone(energy * frameWeight) * gain * (1 - alpha);
+      if (distance <= reach && distance < 1.2) {
+        // A crisp but thin centre accent keeps the split strip legible.
+        alpha = Math.min(1, Math.max(alpha, CREST_ALPHA * (0.4 + 0.6 * level)));
+      }
+      if (alpha <= 0.006) {
+        continue;
+      }
+      // The brightest cells lift towards white, so the strip keeps some depth.
+      const lift = Math.min(1, alpha) * 0.5;
+      const offset = (row * width + column) * 4;
+      pixels[offset] = red + (255 - red) * lift;
+      pixels[offset + 1] = green + (255 - green) * lift;
+      pixels[offset + 2] = blue + (255 - blue) * lift;
+      pixels[offset + 3] = Math.round(Math.min(1, alpha) * 255);
     }
   }
 }

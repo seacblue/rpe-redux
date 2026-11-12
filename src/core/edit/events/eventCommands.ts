@@ -709,8 +709,9 @@ export const eventLayerShortcuts: readonly EditorShortcutDefinition[] = [
 /**
  * Placing a note or an event.
  *
- * `R` is two commands, not one: it places a Hold over the notes and an event
- * over the event area, which is what `enabledFor` decides here.
+ * R is two commands, not one: it places a Hold over the notes timeline and an
+ * event over the event area, which is what `enabledFor` decides here. The other
+ * note types stay note-only and never place through the event timeline.
  */
 export const eventShortcuts: readonly EditorShortcutDefinition[] = [
   {
@@ -719,6 +720,7 @@ export const eventShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.addTap",
     scope: "editor",
     defaults: [{ key: "Q" }],
+    enabledFor: (context) => context.area !== "events",
   },
   {
     id: "note.place.drag",
