@@ -132,9 +132,6 @@ export default {
   "editorPanels.inspector.form.bpm.offset": "时间偏移",
   "editorPanels.inspector.form.bpm.offsetCommit": "调整谱面时间偏移",
   "editorPanels.inspector.form.bpm.time": "时间",
-  "editorPanels.inspector.form.bpm.map": "时值图",
-  "editorPanels.inspector.form.bpm.mapHint": "点击色带跳转到对应时值点",
-  "editorPanels.inspector.form.bpm.mapBand": "{beat} · {bpm} BPM",
   "editorPanels.inspector.form.bpm.value": "BPM",
 
   "editorPanels.inspector.form.bpm.delete": "删除时值点",

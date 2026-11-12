@@ -24,11 +24,7 @@ import {
 import { selectTimingPoint } from "./timingActions.ts";
 
 /** Renders the timing-point list and the add/delete controls. */
-export function GlobalTimingWorkspace({
-  variant = "compact",
-}: {
-  variant?: "compact" | "studio";
-} = {}) {
+export function GlobalTimingWorkspace() {
   const { t } = useTranslation();
   const chart = useGlobalChart();
   const runtime = useEditorRuntime();
@@ -185,7 +181,7 @@ export function GlobalTimingWorkspace({
 
   const offset = Number(chart?.META.offset ?? 0);
   return (
-    <div className="global-timing-workspace" data-variant={variant}>
+    <div className="global-timing-workspace">
       <div className="global-timing-body">
         <ListRow
           as="button"
@@ -202,12 +198,6 @@ export function GlobalTimingWorkspace({
           </strong>
         </ListRow>
         <div className="global-timing-divider" role="separator" />
-        {variant === "studio" && entries.length > 0 && (
-          <div className="global-timing-columns" aria-hidden="true">
-            <span>{t("editorPanels.inspector.form.bpm.time")}</span>
-            <span>BPM</span>
-          </div>
-        )}
         {entries.length ? (
           <div
             ref={listRef}

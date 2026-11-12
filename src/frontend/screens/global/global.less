@@ -160,21 +160,6 @@
   padding: var(--space-2);
 }
 
-.global-timing-workspace[data-variant="studio"] .global-timing-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.global-timing-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  padding: var(--space-1) var(--space-2);
-  color: var(--foreground-muted);
-  font-size: var(--type-micro);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .global-timing-row-time {
   font-size: var(--type-body);
   font-variant-numeric: tabular-nums;
@@ -437,80 +422,6 @@
   grid-row: 1;
 }
 
-.timing-studio .timing-map {
-  grid-column: 1 / -1;
-}
-
-.timing-map {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--edge-divider);
-}
-
-.timing-map-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  margin: 0;
-  color: var(--foreground-muted);
-  font-size: var(--type-label);
-  font-weight: 500;
-}
-
-.timing-map-track {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-  width: 100%;
-  height: 44px;
-  overflow: hidden;
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-control);
-  background: var(--surface-muted);
-}
-
-.timing-map-band {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  min-width: 3px;
-  padding: 0 var(--space-2);
-  border: 0;
-  border-right: 1px solid var(--edge-divider);
-  background: transparent;
-  color: var(--foreground-muted);
-  font-size: var(--type-micro);
-  font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: var(--app-cursor-pointer);
-}
-
-.timing-map-band:hover {
-  background: var(--surface-hover);
-}
-
-.timing-map-band.is-selected {
-  background: var(--active-accent-fill);
-  color: var(--accent);
-}
-
-.timing-map-band strong {
-  font-size: var(--type-label);
-  font-weight: 600;
-}
-
-.timing-map-band small {
-  margin-left: var(--space-1);
-  font-size: var(--type-micro);
-}
-
 .lines-studio .studio-detail-pane,
 .assets-studio .studio-detail-pane {
   padding: 0;
@@ -600,11 +511,6 @@
     grid-row: 2;
   }
 
-  .timing-studio .timing-map {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
   .lines-studio .line-panel-split,
   .assets-studio .asset-library-split {
     grid-template-columns: minmax(0, 1fr);
@@ -686,7 +592,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .timing-map-band,
   .line-panel-stack,
   .asset-library-stack {
     transition: none;

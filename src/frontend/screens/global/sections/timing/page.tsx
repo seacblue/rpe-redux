@@ -3,7 +3,7 @@
  *
  * Both layouts use the same list, property form, metronome, and auto-detect
  * entry. The compact page stacks them so the timeline stays visible; the
- * workspace adds the full-height list and the BPM band map.
+ * workspace adds the full-height list and property face.
  */
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
@@ -19,7 +19,6 @@ import {
 } from "../../../../../core/edit/state/visibility.ts";
 import { GlobalTimingInspector } from "./GlobalTimingInspector.tsx";
 import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
-import { TimingMap } from "./TimingMap.tsx";
 import { useGlobalChart } from "../../useGlobalChart.ts";
 import { TimingDetectFooter } from "../../../editor/inspector/bpm/BpmPanel.tsx";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
@@ -56,20 +55,17 @@ function TimingInspectorPage() {
   );
 }
 
-/** The expanded workspace: full-height list, properties, and the BPM band map. */
+/** The expanded workspace: full-height list and properties. */
 function TimingStudio() {
-  const chart = useGlobalChart();
-  const entries = chart?.BPMList ?? [];
   return (
     <div className="timing-studio">
       <div className="studio-body">
         <div className="studio-list-pane">
-          <GlobalTimingWorkspace variant="studio" />
+          <GlobalTimingWorkspace />
         </div>
         <div className="studio-detail-pane">
           <GlobalTimingInspector />
         </div>
-        <TimingMap entries={entries} chart={chart} />
       </div>
     </div>
   );
