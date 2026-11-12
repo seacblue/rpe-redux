@@ -9,6 +9,7 @@ const pageSource = read("frontend/screens/global/sections/timing/page.tsx");
 const workspaceSource = read("frontend/screens/global/sections/timing/GlobalTimingWorkspace.tsx");
 const styles = read("frontend/screens/global/global.less");
 const bpmStyles = read("frontend/screens/editor/inspector/bpm/bpm.less");
+const inspectorStyles = read("frontend/screens/editor/inspector/inspector.less");
 
 test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(pageSource, /InspectorPageSplit/u);
@@ -24,6 +25,10 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(
     styles,
     /\.global-timing-list[\s\S]*?margin-right: calc\(-1 \* var\(--space-2\)\);/u,
+  );
+  assert.match(
+    inspectorStyles,
+    /\.inspector-content:has\(> \[data-panel="timing"\]:not\(\[hidden\]\)\)[\s\S]*?scrollbar-gutter: auto;/u,
   );
   assert.doesNotMatch(bpmStyles, /\.bpm-tool\s*\{[\s\S]*?border-top:/u);
 });

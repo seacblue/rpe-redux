@@ -127,6 +127,12 @@
   scrollbar-gutter: auto;
 }
 
+// The timing page owns its list scroll surface. Do not reserve a second stable
+// gutter on the Inspector shell, or its right margin becomes wider than its left.
+.inspector-content:has(> [data-panel="timing"]:not([hidden])) {
+  scrollbar-gutter: auto;
+}
+
 // The compact page stays mounted at its original width and right edge while the
 // workspace width moves. It remains hidden until the real width transition ends.
 .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
