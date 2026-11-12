@@ -5,7 +5,14 @@
  * dragged, reset with a double click, and moved with the keyboard, so a narrow
  * inspector still reaches every control without becoming a second column.
  */
-import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 
 /** Per-page defaults; the author can resize the split after mount. */
 export interface InspectorPageSplitProps {
@@ -113,7 +120,12 @@ export function InspectorPageSplit({
     <div
       ref={container}
       className="inspector-page-split"
-      style={{ gridTemplateRows: `minmax(0, ${ratio}fr) 7px minmax(0, ${1 - ratio}fr)` }}
+      style={
+        {
+          gridTemplateRows: `minmax(0, ${ratio}fr) 7px minmax(0, ${1 - ratio}fr)`,
+          "--inspector-page-split-top-share": `${ratio * 100}%`,
+        } as CSSProperties
+      }
     >
       <div id={topId} className="inspector-page-split-top" aria-label={topLabel} role="region">
         {top}

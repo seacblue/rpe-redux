@@ -154,12 +154,18 @@
 .inspector[data-mode-id="timing"][data-mode-phase="opening"]
   .inspector-content[data-mode-surface="true"]
   > [data-mode-underlay="true"]:not([hidden])
-  .inspector-page-split-bottom,
+  .inspector-page-split,
+.inspector[data-mode-id="timing"][data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split,
 .inspector[data-mode-id="timing"][data-mode-phase="closing"]
   .inspector-content[data-mode-surface="true"]
   > [data-mode-underlay="true"]:not([hidden])
-  .inspector-page-split-bottom {
-  visibility: hidden;
+  .inspector-page-split {
+  position: relative;
+  display: block;
+  height: 100%;
 }
 
 .inspector[data-mode-id="timing"][data-mode-phase="opening"]
@@ -176,11 +182,75 @@
   transform: translateY(-100%);
 }
 
+.inspector[data-mode-id="timing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--inspector-page-split-top-share, 42%);
+  padding-bottom: 0;
+}
+
 .inspector[data-mode-id="timing"][data-mode-phase="closing"]
   .inspector-content[data-mode-surface="true"]
   > [data-mode-underlay="true"]:not([hidden])
   .inspector-page-split-top {
   transform: translateY(0);
+}
+
+.inspector[data-mode-id="timing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  top: var(--inspector-page-split-top-share, 42%);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow: auto;
+  transition:
+    top var(--design-dur-enter) var(--design-ease-move),
+    padding var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector[data-mode-id="timing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]) {
+  transition: width var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-bottom {
+  top: 0;
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]) {
+  width: calc(var(--inspector-compact-width) - 1px);
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]) {
+  width: 55%;
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]) {
+  width: calc(var(--inspector-compact-width) - 1px);
+}
+
+.inspector[data-mode-id="timing"] .timing-studio .studio-detail-pane {
+  visibility: hidden;
 }
 
 // The generic Inspector field inset also matches every visible data panel. A
@@ -246,7 +316,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .inspector[data-mode-id="timing"] .timing-studio .studio-list-pane,
-  .inspector[data-mode-id="timing"] .inspector-page-split-top {
+  .inspector[data-mode-id="timing"] .inspector-page-split-top,
+  .inspector[data-mode-id="timing"] .inspector-page-split-bottom,
+  .inspector[data-mode-id="timing"] [data-mode-underlay="true"] {
     transition: none;
   }
 }
