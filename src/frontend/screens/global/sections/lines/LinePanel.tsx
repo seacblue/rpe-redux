@@ -37,7 +37,6 @@ import type { LineField } from "./lineFieldEdits.ts";
 import type { LinePurposeTarget } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
 import { InspectorEmpty } from "../../../editor/inspector/InspectorEmpty.tsx";
 import { LineFolderPanel } from "./LineFolderPanel.tsx";
-import { LineControlCurves } from "./LineControlCurves.tsx";
 import { LineTree } from "./LineTree.tsx";
 import { LineTypeSection } from "./LineTypeSection.tsx";
 import { lineTreeKey } from "./lineTreeModel.ts";
@@ -681,15 +680,6 @@ export function LinePanelView({
           {renderLineProperties()}
         </section>
         {renderCombination()}
-        {!multi && selectedLine && (
-          <LineControlCurves
-            chart={chart}
-            line={selectedLine}
-            lineIndex={session.lineIndex}
-            onCommit={onCommit}
-            notify={notify}
-          />
-        )}
         {textureBrowserOpen && showTexture && (
           <TextureBrowser
             id={textureBrowserId}
