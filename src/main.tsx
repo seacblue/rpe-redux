@@ -39,9 +39,11 @@ import { setLongTaskBootState } from "./core/state/longTasks.ts";
 import { registerFloatingHost } from "./frontend/overlays/floatingHost.ts";
 import "./frontend/platform/shortcuts/audioVolumeShortcuts.ts";
 import { installAudioVolumeInput } from "./frontend/platform/shortcuts/audioVolumeInput.ts";
+import { installFrontendDiagnosticCapture } from "./frontend/platform/diagnosticCapture.ts";
 
 // Keep background operations behind the workspace boot barrier. The barrier is
 // opened only after the editor assembly has published a usable workspace.
+installFrontendDiagnosticCapture();
 setLongTaskBootState("loading");
 // Host-scoped chrome and settings read this before the first frame.
 document.documentElement.dataset.host = hostKind();

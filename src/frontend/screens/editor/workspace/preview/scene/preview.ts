@@ -529,7 +529,7 @@ export class Preview {
     this.shaderRuntime = new ShaderRuntime(() => this.invalidate?.(), readShaderSource);
     this.shaderPipeline = new ShaderPipeline(() => this.invalidate?.());
     this.noteBatchCanvas = layers?.noteBatch ?? document.createElement("canvas");
-    this.noteBatch = new NoteBatch(this.noteBatchCanvas);
+    this.noteBatch = new NoteBatch(this.noteBatchCanvas, "preview");
     this.noiseAreas = new NoiseAreaRenderer(
       () => {
         this.invalidateFrame();
@@ -1077,10 +1077,16 @@ export class Preview {
       drawnNoteCount: drawStats.notes,
       drawnHoldCount: drawStats.holds,
       batchFallbackCount: drawStats.batchFallbacks,
+      fallbackReasons: drawStats.fallbackReasons,
       lineDrawMs: drawStats.lineMs,
       noteDrawMs: drawStats.noteMs,
       collectGeometry,
       noteBatchActive: this.noteBatch.isActive(),
+      renderPath: this.noteBatch.isActive()
+        ? drawStats.batchFallbacks > 0
+          ? "mixed"
+          : "webgl_batch"
+        : "canvas_fallback",
     });
   }
 }

@@ -17,6 +17,7 @@ import type {
 } from "../../../core/shell/registries/contextMenu.ts";
 import { actionShortcut, toolbar } from "../../../core/shell/registries/toolbar.ts";
 import type { ContextMenuTarget } from "../../../core/shell/registries/toolbar.ts";
+import { recordDiagnosticAction } from "../../../core/diagnostics/interactionLog.ts";
 
 /** The two predicates a registry row uses to place and enable itself. */
 export interface MenuRowPredicates {
@@ -117,6 +118,7 @@ export function resolveContextMenuRows(
       separatorBefore: entry.separatorBefore === true,
       select: () => {
         if (!state.disabled) {
+          recordDiagnosticAction(entry.id, "context_menu", "completed", surface);
           runContextMenuTarget(run, target);
         }
       },
@@ -142,6 +144,7 @@ export function resolveContextMenuRows(
       separatorBefore: entry.separatorBefore === true,
       select: () => {
         if (!state.disabled) {
+          recordDiagnosticAction(entry.id, "context_menu", "completed", surface);
           entry.run(target);
         }
       },

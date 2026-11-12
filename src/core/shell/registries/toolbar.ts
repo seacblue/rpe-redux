@@ -29,6 +29,10 @@ import type { SelectedEventRef } from "../../edit/selection/api.ts";
 import { displayText } from "../../shortcuts/keys.ts";
 import { shortcutRegistry } from "../../shortcuts/registry.ts";
 import { Contributions } from "../../state/contributions.ts";
+import {
+  recordDiagnosticAction,
+  type DiagnosticActionSource,
+} from "../../diagnostics/interactionLog.ts";
 
 /** The rows the toolbar lays out, top one first. */
 export type ToolbarRowName = 1 | 2;
@@ -315,10 +319,20 @@ export function actionAvailable(action: ToolbarAction): boolean {
 }
 
 /** Context menus, toolbar rows and plugins execute the action's own callback. */
-export function runAction(action: ToolbarAction): boolean {
+export function runAction(
+  action: ToolbarAction,
+  source: DiagnosticActionSource = "system",
+): boolean {
   if (!actionAvailable(action)) {
+    recordDiagnosticAction(action.id, source, "ignored");
     return false;
   }
-  action.run?.();
-  return true;
+  try {
+    action.run?.();
+    recordDiagnosticAction(action.id, source, "completed");
+    return true;
+  } catch (error) {
+    recordDiagnosticAction(action.id, source, "failed");
+    throw error;
+  }
 }

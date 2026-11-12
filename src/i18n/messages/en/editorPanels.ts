@@ -383,7 +383,7 @@ export default {
   "editorPanels.linePanel.emptyState.description": "Add a judge line below to start placing notes.",
   "editorPanels.linePanel.batchEdit": "Batch edit selected lines",
   "editorPanels.linePanel.batchHint":
-    "Only shared properties are shown. Names, parent links, and rotation stay per line.",
+    "Every property can be applied to all selected lines. Mixed values show as Mixed; leave a mixed number blank to keep it unchanged.",
   "editorPanels.linePanel.mixed": "Mixed",
   "editorPanels.linePanel.batchUnsupported":
     "This property cannot be edited across multiple lines.",

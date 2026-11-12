@@ -10,12 +10,29 @@ export interface NoteBatchUploadState {
   staging: Float32Array;
 }
 
+/** Counters produced while submitting one grouped note batch. */
+export interface NoteBatchUploadMetrics {
+  groupCount: number;
+  instanceCount: number;
+  bufferSubDataCalls: number;
+  bufferSubDataBytes: number;
+  drawCalls: number;
+  textureBinds: number;
+  maxInstancesPerGroup: number;
+}
+
+/** Upload result needed by the caller for capacity and diagnostics state. */
+export interface NoteBatchUploadResult {
+  instanceBufferCapacity: number;
+  metrics: NoteBatchUploadMetrics;
+}
+
 /** Create empty reusable storage for grouped note uploads. */
 export function createNoteBatchUploadState(): NoteBatchUploadState {
   return { groups: [], textures: [], offsets: [], staging: new Float32Array(0) };
 }
 
-/** Submit all groups in layer order and return the required GPU buffer capacity. */
+/** Submit all groups in layer order and return capacity plus bounded counters. */
 export function submitNoteBatchGroups(
   gl: WebGL2RenderingContext,
   instanceBuffer: WebGLBuffer,
@@ -27,7 +44,7 @@ export function submitNoteBatchGroups(
   textureUniform: WebGLUniformLocation | null,
   attributes: readonly [number, number, number, number, number, number, number],
   instanceBufferCapacity: number,
-): number {
+): NoteBatchUploadResult {
   const { groups, textures, offsets } = state;
   groups.length = 0;
   textures.length = 0;
@@ -51,8 +68,17 @@ export function submitNoteBatchGroups(
   collect(holdLayer);
   collect(headLayer);
   collect(selected);
+  const metrics: NoteBatchUploadMetrics = {
+    groupCount: groups.length,
+    instanceCount: groups.reduce((total, group) => total + group.count, 0),
+    bufferSubDataCalls: 0,
+    bufferSubDataBytes: 0,
+    drawCalls: groups.length,
+    textureBinds: groups.length,
+    maxInstancesPerGroup: groups.reduce((maximum, group) => Math.max(maximum, group.count), 0),
+  };
   if (!totalFloats) {
-    return instanceBufferCapacity;
+    return { instanceBufferCapacity, metrics };
   }
   if (state.staging.length < totalFloats) {
     state.staging = new Float32Array(Math.max(totalFloats, state.staging.length * 2));
@@ -72,6 +98,8 @@ export function submitNoteBatchGroups(
   // Intel driver even when the CPU-side upload is small.
   gl.bufferData(gl.ARRAY_BUFFER, instanceBufferCapacity, gl.STREAM_DRAW);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
+  metrics.bufferSubDataCalls = 1;
+  metrics.bufferSubDataBytes = upload.byteLength;
   if (textureUniform) {
     gl.uniform1i(textureUniform, 0);
   }
@@ -91,5 +119,5 @@ export function submitNoteBatchGroups(
   groups.length = 0;
   textures.length = 0;
   offsets.length = 0;
-  return instanceBufferCapacity;
+  return { instanceBufferCapacity, metrics };
 }

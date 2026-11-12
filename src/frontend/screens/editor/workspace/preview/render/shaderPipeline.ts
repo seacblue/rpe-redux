@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- shader context ownership, compilation, and pass execution share one pipeline. */
+
 /**
  * WebGL shader pipeline for chart shaders: compiles portable programs, uploads
  * uniforms, and draws passes inside the preview viewport. Compilation runs ahead
@@ -5,6 +7,10 @@
  * rewriting and uniform defaults live in the sibling shader modules.
  */
 import { PREVIEW_LOGICAL_SIZE } from "../scene/constants.ts";
+import {
+  recordShaderCompile,
+  recordShaderState,
+} from "../../../../../../core/diagnostics/renderMetrics.ts";
 import { defaultShaderUniform } from "../../../../../../core/global/chart/shader/shader.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { canvasPixelRatio, measureCanvas } from "../../../canvas/canvas2d.ts";
@@ -205,6 +211,13 @@ export class ShaderPipeline {
       this.framebuffer =
       this.buffer =
         null;
+    recordShaderState("preview", {
+      webglAvailable: false,
+      webgl2: false,
+      active: false,
+      programCount: 0,
+      lastErrorPresent: false,
+    });
   }
   /** Creates an idle pipeline; `invalidate` requests a repaint after GL work. */
   constructor(invalidate: () => void = () => {}) {
@@ -218,6 +231,7 @@ export class ShaderPipeline {
     this.framebuffer = null;
     this.buffer = null;
     this.disabled = false;
+    this.webgl2 = false;
   }
 
   /** Context after `ensure()` succeeds; callers guarantee it is present. */
@@ -256,9 +270,23 @@ export class ShaderPipeline {
     }
     if (!this.gl) {
       this.disabled = true;
+      recordShaderState("preview", {
+        webglAvailable: false,
+        webgl2: false,
+        active: false,
+        programCount: 0,
+        lastErrorPresent: Boolean(this.lastError),
+      });
       return false;
     }
     this.disabled = false;
+    recordShaderState("preview", {
+      webglAvailable: true,
+      webgl2: Boolean(this.webgl2),
+      active: true,
+      programCount: this.programs.size,
+      lastErrorPresent: Boolean(this.lastError),
+    });
     const gl = this.gl;
     this.buffer = createCornerBuffer(gl, FULLSCREEN_QUAD);
     this.sourceTexture = gl.createTexture();
@@ -382,6 +410,7 @@ export class ShaderPipeline {
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
       this.failedSources.add(key);
+      recordShaderCompile("preview", false);
       return null;
     }
     return this.record(source, program);
@@ -425,6 +454,14 @@ export class ShaderPipeline {
     this.programs.set(source, result);
     this.failedSources.delete(source);
     this.lastError = null;
+    recordShaderCompile("preview", true);
+    recordShaderState("preview", {
+      webglAvailable: Boolean(this.gl),
+      webgl2: Boolean(this.webgl2),
+      active: Boolean(this.gl) && !this.disabled,
+      programCount: this.programs.size,
+      lastErrorPresent: false,
+    });
     return result;
   }
 
@@ -440,6 +477,9 @@ export class ShaderPipeline {
     }
     const program = await this.linkAsync(source, epoch);
     if (!program) {
+      if (epoch === this.cacheEpoch && this.wantedSources.has(source)) {
+        recordShaderCompile("preview", false);
+      }
       if (epoch === this.cacheEpoch && this.wantedSources.has(source)) {
         this.failedSources.add(source);
       }
