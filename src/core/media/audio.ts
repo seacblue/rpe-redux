@@ -90,7 +90,14 @@ export class AudioTransport {
   media: HTMLAudioElement | null;
   mediaStart: MediaStart | null;
   gain: GainNode | null;
+  /** Music bus gain, retained as `gain` for the existing transport contract. */
   backgroundGain: GainNode | null;
+  /** Effect bus gain shared by chart sound effects and future effect owners. */
+  effectGain: GainNode | null;
+  /** Application master gain applied after the foreground/background multiplier. */
+  masterGain: GainNode | null;
+  masterVolume: number;
+  effectVolume: number;
   private backgroundVolume = 1;
   mediaSource: MediaElementAudioSourceNode | null;
   mediaUrl: string | null;
@@ -123,6 +130,10 @@ export class AudioTransport {
     this.mediaStart = null;
     this.gain = null;
     this.backgroundGain = null;
+    this.effectGain = null;
+    this.masterGain = null;
+    this.masterVolume = 1;
+    this.effectVolume = 1;
     this.mediaSource = null;
     this.mediaUrl = null;
     this.cancelLoad = null;
@@ -137,6 +148,8 @@ export class AudioTransport {
     this.clear();
     this.gain?.disconnect();
     this.backgroundGain?.disconnect();
+    this.effectGain?.disconnect();
+    this.masterGain?.disconnect();
     this.mediaSource?.disconnect();
     this.mediaSource = null;
     this.media = null;
@@ -144,6 +157,8 @@ export class AudioTransport {
     this.context = null;
     this.gain = null;
     this.backgroundGain = null;
+    this.effectGain = null;
+    this.masterGain = null;
     return context?.close?.();
   }
   /** Decode a source for analysis, reusing the loaded buffer when it matches. */
@@ -165,8 +180,14 @@ export class AudioTransport {
       this.gain.gain.value = this.volume;
       this.backgroundGain = this.context.createGain();
       this.backgroundGain.gain.value = this.backgroundVolume;
+      this.effectGain = this.context.createGain();
+      this.effectGain.gain.value = this.effectVolume;
+      this.masterGain = this.context.createGain();
+      this.masterGain.gain.value = this.masterVolume;
       this.gain.connect(this.backgroundGain);
-      this.backgroundGain.connect(this.context.destination);
+      this.effectGain.connect(this.backgroundGain);
+      this.backgroundGain.connect(this.masterGain);
+      this.masterGain.connect(this.context.destination);
     }
     return this.context;
   }
@@ -719,6 +740,28 @@ export class AudioTransport {
     this.volume = clamp01(volume);
     if (this.gain) {
       this.gain.gain.value = this.volume;
+    }
+  }
+
+  /** Set the application master volume, clamped to `[0, 1]`. */
+  setMasterVolume(volume: number): void {
+    if (!Number.isFinite(volume)) {
+      throw new Error(t("system.audio.invalidVolume"));
+    }
+    this.masterVolume = clamp01(volume);
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.masterVolume;
+    }
+  }
+
+  /** Set the shared effect bus volume, clamped to `[0, 1]`. */
+  setEffectVolume(volume: number): void {
+    if (!Number.isFinite(volume)) {
+      throw new Error(t("system.audio.invalidVolume"));
+    }
+    this.effectVolume = clamp01(volume);
+    if (this.effectGain) {
+      this.effectGain.gain.value = this.effectVolume;
     }
   }
 

@@ -421,6 +421,9 @@ export default {
   "settings.field.preserve-pitch.label": "变速是否保持音高",
 
   "settings.field.volume.label": "音乐音量",
+  "settings.field.master-volume.label": "主音量",
+  "settings.field.effect-volume.label": "音效音量",
+  "settings.field.hitsound-volume.label": "打击音总线音量",
   "settings.field.background-volume.label": "后台音量",
   "settings.field.background-volume.description": "窗口不在前台时，音量相对于当前音量的比例。",
   "settings.hitsound.slot.tap": "Tap / Hold 音量",

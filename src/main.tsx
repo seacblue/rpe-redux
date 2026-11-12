@@ -37,6 +37,8 @@ import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.t
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
 import { setLongTaskBootState } from "./core/state/longTasks.ts";
 import { registerFloatingHost } from "./frontend/overlays/floatingHost.ts";
+import "./frontend/platform/shortcuts/audioVolumeShortcuts.ts";
+import { installAudioVolumeInput } from "./frontend/platform/shortcuts/audioVolumeInput.ts";
 
 // Keep background operations behind the workspace boot barrier. The barrier is
 // opened only after the editor assembly has published a usable workspace.
@@ -95,6 +97,8 @@ if (isPerformanceHudWindow()) {
   }
   installLoadingPaint();
   installInteractionPolicy();
+  const removeAudioVolumeInput = installAudioVolumeInput();
+  window.addEventListener("beforeunload", removeAudioVolumeInput, { once: true });
   void initializeDeveloperMode();
   const renderApp = () => createRoot(container).render(<App />);
   // A desktop chart link has to become the boot route before the editor

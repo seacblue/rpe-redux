@@ -56,6 +56,13 @@ export default {
   "chrome.performanceHud.trafficGraph": "上行与下行流量图",
   "chrome.performanceHud.upload": "上行",
   "chrome.performanceHud.download": "下行",
+  "chrome.audioVolume.title": "音量控制",
+  "chrome.audioVolume.master": "主音量",
+  "chrome.audioVolume.music": "音乐",
+  "chrome.audioVolume.effect": "音效",
+  "chrome.audioVolume.hitsound": "打击音",
+  "chrome.audioVolume.muted": "已静音",
+  "chrome.audioVolume.adjust": "使用 Alt + 方向键或滚轮调整",
 
   "chrome.sidebar.label": "工作区导航",
 

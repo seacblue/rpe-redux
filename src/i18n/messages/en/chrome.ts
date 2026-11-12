@@ -68,6 +68,13 @@ export default {
   "chrome.performanceHud.trafficGraph": "Upload and download traffic graph",
   "chrome.performanceHud.upload": "Upload",
   "chrome.performanceHud.download": "Download",
+  "chrome.audioVolume.title": "Audio volume",
+  "chrome.audioVolume.master": "Master",
+  "chrome.audioVolume.music": "Music",
+  "chrome.audioVolume.effect": "Effect",
+  "chrome.audioVolume.hitsound": "Hitsound",
+  "chrome.audioVolume.muted": "Muted",
+  "chrome.audioVolume.adjust": "Alt + arrows or wheel to adjust",
 
   "chrome.sidebar.label": "Workspace navigation",
 
