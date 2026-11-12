@@ -12,20 +12,14 @@ import type { PlaybackMetricsReport } from "../edit/perf/playbackMetrics.ts";
 import { getEditorVisibility } from "../edit/state/visibility.ts";
 import { localServiceStatus, type LocalServiceStatus } from "../global/library/service.ts";
 import { values } from "../state/values.ts";
+import { redactDiagnosticValue, type DiagnosticsValue } from "./redaction.ts";
 import {
   backendTraceSnapshot,
   type BackendTraceEntry,
   type BackendTraceSnapshot,
 } from "./backendTrace.ts";
 
-/** Values that survive the redaction pass and JSON serialization. */
-export type DiagnosticsValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly DiagnosticsValue[]
-  | { readonly [key: string]: DiagnosticsValue };
+export type { DiagnosticsValue } from "./redaction.ts";
 
 /** Whether the runtime, editor, and local service are ready to serve requests. */
 export interface DiagnosticsReadiness {
@@ -86,37 +80,6 @@ export interface DiagnosticsSnapshot {
   readonly values: Readonly<Record<string, DiagnosticsValue>>;
   readonly playback: DiagnosticsPlayback;
   readonly backend: DiagnosticsBackend;
-}
-
-const sensitiveKey =
-  /(?:path|file|directory|folder|origin|url|token|secret|password|credential|authorization|cookie|resource|bytes|base64|chart|audio|image|texture|project|recent|library)/i;
-const absolutePath = /^(?:[a-z]:[\\/]|\\\\|file:|https?:\/\/)/i;
-
-/** Recursively drop sensitive keys and bound strings, arrays, and object depth. */
-function redact(value: unknown, key: string, depth = 0): DiagnosticsValue {
-  if (sensitiveKey.test(key)) {
-    return "[redacted]";
-  }
-  if (value === null || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : "[redacted]";
-  }
-  if (typeof value === "string") {
-    return absolutePath.test(value) ? "[redacted]" : value.slice(0, 256);
-  }
-  if (depth >= 3 || typeof value !== "object") {
-    return "[redacted]";
-  }
-  if (Array.isArray(value)) {
-    return Object.freeze(value.slice(0, 32).map((item) => redact(item, key, depth + 1)));
-  }
-  const result: Record<string, DiagnosticsValue> = {};
-  for (const [childKey, childValue] of Object.entries(value).slice(0, 32)) {
-    result[childKey] = redact(childValue, childKey, depth + 1);
-  }
-  return Object.freeze(result);
 }
 
 /** Read the mounted document contract, falling back to an empty document. */
@@ -218,7 +181,7 @@ export function captureDiagnosticsSnapshot(): DiagnosticsSnapshot {
     readiness: readiness(),
     ["document"]: documentSnapshot(),
     values: Object.freeze(
-      redact(values.byId.snapshot(), "values") as Record<string, DiagnosticsValue>,
+      redactDiagnosticValue(values.byId.snapshot(), "values") as Record<string, DiagnosticsValue>,
     ),
     playback: playbackSnapshot(),
     backend: backendSnapshot(backendTraceSnapshot()),

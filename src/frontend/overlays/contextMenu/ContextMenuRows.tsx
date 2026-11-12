@@ -18,6 +18,7 @@ import { MenuItem, MenuSeparator } from "../../../design/components/menu/MenuSur
 import { useTranslation } from "../../../i18n/react.ts";
 import type { ContextMenuAction } from "./ContextMenuPopup.tsx";
 import { resolveContextMenuRows, resolveMenuRow } from "./menuRowModel.ts";
+import { recordDiagnosticAction } from "../../../core/diagnostics/interactionLog.ts";
 
 /**
  * One of the calling site's own rows.
@@ -132,6 +133,7 @@ export function ContextMenuRows({
         onClick={() => {
           action.onLeave?.();
           close();
+          recordDiagnosticAction(action.id, "context_menu", "completed");
           action.run();
         }}
       />,

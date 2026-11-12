@@ -6,6 +6,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { isDesktop } from "../../core/platform/environment.ts";
+import { recordDiagnosticIssue } from "../../core/diagnostics/interactionLog.ts";
 
 /** Preserve the useful call stack without losing non-Error thrown values. */
 export function diagnosticText(error: unknown): string {
@@ -26,6 +27,7 @@ export async function writeDiagnosticLog(report: string): Promise<string | null>
   try {
     return await invoke<string>("write_diagnostic_log", { report });
   } catch (error) {
+    recordDiagnosticIssue("error", "frontend", error, "diagnostic_log.write");
     console.error("[redux.diagnostics] failed to write diagnostic log", error);
     return null;
   }
@@ -39,6 +41,7 @@ export async function openDiagnosticLogs(): Promise<void> {
   try {
     await invoke("open_diagnostic_logs");
   } catch (error) {
+    recordDiagnosticIssue("error", "frontend", error, "diagnostic_log.open");
     console.error("[redux.diagnostics] failed to open diagnostic logs", error);
   }
 }

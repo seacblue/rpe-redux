@@ -102,6 +102,10 @@ export default {
   "editor.dialogs.exportDialog.formatPec": "PhiEdit Format (PEC)",
   "editor.dialogs.exportDialog.warnings":
     "Exported with {count} loss warning(s). Some RPE features were omitted.",
+  "editor.dialogs.exportDialog.lossWarningTitle": "Some chart data will be lost",
+  "editor.dialogs.exportDialog.lossWarningDescription":
+    "Exporting as {format} cannot preserve all chart features ({count} warning(s)). Continue anyway?",
+  "editor.dialogs.exportDialog.exportAnyway": "Export anyway",
   "editor.dialogs.exportDialog.export": "Export",
 
   "editor.app.commit.changeLineTexture": "Change judge line texture",

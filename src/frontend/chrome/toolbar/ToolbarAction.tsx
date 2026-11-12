@@ -96,7 +96,7 @@ function MeasuredToolbarAction({ entry, tRaw }: MeasuredToolbarActionProps) {
   };
   // The button runs the action it was registered with; there is no id lookup in
   // between, so a toolbar click is the same call as the feature's own API.
-  const onClick = () => runAction(entry);
+  const onClick = () => runAction(entry, "toolbar");
   const anchorRef = entry.domId ? onboardingAnchorRef(entry.domId) : undefined;
   if (entry.presentation && entry.presentation !== "icon") {
     return (

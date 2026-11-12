@@ -8,12 +8,14 @@ import { t } from "../../../../../../i18n/index.ts";
 import {
   createChartExport,
   createChartTextExport,
+  chartExportWarnings,
   type ChartExportFormat,
+  type ExportWarning,
 } from "../../../../../../core/global/document/export.ts";
-import { showToast } from "../../../../../../design/patterns/ToastHost.tsx";
 import { download } from "../../../../../platform/download.ts";
 import { currentDocumentStore } from "../../../../../platform/documentStoreHandle.ts";
 import { createModalRequests } from "../../../../../overlays/modals/requests.ts";
+import { requestConfirm } from "../../../../../overlays/modals/prompts.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 
@@ -59,6 +61,9 @@ async function exportChart(
   const { name, format } = options;
   const native = currentDocumentStore();
   if (format === "pez") {
+    if (!(await confirmExportWarnings(format, chartExportWarnings(chart, chartName, format)))) {
+      return null;
+    }
     if (native) {
       const result = await native.export(chart, assets, {
         format: "pez",
@@ -67,15 +72,15 @@ async function exportChart(
       return result?.path ?? null;
     }
     const result = createChartExport(chart, assets, chartName, { name });
+    if (!(await confirmExportWarnings(format, result.warnings))) {
+      return null;
+    }
     download(result.blob, result.name);
     return result.name;
   }
   const result = createChartTextExport(chart, chartName, format, { name });
-  if (result.warnings.length) {
-    showToast({
-      message: t("editor.dialogs.exportDialog.warnings", { count: result.warnings.length }),
-      level: "warning",
-    });
+  if (!(await confirmExportWarnings(format, result.warningDetails))) {
+    return null;
   }
   if (native) {
     return native.exportText(result.text, {
@@ -88,6 +93,31 @@ async function exportChart(
   }
   download(new Blob([result.text], { type: result.mime }), result.name);
   return result.name;
+}
+
+/** Ask for confirmation when the conversion reports target-format loss. */
+export async function confirmExportWarnings(
+  format: ChartExportFormat,
+  warnings: readonly ExportWarning[],
+): Promise<boolean> {
+  if (!warnings.length) {
+    return true;
+  }
+  const label =
+    format === "pez"
+      ? t("editor.dialogs.exportDialog.formatPez")
+      : format === "official"
+        ? t("editor.dialogs.exportDialog.formatOfficial")
+        : t("editor.dialogs.exportDialog.formatPec");
+  return requestConfirm({
+    title: t("editor.dialogs.exportDialog.lossWarningTitle"),
+    description: t("editor.dialogs.exportDialog.lossWarningDescription", {
+      format: label,
+      count: warnings.length,
+    }),
+    label: t("editor.dialogs.exportDialog.exportAnyway"),
+    cancelLabel: t("workspace.dialogs.dismiss"),
+  });
 }
 
 /**
