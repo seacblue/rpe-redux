@@ -110,7 +110,7 @@
   width: 100%;
   min-width: 260px;
   min-height: 0;
-  transition: width 260ms var(--design-ease-enter);
+  transition: width var(--design-dur-enter) var(--design-ease-move);
 }
 
 // A document task expands the inspector itself. The wrapper stays in its grid
@@ -174,7 +174,7 @@
 // surface and covers the workspace directly.
 .redux-app-root .workbench-inspector > .inspector[data-mode-surface="true"] {
   background: var(--surface);
-  border-color: var(--edge-divider);
+  border: 0;
 }
 
 .workbench-inspector > .inspector[data-mode-surface="true"][data-mode-expanded="true"] {

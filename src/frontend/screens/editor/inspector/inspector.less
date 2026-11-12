@@ -85,7 +85,11 @@
   min-width: var(--control-height-compact);
   min-height: var(--control-height-compact);
   padding: 0;
+  border-radius: 50%;
   color: var(--foreground-muted);
+  transition:
+    background-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
 }
 
 .redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled),
@@ -93,17 +97,16 @@
   .inspector
   .inspector-status-actions
   > .inspector-status-expand:hover:not(:disabled) {
+  background: var(--active-accent-fill);
   color: var(--accent);
 }
 
-// The same expand control becomes the return control in place: the panel is
-// already open, so the glyph turns around rather than moving to another bar.
 .redux-app-root
   .inspector
   .inspector-status-actions
-  > .inspector-status-expand.is-expanded
-  .redux-icon {
-  transform: rotate(180deg);
+  > .inspector-status-expand[aria-expanded="true"] {
+  background: var(--active-accent-fill);
+  color: var(--accent);
 }
 
 // A document task owns the inspector body. The panel keeps its header and

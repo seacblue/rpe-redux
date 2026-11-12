@@ -292,7 +292,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
             {(displayedMode || expandMode) && (
               <IconButton
                 className={`inspector-status-expand${displayedMode ? " is-expanded" : ""}`}
-                icon="external"
+                icon={displayedMode ? "windowRestore" : "maximize"}
                 label={t(
                   displayedMode ? "chrome.workspace.backToTimeline" : "chrome.inspector.expand",
                 )}
