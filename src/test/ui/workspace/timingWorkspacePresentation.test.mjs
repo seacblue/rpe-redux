@@ -20,16 +20,26 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   );
   assert.doesNotMatch(pageSource, /TimingMap|timing-map/u);
   assert.doesNotMatch(workspaceSource, /global-timing-columns|data-variant/u);
+  assert.match(workspaceSource, /global-timing-list-shell/u);
   assert.doesNotMatch(styles, /timing-map|global-timing-columns|global-timing-/u);
   assert.match(timingStyles, /\.inspector-page-split\.is-static/u);
+  assert.match(
+    timingStyles,
+    /\.inspector-page-split\.is-static \.inspector-page-split-seam[\s\S]*?pointer-events: none;/u,
+  );
+  assert.match(
+    timingStyles,
+    /\.inspector-page-split\.is-static \.inspector-page-split-seam::before[\s\S]*?width: 100%;/u,
+  );
   assert.match(
     timingStyles,
     /\.inspector-page-split\.is-static > \.inspector-page-split-top[\s\S]*?scrollbar-gutter: auto;/u,
   );
   assert.match(
     timingStyles,
-    /\.global-timing-list[\s\S]*?margin-right: calc\(-1 \* var\(--space-2\)\);/u,
+    /\.global-timing-list-shell[\s\S]*?margin-right: calc\(-1 \* var\(--space-2\)\);/u,
   );
+  assert.doesNotMatch(timingStyles, /\.global-timing-list\s*\{[\s\S]*?margin-right:/u);
   assert.match(
     timingStyles,
     /\.inspector-content:has\(> \[data-panel="timing"\]:not\(\[hidden\]\)\)[\s\S]*?scrollbar-gutter: auto;/u,

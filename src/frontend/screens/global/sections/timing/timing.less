@@ -11,6 +11,7 @@
 .inspector-page-split.is-static .inspector-page-split-seam {
   min-height: var(--space-3);
   cursor: default;
+  pointer-events: none;
 }
 
 .inspector-page-split.is-static .inspector-page-split-seam::before {
@@ -78,14 +79,22 @@
   background: var(--edge-divider);
 }
 
+.global-timing-list-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  margin-right: calc(-1 * var(--space-2));
+}
+
 .global-timing-list {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
+  width: 100%;
   min-height: 0;
   overflow: auto;
-  margin-right: calc(-1 * var(--space-2));
   padding: 0 var(--space-2) 0 0;
   border: 0;
   background: transparent;

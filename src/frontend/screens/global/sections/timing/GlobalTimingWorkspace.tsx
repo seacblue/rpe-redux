@@ -199,38 +199,40 @@ export function GlobalTimingWorkspace() {
         </ListRow>
         <div className="global-timing-divider" role="separator" />
         {entries.length ? (
-          <div
-            ref={listRef}
-            className="global-timing-list"
-            role="listbox"
-            aria-label={t("editorPanels.inspector.form.bpm.title")}
-            data-inline-shortcut-surface
-            {...listbox.listProps}
-          >
-            {entries.map((entry, index) => {
-              return (
-                <ListRow
-                  key={`${index}:${entry.startTime.join(":")}:${entry.bpm}`}
-                  ref={(row) => {
-                    if (row) {
-                      rowRefs.current.set(index, row);
-                    } else {
-                      rowRefs.current.delete(index);
-                    }
-                  }}
-                  selected={selected === index}
-                  className="global-timing-row"
-                  data-bpm-index={index}
-                  {...listbox.optionProps(index)}
-                >
-                  <span className="global-timing-row-time">{formatBeat(entry.startTime)}</span>
-                  <span className="global-timing-row-bpm">
-                    {entry.bpm.toFixed(3).replace(/\.?0+$/u, "")}
-                    <small>BPM</small>
-                  </span>
-                </ListRow>
-              );
-            })}
+          <div className="global-timing-list-shell">
+            <div
+              ref={listRef}
+              className="global-timing-list"
+              role="listbox"
+              aria-label={t("editorPanels.inspector.form.bpm.title")}
+              data-inline-shortcut-surface
+              {...listbox.listProps}
+            >
+              {entries.map((entry, index) => {
+                return (
+                  <ListRow
+                    key={`${index}:${entry.startTime.join(":")}:${entry.bpm}`}
+                    ref={(row) => {
+                      if (row) {
+                        rowRefs.current.set(index, row);
+                      } else {
+                        rowRefs.current.delete(index);
+                      }
+                    }}
+                    selected={selected === index}
+                    className="global-timing-row"
+                    data-bpm-index={index}
+                    {...listbox.optionProps(index)}
+                  >
+                    <span className="global-timing-row-time">{formatBeat(entry.startTime)}</span>
+                    <span className="global-timing-row-bpm">
+                      {entry.bpm.toFixed(3).replace(/\.?0+$/u, "")}
+                      <small>BPM</small>
+                    </span>
+                  </ListRow>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <EmptyState
