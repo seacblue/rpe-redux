@@ -21,6 +21,14 @@ export default {
   "workspace.collaboration.progress.status.publish": "正在发布谱面与素材",
   "workspace.collaboration.progress.status.ready": "房间已就绪",
   "workspace.collaboration.progress.aborted": "已中止房间准备。",
+  "workspace.collaboration.hostModeHint.tunnel":
+    "应用会尝试启动 Cloudflare Tunnel，并为其他成员生成公网邀请地址。需要本机可以访问 Cloudflare；如果启动失败，请检查 cloudflared、网络或安全软件。",
+  "workspace.collaboration.hostModeHint.lan":
+    "内网托管会在本机监听一个协作服务端口。同一局域网内的成员可以通过内网地址加入；如需跨网络访问，请使用 VPN、路由器端口转发或内网穿透服务，将此端口映射到其他成员可以访问的地址。请确保网络转发支持 WebSocket，并让加入者使用映射后的地址和端口。我们不会为您自动配置 NAT、防火墙或内网穿透。",
+  "workspace.collaboration.connectionAddress": "连接地址",
+  "workspace.collaboration.copyConnectionAddress": "复制连接地址",
+  "workspace.collaboration.connectionAddressCopied": "连接地址已复制。",
+  "workspace.collaboration.connectionAddressCopyFailed": "无法复制连接地址。",
   "workspace.collaboration.memberActions": "{name} 的成员操作",
   "workspace.collaboration.changeAccess": "修改权限",
   "workspace.collaboration.changeAccessTitle": "修改 {name} 的权限",

@@ -5,7 +5,7 @@
  * It owns canvas painting; note filtering, geometry, and hit rules come from core
  * and the viewport.
  */
-import { noteIsAbove } from "../../../../../../core/global/chart/chart.ts";
+import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import { verticalGrid } from "../../../../../../core/global/chart/editing/editGrid.ts";
 import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import { prepareCanvas } from "../../../canvas/canvas2d.ts";
@@ -69,9 +69,7 @@ export function drawNote(
   const { note, horizontal, vertical, endVertical, noteWidth, height } = options;
   const palette = this.cache.palette() ?? readCanvasPalette();
   const alpha =
-    (note.isFake ? 0.45 : noteIsAbove(note) ? 1 : 0.7) *
-    (this.appearance.noteOpacity ?? 1) *
-    (options.opacityMultiplier ?? 1);
+    noteAlpha(note) * (this.appearance.noteOpacity ?? 1) * (options.opacityMultiplier ?? 1);
   const shear = note.type === 2 ? 0 : (options.shear ?? 0);
   const rotation = note.type === 2 ? 0 : (options.rotation ?? 0);
   context.globalAlpha = alpha;

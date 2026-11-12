@@ -494,9 +494,9 @@
     color-mix(in srgb, var(--surface-raised) 62%, transparent);
 }
 
-// The visible charge: a green body cut to the fill height, with a pair of slow
-// wave surfaces on the meniscus. The height arrives as `--hold-fill` from the
-// press frame loop, so no React state repaints per frame.
+// The visible charge is a quiet green body cut to the fill height. The height
+// arrives as `--hold-fill` from the press frame loop, so no React state repaints
+// per frame.
 .redux-library-welcome-liquid {
   position: absolute;
   inset: 0;
@@ -522,59 +522,6 @@
     color-mix(in srgb, var(--playing-indicator) 34%, transparent) 48%,
     color-mix(in srgb, var(--playing-indicator) 26%, transparent)
   );
-}
-
-// The meniscus: a wave strip twice the card width so it can travel exactly one
-// full period loop without a seam. The SVG path is the shape; `currentColor`
-// carries the theme green so the stylesheet stays token-only.
-.redux-library-welcome-liquid-wave {
-  position: absolute;
-  left: 0;
-  bottom: calc(var(--hold-fill, 0%) - 9px);
-  width: 200%;
-  height: 18px;
-  color: color-mix(in srgb, var(--playing-indicator) 46%, transparent);
-  animation: library-liquid-wave 6.2s linear infinite;
-
-  svg {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
-
-  path {
-    fill: currentColor;
-  }
-
-  &.is-back {
-    bottom: calc(var(--hold-fill, 0%) - 12px);
-    height: 24px;
-    color: color-mix(in srgb, var(--playing-indicator) 30%, transparent);
-    animation-duration: 9.4s;
-    animation-delay: -1.8s;
-  }
-}
-
-// Idle liquid costs nothing to paint: the waves only run while the charge is on
-// screen.
-.redux-library-welcome-checkin:not([data-hold="true"]) .redux-library-welcome-liquid-wave {
-  animation-play-state: paused;
-}
-
-@keyframes library-liquid-wave {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .redux-library-welcome-liquid-wave {
-    animation: none;
-  }
 }
 
 .redux-library-welcome-checkin-body {
@@ -608,12 +555,6 @@
   min-width: calc(var(--space-7) * 5);
   touch-action: none;
   user-select: none;
-}
-
-// The liquid sits behind the copy, so the prompt steps up to full-strength ink
-// while the card is filling.
-.redux-library-welcome-checkin[data-hold="true"] .redux-library-welcome-checkin-copy {
-  color: var(--foreground);
 }
 
 .redux-library-welcome-fortune {

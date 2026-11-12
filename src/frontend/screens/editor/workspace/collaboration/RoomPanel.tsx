@@ -1,9 +1,6 @@
 /**
  * Inspector pane for creating, joining, and managing one collaboration room.
- *
- * The pane is always mounted beside the editor so room state survives tool
- * switches; the sidebar route and the room badge both open it by the stable
- * `collaboration` inspector id.
+ * The stable `collaboration` inspector id keeps its room state available.
  */
 import {
   useEffect,
@@ -22,7 +19,6 @@ import { Input } from "../../../../../design/components/input/Input.tsx";
 import { ColorField } from "../../../../../design/components/input/ColorField.tsx";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
-import { Select } from "../../../../../design/components/select/Select.tsx";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { createRoomPassword } from "../../../../../core/collaboration/invite.ts";
 import { requestConfirm } from "../../../../overlays/modals/prompts.ts";
@@ -32,19 +28,18 @@ import { MemberAccessDialog } from "./MemberAccessDialog.tsx";
 import { MemberActionsMenu } from "./MemberActionsMenu.tsx";
 import { RoomLocks } from "./RoomLocks.tsx";
 import { RoomServerField } from "./RoomServerField.tsx";
-import { suggestedLanPort, useCollaboration } from "./collaborationRuntime.tsx";
+import { CollaborationConnectionAddress } from "./CollaborationConnectionAddress.tsx";
+import { CollaborationHostFields } from "./CollaborationHostFields.tsx";
+import { useCollaboration } from "./collaborationRuntime.tsx";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
 import { MaxMembersControl } from "./MaxMembersControl.tsx";
-
 const ROLE_KEYS = {
   host: "workspace.collaboration.role.host",
   editor: "workspace.collaboration.role.editor",
   viewer: "workspace.collaboration.role.viewer",
 } as const;
-
 /** Fixed-width placeholder so toggling a secret never changes the row's height. */
 const SECRET_MASK = "••••••••";
-
 interface SecretInputProps {
   id: string;
   value: string;
@@ -56,7 +51,6 @@ interface SecretInputProps {
   inputRef?: RefObject<HTMLInputElement | null>;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }
-
 /** A text field with an inline reveal button; hidden until the reader asks for it. */
 function SecretInput({
   id,
@@ -97,7 +91,6 @@ function SecretInput({
     </div>
   );
 }
-
 /** Read-only secret value with a reveal button and an optional trailing action. */
 function SecretValue({ value, action }: { value: string; action?: ReactNode }) {
   const { t } = useTranslation();
@@ -120,14 +113,11 @@ function SecretValue({ value, action }: { value: string; action?: ReactNode }) {
     </div>
   );
 }
-
 /** Inspector pane for creating, joining, and managing a collaboration room. */
 export function RoomPanel() {
   const { pendingInviteLink } = useCollaboration();
-  // A new invitation reseeds the form without a setState-in-effect cycle.
   return <RoomPanelBody key={pendingInviteLink || "manual"} />;
 }
-
 /** Form state for one room session, reseeded when an invitation arrives. */
 function RoomPanelBody() {
   const { t } = useTranslation();
@@ -145,6 +135,7 @@ function RoomPanelBody() {
     setMaxMembers,
     removeMember,
     copyInvite,
+    copyConnectionAddress,
     startingRoom,
     joiningRoom,
     pendingInviteLink,
@@ -159,8 +150,7 @@ function RoomPanelBody() {
     updateRoomPassword,
   } = useCollaboration();
   const [mode, setMode] = useState<"create" | "join">(pendingInviteLink ? "join" : "create");
-  // Without a document there is no chart to host; the welcome-page entry can
-  // only join an existing room.
+  // Without a document there is no chart to host; the welcome-page entry only joins.
   const effectiveMode = canHost ? mode : "join";
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [color, setColor] = useState(settings.color);
@@ -170,27 +160,23 @@ function RoomPanelBody() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [accessTarget, setAccessTarget] = useState<(typeof state.members)[number] | null>(null);
-  // Members stay in the room record while offline so their resume token still
-  // works. The roster only shows who is actually present.
+  // Offline members remain in the room record so their resume token still works.
   const onlineMembers = state.members.filter((member) => member.online);
   const activeAccessTarget =
     accessTarget && onlineMembers.some((member) => member.id === accessTarget.id)
       ? accessTarget
       : null;
   const [accessRole, setAccessRole] = useState<"editor" | "viewer">("editor");
-  const [joinMethod, setJoinMethod] = useState<"link" | "custom">("link");
-  const [joinLink, setJoinLink] = useState(pendingInviteLink);
-  // A public page can only open a secure room endpoint. Keep a stored wss://
-  // address, but do not preselect the desktop loopback URL on the web host.
+  const [joinMethod, setJoinMethod] = useState<"link" | "custom">(settings.joinMethod);
+  const [joinLink, setJoinLink] = useState(pendingInviteLink || settings.joinLink);
+  // A public page can only open a secure endpoint, not the desktop loopback URL.
   const [serverUrl, setServerUrl] = useState(() =>
     isDesktop() || /^(?:wss|https):\/\//iu.test(settings.serverUrl) ? settings.serverUrl : "",
   );
-  const [joinPassword, setJoinPassword] = useState("");
+  const [joinPassword, setJoinPassword] = useState(settings.joinPassword);
   const [autoApproveEditor, setAutoApproveEditor] = useState(true);
   const passwordInput = useRef<HTMLInputElement | null>(null);
-
-  // The modal opens through the shared dialog stack, which focuses its close
-  // button first. Move focus into the field once that stack settles.
+  // Move focus into the password field after the shared dialog stack settles.
   useEffect(() => {
     if (!passwordOpen) {
       return;
@@ -198,7 +184,6 @@ function RoomPanelBody() {
     const frame = window.requestAnimationFrame(() => passwordInput.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [passwordOpen]);
-
   /** Persists the editable identity and host fields, returning them normalized. */
   const applySettings = () => {
     const next = {
@@ -206,8 +191,10 @@ function RoomPanelBody() {
       color,
       hostMode,
       lanPort: lanPort.trim(),
-      // A browser host has no local bridge; its room server is the only
-      // address that can carry the room and its invitations.
+      joinPassword,
+      joinMethod,
+      joinLink,
+      // A browser host uses the room server address for invitations.
       serverUrl: isDesktop() ? settings.serverUrl : serverUrl.trim() || settings.serverUrl,
     };
     updateSettings(next);
@@ -215,7 +202,10 @@ function RoomPanelBody() {
   };
   const inRoom = Boolean(state.roomId) || state.status === "waiting";
   const statusText = t(`workspace.collaboration.status.${state.status}`);
-  /** Describes where one member is working for the member row. */
+  const setStoredServerUrl = (next: string) => {
+    setServerUrl(next);
+    updateSettings({ serverUrl: next });
+  };
   const locationText = (presence: (typeof state.presence)[number] | undefined) => {
     if (!presence) {
       return t("workspace.collaboration.location.none");
@@ -230,7 +220,6 @@ function RoomPanelBody() {
     }
     return t("workspace.collaboration.location.design");
   };
-  /** Confirms, then asks one member to leave the room. */
   const kickMember = async (member: (typeof state.members)[number]) => {
     const confirmed = await requestConfirm({
       title: t("workspace.collaboration.kickTitle"),
@@ -242,7 +231,6 @@ function RoomPanelBody() {
       removeMember(member.id);
     }
   };
-  /** Opens the access modal with the member's current role preselected. */
   const openAccess = (member: (typeof state.members)[number]) => {
     setAccessTarget(member);
     setAccessRole(member.role === "viewer" ? "viewer" : "editor");
@@ -254,7 +242,6 @@ function RoomPanelBody() {
     }
     setAccessTarget(null);
   };
-  /** Confirms leaving because the temporary room chart is discarded. */
   const leaveRoomWithConfirm = async () => {
     const confirmed = await requestConfirm({
       title: t("workspace.collaboration.leaveTitle"),
@@ -320,6 +307,12 @@ function RoomPanelBody() {
                 </span>
               }
             />
+            {state.role === "host" && state.serverUrl && (
+              <CollaborationConnectionAddress
+                address={state.serverUrl}
+                onCopy={() => void copyConnectionAddress()}
+              />
+            )}
             <FieldRow
               label={t("workspace.collaboration.password")}
               control={
@@ -543,56 +536,44 @@ function RoomPanelBody() {
               <Input
                 id={id}
                 value={displayName}
-                onChange={(event) => setDisplayName(event.currentTarget.value)}
+                onChange={(event) => {
+                  const next = event.currentTarget.value;
+                  setDisplayName(next);
+                  updateSettings({ displayName: next });
+                }}
               />
             )}
           />
           <FieldRow
             label={t("workspace.collaboration.color")}
-            control={<ColorField value={color} onChange={setColor} />}
+            control={
+              <ColorField
+                value={color}
+                onChange={(next) => {
+                  setColor(next);
+                  updateSettings({ color: next });
+                }}
+              />
+            }
           />
           {state.error && <InlineAlert className="collab-error">{state.error}</InlineAlert>}
           {effectiveMode === "create" ? (
             <>
               {isDesktop() ? (
-                <>
-                  <FieldRow
-                    label={t("workspace.collaboration.hostMode")}
-                    control={(id) => (
-                      <Select
-                        id={id}
-                        value={hostMode}
-                        onChange={(event) =>
-                          setHostMode(event.currentTarget.value as typeof hostMode)
-                        }
-                      >
-                        <option value="tunnel">
-                          {t("workspace.collaboration.hostMode.tunnel")}
-                        </option>
-                        <option value="lan">{t("workspace.collaboration.hostMode.lan")}</option>
-                      </Select>
-                    )}
-                  />
-                  {hostMode !== "tunnel" && (
-                    <FieldRow
-                      label={t("workspace.collaboration.lanPort")}
-                      control={(id) => (
-                        <Input
-                          id={id}
-                          type="number"
-                          min="1024"
-                          max="65535"
-                          step="1"
-                          value={lanPort}
-                          placeholder={suggestedLanPort}
-                          onChange={(event) => setLanPort(event.currentTarget.value)}
-                        />
-                      )}
-                    />
-                  )}
-                </>
+                <CollaborationHostFields
+                  hostMode={hostMode}
+                  lanPort={lanPort}
+                  onHostModeChange={(next) => {
+                    setHostMode(next);
+                    updateSettings({ hostMode: next });
+                  }}
+                  onLanPortChange={(next) => {
+                    setLanPort(next);
+                    updateSettings({ lanPort: next });
+                  }}
+                />
               ) : (
-                <RoomServerField value={serverUrl} onChange={setServerUrl} />
+                <RoomServerField value={serverUrl} onChange={setStoredServerUrl} showDescription />
               )}
               <FieldRow
                 label={t("workspace.collaboration.password")}
@@ -661,7 +642,10 @@ function RoomPanelBody() {
                   { value: "link", label: t("workspace.collaboration.joinMethod.link") },
                   { value: "custom", label: t("workspace.collaboration.joinMethod.custom") },
                 ]}
-                onChange={setJoinMethod}
+                onChange={(next) => {
+                  setJoinMethod(next);
+                  updateSettings({ joinMethod: next });
+                }}
               />
               {joinMethod === "link" ? (
                 <>
@@ -672,14 +656,17 @@ function RoomPanelBody() {
                         id={id}
                         value={joinLink}
                         placeholder={t("workspace.collaboration.inviteLinkPlaceholder")}
-                        onChange={setJoinLink}
+                        onChange={(next) => {
+                          setJoinLink(next);
+                          updateSettings({ joinLink: next });
+                        }}
                       />
                     )}
                   />
                 </>
               ) : (
                 <>
-                  <RoomServerField value={serverUrl} onChange={setServerUrl} />
+                  <RoomServerField value={serverUrl} onChange={setStoredServerUrl} />
                   <FieldRow
                     label={t("workspace.collaboration.password")}
                     control={(id) => (
@@ -689,7 +676,10 @@ function RoomPanelBody() {
                         minLength={4}
                         maxLength={64}
                         autoComplete="off"
-                        onChange={setJoinPassword}
+                        onChange={(next) => {
+                          setJoinPassword(next);
+                          updateSettings({ joinPassword: next });
+                        }}
                       />
                     )}
                   />

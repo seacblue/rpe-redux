@@ -8,6 +8,8 @@
 import {
   selectNotesInRectangle,
   commitNoteDrag,
+  timelineEmptyPanPress,
+  timelineSweepEnabled,
 } from "../../../../../../core/edit/timeline/selection.ts";
 import { moveTimelineNote } from "../../../../../../core/edit/timeline/dragPreview.ts";
 import { t } from "../../../../../../i18n/index.ts";
@@ -80,6 +82,9 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       // Pan through the clamped viewport seam so the note and event fields
       // share one scroll bound.
       const deltaX = this.gestures.cursor.x - previous.x;
+      if (this.notesCanvas.style) {
+        this.notesCanvas.style.cursor = "grabbing";
+      }
       if (deltaX !== 0) {
         this.viewport.panMultiLine(this.notesCanvas.clientWidth, deltaX, "notes");
         this.changed();
@@ -172,6 +177,20 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   this.gestures.hoverArea = "notes";
   const hit = this.hit(position);
   const session = this.getSession();
+  const multiMode = session.multiLineActive;
+  const panelCount = this.viewport.panelCount("notes");
+  const multiPanel = multiMode && panelCount > 1;
+  // Multi-line editing with more than one panel reserves an empty primary-button
+  // drag for panning, so that press must not start an additive sweep or clear
+  // the selection it is navigating.
+  const panBlank = timelineEmptyPanPress({
+    multiLineActive: multiMode,
+    panelCount,
+    button: event.button,
+    hit: Boolean(hit),
+    tool: Boolean(this.gestures.tool),
+    pending: Boolean(this.gestures.pendingHold),
+  });
   // A Ctrl+click on a note is the curve-note quick pick; it must win over the
   // ordinary additive selection and any sweep shortcut bound to the same press.
   if (event.button === 0 && event.ctrlKey && !event.shiftKey && !event.altKey && hit) {
@@ -186,7 +205,12 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       return;
     }
   }
-  const sweepMode = timelineSweepMode(session, event, "notes");
+  // A split multi-line timeline owns every sweep-free press: the primary button
+  // pans, and both sweep buttons stay off so the gesture cannot be reintroduced
+  // on the secondary button or through a modifier.
+  const sweepMode = timelineSweepEnabled({ multiLineActive: multiMode, panelCount })
+    ? timelineSweepMode(session, event, "notes")
+    : null;
   if (
     sweepMode &&
     (event.button === 2 ||
@@ -286,13 +310,11 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     session.selectLine(hit.lineIndex);
   }
   session.focus = "notes";
-  if (!event.ctrlKey && !event.shiftKey && event.button !== 1) {
+  if (!panBlank && !event.ctrlKey && !event.shiftKey && event.button !== 1) {
     session.eventSelection.clear();
   }
-  const multiMode = session.multiLineActive;
-  const multiPanel = multiMode && this.viewport.panelCount("notes") > 1;
-  const panBlank = multiPanel && !hit && !this.gestures.tool && !this.gestures.pendingHold;
   if (
+    !panBlank &&
     event.button === 0 &&
     !hit &&
     !event.ctrlKey &&
@@ -345,6 +367,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       pointerId: event.pointerId,
       start: position,
       current: position,
+      clearOnClick: !event.ctrlKey && !event.shiftKey,
     };
   } else if (!multiMode && (event.shiftKey || event.button === 1)) {
     this.gestures.drag = {
@@ -445,8 +468,20 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
     ) {
       return;
     }
+    const drag = this.gestures.drag;
+    const moved = Math.hypot(drag.current.x - drag.start.x, drag.current.y - drag.start.y) > 2;
     this.gestures.drag = null;
     this.notesCanvas.releasePointerCapture?.(event.pointerId);
+    if (!moved && drag.clearOnClick) {
+      // A pan that never moved is an empty-field click: it clears the selection
+      // instead of leaving the pre-pan selection untouched.
+      const session = this.getSession();
+      session.eventSelection.clear();
+      session.selection.clear();
+      session.multiLineSelection.clear();
+      session.multiSelectionIntent = null;
+      session.selectionMode = "none";
+    }
     this.changed();
     return;
   }

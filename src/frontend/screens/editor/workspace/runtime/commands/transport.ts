@@ -40,6 +40,7 @@ export function connectTransport(bindings: TransportBindings): () => void {
   auditionAnchor = null;
   auditionReturnsTime = true;
   auditionPreviewOnly = false;
+  auditionLayoutOnly = false;
   editorAuditioning.set(false);
   return transportBindings.bind(bindings);
 }
@@ -50,6 +51,11 @@ let auditionAnchor: number | null = null;
 let auditionReturnsTime = true;
 /** Whether the current audition owns the preview-only layout. */
 let auditionPreviewOnly = false;
+/**
+ * Whether the current hold only hides the authoring surfaces over a running
+ * playback. Such a hold never starts, pauses, or seeks the transport.
+ */
+let auditionLayoutOnly = false;
 /** Guards a pending play start from clearing a newer audition's state. */
 let auditionRequest = 0;
 
@@ -67,12 +73,22 @@ export function togglePlayback(): void {
  *
  * The toolbar's hold button and the held T/U shortcuts use this. Preview-only
  * auditions restore the layout on release; `restoreTime` also returns to the
- * moment the user was inspecting.
+ * moment the user was inspecting. A playback that is already running keeps the
+ * clock: the hold then only hides the authoring surfaces, so releasing it
+ * neither pauses nor seeks and the chart keeps playing.
  */
 export function beginAudition(options: AuditionOptions = {}): boolean {
   const bound = transportBindings.value();
-  if (!bound || bound.playback.audio.playing || auditionAnchor !== null) {
+  if (!bound || auditionAnchor !== null || auditionLayoutOnly) {
     return false;
+  }
+  if (bound.playback.audio.playing) {
+    if (options.previewOnly !== true) {
+      return false;
+    }
+    auditionLayoutOnly = true;
+    viewControls.beginPreviewOnlyHold();
+    return true;
   }
   const request = ++auditionRequest;
   auditionAnchor = bound.playback.audio.time;
@@ -101,8 +117,18 @@ export function beginAudition(options: AuditionOptions = {}): boolean {
   return true;
 }
 
-/** Stop a temporary audition, restoring its layout and optionally its position. */
+/**
+ * Stop a temporary audition, restoring its layout and optionally its position.
+ *
+ * A layout-only hold leaves a running playback untouched; releasing it only
+ * restores the regions it hid.
+ */
 export function endAudition(): void {
+  if (auditionLayoutOnly) {
+    auditionLayoutOnly = false;
+    viewControls.endPreviewOnlyHold();
+    return;
+  }
   const bound = transportBindings.value();
   if (auditionAnchor === null) {
     return;

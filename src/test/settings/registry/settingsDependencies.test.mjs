@@ -32,10 +32,19 @@ test("every dependency names a registered setting value", () => {
   }
 });
 
-test("heatmap controls follow the heatmap toggle", () => {
+test("waveform controls follow the waveform toggle", () => {
   for (const key of ["audio-analysis-alpha", "audio-analysis-width", "audio-analysis-curve"]) {
     assert.equal(settingsRegistry.definition(key)?.enabledWhen?.key, "audio-analysis-enabled", key);
   }
+});
+
+test("waveform contrast defaults to one and stays within the configured range", () => {
+  const alpha = settingsRegistry.definition("audio-analysis-alpha");
+  const curve = settingsRegistry.definition("audio-analysis-curve");
+  assert.equal(alpha?.default, 0.5);
+  assert.equal(curve?.default, 1);
+  assert.equal(curve?.min, 0.2);
+  assert.equal(curve?.max, 2);
 });
 
 test("autosave timing rows follow autosave-enabled", () => {

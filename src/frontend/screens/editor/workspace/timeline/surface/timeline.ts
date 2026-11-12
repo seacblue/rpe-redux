@@ -195,6 +195,9 @@ export class Timeline {
           if (!this.gestures.drag) {
             this.gestures.cursor = null;
           }
+          if (this.gestures.hoverArea === "notes") {
+            this.gestures.hoverArea = undefined;
+          }
           this.gestures.onNoteHover?.(null);
           this.changed();
         },
@@ -251,6 +254,9 @@ export class Timeline {
         pointerLeave: () => {
           if (!this.disposed && !this.gestures.eventInteraction.drag) {
             this.gestures.eventCursor = null;
+            if (this.gestures.hoverArea === "events") {
+              this.gestures.hoverArea = undefined;
+            }
             this.changed();
           }
         },

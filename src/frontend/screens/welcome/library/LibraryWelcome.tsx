@@ -554,16 +554,6 @@ export function LibraryWelcome({
         >
           <span className="redux-library-welcome-liquid" aria-hidden="true">
             <span className="redux-library-welcome-liquid-fill" />
-            <span className="redux-library-welcome-liquid-wave is-back">
-              <svg viewBox="0 0 200 16" preserveAspectRatio="none">
-                <path d="M0 8 Q 12.5 -6 25 8 T 50 8 T 75 8 T 100 8 T 125 8 T 150 8 T 175 8 T 200 8 V16 H0 Z" />
-              </svg>
-            </span>
-            <span className="redux-library-welcome-liquid-wave">
-              <svg viewBox="0 0 200 16" preserveAspectRatio="none">
-                <path d="M0 8 Q 12.5 -6 25 8 T 50 8 T 75 8 T 100 8 T 125 8 T 150 8 T 175 8 T 200 8 V16 H0 Z" />
-              </svg>
-            </span>
           </span>
           <div className="redux-library-welcome-checkin-body">
             {checkedIn ? (
