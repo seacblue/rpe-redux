@@ -109,6 +109,62 @@ export interface HoldLayout {
   readonly bodyLength: number;
 }
 
+/** Mutable target for reusing Hold layout storage in a rendering batch. */
+export interface HoldLayoutScratch {
+  headCap: { x: number; y: number };
+  tailCap: { x: number; y: number };
+  bodyHead: { x: number; y: number };
+  bodyTail: { x: number; y: number };
+  headCapLength: number;
+  tailCapLength: number;
+  bodyLength: number;
+}
+
+/** Create storage for a Hold layout that can be reused by a renderer. */
+export function createHoldLayoutScratch(): HoldLayoutScratch {
+  return {
+    headCap: { x: 0, y: 0 },
+    tailCap: { x: 0, y: 0 },
+    bodyHead: { x: 0, y: 0 },
+    bodyTail: { x: 0, y: 0 },
+    headCapLength: 0,
+    tailCapLength: 0,
+    bodyLength: 0,
+  };
+}
+
+/** Fill a reusable Hold layout target without allocating geometry objects. */
+export function holdLayoutInto(
+  target: HoldLayoutScratch,
+  headX: number,
+  headY: number,
+  tailX: number,
+  tailY: number,
+  headCapLength: number,
+  tailCapLength = headCapLength,
+  fallbackDirection?: { readonly x: number; readonly y: number },
+): HoldLayout {
+  const deltaX = tailX - headX;
+  const deltaY = tailY - headY;
+  const length = Math.hypot(deltaX, deltaY);
+  const head = Math.max(0, headCapLength);
+  const tail = Math.max(0, tailCapLength);
+  const unitX = length > 0 ? deltaX / length : (fallbackDirection?.x ?? 0);
+  const unitY = length > 0 ? deltaY / length : (fallbackDirection?.y ?? 0);
+  target.headCap.x = headX - unitX * (head / 2);
+  target.headCap.y = headY - unitY * (head / 2);
+  target.tailCap.x = tailX + unitX * (tail / 2);
+  target.tailCap.y = tailY + unitY * (tail / 2);
+  target.bodyHead.x = headX;
+  target.bodyHead.y = headY;
+  target.bodyTail.x = tailX;
+  target.bodyTail.y = tailY;
+  target.headCapLength = head;
+  target.tailCapLength = tail;
+  target.bodyLength = length;
+  return target;
+}
+
 /**
  * Resolve a Hold's cap anchors and full body span.
  *
@@ -127,22 +183,24 @@ export function holdLayout(
   tailCapLength = headCapLength,
   fallbackDirection?: { readonly x: number; readonly y: number },
 ): HoldLayout {
-  const deltaX = tailX - headX;
-  const deltaY = tailY - headY;
-  const length = Math.hypot(deltaX, deltaY);
-  const head = Math.max(0, headCapLength);
-  const tail = Math.max(0, tailCapLength);
-  const unitX = length > 0 ? deltaX / length : (fallbackDirection?.x ?? 0);
-  const unitY = length > 0 ? deltaY / length : (fallbackDirection?.y ?? 0);
-  return {
-    headCap: { x: headX - unitX * (head / 2), y: headY - unitY * (head / 2) },
-    tailCap: { x: tailX + unitX * (tail / 2), y: tailY + unitY * (tail / 2) },
-    bodyHead: { x: headX, y: headY },
-    bodyTail: { x: tailX, y: tailY },
-    headCapLength: head,
-    tailCapLength: tail,
-    bodyLength: length,
-  };
+  return holdLayoutInto(
+    {
+      headCap: { x: 0, y: 0 },
+      tailCap: { x: 0, y: 0 },
+      bodyHead: { x: 0, y: 0 },
+      bodyTail: { x: 0, y: 0 },
+      headCapLength: 0,
+      tailCapLength: 0,
+      bodyLength: 0,
+    },
+    headX,
+    headY,
+    tailX,
+    tailY,
+    headCapLength,
+    tailCapLength,
+    fallbackDirection,
+  );
 }
 
 /**

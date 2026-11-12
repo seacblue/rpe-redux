@@ -429,9 +429,31 @@ test("selected note instances render after ordinary instances", () => {
   );
   batch.finish();
 
-  assert.equal(calls.uploads.length, 2);
+  assert.equal(calls.uploads.length, 1);
   assert.equal(calls.uploads[0][14], 0);
-  assert.equal(calls.uploads[1][14], 1);
+  assert.equal(calls.uploads[0][15 + 14], 1);
+});
+
+test("adaptive note density keeps logical size while lowering only the GPU backing store", () => {
+  const previousRatio = globalThis.devicePixelRatio;
+  globalThis.devicePixelRatio = 2;
+  try {
+    const { canvas } = fakeWebGLCanvas();
+    const batch = new NoteBatch(canvas);
+    const skin = {
+      noteTexture: () => descriptor,
+      holdBodyTexture: () => descriptor,
+      holdHeadTexture: () => descriptor,
+      holdEndTexture: () => descriptor,
+    };
+    batch.begin(100, 100, skin);
+    assert.equal(canvas.width, 200);
+    batch.begin(100, 100, skin, undefined, 0.8);
+    assert.equal(canvas.width, 160);
+    assert.equal(canvas.height, 160);
+  } finally {
+    globalThis.devicePixelRatio = previousRatio;
+  }
 });
 
 test("note batch paints Holds beneath note heads even after a head texture was used first", () => {
@@ -504,9 +526,10 @@ test("authored green tint stays in multiply mode while selected green uses recol
   batch.addHead(skin, 1, false, 20, 20, 8, 0, 0, 1, { mode: "tint", color: [0, 200, 0] });
   batch.addHead(skin, 1, false, 40, 40, 8, 0, 0, 1, { mode: "selected", color: [0, 200, 0] });
   batch.finish();
+  assert.equal(calls.uploads.length, 1);
   assert.equal(calls.uploads[0][14], 0);
-  assert.equal(calls.uploads[1][14], 1);
-  assert.equal(calls.uploads[0][12], calls.uploads[1][12]);
+  assert.equal(calls.uploads[0][15 + 14], 1);
+  assert.equal(calls.uploads[0][12], calls.uploads[0][15 + 12]);
 });
 
 test("ordinary preview notes keep their authored tint", () => {

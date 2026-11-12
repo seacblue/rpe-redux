@@ -3,6 +3,8 @@ export class EditorFrameScheduler {
   private frame: number | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
+  private continuous = false;
+  private hidden = false;
   private readonly callback: FrameRequestCallback;
   /** Stores the frame callback; scheduling starts on the first `wake`. */
   constructor(callback: FrameRequestCallback) {
@@ -18,6 +20,13 @@ export class EditorFrameScheduler {
     this.frame = requestAnimationFrame((timestamp) => {
       this.frame = undefined;
       if (!this.disposed) {
+        // Register the following display callback before synchronous painting.
+        // When the current frame is close to its budget, waiting until the end
+        // can miss the next compositor deadline even though the next frame is
+        // otherwise cheap enough to render.
+        if (this.continuous && !this.hidden) {
+          this.wake();
+        }
         this.callback(timestamp);
       }
     });
@@ -27,6 +36,8 @@ export class EditorFrameScheduler {
     if (this.disposed) {
       return;
     }
+    this.continuous = continuous;
+    this.hidden = hidden;
     if (continuous && !hidden) {
       this.wake();
       return;
@@ -55,5 +66,7 @@ export class EditorFrameScheduler {
     clearTimeout(this.timer);
     this.frame = undefined;
     this.timer = undefined;
+    this.continuous = false;
+    this.hidden = false;
   }
 }

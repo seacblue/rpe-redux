@@ -193,6 +193,7 @@ interface PreparedPreviewLine {
 
 /** Resolve the screen coordinates shared by note rendering, culling, and picking. */
 function previewNoteScreenGeometry(
+  target: PreviewNoteScreenGeometry,
   position: NoteState,
   state: Pick<SampledLineState, "x" | "y">,
   centerX: number,
@@ -210,13 +211,12 @@ function previewNoteScreenGeometry(
   const tail = Number.isFinite(position.tail) ? position.tail : position.y;
   const tailWorldX = state.x + position.x * cosine + tail * sine;
   const tailWorldY = -state.y + position.x * sine - tail * cosine;
-  return {
-    horizontal,
-    headX,
-    headY,
-    tailX: centerX + tailWorldX * scaleX,
-    tailY: centerY + tailWorldY * scaleY,
-  };
+  target.horizontal = horizontal;
+  target.headX = headX;
+  target.headY = headY;
+  target.tailX = centerX + tailWorldX * scaleX;
+  target.tailY = centerY + tailWorldY * scaleY;
+  return target;
 }
 
 /** Return whether a note segment can contribute pixels inside the preview viewport. */
@@ -539,6 +539,13 @@ export function drawLinePasses(
     skew: 0,
     showHead: false,
   };
+  const noteGeometry: PreviewNoteScreenGeometry = {
+    horizontal: 0,
+    headX: 0,
+    headY: 0,
+    tailX: 0,
+    tailY: 0,
+  };
   surface.noteHitAreas.length = 0;
   surface.lineFrames.length = 0;
   // A sampled line is lifted above the other judge lines so its focus colour
@@ -708,6 +715,7 @@ export function drawLinePasses(
           }
           const noteWidth = previewNoteWidth(surface.noteSize) * scaleX * position.size;
           const geometry = previewNoteScreenGeometry(
+            noteGeometry,
             position,
             state,
             centerX,

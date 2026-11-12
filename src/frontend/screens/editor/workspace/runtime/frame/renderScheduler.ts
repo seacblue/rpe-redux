@@ -39,6 +39,8 @@ export interface RenderWork {
   /** Explicit invalidation needs an immediate preview, even for dense charts. */
   readonly previewInvalidated: boolean;
   readonly maxHitEffects: number;
+  /** GPU-only note backing-store scale; logical note geometry is unchanged. */
+  readonly notePixelRatioScale: number;
 }
 
 /** Outcome of one scheduling call. */
@@ -255,6 +257,7 @@ export class EditorRenderScheduler {
         : request.previewHighDensity
           ? 64
           : Number.POSITIVE_INFINITY,
+      notePixelRatioScale: request.reducedQuality ? 0.8 : 1,
     };
   }
 

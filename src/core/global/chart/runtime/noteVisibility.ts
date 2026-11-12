@@ -152,6 +152,10 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
   declare holdActiveIndex: IntervalIndex<T>;
   /** Full visibility-time directory for Holds without a safe spatial bound. */
   declare holdFallbackIndex: IntervalIndex<T>;
+  /** Whether each optional time directory has entries worth querying. */
+  declare hasTemporalItems: boolean;
+  declare hasHoldActiveItems: boolean;
+  declare hasHoldFallbackItems: boolean;
   declare temporalQuery: T[];
   declare holdQuery: T[];
   declare holdFallbackQuery: T[];
@@ -169,6 +173,10 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     this.spatialItems = partition.spatial;
     this.temporalItems = partition.temporal;
     this.holdItems = partition.holds;
+    this.hasTemporalItems = this.temporalItems.length > 0;
+    this.hasHoldActiveItems =
+      model.holdActivationCoveredBySpatial !== true && this.holdItems.length > 0;
+    this.hasHoldFallbackItems = partition.holdFallback.length > 0;
     this.spatialIndex = new IntervalIndex(
       this.spatialItems,
       (entry) => Math.min(entry.floor, entry.tail),
@@ -207,6 +215,10 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     this.spatialItems = partition.spatial;
     this.temporalItems = partition.temporal;
     this.holdItems = partition.holds;
+    this.hasTemporalItems = this.temporalItems.length > 0;
+    this.hasHoldActiveItems =
+      this.model.holdActivationCoveredBySpatial !== true && this.holdItems.length > 0;
+    this.hasHoldFallbackItems = partition.holdFallback.length > 0;
     this.spatialIndex.replaceItems(this.spatialItems);
     this.temporalIndex.replaceItems(this.temporalItems);
     this.holdActiveIndex.replaceItems(
@@ -232,9 +244,21 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
       result,
     );
     const spatialCandidateCount = result.length;
-    this.temporalIndex.queryItemsInto(seconds, seconds, this.temporalQuery);
-    this.holdActiveIndex.queryItemsInto(seconds, seconds, this.holdQuery);
-    this.holdFallbackIndex.queryItemsInto(seconds, seconds, this.holdFallbackQuery);
+    if (this.hasTemporalItems) {
+      this.temporalIndex.queryItemsInto(seconds, seconds, this.temporalQuery);
+    } else {
+      this.temporalQuery.length = 0;
+    }
+    if (this.hasHoldActiveItems) {
+      this.holdActiveIndex.queryItemsInto(seconds, seconds, this.holdQuery);
+    } else {
+      this.holdQuery.length = 0;
+    }
+    if (this.hasHoldFallbackItems) {
+      this.holdFallbackIndex.queryItemsInto(seconds, seconds, this.holdFallbackQuery);
+    } else {
+      this.holdFallbackQuery.length = 0;
+    }
 
     const temporalCandidateCount = this.temporalQuery.length;
     const holdCandidateCount = this.holdQuery.length + this.holdFallbackQuery.length;

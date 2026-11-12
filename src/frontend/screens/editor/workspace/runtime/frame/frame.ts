@@ -85,7 +85,7 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
       state.frameSampleCount++;
       state.paintedFrames++;
       const start = performance.now();
-      const seconds = clock.seconds();
+      const seconds = clock.seconds(timestamp);
       const audioSeconds = options.readouts.audio.time;
       // Expensive inspector and HUD work runs at its own lower cadence; the
       // transport follows the same sampled time on every frame.
