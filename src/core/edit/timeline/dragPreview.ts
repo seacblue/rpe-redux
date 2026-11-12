@@ -12,8 +12,7 @@ import {
   subtractBeats,
   type Beat,
 } from "../../global/chart/timing/beat.ts";
-import { snapTime, type TempoGrid } from "../../global/chart/editing/editGrid.ts";
-import { snapXPosition } from "./timelineCoordinates.ts";
+import { snapTime, verticalGrid, type TempoGrid } from "../../global/chart/editing/editGrid.ts";
 import { checkedNotes } from "./model.ts";
 import type { EditorSession } from "../session/session.ts";
 import type { TimelineDrag, TimelineEventDrag, TimelineNote } from "./types.ts";
@@ -96,9 +95,13 @@ export function moveTimelineNote(
   }
   const rawDeltaX =
     ((drag.current.x - drag.start.x) / Math.max(1, context.panelWidth - context.inset * 2)) * 1350;
+  const spacing = verticalGrid(context.gridCount).spacing;
+  // X snapping is a relative movement grid. Keeping the original offset means
+  // a dragged note does not jump onto a lane just because snapping is enabled.
   const deltaX =
-    snapXPosition(anchor.positionX + rawDeltaX, context.gridCount, context.snapX) -
-    anchor.positionX;
+    context.snapX && Number.isFinite(spacing) && spacing > 0
+      ? Math.round(rawDeltaX / spacing) * spacing
+      : rawDeltaX;
   // A note may be dragged up to beat zero, and no further.
   const mostNegative = subtractBeats(ZERO_BEAT, note.startTime);
   const boundedBeat = compareBeats(deltaBeat, mostNegative) < 0 ? mostNegative : deltaBeat;

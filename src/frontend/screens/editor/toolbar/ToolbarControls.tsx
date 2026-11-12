@@ -233,7 +233,7 @@ const ROW_TWO: readonly ToolbarEntry[] = [
     className: "grid-count-field",
     min: 1,
     max: 100,
-    step: 1,
+    step: "any",
     textAlign: "center",
     label: "chrome.toolbar.gridCount",
     tipTitle: "chrome.toolbar.gridCount",

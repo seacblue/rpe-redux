@@ -327,7 +327,7 @@ export function shiftedTime<T extends { startTime: number[]; endTime: number[] }
   };
 }
 
-/** Moves the selection by one grid step in a page-key direction. */
+/** Moves the selection by one time grid step or half an X grid spacing. */
 export function nudgeSelection(
   session: EditorSession,
   direction: string,
@@ -343,7 +343,7 @@ export function nudgeSelection(
     return true;
   }
   const deltaX = horizontal
-    ? verticalGrid(gridCount).spacing * (direction === "ArrowLeft" ? -1 : 1)
+    ? (verticalGrid(gridCount).spacing / 2) * (direction === "ArrowLeft" ? -1 : 1)
     : 0;
   // The vertical nudge is a grid division, computed in the triple, so a 1/3 or
   // 1/7 division moves by exactly that much.
