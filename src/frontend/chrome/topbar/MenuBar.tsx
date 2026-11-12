@@ -231,7 +231,7 @@ export function MenuBar() {
             danger={action.destructive}
             disabled={!actionAvailable(action) || (menu.id === "view" && atHome)}
             onClick={() => {
-              if (runAction(action)) {
+              if (runAction(action, "menu")) {
                 close();
               }
             }}

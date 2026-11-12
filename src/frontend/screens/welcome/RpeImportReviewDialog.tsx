@@ -44,14 +44,15 @@ function ReviewBody({ request, open }: { request: RpeImportReviewRequest; open: 
   const { t } = useTranslation();
   const settingsHeading = useId();
   const chartsHeading = useId();
+  const selectableRows = request.settings;
   const [selected, setSelected] = useState<ReadonlySet<string>>(
     () =>
       new Set([
-        ...request.settings.map((row) => row.id),
+        ...selectableRows.map((row) => row.id),
         ...request.charts.map((chart) => chart.path),
       ]),
   );
-  const settingIds = request.settings.map((row) => row.id);
+  const settingIds = selectableRows.map((row) => row.id);
   const chartIds = request.charts.map((chart) => chart.path);
   const settingState = groupState(settingIds, selected);
   const chartState = groupState(chartIds, selected);
@@ -110,10 +111,14 @@ function ReviewBody({ request, open }: { request: RpeImportReviewRequest; open: 
     <Modal
       open={open}
       onClose={() => answerRpeImportReview(null)}
-      label={t("workspace.welcome.rpe.review.title")}
+      label={t(
+        request.scan.source === "phiediter"
+          ? "workspace.welcome.pe.review.title"
+          : "workspace.welcome.rpe.review.title",
+      )}
       description={t("workspace.welcome.rpe.review.description", {
         charts: request.charts.length,
-        settings: request.settings.length,
+        settings: selectableRows.length,
       })}
       className="rpe-review-dialog"
       actions={
@@ -143,9 +148,9 @@ function ReviewBody({ request, open }: { request: RpeImportReviewRequest; open: 
             state={settingState}
             onToggle={(checked) => toggleGroup(settingIds, checked)}
           />
-          {request.settings.length ? (
+          {selectableRows.length ? (
             <div className="rpe-review-rows">
-              {request.settings.map((row) => (
+              {selectableRows.map((row) => (
                 <SettingRow
                   key={row.id}
                   row={row}

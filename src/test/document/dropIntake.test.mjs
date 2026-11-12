@@ -1,7 +1,11 @@
 /** Route policy for paths classified by the backend drop intake. */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { dropRoute } from "../../core/global/document/dropIntake.ts";
+
+const PE_ROOT = fileURLToPath(new URL("../fixtures/pe", import.meta.url));
 
 test("an RPE chart keeps its folder and chart entry", () => {
   const route = dropRoute({
@@ -30,6 +34,28 @@ test("an RPE installation opens the review before any importer runs", () => {
     }),
     { action: "rpe-installation", path: "D:/games/rpe" },
   );
+});
+
+test("a PhiEditer installation opens its own review", () => {
+  const route = dropRoute({
+    path: PE_ROOT,
+    kind: "chart",
+    format: "pec",
+    entry: PE_ROOT,
+    peInstallation: true,
+    peDetails: {
+      root: PE_ROOT,
+      installation: true,
+      settingsText: readFileSync(new URL("../fixtures/pe/Settings.txt", import.meta.url), "utf8"),
+      charts: [],
+      warnings: [],
+    },
+    valid: true,
+  });
+  assert.deepEqual(route, {
+    action: "pe-installation",
+    path: PE_ROOT,
+  });
 });
 
 test("official and PEC charts route to the external importer", () => {

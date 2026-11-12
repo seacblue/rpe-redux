@@ -693,7 +693,7 @@ export default {
     "Draw a red border around every preview note; a Hold shows head, body, and tail borders. Click a border to turn it green and show its parameters.",
   "settings.help.developer.exportBundle": "Export diagnostic bundle",
   "settings.help.developer.exportBundleHint":
-    "Package the environment summary, redacted diagnostics snapshot, recent logs, extension list, and current chart summary into one zip.",
+    "Package the sanitized environment, input-free action sequence, frontend/backend warnings and errors, runtime diagnostics, redacted logs, extension inventory, chart health, playback textures, preview geometry, and renderer health counters into one zip without chart pixels.",
   "settings.help.developer.exportBundleBusy": "Exporting…",
   "settings.help.developer.exportBundleSuccess": "Diagnostic bundle exported to {path}.",
   "settings.help.developer.exportBundleFailed": "Could not export the diagnostic bundle: {message}",

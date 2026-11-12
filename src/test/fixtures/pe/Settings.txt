@@ -1,0 +1,23 @@
+﻿WindowSize: 2048 1400
+BGMVolume: 0.6
+SEVolume: 0.5
+MouseScrollSpeed: 5.6
+AnchorLineAmount: 31
+
+#
+Name: Chart One
+Song: one.mp3
+Picture: one.jpg
+Chart: one.pec
+Level: IN Lv.11
+Composer: Composer One
+Charter: Charter One
+
+#
+Name: Chart Two
+Song: two.ogg
+Picture: TWO.png
+Chart: two.pec
+Level: IN Lv.12
+Composer: Composer Two
+Charter: Charter Two

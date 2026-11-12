@@ -21,6 +21,7 @@ import { GAME_UI_BINDING_LABELS } from "../../../editor/workspace/preview/drawin
 
 /** The three purposes the bulk type selector can write. */
 const LINE_PURPOSE_TARGETS: readonly LinePurposeTarget[] = ["standard", "noise", "inverted"];
+const MIXED_VALUE = "__mixed__";
 
 /** Props the panel supplies for one line or one multi-line selection. */
 export interface LineTypeSectionProps {
@@ -30,6 +31,7 @@ export interface LineTypeSectionProps {
   onBatchPurpose(target: LinePurposeTarget): Promise<void>;
   changeNoiseMode(mode: "normal" | "inverted", checked: boolean): Promise<void>;
   attachUI: string;
+  attachUIMixed: boolean;
   lineExtendedEnabled: boolean;
   resets: ReturnType<typeof createLineResets>;
   commitField(field: LineField): void;
@@ -44,6 +46,7 @@ export function LineTypeSection({
   onBatchPurpose,
   changeNoiseMode,
   attachUI,
+  attachUIMixed,
   lineExtendedEnabled,
   resets,
   commitField,
@@ -55,6 +58,29 @@ export function LineTypeSection({
   const lineTraits = judgeLineTraits(selectedLine);
   const settings = noiseLineSettings(selectedLine);
   const noiseMode = settings ? (settings.invert ? "inverted" : "normal") : "off";
+  const binding = (
+    <Select
+      id="line-field-attach-ui"
+      name="attachUI"
+      defaultValue={attachUIMixed ? MIXED_VALUE : attachUI}
+      onChange={() => commitField("attachUI")}
+    >
+      {attachUIMixed && (
+        <option value={MIXED_VALUE} disabled>
+          {t("editorPanels.linePanel.mixed")}
+        </option>
+      )}
+      <option value="">{t("editorPanels.linePanel.noBinding")}</option>
+      {GAME_UI_BINDING_LABELS.map(([key, label]) => (
+        <option value={key} key={key}>
+          {t(label)}
+        </option>
+      ))}
+      {attachUI && !GAME_UI_BINDING_LABELS.some(([key]) => key === attachUI) ? (
+        <option value={attachUI}>{t("editorPanels.linePanel.retained", { name: attachUI })}</option>
+      ) : null}
+    </Select>
+  );
   if (multi) {
     return (
       <section className="line-panel-type">
@@ -74,27 +100,18 @@ export function LineTypeSection({
           }))}
           onChange={(target) => void onBatchPurpose(target)}
         />
+        {(lineExtendedEnabled || attachUI || attachUIMixed) && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="line-field-attach-ui"
+            label={t("editorPanels.linePanel.attachUi")}
+            control={binding}
+          />
+        )}
       </section>
     );
   }
-  const binding = (
-    <Select
-      id="line-field-attach-ui"
-      name="attachUI"
-      defaultValue={attachUI}
-      onChange={() => commitField("attachUI")}
-    >
-      <option value="">{t("editorPanels.linePanel.noBinding")}</option>
-      {GAME_UI_BINDING_LABELS.map(([key, label]) => (
-        <option value={key} key={key}>
-          {t(label)}
-        </option>
-      ))}
-      {attachUI && !GAME_UI_BINDING_LABELS.some(([key]) => key === attachUI) ? (
-        <option value={attachUI}>{t("editorPanels.linePanel.retained", { name: attachUI })}</option>
-      ) : null}
-    </Select>
-  );
   return (
     <section className="line-panel-type">
       <h3 className="line-panel-section-title">{t("editorPanels.linePanel.type")}</h3>

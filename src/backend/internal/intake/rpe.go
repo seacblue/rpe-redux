@@ -52,13 +52,15 @@ type RpeFolderScan struct {
 	Root string `json:"root"`
 	// Installation is true when the root carries PhiEdit.exe and Resources.
 	Installation bool `json:"installation"`
-	// SettingsText, HotkeysText, and UIText are the original sidecar bodies.
-	// The frontend owns the mapping from RPE fields to editor settings.
-	SettingsText *string    `json:"settingsText"`
-	HotkeysText  *string    `json:"hotkeysText"`
-	UIText       *string    `json:"uiText"`
-	Charts       []RpeChart `json:"charts"`
-	Warnings     []string   `json:"warnings"`
+	// SettingsText, HotkeysText, UIText, and DivisionColorText are the original
+	// sidecar bodies. The frontend owns the mapping from RPE fields to editor
+	// settings.
+	SettingsText      *string    `json:"settingsText"`
+	HotkeysText       *string    `json:"hotkeysText"`
+	UIText            *string    `json:"uiText"`
+	DivisionColorText *string    `json:"divisionColorText"`
+	Charts            []RpeChart `json:"charts"`
+	Warnings          []string   `json:"warnings"`
 }
 
 // ReadRpeFolder reads one classified RPE root. It rejects non-folder paths and
@@ -93,6 +95,7 @@ func ReadRpeFolder(raw string) (RpeFolderScan, error) {
 	if scan.UIText == nil {
 		scan.UIText = readRpeText(findChild(root, "UI.json"))
 	}
+	scan.DivisionColorText = readRpeText(findChild(root, "division_color.txt"))
 
 	directories := make([]string, 0, 5)
 	for _, name := range []string{"Resources", "Charts"} {

@@ -22,17 +22,13 @@ import { formatCount, formatRelativeTime } from "./libraryFormat.ts";
 import { LibraryWelcome } from "./LibraryWelcome.tsx";
 import { bindBackgroundVolume } from "../../../platform/backgroundVolume.ts";
 
-/** Cover layer that fades in the selected project's artwork, or a letter fallback. */
-function DetailCover({ url, title }: { url: string; title: string }) {
+/** Cover layer that fades in the selected project's artwork over the empty-cover placeholder. */
+function DetailCover({ url }: { url: string }) {
   return (
     <div className="redux-library-detail-cover">
       <span className="redux-library-detail-cover-placeholder" aria-hidden="true" />
-      {url ? (
+      {url && (
         <AsyncImage key={url} src={url} alt="" className="redux-library-detail-cover-layer" />
-      ) : (
-        <span className="redux-library-detail-cover-letter" aria-hidden="true">
-          <span>{title.trim().slice(0, 1).toUpperCase() || "♪"}</span>
-        </span>
       )}
     </div>
   );
@@ -161,7 +157,7 @@ export function LibraryDetail({
     <aside className="redux-library-detail" onPointerMove={tilt} onPointerLeave={settleTilt}>
       <article ref={tiltCard} className="redux-library-card">
         <div className="redux-library-card-media">
-          <DetailCover url={entry.cover} title={entry.title} />
+          <DetailCover url={entry.cover} />
           <span className="redux-library-detail-scrim" aria-hidden="true" />
           {entry.level && (
             <span

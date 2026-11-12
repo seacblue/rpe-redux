@@ -59,25 +59,61 @@ export function duplicateLine(chart: Chart, index: number): Chart {
 
 /** Point a line at `parent`, rejecting cycles and invalid indices. */
 export function setLineParent(chart: Chart, index: number, parent: number): Chart {
-  requireLine(chart, index);
+  return setLineParents(chart, [index], parent);
+}
+
+/**
+ * Point several lines at one parent as one validated structural edit.
+ *
+ * Validation reads the prospective parent map before writing any line, so a
+ * failed batch cannot leave a partially re-parented chart and a selection that
+ * includes the parent is rejected when it would create a cycle.
+ */
+export function setLineParents(chart: Chart, indices: readonly number[], parent: number): Chart {
+  const lines = chart.judgeLineList;
+  if (!lines) {
+    throw new Error(t("editor.commands.lineCommands.error.invalidIndex"));
+  }
+  const targets = [...new Set(indices)];
+  targets.forEach((target) => requireLine(chart, target));
+  if (!Number.isInteger(parent) || parent < -1) {
+    throw new Error(t("editor.commands.lineCommands.error.invalidIndex"));
+  }
   if (parent !== -1) {
     requireLine(chart, parent);
   }
-  const visited = new Set([index]);
-  let ancestor = parent;
-  while (ancestor !== -1) {
-    if (visited.has(ancestor)) {
-      throw new Error(t("editor.commands.lineCommands.error.parentCycle"));
-    }
-    requireLine(chart, ancestor);
-    visited.add(ancestor);
-    const father = chart.judgeLineList[ancestor].father ?? -1;
-    if (typeof father !== "number") {
+
+  const targetSet = new Set(targets);
+  const originalParent = (index: number): number => {
+    const value = lines[index]?.father;
+    const resolved = value === undefined || value === null || value === "" ? -1 : Number(value);
+    if (!Number.isInteger(resolved) || resolved < -1 || resolved >= lines.length) {
       throw new Error(t("editor.commands.lineCommands.error.invalidIndex"));
     }
-    ancestor = father;
+    return resolved;
+  };
+  const nextParent = (index: number): number =>
+    targetSet.has(index) ? parent : originalParent(index);
+
+  for (const index of targets) {
+    const visited = new Set<number>();
+    let ancestor = index;
+    while (ancestor !== -1) {
+      if (visited.has(ancestor)) {
+        throw new Error(t("editor.commands.lineCommands.error.parentCycle"));
+      }
+      visited.add(ancestor);
+      ancestor = nextParent(ancestor);
+    }
   }
-  const lines = [...chart.judgeLineList];
-  lines[index] = { ...lines[index], father: parent };
-  return { ...chart, judgeLineList: lines };
+
+  const nextLines = [...lines];
+  let changed = false;
+  for (const index of targets) {
+    if (originalParent(index) !== parent) {
+      nextLines[index] = { ...nextLines[index], father: parent };
+      changed = true;
+    }
+  }
+  return changed ? { ...chart, judgeLineList: nextLines } : chart;
 }

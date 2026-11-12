@@ -3166,6 +3166,7 @@ dependencies = [
  "notify",
  "pathdiff",
  "percent-encoding",
+ "regex",
  "rusqlite",
  "semver",
  "serde",

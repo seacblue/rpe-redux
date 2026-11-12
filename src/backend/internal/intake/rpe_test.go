@@ -13,6 +13,7 @@ func TestReadRpeFolderReadsSettingsAndChartMetadata(t *testing.T) {
 	writeFile(t, root, "Settings.json", `{"FpsLimit":120,"Language":"zh.txt"}`)
 	writeFile(t, root, "Hotkey.txt", "AddTap A\n")
 	writeFile(t, root, "UI.txt", "GridColor1=#FF0000\n")
+	writeFile(t, root, "division_color.txt", "# comment\n8: 128, 128, 255, 0.5 // bright blue\n")
 	writeFile(t, root, "Resources/12345/info.txt",
 		"#\r\nName: Test Song\r\nChart: 12345.json\r\nGroup: WIP\r\nSong: song.mp3\r\nComposer: Composer Name\r\nCharter: Charter Name\r\n")
 	writeFile(t, root, "Resources/12345/12345.json", `{"META":{"name":"Test Song"},"BPMList":[]}`)
@@ -32,6 +33,9 @@ func TestReadRpeFolderReadsSettingsAndChartMetadata(t *testing.T) {
 	}
 	if scan.HotkeysText == nil || *scan.HotkeysText != "AddTap A\n" {
 		t.Fatalf("hotkeys = %#v", scan.HotkeysText)
+	}
+	if scan.DivisionColorText == nil || *scan.DivisionColorText != "# comment\n8: 128, 128, 255, 0.5 // bright blue\n" {
+		t.Fatalf("division colours = %#v", scan.DivisionColorText)
 	}
 	if len(scan.Charts) != 1 {
 		t.Fatalf("charts = %#v", scan.Charts)

@@ -685,6 +685,14 @@ export const clipboardShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "B", modifiers: ["CTRL"] }],
   },
   {
+    id: "edit.paste.keepTimeMirror",
+    category: "editor.clipboard",
+    title: "shortcuts.editor.keepTimeMirrorPaste",
+    scope: "editor",
+    // RPE's combined modifier; the editor can bind it from the shortcut editor.
+    defaults: [],
+  },
+  {
     id: "edit.clipboard.jumpStart",
     category: "editor.clipboard",
     title: "shortcuts.editor.clipboardJumpStart",

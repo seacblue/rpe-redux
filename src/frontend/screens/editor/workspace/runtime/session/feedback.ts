@@ -14,6 +14,7 @@ import { loadingProgress } from "../../../../../../core/global/document/loading.
 import { exportAppDataBackup } from "../../../../../../core/platform/desktop/appDataBackup.ts";
 import { isStorageFailure } from "../../../../../../core/platform/storageFailure.ts";
 import { diagnosticText, writeDiagnosticLog } from "../../../../../platform/diagnosticLog.ts";
+import { recordDiagnosticIssue } from "../../../../../../core/diagnostics/interactionLog.ts";
 
 /** The notice/error surface, as the assembly factories consume it. */
 export type EditorFeedback = ReturnType<typeof createEditorFeedback>;
@@ -42,6 +43,7 @@ export function createEditorFeedback() {
       return;
     }
     const message = failureMessage(error);
+    recordDiagnosticIssue("error", "frontend", error, "editor.feedback");
     if (alreadyOnLoadingCard(message)) {
       return;
     }

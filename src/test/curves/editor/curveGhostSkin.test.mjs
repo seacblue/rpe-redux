@@ -43,6 +43,7 @@ function recordingContext() {
     strokeStyle: "",
     lineWidth: 0,
     globalAlpha: 1,
+    filter: "none",
   };
 }
 
@@ -101,6 +102,7 @@ test("the ghost renders real skin holds and heads", () => {
   assert.equal(calls[0].args[3], 875, "the Hold body reaches the end anchor");
   assert.equal(calls[1].kind, "head");
   assert.equal(calls[1].args[3], 800);
+  assert.equal(context.filter, "saturate(0.58) brightness(1.12)");
   assert.equal(
     context.calls.filter((call) => call.name === "fillRect").length,
     0,

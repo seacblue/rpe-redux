@@ -23,12 +23,15 @@ export interface SessionSelectionOptions {
 export function createSessionSelection(options: SessionSelectionOptions) {
   let signature = "";
   let lastRevision = -1;
+  let lastLineIndex: number | null = null;
   return {
     /** Applies the routing decision when the selection signature changed. */
     route(session: EditorSession, activePane: string): void {
       const pointerSelection = session.selectionRevision !== lastRevision;
       const routing = resolveSelectionPane(session, options.layer(), {
         activePane,
+        initialRoute: lastLineIndex === null,
+        lineChanged: lastLineIndex !== null && session.lineIndex !== lastLineIndex,
         pointerSelection,
         ...options.state(),
       });
@@ -37,11 +40,13 @@ export function createSessionSelection(options: SessionSelectionOptions) {
         lastRevision = session.selectionRevision;
         applySelectionPaneAction(routing.action, options.effects);
       }
+      lastLineIndex = session.lineIndex;
     },
     /** Forgets the last signature so the next selection routes again. */
     reset(): void {
       signature = "";
       lastRevision = -1;
+      lastLineIndex = null;
     },
   };
 }

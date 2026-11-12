@@ -26,7 +26,7 @@ export interface TransportBindings {
   togglePlayback(): Promise<unknown>;
   /** Seek to one beat, as the session counts beats. */
   seekBeat(beat: number): void;
-  playback: Pick<EditorPlayback, "play" | "pause" | "seek" | "audio">;
+  playback: Pick<EditorPlayback, "play" | "pause" | "seek" | "audio" | "pending">;
   getSession(): EditorSession;
   invalidate(): void;
   reportError(error: unknown): void;
@@ -41,6 +41,7 @@ export function connectTransport(bindings: TransportBindings): () => void {
   auditionReturnsTime = true;
   auditionPreviewOnly = false;
   auditionLayoutOnly = false;
+  playbackAnchor = null;
   editorAuditioning.set(false);
   return transportBindings.bind(bindings);
 }
@@ -58,6 +59,28 @@ let auditionPreviewOnly = false;
 let auditionLayoutOnly = false;
 /** Guards a pending play start from clearing a newer audition's state. */
 let auditionRequest = 0;
+/** Audio position when the current playback started; the restore key uses it. */
+let playbackAnchor: number | null = null;
+
+/** Enter RPE's playback layout: the authoring regions hide behind the preview. */
+function enterPlaybackPreview(): void {
+  viewControls.enterPlaybackPreview();
+}
+
+/** Leave RPE's playback layout and show the authoring regions again. */
+function exitPlaybackPreview(): void {
+  viewControls.exitPlaybackPreview();
+}
+
+/** Start playback from the current position and remember where it began. */
+function playFromCurrent(bound: TransportBindings): void {
+  playbackAnchor = bound.playback.audio.time;
+  enterPlaybackPreview();
+  void bound.playback
+    .play(bound.getSession().chart)
+    .then(bound.invalidate)
+    .catch(bound.reportError);
+}
 
 /** Play, or stop what is playing. */
 export function togglePlayback(): void {
@@ -65,7 +88,16 @@ export function togglePlayback(): void {
   if (auditionAnchor !== null) {
     return;
   }
-  transportBindings.value()?.togglePlayback();
+  const bound = transportBindings.value();
+  if (!bound) {
+    return;
+  }
+  // RPE's own play/pause key is the plain transport toggle: it does not change
+  // the layout, but the restore key still needs to know where playback began.
+  if (!bound.playback.audio.playing && !bound.playback.pending) {
+    playbackAnchor = bound.playback.audio.time;
+  }
+  bound.togglePlayback();
 }
 
 /**
@@ -155,6 +187,76 @@ export function endAudition(): void {
   bound.invalidate();
 }
 
+/**
+ * Start playback and hide the authoring regions (RPE's start key).
+ *
+ * When already playing the key only ensures the preview layout is active, so it
+ * cannot restart or rewind a running playback.
+ */
+export function startPlayback(): void {
+  const bound = transportBindings.value();
+  if (!bound || auditionAnchor !== null) {
+    return;
+  }
+  if (bound.playback.audio.playing || bound.playback.pending) {
+    enterPlaybackPreview();
+    return;
+  }
+  playFromCurrent(bound);
+}
+
+/**
+ * RPE's restore key: start playback when idle, otherwise show the editor again
+ * and jump back to where playback began.
+ */
+export function stopPlayback(): void {
+  const bound = transportBindings.value();
+  if (!bound || auditionAnchor !== null) {
+    return;
+  }
+  if (bound.playback.audio.playing || bound.playback.pending) {
+    const anchor = playbackAnchor ?? bound.playback.audio.time;
+    bound.playback.seek(anchor);
+    exitPlaybackPreview();
+    bound.invalidate();
+    return;
+  }
+  playFromCurrent(bound);
+}
+
+/**
+ * RPE's stay key: start playback when idle, otherwise show the editor again and
+ * pause at the current position.
+ */
+export function stopPlaybackStay(): void {
+  const bound = transportBindings.value();
+  if (!bound || auditionAnchor !== null) {
+    return;
+  }
+  if (bound.playback.audio.playing || bound.playback.pending) {
+    bound.playback.pause();
+    exitPlaybackPreview();
+    bound.invalidate();
+    return;
+  }
+  playFromCurrent(bound);
+}
+
+/** Seek to the start, hide the authoring regions, and play from the beginning. */
+export function replayPlayback(): void {
+  const bound = transportBindings.value();
+  if (!bound || auditionAnchor !== null) {
+    return;
+  }
+  playbackAnchor = 0;
+  enterPlaybackPreview();
+  bound.playback.seek(0);
+  void bound.playback
+    .play(bound.getSession().chart)
+    .then(bound.invalidate)
+    .catch(bound.reportError);
+}
+
 /** Go back to the first beat without starting the transport. */
 export function rewind(): void {
   transportBindings.value()?.seekBeat(0);
@@ -176,6 +278,10 @@ export function seekToBeat(beat: string): void {
 /** The transport commands, as the menu, the bar and the keys see them. */
 export const transport = Object.freeze({
   togglePlayback,
+  startPlayback,
+  stopPlayback,
+  stopPlaybackStay,
+  replayPlayback,
   beginAudition,
   endAudition,
   rewind,

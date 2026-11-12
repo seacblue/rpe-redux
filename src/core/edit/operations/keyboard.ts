@@ -18,6 +18,7 @@ import type { EditorSession } from "../session/session.ts";
 import type { TimelineArea } from "../timeline/types.ts";
 import { isSystemCancelKey } from "../../shortcuts/keyMatching.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
+import { recordDiagnosticAction } from "../../diagnostics/interactionLog.ts";
 
 export interface KeyboardActionEvent extends ShortcutEventLike {
   key: string;
@@ -130,6 +131,16 @@ export interface EditorKeyboardActionDependencies {
   clearClipboard: () => void;
   selectEventLayer: (layer: number) => void;
   togglePlayback: () => Promise<unknown>;
+  /** Start playback when stopped, without toggling a running transport. */
+  startPlayback: () => Promise<unknown>;
+  /** Stop playback and return to the start of the chart. */
+  stopPlayback: () => void;
+  /** Stop playback and keep the current position. */
+  stopPlaybackStay: () => void;
+  /** Seek to the start and play from there. */
+  replayPlayback: () => Promise<unknown>;
+  /** Toggle time snapping for placing and dragging objects. */
+  toggleTimeSnap: () => void;
   showLineInfo: () => void;
   /** Opens the workspace sampler for the single selected event's anchor. */
   sampleSelection: (field: "start" | "end") => boolean;
@@ -161,12 +172,18 @@ export async function runEditorKeyboardAction(
 ): Promise<void> {
   const { timeline } = deps;
   const session = deps.getSession();
+  const surface = area === "events" ? "events" : "editor";
   let handled = true;
   try {
     if (
       event.repeat &&
       [
         "playback.pause",
+        "playback.start",
+        "playback.stop",
+        "playback.stopStay",
+        "playback.replay",
+        "timeline.toggleSnapX",
         "view.showLineInfo",
         "view.toggleGameUi",
         "view.togglePreviewOnly",
@@ -179,6 +196,7 @@ export async function runEditorKeyboardAction(
         "workspace.multiLine.switchMode",
       ].includes(action)
     ) {
+      recordDiagnosticAction(action, "shortcut", "ignored", surface);
       event.preventDefault();
       return;
     }
@@ -249,10 +267,17 @@ export async function runEditorKeyboardAction(
       deps.selectEventLayer(EVENT_LAYER_ACTIONS[action]);
     } else if (action === "edit.cut") {
       deps.cutSelection();
-    } else if (["edit.paste", "edit.paste.keepTime", "edit.paste.mirror"].includes(action)) {
+    } else if (
+      [
+        "edit.paste",
+        "edit.paste.keepTime",
+        "edit.paste.mirror",
+        "edit.paste.keepTimeMirror",
+      ].includes(action)
+    ) {
       deps.pasteSelection({
-        keepTime: action === "edit.paste.keepTime",
-        mirror: action === "edit.paste.mirror",
+        keepTime: action === "edit.paste.keepTime" || action === "edit.paste.keepTimeMirror",
+        mirror: action === "edit.paste.mirror" || action === "edit.paste.keepTimeMirror",
       });
     } else if (action === "edit.clipboard.jumpStart") {
       handled = deps.jumpToClipboard("start");
@@ -263,6 +288,20 @@ export async function runEditorKeyboardAction(
     } else if (action === "playback.pause") {
       event.preventDefault();
       await deps.togglePlayback();
+    } else if (action === "playback.start") {
+      event.preventDefault();
+      await deps.startPlayback();
+    } else if (action === "playback.stop") {
+      event.preventDefault();
+      deps.stopPlayback();
+    } else if (action === "playback.stopStay") {
+      event.preventDefault();
+      deps.stopPlaybackStay();
+    } else if (action === "playback.replay") {
+      event.preventDefault();
+      await deps.replayPlayback();
+    } else if (action === "timeline.toggleSnapX") {
+      deps.toggleTimeSnap();
     } else if (action === "view.showLineInfo") {
       deps.showLineInfo();
     } else if (action === "event.sample.start" || action === "event.sample.end") {
@@ -323,8 +362,10 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       event.stopPropagation();
     }
+    recordDiagnosticAction(action, "shortcut", handled ? "completed" : "ignored", surface);
   } catch (error) {
     event.preventDefault();
+    recordDiagnosticAction(action, "shortcut", "failed", surface);
     deps.reportError(error);
   }
 }
