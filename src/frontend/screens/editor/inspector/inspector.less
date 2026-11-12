@@ -127,9 +127,8 @@
   scrollbar-gutter: auto;
 }
 
-// The compact page stays mounted at its original width and right edge. It stays
-// hidden while the workspace moves, then participates in a short opaque handoff
-// after the panel reaches the compact track.
+// The compact page stays mounted at its original width and right edge while the
+// workspace width moves. It remains hidden until the real width transition ends.
 .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
   position: absolute;
   top: 0;
@@ -139,17 +138,13 @@
   z-index: 0;
   pointer-events: none;
   visibility: hidden;
-  opacity: 0;
-  transition:
-    opacity var(--design-dur-exit) var(--design-ease-exit),
-    visibility 0s linear var(--design-dur-exit);
 }
 
-.inspector-content[data-mode-surface="true"][data-mode-handoff="true"]
-  > [data-mode-underlay="true"]:not([hidden]) {
-  visibility: visible;
-  opacity: 1;
-  transition-delay: 0s;
+// The generic Inspector field inset also matches every visible data panel. A
+// workspace mode owns its own list/detail gutters, so keeping that host padding
+// would double the left and right margins every time the panel expands.
+.inspector-content > [data-panel="workspace-mode"].inspector-mode-surface:not([hidden]) {
+  padding: 0;
 }
 
 .inspector-mode-surface {
@@ -168,33 +163,12 @@
   overflow: hidden;
   opacity: 1;
   transform-origin: top right;
-  transition: opacity var(--design-dur-exit) var(--design-ease-exit);
-}
-
-.inspector[data-mode-handoff="true"] .inspector-mode-surface {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.redux-app-root
-  .workbench-inspector
-  > .inspector[data-mode-surface="true"][data-mode-handoff="true"] {
-  background: transparent;
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
 }
 
 .inspector-mode-surface > * {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .inspector-mode-surface,
-  .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
-    transition: none;
-  }
 }
 
 .inspector-content {

@@ -75,7 +75,7 @@ function openInspectorGuide(context?: string): void {
   openOnboardingGuide(guideSectionForContext(context));
 }
 
-type InspectorModePhase = "compact" | "expanded" | "closing" | "handoff";
+type InspectorModePhase = "compact" | "expanded" | "closing";
 
 /** Converts one computed CSS time value to milliseconds. */
 function cssDurationMs(value: string): number {
@@ -153,22 +153,16 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     activeWorkspaceMode ? "expanded" : "compact",
   );
   const modeExitTimer = useRef<number | null>(null);
-  const modeHandoffTimer = useRef<number | null>(null);
   useEffect(() => {
     displayedModeRef.current = displayedMode;
   }, [displayedMode]);
 
   // Keep the task mounted while its width returns to the compact track. The
-  // final handoff happens only after the width transition, so the compact pane
-  // can fade in over the already-settled frame instead of appearing by snap.
+  // final page swap happens only after the width transition reaches its endpoint.
   useEffect(() => {
     if (modeExitTimer.current !== null) {
       window.clearTimeout(modeExitTimer.current);
       modeExitTimer.current = null;
-    }
-    if (modeHandoffTimer.current !== null) {
-      window.clearTimeout(modeHandoffTimer.current);
-      modeHandoffTimer.current = null;
     }
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
@@ -201,15 +195,9 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
         window.clearTimeout(modeExitTimer.current);
         modeExitTimer.current = null;
       }
-      setModePhase("handoff");
-      const surface = element?.querySelector<HTMLElement>(".inspector-mode-surface");
-      const handoffDuration = surface ? transitionDurationMs(surface, "opacity") : 0;
-      modeHandoffTimer.current = window.setTimeout(() => {
-        modeHandoffTimer.current = null;
-        displayedModeRef.current = null;
-        setDisplayedMode(null);
-        setModePhase("compact");
-      }, handoffDuration + 40);
+      displayedModeRef.current = null;
+      setDisplayedMode(null);
+      setModePhase("compact");
     };
     if (!element) {
       finishWidthTransition();
@@ -342,7 +330,6 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}${readOnly ? " is-readonly" : ""}`}
       data-mode-surface={modeSurface ? "true" : undefined}
       data-mode-expanded={modeSurface && modePhase === "expanded" ? "true" : undefined}
-      data-mode-handoff={modeSurface && modePhase === "handoff" ? "true" : undefined}
       tabIndex={-1}
       aria-label={t("chrome.inspector.label")}
       aria-readonly={readOnly || undefined}
@@ -400,11 +387,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           </div>
         </div>
       )}
-      <div
-        className="inspector-content"
-        data-mode-surface={modeSurface ? "true" : undefined}
-        data-mode-handoff={modeSurface && modePhase === "handoff" ? "true" : undefined}
-      >
+      <div className="inspector-content" data-mode-surface={modeSurface ? "true" : undefined}>
         <div
           data-panel="empty"
           hidden={modeSurface || activeDrawerPane !== null || activePane !== ""}
