@@ -608,6 +608,46 @@
   image-rendering: pixelated;
 }
 
+// As the inspector contracts, keep the workspace page mounted and let its
+// property face move below the list face before the compact page takes over.
+// The container query follows the animated panel width rather than the window,
+// so the change happens during the inspector's own leftward movement.
+@container inspector-mode (max-width: 900px) {
+  .timing-studio .studio-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 0.85fr) minmax(240px, 1.15fr) auto;
+  }
+
+  .timing-studio .studio-list-pane {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 0;
+    border-bottom: 1px solid var(--edge-divider);
+  }
+
+  .timing-studio .studio-detail-pane {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .timing-studio .timing-map {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .lines-studio .line-panel-split,
+  .assets-studio .asset-library-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 0.85fr) minmax(240px, 1.15fr);
+  }
+
+  .lines-studio .line-panel-split-tree,
+  .assets-studio .asset-library-split > .asset-tree-shell {
+    border-right: 0;
+    border-bottom: 1px solid var(--edge-divider);
+  }
+}
+
 // The compact stacked variants keep the tree and details in one scroll surface,
 // but each face still gets its own bounded area.
 .line-panel-stack,
