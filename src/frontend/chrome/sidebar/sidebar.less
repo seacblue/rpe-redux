@@ -194,7 +194,6 @@
   z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
   width: min(300px, calc(100vw - 2 * var(--space-2)));
   padding: var(--space-3);
   border: 1px solid var(--edge-emphasis);
@@ -220,40 +219,9 @@
   transition-delay: 0s;
 }
 
-.audio-volume-console-header {
-  color: var(--foreground);
-  font-size: var(--type-label);
-  line-height: var(--line-label);
-}
-
-.audio-volume-console-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.audio-volume-console-column {
+.audio-volume-console-fields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.audio-volume-console-column-label {
-  overflow: hidden;
-  color: var(--foreground);
-  font-size: var(--type-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audio-volume-console-column .redux-setting-range {
-  display: block;
-  width: 100%;
-}
-
-.audio-volume-console-column .redux-setting-range > input[type="range"] {
-  width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

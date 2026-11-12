@@ -8,6 +8,7 @@
 import { createPortal } from "react-dom";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
+import { FieldRow } from "../../../design/components/field/FieldRow.tsx";
 import { SliderField } from "../../../design/components/slider/SliderField.tsx";
 import { useAnchoredPopover } from "../../../design/patterns/useAnchoredPopover.ts";
 import { audioMixer } from "../../../core/media/audioMixer.ts";
@@ -65,18 +66,13 @@ export function AudioVolumeConsole() {
           data-placement={popover.side}
           style={popover.style}
         >
-          <header className="audio-volume-console-header">
-            <strong>{t("chrome.audioVolume.title")}</strong>
-          </header>
-          <div className="audio-volume-console-grid">
+          <div className="audio-volume-console-fields">
             <AudioVolumeColumn
-              id="music"
               label={tRaw("chrome.audioVolume.music")}
               value={snapshot.values.music}
               onChange={(value) => audioMixer.set("music", value)}
             />
             <AudioVolumeColumn
-              id="effects"
               label={tRaw("chrome.audioVolume.effects")}
               value={effects}
               onChange={(value) => audioMixer.setEffects(value)}
@@ -89,31 +85,33 @@ export function AudioVolumeConsole() {
   );
 }
 
-/** Render one volume group as a labelled design-system slider. */
+/** Render one volume group as a single-line labelled design-system field. */
 function AudioVolumeColumn({
-  id,
   value,
   label,
   onChange,
 }: {
-  id: "music" | "effects";
   value: number;
   label: string;
   onChange(value: number): void;
 }) {
   return (
-    <div className="audio-volume-console-column">
-      <span className="audio-volume-console-column-label">{label}</span>
-      <SliderField
-        id={`audio-volume-${id}`}
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        percentage
-        aria-label={label}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
-    </div>
+    <FieldRow
+      layout="inline"
+      density="compact"
+      label={label}
+      control={(controlId) => (
+        <SliderField
+          id={controlId}
+          min={0}
+          max={1}
+          step={0.01}
+          value={value}
+          percentage
+          aria-label={label}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+      )}
+    />
   );
 }
