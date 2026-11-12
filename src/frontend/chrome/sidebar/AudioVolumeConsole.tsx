@@ -8,8 +8,7 @@
 import { createPortal } from "react-dom";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
-import { FieldRow } from "../../../design/components/field/FieldRow.tsx";
-import { SliderField } from "../../../design/components/slider/SliderField.tsx";
+import { KnobField } from "../../../design/components/knob/KnobField.tsx";
 import { useAnchoredPopover } from "../../../design/patterns/useAnchoredPopover.ts";
 import { audioMixer } from "../../../core/media/audioMixer.ts";
 import { HIT_SOUND_KINDS } from "../../../core/media/hitsounds.ts";
@@ -85,7 +84,7 @@ export function AudioVolumeConsole() {
   );
 }
 
-/** Render one volume group as a single-line labelled design-system field. */
+/** Render one volume group as a single-line labelled knob field. */
 function AudioVolumeColumn({
   value,
   label,
@@ -96,22 +95,14 @@ function AudioVolumeColumn({
   onChange(value: number): void;
 }) {
   return (
-    <FieldRow
-      layout="inline"
-      density="compact"
+    <KnobField
       label={label}
-      control={(controlId) => (
-        <SliderField
-          id={controlId}
-          min={0}
-          max={1}
-          step={0.01}
-          value={value}
-          percentage
-          aria-label={label}
-          onChange={(event) => onChange(Number(event.currentTarget.value))}
-        />
-      )}
+      min={0}
+      max={1}
+      step={0.01}
+      value={value}
+      percentage
+      onChange={onChange}
     />
   );
 }
