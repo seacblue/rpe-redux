@@ -125,7 +125,11 @@
   color: var(--foreground);
 }
 
-.inspector .inspector-content > [data-panel="lines"]:not([hidden]) > .inspector-panel-surface {
+.inspector
+  .inspector-content
+  > [data-panel="lines"]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content {
   padding: 0;
 }
 
@@ -167,22 +171,6 @@
   min-height: 0;
 }
 
-// With no judge lines and no selected folder, the tree is the whole page. The
-// add-line footer stays pinned at the bottom and the empty form is not mounted.
-.line-panel-single {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.line-panel-single > .line-tree {
-  flex: 1 1 auto;
-  max-height: none;
-  min-height: 0;
-}
-
 // The inspector wrapper is a flex column; the mounted line form must fill it so
 // the split's two faces can size against the available height.
 .inspector .line-panel {
@@ -195,15 +183,15 @@
 .line-panel[data-variant="stacked"] .inspector-page-split-top > .line-tree {
   height: auto;
   max-height: none;
-  padding: var(--space-4) var(--inspector-gutter) var(--space-2);
-}
-
-.line-panel[data-variant="stacked"] .inspector-page-split-top {
   padding: 0;
 }
 
+.line-panel[data-variant="stacked"] .inspector-page-split-top {
+  padding: var(--space-4) var(--inspector-gutter) var(--space-2);
+}
+
 .line-panel[data-variant="stacked"] .inspector-page-split-top > .line-tree-footer {
-  margin-inline: var(--inspector-gutter);
+  margin-inline: 0;
 }
 
 .line-panel[data-variant="stacked"] .inspector-page-split-bottom {

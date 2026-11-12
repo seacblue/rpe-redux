@@ -119,7 +119,12 @@ export function InspectorPageSplit({
         gridTemplateRows: `minmax(0, ${ratio}fr) var(--space-3) minmax(0, ${1 - ratio}fr)`,
       }}
     >
-      <div id={topId} className="inspector-page-split-top" aria-label={topLabel} role="region">
+      <div
+        id={topId}
+        className="inspector-panel-content inspector-page-split-top"
+        aria-label={topLabel}
+        role="region"
+      >
         {top}
       </div>
       <div
@@ -144,7 +149,7 @@ export function InspectorPageSplit({
       </div>
       <div
         id={bottomId}
-        className="inspector-page-split-bottom"
+        className="inspector-panel-content inspector-page-split-bottom"
         aria-label={bottomLabel}
         role="region"
       >

@@ -4,16 +4,16 @@
   overflow: hidden;
 }
 
-.inspector-content:has(> [data-panel="timing"]:not([hidden])) {
-  scrollbar-gutter: auto;
-}
-
-.inspector-content > [data-panel="timing"]:not([hidden]) > .inspector-panel-surface {
+.inspector
+  .inspector-content
+  > [data-panel="timing"]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content {
   padding: 0;
 }
 
 .inspector-page-split.is-static > .inspector-page-split-top {
-  padding: 0;
+  padding: var(--space-4) var(--inspector-gutter) var(--space-2);
 }
 
 .inspector-page-split.is-static > .inspector-page-split-bottom {
@@ -25,7 +25,7 @@
 }
 
 .inspector-page-split.is-static > .inspector-page-split-top > .global-timing-workspace {
-  padding: var(--space-4) var(--inspector-gutter) var(--space-2);
+  padding: 0;
 }
 
 .global-timing-workspace {

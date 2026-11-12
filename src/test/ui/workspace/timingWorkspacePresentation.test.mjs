@@ -16,8 +16,10 @@ const lineStyles = read("frontend/screens/global/sections/lines/linePanel.less")
 const assetStyles = read("frontend/screens/global/sections/assets/assetLibrary.less");
 const bpmStyles = read("frontend/screens/editor/inspector/bpm/bpm.less");
 const inspectorSource = read("frontend/screens/editor/inspector/InspectorPanel.tsx");
+const inspectorStyles = read("frontend/screens/editor/inspector/inspector.less");
 const inspectorDesignStyles = read("frontend/screens/editor/inspector/inspectorDesign.less");
 const drawerSplitSource = read("frontend/chrome/drawer/DrawerSplit.tsx");
+const pageSplitSource = read("frontend/chrome/inspectorPage/InspectorPageSplit.tsx");
 
 test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(pageSource, /TimingPageLayout layout="compact"/u);
@@ -30,13 +32,13 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(inspectorSource, /className="inspector-panel-surface"/u);
   assert.match(inspectorSource, /className="inspector-panel-content"/u);
   assert.match(drawerSplitSource, /className="inspector-panel-content"/u);
+  assert.match(pageSplitSource, /inspector-panel-content inspector-page-split-top/u);
+  assert.match(pageSplitSource, /inspector-panel-content inspector-page-split-bottom/u);
+  assert.doesNotMatch(linesPageSource, /emptyLineList\s*\?/u);
+  assert.doesNotMatch(assetsViewSource, /compactEmpty/u);
   assert.match(
     inspectorDesignStyles,
-    /\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding:/u,
-  );
-  assert.doesNotMatch(
-    inspectorDesignStyles,
-    /\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content\s*,/u,
+    /\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;[\s\S]*?\.inspector-content\s*>\s*\[data-panel\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding:/u,
   );
   assert.doesNotMatch(pageSource, /TimingMap|timing-map/u);
   assert.doesNotMatch(workspaceSource, /global-timing-columns|data-variant/u);
@@ -65,15 +67,15 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   );
   assert.match(
     timingStyles,
-    /\.inspector-content\s*>\s*\[data-panel="timing"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;/u,
+    /\.inspector\s+\.inspector-content\s*>\s*\[data-panel="timing"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding: 0;/u,
   );
   assert.match(
     lineStyles,
-    /\.inspector \.inspector-content\s*>\s*\[data-panel="lines"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;/u,
+    /\.inspector\s+\.inspector-content\s*>\s*\[data-panel="lines"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding: 0;/u,
   );
   assert.match(
     assetStyles,
-    /\.inspector \.inspector-content\s*>\s*\[data-panel="assets"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface[\s\S]*?padding: 0;/u,
+    /\.inspector\s+\.inspector-content\s*>\s*\[data-panel="assets"\]:not\(\[hidden\]\)\s*>\s*\.inspector-panel-surface\s*>\s*\.inspector-panel-content[\s\S]*?padding: 0;/u,
   );
   assert.match(
     lineStyles,
@@ -85,9 +87,6 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
     /\.global-timing-list-shell[\s\S]*?margin-right: calc\(-1 \* var\(--space-2\)\);/u,
   );
   assert.doesNotMatch(timingStyles, /\.global-timing-list\s*\{[\s\S]*?margin-right:/u);
-  assert.match(
-    timingStyles,
-    /\.inspector-content:has\(> \[data-panel="timing"\]:not\(\[hidden\]\)\)[\s\S]*?scrollbar-gutter: auto;/u,
-  );
+  assert.match(inspectorStyles, /\.inspector-content\s*\{[\s\S]*?scrollbar-gutter: auto;/u);
   assert.doesNotMatch(bpmStyles, /\.bpm-tool\s*\{[\s\S]*?border-top:/u);
 });

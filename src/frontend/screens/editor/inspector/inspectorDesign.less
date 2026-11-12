@@ -31,6 +31,19 @@
 .inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface,
 .inspector-content > .inspector-panel-stack > [data-panel]:not([hidden]) > .inspector-panel-surface,
 .drawer-split-properties > .inspector-panel-surface {
+  padding: 0;
+}
+
+.inspector-content
+  > [data-panel]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content,
+.inspector-content
+  > .inspector-panel-stack
+  > [data-panel]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content,
+.drawer-split-properties > .inspector-panel-surface > .inspector-panel-content {
   padding: var(--space-4) var(--inspector-gutter) var(--inspector-gutter);
 }
 

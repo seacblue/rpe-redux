@@ -632,7 +632,6 @@ export function LinePanelView({
   };
   const stacked = variant === "stacked";
   const split = variant === "split";
-  const emptyLineList = lines.length === 0 && folderGroup === null;
   const showTree = variant !== "properties" && (split || stacked || lineView === "lines");
   const showProperties =
     variant !== "tree" &&
@@ -718,26 +717,18 @@ export function LinePanelView({
         />
       )}
       {split ? (
-        emptyLineList ? (
-          <div className="line-panel-single">{treeFace}</div>
-        ) : (
-          <div className="line-panel-split">
-            <div className="line-panel-split-tree">{treeFace}</div>
-            <div className="line-panel-split-properties">{propertyFace}</div>
-          </div>
-        )
+        <div className="line-panel-split">
+          <div className="line-panel-split-tree">{treeFace}</div>
+          <div className="line-panel-split-properties">{propertyFace}</div>
+        </div>
       ) : stacked ? (
-        emptyLineList ? (
-          <div className="line-panel-single">{treeFace}</div>
-        ) : (
-          <InspectorPageSplit
-            topLabel={t("editorPanels.linePanel.title")}
-            bottomLabel={t("editorPanels.linePanel.properties")}
-            top={treeFace}
-            bottom={propertyFace}
-            resizable={false}
-          />
-        )
+        <InspectorPageSplit
+          topLabel={t("editorPanels.linePanel.title")}
+          bottomLabel={t("editorPanels.linePanel.properties")}
+          top={treeFace}
+          bottom={propertyFace}
+          resizable={false}
+        />
       ) : (
         <>
           {treeFace}
