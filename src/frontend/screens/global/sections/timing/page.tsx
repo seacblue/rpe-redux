@@ -6,7 +6,6 @@
  * workspace adds the full-height list and the BPM band map.
  */
 import { useTranslation } from "../../../../../i18n/react.ts";
-import { formatBeat } from "../../../../../core/global/chart/timing/beat.ts";
 import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import {
   registerWorkspaceMode,
@@ -59,26 +58,10 @@ function TimingInspectorPage() {
 
 /** The expanded workspace: full-height list, properties, and the BPM band map. */
 function TimingStudio() {
-  const { t } = useTranslation();
   const chart = useGlobalChart();
   const entries = chart?.BPMList ?? [];
-  const offset = Number(chart?.META.offset ?? 0);
-  const last = entries.at(-1);
   return (
     <div className="timing-studio">
-      <div className="studio-summary">
-        <strong>{t("chrome.timingStudio.points", { count: entries.length })}</strong>
-        <span className="studio-summary-separator" aria-hidden="true" />
-        <span>
-          {t("chrome.timingStudio.offset", { offset: Number.isFinite(offset) ? offset : 0 })}
-        </span>
-        {last && (
-          <>
-            <span className="studio-summary-separator" aria-hidden="true" />
-            <span>{t("chrome.timingStudio.lastBeat", { beat: formatBeat(last.startTime) })}</span>
-          </>
-        )}
-      </div>
       <div className="studio-body">
         <div className="studio-list-pane">
           <GlobalTimingWorkspace variant="studio" />
