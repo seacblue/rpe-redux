@@ -142,7 +142,6 @@ export default {
   "editorPanels.inspector.form.bpm.offset": "Offset",
   "editorPanels.inspector.form.bpm.offsetCommit": "Adjust chart offset",
   "editorPanels.inspector.form.bpm.time": "Time",
-  "editorPanels.inspector.form.bpm.gap": "Gap",
   "editorPanels.inspector.form.bpm.map": "Timing map",
   "editorPanels.inspector.form.bpm.mapHint": "Click a band to jump to its point",
   "editorPanels.inspector.form.bpm.mapBand": "{beat} · {bpm} BPM",

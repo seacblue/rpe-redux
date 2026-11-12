@@ -206,7 +206,6 @@ export function GlobalTimingWorkspace({
           <div className="global-timing-columns" aria-hidden="true">
             <span>{t("editorPanels.inspector.form.bpm.time")}</span>
             <span>BPM</span>
-            <span>{t("editorPanels.inspector.form.bpm.gap")}</span>
           </div>
         )}
         {entries.length ? (
@@ -219,10 +218,6 @@ export function GlobalTimingWorkspace({
             {...listbox.listProps}
           >
             {entries.map((entry, index) => {
-              const previous = index > 0 ? entries[index - 1] : undefined;
-              const gap = previous
-                ? beatValue(entry.startTime) - beatValue(previous.startTime)
-                : null;
               return (
                 <ListRow
                   key={`${index}:${entry.startTime.join(":")}:${entry.bpm}`}
@@ -243,11 +238,6 @@ export function GlobalTimingWorkspace({
                     {entry.bpm.toFixed(3).replace(/\.?0+$/u, "")}
                     <small>BPM</small>
                   </span>
-                  {variant === "studio" && (
-                    <span className="global-timing-row-gap">
-                      {gap === null ? "—" : `+${gap.toFixed(3).replace(/\.?0+$/u, "")}`}
-                    </span>
-                  )}
                 </ListRow>
               );
             })}
