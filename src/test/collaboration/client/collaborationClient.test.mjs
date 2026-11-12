@@ -56,10 +56,12 @@ function socketHarness() {
 test("create waits for open, sends the snapshot, and accepts the welcome", () => {
   const harness = socketHarness();
   const snapshots = [];
+  const traffic = [];
   const client = new CollaborationClient({
     socketFactory: harness.factory,
     reconnect: false,
     onSnapshot: (snapshot) => snapshots.push(snapshot),
+    onTraffic: (sample) => traffic.push(sample),
   });
   client.connect("http://127.0.0.1:47830");
   client.createRoom(
@@ -97,6 +99,8 @@ test("create waits for open, sends the snapshot, and accepts the welcome", () =>
     data: JSON.stringify({ type: "room-settings", maxMembers: 8 }),
   });
   assert.equal(client.state.get().maxMembers, 8);
+  assert.ok(traffic.some((sample) => sample.direction === "upload" && sample.bytes > 0));
+  assert.ok(traffic.some((sample) => sample.direction === "download" && sample.bytes > 0));
   client.dispose();
 });
 

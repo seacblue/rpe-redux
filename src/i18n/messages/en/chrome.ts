@@ -62,11 +62,12 @@ export default {
   "chrome.performanceHud.rafFps": "RAF FPS",
   "chrome.performanceHud.fpsGraph": "FPS graph",
   "chrome.performanceHud.drawTime": "Draw time",
-  "chrome.performanceHud.frameTime": "Frame time (60)",
   "chrome.performanceHud.memory": "Memory (JS heap)",
-  "chrome.performanceHud.memoryGraph": "Memory graph",
-  "chrome.performanceHud.cpu": "CPU (render load)",
-  "chrome.performanceHud.cpuGraph": "CPU graph",
+  "chrome.performanceHud.cpu": "CPU",
+  "chrome.performanceHud.collaborationTraffic": "Room traffic",
+  "chrome.performanceHud.trafficGraph": "Upload and download traffic graph",
+  "chrome.performanceHud.upload": "Upload",
+  "chrome.performanceHud.download": "Download",
 
   "chrome.sidebar.label": "Workspace navigation",
 
