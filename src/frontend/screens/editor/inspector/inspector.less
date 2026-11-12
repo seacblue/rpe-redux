@@ -128,7 +128,8 @@
 }
 
 // The compact page stays mounted at its original width and right edge while the
-// workspace width moves. It remains hidden until the real width transition ends.
+// workspace width moves. Timing owns a transform-only handoff for its top face;
+// other compact pages remain hidden until the real width transition ends.
 .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
   position: absolute;
   top: 0;
@@ -138,6 +139,48 @@
   z-index: 0;
   pointer-events: none;
   visibility: hidden;
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]),
+.inspector[data-mode-id="timing"][data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden]) {
+  z-index: 2;
+  visibility: visible;
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-bottom,
+.inspector[data-mode-id="timing"][data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-bottom {
+  visibility: hidden;
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="opening"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-top {
+  transform: translateY(-100%);
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="expanded"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-top {
+  transform: translateY(-100%);
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="closing"]
+  .inspector-content[data-mode-surface="true"]
+  > [data-mode-underlay="true"]:not([hidden])
+  .inspector-page-split-top {
+  transform: translateY(0);
 }
 
 // The generic Inspector field inset also matches every visible data panel. A
@@ -171,6 +214,26 @@
   min-height: 0;
 }
 
+.inspector[data-mode-id="timing"][data-mode-phase="opening"] .timing-studio .studio-list-pane {
+  transform: translateX(-100%);
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="expanded"] .timing-studio .studio-list-pane,
+.inspector[data-mode-id="timing"][data-mode-phase="closing"] .timing-studio .studio-list-pane {
+  transform: translateX(0);
+}
+
+.inspector[data-mode-id="timing"] .timing-studio .studio-list-pane,
+.inspector[data-mode-id="timing"] .inspector-page-split-top {
+  transition: transform var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector[data-mode-id="timing"][data-mode-phase="closing"] .inspector-mode-surface {
+  // Keep the expanded copy at its full geometry; the shrinking Inspector clips
+  // its left edge instead of squeezing the list into a third layout.
+  width: calc(100vw - var(--workbench-side-track));
+}
+
 .inspector-content {
   flex: 1;
   min-width: 0;
@@ -180,6 +243,14 @@
   scrollbar-gutter: stable;
   background: transparent;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector[data-mode-id="timing"] .timing-studio .studio-list-pane,
+  .inspector[data-mode-id="timing"] .inspector-page-split-top {
+    transition: none;
+  }
+}
+
 .inspector-empty-placeholder {
   display: grid;
   flex: 1 0 auto;

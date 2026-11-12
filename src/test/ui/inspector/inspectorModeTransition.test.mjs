@@ -11,6 +11,7 @@ const inspectorStyles = read("frontend/screens/editor/inspector/inspector.less")
 test("workspace mode collapse waits for the panel transition before handoff", () => {
   assert.match(inspectorSource, /transitionend/u);
   assert.match(inspectorSource, /transitionDurationMs\(element, "width"\)/u);
+  assert.match(inspectorSource, /requestAnimationFrame\(\(\) => setModePhase\("expanded"\)\)/u);
   assert.doesNotMatch(inspectorSource, /data-mode-handoff|modeHandoff/u);
   assert.doesNotMatch(
     inspectorSource,
@@ -23,5 +24,9 @@ test("workspace mode owns its expanded gutters instead of inheriting field paddi
     inspectorStyles,
     /\.inspector-content > \[data-panel="workspace-mode"\]\.inspector-mode-surface:not\(\[hidden\]\)[\s\S]*?padding: 0;/u,
   );
+  assert.match(inspectorStyles, /translateY\(-100%\)/u);
+  assert.match(inspectorStyles, /translateX\(-100%\)/u);
+  assert.match(inspectorStyles, /width: calc\(100vw - var\(--workbench-side-track\)\);/u);
+  assert.doesNotMatch(inspectorStyles, /opacity var\(--design-dur-exit\)/u);
   assert.doesNotMatch(inspectorStyles, /data-mode-handoff/u);
 });
