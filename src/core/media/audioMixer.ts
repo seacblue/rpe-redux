@@ -4,7 +4,8 @@
  * this module; individual screens never need to know which player is active.
  */
 import "../settings/features/audio.ts";
-import { values } from "../state/values.ts";
+import { PREFERENCE_SECTIONS } from "../state/preferences.ts";
+import { defineValue, values, type ValueHandle } from "../state/values.ts";
 import { clamp01 } from "../utils/numbers.ts";
 
 /** The volume meters exposed by the osu!lazer-style overlay. */
@@ -28,17 +29,29 @@ export interface AudioMixerSnapshot {
   readonly values: Readonly<Record<AudioVolumeMeter, number>>;
 }
 
-const SETTING_IDS: Record<AudioVolumeMeter, string> = {
-  master: "master-volume",
-  music: "volume",
-  effect: "effect-volume",
-  hitsound: "hitsound-volume",
-};
 const DEFAULTS: Record<AudioVolumeMeter, number> = {
   master: 1,
   music: 0.75,
   effect: 1,
   hitsound: 1,
+};
+type PersistedBus = Exclude<AudioVolumeMeter, "music">;
+const PERSISTED_BUS_VALUES: Record<PersistedBus, ValueHandle<number>> = {
+  master: defineValue({
+    id: "audio.mixer.master",
+    initial: DEFAULTS.master,
+    persist: PREFERENCE_SECTIONS.values,
+  }),
+  effect: defineValue({
+    id: "audio.mixer.effect",
+    initial: DEFAULTS.effect,
+    persist: PREFERENCE_SECTIONS.values,
+  }),
+  hitsound: defineValue({
+    id: "audio.mixer.hitsound",
+    initial: DEFAULTS.hitsound,
+    persist: PREFERENCE_SECTIONS.values,
+  }),
 };
 const METER_STEP = 0.05;
 const PRECISE_METER_STEP = 0.01;
@@ -56,11 +69,11 @@ class AudioMixController {
   private cachedSnapshot: AudioMixerSnapshot | null = null;
 
   constructor() {
-    for (const meter of AUDIO_VOLUME_METERS) {
-      const id = SETTING_IDS[meter];
-      if (values.byId.has(id)) {
-        this.settingDisposers.push(values.byId.subscribe(id, () => this.refreshOwners()));
-      }
+    if (values.byId.has("volume")) {
+      this.settingDisposers.push(values.byId.subscribe("volume", () => this.refreshOwners()));
+    }
+    for (const value of Object.values(PERSISTED_BUS_VALUES)) {
+      this.settingDisposers.push(value.subscribe(() => this.refreshOwners()));
     }
   }
 
@@ -133,11 +146,11 @@ class AudioMixController {
   /** Set a meter from a pointer position in the overlay. */
   set(meter: AudioVolumeMeter, value: number): void {
     const next = clamp01(Number.isFinite(value) ? value : 0);
-    const id = SETTING_IDS[meter];
-    if (!values.byId.has(id)) {
-      return;
+    if (meter === "music") {
+      values.byId.set("volume", String(next));
+    } else {
+      PERSISTED_BUS_VALUES[meter].set(next);
     }
-    values.byId.set(id, String(next));
     if (meter === "master" && next > 0) {
       this.lastUnmutedMaster = next;
     }
@@ -174,8 +187,10 @@ class AudioMixController {
   }
 
   private read(meter: AudioVolumeMeter): number {
-    const id = SETTING_IDS[meter];
-    const value = values.byId.has(id) ? Number(values.byId.get<unknown>(id)) : DEFAULTS[meter];
+    const value =
+      meter === "music"
+        ? Number(values.byId.get<unknown>("volume"))
+        : PERSISTED_BUS_VALUES[meter].get();
     return clamp01(Number.isFinite(value) ? value : DEFAULTS[meter]);
   }
 

@@ -492,9 +492,6 @@ export default {
 
   // ----------------------------------------------------------- audio (3 rows)
   "settings.field.volume.label": "Music volume",
-  "settings.field.master-volume.label": "Master volume",
-  "settings.field.effect-volume.label": "Effect volume",
-  "settings.field.hitsound-volume.label": "Hit-sound bus volume",
   "settings.field.background-volume.label": "Background volume",
   "settings.field.background-volume.description":
     "Volume relative to the current level while the window is in the background.",

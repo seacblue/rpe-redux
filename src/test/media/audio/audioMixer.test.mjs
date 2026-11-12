@@ -5,10 +5,11 @@ import "../../../core/settings/features/audio.ts";
 import { audioMixer } from "../../../core/media/audioMixer.ts";
 import { values } from "../../../core/state/values.ts";
 
-const METER_IDS = ["master-volume", "volume", "effect-volume", "hitsound-volume"];
+const METER_IDS = ["volume"];
 
 test("audio mixer applies persisted buses to owners and keeps snapshots stable", () => {
   const previous = new Map(METER_IDS.map((id) => [id, values.byId.get(id)]));
+  const previousMaster = audioMixer.snapshot().values.master;
   const applied = [];
   const remove = audioMixer.registerOwner({
     setMasterVolume: (value) => applied.push(["master", value]),
@@ -19,7 +20,7 @@ test("audio mixer applies persisted buses to owners and keeps snapshots stable",
   try {
     const first = audioMixer.snapshot();
     assert.equal(first, audioMixer.snapshot());
-    values.byId.set("master-volume", "0.4");
+    audioMixer.set("master", 0.4);
     assert.equal(applied.at(-1)?.[0], "hitsound");
     assert.equal(applied.filter(([meter]) => meter === "master").at(-1)?.[1], 0.4);
     assert.equal(audioMixer.snapshot().values.master, 0.4);
@@ -28,20 +29,21 @@ test("audio mixer applies persisted buses to owners and keeps snapshots stable",
     for (const [id, value] of previous) {
       values.byId.set(id, value);
     }
+    audioMixer.set("master", previousMaster);
   }
 });
 
 test("audio mixer reveals before the first adjustment and toggles master mute", () => {
-  const previous = values.byId.get("master-volume");
+  const previous = audioMixer.snapshot().values.master;
   try {
-    values.byId.set("master-volume", "0.8");
+    audioMixer.set("master", 0.8);
     audioMixer.show();
     audioMixer.toggleMute();
     assert.equal(audioMixer.snapshot().muted, true);
     audioMixer.toggleMute();
     assert.equal(audioMixer.snapshot().values.master, 0.8);
   } finally {
-    values.byId.set("master-volume", previous);
+    audioMixer.set("master", previous);
   }
 });
 

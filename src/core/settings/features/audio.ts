@@ -1,5 +1,5 @@
 /**
- * The audio settings category: master volume, per-hitsound levels and offsets,
+ * The audio settings category: music volume, per-hitsound levels and offsets,
  * waveform analysis, and speed/pitch policy.
  *
  * Every row answers the same question — what will the user hear? — so the root
@@ -31,39 +31,6 @@ const AudioSettingsSchema: SettingDefinition[] = [
     label: "settings.field.volume.label",
     control: "range",
     default: 0.75,
-    min: 0,
-    max: 1,
-    step: 0.01,
-  },
-  {
-    key: "master-volume",
-    navigation: "playback",
-    group: "settings.group.volume",
-    label: "settings.field.master-volume.label",
-    control: "range",
-    default: 1,
-    min: 0,
-    max: 1,
-    step: 0.01,
-  },
-  {
-    key: "effect-volume",
-    navigation: "playback",
-    group: "settings.group.volume",
-    label: "settings.field.effect-volume.label",
-    control: "range",
-    default: 1,
-    min: 0,
-    max: 1,
-    step: 0.01,
-  },
-  {
-    key: "hitsound-volume",
-    navigation: "playback",
-    group: "settings.group.volume",
-    label: "settings.field.hitsound-volume.label",
-    control: "range",
-    default: 1,
     min: 0,
     max: 1,
     step: 0.01,
