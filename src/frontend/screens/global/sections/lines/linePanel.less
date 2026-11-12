@@ -125,6 +125,13 @@
   color: var(--foreground);
 }
 
+.inspector-content
+  > [data-panel="lines"]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content {
+  padding: 0;
+}
+
 // Expanded workspace: the tree and the property form are two persistent columns,
 // so a bulk selection stays visible while its shared fields are edited.
 .line-panel-split {
@@ -191,10 +198,19 @@
 .line-panel[data-variant="stacked"] .inspector-page-split-top > .line-tree {
   height: auto;
   max-height: none;
+  padding: var(--space-4) var(--inspector-gutter) var(--space-2);
+}
+
+.line-panel[data-variant="stacked"] .inspector-page-split-top {
+  padding: 0;
+}
+
+.line-panel[data-variant="stacked"] .inspector-page-split-top > .line-tree-footer {
+  margin-inline: var(--inspector-gutter);
 }
 
 .line-panel[data-variant="stacked"] .inspector-page-split-bottom {
-  padding-right: var(--space-3);
+  padding: var(--space-2) var(--inspector-gutter) var(--inspector-gutter);
 }
 
 // The drawer gives the tree its own column, so the panel fills that column and

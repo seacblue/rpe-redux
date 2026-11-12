@@ -21,7 +21,9 @@ export function DrawerSplit({ list, properties }: { list: ReactNode; properties:
     <div className="drawer-split">
       <div className="drawer-split-list">{list}</div>
       <div className="drawer-split-properties">
-        <div className="inspector-panel-surface">{properties}</div>
+        <div className="inspector-panel-surface">
+          <div className="inspector-panel-content">{properties}</div>
+        </div>
       </div>
     </div>
   );

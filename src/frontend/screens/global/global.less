@@ -220,6 +220,25 @@
   }
 }
 
+.inspector-page-split.is-static .inspector-page-split-seam {
+  min-height: var(--space-3);
+  cursor: default;
+  pointer-events: none;
+}
+
+.inspector-page-split.is-static .inspector-page-split-seam::before {
+  width: 100%;
+}
+
+.inspector-page-split.is-static .inspector-page-split-grip {
+  display: none;
+}
+
+.inspector-page-split.is-static > .inspector-page-split-top,
+.inspector-page-split.is-static > .inspector-page-split-bottom {
+  scrollbar-gutter: auto;
+}
+
 .inspector-page-split-grip {
   position: absolute;
   top: 50%;

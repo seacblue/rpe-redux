@@ -423,7 +423,9 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
                 hidden={activeDrawerPane !== null || !isActivePanel}
               >
                 <div className="inspector-panel-surface">
-                  <Panel />
+                  <div className="inspector-panel-content">
+                    <Panel />
+                  </div>
                 </div>
               </div>
             );

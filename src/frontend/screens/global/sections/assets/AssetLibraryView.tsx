@@ -522,6 +522,7 @@ export function AssetLibraryView({
             bottomLabel={t("editorPanels.assetLibrary.details")}
             top={treeFace}
             bottom={detailsFace}
+            resizable={false}
           />
         )
       ) : (

@@ -745,6 +745,7 @@ export function LinePanelView({
             bottomLabel={t("editorPanels.linePanel.properties")}
             top={treeFace}
             bottom={propertyFace}
+            resizable={false}
           />
         )
       ) : (

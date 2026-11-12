@@ -28,10 +28,25 @@
   --field-rows-gap: var(--space-1-5);
 }
 
-.inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface,
-.inspector-content > .inspector-panel-stack > [data-panel]:not([hidden]) > .inspector-panel-surface,
-.drawer-split-properties > .inspector-panel-surface {
+.inspector-content
+  > [data-panel]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content,
+.inspector-content
+  > .inspector-panel-stack
+  > [data-panel]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content,
+.drawer-split-properties > .inspector-panel-surface > .inspector-panel-content {
   padding: var(--space-4) var(--inspector-gutter) var(--inspector-gutter);
+}
+
+.inspector-panel-content {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 // Body-level metadata left over from a pane title, such as a count or a trash
@@ -114,7 +129,11 @@
 }
 
 .inspector-content > [data-panel]:not([hidden]),
-.inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface {
+.inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface,
+.inspector-content
+  > [data-panel]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content {
   display: flex;
   flex-direction: column;
   flex: 1 0 auto;

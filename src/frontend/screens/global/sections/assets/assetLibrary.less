@@ -13,6 +13,13 @@
   width: 100%;
 }
 
+.inspector-content
+  > [data-panel="assets"]:not([hidden])
+  > .inspector-panel-surface
+  > .inspector-panel-content {
+  padding: 0;
+}
+
 // Expanded workspace: folder tree and a large preview/details face. The tree
 // keeps its pinned import footer while the details column scrolls on its own.
 .asset-library-split {
@@ -46,6 +53,22 @@
 // one. The split itself owns scrolling; these rules only keep both faces usable.
 .inspector-page-split-top > .asset-tree-shell {
   height: 100%;
+}
+
+.inspector-page-split.is-static > .inspector-page-split-top {
+  padding: 0;
+}
+
+.inspector-page-split.is-static > .inspector-page-split-top > .asset-tree-shell {
+  padding: var(--space-4) var(--inspector-gutter) var(--space-2);
+}
+
+.inspector-page-split.is-static > .inspector-page-split-bottom {
+  padding: var(--space-2) var(--inspector-gutter) var(--inspector-gutter);
+}
+
+.inspector-page-split.is-static > .inspector-page-split-bottom .asset-details {
+  margin: 0;
 }
 
 .asset-drop-overlay {
