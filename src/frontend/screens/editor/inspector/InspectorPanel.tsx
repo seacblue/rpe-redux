@@ -422,7 +422,9 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
                 aria-disabled={locked || undefined}
                 hidden={activeDrawerPane !== null || !isActivePanel}
               >
-                <Panel />
+                <div className="inspector-panel-surface">
+                  <Panel />
+                </div>
               </div>
             );
           })}

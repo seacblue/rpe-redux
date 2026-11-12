@@ -10,10 +10,21 @@ const workspaceSource = read("frontend/screens/global/sections/timing/GlobalTimi
 const styles = read("frontend/screens/global/global.less");
 const timingStyles = read("frontend/screens/global/sections/timing/timing.less");
 const bpmStyles = read("frontend/screens/editor/inspector/bpm/bpm.less");
+const inspectorSource = read("frontend/screens/editor/inspector/InspectorPanel.tsx");
+const inspectorDesignStyles = read("frontend/screens/editor/inspector/inspectorDesign.less");
 
 test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(pageSource, /InspectorPageSplit/u);
   assert.match(pageSource, /resizable=\{false\}/u);
+  assert.match(inspectorSource, /className="inspector-panel-surface"/u);
+  assert.match(
+    inspectorDesignStyles,
+    /\.inspector-content > \[data-panel\]:not\(\[hidden\]\) > \.inspector-panel-surface[\s\S]*?padding:/u,
+  );
+  assert.doesNotMatch(
+    inspectorDesignStyles,
+    /\.inspector-content > \[data-panel\]:not\(\[hidden\]\),\s*\.inspector-content > \.inspector-panel-stack/u,
+  );
   assert.doesNotMatch(
     pageSource,
     /TimingPageLayout|TimingStudio|registerWorkspaceMode|workspaceMode:/u,
@@ -34,6 +45,18 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.match(
     timingStyles,
     /\.inspector-page-split\.is-static > \.inspector-page-split-top[\s\S]*?scrollbar-gutter: auto;/u,
+  );
+  assert.match(
+    timingStyles,
+    /\.inspector-page-split\.is-static > \.inspector-page-split-top[\s\S]*?padding: 0;/u,
+  );
+  assert.match(
+    timingStyles,
+    /\.inspector-page-split\.is-static > \.inspector-page-split-bottom[\s\S]*?padding:/u,
+  );
+  assert.match(
+    timingStyles,
+    /\.inspector-content > \[data-panel="timing"\]:not\(\[hidden\]\) > \.inspector-panel-surface[\s\S]*?padding: 0;/u,
   );
   assert.match(
     timingStyles,

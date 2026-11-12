@@ -28,8 +28,8 @@
   --field-rows-gap: var(--space-1-5);
 }
 
-.inspector-content > [data-panel]:not([hidden]),
-.inspector-content > .inspector-panel-stack > [data-panel]:not([hidden]),
+.inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface,
+.inspector-content > .inspector-panel-stack > [data-panel]:not([hidden]) > .inspector-panel-surface,
 .drawer-split-properties > .inspector-panel-surface {
   padding: var(--space-4) var(--inspector-gutter) var(--inspector-gutter);
 }
@@ -113,10 +113,13 @@
   display: contents;
 }
 
-.inspector-content > [data-panel]:not([hidden]) {
+.inspector-content > [data-panel]:not([hidden]),
+.inspector-content > [data-panel]:not([hidden]) > .inspector-panel-surface {
   display: flex;
   flex-direction: column;
   flex: 1 0 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .drawer-split-properties > .inspector-panel-surface {
