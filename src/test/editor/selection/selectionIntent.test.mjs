@@ -10,6 +10,7 @@ import {
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import { restoreSelection } from "../../../core/edit/session/selectionHistory.ts";
 import { timelineNoteCandidates } from "../../../core/edit/timeline/hitTest.ts";
+import { createSessionSelection } from "../../../frontend/screens/editor/workspace/runtime/bridge/sessionSelection.ts";
 import { resolveSelectionPane } from "../../../frontend/screens/editor/workspace/runtime/bridge/selectionPaneRouting.ts";
 import { previewNoteContains } from "../../../frontend/screens/editor/workspace/preview/interaction/previewHitGeometry.ts";
 
@@ -108,6 +109,62 @@ test("re-selecting the active line keeps the note and event selection", () => {
   session.selectLine(1);
   assert.equal(session.selection.size, 0);
   assert.equal(session.eventSelection.size, 0);
+});
+
+test("judge-line navigation keeps the lines inspector open after clearing object selection", () => {
+  const chart = createChart();
+  chart.judgeLineList.push(createLine("Line 2"));
+  const session = new EditorSession(chart);
+  session.selectLine(1);
+
+  assert.deepEqual(
+    resolveSelectionPane(session, 0, { ...paneState, activePane: "lines", lineChanged: true })
+      .action,
+    { kind: "none" },
+  );
+});
+
+test("line navigation does not close the active object inspector", () => {
+  const chart = createChart();
+  chart.judgeLineList.push(createLine("Line 2"));
+  const session = new EditorSession(chart);
+  session.selectLine(1);
+
+  assert.deepEqual(
+    resolveSelectionPane(session, 0, {
+      ...paneState,
+      activePane: "notes",
+      lineChanged: true,
+    }).action,
+    { kind: "none" },
+  );
+});
+
+test("session routing identifies line navigation without a page-specific exception", () => {
+  const chart = createChart();
+  chart.judgeLineList.push(createLine("Line 2"));
+  const session = new EditorSession(chart);
+  const actions = [];
+  const effects = {
+    syncMulti: () => undefined,
+    activatePane: () => actions.push("activate"),
+    openMulti: () => undefined,
+    deactivateCurve: () => undefined,
+    openTrajectory: () => undefined,
+    closePane: () => actions.push("close"),
+  };
+  const routing = createSessionSelection({
+    layer: () => 0,
+    state: () => ({ multiEditCommitting: false, trajectoryActive: false, curveEditorOpen: false }),
+    effects,
+  });
+
+  routing.route(session, "lines");
+  assert.deepEqual(actions, []);
+  actions.length = 0;
+  session.selectLine(1);
+  routing.route(session, "notes");
+  assert.deepEqual(actions, []);
 });
 
 test("pointer selections replace the curve inspector just like any other pane", () => {
