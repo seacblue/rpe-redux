@@ -113,6 +113,12 @@
   transition: width var(--design-dur-enter) var(--design-ease-move);
 }
 
+// The compact inspector is a bounded side surface. Keep its frame visible
+// even when a chrome material removes the generic panel border.
+.redux-app-root .workbench-inspector > .inspector:not([data-mode-surface="true"]) {
+  border: 1px solid var(--edge-divider);
+}
+
 // A document task expands the inspector itself. The wrapper stays in its grid
 // track and the panel is pinned to the same edge, growing across the workspace.
 // The workspace never resizes behind it.

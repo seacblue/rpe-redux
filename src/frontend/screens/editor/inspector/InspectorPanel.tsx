@@ -128,28 +128,21 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     activeWorkspaceMode,
   );
   const [modeExpanded, setModeExpanded] = useState(activeWorkspaceMode !== null);
-  const [modeLeaving, setModeLeaving] = useState(false);
-  // Keep the task mounted through the collapse transition, then hand the body
-  // back to the compact page. The task enters with its own keyframe animation so
-  // the first paint is already the transparent start state; collapsing swaps
-  // that animation for an exit keyframe and clears the task after the panel has
-  // shrunk and the compact page has returned.
+  // Keep the task mounted through the panel-width transition, then hand the
+  // body back to the compact page without crossfading the two pages.
   useEffect(() => {
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
         setDisplayedMode(activeWorkspaceMode);
         setModeExpanded(true);
-        setModeLeaving(false);
       }, 0);
       return () => window.clearTimeout(openTimer);
     }
     const collapseTimer = window.setTimeout(() => {
       setModeExpanded(false);
-      setModeLeaving(true);
     }, 0);
     const clearTimer = window.setTimeout(() => {
       setDisplayedMode(null);
-      setModeLeaving(false);
     }, 280);
     return () => {
       window.clearTimeout(collapseTimer);
@@ -338,11 +331,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           )}
         </div>
         {modeSurface && DisplayedMode && (
-          <div
-            data-panel="workspace-mode"
-            className="inspector-mode-surface"
-            data-mode-leaving={modeLeaving ? "true" : undefined}
-          >
+          <div data-panel="workspace-mode" className="inspector-mode-surface">
             <DisplayedMode />
           </div>
         )}
