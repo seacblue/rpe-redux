@@ -16,7 +16,6 @@ import {
   type NoteVisibilityEntry,
   type VisibilityDirectoryQueryStats,
 } from "./noteVisibility.ts";
-import { lowerBound } from "../../../utils/search.ts";
 import { easing } from "../../../utils/easing.ts";
 import {
   channelInteger,
@@ -29,6 +28,7 @@ import { CONTROL_TRACKS, type ControlTrackProperty } from "../chartTracks.ts";
 import { trajectoryHasRotation } from "../trajectory/curveTrajectory.ts";
 import { beatValue, isOrderedBeatRange } from "../timing/beat.ts";
 import { isPlaceholderLine } from "../streaming/chartDocument.ts";
+import { noteAlpha } from "../optionalFeatures.ts";
 import type { JudgeLine, JudgeLineEvent, LineEventValue } from "../chart.ts";
 import type { ControlPoint } from "../chart.ts";
 import type { Chart } from "../chart.ts";
@@ -64,6 +64,8 @@ function colorsEqual(left: readonly number[], right: readonly number[]): boolean
 export class ControlCurve {
   declare property: ControlProperty;
   declare points: ControlCurvePoint[];
+  private readonly positions: number[];
+  private readonly amplitudes: number[];
 
   /** Sort control points by distance so evaluation always runs low to high. */
   constructor(points: ControlCurvePoint[] | undefined, property: ControlProperty) {
@@ -71,33 +73,45 @@ export class ControlCurve {
     // RPE charts are serialized in either direction depending on the exporter.
     // Evaluation is always from the smaller distance to the larger one.
     this.points = [...(points ?? [])].sort((left, right) => (left.x ?? 0) - (right.x ?? 0));
+    this.positions = this.points.map((point) => point.x ?? 0);
+    this.amplitudes = this.points.map((point) => point[property] as number);
   }
   /** Interpolate the controlled property at `distance`, clamped to the endpoint values. */
   value(distance: number): number {
-    const points = this.points,
-      key = this.property;
+    const points = this.points;
+    const positions = this.positions;
+    const amplitudes = this.amplitudes;
     if (points.length <= 1) {
-      return points.length ? (points[0][key] as number) : 1;
+      return points.length ? amplitudes[0] : 1;
     }
-    const amplitude = (point: ControlCurvePoint | undefined): number => point?.[key] as number;
-    const position = (point: ControlCurvePoint): number => point.x ?? 0;
-    if (points.length === 2 && points[0][key] === points[1][key]) {
-      return amplitude(points[0]);
+    if (points.length === 2 && amplitudes[0] === amplitudes[1]) {
+      return amplitudes[0];
     }
-    const low = lowerBound(points, distance, position);
+    // Keep the binary search allocation-free: this method is sampled once per
+    // controlled note property and frame during preview playback.
+    let low = 0;
+    let high = positions.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (positions[middle] < distance) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
     if (!low) {
-      return amplitude(points[0]);
+      return amplitudes[0];
     }
     if (low === points.length) {
-      return amplitude(points[points.length - 1]);
+      return amplitudes[amplitudes.length - 1];
     }
-    const start = points[low - 1];
-    const end = points[low];
-    const span = position(end) - position(start);
+    const startPosition = positions[low - 1];
+    const endPosition = positions[low];
+    const span = endPosition - startPosition;
     return (
-      amplitude(start) +
-      (amplitude(end) - amplitude(start)) *
-        (span ? easing((distance - position(start)) / span, end.easing ?? 1) : 1)
+      amplitudes[low - 1] +
+      (amplitudes[low] - amplitudes[low - 1]) *
+        (span ? easing((distance - startPosition) / span, points[low].easing ?? 1) : 1)
     );
   }
 }
@@ -126,6 +140,22 @@ export interface NoteState {
   alpha: number;
   skew: number;
   showHead: boolean;
+}
+
+/** Create a mutable line-state target for repeated Hold anchoring samples. */
+function createLineStateScratch(): LineState {
+  return {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    alpha: 0,
+    scaleX: 1,
+    scaleY: 1,
+    color: [255, 255, 255],
+    text: "",
+    incline: 0,
+    floor: 0,
+  };
 }
 
 /** Per-line visibility work measured for the most recent query. */
@@ -251,31 +281,10 @@ export class LineRuntime {
   declare simpleState: boolean;
   declare staticScaleY: number;
   declare staticColor: number[];
-  /** Scratch line states used to anchor an active Hold's tail to its start time. */
-  private readonly holdStartState: LineState = {
-    x: 0,
-    y: 0,
-    rotation: 0,
-    alpha: 0,
-    scaleX: 1,
-    scaleY: 1,
-    color: [255, 255, 255],
-    text: "",
-    incline: 0,
-    floor: 0,
-  };
-  private readonly holdNowState: LineState = {
-    x: 0,
-    y: 0,
-    rotation: 0,
-    alpha: 0,
-    scaleX: 1,
-    scaleY: 1,
-    color: [255, 255, 255],
-    text: "",
-    incline: 0,
-    floor: 0,
-  };
+  /** Cached line states used to anchor active zero-length Holds. */
+  private readonly holdStartStates = new WeakMap<NoteEntry, LineState>();
+  private readonly holdNowState = createLineStateScratch();
+  private holdNowSeconds = Number.NaN;
 
   /** Compile the line's layers, controls and note indexes for sampling. */
   constructor(
@@ -546,8 +555,14 @@ export class LineRuntime {
     type: "moveXEvents" | "moveYEvents" | "rotateEvents" | "alphaEvents",
     seconds: number,
   ): number {
-    let result = 0;
     const tracks = this.tracks[type];
+    if (!tracks.length) {
+      return 0;
+    }
+    if (tracks.length === 1) {
+      return Number(tracks[0].value(seconds));
+    }
+    let result = 0;
     for (const track of tracks) {
       result += Number(track.value(seconds));
     }
@@ -711,6 +726,27 @@ export class LineRuntime {
     return 1 / Math.abs(speed);
   }
 
+  /** Sample the current line state once for all zero-length Holds in a frame. */
+  private sampleHoldNow(seconds: number): LineState {
+    if (this.holdNowSeconds !== seconds) {
+      this.state(seconds, this.holdNowState);
+      this.holdNowSeconds = seconds;
+    }
+    return this.holdNowState;
+  }
+
+  /** Sample a zero-length Hold's fixed start state once for its runtime entry. */
+  private sampleHoldStart(entry: NoteEntry): LineState {
+    const cached = this.holdStartStates.get(entry);
+    if (cached) {
+      return cached;
+    }
+    const sampled = createLineStateScratch();
+    this.state(entry.start, sampled);
+    this.holdStartStates.set(entry, sampled);
+    return sampled;
+  }
+
   /** Sample one note's local position and visuals relative to the line state. */
   noteState(entry: NoteEntry, state: LineState, seconds: number, result?: NoteState): NoteState {
     const note = entry.note;
@@ -739,8 +775,8 @@ export class LineRuntime {
     target.y = vertical;
     target.tail = (entry.tail - state.floor) * speed * side;
     if (activeHold && entry.tail === entry.floor) {
-      const localNow = this.state(seconds, this.holdNowState);
-      const localStart = this.state(entry.start, this.holdStartState);
+      const localNow = this.sampleHoldNow(seconds);
+      const localStart = this.sampleHoldStart(entry);
       const radians = (state.rotation * Math.PI) / 180;
       // RPE Recorder anchors a zero-length Hold's tail to the line position
       // from the Hold's start time. The body therefore spans the line's local
@@ -752,8 +788,7 @@ export class LineRuntime {
     target.size =
       (note.size ?? 1) * (isHold || !this.hasSizeControl ? 1 : this.controls.size.value(distance));
     target.alpha =
-      ((note.alpha ?? 255) / 255) *
-      (this.hasAlphaControl ? this.controls.alpha.value(distance) : 1);
+      noteAlpha(note) * (this.hasAlphaControl ? this.controls.alpha.value(distance) : 1);
     target.skew =
       isHold || !this.hasSkewControl ? 0 : positionX * this.controls.skew.value(distance);
     // Match the gameplay renderer: the head disappears once the Hold arrives.

@@ -89,6 +89,8 @@ export interface MoveDrag extends DragCommon {
 
 export interface PanDrag extends DragCommon {
   kind: "multi-pan";
+  /** Plain press that pans: a release without movement clears the selection. */
+  clearOnClick?: boolean;
 }
 
 export interface RectangleDrag extends DragCommon {

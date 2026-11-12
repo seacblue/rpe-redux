@@ -12,6 +12,7 @@ import {
   type JudgeLineEvent,
   type JudgeLineNote,
 } from "./chart.ts";
+import { clamp01 } from "../../utils/numbers.ts";
 
 /** A parent relation is an actual editable relation, not the default `-1`. */
 export function lineHasParent(line: JudgeLine | undefined): boolean {
@@ -75,6 +76,11 @@ export function noteHasCustomSize(note: JudgeLineNote | undefined): boolean {
 /** True when the note's alpha differs from the opaque default of 255. */
 export function noteHasCustomAlpha(note: JudgeLineNote | undefined): boolean {
   return Number(note?.alpha ?? 255) !== 255;
+}
+
+/** Return the authored note alpha normalized for every visual renderer. */
+export function noteAlpha(note: JudgeLineNote | undefined): number {
+  return clamp01(Number(note?.alpha ?? 255) / 255);
 }
 
 /** True when the note carries a non-zero vertical offset. */

@@ -5,14 +5,10 @@
  * optional. Real event targets, elements, and hand-written test doubles can all
  * be passed in.
  */
-import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
-import type { ShortcutEventLike } from "../../../core/shortcuts/types.ts";
-
 export interface ShortcutTarget {
   isContentEditable?: boolean;
   type?: string;
   closest?: (selector: string) => ShortcutTarget | null;
-  getAttribute?: (name: string) => string | null;
   blur?: () => void;
 }
 
@@ -65,27 +61,6 @@ export function isShortcutBlockingSurface(target: ShortcutTarget | null | undefi
     return true;
   }
   return Boolean(target?.closest?.('[role="listbox"]:not([data-inline-shortcut-surface])'));
-}
-
-/**
- * Whether a focused control declares this bare key as its own.
- *
- * A local owner draws and handles the key itself, so the global dispatcher must
- * let the event reach its React handler instead of running the workspace
- * command. Modified chords stay global: Ctrl+Space remains the editor's
- * preview-only command even while a media control has focus.
- */
-export function claimsLocalShortcut(
-  target: ShortcutTarget | null | undefined,
-  event: ShortcutEventLike,
-): boolean {
-  if (!event.key || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
-    return false;
-  }
-  const owner = target?.closest?.("[data-local-shortcut]");
-  const declared = owner?.getAttribute?.("data-local-shortcut") ?? "";
-  const key = normalizeShortcutKey(event.key);
-  return declared.split(/\s+/).includes(key);
 }
 
 /** Drops focus from buttons and selects so a shortcut does not re-trigger them. */

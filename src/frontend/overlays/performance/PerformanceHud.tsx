@@ -35,6 +35,7 @@ import {
   subscribePerformanceHudVisibility,
   setPerformanceHudSnapEdges,
   type PerformanceHudPosition,
+  type PerformanceHudSnapshot,
 } from "./performanceHud.ts";
 
 /** Keeps the HUD fully inside the given viewport bounds. */
@@ -50,6 +51,80 @@ function clampPosition(
     x: Math.min(Math.max(0, position.x), Math.max(0, width - panelWidth)),
     y: Math.min(Math.max(0, position.y), Math.max(0, height - panelHeight)),
   };
+}
+
+/** Converts one rolling traffic series into SVG polyline coordinates. */
+function trafficPoints(samples: readonly number[], maximum: number): string {
+  const values = samples.length > 0 ? samples : [0];
+  const width = 240;
+  const height = 72;
+  return values
+    .map((value, index) => {
+      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+      const y = height - (Math.max(0, value) / maximum) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+/** Formats a traffic rate using the same binary units as the byte counters. */
+function formatTrafficRate(kilobytesPerSecond: number): string {
+  if (kilobytesPerSecond >= 1024) {
+    return `${(kilobytesPerSecond / 1024).toFixed(1)} MiB/s`;
+  }
+  return `${kilobytesPerSecond.toFixed(1)} KiB/s`;
+}
+
+/** Draws the upload/download traffic history while a collaboration room is active. */
+function CollaborationTrafficGraph({ snapshot }: { snapshot: PerformanceHudSnapshot }) {
+  const { t } = useTranslation();
+  const maximum = Math.max(
+    1,
+    ...snapshot.collaborationUploadSamples,
+    ...snapshot.collaborationDownloadSamples,
+  );
+  return (
+    <section
+      className="redux-performance-hud-traffic"
+      data-testid="performance-hud-collaboration-traffic"
+      aria-label={t("chrome.performanceHud.collaborationTraffic")}
+    >
+      <div className="redux-performance-hud-traffic-heading">
+        <span className="redux-performance-hud-label">
+          {t("chrome.performanceHud.collaborationTraffic")}
+        </span>
+      </div>
+      <svg
+        className="redux-performance-hud-traffic-chart"
+        viewBox="0 0 240 72"
+        role="img"
+        aria-label={t("chrome.performanceHud.trafficGraph")}
+        preserveAspectRatio="none"
+      >
+        <line className="redux-performance-hud-traffic-grid" x1="0" y1="71" x2="240" y2="71" />
+        <polyline
+          className="redux-performance-hud-traffic-line is-upload"
+          points={trafficPoints(snapshot.collaborationUploadSamples, maximum)}
+        />
+        <polyline
+          className="redux-performance-hud-traffic-line is-download"
+          points={trafficPoints(snapshot.collaborationDownloadSamples, maximum)}
+        />
+      </svg>
+      <div className="redux-performance-hud-traffic-legend">
+        <span className="redux-performance-hud-traffic-key is-upload">
+          <i aria-hidden="true" />
+          <span>{t("chrome.performanceHud.upload")}</span>
+          <strong>{formatTrafficRate(snapshot.collaborationUploadKbps)}</strong>
+        </span>
+        <span className="redux-performance-hud-traffic-key is-download">
+          <i aria-hidden="true" />
+          <span>{t("chrome.performanceHud.download")}</span>
+          <strong>{formatTrafficRate(snapshot.collaborationDownloadKbps)}</strong>
+        </span>
+      </div>
+    </section>
+  );
 }
 
 /** Floating performance monitor with drag, snap edges, and torn-off window hand-off. */
@@ -393,6 +468,9 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
                 )}
               </div>
             ))}
+            {snapshot.collaborationTrafficActive && (
+              <CollaborationTrafficGraph snapshot={snapshot} />
+            )}
           </div>
         </div>
       </aside>

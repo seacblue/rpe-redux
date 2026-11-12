@@ -1,6 +1,6 @@
 # Chart compatibility and resources
 
-RPE Redux reads and writes RPE charts and PEZ packages, and imports/exports Phigros official JSON and PhiEdit PEC charts through a conversion layer. Native RPE/PEZ remains the lossless working format; external formats keep the playable chart and report the editor-only features they cannot carry.
+RPE Redux reads and writes RPE charts and PEZ packages, and imports/exports Phigros official JSON and PhiEdit PEC charts through a conversion layer. Native RPE/PEZ remains the lossless working format; external formats keep the playable chart and report the editor-only features they cannot carry. Export writes use the model-to-RPE intermediate pipeline in [`exportPipeline.ts`](../src/core/global/document/exportPipeline.ts), so a future editor-oriented model can add an adapter without changing the target container writers.
 
 ## Contents
 
@@ -33,6 +33,7 @@ Speed events integrate the eased speed value. Events are sorted by time before i
 - An archive opened as a chart file goes through the native RPE/PEZ reader first. When that reader finds no RPE chart and the archive is a supported external package, the same file is converted, imported, and opened, so a PE package (`info.csv` plus a PEC chart) does not fail as a chart-less PEZ; an archive that is neither still reports the native error.
 - RPE migration reads `Settings.json`, `Hotkey.txt`, and the optional `UI.txt` / `UI.json` appearance sidecar. Recognized beat-line and playhead colours are carried over; otherwise the timeline uses RPE's reading default: red whole-beat lines, green subdivisions, and a grey playhead.
 - The import/export warnings are part of the contract: a converter must not silently drop a feature it cannot represent.
+- Export conversion warnings are collected before the browser or native writer commits bytes. The shared export prompt asks whether to continue; hard packaging failures remain blocking errors.
 
 ## PEZ package layout
 

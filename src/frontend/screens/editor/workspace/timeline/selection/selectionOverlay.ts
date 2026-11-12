@@ -53,6 +53,24 @@ export class SelectionOverlay {
     scope.listen(window, "pointerup", finishWindowDrag, true);
     scope.listen(window, "pointercancel", finishWindowDrag, true);
     scope.listen(
+      window,
+      "pointerdown",
+      (event: PointerEvent) => {
+        const active = timeline.rectangleSelection() || timeline.sweepSelection();
+        if (!active) {
+          return;
+        }
+        const target = event.target;
+        if (target instanceof Node && stage.contains(target)) {
+          return;
+        }
+        if (timeline.gestures.cancelSelectionGesture()) {
+          timeline.changed();
+        }
+      },
+      true,
+    );
+    scope.listen(
       stage,
       "pointerdown",
       (event) => {

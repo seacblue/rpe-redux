@@ -14,6 +14,18 @@ export interface RoomInvite {
   readonly roomId?: string;
 }
 
+/** The two WebSocket schemes supported by room endpoints. */
+export type RoomServerProtocol = "ws" | "wss";
+
+/** Editable address parts used by the collaboration forms. */
+export interface RoomServerUrlParts {
+  readonly address: string;
+  readonly port: string;
+  readonly protocol: RoomServerProtocol;
+  /** Preserve an optional reverse-proxy path from an older full URL. */
+  readonly path: string;
+}
+
 /** Generate a human-typeable room password with an unambiguous alphabet. */
 export function createRoomPassword(length = 8): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -22,15 +34,45 @@ export function createRoomPassword(length = 8): string {
   return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
 }
 
+/** Identify endpoints that normally are only reachable without public TLS. */
+function isLocalOrPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host === "0.0.0.0" || host === "::1" || host.endsWith(".local")) {
+    return true;
+  }
+  if (host.includes(":")) {
+    return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
+  }
+  const octets = host.split(".").map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
 /** Normalize a room server entry into a ws:// or wss:// URL. */
 export function normalizeRoomServerUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
     return "";
   }
-  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `ws://${trimmed}`;
+  const hasProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
+  const candidate = hasProtocol ? trimmed : `ws://${trimmed}`;
   try {
     const url = new URL(candidate);
+    if (!hasProtocol && !isLocalOrPrivateHost(url.hostname)) {
+      url.protocol = "wss:";
+    }
     if (url.protocol === "http:") {
       url.protocol = "ws:";
     } else if (url.protocol === "https:") {
@@ -44,6 +86,46 @@ export function normalizeRoomServerUrl(value: string): string {
   } catch {
     return "";
   }
+}
+
+/** Parse a full room URL into the fields shown by the collaboration forms. */
+export function parseRoomServerUrlParts(
+  value: string,
+  defaultProtocol: RoomServerProtocol = "ws",
+): RoomServerUrlParts {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { address: "", port: "", protocol: defaultProtocol, path: "" };
+  }
+  const normalized = normalizeRoomServerUrl(trimmed);
+  try {
+    const url = new URL(normalized || trimmed);
+    const protocol: RoomServerProtocol = url.protocol === "wss:" ? "wss" : "ws";
+    const address = url.hostname.replace(/^\[|\]$/g, "");
+    const path = `${url.pathname === "/" ? "" : url.pathname}${url.search}`;
+    return { address, port: url.port, protocol, path };
+  } catch {
+    return {
+      address: trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ""),
+      port: "",
+      protocol: defaultProtocol,
+      path: "",
+    };
+  }
+}
+
+/** Build a room URL from the address fields shown by the collaboration forms. */
+export function buildRoomServerUrl(parts: RoomServerUrlParts): string {
+  const address = parts.address.trim().replace(/^\[|\]$/g, "");
+  if (!address) {
+    return "";
+  }
+  const host = address.includes(":") ? `[${address}]` : address;
+  const port = parts.port.trim();
+  const path = parts.path.trim();
+  return `${parts.protocol}://${host}${port ? `:${port}` : ""}${
+    path ? (path.startsWith("/") ? path : `/${path}`) : ""
+  }`;
 }
 
 /** Build the `rperedux://join` link that opens the invite in the app. */

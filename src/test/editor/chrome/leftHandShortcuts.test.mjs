@@ -6,6 +6,7 @@ import {
   matchEditorShortcut,
   registerEditorShortcuts,
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { resolveEditorShortcutArea } from "../../../core/edit/operations/keyboard.ts";
 
 const byId = new Map(EDITOR_SHORTCUTS.map((shortcut) => [shortcut.id, shortcut]));
 
@@ -53,6 +54,46 @@ test("event-edge defaults have left-hand chords before the brackets", () => {
   assert.equal(bindingOf("selection.event.end.earlier"), "Alt+Shift+B");
   assert.equal(bindingOf("selection.event.end.later"), "Alt+Shift+T");
   assert.equal(bindingOf("selection.event.start.earlier", 1), "LEFTBRACKET");
+});
+
+test("R follows the hovered timeline while other note types stay note-only", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    const shortcutContext = {
+      atHome: false,
+      documentOpen: true,
+      modal: "none",
+      capturing: false,
+      developerMode: false,
+      textEntry: false,
+      surface: null,
+    };
+    for (const key of ["Q", "W", "E", "R"]) {
+      assert.equal(
+        matchEditorShortcut({ key }, { area: "notes", hasSelection: false }, shortcutContext),
+        key === "Q"
+          ? "note.place.tap"
+          : key === "W"
+            ? "note.place.drag"
+            : key === "E"
+              ? "note.place.flick"
+              : "note.place.hold",
+      );
+      assert.equal(
+        matchEditorShortcut({ key }, { area: "events", hasSelection: false }, shortcutContext),
+        key === "R" ? "event.place" : undefined,
+      );
+    }
+  } finally {
+    dispose();
+  }
+});
+
+test("hovered timeline area takes precedence over the focused canvas", () => {
+  assert.equal(resolveEditorShortcutArea("notes", "events", "notes", "notes"), "events");
+  assert.equal(resolveEditorShortcutArea("events", undefined, "notes", "notes"), "events");
+  assert.equal(resolveEditorShortcutArea(undefined, undefined, "events", "notes"), "events");
+  assert.equal(resolveEditorShortcutArea(undefined, undefined, undefined, "notes"), "notes");
 });
 
 test("sampling opener yields to the open sampler and the left-hand chords resolve", () => {

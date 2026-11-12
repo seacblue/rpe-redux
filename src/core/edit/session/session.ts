@@ -157,7 +157,8 @@ export class EditorSession extends EventTarget {
   declare shaderAutoAlign?: boolean;
   declare liveBeatEdit?: boolean;
   declare liveEventEdit?: boolean;
-  declare liveNoteEdit?: boolean;
+  /** Whether a note inspector control currently owns an uncommitted draft. */
+  declare noteDraftActive?: boolean;
   declare visibleTimeUnit?: string;
 
   /** Creates a session over a normalized chart, optionally read-only. */

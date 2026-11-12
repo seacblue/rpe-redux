@@ -177,6 +177,8 @@ export function canvasBackingStoreSize(
 
 /**
  * Apply a capped backing-store size without touching the 2D transform.
+ * An explicit ratio is reserved for adaptive GPU layers that can reduce pixel
+ * work without changing their logical CSS geometry.
  *
  * GPU and cached-layer paths own their own viewport and transform, so they only
  * share the size calculation and the `MAX_CANVAS_PIXEL_RATIO` clamp.
@@ -184,8 +186,9 @@ export function canvasBackingStoreSize(
 export function sizeCanvasBackingStore(
   canvas: HTMLCanvasElement,
   measurement: CanvasMeasurement,
+  ratio = canvasPixelRatio(),
 ): CanvasBackingStore {
-  const size = canvasBackingStoreSize(measurement);
+  const size = canvasBackingStoreSize(measurement, ratio);
   if (canvas.width !== size.width || canvas.height !== size.height) {
     canvas.width = size.width;
     canvas.height = size.height;

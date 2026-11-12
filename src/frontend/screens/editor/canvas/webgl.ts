@@ -93,6 +93,8 @@ export function createCornerBuffer(
  *
  * Negative locations are ignored because a linked program may drop an unused
  * attribute. Offsets and stride are measured in floats.
+ * `baseOffsetFloats` points the attributes at one group's range inside a
+ * shared staging upload.
  */
 export function bindInstanceAttribute(
   gl: WebGL2RenderingContext,
@@ -101,6 +103,7 @@ export function bindInstanceAttribute(
   strideFloats: number,
   offsetFloats: number,
   divisor = 1,
+  baseOffsetFloats = 0,
 ): void {
   if (location < 0) {
     return;
@@ -112,7 +115,7 @@ export function bindInstanceAttribute(
     gl.FLOAT,
     false,
     strideFloats * Float32Array.BYTES_PER_ELEMENT,
-    offsetFloats * Float32Array.BYTES_PER_ELEMENT,
+    (baseOffsetFloats + offsetFloats) * Float32Array.BYTES_PER_ELEMENT,
   );
   gl.vertexAttribDivisor(location, divisor);
 }

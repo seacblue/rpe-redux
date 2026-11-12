@@ -15,7 +15,7 @@ import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { EditorFrameState, FrameVisibility } from "./frame.ts";
 /** Clocks and callbacks advanced on every display callback. */
 export interface FrameClockOptions {
-  audio: Pick<AudioTransport, "update" | "playing" | "time" | "duration" | "pause">;
+  audio: Pick<AudioTransport, "update" | "playing" | "time" | "rate" | "duration" | "pause">;
   timeline: Pick<Timeline, "autoScroll">;
   lineSwitcher: { draw(timestamp: number): void };
   editClock: Pick<EditorEditClock, "advance">;
@@ -25,9 +25,102 @@ export interface FrameClockOptions {
   chartSeconds(): number;
   invalidate(): void;
 }
+
+/**
+ * Interpolates the visual clock between coarse audio-clock samples.
+ *
+ * WebAudio remains the authority for audible time. This helper only fills the
+ * gap between two monotonic samples so a display callback does not repaint the
+ * same note position twice when the audio processing clock advances in larger
+ * quanta. Large discontinuities reset the anchor and never smear a transport
+ * jump across the canvas.
+ */
+export interface VisualPlaybackClock {
+  /** Return chart time suitable for one display frame. */
+  read(timestamp: number): number;
+  /** Forget the interpolation anchor after an external transport change. */
+  reset(): void;
+}
+
+/** Build a visual-only clock over the authoritative audio and chart clocks. */
+export function createVisualPlaybackClock(options: {
+  audio: Pick<AudioTransport, "playing" | "time" | "rate">;
+  chartSeconds(): number;
+}): VisualPlaybackClock {
+  let anchorAudio = Number.NaN;
+  let anchorTimestamp = Number.NaN;
+  let previousAudio = Number.NaN;
+  let previousTimestamp = Number.NaN;
+  let anchorOffset = Number.NaN;
+  let playing = false;
+
+  const reset = (): void => {
+    anchorAudio = Number.NaN;
+    anchorTimestamp = Number.NaN;
+    previousAudio = Number.NaN;
+    previousTimestamp = Number.NaN;
+    anchorOffset = Number.NaN;
+    playing = false;
+  };
+
+  return {
+    reset,
+    read(timestamp: number): number {
+      const audio = options.audio.time;
+      const chart = options.chartSeconds();
+      if (
+        !options.audio.playing ||
+        !Number.isFinite(timestamp) ||
+        !Number.isFinite(audio) ||
+        !Number.isFinite(chart)
+      ) {
+        reset();
+        return chart;
+      }
+
+      const offset = audio - chart;
+      const elapsedMs = Number.isFinite(previousTimestamp) ? timestamp - previousTimestamp : 0;
+      const audioStep = Number.isFinite(previousAudio) ? audio - previousAudio : 0;
+      const rate =
+        Number.isFinite(options.audio.rate) && options.audio.rate > 0 ? options.audio.rate : 1;
+      const discontinuity =
+        !playing ||
+        !Number.isFinite(anchorAudio) ||
+        !Number.isFinite(anchorTimestamp) ||
+        !Number.isFinite(anchorOffset) ||
+        elapsedMs < 0 ||
+        audioStep < -0.05 ||
+        audioStep > Math.max(0.25, (Math.max(0, elapsedMs) / 1000) * rate * 8 + 0.05) ||
+        Math.abs(offset - anchorOffset) > 0.05;
+
+      if (discontinuity) {
+        anchorAudio = audio;
+        anchorTimestamp = timestamp;
+        anchorOffset = offset;
+        playing = true;
+      } else if (audio > previousAudio + 0.000001) {
+        // Prefer every newer authoritative sample, then interpolate only until
+        // the next sample arrives.
+        anchorAudio = audio;
+        anchorTimestamp = timestamp;
+        anchorOffset = offset;
+      }
+
+      previousAudio = audio;
+      previousTimestamp = timestamp;
+      const predictedAudio = anchorAudio + (Math.max(0, timestamp - anchorTimestamp) / 1000) * rate;
+      return predictedAudio - offset;
+    },
+  };
+}
+
 /** Advance media/gesture clocks on every callback, even when painting is skipped. */
 export function createFrameClock(options: FrameClockOptions, visibility: FrameVisibility) {
   const runtime = options;
+  const visualClock = createVisualPlaybackClock({
+    audio: runtime.audio,
+    chartSeconds: runtime.chartSeconds,
+  });
   return {
     /** Advances audio, scrolling, overlays, FPS sampling, and edit time. */
     advance(
@@ -70,6 +163,6 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
       return { session, tempo };
     },
     playing: () => options.audio.playing,
-    seconds: options.chartSeconds,
+    seconds: (timestamp: number) => visualClock.read(timestamp),
   };
 }

@@ -24,6 +24,7 @@ export function packageEntries(
   chart: Chart,
   assets: ReadonlyMap<string, Uint8Array>,
   chartName: string,
+  options: { projected?: boolean } = {},
 ): Map<string, Uint8Array> {
   const output = new Map<string, Uint8Array>();
   const previousChart = normalizePath(chartName);
@@ -35,7 +36,7 @@ export function packageEntries(
     }
     output.set(name, bytes);
   }
-  const projected = projectChartForExport(chart, chartName);
+  const projected = options.projected ? chart : projectChartForExport(chart, chartName);
   const id = String(projected.META.id ?? "").trim();
   // PEZ stores every package file at the root; native RPE uses the project id
   // as the chart stem and as the Resources folder name.

@@ -6,6 +6,7 @@
  * line overview index.
  */
 import { noteColor, readCanvasPalette } from "../../../canvas/palette.ts";
+import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import type { LineThumbnailSnapshot } from "./lineSwitcherTypes.ts";
 
 /** Paint one line's notes and events into a switcher card canvas. */
@@ -54,7 +55,7 @@ export function drawLineThumbnail(
         continue;
       }
       context.fillStyle = noteColor(palette, note.type);
-      context.globalAlpha = note.isFake ? 0.35 : 0.9;
+      context.globalAlpha = 0.9 * noteAlpha(note);
       if (hold) {
         context.fillRect(
           horizontal - 4,

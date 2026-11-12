@@ -75,6 +75,12 @@ export interface AssetTransferProgress {
   readonly total: number;
 }
 
+/** One wire-traffic observation emitted by the room socket. */
+export interface CollaborationTrafficSample {
+  readonly direction: "upload" | "download";
+  readonly bytes: number;
+}
+
 /** Options for a collaboration client. */
 export interface CollaborationClientOptions {
   readonly socketFactory?: CollaborationSocketFactory;
@@ -90,6 +96,7 @@ export interface CollaborationClientOptions {
   readonly onError?: (message: string, code?: string) => void;
   readonly onAssetReady?: (asset: RoomAsset, bytes: Uint8Array) => void;
   readonly onAssetProgress?: (progress: AssetTransferProgress) => void;
+  readonly onTraffic?: (sample: CollaborationTrafficSample) => void;
   readonly onAssetError?: (message: string, assetName?: string) => void;
   readonly onMemberLeft?: (memberId: string) => void;
   readonly onLockDenied?: (conflicts: readonly RoomLock[]) => void;
@@ -189,6 +196,23 @@ function randomId(): string {
     return crypto.randomUUID();
   }
   return `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Returns the WebSocket payload size in bytes without decoding its contents. */
+function wireByteLength(value: unknown): number {
+  if (typeof value === "string") {
+    return new TextEncoder().encode(value).byteLength;
+  }
+  if (value instanceof ArrayBuffer) {
+    return value.byteLength;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return value.byteLength;
+  }
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return value.size;
+  }
+  return 0;
 }
 
 /** Bounded estimate of one transaction's wire size for the outgoing queue. */
@@ -303,6 +327,13 @@ export class CollaborationClient {
   private manualClose = false;
   private reconnectWanted = false;
   private disposed = false;
+
+  /** Reports a successfully observed WebSocket frame to the host surface. */
+  private reportTraffic(direction: CollaborationTrafficSample["direction"], bytes: number): void {
+    if (bytes > 0 && Number.isFinite(bytes)) {
+      this.options.onTraffic?.({ direction, bytes });
+    }
+  }
 
   /** Create an idle client; `state` is shared when the shell already owns a cell. */
   constructor(options: CollaborationClientOptions = {}) {
@@ -956,7 +987,9 @@ export class CollaborationClient {
     });
     socket.addEventListener("message", (event) => {
       if (isCurrent()) {
-        this.enqueueData((event as MessageEvent).data);
+        const data = (event as MessageEvent).data;
+        this.reportTraffic("download", wireByteLength(data));
+        this.enqueueData(data);
       }
     });
     socket.addEventListener("close", () => {
@@ -2200,7 +2233,9 @@ export class CollaborationClient {
       return;
     }
     try {
-      this.socket.send(JSON.stringify(message));
+      const payload = JSON.stringify(message);
+      this.socket.send(payload);
+      this.reportTraffic("upload", wireByteLength(payload));
     } catch (error) {
       this.handleSocketFailure(error);
     }
@@ -2212,7 +2247,9 @@ export class CollaborationClient {
       return;
     }
     try {
-      this.socket.send(encodeBinaryAssetFrame(header, body));
+      const payload = encodeBinaryAssetFrame(header, body);
+      this.socket.send(payload);
+      this.reportTraffic("upload", wireByteLength(payload));
     } catch (error) {
       this.handleSocketFailure(error);
     }

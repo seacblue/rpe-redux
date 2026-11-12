@@ -4,19 +4,42 @@
  * accent, or curve changes. The loader supplies one full-track analysis; the
  * A-B range is a separate frame on the progress surface.
  */
-import { paintSpectrogramPixels } from "../../../core/media/spectrumPixels.ts";
+import { paintSpectrumPixels } from "../../../core/media/spectrumPixels.ts";
 
 import { type AudioAnalysisData } from "../../../core/media/audioAnalysis.ts";
-import { resolveCanvasColor } from "../../../design/components/media/canvasColor.ts";
 
 const MAX_SCALE = 2;
+
+let probeContext: CanvasRenderingContext2D | null | undefined;
+
+/** Parses a CSS colour through a 1x1 probe canvas, falling back to the accent blue. */
+function resolveColor(value: string): [number, number, number] {
+  if (probeContext === undefined) {
+    if (typeof document === "undefined") {
+      probeContext = null;
+    } else {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      probeContext = canvas.getContext("2d", { willReadFrequently: true });
+    }
+  }
+  if (!probeContext) {
+    return [90, 169, 255];
+  }
+  probeContext.clearRect(0, 0, 1, 1);
+  probeContext.fillStyle = value || "#5aa9ff";
+  probeContext.fillRect(0, 0, 1, 1);
+  const pixel = probeContext.getImageData(0, 0, 1, 1).data;
+  return [pixel[0] ?? 90, pixel[1] ?? 169, pixel[2] ?? 255];
+}
 
 /** Paints the scrubber spectrum for one canvas. */
 export class ScrubberSpectrum {
   canvas: HTMLCanvasElement;
   data: AudioAnalysisData | null = null;
-  /** Perceptual emphasis shared with the timeline heatmap. */
-  curve = 1.5;
+  /** Perceptual emphasis shared with the timeline waveform. */
+  curve = 1;
   painted = "";
   /** Bumped by `setData` so two tracks with identical shapes still repaint. */
   revision = 0;
@@ -51,10 +74,8 @@ export class ScrubberSpectrum {
     const scale = Math.min(MAX_SCALE, Math.max(1, globalThis.devicePixelRatio || 1));
     const width = Math.max(2, Math.round(layoutWidth * scale));
     const height = Math.max(2, Math.round(layoutHeight * scale));
-    const style = getComputedStyle(this.canvas);
-    const accent = style.getPropertyValue("--accent").trim();
-    const foreground = style.getPropertyValue("--foreground").trim();
-    const key = `${width}x${height}:${accent}:${foreground}:${this.curve}:${this.revision}`;
+    const accent = getComputedStyle(this.canvas).getPropertyValue("--accent").trim();
+    const key = `${width}x${height}:${accent}:${this.curve}:${this.revision}`;
     if (key === this.painted) {
       return;
     }
@@ -71,13 +92,8 @@ export class ScrubberSpectrum {
     const image = context.createImageData(width, height);
     const pixels = image.data;
     const data = this.data;
-    if (data && data.bands > 0 && data.frameCount > 0 && data.spectrum.length > 0) {
-      paintSpectrogramPixels(pixels, width, height, data, {
-        low: resolveCanvasColor(accent, [90, 169, 255]),
-        high: resolveCanvasColor(foreground, [255, 255, 255]),
-        curve: this.curve,
-        alpha: 0.9,
-      });
+    if (data && data.bands > 0 && data.frameCount > 0 && data.left.min.length > 0) {
+      paintSpectrumPixels(pixels, width, height, data, resolveColor(accent), this.curve);
     }
     context.putImageData(image, 0, 0);
   }

@@ -63,6 +63,8 @@ export interface PreviewDrawOptions {
   readonly collectGeometry?: boolean;
   /** Maximum cosmetic hit effects to draw in one frame. */
   readonly maxHitEffects?: number;
+  /** Scale only the note-batch backing store during adaptive GPU recovery. */
+  readonly notePixelRatioScale?: number;
   /** Let a large chart edit repaint after the interaction frame. */
   readonly deferHeavyFrame?: boolean;
   /** All judge lines in the current selection; falls back to selectedLine. */
@@ -822,7 +824,13 @@ export class Preview {
     this.noteHitAreas.length = 0;
     this.lineFrames.length = 0;
     const notesStarted = performance.now();
-    this.noteBatch.begin(frame.width, frame.height, this.skin ?? null, frame.viewport);
+    this.noteBatch.begin(
+      frame.width,
+      frame.height,
+      this.skin ?? null,
+      frame.viewport,
+      options.notePixelRatioScale,
+    );
     const drawStats = drawLinePasses(this, frame);
     this.noteBatch.finish();
     const drawnNotes = drawStats.notes + drawStats.holds;

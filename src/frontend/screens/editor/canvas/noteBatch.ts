@@ -1,32 +1,30 @@
-/* eslint-disable max-lines -- note-batch resource ownership, batching, and fallback share one GPU surface. */
-
 /**
  * WebGL batch shared by the preview and timeline for drawing note and hold skins.
  * Geometry and hit testing stay on the CPU; the batch owns only its GL program,
  * buffers, and per-frame instance data.
  */
-import { sizeCanvasBackingStore } from "./canvas2d.ts";
-import { holdLayout, holdRenderRotation } from "./noteGeometry.ts";
+/* eslint-disable max-lines -- the batch keeps texture, instance, and context-loss ownership together. */
+import { canvasPixelRatio, sizeCanvasBackingStore } from "./canvas2d.ts";
+import { createHoldLayoutScratch, holdLayoutInto, holdRenderRotation } from "./noteGeometry.ts";
+import { createNoteBatchUploadState, submitNoteBatchGroups } from "./noteBatchUpload.ts";
 import { NoteBatchDiagnostics } from "./noteBatchDiagnostics.ts";
 import type { RenderSurface } from "../../../../core/diagnostics/renderMetrics.ts";
 import {
+  HEAD_PAINT_LAYER,
   HOLD_PAINT_LAYER,
   INSTANCE_STRIDE,
   NoteSpriteGroups,
   notePaintLayer,
   type NoteColor,
   type NotePaintLayer,
-  type SpriteGroup,
   type TextureDescriptor,
 } from "./noteSpriteGroups.ts";
 import {
-  bindInstanceAttribute,
   configureTextureSampling,
   createCornerBuffer,
   installContextLossHandlers,
   linkProgram,
 } from "./webgl.ts";
-
 /** Resolved Hold textures and skin-specific cap ratios for the current skin. */
 interface HoldTextureSet {
   body: TextureDescriptor | null;
@@ -69,6 +67,15 @@ export class NoteBatch {
   private alphaLocation = -1;
   private tintLocation = -1;
   private colorizeLocation = -1;
+  private readonly instanceAttributes = [-1, -1, -1, -1, -1, -1, -1] as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
   private width = 0;
   private height = 0;
   private readonly groups = new NoteSpriteGroups();
@@ -79,7 +86,10 @@ export class NoteBatch {
     null,
     null,
   ];
+  private readonly holdDirection = { x: 0, y: 1 };
+  private readonly holdLayout = createHoldLayoutScratch();
   private readonly rotationCache = new Map<number, readonly [number, number]>();
+  private readonly uploadState = createNoteBatchUploadState();
   private instanceBufferCapacity = 0;
   private active = false;
   private prewarmQueue: HTMLImageElement[] = [];
@@ -87,7 +97,6 @@ export class NoteBatch {
   private prewarmIdle = false;
   private contextLost = false;
   private uninstallContextLoss: (() => void) | null = null;
-
   /** Create the batch for one canvas; without WebGL2 every submit is a no-op. */
   constructor(canvas: HTMLCanvasElement, surface: RenderSurface = "preview") {
     this.canvas = canvas;
@@ -239,6 +248,13 @@ export class NoteBatch {
     this.alphaLocation = this.program ? gl.getAttribLocation(this.program, "a_alpha") : -1;
     this.tintLocation = this.program ? gl.getAttribLocation(this.program, "a_tint") : -1;
     this.colorizeLocation = this.program ? gl.getAttribLocation(this.program, "a_colorize") : -1;
+    this.instanceAttributes[0] = this.transformLocation;
+    this.instanceAttributes[1] = this.rotationLocation;
+    this.instanceAttributes[2] = this.shearLocation;
+    this.instanceAttributes[3] = this.uvLocation;
+    this.instanceAttributes[4] = this.alphaLocation;
+    this.instanceAttributes[5] = this.tintLocation;
+    this.instanceAttributes[6] = this.colorizeLocation;
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
@@ -331,13 +347,16 @@ export class NoteBatch {
   /**
    * Start a frame: size the canvas, clear it, and set the optional scissor clip.
    *
-   * Callers must follow with `addHead`/`addHold` and `finish`.
+   * `pixelRatioScale` changes only the GPU layer's backing-store density; its
+   * logical coordinates and paint order remain unchanged. Callers must follow
+   * with `addHead`/`addHold` and `finish`.
    */
   begin(
     width: number,
     height: number,
     skin: NoteBatchSkin | null,
     clip?: { left: number; top: number; width: number; height: number },
+    pixelRatioScale = 1,
   ): void {
     this.width = width;
     this.height = height;
@@ -359,7 +378,14 @@ export class NoteBatch {
       this.reportState();
       return;
     }
-    const backing = sizeCanvasBackingStore(this.canvas, { width, height });
+    const safeScale = Number.isFinite(pixelRatioScale)
+      ? Math.max(0.5, Math.min(1, pixelRatioScale))
+      : 1;
+    const backing = sizeCanvasBackingStore(
+      this.canvas,
+      { width, height },
+      Math.max(1, canvasPixelRatio() * safeScale),
+    );
     this.gl.viewport(0, 0, backing.width, backing.height);
     this.gl.disable(this.gl.SCISSOR_TEST);
     this.gl.clearColor(0, 0, 0, 0);
@@ -459,8 +485,18 @@ export class NoteBatch {
     }
     const headLength = head ? width * (textures.headRatio ?? 0) * capScale : 0;
     const tailLength = width * textures.endRatio * capScale;
-    const direction = { x: -Math.sin(rotation), y: Math.cos(rotation) };
-    const layout = holdLayout(headX, headY, tailX, tailY, headLength, tailLength, direction);
+    this.holdDirection.x = -Math.sin(rotation);
+    this.holdDirection.y = Math.cos(rotation);
+    const layout = holdLayoutInto(
+      this.holdLayout,
+      headX,
+      headY,
+      tailX,
+      tailY,
+      headLength,
+      tailLength,
+      this.holdDirection,
+    );
     const bodyAdded =
       layout.bodyLength <= 0.5 ||
       this.add(
@@ -531,17 +567,16 @@ export class NoteBatch {
 
   /** Upload the queued instance data and draw every group in layer order. */
   finish(): void {
-    const batch = {
-      groupCount: 0,
-      instanceCount: 0,
-      bufferSubDataCalls: 0,
-      bufferSubDataBytes: 0,
-      drawCalls: 0,
-      textureBinds: 0,
-      maxInstancesPerGroup: 0,
-    };
     if (!this.active || this.isContextLost() || !this.gl || !this.program || !this.instanceBuffer) {
-      this.diagnostics.submit(batch);
+      this.diagnostics.submit({
+        groupCount: 0,
+        instanceCount: 0,
+        bufferSubDataCalls: 0,
+        bufferSubDataBytes: 0,
+        drawCalls: 0,
+        textureBinds: 0,
+        maxInstancesPerGroup: 0,
+      });
       return;
     }
     const gl = this.gl;
@@ -555,51 +590,23 @@ export class NoteBatch {
       gl.enableVertexAttribArray(this.cornerLocation);
       gl.vertexAttribPointer(this.cornerLocation, 2, gl.FLOAT, false, 0, 0);
     }
-    const drawGroups = (groups: Iterable<SpriteGroup>): void => {
-      for (const group of groups) {
-        if (!group.count) {
-          continue;
-        }
-        const texture = this.textureFor(group.descriptor.source);
-        if (!texture) {
-          continue;
-        }
-        batch.groupCount += 1;
-        batch.instanceCount += group.count;
-        batch.textureBinds += 1;
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        if (this.textureUniform) {
-          gl.uniform1i(this.textureUniform, 0);
-        }
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-        const upload = group.instances.subarray(0, group.count * INSTANCE_STRIDE);
-        if (upload.byteLength > this.instanceBufferCapacity) {
-          this.instanceBufferCapacity = upload.byteLength;
-          gl.bufferData(gl.ARRAY_BUFFER, this.instanceBufferCapacity, gl.STREAM_DRAW);
-        }
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
-        batch.bufferSubDataCalls += 1;
-        batch.bufferSubDataBytes += upload.byteLength;
-        batch.maxInstancesPerGroup = Math.max(batch.maxInstancesPerGroup, group.count);
-        bindInstanceAttribute(gl, this.transformLocation, 4, INSTANCE_STRIDE, 0);
-        bindInstanceAttribute(gl, this.rotationLocation, 1, INSTANCE_STRIDE, 4);
-        bindInstanceAttribute(gl, this.shearLocation, 1, INSTANCE_STRIDE, 5);
-        bindInstanceAttribute(gl, this.uvLocation, 4, INSTANCE_STRIDE, 6);
-        bindInstanceAttribute(gl, this.alphaLocation, 1, INSTANCE_STRIDE, 10);
-        bindInstanceAttribute(gl, this.tintLocation, 3, INSTANCE_STRIDE, 11);
-        bindInstanceAttribute(gl, this.colorizeLocation, 1, INSTANCE_STRIDE, 14);
-        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, group.count);
-        batch.drawCalls += 1;
-      }
-    };
     // Ascending layer order keeps Holds beneath Tap/Drag/Flick heads; the
-    // selection paints last so an overlap cannot hide it.
-    for (const layer of this.groups.layers) {
-      drawGroups(layer.values());
-    }
-    drawGroups(this.groups.selected.values());
+    // selection paints last so an overlap cannot hide the selection.
+    const result = submitNoteBatchGroups(
+      gl,
+      this.instanceBuffer,
+      this.uploadState,
+      this.groups.layers[HOLD_PAINT_LAYER].values(),
+      this.groups.layers[HEAD_PAINT_LAYER].values(),
+      this.groups.selected.values(),
+      (source) => this.textureFor(source),
+      this.textureUniform,
+      this.instanceAttributes,
+      this.instanceBufferCapacity,
+    );
+    this.instanceBufferCapacity = result.instanceBufferCapacity;
+    this.diagnostics.submit(result.metrics);
     gl.disable(gl.SCISSOR_TEST);
-    this.diagnostics.submit(batch);
     this.reportState();
   }
 

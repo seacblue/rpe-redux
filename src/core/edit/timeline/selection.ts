@@ -64,6 +64,44 @@ export function shouldSuppressTimelineContextMenu(input: {
   return input.button === 2 && input.moved;
 }
 
+/**
+ * Return whether an empty primary-button press pans the multi-line viewport.
+ *
+ * A multi-panel timeline reserves that press for panning, so it must not also
+ * start a sweep, place an object, or clear the selection it is navigating.
+ */
+export function timelineEmptyPanPress(input: {
+  multiLineActive: boolean;
+  panelCount: number;
+  button: number;
+  hit: boolean;
+  tool: boolean;
+  pending: boolean;
+}): boolean {
+  return (
+    input.multiLineActive &&
+    input.panelCount > 1 &&
+    input.button === 0 &&
+    !input.hit &&
+    !input.tool &&
+    !input.pending
+  );
+}
+
+/**
+ * Return whether the timeline may start any freehand sweep.
+ *
+ * A split multi-line timeline reserves pointer drags for panning and marquee
+ * selection, so both the additive and the subtractive sweep are unavailable
+ * there; the sweep is not reintroduced through another button or modifier.
+ */
+export function timelineSweepEnabled(input: {
+  multiLineActive: boolean;
+  panelCount: number;
+}): boolean {
+  return !input.multiLineActive || input.panelCount <= 1;
+}
+
 /** Return whether a pointer path exceeds the timeline's click tolerance. */
 export function timelineSweepMoved(
   start: { x: number; y: number },

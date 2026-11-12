@@ -1,21 +1,24 @@
 /**
- * Builds the downloadable PEZ export of a chart.
+ * Public chart-export helpers used by the editor and the library screen.
  *
- * The caller supplies the chart, its assets and a display name; the returned
- * blob and filename are ready for a host save dialog. JSON remains a document
- * save/open format, not an export container.
+ * The format writers live behind `exportPipeline.ts`: callers work with a
+ * completed artifact and its conversion warnings, while the platform decides
+ * whether to download it or hand it to a native save dialog.
  */
 import { t } from "../../../i18n/index.ts";
-import { type Chart } from "../chart/chart.ts";
-import { serializeOfficialChart } from "../chart/formats/official.ts";
-import { serializePecChart } from "../chart/formats/pec.ts";
-import { writeZip } from "../../utils/zip.ts";
-import { packageEntries } from "./package.ts";
+import {
+  createExportArtifact,
+  currentChartExportAdapter,
+  exportStem,
+  inspectExport,
+  type ChartExportFormat,
+  type ExportWarning,
+} from "./exportPipeline.ts";
+import type { Chart } from "../chart/chart.ts";
 
-/** The containers the export dialog can write. */
-export type ChartExportFormat = "pez" | "official" | "pec";
+export type { ChartExportFormat, ExportWarning } from "./exportPipeline.ts";
 
-/** Filename stem for the PEZ package. */
+/** Filename stem for a chart export. */
 export interface ChartExportOptions {
   name?: string;
 }
@@ -26,66 +29,76 @@ export interface ChartTextExport {
   name: string;
   mime: string;
   warnings: readonly string[];
+  warningDetails: readonly ExportWarning[];
 }
 
-/** Strip a container extension and characters a Windows file dialog rejects. */
-function exportStem(name: string, fallback: string): string {
-  return (name.trim() || fallback)
-    .replace(/\.(json|pec|pez|zip)$/i, "")
-    .replace(/[\\/:*?"<>|]/g, "_");
-}
-
-/**
- * Build a PEZ export blob and its filename from a chart and its assets.
- *
- * Defaults to a package named after the chart. Throws when the name is empty
- * after trimming its container extension.
- */
+/** Build a PEZ export blob and its conversion report. */
 export function createChartExport(
   chart: Chart,
   assets: ReadonlyMap<string, Uint8Array>,
   chartName: string,
   options: ChartExportOptions = {},
-): { blob: Blob; name: string } {
-  const { name = chartName } = options;
-  const snapshot: Chart = { ...chart };
-  delete snapshot.chartTime;
-  const stem = exportStem(String(name), "");
-  if (!stem) {
+): { blob: Blob; name: string; warnings: readonly ExportWarning[] } {
+  const name = options.name ?? chartName;
+  if (!exportStem(name)) {
     throw new Error(t("system.files.exportNameRequired"));
   }
-  return {
-    blob: writeZip(packageEntries(snapshot, assets, chartName)),
-    name: `${stem}.pez`,
-  };
+  const snapshot: Chart = { ...chart };
+  delete snapshot.chartTime;
+  const result = createExportArtifact(
+    {
+      model: snapshot,
+      assets,
+      chartName,
+      name,
+      format: "pez",
+    },
+    currentChartExportAdapter,
+  );
+  if (result.kind !== "binary") {
+    throw new Error("The PEZ exporter produced a text artifact.");
+  }
+  return { blob: result.blob, name: result.name, warnings: result.warnings };
 }
 
-/** Build a single-file official JSON or PEC export. */
+/** Build a single-file official JSON or PEC export and preserve structured warnings. */
 export function createChartTextExport(
   chart: Chart,
   chartName: string,
   format: Exclude<ChartExportFormat, "pez">,
   options: ChartExportOptions = {},
 ): ChartTextExport {
-  const { name = chartName } = options;
-  const stem = exportStem(String(name), "");
-  if (!stem) {
+  const name = options.name ?? chartName;
+  if (!exportStem(name)) {
     throw new Error(t("system.files.exportNameRequired"));
   }
-  if (format === "official") {
-    const result = serializeOfficialChart(chart);
-    return {
-      text: result.text,
-      name: `${stem}.json`,
-      mime: "application/json",
-      warnings: result.warnings,
-    };
+  const result = createExportArtifact(
+    {
+      model: chart,
+      assets: new Map(),
+      chartName,
+      name,
+      format,
+    },
+    currentChartExportAdapter,
+  );
+  if (result.kind !== "text") {
+    throw new Error("The text exporter produced a binary artifact.");
   }
-  const result = serializePecChart(chart);
   return {
     text: result.text,
-    name: `${stem}.pec`,
-    mime: "text/plain;charset=utf-8",
-    warnings: result.warnings,
+    name: result.name,
+    mime: result.mime,
+    warnings: result.warnings.map(({ message }) => message),
+    warningDetails: result.warnings,
   };
+}
+
+/** Inspect a chart export before a native writer opens its save session. */
+export function chartExportWarnings(
+  chart: Chart,
+  chartName: string,
+  format: ChartExportFormat,
+): readonly ExportWarning[] {
+  return inspectExport({ model: chart, chartName, format }, currentChartExportAdapter);
 }
