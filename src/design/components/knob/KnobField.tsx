@@ -5,6 +5,7 @@
  * the interaction model: vertical drag, wheel, and keyboard value changes.
  */
 import {
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -12,7 +13,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { FieldRow } from "../field/FieldRow.tsx";
 
 const DRAG_PIXELS_PER_RANGE = 120;
 
@@ -45,27 +45,25 @@ export function KnobField({
   disabled = false,
   onChange,
 }: KnobFieldProps) {
+  const controlId = useId();
+  const labelId = `${controlId}-label`;
   return (
-    <FieldRow
-      className="redux-knob-field"
-      layout="inline"
-      density="compact"
-      label={label}
-      disabled={disabled}
-      control={(controlId) => (
-        <Knob
-          id={controlId}
-          ariaLabel={label}
-          value={value}
-          min={min}
-          max={max}
-          step={step}
-          percentage={percentage}
-          disabled={disabled}
-          onChange={onChange}
-        />
-      )}
-    />
+    <div className="redux-knob-field" data-disabled={disabled || undefined}>
+      <label id={labelId} htmlFor={controlId} className="redux-knob-label">
+        {label}
+      </label>
+      <Knob
+        id={controlId}
+        ariaLabel={label}
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        percentage={percentage}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    </div>
   );
 }
 

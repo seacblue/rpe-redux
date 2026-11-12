@@ -1,11 +1,22 @@
 // The reusable circular numeric control used by compact labelled fields.
 
-.redux-knob-field.redux-field-row {
-  // FieldRow normally owns a list margin. A knob has a fixed control height,
-  // so the surrounding stack must own the gap instead of doubling it here.
-  --field-row-margin-block: 0;
-  --field-row-padding-block: 0;
-  min-height: var(--design-control-height);
+.redux-knob-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--foreground);
+}
+
+.redux-knob-label {
+  max-width: 100%;
+  color: var(--foreground);
+  font-size: var(--type-label);
+  line-height: var(--line-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .redux-knob {
@@ -15,8 +26,8 @@
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: var(--design-control-height);
-  height: var(--design-control-height);
+  width: var(--design-knob-size);
+  height: var(--design-knob-size);
   border: 1px solid var(--edge-control);
   border-radius: 50%;
   background: var(--surface-raised);
@@ -66,14 +77,14 @@
   background: var(--active-accent);
   pointer-events: none;
   transform: rotate(var(--knob-angle));
-  transform-origin: 50% calc(var(--design-control-height) / 2 - var(--space-1));
+  transform-origin: 50% calc(var(--design-knob-size) / 2 - var(--space-1));
 }
 
 .redux-knob-value {
   position: relative;
   z-index: 1;
   color: var(--foreground-muted);
-  font-size: var(--type-micro);
+  font-size: var(--type-caption);
   font-variant-numeric: tabular-nums;
   line-height: var(--line-label);
   pointer-events: none;
