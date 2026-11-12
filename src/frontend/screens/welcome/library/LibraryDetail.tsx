@@ -23,17 +23,13 @@ import { LibraryWelcome } from "./LibraryWelcome.tsx";
 import { bindBackgroundVolume } from "../../../platform/backgroundVolume.ts";
 import { audioMixer } from "../../../../core/media/audioMixer.ts";
 
-/** Cover layer that fades in the selected project's artwork, or a letter fallback. */
-function DetailCover({ url, title }: { url: string; title: string }) {
+/** Cover layer that fades in the selected project's artwork over the empty-cover placeholder. */
+function DetailCover({ url }: { url: string }) {
   return (
     <div className="redux-library-detail-cover">
       <span className="redux-library-detail-cover-placeholder" aria-hidden="true" />
-      {url ? (
+      {url && (
         <AsyncImage key={url} src={url} alt="" className="redux-library-detail-cover-layer" />
-      ) : (
-        <span className="redux-library-detail-cover-letter" aria-hidden="true">
-          <span>{title.trim().slice(0, 1).toUpperCase() || "♪"}</span>
-        </span>
       )}
     </div>
   );
@@ -142,7 +138,6 @@ export function LibraryDetail({
     const audio = new LibraryPreviewAudio((playing) => setPreviewPlaying(playing));
     player.current = audio;
     const removeAudioOwner = audioMixer.registerOwner({
-      setMasterVolume: (value) => audio.setMasterVolume(value),
       setMusicVolume: (value) => audio.setMusicVolume(value),
     });
     const unbind = bindBackgroundVolume((level) => audio.setBackgroundVolume(level));
@@ -167,7 +162,7 @@ export function LibraryDetail({
     <aside className="redux-library-detail" onPointerMove={tilt} onPointerLeave={settleTilt}>
       <article ref={tiltCard} className="redux-library-card">
         <div className="redux-library-card-media">
-          <DetailCover url={entry.cover} title={entry.title} />
+          <DetailCover url={entry.cover} />
           <span className="redux-library-detail-scrim" aria-hidden="true" />
           {entry.level && (
             <span

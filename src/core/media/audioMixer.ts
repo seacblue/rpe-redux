@@ -1,79 +1,70 @@
 /**
- * Owns the application's four user-facing audio buses and applies them to the
- * currently mounted audio owners. The overlay and shortcut layer only talk to
- * this module; individual screens never need to know which player is active.
+ * Provides one transient controller over the audio settings already used by
+ * playback. It never invents another gain graph: music writes `volume`, while
+ * each hitsound meter writes the existing per-kind hitsound setting.
  */
 import "../settings/features/audio.ts";
-import { PREFERENCE_SECTIONS } from "../state/preferences.ts";
-import { defineValue, values, type ValueHandle } from "../state/values.ts";
+import { HIT_SOUND_KINDS } from "./hitsounds.ts";
+import { values } from "../state/values.ts";
 import { clamp01 } from "../utils/numbers.ts";
 
-/** The volume meters exposed by the osu!lazer-style overlay. */
-export const AUDIO_VOLUME_METERS = ["master", "music", "effect", "hitsound"] as const;
-/** One user-facing audio meter. */
+/** The existing playback values exposed by the transient audio controller. */
+export const AUDIO_VOLUME_METERS = ["music", "tap", "drag", "flick", "custom"] as const;
+/** One existing music or object-hitsound setting. */
 export type AudioVolumeMeter = (typeof AUDIO_VOLUME_METERS)[number];
 
-/** A runtime audio player that can receive the global mix. */
+/** A mounted player that needs the shared music setting applied immediately. */
 export interface AudioMixerOwner {
-  setMasterVolume?(value: number): void;
   setMusicVolume?(value: number): void;
-  setEffectVolume?(value: number): void;
-  setHitsoundVolume?(value: number): void;
 }
 
 /** The state consumed by the React overlay. */
 export interface AudioMixerSnapshot {
   readonly visible: boolean;
   readonly selected: AudioVolumeMeter;
-  readonly muted: boolean;
   readonly values: Readonly<Record<AudioVolumeMeter, number>>;
 }
 
-const DEFAULTS: Record<AudioVolumeMeter, number> = {
-  master: 1,
-  music: 0.75,
-  effect: 1,
-  hitsound: 1,
+const SETTING_IDS: Record<AudioVolumeMeter, string> = {
+  music: "volume",
+  tap: "hitsound-tap",
+  drag: "hitsound-drag",
+  flick: "hitsound-flick",
+  custom: "hitsound-custom",
 };
-type PersistedBus = Exclude<AudioVolumeMeter, "music">;
-const PERSISTED_BUS_VALUES: Record<PersistedBus, ValueHandle<number>> = {
-  master: defineValue({
-    id: "audio.mixer.master",
-    initial: DEFAULTS.master,
-    persist: PREFERENCE_SECTIONS.values,
-  }),
-  effect: defineValue({
-    id: "audio.mixer.effect",
-    initial: DEFAULTS.effect,
-    persist: PREFERENCE_SECTIONS.values,
-  }),
-  hitsound: defineValue({
-    id: "audio.mixer.hitsound",
-    initial: DEFAULTS.hitsound,
-    persist: PREFERENCE_SECTIONS.values,
-  }),
+const DEFAULTS: Record<AudioVolumeMeter, number> = {
+  music: 0.75,
+  tap: 0.3,
+  drag: 0.3,
+  flick: 0.3,
+  custom: 0.3,
 };
 const METER_STEP = 0.05;
 const PRECISE_METER_STEP = 0.01;
 const HIDE_DELAY_MS = 1000;
 
-/** A single shared application mixer with persistence and owner fan-out. */
+/** A transient controller that fans the existing settings into mounted players. */
 class AudioMixController {
   private readonly owners = new Set<AudioMixerOwner>();
   private readonly listeners = new Set<() => void>();
   private readonly settingDisposers: (() => void)[] = [];
   private visible = false;
-  private selected: AudioVolumeMeter = "master";
-  private lastUnmutedMaster = DEFAULTS.master;
+  private selected: AudioVolumeMeter = "music";
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedSnapshot: AudioMixerSnapshot | null = null;
 
   constructor() {
-    if (values.byId.has("volume")) {
-      this.settingDisposers.push(values.byId.subscribe("volume", () => this.refreshOwners()));
+    for (const meter of AUDIO_VOLUME_METERS) {
+      const id = SETTING_IDS[meter];
+      if (values.byId.has(id)) {
+        this.settingDisposers.push(values.byId.subscribe(id, () => this.refreshOwners()));
+      }
     }
-    for (const value of Object.values(PERSISTED_BUS_VALUES)) {
-      this.settingDisposers.push(value.subscribe(() => this.refreshOwners()));
+    // Keep the public tuple aligned with the setting schema if a new kind is added.
+    for (const kind of HIT_SOUND_KINDS) {
+      if (!AUDIO_VOLUME_METERS.includes(kind)) {
+        throw new Error(`Missing audio volume meter for hitsound kind: ${kind}`);
+      }
     }
   }
 
@@ -88,26 +79,25 @@ class AudioMixController {
     this.cachedSnapshot = Object.freeze({
       visible: this.visible,
       selected: this.selected,
-      muted: current.master <= 0,
       values: Object.freeze(current),
     });
     return this.cachedSnapshot;
   };
 
-  /** Subscribe to visibility, selection, and persisted meter changes. */
+  /** Subscribe to visibility, selection, and existing setting changes. */
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
 
-  /** Register a music or effect player and immediately apply the live mix. */
+  /** Register a mounted music player and immediately apply the current setting. */
   registerOwner(owner: AudioMixerOwner): () => void {
     this.owners.add(owner);
     this.applyOwner(owner);
     return () => this.owners.delete(owner);
   }
 
-  /** Move the visible meter selection, matching osu!lazer's wraparound behavior. */
+  /** Move the visible meter selection without changing any setting. */
   select(direction: -1 | 1): void {
     if (!this.visible) {
       return;
@@ -120,13 +110,13 @@ class AudioMixController {
     this.notify();
   }
 
-  /** Select one meter from a pointer gesture without changing visibility. */
+  /** Select one existing setting from a pointer gesture without showing the HUD. */
   selectMeter(meter: AudioVolumeMeter): void {
     this.selected = meter;
     this.notify();
   }
 
-  /** Increase or decrease the selected meter; the first press only reveals it. */
+  /** Increase or decrease the selected existing setting; the first press reveals the HUD. */
   adjustSelected(direction: -1 | 1, precise = false): void {
     if (!this.visible) {
       this.show();
@@ -135,41 +125,24 @@ class AudioMixController {
     this.adjust(this.selected, direction, precise);
   }
 
-  /** Apply a wheel delta to one meter and keep the overlay alive. */
+  /** Apply a wheel delta to one existing setting and keep the HUD alive briefly. */
   adjust(meter: AudioVolumeMeter, direction: -1 | 1, precise = false): void {
     this.selected = meter;
     const step = precise ? PRECISE_METER_STEP : METER_STEP;
     this.set(meter, this.read(meter) + direction * step);
-    this.show();
   }
 
-  /** Set a meter from a pointer position in the overlay. */
+  /** Set one existing playback setting from a pointer position in the HUD. */
   set(meter: AudioVolumeMeter, value: number): void {
-    const next = clamp01(Number.isFinite(value) ? value : 0);
-    if (meter === "music") {
-      values.byId.set("volume", String(next));
-    } else {
-      PERSISTED_BUS_VALUES[meter].set(next);
+    const id = SETTING_IDS[meter];
+    if (!values.byId.has(id)) {
+      return;
     }
-    if (meter === "master" && next > 0) {
-      this.lastUnmutedMaster = next;
-    }
+    values.byId.set(id, String(clamp01(Number.isFinite(value) ? value : 0)));
     this.show();
   }
 
-  /** Toggle master mute while remembering the previous non-zero level. */
-  toggleMute(): void {
-    const current = this.read("master");
-    if (current > 0) {
-      this.lastUnmutedMaster = current;
-      this.set("master", 0);
-    } else {
-      this.set("master", this.lastUnmutedMaster || DEFAULTS.master);
-    }
-    this.show();
-  }
-
-  /** Explicitly reveal the overlay and restart its one-second popout timer. */
+  /** Explicitly reveal the HUD and restart its one-second hide timer. */
   show(): void {
     this.visible = true;
     this.scheduleHide();
@@ -187,18 +160,13 @@ class AudioMixController {
   }
 
   private read(meter: AudioVolumeMeter): number {
-    const value =
-      meter === "music"
-        ? Number(values.byId.get<unknown>("volume"))
-        : PERSISTED_BUS_VALUES[meter].get();
+    const id = SETTING_IDS[meter];
+    const value = values.byId.has(id) ? Number(values.byId.get<unknown>(id)) : DEFAULTS[meter];
     return clamp01(Number.isFinite(value) ? value : DEFAULTS[meter]);
   }
 
   private applyOwner(owner: AudioMixerOwner): void {
-    owner.setMasterVolume?.(this.read("master"));
     owner.setMusicVolume?.(this.read("music"));
-    owner.setEffectVolume?.(this.read("effect"));
-    owner.setHitsoundVolume?.(this.read("hitsound"));
   }
 
   private refreshOwners(): void {
@@ -232,5 +200,5 @@ class AudioMixController {
   }
 }
 
-/** The single mixer shared by editor preview, library preview, and the overlay. */
+/** The single transient controller shared by editor and library playback. */
 export const audioMixer = new AudioMixController();

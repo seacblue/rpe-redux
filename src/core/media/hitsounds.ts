@@ -116,9 +116,7 @@ export class HitSounds {
     this.transport = transport;
     this.buffers = new Map();
     this.sources = new Set();
-    // The global hitsound bus starts at unity; per-kind settings retain the
-    // existing 0.3 defaults and therefore preserve the audible level.
-    this.volume = 1;
+    this.volume = 0.3;
     this.soundVolumes = { tap: 0.3, drag: 0.3, flick: 0.3, custom: 0.3 };
     this.onlyCurrentLine = false;
     this.assets = new Map();
@@ -161,9 +159,7 @@ export class HitSounds {
     const context = this.transport.ensureContext();
     if (!this.gain) {
       this.gain = context.createGain();
-      this.gain.connect(
-        this.transport.effectGain ?? this.transport.backgroundGain ?? context.destination,
-      );
+      this.gain.connect(this.transport.backgroundGain ?? context.destination);
     }
     this.gain.gain.value = this.volume;
     for (const kind of HIT_SOUND_KINDS) {
@@ -361,20 +357,6 @@ export class HitSounds {
       const gain = this.channelGains[kind];
       if (gain) {
         gain.gain.value = this.volume === 0 ? 0 : 1;
-      }
-    }
-  }
-
-  /** Set the global hitsound bus without changing each kind's user setting. */
-  setMasterVolume(value: number): void {
-    this.volume = clamp01(value);
-    if (this.gain) {
-      this.gain.gain.value = this.volume;
-    }
-    for (const kind of HIT_SOUND_KINDS) {
-      const gain = this.channelGains[kind];
-      if (gain) {
-        gain.gain.value = this.volume === 0 ? 0 : this.soundVolumes[kind] / this.volume;
       }
     }
   }

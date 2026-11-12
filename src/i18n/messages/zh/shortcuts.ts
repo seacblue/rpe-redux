@@ -71,7 +71,6 @@ export default {
   "shortcuts.audio.volumeDown": "调低当前音量",
   "shortcuts.audio.previousMeter": "选择上一个音量通道",
   "shortcuts.audio.nextMeter": "选择下一个音量通道",
-  "shortcuts.audio.toggleMute": "切换主音量静音",
   "shortcuts.editor.lineJump": "跳转到指定判定线",
   "shortcuts.editor.timelineBackward": "时间轴后退",
   "shortcuts.editor.timelineForward": "时间轴前进",

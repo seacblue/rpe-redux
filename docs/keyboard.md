@@ -94,13 +94,12 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 | Increase / decrease audio          | `Alt+Wheel Up` / `Alt+Wheel Down`     |
 | Select previous / next audio bus   | `Alt+Left` / `Alt+Right`              |
 | Increase / decrease selected audio | `Alt+Up` / `Alt+Down`                 |
-| Toggle master mute                 | `Ctrl+F4`                             |
 | Zoom timeline out / in             | `Alt+Wheel Down` / `Alt+Wheel Up`     |
 | Settings                           | `Ctrl+K`                              |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
-Outside the timeline, `Alt+Wheel` adjusts the selected audio bus; over the timeline it remains timeline zoom. `Alt+Up` / `Alt+Down` adjusts audio anywhere. The transient volume HUD appears during adjustment and hides after one second.
+Outside the timeline, `Alt+Wheel` adjusts the selected existing audio setting; over the timeline it remains timeline zoom. `Alt+Up` / `Alt+Down` adjusts audio anywhere. The transient volume HUD shows Music and each object hitsound setting during adjustment, then hides after one second.
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
 

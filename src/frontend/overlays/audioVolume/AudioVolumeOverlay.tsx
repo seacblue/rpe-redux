@@ -1,6 +1,6 @@
 /**
- * The transient left-side audio mixer. It renders only the state published by
- * the core mixer, while pointer gestures are translated back into mixer calls.
+ * The transient audio settings HUD. It renders only the state published by
+ * the existing playback settings and routes pointer gestures back into them.
  */
 import { createPortal } from "react-dom";
 import { useRef, useSyncExternalStore, type PointerEvent, type WheelEvent } from "react";
@@ -22,7 +22,7 @@ function valueFromPointer(event: PointerEvent<HTMLButtonElement>): number {
   return 1 - (event.clientY - box.top) / box.height;
 }
 
-/** Renders the osu!lazer-style transient audio meter strip. */
+/** Renders the transient music and object-hitsound settings strip. */
 export function AudioVolumeOverlay() {
   const { tRaw } = useTranslation();
   const snapshot = useSyncExternalStore(
@@ -103,7 +103,7 @@ export function AudioVolumeOverlay() {
         })}
       </div>
       <div className="redux-audio-volume-status" aria-live="polite">
-        {snapshot.muted ? tRaw("chrome.audioVolume.muted") : tRaw("chrome.audioVolume.adjust")}
+        {tRaw("chrome.audioVolume.adjust")}
       </div>
     </aside>
   );

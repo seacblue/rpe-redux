@@ -92,10 +92,7 @@ export function createPreviewRuntime(options: {
   };
   const hitSounds = new HitSounds(audio);
   const removeAudioOwner = audioMixer.registerOwner({
-    setMasterVolume: (value) => audio.setMasterVolume(value),
     setMusicVolume: (value) => audio.setVolume(value),
-    setEffectVolume: (value) => audio.setEffectVolume(value),
-    setHitsoundVolume: (value) => hitSounds.setMasterVolume(value),
   });
   const removeBackgroundVolume = bindBackgroundVolume((level) => audio.setBackgroundVolume(level));
   const backgroundClock = new Worker(new URL("./backgroundAudioClock.worker.ts", import.meta.url), {

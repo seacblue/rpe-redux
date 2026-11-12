@@ -31,7 +31,6 @@ export class LibraryPreviewAudio {
   private master: GainNode | null = null;
   private readonly gains = new Map<HTMLAudioElement, GainNode>();
   private backgroundVolume = 1;
-  private masterVolume = 1;
   private musicVolume = 0.75;
   private revision = 0;
   private playingId = "";
@@ -100,15 +99,7 @@ export class LibraryPreviewAudio {
   setBackgroundVolume(multiplier: number): void {
     this.backgroundVolume = Math.max(0, Math.min(1, Number.isFinite(multiplier) ? multiplier : 1));
     if (this.context && this.master) {
-      rampGain(this.master.gain, this.context.currentTime, this.outputVolume());
-    }
-  }
-
-  /** Applies the shared application master volume without restarting preview. */
-  setMasterVolume(value: number): void {
-    this.masterVolume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-    if (this.context && this.master) {
-      rampGain(this.master.gain, this.context.currentTime, this.outputVolume());
+      rampGain(this.master.gain, this.context.currentTime, this.backgroundVolume);
     }
   }
 
@@ -132,7 +123,7 @@ export class LibraryPreviewAudio {
     if (!this.context) {
       const context = new AudioContext();
       const master = context.createGain();
-      master.gain.value = this.outputVolume();
+      master.gain.value = this.backgroundVolume;
       master.connect(context.destination);
       for (const element of this.elements) {
         const gain = context.createGain();
@@ -269,11 +260,6 @@ export class LibraryPreviewAudio {
   /** The music level applied to the active cross-fade gain. */
   private targetVolume(): number {
     return TARGET_VOLUME * this.musicVolume;
-  }
-
-  /** The output level after master and background attenuation. */
-  private outputVolume(): number {
-    return this.masterVolume * this.backgroundVolume;
   }
 
   /** Notifies the owner only when the playing state actually flips. */

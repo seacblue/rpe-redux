@@ -72,7 +72,6 @@ export default {
   "shortcuts.audio.volumeDown": "Decrease selected audio volume",
   "shortcuts.audio.previousMeter": "Select previous audio volume meter",
   "shortcuts.audio.nextMeter": "Select next audio volume meter",
-  "shortcuts.audio.toggleMute": "Toggle master mute",
   "shortcuts.editor.lineJump": "Jump to a judge line",
   "shortcuts.editor.timelineBackward": "Seek timeline backward",
   "shortcuts.editor.timelineForward": "Seek timeline forward",

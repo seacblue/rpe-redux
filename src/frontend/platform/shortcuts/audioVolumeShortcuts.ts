@@ -14,7 +14,6 @@ export const AUDIO_VOLUME_SHORTCUT_IDS = Object.freeze({
   decrease: "audio.volume.decrease",
   previous: "audio.volume.previous",
   next: "audio.volume.next",
-  mute: "audio.volume.mute",
 });
 
 const category = shortcutRegistry.hasCategory(SHORTCUT_CATEGORIES.audioVolume.id)
@@ -53,14 +52,6 @@ const definitions: readonly ShortcutDefinition[] = [
     defaults: [{ key: "RIGHTARROW", modifiers: ["ALT"] }],
     scope: "instrument",
     run: () => audioMixer.select(1),
-  },
-  {
-    id: AUDIO_VOLUME_SHORTCUT_IDS.mute,
-    category: SHORTCUT_CATEGORIES.audioVolume.id,
-    title: "shortcuts.audio.toggleMute",
-    defaults: [{ key: "F4", modifiers: ["CTRL"] }],
-    scope: "instrument",
-    run: () => audioMixer.toggleMute(),
   },
 ];
 

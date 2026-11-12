@@ -15,7 +15,6 @@ const AUDIO_ACTIONS = [
   AUDIO_VOLUME_SHORTCUT_IDS.decrease,
   AUDIO_VOLUME_SHORTCUT_IDS.previous,
   AUDIO_VOLUME_SHORTCUT_IDS.next,
-  AUDIO_VOLUME_SHORTCUT_IDS.mute,
 ] as const;
 
 /** Returns the global audio action matching the current event, if any. */
