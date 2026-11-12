@@ -14,7 +14,8 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
-const DRAG_PIXELS_PER_RANGE = 120;
+// A 64px vertical travel covers the complete range with a direct linear map.
+const DRAG_PIXELS_PER_FULL_RANGE = 64;
 
 export interface KnobFieldProps {
   /** Text shown beside the knob and exposed as its accessible name. */
@@ -116,7 +117,7 @@ function Knob({ id, ariaLabel, value, min, max, step, percentage, disabled, onCh
       return;
     }
     const range = max - min;
-    const delta = ((active.startY - event.clientY) / DRAG_PIXELS_PER_RANGE) * range;
+    const delta = ((active.startY - event.clientY) / DRAG_PIXELS_PER_FULL_RANGE) * range;
     onChange(normalizeValue(active.startValue + delta, min, max, step));
   };
 
