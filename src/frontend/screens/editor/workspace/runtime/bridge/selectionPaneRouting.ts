@@ -31,6 +31,10 @@ export interface SelectionPaneState {
   curveEditorOpen: boolean;
   /** True when the selection change came from a direct pointer gesture. */
   pointerSelection: boolean;
+  /** True before the router has observed the first published editor state. */
+  initialRoute: boolean;
+  /** True when the active judge line changed without a new object selection. */
+  lineChanged: boolean;
 }
 
 /** Serializes one multi-line selection for change detection. */
@@ -118,7 +122,7 @@ export function resolveSelectionPane(
       session.focus === "events" && selected && event?.trajectory
         ? { kind: "open-trajectory", event, lineIndex: selected.lineIndex, layer }
         : { kind: "activate-pane", name: session.focus === "events" ? "events" : "notes" };
-  } else if (state.activePane !== "multi-line") {
+  } else if (!state.initialRoute && !state.lineChanged && state.activePane !== "multi-line") {
     action = { kind: "close" };
   }
   return { signature: selectionPaneSignature(session, layer), selectionCount: count, action };

@@ -77,6 +77,8 @@ export interface ToolbarNumberFieldProps {
    * string on blur or Enter.
    */
   commitOnBlur?: boolean;
+  /** Whether an accepted empty edit should be committed when the field blurs. */
+  commitEmptyOnBlur?: boolean;
   /** Every keystroke and every step; nothing is finished yet. */
   onInput(value: string): void;
   /**
@@ -105,6 +107,7 @@ export function ToolbarNumberField({
   tipDesc,
   accept,
   commitOnBlur = false,
+  commitEmptyOnBlur = false,
   onInput,
   onCommit,
 }: ToolbarNumberFieldProps) {
@@ -176,7 +179,11 @@ export function ToolbarNumberField({
           ? (event) => {
               if (commitOnBlur) {
                 const next = draftText;
-                if (next !== null && next.trim() !== "" && accept?.(next) !== false) {
+                if (
+                  next !== null &&
+                  (next.trim() !== "" || commitEmptyOnBlur) &&
+                  accept?.(next) !== false
+                ) {
                   onCommit?.(next);
                 }
                 setDraft(null);
@@ -283,6 +290,7 @@ function ToolbarLinePickerField({
         tipDesc={entry.tipDesc ? tRaw(entry.tipDesc) : undefined}
         accept={entry.accept}
         commitOnBlur={entry.commitOnBlur}
+        commitEmptyOnBlur={entry.commitEmptyOnBlur}
         onInput={(next) => entry.input(next)}
         onCommit={entry.commit ? (next) => entry.commit?.(next) : undefined}
       />
@@ -360,6 +368,7 @@ export function toolbarFieldNode(entry: ToolbarField, tRaw: (key: string) => str
       tipDesc={entry.tipDesc ? tRaw(entry.tipDesc) : undefined}
       accept={entry.accept}
       commitOnBlur={entry.commitOnBlur}
+      commitEmptyOnBlur={entry.commitEmptyOnBlur}
       onInput={(next) => entry.input(next)}
       onCommit={entry.commit ? (next) => entry.commit?.(next) : undefined}
     />

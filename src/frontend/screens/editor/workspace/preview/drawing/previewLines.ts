@@ -466,8 +466,20 @@ export interface PreviewLineDrawStats {
   notes: number;
   holds: number;
   batchFallbacks: number;
+  fallbackReasons: Record<string, number>;
   lineMs: number;
   noteMs: number;
+}
+
+/** Explain why a visible note had to use the Canvas path. */
+function previewFallbackReason(surface: PreviewLineSurface): string {
+  if (surface.noteBatch.isContextLost?.() === true) {
+    return "context_lost";
+  }
+  if (!surface.skin) {
+    return "missing_skin";
+  }
+  return surface.noteBatch.isActive() ? "texture_unavailable" : "batch_inactive";
 }
 
 /** Draws judge lines and notes in render order while collecting hit areas. */
@@ -480,6 +492,7 @@ export function drawLinePasses(
     notes: 0,
     holds: 0,
     batchFallbacks: 0,
+    fallbackReasons: {},
     lineMs: 0,
     noteMs: 0,
   };
@@ -762,6 +775,8 @@ export function drawLinePasses(
             )
           ) {
             stats.batchFallbacks += 1;
+            const reason = previewFallbackReason(surface);
+            stats.fallbackReasons[reason] = (stats.fallbackReasons[reason] ?? 0) + 1;
           }
         }
       }

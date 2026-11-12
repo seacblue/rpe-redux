@@ -18,6 +18,7 @@ import type { EditorSession } from "../session/session.ts";
 import type { TimelineArea } from "../timeline/types.ts";
 import { isSystemCancelKey } from "../../shortcuts/keyMatching.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
+import { recordDiagnosticAction } from "../../diagnostics/interactionLog.ts";
 
 export interface KeyboardActionEvent extends ShortcutEventLike {
   key: string;
@@ -161,6 +162,7 @@ export async function runEditorKeyboardAction(
 ): Promise<void> {
   const { timeline } = deps;
   const session = deps.getSession();
+  const surface = area === "events" ? "events" : "editor";
   let handled = true;
   try {
     if (
@@ -179,6 +181,7 @@ export async function runEditorKeyboardAction(
         "workspace.multiLine.switchMode",
       ].includes(action)
     ) {
+      recordDiagnosticAction(action, "shortcut", "ignored", surface);
       event.preventDefault();
       return;
     }
@@ -323,8 +326,10 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       event.stopPropagation();
     }
+    recordDiagnosticAction(action, "shortcut", handled ? "completed" : "ignored", surface);
   } catch (error) {
     event.preventDefault();
+    recordDiagnosticAction(action, "shortcut", "failed", surface);
     deps.reportError(error);
   }
 }

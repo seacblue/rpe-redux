@@ -100,6 +100,10 @@ export default {
   "editor.dialogs.exportDialog.formatOfficial": "Phigros 官方格式（JSON）",
   "editor.dialogs.exportDialog.formatPec": "PhiEdit 格式（PEC）",
   "editor.dialogs.exportDialog.warnings": "已导出，包含 {count} 条损失警告；部分 RPE 特性被省略。",
+  "editor.dialogs.exportDialog.lossWarningTitle": "导出将导致部分谱面数据丢失",
+  "editor.dialogs.exportDialog.lossWarningDescription":
+    "{format} 无法完整保存当前谱面特性（{count} 条警告）。仍要继续导出吗？",
+  "editor.dialogs.exportDialog.exportAnyway": "仍然导出",
   "editor.dialogs.exportDialog.export": "导出",
 
   "editor.app.commit.changeLineTexture": "更改判定线贴图",
