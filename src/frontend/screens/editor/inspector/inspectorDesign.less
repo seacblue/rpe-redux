@@ -1,6 +1,9 @@
-// Inspector-wide rhythm and frame. Field-row anatomy and variants stay with the
-// design-system field row; the inspector pins one row geometry for every pane
-// so no feature sheet or pane chooses a different inset.
+// Inspector-wide rhythm and frame tokens. Field-row anatomy and variants stay
+// with the design-system field row; the inspector pins one row geometry for
+// every pane so no feature sheet or pane chooses a different inset.
+//
+// Page insets are not part of this sheet: chrome/inspectorPage owns the content
+// layer, and the frame keeps its gutter token here because both layers read it.
 .inspector {
   --inspector-gutter: var(--design-space-5);
   --inspector-section-gap: var(--design-space-4);
@@ -26,12 +29,6 @@
 // owns the gap and the rows stop carrying a margin.
 .inspector .redux-field-rows {
   --field-rows-gap: var(--space-1-5);
-}
-
-.inspector-content > [data-panel]:not([hidden]),
-.inspector-content > .inspector-panel-stack > [data-panel]:not([hidden]),
-.drawer-split-properties > .inspector-panel-surface {
-  padding: var(--space-4) var(--inspector-gutter) var(--inspector-gutter);
 }
 
 // Body-level metadata left over from a pane title, such as a count or a trash
@@ -100,33 +97,10 @@
   text-align: center;
 }
 
-// Fragment panes stack their title and body; the visible wrapper is a column so
-// a lone empty state can claim the remaining height.
-.inspector-content {
-  display: flex;
-  flex-direction: column;
-}
-
 // The note pane wraps its keyed property view to observe focus; the wrapper
 // must not add a box between the panel and its field rows.
 .notes-panel-properties {
   display: contents;
-}
-
-.inspector-content > [data-panel]:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  flex: 1 0 auto;
-}
-
-.drawer-split-properties > .inspector-panel-surface {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 100%;
-  // The drawer property face is the same opaque panel surface as the ordinary
-  // inspector so the revealed list can never show the stage through its form.
-  background: var(--drawer-surface);
 }
 
 .inspector :is(.wide-button, .wide-field) {

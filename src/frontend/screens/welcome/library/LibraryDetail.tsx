@@ -21,6 +21,7 @@ import type { LibraryEntry } from "./libraryEntries.ts";
 import { formatCount, formatRelativeTime } from "./libraryFormat.ts";
 import { LibraryWelcome } from "./LibraryWelcome.tsx";
 import { bindBackgroundVolume } from "../../../platform/backgroundVolume.ts";
+import { audioMixer } from "../../../../core/media/audioMixer.ts";
 
 /** Cover layer that fades in the selected project's artwork over the empty-cover placeholder. */
 function DetailCover({ url }: { url: string }) {
@@ -136,8 +137,12 @@ export function LibraryDetail({
   useEffect(() => {
     const audio = new LibraryPreviewAudio((playing) => setPreviewPlaying(playing));
     player.current = audio;
+    const removeAudioOwner = audioMixer.registerOwner({
+      setMusicVolume: (value) => audio.setMusicVolume(value),
+    });
     const unbind = bindBackgroundVolume((level) => audio.setBackgroundVolume(level));
     return () => {
+      removeAudioOwner();
       unbind();
       player.current = null;
       audio.dispose();

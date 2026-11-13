@@ -1,0 +1,111 @@
+// Timing Inspector surfaces: the timing-point list and the property form.
+//
+// The compact page is a split inspector page; its two faces use the shared
+// inspector page content layer, so this sheet only sizes the timing surfaces
+// inside that layer.
+
+.global-timing-workspace {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.global-timing-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+.global-timing-offset {
+  width: 100%;
+  text-align: left;
+  cursor: var(--app-cursor-pointer);
+
+  span {
+    color: var(--foreground);
+    font-size: var(--type-body);
+  }
+
+  strong {
+    color: var(--foreground);
+    font-size: var(--type-body);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.global-timing-divider {
+  flex: none;
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--edge-divider);
+}
+
+.global-timing-list-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  margin-right: calc(-1 * var(--space-2));
+}
+
+.global-timing-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--space-2) 0 0;
+  border: 0;
+  background: transparent;
+}
+
+.global-timing-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-height);
+  padding: var(--space-2);
+}
+
+.global-timing-row-time {
+  font-size: var(--type-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.global-timing-row-bpm {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--foreground);
+  font-size: var(--type-body);
+  font-variant-numeric: tabular-nums;
+
+  small {
+    color: var(--foreground-muted);
+    font-size: var(--type-micro);
+    letter-spacing: 0.08em;
+  }
+}
+
+.global-timing-footer {
+  margin-top: auto;
+}
+
+.global-timing-error {
+  margin: 0;
+}

@@ -1,5 +1,5 @@
 /**
- * The audio settings category: master volume, per-hitsound levels and offsets,
+ * The audio settings category: music volume, per-hitsound levels and offsets,
  * waveform analysis, and speed/pitch policy.
  *
  * Every row answers the same question — what will the user hear? — so the root

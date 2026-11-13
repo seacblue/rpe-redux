@@ -171,3 +171,62 @@
 .sidebar-content > .redux-divider + .redux-divider {
   display: none;
 }
+
+// The audio trigger belongs to the rail, while its panel is portaled into the
+// shared floating host so it can open above the inspector without widening the
+// navigation column.
+.sidebar-audio-volume {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--edge-divider);
+}
+
+.sidebar-audio-volume-trigger {
+  width: var(--sidebar-peek-content-width);
+}
+
+.audio-volume-console {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: min(260px, calc(100vw - 2 * var(--space-2)));
+  padding: var(--space-2);
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-panel);
+  background: var(--panel-header);
+  box-shadow: var(--shadow-overlay-popover);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(0.98);
+  transform-origin: var(--popover-origin-x) var(--popover-origin-y);
+  transition:
+    opacity var(--design-dur-overlay) ease,
+    transform var(--design-dur-overlay) ease,
+    visibility 0s linear var(--design-dur-overlay);
+}
+
+.audio-volume-console.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: scale(1);
+  transition-delay: 0s;
+}
+
+.audio-volume-console-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audio-volume-console {
+    transition: none;
+  }
+}

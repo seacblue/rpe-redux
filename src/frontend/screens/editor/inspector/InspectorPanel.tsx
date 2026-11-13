@@ -9,7 +9,15 @@
  * duplicates neither. Unless a theme supplies its own `inspector.empty` slot,
  * the empty state renders the registered sidebar as a two-column text grid.
  */
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import type { CSSProperties } from "react";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { mergeRefs } from "../../../platform/mergeRefs.ts";
 import { onboardingAnchorRef } from "../../../onboarding/anchors.ts";
@@ -46,6 +54,7 @@ import {
   useDrawerState,
 } from "../../../chrome/drawer/drawerPanes.ts";
 import { DrawerPaneView } from "../../../chrome/drawer/DrawerPaneView.tsx";
+import { InspectorPage } from "../../../chrome/inspectorPage/InspectorPage.tsx";
 import {
   collapseWorkspaceMode,
   expandWorkspaceMode,
@@ -73,6 +82,57 @@ function openInspectorGuide(context?: string): void {
     return;
   }
   openOnboardingGuide(guideSectionForContext(context));
+}
+
+type InspectorModePhase = "compact" | "opening" | "expanded" | "closing";
+
+/**
+ * The two scroll containers that trade places during a handoff.
+ *
+ * A split page's lower face owns the scroll of the compact copy; the wide page's
+ * detail column owns the same scroll once the page has arrived. Both render the
+ * same page, so the offset has to travel with the content rather than reset.
+ */
+function handoffScrollers(root: HTMLElement | null) {
+  const compact =
+    root?.querySelector<HTMLElement>(
+      '.inspector-body > [data-mode-underlay="true"] .inspector-page-split-bottom',
+    ) ?? null;
+  const wide =
+    root?.querySelector<HTMLElement>(".inspector-mode-surface .mode-handoff-detail") ?? null;
+  return { compact, wide };
+}
+
+/** Copies the page's scroll offset across the handoff so the swap cannot jump. */
+function carryHandoffScroll(root: HTMLElement | null, direction: "to-wide" | "to-compact"): void {
+  const { compact, wide } = handoffScrollers(root);
+  if (!compact || !wide) {
+    return;
+  }
+  if (direction === "to-wide") {
+    wide.scrollTop = compact.scrollTop;
+    return;
+  }
+  compact.scrollTop = wide.scrollTop;
+}
+
+/** Converts one computed CSS time value to milliseconds. */
+function cssDurationMs(value: string): number {
+  const match = /^\s*([\d.]+)(ms|s)\s*$/u.exec(value);
+  if (!match) {
+    return 0;
+  }
+  const amount = Number(match[1]);
+  return Number.isFinite(amount) && amount > 0 ? amount * (match[2] === "s" ? 1000 : 1) : 0;
+}
+
+/** Reads the computed duration for one transition property. */
+function transitionDurationMs(element: HTMLElement, property: string): number {
+  const style = getComputedStyle(element);
+  const properties = style.transitionProperty.split(",").map((value) => value.trim());
+  const durations = style.transitionDuration.split(",").map((value) => value.trim());
+  const index = properties.findIndex((value) => value === property || value === "all");
+  return cssDurationMs(durations[index >= 0 ? index : 0] ?? "");
 }
 
 /** Inspector frame and visibility; each pane owns its view and subscriptions. */
@@ -123,39 +183,103 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     (entry): entry is SidebarNavigationItem => entry.kind === "item",
   );
   const activeDefinition = panels.find(({ id }) => id === activePane);
+  const modeDetailShare = activeDefinition?.modeDetailShare;
+  // The compact copy sizes itself from the wide page's detail column during a
+  // handoff, so the frame republishes the page's share as a length it can read.
+  const frameStyle =
+    modeDetailShare === undefined
+      ? undefined
+      : ({ "--mode-detail-share": String(modeDetailShare) } as CSSProperties);
   const activeWorkspaceMode = useActiveWorkspaceMode();
   const [displayedMode, setDisplayedMode] = useState<WorkspaceModeDefinition | null>(
     activeWorkspaceMode,
   );
-  const [modeExpanded, setModeExpanded] = useState(activeWorkspaceMode !== null);
-  const [modeLeaving, setModeLeaving] = useState(false);
-  // Keep the task mounted through the collapse transition, then hand the body
-  // back to the compact page. The task enters with its own keyframe animation so
-  // the first paint is already the transparent start state; collapsing swaps
-  // that animation for an exit keyframe and clears the task after the panel has
-  // shrunk and the compact page has returned.
+  const displayedModeRef = useRef(displayedMode);
+  const [modePhase, setModePhase] = useState<InspectorModePhase>(
+    activeWorkspaceMode ? "expanded" : "compact",
+  );
+  const modeExitTimer = useRef<number | null>(null);
   useEffect(() => {
+    displayedModeRef.current = displayedMode;
+  }, [displayedMode]);
+
+  // Keep both page copies mounted while the inspector moves between tracks.
+  // The compact copy exits through the top face on open and re-enters from the
+  // same edge on close; the expanded copy stays under it until the width settles.
+  useEffect(() => {
+    if (modeExitTimer.current !== null) {
+      window.clearTimeout(modeExitTimer.current);
+      modeExitTimer.current = null;
+    }
     if (activeWorkspaceMode) {
       const openTimer = window.setTimeout(() => {
         setDisplayedMode(activeWorkspaceMode);
-        setModeExpanded(true);
-        setModeLeaving(false);
+        setModePhase("opening");
       }, 0);
       return () => window.clearTimeout(openTimer);
     }
-    const collapseTimer = window.setTimeout(() => {
-      setModeExpanded(false);
-      setModeLeaving(true);
-    }, 0);
-    const clearTimer = window.setTimeout(() => {
-      setDisplayedMode(null);
-      setModeLeaving(false);
-    }, 280);
-    return () => {
-      window.clearTimeout(collapseTimer);
-      window.clearTimeout(clearTimer);
-    };
+    if (displayedModeRef.current) {
+      setModePhase("closing");
+    } else {
+      setModePhase("compact");
+    }
   }, [activeWorkspaceMode]);
+
+  // Width is the authoritative handoff boundary in both directions. A
+  // token-based fallback covers reduced-motion styles and environments that do
+  // not emit transitionend.
+  useEffect(() => {
+    if (modePhase !== "opening" && modePhase !== "closing") {
+      return undefined;
+    }
+    const element = inspector.current;
+    let finished = false;
+    const finishWidthTransition = (): void => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      if (modeExitTimer.current !== null) {
+        window.clearTimeout(modeExitTimer.current);
+        modeExitTimer.current = null;
+      }
+      if (modePhase === "opening") {
+        carryHandoffScroll(element, "to-wide");
+        setModePhase("expanded");
+        return;
+      }
+      displayedModeRef.current = null;
+      setDisplayedMode(null);
+      setModePhase("compact");
+    };
+    if (!element) {
+      finishWidthTransition();
+      return undefined;
+    }
+    const onTransitionEnd = (event: TransitionEvent): void => {
+      if (event.target === element && event.propertyName === "width") {
+        finishWidthTransition();
+      }
+    };
+    element.addEventListener("transitionend", onTransitionEnd);
+    const widthDuration = transitionDurationMs(element, "width");
+    modeExitTimer.current = window.setTimeout(finishWidthTransition, widthDuration + 80);
+    return () => {
+      element.removeEventListener("transitionend", onTransitionEnd);
+      if (modeExitTimer.current !== null) {
+        window.clearTimeout(modeExitTimer.current);
+        modeExitTimer.current = null;
+      }
+    };
+  }, [modePhase]);
+
+  // The compact copy becomes the visible one on the collapse frame; move the
+  // page's scroll into it before the browser paints so the swap cannot jump.
+  useLayoutEffect(() => {
+    if (modePhase === "closing") {
+      carryHandoffScroll(inspector.current, "to-compact");
+    }
+  }, [modePhase]);
   const activeDrawerPane = drawerState.open
     ? (drawerPanes.find(
         (pane) =>
@@ -265,8 +389,10 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       id="inspector"
       ref={mergeRefs(inspector, surface.attach.inspector, onboardingAnchorRef("inspector"))}
       className={`inspector panel${activeDrawerPane ? " is-drawer" : ""}${readOnly ? " is-readonly" : ""}`}
+      style={frameStyle}
       data-mode-surface={modeSurface ? "true" : undefined}
-      data-mode-expanded={modeSurface && modeExpanded ? "true" : undefined}
+      data-mode-phase={modeSurface ? modePhase : undefined}
+      data-mode-expanded={modeSurface && modePhase !== "closing" ? "true" : undefined}
       tabIndex={-1}
       aria-label={t("chrome.inspector.label")}
       aria-readonly={readOnly || undefined}
@@ -279,6 +405,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           <IconButton
             className="inspector-status-help"
             icon="help"
+            size="small"
             label={t("chrome.inspector.help")}
             tooltip={false}
             onClick={() =>
@@ -291,7 +418,7 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
             {(displayedMode || expandMode) && (
               <IconButton
                 className={`inspector-status-expand${displayedMode ? " is-expanded" : ""}`}
-                icon="external"
+                icon={displayedMode ? "windowRestore" : "maximize"}
                 label={t(
                   displayedMode ? "chrome.workspace.backToTimeline" : "chrome.inspector.expand",
                 )}
@@ -323,44 +450,56 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
           </div>
         </div>
       )}
-      <div className="inspector-content" data-mode-surface={modeSurface ? "true" : undefined}>
+      <div
+        className="inspector-body"
+        data-mode-surface={modeSurface ? "true" : undefined}
+        data-mode-phase={modeSurface ? modePhase : undefined}
+      >
         <div
           data-panel="empty"
+          className="inspector-pane"
           hidden={modeSurface || activeDrawerPane !== null || activePane !== ""}
         >
-          {emptySlot ? (
-            <ThemeUiNodeView tree={emptySlot} bindings={{ items: themeItems, expanded: true }} />
-          ) : navigation.entries.length > 0 ? (
-            <InspectorNavigation entries={navigation.entries} />
-          ) : (
-            <div className="inspector-empty-placeholder">{t("chrome.inspector.empty")}</div>
-          )}
+          <InspectorPage>
+            {emptySlot ? (
+              <ThemeUiNodeView tree={emptySlot} bindings={{ items: themeItems, expanded: true }} />
+            ) : navigation.entries.length > 0 ? (
+              <InspectorNavigation entries={navigation.entries} />
+            ) : (
+              <div className="inspector-empty-placeholder">{t("chrome.inspector.empty")}</div>
+            )}
+          </InspectorPage>
         </div>
         {modeSurface && DisplayedMode && (
-          <div
-            data-panel="workspace-mode"
-            className="inspector-mode-surface"
-            data-mode-leaving={modeLeaving ? "true" : undefined}
-          >
+          <div data-panel="workspace-mode" className="inspector-mode-surface">
             <DisplayedMode />
           </div>
         )}
         {inspectorRuntime &&
-          panels.map(({ id, component: Panel, editsChart }) => {
+          panels.map(({ id, component: Panel, editsChart, layout }) => {
             const locked = readOnly && editsChart === true;
+            const isModeUnderlay = modeSurface && displayedMode?.id === id;
+            const isActivePanel = activePane === id || isModeUnderlay;
             return (
               <div
                 key={id}
                 ref={onboardingAnchorRef(`inspector-panel-${id}`)}
                 data-panel={id}
+                className="inspector-pane"
                 data-readonly={locked ? "true" : undefined}
-                data-mode-underlay={modeSurface ? "true" : undefined}
+                data-mode-underlay={isModeUnderlay ? "true" : undefined}
                 inert={locked || modeSurface || undefined}
                 aria-hidden={modeSurface || undefined}
                 aria-disabled={locked || undefined}
-                hidden={activeDrawerPane !== null || activePane !== id}
+                hidden={activeDrawerPane !== null || !isActivePanel}
               >
-                <Panel />
+                {layout === "split" ? (
+                  <Panel />
+                ) : (
+                  <InspectorPage>
+                    <Panel />
+                  </InspectorPage>
+                )}
               </div>
             );
           })}

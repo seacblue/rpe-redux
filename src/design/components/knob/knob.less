@@ -1,0 +1,110 @@
+// The reusable circular numeric control used by compact labelled fields.
+
+.redux-knob-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--foreground);
+}
+
+.redux-knob-label {
+  max-width: 100%;
+  color: var(--foreground);
+  font-size: var(--type-label);
+  line-height: var(--line-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-knob {
+  --knob-ratio: 0;
+  --knob-angle: -135deg;
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--design-knob-size);
+  height: var(--design-knob-size);
+  border: 1px solid var(--edge-control);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  cursor: ns-resize;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  transition:
+    border-color var(--design-dur-tint) ease,
+    background-color var(--design-dur-tint) ease;
+}
+
+.redux-knob::before,
+.redux-knob::after {
+  position: absolute;
+  inset: var(--space-1);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.redux-knob::before {
+  background: conic-gradient(
+    from 225deg,
+    var(--active-accent) 0deg,
+    var(--active-accent) calc(var(--knob-ratio) * 270deg),
+    var(--edge-divider) calc(var(--knob-ratio) * 270deg),
+    var(--edge-divider) 270deg,
+    transparent 270deg
+  );
+}
+
+.redux-knob::after {
+  inset: var(--space-2);
+  background: var(--surface-raised);
+}
+
+.redux-knob-mark {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-1);
+  left: calc(50% - var(--space-1) / 2);
+  width: var(--space-1);
+  height: var(--space-3);
+  border-radius: var(--design-radius-micro);
+  background: var(--active-accent);
+  pointer-events: none;
+  transform: rotate(var(--knob-angle));
+  transform-origin: 50% calc(var(--design-knob-size) / 2 - var(--space-1));
+}
+
+.redux-knob-value {
+  position: relative;
+  z-index: 1;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-label);
+  pointer-events: none;
+}
+
+.redux-knob:hover:not([aria-disabled="true"]) {
+  border-color: var(--active-accent);
+  background: var(--surface-hover);
+}
+
+.redux-knob[data-dragging="true"] {
+  border-color: var(--active-accent);
+  cursor: ns-resize;
+}
+
+.redux-knob[aria-disabled="true"] {
+  cursor: var(--app-cursor-disabled);
+  opacity: 0.55;
+}
+
+.redux-knob:focus-visible {
+  .focus-ring(2px);
+}

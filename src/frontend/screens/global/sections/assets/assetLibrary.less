@@ -37,15 +37,41 @@
   scrollbar-gutter: stable;
 }
 
+// The workspace gives the preview a full-height plate. The compact copy grows
+// the plate to that size while the panel expands, so the handoff frame keeps
+// the same pixels instead of swapping a short plate for a tall one.
+.inspector[data-mode-phase="opening"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .asset-details
+  > .asset-image,
+.inspector[data-mode-phase="expanded"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .asset-details
+  > .asset-image {
+  height: min(48vh, 460px);
+}
+
+.inspector-body > [data-mode-underlay="true"] .asset-details > .asset-image {
+  transition: height var(--design-dur-enter) var(--design-ease-move);
+}
+
 .asset-library-split-details .asset-details {
   margin: 0;
   padding: var(--space-4);
 }
 
 // Compact Inspector: the tree gets the upper face and the details the lower
-// one. The split itself owns scrolling; these rules only keep both faces usable.
-.inspector-page-split-top > .asset-tree-shell {
-  height: 100%;
+// one. Both faces use the shared inspector page content layer for their inset;
+// these rules only keep the tree and its pinned footer usable inside the face.
+.inspector-page-split-top .asset-tree-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.inspector-page-split .asset-details {
+  margin: 0;
 }
 
 .asset-drop-overlay {

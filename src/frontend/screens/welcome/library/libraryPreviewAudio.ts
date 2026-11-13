@@ -31,6 +31,7 @@ export class LibraryPreviewAudio {
   private master: GainNode | null = null;
   private readonly gains = new Map<HTMLAudioElement, GainNode>();
   private backgroundVolume = 1;
+  private musicVolume = 0.75;
   private revision = 0;
   private playingId = "";
   private reported = false;
@@ -99,6 +100,21 @@ export class LibraryPreviewAudio {
     this.backgroundVolume = Math.max(0, Math.min(1, Number.isFinite(multiplier) ? multiplier : 1));
     if (this.context && this.master) {
       rampGain(this.master.gain, this.context.currentTime, this.backgroundVolume);
+    }
+  }
+
+  /** Applies the music bus volume to the active cross-fade gains. */
+  setMusicVolume(value: number): void {
+    this.musicVolume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+    if (!this.context) {
+      return;
+    }
+    for (const [element, gain] of this.gains) {
+      rampGain(
+        gain.gain,
+        this.context.currentTime,
+        element === this.active ? this.targetVolume() : 0,
+      );
     }
   }
 
@@ -179,7 +195,7 @@ export class LibraryPreviewAudio {
       return;
     }
     this.fading = previous;
-    rampGain(nextGain.gain, context.currentTime, TARGET_VOLUME, FADE_MS / 1000);
+    rampGain(nextGain.gain, context.currentTime, this.targetVolume(), FADE_MS / 1000);
     const previousGain = previous && this.gains.get(previous);
     if (previousGain) {
       rampGain(previousGain.gain, context.currentTime, 0, FADE_MS / 1000);
@@ -239,6 +255,11 @@ export class LibraryPreviewAudio {
     element.pause();
     element.removeAttribute("src");
     element.load();
+  }
+
+  /** The music level applied to the active cross-fade gain. */
+  private targetVolume(): number {
+    return TARGET_VOLUME * this.musicVolume;
   }
 
   /** Notifies the owner only when the playing state actually flips. */

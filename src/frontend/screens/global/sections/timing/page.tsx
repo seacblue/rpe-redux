@@ -1,13 +1,10 @@
 /**
- * Timing page: a compact Inspector stack and the expanded timing workspace.
+ * Timing page: the compact Inspector stack and the expanded timing workspace.
  *
- * Both layouts use the same list, property form, metronome, and auto-detect
- * entry. The compact page stacks them so the timeline stays visible; the
- * workspace adds the full-height list and the BPM band map.
+ * Both layouts use the same list and property faces. The compact page stacks
+ * them as a split inspector page; the workspace places them side by side at
+ * full height.
  */
-import { useTranslation } from "../../../../../i18n/react.ts";
-import { formatBeat } from "../../../../../core/global/chart/timing/beat.ts";
-import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import {
   registerWorkspaceMode,
   type WorkspaceModeDefinition,
@@ -18,12 +15,8 @@ import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../../../../core/edit/state/visibility.ts";
-import { GlobalTimingInspector } from "./GlobalTimingInspector.tsx";
-import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
-import { TimingMap } from "./TimingMap.tsx";
-import { useGlobalChart } from "../../useGlobalChart.ts";
-import { TimingDetectFooter } from "../../../editor/inspector/bpm/BpmPanel.tsx";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
+import { TimingPageLayout } from "./TimingPageLayout.tsx";
 
 const hasDocument = {
   get: () => getEditorVisibility().hasDocument,
@@ -32,64 +25,12 @@ const hasDocument = {
 
 /** The compact page: timing rows above the selected point's properties. */
 function TimingInspectorPage() {
-  const { t } = useTranslation();
-  const chart = useGlobalChart();
-  if (!chart?.BPMList.length) {
-    // With no timing points there is no point property to inspect. Keep the
-    // offset/list/add surface full-height, and pin the detector entry below it
-    // so the author can still create the first timing.
-    return (
-      <div className="timing-empty-page">
-        <div className="timing-empty-list">
-          <GlobalTimingWorkspace />
-        </div>
-        <TimingDetectFooter disabled={!chart} />
-      </div>
-    );
-  }
-  return (
-    <InspectorPageSplit
-      topLabel={t("editorPanels.inspector.form.bpm.title")}
-      bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
-      top={<GlobalTimingWorkspace />}
-      bottom={<GlobalTimingInspector />}
-    />
-  );
+  return <TimingPageLayout layout="compact" />;
 }
 
-/** The expanded workspace: full-height list, properties, and the BPM band map. */
+/** The expanded workspace: full-height timing list and property faces. */
 function TimingStudio() {
-  const { t } = useTranslation();
-  const chart = useGlobalChart();
-  const entries = chart?.BPMList ?? [];
-  const offset = Number(chart?.META.offset ?? 0);
-  const last = entries.at(-1);
-  return (
-    <div className="timing-studio">
-      <div className="studio-summary">
-        <strong>{t("chrome.timingStudio.points", { count: entries.length })}</strong>
-        <span className="studio-summary-separator" aria-hidden="true" />
-        <span>
-          {t("chrome.timingStudio.offset", { offset: Number.isFinite(offset) ? offset : 0 })}
-        </span>
-        {last && (
-          <>
-            <span className="studio-summary-separator" aria-hidden="true" />
-            <span>{t("chrome.timingStudio.lastBeat", { beat: formatBeat(last.startTime) })}</span>
-          </>
-        )}
-      </div>
-      <div className="studio-body">
-        <div className="studio-list-pane">
-          <GlobalTimingWorkspace variant="studio" />
-        </div>
-        <div className="studio-detail-pane">
-          <GlobalTimingInspector />
-        </div>
-        <TimingMap entries={entries} chart={chart} />
-      </div>
-    </div>
-  );
+  return <TimingPageLayout layout="expanded" />;
 }
 
 const mode: WorkspaceModeDefinition = {
@@ -104,10 +45,14 @@ const mode: WorkspaceModeDefinition = {
 const disposePanel = registerInspectorPanel({
   id: "timing",
   component: TimingInspectorPage,
+  layout: "split",
   label: "chrome.pane.bpm",
   icon: "bpm",
   tutorial: GLOBAL_PAGE_TUTORIALS.timing,
   workspaceMode: "timing",
+  // The timing workspace splits its two faces evenly, so the compact page settles
+  // on the right half when it expands.
+  modeDetailShare: 0.5,
   editsChart: true,
 });
 

@@ -36,6 +36,7 @@ import { curvePreviewMode } from "../../../curveEvents/mode.ts";
 import { freeCameraState } from "../../stage/freeCamera/freeCamera.ts";
 import { detailedNoiseRendering } from "../../../../../../core/edit/state/noiseRendering.ts";
 import { bindBackgroundVolume } from "../../../../../platform/backgroundVolume.ts";
+import { audioMixer } from "../../../../../../core/media/audioMixer.ts";
 
 /** Preview media, skin resources, and stage helpers for one editor mount. */
 export interface PreviewRuntime {
@@ -90,6 +91,9 @@ export function createPreviewRuntime(options: {
     options.notify(t("system.audio.timeStretchUnavailable"), "warning");
   };
   const hitSounds = new HitSounds(audio);
+  const removeAudioOwner = audioMixer.registerOwner({
+    setMusicVolume: (value) => audio.setVolume(value),
+  });
   const removeBackgroundVolume = bindBackgroundVolume((level) => audio.setBackgroundVolume(level));
   const backgroundClock = new Worker(new URL("./backgroundAudioClock.worker.ts", import.meta.url), {
     type: "module",
@@ -333,6 +337,7 @@ export function createPreviewRuntime(options: {
       window.removeEventListener("blur", syncBackgroundClock);
       backgroundClock.terminate();
       timelineThumbnail.dispose();
+      removeAudioOwner();
       void audio.dispose();
       removeCustomBackgroundBinding();
       images.dispose();

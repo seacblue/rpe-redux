@@ -6,8 +6,6 @@
  * room; it does not fork asset behavior.
  */
 import { useEffect, useSyncExternalStore } from "react";
-import { useTranslation } from "../../../../../i18n/react.ts";
-import { useEditorRuntimeValue } from "../../../editor/workspace/runtime/composition/EditorRuntime.tsx";
 import { useEditorSession } from "../../../editor/workspace/runtime/providers/SessionProvider.tsx";
 import { useInspectorRuntime } from "../../../editor/workspace/runtime/providers/InspectorProvider.tsx";
 import {
@@ -21,7 +19,6 @@ import {
   subscribeToEditorVisibility,
 } from "../../../../../core/edit/state/visibility.ts";
 import { AssetsPanel } from "./AssetsPanel.tsx";
-import type { AssetLibraryPanelState } from "./model.ts";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
 
 const hasDocument = {
@@ -57,21 +54,10 @@ function AssetsInspectorPage() {
   return <AssetsPage layout="compact" />;
 }
 
-/** The expanded workspace summary and full-height tree/preview columns. */
+/** The expanded workspace with full-height tree/preview columns. */
 function AssetsStudio() {
-  const { t } = useTranslation();
-  const state = useEditorRuntimeValue(
-    (runtime) => runtime.ui.assetLibrary,
-    null as AssetLibraryPanelState | null,
-  );
-  const snapshot = state?.status === "ready" ? state.snapshot : null;
   return (
     <div className="assets-studio">
-      <div className="studio-summary">
-        <strong>{t("chrome.assetsStudio.assets", { count: snapshot?.assetCount ?? 0 })}</strong>
-        <span className="studio-summary-separator" aria-hidden="true" />
-        <span>{t("chrome.assetsStudio.folders", { count: snapshot?.folders.length ?? 0 })}</span>
-      </div>
       <AssetsPage layout="workspace" />
     </div>
   );
@@ -89,10 +75,14 @@ const mode: WorkspaceModeDefinition = {
 const disposePanel = registerInspectorPanel({
   id: "assets",
   component: AssetsInspectorPage,
+  layout: "split",
   label: "chrome.pane.assets",
   icon: "folder",
   tutorial: GLOBAL_PAGE_TUTORIALS.assets,
   workspaceMode: "assets",
+  // The asset workspace splits its two faces 0.9fr / 1.1fr, so the compact page
+  // settles on the larger details column when it expands.
+  modeDetailShare: 0.55,
   editsChart: true,
 });
 

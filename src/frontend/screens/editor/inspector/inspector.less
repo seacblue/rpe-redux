@@ -1,21 +1,33 @@
 /*
- * Frame for the inspector column: the fixed pane status bar, the scrollable
- * content area, the empty placeholder, and the shared `details`/`summary`
- * surfaces.
+ * Inspector frame: the fixed status bar, the pane host, the workspace-mode
+ * surface, and the empty placeholder.
  *
- * Feature sheets own their own layout; this sheet only paints the frame and
- * must stay free of pane-specific selectors.
+ * The frame contributes no margin or padding of its own. A pane fills the body
+ * edge to edge and the page layer (chrome/inspectorPage) owns every content
+ * inset, so scrollbars sit on the panel's outer edge.
+ *
+ * Expanding into a workspace page is one motion: the panel grows leftward while
+ * the compact page slides out of its top face and settles as the wide page's
+ * detail column. `--mode-cover` is the one length both copies read (the compact
+ * copy's width and the wide page's detail track), so the two cannot drift apart
+ * and the handoff ends on identical pixels.
  */
+@property --mode-cover {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 .inspector {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-panel);
-  padding: 0;
-  overflow: hidden;
-  min-width: 0;
-  font-size: var(--type-body);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  background: transparent;
+  overflow: hidden;
+  font-size: var(--type-body);
 }
 
 .inspector-status {
@@ -25,7 +37,7 @@
   gap: var(--space-2);
   height: calc(var(--control-height) + var(--space-1-5));
   padding: 0 var(--space-2) 0 var(--space-3);
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--edge-divider);
   background: transparent;
 }
 
@@ -68,7 +80,16 @@
   padding: 0;
 }
 
-.redux-app-root .inspector .inspector-status > .inspector-status-help,
+.redux-app-root .inspector .inspector-status > .inspector-status-help {
+  flex: none;
+  width: var(--space-6);
+  height: var(--space-6);
+  min-width: var(--space-6);
+  min-height: var(--space-6);
+  padding: 0;
+  color: var(--foreground-muted);
+}
+
 .redux-app-root .inspector .inspector-status-actions > .inspector-status-expand {
   flex: none;
   width: var(--control-height-compact);
@@ -76,7 +97,11 @@
   min-width: var(--control-height-compact);
   min-height: var(--control-height-compact);
   padding: 0;
+  border-radius: 50%;
   color: var(--foreground-muted);
+  transition:
+    background-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
 }
 
 .redux-app-root .inspector .inspector-status > .inspector-status-help:hover:not(:disabled),
@@ -84,61 +109,86 @@
   .inspector
   .inspector-status-actions
   > .inspector-status-expand:hover:not(:disabled) {
+  background: var(--active-accent-fill);
   color: var(--accent);
 }
 
-// The same expand control becomes the return control in place: the panel is
-// already open, so the glyph turns around rather than moving to another bar.
 .redux-app-root
   .inspector
   .inspector-status-actions
-  > .inspector-status-expand.is-expanded
-  .redux-icon {
-  transform: rotate(180deg);
+  > .inspector-status-expand[aria-expanded="true"] {
+  background: var(--active-accent-fill);
+  color: var(--accent);
 }
 
-// A document task owns the inspector body. The panel keeps its header and
-// scrolls inside the task page instead of the outer inspector column. The
-// expanded panel spans the full width, so its header uses equal side insets and
-// the content drops the scrollbar gutter that would otherwise shift the studio
-// to the left.
+// A document task owns the body. The header keeps equal side insets in that
+// mode; the body clips both the compact copy and the wide copy through the
+// width handoff.
 .inspector[data-mode-surface="true"] .inspector-status {
   padding-right: var(--space-3);
   border-bottom-color: var(--edge-divider);
 }
 
-.inspector[data-mode-surface="true"] .inspector-content {
+// The body is the pane host. It is a frame-sized box: no padding, no margin,
+// and no scrollbar of its own. Every page supplies its scroll region.
+.inspector-body {
+  --mode-cover: calc(var(--inspector-compact-width, 400px) - 1px);
   position: relative;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  scrollbar-gutter: auto;
+  background: transparent;
+  transition: --mode-cover var(--design-dur-enter) var(--design-ease-move);
 }
 
-// The compact page stays mounted at its original width and right edge. It
-// fades out as the studio fades in, then returns while the studio leaves, so
-// the two arrangements crossfade inside the shrinking panel. The studio is
-// laid out at its final width from the first frame and anchored to the right
-// edge, so growing the panel reveals a stable layout instead of reflowing it.
-.inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
+// While a workspace page is open, the cover widens to the page's detail column:
+// the compact page's resting width on the way in, that column's width once the
+// panel arrives. The page's detail track reads the same value.
+.inspector[data-mode-phase="opening"] .inspector-body,
+.inspector[data-mode-phase="expanded"] .inspector-body {
+  --mode-cover: calc(var(--mode-detail-share, 0.5) * (100vw - var(--workbench-side-track, 0px)));
+}
+
+// One registered pane fills the body. The pane host is layout only; the page
+// renders the scroll region and the content layer inside it.
+.inspector-pane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.inspector-pane[hidden] {
+  display: none;
+}
+
+// The compact page stays mounted at its resting width and right edge while the
+// workspace width moves. During the handoff it sits above the wide copy at the
+// cover width so its upper and lower faces can leave and settle without a
+// content swap.
+.inspector-body[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: calc(var(--inspector-compact-width) - 1px);
-  z-index: 0;
+  width: var(--mode-cover);
+  z-index: 2;
   pointer-events: none;
-  opacity: 1;
-  transition: opacity 120ms ease 140ms;
+  visibility: visible;
 }
 
-.inspector[data-mode-surface="true"][data-mode-expanded="true"]
-  .inspector-content
+.inspector[data-mode-phase="expanded"]
+  .inspector-body[data-mode-surface="true"]
   > [data-mode-underlay="true"]:not([hidden]) {
-  opacity: 0;
-  transition: opacity 80ms ease;
+  visibility: hidden;
 }
 
+// The wide copy follows the inspector's animated width, so its content moves
+// with the panel's left edge instead of appearing at its final position.
 .inspector-mode-surface {
   position: absolute;
   top: 0;
@@ -146,44 +196,13 @@
   bottom: 0;
   z-index: 1;
   display: flex;
-  width: var(--inspector-expanded-width);
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  opacity: 1;
-  transform: scale(1);
+  container-type: inline-size;
+  container-name: inspector-mode;
   transform-origin: top right;
-  animation: inspector-mode-surface-in 200ms var(--design-ease-enter) both;
-}
-
-// Collapsing swaps the entry keyframe for an exit keyframe so the task fades
-// out while the panel shrinks and the compact page returns underneath it.
-.inspector-mode-surface[data-mode-leaving="true"] {
-  opacity: 0;
-  transform: scale(0.997);
-  animation: inspector-mode-surface-out 200ms ease both;
-}
-
-@keyframes inspector-mode-surface-in {
-  from {
-    opacity: 0;
-    transform: scale(0.997);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes inspector-mode-surface-out {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: scale(0.997);
-  }
 }
 
 .inspector-mode-surface > * {
@@ -192,27 +211,15 @@
   min-height: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .inspector-mode-surface,
-  .inspector-mode-surface[data-mode-leaving="true"] {
-    animation: none;
-    transition: none;
-  }
-
-  .inspector-content[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
-    transition: none;
-  }
+// The compact copy owns the detail face until the width transition ends. The
+// wide copy lays that same face out underneath at the same size, so it waits
+// hidden and takes over on the handoff frame: every control exists once on
+// screen, never twice.
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .mode-handoff-detail,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .mode-handoff-detail {
+  visibility: hidden;
 }
 
-.inspector-content {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  background: transparent;
-}
 .inspector-empty-placeholder {
   display: grid;
   flex: 1 0 auto;
@@ -235,6 +242,6 @@
   padding: var(--space-2) var(--space-3);
 }
 
-.inspector-content [data-readonly="true"] {
+.inspector-body [data-readonly="true"] {
   opacity: 0.72;
 }

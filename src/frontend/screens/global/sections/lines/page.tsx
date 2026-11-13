@@ -5,10 +5,7 @@
  * same components in both layouts. The compact page stacks tree above form; the
  * workspace shows both columns at full height.
  */
-import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useTranslation } from "../../../../../i18n/react.ts";
-import { values } from "../../../../../core/state/values.ts";
-import { lineGroupLabels } from "../../../editor/workspace/lineLabels.ts";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   useEditorRuntime,
   useEditorRuntimeValue,
@@ -33,20 +30,6 @@ const hasDocument = {
   get: () => getEditorVisibility().hasDocument,
   subscribe: subscribeToEditorVisibility,
 };
-
-const EMPTY_SELECTION: readonly number[] = Object.freeze([]);
-
-/** The toolbar-owned line selection, used for the workspace summary. */
-function useSharedLineSelection(): readonly number[] {
-  return useSyncExternalStore(
-    useCallback((listener) => values.byId.subscribe("editor.lineSelection", listener), []),
-    useCallback(
-      () => values.byId.get<readonly number[]>("editor.lineSelection") ?? EMPTY_SELECTION,
-      [],
-    ),
-    () => EMPTY_SELECTION,
-  );
-}
 
 /**
  * Keeps the line-panel snapshot bound to the installed session.
@@ -105,29 +88,10 @@ function LinesInspectorPage() {
   return <LinesPage layout="compact" />;
 }
 
-/** The expanded workspace summary and full-height tree/form columns. */
+/** The expanded workspace with full-height tree/form columns. */
 function LinesStudio() {
-  const { t } = useTranslation();
-  const linePanel = useEditorRuntimeValue(
-    (runtime) => runtime.ui.linePanel,
-    null as LinePanelSnapshot | null,
-  );
-  const selected = useSharedLineSelection();
-  const chart = linePanel?.props.session.chart;
-  const lines = chart?.judgeLineList ?? [];
-  const groups = chart ? lineGroupLabels(chart).length : 0;
-  const selectedCount = lines.length
-    ? Math.max(1, Math.min(selected.length || 1, lines.length))
-    : 0;
   return (
     <div className="lines-studio">
-      <div className="studio-summary">
-        <strong>{t("chrome.linesStudio.lines", { count: lines.length })}</strong>
-        <span className="studio-summary-separator" aria-hidden="true" />
-        <span>{t("chrome.linesStudio.groups", { count: groups })}</span>
-        <span className="studio-summary-separator" aria-hidden="true" />
-        <span>{t("chrome.linesStudio.selected", { count: selectedCount })}</span>
-      </div>
       <LinesPage layout="workspace" />
     </div>
   );
@@ -145,10 +109,14 @@ const mode: WorkspaceModeDefinition = {
 const disposePanel = registerInspectorPanel({
   id: "lines",
   component: LinesInspectorPage,
+  layout: "split",
   label: "chrome.pane.lines",
   icon: "grid",
   tutorial: GLOBAL_PAGE_TUTORIALS.lines,
   workspaceMode: "lines",
+  // The line workspace splits its two faces 0.9fr / 1.1fr, so the compact page
+  // settles on the larger property column when it expands.
+  modeDetailShare: 0.55,
   editsChart: true,
 });
 

@@ -86,7 +86,6 @@
   gap: 0;
   --workbench-side-track: var(--chrome-sidebar-track);
   --inspector-compact-width: clamp(260px, var(--inspector-width), 57vw);
-  --inspector-expanded-width: calc(100vw - var(--workbench-side-track) - 1px);
   --cover-backdrop-workbench-top: calc(var(--titlebar-height) + 106px);
 }
 
@@ -110,7 +109,13 @@
   width: 100%;
   min-width: 260px;
   min-height: 0;
-  transition: width 260ms var(--design-ease-enter);
+  transition: width var(--design-dur-enter) var(--design-ease-move);
+}
+
+// The compact inspector is a bounded side surface. Keep its frame visible
+// even when a chrome material removes the generic panel border.
+.redux-app-root .workbench-inspector > .inspector:not([data-mode-surface="true"]) {
+  border: 1px solid var(--edge-divider);
 }
 
 // A document task expands the inspector itself. The wrapper stays in its grid
@@ -174,7 +179,7 @@
 // surface and covers the workspace directly.
 .redux-app-root .workbench-inspector > .inspector[data-mode-surface="true"] {
   background: var(--surface);
-  border-color: var(--edge-divider);
+  border: 0;
 }
 
 .workbench-inspector > .inspector[data-mode-surface="true"][data-mode-expanded="true"] {
