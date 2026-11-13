@@ -198,6 +198,12 @@ export function createTimelineRuntime(options: {
     options.shell.eventsBackdrop,
     options.shell.notesPlayhead,
     options.shell.eventsPlayhead,
+    options.shell.notesGridBatch,
+    options.shell.notesPlayheadBatch,
+    options.shell.eventsGridBatch,
+    options.shell.eventsPlayheadBatch,
+    options.shell.noteSolidBatch,
+    options.shell.eventOverlayBatch,
   );
   options.scope.add(() => timeline.dispose());
 
@@ -279,6 +285,7 @@ export function createTimelineRuntime(options: {
   const selectionOverlay = new SelectionOverlay(
     options.shell.stage,
     options.shell.selectionOverlay,
+    options.shell.selectionOverlayBatch,
     timeline,
     options.scope,
   );

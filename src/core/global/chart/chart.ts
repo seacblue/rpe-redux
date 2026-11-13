@@ -20,7 +20,7 @@ import {
 import { isRecord } from "../../utils/guards.ts";
 import { yieldToHost } from "../../utils/yieldToHost.ts";
 import { extensionRegistry } from "../../extensions/runtime.ts";
-import { EVENT_TYPES, EXTENDED_TYPES } from "./chartVocabulary.ts";
+import { EVENT_TYPES, EVENT_TRACKS } from "./chartVocabulary.ts";
 import { containsCycle } from "./cycles.ts";
 import { assertChartStructure } from "./chartValidation.ts";
 import type { BlockArea } from "./noise/blockArea.ts";
@@ -457,6 +457,16 @@ export function isChartObjectIdsNormalized(chart: Chart): boolean {
   return normalizedCharts.has(chart);
 }
 
+/** Mark one freshly generated object as already carrying a trusted id. */
+export function markChartObjectIdNormalized(value: object): void {
+  normalizedObjects.add(value);
+}
+
+/** Mark a copy-on-write collection whose members were already identity-checked. */
+export function markChartObjectCollectionNormalized(value: object): void {
+  normalizedCollections.add(value);
+}
+
 type ChartIdentityAssigner = (value: Record<string, unknown>) => void;
 
 /** One id set and factory shared by every object in a chart. */
@@ -491,7 +501,7 @@ function assignLineNoteIds(line: JudgeLine, assign: ChartIdentityAssigner): void
 /** Assign ids to every event on a line, including extended tracks. */
 function assignLineEventIds(line: JudgeLine, assign: ChartIdentityAssigner): void {
   for (const layer of lineEventLayers(line)) {
-    for (const type of [...EVENT_TYPES, ...EXTENDED_TYPES]) {
+    for (const type of EVENT_TRACKS) {
       const events = layer[type];
       if (!events) {
         continue;
@@ -513,7 +523,7 @@ async function assignLineEventIdsAsync(
 ): Promise<void> {
   let assigned = 0;
   for (const layer of lineEventLayers(line)) {
-    for (const type of [...EVENT_TYPES, ...EXTENDED_TYPES]) {
+    for (const type of EVENT_TRACKS) {
       const events = layer[type];
       if (!events) {
         continue;
@@ -547,45 +557,6 @@ function assignChartEffectIds(chart: Chart, assign: ChartIdentityAssigner): void
   }
 }
 
-interface LineNormalizationLookup {
-  readonly byId: Map<string, object>;
-  readonly present: WeakSet<object>;
-}
-
-/** Visit the line itself and every note and event object it owns. */
-function visitLineObjects(line: JudgeLine, visit: (value: Record<string, unknown>) => void): void {
-  visit(line as unknown as Record<string, unknown>);
-  for (const note of line.notes ?? []) {
-    visit(note as unknown as Record<string, unknown>);
-  }
-  for (const layer of lineEventLayers(line)) {
-    for (const type of [...EVENT_TYPES, ...EXTENDED_TYPES]) {
-      for (const event of layer[type] ?? []) {
-        visit(event as unknown as Record<string, unknown>);
-      }
-    }
-  }
-}
-
-/** Index the previous line by id and the current line by object identity. */
-function lineNormalizationLookup(
-  previousLine: JudgeLine,
-  currentLine: JudgeLine,
-): LineNormalizationLookup {
-  const byId = new Map<string, object>();
-  visitLineObjects(previousLine, (value) => {
-    const id = value.id;
-    if (isChartObjectId(id) && !byId.has(id)) {
-      byId.set(id, value);
-    }
-  });
-  const present = new WeakSet<object>();
-  visitLineObjects(currentLine, (value) => {
-    present.add(value);
-  });
-  return { byId, present };
-}
-
 /**
  * Normalize one note/event collection against the previous line revision.
  *
@@ -595,25 +566,54 @@ function lineNormalizationLookup(
  */
 function normalizeCollectionIncremental(
   items: readonly Record<string, unknown>[] | undefined,
-  previous: () => LineNormalizationLookup | null,
+  previousItems: readonly Record<string, unknown>[] | undefined,
   used: Set<string>,
   factory: ReturnType<typeof createChartIdentityFactory>,
 ): boolean {
   if (!items || normalizedCollections.has(items)) {
     return true;
   }
-  const lookup = previous();
-  for (const item of items) {
+  let lookup: Map<string, object> | undefined;
+  let present: WeakSet<object> | undefined;
+  const buildLookup = (): void => {
+    if (lookup && present) {
+      return;
+    }
+    lookup = new Map<string, object>();
+    for (const previousItem of previousItems ?? []) {
+      const id = previousItem.id;
+      if (isChartObjectId(id) && !lookup.has(id)) {
+        lookup.set(id, previousItem);
+      }
+    }
+    present = new WeakSet<object>();
+    for (const currentItem of items) {
+      present.add(currentItem);
+    }
+  };
+  for (const [index, item] of items.entries()) {
     if (normalizedObjects.has(item)) {
+      continue;
+    }
+    // Copy-on-write keeps unchanged positions by identity. Avoid even reading
+    // their ids; this is the common path for a one-note edit in a large line.
+    if (previousItems?.[index] === item) {
       continue;
     }
     const existing = item.id;
     if (isChartObjectId(existing) && !used.has(existing)) {
-      const old = lookup?.byId.get(existing);
+      const previousAtIndex = previousItems?.[index];
+      if (previousAtIndex?.id === existing && previousAtIndex !== item) {
+        used.add(existing);
+        normalizedObjects.add(item);
+        continue;
+      }
+      buildLookup();
+      const old = lookup?.get(existing);
       if (!old) {
         return false;
       }
-      if (old === item || !lookup?.present.has(old)) {
+      if (old === item || !present?.has(old)) {
         used.add(existing);
         normalizedObjects.add(item);
         continue;
@@ -628,19 +628,32 @@ function normalizeCollectionIncremental(
   return true;
 }
 
-/** Normalize one changed line without walking the rest of the chart. */
+/**
+ * Normalize one changed line without walking the rest of the chart.
+ *
+ * A copy-on-write clone keeps every untouched container by identity. The line
+ * id check, the note collection, and each event track are therefore only
+ * visited when this revision actually replaced that container, and a line that
+ * is the previous revision's own object returns immediately.
+ */
 function normalizeLineIncremental(
   line: JudgeLine,
   previousLine: JudgeLine | undefined,
   factory: ReturnType<typeof createChartIdentityFactory>,
 ): boolean {
-  const used = new Set<string>();
-  let lookup: LineNormalizationLookup | null | undefined;
-  const previousLookup = (): LineNormalizationLookup | null => {
-    if (lookup === undefined) {
-      lookup = previousLine ? lineNormalizationLookup(previousLine, line) : null;
+  if (line === previousLine && normalizedObjects.has(line)) {
+    return true;
+  }
+  let used: Set<string> | null = null;
+  // Allocate the shared id set only for a line with a changed collection.
+  const usedIds = (): Set<string> => {
+    if (!used) {
+      used = new Set<string>();
+      if (isChartObjectId(line.id)) {
+        used.add(line.id);
+      }
     }
-    return lookup;
+    return used;
   };
   if (!normalizedObjects.has(line)) {
     const existing = line.id;
@@ -652,15 +665,31 @@ function normalizeLineIncremental(
     }
     normalizedObjects.add(line);
   }
-  if (isChartObjectId(line.id)) {
-    used.add(line.id);
+  if (line.notes !== previousLine?.notes) {
+    if (!normalizeCollectionIncremental(line.notes, previousLine?.notes, usedIds(), factory)) {
+      return false;
+    }
   }
-  if (!normalizeCollectionIncremental(line.notes, previousLookup, used, factory)) {
-    return false;
+  // Untouched layers and tracks are shared by identity with the previous line
+  // revision and were normalized there; skip laying them out again.
+  if (line.eventLayers === previousLine?.eventLayers && line.extended === previousLine?.extended) {
+    return true;
   }
-  for (const layer of lineEventLayers(line)) {
-    for (const type of [...EVENT_TYPES, ...EXTENDED_TYPES]) {
-      if (!normalizeCollectionIncremental(layer[type], previousLookup, used, factory)) {
+  const currentLayers = lineEventLayers(line);
+  const previousLayers = previousLine ? lineEventLayers(previousLine) : [];
+  for (const [layerIndex, layer] of currentLayers.entries()) {
+    // Copy-on-write transactions preserve untouched layer and track arrays by
+    // identity. Their ids were valid in the previous revision, so walking a
+    // shared million-event track here would only duplicate work.
+    if (layer === previousLayers[layerIndex]) {
+      continue;
+    }
+    const previousLayer = previousLayers[layerIndex];
+    for (const type of EVENT_TRACKS) {
+      if (layer[type] === previousLayer?.[type]) {
+        continue;
+      }
+      if (!normalizeCollectionIncremental(layer[type], previousLayer?.[type], usedIds(), factory)) {
         return false;
       }
     }
@@ -670,6 +699,11 @@ function normalizeLineIncremental(
 
 /**
  * Normalize a chart derived from `previous` by touching only changed lines.
+ *
+ * A copy-on-write copy keeps every untouched line object identical to the
+ * previous chart's line at the same slot, and that object was normalized there,
+ * so untouched lines cost nothing. The previous line for a changed line is read
+ * from the same slot first; only a reordered or replaced line needs the id map.
  *
  * Returns false when an id cannot be attributed to the same previous line; the
  * caller then runs the whole-chart pass, which preserves duplicate repair for
@@ -688,14 +722,36 @@ function normalizeChartObjectIdsIncremental(
     return false;
   }
   const previousLines = previous.judgeLineList ?? [];
-  const previousById = new Map<string, JudgeLine>();
-  for (const line of previousLines) {
-    if (isChartObjectId(line.id)) {
-      previousById.set(line.id, line);
+  const lines = chart.judgeLineList ?? [];
+  let previousById: Map<string, JudgeLine> | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const atSameSlot = previousLines[index];
+    // The line object survived the copy-on-write clone unchanged and was
+    // normalized in an earlier revision.
+    if (line === atSameSlot && normalizedObjects.has(line)) {
+      continue;
     }
-  }
-  for (const line of chart.judgeLineList ?? []) {
-    const previousLine = isChartObjectId(line.id) ? previousById.get(line.id) : undefined;
+    let previousLine: JudgeLine | undefined;
+    if (atSameSlot && isChartObjectId(line.id) && atSameSlot.id === line.id) {
+      previousLine = atSameSlot;
+    } else if (isChartObjectId(line.id)) {
+      if (!previousById) {
+        previousById = new Map<string, JudgeLine>();
+        for (const candidate of previousLines) {
+          if (isChartObjectId(candidate.id) && !previousById.has(candidate.id)) {
+            previousById.set(candidate.id, candidate);
+          }
+        }
+      }
+      previousLine = previousById.get(line.id);
+      // A moved object may claim its id only when that line is not also still
+      // present elsewhere; a copied line carrying another line's id is a
+      // duplicate the incremental pass must hand to the whole-chart repair.
+      if (previousLine && previousLine !== line && lines.includes(previousLine)) {
+        return false;
+      }
+    }
     if (!normalizeLineIncremental(line, previousLine, factory)) {
       return false;
     }
@@ -763,12 +819,21 @@ export function noteIsAbove(note: { above?: unknown }): boolean {
 }
 
 /**
+ * Scoring weight of one note: Holds (type 2) do not score.
+ *
+ * Shared by the tally below and the transaction kernel's incremental count.
+ */
+export function noteScoringWeight(note: { type?: number } | undefined): number {
+  return note?.type === 2 ? 0 : 1;
+}
+
+/**
  * Count scoring notes: every note except a Hold.
  *
  * Charts show this tally as `numOfNotes`; a chart with 3 Taps and 2 Holds reads 3.
  */
 export function countScoringNotes(notes: readonly { type?: number }[] | undefined): number {
-  return (notes ?? []).reduce((sum, note) => sum + (note.type === 2 ? 0 : 1), 0);
+  return (notes ?? []).reduce((sum, note) => sum + noteScoringWeight(note), 0);
 }
 
 /**

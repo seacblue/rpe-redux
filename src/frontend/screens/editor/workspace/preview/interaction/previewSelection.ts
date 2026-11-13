@@ -25,6 +25,7 @@ import {
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { applySelection, cloneSelection } from "./previewNoteSelection.ts";
 import { previewPointerMoved } from "./previewSelectionPolicy.ts";
+export { selectionMapForSession } from "./previewSelectionMap.ts";
 
 /** A CSS-pixel point in the preview canvas. */
 export interface PreviewPoint {
@@ -112,11 +113,6 @@ function historyKey(session: EditorSession): string {
 
 /** One scratch array per gesture keeps pointer moves allocation-light. */
 const queryScratch: HitTestNoteGeometry[] = [];
-
-/** The session's note selection as a fresh map for preview rendering. */
-export function selectionMapForSession(session: EditorSession): Map<number, Set<number>> {
-  return cloneSelection(session);
-}
 
 /** Whether `point` lies inside the inclusive rectangle. */
 function pointInRectangle(point: Point, left: number, right: number, top: number, bottom: number) {

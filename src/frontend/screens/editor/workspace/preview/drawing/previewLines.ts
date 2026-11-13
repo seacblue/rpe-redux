@@ -15,10 +15,11 @@ import {
 } from "../../../canvas/palette.ts";
 import { noteIsAbove } from "../../../../../../core/global/chart/chart.ts";
 import { drawLine } from "./previewGuides.ts";
+import { preparedLineCache, type PreparedPreviewLine } from "./preparedLineCache.ts";
+import { passesForSampling } from "./previewPassOrder.ts";
 import type { JudgeLine, JudgeLineNote } from "../../../../../../core/global/chart/chart.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import type {
-  LineRuntime,
   NoteEntry,
   NoteState,
   SampledLineState,
@@ -175,20 +176,6 @@ interface PreviewNoteScreenGeometry {
   headY: number;
   tailX: number;
   tailY: number;
-}
-
-/** Per-frame line values shared by the Hold and ordinary-note passes. */
-interface PreparedPreviewLine {
-  state: SampledLineState;
-  runtime: LineRuntime;
-  centerX: number;
-  centerY: number;
-  rotation: number;
-  cosine: number;
-  sine: number;
-  lineScaleX: number;
-  lineScaleY: number;
-  isNoiseLine: boolean;
 }
 
 /** Resolve the screen coordinates shared by note rendering, culling, and picking. */
@@ -500,33 +487,56 @@ export function drawLinePasses(
   } = frame;
   const { centerX, centerY } = frame;
   const lines = frame.scene.lines;
-  const preparedLines: Array<PreparedPreviewLine | null | undefined> = new Array(lines.length);
+  const preparedCache = preparedLineCache(surface);
+  const preparedLines = preparedCache.entries;
+  const preparedGeneration = preparedCache.generation;
   const batchActive = surface.noteBatch.isActive();
   /** Prepare one line's shared transform once for every draw pass in this frame. */
   const prepareLine = (index: number): PreparedPreviewLine | null => {
-    const cached = preparedLines[index];
-    if (cached !== undefined) {
-      return cached;
-    }
     const state = states[index];
     const runtime = lines[index];
     if (!state || !runtime) {
-      preparedLines[index] = null;
       return null;
     }
+    const cached = preparedLines[index];
+    if (cached?.frame === preparedGeneration) {
+      return cached;
+    }
     const rotation = (state.rotation * Math.PI) / 180;
-    const prepared: PreparedPreviewLine = {
+    const prepared = cached ?? {
+      frame: 0,
       state,
       runtime,
-      centerX: centerX + state.x * scaleX,
-      centerY: centerY - state.y * scaleY,
-      rotation,
-      cosine: Math.cos(rotation),
-      sine: Math.sin(rotation),
-      lineScaleX: state.scaleX,
-      lineScaleY: state.scaleY,
-      isNoiseLine: noiseLineSettings(runtime.line) !== null,
+      selectedNotes: undefined,
+      centerX: 0,
+      centerY: 0,
+      rotation: 0,
+      cosine: 1,
+      sine: 0,
+      holdCapScale: 1,
+      lineScaleX: 1,
+      lineScaleY: 1,
+      isNoiseLine: false,
     };
+    prepared.frame = preparedGeneration;
+    prepared.state = state;
+    prepared.runtime = runtime;
+    prepared.selectedNotes = surface.selectedNotes.get(index);
+    prepared.centerX = centerX + state.x * scaleX;
+    prepared.centerY = centerY - state.y * scaleY;
+    prepared.rotation = rotation;
+    prepared.cosine = Math.cos(rotation);
+    prepared.sine = Math.sin(rotation);
+    // The preview can scale X and Y independently. A Hold cap runs along the
+    // line's local Y axis, so scale its length by that axis instead of the
+    // note's horizontal width scale; otherwise caps shorter than the note
+    // spacing leave gaps on static lines.
+    const localXScale = Math.hypot(prepared.cosine * scaleX, prepared.sine * scaleY);
+    const localYScale = Math.hypot(prepared.sine * scaleX, prepared.cosine * scaleY);
+    prepared.holdCapScale = localXScale > 0 ? localYScale / localXScale : 1;
+    prepared.lineScaleX = state.scaleX;
+    prepared.lineScaleY = state.scaleY;
+    prepared.isNoiseLine = noiseLineSettings(runtime.line) !== null;
     preparedLines[index] = prepared;
     return prepared;
   };
@@ -551,21 +561,7 @@ export function drawLinePasses(
   // A sampled line is lifted above the other judge lines so its focus colour
   // and opacity preview stay visible when lines overlap. Notes and holds keep
   // their own later passes.
-  const samplingLine = surface.samplingFocus?.lineIndex;
-  const linePasses =
-    samplingLine == null
-      ? null
-      : surface.passes.filter(
-          (pass): pass is { kind: "line"; index: number; depth: number } => pass.kind === "line",
-        );
-  const passes =
-    samplingLine == null || linePasses == null
-      ? surface.passes
-      : [
-          ...linePasses.filter((pass) => pass.index !== samplingLine),
-          ...linePasses.filter((pass) => pass.index === samplingLine),
-          ...surface.passes.filter((pass) => pass.kind !== "line"),
-        ];
+  const passes = passesForSampling(surface.passes, surface.samplingFocus?.lineIndex);
   for (const pass of passes) {
     const singleLinePass = pass.kind === "line";
     const passLength = singleLinePass ? 1 : order.length;
@@ -636,13 +632,6 @@ export function drawLinePasses(
         context.translate(lineCenterX, lineCenterY);
       }
       const { rotation, cosine, sine } = prepared;
-      // The preview can scale X and Y independently. A Hold cap runs along the
-      // line's local Y axis, so scale its length by that axis instead of the
-      // note's horizontal width scale; otherwise caps shorter than the note
-      // spacing leave gaps on static lines.
-      const localXScale = Math.hypot(cosine * scaleX, sine * scaleY);
-      const localYScale = Math.hypot(sine * scaleX, cosine * scaleY);
-      const holdCapScale = localXScale > 0 ? localYScale / localXScale : 1;
       if (usesCanvasLineTransform) {
         context.rotate(rotation);
       }
@@ -697,18 +686,13 @@ export function drawLinePasses(
         const isHoldPass = pass.kind === "hold";
         const entries = isHoldPass ? visibleHolds[index] : visibleNotes[index];
         for (const entry of entries ?? []) {
-          const note = entry.note;
-          const isHold = note.type === 2;
-          if (isHold !== isHoldPass) {
-            continue;
-          }
           // Every entry appears in one pass, so the shared object is consumed
           // immediately and can be reused for the next note.
           const position = runtime.noteState(entry, state, seconds, noteState);
           if (position.alpha <= 0 || position.size === 0) {
             continue;
           }
-          if (note.type === 2) {
+          if (isHoldPass) {
             stats.holds += 1;
           } else {
             stats.notes += 1;
@@ -737,7 +721,7 @@ export function drawLinePasses(
               hoveredNote.lineIndex === index &&
               hoveredNote.noteIndex === entry.noteIndex
             : entry.noteIndex !== undefined &&
-              isPreviewNoteSelected(surface.selectedNotes, index, entry.noteIndex);
+              prepared.selectedNotes?.has(entry.noteIndex) === true;
           const highlight = shouldHighlightPreviewNote(surface, entry);
           if (
             drawPreviewNoteEntry(
@@ -751,7 +735,7 @@ export function drawLinePasses(
               geometry,
               noteWidth,
               scaleY,
-              holdCapScale,
+              prepared.holdCapScale,
               rotation,
               state.rotation,
               lineCenterX,
@@ -768,12 +752,12 @@ export function drawLinePasses(
       if (usesCanvasLineTransform) {
         context.restore();
       }
-      const passMs = performance.now() - passStarted;
-      if (singleLinePass) {
-        stats.lineMs += passMs;
-      } else {
-        stats.noteMs += passMs;
-      }
+    }
+    const passMs = performance.now() - passStarted;
+    if (singleLinePass) {
+      stats.lineMs += passMs;
+    } else {
+      stats.noteMs += passMs;
     }
   }
   return stats;

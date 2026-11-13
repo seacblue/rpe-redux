@@ -178,6 +178,10 @@ export interface TransactionCommitOptions {
    * compatibility for this chart. Only the transaction kernel sets it.
    */
   readonly validatedNoise?: boolean;
+  /** Internal precomputed revision for a streamed line-local transaction. */
+  readonly afterFingerprint?: string;
+  /** Internal COW estimate; avoids recursively sizing shared chart subtrees. */
+  readonly estimatedBytes?: number;
 }
 
 export type TransactionPreviewStatus = "previewed" | "unchanged" | "rejected" | "unavailable";

@@ -55,6 +55,7 @@ import type {
   PreviewSkin,
   PreviewNoteSelection,
   PreviewOverlapHighlight,
+  PreviewShaderEffect,
 } from "./previewTypes.ts";
 
 /** Per-call switches for one preview paint. */
@@ -199,6 +200,20 @@ export class Preview {
   private shaderPrewarmChart: Chart | null = null;
   private shaderPrewarmRevision = -1;
   private readonly guideBuffer: NonNullable<Preview["guides"]> = [];
+  /**
+   * Monotonic identity for guide geometry changes consumed by the overlay cache.
+   * It never resets while this instance lives: the guide caches are keyed by it,
+   * and a reopened document must not collide with a cached overlay key.
+   */
+  guideRevision = 0;
+  private staticGuideProjection: {
+    chart: Chart;
+    order: readonly number[];
+    centerX: number;
+    centerY: number;
+    scaleX: number;
+    scaleY: number;
+  } | null = null;
   readonly hitStateCache = new Map<number, (index: number) => SampledLineState>();
 
   /** Resets all cached chart, frame, and geometry state for a closed document. */
@@ -207,6 +222,7 @@ export class Preview {
     this.noiseComposited = false;
     this.lineFrames.length = 0;
     this.lastFrame = null;
+    this.staticGuideProjection = null;
     this.scene.clear();
     this.chart = null;
     this.samplingFocus = null;
@@ -784,23 +800,17 @@ export class Preview {
         holdBucket.length = 0;
         continue;
       }
-      runtime.visibleNotes(seconds, state, 1600 * divisor + Math.hypot(state.x, state.y), bucket);
+      runtime.visibleNotes(
+        seconds,
+        state,
+        1600 * divisor + Math.hypot(state.x, state.y),
+        bucket,
+        holdBucket,
+      );
       visibilityIndexMs += runtime.lastVisibilityStats.indexMs;
       visibilityCandidateCount += runtime.lastVisibilityStats.candidateCount;
-      holdBucket.length = 0;
-      let noteWrite = 0;
-      let holdWrite = 0;
-      for (const entry of bucket) {
-        if (entry.note.type === 2) {
-          holdBucket[holdWrite++] = entry;
-        } else {
-          bucket[noteWrite++] = entry;
-        }
-      }
-      bucket.length = noteWrite;
-      holdBucket.length = holdWrite;
-      visibleNoteCount += noteWrite;
-      visibleHoldCount += holdWrite;
+      visibleNoteCount += bucket.length;
+      visibleHoldCount += holdBucket.length;
     }
     return {
       visibleNoteCount,
@@ -863,7 +873,7 @@ export class Preview {
     if (
       !this.noiseComposited &&
       this.applyShaders &&
-      this.shaderRuntime.active(frame.seconds).length > 0 &&
+      frame.shaderEffects.length > 0 &&
       this.noteBatch.isActive() &&
       this.noteBatchCanvas
     ) {
@@ -986,6 +996,9 @@ export class Preview {
       this.shaderRuntime.compile(chart, tempo);
     }
     this.prewarmShaderPrograms();
+    const shaderEffects: readonly PreviewShaderEffect[] = this.applyShaders
+      ? this.shaderRuntime.activeInto(seconds)
+      : [];
     const prepared = this.prepareCanvasFrame(measurement, drawStarted);
     const { context, width, height, viewport, divisor, screenScale, contentFrame, setupMs } =
       prepared;
@@ -997,16 +1010,32 @@ export class Preview {
     this.viewport = viewport;
     this.selectedLine = selectedLine;
     this.selectedNotes = selectedNotes;
-    this.guides = lineGuides(
-      states,
-      chart.judgeLineList ?? [],
-      order,
-      centerX,
-      centerY,
-      scaleX,
-      scaleY,
-      this.guideBuffer,
-    );
+    const staticGuide = this.staticGuideProjection;
+    const reuseStaticGuides =
+      this.scene.allStatesStatic &&
+      staticGuide !== null &&
+      staticGuide.chart === chart &&
+      staticGuide.order === order &&
+      staticGuide.centerX === centerX &&
+      staticGuide.centerY === centerY &&
+      staticGuide.scaleX === scaleX &&
+      staticGuide.scaleY === scaleY;
+    if (!reuseStaticGuides) {
+      this.guides = lineGuides(
+        states,
+        chart.judgeLineList ?? [],
+        order,
+        centerX,
+        centerY,
+        scaleX,
+        scaleY,
+        this.guideBuffer,
+      );
+      this.guideRevision += 1;
+      this.staticGuideProjection = this.scene.allStatesStatic
+        ? { chart, order, centerX, centerY, scaleX, scaleY }
+        : null;
+    }
     const {
       visibleNoteCount,
       visibleHoldCount,
@@ -1037,6 +1066,7 @@ export class Preview {
       scaleY,
       screenScale,
       viewport,
+      shaderEffects,
       shaderSourceRevision: this.shaderSourceRevision,
     };
     const { drawStats, notesMs, effectsMs, compositeMs } = this.drawFrameLayers(frame, options);

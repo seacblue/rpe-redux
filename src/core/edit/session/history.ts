@@ -163,6 +163,8 @@ export class History {
   private readonly listeners = new Set<() => void>();
   /** Paged document backing a streamed chart facade. */
   readonly chartDocument?: ChartDocument;
+  /** Keeps the initial saved token provisional until background digests finish. */
+  private pendingInitialFingerprint = false;
 
   /** Starts from a normalized document with empty stacks. */
   constructor(document: Chart, limit = 150, chartDocument?: ChartDocument) {
@@ -171,6 +173,22 @@ export class History {
     this.savedFingerprint = chartDocument
       ? chartDocument.fingerprint()
       : chartFingerprint(this.document);
+    if (chartDocument && !chartDocument.fingerprintReady) {
+      this.pendingInitialFingerprint = true;
+      void chartDocument.whenFingerprintReady().then(() => {
+        if (
+          !this.pendingInitialFingerprint ||
+          this.undoStack.length ||
+          this.redoStack.length ||
+          this.document !== chartDocument.chart
+        ) {
+          return;
+        }
+        this.savedFingerprint = chartDocument.fingerprint();
+        this.pendingInitialFingerprint = false;
+        this.notify();
+      });
+    }
     this.undoStack = [];
     this.redoStack = [];
     this.limit = limit;
@@ -239,6 +257,10 @@ export class History {
   ): boolean {
     if (next === this.document) {
       return false;
+    }
+    this.pendingInitialFingerprint = false;
+    if (this.chartDocument?.fingerprintReady === false) {
+      this.savedFingerprint = null;
     }
     if (this.chartDocument) {
       const beforeLines = [...(this.document.judgeLineList ?? [])];
@@ -427,6 +449,7 @@ export class History {
 
   /** Marks a document as the saved baseline for dirty tracking. */
   markSaved(document: Chart = this.document): void {
+    this.pendingInitialFingerprint = false;
     this.savedFingerprint =
       this.chartDocument && document === this.document
         ? this.chartDocument.fingerprint()
@@ -434,11 +457,17 @@ export class History {
   }
   /** Marks the session as requiring an initial save. */
   markUnsaved(): void {
+    this.pendingInitialFingerprint = false;
     this.savedFingerprint = null;
   }
   /** True when the current document's content differs from the saved baseline. */
   get dirty(): boolean {
     return this.savedFingerprint === null || this.fingerprint() !== this.savedFingerprint;
+  }
+
+  /** True when the current chart fingerprint is semantic rather than provisional. */
+  get fingerprintReady(): boolean {
+    return this.chartDocument?.fingerprintReady ?? true;
   }
 
   /**

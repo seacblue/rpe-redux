@@ -1,8 +1,9 @@
-// Marquee overlay canvas above the timeline canvases. The sheet only makes the layer
+// Marquee overlay canvases above the timeline canvases. The sheet only makes the layers
 // full-bleed and non-interactive; rectangle colors come from the palette in
-// selectionOverlay.ts.
+// selectionOverlay.ts. The Canvas2D and WebGL layers share one box so either can paint.
 
-.selection-overlay {
+.selection-overlay,
+.selection-overlay-batch {
   position: absolute;
   inset: 0;
   width: 100%;

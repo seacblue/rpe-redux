@@ -4,6 +4,7 @@
  */
 import type { BlockArea } from "../noise/blockArea.ts";
 import type { BpmEntry, Chart, ChartMeta, JudgeLine } from "../chart.ts";
+import type { ChartValueDigestGroup } from "../chartContentHash.ts";
 
 /** Magic bytes that prefix a binary chart stream. */
 export const CHART_STREAM_MAGIC = "RPE1";
@@ -78,6 +79,8 @@ export interface ChartLineSummary {
   readonly intervals?: readonly ChartTimeInterval[];
   /** Content digest that ignores editor-only object ids. */
   readonly digest: string;
+  /** Hashes of unchanged top-level children used to update a materialized line incrementally. */
+  readonly childDigests?: Readonly<Record<string, number>>;
   readonly flags: number;
   readonly group: number;
   readonly father: number;
@@ -93,6 +96,8 @@ export interface ChartIndex {
   readonly totalBytes: number;
   /** True when clean line text is already in the canonical serializer shape. */
   readonly canonical: boolean;
+  /** True while semantic line digests are being filled by the background indexer. */
+  readonly fingerprintsPending?: boolean;
 }
 
 /** One line range inside a JSON source. */
@@ -128,7 +133,13 @@ export interface ChartStream {
 /** A provider that returns raw JSON text for one line. */
 export interface ChartLineProvider {
   readonly lineCount: number;
-  readLine(index: number, signal?: AbortSignal): Promise<string | undefined>;
+  readLine(index: number, signal?: AbortSignal): Promise<string | ChartLineRead | undefined>;
+}
+
+/** Raw line text plus optional object hashes from an off-thread parser. */
+export interface ChartLineRead {
+  readonly raw: string;
+  readonly valueDigests?: readonly ChartValueDigestGroup[];
 }
 
 /** A materialized chart plus the index that describes its source. */

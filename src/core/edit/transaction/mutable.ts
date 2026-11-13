@@ -6,9 +6,9 @@
  * chart therefore keeps every object identity it had before the request.
  */
 import {
-  countScoringNotes,
   EVENT_TYPES,
   isEventTrack,
+  markChartObjectCollectionNormalized,
   type Chart,
   type JudgeLine,
   type JudgeLineEvent,
@@ -18,6 +18,11 @@ import {
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import type { TransactionIssue } from "./contract.ts";
 import { setLineNotesRef, type LocatedEvent, type LocatedLine } from "./locations.ts";
+import {
+  inheritLineContentFingerprint,
+  inheritValueContentFingerprint,
+  markValueContentFingerprintDirty,
+} from "../../global/chart/chartContentHash.ts";
 
 /** Mutable state shared by the transaction apply kernel and its helpers. */
 export interface MutableTransactionState {
@@ -33,8 +38,6 @@ export interface MutableTransactionState {
   usedIdsReady?: boolean;
   /** Line indices whose note arrays were copied for this transaction. */
   clonedNoteLines?: Set<number>;
-  /** Line indices whose `numOfNotes` must be recomputed once at the end. */
-  noteCountLines?: Set<number>;
   /** Line indices whose event-layer arrays were copied. */
   clonedEventLayerArrays?: Set<number>;
   /** `lineIndex:layerIndex` keys whose layer objects were copied. */
@@ -43,6 +46,25 @@ export interface MutableTransactionState {
   clonedExtendedLayers?: Set<number>;
   /** `lineIndex:layerIndex:track` keys whose event arrays were copied. */
   eventTracks?: Map<string, Record<string, unknown>[]>;
+  /** Newly inserted or patched notes that require structural validation. */
+  changedNotes?: Set<{ note: JudgeLineNote; lineIndex: number; noteIndex: number }>;
+  /** Newly inserted or patched events that require structural validation. */
+  changedEvents?: Set<{
+    event: JudgeLineEvent;
+    lineIndex: number;
+    layerIndex: number;
+    track: string;
+    eventIndex: number;
+  }>;
+  /** New lines need the complete line validator; existing lines use fields only. */
+  fullLineValidation?: Set<number>;
+  /** Conservative retained-byte estimate collected while containers are copied. */
+  retainedBytes?: number;
+}
+
+/** Add a conservative history-retention estimate without traversing shared data. */
+function addRetainedBytes(state: MutableTransactionState, bytes: number): void {
+  state.retainedBytes = (state.retainedBytes ?? 64) + Math.max(0, bytes);
 }
 
 /** Build one immutable transaction issue with optional path/object context. */
@@ -66,6 +88,8 @@ export function mutableLine(state: MutableTransactionState, located: LocatedLine
     const clone: JudgeLine = { ...located.line };
     state.chart.judgeLineList![located.index] = clone;
     state.clonedLines.add(located.index);
+    inheritLineContentFingerprint(located.line, clone);
+    addRetainedBytes(state, 128);
     return clone;
   }
   return state.chart.judgeLineList?.[located.index] ?? located.line;
@@ -79,9 +103,16 @@ export function mutableNotes(
 ): JudgeLineNote[] {
   const cloned = (state.clonedNoteLines ??= new Set<number>());
   if (!cloned.has(lineIndex)) {
-    line.notes = [...(line.notes ?? [])];
+    const source = line.notes;
+    line.notes = [...(source ?? [])];
+    if (source) {
+      inheritValueContentFingerprint(source, line.notes);
+    }
+    addRetainedBytes(state, (source?.length ?? 0) * 8 + 128);
     cloned.add(lineIndex);
     setLineNotesRef(state.chart, lineIndex, line.notes);
+    markChartObjectCollectionNormalized(line.notes);
+    markValueContentFingerprintDirty(line.notes);
   }
   line.notes ??= [];
   return line.notes;
@@ -94,26 +125,6 @@ export function mutableNote(notes: JudgeLineNote[], index: number): JudgeLineNot
   return clone;
 }
 
-/** Marks a line whose scoring count must be recomputed after all note operations. */
-export function markNoteCount(state: MutableTransactionState, lineIndex: number): void {
-  (state.noteCountLines ??= new Set<number>()).add(lineIndex);
-}
-
-/** Recomputes each touched line's scoring count exactly once. */
-export function refreshNoteCounts(state: MutableTransactionState): void {
-  const lines = state.noteCountLines;
-  if (!lines?.size) {
-    return;
-  }
-  for (const lineIndex of lines) {
-    const line = state.chart.judgeLineList?.[lineIndex];
-    if (line) {
-      line.numOfNotes = countScoringNotes(line.notes);
-    }
-  }
-  lines.clear();
-}
-
 /** Returns the line's private event-layer array, copying it on first event mutation. */
 function mutableEventLayerArray(
   state: MutableTransactionState,
@@ -122,7 +133,15 @@ function mutableEventLayerArray(
 ): (MutableEventLayer | null)[] {
   const cloned = (state.clonedEventLayerArrays ??= new Set<number>());
   if (!cloned.has(lineIndex)) {
-    line.eventLayers = [...(line.eventLayers ?? [])];
+    const source = line.eventLayers;
+    line.eventLayers = [...(source ?? [])];
+    if (source) {
+      inheritValueContentFingerprint(source, line.eventLayers);
+    }
+    // Replacing a layer object changes this array even though its length does
+    // not, so the inherited seed must reconcile before it is reused.
+    markValueContentFingerprintDirty(line.eventLayers);
+    addRetainedBytes(state, (source?.length ?? 0) * 8 + 128);
     cloned.add(lineIndex);
   }
   return line.eventLayers as (MutableEventLayer | null)[];
@@ -142,7 +161,12 @@ function mutableEventLayer(
   const key = `${lineIndex}:${layerIndex}`;
   const cloned = (state.clonedEventLayerObjects ??= new Set<string>());
   if (!cloned.has(key)) {
-    layers[layerIndex] = { ...(layers[layerIndex] ?? {}) };
+    const source = layers[layerIndex];
+    layers[layerIndex] = { ...(source ?? {}) };
+    if (source) {
+      inheritValueContentFingerprint(source, layers[layerIndex] as object);
+    }
+    addRetainedBytes(state, 128);
     cloned.add(key);
   }
   return layers[layerIndex] as MutableEventLayer;
@@ -156,7 +180,12 @@ function mutableExtendedLayer(
 ): MutableEventLayer {
   const cloned = (state.clonedExtendedLayers ??= new Set<number>());
   if (!cloned.has(lineIndex)) {
-    line.extended = { ...(line.extended ?? {}) };
+    const source = line.extended;
+    line.extended = { ...(source ?? {}) };
+    if (source) {
+      inheritValueContentFingerprint(source, line.extended);
+    }
+    addRetainedBytes(state, 128);
     cloned.add(lineIndex);
   }
   return line.extended as MutableEventLayer;
@@ -178,12 +207,14 @@ export function mutableEventTrack(
   const tracks = (state.eventTracks ??= new Map<string, Record<string, unknown>[]>());
   let events = tracks.get(key);
   if (!events) {
-    events = [...((layer[eventType] as JudgeLineEvent[] | undefined) ?? [])] as unknown as Record<
-      string,
-      unknown
-    >[];
+    const source = (layer[eventType] as JudgeLineEvent[] | undefined) ?? [];
+    events = [...source] as unknown as Record<string, unknown>[];
+    inheritValueContentFingerprint(source, events);
     (layer as Record<string, unknown>)[eventType] = events;
     tracks.set(key, events);
+    markChartObjectCollectionNormalized(events);
+    markValueContentFingerprintDirty(events);
+    addRetainedBytes(state, source.length * 8 + 128);
   }
   return events;
 }

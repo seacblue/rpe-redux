@@ -13,6 +13,11 @@ import {
 
 /** A 2D affine matrix ordered as `[a, b, c, d, tx, ty]`. */
 type Matrix = [number, number, number, number, number, number];
+/** Reusable result for one transform-track lookup. */
+interface TrackSample {
+  value: number;
+  event?: BlockAreaEvent;
+}
 /** Transform channels sampled with anchored, relative matrices. */
 type TransformTrack = "scaleXEvents" | "scaleYEvents" | "rotateEvents";
 /** The identity matrix. */
@@ -70,6 +75,21 @@ export interface NoiseAreaSample {
   invert: boolean;
 }
 
+/** Create an independent sample target for callers that need retained output. */
+function createNoiseAreaSample(invert: boolean): NoiseAreaSample {
+  return {
+    state: "hidden",
+    activation: 0,
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+    ],
+    invert,
+  };
+}
+
 /** Compile event tracks once per area and tempo; sample repeatedly during playback. */
 export class NoiseAreaRuntime {
   private readonly tracks: Record<
@@ -85,6 +105,14 @@ export class NoiseAreaRuntime {
   private readonly disappear: number;
   private readonly area: BlockArea;
   private readonly rotationAspect: number;
+  private readonly sampleBuffer = createNoiseAreaSample(false);
+  private readonly trackSamples: Record<keyof NoiseAreaRuntime["tracks"], TrackSample> = {
+    moveXEvents: { value: 0 },
+    moveYEvents: { value: 0 },
+    rotateEvents: { value: 0 },
+    scaleXEvents: { value: 0 },
+    scaleYEvents: { value: 0 },
+  };
   /** Compile intervals and transform tracks once; `rotationAspect` scales screen-space rotation. */
   constructor(
     area: BlockArea,
@@ -181,7 +209,8 @@ export class NoiseAreaRuntime {
     type: keyof NoiseAreaRuntime["tracks"],
     seconds: number,
     fallback: number,
-  ): { value: number; event?: BlockAreaEvent } {
+    target: TrackSample,
+  ): TrackSample {
     const track = this.tracks[type];
     const entries = this.entries[type];
     let low = 0;
@@ -195,21 +224,38 @@ export class NoiseAreaRuntime {
       }
     }
     const selected: TimedEvent<BlockAreaEvent> | undefined = entries[low - 1];
-    return selected
-      ? { value: Number(track.sample(selected, seconds)), event: selected.event }
-      : { value: fallback };
+    target.value = selected ? Number(track.sample(selected, seconds)) : fallback;
+    target.event = selected?.event;
+    return target;
   }
   /** Sample lifetime boundaries, activation and transforms without mutating chart data. */
   sample(seconds: number): NoiseAreaSample {
+    return this.sampleInto(seconds, createNoiseAreaSample(this.area.isInvert === true));
+  }
+
+  /** Sample into reusable storage for frame renderers that consume the result immediately. */
+  sampleInto(seconds: number, target = this.sampleBuffer): NoiseAreaSample {
     let state: NoiseAreaSample["state"] = "disabled";
     let activation = 0;
     if (seconds + 1e-9 < this.appear || seconds + 1e-9 >= this.disappear) {
       state = "hidden";
     } else {
-      const active = this.intervals
-        .filter((i) => i.start <= seconds + 1e-9 && i.end > i.start)
-        .at(-1);
-      const next = this.intervals.find((i) => i.start > seconds + 1e-9);
+      const now = seconds + 1e-9;
+      let active: (typeof this.intervals)[number] | undefined;
+      for (let index = this.intervals.length - 1; index >= 0; index--) {
+        const interval = this.intervals[index];
+        if (interval.start <= now && interval.end > interval.start) {
+          active = interval;
+          break;
+        }
+      }
+      let next: (typeof this.intervals)[number] | undefined;
+      for (const interval of this.intervals) {
+        if (interval.start > now) {
+          next = interval;
+          break;
+        }
+      }
       if (active && seconds + 1e-9 < active.end) {
         state = "active";
         activation = 1;
@@ -219,11 +265,11 @@ export class NoiseAreaRuntime {
         activation = (1 + Math.cos(phase * Math.PI * 6)) / 2;
       }
     }
-    const x = this.track("moveXEvents", seconds, this.center.x).value,
-      y = this.track("moveYEvents", seconds, this.center.y).value;
-    const sx = this.track("scaleXEvents", seconds, 1),
-      sy = this.track("scaleYEvents", seconds, 1),
-      rot = this.track("rotateEvents", seconds, 0);
+    const x = this.track("moveXEvents", seconds, this.center.x, this.trackSamples.moveXEvents),
+      y = this.track("moveYEvents", seconds, this.center.y, this.trackSamples.moveYEvents);
+    const sx = this.track("scaleXEvents", seconds, 1, this.trackSamples.scaleXEvents),
+      sy = this.track("scaleYEvents", seconds, 1, this.trackSamples.scaleYEvents),
+      rot = this.track("rotateEvents", seconds, 0, this.trackSamples.rotateEvents);
     const accumulate = (
       type: TransformTrack,
       point: BlockAreaPoint,
@@ -252,14 +298,19 @@ export class NoiseAreaRuntime {
     const angle = (rot.value * Math.PI) / 180,
       c = Math.cos(angle),
       s = Math.sin(angle);
-    const points = this.bounds.corners.map((p) => {
+    const points = target.points;
+    for (let index = 0; index < this.bounds.corners.length; index++) {
+      const p = this.bounds.corners[index];
       const dx = sx.value * (p.x - this.center.x),
         dy = sy.value * (p.y - this.center.y);
-      return {
-        x: center.x + c * dx + s * dy * this.rotationAspect + x - this.center.x,
-        y: center.y - (s * dx) / this.rotationAspect + c * dy + y - this.center.y,
-      };
-    });
-    return { state, activation, points, invert: this.area.isInvert === true };
+      const point = points[index] ?? (points[index] = { x: 0, y: 0 });
+      point.x = center.x + c * dx + s * dy * this.rotationAspect + x.value - this.center.x;
+      point.y = center.y - (s * dx) / this.rotationAspect + c * dy + y.value - this.center.y;
+    }
+    points.length = this.bounds.corners.length;
+    target.state = state;
+    target.activation = activation;
+    target.invert = this.area.isInvert === true;
+    return target;
   }
 }

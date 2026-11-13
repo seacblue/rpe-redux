@@ -86,6 +86,17 @@ type GlContext = WebGL2RenderingContext | WebGLRenderingContext;
 
 /** Clip-space position and texture coordinates for one full-screen quad. */
 const FULLSCREEN_QUAD = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
+const EMPTY_UNIFORM_VALUES: Record<string, unknown> = Object.freeze({});
+const BUILTIN_UNIFORM_NAMES = new Set([
+  "u_texture",
+  "u_time",
+  "time",
+  "screenSize",
+  "rpenSurfaceSize",
+  "resolution",
+  "rpeRectMin",
+  "rpeRectMax",
+]);
 
 /** The optional completion-status query from KHR_parallel_shader_compile. */
 interface ParallelShaderCompile {
@@ -164,6 +175,8 @@ export class ShaderPipeline {
   private precompileChain: Promise<void> = Promise.resolve();
   /** Invalidates queued work when the context or canvas is replaced. */
   private cacheEpoch = 0;
+  /** Reusable pass list for one render submission. */
+  private readonly usablePasses: { pass: ShaderPass; program: ShaderProgram }[] = [];
 
   /** Releases every GL object this pipeline created. */
   dispose(): void {
@@ -536,9 +549,9 @@ export class ShaderPipeline {
     resolution?: number[],
   ): void {
     const gl = this.context();
-    const provided: Record<string, unknown> = isUniformValues(values) ? values : {};
-    // Integer uniforms use uniform1i; number[] accepts every relevant GLenum value.
-    const integerTypes: number[] = [gl.SAMPLER_2D, gl.INT, gl.BOOL];
+    const provided: Record<string, unknown> = isUniformValues(values)
+      ? values
+      : EMPTY_UNIFORM_VALUES;
     /** Uploads one uniform if the program declares it. */
     const set = (name: string, value: unknown): void => {
       const location = result.uniforms.get(name);
@@ -550,7 +563,7 @@ export class ShaderPipeline {
         normalized = normalized[0];
       }
       const type = result.types.get(name);
-      if (type !== undefined && integerTypes.includes(type)) {
+      if (type === gl.SAMPLER_2D || type === gl.INT || type === gl.BOOL) {
         gl.uniform1i(location, Number(normalized) || 0);
         return;
       }
@@ -586,18 +599,7 @@ export class ShaderPipeline {
     set("rpeRectMin", rect?.min ?? [0, 0]);
     set("rpeRectMax", rect?.max ?? [1, 1]);
     for (const name of result.uniforms.keys()) {
-      if (
-        [
-          "u_texture",
-          "u_time",
-          "time",
-          "screenSize",
-          "rpenSurfaceSize",
-          "resolution",
-          "rpeRectMin",
-          "rpeRectMax",
-        ].includes(name)
-      ) {
+      if (BUILTIN_UNIFORM_NAMES.has(name)) {
         continue;
       }
       const fallback =
@@ -652,7 +654,7 @@ export class ShaderPipeline {
   render(
     sourceCanvas: HTMLCanvasElement,
     targetCanvas: HTMLCanvasElement | null,
-    passes: ShaderPass[],
+    passes: readonly ShaderPass[],
     seconds: number,
     sourceFor: (pass: ShaderPass) => string | null | undefined,
     viewport?: ShaderView | null,
@@ -726,7 +728,8 @@ export class ShaderPipeline {
     let input = this.sourceTexture;
     let output = this.pingTexture;
     let rendered = 0;
-    const usable: { pass: ShaderPass; program: ShaderProgram }[] = [];
+    const usable = this.usablePasses;
+    usable.length = 0;
     for (const pass of passes) {
       const source = sourceFor(pass);
       const program = source ? this.compile(pass.shader, source) : null;
@@ -760,8 +763,10 @@ export class ShaderPipeline {
       }
     }
     if (!rendered) {
+      usable.length = 0;
       return false;
     }
+    usable.length = 0;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.flush();
     targetCanvas.style.visibility = "visible";

@@ -50,6 +50,7 @@ export class TimelineEventBatch {
   private alpha = 1;
   private instances = new Float32Array(0);
   private instanceCount = 0;
+  private instanceBufferCapacity = 0;
   private textureSource: HTMLImageElement | null = null;
   private descriptor: SkinTextureDescriptor | null = null;
   private renderKey: string | null = null;
@@ -104,6 +105,7 @@ export class TimelineEventBatch {
     this.textureSource = null;
     this.descriptor = null;
     this.instanceCount = 0;
+    this.instanceBufferCapacity = 0;
     this.renderKey = null;
   };
 
@@ -282,11 +284,12 @@ export class TimelineEventBatch {
     gl.vertexAttribDivisor(this.cornerLocation, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      this.instances.subarray(0, this.instanceCount * INSTANCE_STRIDE),
-      gl.STREAM_DRAW,
-    );
+    const upload = this.instances.subarray(0, this.instanceCount * INSTANCE_STRIDE);
+    if (upload.byteLength > this.instanceBufferCapacity) {
+      this.instanceBufferCapacity = upload.byteLength;
+      gl.bufferData(gl.ARRAY_BUFFER, this.instanceBufferCapacity, gl.STREAM_DRAW);
+    }
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
     bindInstanceAttribute(gl, this.rectLocation, 4, INSTANCE_STRIDE, 0);
     bindInstanceAttribute(gl, this.uvLocation, 4, INSTANCE_STRIDE, 4);
     bindInstanceAttribute(gl, this.alphaLocation, 1, INSTANCE_STRIDE, 8);
@@ -320,6 +323,7 @@ export class TimelineEventBatch {
     this.texture = null;
     this.instances = new Float32Array(0);
     this.instanceCount = 0;
+    this.instanceBufferCapacity = 0;
     this.descriptor = null;
     this.textureSource = null;
     this.active = false;

@@ -20,16 +20,40 @@ export function sampleNoiseLinePreview(
   sizeY: number,
   aspect: number,
 ): NoiseAreaSample {
+  return sampleNoiseLinePreviewInto(area, sample, state, sizeX, sizeY, aspect, {
+    state: sample.state,
+    activation: sample.activation,
+    points: [],
+    invert: sample.invert,
+  });
+}
+
+/** Project a noise-line sample into caller-owned storage without allocating a polygon. */
+export function sampleNoiseLinePreviewInto(
+  area: BlockArea,
+  sample: NoiseAreaSample,
+  state: LineState,
+  sizeX: number,
+  sizeY: number,
+  aspect: number,
+  target: NoiseAreaSample,
+): NoiseAreaSample {
   const bounds = blockAreaBounds(area);
   const angle = (state.rotation * Math.PI) / 180;
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return {
-    ...sample,
-    points: bounds.corners.map(({ x, y }) => {
-      const dx = (x - bounds.centerX) * sizeX;
-      const dy = (y - bounds.centerY) * sizeY;
-      return { x: state.x + c * dx + s * dy * aspect, y: state.y - (s * dx) / aspect + c * dy };
-    }),
-  };
+  const points = target.points;
+  for (let index = 0; index < bounds.corners.length; index++) {
+    const { x, y } = bounds.corners[index];
+    const dx = (x - bounds.centerX) * sizeX;
+    const dy = (y - bounds.centerY) * sizeY;
+    const point = points[index] ?? (points[index] = { x: 0, y: 0 });
+    point.x = state.x + c * dx + s * dy * aspect;
+    point.y = state.y - (s * dx) / aspect + c * dy;
+  }
+  points.length = bounds.corners.length;
+  target.state = sample.state;
+  target.activation = sample.activation;
+  target.invert = sample.invert;
+  return target;
 }

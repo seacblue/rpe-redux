@@ -147,6 +147,36 @@ test("Y control and Hold fallback keep the old final set exactly", () => {
   assert.deepEqual([...current].sort(), [...previous].sort());
 });
 
+test("Y-control visibility keeps ordered candidates and repairs unordered candidates", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  line.yControl = [
+    { x: 0, y: 0.25 },
+    { x: 1000, y: 1.75 },
+  ];
+  line.notes = [createNote(1, 2, 0), createNote(1, 2, 20), createNote(1, 2, 40)];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const runtime = scene.lines[0];
+  const seconds = tempo.seconds(2);
+  const state = scene.sample(seconds)[0];
+  const ordered = [...runtime.notes];
+  const candidates = runtime.visibility.query.bind(runtime.visibility);
+  for (const source of [ordered, [...ordered].reverse()]) {
+    runtime.visibility.query = (_seconds, _floor, _radius, result) => {
+      result.length = 0;
+      result.push(...source);
+      return result;
+    };
+    assert.deepEqual(
+      runtime.visibleNotes(seconds, state, 320).map((entry) => entry.noteIndex),
+      [0, 1, 2],
+    );
+  }
+  runtime.visibility.query = candidates;
+});
+
 test("visibility metrics account for candidates, final results, and index time", () => {
   const chart = createChart();
   const line = chart.judgeLineList[0];

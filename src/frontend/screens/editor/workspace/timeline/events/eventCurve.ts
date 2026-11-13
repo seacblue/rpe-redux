@@ -10,6 +10,7 @@ import { eventValueNumber } from "../../../../../../core/edit/timeline/model.ts"
 import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
 import type { EventChain } from "../../../../../../core/edit/timeline/eventChains.ts";
 import type { CanvasPalette } from "../../../canvas/palette.ts";
+import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 
 /**
  * The stroke colour of an event curve.
@@ -33,6 +34,24 @@ interface CurveEntry {
   range: EventChain<JudgeLineEvent>;
   startY: number;
   endY: number;
+}
+
+interface CurveRectangle {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Sampling inputs shared by the Canvas2D stroke and the overlay polyline. */
+interface CurveSampling {
+  readonly samples: readonly number[];
+  readonly start: number;
+  readonly end: number;
+  readonly minimum: number;
+  readonly span: number;
+  readonly left: number;
+  readonly width: number;
 }
 
 const shapeCache = new Map<string, readonly number[]>();
@@ -76,35 +95,71 @@ function curveShape(event: JudgeLineEvent, steps: number): readonly number[] {
   return samples;
 }
 
-/** Stroke one event's sampled value curve inside `rectangle`; `append` adds to the current path. */
-export function drawEventCurve(
-  context: CanvasRenderingContext2D,
+/**
+ * Resolve shape and projection inputs for one visible event curve.
+ *
+ * The Canvas2D stroke and the WebGL overlay polyline read the same sampling so a
+ * curve keeps one geometry across both renderers.
+ */
+function curveSampling(
   event: JudgeLineEvent,
   range: EventChain<JudgeLineEvent> | undefined,
-  rectangle: { x: number; y: number; width: number; height: number },
-  startY: number,
-  endY: number,
-  options: CurveOptions = {},
-): boolean {
+  rectangle: CurveRectangle,
+  options: CurveOptions,
+): CurveSampling | null {
+  if (!range) {
+    return null;
+  }
   const start = eventValueNumber(event.start);
   const end = eventValueNumber(event.end);
   if (
-    !range ||
     !Number.isFinite(start) ||
     !Number.isFinite(end) ||
     !Number.isFinite(range.min) ||
     !Number.isFinite(range.max)
   ) {
-    return false;
+    return null;
   }
   const span = range.max - range.min;
   if (span <= 0.01 && !options.drawConstant) {
-    return false;
+    return null;
   }
   const steps = options.steps ?? 36;
   const padding = options.padding ?? 6;
-  const samples = curveShape(event, steps);
-  if (!options.append) {
+  return {
+    samples: curveShape(event, steps),
+    start,
+    end,
+    minimum: range.min,
+    span,
+    left: rectangle.x + padding,
+    width: Math.max(1, rectangle.width - 2 * padding),
+  };
+}
+
+/** Horizontal position of one sampled curve point inside its plot rectangle. */
+function curveHorizontal(sampling: CurveSampling, value: number): number {
+  const normalized = sampling.span > 0.01 ? (value - sampling.minimum) / sampling.span : 0.5;
+  return sampling.left + normalized * sampling.width;
+}
+
+/** Stroke one event's sampled value curve inside `rectangle`; `append` adds to the current path. */
+function drawEventCurvePath(
+  context: CanvasRenderingContext2D,
+  event: JudgeLineEvent,
+  range: EventChain<JudgeLineEvent> | undefined,
+  rectangle: CurveRectangle,
+  startY: number,
+  endY: number,
+  options: CurveOptions,
+  append: boolean,
+): boolean {
+  const sampling = curveSampling(event, range, rectangle, options);
+  if (!sampling) {
+    return false;
+  }
+  const { samples, start, end } = sampling;
+  if (!append) {
     context.save();
     context.beginPath();
     context.rect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
@@ -114,9 +169,8 @@ export function drawEventCurve(
   }
   for (let step = 0; step < samples.length; step++) {
     const progress = step / (samples.length - 1);
-    const value = start + (end - start) * samples[step];
-    const normalized = span > 0.01 ? (value - range.min) / span : 0.5;
-    const x = rectangle.x + padding + normalized * Math.max(1, rectangle.width - 2 * padding);
+    const value = start + (end - start) * (samples[step] ?? 0);
+    const x = curveHorizontal(sampling, value);
     const y = startY + (endY - startY) * progress;
     if (step === 0) {
       context.moveTo(x, y);
@@ -124,11 +178,33 @@ export function drawEventCurve(
       context.lineTo(x, y);
     }
   }
-  if (!options.append) {
+  if (!append) {
     context.stroke();
     context.restore();
   }
   return true;
+}
+
+/** Stroke one event's sampled value curve inside `rectangle`. */
+export function drawEventCurve(
+  context: CanvasRenderingContext2D,
+  event: JudgeLineEvent,
+  range: EventChain<JudgeLineEvent> | undefined,
+  rectangle: { x: number; y: number; width: number; height: number },
+  startY: number,
+  endY: number,
+  options: CurveOptions = {},
+): boolean {
+  return drawEventCurvePath(
+    context,
+    event,
+    range,
+    rectangle,
+    startY,
+    endY,
+    options,
+    options.append === true,
+  );
 }
 
 /** Stroke a set of event curves with one shared clip and stroke pass. */
@@ -148,11 +224,68 @@ export function drawEventCurveBatch(
   context.lineWidth = options.lineWidth ?? 2;
   context.beginPath();
   for (const entry of entries) {
-    drawEventCurve(context, entry.event, entry.range, rectangle, entry.startY, entry.endY, {
-      ...options,
-      append: true,
-    });
+    drawEventCurvePath(
+      context,
+      entry.event,
+      entry.range,
+      rectangle,
+      entry.startY,
+      entry.endY,
+      options,
+      true,
+    );
   }
   context.stroke();
   context.restore();
+}
+
+/** Queue the same sampled curves into the timeline WebGL overlay. */
+export function drawEventCurveBatchGpu(
+  batch: TimelineOverlayBatch,
+  entries: readonly CurveEntry[],
+  rectangle: CurveRectangle,
+  color: string,
+  options: CurveOptions = {},
+  alpha = 1,
+): void {
+  const lineWidth = options.lineWidth ?? 2;
+  const points: number[] = [];
+  for (const entry of entries) {
+    const sampling = curveSampling(entry.event, entry.range, rectangle, options);
+    if (!sampling) {
+      continue;
+    }
+    const { samples, start, end } = sampling;
+    points.length = 0;
+    for (let step = 0; step < samples.length; step++) {
+      const progress = step / (samples.length - 1);
+      const value = start + (end - start) * (samples[step] ?? 0);
+      points.push(
+        curveHorizontal(sampling, value),
+        entry.startY + (entry.endY - entry.startY) * progress,
+      );
+    }
+    batch.addPolyline(points, color, lineWidth, alpha);
+  }
+}
+
+/** Paint a batch of curves through the overlay when it is active, else on the canvas. */
+export function drawEventCurves(
+  context: CanvasRenderingContext2D,
+  batch: TimelineOverlayBatch | null,
+  entries: readonly CurveEntry[],
+  rectangle: CurveRectangle,
+  color: string,
+  options: CurveOptions = {},
+  alpha = 1,
+): void {
+  if (!entries.length) {
+    return;
+  }
+  if (batch) {
+    drawEventCurveBatchGpu(batch, entries, rectangle, color, options, alpha);
+    return;
+  }
+  context.strokeStyle = color;
+  drawEventCurveBatch(context, entries, rectangle, options);
 }

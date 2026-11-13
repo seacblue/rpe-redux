@@ -7,8 +7,6 @@
  */
 import {
   lineParentIndex,
-  parseChart,
-  serializeChart,
   type Chart,
   type ChartMeta,
   type JudgeLine,
@@ -142,6 +140,41 @@ function freezeDeep<T>(value: T, seen = new WeakSet<object>()): ReadonlyChart<T>
 // EditorSession replaces the chart object at every committed edit, so the
 // detached read model is reused while that identity is current.
 const detachedSnapshots = new WeakMap<Chart, ChartReadSnapshot>();
+const detachedLineSnapshots = new WeakMap<object, ChartReadLine>();
+const detachedMetaSnapshots = new WeakMap<object, ChartReadMeta>();
+const detachedNoteSnapshots = new WeakMap<object, ChartReadNote>();
+const detachedEventSnapshots = new WeakMap<object, ChartReadEvent>();
+
+/** Clone and freeze one chart value while reusing the current source identity. */
+function detachedValue<T extends object, R>(value: T, cache: WeakMap<object, R>): R {
+  const cached = cache.get(value);
+  if (cached) {
+    return cached;
+  }
+  const snapshot = freezeDeep(structuredClone(value)) as R;
+  cache.set(value, snapshot);
+  return snapshot;
+}
+
+/** Return one detached line without copying unrelated lines or chart headers. */
+function detachedLine(line: JudgeLine): ChartReadLine {
+  return detachedValue(line, detachedLineSnapshots);
+}
+
+/** Return one detached metadata block without copying chart content. */
+function detachedMeta(meta: ChartMeta): ChartReadMeta {
+  return detachedValue(meta, detachedMetaSnapshots);
+}
+
+/** Return one detached note without copying its owning line. */
+function detachedNote(note: JudgeLineNote): ChartReadNote {
+  return detachedValue(note, detachedNoteSnapshots);
+}
+
+/** Return one detached event without copying its owning line. */
+function detachedEvent(event: JudgeLineEvent): ChartReadEvent {
+  return detachedValue(event, detachedEventSnapshots);
+}
 
 /** Returns a frozen, detached copy of the chart for read-only consumers. */
 function detachedChart(chart: Chart | null): ChartReadSnapshot | null {
@@ -152,7 +185,10 @@ function detachedChart(chart: Chart | null): ChartReadSnapshot | null {
   if (cached) {
     return cached;
   }
-  const snapshot = freezeDeep(parseChart(serializeChart(chart)));
+  // A structured clone preserves the detached-read contract without first
+  // building a second whole-chart JSON string. The old serialize/parse path
+  // could exceed the browser string limit on million-event charts.
+  const snapshot = freezeDeep(structuredClone(chart));
   detachedSnapshots.set(chart, snapshot);
   return snapshot;
 }
@@ -165,7 +201,7 @@ interface ChartReadCursor {
 }
 
 interface ChartCapture {
-  readonly snapshot: ChartReadSnapshot | null;
+  readonly source: Chart | null;
   readonly revision: ChartReadState;
 }
 
@@ -210,17 +246,45 @@ function pageSize(value: number | undefined): number {
     : DEFAULT_PAGE_SIZE;
 }
 
-/** Collects every id-bearing event across layers and extended tracks. */
-function eventRefs(snapshot: ChartReadSnapshot): readonly ChartEventReadRef[] {
-  const refs: ChartEventReadRef[] = [];
-  for (const [lineIndex, line] of (snapshot.judgeLineList ?? []).entries()) {
+type SourceItem = ChartNoteReadRef | ChartEventReadRef;
+type SourceItemFactory = () => SourceItem;
+
+/** Visit source items lazily so skipped pages never clone their payloads. */
+function visitSourceItems(
+  source: Chart | null,
+  collection: "notes" | "events",
+  visit: (id: ChartObjectId, create: SourceItemFactory) => boolean,
+): void {
+  for (const [lineIndex, line] of (source?.judgeLineList ?? []).entries()) {
     if (!line.id) {
       continue;
     }
-    type ReadonlyLayer = NonNullable<typeof line.extended>;
-    const layers: [ReadonlyLayer | null, number | "extended"][] = (line.eventLayers ?? []).map(
-      (layer, layerIndex) => [layer, layerIndex],
-    );
+    const lineId = line.id;
+    if (collection === "notes") {
+      for (const [index, note] of (line.notes ?? []).entries()) {
+        if (!note?.id) {
+          continue;
+        }
+        const id = note.id;
+        if (
+          visit(id, () =>
+            Object.freeze({
+              id,
+              lineId,
+              lineIndex,
+              index,
+              note: detachedNote(note),
+            }),
+          )
+        ) {
+          return;
+        }
+      }
+      continue;
+    }
+    const layers: [NonNullable<JudgeLine["extended"]> | null, number | "extended"][] = (
+      line.eventLayers ?? []
+    ).map((layer, layerIndex) => [layer, layerIndex]);
     if (line.extended) {
       layers.push([line.extended, "extended"]);
     }
@@ -236,62 +300,55 @@ function eventRefs(snapshot: ChartReadSnapshot): readonly ChartEventReadRef[] {
           if (!event || typeof event !== "object" || !event.id) {
             continue;
           }
-          refs.push(
-            Object.freeze({
-              id: event.id,
-              lineId: line.id,
-              lineIndex,
-              eventType,
-              layer: layerIndex,
-              index,
-              event,
-            }),
-          );
+          const id = event.id as ChartObjectId;
+          if (
+            visit(id, () =>
+              Object.freeze({
+                id,
+                lineId,
+                lineIndex,
+                eventType,
+                layer: layerIndex,
+                index,
+                event: detachedEvent(event as JudgeLineEvent),
+              }),
+            )
+          ) {
+            return;
+          }
         }
       }
     }
   }
-  return Object.freeze(refs);
-}
-
-/** Collects every id-bearing note with its owning line. */
-function noteRefs(snapshot: ChartReadSnapshot): readonly ChartNoteReadRef[] {
-  const refs: ChartNoteReadRef[] = [];
-  for (const [lineIndex, line] of (snapshot.judgeLineList ?? []).entries()) {
-    if (!line.id) {
-      continue;
-    }
-    for (const [index, note] of (line.notes ?? []).entries()) {
-      if (!note?.id) {
-        continue;
-      }
-      refs.push(
-        Object.freeze({
-          id: note.id,
-          lineId: line.id,
-          lineIndex,
-          index,
-          note,
-        }),
-      );
-    }
-  }
-  return Object.freeze(refs);
 }
 
 /** Resolve a line's parent, or the owning line for a note/event. */
-function parentId(snapshot: ChartReadSnapshot, id: ChartObjectId): ChartObjectId | null {
-  const lines = snapshot.judgeLineList ?? [];
+function parentId(source: Chart | null, id: ChartObjectId): ChartObjectId | null {
+  const lines = source?.judgeLineList ?? [];
   const line = lines.find((candidate) => candidate.id === id);
   if (line) {
     const parent = lineParentIndex(line.father);
     return Number.isInteger(parent) && parent >= 0 ? (lines[parent]?.id ?? null) : null;
   }
-  return (
-    noteRefs(snapshot).find((candidate) => candidate.id === id)?.lineId ??
-    eventRefs(snapshot).find((candidate) => candidate.id === id)?.lineId ??
-    null
-  );
+  let owner: ChartObjectId | null = null;
+  visitSourceItems(source, "notes", (itemId, create) => {
+    if (itemId === id) {
+      owner = (create() as ChartNoteReadRef).lineId;
+      return true;
+    }
+    return false;
+  });
+  if (owner) {
+    return owner;
+  }
+  visitSourceItems(source, "events", (itemId, create) => {
+    if (itemId === id) {
+      owner = (create() as ChartEventReadRef).lineId;
+      return true;
+    }
+    return false;
+  });
+  return owner;
 }
 
 /** Return chart-declared resource names without exposing the mutable asset map. */
@@ -315,21 +372,49 @@ function resourceReferences(snapshot: ChartReadSnapshot): readonly ChartResource
   return Object.freeze(references);
 }
 
-/** Returns the paged items for one readable chart collection. */
-function collectionItems(
-  snapshot: ChartReadSnapshot | null,
+interface ReadPageSlice {
+  readonly items: readonly unknown[];
+  readonly hasMore: boolean;
+}
+
+/** Read one page directly from the live chart without assembling all items. */
+function readPageFromSource(
+  source: Chart | null,
   collection: ChartReadCollection,
-): readonly (ChartReadMeta | ChartReadLine | ChartNoteReadRef | ChartEventReadRef)[] {
-  if (!snapshot) {
-    return [];
+  offset: number,
+  size: number,
+): ReadPageSlice {
+  if (!source) {
+    return { items: [], hasMore: false };
   }
   if (collection === "metadata") {
-    return [snapshot.META];
+    return offset === 0
+      ? { items: [detachedMeta(source.META)], hasMore: false }
+      : { items: [], hasMore: false };
   }
   if (collection === "lines") {
-    return snapshot.judgeLineList ?? [];
+    const lines = source.judgeLineList ?? [];
+    const page = lines.slice(offset, offset + size).map(detachedLine);
+    return { items: page, hasMore: offset + page.length < lines.length };
   }
-  return collection === "notes" ? noteRefs(snapshot) : eventRefs(snapshot);
+
+  const items: SourceItem[] = [];
+  let seen = 0;
+  let hasMore = false;
+  visitSourceItems(source, collection, (_id, create) => {
+    if (seen < offset) {
+      seen += 1;
+      return false;
+    }
+    if (items.length >= size) {
+      hasMore = true;
+      return true;
+    }
+    seen += 1;
+    items.push(create());
+    return false;
+  });
+  return { items: Object.freeze(items), hasMore };
 }
 
 /** Builds the detached chart read model over one host. */
@@ -346,10 +431,9 @@ export function createChartApi(host: ChartApiHost): ChartApi {
       previousChart = source;
       previousFingerprint = computedFingerprint;
     }
-    const snapshot = detachedChart(source);
     const suppliedRevision = host.revision?.();
     return {
-      snapshot,
+      source,
       revision: Object.freeze({
         chartFingerprint: suppliedRevision?.chartFingerprint ?? computedFingerprint,
         generation: suppliedRevision?.generation ?? localGeneration,
@@ -357,7 +441,7 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     };
   };
 
-  const current = (): ChartReadSnapshot | null => capture().snapshot;
+  const current = (): ChartReadSnapshot | null => detachedChart(capture().source);
   const read = <Collection extends ChartReadCollection>(
     collection: Collection,
     options: ChartReadPageOptions = {},
@@ -397,21 +481,19 @@ export function createChartApi(host: ChartApiHost): ChartApi {
       };
     }
 
-    const snapshot = captureResult.snapshot;
-    const allItems = collectionItems(snapshot, collection) as readonly ChartReadItem<Collection>[];
     const offset = cursor?.offset ?? 0;
     const size = pageSize(options.limit);
-    const items = allItems.slice(offset, offset + size);
+    const page = readPageFromSource(captureResult.source, collection, offset, size);
+    const items = page.items as readonly ChartReadItem<Collection>[];
     const nextOffset = offset + items.length;
-    const nextCursor =
-      nextOffset < allItems.length
-        ? encodeCursor({
-            collection,
-            chartFingerprint: captureResult.revision.chartFingerprint,
-            generation: captureResult.revision.generation,
-            offset: nextOffset,
-          })
-        : null;
+    const nextCursor = page.hasMore
+      ? encodeCursor({
+          collection,
+          chartFingerprint: captureResult.revision.chartFingerprint,
+          generation: captureResult.revision.generation,
+          offset: nextOffset,
+        })
+      : null;
     return {
       status: "ok",
       chartFingerprint: captureResult.revision.chartFingerprint,
@@ -429,35 +511,62 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     read,
     snapshot: current,
     metadata(): ChartReadMeta | null {
-      return current()?.META ?? null;
+      const source = capture().source;
+      return source ? detachedMeta(source.META) : null;
     },
     resources(): readonly ChartResourceReference[] {
-      const snapshot = current();
-      return snapshot ? resourceReferences(snapshot) : Object.freeze([]);
+      const source = capture().source;
+      return source ? resourceReferences(source) : Object.freeze([]);
     },
     lines(): readonly ChartReadLine[] {
-      return Object.freeze([...(current()?.judgeLineList ?? [])]);
+      return Object.freeze((capture().source?.judgeLineList ?? []).map(detachedLine));
     },
     line(id: ChartObjectId): ChartReadLine | null {
-      return current()?.judgeLineList?.find((line) => line.id === id) ?? null;
+      const line = capture().source?.judgeLineList?.find((candidate) => candidate.id === id);
+      return line ? detachedLine(line) : null;
     },
     parentId(id: ChartObjectId): ChartObjectId | null {
-      const snapshot = current();
-      return snapshot ? parentId(snapshot, id) : null;
+      return parentId(capture().source, id);
     },
     notes(): readonly ChartNoteReadRef[] {
-      const snapshot = current();
-      return snapshot ? noteRefs(snapshot) : Object.freeze([]);
+      const source = capture().source;
+      if (!source) {
+        return Object.freeze([]);
+      }
+      const page = readPageFromSource(source, "notes", 0, Number.MAX_SAFE_INTEGER);
+      return page.items as readonly ChartNoteReadRef[];
     },
     note(id: ChartObjectId): ChartNoteReadRef | null {
-      return this.notes().find((note) => note.id === id) ?? null;
+      const source = capture().source;
+      let result: ChartNoteReadRef | null = null;
+      visitSourceItems(source, "notes", (noteId, create) => {
+        if (noteId !== id) {
+          return false;
+        }
+        result = create() as ChartNoteReadRef;
+        return true;
+      });
+      return result;
     },
     events(): readonly ChartEventReadRef[] {
-      const snapshot = current();
-      return snapshot ? eventRefs(snapshot) : Object.freeze([]);
+      const source = capture().source;
+      if (!source) {
+        return Object.freeze([]);
+      }
+      const page = readPageFromSource(source, "events", 0, Number.MAX_SAFE_INTEGER);
+      return page.items as readonly ChartEventReadRef[];
     },
     event(id: ChartObjectId): ChartEventReadRef | null {
-      return this.events().find((event) => event.id === id) ?? null;
+      const source = capture().source;
+      let result: ChartEventReadRef | null = null;
+      visitSourceItems(source, "events", (eventId, create) => {
+        if (eventId !== id) {
+          return false;
+        }
+        result = create() as ChartEventReadRef;
+        return true;
+      });
+      return result;
     },
   };
 }

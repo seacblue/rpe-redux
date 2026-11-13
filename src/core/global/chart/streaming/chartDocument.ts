@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- the document owns paging, revisions, and serialization. */
 /**
  * A paged chart document: header plus line summaries, with raw line text loaded
  * on demand. The document owns the chart facade used by the editor and keeps a
@@ -12,10 +13,13 @@ import {
   combineContentFingerprint,
   headerContentFingerprint,
   lineContentFingerprint,
-} from "./chartContentHash.ts";
-import { summarizeChartLine } from "./chartLineSummary.ts";
+  primeLineContentFingerprint,
+} from "../chartContentHash.ts";
+import { summarizeChartLine, summarizeChartLineIncremental } from "./chartLineSummary.ts";
 import { stringifyChartValue } from "./chartSerialize.ts";
 import { registerChartDocument } from "./chartDocumentRegistry.ts";
+import type { ChartLineRevisionSeed } from "../chartRevisionSeed.ts";
+import type { ChartValueDigestGroup } from "../chartContentHash.ts";
 import {
   LINE_FLAG_IDS,
   LINE_FLAG_INVALID,
@@ -27,6 +31,7 @@ import {
 
 /** Marker attached to a not-yet-loaded line in a paged chart facade. */
 const LINE_PLACEHOLDER = Symbol("chart-line-placeholder");
+let nextPendingFingerprintId = 1;
 
 /** True when a line is a paged facade placeholder rather than chart content. */
 export function isPlaceholderLine(line: unknown): boolean {
@@ -81,7 +86,7 @@ function placeholderLine(summary: ChartLineSummary): JudgeLine {
     notes: [],
     eventLayers: [],
     extended: {},
-    numOfNotes: 0,
+    numOfNotes: summary.noteCount,
   } as JudgeLine;
   Object.defineProperty(line, LINE_PLACEHOLDER, { value: true });
   return line;
@@ -163,6 +168,18 @@ export class ChartDocument {
   private clock = 0;
   private revision = 0;
   private fingerprintCache: string | null = null;
+  private readonly pendingFingerprintToken = `pending-chart-fingerprint-${nextPendingFingerprintId++}`;
+  private fingerprintReadyState: boolean;
+  /**
+   * Line indexes whose semantic digest has not been published yet.
+   *
+   * Keyed by line index instead of counted so a duplicate or unusable seed can
+   * consume its slot without completing hydration early or leaving it pending
+   * forever.
+   */
+  private readonly pendingFingerprintSlots = new Set<number>();
+  private fingerprintReadyPromise: Promise<void>;
+  private resolveFingerprintReady!: () => void;
   private materialized: Chart | null = null;
   private materializing = false;
   private tempoDirty = false;
@@ -193,6 +210,22 @@ export class ChartDocument {
     this.lines = new Array<JudgeLine>(this.lineCount);
     for (let index = 0; index < this.lineCount; index++) {
       this.lines[index] = placeholderLine(this.slots[index].summary);
+    }
+    this.fingerprintReadyState = !options.index?.fingerprintsPending;
+    if (!this.fingerprintReadyState) {
+      for (const [index, slot] of this.slots.entries()) {
+        if (!slot.summary.digest) {
+          this.pendingFingerprintSlots.add(index);
+        }
+      }
+    }
+    this.fingerprintReadyPromise = this.fingerprintReadyState
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          this.resolveFingerprintReady = resolve;
+        });
+    if (!this.pendingFingerprintSlots.size && !this.fingerprintReadyState) {
+      this.completeFingerprintHydration();
     }
     const initial = options.initialLines;
     if (initial) {
@@ -228,6 +261,56 @@ export class ChartDocument {
   /** Read one line's summary. */
   summary(index: number): ChartLineSummary {
     return this.slots[index]?.summary ?? emptySummary(index);
+  }
+
+  /** True once every clean line has its semantic content digest. */
+  get fingerprintReady(): boolean {
+    return this.fingerprintReadyState;
+  }
+
+  /** Wait for the background line digest pass to finish. */
+  whenFingerprintReady(): Promise<void> {
+    return this.fingerprintReadyPromise;
+  }
+
+  /**
+   * Install one background-computed line digest without materializing siblings.
+   *
+   * The producer emits at most one seed per line, so an out-of-range or
+   * unusable seed still consumes its pending slot: a later seed cannot repair
+   * it, and leaving the slot pending would keep `whenFingerprintReady` unsettled
+   * forever.
+   */
+  applyFingerprintSeed(index: number, seed: ChartLineRevisionSeed): void {
+    const slot = this.slots[index];
+    if (!slot) {
+      return;
+    }
+    this.pendingFingerprintSlots.delete(index);
+    if (seed.digest && !slot.summary.digest) {
+      const summary = { ...slot.summary, digest: seed.digest, childDigests: seed.childDigests };
+      slot.summary = summary;
+      const indexedLines = this.index?.lines as ChartLineSummary[] | undefined;
+      if (indexedLines) {
+        indexedLines[index] = summary;
+      }
+      if (slot.line && slot.state !== "dirty") {
+        primeLineContentFingerprint(slot.line, seed.digest, seed.childDigests);
+      }
+      this.fingerprintCache = null;
+    }
+    if (!this.pendingFingerprintSlots.size) {
+      this.completeFingerprintHydration();
+    }
+  }
+
+  /** Mark the background digest stream complete after all seeds arrived. */
+  completeFingerprintHydration(): void {
+    if (this.fingerprintReadyState || this.pendingFingerprintSlots.size > 0) {
+      return;
+    }
+    this.fingerprintReadyState = true;
+    this.resolveFingerprintReady?.();
   }
 
   /** True when the line is materialized and not a placeholder. */
@@ -397,13 +480,16 @@ export class ChartDocument {
         continue;
       }
       const normalized = this.normalizeLine(line, true);
-      slot.summary = summarizeChartLine(
-        normalized,
-        index,
-        this.tempo,
-        slot.summary.byteOffset,
-        slot.summary.byteLength,
-      );
+      slot.summary =
+        !recomputeAll && slot.line && !isPlaceholderLine(this.lines[index])
+          ? summarizeChartLineIncremental(slot.summary, normalized, index)
+          : summarizeChartLine(
+              normalized,
+              index,
+              this.tempo,
+              slot.summary.byteOffset,
+              slot.summary.byteLength,
+            );
       this.installLine(index, normalized, "dirty");
     }
     this.changed();
@@ -416,6 +502,12 @@ export class ChartDocument {
     }
     const lines = next.judgeLineList ?? [];
     this.applyLineSnapshot(lines, chartHeader(next, lines.length));
+  }
+
+  /** Replace only the document header while keeping all line slots paged. */
+  updateHeaderFromChart(next: Chart): void {
+    this.setHeader(chartHeader(next, this.lineCount));
+    this.changed();
   }
 
   /** Insert a line at `index`, shifting later summaries and slots. */
@@ -482,6 +574,12 @@ export class ChartDocument {
     if (this.fingerprintCache !== null) {
       return this.fingerprintCache;
     }
+    if (!this.fingerprintReadyState) {
+      // The token is intentionally process-local and must never be used for a
+      // save/conflict decision. Hosts gate writes on `fingerprintReady` and
+      // replace it with the semantic digest when the worker finishes.
+      return this.pendingFingerprintToken;
+    }
     const digests = this.slots.map((slot) => {
       // A clean line's index digest already describes its content and ignores
       // editor-only ids, so loading it does not require another full walk.
@@ -498,6 +596,23 @@ export class ChartDocument {
       digests,
     );
     return this.fingerprintCache;
+  }
+
+  /** Build a transaction fingerprint by reusing clean line digests. */
+  previewFingerprint(chart: Chart, changedLineIndexes: Iterable<number>): string {
+    if (!this.fingerprintReadyState) {
+      return this.pendingFingerprintToken;
+    }
+    const changed = new Set(changedLineIndexes);
+    const lines = chart.judgeLineList ?? [];
+    const digests = lines.map((line, index) => {
+      if (changed.has(index)) {
+        return lineContentFingerprint(line);
+      }
+      const summary = this.slots[index]?.summary;
+      return summary?.digest || lineContentFingerprint(line);
+    });
+    return combineContentFingerprint(headerContentFingerprint(chart), digests);
   }
 
   /**
@@ -530,22 +645,23 @@ export class ChartDocument {
       }
       // Clean lines are copied from the source without parsing or assigning
       // ids; the index already validated their structure when it was built.
-      const raw = slot.raw ?? (await this.provider.readLine(index));
-      if (raw === undefined) {
+      const source = slot.raw ?? (await this.provider.readLine(index));
+      if (source === undefined) {
         throw new Error(`Missing chart line ${index}`);
       }
-      await sink(raw);
+      await sink(typeof source === "string" ? source : source.raw);
     }
     await sink("]}");
   }
 
   /** Load one line from raw text or the provider. */
   private async loadLine(index: number, slot: LineSlot, signal?: AbortSignal): Promise<JudgeLine> {
-    const raw = slot.raw ?? (await this.provider.readLine(index, signal));
-    if (raw === undefined) {
+    const source = slot.raw ?? (await this.provider.readLine(index, signal));
+    if (source === undefined) {
       slot.state = "invalid";
       throw new Error(`Missing chart line ${index}`);
     }
+    const raw = typeof source === "string" ? source : source.raw;
     let value: unknown;
     try {
       value = JSON.parse(raw);
@@ -582,7 +698,13 @@ export class ChartDocument {
         }
       }
     }
-    this.installLine(index, line, "loaded", raw);
+    this.installLine(
+      index,
+      line,
+      "loaded",
+      raw,
+      typeof source === "string" ? undefined : source.valueDigests,
+    );
     this.evict();
     return line;
   }
@@ -593,6 +715,7 @@ export class ChartDocument {
     line: JudgeLine,
     state: "loaded" | "dirty",
     raw?: string,
+    valueDigests?: readonly ChartValueDigestGroup[],
   ): void {
     const slot = this.slots[index];
     if (!slot) {
@@ -603,6 +726,7 @@ export class ChartDocument {
     slot.raw = raw ?? slot.raw;
     slot.lastUsed = ++this.clock;
     this.lines[index] = line;
+    primeLineContentFingerprint(line, slot.summary.digest, slot.summary.childDigests, valueDigests);
     this.cachedBytes += raw?.length ?? 0;
   }
 

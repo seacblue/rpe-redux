@@ -79,16 +79,13 @@ function drawUnshadedOverlay(
  * a mask over the surrounding stage.
  */
 export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFrame): void {
-  const { context, chart, tempo, seconds, viewport } = frame;
+  const { context, seconds, viewport } = frame;
+  // `Preview.draw` compiles the shader runtime before sampling `frame.shaderEffects`,
+  // so composite consumes that compiled state instead of re-running the check.
   // Guides are cheap and identify the selected line; never put them behind the
   // adaptive quality gate. A missing number reads as a rendering failure, while
   // a slightly slower frame is invisible. Background blur follows the same rule.
-  if (surface.applyShaders) {
-    surface.shaderRuntime.compile(chart, tempo);
-  }
-  const shaderEffects: PreviewShaderEffect[] = surface.applyShaders
-    ? surface.shaderRuntime.active(seconds)
-    : [];
+  const shaderEffects = surface.applyShaders ? frame.shaderEffects : [];
   const globalShader = shaderEffects.some((effect) => effect.global);
   if (!shaderEffects.length) {
     drawUnshadedOverlay(surface, frame, context);

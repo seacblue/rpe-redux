@@ -5,12 +5,9 @@
  * It owns painting and per-pass culling; event lookup, drag deltas, and viewport
  * projection come from core, the cache, and the viewport.
  */
+/* eslint-disable max-lines -- single and multi-line event passes share one GPU fallback contract. */
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
-import {
-  eventKey,
-  eventList,
-  eventListAt,
-} from "../../../../../../core/edit/events/eventTracks.ts";
+import { eventList, eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { context2d, prepareCanvas } from "../../../canvas/canvas2d.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
@@ -18,7 +15,7 @@ import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { NOISE_ACTIVE_EVENTS } from "../../../../../../core/edit/events/eventTracks.ts";
 import { BACKGROUND_GRID, FOREGROUND_GRID, strokeVerticalGrid } from "../drawing/gridDrawing.ts";
-import { eventLayerOf, hasNonPositiveRange } from "../../../../../../core/edit/timeline/model.ts";
+import { eventLayerOf } from "../../../../../../core/edit/timeline/model.ts";
 import { eventColumnBoundary } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type {
   TimelineEventLayer,
@@ -28,24 +25,83 @@ import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.t
 import type { EventChain } from "../../../../../../core/edit/timeline/eventChains.ts";
 import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.ts";
 import { readCanvasPalette, type CanvasPalette } from "../../../canvas/palette.ts";
+import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
-import { drawEventCurve, drawEventCurveBatch, eventCurveStroke } from "./eventCurve.ts";
-import {
-  drawEventOverlapFilter,
-  drawEventSelectionFilters,
-  drawRemoteEventSelectionFilters,
-} from "./eventSelectionDrawing.ts";
+import { drawEventCurves, eventCurveStroke } from "./eventCurve.ts";
+import { drawEventOverlapFilter, drawEventSelectionOverlay } from "./eventSelectionDrawing.ts";
 import {
   drawEventBar,
   drawMultiLineEventChrome,
   eventBarOpacity,
   multiLineChromeKey,
-  verticalAtBeat,
+  createVerticalAtBeat,
 } from "./eventRenderCache.ts";
-import { labelGroups, shouldDrawEventCurves } from "./eventLabelLayout.ts";
+import {
+  createEventLabelScratch,
+  labelGroupsFromEntries,
+  shouldDrawEventCurves,
+  type EventLabelScratch,
+} from "./eventLabelLayout.ts";
+import { drawTrajectory } from "./eventOverlayDrawing.ts";
+import { drawEventText } from "./eventTextDrawing.ts";
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
+
+interface EventCurveEntry {
+  event: JudgeLineEvent;
+  range: EventChain<JudgeLineEvent>;
+  startY: number;
+  endY: number;
+}
+
 const EMPTY_EVENTS: readonly JudgeLineEvent[] = [];
 const EMPTY_SELECTION = new Set<string>();
+const EMPTY_SELECTED_INDEXES = new Set<number>();
+
+/** Decode canonical event-selection keys once before scanning one track. */
+export function selectedEventIndexesForType(
+  selection: ReadonlySet<string>,
+  type: string,
+): ReadonlySet<number> {
+  if (!selection.size) {
+    return EMPTY_SELECTED_INDEXES;
+  }
+  const prefix = `${type}:`;
+  const indexes = new Set<number>();
+  for (const key of selection) {
+    if (!key.startsWith(prefix)) {
+      continue;
+    }
+    const indexText = key.slice(prefix.length);
+    if (/^(?:0|[1-9]\d*)$/.test(indexText)) {
+      indexes.add(Number(indexText));
+    }
+  }
+  return indexes;
+}
+
+/** Resolve the event viewport range once because eventBeatAt is type-independent. */
+export function eventBeatRangeForTypes(
+  viewport: Pick<TimelineEventDrawingReceiver["viewport"], "eventBeatAt">,
+  height: number,
+  eventTypes: readonly string[],
+): [number, number] {
+  if (!eventTypes.length) {
+    return [0, 0];
+  }
+  const type = eventTypes[0] ?? "";
+  return [viewport.eventBeatAt(height, type), viewport.eventBeatAt(0, type)];
+}
+
+/** Format an event start/end value for the value labels. */
+function formatEventValue(value: unknown): string {
+  if (typeof value === "number") {
+    return value.toFixed(2);
+  }
+  if (Array.isArray(value)) {
+    return value.join(",");
+  }
+  return String(value ?? "");
+}
 
 /** One selected event's projected values, ready for the always-visible label pass. */
 interface SelectedEventValue {
@@ -55,6 +111,64 @@ interface SelectedEventValue {
   readonly bottom: number;
 }
 
+interface EventDrawingScratch {
+  readonly selectedRectangles: EventBarRectangle[];
+  readonly remoteSelectedRectangles: EventBarRectangle[];
+  readonly selectedValues: SelectedEventValue[];
+  readonly curveEntriesBySelection: [EventCurveEntry[], EventCurveEntry[]];
+  readonly selectedIndexesBySelection: Map<ReadonlySet<string>, Map<string, ReadonlySet<number>>>;
+  readonly labelScratch: EventLabelScratch;
+}
+
+const eventDrawingScratch = new WeakMap<object, EventDrawingScratch>();
+
+/** Retain per-receiver event work lists and value objects across drawing frames. */
+function scratchFor(receiver: object): EventDrawingScratch {
+  const existing = eventDrawingScratch.get(receiver);
+  if (existing) {
+    return existing;
+  }
+  const created: EventDrawingScratch = {
+    selectedRectangles: [],
+    remoteSelectedRectangles: [],
+    selectedValues: [],
+    curveEntriesBySelection: [[], []],
+    selectedIndexesBySelection: new Map(),
+    labelScratch: createEventLabelScratch(),
+  };
+  eventDrawingScratch.set(receiver, created);
+  return created;
+}
+
+/** Decode one selection/type pair at most once during a synchronous draw. */
+function selectedIndexesForChannel(
+  cache: Map<ReadonlySet<string>, Map<string, ReadonlySet<number>>>,
+  selection: ReadonlySet<string>,
+  type: string,
+): ReadonlySet<number> {
+  let byType = cache.get(selection);
+  if (!byType) {
+    byType = new Map();
+    cache.set(selection, byType);
+  }
+  const cached = byType.get(type);
+  if (cached) {
+    return cached;
+  }
+  const indexes = selectedEventIndexesForType(selection, type);
+  byType.set(type, indexes);
+  return indexes;
+}
+
+/** Clear the lists consumed by one event channel without releasing their capacity. */
+function resetChannelScratch(scratch: EventDrawingScratch): void {
+  scratch.selectedRectangles.length = 0;
+  scratch.remoteSelectedRectangles.length = 0;
+  scratch.selectedValues.length = 0;
+  scratch.curveEntriesBySelection[0].length = 0;
+  scratch.curveEntriesBySelection[1].length = 0;
+}
+
 /**
  * Paint start and end values for selected events regardless of column width.
  *
@@ -62,35 +176,63 @@ interface SelectedEventValue {
  * narrow inspector layout can hide the event being edited. A selected event
  * keeps a surface chip at both anchors; this pass deliberately ignores the
  * label budget so the values follow the selection into every inspector.
+ *
+ * Both renderers share the chip geometry: the Canvas2D branch measures and fills
+ * one chip, the overlay branch queues the same chip into the retained texture.
  */
 function drawSelectedEventValues(
   context: CanvasRenderingContext2D,
+  batch: TimelineOverlayBatch | null,
   values: readonly SelectedEventValue[],
   centerX: number,
   width: number,
   height: number,
   palette: CanvasPalette,
   font: string,
-  format: (value: unknown) => string,
   opacity = 1,
 ): void {
   if (!values.length || width <= 8) {
     return;
   }
   const availableWidth = Math.max(12, width - 4);
-  context.save();
-  context.font = font;
-  context.textAlign = "center";
-  context.globalAlpha = opacity;
+  if (!batch) {
+    context.save();
+    context.font = font;
+    context.textAlign = "center";
+    context.globalAlpha = opacity;
+  }
   for (const value of values) {
     if (value.bottom - value.top <= 26 || value.bottom < 0 || value.top > height) {
       continue;
     }
     const top = Math.max(36, value.top + 13);
     const bottom = Math.min(height - 5, value.bottom - 5);
+    if (batch) {
+      batch.addTextChip(
+        formatEventValue(value.end),
+        centerX,
+        top,
+        availableWidth,
+        font,
+        palette.foreground,
+        palette.surface,
+        opacity,
+      );
+      batch.addTextChip(
+        formatEventValue(value.start),
+        centerX,
+        bottom,
+        availableWidth,
+        font,
+        palette.foreground,
+        palette.surface,
+        opacity,
+      );
+      continue;
+    }
     for (const [text, y] of [
-      [format(value.end), top],
-      [format(value.start), bottom],
+      [formatEventValue(value.end), top],
+      [formatEventValue(value.start), bottom],
     ] as const) {
       // Keep the chip tight to the printed value; a full-column bar would read
       // as a second event bar behind every selected anchor.
@@ -104,15 +246,22 @@ function drawSelectedEventValues(
       context.fillText(text, centerX, y, chipWidth - 6);
     }
   }
-  context.restore();
+  if (!batch) {
+    context.restore();
+  }
 }
 
 /** Draw the event field for the current mode: grid, bars, curves, labels, and gestures. */
 export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number): void {
+  this.gestures.beginEventRectFrame();
   const palette = this.cache.palette() ?? readCanvasPalette();
   const { context, width, height } = prepareCanvas(this.eventsCanvas);
+  const overlayActive = this.eventOverlayBatch.begin(width, height);
+  const overlayBatch = overlayActive ? this.eventOverlayBatch : null;
   this.viewport.syncMultiLineChrome("events", width);
   const session = this.getSession();
+  const scratch = scratchFor(this);
+  scratch.selectedIndexesBySelection.clear();
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const multiEvents = session.eventsMode === "multi";
   // The event backdrop holds the beat grid and the panel/channel separators.
@@ -120,17 +269,22 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   // rather than translated as a cached bitmap.
   const backdrop = prepareCanvas(this.eventsBackdrop);
   const factor = this.viewport.factor;
-  const verticalAt = (beat: number) => verticalAtBeat(this, beat, factor, height);
+  const verticalAt = createVerticalAtBeat(this, factor, height);
   // Multi-line event bars are a time-dependent GPU batch and are submitted on
   // every frame; the visible event range bounds the instance count.
-  const chrome = multiEvents
-    ? this.cache.canvasLayer(
-        this.eventsCanvas,
-        multiLineChromeKey(this, session, width, height, palette),
-        width,
-        23,
-      )
-    : undefined;
+  // The header strip is a Canvas2D layer whose labels stay in the strip. The
+  // WebGL overlay clears its label batch and texture every frame, so overlay
+  // chrome is painted into the live context and batched again on each frame
+  // instead of being cached.
+  const chrome =
+    multiEvents && !overlayActive
+      ? this.cache.canvasLayer(
+          this.eventsCanvas,
+          multiLineChromeKey(this, session, width, height, palette),
+          width,
+          23,
+        )
+      : undefined;
   if (chrome?.repaint) {
     drawMultiLineEventChrome(this, chrome.context, width);
   }
@@ -157,13 +311,20 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       }
       context.restore();
     }
+    this.eventsGridBatch.begin(width, height);
     this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "events", BACKGROUND_GRID);
+    this.eventsGridBatch.finish();
     this.drawMultiLineGrid(context, width, height, playBeat, "events", FOREGROUND_GRID);
     if (repaintBatch) {
       this.drawMultiLineEvents(playBeat, backdrop.context);
     }
     if (chrome) {
       context.drawImage(chrome.canvas, 0, 0, width, 23);
+    } else {
+      // Cached chrome is unavailable only when the overlay owns the label
+      // batch (or the browser cannot allocate a layer), so repaint straight
+      // into the live context and queue the labels for this frame.
+      drawMultiLineEventChrome(this, context, width, overlayBatch ?? undefined);
     }
     this.gestures.eventInteraction.draw(context, width);
     this.drawMultiLineBeatLabels(context, width, height, "events");
@@ -171,9 +332,13 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     if (repaintBatch) {
       this.eventBatch.finish();
     }
+    this.eventOverlayBatch.finish();
+    this.gestures.finishEventRectFrame();
     return;
   }
+  this.eventsGridBatch.begin(width, height);
   this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "events");
+  this.eventsGridBatch.finish();
   this.grid(context, width, height, playBeat, FOREGROUND_GRID, "events");
   const layer: TimelineEventLayer = this.gestures.extended
     ? { ...session.line?.extended, paintEvents: eventList(session, "paintEvents") }
@@ -186,25 +351,29 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         }
       : eventLayerOf(session.line?.eventLayers?.[this.gestures.layer]);
   const indexKey = `${session.lineIndex}:${this.gestures.extended}:${this.gestures.layer}`;
-  const cached = this.cache.events(session.chart, indexKey, this.eventTypes, layer);
-  this.gestures.eventRects = [];
+  // Resolve the display columns once. The getter also reads visibility settings
+  // and allocates the track list, so calling it from loop bounds multiplies work
+  // across every event channel in the frame.
+  const eventTypes = this.eventTypes;
+  const eventTypeCount = eventTypes.length;
+  const cached = this.cache.events(session.chart, indexKey, eventTypes, layer);
   const labels = noiseLineSettings(session.line) ? noiseTrackLabels() : trackLabels();
+  const headerLabels = this.gestures.extended ? extendedLabels() : labels;
   backdrop.context.strokeStyle = this.appearance.verticalGridColor;
   const eventInset = this.viewport.eventInset(width);
-  for (let channel = 1; channel < this.eventTypes.length; channel++) {
-    const x = eventColumnBoundary(channel, width, this.eventTypes.length, eventInset);
+  const eventBeatRange = eventBeatRangeForTypes(this.viewport, height, eventTypes);
+  for (let channel = 1; channel < eventTypeCount; channel++) {
+    const x = eventColumnBoundary(channel, width, eventTypeCount, eventInset);
     strokeVerticalGrid(backdrop.context, x, height);
   }
-  const firstColumn = eventColumnBoundary(0, width, this.eventTypes.length, eventInset);
-  const lastColumn = eventColumnBoundary(
-    this.eventTypes.length,
-    width,
-    this.eventTypes.length,
-    eventInset,
-  );
+  const firstColumn = eventColumnBoundary(0, width, eventTypeCount, eventInset);
+  const lastColumn = eventColumnBoundary(eventTypeCount, width, eventTypeCount, eventInset);
   strokeVerticalGrid(backdrop.context, Math.max(0.5, firstColumn), height);
   strokeVerticalGrid(backdrop.context, Math.min(width - 0.5, lastColumn), height);
-  this.eventTypes.forEach((type, channel) => {
+  // Reuse per-channel work lists. Their contents are consumed before the next
+  // channel starts, so only growth beyond the largest channel remains allocative.
+  eventTypes.forEach((type, channel) => {
+    resetChannelScratch(scratch);
     const {
       channelWidth,
       left: columnLeft,
@@ -216,30 +385,36 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     const entries = this.cache.eventEntries(
       session.chart,
       events,
-      this.viewport.eventBeatAt(height, type),
-      this.viewport.eventBeatAt(0, type),
+      eventBeatRange[0],
+      eventBeatRange[1],
       this.viewport.gridCount,
     );
+    const selectedIndexes = selectedIndexesForChannel(
+      scratch.selectedIndexesBySelection,
+      session.eventSelection,
+      type,
+    );
     if (type === "paintEvents") {
-      this.drawShaderEvents(context, entries, channel, width, height);
+      this.drawShaderEvents(context, entries, channel, width, height, selectedIndexes);
       context.fillStyle = palette.headerSurface;
       context.fillRect(horizontal, 0, channelWidth, 23);
-      context.fillStyle = palette.foreground;
-      context.font = canvasFont("caption");
-      context.textAlign = "center";
-      context.fillText(
-        t("editorPanels.timeline.shaderTrack"),
-        horizontal + channelWidth / 2,
+      const shaderLabel = t("editorPanels.timeline.shaderTrack");
+      const shaderX = horizontal + channelWidth / 2;
+      const shaderWidth = Math.max(8, channelWidth - 8);
+      drawEventText(
+        context,
+        overlayBatch,
+        shaderLabel,
+        shaderX,
         16,
-        Math.max(8, channelWidth - 8),
+        shaderWidth,
+        canvasFont("caption"),
+        palette.foreground,
+        "center",
       );
-      context.textAlign = "left";
       return;
     }
     const ranges = cached.ranges[channel];
-    const selectedRectangles: EventBarRectangle[] = [];
-    const remoteSelectedRectangles: EventBarRectangle[] = [];
-    const selectedValues: SelectedEventValue[] = [];
     const drawCurves =
       this.appearance.eventCurvesEnabled !== false && shouldDrawEventCurves(entries.length, height);
     for (const entry of entries) {
@@ -248,27 +423,22 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       if (bottom < 0 || vertical > height) {
         continue;
       }
-      const rectangle = {
-        x: barX,
-        y: Math.max(0, vertical),
-        width: barWidth,
-        height: Math.max(2, Math.min(height, bottom) - Math.max(0, vertical)),
-        index: entry.index,
-        type,
-      };
-      this.gestures.eventRects.push(rectangle);
-      const selected = this.getSession().eventSelection.has(eventKey(type, entry.index));
-      const hovered = this.gestures.isEventOverlapHovered(
-        this.getSession().lineIndex,
-        type,
+      const projected = this.gestures.recordEventRect(
+        barX,
+        Math.max(0, vertical),
+        barWidth,
+        Math.max(2, Math.min(height, bottom) - Math.max(0, vertical)),
         entry.index,
+        type,
       );
+      const selected = selectedIndexes.has(entry.index);
+      const hovered = this.gestures.isEventOverlapHovered(session.lineIndex, type, entry.index);
       const highlightSelection = hovered || (!overlapSelectionSuppressed && selected);
       if (highlightSelection) {
-        selectedRectangles.push(rectangle);
+        scratch.selectedRectangles.push(projected);
       }
       if (selected) {
-        selectedValues.push({
+        scratch.selectedValues.push({
           start: entry.item.start,
           end: entry.item.end,
           top: vertical,
@@ -281,19 +451,16 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         entry.item.id !== undefined &&
         this.remoteSelectedEventIds.has(entry.item.id)
       ) {
-        remoteSelectedRectangles.push(rectangle);
+        scratch.remoteSelectedRectangles.push(projected);
       }
       context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity);
-      drawEventBar(this, context, rectangle);
-      if (
-        cached.overlaps[channel].has(entry.index) ||
-        hasNonPositiveRange(entry.item.startTime, entry.item.endTime)
-      ) {
-        drawEventOverlapFilter(context, rectangle, palette);
+      drawEventBar(this, context, projected);
+      if (cached.overlaps[channel].has(entry.index) || entry.invalid) {
+        drawEventOverlapFilter(context, projected, palette);
       }
       context.globalAlpha = 1;
       if (entry.item.trajectory) {
-        this.drawTrajectoryEvent(context, rectangle, entry.item);
+        drawTrajectory.call(this, context, overlayBatch, projected, entry.item);
       }
       if (
         this.appearance.eventCurvesEnabled !== false &&
@@ -301,34 +468,49 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         (drawCurves || selected) &&
         channelWidth >= (this.appearance.eventCurveThreshold ?? 24)
       ) {
-        context.strokeStyle = eventCurveStroke(palette, selected);
-        drawEventCurve(context, entry.item, ranges.get(entry.index), rectangle, bottom, vertical);
+        const range = ranges.get(entry.index);
+        if (range) {
+          scratch.curveEntriesBySelection[selected ? 1 : 0].push({
+            event: entry.item,
+            range,
+            startY: bottom,
+            endY: vertical,
+          });
+        }
       }
     }
-    drawEventSelectionFilters(context, selectedRectangles);
-    drawRemoteEventSelectionFilters(context, remoteSelectedRectangles, palette);
+    for (const [selected, curveEntries] of scratch.curveEntriesBySelection.entries()) {
+      drawEventCurves(
+        context,
+        overlayBatch,
+        curveEntries,
+        { x: barX, y: 0, width: barWidth, height },
+        eventCurveStroke(palette, selected === 1),
+      );
+    }
+    drawEventSelectionOverlay(
+      context,
+      overlayBatch,
+      palette,
+      scratch.selectedRectangles,
+      scratch.remoteSelectedRectangles,
+    );
     context.strokeStyle = palette.eventStroke;
     context.lineWidth = 1;
-    const formatValue = (value: unknown) =>
-      typeof value === "number"
-        ? value.toFixed(2)
-        : Array.isArray(value)
-          ? value.join(",")
-          : String(value);
     const valueThreshold = this.appearance.eventValueThreshold ?? 30;
+    const valueFontSize = this.appearance.eventValueFontSize ?? canvasTypePx("body");
+    const valueFont = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
     if (type !== NOISE_ACTIVE_EVENTS && channelWidth >= valueThreshold) {
-      context.font = `${this.appearance.eventValueFontSize ?? canvasTypePx("body")}px ${CANVAS_FONT_FAMILY}`;
-      const valueGroups = labelGroups(
-        entries.map((entry) => ranges.get(entry.index)),
+      const valueGroups = labelGroupsFromEntries(
+        entries,
+        ranges,
         height,
-        (group) =>
-          group.entries.some((entry) =>
-            this.getSession().eventSelection.has(eventKey(type, entry.index)),
-          ),
+        (group) => group.entries.some((entry) => selectedIndexes.has(entry.index)),
         (group) => ({
           top: verticalAt(beatValue(group.entries.at(-1)!.event.endTime)),
           bottom: verticalAt(beatValue(group.entries[0]!.event.startTime)),
         }),
+        scratch.labelScratch,
       );
       for (const group of valueGroups) {
         const first = group.entries[0].event;
@@ -339,49 +521,60 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         const last = lastEntry.event;
         const top = verticalAt(beatValue(last.endTime));
         const bottom = verticalAt(beatValue(first.startTime));
-        context.fillStyle = top < 23 ? palette.topValue : palette.foreground;
-        context.textAlign = "center";
-        context.fillText(
-          formatValue(Number.isFinite(group.max) ? group.max : last.end),
+        drawEventText(
+          context,
+          overlayBatch,
+          formatEventValue(Number.isFinite(group.max) ? group.max : last.end),
           horizontal + channelWidth / 2,
           Math.max(36, top + 13),
           channelWidth - 12,
+          valueFont,
+          top < 23 ? palette.topValue : palette.foreground,
+          "center",
         );
-        context.fillStyle = bottom > height ? palette.bottomValue : palette.foreground;
         if (bottom - top > 26) {
-          context.fillText(
-            formatValue(Number.isFinite(group.min) ? group.min : first.start),
+          drawEventText(
+            context,
+            overlayBatch,
+            formatEventValue(Number.isFinite(group.min) ? group.min : first.start),
             horizontal + channelWidth / 2,
             Math.min(height - 5, bottom - 5),
             channelWidth - 12,
+            valueFont,
+            bottom > height ? palette.bottomValue : palette.foreground,
+            "center",
           );
         }
-        context.textAlign = "left";
       }
     }
     if (type !== NOISE_ACTIVE_EVENTS) {
       drawSelectedEventValues(
         context,
-        selectedValues,
+        overlayBatch,
+        scratch.selectedValues,
         horizontal + channelWidth / 2,
         channelWidth,
         height,
         palette,
-        `${this.appearance.eventValueFontSize ?? canvasTypePx("body")}px ${CANVAS_FONT_FAMILY}`,
-        formatValue,
+        valueFont,
       );
     }
     context.fillStyle = palette.headerSurface;
     context.fillRect(horizontal, 0, channelWidth, 23);
-    context.fillStyle = palette.foreground;
-    context.textAlign = "center";
-    context.fillText(
-      (this.gestures.extended ? extendedLabels() : labels)[channel],
-      horizontal + channelWidth / 2,
-      16,
-      Math.max(8, channelWidth - 8),
-    );
-    context.textAlign = "left";
+    const headerLabel = headerLabels[channel];
+    if (headerLabel) {
+      drawEventText(
+        context,
+        overlayBatch,
+        headerLabel,
+        horizontal + channelWidth / 2,
+        16,
+        Math.max(8, channelWidth - 8),
+        canvasFont("caption"),
+        palette.foreground,
+        "center",
+      );
+    }
   });
   // Header fills cover the backdrop's vertical separators. Re-stroke the
   // header portion on the editing canvas so every column edge, including the
@@ -389,12 +582,14 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   context.globalAlpha = 1;
   context.lineWidth = 1;
   context.strokeStyle = palette.gridMinor;
-  for (let boundary = 0; boundary <= this.eventTypes.length; boundary += 1) {
-    const x = eventColumnBoundary(boundary, width, this.eventTypes.length, eventInset);
+  for (let boundary = 0; boundary <= eventTypeCount; boundary += 1) {
+    const x = eventColumnBoundary(boundary, width, eventTypeCount, eventInset);
     strokeVerticalGrid(context, Math.max(0.5, Math.min(width - 0.5, x)), 23);
   }
   this.gestures.eventInteraction.draw(context, width);
   this.eventBatch.finish();
+  this.eventOverlayBatch.finish();
+  this.gestures.finishEventRectFrame();
 }
 
 /** Draw all visible multi-line event panels into the live canvas. */
@@ -403,13 +598,16 @@ export function drawMultiLineEvents(
   playBeat: number,
   separators: CanvasRenderingContext2D,
 ): boolean {
+  const scratch = scratchFor(this);
+  scratch.selectedIndexesBySelection.clear();
   const palette = this.cache.palette() ?? readCanvasPalette();
   const session = this.getSession();
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const context = context2d(this.eventsCanvas);
   const width = this.eventsCanvas.clientWidth;
   const height = this.eventsCanvas.clientHeight;
-  this.gestures.eventRects = [];
+  this.gestures.beginEventRectFrame();
+  const overlayBatch = this.eventOverlayBatch.isActive() ? this.eventOverlayBatch : null;
   const baseValueFontSize = this.appearance.eventValueFontSize ?? 13;
   const lineIndices = session.targetLineIndices;
   const panelWidth = this.viewport.panelWidth(width, "events");
@@ -433,7 +631,8 @@ export function drawMultiLineEvents(
       this.appearance.multiLineNonCurrentOpacity,
     );
     const lineFactor = this.viewport.factorForLine(lineIndex);
-    const verticalAt = (beat: number) => verticalAtBeat(this, beat, lineFactor, height);
+    const verticalAt = createVerticalAtBeat(this, lineFactor, height);
+    const eventBeatRange = this.viewport.beatRangeForLine(lineIndex, height);
     const offset = panel * panelStride - viewportOffset + eventInset;
     const contentRight = offset + channelWidth * eventTypes.length;
     const layer: TimelineEventLayer = this.gestures.extended
@@ -460,7 +659,11 @@ export function drawMultiLineEvents(
       strokeVerticalGrid(separators, Math.max(0.5, offset), height);
       strokeVerticalGrid(separators, Math.min(width - 0.5, offset + contentWidth), height);
     }
+    const lineSelection =
+      session.multiEventSelection?.get(lineIndex) ??
+      (lineIndex === session.lineIndex ? session.eventSelection : EMPTY_SELECTION);
     eventTypes.forEach((type, channel) => {
+      resetChannelScratch(scratch);
       context.globalAlpha = lineOpacity;
       const barX = offset + channel * channelWidth + (channelWidth - barWidth) / 2;
       separators.strokeStyle = this.appearance.verticalGridColor;
@@ -472,61 +675,44 @@ export function drawMultiLineEvents(
       const events = layer[type] ?? EMPTY_EVENTS;
       const display = this.cache.eventDisplay(session.chart, events);
       const { ranges } = display;
-      const [bottomBeat, topBeat] = this.viewport.beatRangeForLine(lineIndex, height);
       const entries = this.cache.eventEntries(
         session.chart,
         events,
-        bottomBeat,
-        topBeat,
+        eventBeatRange[0],
+        eventBeatRange[1],
         this.viewport.gridCount,
       );
-      const selectedRectangles: EventBarRectangle[] = [];
-      const remoteSelectedRectangles: EventBarRectangle[] = [];
-      const selectedValues: SelectedEventValue[] = [];
-      const lineSelection =
-        session.multiEventSelection?.get(lineIndex) ??
-        (lineIndex === session.lineIndex ? session.eventSelection : EMPTY_SELECTION);
+      const selectedIndexes = selectedIndexesForChannel(
+        scratch.selectedIndexesBySelection,
+        lineSelection,
+        type,
+      );
       const drawCurves =
         this.appearance.eventCurvesEnabled !== false &&
         shouldDrawEventCurves(entries.length, height);
-      const curveEntriesBySelection: [
-        Array<{
-          event: JudgeLineEvent;
-          range: EventChain<JudgeLineEvent>;
-          startY: number;
-          endY: number;
-        }>,
-        Array<{
-          event: JudgeLineEvent;
-          range: EventChain<JudgeLineEvent>;
-          startY: number;
-          endY: number;
-        }>,
-      ] = [[], []];
-      for (const { index, item: event, start, end } of entries) {
+      for (const { index, item: event, start, end, invalid } of entries) {
         const top = verticalAt(end);
         const bottom = verticalAt(start);
         if (bottom < 23 || top > height) {
           continue;
         }
-        const rectangle = {
-          x: barX,
-          y: Math.max(23, top),
-          width: barWidth,
-          height: Math.max(2, Math.min(height, bottom) - Math.max(23, top)),
+        const projected = this.gestures.recordEventRect(
+          barX,
+          Math.max(23, top),
+          barWidth,
+          Math.max(2, Math.min(height, bottom) - Math.max(23, top)),
           index,
           type,
           lineIndex,
-        };
-        this.gestures.eventRects.push(rectangle);
-        const selected = lineSelection.has(eventKey(type, index));
+        );
+        const selected = selectedIndexes.has(index);
         const hovered = this.gestures.isEventOverlapHovered(lineIndex, type, index);
         const highlightSelection = hovered || (!overlapSelectionSuppressed && selected);
         if (highlightSelection) {
-          selectedRectangles.push(rectangle);
+          scratch.selectedRectangles.push(projected);
         }
         if (selected && type !== "paintEvents") {
-          selectedValues.push({ start: event.start, end: event.end, top, bottom });
+          scratch.selectedValues.push({ start: event.start, end: event.end, top, bottom });
         }
         if (
           !highlightSelection &&
@@ -534,16 +720,16 @@ export function drawMultiLineEvents(
           event.id !== undefined &&
           this.remoteSelectedEventIds.has(event.id)
         ) {
-          remoteSelectedRectangles.push(rectangle);
+          scratch.remoteSelectedRectangles.push(projected);
         }
         context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, lineOpacity);
-        drawEventBar(this, context, rectangle, lineOpacity);
-        if (display.overlaps.has(index) || hasNonPositiveRange(event.startTime, event.endTime)) {
-          drawEventOverlapFilter(context, rectangle, palette);
+        drawEventBar(this, context, projected, lineOpacity);
+        if (display.overlaps.has(index) || invalid) {
+          drawEventOverlapFilter(context, projected, palette);
         }
         context.globalAlpha = lineOpacity;
         if (event.trajectory) {
-          this.drawTrajectoryEvent(context, rectangle, event);
+          drawTrajectory.call(this, context, overlayBatch, projected, event, lineOpacity);
         }
         if (
           this.appearance.eventCurvesEnabled !== false &&
@@ -554,7 +740,7 @@ export function drawMultiLineEvents(
         ) {
           const group = ranges.get(index);
           if (group) {
-            curveEntriesBySelection[selected ? 1 : 0].push({
+            scratch.curveEntriesBySelection[selected ? 1 : 0].push({
               event,
               range: group,
               startY: bottom,
@@ -564,19 +750,24 @@ export function drawMultiLineEvents(
         }
       }
       context.globalAlpha = lineOpacity;
-      drawEventSelectionFilters(context, selectedRectangles);
-      drawRemoteEventSelectionFilters(context, remoteSelectedRectangles, palette);
+      drawEventSelectionOverlay(
+        context,
+        overlayBatch,
+        palette,
+        scratch.selectedRectangles,
+        scratch.remoteSelectedRectangles,
+        lineOpacity,
+      );
       context.strokeStyle = palette.eventStroke;
-      for (const [selected, curveEntries] of curveEntriesBySelection.entries()) {
-        if (!curveEntries.length) {
-          continue;
-        }
-        context.strokeStyle = eventCurveStroke(palette, selected === 1);
-        drawEventCurveBatch(
+      for (const [selected, curveEntries] of scratch.curveEntriesBySelection.entries()) {
+        drawEventCurves(
           context,
+          overlayBatch,
           curveEntries,
           { x: barX, y: 23, width: barWidth, height: Math.max(2, height - 23) },
+          eventCurveStroke(palette, selected === 1),
           { steps: 24, padding: 4, lineWidth: 1.5, drawConstant: true },
+          lineOpacity,
         );
       }
       const valueThreshold = this.appearance.eventValueThreshold ?? 30;
@@ -590,24 +781,21 @@ export function drawMultiLineEvents(
               : channelWidth >= valueThreshold
                 ? Math.min(baseValueFontSize, 8)
                 : 0;
-      const format = (value: unknown) =>
-        typeof value === "number"
-          ? value.toFixed(2)
-          : Array.isArray(value)
-            ? value.join(",")
-            : String(value ?? "");
       if (type !== "paintEvents" && valueFontSize > 0) {
-        context.font = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
-        context.textAlign = "center";
-        const valueGroups = labelGroups(
-          entries.map((entry) => ranges.get(entry.index)),
+        const valueGroups = labelGroupsFromEntries(
+          entries,
+          ranges,
           height,
-          (group) => group.entries.some((entry) => lineSelection.has(eventKey(type, entry.index))),
+          (group) => group.entries.some((entry) => selectedIndexes.has(entry.index)),
           (group) => ({
             top: verticalAt(beatValue(group.entries.at(-1)!.event.endTime)),
             bottom: verticalAt(beatValue(group.entries[0]!.event.startTime)),
           }),
+          scratch.labelScratch,
         );
+        const centerX = offset + channel * channelWidth + channelWidth / 2;
+        const maxWidth = Math.max(10, channelWidth - 8);
+        const font = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
         for (const group of valueGroups) {
           const first = group.entries[0].event;
           const lastEntry = group.entries.at(-1);
@@ -617,34 +805,44 @@ export function drawMultiLineEvents(
           const last = lastEntry.event;
           const top = verticalAt(beatValue(last.endTime));
           const bottom = verticalAt(beatValue(first.startTime));
-          context.fillStyle = palette.foreground;
-          context.fillText(
-            format(Number.isFinite(group.max) ? group.max : last.end),
-            offset + channel * channelWidth + channelWidth / 2,
+          drawEventText(
+            context,
+            overlayBatch,
+            formatEventValue(Number.isFinite(group.max) ? group.max : last.end),
+            centerX,
             Math.max(37, top + 13),
-            Math.max(10, channelWidth - 8),
+            maxWidth,
+            font,
+            palette.foreground,
+            "center",
+            lineOpacity,
           );
           if (bottom - top > 26) {
-            context.fillText(
-              format(Number.isFinite(group.min) ? group.min : first.start),
-              offset + channel * channelWidth + channelWidth / 2,
+            drawEventText(
+              context,
+              overlayBatch,
+              formatEventValue(Number.isFinite(group.min) ? group.min : first.start),
+              centerX,
               Math.min(height - 5, bottom - 5),
-              Math.max(10, channelWidth - 8),
+              maxWidth,
+              font,
+              palette.foreground,
+              "center",
+              lineOpacity,
             );
           }
         }
-        context.textAlign = "left";
       }
       if (type !== "paintEvents" && type !== NOISE_ACTIVE_EVENTS) {
         drawSelectedEventValues(
           context,
-          selectedValues,
+          overlayBatch,
+          scratch.selectedValues,
           offset + channel * channelWidth + channelWidth / 2,
           channelWidth,
           height,
           palette,
           `${Math.max(8, valueFontSize || Math.min(baseValueFontSize, 10))}px ${CANVAS_FONT_FAMILY}`,
-          format,
           lineOpacity,
         );
       }

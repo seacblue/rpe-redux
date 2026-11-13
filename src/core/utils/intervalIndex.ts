@@ -27,6 +27,8 @@ interface IntervalBlock {
 }
 
 const BLOCK_SIZE = 256;
+/** Maximum contiguous source mutation handled without a directory rebuild. */
+const MAX_INCREMENTAL_MUTATION = 8;
 
 /**
  * Chunked interval directory over an immutable item array.
@@ -56,6 +58,8 @@ export class IntervalIndex<T> {
   private blocks: IntervalBlock[] = [];
   /** First start in each block, used to find the query's right boundary. */
   private blockFirstStarts = new Float64Array(0);
+  /** First source index for equal-start tie breaking during insertion. */
+  private blockFirstIndices = new Uint32Array(0);
   /** Prefix maximum of block end values, used to skip expired blocks. */
   private prefixMaxEnds = new Float64Array(0);
 
@@ -93,6 +97,26 @@ export class IntervalIndex<T> {
       return "same";
     }
     const previous = this.items;
+    const change = this.contiguousChange(previous, items);
+    if (change?.inserted) {
+      this.items = items;
+      this.shiftEntryIndices(change.index, change.inserted);
+      for (let offset = 0; offset < change.inserted; offset += 1) {
+        this.insertEntry(change.index + offset, items[change.index + offset]);
+      }
+      this.incrementalUpdateCount++;
+      return "incremental";
+    }
+    if (change) {
+      for (let index = change.index + change.removed - 1; index >= change.index; index -= 1) {
+        this.removeEntry(index);
+      }
+      this.shiftEntryIndices(change.index + change.removed, -change.removed);
+      this.items = items;
+      this.rebuildDirectory();
+      this.incrementalUpdateCount++;
+      return "incremental";
+    }
     const changed: number[] = [];
     const commonLength = Math.min(previous.length, items.length);
     for (let index = 0; index < commonLength; index++) {
@@ -168,12 +192,20 @@ export class IntervalIndex<T> {
 
   /** Return every entry overlapping the inclusive range `[start, end]`. */
   query(start: number, end: number): IntervalEntry<T>[] {
-    const result: IntervalEntry<T>[] = [];
+    return this.queryInto(start, end, []);
+  }
+
+  /** Fill a caller-owned entry buffer, reusing its entry objects when possible. */
+  queryInto(start: number, end: number, result: IntervalEntry<T>[]): IntervalEntry<T>[] {
+    const previousLength = result.length;
+    let count = 0;
     if (start > end) {
+      result.length = 0;
       return result;
     }
     const [firstBlock, lastBlock] = this.queryBlockRange(start, end);
     if (firstBlock > lastBlock) {
+      result.length = 0;
       return result;
     }
     for (let blockIndex = firstBlock; blockIndex <= lastBlock; blockIndex++) {
@@ -187,14 +219,24 @@ export class IntervalIndex<T> {
           continue;
         }
         const index = block.indices[position];
-        result.push({
-          item: this.items[index],
-          index,
-          start: block.starts[position],
-          end: block.ends[position],
-        });
+        const entry =
+          count < previousLength
+            ? result[count]
+            : {
+                item: this.items[index],
+                index,
+                start: block.starts[position],
+                end: block.ends[position],
+              };
+        entry.item = this.items[index];
+        entry.index = index;
+        entry.start = block.starts[position];
+        entry.end = block.ends[position];
+        result[count] = entry;
+        count++;
       }
     }
+    result.length = count;
     return result;
   }
 
@@ -343,9 +385,21 @@ export class IntervalIndex<T> {
 
   /** Project items to index/start/end records sorted by start. */
   private sortedEntries(items: readonly T[]): Array<{ index: number; start: number; end: number }> {
-    return items
-      .map((item, index) => ({ index, start: this.startOf(item), end: this.endOf(item) }))
-      .sort((a, b) => a.start - b.start);
+    const entries = items.map((item, index) => ({
+      index,
+      start: this.startOf(item),
+      end: this.endOf(item),
+    }));
+    let ordered = true;
+    for (let index = 1; index < entries.length; index += 1) {
+      if (entries[index - 1].start > entries[index].start) {
+        ordered = false;
+        break;
+      }
+    }
+    return ordered
+      ? entries
+      : entries.sort((left, right) => left.start - right.start || left.index - right.index);
   }
 
   /** Split sorted entries into fixed-size blocks and refresh the lookup directory. */
@@ -357,46 +411,32 @@ export class IntervalIndex<T> {
     this.rebuildDirectory();
   }
 
-  /** Copy sorted records into typed arrays and record the block's maximum end. */
+  /** Copy sorted records into typed arrays and derive the block envelope. */
   private createBlock(
     entries: readonly { index: number; start: number; end: number }[],
   ): IntervalBlock {
     const indices = new Uint32Array(entries.length);
     const starts = new Float64Array(entries.length);
     const ends = new Float64Array(entries.length);
-    let maxEnd = -Infinity;
-    for (let position = 0; position < entries.length; position++) {
+    for (let position = 0; position < entries.length; position += 1) {
       const entry = entries[position];
       indices[position] = entry.index;
       starts[position] = entry.start;
       ends[position] = entry.end;
-      maxEnd = Math.max(maxEnd, entry.end);
     }
-    let maxExpansionFactor = 0;
-    for (let position = 0; position < indices.length; position++) {
-      maxExpansionFactor = Math.max(
-        maxExpansionFactor,
-        this.expansionFactorOf(this.items[indices[position]]),
-      );
-    }
-    return {
-      indices,
-      starts,
-      ends,
-      maxEnd,
-      maxExpansionFactor,
-      ...this.secondaryEnvelope(indices),
-    };
+    return this.createBlockFromArrays(indices, starts, ends);
   }
 
   /** Recompute per-block first starts and the prefix maximum of block ends. */
   private rebuildDirectory(): void {
     this.blockFirstStarts = new Float64Array(this.blocks.length);
+    this.blockFirstIndices = new Uint32Array(this.blocks.length);
     this.prefixMaxEnds = new Float64Array(this.blocks.length);
     let maximum = -Infinity;
     for (let index = 0; index < this.blocks.length; index++) {
       const block = this.blocks[index];
       this.blockFirstStarts[index] = block.starts[0];
+      this.blockFirstIndices[index] = block.indices[0];
       maximum = Math.max(maximum, block.maxEnd);
       this.prefixMaxEnds[index] = maximum;
     }
@@ -422,6 +462,55 @@ export class IntervalIndex<T> {
     return true;
   }
 
+  /**
+   * Find a small contiguous insertion or deletion that preserves every other
+   * item's identity, so the sorted directory can be patched in place.
+   */
+  private contiguousChange(
+    previous: readonly T[],
+    items: readonly T[],
+  ): { index: number; inserted: number; removed: number } | undefined {
+    const inserted = items.length - previous.length;
+    const removed = previous.length - items.length;
+    const changed = Math.max(inserted, removed);
+    if (changed <= 0 || changed > MAX_INCREMENTAL_MUTATION) {
+      return undefined;
+    }
+    const shared = Math.min(previous.length, items.length);
+    let index = 0;
+    while (index < shared && previous[index] === items[index]) {
+      index += 1;
+    }
+    if (inserted > 0) {
+      for (let offset = index; offset < previous.length; offset += 1) {
+        if (previous[offset] !== items[offset + inserted]) {
+          return undefined;
+        }
+      }
+      return { index, inserted, removed: 0 };
+    }
+    for (let offset = index; offset < items.length; offset += 1) {
+      if (previous[offset - removed] !== items[offset]) {
+        return undefined;
+      }
+    }
+    return { index, inserted: 0, removed };
+  }
+
+  /** Shift source indexes in the sorted directory after a middle mutation. */
+  private shiftEntryIndices(at: number, delta: number): void {
+    if (delta === 0) {
+      return;
+    }
+    for (const block of this.blocks) {
+      for (let position = 0; position < block.indices.length; position += 1) {
+        if (block.indices[position] >= at) {
+          block.indices[position] += delta;
+        }
+      }
+    }
+  }
+
   /** Insert one entry into the block whose start range contains it, splitting when full. */
   private insertEntry(index: number, item: T): void {
     const start = this.startOf(item);
@@ -431,9 +520,12 @@ export class IntervalIndex<T> {
       this.rebuildDirectory();
       return;
     }
-    const blockIndex = Math.max(0, upperBound(this.blockFirstStarts, start) - 1);
+    const blockIndex = Math.max(
+      0,
+      this.firstAfter(this.blockFirstStarts, this.blockFirstIndices, start, index) - 1,
+    );
     const block = this.blocks[blockIndex];
-    const position = upperBound(block.starts, start);
+    const position = this.firstAfter(block.starts, block.indices, start, index);
     const next = this.insertIntoBlock(block, position, index, start, end);
     if (next.indices.length <= BLOCK_SIZE) {
       this.blocks[blockIndex] = next;
@@ -449,6 +541,30 @@ export class IntervalIndex<T> {
       this.sliceBlock(next, split, next.indices.length),
     );
     this.rebuildDirectory();
+  }
+
+  /**
+   * Return the first position whose `(start, source index)` pair is greater than
+   * the probe. Equal starts keep source order because the pair breaks the tie.
+   */
+  private firstAfter(
+    starts: ArrayLike<number>,
+    indices: ArrayLike<number>,
+    start: number,
+    index: number,
+  ): number {
+    let low = 0;
+    let high = starts.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      const entryStart = starts[middle];
+      if (entryStart < start || (entryStart === start && indices[middle] <= index)) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
   }
 
   /** Return a copy of the block with one record inserted at `position`. */

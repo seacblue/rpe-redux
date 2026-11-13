@@ -12,6 +12,8 @@ import {
 } from "../../../frontend/screens/editor/workspace/preview/render/background.ts";
 import { shaderTextureSize } from "../../../frontend/screens/editor/workspace/preview/render/shaderPipeline.ts";
 import { fragmentSource } from "../../../frontend/screens/editor/workspace/preview/render/shaderSource.ts";
+import { defaultShaderUniform } from "../../../core/global/chart/shader/shader.ts";
+import { selectionMapForSession } from "../../../frontend/screens/editor/workspace/preview/interaction/previewSelectionMap.ts";
 
 /** Replaces the document factory for one test and always restores the global. */
 function withDocument(factory, run) {
@@ -120,6 +122,42 @@ test("shader texture fits the logical size inside 1920x1080", () => {
   assert.deepEqual(shaderTextureSize(2560, 1440), { width: 1920, height: 1080 });
   assert.deepEqual(shaderTextureSize(1000, 2000), { width: 540, height: 1080 });
   assert.deepEqual(shaderTextureSize(0, 0), { width: 1, height: 1 });
+});
+
+test("shader uniform defaults preserve values and vector ownership", () => {
+  assert.equal(defaultShaderUniform("sampleCount"), 3);
+  assert.deepEqual(defaultShaderUniform("direction"), [1, 0]);
+  const first = defaultShaderUniform("direction");
+  assert.ok(Array.isArray(first));
+  first[0] = 9;
+  assert.deepEqual(defaultShaderUniform("direction"), [1, 0]);
+  const resolution = [800, 600];
+  assert.strictEqual(defaultShaderUniform("resolution", resolution), resolution);
+  assert.equal(defaultShaderUniform("unknownUniform"), undefined);
+});
+
+test("preview selection maps are reused until the session selection revision changes", () => {
+  const session = {
+    selectionRevision: 0,
+    lineIndex: 2,
+    selection: new Set([1, 3]),
+    multiLineActive: false,
+    multiLineMode: "notes",
+    multiLineSelection: new Map(),
+  };
+  const first = selectionMapForSession(session);
+  assert.strictEqual(selectionMapForSession(session), first);
+  session.selection = new Set([4]);
+  session.selectionRevision += 1;
+  const next = selectionMapForSession(session);
+  assert.notStrictEqual(next, first);
+  assert.deepEqual([...next.get(2)], [4]);
+  // Session code also clears or edits the same set in place without bumping the
+  // revision, so the cached projection must follow the content.
+  session.selection.clear();
+  const cleared = selectionMapForSession(session);
+  assert.notStrictEqual(cleared, next);
+  assert.equal(cleared.get(2).size, 0);
 });
 
 test("legacy shader texture samples map the chart rectangle into the source texture", () => {

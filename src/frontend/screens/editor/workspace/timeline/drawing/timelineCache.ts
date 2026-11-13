@@ -35,11 +35,13 @@ import type {
   NoteIndex,
   TimelineNote,
   TimelineNoteEntry,
+  TimelineEventEntry,
   TimelineEventLayer,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelinePalette } from "./canvas.ts";
 import { readCanvasPalette, selectionColor } from "../../../canvas/palette.ts";
 import { sizeCanvasBackingStore } from "../../../canvas/canvas2d.ts";
+import { notePaintLayer } from "../../../canvas/noteSpriteGroups.ts";
 
 export interface TimelineEventDisplay {
   readonly length: number;
@@ -47,13 +49,36 @@ export interface TimelineEventDisplay {
   readonly groups: EventChain<JudgeLineEvent>[];
   readonly ranges: Map<number, EventChain<JudgeLineEvent>>;
   readonly overlaps: Set<number>;
+  renderRanges?: CachedEventRenderRanges;
 }
+
+/** Beat and second bounds prepared once for one note render configuration. */
+export interface TimelineNoteRenderData {
+  readonly start: number;
+  readonly end: number;
+  readonly startSeconds: number;
+  readonly endSeconds: number;
+  readonly invalid: boolean;
+}
+
+const INVALID_NOTE_RENDER_DATA: TimelineNoteRenderData = Object.freeze({
+  start: 0,
+  end: 0,
+  startSeconds: 0,
+  endSeconds: 0,
+  invalid: true,
+});
 
 interface CachedEventQuery {
   readonly start: number;
   readonly end: number;
   readonly gridCount: number;
-  readonly entries: readonly IntervalEntry<JudgeLineEvent>[];
+  readonly entries: TimelineEventEntry[];
+}
+
+interface CachedEventRenderRanges {
+  readonly gridCount: number;
+  readonly values: Array<ReturnType<typeof timelineRenderRange> | undefined>;
 }
 
 interface CachedNoteQuery {
@@ -61,6 +86,7 @@ interface CachedNoteQuery {
   readonly bottom: number;
   readonly top: number;
   readonly entries: TimelineNoteEntry[];
+  readonly paintEntries: TimelineNoteEntry[];
 }
 
 interface CanvasLayerState {
@@ -80,19 +106,32 @@ export class TimelineCache {
   private readonly noteIndexes = new Map<number, NoteIndex>();
   /** One visible-range result per line; pointer hit tests and painting share it. */
   private readonly noteQueries = new Map<number, CachedNoteQuery>();
+  /** Reusable interval-entry buffers keep playback queries out of the GC path. */
+  private readonly noteQueryBuffers = new Map<number, IntervalEntry<TimelineNote>[]>();
   private validatedNoteArrays = new WeakSet<JudgeLineNote[]>();
   private noteOverlaps = new WeakMap<
     readonly TimelineNote[],
     { threshold: number; ranks: NoteOverlapRanks }
   >();
+  /** Whether each immutable note array can use the linear paint partition. */
+  private notePaintOrderFastPaths = new WeakMap<readonly TimelineNote[], boolean>();
 
   private eventDisplays = new WeakMap<readonly JudgeLineEvent[], TimelineEventDisplay>();
   private eventQueries = new WeakMap<readonly JudgeLineEvent[], CachedEventQuery>();
+  /** Reusable interval-entry storage keeps playback queries out of the GC path. */
+  private eventQueryBuffers = new WeakMap<
+    readonly JudgeLineEvent[],
+    IntervalEntry<JudgeLineEvent>[]
+  >();
   private canvasLayers = new WeakMap<
     HTMLCanvasElement,
-    { canvas: HTMLCanvasElement; state?: CanvasLayerState }
+    Map<string, { canvas: HTMLCanvasElement; state?: CanvasLayerState }>
   >();
   private tempoSecondsCache = new WeakMap<object, Map<number, Map<number, number>>>();
+  private noteRenderDataCache = new WeakMap<
+    object,
+    WeakMap<readonly TimelineNote[], Map<string, readonly TimelineNoteRenderData[]>>
+  >();
   private eventData?: {
     chart: Chart;
     key: string;
@@ -104,20 +143,33 @@ export class TimelineCache {
   private theme?: string;
   private colors?: TimelinePalette;
 
-  /** Return a reusable layer canvas, flagging `repaint` when its key or size changed. */
+  /**
+   * Return a reusable render layer, flagging `repaint` when its key or size changed.
+   *
+   * The target is only an owner for the offscreen surface. `slot` lets several
+   * independent reusable layers share one owner without sharing invalidation.
+   * Callers must include every visual input in `key`; the returned layer is a
+   * snapshot and is never allowed to stand in for a dynamic pass.
+   */
   canvasLayer(
     target: HTMLCanvasElement,
     key: string,
     width: number,
     height: number,
+    slot = "default",
   ): CachedCanvasLayer | undefined {
     if (typeof document === "undefined") {
       return undefined;
     }
-    let cached = this.canvasLayers.get(target);
+    let layers = this.canvasLayers.get(target);
+    if (!layers) {
+      layers = new Map();
+      this.canvasLayers.set(target, layers);
+    }
+    let cached = layers.get(slot);
     if (!cached) {
       cached = { canvas: document.createElement("canvas") };
-      this.canvasLayers.set(target, cached);
+      layers.set(slot, cached);
     }
     const canvas = cached.canvas;
     const previousWidth = canvas.width;
@@ -191,6 +243,26 @@ export class TimelineCache {
     return ranks;
   }
 
+  /** Check once whether interval-directory order preserves source note order. */
+  private canPartitionPaintOrder(notes: readonly TimelineNote[]): boolean {
+    const cached = this.notePaintOrderFastPaths.get(notes);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let previousStart = Number.NEGATIVE_INFINITY;
+    let ordered = true;
+    for (const note of notes) {
+      const start = beatValue(note.startTime);
+      if (start < previousStart) {
+        ordered = false;
+        break;
+      }
+      previousStart = start;
+    }
+    this.notePaintOrderFastPaths.set(notes, ordered);
+    return ordered;
+  }
+
   /** Query one line's visible notes once per range shared by hit testing and painting. */
   visibleNotes(lineIndex: number, bottom: number, top: number): TimelineNoteEntry[] {
     const noteIndex = this.noteIndexes.get(lineIndex);
@@ -201,12 +273,128 @@ export class TimelineCache {
     if (cached?.notes === noteIndex.notes && cached.bottom === bottom && cached.top === top) {
       return cached.entries;
     }
-    const entries = noteIndex.index
-      .query(bottom, top)
-      .filter((entry) => isTimelineNoteRenderable(entry.item))
-      .map((entry) => ({ ...entry, lineIndex }));
-    this.noteQueries.set(lineIndex, { notes: noteIndex.notes, bottom, top, entries });
+    const rawEntries = this.noteQueryBuffers.get(lineIndex) ?? [];
+    this.noteQueryBuffers.set(lineIndex, rawEntries);
+    noteIndex.index.queryInto(bottom, top, rawEntries);
+    const entries = cached?.entries ?? [];
+    const paintEntries = cached?.paintEntries ?? [];
+    let count = 0;
+    for (const entry of rawEntries) {
+      if (!isTimelineNoteRenderable(entry.item)) {
+        continue;
+      }
+      const visibleEntry = entries[count] ?? {
+        item: entry.item,
+        index: entry.index,
+        start: entry.start,
+        end: entry.end,
+        lineIndex,
+      };
+      visibleEntry.item = entry.item;
+      visibleEntry.index = entry.index;
+      visibleEntry.start = entry.start;
+      visibleEntry.end = entry.end;
+      visibleEntry.lineIndex = lineIndex;
+      entries[count] = visibleEntry;
+      count++;
+    }
+    entries.length = count;
+    if (this.canPartitionPaintOrder(noteIndex.notes)) {
+      let holdCount = 0;
+      for (const entry of entries) {
+        if (notePaintLayer(entry.item.type) === 0) {
+          holdCount += 1;
+        }
+      }
+      paintEntries.length = entries.length;
+      let holdPosition = 0;
+      let headPosition = holdCount;
+      for (const entry of entries) {
+        if (notePaintLayer(entry.item.type) === 0) {
+          paintEntries[holdPosition] = entry;
+          holdPosition += 1;
+        } else {
+          paintEntries[headPosition] = entry;
+          headPosition += 1;
+        }
+      }
+    } else {
+      paintEntries.length = 0;
+      paintEntries.push(...entries);
+      paintEntries.sort(
+        (left, right) =>
+          notePaintLayer(left.item.type) - notePaintLayer(right.item.type) ||
+          left.index - right.index,
+      );
+    }
+    this.noteQueries.set(lineIndex, {
+      notes: noteIndex.notes,
+      bottom,
+      top,
+      entries,
+      paintEntries,
+    });
     return entries;
+  }
+
+  /** Return the visible notes in stable hold-before-head paint order. */
+  paintOrderedNotes(lineIndex: number, bottom: number, top: number): TimelineNoteEntry[] {
+    const cached = this.noteQueries.get(lineIndex);
+    if (cached?.bottom === bottom && cached.top === top) {
+      return cached.paintEntries;
+    }
+    this.visibleNotes(lineIndex, bottom, top);
+    return this.noteQueries.get(lineIndex)?.paintEntries ?? [];
+  }
+
+  /** Return the cached beat/second bounds for one note render configuration. */
+  noteRenderDataSet(
+    notes: readonly TimelineNote[],
+    tempo: TempoSource,
+    factor: number,
+    gridCount: number,
+  ): readonly TimelineNoteRenderData[] {
+    let byNotes = this.noteRenderDataCache.get(tempo as object);
+    if (!byNotes) {
+      byNotes = new WeakMap();
+      this.noteRenderDataCache.set(tempo as object, byNotes);
+    }
+    let byConfiguration = byNotes.get(notes);
+    if (!byConfiguration) {
+      byConfiguration = new Map();
+      byNotes.set(notes, byConfiguration);
+    }
+    const normalizedFactor = Number.isFinite(factor) && Math.abs(factor) >= 0.001 ? factor : 1;
+    const key = `${normalizedFactor}:${Math.max(1, Math.round(gridCount))}`;
+    let values = byConfiguration.get(key);
+    if (!values || values.length !== notes.length) {
+      const next = new Array<TimelineNoteRenderData>(notes.length);
+      for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
+        const note = notes[noteIndex];
+        const range = timelineRenderRange(note.startTime, note.endTime, gridCount);
+        next[noteIndex] = {
+          ...range,
+          startSeconds: this.tempoSeconds(tempo, range.start, normalizedFactor),
+          endSeconds: this.tempoSeconds(tempo, range.end, normalizedFactor),
+        };
+      }
+      values = next;
+      byConfiguration.set(key, values);
+    }
+    return values;
+  }
+
+  /** Return precomputed beat/second bounds for one note array and line factor. */
+  noteRenderData(
+    notes: readonly TimelineNote[],
+    tempo: TempoSource,
+    factor: number,
+    gridCount: number,
+    index: number,
+  ): TimelineNoteRenderData {
+    return (
+      this.noteRenderDataSet(notes, tempo, factor, gridCount)[index] ?? INVALID_NOTE_RENDER_DATA
+    );
   }
 
   /** Build and memoize the interval index, chains, and overlaps for one event array. */
@@ -247,18 +435,58 @@ export class TimelineCache {
     start: number,
     end: number,
     gridCount: number,
-  ): readonly IntervalEntry<JudgeLineEvent>[] {
+  ): readonly TimelineEventEntry[] {
     const cached = this.eventQueries.get(events);
     if (cached?.start === start && cached.end === end && cached.gridCount === gridCount) {
       return cached.entries;
     }
-    const entries = this.eventDisplay(chart, events)
-      .index.query(start, end)
-      .map((entry) => {
-        const range = timelineRenderRange(entry.item.startTime, entry.item.endTime, gridCount);
-        return { ...entry, start: range.start, end: range.end };
-      })
-      .sort((left, right) => left.index - right.index);
+    const display = this.eventDisplay(chart, events);
+    const rawEntries = this.eventQueryBuffers.get(events) ?? [];
+    this.eventQueryBuffers.set(events, rawEntries);
+    display.index.queryInto(start, end, rawEntries);
+    const entries = cached?.entries ?? [];
+    let renderRanges = display.renderRanges;
+    if (!renderRanges || renderRanges.gridCount !== gridCount) {
+      renderRanges = {
+        gridCount,
+        values: new Array(events.length),
+      };
+      display.renderRanges = renderRanges;
+    }
+    let count = 0;
+    let previousIndex = -1;
+    let alreadyOrdered = true;
+    for (const rawEntry of rawEntries) {
+      const range =
+        renderRanges.values[rawEntry.index] ??
+        (renderRanges.values[rawEntry.index] = timelineRenderRange(
+          rawEntry.item.startTime,
+          rawEntry.item.endTime,
+          gridCount,
+        ));
+      if (rawEntry.index < previousIndex) {
+        alreadyOrdered = false;
+      }
+      previousIndex = rawEntry.index;
+      const entry = entries[count] ?? {
+        item: rawEntry.item,
+        index: rawEntry.index,
+        start: range.start,
+        end: range.end,
+        invalid: range.invalid,
+      };
+      entry.item = rawEntry.item;
+      entry.index = rawEntry.index;
+      entry.start = range.start;
+      entry.end = range.end;
+      entry.invalid = range.invalid;
+      entries[count] = entry;
+      count += 1;
+    }
+    entries.length = count;
+    if (!alreadyOrdered) {
+      entries.sort((left, right) => left.index - right.index);
+    }
     this.eventQueries.set(events, { start, end, gridCount, entries });
     return entries;
   }
@@ -342,13 +570,16 @@ export class TimelineCache {
     this.eventData = undefined;
     this.eventDisplays = new WeakMap();
     this.eventQueries = new WeakMap();
+    this.eventQueryBuffers = new WeakMap();
     this.tempoSecondsCache = new WeakMap();
+    this.noteRenderDataCache = new WeakMap();
     this.canvasLayers = new WeakMap();
   }
   /** Drop every cached index, query, and canvas layer. */
   clear(): void {
     this.noteIndexes.clear();
     this.noteQueries.clear();
+    this.noteQueryBuffers.clear();
     this.validatedNoteArrays = new WeakSet();
     this.noteOverlaps = new WeakMap();
     this.invalidateEvents();

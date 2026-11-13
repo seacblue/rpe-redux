@@ -96,6 +96,25 @@ export function noteVerticalForLine(
   return verticalAt(this, beat, this.noteFactorForLine(lineIndex), height, area);
 }
 
+/** Create one reusable horizontal and clipping projection for a note panel. */
+export function notePanelProjectionForLine(
+  this: TimelineViewportReceiver,
+  width: number,
+  lineIndex: number = this.getSession().lineIndex,
+): coreGeometry.NotePanelProjection {
+  const layout = this.panelLayout("notes");
+  const panelWidth = this.panelWidth(width, "notes");
+  return coreGeometry.createNotePanelProjection(
+    this.cameraX ?? 0,
+    this.noteInset(panelWidth),
+    panelWidth,
+    this.panelIndex(lineIndex, "notes"),
+    width,
+    layout,
+    this.multiLineViewportOffset(width, "notes"),
+  );
+}
+
 /** Visible beat range for a line's note panel. */
 export function noteBeatRangeForLine(
   this: TimelineViewportReceiver,
@@ -439,6 +458,7 @@ export type TimelineGeometryModule = {
   factorForLine: typeof factorForLine;
   noteFactorForLine: typeof noteFactorForLine;
   noteVerticalForLine: typeof noteVerticalForLine;
+  notePanelProjectionForLine: typeof notePanelProjectionForLine;
   noteBeatRangeForLine: typeof noteBeatRangeForLine;
   verticalForLine: typeof verticalForLine;
   beatRangeForLine: typeof beatRangeForLine;

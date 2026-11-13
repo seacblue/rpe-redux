@@ -10,14 +10,32 @@ import type { TimelineEventRect } from "../../../../../../core/edit/timeline/typ
 import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.ts";
 import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
 import { eventTypesForLine } from "../drawing/tracks.ts";
+import { eventColumnVisibilityKey } from "./eventColumns.ts";
 import { eventColumnLabel } from "./eventColumns.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { canvasFont } from "../../../canvas/text.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import { strokeVerticalGrid } from "../drawing/gridDrawing.ts";
+import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
+import { drawEventText } from "./eventTextDrawing.ts";
 
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
+
+interface MultiLineChromeKeyCache {
+  readonly chart: object;
+  readonly targetLineIndices: readonly number[];
+  readonly palette: object;
+  readonly extended: boolean;
+  readonly visibility: number;
+  readonly width: number;
+  readonly height: number;
+  readonly panelWidth: number;
+  readonly offset: number;
+  readonly key: string;
+}
+
+const multiLineChromeKeyCache = new WeakMap<object, MultiLineChromeKeyCache>();
 
 /** The event-bar resources shared by track painting and the placement preview. */
 type EventBarReceiver = Pick<TimelineEventDrawingReceiver, "appearance" | "eventBatch">;
@@ -52,6 +70,25 @@ export function verticalAtBeat(
   );
 }
 
+/** Create a beat projector that reuses the frame's origin and event scale. */
+export function createVerticalAtBeat(
+  receiver: TimelineEventDrawingReceiver,
+  factor: number,
+  height: number,
+): (beat: number) => number {
+  const originSeconds = receiver.cache.tempoSeconds(
+    receiver.viewport.tempo,
+    receiver.viewport.origin,
+    factor,
+  );
+  const scale = timelineScale(receiver);
+  const offset = receiver.viewport.judgementOffset;
+  const cache = receiver.cache;
+  const tempo = receiver.viewport.tempo;
+  return (beat: number) =>
+    height - offset - (cache.tempoSeconds(tempo, beat, factor) - originSeconds) * scale;
+}
+
 /** Add a bar to the GPU batch, falling back to the skin's canvas bar. */
 export function drawEventBar(
   receiver: EventBarReceiver,
@@ -79,21 +116,54 @@ export function multiLineChromeKey(
   height: number,
   palette: ReturnType<typeof readCanvasPalette>,
 ): string {
-  return [
-    session.targetLineIndices.join(","),
-    receiver.gestures.extended,
-    session.targetLineIndices
+  const targetLineIndices = session.targetLineIndices;
+  const extended = receiver.gestures.extended;
+  const visibility = eventColumnVisibilityKey();
+  const panelWidth = receiver.viewport.panelWidth(width, "events");
+  const offset = receiver.viewport.multiLineViewportOffset(width, "events");
+  const cached = multiLineChromeKeyCache.get(receiver);
+  if (
+    cached &&
+    cached.chart === session.chart &&
+    cached.targetLineIndices === targetLineIndices &&
+    cached.palette === palette &&
+    cached.extended === extended &&
+    cached.visibility === visibility &&
+    cached.width === width &&
+    cached.height === height &&
+    cached.panelWidth === panelWidth &&
+    cached.offset === offset
+  ) {
+    return cached.key;
+  }
+  const key = [
+    targetLineIndices.join(","),
+    extended,
+    targetLineIndices
       .map((index) => receiver.viewport.eventTypesForLine(index).join(","))
       .join(";"),
     width,
     height,
-    receiver.viewport.panelWidth(width, "events"),
-    receiver.viewport.multiLineViewportOffset(width, "events"),
+    panelWidth,
+    offset,
     palette.headerSurface,
     palette.foreground,
     receiver.appearance.verticalGridColor,
     palette.outline,
   ].join("|");
+  multiLineChromeKeyCache.set(receiver, {
+    chart: session.chart,
+    targetLineIndices,
+    palette,
+    extended,
+    visibility,
+    width,
+    height,
+    panelWidth,
+    offset,
+    key,
+  });
+  return key;
 }
 
 /** Paint the column headers for every visible multi-line event panel. */
@@ -101,6 +171,7 @@ export function drawMultiLineEventChrome(
   receiver: TimelineEventDrawingReceiver,
   context: CanvasRenderingContext2D,
   width: number,
+  labelBatch?: TimelineOverlayBatch,
 ): void {
   const palette = receiver.cache.palette() ?? readCanvasPalette();
   const session = receiver.getSession();
@@ -136,16 +207,18 @@ export function drawMultiLineEventChrome(
     for (let channel = 0; channel < eventTypes.length; channel++) {
       context.fillRect(panelOffset + channel * channelWidth, 0, channelWidth, 23);
       if (channelWidth >= 48) {
-        context.fillStyle = palette.foreground;
-        context.font = canvasFont("caption");
-        context.textAlign = "center";
-        context.fillText(
-          eventColumnLabel(eventTypes[channel], rawTypes, labels),
+        const label = eventColumnLabel(eventTypes[channel], rawTypes, labels);
+        drawEventText(
+          context,
+          labelBatch ?? null,
+          label,
           panelOffset + channel * channelWidth + channelWidth / 2,
           16,
           Math.max(8, channelWidth - 8),
+          canvasFont("caption"),
+          palette.foreground,
+          "center",
         );
-        context.textAlign = "left";
         context.fillStyle = palette.headerSurface;
       }
     }

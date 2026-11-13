@@ -15,14 +15,21 @@ export interface PreviewSurface {
 export interface TimelineSurface {
   readonly stage: HTMLDivElement;
   readonly notesBackdrop: HTMLCanvasElement;
+  readonly notesGridBatch: HTMLCanvasElement;
   readonly notesPlayhead: HTMLCanvasElement;
+  readonly notesPlayheadBatch: HTMLCanvasElement;
   readonly notes: HTMLCanvasElement;
   readonly noteBatch: HTMLCanvasElement;
+  readonly noteSolidBatch: HTMLCanvasElement;
   readonly eventsBackdrop: HTMLCanvasElement;
+  readonly eventsGridBatch: HTMLCanvasElement;
   readonly eventsPlayhead: HTMLCanvasElement;
+  readonly eventsPlayheadBatch: HTMLCanvasElement;
   readonly events: HTMLCanvasElement;
   readonly eventBatch: HTMLCanvasElement;
+  readonly eventOverlayBatch: HTMLCanvasElement;
   readonly selectionOverlay: HTMLCanvasElement;
+  readonly selectionOverlayBatch: HTMLCanvasElement;
   readonly audioAnalysisOverlay: HTMLCanvasElement;
   readonly noteDensity: HTMLCanvasElement;
   readonly history: HTMLCanvasElement;

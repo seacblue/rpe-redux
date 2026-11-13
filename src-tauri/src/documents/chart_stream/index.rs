@@ -17,8 +17,9 @@
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
-use super::json_scan::ChartJsonScan;
+use super::json_scan::{ChartJsonScan, LineRange};
 use crate::documents::Result;
 
 /// FNV-1a offset basis.
@@ -82,6 +83,8 @@ pub(crate) struct ChartLineSummary {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     intervals: Vec<[f64; 2]>,
     digest: String,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    child_digests: BTreeMap<String, u32>,
     flags: u32,
     #[serde(serialize_with = "serialize_js_number")]
     group: f64,
@@ -120,6 +123,13 @@ pub(crate) struct BuiltIndex {
     pub(crate) index: ChartIndex,
     /// Asset names plus shader paths from the header and line paint events.
     pub(crate) resource_names: Vec<String>,
+}
+
+/// Per-line index result kept separate so independent lines can be built in parallel.
+struct IndexedLine {
+    summary: ChartLineSummary,
+    asset_names: Vec<String>,
+    shader_names: Vec<String>,
 }
 
 /// One validated tempo point.
@@ -248,19 +258,12 @@ pub(crate) fn build_chart_index(bytes: &[u8], scan: &ChartJsonScan) -> Result<Bu
     collect_shader_names(scan.header.get("effects"), &mut shader_names);
     collect_shader_names(scan.header.get("shaderEvents"), &mut shader_names);
 
-    let mut lines = Vec::with_capacity(scan.line_ranges.len());
-    for (index, range) in scan.line_ranges.iter().enumerate() {
-        let line =
-            serde_json::from_slice::<Value>(&bytes[range.start..range.end]).unwrap_or(Value::Null);
-        collect_asset_names(&line, &mut asset_names);
-        collect_line_shader_names(&line, &mut shader_names);
-        lines.push(summarize_line(
-            &line,
-            index,
-            &tempo,
-            range.start,
-            range.len(),
-        ));
+    let indexed_lines = index_lines(bytes, &scan.line_ranges, &tempo)?;
+    let mut lines = Vec::with_capacity(indexed_lines.len());
+    for indexed in indexed_lines {
+        asset_names.extend(indexed.asset_names);
+        shader_names.extend(indexed.shader_names);
+        lines.push(indexed.summary);
     }
 
     asset_names.sort_by(|left, right| js_string_cmp(left, right));
@@ -293,6 +296,62 @@ pub(crate) fn build_chart_index(bytes: &[u8], scan: &ChartJsonScan) -> Result<Bu
     })
 }
 
+/// Parse and summarize every line, parallelizing only when the chart is large enough.
+fn index_lines(bytes: &[u8], ranges: &[LineRange], tempo: &TempoMap) -> Result<Vec<IndexedLine>> {
+    let worker_count = std::thread::available_parallelism()
+        .map(|count| count.get().min(ranges.len()))
+        .unwrap_or(1);
+    if worker_count < 2 || ranges.len() < 4 {
+        return Ok(ranges
+            .iter()
+            .enumerate()
+            .map(|(index, range)| index_one_line(bytes, index, range, tempo))
+            .collect());
+    }
+
+    let chunk_size = ranges.len().div_ceil(worker_count);
+    std::thread::scope(|scope| {
+        let handles = ranges
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(chunk, chunk_ranges)| {
+                scope.spawn(move || {
+                    chunk_ranges
+                        .iter()
+                        .enumerate()
+                        .map(|(offset, range)| {
+                            index_one_line(bytes, chunk * chunk_size + offset, range, tempo)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            });
+        let mut indexed = Vec::with_capacity(ranges.len());
+        for handle in handles {
+            indexed.extend(
+                handle
+                    .join()
+                    .map_err(|_| "chart_index_worker_failed".to_string())?,
+            );
+        }
+        Ok(indexed)
+    })
+}
+
+/// Parse and summarize one source line with the same rules as the sequential path.
+fn index_one_line(bytes: &[u8], index: usize, range: &LineRange, tempo: &TempoMap) -> IndexedLine {
+    let line =
+        serde_json::from_slice::<Value>(&bytes[range.start..range.end]).unwrap_or(Value::Null);
+    let mut asset_names = Vec::new();
+    let mut shader_names = Vec::new();
+    collect_asset_names(&line, &mut asset_names);
+    collect_line_shader_names(&line, &mut shader_names);
+    IndexedLine {
+        summary: summarize_line(&line, index, tempo, range.start, range.len()),
+        asset_names,
+        shader_names,
+    }
+}
+
 /// Summarize one line without retaining any note or event object.
 fn summarize_line(
     line: &Value,
@@ -301,7 +360,7 @@ fn summarize_line(
     byte_offset: usize,
     byte_length: usize,
 ) -> ChartLineSummary {
-    let digest = line_content_fingerprint(line);
+    let (digest, child_digests) = line_content_fingerprint_parts(line);
     let Some(object) = line.as_object() else {
         return ChartLineSummary {
             index,
@@ -313,6 +372,7 @@ fn summarize_line(
             end_seconds: None,
             intervals: Vec::new(),
             digest,
+            child_digests,
             flags: LINE_FLAG_INVALID | LINE_FLAG_UNBOUNDED,
             group: 0.0,
             father: -1.0,
@@ -443,6 +503,7 @@ fn summarize_line(
         },
         intervals: merge_intervals(intervals),
         digest,
+        child_digests,
         flags,
         group: object
             .get("Group")
@@ -493,6 +554,22 @@ fn add_interval(intervals: &mut Vec<[f64; 2]>, start: Option<f64>, end: Option<f
 fn merge_intervals(mut intervals: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
     if intervals.len() <= 1 {
         return intervals;
+    }
+    let already_ordered = intervals.windows(2).all(|pair| {
+        pair[1][0] > pair[0][0] || (pair[1][0] == pair[0][0] && pair[1][1] >= pair[0][1])
+    });
+    if already_ordered {
+        let mut merged: Vec<[f64; 2]> = Vec::with_capacity(intervals.len());
+        for interval in intervals {
+            if let Some(current) = merged.last_mut() {
+                if interval[0] <= current[1] {
+                    current[1] = current[1].max(interval[1]);
+                    continue;
+                }
+            }
+            merged.push(interval);
+        }
+        return merged;
     }
     intervals.sort_by(|left, right| {
         left[0]
@@ -599,9 +676,20 @@ fn collect_line_shader_names(line: &Value, names: &mut Vec<String>) {
     collect_shader_names(paint_events, names);
 }
 
+/// Hash a line and expose hashes of its top-level children for copy-on-write edits.
+fn line_content_fingerprint_parts(line: &Value) -> (String, BTreeMap<String, u32>) {
+    let mut child_digests = BTreeMap::new();
+    let digest = format!(
+        "{:08x}",
+        value_hash_with_children(line, true, 0, Some(&mut child_digests))
+    );
+    (digest, child_digests)
+}
+
 /// Hash a line while ignoring editor-only object ids.
+#[cfg(test)]
 pub(crate) fn line_content_fingerprint(line: &Value) -> String {
-    content_fingerprint(line, true)
+    line_content_fingerprint_parts(line).0
 }
 
 /// Hash the chart fields outside `judgeLineList`, including `META.id`.
@@ -627,6 +715,16 @@ fn content_fingerprint(value: &Value, ignore_ids: bool) -> String {
 
 /// Hash a value with sorted object keys.
 fn value_hash(value: &Value, ignore_ids: bool, depth: usize) -> u32 {
+    value_hash_with_children(value, ignore_ids, depth, None)
+}
+
+/// Hash a value and optionally collect the immediate child hashes of its root object.
+fn value_hash_with_children(
+    value: &Value,
+    ignore_ids: bool,
+    depth: usize,
+    mut top_level_children: Option<&mut BTreeMap<String, u32>>,
+) -> u32 {
     match value {
         Value::Null => hash_text("null", HASH_SEED),
         Value::Bool(value) => hash_text(if *value { "true" } else { "false" }, HASH_SEED),
@@ -648,7 +746,10 @@ fn value_hash(value: &Value, ignore_ids: bool, depth: usize) -> u32 {
             let mut hash = hash_text("[", HASH_SEED);
             hash = hash_word(hash, values.len() as u32);
             for child in values {
-                hash = hash_word(hash, value_hash(child, ignore_ids, depth + 1));
+                hash = hash_word(
+                    hash,
+                    value_hash_with_children(child, ignore_ids, depth + 1, None),
+                );
             }
             hash_text("]", hash)
         }
@@ -657,14 +758,42 @@ fn value_hash(value: &Value, ignore_ids: bool, depth: usize) -> u32 {
                 return hash_text(CYCLE_MARKER, HASH_SEED);
             }
             let mut hash = hash_text("{", HASH_SEED);
-            let mut keys = values.keys().collect::<Vec<_>>();
-            keys.sort_by(|left, right| js_string_cmp(left, right));
-            for key in keys {
-                if ignore_ids && key == "id" {
-                    continue;
+            // serde_json uses its default BTreeMap representation here. For
+            // chart keys (which are ASCII), that iteration order is already
+            // the same as JavaScript's UTF-16 sort, so avoid allocating and
+            // sorting a key vector for every note/event object. Preserve the
+            // explicit UTF-16 sort fallback for unusual non-ASCII keys.
+            if values.keys().all(|key| key.is_ascii()) {
+                for (key, child) in values {
+                    if ignore_ids && key == "id" {
+                        continue;
+                    }
+                    hash = hash_text(key, hash);
+                    let child_hash = value_hash_with_children(child, ignore_ids, depth + 1, None);
+                    if depth == 0 {
+                        if let Some(children) = top_level_children.as_deref_mut() {
+                            children.insert(key.clone(), child_hash);
+                        }
+                    }
+                    hash = hash_word(hash, child_hash);
                 }
-                hash = hash_text(key, hash);
-                hash = hash_word(hash, value_hash(&values[key], ignore_ids, depth + 1));
+            } else {
+                let mut keys = values.keys().collect::<Vec<_>>();
+                keys.sort_by(|left, right| js_string_cmp(left, right));
+                for key in keys {
+                    if ignore_ids && key == "id" {
+                        continue;
+                    }
+                    hash = hash_text(key, hash);
+                    let child_hash =
+                        value_hash_with_children(&values[key], ignore_ids, depth + 1, None);
+                    if depth == 0 {
+                        if let Some(children) = top_level_children.as_deref_mut() {
+                            children.insert(key.to_string(), child_hash);
+                        }
+                    }
+                    hash = hash_word(hash, child_hash);
+                }
             }
             hash_text("}", hash)
         }
@@ -722,6 +851,14 @@ fn json_string_literal(text: &str) -> String {
 fn js_number_string(value: f64) -> String {
     if value == 0.0 {
         return "0".to_owned();
+    }
+    // Chart coordinates and event values are overwhelmingly integral. Avoid the
+    // exponent decomposition below for JavaScript's fixed-range integer form.
+    // Only safe integers have the exact decimal expansion equal to ECMAScript's
+    // shortest spelling; a larger integral double must take the shortest
+    // round-trip path so the digest stays bit-identical to the TypeScript hash.
+    if value.fract() == 0.0 && value.abs() <= MAX_SAFE_INTEGER {
+        return format!("{value:.0}");
     }
     let sign = if value < 0.0 { "-" } else { "" };
     let absolute = value.abs();
@@ -850,12 +987,13 @@ fn serialize_optional_js_number<S: Serializer>(
 mod tests {
     use super::{
         build_chart_index, combine_content_fingerprint, header_content_fingerprint,
-        js_number_string, line_content_fingerprint, summarize_line, ChartLineSummary, TempoMap,
-        LINE_FLAG_INVALID, LINE_FLAG_NOISE, LINE_FLAG_SHADER, LINE_FLAG_STATIC,
-        LINE_FLAG_UNBOUNDED, MAX_SAFE_INTEGER,
+        js_number_string, line_content_fingerprint, line_content_fingerprint_parts, summarize_line,
+        ChartLineSummary, TempoMap, LINE_FLAG_INVALID, LINE_FLAG_NOISE, LINE_FLAG_SHADER,
+        LINE_FLAG_STATIC, LINE_FLAG_UNBOUNDED, MAX_SAFE_INTEGER,
     };
     use crate::documents::chart_stream::json_scan::scan_chart_json;
     use serde_json::{json, Map, Value};
+    use std::collections::BTreeMap;
 
     fn header(value: Value) -> Map<String, Value> {
         value.as_object().unwrap().clone()
@@ -929,6 +1067,26 @@ mod tests {
     }
 
     #[test]
+    fn child_digests_match_the_typescript_revision_seed_vector() {
+        let line = json!({
+            "id": "line",
+            "notes": [{"id": "note", "startTime": [0, 0, 1]}],
+            "eventLayers": [{
+                "alphaEvents": [{
+                    "id": "event",
+                    "startTime": [1, 0, 1],
+                    "endTime": [2, 0, 1],
+                    "end": 0
+                }]
+            }]
+        });
+        let (digest, children) = line_content_fingerprint_parts(&line);
+        assert_eq!(digest, "e07305ab");
+        assert_eq!(children.get("eventLayers"), Some(&632912271));
+        assert_eq!(children.get("notes"), Some(&4181772340));
+    }
+
+    #[test]
     fn line_digest_ignores_ids_at_every_depth() {
         let left = json!({
             "id": "line",
@@ -962,6 +1120,13 @@ mod tests {
         assert_eq!(js_number_string(1e-7), "1e-7");
         assert_eq!(js_number_string(-1.5), "-1.5");
         assert_eq!(js_number_string(5e-324), "5e-324");
+        assert_eq!(js_number_string(1e15), "1000000000000000");
+        // Above 2^53 an integral double has no exact shortest spelling, so it
+        // must match JavaScript's shortest round-trip digits, not the exact value.
+        assert_eq!(
+            js_number_string(1234567890123456789.0),
+            "1234567890123456800"
+        );
     }
 
     #[test]
@@ -1117,6 +1282,7 @@ mod tests {
             end_seconds: None,
             intervals: Vec::new(),
             digest: "00000000".into(),
+            child_digests: BTreeMap::new(),
             flags: 0,
             group: 2.0,
             father: -1.0,

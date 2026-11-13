@@ -20,6 +20,7 @@ import {
   installContextLossHandlers,
   linkProgram,
 } from "../../../canvas/webgl.ts";
+import { noiseMaskBitsForEntry, noiseThemeEntryBelongsToPass } from "./noiseGeometry.ts";
 
 /** GLSL sources keyed by their file name, consumed by `config.json` passes. */
 const sources: Record<string, string> = {
@@ -118,9 +119,37 @@ interface TargetPair {
   front: Target;
   back: Target;
 }
+type NoiseColorMask = [boolean, boolean, boolean, boolean];
+interface NoisePassPlan {
+  shader: string;
+  outputName: string;
+  component: string | undefined;
+  inputs: readonly [string, string][];
+  constants: readonly [string, number | number[]][];
+  colorMask: NoiseColorMask | null;
+}
 
-/** Polygon vertices are normalized to the preview viewport, with Y increasing upward. */
-export interface NoiseMaskEntry extends NoiseAreaSample {
+/** Compile static NoiseField config into allocation-free frame pass metadata. */
+const noisePassPlans: readonly NoisePassPlan[] = (config as NoiseConfig).passes.map((pass) => {
+  const [outputName, component] = pass.output.split(".", 2);
+  const colorMask = component
+    ? (["r", "g", "b", "a"].map((channel) => channel === component) as NoiseColorMask)
+    : null;
+  return {
+    shader: pass.shader,
+    outputName,
+    component,
+    inputs: Object.entries(pass.inputs ?? {}) as [string, string][],
+    constants: Object.entries(pass.constants ?? {}) as [string, number | number[]][],
+    colorMask,
+  };
+});
+
+/** One sampled noise area prepared for the GPU passes; `vertices` is its only geometry. */
+export interface NoiseMaskEntry {
+  state: NoiseAreaSample["state"];
+  invert: boolean;
+  /** Polygon vertices normalized to the preview viewport, with Y increasing upward. */
   vertices: readonly { x: number; y: number }[];
   /** Optional theme RGB in the 0–1 range. */
   color?: readonly [number, number, number];
@@ -136,6 +165,15 @@ export class NoiseFieldPipeline {
   private images = new Map<string, Target>();
   private quadBuffer: WebGLBuffer | null = null;
   private geometryBuffer: WebGLBuffer | null = null;
+  private readonly geometryVertices = new Float32Array(12);
+  private readonly maskGroups: [
+    NoiseMaskEntry[],
+    NoiseMaskEntry[],
+    NoiseMaskEntry[],
+    NoiseMaskEntry[],
+    NoiseMaskEntry[],
+    NoiseMaskEntry[],
+  ] = [[], [], [], [], [], []];
   private screen: [Target, Target] | null = null;
   private mask: Target | null = null;
   private themeBase: Target | null = null;
@@ -150,6 +188,7 @@ export class NoiseFieldPipeline {
   private initialization: Promise<void> = Promise.resolve();
   private readonly parameters = new Map<string, Uniform>();
   private readonly touchPoints = new Float32Array(128);
+  private readonly themeColor = new Float32Array(4);
   private readonly invalidate: () => void;
   private readonly onError: () => void;
   /** Creates the pipeline and starts texture loading; `onError` reports GPU failure. */
@@ -184,6 +223,10 @@ export class NoiseFieldPipeline {
       const gl = this.gl;
       this.quadBuffer = createCornerBuffer(gl, quad);
       this.geometryBuffer = gl.createBuffer();
+      if (this.geometryBuffer) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.geometryBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.geometryVertices.byteLength, gl.STREAM_DRAW);
+      }
       for (const [name, source] of Object.entries({
         ...sources,
         "@mask": maskFragment,
@@ -471,17 +514,23 @@ export class NoiseFieldPipeline {
     this.clear(target);
     const gl = this.context();
     const program = this.getProgram("@themeSolid");
-    // Active owners take priority over disabled/ready owners at overlaps;
-    // within each phase, the chart's original order remains significant.
-    const ordered = entries
-      .filter((entry) => entry.state !== "hidden")
-      .toSorted((a, b) => Number(a.state === "active") - Number(b.state === "active"));
     gl.disable(gl.BLEND);
     this.bindGeometry(program, target);
-    for (const entry of ordered) {
-      const color = entry.color ?? fallback;
-      this.uniform(program, "themeColor", [color[0], color[1], color[2], 1]);
-      this.drawGeometry(entry);
+    // Active owners take priority over disabled/ready owners at overlaps;
+    // two stable passes preserve the old order without filtering or sorting.
+    for (const active of [false, true]) {
+      for (const entry of entries) {
+        if (!noiseThemeEntryBelongsToPass(entry.state, active)) {
+          continue;
+        }
+        const color = entry.color ?? fallback;
+        this.themeColor[0] = color[0];
+        this.themeColor[1] = color[1];
+        this.themeColor[2] = color[2];
+        this.themeColor[3] = 1;
+        this.uniform(program, "themeColor", this.themeColor);
+        this.drawGeometry(entry);
+      }
     }
   }
   /** Binds the geometry vertex layout for a mask or theme pass. */
@@ -505,11 +554,20 @@ export class NoiseFieldPipeline {
       return;
     }
     const gl = this.context();
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([a.x, a.y, b.x, b.y, c.x, c.y, a.x, a.y, c.x, c.y, d.x, d.y]),
-      gl.STREAM_DRAW,
-    );
+    const vertices = this.geometryVertices;
+    vertices[0] = a.x;
+    vertices[1] = a.y;
+    vertices[2] = b.x;
+    vertices[3] = b.y;
+    vertices[4] = c.x;
+    vertices[5] = c.y;
+    vertices[6] = a.x;
+    vertices[7] = a.y;
+    vertices[8] = c.x;
+    vertices[9] = c.y;
+    vertices[10] = d.x;
+    vertices[11] = d.y;
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
   /** Displace the body colour and grow its edge/glow ownership field. */
@@ -553,19 +611,20 @@ export class NoiseFieldPipeline {
       return;
     }
     this.clear(full);
+    for (const selected of this.maskGroups) {
+      selected.length = 0;
+    }
+    for (const entry of entries) {
+      const bits = noiseMaskBitsForEntry(entry);
+      for (let bit = 0; bit < 6; bit++) {
+        if (bits & (1 << bit)) {
+          this.maskGroups[bit].push(entry);
+        }
+      }
+    }
     for (let bit = 0; bit < 6; bit++) {
-      const group = Math.floor(bit / 2),
-        inverted = bit % 2 === 1;
-      const selected = entries.filter(
-        (entry) =>
-          entry.state !== "hidden" &&
-          entry.invert === inverted &&
-          (group === 0
-            ? entry.state === "active"
-            : group === 1
-              ? entry.state !== "active"
-              : entry.state === "ready"),
-      );
+      const selected = this.maskGroups[bit];
+      const inverted = bit % 2 === 1;
       if (!selected.length) {
         continue;
       }
@@ -630,21 +689,27 @@ export class NoiseFieldPipeline {
       }
       const defaultColor = this.parameters.get("outlineColor") as readonly number[];
       const firstColor = entries[0]?.color ?? defaultColor;
-      const sharedTheme = entries.every((entry) =>
-        (entry.color ?? defaultColor)
-          .slice(0, 3)
-          .every((channel, index) => channel === firstColor[index]),
-      );
+      let sharedTheme = true;
+      for (const entry of entries) {
+        const color = entry.color ?? defaultColor;
+        if (
+          color[0] !== firstColor[0] ||
+          color[1] !== firstColor[1] ||
+          color[2] !== firstColor[2]
+        ) {
+          sharedTheme = false;
+          break;
+        }
+      }
       const uniformColor = [firstColor[0], firstColor[1], firstColor[2], 1];
       if (!sharedTheme) {
         this.themeGeometry(entries, defaultColor);
       }
       let themeEffect = this.themeEffects?.[0];
-      for (const pass of (config as NoiseConfig).passes) {
-        const [name, component] = pass.output.split("."),
-          pair = this.targets.get(name),
+      for (const pass of noisePassPlans) {
+        const pair = this.targets.get(pass.outputName),
           output = pair ? pair.back : other;
-        if (component && pair) {
+        if (pass.component && pair) {
           this.blit(pair.front, output);
         }
         const program = this.getProgram(pass.shader);
@@ -652,7 +717,7 @@ export class NoiseFieldPipeline {
         let unit = 0;
         unit = this.sampler(program, "screenTexture", screen, unit);
         unit = this.sampler(program, "blockMask", this.mask, unit);
-        for (const [uniformName, input] of Object.entries(pass.inputs ?? {})) {
+        for (const [uniformName, input] of pass.inputs) {
           unit = this.sampler(
             program,
             uniformName,
@@ -675,18 +740,11 @@ export class NoiseFieldPipeline {
         for (const [key, value] of this.parameters) {
           this.uniform(program, key, key === "outlineColor" ? uniformColor : value);
         }
-        for (const [key, value] of Object.entries(pass.constants ?? {})) {
+        for (const [key, value] of pass.constants) {
           this.uniform(program, key, value);
         }
-        if (component) {
-          gl.colorMask(
-            ...(["r", "g", "b", "a"].map((channel) => channel === component) as [
-              boolean,
-              boolean,
-              boolean,
-              boolean,
-            ]),
-          );
+        if (pass.colorMask) {
+          gl.colorMask(...pass.colorMask);
         }
         this.drawQuad();
         gl.colorMask(true, true, true, true);

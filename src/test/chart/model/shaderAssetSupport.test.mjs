@@ -25,6 +25,35 @@ test("uses a custom shader asset as the event identity", () => {
   assert.equal(shaderIdentity({ shader: "/effects/wave.glsl" }), "effects/wave.glsl");
 });
 
+test("active shader effects preserve order and sampled values across frames", () => {
+  const runtime = new ShaderRuntime(
+    () => {},
+    async () => null,
+  );
+  runtime.compile(
+    {
+      META: {},
+      BPMList: [],
+      judgeLineList: [{ bpmfactor: 1 }],
+      effects: [
+        { shader: "rain", line: 0, order: 2, start: [0, 0, 1], end: [1, 0, 1] },
+        { shader: "glitch", line: 0, order: 1, start: [0, 0, 1], end: [1, 0, 1] },
+      ],
+    },
+    null,
+  );
+  const first = runtime.active(0.5);
+  const second = runtime.active(0.5);
+  assert.deepEqual(
+    first.map(({ shader, values }) => ({ shader, values })),
+    second.map(({ shader, values }) => ({ shader, values })),
+  );
+  assert.deepEqual(
+    first.map(({ shader }) => shader),
+    ["glitch", "rain"],
+  );
+});
+
 test("keeps Phira built-in preview references on the built-in path", () => {
   assert.equal(builtinShaderReference("/rain_pr.glsl"), true);
   assert.equal(shaderIdentity({ shader: "/rain_pr.glsl" }), "rain");

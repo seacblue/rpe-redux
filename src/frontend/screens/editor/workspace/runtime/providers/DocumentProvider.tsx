@@ -25,6 +25,7 @@ import type { AssetMap, EditorCandidate } from "../../../../../../core/global/do
 import { materializeAssets } from "../../../../../../core/global/library/document.ts";
 import { openFiles } from "../../../../../../core/global/document/import.ts";
 import { parseChartEntriesOffThread } from "../../document/open/chartParseOffThread.ts";
+import { openChartDocumentFromBytes } from "../../document/open/chartStreamOffThread.ts";
 import { readZipOffThread } from "../../document/open/zipReadOffThread.ts";
 import type { SaveResult } from "../../../../../../core/global/document/desktopTypes.ts";
 import { connectDocumentApi } from "../../../../../../core/edit/document/api.ts";
@@ -309,6 +310,19 @@ export function createDocumentRuntime(options: {
           }
         },
       },
+      fingerprintReady: (session) => {
+        if (!options.hasDocument() || getSession() !== session) {
+          return;
+        }
+        documentCoordinator.admitSync({
+          kind: "history",
+          run: () => undefined,
+          revisions: () => ({
+            chartFingerprint: session.history.fingerprint(),
+            savedChartFingerprint: session.history.savedFingerprint,
+          }),
+        });
+      },
       resetSelectionView: options.resetSelectionView,
       recovery: {
         clearDraft: () => {
@@ -520,7 +534,12 @@ export function createDocumentRuntime(options: {
     }
     const conversion = convertChartToCurrentVersion(candidate.chart, report);
     return conversion
-      ? { ...candidate, chart: conversion.chart, converted: conversion.converted }
+      ? {
+          ...candidate,
+          chart: conversion.chart,
+          revisionSeed: undefined,
+          converted: conversion.converted,
+        }
       : null;
   };
   // The saver is created after the loader because its helpers read the same
@@ -1103,11 +1122,17 @@ export function createDocumentRuntime(options: {
       undefined,
       parseChartEntriesOffThread,
       readZipOffThread,
+      openChartDocumentFromBytes,
     );
     if (!opened) {
       throw new Error(t("workspace.document.error.bytesMissing"));
     }
     if (opened.candidates.length !== 1) {
+      // Multi-chart archives open a paged document per chart; the API reports
+      // the ambiguity instead of choosing, so release those workers here.
+      for (const candidate of opened.candidates) {
+        candidate.disposeDocument?.();
+      }
       return "multiple";
     }
     await loadCandidate(

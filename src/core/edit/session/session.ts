@@ -139,9 +139,13 @@ export class EditorSession extends EventTarget {
   readonly chartDocument?: ChartDocument;
   /** The active room role can make an otherwise writable document read-only. */
   collaborationReadOnly = false;
+  /** Large streamed charts stay read-only until their semantic fingerprint is ready. */
+  get fingerprintReady(): boolean {
+    return this.chartDocument?.fingerprintReady ?? true;
+  }
   /** Whether local user actions may change the chart. */
   get editable(): boolean {
-    return !this.readOnly && !this.collaborationReadOnly;
+    return !this.readOnly && !this.collaborationReadOnly && this.fingerprintReady;
   }
   /** Remote entries are applied through the room and must not be undone locally. */
   collaborationActive = false;

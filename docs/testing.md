@@ -91,7 +91,7 @@ Two suites need the packaged Go sidecar: `collaborationDesktop.test.mjs` and `co
 
 The render-equivalence suite is the correctness gate for paging: it compares `SceneRuntime` sampling and `visibleNotes` against the full chart for deterministic tricky and randomized corpora. Do not replace it with a pixel snapshot; the scene data is the renderer's shared input.
 
-`chartPagedSession.test.mjs` covers paged edits, line insertion/removal, undo/redo, and save-stream round trips. The editor enables the paged session above 10,000 lines only when no Extension, Code Cell, or collaboration session needs the synchronous full chart; those features keep the eager path.
+`chartPagedSession.test.mjs` covers paged edits, line insertion/removal, undo/redo, and save-stream round trips. The editor enables the paged session above 10,000 lines, or for a chart whose indexed notes and events exceed 100,000 objects, only when no Extension, Code Cell, or collaboration session needs the synchronous full chart; those features keep the eager path. A dense chart skips the initial time-window preload, so startup materializes only the selected line and its ancestors.
 
 Use the benchmark for scale comparisons, not as a unit test:
 
@@ -103,6 +103,8 @@ npm run benchmark:streaming -- --lines 10000 --notes 20 --visible-time 1
 `--visible-time` controls the note pre-roll window used by the generated corpus. A large value (the default) makes every line a conservative paging candidate; a bounded value demonstrates the time-window working set. Both runs are useful: the first measures conservative correctness, the second measures paged loading.
 
 It reports whole-chart parse, scan/index, eager materialization, paged time-window loading, and chunked serialization with heap/RSS. The numbers are machine-specific; compare runs on the same host.
+
+`npm run benchmark:crud` measures the edit path that pointer drags, keyboard edits, and inspector fields hit: note and event update, delete, and insert through the public transaction API, for a cold session and for an importer-seeded session. It reports median, p95, and max against the 3 ms per-edit ceiling (a 144 Hz frame is 6.94 ms, and an edit shares that frame with rendering) and never exits non-zero because a machine is slow. Pass `--chart-file path/to/chart.json` to measure a real chart, `--chart` to run one case, `--iters` for more samples, and `--json` for machine-readable output. The committed `crudBudget.test.mjs` guards the transaction work counters instead of wall-clock time, so it can run in the unit suite.
 
 ## Desktop smoke suite
 

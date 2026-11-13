@@ -19,13 +19,31 @@ import {
   type ChartHeader,
   type ChartIndex,
   type ChartLineProvider,
+  type ChartLineRead,
 } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
 import { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
+import { lineRevisionSeedFromJson } from "../../../../../../core/global/chart/chartContentHash.ts";
+import { yieldToHost } from "../../../../../../core/utils/yieldToHost.ts";
+import type { ChartLineRevisionSeed } from "../../../../../../core/global/chart/chartRevisionSeed.ts";
 
 /** An opened stream document plus the worker lifetime it depends on. */
 export interface OpenedChartStream {
   readonly document: ChartDocument;
   dispose(): void;
+}
+
+/** Open archive bytes as a paged chart document for the core import seam. */
+export async function openChartDocumentFromBytes(
+  bytes: Uint8Array,
+  name: string,
+): Promise<{ chartDocument: ChartDocument; dispose(): void }> {
+  const opened = await openChartStreamFromChunks(
+    (async function* () {
+      yield bytes;
+    })(),
+    name,
+  );
+  return { chartDocument: opened.document, dispose: opened.dispose };
 }
 
 /** A provider that asks the worker for one raw line at a time. */
@@ -36,8 +54,8 @@ class WorkerChartLineProvider implements ChartLineProvider {
   private readonly pending = new Map<
     number,
     {
-      promise: Promise<string | undefined>;
-      resolve(raw: string | undefined): void;
+      promise: Promise<string | ChartLineRead | undefined>;
+      resolve(read: string | ChartLineRead | undefined): void;
       reject(error: unknown): void;
     }
   >();
@@ -51,7 +69,7 @@ class WorkerChartLineProvider implements ChartLineProvider {
   }
 
   /** Read one raw line through the worker. */
-  readLine(index: number, signal?: AbortSignal): Promise<string | undefined> {
+  readLine(index: number, signal?: AbortSignal): Promise<string | ChartLineRead | undefined> {
     if (this.closed) {
       return Promise.reject(new Error("Chart stream is closed"));
     }
@@ -59,9 +77,9 @@ class WorkerChartLineProvider implements ChartLineProvider {
     if (existing) {
       return existing.promise;
     }
-    let resolveLine!: (raw: string | undefined) => void;
+    let resolveLine!: (read: string | ChartLineRead | undefined) => void;
     let rejectLine!: (error: unknown) => void;
-    const promise = new Promise<string | undefined>((resolve, reject) => {
+    const promise = new Promise<string | ChartLineRead | undefined>((resolve, reject) => {
       resolveLine = resolve;
       rejectLine = reject;
     });
@@ -84,7 +102,9 @@ class WorkerChartLineProvider implements ChartLineProvider {
       return;
     }
     this.pending.delete(message.index);
-    pending.resolve(message.raw ?? undefined);
+    pending.resolve(
+      message.raw === null ? undefined : { raw: message.raw, valueDigests: message.valueDigests },
+    );
   }
 
   /** Reject every in-flight read and stop accepting new ones. */
@@ -110,7 +130,7 @@ function localDocument(bytes: ArrayBuffer): OpenedChartStream {
   const tempo = new TempoMap(
     header.BPMList.length ? header.BPMList : [{ bpm: 120, startTime: [0, 0, 1] }],
   );
-  const index = buildChartIndex(scan, tempo);
+  const index = buildChartIndex(scan, tempo, { includeFingerprints: false });
   const provider: ChartLineProvider = {
     lineCount: scan.lineRanges.length,
     async readLine(lineIndex: number) {
@@ -118,16 +138,36 @@ function localDocument(bytes: ArrayBuffer): OpenedChartStream {
       return range ? scan.text.slice(range.start, range.end) : undefined;
     },
   };
+  const document = new ChartDocument({
+    header,
+    index,
+    provider,
+    maxCachedLines: PAGED_DOCUMENT_MAX_LINES,
+    maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
+  });
+  void hydrateLocalFingerprints(document, scan);
   return {
-    document: new ChartDocument({
-      header,
-      index,
-      provider,
-      maxCachedLines: PAGED_DOCUMENT_MAX_LINES,
-      maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
-    }),
+    document,
     dispose() {},
   };
+}
+
+/** Compute fallback fingerprints in bounded slices so the main thread can paint between them. */
+async function hydrateLocalFingerprints(
+  document: ChartDocument,
+  scan: ReturnType<typeof scanChartJson>,
+): Promise<void> {
+  for (let start = 0; start < scan.lineRanges.length; start += 4) {
+    for (let index = start; index < Math.min(scan.lineRanges.length, start + 4); index += 1) {
+      const range = scan.lineRanges[index];
+      document.applyFingerprintSeed(
+        index,
+        lineRevisionSeedFromJson(scan.text.slice(range.start, range.end)),
+      );
+    }
+    await yieldToHost();
+  }
+  document.completeFingerprintHydration();
 }
 
 /** Collect an async chunk source into one exact ArrayBuffer. */
@@ -180,6 +220,20 @@ export async function openChartStreamFromChunks(
   let header: ChartHeader | null = null;
   let index: ChartIndex | null = null;
   let provider: WorkerChartLineProvider | null = null;
+  let chartDocument: ChartDocument | null = null;
+  let fingerprintsDone = false;
+  const pendingFingerprintBatches: Array<{
+    start: number;
+    seeds: readonly ChartLineRevisionSeed[];
+  }> = [];
+  /** Install one worker seed batch on the document that owns the line slots. */
+  const applySeeds = (
+    document: ChartDocument,
+    start: number,
+    seeds: readonly ChartLineRevisionSeed[],
+  ): void => {
+    seeds.forEach((seed, offset) => document.applyFingerprintSeed(start + offset, seed));
+  };
   let settleOpen: { resolve(): void; reject(error: unknown): void } | null = null;
   const opened = new Promise<void>((resolve, reject) => {
     settleOpen = { resolve, reject };
@@ -202,6 +256,19 @@ export async function openChartStreamFromChunks(
         settleOpen?.resolve();
         settleOpen = null;
       }
+      return;
+    }
+    if (message.kind === "fingerprints") {
+      if (chartDocument) {
+        applySeeds(chartDocument, message.start, message.seeds);
+      } else {
+        pendingFingerprintBatches.push({ start: message.start, seeds: message.seeds });
+      }
+      return;
+    }
+    if (message.kind === "fingerprints-done") {
+      fingerprintsDone = true;
+      chartDocument?.completeFingerprintHydration();
       return;
     }
     if (message.kind === "line") {
@@ -242,6 +309,13 @@ export async function openChartStreamFromChunks(
     maxCachedLines: PAGED_DOCUMENT_MAX_LINES,
     maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
   });
+  chartDocument = document;
+  for (const batch of pendingFingerprintBatches) {
+    applySeeds(document, batch.start, batch.seeds);
+  }
+  if (fingerprintsDone) {
+    document.completeFingerprintHydration();
+  }
   const dispose = () => {
     provider?.close();
     worker.postMessage({ id: sessionId, kind: "close" });

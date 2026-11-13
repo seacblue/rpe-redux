@@ -4,6 +4,8 @@ import test from "node:test";
 import { measureCanvas } from "../../../frontend/screens/editor/canvas/canvas2d.ts";
 import { NoteBatch } from "../../../frontend/screens/editor/canvas/noteBatch.ts";
 import { notePaintLayer } from "../../../frontend/screens/editor/canvas/noteSpriteGroups.ts";
+import { TimelineLineBatch } from "../../../frontend/screens/editor/canvas/timelineLineBatch.ts";
+import { TimelineSolidBatch } from "../../../frontend/screens/editor/canvas/timelineSolidBatch.ts";
 import {
   noteSkewAtHit,
   noteSkewCurve,
@@ -17,6 +19,7 @@ import {
   previewNoteTint,
   shouldHighlightPreviewNote,
 } from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
+import { passesForSampling } from "../../../frontend/screens/editor/workspace/preview/drawing/previewPassOrder.ts";
 import {
   drawEventBar,
   eventBarOpacity,
@@ -28,7 +31,7 @@ import { EditorRenderScheduler } from "../../../frontend/screens/editor/workspac
 function fakeWebGLCanvas() {
   const listeners = new Map();
   let lost = false;
-  const calls = { draws: 0, uploads: [], drawSources: [] };
+  const calls = { draws: 0, uploads: [], bufferAllocations: [], drawSources: [] };
   const textureSources = new Map();
   let pendingTexture = null;
   let boundTexture = null;
@@ -84,6 +87,11 @@ function fakeWebGLCanvas() {
       },
       bufferSubData: (_target, _offset, data) => {
         calls.uploads.push(Array.from(data));
+      },
+      bufferData: (_target, size) => {
+        if (typeof size === "number") {
+          calls.bufferAllocations.push(size);
+        }
       },
     },
     {
@@ -168,6 +176,106 @@ test("GPU event bars carry the per-line opacity alongside the global alpha", () 
   assert.equal(batch.instances[8], 0.5);
   batch.finish();
   assert.equal(calls.draws, 1);
+});
+
+test("GPU event buffers reuse stable capacity without changing packed uploads", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const batch = new TimelineEventBatch(canvas);
+  const skin = { eventBarTexture: () => descriptor };
+  assert.equal(batch.begin(100, 100, skin, 1), true);
+  assert.equal(batch.add({ x: 1, y: 2, width: 10, height: 20 }, 0.5), true);
+  batch.finish();
+  const firstUpload = calls.uploads[0];
+
+  assert.equal(batch.begin(100, 100, skin, 1), true);
+  assert.equal(batch.add({ x: 3, y: 4, width: 12, height: 24 }, 0.25), true);
+  batch.finish();
+
+  assert.equal(calls.bufferAllocations.length, 1);
+  assert.equal(calls.uploads.length, 2);
+  assert.notDeepEqual(calls.uploads[1], firstUpload);
+  assert.deepEqual(calls.uploads[1].slice(8), [0.25]);
+});
+
+test("timeline line and solid buffers reuse stable capacity", () => {
+  const cases = [
+    [TimelineLineBatch, (batch) => batch.addRect(1, 2, 10, 20, "#ffffff")],
+    [TimelineSolidBatch, (batch) => batch.addRect(5, 6, 10, 20, 0, 0, 1, "#ffffff")],
+  ];
+  for (const [Batch, add] of cases) {
+    const { canvas, calls } = fakeWebGLCanvas();
+    const batch = new Batch(canvas);
+    assert.equal(batch.begin(100, 100), true);
+    add(batch);
+    batch.finish();
+    assert.equal(batch.begin(100, 100), true);
+    add(batch);
+    batch.finish();
+    assert.equal(calls.bufferAllocations.length, 1);
+    assert.equal(calls.uploads.length, 2);
+  }
+});
+
+test("preview note buffers reuse stable capacity without reusing stale instances", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const batch = new NoteBatch(canvas);
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+  };
+
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addHead(skin, 1, false, 20, 20, 8, 0, 0, 1), true);
+  batch.finish();
+  const firstUpload = calls.uploads[0];
+
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addHead(skin, 1, false, 80, 80, 8, 0, 0, 1), true);
+  batch.finish();
+
+  assert.equal(calls.bufferAllocations.length, 1);
+  assert.equal(calls.uploads.length, 2);
+  assert.notDeepEqual(calls.uploads[1], firstUpload);
+  assert.equal(calls.uploads[1][0], 80);
+  assert.equal(calls.uploads[1][1], 80);
+});
+
+test("preview note rotations reuse trigonometry across stable frames", () => {
+  const originalCos = Math.cos;
+  const originalSin = Math.sin;
+  let cosCalls = 0;
+  let sinCalls = 0;
+  Math.cos = (value) => {
+    cosCalls += 1;
+    return originalCos(value);
+  };
+  Math.sin = (value) => {
+    sinCalls += 1;
+    return originalSin(value);
+  };
+  try {
+    const { canvas } = fakeWebGLCanvas();
+    const batch = new NoteBatch(canvas);
+    const skin = {
+      noteTexture: () => descriptor,
+      holdBodyTexture: () => descriptor,
+      holdHeadTexture: () => descriptor,
+      holdEndTexture: () => descriptor,
+    };
+    batch.begin(100, 100, skin);
+    assert.equal(batch.addHead(skin, 1, false, 20, 20, 8, 0.25, 0, 1), true);
+    batch.finish();
+    batch.begin(100, 100, skin);
+    assert.equal(batch.addHead(skin, 1, false, 80, 80, 8, 0.25, 0, 1), true);
+    batch.finish();
+    assert.equal(cosCalls, 1);
+    assert.equal(sinCalls, 1);
+  } finally {
+    Math.cos = originalCos;
+    Math.sin = originalSin;
+  }
 });
 
 test("event-bar opacity matches between the canvas fallback and the batch", () => {
@@ -392,6 +500,18 @@ test("active note batches skip line transforms while fallback notes restore them
       "restore",
       "restore",
     ]);
+
+    calls.length = 0;
+    const movedFrame = { ...frame, states: [{ ...state, x: 10 }] };
+    drawLinePasses(surface, movedFrame);
+    assert.deepEqual(calls, [
+      "save",
+      ["translate", 60, 50],
+      ["rotate", 0],
+      "save",
+      "restore",
+      "restore",
+    ]);
   } finally {
     if (previousDocument === undefined) {
       delete globalThis.document;
@@ -511,6 +631,22 @@ test("preview draw passes paint Holds before note heads", () => {
   const hold = passes.find((pass) => pass.kind === "hold");
   const note = passes.find((pass) => pass.kind === "note");
   assert.ok(hold.depth < note.depth);
+});
+
+test("sampled preview line reorder preserves non-line pass order", () => {
+  const source = [
+    { kind: "line", index: 2, depth: 0 },
+    { kind: "hold", depth: 999 },
+    { kind: "line", index: 5, depth: 1 },
+    { kind: "note", depth: 1000 },
+  ];
+  const actual = passesForSampling(source, 2);
+  assert.deepEqual(
+    actual.map((pass) => `${pass.kind}:${pass.index ?? ""}`),
+    ["line:5", "line:2", "hold:", "note:"],
+  );
+  assert.deepEqual(passesForSampling(source, null), source);
+  assert.equal(passesForSampling(source, 2), passesForSampling(source, 2));
 });
 
 test("authored green tint stays in multiply mode while selected green uses recoloring", () => {

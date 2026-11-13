@@ -5,6 +5,7 @@
  * to open, and `EditorCandidate` the pre-validation shape handed to the editor.
  */
 import { type Chart } from "../chart/chart.ts";
+import type { ChartRevisionSeed } from "../chart/chartRevisionSeed.ts";
 import type { ChartDocument } from "../chart/streaming/chartDocument.ts";
 import type { ChartDiagnostic } from "../chart/diagnostics.ts";
 import type { LibraryProjectRef, LibraryViewState } from "../library/types.ts";
@@ -28,6 +29,8 @@ export interface OpenCandidate {
   chart: Chart;
   /** Paged document backing `chart`; its facade may contain placeholders. */
   chartDocument?: ChartDocument;
+  /** Content digests computed by the parser and installed with the document. */
+  revisionSeed?: ChartRevisionSeed;
   /** Release a worker or source held only for this candidate. */
   disposeDocument?: () => void;
   info?: Record<string, string>;
@@ -42,6 +45,8 @@ export interface EditorCandidate {
   chart: unknown;
   /** Paged document backing `chart`; present when the source was streamed. */
   chartDocument?: ChartDocument;
+  /** Content digests computed by the parser and installed with the document. */
+  revisionSeed?: ChartRevisionSeed;
   /** Release a worker or source held only for this candidate. */
   disposeDocument?: () => void;
   name: string;

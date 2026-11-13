@@ -182,7 +182,7 @@ export class OffscreenPreviewRenderer {
     if (this.noiseFailed) {
       throw new Error("preview_frame_noise_unavailable");
     }
-    const effects = this.preview.shaderRuntime.active(seconds);
+    const effects = this.preview.shaderRuntime.activeInto(seconds);
     if (effects.length && shader.style.visibility !== "visible") {
       throw new Error(`preview_frame_shader_failed:${this.preview.shaderPipeline.lastError ?? ""}`);
     }

@@ -115,6 +115,7 @@ export function createFrameReadouts(options: FrameReadoutOptions, visibility: Fr
       timestamp: number,
       start: number,
       state: Pick<EditorFrameState, "measuredFps">,
+      targetRefreshRate: number,
     ): void {
       const drawTimeMs = performance.now() - start;
       if (isPerformanceHudVisible()) {
@@ -122,6 +123,7 @@ export function createFrameReadouts(options: FrameReadoutOptions, visibility: Fr
           timestamp,
           fps: state.measuredFps,
           drawTimeMs,
+          targetRefreshRate,
         });
       }
     },

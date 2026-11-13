@@ -12,7 +12,7 @@ import type { BlockArea } from "../noise/blockArea.ts";
 import { beatValue } from "../timing/beat.ts";
 import { TempoMap } from "../timing/tempo.ts";
 import { isChartObjectId } from "../identity.ts";
-import { lineContentFingerprint, headerContentFingerprint } from "./chartContentHash.ts";
+import { lineContentFingerprintParts, headerContentFingerprint } from "../chartContentHash.ts";
 import type { ChartJsonScan } from "./chartJsonScanner.ts";
 import {
   LINE_FLAG_IDS,
@@ -66,9 +66,28 @@ function mergeIntervals(intervals: readonly [number, number][]): [number, number
   if (intervals.length <= 1) {
     return [...intervals];
   }
-  const ordered = [...intervals].sort((left, right) => left[0] - right[0] || left[1] - right[1]);
-  const merged: [number, number][] = [[...ordered[0]]];
-  for (const interval of ordered.slice(1)) {
+  let ordered = true;
+  for (let index = 1; index < intervals.length; index++) {
+    const previous = intervals[index - 1];
+    const current = intervals[index];
+    if (current[0] < previous[0] || (current[0] === previous[0] && current[1] < previous[1])) {
+      ordered = false;
+      break;
+    }
+  }
+  const source = ordered
+    ? intervals
+    : [...intervals].sort((left, right) => left[0] - right[0] || left[1] - right[1]);
+  const first = source[0];
+  if (!first) {
+    return [];
+  }
+  const merged: [number, number][] = [[first[0], first[1]]];
+  for (let index = 1; index < source.length; index += 1) {
+    const interval = source[index];
+    if (!interval) {
+      continue;
+    }
     const current = merged[merged.length - 1];
     if (interval[0] <= current[1]) {
       current[1] = Math.max(current[1], interval[1]);
@@ -92,8 +111,12 @@ export function summarizeChartLine(
   tempo: TempoMap,
   byteOffset = 0,
   byteLength = 0,
+  options: { includeFingerprint?: boolean } = {},
 ): ChartLineSummary {
-  const digest = lineContentFingerprint(line);
+  const includeFingerprint = options.includeFingerprint !== false;
+  const fingerprint = includeFingerprint ? lineContentFingerprintParts(line) : undefined;
+  const digest = fingerprint?.digest ?? "";
+  const childDigests = fingerprint?.childDigests;
   if (!isRecord(line)) {
     return {
       index,
@@ -104,6 +127,7 @@ export function summarizeChartLine(
       startSeconds: null,
       endSeconds: null,
       digest,
+      childDigests,
       flags: LINE_FLAG_INVALID | LINE_FLAG_UNBOUNDED,
       group: 0,
       father: -1,
@@ -122,6 +146,7 @@ export function summarizeChartLine(
 
   const notes = Array.isArray(line.notes) ? line.notes : [];
   const noteCount = notes.length;
+  const layers = [...(Array.isArray(line.eventLayers) ? line.eventLayers : []), line.extended];
   for (const note of notes) {
     if (!isRecord(note)) {
       continue;
@@ -142,7 +167,6 @@ export function summarizeChartLine(
     }
   }
 
-  const layers = [...(Array.isArray(line.eventLayers) ? line.eventLayers : []), line.extended];
   for (const layer of layers) {
     if (!isRecord(layer)) {
       continue;
@@ -219,6 +243,65 @@ export function summarizeChartLine(
     endSeconds,
     intervals: mergeIntervals(intervals),
     digest,
+    childDigests,
+    flags,
+    group: Number.isFinite(Number(line.Group)) ? Number(line.Group) : 0,
+    father: lineParentIndex(line.father),
+    ...(typeof line.id === "string" ? { id: line.id } : {}),
+  };
+}
+
+/**
+ * Refresh a dirty line's structural summary without rescanning every event time.
+ *
+ * The line is already materialized and therefore cannot be missed by rendering.
+ * Its time directory is conservatively invalidated; a later paging query will
+ * include the line and the next full source rebuild restores precise intervals.
+ */
+export function summarizeChartLineIncremental(
+  previous: ChartLineSummary,
+  line: JudgeLine,
+  index: number,
+): ChartLineSummary {
+  const { digest, childDigests } = lineContentFingerprintParts(line);
+  const notes = Array.isArray(line.notes) ? line.notes : [];
+  const layers = [...(Array.isArray(line.eventLayers) ? line.eventLayers : []), line.extended];
+  let eventCount = 0;
+  let hasShader = false;
+  for (const layer of layers) {
+    if (!isRecord(layer)) {
+      continue;
+    }
+    for (const type of EVENT_TRACKS) {
+      const events = layer[type];
+      if (Array.isArray(events)) {
+        eventCount += events.length;
+        hasShader ||= type === "paintEvents" && events.length > 0;
+      }
+    }
+  }
+  let flags = previous.flags | LINE_FLAG_UNBOUNDED;
+  flags &= ~LINE_FLAG_STATIC;
+  if (hasShader) {
+    flags |= LINE_FLAG_SHADER;
+  } else {
+    flags &= ~LINE_FLAG_SHADER;
+  }
+  if (Object.hasOwn(line, "_reduxNoiseLine")) {
+    flags |= LINE_FLAG_NOISE;
+  } else {
+    flags &= ~LINE_FLAG_NOISE;
+  }
+  return {
+    ...previous,
+    index,
+    noteCount: notes.length,
+    eventCount,
+    startSeconds: null,
+    endSeconds: null,
+    intervals: undefined,
+    digest,
+    childDigests,
     flags,
     group: Number.isFinite(Number(line.Group)) ? Number(line.Group) : 0,
     father: lineParentIndex(line.father),
@@ -285,7 +368,12 @@ function collectAssetNames(line: unknown, names: Set<string>): void {
  * Every line is parsed once so counts and digests are exact; the parsed object
  * is discarded immediately and never retained by the index.
  */
-export function buildChartIndex(scan: ChartJsonScan, tempo: TempoMap): ChartIndex {
+export function buildChartIndex(
+  scan: ChartJsonScan,
+  tempo: TempoMap,
+  options: { includeFingerprints?: boolean } = {},
+): ChartIndex {
+  const includeFingerprints = options.includeFingerprints !== false;
   const header = chartHeaderFromScan(scan);
   const headerChart = { ...scan.header, judgeLineList: [] };
   const headerDigest = headerContentFingerprint(headerChart);
@@ -304,7 +392,9 @@ export function buildChartIndex(scan: ChartJsonScan, tempo: TempoMap): ChartInde
       line = null;
     }
     collectAssetNames(line, names);
-    const summary = summarizeChartLine(line, index, tempo, range.start, range.end - range.start);
+    const summary = summarizeChartLine(line, index, tempo, range.start, range.end - range.start, {
+      includeFingerprint: includeFingerprints,
+    });
     if (line !== null) {
       try {
         assertJudgeLineStructure(line as JudgeLine, index);
@@ -322,5 +412,6 @@ export function buildChartIndex(scan: ChartJsonScan, tempo: TempoMap): ChartInde
     assetNames: [...names].sort(),
     totalBytes: scan.text.length,
     canonical: false,
+    ...(includeFingerprints ? {} : { fingerprintsPending: true }),
   };
 }

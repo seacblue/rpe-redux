@@ -21,12 +21,20 @@ const PREVIEW_PATTERNS: Readonly<Record<number, readonly BeatLineColorKey[]>> = 
 
 const SUPPORTED_DENOMINATORS = [1, 2, 3, 4, 6, 8, 12, 16] as const;
 
+/** Avoid rebuilding ordinary subdivision patterns for every painted grid line. */
+const GENERATED_PATTERN_CACHE_LIMIT = 128;
+const generatedPatternCache = new Map<number, readonly BeatLineColorKey[]>();
+
 /** Assign colors from coarse to fine without overwriting an assigned line. */
 export function beatLineColorKeys(lineCount: number): readonly BeatLineColorKey[] {
   const count = Math.max(1, Math.trunc(lineCount));
   const previewPattern = PREVIEW_PATTERNS[count];
   if (previewPattern) {
     return previewPattern;
+  }
+  const cached = generatedPatternCache.get(count);
+  if (cached) {
+    return cached;
   }
 
   const roles: BeatLineColorKey[] = Array.from({ length: count }, () => "default");
@@ -41,6 +49,9 @@ export function beatLineColorKeys(lineCount: number): readonly BeatLineColorKey[
         roles[index] = role;
       }
     }
+  }
+  if (count <= GENERATED_PATTERN_CACHE_LIMIT) {
+    generatedPatternCache.set(count, roles);
   }
   return roles;
 }

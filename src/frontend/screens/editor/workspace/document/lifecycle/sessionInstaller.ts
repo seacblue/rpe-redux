@@ -12,12 +12,15 @@ import type { AutoSaveClock } from "../../../../../../core/edit/session/autosave
 import type { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import type { ProjectImages } from "../../../../../../core/media/images.ts";
 import type { DocumentReplacement } from "./replacer.ts";
+import { installChartRevisionSeed } from "../../../../../../core/edit/document/chartRevision.ts";
 
 /** Session transfer and setup operations for one installed document. */
 export interface DocumentInstallOptions {
   session: { current(): EditorSession; replace(session: EditorSession): void };
   mutationGate: SessionMutationGate;
   history: { clipboard: Pick<ClipboardHistory, "attach">; limit(): number; onChange(): void };
+  /** Publishes the final document revision after streamed digests arrive. */
+  fingerprintReady?(session: EditorSession): void;
   resetSelectionView(): void;
   recovery: { clearDraft(): void; autoSave: Pick<AutoSaveClock, "reset"> };
   resetCurveDraft(): void;
@@ -33,6 +36,9 @@ export interface DocumentInstallOptions {
 export function createSessionInstaller(options: DocumentInstallOptions) {
   return (replacement: DocumentReplacement): void => {
     options.session.current().removeEventListener("change", options.history.onChange);
+    if (!replacement.chartDocument && replacement.revisionSeed) {
+      installChartRevisionSeed(replacement.chart, replacement.revisionSeed);
+    }
     const session = replacement.chartDocument
       ? EditorSession.fromDocument(replacement.chartDocument, replacement.readOnly)
       : new EditorSession(replacement.chart, replacement.readOnly);
@@ -42,6 +48,11 @@ export function createSessionInstaller(options: DocumentInstallOptions) {
     options.resetSelectionView();
     session.history.limit = options.history.limit();
     session.addEventListener("change", options.history.onChange);
+    if (session.chartDocument && !session.chartDocument.fingerprintReady) {
+      void session.chartDocument.whenFingerprintReady().then(() => {
+        options.fingerprintReady?.(session);
+      });
+    }
     options.recovery.clearDraft();
     options.recovery.autoSave.reset(performance.now());
     options.resetCurveDraft();

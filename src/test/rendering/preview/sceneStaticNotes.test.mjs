@@ -4,7 +4,12 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart, createEvent, createNote } from "../../../core/global/chart/chart.ts";
+import {
+  createChart,
+  createEvent,
+  createLine,
+  createNote,
+} from "../../../core/global/chart/chart.ts";
 import { SceneRuntime } from "../../../core/global/chart/runtime/scene.ts";
 import { NoteVisibilityDirectory } from "../../../core/global/chart/runtime/noteVisibility.ts";
 import { fromNumber } from "../../../core/global/chart/timing/beat.ts";
@@ -37,6 +42,153 @@ test("static notes are queried by visible time and keep author order", () => {
     [1, 3],
     "only the visible static notes are returned, in their authored order",
   );
+});
+
+test("a line without motion or speed events exposes the static-state fast path", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers = [{}];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+
+  assert.equal(scene.lines[0].staticState, true);
+  assert.equal(scene.allStatesStatic, true);
+  assert.deepEqual(scene.sample(0)[0], scene.sample(10)[0]);
+});
+
+test("note-only controls keep the line state static during playback", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers = [{}];
+  chart.judgeLineList[0].posControl = [
+    { x: 0, y: 1 },
+    { x: 100, y: 0.5 },
+  ];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+
+  assert.equal(scene.lines[0].staticState, true);
+  const first = scene.sampleInto(0, []);
+  const second = scene.sampleInto(10, []);
+  assert.strictEqual(second[0], first[0]);
+});
+
+test("repeated samplers do not reapply a parent transform", () => {
+  const chart = createChart();
+  const parent = chart.judgeLineList[0];
+  parent.eventLayers[0].moveXEvents = [createEvent(100, 0, 0, 10)];
+  const child = createLine("Child");
+  child.father = 0;
+  chart.judgeLineList.push(child);
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const seconds = tempo.seconds(5);
+  const first = scene.sampler(seconds)(1);
+  const repeated = scene.sampler(seconds)(1);
+
+  assert.deepEqual(repeated, first);
+});
+
+test("parent sampling reuses static local state across playback times", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers = [{}];
+  const child = createLine("Child");
+  child.father = 0;
+  child.eventLayers = [{}];
+  chart.judgeLineList.push(child);
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const parent = scene.lines[0];
+  const originalState = parent.state.bind(parent);
+  let stateCalls = 0;
+  parent.state = (...args) => {
+    stateCalls += 1;
+    return originalState(...args);
+  };
+
+  const first = scene.sampleInto(0, []);
+  const second = scene.sampleInto(1, first);
+  const expected = scene.sampler(1)(1);
+  assert.equal(stateCalls, 1);
+  assert.equal(scene.allStatesStatic, true);
+  assert.deepEqual(second[1], expected);
+});
+
+test("topological parent sampling matches the defensive sampler", () => {
+  const chart = createChart();
+  chart.judgeLineList = Array.from({ length: 32 }, (_, index) => {
+    const line = createLine(`Parent-${index}`);
+    line.eventLayers[0] = {};
+    if (index > 0) {
+      line.father = Math.floor(index / 2);
+    }
+    if (index % 5 === 0) {
+      line.eventLayers[0].moveXEvents = [createEvent(index + 1, 0, 0, 8)];
+      line.eventLayers[0].rotateEvents = [createEvent(index * 2, 0, 0, 8)];
+    }
+    return line;
+  });
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+
+  for (const seconds of [0, 0.25, 1, 2.5, 5]) {
+    const actual = scene.sampleInto(seconds, []);
+    const sample = scene.sampler(seconds);
+    const expected = actual.map((_, index) => sample(index));
+    assert.deepEqual(actual, expected, `parent state mismatch at ${seconds}s`);
+  }
+});
+
+test("visible-note queries can split Holds without a second scan", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  line.notes = [createNote(1, 0, 0), createNote(2, 0, 0, 1)];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const notes = [];
+  const holds = [];
+  const state = scene.sample(0)[0];
+  scene.lines[0].visibleNotes(0, state, 1000, notes, holds);
+
+  assert.deepEqual(
+    notes.map((entry) => entry.noteIndex),
+    [0],
+  );
+  assert.deepEqual(
+    holds.map((entry) => entry.noteIndex),
+    [1],
+  );
+});
+
+test("ordinary notes keep their base state on the simple note fast path", () => {
+  const chart = createChart();
+  const note = createNote(1, 0, 120);
+  note.speed = 0.75;
+  note.size = 0.8;
+  note.alpha = 128;
+  chart.judgeLineList[0].notes = [note];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const entry = scene.lines[0].notes[0];
+  const sampled = scene.lines[0].noteState(entry, scene.sample(0)[0], 0);
+
+  assert.deepEqual(sampled, {
+    x: 120,
+    y: 0,
+    tail: 0,
+    size: 0.8,
+    alpha: 128 / 255,
+    skew: 0,
+    showHead: true,
+  });
 });
 
 test("yControl lines use the time index instead of scanning every note", () => {

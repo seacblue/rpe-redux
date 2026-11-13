@@ -11,13 +11,15 @@
  */
 
 import { type Chart } from "../../global/chart/chart.ts";
+import type { ChartRevisionSeed } from "../../global/chart/chartRevisionSeed.ts";
 import { yieldToHost } from "../../utils/yieldToHost.ts";
 import { registeredChartDocument } from "../../global/chart/streaming/chartDocumentRegistry.ts";
 import {
   combineContentFingerprint,
   headerContentFingerprint,
   lineContentFingerprint,
-} from "../../global/chart/streaming/chartContentHash.ts";
+  primeLineContentFingerprint,
+} from "../../global/chart/chartContentHash.ts";
 
 const wholeChartCache = new WeakMap<object, string>();
 const headerCache = new WeakMap<object, string>();
@@ -63,9 +65,29 @@ async function lineFingerprintAsync(line: unknown, state: { deadline: number }):
   return digest;
 }
 
-/** Seed a fingerprint computed off-thread for a freshly installed chart. */
-export function primeChartFingerprint(chart: Chart, fingerprint: string): void {
-  wholeChartCache.set(chart, fingerprint);
+/**
+ * Installs line and child digests computed by a chart importer for a plain
+ * parsed chart.
+ *
+ * The line objects may arrive through structured clone after the worker has
+ * hashed them, so the digest is keyed to the received object identity here. The
+ * per-line WeakMap cache is shared by every later revision: a copy-on-write
+ * clone keeps untouched line object identities, so re-reading those digests
+ * costs one WeakMap lookup instead of a whole-chart walk. Child digests let a
+ * later copy-on-write edit rehash only the changed field instead of walking a
+ * million-event sibling array again.
+ */
+export function installChartRevisionSeed(chart: Chart, seed: ChartRevisionSeed): void {
+  const lines = chart.judgeLineList ?? [];
+  for (let index = 0; index < lines.length && index < seed.lines.length; index += 1) {
+    const line = lines[index];
+    const seeded = seed.lines[index];
+    if (!line || !seeded?.digest) {
+      continue;
+    }
+    primeLineContentFingerprint(line, seeded.digest, seeded.childDigests, seeded.valueDigests);
+    lineCache.set(line as object, seeded.digest);
+  }
 }
 
 /**
@@ -123,22 +145,4 @@ export function chartFingerprint(chart: Chart | null | undefined): string | null
   );
   wholeChartCache.set(chart, digest);
   return digest;
-}
-
-/** Header digest used by the streaming document and line index. */
-export function chartHeaderFingerprint(chart: Chart): string {
-  return headerFingerprint(chart);
-}
-
-/** One line digest used by the streaming document and line index. */
-export function chartLineFingerprint(line: unknown): string {
-  return lineFingerprint(line);
-}
-
-/** Combine a header digest and ordered line digests into one chart digest. */
-export function combineChartFingerprint(
-  headerDigest: string,
-  lineDigests: readonly string[],
-): string {
-  return combineContentFingerprint(headerDigest, lineDigests);
 }

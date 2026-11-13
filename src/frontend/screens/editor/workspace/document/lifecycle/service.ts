@@ -151,7 +151,16 @@ function loadPickedCharts(bound: DocumentServiceBindings, files: readonly File[]
         label: (candidate) => `${candidate.name}, ${candidate.chart.META.name ?? ""}`,
       });
       if (chosen) {
+        for (const candidate of candidates) {
+          if (candidate !== chosen) {
+            candidate.disposeDocument?.();
+          }
+        }
         await bound.loadCandidate(chosen, assets).catch(bound.reportError);
+      } else {
+        for (const candidate of candidates) {
+          candidate.disposeDocument?.();
+        }
       }
     },
     reportError: bound.reportError,

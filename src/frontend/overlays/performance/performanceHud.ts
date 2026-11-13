@@ -11,8 +11,16 @@ import type { MessageKey } from "../../../i18n/index.ts";
 import { developerReveal, isDeveloperRevealed } from "../../../core/state/developerReveal.ts";
 import {
   publishPerformanceHudFrame as publishPerformanceHudFrameToWindow,
+  type PerformanceHudFramePayload,
   type PerformanceHudSnapEdges,
 } from "../../../core/platform/desktop/performanceHudWindow.ts";
+import {
+  appendBoundedSample,
+  frameBudgetMs,
+  frameIntervalLoadPercent,
+  renderLoadPercent,
+} from "./performanceHudMetrics.ts";
+import { performanceFrameTimingSnapshot } from "./performanceFrameTiming.ts";
 
 export const PERFORMANCE_HUD_ENABLED_ID = "settings.performance-hud-enabled";
 
@@ -65,19 +73,13 @@ export function togglePerformanceHud(): boolean {
   return next;
 }
 
-/** One frame of measured values the HUD renders. */
-export interface PerformanceHudSnapshot {
-  fps: number;
-  fpsSamples: readonly number[];
-  drawTimeMs: number;
-  frameTimesMs: readonly number[];
-  memoryAvailable: boolean;
-  memoryUsedMb: number;
-  memoryLimitMb: number;
-  memorySamplesMb: readonly number[];
-  renderLoadPercent: number;
-  renderLoadSamples: readonly number[];
-}
+/**
+ * One frame of measured values the HUD renders.
+ *
+ * The docked HUD and the detached window render the same readings, so this is
+ * the relay payload rather than a second declaration of its fields.
+ */
+export type PerformanceHudSnapshot = PerformanceHudFramePayload;
 
 const snapshot = createValue<PerformanceHudSnapshot>({
   initial: {
@@ -85,6 +87,15 @@ const snapshot = createValue<PerformanceHudSnapshot>({
     fpsSamples: [],
     drawTimeMs: 0,
     frameTimesMs: [],
+    frameIntervalMs: 0,
+    frameBudgetMs: 1000 / 60,
+    targetRefreshRate: 60,
+    frameIntervalLoadPercent: 0,
+    frameIntervalLoadSamples: [],
+    timelineDrawMs: 0,
+    timelineDrawSamples: [],
+    previewDrawMs: 0,
+    previewDrawSamples: [],
     memoryAvailable: false,
     memoryUsedMb: 0,
     memoryLimitMb: 0,
@@ -160,10 +171,53 @@ registerPerformanceHudBlock({
   value: (value) => `${value.drawTimeMs.toFixed(1)} ms`,
 });
 registerPerformanceHudBlock({
+  id: "timeline-draw-time",
+  label: "chrome.performanceHud.timelineDrawTime",
+  kind: "text",
+  value: (value) => `${value.timelineDrawMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "timeline-draw-graph",
+  label: "chrome.performanceHud.timelineDrawGraph",
+  kind: "bar",
+  values: (value) => value.timelineDrawSamples,
+});
+registerPerformanceHudBlock({
+  id: "preview-draw-time",
+  label: "chrome.performanceHud.previewDrawTime",
+  kind: "text",
+  value: (value) => `${value.previewDrawMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "preview-draw-graph",
+  label: "chrome.performanceHud.previewDrawGraph",
+  kind: "bar",
+  values: (value) => value.previewDrawSamples,
+});
+registerPerformanceHudBlock({
   id: "frame-time",
   label: "chrome.performanceHud.frameTime",
   kind: "bar",
   values: (value) => value.frameTimesMs,
+});
+registerPerformanceHudBlock({
+  id: "frame-budget",
+  label: "chrome.performanceHud.frameBudget",
+  kind: "text",
+  value: (value) =>
+    `${value.frameBudgetMs.toFixed(2)} ms @ ${value.targetRefreshRate.toFixed(0)} Hz`,
+});
+registerPerformanceHudBlock({
+  id: "frame-load",
+  label: "chrome.performanceHud.frameLoad",
+  kind: "text",
+  value: (value) => `${value.frameIntervalLoadPercent.toFixed(0)}%`,
+});
+registerPerformanceHudBlock({
+  id: "frame-load-graph",
+  label: "chrome.performanceHud.frameLoadGraph",
+  kind: "bar",
+  values: (value) => value.frameIntervalLoadSamples,
 });
 registerPerformanceHudBlock({
   id: "memory",
@@ -193,23 +247,17 @@ registerPerformanceHudBlock({
   values: (value) => value.renderLoadSamples,
 });
 let lastSnapshotAt = -Infinity;
-const frameTimes: number[] = [];
+const frameIntervals: number[] = [];
 const fpsSamples: number[] = [];
+const frameIntervalLoadSamples: number[] = [];
 const memorySamplesMb: number[] = [];
 const renderLoadSamples: number[] = [];
+let lastFrameTimestamp = Number.NaN;
 
 /** Heap figures the WebView exposes through `performance.memory`. */
 interface PerformanceMemory {
   usedJSHeapSize: number;
   jsHeapSizeLimit: number;
-}
-
-/** Appends one sample, keeping the newest 60. */
-function appendSample(samples: number[], value: number): void {
-  samples.push(value);
-  if (samples.length > 60) {
-    samples.shift();
-  }
 }
 
 /** Reads the WebView heap figures, reporting unavailability rather than guessing. */
@@ -243,24 +291,37 @@ export function publishPerformanceHudFrame({
   timestamp,
   fps,
   drawTimeMs,
+  targetRefreshRate,
 }: {
   timestamp: number;
   fps: number;
   drawTimeMs: number;
+  targetRefreshRate: number;
 }): void {
   if (!isPerformanceHudVisible()) {
+    lastFrameTimestamp = Number.NaN;
     return;
   }
-  frameTimes.push(drawTimeMs);
-  if (frameTimes.length > 60) {
-    frameTimes.shift();
+  const hasPreviousFrame = Number.isFinite(lastFrameTimestamp);
+  const frameIntervalMs = hasPreviousFrame ? Math.max(0, timestamp - lastFrameTimestamp) : 0;
+  lastFrameTimestamp = timestamp;
+  if (hasPreviousFrame) {
+    appendBoundedSample(frameIntervals, frameIntervalMs);
   }
-  appendSample(fpsSamples, Math.max(0, fps));
+  appendBoundedSample(fpsSamples, Math.max(0, fps));
   const memory = readMemory();
-  appendSample(memorySamplesMb, memory.usedMb);
-  // Render load is the share of the 60 FPS frame budget consumed by draw time.
-  const renderLoadPercent = Math.min(100, Math.max(0, (drawTimeMs / (1000 / 60)) * 100));
-  appendSample(renderLoadSamples, renderLoadPercent);
+  appendBoundedSample(memorySamplesMb, memory.usedMb);
+  const safeTargetRefreshRate =
+    Number.isFinite(targetRefreshRate) && targetRefreshRate > 0 ? targetRefreshRate : 60;
+  const targetFrameBudgetMs = frameBudgetMs(safeTargetRefreshRate);
+  const renderLoad = renderLoadPercent(drawTimeMs, safeTargetRefreshRate);
+  const intervalLoad = frameIntervalLoadPercent(frameIntervalMs, safeTargetRefreshRate);
+  const paintTiming = performanceFrameTimingSnapshot();
+  // Keep over-budget values visible: 11 ms at 144 Hz is 158% of the budget.
+  const renderLoadPercentValue = Math.max(0, renderLoad);
+  const frameIntervalLoadValue = hasPreviousFrame ? Math.max(0, intervalLoad) : 0;
+  appendBoundedSample(renderLoadSamples, renderLoadPercentValue);
+  appendBoundedSample(frameIntervalLoadSamples, frameIntervalLoadValue);
   if (timestamp - lastSnapshotAt < 1000 / 15) {
     return;
   }
@@ -269,12 +330,21 @@ export function publishPerformanceHudFrame({
     fps,
     fpsSamples: [...fpsSamples],
     drawTimeMs,
-    frameTimesMs: [...frameTimes],
+    frameTimesMs: [...frameIntervals],
+    frameIntervalMs,
+    frameBudgetMs: targetFrameBudgetMs,
+    targetRefreshRate: safeTargetRefreshRate,
+    frameIntervalLoadPercent: frameIntervalLoadValue,
+    frameIntervalLoadSamples: [...frameIntervalLoadSamples],
+    timelineDrawMs: paintTiming.timelineMs,
+    timelineDrawSamples: paintTiming.timelineSamples,
+    previewDrawMs: paintTiming.previewMs,
+    previewDrawSamples: paintTiming.previewSamples,
     memoryAvailable: memory.available,
     memoryUsedMb: memory.usedMb,
     memoryLimitMb: memory.limitMb,
     memorySamplesMb: [...memorySamplesMb],
-    renderLoadPercent,
+    renderLoadPercent: renderLoadPercentValue,
     renderLoadSamples: [...renderLoadSamples],
   });
   void publishPerformanceHudFrameToWindow(snapshot.get()).catch(() => {});

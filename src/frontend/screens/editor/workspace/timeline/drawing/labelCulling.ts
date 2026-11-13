@@ -17,6 +17,13 @@ export interface TimelineLabelCullingOptions {
 
 const CELL_WIDTH = 32;
 const CELL_HEIGHT = 24;
+const CELL_KEY_LIMIT = 8192;
+const CELL_PRUNE_INTERVAL = 16;
+
+interface LabelCell {
+  generation: number;
+  points: TimelineLabelPoint[];
+}
 
 /**
  * Keeps dense canvas labels readable without making every draw call scan all
@@ -24,11 +31,22 @@ const CELL_HEIGHT = 24;
  * explicitly important items.
  */
 export class TimelineLabelCuller {
-  private readonly cells = new Map<string, TimelineLabelPoint[]>();
+  private readonly cells = new Map<string, LabelCell>();
+  private generation = 0;
+  private framesSincePrune = 0;
 
-  /** Forget every reserved label box. */
+  /** Advance the frame generation and occasionally remove keys outside the viewport. */
   clear(): void {
-    this.cells.clear();
+    this.generation += 1;
+    this.framesSincePrune += 1;
+    if (this.cells.size > CELL_KEY_LIMIT && this.framesSincePrune >= CELL_PRUNE_INTERVAL) {
+      this.framesSincePrune = 0;
+      for (const [key, cell] of this.cells) {
+        if (cell.generation !== this.generation) {
+          this.cells.delete(key);
+        }
+      }
+    }
   }
 
   /** Reserve a label box when it clears its neighbours; forced labels always reserve. */
@@ -42,9 +60,15 @@ export class TimelineLabelCuller {
       return false;
     }
     const key = this.key(point.x, point.y);
-    const cell = this.cells.get(key) ?? [];
-    cell.push(point);
-    this.cells.set(key, cell);
+    let cell = this.cells.get(key);
+    if (!cell) {
+      cell = { generation: this.generation, points: [] };
+      this.cells.set(key, cell);
+    } else if (cell.generation !== this.generation) {
+      cell.generation = this.generation;
+      cell.points.length = 0;
+    }
+    cell.points.push(point);
     return true;
   }
 
@@ -54,12 +78,12 @@ export class TimelineLabelCuller {
     const cellY = Math.floor(point.y / CELL_HEIGHT);
     for (let x = cellX - 1; x <= cellX + 1; x++) {
       for (let y = cellY - 1; y <= cellY + 1; y++) {
-        const candidates = this.cells.get(`${x}:${y}`);
-        if (!candidates) {
+        const cell = this.cells.get(`${x}:${y}`);
+        if (!cell || cell.generation !== this.generation) {
           continue;
         }
         if (
-          candidates.some(
+          cell.points.some(
             (candidate) =>
               Math.abs(candidate.x - point.x) < horizontalGap &&
               Math.abs(candidate.y - point.y) < verticalGap,

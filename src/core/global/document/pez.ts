@@ -9,6 +9,7 @@ import { readZip, type ZipLimits } from "../../utils/zip.ts";
 import { decodeChartText } from "../../utils/text.ts";
 import { mergeInfoIntoMeta, parseInfo } from "./info.ts";
 import type { OpenCandidate } from "./types.ts";
+import type { ChartDocument } from "../chart/streaming/chartDocument.ts";
 import { t } from "../../../i18n/index.ts";
 import { loadingPaint, type LoadTask } from "./loading.ts";
 import { normalizePath } from "../../utils/paths.ts";
@@ -24,6 +25,12 @@ export type ArchiveReader = (
   limits: ZipLimits,
   onProgress?: (completed: number, total: number) => void | Promise<void>,
 ) => Promise<Map<string, Uint8Array>>;
+
+/** Opens one archive chart as a paged document without materializing its lines. */
+export type ChartDocumentFactory = (
+  bytes: Uint8Array,
+  name: string,
+) => Promise<{ chartDocument: ChartDocument; dispose(): void }>;
 
 /** Fixed archive safety limits: entry count, per-entry bytes and total bytes. */
 const PEZ_LIMITS = {
@@ -44,6 +51,7 @@ export async function readPez(
   task?: LoadTask,
   parseCharts: ChartEntryParser = parseChartEntries,
   readArchive: ArchiveReader = readZip,
+  createChartDocument?: ChartDocumentFactory,
 ): Promise<{
   candidates: OpenCandidate[];
   assets: Map<string, Uint8Array>;
@@ -67,12 +75,41 @@ export async function readPez(
   if (task) {
     await loadingPaint();
   }
-  const parsed: ParsedChartEntries = await parseCharts(assets);
-  const candidates: OpenCandidate[] = parsed.candidates;
+  const candidates: OpenCandidate[] = [];
+  let parseIssues: ParsedChartEntries["issues"] = [];
+  let parseErrors: string[] = [];
+  // Charts the paged opener rejects fall back to the classic entry parser.
+  const unopenedAssets = new Map<string, Uint8Array>();
+  if (createChartDocument) {
+    for (const [name, bytes] of assets) {
+      if (!/\.json$/i.test(name)) {
+        continue;
+      }
+      try {
+        const opened = await createChartDocument(bytes, name);
+        candidates.push({
+          name,
+          chart: opened.chartDocument.chart,
+          chartDocument: opened.chartDocument,
+          disposeDocument: () => opened.dispose(),
+        });
+      } catch {
+        unopenedAssets.set(name, bytes);
+      }
+    }
+  }
+  const needsFallback = !createChartDocument || unopenedAssets.size > 0 || !candidates.length;
+  if (needsFallback) {
+    const fallbackAssets = createChartDocument && unopenedAssets.size ? unopenedAssets : assets;
+    const parsed: ParsedChartEntries = await parseCharts(fallbackAssets);
+    candidates.push(...parsed.candidates);
+    parseIssues = parsed.issues;
+    parseErrors = parsed.errors;
+  }
   if (!candidates.length) {
     throw new ChartLoadError(
-      parsed.issues.length
-        ? parsed.issues
+      parseIssues.length
+        ? parseIssues
         : [
             {
               id: "document:package",
@@ -81,7 +118,7 @@ export async function readPez(
               messageKey: "model.chart.invalidDocument",
             },
           ],
-      `${t("system.files.chartNotFound")}\n${parsed.errors.join("\n")}`,
+      `${t("system.files.chartNotFound")}\n${parseErrors.join("\n")}`,
     );
   }
   // Attach each Info.txt to the chart its `Chart` field names.
@@ -99,6 +136,7 @@ export async function readPez(
     if (candidate) {
       candidate.info = info;
       mergeInfoIntoMeta(candidate.chart, info);
+      candidate.chartDocument?.updateHeaderFromChart(candidate.chart);
       preferredNames.add(candidate.name);
     }
   }

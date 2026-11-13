@@ -1,5 +1,14 @@
 /** Plans, caches, and consumes script transaction previews without touching history. */
 import { assertChart, normalizeChartObjectIds, type Chart } from "../../global/chart/chart.ts";
+import {
+  assertChartHeaderStructure,
+  assertEventStructure,
+  assertJudgeLineFields,
+  assertJudgeLineStructure,
+  assertNoteStructure,
+} from "../../global/chart/chartValidation.ts";
+import { containsCycle } from "../../global/chart/cycles.ts";
+import { extensionRegistry } from "../../extensions/runtime.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { fingerprintJsonText } from "../../utils/fingerprint.ts";
 import type { EditorSession } from "../session/session.ts";
@@ -35,9 +44,11 @@ interface PlannedTransaction {
   readonly previewId: string;
   readonly requestFingerprint: string;
   readonly beforeFingerprint: string;
+  readonly afterFingerprint: string;
   readonly chart: Chart;
   readonly label: string;
   readonly affectedObjectIds: readonly ChartObjectId[];
+  readonly estimatedBytes: number;
   readonly status: "previewed" | "unchanged";
   readonly dispose: () => void;
 }
@@ -97,6 +108,43 @@ function requestFingerprint(request: ChartTransactionRequest): string | null {
   }
 }
 
+/** Validate only transaction-owned structures when the chart has no validator hook. */
+function validateTransactionChart(chart: Chart, state: MutableTransactionState): void {
+  // Extension validators own the complete chart contract when installed.
+  if (extensionRegistry.hasHook("chart:validate")) {
+    assertChart(chart);
+    return;
+  }
+  assertChartHeaderStructure(chart);
+  for (const lineIndex of state.clonedLines) {
+    const line = chart.judgeLineList?.[lineIndex];
+    if (line) {
+      if (state.fullLineValidation?.has(lineIndex)) {
+        assertJudgeLineStructure(line, lineIndex);
+      } else {
+        assertJudgeLineFields(line, lineIndex);
+      }
+    }
+  }
+  for (const changed of state.changedNotes ?? []) {
+    if (containsCycle(changed.note)) {
+      throw new Error("Chart contains a cyclic note value");
+    }
+    assertNoteStructure(changed.note, `judgeLineList[${changed.lineIndex}]`, changed.noteIndex);
+  }
+  for (const changed of state.changedEvents ?? []) {
+    if (containsCycle(changed.event)) {
+      throw new Error("Chart contains a cyclic event value");
+    }
+    assertEventStructure(
+      changed.event,
+      changed.track,
+      `judgeLineList[${changed.lineIndex}].events`,
+      changed.eventIndex,
+    );
+  }
+}
+
 /** Applies a request to a working chart and returns either a plan or a failure. */
 function planChartTransaction(
   session: EditorSession | null,
@@ -105,6 +153,11 @@ function planChartTransaction(
 ): TransactionPlanOutcome {
   if (!session) {
     return { result: result("unavailable", null, null, [], [issue("editor.unavailable")], null) };
+  }
+  if (!session.fingerprintReady) {
+    return {
+      result: result("rejected", null, null, [], [issue("editor.fingerprintPending")], null),
+    };
   }
   const beforeFingerprint = fingerprint(session.chart);
   if (expectedFingerprint !== undefined && beforeFingerprint !== expectedFingerprint) {
@@ -149,6 +202,8 @@ function planChartTransaction(
     usedIdsReady: false,
     relationTouched: new Set(),
     clonedLines: new Set(),
+    fullLineValidation: new Set(),
+    retainedBytes: 64,
   };
   applyRequest(state, request);
   for (const [index, line] of (chart.judgeLineList ?? []).entries()) {
@@ -177,9 +232,12 @@ function planChartTransaction(
     };
   }
   try {
-    normalizeChartObjectIds(chart);
-    assertChart(chart);
-    const afterFingerprint = fingerprint(chart);
+    normalizeChartObjectIds(chart, undefined, session.chart);
+    validateTransactionChart(chart, state);
+    const afterFingerprint =
+      session.chartDocument && chart.judgeLineList?.length === session.chartDocument.lineCount
+        ? session.chartDocument.previewFingerprint(chart, state.clonedLines)
+        : fingerprint(chart);
     const changed = beforeFingerprint !== afterFingerprint;
     const requestKey = requestFingerprint(request);
     if (!requestKey) {
@@ -200,9 +258,11 @@ function planChartTransaction(
         previewId: `transaction-preview-${nextPreviewId++}`,
         requestFingerprint: requestKey,
         beforeFingerprint,
+        afterFingerprint,
         chart,
         label: transactionLabel(request),
         affectedObjectIds: freezeIds(changed ? state.affected : []),
+        estimatedBytes: state.retainedBytes ?? 64,
         status: changed ? "previewed" : "unchanged",
       },
     };
@@ -330,7 +390,12 @@ function applyPreviewTransaction(
     plan.label,
     plan.beforeFingerprint,
     plan.affectedObjectIds,
-    { ...options, validatedNoise: true },
+    {
+      ...options,
+      validatedNoise: true,
+      afterFingerprint: plan.afterFingerprint,
+      estimatedBytes: plan.estimatedBytes,
+    },
   );
 }
 
@@ -380,6 +445,11 @@ export function applyChartTransaction(
     outcome.plan.label,
     outcome.plan.beforeFingerprint,
     outcome.plan.affectedObjectIds,
-    { ...options, validatedNoise: true },
+    {
+      ...options,
+      validatedNoise: true,
+      afterFingerprint: outcome.plan.afterFingerprint,
+      estimatedBytes: outcome.plan.estimatedBytes,
+    },
   );
 }

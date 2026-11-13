@@ -17,6 +17,8 @@ import type { Preview } from "../../preview/scene/preview.ts";
 import { selectionMapForSession } from "../../preview/interaction/previewSelection.ts";
 import { EditorRenderScheduler, type RenderTiming } from "./renderScheduler.ts";
 import { freeCameraState } from "../../stage/freeCamera/freeCamera.ts";
+import { isPerformanceHudVisible } from "../../../../../overlays/performance/performanceHud.ts";
+import { recordPerformanceFrameTiming } from "../../../../../overlays/performance/performanceFrameTiming.ts";
 
 interface FrameTimingProbe {
   (sample: {
@@ -39,6 +41,13 @@ function reportFrameTiming(sample: Parameters<FrameTimingProbe>[0]): void {
   const probe = (globalThis as typeof globalThis & { __reduxFrameTimingProbe?: FrameTimingProbe })
     .__reduxFrameTimingProbe;
   probe?.(sample);
+  if (isPerformanceHudVisible()) {
+    recordPerformanceFrameTiming({
+      timelineMs: sample.timelineMs,
+      previewMs: sample.previewMs,
+      totalMs: sample.totalMs,
+    });
+  }
 }
 
 type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession"> & {

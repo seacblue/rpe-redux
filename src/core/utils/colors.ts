@@ -73,11 +73,25 @@ export function cssColor(value: string): string {
   return `rgba(${parsed.red},${parsed.green},${parsed.blue},${parsed.alpha})`;
 }
 
+interface NormalizedCssColor {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+  hasAlpha: boolean;
+}
+
 /** Parse the hexadecimal or rgba CSS colours used by canvas theme tokens. */
-function parseCssColor(value: string): HexColor | null {
+function parseNormalizedCssColor(value: string): NormalizedCssColor | null {
   const hex = parseHexColor(value);
   if (hex) {
-    return hex;
+    return {
+      red: hex.red / 255,
+      green: hex.green / 255,
+      blue: hex.blue / 255,
+      alpha: hex.alpha,
+      hasAlpha: hex.hasAlpha,
+    };
   }
   const match = /^rgba?\((.*)\)$/iu.exec(value.trim());
   if (!match) {
@@ -96,9 +110,8 @@ function parseCssColor(value: string): HexColor | null {
     if (!Number.isFinite(number)) {
       return null;
     }
-    return Math.round(
-      Math.max(0, Math.min(percentage ? 100 : 255, number)) * (percentage ? 2.55 : 1),
-    );
+    // Hex channels are already normalized; rgba() text may use 0-255 or 0-100%.
+    return Math.max(0, Math.min(1, number / (percentage ? 100 : 255)));
   };
   const red = parseChannel(channels[0]);
   const green = parseChannel(channels[1]);
@@ -118,6 +131,27 @@ function parseCssColor(value: string): HexColor | null {
     blue,
     alpha: Math.max(0, Math.min(1, alphaPercentage ? alphaNumber / 100 : alphaNumber)),
     hasAlpha: channels.length === 4,
+  };
+}
+
+/** Parse a theme colour into normalized RGBA channels for GPU uploads. */
+export function normalizedCssColor(value: string): readonly [number, number, number, number] {
+  const parsed = parseNormalizedCssColor(value);
+  return parsed ? [parsed.red, parsed.green, parsed.blue, parsed.alpha] : [1, 1, 1, 1];
+}
+
+/** Parse a CSS colour into byte-like channels for compositing. */
+function parseCssColor(value: string): HexColor | null {
+  const parsed = parseNormalizedCssColor(value);
+  if (!parsed) {
+    return null;
+  }
+  return {
+    red: parsed.red * 255,
+    green: parsed.green * 255,
+    blue: parsed.blue * 255,
+    alpha: parsed.alpha,
+    hasAlpha: parsed.hasAlpha,
   };
 }
 

@@ -13,7 +13,11 @@ import { canvasFont } from "../../../canvas/text.ts";
 import type { TimelineAppearance } from "./timelineAppearance.ts";
 import type { TimelineGestures } from "../interaction/timelineGestures.ts";
 import type { TimelineViewport } from "../viewport/timelineViewport.ts";
-import { BEAT_LINE_COLOR_KEYS, beatLineColorKeyAt } from "../../../canvas/beatLineColors.ts";
+import {
+  beatLineColorKeyAt,
+  beatLineColorKeys,
+  type BeatLineColorKey,
+} from "../../../canvas/beatLineColors.ts";
 import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 
 /**
@@ -53,44 +57,80 @@ export const PLAYHEAD_GRID: GridParts = Object.freeze({
 const draws = (parts: GridParts, part: keyof GridParts): boolean => parts[part] !== false;
 
 /** Include the hovered tick even when dense-grid culling skips its neighbours. */
-function visibleGridTicks(
+export function visibleGridTicks(
   first: number,
   last: number,
   stride: number,
   highlightedTick: number | null,
 ): number[] {
-  const ticks = new Set<number>();
-  for (let tick = first; tick <= last; tick += stride) {
-    ticks.add(tick);
-  }
-  if (highlightedTick !== null && highlightedTick >= first && highlightedTick <= last) {
-    ticks.add(highlightedTick);
-  }
-  return [...ticks].sort((left, right) => left - right);
+  const ticks: number[] = [];
+  return visibleGridTicksInto(first, last, stride, highlightedTick, ticks);
 }
 
-/** Resolve the stroke colour for one grid tick from the configured subdivision colours. */
-function gridStrokeColor(
+/** Fill reusable storage with the visible grid ticks while preserving draw order. */
+export function visibleGridTicksInto(
+  first: number,
+  last: number,
+  stride: number,
+  highlightedTick: number | null,
+  ticks: number[],
+): number[] {
+  ticks.length = 0;
+  for (let tick = first; tick <= last; tick += stride) {
+    ticks.push(tick);
+  }
+  if (highlightedTick !== null && highlightedTick >= first && highlightedTick <= last) {
+    const position = (highlightedTick - first) / stride;
+    if (!Number.isInteger(position)) {
+      ticks.splice(Math.ceil(position), 0, highlightedTick);
+    }
+  }
+  return ticks;
+}
+
+const GRID_COLOR_INDEX: Readonly<Record<BeatLineColorKey, number>> = {
+  "1": 0,
+  "2": 1,
+  "3": 2,
+  "4": 3,
+  "6": 4,
+  "8": 5,
+  "12": 6,
+  "16": 7,
+  default: 8,
+};
+
+/** Build the fallback slots once per grid pass instead of once per tick. */
+function gridFallbackColors(
+  palette: ReturnType<typeof readCanvasPalette>,
+  target: string[],
+): readonly string[] {
+  target[0] = palette.gridMajor;
+  target[1] = palette.gridSubdivisions[0] ?? palette.gridMinor;
+  target[2] = palette.gridSubdivisions[1] ?? palette.gridMinor;
+  target[3] = palette.gridSubdivisions[2] ?? palette.gridMinor;
+  target[4] = palette.gridSubdivisions[3] ?? palette.gridMinor;
+  target[5] = palette.gridSubdivisions[4] ?? palette.gridMinor;
+  target[6] = palette.gridSubdivisions[5] ?? palette.gridMinor;
+  target[7] = palette.gridSubdivisions[6] ?? palette.gridMinor;
+  target[8] = palette.gridMinor;
+  return target;
+}
+
+/** Resolve one grid color using a precomputed fallback slot table. */
+export function gridStrokeColor(
   palette: ReturnType<typeof readCanvasPalette>,
   tick: number,
   division: number,
   subdivisionColors: readonly string[],
+  fallbackColors: readonly string[],
+  colorKeys: readonly BeatLineColorKey[] = beatLineColorKeys(division),
 ): string {
-  const key = beatLineColorKeyAt(tick, division);
-  // The settings table and the canvas role list share one coarse-to-fine order.
-  const index = BEAT_LINE_COLOR_KEYS.indexOf(key);
-  const fallbackByKey: Record<string, string> = {
-    "1": palette.gridMajor,
-    "2": palette.gridSubdivisions[0] ?? palette.gridMinor,
-    "3": palette.gridSubdivisions[1] ?? palette.gridMinor,
-    "4": palette.gridSubdivisions[2] ?? palette.gridMinor,
-    "6": palette.gridSubdivisions[3] ?? palette.gridMinor,
-    "8": palette.gridSubdivisions[4] ?? palette.gridMinor,
-    "12": palette.gridSubdivisions[5] ?? palette.gridMinor,
-    "16": palette.gridSubdivisions[6] ?? palette.gridMinor,
-    default: palette.gridMinor,
-  };
-  return subdivisionColors[index] ?? fallbackByKey[key] ?? palette.gridMinor;
+  const indexInPattern =
+    ((Math.trunc(tick) % colorKeys.length) + colorKeys.length) % colorKeys.length;
+  const key = colorKeys[indexInPattern] ?? beatLineColorKeyAt(tick, division);
+  const index = GRID_COLOR_INDEX[key];
+  return subdivisionColors[index] ?? fallbackColors[index] ?? palette.gridMinor;
 }
 
 interface GridStrokeBatch {
@@ -99,17 +139,71 @@ interface GridStrokeBatch {
   positions: number[];
 }
 
+interface GridScratch {
+  readonly ticks: number[];
+  readonly batches: Map<string, GridStrokeBatch>;
+  readonly batchPool: GridStrokeBatch[];
+  readonly fallbackColors: string[];
+}
+
+const gridScratch = new WeakMap<object, GridScratch>();
+
+/** Retain grid pass storage per receiver without changing the public drawing contract. */
+function scratchFor(receiver: object): GridScratch {
+  const current = gridScratch.get(receiver);
+  if (current) {
+    return current;
+  }
+  const created: GridScratch = {
+    ticks: [],
+    batches: new Map(),
+    batchPool: [],
+    fallbackColors: new Array<string>(9),
+  };
+  gridScratch.set(receiver, created);
+  return created;
+}
+
+/** Return completed stroke batches to the receiver-owned pool for the next pass. */
+function resetGridBatches(scratch: GridScratch): void {
+  for (const batch of scratch.batches.values()) {
+    batch.positions.length = 0;
+    scratch.batchPool.push(batch);
+  }
+  scratch.batches.clear();
+}
+
+type TempoSecondsCache = {
+  tempoSeconds?: (tempo: TimelineViewport["tempo"], beat: number, factor: number) => number;
+};
+
+/** Resolve beat time through the retained cache, while keeping lightweight test receivers valid. */
+function cachedTempoSeconds(
+  cache: TempoSecondsCache,
+  tempo: TimelineViewport["tempo"],
+  beat: number,
+  factor: number,
+): number {
+  return cache.tempoSeconds?.call(cache, tempo, beat, factor) ?? tempo.seconds(beat, factor);
+}
+
 /** Add one grid line to the batch with the same colour and alpha. */
 function addGridPosition(
   batches: Map<string, GridStrokeBatch>,
+  batchPool: GridStrokeBatch[],
   color: string,
   alpha: number,
   position: number,
 ): void {
   const key = `${color}|${alpha}`;
-  const batch = batches.get(key) ?? { color, alpha, positions: [] };
+  let batch = batches.get(key);
+  if (!batch) {
+    batch = batchPool.pop() ?? { color, alpha, positions: [] };
+    batch.color = color;
+    batch.alpha = alpha;
+    batches.set(key, batch);
+  }
   batch.positions.push(position);
-  batches.set(key, batch);
 }
 
 /** Stroke every queued grid line with one path per colour and alpha. */
@@ -134,6 +228,7 @@ function strokeGridBatches(
 
 type TimelineHoverGuideReceiver = {
   appearance: Pick<TimelineAppearance, "hoverGuidesEnabled" | "gridHighlightColor">;
+  cache: TempoSecondsCache;
   gestures: Pick<TimelineGestures, "cursor" | "eventCursor" | "hoverArea">;
   viewport: TimelineViewport;
 };
@@ -155,7 +250,7 @@ function hoveredGridLine(
   const lineIndex = receiver.viewport.lineIndexAt(pointer.x, width, area);
   const factor = receiver.viewport.factorForLine(lineIndex);
   const seconds =
-    receiver.viewport.tempo.seconds(receiver.viewport.origin, factor) +
+    cachedTempoSeconds(receiver.cache, receiver.viewport.tempo, receiver.viewport.origin, factor) +
     (height - receiver.viewport.judgementOffset - pointer.y) / receiver.viewport.scaleForArea(area);
   const beat = receiver.viewport.tempo.beat(seconds, factor);
   const snapped = Math.round(beat * receiver.viewport.division) / receiver.viewport.division;
@@ -209,7 +304,12 @@ export function grid(
   // default can belong to the other timeline canvas during a resize or mode
   // switch, which shifts the visible beat grid.
   const scale = this.viewport.scaleForArea(area);
-  const originSeconds = this.viewport.tempo.seconds(this.viewport.origin, this.viewport.factor);
+  const originSeconds = cachedTempoSeconds(
+    this.cache,
+    this.viewport.tempo,
+    this.viewport.origin,
+    this.viewport.factor,
+  );
   const secondsAt = (vertical: number) =>
     originSeconds + (height - this.viewport.judgementOffset - vertical) / scale;
   const beatAt = (vertical: number) =>
@@ -217,7 +317,9 @@ export function grid(
   const verticalAt = (beat: number) =>
     height -
     this.viewport.judgementOffset -
-    (this.viewport.tempo.seconds(beat, this.viewport.factor) - originSeconds) * scale;
+    (cachedTempoSeconds(this.cache, this.viewport.tempo, beat, this.viewport.factor) -
+      originSeconds) *
+      scale;
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
   const localBeatHeight = Math.abs(
@@ -231,8 +333,15 @@ export function grid(
   const highlightedTick = hovered ? Math.round(hovered.beat * this.viewport.division) : null;
   context.font = canvasFont("caption");
   context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
-  const batches = new Map<string, GridStrokeBatch>();
-  for (const tick of visibleGridTicks(first, last, stride, highlightedTick)) {
+  const scratch = scratchFor(this);
+  resetGridBatches(scratch);
+  const batches = scratch.batches;
+  const lineBatch = area === "notes" ? this.notesGridBatch : this.eventsGridBatch;
+  const playheadBatch = area === "notes" ? this.notesPlayheadBatch : this.eventsPlayheadBatch;
+  const fallbackColors = gridFallbackColors(palette, scratch.fallbackColors);
+  const colorKeys = beatLineColorKeys(this.viewport.division);
+  const ticks = visibleGridTicksInto(first, last, stride, highlightedTick, scratch.ticks);
+  for (const tick of ticks) {
     const beat = tick / this.viewport.division;
     const vertical = verticalAt(beat);
     const major = tick % this.viewport.division === 0;
@@ -241,6 +350,8 @@ export function grid(
       tick,
       this.viewport.division,
       this.appearance.subdivisionColors,
+      fallbackColors,
+      colorKeys,
     );
     const baseAlpha = Math.min(
       1,
@@ -252,7 +363,11 @@ export function grid(
       : baseColor;
     const alpha = highlighted ? 1 : baseAlpha;
     if (draws(parts, "lines")) {
-      addGridPosition(batches, color, alpha, vertical);
+      if (lineBatch?.isActive?.()) {
+        lineBatch.addRect(0, vertical, width, Math.max(0.5, context.lineWidth), color, alpha);
+      } else {
+        addGridPosition(batches, scratch.batchPool, color, alpha, vertical);
+      }
     }
     if (draws(parts, "labels") && tick % this.viewport.division === 0) {
       context.globalAlpha = 1;
@@ -263,13 +378,19 @@ export function grid(
   strokeGridBatches(context, batches, 0, width);
   context.globalAlpha = 1;
   if (draws(parts, "playhead")) {
-    context.strokeStyle = this.appearance.playheadColor ?? palette.playhead;
-    context.lineWidth = playheadLineWidth(this.appearance);
     const vertical = verticalAt(playBeat);
-    context.beginPath();
-    context.moveTo(0, vertical);
-    context.lineTo(width, vertical);
-    context.stroke();
+    const color = this.appearance.playheadColor ?? palette.playhead;
+    const lineWidth = playheadLineWidth(this.appearance);
+    if (playheadBatch?.isActive?.()) {
+      playheadBatch.addRect(0, vertical, width, lineWidth, color);
+    } else {
+      context.strokeStyle = color;
+      context.lineWidth = lineWidth;
+      context.beginPath();
+      context.moveTo(0, vertical);
+      context.lineTo(width, vertical);
+      context.stroke();
+    }
   }
   context.lineWidth = 1;
 }
@@ -289,7 +410,12 @@ export function gridForLine(
 ): void {
   const palette = this.cache.palette() ?? readCanvasPalette();
   const factor = this.viewport.factorForLine(lineIndex);
-  const originSeconds = this.viewport.tempo.seconds(this.viewport.origin, factor);
+  const originSeconds = cachedTempoSeconds(
+    this.cache,
+    this.viewport.tempo,
+    this.viewport.origin,
+    factor,
+  );
   const secondsAt = (vertical: number) =>
     originSeconds +
     (height - this.viewport.judgementOffset - vertical) / this.viewport.scaleForArea(area);
@@ -317,8 +443,15 @@ export function gridForLine(
   context.clip();
   context.font = canvasFont("caption");
   context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
-  const batches = new Map<string, GridStrokeBatch>();
-  for (const tick of visibleGridTicks(first, last, stride, highlightedTick)) {
+  const scratch = scratchFor(this);
+  resetGridBatches(scratch);
+  const batches = scratch.batches;
+  const lineBatch = area === "notes" ? this.notesGridBatch : this.eventsGridBatch;
+  const playheadBatch = area === "notes" ? this.notesPlayheadBatch : this.eventsPlayheadBatch;
+  const fallbackColors = gridFallbackColors(palette, scratch.fallbackColors);
+  const colorKeys = beatLineColorKeys(this.viewport.division);
+  const ticks = visibleGridTicksInto(first, last, stride, highlightedTick, scratch.ticks);
+  for (const tick of ticks) {
     const beat = tick / this.viewport.division;
     const vertical = this.viewport.verticalForLine(beat, lineIndex, height, area);
     const major = tick % this.viewport.division === 0;
@@ -327,6 +460,8 @@ export function gridForLine(
       tick,
       this.viewport.division,
       this.appearance.subdivisionColors,
+      fallbackColors,
+      colorKeys,
     );
     const baseAlpha = Math.min(
       1,
@@ -338,7 +473,11 @@ export function gridForLine(
       : baseColor;
     const alpha = highlighted ? 1 : baseAlpha;
     if (draws(parts, "lines")) {
-      addGridPosition(batches, color, alpha, vertical);
+      if (lineBatch?.isActive?.()) {
+        lineBatch.addRect(left, vertical, width, Math.max(0.5, context.lineWidth), color, alpha);
+      } else {
+        addGridPosition(batches, scratch.batchPool, color, alpha, vertical);
+      }
     }
     if (draws(parts, "labels") && major && showBeatLabels) {
       context.globalAlpha = 1;
@@ -351,15 +490,19 @@ export function gridForLine(
   if (draws(parts, "playhead")) {
     const playSeconds = this.viewport.tempo.seconds(playBeat, this.viewport.factor);
     const playLineBeat = this.viewport.tempo.beat(playSeconds, factor);
-    context.strokeStyle = this.appearance.playheadColor ?? palette.playhead;
-    context.lineWidth = playheadLineWidth(this.appearance);
-    context.beginPath();
-    context.moveTo(left, this.viewport.verticalForLine(playLineBeat, lineIndex, height, area));
-    context.lineTo(
-      left + width,
-      this.viewport.verticalForLine(playLineBeat, lineIndex, height, area),
-    );
-    context.stroke();
+    const vertical = this.viewport.verticalForLine(playLineBeat, lineIndex, height, area);
+    const color = this.appearance.playheadColor ?? palette.playhead;
+    const lineWidth = playheadLineWidth(this.appearance);
+    if (playheadBatch?.isActive?.()) {
+      playheadBatch.addRect(left, vertical, width, lineWidth, color);
+    } else {
+      context.strokeStyle = color;
+      context.lineWidth = lineWidth;
+      context.beginPath();
+      context.moveTo(left, vertical);
+      context.lineTo(left + width, vertical);
+      context.stroke();
+    }
   }
   context.restore();
   context.lineWidth = 1;
@@ -383,11 +526,17 @@ export function drawMultiLineGrid(
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, area);
   if (parts.playhead && !parts.lines && !parts.labels) {
     const palette = this.cache.palette() ?? readCanvasPalette();
-    context.save();
-    context.strokeStyle = this.appearance.playheadColor ?? palette.playhead;
-    context.lineWidth = playheadLineWidth(this.appearance);
-    context.beginPath();
+    const playheadBatch = area === "notes" ? this.notesPlayheadBatch : this.eventsPlayheadBatch;
+    const active = playheadBatch?.isActive?.() === true;
+    const lineWidth = playheadLineWidth(this.appearance);
+    const color = this.appearance.playheadColor ?? palette.playhead;
     const playSeconds = this.viewport.tempo.seconds(playBeat, this.viewport.factor);
+    if (!active) {
+      context.save();
+      context.strokeStyle = color;
+      context.lineWidth = lineWidth;
+      context.beginPath();
+    }
     for (let panel = firstPanel; panel <= lastPanel; panel++) {
       const lineIndex = targetLines[panel];
       if (lineIndex === undefined) {
@@ -402,11 +551,17 @@ export function drawMultiLineGrid(
       if (!Number.isFinite(vertical)) {
         continue;
       }
-      context.moveTo(left, vertical);
-      context.lineTo(left + panelWidth, vertical);
+      if (active) {
+        playheadBatch.addRect(left, vertical, panelWidth, lineWidth, color);
+      } else {
+        context.moveTo(left, vertical);
+        context.lineTo(left + panelWidth, vertical);
+      }
     }
-    context.stroke();
-    context.restore();
+    if (!active) {
+      context.stroke();
+      context.restore();
+    }
     return;
   }
   for (let panel = firstPanel; panel <= lastPanel; panel++) {
@@ -451,7 +606,12 @@ export function drawMultiLineBeatLabels(
       continue;
     }
     const factor = this.viewport.factorForLine(lineIndex);
-    const originSeconds = this.viewport.tempo.seconds(this.viewport.origin, factor);
+    const originSeconds = cachedTempoSeconds(
+      this.cache,
+      this.viewport.tempo,
+      this.viewport.origin,
+      factor,
+    );
     const secondsAt = (vertical: number) =>
       originSeconds +
       (height - this.viewport.judgementOffset - vertical) / this.viewport.scaleForArea(area);
@@ -497,6 +657,56 @@ const LINE_LABEL_BASELINE = 16;
 
 /** Draw each visible panel's line index in its top-left corner. */
 export function drawMultiLinePanelLabels(
+  this: TimelineGridReceiver,
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  area: TimelineArea,
+): void {
+  if (this.viewport.panelCount(area) < 2) {
+    return;
+  }
+  const key = multiLinePanelLabelLayerKey(this, width, height, area);
+  const owner = area === "notes" ? this.notesBackdrop : this.eventsBackdrop;
+  const layer = this.cache.canvasLayer(owner, key, width, height, `panel-labels:${area}`);
+  if (layer) {
+    if (layer.repaint) {
+      drawMultiLinePanelLabelsInto.call(this, layer.context, width, height, area);
+    }
+    context.drawImage(layer.canvas, 0, 0, width, height);
+    return;
+  }
+  drawMultiLinePanelLabelsInto.call(this, context, width, height, area);
+}
+
+/** Return every geometry and appearance input used by the cached panel labels. */
+function multiLinePanelLabelLayerKey(
+  receiver: TimelineGridReceiver,
+  width: number,
+  height: number,
+  area: TimelineArea,
+): string {
+  const panelCount = receiver.viewport.panelCount(area);
+  const stride = receiver.viewport.panelStride(width, area);
+  const offset = receiver.viewport.multiLineViewportOffset(width, area);
+  const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, area);
+  const palette = receiver.cache.palette() ?? readCanvasPalette();
+  return [
+    width,
+    height,
+    area,
+    panelCount,
+    stride,
+    offset,
+    firstPanel,
+    lastPanel,
+    receiver.getSession().targetLineIndices.join(","),
+    palette.bottomValue,
+  ].join("|");
+}
+
+/** Paint the panel labels into either the live or an offscreen context. */
+function drawMultiLinePanelLabelsInto(
   this: TimelineGridReceiver,
   context: CanvasRenderingContext2D,
   width: number,

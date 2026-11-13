@@ -13,7 +13,11 @@ import {
 } from "../../../core/global/chart/chart.ts";
 import { createChartObjectId } from "../../../core/global/chart/identity.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
-import { applyRequest, transactionChart } from "../../../core/edit/transaction/apply.ts";
+import {
+  applyRequest,
+  fingerprint,
+  transactionChart,
+} from "../../../core/edit/transaction/apply.ts";
 import {
   chartLocationDiagnostics,
   ensureChartLocations,
@@ -23,6 +27,8 @@ import {
   resetChartLocationDiagnostics,
 } from "../../../core/edit/transaction/locations.ts";
 import { applyChartTransaction } from "../../../core/edit/transaction/preview.ts";
+import { installChartRevisionSeed } from "../../../core/edit/document/chartRevision.ts";
+import { lineContentFingerprintParts } from "../../../core/global/chart/chartContentHash.ts";
 
 /** Build a chart with one normal layer and one extended track per line. */
 function makeEventChart(lineCount = 5, eventsPerTrack = 50) {
@@ -178,6 +184,66 @@ test("findEvent indexes normal layers, the extended layer, and root lists", () =
   assert.equal(root?.line?.index, 0);
   assert.ok(findEvent(chart, shaderEvent.id));
   assert.ok(findEvent(chart, metadataEvent.id));
+});
+
+test("a single uncached event lookup scans owners without building the full index", () => {
+  const chart = makeEventChart(40, 80);
+  const ids = eventIds(chart);
+  resetChartLocationDiagnostics();
+
+  const located = findEvent(chart, ids.at(-1));
+
+  assert.equal(located?.event.id, ids.at(-1));
+  assert.equal(chartLocationDiagnostics().indexBuilds, 0);
+  assert.equal(chartLocationDiagnostics().eventLookups, 1);
+});
+
+test("copy-on-write fingerprint reuse keeps the changed chart digest exact", () => {
+  const chart = makeEventChart(3, 3);
+  fingerprint(chart);
+  const next = transactionChart(chart);
+  next.judgeLineList[0] = {
+    ...next.judgeLineList[0],
+    notes: [createNote(1, 4, 0)],
+  };
+
+  const reused = fingerprint(next);
+  const independentlyHashed = fingerprint(structuredClone(next));
+
+  assert.notEqual(reused, fingerprint(chart));
+  assert.equal(reused, independentlyHashed);
+});
+
+test("worker-primed line digests survive a plain chart copy-on-write edit", () => {
+  const chart = makeEventChart(2, 20);
+  installChartRevisionSeed(chart, {
+    lines: chart.judgeLineList.map(lineContentFingerprintParts),
+  });
+
+  const next = transactionChart(chart);
+  next.judgeLineList[0] = {
+    ...next.judgeLineList[0],
+    notes: [createNote(1, 4, 0)],
+  };
+
+  assert.equal(fingerprint(next), fingerprint(structuredClone(next)));
+});
+
+test("worker array seeds stay exact after an in-place note patch", () => {
+  const chart = makeEventChart(1, 40);
+  const line = chart.judgeLineList[0];
+  line.notes = Array.from({ length: 40 }, (_, index) => createNote(1, index, index));
+  const parts = lineContentFingerprintParts(line, { includeValueDigests: true });
+  installChartRevisionSeed(chart, { lines: [parts] });
+  const session = new EditorSession(chart);
+  const note = line.notes[17];
+
+  const result = applyChartTransaction(session, {
+    notes: { update: [{ id: note.id, patch: { positionX: 999 } }] },
+  });
+
+  assert.equal(result.status, "committed");
+  assert.equal(result.afterFingerprint, fingerprint(structuredClone(session.chart)));
 });
 
 test("unknown note and line ids do not rebuild the index", () => {

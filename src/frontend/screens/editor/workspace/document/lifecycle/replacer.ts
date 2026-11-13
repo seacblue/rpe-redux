@@ -7,12 +7,14 @@ import { assertChart, type Chart } from "../../../../../../core/global/chart/cha
 import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { ChartDiagnostic } from "../../../../../../core/global/chart/diagnostics.ts";
+import type { ChartRevisionSeed } from "../../../../../../core/global/chart/chartRevisionSeed.ts";
 
 /** One validated document ready to replace the current one. */
 export interface DocumentReplacement {
   chart: Chart;
   /** Paged document backing `chart`; its facade may contain placeholders. */
   chartDocument?: ChartDocument;
+  revisionSeed?: ChartRevisionSeed;
   name: string;
   assets: AssetMap;
   folders: Set<string>;
@@ -38,6 +40,7 @@ export function createDocumentReplacer(steps: DocumentReplacementSteps) {
     diagnostics: readonly ChartDiagnostic[] = [],
     readOnly = false,
     chartDocument?: ChartDocument,
+    revisionSeed?: ChartRevisionSeed,
   ): void {
     // A paged facade contains placeholders; its document validated each loaded
     // line as it was parsed, so the whole-chart walk would inspect placeholders.
@@ -48,6 +51,7 @@ export function createDocumentReplacer(steps: DocumentReplacementSteps) {
     steps.install({
       chart,
       ...(chartDocument ? { chartDocument } : {}),
+      ...(revisionSeed ? { revisionSeed } : {}),
       name,
       assets,
       folders: new Set(folders ?? []),

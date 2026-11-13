@@ -66,11 +66,8 @@ export function submitNoteBatchGroups(
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   if (upload.byteLength > instanceBufferCapacity) {
     instanceBufferCapacity = upload.byteLength;
+    gl.bufferData(gl.ARRAY_BUFFER, instanceBufferCapacity, gl.STREAM_DRAW);
   }
-  // Orphan the previous store before writing the next frame. Reusing a store
-  // that the compositor still consumes can make bufferSubData wait for the
-  // Intel driver even when the CPU-side upload is small.
-  gl.bufferData(gl.ARRAY_BUFFER, instanceBufferCapacity, gl.STREAM_DRAW);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
   if (textureUniform) {
     gl.uniform1i(textureUniform, 0);

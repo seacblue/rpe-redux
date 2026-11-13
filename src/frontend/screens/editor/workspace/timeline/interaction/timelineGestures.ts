@@ -82,6 +82,7 @@ export class TimelineGestures {
   private selectionHistoryChart: EditorSession["chart"] | null = null;
   private eventRectIndexSource: TimelineEventRect[] | null = null;
   private readonly eventRectIndex = new Map<number, TimelineEventRect[]>();
+  private eventRectCursor = 0;
 
   /** The active event layer; the live session is its only owner. */
   get layer(): number {
@@ -134,6 +135,47 @@ export class TimelineGestures {
       }
     }
     return this.eventRectIndex.get(multiLine ? lineIndex : -1) ?? EMPTY_EVENT_RECTS;
+  }
+
+  /** Start a paint pass that reuses the previous frame's event rectangles. */
+  beginEventRectFrame(): void {
+    this.eventRectCursor = 0;
+    this.eventRectIndexSource = null;
+    this.eventRectIndex.clear();
+  }
+
+  /** Store one projected event rectangle without allocating when its slot exists. */
+  recordEventRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    eventIndex: number,
+    type: string,
+    lineIndex?: number,
+  ): TimelineEventRect {
+    const slot = this.eventRectCursor++;
+    const previous = this.eventRects[slot];
+    if (previous) {
+      previous.x = x;
+      previous.y = y;
+      previous.width = width;
+      previous.height = height;
+      previous.index = eventIndex;
+      previous.type = type;
+      previous.lineIndex = lineIndex;
+      return previous;
+    }
+    const rectangle = { x, y, width, height, index: eventIndex, type, lineIndex };
+    this.eventRects[slot] = rectangle;
+    return rectangle;
+  }
+
+  /** Finish a paint pass and discard stale rectangles from the prior frame. */
+  finishEventRectFrame(): void {
+    this.eventRects.length = this.eventRectCursor;
+    this.eventRectIndexSource = null;
+    this.eventRectIndex.clear();
   }
 
   /** Create gestures around the active event-interaction handle and live session. */
@@ -201,7 +243,8 @@ export class TimelineGestures {
     this.clipboardPointer = null;
     this.hoverArea = undefined;
     this.cursorLineIndex = undefined;
-    this.eventRects = [];
+    this.eventRects.length = 0;
+    this.eventRectCursor = 0;
     this.eventRectIndexSource = null;
     this.eventRectIndex.clear();
   }
@@ -214,7 +257,8 @@ export class TimelineGestures {
     this.eventCursor = null;
     this.clipboardPointer = null;
     this.cursorLineIndex = undefined;
-    this.eventRects = [];
+    this.eventRects.length = 0;
+    this.eventRectCursor = 0;
     this.eventRectIndexSource = null;
     this.eventRectIndex.clear();
     this.preview = null;

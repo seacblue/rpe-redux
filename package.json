@@ -22,6 +22,7 @@
     "build:icons": "node scripts/buildThemeIcons.mjs",
     "test:unit": "node --test \"src/test/**/*.test.mjs\"",
     "benchmark:streaming": "node --expose-gc scripts/benchmarkChartStreaming.mjs",
+    "benchmark:crud": "node --expose-gc scripts/benchmarkChartCrud.mjs",
     "test:server": "go -C src/backend test ./...",
     "smoke": "node scripts/smoke.mjs",
     "icons:check": "node scripts/checkThemeIcons.mjs",

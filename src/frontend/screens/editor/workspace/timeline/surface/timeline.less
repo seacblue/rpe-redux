@@ -30,7 +30,9 @@
 // overview strips frame whichever field is active.
 .editor.multi-notes .timeline-events,
 .editor.multi-notes .timeline-events-backdrop,
+.editor.multi-notes .timeline-events-grid-batch,
 .editor.multi-notes .timeline-events-playhead,
+.editor.multi-notes .timeline-events-playhead-batch,
 .editor.multi-notes .timeline-event-batch,
 .editor.multi-notes .layer-buttons {
   display: none;
@@ -38,8 +40,11 @@
 
 .editor.multi-events .timeline-notes,
 .editor.multi-events .timeline-notes-backdrop,
+.editor.multi-events .timeline-notes-grid-batch,
 .editor.multi-events .timeline-notes-playhead,
-.editor.multi-events .timeline-note-batch {
+.editor.multi-events .timeline-notes-playhead-batch,
+.editor.multi-events .timeline-note-batch,
+.editor.multi-events .timeline-note-solid-batch {
   display: none;
 }
 
@@ -210,6 +215,31 @@ canvas {
   background: transparent;
 }
 
+.timeline-grid-batch,
+.timeline-playhead-batch {
+  grid-row: 1;
+  pointer-events: none;
+  background: transparent;
+}
+
+.timeline-grid-batch {
+  z-index: 1;
+}
+
+.timeline-playhead-batch {
+  z-index: 2;
+}
+
+.timeline-notes-grid-batch,
+.timeline-notes-playhead-batch {
+  grid-column: 2;
+}
+
+.timeline-events-grid-batch,
+.timeline-events-playhead-batch {
+  grid-column: 3;
+}
+
 .timeline-notes-playhead {
   grid-column: 2;
 }
@@ -236,6 +266,14 @@ canvas {
   background: transparent;
 }
 
+.timeline-note-solid-batch {
+  grid-column: 2;
+  grid-row: 1;
+  z-index: 2;
+  pointer-events: none;
+  background: transparent;
+}
+
 .timeline-events {
   grid-column: 3;
   grid-row: 1;
@@ -249,6 +287,14 @@ canvas {
   grid-column: 3;
   grid-row: 1;
   z-index: 2;
+  pointer-events: none;
+  background: transparent;
+}
+
+.timeline-event-overlay-batch {
+  grid-column: 3;
+  grid-row: 1;
+  z-index: 4;
   pointer-events: none;
   background: transparent;
 }
@@ -317,15 +363,21 @@ canvas {
 
 .editor.notes-hidden .timeline-notes,
 .editor.notes-hidden .timeline-notes-backdrop,
+.editor.notes-hidden .timeline-notes-grid-batch,
 .editor.notes-hidden .timeline-note-batch,
-.editor.notes-hidden .timeline-notes-playhead {
+.editor.notes-hidden .timeline-note-solid-batch,
+.editor.notes-hidden .timeline-notes-playhead,
+.editor.notes-hidden .timeline-notes-playhead-batch {
   display: none;
 }
 
 .editor.events-hidden .timeline-events,
 .editor.events-hidden .timeline-events-backdrop,
+.editor.events-hidden .timeline-events-grid-batch,
 .editor.events-hidden .timeline-events-playhead,
+.editor.events-hidden .timeline-events-playhead-batch,
 .editor.events-hidden .timeline-event-batch,
+.editor.events-hidden .timeline-event-overlay-batch,
 .editor.events-hidden .layer-buttons {
   display: none;
 }
@@ -367,9 +419,13 @@ canvas {
   & .timeline-notes,
   & .timeline-backdrop,
   & .timeline-playhead,
+  & .timeline-grid-batch,
+  & .timeline-playhead-batch,
   & .timeline-note-batch,
+  & .timeline-note-solid-batch,
   & .timeline-events,
-  & .timeline-event-batch {
+  & .timeline-event-batch,
+  & .timeline-event-overlay-batch {
     grid-column: 2;
   }
 }
@@ -387,9 +443,13 @@ canvas {
   & .timeline-notes,
   & .timeline-backdrop,
   & .timeline-playhead,
+  & .timeline-grid-batch,
+  & .timeline-playhead-batch,
   & .timeline-note-batch,
+  & .timeline-note-solid-batch,
   & .timeline-events,
-  & .timeline-event-batch {
+  & .timeline-event-batch,
+  & .timeline-event-overlay-batch {
     grid-column: 3;
   }
 

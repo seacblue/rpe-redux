@@ -37,13 +37,32 @@ export function timelineRenderRange(
   endTime: readonly number[],
   gridCount: number,
 ): TimelineRenderRange {
+  return timelineRenderRangeInto(startTime, endTime, gridCount, {
+    start: 0,
+    end: 0,
+    invalid: false,
+  });
+}
+
+/** Fill a reusable render range to keep dense timeline drawing allocation-free. */
+export function timelineRenderRangeInto(
+  startTime: readonly number[],
+  endTime: readonly number[],
+  gridCount: number,
+  target: TimelineRenderRange,
+): TimelineRenderRange {
   const start = beatValue(startTime);
   const end = beatValue(endTime);
+  target.start = start;
+  target.end = end;
+  target.invalid = false;
   if (end > start) {
-    return { start, end, invalid: false };
+    return target;
   }
   const divisions = Number.isFinite(gridCount) ? Math.max(1, Math.round(gridCount)) : 1;
-  return { start, end: start + 1 / divisions, invalid: true };
+  target.end = start + 1 / divisions;
+  target.invalid = true;
+  return target;
 }
 
 /** Whether an exact chart range has no forward duration. */

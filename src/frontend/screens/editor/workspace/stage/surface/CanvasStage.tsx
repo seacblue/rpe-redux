@@ -24,7 +24,7 @@ import { onboardingAnchorRef } from "../../../../../onboarding/anchors.ts";
 
 /** Compose the stage in paint order; each feature owns its subscriptions and DOM bindings. */
 export function CanvasStage() {
-  const { stage, selectionOverlay } = useTimelineDomSurface().attach;
+  const { stage, selectionOverlay, selectionOverlayBatch } = useTimelineDomSurface().attach;
   const curvePreviewActive = useSyncExternalStore(
     curvePreviewMode.subscribe,
     curvePreviewMode.get,
@@ -52,6 +52,7 @@ export function CanvasStage() {
       <BatchControlsOverlay />
       <PreviewCanvases />
       <AudioAnalysisCanvas />
+      <canvas ref={selectionOverlayBatch} className="selection-overlay-batch" aria-hidden="true" />
       <canvas ref={selectionOverlay} className="selection-overlay" aria-hidden="true" />
       <Editor />
       <ExtensionOverlays />

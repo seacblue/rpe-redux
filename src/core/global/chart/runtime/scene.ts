@@ -178,6 +178,59 @@ function emptyVisibilityStats(): VisibilityQueryStats {
   };
 }
 
+/** Reset one line's reusable visibility stats without allocating a new object. */
+function resetVisibilityStats(target: VisibilityQueryStats): void {
+  target.candidateCount = 0;
+  target.visibleCount = 0;
+  target.spatialCandidateCount = 0;
+  target.temporalCandidateCount = 0;
+  target.holdCandidateCount = 0;
+  target.indexMs = 0;
+}
+
+/** True when ordinary notes need no control-curve or incline sampling. */
+function computeSimpleNoteState(runtime: LineRuntime): boolean {
+  return (
+    !runtime.hasPositionControl &&
+    !runtime.hasSizeControl &&
+    !runtime.hasAlphaControl &&
+    !runtime.hasSkewControl &&
+    !runtime.extended.inclineEvents.sources.length
+  );
+}
+
+/** True when every extended visual track and control curve is constant. */
+function computeSimpleState(runtime: LineRuntime): boolean {
+  return (
+    !runtime.extended.scaleXEvents.sources.length &&
+    !runtime.extended.scaleYEvents.sources.length &&
+    !runtime.extended.colorEvents.sources.length &&
+    !runtime.extended.textEvents.sources.length &&
+    !runtime.extended.inclineEvents.sources.length &&
+    !runtime.hasPositionControl &&
+    !runtime.hasSizeControl &&
+    !runtime.hasAlphaControl &&
+    !runtime.hasSkewControl &&
+    !runtime.hasYControl
+  );
+}
+
+/** True when sampling can skip all event-track and floor lookups. */
+function computeStaticState(runtime: LineRuntime): boolean {
+  return (
+    !runtime.extended.scaleXEvents.sources.length &&
+    !runtime.extended.scaleYEvents.sources.length &&
+    !runtime.extended.colorEvents.sources.length &&
+    !runtime.extended.textEvents.sources.length &&
+    !runtime.extended.inclineEvents.sources.length &&
+    runtime.tracks.moveXEvents.every((track) => track.sources.length === 0) &&
+    runtime.tracks.moveYEvents.every((track) => track.sources.length === 0) &&
+    runtime.tracks.rotateEvents.every((track) => track.sources.length === 0) &&
+    runtime.tracks.alphaEvents.every((track) => track.sources.length === 0) &&
+    runtime.speeds.every((speed) => speed.sources.length === 0)
+  );
+}
+
 /** A certified direction of the accumulated line floor. */
 type FloorDirection = -1 | 0 | 1;
 
@@ -274,10 +327,14 @@ export class LineRuntime {
   declare hasAlphaControl: boolean;
   declare hasSkewControl: boolean;
   declare hasYControl: boolean;
+  /** True when ordinary notes need no control-curve or incline sampling. */
+  declare simpleNoteState: boolean;
   declare yEnvelope: ControlDistanceEnvelope;
   /** True only when every speed layer proves the floor is monotone. */
   declare holdActivationCoveredBySpatial: boolean;
   declare simpleState: boolean;
+  /** True when sampling can skip all event-track and floor lookups. */
+  declare staticState: boolean;
   declare staticScaleY: number;
   declare staticColor: number[];
   /** Cached line states used to anchor active zero-length Holds. */
@@ -348,6 +405,7 @@ export class LineRuntime {
     this.hasSizeControl = this.controls.size.points.length > 1;
     this.hasAlphaControl = this.controls.alpha.points.length > 1;
     this.hasSkewControl = this.controls.skew.points.length > 1;
+    this.simpleNoteState = computeSimpleNoteState(this);
     this.notes = (line.notes ?? []).flatMap((note, noteIndex) => {
       if (!isOrderedBeatRange(note.startTime, note.endTime)) {
         return [];
@@ -380,17 +438,8 @@ export class LineRuntime {
     this.lastVisibilityStats = emptyVisibilityStats();
     this.staticScaleY = Number(this.extended.scaleYEvents.fallback);
     this.staticColor = [...(this.extended.colorEvents.fallback as number[])];
-    this.simpleState =
-      !this.extended.scaleXEvents.sources.length &&
-      !this.extended.scaleYEvents.sources.length &&
-      !this.extended.colorEvents.sources.length &&
-      !this.extended.textEvents.sources.length &&
-      !this.extended.inclineEvents.sources.length &&
-      !this.hasPositionControl &&
-      !this.hasSizeControl &&
-      !this.hasAlphaControl &&
-      !this.hasSkewControl &&
-      !this.hasYControl;
+    this.simpleState = computeSimpleState(this);
+    this.staticState = computeStaticState(this);
   }
 
   /**
@@ -531,17 +580,9 @@ export class LineRuntime {
     ) as LineRuntime["extended"];
     next.staticScaleY = Number(next.extended.scaleYEvents.fallback);
     next.staticColor = [...(next.extended.colorEvents.fallback as number[])];
-    next.simpleState =
-      !next.extended.scaleXEvents.sources.length &&
-      !next.extended.scaleYEvents.sources.length &&
-      !next.extended.colorEvents.sources.length &&
-      !next.extended.textEvents.sources.length &&
-      !next.extended.inclineEvents.sources.length &&
-      !next.hasPositionControl &&
-      !next.hasSizeControl &&
-      !next.hasAlphaControl &&
-      !next.hasSkewControl &&
-      !next.hasYControl;
+    next.simpleState = computeSimpleState(next);
+    next.simpleNoteState = computeSimpleNoteState(next);
+    next.staticState = computeStaticState(next);
     return next;
   }
 
@@ -570,6 +611,33 @@ export class LineRuntime {
 
   /** Sample the line's transform and visual channels, writing into `target` when given. */
   state(seconds: number, target?: LineState): LineState {
+    if (this.staticState) {
+      const result =
+        target ??
+        ({
+          x: 0,
+          y: 0,
+          rotation: 0,
+          alpha: 0,
+          scaleX: 1,
+          scaleY: this.staticScaleY,
+          color: [...this.staticColor],
+          text: "",
+          incline: 0,
+          floor: 0,
+        } satisfies LineState);
+      result.x = 0;
+      result.y = 0;
+      result.rotation = 0;
+      result.alpha = 0;
+      result.scaleX = 1;
+      result.scaleY = this.staticScaleY;
+      result.color = this.staticColor;
+      result.text = "";
+      result.incline = 0;
+      result.floor = 0;
+      return result;
+    }
     const x = this.value("moveXEvents", seconds);
     const y = this.value("moveYEvents", seconds);
     const rotation = this.value("rotateEvents", seconds);
@@ -644,26 +712,47 @@ export class LineRuntime {
     return target;
   }
 
-  /** Fill `result` with conservative candidates visible around `seconds`. */
+  /** Fill reusable note and optional Hold buffers with conservative visible candidates. */
   visibleNotes(
     seconds: number,
     state: LineState,
     radius = 1600,
     result: NoteEntry[] = [],
+    holdResult?: NoteEntry[],
   ): NoteEntry[] {
     result.length = 0;
+    if (holdResult) {
+      holdResult.length = 0;
+    }
+    if (this.notes.length === 0) {
+      resetVisibilityStats(this.lastVisibilityStats);
+      return result;
+    }
     if (state.alpha < 0) {
-      this.lastVisibilityStats = emptyVisibilityStats();
+      resetVisibilityStats(this.lastVisibilityStats);
       return result;
     }
     const queryStarted = performance.now();
     this.visibility.query(seconds, state.floor, radius, result);
     const indexMs = performance.now() - queryStarted;
     if (this.hasYControl && result.length > 1) {
-      result.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
+      let ordered = true;
+      let previousIndex = result[0].noteIndex ?? 0;
+      for (let index = 1; index < result.length; index += 1) {
+        const noteIndex = result[index].noteIndex ?? 0;
+        if (noteIndex < previousIndex) {
+          ordered = false;
+          break;
+        }
+        previousIndex = noteIndex;
+      }
+      if (!ordered) {
+        result.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
+      }
     }
     const candidateCount = result.length;
     let write = 0;
+    let holdWrite = 0;
     for (const entry of result) {
       if (entry.end < seconds || entry.start - seconds > (entry.note.visibleTime ?? 999999)) {
         continue;
@@ -675,15 +764,23 @@ export class LineRuntime {
       ) {
         continue;
       }
-      result[write++] = entry;
+      if (holdResult && entry.note.type === 2) {
+        holdResult[holdWrite++] = entry;
+      } else {
+        result[write++] = entry;
+      }
     }
     result.length = write;
-    this.lastVisibilityStats = {
-      ...this.visibility.lastQueryStats,
-      candidateCount,
-      visibleCount: write,
-      indexMs,
-    };
+    if (holdResult) {
+      holdResult.length = holdWrite;
+    }
+    const stats = this.lastVisibilityStats;
+    stats.spatialCandidateCount = this.visibility.lastQueryStats.spatialCandidateCount;
+    stats.temporalCandidateCount = this.visibility.lastQueryStats.temporalCandidateCount;
+    stats.holdCandidateCount = this.visibility.lastQueryStats.holdCandidateCount;
+    stats.candidateCount = candidateCount;
+    stats.visibleCount = write;
+    stats.indexMs = indexMs;
     return result;
   }
 
@@ -755,6 +852,19 @@ export class LineRuntime {
     const side = noteIsAbove(note) ? 1 : -1;
     const isHold = note.type === 2;
     const positionX = note.positionX ?? 0;
+    if (!isHold && this.simpleNoteState) {
+      const target =
+        result ??
+        ({ x: 0, y: 0, tail: 0, size: 0, alpha: 0, skew: 0, showHead: false } satisfies NoteState);
+      target.x = positionX;
+      target.y = distance * speed * side;
+      target.tail = (entry.tail - state.floor) * speed * side;
+      target.size = note.size ?? 1;
+      target.alpha = (note.alpha ?? 255) / 255;
+      target.skew = 0;
+      target.showHead = true;
+      return target;
+    }
     const positionFactor =
       isHold || !this.hasPositionControl ? 1 : this.controls.pos.value(distance);
     const verticalFactor = !isHold && this.hasYControl ? this.controls.y.value(distance) : 1;
@@ -815,6 +925,22 @@ const EMPTY_LINE_STATE: SampledLineState = Object.freeze({
 /** Return the shared empty state for an unmaterialized line. */
 function emptyLineState(): SampledLineState {
   return EMPTY_LINE_STATE;
+}
+
+/** Compose one line's local state under its parent's world transform. */
+function composeParentState(
+  parent: SampledLineState,
+  child: SampledLineState,
+  line: JudgeLine,
+): void {
+  const angle = (-parent.rotation * Math.PI) / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const localX = child.x;
+  const localY = child.y;
+  child.x = parent.x + localX * cosine - localY * sine;
+  child.y = parent.y + localX * sine + localY * cosine;
+  child.rotation += inheritsParentRotation(line) ? parent.rotation : 0;
 }
 
 /** Copy a sampled line state into `target`, or into a new object. */
@@ -932,6 +1058,50 @@ function sameSpeedSources(previous: JudgeLine, next: JudgeLine): boolean {
   return true;
 }
 
+/**
+ * Build a parent-before-child order for the frame sampler.
+ *
+ * `null` means the chart contains a parent cycle and must use the defensive
+ * recursive sampler. Invalid out-of-range parents are treated as roots, which
+ * matches the sampler's existing behavior for malformed but loadable charts.
+ */
+function parentSampleOrder(lines: readonly JudgeLine[]): number[] | null {
+  const children = Array.from({ length: lines.length }, () => [] as number[]);
+  const pendingParents = new Uint32Array(lines.length);
+  let hasParent = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const parent = lineParentIndex(lines[index]?.father);
+    if (!Number.isInteger(parent) || parent < 0 || parent >= lines.length) {
+      continue;
+    }
+    hasParent = true;
+    if (parent === index) {
+      return null;
+    }
+    pendingParents[index] = 1;
+    children[parent].push(index);
+  }
+  if (!hasParent) {
+    return [];
+  }
+  const queue: number[] = [];
+  for (let index = 0; index < pendingParents.length; index += 1) {
+    if (pendingParents[index] === 0) {
+      queue.push(index);
+    }
+  }
+  const order: number[] = [];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const index = queue[cursor];
+    order.push(index);
+    for (const child of children[index]) {
+      pendingParents[child] = 0;
+      queue.push(child);
+    }
+  }
+  return order.length === lines.length ? order : null;
+}
+
 /** True when `next` keeps every existing note and only appends new ones. */
 function extendsNotes(previous: JudgeLine, next: JudgeLine): boolean {
   const before = previous.notes ?? [];
@@ -974,11 +1144,17 @@ export class SceneRuntime {
   declare orderValues: Float64Array;
   declare sortedOrder: number[];
   declare defaultLineColor: number[];
+  /** True when every rendered line's world state is time-invariant. */
+  declare allStatesStatic: boolean;
   private sampleStatus = new Uint8Array();
   private sampledSeconds = Number.NaN;
   private sampledTempo: TempoSource | null = null;
   private sampledStates: SampledLineState[] | null = null;
   private lineSamples = new WeakMap<LineRuntime, { seconds: number; state: SampledLineState }>();
+  /** Parent-before-child order used by the allocation-free frame sampler. */
+  private parentOrder: number[] | null = null;
+  /** Parentless charts can sample each line without recursive resolution. */
+  private hasParentLines = false;
   private runtimeById = new Map<string, LineRuntime>();
 
   /** Create an empty runtime with the default line colour. */
@@ -996,11 +1172,14 @@ export class SceneRuntime {
     this.orderLines = [];
     this.orderValues = new Float64Array();
     this.sortedOrder = [];
+    this.allStatesStatic = false;
     this.sampleStatus = new Uint8Array();
     this.sampledSeconds = Number.NaN;
     this.sampledTempo = null;
     this.sampledStates = null;
     this.lineSamples = new WeakMap();
+    this.parentOrder = null;
+    this.hasParentLines = false;
     this.runtimeById.clear();
   }
 
@@ -1025,6 +1204,10 @@ export class SceneRuntime {
     this.sampledSeconds = Number.NaN;
     this.sampledStates = null;
     const sourceLines = chart.judgeLineList ?? [];
+    this.hasParentLines = sourceLines.some((line) => {
+      const parent = lineParentIndex(line.father);
+      return Number.isInteger(parent) && parent >= 0;
+    });
     const previousById = this.runtimeById;
     this.runtimeById = new Map();
     this.lines = sourceLines.map((line) => {
@@ -1056,6 +1239,8 @@ export class SceneRuntime {
       }
       return runtime;
     });
+    this.allStatesStatic = this.lines.every((runtime) => !runtime || runtime.staticState);
+    this.parentOrder = parentSampleOrder(sourceLines);
     const sameOrder =
       sourceLines.length === this.orderLines.length &&
       sourceLines.every(
@@ -1070,6 +1255,31 @@ export class SceneRuntime {
         .sort((left, right) => this.orderValues[left] - this.orderValues[right] || left - right);
     }
     this.order = this.sortedOrder;
+  }
+
+  /**
+   * Sample one line into reusable storage.
+   *
+   * The cached local state is reused when it belongs to the requested time or
+   * the line is time-invariant, so a static line costs one copy per frame.
+   */
+  private sampledLineState(
+    runtime: LineRuntime,
+    seconds: number,
+    slot: SampledLineState | undefined,
+  ): SampledLineState {
+    const cached = this.lineSamples.get(runtime);
+    if (cached && (cached.seconds === seconds || runtime.staticState)) {
+      return copyLineState(slot, cached.state);
+    }
+    const localState = runtime.state(seconds, cached?.state);
+    const state = copyLineState(slot, localState);
+    if (cached) {
+      cached.seconds = seconds;
+    } else {
+      this.lineSamples.set(runtime, { seconds, state: localState });
+    }
+    return state;
   }
 
   /**
@@ -1099,19 +1309,7 @@ export class SceneRuntime {
       }
       const line = runtime.line;
       const parent = lineParentIndex(line.father);
-      const cached = this.lineSamples.get(runtime);
-      let state: SampledLineState;
-      if (cached && cached.seconds === seconds) {
-        state = copyLineState(states[index], cached.state);
-        states[index] = state;
-      } else {
-        state = runtime.state(seconds, states[index]);
-        states[index] = state;
-        this.lineSamples.set(runtime, {
-          seconds,
-          state: copyLineState(undefined, state),
-        });
-      }
+      states[index] = this.sampledLineState(runtime, seconds, states[index]);
       if (Number.isInteger(parent) && parent >= 0 && parent < this.lines.length) {
         if (!resolve(parent)) {
           status[index] = 2;
@@ -1123,14 +1321,7 @@ export class SceneRuntime {
           status[index] = 2;
           return false;
         }
-        const angle = (-ancestor.rotation * Math.PI) / 180;
-        const cosine = Math.cos(angle);
-        const sine = Math.sin(angle);
-        const localX = local.x;
-        const localY = local.y;
-        local.x = ancestor.x + localX * cosine - localY * sine;
-        local.y = ancestor.y + localX * sine + localY * cosine;
-        local.rotation += inheritsParentRotation(line) ? ancestor.rotation : 0;
+        composeParentState(ancestor, local, line);
       }
       status[index] = 2;
       return true;
@@ -1166,6 +1357,45 @@ export class SceneRuntime {
       for (let index = 0; index < this.sampledStates.length; index += 1) {
         target[index] = this.sampledStates[index];
       }
+      return target;
+    }
+    if (!this.hasParentLines) {
+      target.length = this.lines.length;
+      const previous = this.sampledStates;
+      for (let index = 0; index < this.lines.length; index++) {
+        const runtime = this.lines[index];
+        if (runtime?.staticState && previous?.[index]) {
+          target[index] = previous[index];
+        } else {
+          target[index] = runtime ? runtime.state(seconds, target[index]) : emptyLineState();
+        }
+      }
+      this.sampledSeconds = seconds;
+      this.sampledTempo = this.tempo;
+      this.sampledStates = target;
+      return target;
+    }
+    if (this.parentOrder !== null) {
+      target.length = this.lines.length;
+      for (const index of this.parentOrder) {
+        const runtime = this.lines[index];
+        if (!runtime) {
+          target[index] = emptyLineState();
+          continue;
+        }
+        target[index] = this.sampledLineState(runtime, seconds, target[index]);
+        const parent = lineParentIndex(runtime.line.father);
+        if (Number.isInteger(parent) && parent >= 0 && parent < this.lines.length) {
+          const ancestor = target[parent];
+          const local = target[index];
+          if (ancestor && local) {
+            composeParentState(ancestor, local, runtime.line);
+          }
+        }
+      }
+      this.sampledSeconds = seconds;
+      this.sampledTempo = this.tempo;
+      this.sampledStates = target;
       return target;
     }
     if (this.sampleStatus.length !== this.lines.length) {

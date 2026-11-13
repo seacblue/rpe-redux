@@ -71,6 +71,45 @@ test("hit effects use the post-event position and the configured effect scale", 
   assert.equal(pictures.at(-1)[1] + pictures.at(-1)[3] / 2, 300);
 });
 
+test("minimal hit-effect surfaces do not retain sampled positions across frames", () => {
+  const hit = { start: 1, end: 1, note: { type: 1 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  let x = 10;
+  const pictures = [];
+  const surface = {
+    skin: { particleFrameCount: 30, tinted: () => ({}) },
+    noteSize: 175,
+    hitEffectScale: 1,
+    effectsSince: 0,
+    defaultParticleColor: [255, 255, 255],
+  };
+  const frame = {
+    context: { drawImage: (...args) => pictures.push(args), fillRect() {} },
+    scene: {
+      lines: [line],
+      sampler: () => () => ({ x, y: 0, rotation: 0 }),
+    },
+    order: [0],
+    seconds: 1.1,
+    width: 200,
+    height: 200,
+    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
+  };
+  drawHitEffects(surface, frame);
+  const firstCenter = pictures.at(-1)[1] + pictures.at(-1)[3] / 2;
+  x = 80;
+  drawHitEffects(surface, frame);
+  const secondCenter = pictures.at(-1)[1] + pictures.at(-1)[3] / 2;
+  assert.equal(firstCenter, 110);
+  assert.equal(secondCenter, 180);
+});
+
 test("a hit samples both the line and its parent after simultaneous teleports", () => {
   const chart = createChart();
   const parent = chart.judgeLineList[0];

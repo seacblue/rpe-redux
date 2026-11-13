@@ -10,6 +10,9 @@ import type { TimelineViewport } from "../viewport/timelineViewport.ts";
 import type { TimelineMethodSurface } from "./timelineMethods.ts";
 import type { TimelineEventBatch } from "../events/timelineEventBatch.ts";
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { TimelineLineBatch } from "../../../canvas/timelineLineBatch.ts";
+import type { TimelineSolidBatch } from "../../../canvas/timelineSolidBatch.ts";
+import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 
 /**
  * Structural seam shared by the Timeline class and its independently
@@ -25,13 +28,19 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   readonly appearance: TimelineAppearance;
   readonly cache: TimelineCache;
   notesBackdrop: HTMLCanvasElement;
+  notesGridBatch: TimelineLineBatch;
   notesPlayhead: HTMLCanvasElement;
+  notesPlayheadBatch: TimelineLineBatch;
   notesCanvas: HTMLCanvasElement;
   noteBatch: NoteBatch;
+  noteSolidBatch: TimelineSolidBatch;
   eventsBackdrop: HTMLCanvasElement;
+  eventsGridBatch: TimelineLineBatch;
   eventsPlayhead: HTMLCanvasElement;
+  eventsPlayheadBatch: TimelineLineBatch;
   eventsCanvas: HTMLCanvasElement;
   eventBatch: TimelineEventBatch;
+  eventOverlayBatch: TimelineOverlayBatch;
   getSession: () => EditorSession;
   getPreviewSession(): EditorSession | null;
   /** Note ids another room member selected, drawn with the collaboration tint. */
@@ -51,7 +60,18 @@ export type TimelineGestureReceiver = Pick<
 /** The drawing contract for the shared grid and multi-line grid labels. */
 export type TimelineGridReceiver = Pick<
   TimelineRuntimeSurface,
-  "appearance" | "cache" | "getSession" | "gridForLine" | "gestures" | "viewport"
+  | "appearance"
+  | "cache"
+  | "eventsGridBatch"
+  | "eventsPlayheadBatch"
+  | "getSession"
+  | "gridForLine"
+  | "gestures"
+  | "notesGridBatch"
+  | "notesBackdrop"
+  | "eventsBackdrop"
+  | "notesPlayheadBatch"
+  | "viewport"
 >;
 
 /** The contract used while resolving a rectangle selection. */
@@ -123,7 +143,9 @@ export type TimelineNoteDrawingReceiver = Pick<
   | "grid"
   | "movedNote"
   | "noteBatch"
+  | "noteSolidBatch"
   | "notesBackdrop"
+  | "notesGridBatch"
   | "notesCanvas"
   | "remoteSelectedNoteIds"
   | "rectangleStart"
@@ -140,7 +162,14 @@ export type TimelineCurveGhostReceiver = Pick<
 /** The lightweight moving overlay shared by notes and events timelines. */
 export type TimelinePlayheadDrawingReceiver = Pick<
   TimelineRuntimeSurface,
-  "drawMultiLineGrid" | "eventsPlayhead" | "getSession" | "grid" | "notesPlayhead" | "viewport"
+  | "drawMultiLineGrid"
+  | "eventsPlayhead"
+  | "eventsPlayheadBatch"
+  | "getSession"
+  | "grid"
+  | "notesPlayhead"
+  | "notesPlayheadBatch"
+  | "viewport"
 >;
 
 /** The event canvas drawing contract. */
@@ -153,10 +182,11 @@ export type TimelineEventDrawingReceiver = Pick<
   | "drawMultiLineEvents"
   | "drawMultiLineGrid"
   | "drawShaderEvents"
-  | "drawTrajectoryEvent"
   | "eventTypes"
   | "eventBatch"
+  | "eventOverlayBatch"
   | "eventsBackdrop"
+  | "eventsGridBatch"
   | "eventsCanvas"
   | "getSession"
   | "gestures"
@@ -169,7 +199,13 @@ export type TimelineEventDrawingReceiver = Pick<
 /** The event overlay contract, without event-canvas pointer interaction. */
 export type TimelineEventOverlayReceiver = Pick<
   TimelineRuntimeSurface,
-  "appearance" | "cache" | "getSession" | "gestures" | "remoteSelectedEventIds" | "viewport"
+  | "appearance"
+  | "cache"
+  | "eventOverlayBatch"
+  | "getSession"
+  | "gestures"
+  | "remoteSelectedEventIds"
+  | "viewport"
 >;
 
 /** The pending event preview contract: placement geometry plus the shared event-bar resources. */

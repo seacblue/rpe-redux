@@ -135,8 +135,16 @@ export function TimelineCanvases() {
         surfaceRef={surface.attach.notesBackdrop}
       />
       <BatchCanvas
+        className="timeline-grid-batch timeline-notes-grid-batch"
+        surfaceRef={surface.attach.notesGridBatch}
+      />
+      <BatchCanvas
         className="timeline-playhead timeline-notes-playhead"
         surfaceRef={surface.attach.notesPlayhead}
+      />
+      <BatchCanvas
+        className="timeline-playhead-batch timeline-notes-playhead-batch"
+        surfaceRef={surface.attach.notesPlayheadBatch}
       />
       <EditingCanvas
         id="notes"
@@ -146,12 +154,24 @@ export function TimelineCanvases() {
       />
       <BatchCanvas className="timeline-note-batch" surfaceRef={surface.attach.noteBatch} />
       <BatchCanvas
+        className="timeline-note-solid-batch"
+        surfaceRef={surface.attach.noteSolidBatch}
+      />
+      <BatchCanvas
         className="timeline-backdrop timeline-events-backdrop"
         surfaceRef={surface.attach.eventsBackdrop}
       />
       <BatchCanvas
+        className="timeline-grid-batch timeline-events-grid-batch"
+        surfaceRef={surface.attach.eventsGridBatch}
+      />
+      <BatchCanvas
         className="timeline-playhead timeline-events-playhead"
         surfaceRef={surface.attach.eventsPlayhead}
+      />
+      <BatchCanvas
+        className="timeline-playhead-batch timeline-events-playhead-batch"
+        surfaceRef={surface.attach.eventsPlayheadBatch}
       />
       <EditingCanvas
         id="events"
@@ -160,6 +180,10 @@ export function TimelineCanvases() {
         surfaceRef={surface.attach.events}
       />
       <BatchCanvas className="timeline-event-batch" surfaceRef={surface.attach.eventBatch} />
+      <BatchCanvas
+        className="timeline-event-overlay-batch"
+        surfaceRef={surface.attach.eventOverlayBatch}
+      />
       <OverviewStrip
         name="history-strip"
         bindings={activeOverview?.history}

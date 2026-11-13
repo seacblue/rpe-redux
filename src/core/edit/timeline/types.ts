@@ -45,6 +45,9 @@ export interface TimelineEventRect {
 
 export type TimelineNoteEntry = IntervalEntry<TimelineNote> & { lineIndex: number };
 
+/** Visible event entry with its already-projected invalid-range flag. */
+export type TimelineEventEntry = IntervalEntry<JudgeLineEvent> & { invalid: boolean };
+
 export interface NoteIndex {
   notes: TimelineNote[];
   index: IntervalIndex<TimelineNote>;

@@ -187,6 +187,8 @@ export interface PreviewFrame {
   /** Uniform fitted scale for screen-anchored HUD; the free camera never changes it. */
   screenScale: number;
   viewport: PreviewViewport;
+  /** Shader effects sampled once for this frame and shared by composition passes. */
+  shaderEffects: readonly PreviewShaderEffect[];
   /** Changes only when the primary canvas pixels can change. */
   shaderSourceRevision: number;
 }

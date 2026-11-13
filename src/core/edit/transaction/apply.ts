@@ -6,14 +6,27 @@
  * module; it never imports either caller. An internal origin tag travels from a
  * detached request to the history entry its commit records.
  */
-import { createLine, EXTENDED_TYPES, type Chart } from "../../global/chart/chart.ts";
+import {
+  createLine,
+  countScoringNotes,
+  EXTENDED_TYPES,
+  markChartObjectIdNormalized,
+  markChartObjectCollectionNormalized,
+  noteScoringWeight,
+  type Chart,
+  type JudgeLine,
+  type JudgeLineEvent,
+  type JudgeLineNote,
+} from "../../global/chart/chart.ts";
 import {
   createChartObjectId,
   isChartObjectId,
   type ChartObjectId,
 } from "../../global/chart/identity.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
+import { removeValueContentFingerprint } from "../../global/chart/chartContentHash.ts";
 import { isRecord } from "../../utils/guards.ts";
+import { containsCycle } from "../../global/chart/cycles.ts";
 import type { EditorSession } from "../session/session.ts";
 import type {
   ChartTransactionRequest,
@@ -32,26 +45,31 @@ import type {
 import type { HistoryEntryMetadata, HistoryEntryOrigin } from "../session/history.ts";
 import { t } from "../../../i18n/index.ts";
 import {
+  adoptChartLocations,
+  appendObjectIdView,
   collectChartObjectIds,
+  detachChartLocations,
   ensureChartLocations,
+  eventTrackSpliced,
   findEvent,
-  invalidateChartLocations,
+  inheritChartLocations,
+  inheritObjectIdView,
   locateLine,
   locateNote,
+  noteLineSpliced,
   rebuildChartLocations,
   registerEventInIndex,
+  registerLineInIndex,
   registerNoteInIndex,
   type LocatedLine,
 } from "./locations.ts";
 import {
   ensureEventList,
   issue,
-  markNoteCount,
   mutableEventListFor,
   mutableLine,
   mutableNote,
   mutableNotes,
-  refreshNoteCounts,
   type MutableTransactionState,
 } from "./mutable.ts";
 import { applyJudgeLinePatch, validateTouchedLineRelations } from "./linePatches.ts";
@@ -60,6 +78,24 @@ import { applyTiming } from "./timing.ts";
 const NOTE_PATCH_BLOCKLIST = new Set(["id"]);
 const EVENT_PATCH_BLOCKLIST = new Set(["id", "line", "lineIndex", "eventType", "layer"]);
 const UNSAFE_PATCH_FIELDS = new Set(["__proto__", "prototype", "constructor"]);
+
+/**
+ * Applies one line's scoring-count delta.
+ *
+ * A line's current `numOfNotes` is the authoritative start the kernel edits, so
+ * inserts, deletes, and note-type patches adjust it instead of recounting an
+ * entire line. A chart line without a numeric count falls back to one exact
+ * recount of its final notes.
+ */
+function adjustNoteCount(line: JudgeLine, delta: number): void {
+  if (!delta) {
+    return;
+  }
+  line.numOfNotes =
+    typeof line.numOfNotes === "number"
+      ? Math.max(0, line.numOfNotes + delta)
+      : countScoringNotes(line.notes);
+}
 
 /** Private audit origins: request tag, then the plan chart its preview commits. */
 const requestOrigins = new WeakMap<object, HistoryEntryOrigin>();
@@ -80,19 +116,29 @@ export { issue } from "./mutable.ts";
 
 /**
  * Clones only the containers a transaction may mutate.
- * Judge lines stay shared and are cloned on first mutation.
+ *
+ * Judge lines stay shared and are cloned on first mutation, and the source
+ * chart's location index moves to the copy so a one-object edit reuses it.
+ * Untouched line objects stay shared, so their cached content digests are
+ * reused without copying a per-chart digest map.
  */
 export function transactionChart(source: Chart): Chart {
-  return {
+  const target = {
     ...source,
-    META: structuredClone(source.META),
-    BPMList: structuredClone(source.BPMList),
+    // A transaction replaces metadata keys and the whole tempo map instead of
+    // mutating them in place, so a shallow header copy isolates the source and
+    // keeps the nested effect list identical for incremental id normalization.
+    META: { ...source.META },
+    BPMList: source.BPMList,
     judgeLineList: source.judgeLineList ? [...source.judgeLineList] : source.judgeLineList,
-    ...(Array.isArray(source.effects) ? { effects: structuredClone(source.effects) } : {}),
-    ...(Array.isArray(source.shaderEvents)
-      ? { shaderEvents: structuredClone(source.shaderEvents) }
-      : {}),
+    // Transaction operations do not mutate these root event arrays. Reusing
+    // them lets incremental id normalization distinguish a line edit from a
+    // root-chart replacement without scanning every object again.
+    ...(Array.isArray(source.effects) ? { effects: source.effects } : {}),
+    ...(Array.isArray(source.shaderEvents) ? { shaderEvents: source.shaderEvents } : {}),
   };
+  inheritChartLocations(source, target);
+  return target;
 }
 
 /** Copy and freeze an issue list for a public transaction result. */
@@ -160,8 +206,9 @@ function nextId(
   value: unknown,
   path: string,
 ): ChartObjectId | null {
-  ensureUsedIds(state);
   if (value !== undefined) {
+    // Caller-supplied ids must still be checked against the complete chart.
+    ensureUsedIds(state);
     if (!isChartObjectId(value)) {
       state.issues.push(issue("object.id.invalid", path));
       return null;
@@ -173,6 +220,10 @@ function nextId(
     state.usedIds.add(value);
     return value;
   }
+  // Generated ids already come from the shared UUID-shaped identity factory.
+  // Avoid the million-object scan that was previously used to prove a random
+  // id unique; generated editor ids use the same collision model everywhere
+  // else in the editor, while explicit ids keep the strict validation path.
   let id = createChartObjectId();
   while (state.usedIds.has(id)) {
     id = createChartObjectId();
@@ -208,7 +259,12 @@ function applyPatch(
       continue;
     }
     try {
-      target[key] = clonePatchValue(value);
+      const cloned = clonePatchValue(value);
+      if (containsCycle(cloned)) {
+        issues.push(issue("patch.value.cyclic", `${path}.${key}`));
+        continue;
+      }
+      target[key] = cloned;
     } catch (error) {
       issues.push(
         issue(
@@ -315,9 +371,18 @@ function insertNote(
     return;
   }
   note.id = id;
+  if (entry.note.id === undefined) {
+    markChartObjectIdNormalized(note);
+  }
   notes.push(note);
+  appendObjectIdView(notes, id);
+  (state.changedNotes ??= new Set()).add({
+    note,
+    lineIndex: located.index,
+    noteIndex: notes.length - 1,
+  });
   registerNoteInIndex(state.chart, located.index, id, notes.length - 1);
-  markNoteCount(state, located.index);
+  adjustNoteCount(line, noteScoringWeight(note));
   addAffected(state, id);
   addAffected(state, line.id);
 }
@@ -361,7 +426,12 @@ function insertEvent(
     return;
   }
   event.id = id;
-  events.push({ start: 0, end: 0, ...event });
+  const nextEvent = { start: 0, end: 0, ...event };
+  if (entry.event.id === undefined) {
+    markChartObjectIdNormalized(nextEvent);
+  }
+  events.push(nextEvent);
+  appendObjectIdView(events, id);
   const layerIndex =
     entry.layer === "extended" ||
     (entry.layer === undefined && (EXTENDED_TYPES as readonly string[]).includes(entry.eventType))
@@ -377,6 +447,13 @@ function insertEvent(
     id,
     events.length - 1,
   );
+  (state.changedEvents ??= new Set()).add({
+    event: nextEvent,
+    lineIndex: located.index,
+    layerIndex,
+    track: entry.eventType,
+    eventIndex: events.length - 1,
+  });
   addAffected(state, id);
   addAffected(state, line.id);
 }
@@ -412,8 +489,11 @@ function updateNotes(
       state.issues.push(issue("note.id.notFound", `notes.update[${index}].id`, id));
       continue;
     }
+    const previousWeight = noteScoringWeight(located.note);
+    const previousNotes = located.notes;
     const line = mutableLine(state, { line: located.line, index: located.lineIndex });
     const notes = mutableNotes(state, line, located.lineIndex);
+    inheritObjectIdView(previousNotes, notes);
     applyPatch(
       mutableNote(notes, located.noteIndex),
       update.patch,
@@ -421,11 +501,26 @@ function updateNotes(
       `notes.update[${index}].patch`,
       state.issues,
     );
-    markNoteCount(state, located.lineIndex);
+    const changedNote = notes[located.noteIndex];
+    if (changedNote) {
+      (state.changedNotes ??= new Set()).add({
+        note: changedNote,
+        lineIndex: located.lineIndex,
+        noteIndex: located.noteIndex,
+      });
+    }
+    adjustNoteCount(line, noteScoringWeight(changedNote) - previousWeight);
     addAffected(state, id);
     addAffected(state, line.id);
   }
-  const deletedByLine = new Map<number, Set<ChartObjectId>>();
+  const deletedByLine = new Map<
+    number,
+    {
+      readonly indices: number[];
+      readonly ids: ChartObjectId[];
+      readonly notes: JudgeLineNote[];
+    }
+  >();
   for (const [index, value] of deletes.entries()) {
     const id = validateObjectId(value, `notes.delete[${index}]`, state);
     if (!id) {
@@ -442,25 +537,40 @@ function updateNotes(
       continue;
     }
     mutableLine(state, { line: located.line, index: located.lineIndex });
-    const ids = deletedByLine.get(located.lineIndex) ?? new Set<ChartObjectId>();
-    ids.add(id);
-    deletedByLine.set(located.lineIndex, ids);
+    const deleted = deletedByLine.get(located.lineIndex);
+    if (deleted) {
+      deleted.indices.push(located.noteIndex);
+      deleted.ids.push(id);
+    } else {
+      deletedByLine.set(located.lineIndex, {
+        indices: [located.noteIndex],
+        ids: [id],
+        notes: located.notes,
+      });
+    }
     addAffected(state, id);
     addAffected(state, located.line.id);
   }
-  for (const [lineIndex, ids] of deletedByLine) {
+  for (const [lineIndex, deleted] of deletedByLine) {
     const line = state.chart.judgeLineList?.[lineIndex];
     if (!line) {
       continue;
     }
-    const notes = mutableNotes(state, line, lineIndex);
-    line.notes = notes.filter((note) => !(isChartObjectId(note.id) && ids.has(note.id)));
-    markNoteCount(state, lineIndex);
+    const sourceNotes = mutableNotes(state, line, lineIndex);
+    inheritObjectIdView(deleted.notes, sourceNotes);
+    removeValueContentFingerprint(sourceNotes, sourceNotes, deleted.indices);
+    let removedWeight = 0;
+    for (const noteIndex of deleted.indices) {
+      removedWeight += noteScoringWeight(sourceNotes[noteIndex]);
+    }
+    for (const noteIndex of [...deleted.indices].sort((left, right) => right - left)) {
+      sourceNotes.splice(noteIndex, 1);
+    }
+    line.notes = sourceNotes;
+    markChartObjectCollectionNormalized(sourceNotes);
+    noteLineSpliced(state.chart, lineIndex, deleted.indices, deleted.ids);
+    adjustNoteCount(line, -removedWeight);
   }
-  if (deletedByLine.size) {
-    invalidateChartLocations(state.chart);
-  }
-  refreshNoteCounts(state);
 }
 
 /** Resolves a located event's index after copy-on-write replaced the track array. */
@@ -505,6 +615,9 @@ function updateEvents(
       continue;
     }
     const events = mutableEventListFor(state, located);
+    if (events !== located.events) {
+      inheritObjectIdView(located.events, events);
+    }
     const eventIndex = currentEventIndex(events, located);
     if (eventIndex < 0) {
       continue;
@@ -518,6 +631,15 @@ function updateEvents(
       `events.update[${index}].patch`,
       state.issues,
     );
+    if (located.line && located.track && located.layerIndex !== null) {
+      (state.changedEvents ??= new Set()).add({
+        event: mutable as unknown as JudgeLineEvent,
+        lineIndex: located.line.index,
+        layerIndex: located.layerIndex,
+        track: located.track,
+        eventIndex,
+      });
+    }
     addAffected(state, id);
     addAffected(state, located.line?.line.id);
   }
@@ -528,6 +650,7 @@ function updateEvents(
   const deletions: {
     readonly events: Record<string, unknown>[];
     readonly eventIndex: number;
+    readonly id: ChartObjectId;
   }[] = [];
   for (const [index, value] of deletes.entries()) {
     const id = validateObjectId(value, `events.delete[${index}]`, state);
@@ -545,31 +668,41 @@ function updateEvents(
       continue;
     }
     const events = mutableEventListFor(state, located);
+    if (events !== located.events) {
+      inheritObjectIdView(located.events, events);
+    }
     const eventIndex = currentEventIndex(events, located);
     if (eventIndex < 0) {
       continue;
     }
-    deletions.push({ events, eventIndex });
+    deletions.push({ events, eventIndex, id });
     addAffected(state, id);
     addAffected(state, located.line?.line.id);
   }
   if (deletions.length) {
-    const byList = new Map<Record<string, unknown>[], number[]>();
+    const byList = new Map<
+      Record<string, unknown>[],
+      { readonly indexes: number[]; readonly ids: ChartObjectId[] }
+    >();
     for (const deletion of deletions) {
-      const indexes = byList.get(deletion.events);
-      if (indexes) {
-        indexes.push(deletion.eventIndex);
+      const list = byList.get(deletion.events);
+      if (list) {
+        list.indexes.push(deletion.eventIndex);
+        list.ids.push(deletion.id);
       } else {
-        byList.set(deletion.events, [deletion.eventIndex]);
+        byList.set(deletion.events, { indexes: [deletion.eventIndex], ids: [deletion.id] });
       }
     }
-    for (const [events, indexes] of byList) {
-      indexes.sort((left, right) => right - left);
-      for (const eventIndex of indexes) {
+    for (const [events, deleted] of byList) {
+      deleted.indexes.sort((left, right) => right - left);
+      for (const eventIndex of deleted.indexes) {
         events.splice(eventIndex, 1);
       }
+      eventTrackSpliced(state.chart, events, deleted.indexes, deleted.ids);
     }
-    rebuildChartLocations(state.chart);
+    if (deletions.length > 1) {
+      rebuildChartLocations(state.chart);
+    }
   }
 }
 
@@ -590,9 +723,14 @@ function insertLine(
     return;
   }
   line.id = id;
+  if (entry.line.id === undefined) {
+    markChartObjectIdNormalized(line);
+  }
   state.chart.judgeLineList ??= [];
   state.chart.judgeLineList.push(line);
-  invalidateChartLocations(state.chart);
+  state.clonedLines.add(state.chart.judgeLineList.length - 1);
+  (state.fullLineValidation ??= new Set()).add(state.chart.judgeLineList.length - 1);
+  registerLineInIndex(state.chart, state.chart.judgeLineList.length - 1);
   applyJudgeLinePatch(
     state.chart,
     state.issues,
@@ -775,7 +913,7 @@ export function commitTransaction(
     };
     return result("conflict", currentFingerprint, currentFingerprint, [], [], null, conflict);
   }
-  const afterFingerprint = fingerprint(chart);
+  const afterFingerprint = options.afterFingerprint ?? fingerprint(chart);
   if (beforeFingerprint === afterFingerprint) {
     return result("unchanged", beforeFingerprint, afterFingerprint, [], [], null);
   }
@@ -785,14 +923,23 @@ export function commitTransaction(
     issues: [],
     ...(origin ? { origin } : {}),
   };
+  // The commit boundary invalidates the committed chart's cache so old history
+  // snapshots do not retain it; carry the planned chart's index across and hand
+  // it to the document the session keeps next.
+  const locations = detachChartLocations(chart);
   const committed = session.commitChart(
     label,
     chart,
     session.selectionState(),
     metadata,
-    options.validatedNoise ? { validatedNoise: true } : undefined,
+    options.validatedNoise
+      ? { validatedNoise: true, estimatedBytes: options.estimatedBytes }
+      : options.estimatedBytes === undefined
+        ? undefined
+        : { estimatedBytes: options.estimatedBytes },
   );
   if (!committed) {
+    adoptChartLocations(chart, locations);
     return result(
       "rejected",
       beforeFingerprint,
@@ -802,6 +949,7 @@ export function commitTransaction(
       null,
     );
   }
+  adoptChartLocations(session.chart, locations);
   const entry = session.history.undoStack.at(-1);
   if (!entry) {
     return result(

@@ -132,6 +132,18 @@ export interface VisibilityDirectoryQueryStats {
   holdCandidateCount: number;
 }
 
+/** Write one query sample into the directory's reusable stats object. */
+function writeQueryStats(
+  target: VisibilityDirectoryQueryStats,
+  spatialCandidateCount: number,
+  temporalCandidateCount: number,
+  holdCandidateCount: number,
+): void {
+  target.spatialCandidateCount = spatialCandidateCount;
+  target.temporalCandidateCount = temporalCandidateCount;
+  target.holdCandidateCount = holdCandidateCount;
+}
+
 /**
  * Conservative candidate directory for one judge line.
  *
@@ -156,6 +168,8 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
   declare hasTemporalItems: boolean;
   declare hasHoldActiveItems: boolean;
   declare hasHoldFallbackItems: boolean;
+  /** True when every candidate is covered by the spatial directory alone. */
+  declare spatialOnly: boolean;
   declare temporalQuery: T[];
   declare holdQuery: T[];
   declare holdFallbackQuery: T[];
@@ -177,6 +191,8 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     this.hasHoldActiveItems =
       model.holdActivationCoveredBySpatial !== true && this.holdItems.length > 0;
     this.hasHoldFallbackItems = partition.holdFallback.length > 0;
+    this.spatialOnly =
+      !this.hasTemporalItems && !this.hasHoldActiveItems && !this.hasHoldFallbackItems;
     this.spatialIndex = new IntervalIndex(
       this.spatialItems,
       (entry) => Math.min(entry.floor, entry.tail),
@@ -219,6 +235,8 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     this.hasHoldActiveItems =
       this.model.holdActivationCoveredBySpatial !== true && this.holdItems.length > 0;
     this.hasHoldFallbackItems = partition.holdFallback.length > 0;
+    this.spatialOnly =
+      !this.hasTemporalItems && !this.hasHoldActiveItems && !this.hasHoldFallbackItems;
     this.spatialIndex.replaceItems(this.spatialItems);
     this.temporalIndex.replaceItems(this.temporalItems);
     this.holdActiveIndex.replaceItems(
@@ -244,6 +262,10 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
       result,
     );
     const spatialCandidateCount = result.length;
+    if (this.spatialOnly) {
+      writeQueryStats(this.lastQueryStats, spatialCandidateCount, 0, 0);
+      return result;
+    }
     if (this.hasTemporalItems) {
       this.temporalIndex.queryItemsInto(seconds, seconds, this.temporalQuery);
     } else {
@@ -265,11 +287,7 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     const hasFallback = temporalCandidateCount > 0 || holdCandidateCount > 0;
     if (!hasFallback) {
       this.fallbackQuery.length = 0;
-      this.lastQueryStats = {
-        spatialCandidateCount,
-        temporalCandidateCount: 0,
-        holdCandidateCount: 0,
-      };
+      writeQueryStats(this.lastQueryStats, spatialCandidateCount, 0, 0);
       return result;
     }
 
@@ -294,11 +312,12 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     const needsDedup = this.holdQuery.length > 0 && hasSpatialHold;
     if (!needsDedup) {
       result.push(...this.fallbackQuery);
-      this.lastQueryStats = {
+      writeQueryStats(
+        this.lastQueryStats,
         spatialCandidateCount,
         temporalCandidateCount,
         holdCandidateCount,
-      };
+      );
       return result;
     }
 
@@ -321,11 +340,12 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
       }
     }
     this.seenCandidates.clear();
-    this.lastQueryStats = {
+    writeQueryStats(
+      this.lastQueryStats,
       spatialCandidateCount,
-      temporalCandidateCount: appendedTemporalCandidateCount,
-      holdCandidateCount: appendedHoldCandidateCount,
-    };
+      appendedTemporalCandidateCount,
+      appendedHoldCandidateCount,
+    );
     return result;
   }
 

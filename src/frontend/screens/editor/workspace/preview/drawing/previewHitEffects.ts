@@ -27,6 +27,29 @@ export interface PreviewHitEffectSurface {
   hitStateCache?: Map<number, SampleAt>;
 }
 
+interface HitEffectScratch {
+  hits: Hit[];
+  particles: HitParticle[];
+  hitStates: Map<number, SampleAt>;
+}
+
+const hitEffectScratch = new WeakMap<object, HitEffectScratch>();
+
+/** Return the per-surface buffers reused by the hit-effect pass. */
+function scratchFor(surface: object): HitEffectScratch {
+  const cached = hitEffectScratch.get(surface);
+  if (cached) {
+    return cached;
+  }
+  const scratch: HitEffectScratch = {
+    hits: [],
+    particles: [],
+    hitStates: new Map<number, SampleAt>(),
+  };
+  hitEffectScratch.set(surface, scratch);
+  return scratch;
+}
+
 /** Resolve a chart tint, keeping the configured colour only as a fallback. */
 export function resolveParticleColor(
   tint: unknown,
@@ -47,9 +70,13 @@ export function drawHitEffects(
   const { context, order, seconds, width, height, centerX, centerY, scaleX, scaleY } = frame;
   const originX = centerX ?? width / 2;
   const originY = centerY ?? height / 2;
-  const hitStates = surface.hitStateCache ?? new Map<number, SampleAt>();
-  const hits: Hit[] = [];
-  const particles: HitParticle[] = [];
+  const scratch = scratchFor(surface);
+  const hitStates = surface.hitStateCache ?? scratch.hitStates;
+  if (!surface.hitStateCache) {
+    // Optional test/minimal surfaces do not promise sampler stability across frames.
+    hitStates.clear();
+  }
+  const { hits, particles } = scratch;
   const limit = Number.isFinite(maxEffects) ? Math.max(0, Math.floor(maxEffects)) : Infinity;
   let drawnEffects = 0;
   for (const index of order) {
@@ -128,12 +155,10 @@ export function drawHitEffects(
       context.globalAlpha = 1;
     }
   }
-  if (surface.hitStateCache) {
-    const oldestActiveHit = seconds - Math.max(HIT_DURATION, 2 / 3);
-    for (const time of surface.hitStateCache.keys()) {
-      if (time < oldestActiveHit) {
-        surface.hitStateCache.delete(time);
-      }
+  const oldestActiveHit = seconds - Math.max(HIT_DURATION, 2 / 3);
+  for (const time of hitStates.keys()) {
+    if (time < oldestActiveHit) {
+      hitStates.delete(time);
     }
   }
 }

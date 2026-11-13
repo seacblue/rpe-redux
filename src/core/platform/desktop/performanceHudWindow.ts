@@ -23,6 +23,15 @@ export interface PerformanceHudFramePayload {
   fpsSamples: readonly number[];
   drawTimeMs: number;
   frameTimesMs: readonly number[];
+  frameIntervalMs: number;
+  frameBudgetMs: number;
+  targetRefreshRate: number;
+  frameIntervalLoadPercent: number;
+  frameIntervalLoadSamples: readonly number[];
+  timelineDrawMs: number;
+  timelineDrawSamples: readonly number[];
+  previewDrawMs: number;
+  previewDrawSamples: readonly number[];
   memoryAvailable: boolean;
   memoryUsedMb: number;
   memoryLimitMb: number;

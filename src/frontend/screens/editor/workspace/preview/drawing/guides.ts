@@ -59,6 +59,7 @@ export function lineGuides(
 }
 
 type GuideGrid = Map<number, Map<number, Map<number, number[]>>>;
+const guideGroupPools = new WeakMap<LineGuideGroup[], LineGuideGroup[]>();
 
 /**
  * Merge guides that share a screen anchor.
@@ -72,7 +73,22 @@ export function mergeGuides(
   scale: number,
   enabled = true,
 ): LineGuideGroup[] {
-  const groups: LineGuideGroup[] = [];
+  return mergeGuidesInto(guides, scale, enabled, []);
+}
+
+/** Merge guides into caller-owned groups so repeated preview frames avoid group allocations. */
+export function mergeGuidesInto(
+  guides: readonly LineGuide[],
+  scale: number,
+  enabled: boolean,
+  groups: LineGuideGroup[],
+): LineGuideGroup[] {
+  const pool = guideGroupPools.get(groups) ?? [];
+  for (const group of groups) {
+    group.indices.length = 0;
+    pool.push(group);
+  }
+  groups.length = 0;
   const radius = 10 * scale;
   const indexable = enabled && guides.length >= 64 && Number.isFinite(radius) && radius > 0;
   let grid: GuideGrid | null = null;
@@ -166,9 +182,16 @@ export function mergeGuides(
       if (grid && indexed) {
         insert(grid, guide, groups.length);
       }
-      groups.push({ ...guide, indices: [guide.index] });
+      const next = pool.pop() ?? { ...guide, indices: [] };
+      next.index = guide.index;
+      next.x = guide.x;
+      next.y = guide.y;
+      next.rotation = guide.rotation;
+      next.indices.push(guide.index);
+      groups.push(next);
     }
   }
+  guideGroupPools.set(groups, pool);
   return groups;
 }
 

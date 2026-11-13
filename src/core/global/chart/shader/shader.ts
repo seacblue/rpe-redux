@@ -317,6 +317,16 @@ export class ShaderRuntime {
   declare sourcesWanted: Set<string>;
   /** Bumped whenever loaded source text changes; callers use it as a cache key. */
   declare sourceRevision: number;
+  /** Reusable interval candidates for the per-frame active-effect query. */
+  declare activeCandidates: TimedShaderEffect[];
+  /** Reusable active-effect list returned by the preview frame path. */
+  private readonly activeFrameList: ActiveShaderEffect[] = [];
+  /** Reusable active effect objects for the preview frame path. */
+  private readonly activeFrameEffects: Array<ActiveShaderEffect | undefined> = [];
+  /** Reusable uniform records paired with `activeFrameEffects`. */
+  private readonly activeFrameValues: Array<Record<string, unknown> | undefined> = [];
+  /** Keys currently present in each reusable uniform record. */
+  private readonly activeFrameValueKeys: string[][] = [];
 
   /** Create a runtime; `invalidate` is called when loaded sources change. */
   constructor(invalidate: () => void = () => {}, loadSource: ShaderSourceLoader) {
@@ -335,6 +345,7 @@ export class ShaderRuntime {
     this.loading = new Set();
     this.sourcesWanted = new Set();
     this.sourceRevision = 0;
+    this.activeCandidates = [];
   }
 
   /** Update the chart path used to resolve relative shader assets. */
@@ -456,25 +467,50 @@ export class ShaderRuntime {
 
   /** Effects active at `seconds`, with their uniforms sampled for this frame. */
   active(seconds: number): ActiveShaderEffect[] {
-    const active: ActiveShaderEffect[] = [];
-    const candidates = this.activeIndex.queryItems(seconds, seconds);
+    const active = this.activeInto(seconds);
+    return active.map((effect) => ({ ...effect, values: { ...effect.values } }));
+  }
+
+  /**
+   * Fill caller-owned storage with active effects without allocating per-frame
+   * effect objects or uniform records. The returned entries are invalidated by
+   * the next call on this runtime and must be consumed synchronously.
+   */
+  activeInto(
+    seconds: number,
+    target: ActiveShaderEffect[] = this.activeFrameList,
+  ): ActiveShaderEffect[] {
+    target.length = 0;
+    const candidates = this.activeIndex.queryItemsInto(seconds, seconds, this.activeCandidates);
     candidates.sort((left, right) => left.index - right.index);
-    for (const { effect } of candidates) {
+    for (const { effect, index } of candidates) {
       const factor = this.chart?.judgeLineList?.[effect.line]?.bpmfactor ?? 1;
       const beat = this.tempo?.beat?.(seconds, factor) ?? seconds;
       if (beat < effect.startBeat || beat >= effect.endBeat) {
         continue;
       }
-      const values: Record<string, unknown> = {};
+      const values = this.activeFrameValues[index] ?? {};
+      const valueKeys = this.activeFrameValueKeys[index] ?? [];
+      for (const key of valueKeys) {
+        delete values[key];
+      }
+      valueKeys.length = 0;
       for (const [name, events] of Object.entries(effect.vars)) {
         const value = sampleValue(events, seconds, this.tempo, factor, events[0]?.start);
         if (value !== undefined) {
           values[name] = value;
+          valueKeys.push(name);
         }
       }
-      active.push({ ...effect, values });
+      this.activeFrameValues[index] = values;
+      this.activeFrameValueKeys[index] = valueKeys;
+      const cached = this.activeFrameEffects[index] ?? { ...effect, values };
+      Object.assign(cached, effect);
+      cached.values = values;
+      this.activeFrameEffects[index] = cached;
+      target.push(cached);
     }
-    return active;
+    return target;
   }
 
   /** Loaded source text for `name`, or an empty string when it is not loaded. */
@@ -498,65 +534,73 @@ export class ShaderRuntime {
   }
 }
 
+/** Scalar and vector defaults shared by every shader-uniform lookup. */
+const SHADER_UNIFORM_DEFAULTS: Record<string, number | readonly number[]> = {
+  sampleCount: 3,
+  power: 0.03,
+  size: 3,
+  rate: 0.6,
+  speed: 1,
+  blockCount: 30.5,
+  colorRate: 0.01,
+  factor: 1,
+  seed: 81,
+  centerX: 0.5,
+  centerY: 0.5,
+  progress: 0.2,
+  width: 0.1,
+  distortion: 0.8,
+  expand: 10,
+  extend: 0.25,
+  radius: 15,
+  frequency: 10,
+  amplitude: 0.02,
+  speedx: 1,
+  speedy: 1,
+  snowCount: 100,
+  direction: [1, 0],
+  threshold: 0.5,
+  intensity: 1,
+  density: 1,
+  lightpos: [0.5, 0.5],
+  fogColor: [0.5, 0.5, 0.5, 1],
+  fogStart: 0,
+  fogEnd: 1,
+  segments: 8,
+  center: [0.5, 0.5],
+  angle: 0,
+  hologramColor: [0, 1, 1, 1],
+  burnColor: [1, 0.2, 0, 1],
+  zoom: 1,
+  offset: 0,
+  rotation: 0,
+  numBolts: 5,
+  flashDuration: 0.1,
+  rainColor: [0.4, 0.6, 1, 1],
+  height: 1,
+  strength: 1,
+  blurRadius: 1,
+  exposure: 1,
+  decay: 1,
+  weight: 0.5,
+  hueShift: 0,
+  saturationShift: 0,
+  valueShift: 0,
+  color1: [0, 0, 0, 1],
+  color2: [1, 1, 1, 1],
+};
+
 /** Built-in uniform default for `name`, or undefined when the shader declares none. */
 export function defaultShaderUniform(
   name: string,
   resolution: number[] = [1350, 900],
 ): number | number[] | undefined {
-  const defaults: Record<string, number | number[]> = {
-    sampleCount: 3,
-    power: 0.03,
-    size: 3,
-    rate: 0.6,
-    speed: 1,
-    blockCount: 30.5,
-    colorRate: 0.01,
-    factor: 1,
-    seed: 81,
-    centerX: 0.5,
-    centerY: 0.5,
-    progress: 0.2,
-    width: 0.1,
-    distortion: 0.8,
-    expand: 10,
-    extend: 0.25,
-    radius: 15,
-    frequency: 10,
-    amplitude: 0.02,
-    speedx: 1,
-    speedy: 1,
-    snowCount: 100,
-    direction: [1, 0],
-    threshold: 0.5,
-    intensity: 1,
-    density: 1,
-    lightpos: [0.5, 0.5],
-    fogColor: [0.5, 0.5, 0.5, 1],
-    fogStart: 0,
-    fogEnd: 1,
-    segments: 8,
-    center: [0.5, 0.5],
-    angle: 0,
-    hologramColor: [0, 1, 1, 1],
-    burnColor: [1, 0.2, 0, 1],
-    zoom: 1,
-    offset: 0,
-    rotation: 0,
-    numBolts: 5,
-    flashDuration: 0.1,
-    rainColor: [0.4, 0.6, 1, 1],
-    height: 1,
-    strength: 1,
-    blurRadius: 1,
-    exposure: 1,
-    decay: 1,
-    weight: 0.5,
-    hueShift: 0,
-    saturationShift: 0,
-    valueShift: 0,
-    color1: [0, 0, 0, 1],
-    color2: [1, 1, 1, 1],
-    resolution,
-  };
-  return defaults[name];
+  if (name === "resolution") {
+    return resolution;
+  }
+  const value = SHADER_UNIFORM_DEFAULTS[name];
+  if (value === undefined) {
+    return undefined;
+  }
+  return typeof value === "number" ? value : [...value];
 }

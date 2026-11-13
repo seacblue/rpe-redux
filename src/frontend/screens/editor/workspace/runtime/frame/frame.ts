@@ -86,6 +86,7 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
       state.paintedFrames++;
       const start = performance.now();
       const seconds = clock.seconds(timestamp);
+      const contentRefreshRate = options.contentRefreshRate();
       const audioSeconds = options.readouts.audio.time;
       // Expensive inspector and HUD work runs at its own lower cadence; the
       // transport follows the same sampled time on every frame.
@@ -97,13 +98,13 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
         current.tempo,
         refreshHud,
         state.dirty,
-        options.contentRefreshRate(),
+        contentRefreshRate,
       );
       readouts.publishProgress(timestamp, seconds, audioSeconds, current.tempo, beat);
       if (refreshHud) {
         readouts.publish(timestamp, state, current.session);
       }
-      readouts.performance(timestamp, start, state);
+      readouts.performance(timestamp, start, state, contentRefreshRate);
       state.dirty = false;
       if (clock.playing()) {
         options.metrics.record(timestamp, performance.now() - start, seconds);

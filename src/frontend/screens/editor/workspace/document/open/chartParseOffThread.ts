@@ -1,52 +1,29 @@
 /**
  * Main-thread front end for the chart parsing worker: sends archive entries to
- * the worker and rebuilds candidates with primed fingerprints on return. Parsing
- * rules stay in core; hosts without workers parse in-process.
+ * the worker and rebuilds candidates with their line revision seeds on return.
+ * Parsing rules stay in core; hosts without workers parse in-process.
  */
-import {
-  markChartObjectIdsNormalized,
-  type Chart,
-  type JudgeLine,
-} from "../../../../../../core/global/chart/chart.ts";
+import { markChartObjectIdsNormalized } from "../../../../../../core/global/chart/chart.ts";
 import {
   parseChartEntries,
   type ParsedChartEntries,
 } from "../../../../../../core/global/document/chartParsing.ts";
 import type { OpenCandidate } from "../../../../../../core/global/document/types.ts";
-import { primeChartFingerprint } from "../../../../../../core/edit/document/chartRevision.ts";
+import type { ChartLineRevisionSeed } from "../../../../../../core/global/chart/chartRevisionSeed.ts";
+import { lineRevisionSeed } from "../../../../../../core/global/chart/chartContentHash.ts";
+import type { ChartParseResponse } from "./chartParseProtocol.ts";
 
 let nextRequestId = 1;
 
-interface CandidateStart {
-  name: string;
-  chart: Chart;
-  info?: Record<string, string>;
-  desktop?: boolean;
-  project?: {
-    assetFolders?: string[];
-    viewState?: { lineIndex?: number };
-  } | null;
-  diagnostics?: ParsedChartEntries["candidates"][number]["diagnostics"];
-  readOnly?: boolean;
-  normalized: boolean;
-  fingerprint: string;
+/** Attach seeds to a parsed result for hosts without a worker or after failure. */
+function attachRevisionSeeds(parsed: ParsedChartEntries): ParsedChartEntries {
+  for (const candidate of parsed.candidates) {
+    candidate.revisionSeed = {
+      lines: (candidate.chart.judgeLineList ?? []).map((line) => lineRevisionSeed(line)),
+    };
+  }
+  return parsed;
 }
-
-type ParseResponse =
-  | {
-      id: number;
-      kind: "start";
-      candidates: CandidateStart[];
-      errors: string[];
-      issues: ParsedChartEntries["issues"];
-    }
-  | {
-      id: number;
-      kind: "lines";
-      candidateIndex: number;
-      lines: JudgeLine[];
-    }
-  | { id: number; kind: "done" };
 
 /**
  * Parses chart JSON away from the UI thread when module workers are available.
@@ -59,7 +36,7 @@ export async function parseChartEntriesOffThread(
 ): Promise<ParsedChartEntries> {
   const jsonEntries = [...entries].filter(([name]) => /\.json$/i.test(name));
   if (!jsonEntries.length || typeof Worker === "undefined") {
-    return parseChartEntries(jsonEntries);
+    return attachRevisionSeeds(parseChartEntries(jsonEntries));
   }
 
   const worker = new Worker(new URL("./chartParseWorker.ts", import.meta.url), {
@@ -74,7 +51,7 @@ export async function parseChartEntriesOffThread(
   return new Promise<ParsedChartEntries>((resolve) => {
     const candidates: OpenCandidate[] = [];
     const normalized: boolean[] = [];
-    const fingerprints: string[] = [];
+    const revisionSeeds: ChartLineRevisionSeed[][] = [];
     let errors: string[] = [];
     let issues: ParsedChartEntries["issues"] = [];
     let settled = false;
@@ -89,9 +66,9 @@ export async function parseChartEntriesOffThread(
     };
     /** Completes the parse on the main thread after a worker failure. */
     const fallback = (): void => {
-      finish(parseChartEntries(jsonEntries));
+      finish(attachRevisionSeeds(parseChartEntries(jsonEntries)));
     };
-    worker.onmessage = (event: MessageEvent<ParseResponse>) => {
+    worker.onmessage = (event: MessageEvent<ChartParseResponse>) => {
       const message = event.data;
       if (message.id !== id) {
         return;
@@ -101,7 +78,7 @@ export async function parseChartEntriesOffThread(
           const { chart, normalized: entryNormalized, ...meta } = entry;
           candidates.push({ ...meta, chart: { ...chart, judgeLineList: [] } });
           normalized.push(entryNormalized);
-          fingerprints.push(entry.fingerprint);
+          revisionSeeds.push([]);
         }
         errors = message.errors;
         issues = message.issues;
@@ -109,25 +86,18 @@ export async function parseChartEntriesOffThread(
       }
       if (message.kind === "lines") {
         candidates[message.candidateIndex]?.chart.judgeLineList?.push(...message.lines);
+        revisionSeeds[message.candidateIndex]?.push(...message.revisionSeeds);
         return;
       }
       for (let index = 0; index < candidates.length; index++) {
         if (normalized[index]) {
           markChartObjectIdsNormalized(candidates[index].chart);
         }
-        if (fingerprints[index]) {
-          primeChartFingerprint(candidates[index].chart, fingerprints[index]);
-        }
+        candidates[index].revisionSeed = { lines: revisionSeeds[index] ?? [] };
       }
       finish({ candidates, errors, issues });
     };
-    worker.onerror = (event) => {
-      if (event.error instanceof Error) {
-        fallback();
-      } else {
-        fallback();
-      }
-    };
+    worker.onerror = () => fallback();
     worker.postMessage({ id, entries: payload }, transfer);
   });
 }

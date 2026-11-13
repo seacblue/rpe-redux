@@ -16,6 +16,65 @@ export interface TimelineScale {
   judgementOffset: number;
 }
 
+/** A reusable beat-to-pixel projection for one timeline frame and scale. */
+export type VerticalBeatProjection = (beat: number) => number;
+
+/** Reusable horizontal and clipping projection for one note panel. */
+export interface NotePanelProjection {
+  horizontal(position: number): number;
+  clamp(horizontal: number, noteWidth: number): number | null;
+}
+
+/**
+ * Create a vertical projection that reuses the origin time for every beat.
+ *
+ * Drawing a dense timeline asks for both anchors of every visible note. The
+ * origin is invariant for the frame, so calculating it once avoids repeating
+ * the same tempo lookup while preserving the exact `verticalAtBeat` formula.
+ */
+export function createVerticalBeatProjection(
+  height: number,
+  scale: TimelineScale,
+  tempo: TempoGrid,
+): VerticalBeatProjection {
+  const originSeconds = tempo.seconds(scale.origin, scale.factor);
+  return (beat) =>
+    height -
+    scale.judgementOffset -
+    (tempo.seconds(beat, scale.factor) - originSeconds) * scale.scale;
+}
+
+/**
+ * Create a note-panel projection that reuses all layout values invariant for a
+ * frame. The returned clipping operation has the same panel-overlap contract as
+ * `clampNoteHorizontal`.
+ */
+export function createNotePanelProjection(
+  cameraX: number,
+  inset: number,
+  panelWidthValue: number,
+  linePanel: number,
+  canvasWidth: number,
+  layout: TimelinePanelLayout,
+  scroll: number,
+): NotePanelProjection {
+  return {
+    horizontal: (position) =>
+      noteHorizontal(
+        position,
+        cameraX,
+        inset,
+        panelWidthValue,
+        linePanel,
+        canvasWidth,
+        layout,
+        scroll,
+      ),
+    clamp: (horizontal, noteWidthValue) =>
+      clampNoteHorizontal(horizontal, noteWidthValue, canvasWidth, linePanel, layout, scroll),
+  };
+}
+
 export interface TimelinePanelLayout {
   active: boolean;
   count: number;

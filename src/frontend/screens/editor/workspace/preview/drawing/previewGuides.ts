@@ -4,7 +4,12 @@
  * canvas drawing and the texture surface it reads.
  */
 import { DEFAULT_LINE_HEIGHT, DEFAULT_LINE_WIDTH } from "../scene/constants.ts";
-import { formatLineNumbers, mergeGuides, type LineGuide } from "./guides.ts";
+import {
+  formatLineNumbers,
+  mergeGuidesInto,
+  type LineGuide,
+  type LineGuideGroup,
+} from "./guides.ts";
 import { viewportTextureScale } from "../../../../../../core/media/images.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import type { Chart, JudgeLine } from "../../../../../../core/global/chart/chart.ts";
@@ -22,6 +27,8 @@ import { readCanvasPalette } from "../../../canvas/palette.ts";
 export interface PreviewGuideSurface extends PreviewTextureSurface {
   chart: Chart | null;
   guides: LineGuide[] | null;
+  /** Changes only when guide geometry is recomputed; overlay grouping may reuse it. */
+  guideRevision?: number;
   lineNumbers?: boolean;
   lineArrows?: boolean;
   mergeLineNumbers?: boolean;
@@ -42,8 +49,28 @@ interface GuideLabelCache {
   labels: Map<string, GuideLabel>;
 }
 
+/** Raster layer and the static label bounds it was painted from. */
+interface GuideLabelLayer {
+  canvas: HTMLCanvasElement;
+  key: string;
+  guides: readonly LineGuide[];
+  chart: Chart | null;
+}
+
+/** Everything one guide surface retains between frames: merge groups and label layer. */
+interface GuideSurfaceCache {
+  guides: readonly LineGuide[];
+  scale: number;
+  enabled: boolean;
+  revision: number;
+  groups: LineGuideGroup[];
+  layer: GuideLabelLayer | null;
+}
+
 const guideLabelCaches = new WeakMap<object, GuideLabelCache>();
 const fallbackGuideLabelCache: GuideLabelCache = { scale: Number.NaN, labels: new Map() };
+const guideSurfaceCaches = new WeakMap<object, GuideSurfaceCache>();
+const EMPTY_GUIDES: readonly LineGuide[] = [];
 
 /** Keep measured label bounds for one chart/scale; indices only change with the chart. */
 function guideLabels(chart: Chart | null, scale: number): Map<string, GuideLabel> {
@@ -69,13 +96,15 @@ function labelFor(
   context: CanvasRenderingContext2D,
   cache: Map<string, GuideLabel>,
   key: string,
-  text: string,
+  indices: readonly number[],
+  lines: readonly JudgeLine[] | null,
   scale: number,
 ): GuideLabel {
   const cached = cache.get(key);
   if (cached) {
     return cached;
   }
+  const text = formatLineNumbers(indices, lines);
   const metrics = context.measureText(text);
   const fontSize = 30 * scale;
   const label: GuideLabel = {
@@ -93,6 +122,149 @@ function labelFor(
   }
   cache.set(key, label);
   return label;
+}
+
+/** Return logical dimensions when the current context has a simple pixel scale. */
+function guideLayerDimensions(
+  context: CanvasRenderingContext2D,
+  matrix: DOMMatrix,
+): { width: number; height: number; ratio: number } | null {
+  if (
+    !Number.isFinite(matrix.a) ||
+    !Number.isFinite(matrix.d) ||
+    matrix.a <= 0 ||
+    matrix.d <= 0 ||
+    Math.abs(matrix.b) > 1e-9 ||
+    Math.abs(matrix.c) > 1e-9 ||
+    Math.abs(matrix.a - matrix.d) > 1e-9 ||
+    context.globalAlpha !== 1 ||
+    context.globalCompositeOperation !== "source-over" ||
+    context.canvas.width <= 0 ||
+    context.canvas.height <= 0
+  ) {
+    return null;
+  }
+  return {
+    width: context.canvas.width / matrix.a,
+    height: context.canvas.height / matrix.d,
+    ratio: matrix.a,
+  };
+}
+
+/** Build the invalidation key for the retained static guide-number surface. */
+function guideLabelLayerKey(
+  surface: PreviewGuideSurface,
+  scale: number,
+  selectedLine: number,
+  mergeEnabled: boolean,
+  palette: ReturnType<typeof readCanvasPalette>,
+  dimensions: { width: number; height: number; ratio: number },
+): string {
+  return [
+    surface.guideRevision,
+    dimensions.width,
+    dimensions.height,
+    dimensions.ratio,
+    scale,
+    selectedLine,
+    mergeEnabled,
+    surface.lineNumbers,
+    palette.previewLine,
+    palette.previewLineSelected,
+  ].join("|");
+}
+
+/**
+ * Paint one anchored guide marker: its merged line-number label when `label` is
+ * set and, when `drawArrow` is true, the selected line's arrow (`arrow` null
+ * draws the vector fallback).
+ */
+function paintGuideMarker(
+  context: CanvasRenderingContext2D,
+  group: LineGuideGroup,
+  color: string,
+  scale: number,
+  label: GuideLabel | null,
+  arrow: CanvasImageSource | null | undefined,
+  drawArrow: boolean,
+): void {
+  context.save();
+  context.translate(group.x, group.y);
+  context.rotate((group.rotation * Math.PI) / 180);
+  context.fillStyle = color;
+  if (label) {
+    context.fillText(label.text, 0, 4 * scale);
+  }
+  if (drawArrow) {
+    if (arrow) {
+      context.save();
+      context.rotate(Math.PI);
+      context.drawImage(arrow, -25 * scale, -25 * scale, 50 * scale, 50 * scale);
+      context.restore();
+    } else {
+      context.beginPath();
+      context.moveTo(0, -24 * scale);
+      context.lineTo(-12 * scale, -8 * scale);
+      context.lineTo(12 * scale, -8 * scale);
+      context.closePath();
+      context.fill();
+    }
+  }
+  context.restore();
+}
+
+/** Paint all static line-number labels into a reusable logical-coordinate layer. */
+function paintGuideLabelLayer(
+  surface: PreviewGuideSurface,
+  target: CanvasRenderingContext2D,
+  groups: readonly LineGuideGroup[],
+  scale: number,
+  selectedLine: number,
+  palette: ReturnType<typeof readCanvasPalette>,
+  width: number,
+  height: number,
+  ratio: number,
+): void {
+  target.setTransform(ratio, 0, 0, ratio, 0, 0);
+  target.clearRect(0, 0, width, height);
+  target.font = `${30 * scale}px Saira, 'Source Han Sans CN', sans-serif`;
+  target.textAlign = "center";
+  target.textBaseline = "top";
+  const labels = guideLabels(surface.chart, scale);
+  for (const group of groups) {
+    const selected = group.indices.includes(selectedLine);
+    const color = selected ? palette.previewLineSelected : palette.previewLine;
+    const label = labelFor(
+      target,
+      labels,
+      group.indices.join(","),
+      group.indices,
+      surface.chart?.judgeLineList ?? null,
+      scale,
+    );
+    paintGuideMarker(target, group, color, scale, label, null, false);
+  }
+}
+
+/** Draw only the selected arrow after static guide labels are composited. */
+function drawSelectedGuideArrows(
+  surface: PreviewGuideSurface,
+  context: CanvasRenderingContext2D,
+  groups: readonly LineGuideGroup[],
+  scale: number,
+  selectedLine: number,
+  palette: ReturnType<typeof readCanvasPalette>,
+): void {
+  if (!surface.lineArrows) {
+    return;
+  }
+  const arrow = surface.skin?.images?.get("Arrow2");
+  for (const group of groups) {
+    if (!group.indices.includes(selectedLine)) {
+      continue;
+    }
+    paintGuideMarker(context, group, palette.previewLineSelected, scale, null, arrow, true);
+  }
 }
 
 /** Draws line numbers and the selected arrow when either option is enabled. */
@@ -125,7 +297,102 @@ export function drawGuides(
     context.textAlign = "center";
     context.textBaseline = "top";
   }
-  for (const group of mergeGuides(surface.guides ?? [], scale, surface.mergeLineNumbers)) {
+  const guides = surface.guides ?? EMPTY_GUIDES;
+  const mergeEnabled = surface.mergeLineNumbers ?? true;
+  const revision = surface.guideRevision;
+  let cache = guideSurfaceCaches.get(surface);
+  if (!cache) {
+    cache = {
+      guides: EMPTY_GUIDES,
+      scale: Number.NaN,
+      enabled: false,
+      revision: Number.NaN,
+      groups: [],
+      layer: null,
+    };
+    guideSurfaceCaches.set(surface, cache);
+  }
+  let groups: LineGuideGroup[];
+  if (
+    revision !== undefined &&
+    cache.guides === guides &&
+    cache.scale === scale &&
+    cache.enabled === mergeEnabled &&
+    cache.revision === revision
+  ) {
+    groups = cache.groups;
+  } else {
+    mergeGuidesInto(guides, scale, mergeEnabled, cache.groups);
+    groups = cache.groups;
+    if (revision !== undefined) {
+      cache.guides = guides;
+      cache.scale = scale;
+      cache.enabled = mergeEnabled;
+      cache.revision = revision;
+    }
+  }
+  const dimensions =
+    surface.guideRevision !== undefined && surface.lineNumbers
+      ? guideLayerDimensions(context, matrix)
+      : null;
+  if (dimensions && typeof document !== "undefined") {
+    const key = guideLabelLayerKey(surface, scale, selectedLine, mergeEnabled, palette, dimensions);
+    let layer = cache.layer;
+    if (!layer) {
+      layer = {
+        canvas: document.createElement("canvas"),
+        key: "",
+        guides,
+        chart: surface.chart,
+      };
+      cache.layer = layer;
+    }
+    if (
+      layer.key !== key ||
+      layer.guides !== guides ||
+      layer.chart !== surface.chart ||
+      layer.canvas.width !== context.canvas.width ||
+      layer.canvas.height !== context.canvas.height
+    ) {
+      layer.canvas.width = context.canvas.width;
+      layer.canvas.height = context.canvas.height;
+      const target = layer.canvas.getContext("2d");
+      if (target) {
+        paintGuideLabelLayer(
+          surface,
+          target,
+          groups,
+          scale,
+          selectedLine,
+          palette,
+          dimensions.width,
+          dimensions.height,
+          dimensions.ratio,
+        );
+        layer.guides = guides;
+        layer.chart = surface.chart;
+        layer.key = key;
+      }
+    }
+    if (layer.key === key) {
+      context.drawImage(
+        layer.canvas,
+        0,
+        0,
+        layer.canvas.width,
+        layer.canvas.height,
+        0,
+        0,
+        dimensions.width,
+        dimensions.height,
+      );
+      drawSelectedGuideArrows(surface, context, groups, scale, selectedLine, palette);
+      context.restore();
+      return;
+    }
+  }
+  const arrowImage = surface.lineArrows ? surface.skin?.images?.get("Arrow2") : undefined;
+  for (const group of groups) {
     const selected = group.indices.includes(selectedLine);
     if (!surface.lineNumbers && !(surface.lineArrows && selected)) {
       continue;
@@ -138,7 +405,8 @@ export function drawGuides(
         context,
         labels,
         key,
-        formatLineNumbers(group.indices, surface.chart?.judgeLineList ?? null),
+        group.indices,
+        surface.chart?.judgeLineList ?? null,
         scale,
       );
     }
@@ -167,30 +435,9 @@ export function drawGuides(
         continue;
       }
     }
-    context.save();
-    context.translate(group.x, group.y);
-    context.rotate(angle);
-    context.fillStyle = selected ? palette.previewLineSelected : palette.previewLine;
-    if (surface.lineNumbers && label) {
-      context.fillText(label.text, 0, 4 * scale);
-    }
-    if (surface.lineArrows && selected) {
-      const arrow = surface.skin?.images?.get("Arrow2");
-      if (arrow) {
-        context.save();
-        context.rotate(Math.PI);
-        context.drawImage(arrow, -25 * scale, -25 * scale, 50 * scale, 50 * scale);
-        context.restore();
-      } else {
-        context.beginPath();
-        context.moveTo(0, -24 * scale);
-        context.lineTo(-12 * scale, -8 * scale);
-        context.lineTo(12 * scale, -8 * scale);
-        context.closePath();
-        context.fill();
-      }
-    }
-    context.restore();
+    const color = selected ? palette.previewLineSelected : palette.previewLine;
+    const drawArrow = surface.lineArrows === true && selected;
+    paintGuideMarker(context, group, color, scale, label, arrowImage, drawArrow);
   }
   context.restore();
 }

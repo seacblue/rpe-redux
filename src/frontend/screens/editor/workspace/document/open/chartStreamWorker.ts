@@ -9,11 +9,17 @@ import {
   chartHeaderFromScan,
 } from "../../../../../../core/global/chart/streaming/chartLineSummary.ts";
 import { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
+import {
+  lineContentFingerprintParts,
+  lineRevisionSeedFromJson,
+} from "../../../../../../core/global/chart/chartContentHash.ts";
+import { yieldToHost } from "../../../../../../core/utils/yieldToHost.ts";
 import type {
   ChartWorkerRequest,
   ChartWorkerResponse,
 } from "../../../../../../core/global/chart/streaming/chartStreamWorkerProtocol.ts";
 import type { ChartLineRange } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
+import type { ChartValueDigestGroup } from "../../../../../../core/global/chart/chartContentHash.ts";
 
 interface StreamSession {
   readonly id: number;
@@ -49,8 +55,29 @@ function openSource(request: Extract<ChartWorkerRequest, { kind: "open" }>): voi
   }
 }
 
-/** Concatenate the received chunks and scan the source. */
-function finishSource(request: Extract<ChartWorkerRequest, { kind: "finish" }>): void {
+/** Compute semantic line seeds after the lightweight index is published. */
+async function fingerprintSource(
+  id: number,
+  text: string,
+  ranges: readonly ChartLineRange[],
+): Promise<void> {
+  const batchSize = 8;
+  for (let start = 0; start < ranges.length; start += batchSize) {
+    const seeds = [];
+    for (let index = start; index < Math.min(ranges.length, start + batchSize); index += 1) {
+      const range = ranges[index];
+      seeds.push(lineRevisionSeedFromJson(text.slice(range.start, range.end)));
+    }
+    reply({ id, kind: "fingerprints", start, seeds });
+    await yieldToHost();
+  }
+  reply({ id, kind: "fingerprints-done" });
+}
+
+/** Concatenate the received chunks and publish a lightweight index first. */
+async function finishSource(
+  request: Extract<ChartWorkerRequest, { kind: "finish" }>,
+): Promise<void> {
   try {
     const bytes = new Uint8Array(pendingBytes);
     let offset = 0;
@@ -66,7 +93,7 @@ function finishSource(request: Extract<ChartWorkerRequest, { kind: "finish" }>):
     const tempo = new TempoMap(
       header.BPMList.length ? header.BPMList : [{ bpm: 120, startTime: [0, 0, 1] }],
     );
-    const index = buildChartIndex(scan, tempo);
+    const index = buildChartIndex(scan, tempo, { includeFingerprints: false });
     session = { id: request.id, text, ranges: scan.lineRanges };
     reply({
       id: request.id,
@@ -74,6 +101,7 @@ function finishSource(request: Extract<ChartWorkerRequest, { kind: "finish" }>):
       header: { ...header, lineCount: scan.lineRanges.length },
     });
     reply({ id: request.id, kind: "index", index });
+    await fingerprintSource(request.id, text, scan.lineRanges);
   } catch (error) {
     session = null;
     reply({
@@ -91,11 +119,22 @@ function readLine(request: Extract<ChartWorkerRequest, { kind: "line" }>): void 
     return;
   }
   const range = session.ranges[request.index];
+  const raw = range ? session.text.slice(range.start, range.end) : null;
+  let valueDigests: readonly ChartValueDigestGroup[] | undefined;
+  if (raw) {
+    try {
+      const line = JSON.parse(raw);
+      valueDigests = lineContentFingerprintParts(line, { includeValueDigests: true }).valueDigests;
+    } catch {
+      valueDigests = undefined;
+    }
+  }
   reply({
     id: request.id,
     kind: "line",
     index: request.index,
-    raw: range ? session.text.slice(range.start, range.end) : null,
+    raw,
+    valueDigests,
   });
 }
 
@@ -118,7 +157,7 @@ workerScope.onmessage = (event) => {
     return;
   }
   if (request.kind === "finish") {
-    finishSource(request);
+    void finishSource(request);
     return;
   }
   if (request.kind === "line") {

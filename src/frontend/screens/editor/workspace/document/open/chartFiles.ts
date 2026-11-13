@@ -11,7 +11,7 @@ import {
 import { openFiles } from "../../../../../../core/global/document/import.ts";
 import type { OpenCandidate } from "../../../../../../core/global/document/types.ts";
 import { parseChartEntriesOffThread } from "./chartParseOffThread.ts";
-import { openChartStreamFromChunks } from "./chartStreamOffThread.ts";
+import { openChartDocumentFromBytes, openChartStreamFromChunks } from "./chartStreamOffThread.ts";
 import { readZipOffThread } from "./zipReadOffThread.ts";
 
 interface ChartFileOpenOptions {
@@ -60,7 +60,13 @@ export async function openChartFiles(
         // JSON still get the existing explanation.
       }
     }
-    const loaded = await openFiles([...files], task, parseChartEntriesOffThread, readZipOffThread);
+    const loaded = await openFiles(
+      [...files],
+      task,
+      parseChartEntriesOffThread,
+      readZipOffThread,
+      openChartDocumentFromBytes,
+    );
     if (!loaded) {
       loadingProgress.dismiss();
       return;

@@ -28,7 +28,7 @@ function validEventValue(entry: LineEventValue, type: string): boolean {
 }
 
 /** Validate one note at a known line path; builds field paths only on failure. */
-function assertNoteStructure(note: JudgeLineNote, linePath: string, index: number): void {
+export function assertNoteStructure(note: JudgeLineNote, linePath: string, index: number): void {
   if (!isBeat(note.startTime)) {
     throw new Error(
       t("model.beat.invalidTuple", { path: `${linePath}.notes[${index}].startTime` }),
@@ -78,7 +78,7 @@ function assertNoteStructure(note: JudgeLineNote, linePath: string, index: numbe
 }
 
 /** Validate one event inside a named track; builds field paths only on failure. */
-function assertEventStructure(
+export function assertEventStructure(
   event: JudgeLineEvent | null | undefined,
   type: string,
   trackPath: string,
@@ -180,7 +180,7 @@ export function assertChartHeaderStructure(value: Chart): void {
 }
 
 /** Throws a descriptive error when one judge line fails structural rules. */
-export function assertJudgeLineStructure(line: JudgeLine, lineIndex: number): void {
+export function assertJudgeLineFields(line: JudgeLine, lineIndex: number): void {
   const path = `judgeLineList[${lineIndex}]`;
   if (!line || typeof line !== "object") {
     throw new Error(t("model.chart.invalidJudgeLine", { path }));
@@ -191,28 +191,8 @@ export function assertJudgeLineStructure(line: JudgeLine, lineIndex: number): vo
   if (line.notes != null && !Array.isArray(line.notes)) {
     throw new Error(t("model.validation.mustBeArray", { target: `${path}.notes` }));
   }
-  const notes = line.notes ?? [];
-  for (let index = 0; index < notes.length; index++) {
-    const note = notes[index];
-    if (!note || typeof note !== "object") {
-      throw new Error(t("model.chart.invalidNote", { path: `${path}.notes[${index}]` }));
-    }
-    assertNoteStructure(note, path, index);
-  }
   if (line.eventLayers != null && !Array.isArray(line.eventLayers)) {
     throw new Error(t("model.validation.mustBeArray", { target: `${path}.eventLayers` }));
-  }
-  for (const layer of [...(line.eventLayers ?? []), line.extended]) {
-    if (!layer) {
-      continue;
-    }
-    for (const type of EVENT_TRACKS) {
-      const events = layer[type];
-      if (events != null && !Array.isArray(events)) {
-        throw new Error(t("model.validation.mustBeArray", { target: `${path}.${type}` }));
-      }
-      assertEventTrackStructure(events, type, `${path}.${type}`);
-    }
   }
   for (const { field, property } of CONTROL_TRACKS) {
     const list = line[field];
@@ -228,6 +208,32 @@ export function assertJudgeLineStructure(line: JudgeLine, lineIndex: number): vo
           t("model.chart.invalidControlPoint", { path: `${path}.${field}[${index}]` }),
         );
       }
+    }
+  }
+}
+
+/** Throws when one changed line's notes and event tracks fail structure checks. */
+export function assertJudgeLineStructure(line: JudgeLine, lineIndex: number): void {
+  const path = `judgeLineList[${lineIndex}]`;
+  assertJudgeLineFields(line, lineIndex);
+  const notes = line.notes ?? [];
+  for (let index = 0; index < notes.length; index++) {
+    const note = notes[index];
+    if (!note || typeof note !== "object") {
+      throw new Error(t("model.chart.invalidNote", { path: `${path}.notes[${index}]` }));
+    }
+    assertNoteStructure(note, path, index);
+  }
+  for (const layer of [...(line.eventLayers ?? []), line.extended]) {
+    if (!layer) {
+      continue;
+    }
+    for (const type of EVENT_TRACKS) {
+      const events = layer[type];
+      if (events != null && !Array.isArray(events)) {
+        throw new Error(t("model.validation.mustBeArray", { target: `${path}.${type}` }));
+      }
+      assertEventTrackStructure(events, type, `${path}.${type}`);
     }
   }
 }

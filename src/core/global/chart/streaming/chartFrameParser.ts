@@ -8,7 +8,7 @@ import type { Chart, JudgeLine } from "../chart.ts";
 import { assertJudgeLineStructure } from "../chartValidation.ts";
 import { TempoMap } from "../timing/tempo.ts";
 import { ChartDocument } from "./chartDocument.ts";
-import { headerContentFingerprint } from "./chartContentHash.ts";
+import { headerContentFingerprint } from "../chartContentHash.ts";
 import { scanJsonArrayRanges } from "./chartJsonScanner.ts";
 import { summarizeChartLine } from "./chartLineSummary.ts";
 import {

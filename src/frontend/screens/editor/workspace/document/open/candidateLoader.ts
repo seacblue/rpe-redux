@@ -31,10 +31,15 @@ import { loadingPaint, type LoadTask } from "../../../../../../core/global/docum
 import { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import { ProjectImages } from "../../../../../../core/media/images.ts";
 import type { EditorCandidate } from "../../../../../../core/global/document/types.ts";
+import type { ChartRevisionSeed } from "../../../../../../core/global/chart/chartRevisionSeed.ts";
 import type { LibraryProjectRef } from "../../../../../../core/global/library/types.ts";
 import { t } from "../../../../../../i18n/index.ts";
 
 const YIELD_INTERVAL = 512;
+/** Keep dense event charts paged even when they contain relatively few lines. */
+const PAGED_LINE_THRESHOLD = 10_000;
+/** Avoid eagerly materializing a chart whose indexed object graph is already large. */
+const PAGED_OBJECT_THRESHOLD = 100_000;
 
 /** Yield while visiting large note/event collections so loading progress can paint. */
 async function reportChartObjectProgress(chart: Chart, task: LoadTask): Promise<void> {
@@ -101,6 +106,7 @@ export interface CandidateLoaderDependencies {
     diagnostics?: EditorCandidate["diagnostics"],
     readOnly?: boolean,
     document?: ChartDocument,
+    revisionSeed?: ChartRevisionSeed,
   ) => void;
   setLibraryProject: (project: LibraryProjectRef | null) => void;
   currentChart: () => Chart;
@@ -122,6 +128,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
     const chartDocument = candidate.chartDocument;
     let chart: Chart | undefined;
     let chartDocumentForSession: ChartDocument | undefined;
+    let revisionSeed: ChartRevisionSeed | undefined;
     let diagnostics: NonNullable<EditorCandidate["diagnostics"]> = [];
     if (chartDocument) {
       const initialLine = candidate.project?.viewState?.lineIndex ?? 0;
@@ -140,9 +147,22 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
         !extensionRuntime.hasEnabled() &&
         !codeExecutionEnabled() &&
         !collaborationRoomDocument.get();
-      if (chartDocument.lineCount > 10_000 && pagedAllowed) {
+      const indexedObjectCount =
+        chartDocument.index?.lines.reduce(
+          (total, summary) => total + summary.noteCount + summary.eventCount,
+          0,
+        ) ?? 0;
+      const denseChart = indexedObjectCount > PAGED_OBJECT_THRESHOLD;
+      const usePagedSession =
+        pagedAllowed && (chartDocument.lineCount > PAGED_LINE_THRESHOLD || denseChart);
+      if (usePagedSession) {
         try {
-          await chartDocument.ensureTime(0, 60, { maxLines: PAGED_PRELOAD_MAX_LINES });
+          // Dense charts often have unbounded event lines. Preloading their
+          // initial time window would still materialize every line, so the
+          // selected line and its ancestors are the only startup reads.
+          if (!denseChart) {
+            await chartDocument.ensureTime(0, 60, { maxLines: PAGED_PRELOAD_MAX_LINES });
+          }
           chart = chartDocument.chart;
           chartDocumentForSession = chartDocument;
         } catch {
@@ -195,6 +215,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       if (!parsedAndValidated) {
         assertChart(resolved);
       }
+      revisionSeed = parsedAndValidated ? candidate.revisionSeed : undefined;
       await reportChartObjectProgress(resolved, task);
       attachExternalEffects([{ name: candidate.name, chart: resolved }], nextAssets);
       chart = resolved;
@@ -214,6 +235,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       diagnostics,
       Boolean(candidate.readOnly || diagnostics.length),
       chartDocumentForSession,
+      revisionSeed,
     );
     deps.setLibraryProject(candidate.project ?? null);
 

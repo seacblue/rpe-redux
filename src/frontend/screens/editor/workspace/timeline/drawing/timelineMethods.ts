@@ -29,7 +29,7 @@ import {
 import { draw, drawMultiLineNotes, drawPlayhead } from "../notes/noteDrawing.ts";
 import { drawCurveGhost } from "../notes/curveGhostDrawing.ts";
 import { drawEvents, drawMultiLineEvents } from "../events/eventDrawing.ts";
-import { drawTrajectoryEvent, drawShaderEvents } from "../events/eventOverlayDrawing.ts";
+import { drawShaderEvents } from "../events/eventOverlayDrawing.ts";
 
 /** The satellite implementations installed on `Timeline.prototype`. */
 export const timelineMethods = {
@@ -62,7 +62,6 @@ export const timelineMethods = {
   drawMultiLineEvents,
   drawCurveGhost,
   drawEvents,
-  drawTrajectoryEvent,
   drawShaderEvents,
 } as const;
 

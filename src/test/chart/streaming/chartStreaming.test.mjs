@@ -13,6 +13,12 @@ import {
   serializeChart,
 } from "../../../core/global/chart/chart.ts";
 import { chartFingerprint } from "../../../core/edit/document/chartRevision.ts";
+import {
+  inheritLineContentFingerprint,
+  lineContentFingerprint,
+  lineContentFingerprintParts,
+  primeLineContentFingerprint,
+} from "../../../core/global/chart/chartContentHash.ts";
 import { scanChartJson } from "../../../core/global/chart/streaming/chartJsonScanner.ts";
 import {
   buildChartIndex,
@@ -37,8 +43,10 @@ import {
   parseChartByteStream,
 } from "../../../core/global/chart/streaming/chartFrameParser.ts";
 import { openChartStreamOffThread } from "../../../frontend/screens/editor/workspace/document/open/chartStreamOffThread.ts";
+import { parseChartEntriesOffThread } from "../../../frontend/screens/editor/workspace/document/open/chartParseOffThread.ts";
 import { serializeChartStream } from "../../../frontend/screens/editor/workspace/document/save/chartSerializeOffThread.ts";
 import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
+import { readPez } from "../../../core/global/document/pez.ts";
 
 /** A chart with a static line, a normal line, and tricky speed lines. */
 function trickyChart() {
@@ -141,6 +149,30 @@ test("summaries flag unbounded static and non-positive-speed lines", () => {
   assert.ok(negativeSummary.flags & LINE_FLAG_UNBOUNDED);
 });
 
+test("unbounded note-only lines retain note timing before the open-ended range", () => {
+  const chart = createChart();
+  const line = createLine("Note only");
+  const note = createNote(2, 10, 0.5, 12);
+  note.visibleTime = 2;
+  line.notes = [note];
+  line.eventLayers = [];
+  line.extended = {};
+  chart.judgeLineList = [line];
+  const summary = summarizeChartLine(line, 0, new TempoMap(chart.BPMList));
+  assert.equal(summary.startSeconds, 3);
+  assert.deepEqual(summary.intervals, [[0, Number.MAX_SAFE_INTEGER]]);
+});
+
+test("paged placeholders preserve indexed note counts before line materialization", () => {
+  const chart = trickyChart();
+  const scan = scanChartJson(serializeChart(chart));
+  const document = documentFromScan(scan);
+  const line = document.chart.judgeLineList[1];
+  assert.equal(isPlaceholderLine(line), true);
+  assert.equal(line.numOfNotes, document.summary(1).noteCount);
+  assert.equal(document.isLoaded(1), false);
+});
+
 test("paged document materializes to the same content fingerprint", async () => {
   const chart = trickyChart();
   const text = serializeChart(chart);
@@ -165,6 +197,175 @@ test("editor-only ids do not change the content fingerprint", () => {
     }
   }
   assert.equal(chartFingerprint(clone), chartFingerprint(chart));
+});
+
+test("materialized line fingerprints reuse unchanged event subtrees", () => {
+  const chart = trickyChart();
+  const line = chart.judgeLineList[1];
+  const parts = lineContentFingerprintParts(line);
+  primeLineContentFingerprint(line, parts.digest, parts.childDigests);
+  const changed = {
+    ...line,
+    notes: [...(line.notes ?? []), createNote(1, 12, 0)],
+  };
+  inheritLineContentFingerprint(line, changed);
+
+  const reused = lineContentFingerprint(changed);
+  const direct = lineContentFingerprint(structuredClone(changed));
+
+  assert.equal(reused, direct);
+});
+
+test("worker object seeds keep copy-on-write fingerprints exact", () => {
+  const chart = trickyChart();
+  const sourceLine = structuredClone(chart.judgeLineList[1]);
+  const source = lineContentFingerprintParts(sourceLine, { includeValueDigests: true });
+  const line = structuredClone(chart.judgeLineList[1]);
+  primeLineContentFingerprint(line, source.digest, source.childDigests, source.valueDigests);
+  const changed = {
+    ...line,
+    eventLayers: [
+      {
+        ...line.eventLayers[0],
+        moveXEvents: [{ ...line.eventLayers[0].moveXEvents[0], start: 7 }],
+      },
+    ],
+  };
+  inheritLineContentFingerprint(line, changed);
+
+  assert.equal(lineContentFingerprint(changed), lineContentFingerprint(structuredClone(changed)));
+});
+
+test("deferred line fingerprints become ready without changing the chart digest", async () => {
+  const chart = trickyChart();
+  const text = serializeChart(chart);
+  const scan = scanChartJson(text);
+  const header = chartHeaderFromScan(scan);
+  const index = buildChartIndex(scan, new TempoMap(header.BPMList), {
+    includeFingerprints: false,
+  });
+  const document = new ChartDocument({
+    header,
+    index,
+    provider: {
+      lineCount: scan.lineRanges.length,
+      async readLine(lineIndex) {
+        const range = scan.lineRanges[lineIndex];
+        return range ? scan.text.slice(range.start, range.end) : undefined;
+      },
+    },
+  });
+  assert.equal(document.fingerprintReady, false);
+  for (const [index, line] of chart.judgeLineList.entries()) {
+    const seed = lineContentFingerprintParts(line);
+    document.applyFingerprintSeed(index, seed);
+  }
+  document.completeFingerprintHydration();
+  await document.whenFingerprintReady();
+  assert.equal(document.fingerprintReady, true);
+  assert.equal(document.fingerprint(), chartFingerprint(chart));
+});
+
+test("duplicate or unusable fingerprint seeds still complete hydration", async () => {
+  const chart = trickyChart();
+  const text = serializeChart(chart);
+  const scan = scanChartJson(text);
+  const header = chartHeaderFromScan(scan);
+  const index = buildChartIndex(scan, new TempoMap(header.BPMList), {
+    includeFingerprints: false,
+  });
+  const document = new ChartDocument({
+    header,
+    index,
+    provider: {
+      lineCount: scan.lineRanges.length,
+      async readLine(lineIndex) {
+        const range = scan.lineRanges[lineIndex];
+        return range ? scan.text.slice(range.start, range.end) : undefined;
+      },
+    },
+  });
+  assert.equal(document.fingerprintReady, false);
+  // The first line's only seed is unusable, and the remaining lines are seeded
+  // twice plus one out-of-range seed. Hydration must still finish instead of
+  // waiting for a seed that will never arrive.
+  document.applyFingerprintSeed(0, { digest: "", childDigests: {} });
+  for (let lineIndex = 1; lineIndex < chart.judgeLineList.length; lineIndex += 1) {
+    const seed = lineContentFingerprintParts(chart.judgeLineList[lineIndex]);
+    document.applyFingerprintSeed(lineIndex, seed);
+    document.applyFingerprintSeed(lineIndex, seed);
+  }
+  document.applyFingerprintSeed(chart.judgeLineList.length + 1, lineContentFingerprintParts(null));
+  await document.whenFingerprintReady();
+  assert.equal(document.fingerprintReady, true);
+});
+
+test("revision seed child digests match the native index vector", () => {
+  const line = {
+    id: "line",
+    notes: [{ id: "note", startTime: [0, 0, 1] }],
+    eventLayers: [
+      {
+        alphaEvents: [{ id: "event", startTime: [1, 0, 1], endTime: [2, 0, 1], end: 0 }],
+      },
+    ],
+  };
+  const parts = lineContentFingerprintParts(line);
+  assert.equal(parts.digest, "e07305ab");
+  assert.equal(parts.childDigests.eventLayers, 632912271);
+  assert.equal(parts.childDigests.notes, 4181772340);
+});
+
+test("archive chart entries can use the paged document factory", async () => {
+  const bytes = new TextEncoder().encode(serializeChart(trickyChart()));
+  let factoryCalls = 0;
+  const opened = await readPez(
+    new Uint8Array(),
+    undefined,
+    undefined,
+    async () => new Map([["chart.json", bytes]]),
+    async (entry) => {
+      factoryCalls += 1;
+      const document = ChartDocument.fromChart(parseChart(new TextDecoder().decode(entry)));
+      return { chartDocument: document, dispose() {} };
+    },
+  );
+
+  assert.equal(factoryCalls, 1);
+  assert.equal(opened.candidates.length, 1);
+  assert.equal(opened.candidates[0].chartDocument?.chart, opened.candidates[0].chart);
+});
+
+test("archive stream fallback parses only entries the paged factory rejects", async () => {
+  const goodBytes = new TextEncoder().encode(serializeChart(trickyChart()));
+  const rejectedBytes = new TextEncoder().encode("not a chart");
+  let parsedNames = [];
+  const opened = await readPez(
+    new Uint8Array(),
+    undefined,
+    (entries) => {
+      parsedNames = [...entries].map(([name]) => name);
+      return { candidates: [], issues: [], errors: [] };
+    },
+    async () =>
+      new Map([
+        ["good.json", goodBytes],
+        ["rejected.json", rejectedBytes],
+      ]),
+    async (entry, name) => {
+      if (name === "rejected.json") {
+        throw new Error("not streamable");
+      }
+      return {
+        chartDocument: ChartDocument.fromChart(parseChart(new TextDecoder().decode(entry))),
+        dispose() {},
+      };
+    },
+  );
+
+  assert.deepEqual(parsedNames, ["rejected.json"]);
+  assert.equal(opened.candidates.length, 1);
+  assert.equal(opened.candidates[0].name, "good.json");
 });
 
 test("paged serialization round trips through parseChart", async () => {
@@ -265,6 +466,21 @@ test("off-thread opener falls back to in-process scanning without workers", asyn
   } finally {
     opened.dispose();
   }
+});
+
+test("plain chart import carries revision data without importing the editor store", async () => {
+  const chart = trickyChart();
+  const parsed = await parseChartEntriesOffThread([
+    ["chart.json", new TextEncoder().encode(serializeChart(chart))],
+  ]);
+  const candidate = parsed.candidates[0];
+
+  assert.ok(candidate);
+  assert.equal(candidate.revisionSeed?.lines.length, chart.judgeLineList.length);
+  assert.deepEqual(
+    candidate.revisionSeed?.lines.map((line) => line.digest),
+    candidate.chart.judgeLineList.map((line) => lineContentFingerprint(line)),
+  );
 });
 
 test("document-backed save stream round trips through parseChart", async () => {

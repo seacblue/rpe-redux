@@ -9,14 +9,29 @@ import type { TempoSource } from "../../../../../../core/global/chart/timing/eve
 import type { PreviewFrame } from "../scene/previewTypes.ts";
 import { canvasPixelRatio } from "../../../canvas/canvas2d.ts";
 import { NoiseFieldPipeline, type NoiseMaskEntry } from "./noiseFieldPipeline.ts";
+import { partitionNoiseMaskEntries } from "./noiseGeometry.ts";
 import {
   noiseLinePreviewArea,
-  sampleNoiseLinePreview,
+  sampleNoiseLinePreviewInto,
 } from "../../../../../../core/global/chart/noise/noiseLinePreview.ts";
 import { noiseLineSizeAt } from "../../../../../../core/global/chart/noise/noiseLineSize.ts";
 import { noiseParentIndex } from "../../../../../../core/global/chart/noise/noiseParent.ts";
 import type { JudgeLine } from "../../../../../../core/global/chart/chart.ts";
 import { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
+
+interface NoiseAreaSource {
+  area: BlockArea;
+  lineIndex?: number;
+}
+
+interface MutableNoiseMaskEntry extends Omit<NoiseMaskEntry, "vertices"> {
+  vertices: { x: number; y: number }[];
+}
+
+/** Create one reusable GPU-entry shell; its point arrays are filled per frame. */
+function createMaskEntry(): MutableNoiseMaskEntry {
+  return { state: "hidden", invert: false, vertices: [] };
+}
 
 /** Maintains reusable viewport-sized surfaces and the optional NoiseField pipeline. */
 export class NoiseAreaRenderer {
@@ -32,6 +47,10 @@ export class NoiseAreaRenderer {
     { chart: object; bpm: object; area: BlockArea }
   >();
   private readonly lineTempos = new WeakMap<object, TempoMap>();
+  private readonly areaSources: NoiseAreaSource[] = [];
+  /** Reused entry objects; the array is truncated to the current frame's entry count. */
+  private readonly entries: MutableNoiseMaskEntry[] = [];
+  private readonly simpleGroups: [NoiseMaskEntry[], NoiseMaskEntry[]] = [[], []];
   private readonly invalidate: () => void;
   private readonly onError: () => void;
   /** Creates the renderer; `invalidate` requests a repaint and `onError` reports GPU failure. */
@@ -77,7 +96,7 @@ export class NoiseAreaRenderer {
       entry = { tempo, aspect, runtime: new NoiseAreaRuntime(area, tempo, aspect) };
       this.runtimes.set(area, entry);
     }
-    return entry.runtime.sample(seconds);
+    return entry.runtime.sampleInto(seconds);
   }
   /** Build one canvas-space polygon from normalized area vertices. */
   private canvasPath(vertices: NoiseMaskEntry["vertices"], width: number, height: number): Path2D {
@@ -120,8 +139,10 @@ export class NoiseAreaRenderer {
     seconds: number,
   ): void {
     const overlay = this.layer("overlay", width, height);
-    for (const active of [false, true]) {
-      const group = entries.filter((entry) => (entry.state === "active") === active);
+    partitionNoiseMaskEntries(entries, this.simpleGroups);
+    for (let activeIndex = 0; activeIndex < 2; activeIndex++) {
+      const active = activeIndex === 1;
+      const group = this.simpleGroups[activeIndex];
       if (!group.length) {
         continue;
       }
@@ -182,9 +203,14 @@ export class NoiseAreaRenderer {
     notes: HTMLCanvasElement | null,
     detailed: boolean,
   ): boolean {
-    const areas: Array<{ area: BlockArea; lineIndex?: number }> = (
-      frame.chart.blockAreaList ?? []
-    ).map((area) => ({ area }));
+    const areas = this.areaSources;
+    areas.length = 0;
+    for (const area of frame.chart.blockAreaList ?? []) {
+      const source = areas[areas.length] ?? { area };
+      source.area = area;
+      source.lineIndex = undefined;
+      areas.push(source);
+    }
     for (const [lineIndex, line] of (frame.chart.judgeLineList ?? []).entries()) {
       try {
         let cached = this.lineAreas.get(line);
@@ -205,7 +231,10 @@ export class NoiseAreaRenderer {
           }
         }
         if (cached) {
-          areas.push({ area: cached.area, lineIndex });
+          const source = areas[areas.length] ?? { area: cached.area };
+          source.area = cached.area;
+          source.lineIndex = lineIndex;
+          areas.push(source);
         }
       } catch {
         // Unsupported transforms remain editable; export rejects them explicitly.
@@ -220,11 +249,8 @@ export class NoiseAreaRenderer {
     // frame while their judge lines move with the free camera.
     const originX = frame.centerX - frame.viewport.left;
     const originY = frame.centerY - frame.viewport.top;
-    const toClip = (point: { readonly x: number; readonly y: number }) => ({
-      x: (2 * (originX + point.x * frame.scaleX)) / frame.viewport.width - 1,
-      y: (2 * (point.y * frame.scaleY - originY)) / frame.viewport.height + 1,
-    });
-    const entries: NoiseMaskEntry[] = [];
+    const entries = this.entries;
+    let entryCount = 0;
     for (const { area, lineIndex } of areas) {
       let sample = this.sample(area, frame.tempo, frame.seconds, aspect);
       if (lineIndex !== undefined) {
@@ -233,24 +259,35 @@ export class NoiseAreaRenderer {
         if (!state || !runtime) {
           continue;
         }
-        sample = sampleNoiseLinePreview(
+        sample = sampleNoiseLinePreviewInto(
           area,
           sample,
           state,
           noiseLineSizeAt(runtime.extended.scaleXEvents, state.scaleX, frame.seconds),
           noiseLineSizeAt(runtime.extended.scaleYEvents, state.scaleY, frame.seconds),
           aspect,
+          sample,
         );
       }
       if (sample.state === "hidden") {
         continue;
       }
-      entries.push({
-        ...sample,
-        color: blockAreaColor(area.color) ?? undefined,
-        vertices: sample.points.map(toClip),
-      });
+      const entry = entries[entryCount] ?? createMaskEntry();
+      entries[entryCount] = entry;
+      entryCount += 1;
+      entry.state = sample.state;
+      entry.invert = sample.invert;
+      entry.color = blockAreaColor(area.color) ?? undefined;
+      const vertices = entry.vertices;
+      for (let index = 0; index < sample.points.length; index++) {
+        const point = sample.points[index];
+        const vertex = vertices[index] ?? (vertices[index] = { x: 0, y: 0 });
+        vertex.x = (2 * (originX + point.x * frame.scaleX)) / frame.viewport.width - 1;
+        vertex.y = (2 * (point.y * frame.scaleY - originY)) / frame.viewport.height + 1;
+      }
+      vertices.length = sample.points.length;
     }
+    entries.length = entryCount;
     if (!entries.length) {
       return false;
     }

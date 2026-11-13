@@ -15,6 +15,9 @@ import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.
 import { EventInteraction } from "../events/eventInteraction.ts";
 import { TimelineEventBatch } from "../events/timelineEventBatch.ts";
 import { NoteBatch } from "../../../canvas/noteBatch.ts";
+import { TimelineLineBatch } from "../../../canvas/timelineLineBatch.ts";
+import { TimelineSolidBatch } from "../../../canvas/timelineSolidBatch.ts";
+import { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 
 import { eventColumnsForLine, visibleEventTypesForLine } from "../events/eventColumns.ts";
 
@@ -38,14 +41,20 @@ export class Timeline {
   readonly cache = new TimelineCache();
   /** The layer that draws the beat grid, playhead and lane separators. */
   notesBackdrop: HTMLCanvasElement;
+  readonly notesGridBatch: TimelineLineBatch;
   notesPlayhead: HTMLCanvasElement;
+  readonly notesPlayheadBatch: TimelineLineBatch;
   notesCanvas: HTMLCanvasElement;
   readonly noteBatch: NoteBatch;
+  readonly noteSolidBatch: TimelineSolidBatch;
   /** The event field's own backdrop layer; see `notesBackdrop`. */
   eventsBackdrop: HTMLCanvasElement;
+  readonly eventsGridBatch: TimelineLineBatch;
   eventsPlayhead: HTMLCanvasElement;
+  readonly eventsPlayheadBatch: TimelineLineBatch;
   eventsCanvas: HTMLCanvasElement;
   readonly eventBatch: TimelineEventBatch;
+  readonly eventOverlayBatch: TimelineOverlayBatch;
   /**
    * The document to draw and hit-test: the live session, or — while a bulk drag is in
    * progress — the proposal that drag would commit. Every drawing function, hit test and
@@ -122,15 +131,27 @@ export class Timeline {
     eventsBackdropCanvas: HTMLCanvasElement,
     notesPlayheadCanvas: HTMLCanvasElement,
     eventsPlayheadCanvas: HTMLCanvasElement,
+    notesGridBatchCanvas: HTMLCanvasElement,
+    notesPlayheadBatchCanvas: HTMLCanvasElement,
+    eventsGridBatchCanvas: HTMLCanvasElement,
+    eventsPlayheadBatchCanvas: HTMLCanvasElement,
+    noteSolidBatchCanvas: HTMLCanvasElement,
+    eventOverlayBatchCanvas: HTMLCanvasElement,
   ) {
     this.notesCanvas = notesCanvas;
     this.notesBackdrop = notesBackdropCanvas;
     this.notesPlayhead = notesPlayheadCanvas;
+    this.notesGridBatch = new TimelineLineBatch(notesGridBatchCanvas);
+    this.notesPlayheadBatch = new TimelineLineBatch(notesPlayheadBatchCanvas);
     this.noteBatch = new NoteBatch(noteBatchCanvas);
+    this.noteSolidBatch = new TimelineSolidBatch(noteSolidBatchCanvas);
     this.eventsCanvas = eventsCanvas;
     this.eventsBackdrop = eventsBackdropCanvas;
     this.eventsPlayhead = eventsPlayheadCanvas;
+    this.eventsGridBatch = new TimelineLineBatch(eventsGridBatchCanvas);
+    this.eventsPlayheadBatch = new TimelineLineBatch(eventsPlayheadBatchCanvas);
     this.eventBatch = new TimelineEventBatch(eventBatchCanvas);
+    this.eventOverlayBatch = new TimelineOverlayBatch(eventOverlayBatchCanvas);
     this.liveSession = getSession;
     this.getSession = () => this.getPreviewSession() ?? this.liveSession();
     this.viewport = new TimelineViewport(
@@ -264,7 +285,13 @@ export class Timeline {
     this.disposed = true;
     this.cache.clear();
     this.noteBatch.dispose();
+    this.noteSolidBatch.dispose();
+    this.notesGridBatch.dispose();
+    this.notesPlayheadBatch.dispose();
     this.eventBatch.dispose();
+    this.eventOverlayBatch.dispose();
+    this.eventsGridBatch.dispose();
+    this.eventsPlayheadBatch.dispose();
     this.gestures.resetDocument();
     if (this.bindingState.canvas.get() === this.canvasBindings) {
       this.bindingState.canvas.set(null);
