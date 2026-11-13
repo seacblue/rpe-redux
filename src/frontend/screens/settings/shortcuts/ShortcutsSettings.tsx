@@ -122,6 +122,7 @@ function RpeHotkeySection({
   findRow(id: string): HTMLElement | null;
 }) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
   const mapped = record.entries.filter((entry) => entry.target);
   const unmapped = record.entries.filter((entry) => !entry.target);
   // A tampered or enormous Hotkey.txt must not build thousands of buttons.
@@ -138,73 +139,93 @@ function RpeHotkeySection({
     window.setTimeout(() => delete row.dataset.flash, 1200);
   };
   return (
-    <section className="redux-shortcut-category redux-shortcut-rpe">
-      <h3>{t("shortcuts.rpeSection.title")}</h3>
+    <section
+      className="redux-shortcut-category redux-shortcut-rpe"
+      data-expanded={String(expanded)}
+    >
+      <div className="redux-shortcut-rpe-head">
+        <h3>{t("shortcuts.rpeSection.title")}</h3>
+        <IconButton
+          icon={expanded ? "chevronDown" : "chevronRight"}
+          size={16}
+          label={t(expanded ? "shortcuts.rpeSection.collapse" : "shortcuts.rpeSection.expand")}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        />
+      </div>
       <p className="redux-shortcut-rpe-summary">
         {t("shortcuts.rpeSection.summary", { mapped: mapped.length, unmapped: unmapped.length })}
       </p>
-      {mapped.length > 0 && (
-        <div className="redux-shortcut-rpe-group">
-          <h4>{t("shortcuts.rpeSection.mapped")}</h4>
-          <div className="redux-shortcut-rpe-chips">
-            {mappedShown.map((entry, index) => (
+      {expanded && (
+        <>
+          {mapped.length > 0 && (
+            <div className="redux-shortcut-rpe-group">
+              <h4>{t("shortcuts.rpeSection.mapped")}</h4>
+              <div className="redux-shortcut-rpe-chips">
+                {mappedShown.map((entry, index) => (
+                  <Button
+                    key={`${index}:${entry.action}`}
+                    variant="outlined"
+                    className="redux-shortcut-rpe-chip"
+                    data-tip-title={t("shortcuts.rpeSection.revealHint")}
+                    onClick={() => entry.target && reveal(entry.target)}
+                  >
+                    <span className="redux-shortcut-rpe-keys">{entry.binding}</span>
+                    <span className="redux-shortcut-rpe-action">{entry.action}</span>
+                  </Button>
+                ))}
+              </div>
+              {mapped.length > mappedShown.length && (
+                <p className="redux-shortcut-rpe-summary">
+                  {t("shortcuts.rpeSection.more", {
+                    count: mapped.length - mappedShown.length,
+                  })}
+                </p>
+              )}
+            </div>
+          )}
+          {unmapped.length > 0 && (
+            <div className="redux-shortcut-rpe-group">
+              <h4>{t("shortcuts.rpeSection.unmapped")}</h4>
+              <ul className="redux-shortcut-rpe-list">
+                {unmappedShown.map((entry, index) => (
+                  <li key={`${index}:${entry.action}`} className="redux-shortcut-rpe-row">
+                    <span className="redux-shortcut-rpe-keys">{entry.binding}</span>
+                    <span className="redux-shortcut-rpe-action">{entry.action}</span>
+                    <span className="redux-shortcut-rpe-reason">
+                      {t(
+                        entry.reason === "invalid-binding"
+                          ? "shortcuts.rpeSection.invalidBinding"
+                          : "shortcuts.rpeSection.unknownAction",
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {unmapped.length > unmappedShown.length && (
+                <p className="redux-shortcut-rpe-summary">
+                  {t("shortcuts.rpeSection.more", {
+                    count: unmapped.length - unmappedShown.length,
+                  })}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="redux-footer-bar">
+            <div className="redux-footer-actions">
               <Button
-                key={`${index}:${entry.action}`}
-                variant="outlined"
-                className="redux-shortcut-rpe-chip"
-                data-tip-title={t("shortcuts.rpeSection.revealHint")}
-                onClick={() => entry.target && reveal(entry.target)}
+                variant="plain"
+                onClick={() => {
+                  clearRpeHotkeyRecord();
+                  onClear();
+                }}
               >
-                <span className="redux-shortcut-rpe-keys">{entry.binding}</span>
-                <span className="redux-shortcut-rpe-action">{entry.action}</span>
+                {t("shortcuts.rpeSection.clear")}
               </Button>
-            ))}
+            </div>
           </div>
-          {mapped.length > mappedShown.length && (
-            <p className="redux-shortcut-rpe-summary">
-              {t("shortcuts.rpeSection.more", { count: mapped.length - mappedShown.length })}
-            </p>
-          )}
-        </div>
+        </>
       )}
-      {unmapped.length > 0 && (
-        <div className="redux-shortcut-rpe-group">
-          <h4>{t("shortcuts.rpeSection.unmapped")}</h4>
-          <ul className="redux-shortcut-rpe-list">
-            {unmappedShown.map((entry, index) => (
-              <li key={`${index}:${entry.action}`} className="redux-shortcut-rpe-row">
-                <span className="redux-shortcut-rpe-keys">{entry.binding}</span>
-                <span className="redux-shortcut-rpe-action">{entry.action}</span>
-                <span className="redux-shortcut-rpe-reason">
-                  {t(
-                    entry.reason === "invalid-binding"
-                      ? "shortcuts.rpeSection.invalidBinding"
-                      : "shortcuts.rpeSection.unknownAction",
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {unmapped.length > unmappedShown.length && (
-            <p className="redux-shortcut-rpe-summary">
-              {t("shortcuts.rpeSection.more", { count: unmapped.length - unmappedShown.length })}
-            </p>
-          )}
-        </div>
-      )}
-      <div className="redux-footer-bar">
-        <div className="redux-footer-actions">
-          <Button
-            variant="plain"
-            onClick={() => {
-              clearRpeHotkeyRecord();
-              onClear();
-            }}
-          >
-            {t("shortcuts.rpeSection.clear")}
-          </Button>
-        </div>
-      </div>
     </section>
   );
 }

@@ -1185,7 +1185,10 @@ export function createDocumentRuntime(options: {
     }),
   );
   options.scope.add(
-    connectTransactionApi({ session: () => (options.hasDocument() ? getSession() : null) }),
+    connectTransactionApi({
+      session: () => (options.hasDocument() ? getSession() : null),
+      revision: () => ({ generation: documentCoordinator.snapshot().revisions.generation }),
+    }),
   );
   options.scope.add(
     connectCodeCellApi(

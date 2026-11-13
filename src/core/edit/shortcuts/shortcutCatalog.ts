@@ -83,6 +83,19 @@ const viewShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "G", modifiers: ["CTRL", "SHIFT"] }],
   },
 ];
+/** Editor shortcuts that change a live editing mode. */
+const interactionShortcuts: readonly EditorShortcutDefinition[] = [
+  {
+    id: "timeline.toggleSnapX",
+    category: SHORTCUT_CATEGORIES.editorEditing.id,
+    title: "shortcuts.editor.toggleSnapX",
+    scope: "editor",
+    // RPE binds its global time-snap toggle here; a fresh install leaves it
+    // unbound and toggles snapping from the timeline controls.
+    defaults: [],
+  },
+];
+
 /**
  * Editor shortcuts that open or close the workspace sampler.
  *
@@ -272,6 +285,7 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcutDefinition[] = [
   ...navigationShortcuts,
   ...playbackShortcuts,
   ...viewShortcuts,
+  ...interactionShortcuts,
   ...lineInfoShortcuts,
   ...multiLineShortcuts,
 ];

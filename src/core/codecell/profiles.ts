@@ -23,6 +23,7 @@ const READ_CAPABILITIES: readonly ExtensionCapability[] = Object.freeze([
   "document.read",
   "chart.read",
   "selection.read",
+  "hitTest.read",
   "preview.read",
 ]);
 

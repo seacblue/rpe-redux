@@ -1,10 +1,17 @@
 /** Adapts preview and timeline-owned geometry to the public hit-test contract. */
 import { eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
+import { queryChartAtTime } from "../../../../../../core/edit/hitTest/query.ts";
+import { getChartApi } from "../../../../../../core/edit/chart/api.ts";
+import { chartFingerprint } from "../../../../../../core/edit/document/chartRevision.ts";
+import { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import type {
+  HitTestAtRequest,
+  HitTestAtSnapshot,
   HitTestKind,
   HitTestRequest,
   HitTestResult,
 } from "../../../../../../core/edit/hitTest/api.ts";
+import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { Preview } from "../../preview/scene/preview.ts";
 import { holdUsefulInterval } from "../../../canvas/noteGeometry.ts";
@@ -174,6 +181,55 @@ export function createHitTestPicker({ preview, timeline }: HitTestBindings) {
         : timelineHits(timeline, request, include);
     results.sort(resultOrder);
     return request.mode === "all" ? results : results.slice(0, 1);
+  };
+}
+
+/** Creates the chart-time query behind `redux.hitTest.queryAt`. */
+export function createHitTestTimeQuery({ preview, timeline }: HitTestBindings) {
+  const tempoCache = new WeakMap<Chart, { entries: Chart["BPMList"]; tempo: TempoMap }>();
+  const fallbackRevisions = new WeakMap<Chart, { chartFingerprint: string; generation: number }>();
+  let nextFallbackGeneration = 0;
+  const tempoFor = (chart: Chart): TempoMap => {
+    const cached = tempoCache.get(chart);
+    if (cached?.entries === chart.BPMList) {
+      return cached.tempo;
+    }
+    const tempo = new TempoMap(chart.BPMList);
+    tempoCache.set(chart, { entries: chart.BPMList, tempo });
+    return tempo;
+  };
+  const revisionFor = (chart: Chart): { chartFingerprint: string | null; generation: number } => {
+    const fingerprint = chartFingerprint(chart);
+    const mounted = getChartApi()?.state();
+    if (mounted?.chartFingerprint === fingerprint) {
+      return mounted;
+    }
+    const previous = fallbackRevisions.get(chart);
+    const revision =
+      previous?.chartFingerprint === fingerprint
+        ? previous
+        : { chartFingerprint: fingerprint, generation: ++nextFallbackGeneration };
+    fallbackRevisions.set(chart, revision);
+    return revision;
+  };
+  return (request: HitTestAtRequest): HitTestAtSnapshot => {
+    const chart = request.surface === "preview" ? preview.chart : timeline.getSession().chart;
+    if (!chart) {
+      return {
+        chartFingerprint: null,
+        generation: 0,
+        totalHits: 0,
+        truncated: false,
+        ordering: "lineIndex,notes,judgeLine,eventTrack,eventIndex",
+        hits: [],
+      };
+    }
+    const query = queryChartAtTime({
+      chart,
+      tempo: tempoFor(chart),
+      request,
+    });
+    return { ...revisionFor(chart), ...query };
   };
 }
 

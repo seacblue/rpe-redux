@@ -9,6 +9,7 @@
  */
 import { beatValue, isOrderedBeatRange } from "../../../../../../core/global/chart/timing/beat.ts";
 import { noteColor, readCanvasPalette } from "../../../canvas/palette.ts";
+import { NOTE_GHOST_FILTER } from "../../../canvas/noteGhostVisual.ts";
 import { notePaintLayer } from "../../../canvas/noteSpriteGroups.ts";
 import type { TimelineCurveGhostReceiver } from "../drawing/timelineReceiver.ts";
 import type { TimelineNote } from "../../../../../../core/edit/timeline/types.ts";
@@ -35,6 +36,7 @@ export function drawCurveGhost(
   const fallbackFill = noteColor(palette, renderableGhost[0].type);
   context.save();
   context.globalAlpha = 0.5;
+  context.filter = NOTE_GHOST_FILTER;
   context.strokeStyle = palette.bottomValue;
   context.fillStyle = fallbackFill;
   context.lineWidth = 2.5;

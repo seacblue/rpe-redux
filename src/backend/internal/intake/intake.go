@@ -84,8 +84,13 @@ type Item struct {
 	// Resources folder. The frontend opens its review dialog before importing
 	// the settings and chart folders that classification found.
 	RPEInstallation bool `json:"rpeInstallation,omitempty"`
+	// PEInstallation marks an old PhiEditer root (PhiEditer.exe + Resources).
+	// Its review lists the PEC charts indexed by Settings.txt.
+	PEInstallation bool `json:"peInstallation,omitempty"`
 	// Details carries the settings and chart rows for a classified RPE root.
 	Details *RpeFolderScan `json:"details,omitempty"`
+	// PeDetails carries the PhiEditer chart rows for its review.
+	PeDetails *PeFolderScan `json:"peDetails,omitempty"`
 	// Valid is false when the package shell was found but failed its basic
 	// shape checks; Kind still names the owner that should explain the error.
 	Valid bool `json:"valid"`
@@ -161,6 +166,14 @@ func classifyFile(file string) Item {
 // identifies an Extension even when it carries JSON data, and a valid chart
 // identifies a chart folder even when an info.yml provides its metadata.
 func classifyDirectory(original, dir string, depth int) Item {
+	if root := peInstallationRoot(dir); root != "" {
+		item := chartItem(original, root, FormatPEC, "", nil, "PhiEditer installation")
+		item.PEInstallation = true
+		if scan, err := ReadPeFolder(root); err == nil {
+			item.PeDetails = &scan
+		}
+		return item
+	}
 	if root := rpeInstallationRoot(dir); root != "" {
 		item := chartItem(original, root, FormatRPE, "", nil, "RPE installation")
 		item.RPEInstallation = true

@@ -151,3 +151,78 @@
   background: var(--accent);
   opacity: 0.78;
 }
+
+.redux-performance-hud-traffic {
+  display: grid;
+  gap: var(--space-1-5);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--edge-divider);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.redux-performance-hud-traffic-heading,
+.redux-performance-hud-traffic-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.redux-performance-hud-traffic-heading {
+  justify-content: space-between;
+}
+
+.redux-performance-hud-traffic-chart {
+  display: block;
+  width: 100%;
+  height: 72px;
+  overflow: visible;
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface-sunken) 72%, transparent);
+}
+
+.redux-performance-hud-traffic-grid {
+  stroke: var(--edge-divider);
+  stroke-width: 1;
+}
+
+.redux-performance-hud-traffic-line {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.redux-performance-hud-traffic-line.is-upload,
+.redux-performance-hud-traffic-key.is-upload i {
+  stroke: var(--accent);
+  background: var(--accent);
+}
+
+.redux-performance-hud-traffic-line.is-download,
+.redux-performance-hud-traffic-key.is-download i {
+  stroke: var(--warning);
+  background: var(--warning);
+}
+
+.redux-performance-hud-traffic-legend {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.redux-performance-hud-traffic-key {
+  color: var(--foreground-muted);
+}
+
+.redux-performance-hud-traffic-key i {
+  display: block;
+  width: 14px;
+  height: 2px;
+  flex: none;
+}
+
+.redux-performance-hud-traffic-key strong {
+  margin-left: auto;
+  color: var(--foreground);
+  font-weight: 500;
+}

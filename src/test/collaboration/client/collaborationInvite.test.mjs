@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   buildRoomInviteLink,
   buildWebRoomInviteLink,
+  buildRoomServerUrl,
   createRoomPassword,
   normalizeRoomServerUrl,
+  parseRoomServerUrlParts,
   parseRoomInviteLink,
   parseWebRoomInviteUrl,
 } from "../../../core/collaboration/invite.ts";
@@ -58,6 +60,8 @@ test("generated room passwords are typeable and distinct", () => {
 
 test("manual addresses normalize to ws or wss", () => {
   assert.equal(normalizeRoomServerUrl("192.168.1.10:47831"), "ws://192.168.1.10:47831");
+  assert.equal(normalizeRoomServerUrl("localhost:47831"), "ws://localhost:47831");
+  assert.equal(normalizeRoomServerUrl("room.example.com:47831"), "wss://room.example.com:47831");
   assert.equal(normalizeRoomServerUrl("http://example.com/rooms"), "ws://example.com/rooms");
   assert.equal(normalizeRoomServerUrl("https://example.com"), "wss://example.com");
   assert.equal(normalizeRoomServerUrl("wss://example.com/rooms"), "wss://example.com/rooms");
@@ -67,6 +71,34 @@ test("manual addresses normalize to ws or wss", () => {
   );
   assert.equal(normalizeRoomServerUrl("ftp://example.com"), "");
   assert.equal(normalizeRoomServerUrl(""), "");
+});
+
+test("room server fields split and rebuild supported endpoints", () => {
+  assert.deepEqual(parseRoomServerUrlParts("wss://room.example.com:47831/rooms"), {
+    address: "room.example.com",
+    port: "47831",
+    protocol: "wss",
+    path: "/rooms",
+  });
+  assert.equal(
+    buildRoomServerUrl({
+      address: "room.example.com",
+      port: "47831",
+      protocol: "wss",
+      path: "/rooms",
+    }),
+    "wss://room.example.com:47831/rooms",
+  );
+  assert.deepEqual(parseRoomServerUrlParts("", "wss"), {
+    address: "",
+    port: "",
+    protocol: "wss",
+    path: "",
+  });
+  assert.equal(
+    buildRoomServerUrl({ address: "2001:db8::1", port: "47831", protocol: "ws", path: "" }),
+    "ws://[2001:db8::1]:47831",
+  );
 });
 
 test("invalid or incomplete invite links are rejected", () => {

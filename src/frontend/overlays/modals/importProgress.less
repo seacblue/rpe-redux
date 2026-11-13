@@ -1,0 +1,35 @@
+// Import progress dialog: one determinate bar, the current chart line, and the
+// completed/total count for a reviewed batch import.
+.import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: min(420px, 60vw);
+}
+
+.import-progress-stage {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--type-body);
+  line-height: var(--line-body);
+  overflow-wrap: anywhere;
+}
+
+.import-progress-bar {
+  margin: var(--space-1) 0;
+}
+
+.import-progress-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  .meta-text();
+}
+
+.import-progress-percent {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}

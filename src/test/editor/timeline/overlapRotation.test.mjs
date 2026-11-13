@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { overlappingNoteRanks } from "../../../core/edit/timeline/noteOverlap.ts";
 import { timelineNoteCandidates } from "../../../core/edit/timeline/hitTest.ts";
+import { noteOverlapRotation } from "../../../frontend/screens/editor/workspace/timeline/notes/noteRotation.ts";
 
 /** Minimal non-Hold note for overlap rank tests. */
 function note(positionX, beat = 1, type = 1) {
@@ -39,6 +40,13 @@ test("notes on different beats and Holds keep rank zero", () => {
 
 test("a zero threshold disables overlap ranks", () => {
   assert.equal(overlappingNoteRanks([note(0), note(10)], 0).size, 0);
+});
+
+test("overlap ranks rotate notes in the negative direction", () => {
+  const step = (15 * Math.PI) / 180;
+  assert.equal(noteOverlapRotation(undefined), 0);
+  assert.equal(noteOverlapRotation(1), -step);
+  assert.equal(noteOverlapRotation(2), -2 * step);
 });
 
 test("hit testing follows the rotated note head instead of its axis-aligned box", () => {

@@ -243,14 +243,15 @@ interface CodeCellResult {
 
 | profile | exact capabilities |
 | --- | --- |
-| `read` | `document.read`, `chart.read`, `selection.read`, `preview.read` |
-| `write` (default) | `document.read`, `chart.read`, `selection.read`, `preview.read`, `chart.write`, `library.read`, `assets.write` |
+| `read` | `document.read`, `chart.read`, `selection.read`, `hitTest.read`, `preview.read` |
+| `write` (default) | `document.read`, `chart.read`, `selection.read`, `hitTest.read`, `preview.read`, `chart.write`, `library.read`, `assets.write` |
 
 `read` can call:
 
 - `redux.document.availability/state`
 - `redux.chart.availability/state/read/snapshot/metadata/resources/lines/line/parentId/notes/note/events/event`
 - `redux.selection.availability/state/subscribe`
+- `redux.hitTest.availability/queryAt` (temporal queries), plus `pick/geometry` through `preview.read`
 - `redux.preview.availability/snapshot/frame`
 - `redux.capabilities()`
 
@@ -279,7 +280,7 @@ A capability denial is a normal cell error:
 
 The host raises `ExtensionCapabilityError`, but the cell result usually reports `name: "Error"` because the bridge carries the message and code rather than the host class. A bridged call can also prefix the message with its path, for example `document.save: Extension capability is not granted: document.write (document.save)`. Always test `error.code === "capabilityDenied"`; never match the full message or the name.
 
-The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.values`, `redux.settings`, `redux.toolbar`, `redux.sidebar`, `redux.playback`, `redux.layout`, `redux.hitTest`, `redux.diagnostics`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles. `redux.preview` is available because both profiles hold `preview.read`; use it to inspect visible objects or render a frame.
+The source receives exactly `redux`, `input`, and `console`. There is no `ui`, `timers`, `values`, `settings`, `storage`, `events`, `scripts`, `styles`, `context`, `window`, or `document`. `redux.diagnostics`, `redux.help`, and `redux.extensions` throw `capabilityDenied` on property access in both profiles. `redux.hitTest` is available because both profiles hold `hitTest.read`; its geometric `pick` and `geometry` methods additionally use `preview.read`. `redux.preview` is available because both profiles hold `preview.read`; use it to inspect visible objects or render a frame.
 
 ### Exact signatures
 
@@ -427,6 +428,16 @@ interface PreviewFrameImage {
   byteLength: number;
   chartFingerprint: string;
 }
+
+// Read-only temporal and geometric hit tests (both profiles).
+redux.hitTest.availability(): Promise<ApiAvailability>;
+redux.hitTest.pick(
+  request: HitTestRequest,
+): Promise<ApiResult<readonly HitTestResult[]>>;
+redux.hitTest.queryAt(
+  request: HitTestAtRequest,
+): Promise<ApiResult<HitTestAtSnapshot>>;
+redux.hitTest.geometry(): Promise<ApiResult<HitTestPreviewGeometry>>;
 
 // Transactions (write profile only).
 redux.transaction.availability(): Promise<ApiAvailability>;

@@ -14,6 +14,7 @@ import { Modal } from "../../../design/components/modal/Modal.tsx";
 import { FILE_DRAG_EVENT } from "../../../core/shell/shellEventNames.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import { requestExternalImport } from "./externalImportService.ts";
+import { requestPeImport } from "./peImportService.ts";
 import { requestRpeImport } from "./rpeImportService.ts";
 import {
   closeWelcomeImportDialog,
@@ -70,6 +71,9 @@ export function WelcomeImportDialog() {
           </Button>
           <Button variant="outlined" onClick={() => choose(requestExternalImport)}>
             {t("workspace.welcome.importDialog.external")}
+          </Button>
+          <Button variant="outlined" onClick={() => choose(requestPeImport)}>
+            {t("workspace.welcome.importDialog.pe")}
           </Button>
           <Button variant="solid" onClick={() => choose(requestRpeImport)}>
             {t("workspace.welcome.importDialog.rpe")}

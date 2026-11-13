@@ -14,7 +14,10 @@ import type { LibraryProjectSummary } from "../../../core/global/library/client.
 import type { DropClassification } from "../../../core/global/document/dropIntake.ts";
 import type { LoadTask } from "../../../core/global/document/loading.ts";
 import { ProjectHome } from "./projectLibrary.ts";
-import { showExportDialog } from "../editor/workspace/document/export/exportPrompt.ts";
+import {
+  confirmExportWarnings,
+  showExportDialog,
+} from "../editor/workspace/document/export/exportPrompt.ts";
 import { openSettings } from "../settings/settingsWindowController.ts";
 import type { AssetMap, EditorCandidate } from "../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../core/global/library/types.ts";
@@ -34,13 +37,18 @@ import {
   openLibraryChartDocument,
 } from "../../../core/global/library/document.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
-import { createChartExport, createChartTextExport } from "../../../core/global/document/export.ts";
+import {
+  chartExportWarnings,
+  createChartExport,
+  createChartTextExport,
+} from "../../../core/global/document/export.ts";
 import { download } from "../../platform/download.ts";
 import {
   chooseRpeImport as chooseRpeFolderMigration,
   importRpePath,
   type RpeImportDeps,
 } from "./rpeImport.ts";
+import { choosePeImport as choosePeFolderMigration, importPeFolder } from "./peImport.ts";
 import {
   chooseExternalImport as chooseExternalChartImport,
   importExternalPath,
@@ -167,13 +175,8 @@ export function createEditorHomeRuntime(deps: {
         const chart = opened.project.chart as Chart;
         if (format !== "pez") {
           const result = createChartTextExport(chart, opened.project.name, format, { name });
-          if (result.warnings.length) {
-            showToast({
-              message: t("editor.dialogs.exportDialog.warnings", {
-                count: result.warnings.length,
-              }),
-              level: "warning",
-            });
+          if (!(await confirmExportWarnings(format, result.warningDetails))) {
+            return null;
           }
           if (!deps.documents) {
             download(new Blob([result.text], { type: result.mime }), result.name);
@@ -199,8 +202,19 @@ export function createEditorHomeRuntime(deps: {
           const result = createChartExport(chart, assets, opened.project.name, {
             name: exportFileName(name),
           });
+          if (!(await confirmExportWarnings("pez", result.warnings))) {
+            return null;
+          }
           download(result.blob, result.name);
           return result.name;
+        }
+        if (
+          !(await confirmExportWarnings(
+            "pez",
+            chartExportWarnings(chart, opened.project.name, "pez"),
+          ))
+        ) {
+          return null;
         }
         const exporter = new TauriDocumentStore();
         try {
@@ -371,6 +385,7 @@ export function createEditorHomeRuntime(deps: {
   const home = new ProjectHome({
     importRpePath: (path) => importRpePath(path, rpeDeps),
     importRpeInstallation: (path, details) => importRpePath(path, rpeDeps, details),
+    importPeInstallation: (path, details) => importPeFolder(path, rpeDeps, details),
     importExternalPath: (path) => importExternalPath(path, externalDeps),
     classifyPaths,
     importExtension: async (item) => offerPackageSettings(item, "extension"),
@@ -383,6 +398,7 @@ export function createEditorHomeRuntime(deps: {
     },
     importExternalChart: openExternalChartFile,
     chooseRpeImport: () => chooseRpeFolderMigration(rpeDeps),
+    choosePeImport: () => choosePeFolderMigration(rpeDeps),
     chooseExternalImport: () => chooseExternalChartImport(externalDeps),
     openProject: async (id) => {
       const found = await localService();

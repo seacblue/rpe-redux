@@ -134,6 +134,35 @@ export const playbackShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "SPACE" }],
   },
   {
+    id: "playback.start",
+    category: "editor.playback",
+    title: "shortcuts.editor.startPlayback",
+    scope: "editor",
+    // Start without toggling: an RPE migration binds it to RPE's start key.
+    defaults: [],
+  },
+  {
+    id: "playback.stop",
+    category: "editor.playback",
+    title: "shortcuts.editor.stopPlaybackRestore",
+    scope: "editor",
+    defaults: [],
+  },
+  {
+    id: "playback.stopStay",
+    category: "editor.playback",
+    title: "shortcuts.editor.stopPlaybackStay",
+    scope: "editor",
+    defaults: [],
+  },
+  {
+    id: "playback.replay",
+    category: "editor.playback",
+    title: "shortcuts.editor.replayPlayback",
+    scope: "editor",
+    defaults: [],
+  },
+  {
     id: "playback.step.previous",
     shared: true,
     category: "editor.playback",

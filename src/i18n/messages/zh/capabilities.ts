@@ -83,6 +83,9 @@ export default {
   "settings.extensions.capability.timers.description": "在宿主计时器预算内运行超时、间隔和动画帧。",
   "settings.extensions.capability.diagnostics.label": "读取诊断",
   "settings.extensions.capability.diagnostics.description": "读取诊断快照并控制跟踪捕获。",
+  "settings.extensions.capability.hitTest.read.label": "读取谱面命中测试",
+  "settings.extensions.capability.hitTest.read.description":
+    "在不改变编辑器视图的情况下，按指定时间查询谱面对象。",
   "settings.extensions.capability.preview.read.label": "读取预览几何",
   "settings.extensions.capability.preview.read.description":
     "读取已绘制的预览对象、拾取几何和布局锚点。",

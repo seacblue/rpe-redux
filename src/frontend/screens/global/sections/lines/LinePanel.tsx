@@ -17,6 +17,7 @@ import { Segmented } from "../../../../../design/components/segmented/Segmented.
 import { Select } from "../../../../../design/components/select/Select.tsx";
 import {
   inheritsParentRotation,
+  lineParentIndex,
   type Chart,
   type JudgeLine,
 } from "../../../../../core/global/chart/chart.ts";
@@ -79,6 +80,8 @@ export interface LinePanelProps {
 
 /** Controller props plus the view-only chrome owned by the mounted panel. */
 export interface LinePanelViewProps extends LinePanelProps {
+  /** Snapshot revision used to remount uncontrolled property fields after edits. */
+  snapshotRevision: number;
   selectedLineIds: ReadonlySet<string>;
   /** The folder selected in folder mode, or null while lines are selected. */
   selectedFolderGroup: number | null;
@@ -154,6 +157,7 @@ export function LinePanelView({
   onApplySelectionPurpose,
   onAddTexture,
   onTextureBrowserOpen,
+  snapshotRevision,
   showTitle = true,
   variant = "all",
   notify,
@@ -203,6 +207,11 @@ export function LinePanelView({
   // A mixed control is null; the form renders it as an empty numeric field or a
   // disabled "Mixed" option. Only the field that actually changed is committed.
   const sharedGroup = sharedValue(selectedLines.map((line) => lineGroupIndex(line)));
+  const sharedName = sharedValue(selectedLines.map((line) => String(line.Name ?? "")));
+  const sharedParent = sharedValue(selectedLines.map((line) => lineParentIndex(line.father)));
+  const sharedRotateWithFather = sharedValue(
+    selectedLines.map((line) => inheritsParentRotation(line)),
+  );
   const sharedMask = sharedValue(
     selectedLines.map((line) => (Number(line.isCover ?? 0) === 1 ? "1" : "0")),
   );
@@ -336,27 +345,26 @@ export function LinePanelView({
             <small>{t("editorPanels.linePanel.batchHint")}</small>
           </div>
         )}
-        {!multi && (
-          <FieldRow
-            layout="inline"
-            density="compact"
-            htmlFor="line-field-name"
-            label={t("editorPanels.linePanel.name")}
-            reset={resets.field(
-              "name",
-              t("editorPanels.linePanel.name"),
-              String(selectedLine.Name ?? "") !== t("model.line.untitled"),
-            )}
-            control={
-              <Input
-                id="line-field-name"
-                name="name"
-                defaultValue={selectedLine.Name ?? ""}
-                onBlur={() => commitField("name")}
-              />
-            }
-          />
-        )}
+        <FieldRow
+          layout="inline"
+          density="compact"
+          htmlFor="line-field-name"
+          label={t("editorPanels.linePanel.name")}
+          reset={resets.field(
+            "name",
+            t("editorPanels.linePanel.name"),
+            String(selectedLine.Name ?? "") !== t("model.line.untitled"),
+          )}
+          control={
+            <Input
+              id="line-field-name"
+              name="name"
+              defaultValue={sharedName ?? ""}
+              placeholder={sharedName === null ? t("editorPanels.linePanel.mixed") : undefined}
+              onBlur={() => commitField("name")}
+            />
+          }
+        />
         <LineTypeSection
           selectedLine={selectedLine}
           multi={multi}
@@ -364,6 +372,7 @@ export function LinePanelView({
           onBatchPurpose={applyBatchPurpose}
           changeNoiseMode={changeNoiseMode}
           attachUI={attachUI}
+          attachUIMixed={sharedAttachUI === null}
           lineExtendedEnabled={lineExtendedEnabled}
           resets={resets}
           commitField={commitField}
@@ -523,17 +532,16 @@ export function LinePanelView({
       return null;
     }
     const groupIndex = sharedGroup === null ? null : clampGroup(sharedGroup, groupCount);
-    const parentValue = Number(selectedLine.father ?? -1);
-    const parent = Number.isInteger(parentValue) ? parentValue : -1;
-    const showParent = !multi && (parentLinesEnabled || lineHasParent(selectedLine));
-    const rotateWithFather = inheritsParentRotation(selectedLine);
+    const parent = sharedParent === null ? -1 : sharedParent;
+    const showParent = parentLinesEnabled || selectedLines.some((line) => lineHasParent(line));
+    const rotateWithFather = sharedRotateWithFather ?? false;
     if (!showGroups && !showParent) {
       return null;
     }
     return (
       <section
         className="line-panel-combination"
-        key={`combination:${selectionKey}:${session.lineIndex}`}
+        key={`combination:${snapshotRevision}:${selectionKey}:${session.lineIndex}`}
       >
         <h3 className="line-panel-section-title">{t("editorPanels.linePanel.combination")}</h3>
         {showGroups && (
@@ -577,10 +585,14 @@ export function LinePanelView({
                   id="line-field-parent"
                   name="parent"
                   type="number"
-                  min="0"
+                  min="-1"
                   step="1"
-                  defaultValue={parent >= 0 ? String(parent) : ""}
-                  placeholder={t("editorPanels.linePanel.noParent")}
+                  defaultValue={sharedParent !== null && parent >= 0 ? String(parent) : ""}
+                  placeholder={
+                    sharedParent === null
+                      ? t("editorPanels.linePanel.mixed")
+                      : t("editorPanels.linePanel.noParent")
+                  }
                   onBlur={() => commitField("parent")}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -608,6 +620,11 @@ export function LinePanelView({
                   name="rotateWithFather"
                   type="checkbox"
                   defaultChecked={rotateWithFather}
+                  ref={(element) => {
+                    if (element) {
+                      element.indeterminate = sharedRotateWithFather === null;
+                    }
+                  }}
                   onChange={() => commitField("rotateWithFather")}
                 />
               }
@@ -662,7 +679,7 @@ export function LinePanelView({
         <section
           className="line-panel-properties"
           aria-label={t("editorPanels.linePanel.properties")}
-          key={`properties:${selectionKey}:${session.lineIndex}`}
+          key={`properties:${snapshotRevision}:${selectionKey}:${session.lineIndex}`}
         >
           {renderLineProperties()}
         </section>

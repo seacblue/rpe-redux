@@ -166,7 +166,7 @@ export function renderProperties(
   // Structural changes may need to publish while a control still owns focus.
   forceRefresh = false,
 ): void {
-  if (session.liveNoteEdit && !forceRefresh) {
+  if (session.noteDraftActive && !forceRefresh) {
     return;
   }
   const entries = selectedNoteEntries(session);
@@ -240,12 +240,12 @@ export function renderProperties(
               ? 5
               : 1;
       const focus = () => {
-        session.liveNoteEdit = true;
+        session.noteDraftActive = true;
       };
       const blur = () => {
-        session.liveNoteEdit = false;
+        session.noteDraftActive = false;
         queueMicrotask(() => {
-          if (!session.liveNoteEdit) {
+          if (!session.noteDraftActive) {
             renderProperties(session, state, tempo, reportError, nudgeBeatInput);
           }
         });
@@ -291,6 +291,7 @@ export function renderProperties(
           label,
           kind,
           value: "",
+          preservesDraft: true,
           beat: note[key] as Beat,
           // A Hold's end must follow its start; a derived end is read-only.
           accepts:
@@ -354,6 +355,7 @@ export function renderProperties(
           key,
           label,
           kind: key === "color" ? "color" : "text",
+          preservesDraft: key === "hitSound",
           value:
             key === "color"
               ? colorHex(tinted.color ?? tinted.tint)
@@ -422,6 +424,7 @@ export function renderProperties(
         key === "alpha" ||
         key === "yOffset" ||
         key === "visibleTime";
+      const preservesDraft = kind === "number" || kind === "duration" || kind === "text";
       const present =
         key === "isFake"
           ? Number(note.isFake ?? 0) === 1
@@ -469,6 +472,7 @@ export function renderProperties(
         key,
         label,
         kind,
+        preservesDraft,
         value,
         options:
           kind === "select" ? Object.entries((options ?? {}) as Record<string, string>) : undefined,

@@ -37,6 +37,7 @@ export default {
   "chrome.toolbar.freeCameraPanX": "Pan X",
   "chrome.toolbar.freeCameraPanY": "Pan Y",
   "chrome.toolbar.freeCameraReset": "Reset view",
+  "chrome.toolbar.parentLine": "Parent line number",
   "chrome.toolbar.noiseRendering": "Actual noise rendering",
   "chrome.toolbar.noiseRenderingUnavailable":
     "Detailed noise rendering is unavailable. Switch to simplified rendering to keep editing.",
@@ -71,9 +72,11 @@ export default {
   "chrome.performanceHud.frameLoad": "Frame interval load",
   "chrome.performanceHud.frameLoadGraph": "Frame interval load graph",
   "chrome.performanceHud.memory": "Memory (JS heap)",
-  "chrome.performanceHud.memoryGraph": "Memory graph",
-  "chrome.performanceHud.cpu": "CPU (render load)",
-  "chrome.performanceHud.cpuGraph": "CPU graph",
+  "chrome.performanceHud.cpu": "CPU",
+  "chrome.performanceHud.collaborationTraffic": "Room traffic",
+  "chrome.performanceHud.trafficGraph": "Upload and download traffic graph",
+  "chrome.performanceHud.upload": "Upload",
+  "chrome.performanceHud.download": "Download",
 
   "chrome.sidebar.label": "Workspace navigation",
 
@@ -124,7 +127,7 @@ export default {
   "chrome.pane.metadata": "Chart information",
   "chrome.pane.bpm": "Timing",
   "chrome.pane.assets": "Asset library",
-  "chrome.pane.audio": "Audio heatmap",
+  "chrome.pane.audio": "Waveform / spectrum",
   "chrome.pane.curve": "Fill curve notes",
   "chrome.pane.trajectory": "Curve trajectory generation",
   "chrome.pane.multiLine": "Multi-line editing",

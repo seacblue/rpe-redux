@@ -143,7 +143,7 @@ export class Timeline {
     this.notesPlayhead = notesPlayheadCanvas;
     this.notesGridBatch = new TimelineLineBatch(notesGridBatchCanvas);
     this.notesPlayheadBatch = new TimelineLineBatch(notesPlayheadBatchCanvas);
-    this.noteBatch = new NoteBatch(noteBatchCanvas);
+    this.noteBatch = new NoteBatch(noteBatchCanvas, "timeline");
     this.noteSolidBatch = new TimelineSolidBatch(noteSolidBatchCanvas);
     this.eventsCanvas = eventsCanvas;
     this.eventsBackdrop = eventsBackdropCanvas;
@@ -216,6 +216,9 @@ export class Timeline {
           if (!this.gestures.drag) {
             this.gestures.cursor = null;
           }
+          if (this.gestures.hoverArea === "notes") {
+            this.gestures.hoverArea = undefined;
+          }
           this.gestures.onNoteHover?.(null);
           this.changed();
         },
@@ -272,6 +275,9 @@ export class Timeline {
         pointerLeave: () => {
           if (!this.disposed && !this.gestures.eventInteraction.drag) {
             this.gestures.eventCursor = null;
+            if (this.gestures.hoverArea === "events") {
+              this.gestures.hoverArea = undefined;
+            }
             this.changed();
           }
         },

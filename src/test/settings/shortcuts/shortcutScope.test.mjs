@@ -5,7 +5,6 @@ import { shortcutScopeAvailable, shortcutScopePriority } from "../../../core/sho
 import { historyShortcuts } from "../../../core/edit/session/history.ts";
 import { playbackShortcuts } from "../../../core/edit/playback/transport.ts";
 import {
-  claimsLocalShortcut,
   isShortcutBlockingSurface,
   isWindowBlur,
 } from "../../../frontend/platform/shortcuts/focus.ts";
@@ -98,23 +97,6 @@ test("inline listboxes do not hide workspace shortcuts", () => {
   assert.equal(isShortcutBlockingSurface(target("inline-listbox")), false);
   assert.equal(isShortcutBlockingSurface(target("button")), false);
   assert.equal(isShortcutBlockingSurface(null), false);
-});
-
-test("a local surface claims only the bare keys it declares", () => {
-  const target = (declared) => ({
-    closest: (selector) =>
-      selector === "[data-local-shortcut]" && declared !== null
-        ? { getAttribute: () => declared }
-        : null,
-  });
-  assert.equal(claimsLocalShortcut(target("SPACE"), { key: " " }), true);
-  assert.equal(claimsLocalShortcut(target("ENTER SPACE"), { key: " " }), true);
-  assert.equal(claimsLocalShortcut(target("ENTER"), { key: " " }), false);
-  assert.equal(claimsLocalShortcut(target("SPACE"), { key: "Enter" }), false);
-  // Modified chords stay global, so Ctrl+Space still reaches preview-only.
-  assert.equal(claimsLocalShortcut(target("SPACE"), { key: " ", ctrlKey: true }), false);
-  assert.equal(claimsLocalShortcut(target("SPACE"), { key: " ", shiftKey: true }), false);
-  assert.equal(claimsLocalShortcut(null, { key: " " }), false);
 });
 
 test("a control losing focus is not the window losing focus", () => {

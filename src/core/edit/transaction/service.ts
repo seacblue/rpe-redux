@@ -33,6 +33,7 @@ export {
 
 interface TransactionApiHost {
   session(): EditorSession | null;
+  revision?(): { readonly generation: number };
 }
 
 /** Connect the mounted editor to the public transaction facade. */
@@ -67,10 +68,14 @@ function createTransactionApi(host: TransactionApiHost) {
   return {
     version: 1,
     apply(requestOrPreviewId?: unknown, previewId?: string): ChartTransactionResult {
-      return applyChartTransaction(host.session(), requestOrPreviewId, previewId);
+      return applyChartTransaction(host.session(), requestOrPreviewId, previewId, {
+        currentGeneration: host.revision?.().generation ?? 0,
+      });
     },
     preview(request: unknown): ChartTransactionPreviewResult {
-      return previewChartTransaction(host.session(), request);
+      return previewChartTransaction(host.session(), request, {
+        currentGeneration: host.revision?.().generation ?? 0,
+      });
     },
     cancel(previewId: string): boolean {
       return cancelPreviewTransaction(host.session(), previewId);

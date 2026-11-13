@@ -20,6 +20,7 @@ Extension 在独立的 iframe 沙箱中运行，用于添加快捷键、工具�
 - [事务](#事务)
 - [信任](#信任)
 - [预览几何](#预览几何)
+- [按时间命中测试](#按时间命中测试)
 - [布局锚点](#布局锚点)
 - [SDK](#sdk)
 
@@ -95,10 +96,11 @@ Capability 控制谱面读写、工具栏/面板/侧栏 UI、舞台或窗口叠�
 | 播放 | `playback.read`, `playback.control` |
 | UI | `ui.notice`, `ui.dialog`, `ui.panel`, `ui.sidebar`, `ui.overlay`, `ui.toolbar`, `ui.contextMenu` |
 | 宿主服务 | `shortcuts`, `shortcuts.read`, `settings`, `hooks`, `values`, `storage`, `events`, `services`, `styles`, `timers`, `diagnostics` |
-| 预览与布局 | `preview.read` |
+| 按时间命中测试 | `hitTest.read` |
+| 预览几何与布局 | `preview.read` |
 | 宿主专用 gate | `host.patch`（已弃用；不授予任何能力） |
 
-词汇表共 32 项，其中 31 项可授予。`capabilityCatalog.ts` 的 consent 目录覆盖全部 32 项；`CAPABILITY_CONSENT_ROWS` 不包含 `host.patch`，因为它不会进入安装对话框。
+词汇表共 34 项，其中 33 项可授予。`capabilityCatalog.ts` 的 consent 目录覆盖全部 34 项；`CAPABILITY_CONSENT_ROWS` 不包含 `host.patch`，因为它不会进入安装对话框。`hitTest.read` 只授予按时间的 `queryAt`；几何拾取、预览几何和布局仍属于 `preview.read`。
 
 Capability 检查作用在 iframe 与宿主之间的每次桥接调用上。iframe 使用不透明源，其文档策略禁止网络、Worker、子框架和顶层导航，因此无法访问宿主 DOM、Tauri IPC 或 `window.redux`。受限的 `values` 只能写入本包声明过的值（以及同时持有 `shortcuts` capability 时的快捷键绑定）。工具栏只暴露本包注册的动作；没有可按 id 调用的宿主命令分发器。
 
@@ -369,7 +371,7 @@ if (lines.ok && lines.value.length > 0) {
 
 请求可以更新谱面 `metadata`、通过 `timing.bpmList` 替换速度表、插入或更新判定线，以及按 id 插入、更新或删除音符和事件。音符和事件时间是约分后的拍三元组，不是秒。`lines` 没有删除操作。
 
-`preview(request)` 先做 dry-run 校验，只有状态为 `previewed` 时才返回 preview id；把 id 传给 `apply(previewId)`，或用 `cancel(previewId)` 丢弃。`apply` 的状态是 `committed`、`unchanged`、`rejected`、`conflict` 或 `unavailable`，`value` 里包含 issues、受影响对象 id 和撤销历史。分页 `chart.read` 用旧游标时返回 `stale_read`；提交前谱面变化时 `apply` 返回 `conflict`。这时应重新读取并重建请求，不要盲目重试。
+`preview(request)` 先做 dry-run 校验，只有状态为 `previewed` 时才返回 preview id；把 id 传给 `apply(previewId)`，或用 `cancel(previewId)` 丢弃。`apply` 的状态是 `committed`、`unchanged`、`rejected`、`conflict` 或 `unavailable`，`value` 里包含 issues、受影响对象 id 和撤销历史。分页 `chart.read` 用旧游标时返回 `stale_read`；请求带有旧 `expectedGeneration` 时也会以 issue code `stale_read` 拒绝；提交前谱面变化时 `apply` 返回 `conflict`。这时应重新读取并重建请求，不要盲目重试。
 
 公开的[谱面操作](../docs-sdk/zh/place-note.md)指南包含完整插件、选中音符更新、事件和结果处理。
 
@@ -413,6 +415,27 @@ const stop = await api.preview.subscribe((snapshot) => {
 每个对象都有稳定 id 和两个坐标系：`client` 相对于应用窗口，`surface` 相对于预览画布左上角。`bounds` 是画布在窗口中的矩形，`viewport` 是画布内实际绘制的预览画面，`rotation` 是顺时针角度。订阅会跟随每个绘制帧，且不会额外触发一次渲染；`snapshot()` 只读取当前帧一次。需要拾取用的碰撞几何时使用 `await api.hitTest.geometry()`。
 
 `subscribe` 只在预览绘制时报告帧。自主动画的消费者（例如桌宠）应通过 `timers` capability 运行自己的时钟，并在两次绘制之间复用最近的快照，这样暂停播放不会让消费者停住。
+
+## 按时间命中测试
+
+`api.hitTest.queryAt(request)` 是按时间查询对象的接口，不是几何拾取。它按明确的谱面时间读取当前有效的谱面对象。请求必须在 `time.seconds` 和 `time.beat` 中恰好指定一个；返回值包含同一 chart revision 下的 `chartFingerprint`、`generation`、`totalHits`、`truncated`、稳定的 `ordering` 和 `hits`。`limit` 限制返回数量（默认 100，最大 1000），`eventTypes` 过滤事件轨道但不改变顺序。preview 请求可以省略 `lineIndex`，或使用稳定的 `lineId` 查询所有或指定判定线；但只要查询包含 event，就必须显式提供 `eventLayer`，只查询 note/判定线时可以省略。timeline 请求必须提供 `lineIndex` 或 `lineId`、`eventLayer` 和 `coordinateSpace: "chart-time"`。每个结果都会返回 `lineId`；note 会返回 `noteType`，event 会返回数值 layer 或 extended 轨道的 `"extended"`、当前 `eventValue`、起止值和 easing 参数。存在时也包含合成的 `noiseActiveEvents`。结果按判定线索引、note、判定线、事件轨道顺序和事件索引排序。查询返回脱离宿主状态的对象引用和拍数区间，不会选中对象、改变焦点、跳转播放、滚动时间轴、改变 viewport 或写入编辑历史。
+
+```js
+const result = await api.hitTest.queryAt({
+  surface: "timeline",
+  time: { beat: [32, 0, 1] },
+  lineId: "line-1",
+  eventLayer: 0,
+  coordinateSpace: "chart-time",
+  include: ["note", "event"],
+});
+if (result.ok) {
+  console.log(result.value.chartFingerprint, result.value.generation);
+  for (const hit of result.value.hits) console.log(hit.kind, hit.lineId, hit.time);
+}
+```
+
+现有的 `api.hitTest.pick()` 仍然是按屏幕坐标进行几何拾取的接口：调用方已有 preview 或 timeline 上的几何点时使用它；调用方只有谱面时间、且必须避免影响人类编辑界面时使用 `queryAt()`。`coordinateSpace: "chart-time"` 表示 timeline 查询使用谱面时间引用，并不是 CSS 或 canvas 坐标系。
 
 ## 布局锚点
 

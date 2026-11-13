@@ -8,7 +8,7 @@
  */
 import type { Chart, JudgeLine } from "../../../../../core/global/chart/chart.ts";
 import { groupNames } from "../../../../../core/global/chart/line/lineGroups.ts";
-import { setLineParent } from "../../../../../core/global/chart/line/lineEdits.ts";
+import { setLineParents } from "../../../../../core/global/chart/line/lineEdits.ts";
 import { t } from "../../../../../i18n/index.ts";
 
 /** Judge-line properties the panel form can edit. */
@@ -32,9 +32,6 @@ export interface LineFieldEdit {
   /** Checkbox state; only `rotateWithFather` reads it. */
   checked?: boolean;
 }
-
-/** The fields that cannot be collapsed onto a multi-line selection. */
-const PER_LINE_FIELDS = new Set<LineField>(["name", "parent", "rotateWithFather"]);
 
 /** Deduplicated, in-range indices for an edit. */
 function validTargets(chart: Chart, indices: readonly number[]): number[] {
@@ -62,9 +59,9 @@ function numberValue(raw: string, multiple: boolean, message: string): number | 
 /**
  * Apply one changed form field to the selected lines.
  *
- * `name`, `parent`, and `rotateWithFather` stay per line: they are relational or
- * identifying values, not a shared visual property. A multi-line request for one
- * of them is rejected instead of guessing which line should keep its own value.
+ * Every field is written to every target. Relational fields are validated as a
+ * prospective graph before any line is changed, so a parent-cycle rejection is
+ * atomic just like the ordinary scalar fields.
  */
 export function editLineField(
   chart: Chart,
@@ -76,15 +73,19 @@ export function editLineField(
     return chart;
   }
   const multiple = targets.length > 1;
-  if (multiple && PER_LINE_FIELDS.has(edit.field)) {
-    throw new Error(t("editorPanels.linePanel.batchUnsupported"));
-  }
   if (edit.field === "parent") {
-    // An empty field is the explicit "no parent" state; numbers name a line.
+    // A blank multi-line field keeps mixed parent links unchanged. Type -1 to
+    // explicitly clear every selected parent; a blank single-line field still
+    // means the ordinary "no parent" state.
     const raw = edit.value.trim();
+    if (raw === "" && multiple) {
+      return chart;
+    }
     const parent = raw === "" ? -1 : Number(raw);
-    const current = Number(chart.judgeLineList?.[targets[0]]?.father ?? -1);
-    return current === parent ? chart : setLineParent(chart, targets[0], parent);
+    if (!Number.isInteger(parent) || parent < -1) {
+      throw new Error(t("editor.commands.lineCommands.error.invalidIndex"));
+    }
+    return setLineParents(chart, targets, parent);
   }
 
   const sourceLines = chart.judgeLineList ?? [];
@@ -94,6 +95,9 @@ export function editLineField(
   const update = (line: JudgeLine): JudgeLine => {
     switch (edit.field) {
       case "name":
+        if (multiple && edit.value === "") {
+          return line;
+        }
         return { ...line, Name: edit.value };
       case "group": {
         const group = Number(edit.value);

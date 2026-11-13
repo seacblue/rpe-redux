@@ -13,6 +13,7 @@ import {
   shiftEventEdge,
   shiftSelectionLine,
 } from "../../../core/edit/selection/control.ts";
+import { nudgeSelection } from "../../../core/edit/selection/edits.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 
 function noteSession() {
@@ -62,4 +63,12 @@ test("event edge shortcuts move only one endpoint", () => {
   event = session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0];
   assert.equal(beatValue(event.startTime), 0.25);
   assert.equal(beatValue(event.endTime), 3.75);
+});
+
+test("horizontal selection nudges move by half a vertical grid spacing", () => {
+  const session = noteSession();
+  assert.equal(nudgeSelection(session, "ArrowRight", 4, 11), true);
+  assert.equal(session.chart.judgeLineList[0].notes[0].positionX, -32.5);
+  assert.equal(session.chart.judgeLineList[0].notes[1].positionX, 67.5);
+  assert.equal(session.chart.judgeLineList[0].notes[2].positionX, 167.5);
 });

@@ -272,6 +272,21 @@ test("a stale or invalid transaction leaves document and history untouched", () 
   assert.equal(session.history.undoStack.length, 0);
 });
 
+test("an expected chart generation rejects a stale AI write", () => {
+  const session = new EditorSession(createChart());
+  const before = session.chart;
+  const stale = applyChartTransaction(
+    session,
+    { expectedGeneration: 4, metadata: { name: "must-not-apply" } },
+    undefined,
+    { currentGeneration: 5 },
+  );
+  assert.equal(stale.status, "rejected");
+  assert.equal(stale.issues[0].code, "stale_read");
+  assert.equal(session.chart, before);
+  assert.equal(session.history.undoStack.length, 0);
+});
+
 test("a cancelled commit is rejected without changing the chart or history", () => {
   const session = new EditorSession(createChart());
   const before = session.chart;

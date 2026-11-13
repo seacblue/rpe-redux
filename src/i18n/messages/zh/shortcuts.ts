@@ -11,6 +11,8 @@ export default {
   "shortcuts.rpeSection.unknownAction": "这里没有对应命令",
   "shortcuts.rpeSection.invalidBinding": "按键无法解析",
   "shortcuts.rpeSection.clear": "清除迁移记录",
+  "shortcuts.rpeSection.expand": "展开",
+  "shortcuts.rpeSection.collapse": "收起",
   "shortcuts.rpeSection.more": "另有 {count} 条未显示。",
   "shortcuts.category.workspace": "工作区",
   "shortcuts.category.file": "文件",
@@ -52,6 +54,7 @@ export default {
 
   "shortcuts.editor.keepTimePaste": "等时粘贴",
   "shortcuts.editor.mirrorPaste": "镜像粘贴",
+  "shortcuts.editor.keepTimeMirrorPaste": "等时镜像粘贴",
 
   "shortcuts.editor.eventLayer0": "事件层 0",
   "shortcuts.editor.eventLayer1": "事件层 1",
@@ -60,6 +63,11 @@ export default {
   "shortcuts.editor.eventLayerExtended": "事件特殊层",
 
   "shortcuts.editor.pause": "播放 / 暂停",
+  "shortcuts.editor.startPlayback": "开始播放",
+  "shortcuts.editor.stopPlaybackRestore": "停止播放并回到开头",
+  "shortcuts.editor.stopPlaybackStay": "停止播放并保持位置",
+  "shortcuts.editor.replayPlayback": "从头播放",
+  "shortcuts.editor.toggleSnapX": "切换时间吸附",
   "shortcuts.editor.lastBeat": "后退一横线",
   "shortcuts.editor.nextBeat": "前进一横线",
   "shortcuts.editor.previousJudgeLine": "判定线号递减",

@@ -76,7 +76,12 @@ export async function migrateRpeScan(
   deps: RpeImportDeps,
   selection?: RpeImportSelection,
 ): Promise<RpeImportSummary> {
-  const plan = createRpeMigrationPlan(scan.settingsText, scan.hotkeysText, scan.uiText);
+  const plan = createRpeMigrationPlan(
+    scan.settingsText,
+    scan.hotkeysText,
+    scan.uiText,
+    scan.divisionColorText,
+  );
   const approved = selection ? filterRpeMigrationPlan(plan, selection) : plan;
   const selectedCharts = selection ? new Set(selection.chartPaths) : null;
   const charts = selectedCharts
@@ -293,7 +298,12 @@ export async function importRpePath(
     return null;
   }
   if (scan.installation) {
-    const plan = createRpeMigrationPlan(scan.settingsText, scan.hotkeysText, scan.uiText);
+    const plan = createRpeMigrationPlan(
+      scan.settingsText,
+      scan.hotkeysText,
+      scan.uiText,
+      scan.divisionColorText,
+    );
     const selection = await requestRpeImportReview(scan, plan);
     if (!selection) {
       return [];

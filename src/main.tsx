@@ -37,9 +37,11 @@ import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.t
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
 import { setLongTaskBootState } from "./core/state/longTasks.ts";
 import { registerFloatingHost } from "./frontend/overlays/floatingHost.ts";
+import { installFrontendDiagnosticCapture } from "./frontend/platform/diagnosticCapture.ts";
 
 // Keep background operations behind the workspace boot barrier. The barrier is
 // opened only after the editor assembly has published a usable workspace.
+installFrontendDiagnosticCapture();
 setLongTaskBootState("loading");
 // Host-scoped chrome and settings read this before the first frame.
 document.documentElement.dataset.host = hostKind();

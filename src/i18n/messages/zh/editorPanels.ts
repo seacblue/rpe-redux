@@ -368,7 +368,8 @@ export default {
   "editorPanels.linePanel.emptyState.title": "还没有判定线",
   "editorPanels.linePanel.emptyState.description": "在下方新增判定线，开始放置音符。",
   "editorPanels.linePanel.batchEdit": "批量编辑选中的判定线",
-  "editorPanels.linePanel.batchHint": "仅显示可批量修改的属性；名称、父线和旋转关系保持独立。",
+  "editorPanels.linePanel.batchHint":
+    "所有属性都可以应用到选中的判定线。不同值显示为“多个值”；混合数字字段留空表示保持各自数值。",
   "editorPanels.linePanel.mixed": "多个值",
   "editorPanels.linePanel.batchUnsupported": "该属性不支持批量编辑。",
   "editorPanels.linePanel.batchApplyLabel": "更新选中的判定线",

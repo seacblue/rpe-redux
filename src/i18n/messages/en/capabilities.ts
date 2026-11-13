@@ -101,6 +101,9 @@ export default {
   "settings.extensions.capability.diagnostics.label": "Read diagnostics",
   "settings.extensions.capability.diagnostics.description":
     "Read diagnostics snapshots and control trace capture.",
+  "settings.extensions.capability.hitTest.read.label": "Read chart hit tests",
+  "settings.extensions.capability.hitTest.read.description":
+    "Query chart objects at an explicit time without changing the editor view.",
   "settings.extensions.capability.preview.read.label": "Read preview geometry",
   "settings.extensions.capability.preview.read.description":
     "Read painted preview objects, hit-test geometry, and layout anchors.",

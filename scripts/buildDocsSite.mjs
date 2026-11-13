@@ -611,7 +611,8 @@ const CAPABILITY_DESCRIPTIONS = Object.freeze({
   styles: "注入所有者作用域的样式表。",
   timers: "使用宿主计时器（64 个上限，16 ms 下限）。",
   diagnostics: "读取诊断快照并控制跟踪。",
-  "preview.read": "读取预览几何、命中测试和布局锚点。",
+  "hitTest.read": "按指定谱面时间读取命中对象，不改变编辑器状态。",
+  "preview.read": "读取预览几何、几何拾取和布局锚点。",
   "host.patch": "已退役，仅保留旧清单解析，不授予任何权限。",
 });
 

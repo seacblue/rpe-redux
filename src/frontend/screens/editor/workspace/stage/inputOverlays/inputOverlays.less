@@ -1,11 +1,11 @@
 // Input overlays: the transient key-press label and the pointer trail. They sit
-// just below the performance HUD, the diagnostics surface the user can drag,
-// and never take pointer events; their models own the state.
+// above every other in-window surface and never take pointer events; their
+// models own the state.
 
 .input-overlays {
   position: fixed;
   inset: 0;
-  z-index: calc(var(--z-performance-hud) - 1);
+  z-index: calc(var(--z-performance-hud) + 1);
   overflow: hidden;
   pointer-events: none;
 }

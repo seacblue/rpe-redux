@@ -26,6 +26,7 @@ export default {
   "chrome.toolbar.freeCameraPanX": "平移 X",
   "chrome.toolbar.freeCameraPanY": "平移 Y",
   "chrome.toolbar.freeCameraReset": "视角归位",
+  "chrome.toolbar.parentLine": "父线编号",
   "chrome.toolbar.noiseRendering": "实际噪域渲染",
   "chrome.toolbar.noiseRenderingUnavailable": "实际噪域渲染不可用，请切换到简化渲染以继续编辑。",
   "chrome.toolbar.previewBatchUnavailable":
@@ -59,9 +60,11 @@ export default {
   "chrome.performanceHud.frameLoad": "帧间隔负载",
   "chrome.performanceHud.frameLoadGraph": "帧间隔负载图",
   "chrome.performanceHud.memory": "内存（JS 堆）",
-  "chrome.performanceHud.memoryGraph": "内存图",
-  "chrome.performanceHud.cpu": "CPU（渲染负载）",
-  "chrome.performanceHud.cpuGraph": "CPU 图",
+  "chrome.performanceHud.cpu": "CPU",
+  "chrome.performanceHud.collaborationTraffic": "协作房间流量",
+  "chrome.performanceHud.trafficGraph": "上行与下行流量图",
+  "chrome.performanceHud.upload": "上行",
+  "chrome.performanceHud.download": "下行",
 
   "chrome.sidebar.label": "工作区导航",
 
@@ -108,7 +111,7 @@ export default {
   "chrome.pane.metadata": "谱面信息",
   "chrome.pane.bpm": "时值",
   "chrome.pane.assets": "素材库",
-  "chrome.pane.audio": "音频热力图",
+  "chrome.pane.audio": "波形 / 频谱",
   "chrome.pane.curve": "填充曲线音符",
   "chrome.pane.trajectory": "曲线轨迹生成",
   "chrome.pane.multiLine": "多线编辑",

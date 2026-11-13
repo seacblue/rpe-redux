@@ -216,7 +216,7 @@ test("timeline line and solid buffers reuse stable capacity", () => {
   }
 });
 
-test("preview note buffers reuse stable capacity without reusing stale instances", () => {
+test("preview note buffers orphan each frame while keeping a stable capacity", () => {
   const { canvas, calls } = fakeWebGLCanvas();
   const batch = new NoteBatch(canvas);
   const skin = {
@@ -235,7 +235,8 @@ test("preview note buffers reuse stable capacity without reusing stale instances
   assert.equal(batch.addHead(skin, 1, false, 80, 80, 8, 0, 0, 1), true);
   batch.finish();
 
-  assert.equal(calls.bufferAllocations.length, 1);
+  assert.equal(calls.bufferAllocations.length, 2);
+  assert.equal(calls.bufferAllocations[0], calls.bufferAllocations[1]);
   assert.equal(calls.uploads.length, 2);
   assert.notDeepEqual(calls.uploads[1], firstUpload);
   assert.equal(calls.uploads[1][0], 80);

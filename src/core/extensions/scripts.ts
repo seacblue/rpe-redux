@@ -1,13 +1,10 @@
 /* eslint-disable max-lines -- script registration, execution, parameters, and UI capabilities share one registry. */
 /** Extension-owned script registration, parameter resolution, shortcuts, and run history. */
-import { getHitTestApi } from "../edit/hitTest/api.ts";
 import { getSelectionSession } from "../edit/selection/api.ts";
 import { chart as chartApi, type ChartHandle } from "../api/chart.ts";
 import { selection as selectionApi, type SelectionHandle } from "../api/selection.ts";
 import { transaction as transactionApi, type TransactionHandle } from "../api/transaction.ts";
 import type { ReduxApi } from "../api/index.ts";
-import type { HitTestPreviewGeometry, HitTestRequest, HitTestResult } from "../edit/hitTest/api.ts";
-import type { ApiResult } from "../contracts/result.ts";
 import { shortcutRegistry } from "../shortcuts/registry.ts";
 import type { Shortcut, ShortcutDisposer, ShortcutScope } from "../shortcuts/types.ts";
 import type { TrustedExtensionManifest } from "./extensionRuntime.ts";
@@ -74,18 +71,11 @@ import { tRaw } from "../../i18n/index.ts";
 
 export type { ExtensionScriptStep } from "./steps.ts";
 
-/** Host hit-test calls exposed to scripts under `preview.read`. */
-export interface ScriptHitTestApi {
-  pick(request: HitTestRequest): ApiResult<readonly HitTestResult[]>;
-  geometry(): ApiResult<HitTestPreviewGeometry>;
-}
-
 /** Capability-gated editor handles one script can reach. */
 export interface ScriptEditorContext {
   readonly selection: SelectionHandle;
   readonly chart: ChartHandle;
   readonly transaction: TransactionHandle;
-  readonly hitTest: ScriptHitTestApi | null;
 }
 
 /** Host UI handles available to one Extension, each checked against its grant. */
@@ -278,48 +268,10 @@ function editor(): ScriptEditorContext | null {
   ) {
     return null;
   }
-  const host = getHitTestApi();
-  const hitTest: ScriptHitTestApi | null = host
-    ? {
-        pick(request) {
-          try {
-            return { ok: true, value: Object.freeze([...host.pick(request)]) };
-          } catch (error) {
-            return {
-              ok: false,
-              error: {
-                code: "failed",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            };
-          }
-        },
-        geometry() {
-          try {
-            const geometry = host.getPreviewGeometry?.() ?? null;
-            return geometry
-              ? { ok: true, value: geometry }
-              : {
-                  ok: false,
-                  error: { code: "unavailable", message: "Preview geometry unavailable" },
-                };
-          } catch (error) {
-            return {
-              ok: false,
-              error: {
-                code: "failed",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            };
-          }
-        },
-      }
-    : null;
   return {
     selection: selectionApi,
     chart: chartApi,
     transaction: transactionApi,
-    hitTest,
   };
 }
 
@@ -564,12 +516,6 @@ function contextFor(
     get transaction() {
       requireCapability("chart.write", "editor.transaction");
       return currentEditor.transaction;
-    },
-    get hitTest() {
-      if (!granted.has("preview.read")) {
-        return null;
-      }
-      return currentEditor.hitTest;
     },
   };
   return {

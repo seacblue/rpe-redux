@@ -40,6 +40,13 @@ export type {
 } from "./document.ts";
 export type {
   HitTestArea,
+  HitTestAtRequest,
+  HitTestAtResult,
+  HitTestAtSnapshot,
+  HitTestAtOrdering,
+  HitTestCoordinateSpace,
+  HitTestEventLayer,
+  HitTestEventType,
   HitTestKind,
   HitTestLineGeometry,
   HitTestMode,
@@ -49,6 +56,9 @@ export type {
   HitTestRequest,
   HitTestResult,
   HitTestSurface,
+  HitTestTime,
+  HitTestTimeRequest,
+  HitTestValue,
 } from "./hitTest.ts";
 export type {
   LibraryAssetSummary,

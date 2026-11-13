@@ -27,6 +27,15 @@ export default {
   "workspace.collaboration.progress.status.publish": "Publishing the chart and assets",
   "workspace.collaboration.progress.status.ready": "Room ready",
   "workspace.collaboration.progress.aborted": "Room setup was aborted.",
+  "workspace.collaboration.hostModeHint.tunnel":
+    "The app will try to start Cloudflare Tunnel and generate a public invite address. This device must be able to reach Cloudflare; if startup fails, check cloudflared, the network, or security software.",
+  "workspace.collaboration.hostModeHint.lan":
+    "LAN hosting listens for a collaboration service on this device. Members on the same LAN can join through the local address; for access across networks, use a VPN, router port forwarding, or a tunnelling service to map this port to an address the other members can reach. Make sure the forwarding supports WebSocket, and have joiners use the mapped address and port. We do not configure NAT, firewalls, or tunnelling services for you.",
+  "workspace.collaboration.connectionAddress": "Connection address",
+  "workspace.collaboration.copyConnectionAddress": "Copy connection address",
+  "workspace.collaboration.connectionAddressCopied": "Connection address copied.",
+  "workspace.collaboration.connectionAddressCopyFailed":
+    "The connection address could not be copied.",
   "workspace.collaboration.memberActions": "Member actions for {name}",
   "workspace.collaboration.changeAccess": "Change access",
   "workspace.collaboration.changeAccessTitle": "Change access for {name}",

@@ -102,10 +102,11 @@ A manifest declaration is a request. The runtime grants only these names, and ev
 | Playback | `playback.read`, `playback.control` |
 | UI | `ui.notice`, `ui.dialog`, `ui.panel`, `ui.sidebar`, `ui.overlay`, `ui.toolbar`, `ui.contextMenu` |
 | Host services | `shortcuts`, `shortcuts.read`, `settings`, `hooks`, `values`, `storage`, `events`, `services`, `styles`, `timers`, `diagnostics` |
-| Preview and layout | `preview.read` |
+| Temporal hit-testing | `hitTest.read` |
+| Preview geometry and layout | `preview.read` |
 | Host-only gate | `host.patch` (deprecated; grants nothing) |
 
-The vocabulary has 32 names, of which 31 are grantable. The consent catalog in `src/core/extensions/capabilityCatalog.ts` covers all 32, while `CAPABILITY_CONSENT_ROWS` omits `host.patch` because it never reaches an install dialog.
+The vocabulary has 34 names, of which 33 are grantable. The consent catalog in `src/core/extensions/capabilityCatalog.ts` covers all 34, while `CAPABILITY_CONSENT_ROWS` omits `host.patch` because it never reaches an install dialog. `hitTest.read` grants temporal `queryAt`; geometric picking, preview geometry, and layout remain under `preview.read`.
 
 Runtime-backed handles expose `availability()`; a missing capability or runtime is returned as an unavailable result or a `capabilityDenied` error. The sandbox has an opaque origin and cannot reach the host DOM, Tauri IPC, `window.redux`, network, workers, or child frames. Its only channel is a transferred `MessagePort`, and every result is plain cloned data.
 
@@ -435,7 +436,7 @@ if (lines.ok && lines.value.length > 0) {
 
 A request may update chart `metadata`, replace the tempo map under `timing.bpmList`, insert or update judge lines, and insert, update, or delete notes and events by id. Notes and events use reduced beat triples, not seconds. `lines` has no delete operation.
 
-`preview(request)` validates a dry run and returns a preview id only when the status is `previewed`; pass that id to `apply(previewId)` or discard it with `cancel(previewId)`. `apply` status is `committed`, `unchanged`, `rejected`, `conflict`, or `unavailable`, with issues, affected object ids, and history metadata inside `value`. A read page with an old cursor returns `stale_read`; a commit after the chart changed returns `conflict`. Re-read and rebuild instead of retrying blindly.
+`preview(request)` validates a dry run and returns a preview id only when the status is `previewed`; pass that id to `apply(previewId)` or discard it with `cancel(previewId)`. `apply` status is `committed`, `unchanged`, `rejected`, `conflict`, or `unavailable`, with issues, affected object ids, and history metadata inside `value`. A read page with an old cursor returns `stale_read`; a request with an old `expectedGeneration` is rejected with issue code `stale_read`; a commit after the chart changed returns `conflict`. Re-read and rebuild instead of retrying blindly.
 
 The public [Chart operations](../docs-sdk/en/place-note.md) guide walks through a complete plugin, selected-note updates, events, and result handling.
 
@@ -469,6 +470,27 @@ const stop = await api.preview.subscribe((snapshot) => {
 ```
 
 Each object carries a stable chart id (or an index fallback) and two coordinate spaces: `client` is relative to the application viewport and `surface` is relative to the preview canvas's top-left corner. `bounds` is the canvas in client space, `viewport` is the painted frame inside it, and `rotation` is clockwise degrees. Use `api.hitTest.geometry()` for the collision geometry used by picking. A consumer that animates runs its own clock through `timers` and reuses the latest snapshot between paints.
+
+## Time-aware hit testing
+
+`api.hitTest.queryAt(request)` is the temporal object query, not a geometric picker. It reads chart objects active at one explicit chart time. The request must contain exactly one of `time.seconds` or `time.beat`; the response contains `chartFingerprint`, `generation`, `totalHits`, `truncated`, a stable `ordering`, and a `hits` array from one read-consistent chart revision. `limit` bounds the returned list (default 100, maximum 1000); `eventTypes` filters event tracks without changing order. A preview request may omit `lineIndex` or use stable `lineId` to inspect every or one judge line, but any query that includes events must explicitly provide `eventLayer`; note/line-only preview queries may omit it. A timeline request must include `lineIndex` or `lineId`, `eventLayer`, and `coordinateSpace: "chart-time"`. Each hit includes `lineId`; note hits include `noteType`, while event hits include their numeric layer or `"extended"`, current `eventValue`, endpoints, and easing parameters. Synthetic `noiseActiveEvents` are included when present. Results are ordered by line index, notes, judge line, event-track order, and event index. The query returns detached object references and beat ranges; it does not select an object, move focus, seek playback, scroll, change the viewport, or write editor history.
+
+```js
+const result = await api.hitTest.queryAt({
+  surface: "timeline",
+  time: { beat: [32, 0, 1] },
+  lineId: "line-1",
+  eventLayer: 0,
+  coordinateSpace: "chart-time",
+  include: ["note", "event"],
+});
+if (result.ok) {
+  console.log(result.value.chartFingerprint, result.value.generation);
+  for (const hit of result.value.hits) console.log(hit.kind, hit.lineId, hit.time);
+}
+```
+
+The existing `api.hitTest.pick()` remains the geometric screen-coordinate picker. Use it when a caller already has a point in the mounted preview or timeline surface; use `queryAt()` when the caller has a chart time and must leave the human editing surface untouched. `coordinateSpace: "chart-time"` identifies the temporal chart reference used by timeline callers; it is not a CSS or canvas coordinate system.
 
 ## Layout anchors
 

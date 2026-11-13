@@ -12,6 +12,8 @@ export default {
   "shortcuts.rpeSection.unknownAction": "No matching command",
   "shortcuts.rpeSection.invalidBinding": "Key could not be parsed",
   "shortcuts.rpeSection.clear": "Clear migration record",
+  "shortcuts.rpeSection.expand": "Expand",
+  "shortcuts.rpeSection.collapse": "Collapse",
   "shortcuts.rpeSection.more": "{count} more entries are not shown.",
   "shortcuts.category.workspace": "Workspace",
   "shortcuts.category.file": "File",
@@ -53,6 +55,7 @@ export default {
 
   "shortcuts.editor.keepTimePaste": "Paste keeping time",
   "shortcuts.editor.mirrorPaste": "Paste mirrored",
+  "shortcuts.editor.keepTimeMirrorPaste": "Paste mirrored keeping time",
 
   "shortcuts.editor.eventLayer0": "Event layer 0",
   "shortcuts.editor.eventLayer1": "Event layer 1",
@@ -61,6 +64,11 @@ export default {
   "shortcuts.editor.eventLayerExtended": "Extended event layer",
 
   "shortcuts.editor.pause": "Play / pause",
+  "shortcuts.editor.startPlayback": "Start playback",
+  "shortcuts.editor.stopPlaybackRestore": "Stop playback and return to the start",
+  "shortcuts.editor.stopPlaybackStay": "Stop playback and stay",
+  "shortcuts.editor.replayPlayback": "Replay from the beginning",
+  "shortcuts.editor.toggleSnapX": "Toggle time snapping",
   "shortcuts.editor.lastBeat": "Back one line",
   "shortcuts.editor.nextBeat": "Forward one line",
   "shortcuts.editor.previousJudgeLine": "Previous judge line",

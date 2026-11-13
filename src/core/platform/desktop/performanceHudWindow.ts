@@ -38,6 +38,11 @@ export interface PerformanceHudFramePayload {
   memorySamplesMb: readonly number[];
   renderLoadPercent: number;
   renderLoadSamples: readonly number[];
+  collaborationTrafficActive: boolean;
+  collaborationUploadKbps: number;
+  collaborationDownloadKbps: number;
+  collaborationUploadSamples: readonly number[];
+  collaborationDownloadSamples: readonly number[];
 }
 
 /** Screen edges the detached HUD snapped to. */

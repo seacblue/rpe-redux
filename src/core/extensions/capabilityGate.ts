@@ -86,6 +86,30 @@ function wrapMethod<T extends (...args: never[]) => unknown>(
 }
 
 /**
+ * Keep temporal queries independently grantable while grouping geometric
+ * picking and preview geometry under the preview capability.
+ */
+function hitTestView(api: ReduxApi, granted: Granted, owner?: string): ReduxApi["hitTest"] {
+  return {
+    availability: () => {
+      if (!granted.has("hitTest.read") && !granted.has("preview.read")) {
+        require(granted, "hitTest.read", "api.hitTest.availability", owner);
+      }
+      return api.hitTest.availability();
+    },
+    pick: wrapMethod(granted, "preview.read", "api.hitTest.pick", api.hitTest.pick, owner),
+    queryAt: wrapMethod(granted, "hitTest.read", "api.hitTest.queryAt", api.hitTest.queryAt, owner),
+    geometry: wrapMethod(
+      granted,
+      "preview.read",
+      "api.hitTest.geometry",
+      api.hitTest.geometry,
+      owner,
+    ),
+  };
+}
+
+/**
  * Project one context-menu target to the reader's declared capabilities.
  *
  * `beat`/`chartSeconds` (and a notes target's line) describe chart position and
@@ -1007,11 +1031,21 @@ export function gateExtensionApi(
     get: () => api.version,
   });
 
-  const allow = (key: string, capability: ExtensionCapability, value: unknown): void => {
+  const allow = (
+    key: string,
+    capability: ExtensionCapability | readonly ExtensionCapability[],
+    value: unknown,
+  ): void => {
     Object.defineProperty(gated, key, {
       enumerable: true,
       get: () => {
-        require(granted, capability, `api.${key}`, owner);
+        if (typeof capability !== "string") {
+          if (!capability.some((name) => granted.has(name))) {
+            require(granted, capability[0], `api.${key}`, owner);
+          }
+        } else {
+          require(granted, capability, `api.${key}`, owner);
+        }
         return value;
       },
     });
@@ -1053,7 +1087,7 @@ export function gateExtensionApi(
   allow("values", "values", valuesView(api, granted, owner, ownedShortcuts));
   allow("shortcuts", "shortcuts", shortcutsView(api, owner, ownedShortcuts));
   allow("diagnostics", "diagnostics", api.diagnostics);
-  allow("hitTest", "preview.read", api.hitTest);
+  allow("hitTest", ["hitTest.read", "preview.read"], hitTestView(api, granted, owner));
   allow("preview", "preview.read", api.preview);
   allow("layout", "preview.read", api.layout);
   allow("theme", "styles", themeView(api, granted, owner, options));

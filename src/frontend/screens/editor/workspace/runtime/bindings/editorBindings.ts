@@ -27,6 +27,7 @@ import {
   editorLineSelection,
   editorPreviewRatio,
   editorRealtimePreviewEnabled,
+  editorSnapX,
 } from "../../../../../../core/edit/state/publishedValues.ts";
 import { formatLineSelection } from "../../../../../../core/edit/state/lineSelectionInput.ts";
 import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
@@ -45,6 +46,7 @@ import {
   createHistoryTravel,
 } from "../../../../../../core/edit/operations/editing.ts";
 import { bindTimelineControlInputs } from "../../../toolbar/timelineControls.ts";
+import { bindParentLineControl } from "../../../toolbar/parentLineControls.ts";
 import { registerEditorKeyboardBindings } from "../../../../../platform/shortcuts/editorKeyboard.ts";
 import { samplingActive, startSamplingForSelection } from "../../../sampling/samplingSession.ts";
 import { claimCurveDraftShortcut } from "../../../curveEvents/undo.ts";
@@ -116,6 +118,7 @@ interface EditorBindingPlayback {
 interface EditorBindingEditing {
   linePanel: {
     commit(label: string, chart: Chart, index?: number): void;
+    render(): void;
   };
   curveEditor: CurveEditorBinding;
   batchControls: BatchControlsBinding;
@@ -150,6 +153,13 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
       updateCurvePanel: deps.curveEditor.updatePanel,
       persistEditor: deps.persistEditor,
       invalidate: deps.invalidate,
+    }),
+  );
+  deps.scope.add(
+    bindParentLineControl({
+      getSession: deps.getSession,
+      commit: (label, chart, index) => deps.linePanel.commit(label, chart, index),
+      render: () => deps.linePanel.render(),
     }),
   );
   // The field is the one place the toolbar shows the line set; multi-line
@@ -220,8 +230,11 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
   deps.scope.add(setProgressSeekHandler(deps.progress, (seconds) => deps.playback.seek(seconds)));
   deps.scope.add(
     bindPlaybackControls({
-      setVolume: deps.audio.setVolume,
-      setHitSoundVolume: deps.hitSounds.setSoundVolume,
+      // Keep the transport as the receiver: the playback owners are class
+      // instances, so passing their prototype methods unbound throws when a
+      // settings write (for example an RPE migration) reaches the listener.
+      setVolume: (value) => deps.audio.setVolume(value),
+      setHitSoundVolume: (kind, value) => deps.hitSounds.setSoundVolume?.(kind, value),
       setRealtimeAlpha: (value) => {
         deps.realtimePreview.opacity = value;
       },
@@ -303,6 +316,23 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     clearClipboard: () => deps.selectionClipboard.clearClipboard(),
     selectEventLayer: (layer) => selectEventLayer(deps.timeline, deps.getSession(), layer),
     togglePlayback: deps.togglePlayback,
+    startPlayback: () => {
+      transport.startPlayback();
+      return Promise.resolve();
+    },
+    stopPlayback: () => transport.stopPlayback(),
+    stopPlaybackStay: () => transport.stopPlaybackStay(),
+    replayPlayback: () => {
+      transport.replayPlayback();
+      return Promise.resolve();
+    },
+    toggleTimeSnap: () => {
+      const enabled = !deps.timeline.viewport.snapX;
+      deps.timeline.viewport.snapX = enabled;
+      editorSnapX.set(enabled);
+      deps.persistEditor();
+      deps.invalidate();
+    },
     showLineInfo: deps.showLineInfo,
     sampleSelection: () => startSamplingForSelection(deps.getSession()),
     resetCamera: deps.resetCamera,

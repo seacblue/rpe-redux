@@ -32,6 +32,11 @@ interface ProjectHomeOptions {
     path: string,
     details?: DropClassification["details"],
   ) => Promise<readonly string[] | null>;
+  /** Open the review for an old PhiEditer installation; null when classification failed. */
+  importPeInstallation?: (
+    path: string,
+    details?: DropClassification["peDetails"],
+  ) => Promise<readonly string[] | null>;
   /** Import an official/PEC chart path; null when the path is not that format. */
   importExternalPath?: (path: string) => Promise<string | null>;
   /** Ask the backend to classify dropped paths before choosing an importer. */
@@ -49,6 +54,8 @@ interface ProjectHomeOptions {
   importExternalChart?: (path: string) => Promise<boolean>;
   /** Ask for an RPE root and run the confirmed migration. */
   chooseRpeImport?: () => Promise<unknown>;
+  /** Ask for a PhiEditer root and run the confirmed import. */
+  choosePeImport?: () => Promise<unknown>;
   /** Ask for an official/PEC chart and import it. */
   chooseExternalImport?: () => Promise<unknown>;
   /** Write a library project to a chart file chosen by the user. */
@@ -68,6 +75,10 @@ export class ProjectHome {
     path: string,
     details?: DropClassification["details"],
   ) => Promise<readonly string[] | null>;
+  private readonly importPeInstallation?: (
+    path: string,
+    details?: DropClassification["peDetails"],
+  ) => Promise<readonly string[] | null>;
   private readonly openProjectAction: (id: string) => Promise<boolean>;
   private readonly openImported?: (id: string) => Promise<unknown>;
   private readonly importExternalPath?: (path: string) => Promise<string | null>;
@@ -79,6 +90,7 @@ export class ProjectHome {
   private readonly unsupportedDrop?: (item: DropClassification) => void;
   private readonly importExternalChart?: (path: string) => Promise<boolean>;
   private readonly chooseRpe?: () => Promise<unknown>;
+  private readonly choosePe?: () => Promise<unknown>;
   private readonly chooseExternal?: () => Promise<unknown>;
   private readonly reportError: (error: unknown) => void;
 
@@ -89,6 +101,7 @@ export class ProjectHome {
     importFile,
     importRpePath,
     importRpeInstallation,
+    importPeInstallation,
     importExternalPath,
     classifyPaths,
     importExtension,
@@ -96,6 +109,7 @@ export class ProjectHome {
     unsupportedDrop,
     importExternalChart,
     chooseRpeImport,
+    choosePeImport,
     chooseExternalImport,
     exportProject,
     reportError,
@@ -104,6 +118,7 @@ export class ProjectHome {
     this.importFile = importFile;
     this.importRpePath = importRpePath;
     this.importRpeInstallation = importRpeInstallation;
+    this.importPeInstallation = importPeInstallation;
     this.openProjectAction = openProject;
     this.openImported = openImported;
     this.importExternalPath = importExternalPath;
@@ -113,6 +128,7 @@ export class ProjectHome {
     this.unsupportedDrop = unsupportedDrop;
     this.importExternalChart = importExternalChart;
     this.chooseRpe = chooseRpeImport;
+    this.choosePe = choosePeImport;
     this.chooseExternal = chooseExternalImport;
     this.reportError = reportError;
     this.cards = new HomeProjectCardsAdapter({
@@ -155,6 +171,15 @@ export class ProjectHome {
   async chooseRpeImport(): Promise<void> {
     try {
       await this.chooseRpe?.();
+    } catch (error) {
+      this.reportError(error);
+    }
+  }
+
+  /** Ask for a PhiEditer root and import it; failures go through the reporter. */
+  async choosePeImport(): Promise<void> {
+    try {
+      await this.choosePe?.();
     } catch (error) {
       this.reportError(error);
     }
@@ -231,6 +256,16 @@ export class ProjectHome {
         } else if (this.importRpePath) {
           ids = await this.importRpePath(route.path);
         }
+        if (ids === null) {
+          this.unsupportedDrop?.(item);
+          return [];
+        }
+        return ids;
+      }
+      case "pe-installation": {
+        const ids = this.importPeInstallation
+          ? await this.importPeInstallation(route.path, item.peDetails)
+          : null;
         if (ids === null) {
           this.unsupportedDrop?.(item);
           return [];
