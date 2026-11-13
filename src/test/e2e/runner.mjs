@@ -67,11 +67,13 @@ export class SmokeRunner {
     timeoutMs = 45000,
     executable = DEFAULT_EXE,
     startupPath = null,
+    startAtHome = false,
     profileDir = null,
   } = {}) {
     this.timeoutMs = timeoutMs;
     this.executable = resolve(executable);
     this.startupPath = startupPath;
+    this.startAtHome = startAtHome;
     this.requestedProfileDir = profileDir ? ownedRunPath(profileDir) : null;
     this.profileDir = null;
     this.profileRemoved = false;
@@ -168,6 +170,17 @@ export class SmokeRunner {
         () =>
           this.evaluate(
             "!document.querySelector('dialog.redux-chart-loading[open]') && !document.querySelector('.redux-modal-scrim')",
+          ),
+        deadline,
+      );
+    } else if (this.startAtHome) {
+      // Experience journeys start on the home screen and drive document creation
+      // through the real shortcut and pointer paths instead of an installed chart.
+      await this.waitFor(
+        "home screen mount",
+        () =>
+          this.evaluate(
+            "document.querySelector('.redux-app-shell')?.dataset.atHome === 'true' && document.querySelector('#home')?.hidden === false",
           ),
         deadline,
       );

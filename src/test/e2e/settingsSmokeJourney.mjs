@@ -122,10 +122,16 @@ export async function settingsSmoke(runner) {
 
   // A tip opened from inside a modal must join the top layer above the dialog's
   // z-index, and the next modal-stack change must dismiss it instead of leaving
-  // a stale label from the previous layer.
+  // a stale label from the previous layer. Pick a control that is not already
+  // engaged: a trigger with an open surface deliberately suppresses its own tip.
   const probe = await runner.evaluate(`(() => {
     const dialog = document.querySelector('dialog.redux-settings[open]');
-    const anchor = dialog?.querySelector('button');
+    const anchor = [...(dialog?.querySelectorAll('button') ?? [])].find(
+      (button) =>
+        !button.hasAttribute('aria-expanded') &&
+        !button.hasAttribute('aria-controls') &&
+        !button.closest('[inert]'),
+    );
     if (!anchor) return null;
     anchor.setAttribute('data-tip-title', 'Tooltip probe');
     anchor.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));

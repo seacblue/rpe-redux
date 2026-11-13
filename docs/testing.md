@@ -25,7 +25,7 @@ For everyday behavior checks, use the browser loop (`npm run dev`) and let hot r
 | Source gate | `npm run check` | Types, lint, style rules, Less compile, docs links, icons, SDK, unit suite, Go tests | `npm ci` |
 | Formatting gate | `npm run verify` | `check` plus Prettier over source and docs | `npm ci` |
 | Unit suite | `npm run test:unit` | `src/test/**/*.test.mjs` | Node.js 22.18+ |
-| Smoke suite | `npm run smoke` | Four P0 journeys against the packaged window | `npm run build -- --debug`; Windows |
+| Smoke suite | `npm run smoke` | Contract journeys and experience journeys against the packaged window | `npm run build -- --debug`; Windows |
 | Go service | `npm run test:server` | `src/backend/**/*_test.go` | Go 1.25.3+ |
 | Rust | `npm run check:native` | `cargo fmt --check` and `cargo check` | Rust stable |
 | Docs site | `npm run build:docs` | Extension SDK site into `docs-site-dist/` | `npm ci` |
@@ -104,11 +104,11 @@ npm run benchmark:streaming -- --lines 10000 --notes 20 --visible-time 1
 
 It reports whole-chart parse, scan/index, eager materialization, paged time-window loading, and chunked serialization with heap/RSS. The numbers are machine-specific; compare runs on the same host.
 
-`npm run benchmark:crud` measures the edit path that pointer drags, keyboard edits, and inspector fields hit: note and event update, delete, and insert through the public transaction API, for a cold session and for an importer-seeded session. It reports median, p95, and max against the 3 ms per-edit ceiling (a 144 Hz frame is 6.94 ms, and an edit shares that frame with rendering) and never exits non-zero because a machine is slow. Pass `--chart-file path/to/chart.json` to measure a real chart, `--chart` to run one case, `--iters` for more samples, and `--json` for machine-readable output. The committed `crudBudget.test.mjs` guards the transaction work counters instead of wall-clock time, so it can run in the unit suite.
+`npm run benchmark:crud` measures the edit path that pointer drags, keyboard edits, and inspector fields hit: note and event update, delete, and insert through the public transaction API, for a cold session and for an importer-seeded session. It reports median, p95, and max against the 3 ms per-edit ceiling (a 144 Hz frame is 6.94 ms, and an edit shares that frame with rendering) and never exits non-zero because a machine is slow. Pass `--chart-file path/to/chart.json` to measure a real chart, `--chart` to run one case, `--iters` for more samples, and `--json` for machine-readable output. The committed `chartEditBudget.test.mjs` guards the transaction work counters and the fingerprint round trip instead of wall-clock time, so it can run in the unit suite.
 
 ## Desktop smoke suite
 
-`npm run smoke` launches the debug executable and runs the P0 journeys from `src/test/e2e/journeyGroups.mjs`:
+`npm run smoke` launches the debug executable and runs the journeys from `src/test/e2e/journeyGroups.mjs`:
 
 | Group | Journey |
 | --- | --- |
@@ -116,19 +116,27 @@ It reports whole-chart parse, scan/index, eager materialization, paged time-wind
 | `documents` | cold open, PEZ open with resources, PE package conversion, create, save round trip, replace policy |
 | `settings` | settings pages and persistence |
 | `session-restore` | restart with the same profile and restore the workspace |
+| `experience-create` | home → Ctrl+N → pointer placement, selection, nudge, undo/redo, delete, hold placement, region toggle, playback |
+| `experience-events` | event-field placement through the keyboard path and undo |
+| `experience-settings` | settings window from the home button, rail navigation, a real toggle, and its persistence across close/reopen |
+
+The first four groups are **contract journeys**: they keep the shared startup chart and call the public API, so they prove the document and Extension pipeline. The `experience-*` groups are **experience journeys**: they start on the home screen (`startsAtHome`), press real keys, move a real pointer over the timelines, and click real toolbar and settings controls, then assert the resulting document, selection, and DOM state. A mixed selection needs one process per group, which `npm run smoke` does.
 
 ```powershell
 npm run build -- --debug            # prerequisite
 npm run smoke                       # every group, one fresh profile per group
 npm run smoke -- --list             # group names
 npm run smoke -- --scenario=documents
+npm run smoke -- --scenario=experience-create
 ```
 
 The runner creates an isolated profile under `.scratch/e2e-smoke-quality/runs/` and writes screenshots and round-trip artifacts under `.scratch/e2e-smoke-quality/artifacts/`. It drives the real window through the WebView2 debugging protocol, so it runs on Windows only; Linux acceptance stays manual until an equivalent driver exists.
 
 Treat the smoke suite as a final acceptance check, not an edit loop. It needs a fresh debug build, so run it after the browser checks and the source gate are green.
 
-A journey is an async function that receives the runner. Use `runner.callApi` for product API calls, `runner.evaluate` for DOM probes, `runner.waitFor` instead of fixed sleeps, and `runner.assert` for checks. Feature-specific journeys are not part of the default run: unit-test the extracted rule, and add a journey only for a P0 path that must be proven end to end.
+A journey is an async function that receives the runner. Use `runner.callApi` for product API calls, `runner.evaluate` for DOM probes, `runner.waitFor` instead of fixed sleeps, and `runner.assert` for checks. Contract journeys start with `startupPath`, experience journeys with `startAtHome`; a journey that drives window input marks itself with `startsAtHome = true`. Feature-specific journeys are not part of the default run: unit-test the extracted rule, and add a journey only for a P0 interaction that must be proven end to end.
+
+Keep implementation-detail assertions out of the unit suite. A test that pins "this function reuses a buffer", "this value is cached", or "this call happens once" belongs to the change that introduced it, not to the repository: it fails on harmless refactors and proves nothing about the product. Assert the observable result instead — rendered output, parsed document, selection, or visible layout — and leave the fast path free to change.
 
 ## Quick audio check
 

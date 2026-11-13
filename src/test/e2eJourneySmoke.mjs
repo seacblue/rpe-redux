@@ -38,8 +38,22 @@ async function main() {
       `Unknown scenario ${scenario}; choose one of ${Object.keys(journeys).join(", ")}`,
     );
   }
+  // Experience journeys begin on the home screen and create their own document;
+  // the contract journeys keep the shared startup chart. A mixed selection needs
+  // one session per journey, which `npm run smoke` provides by spawning each
+  // group separately.
+  const startAtHome = selected.every(([, journey]) => journey.startsAtHome === true);
+  if (!startAtHome && selected.some(([, journey]) => journey.startsAtHome === true)) {
+    throw new Error(
+      "Experience journeys cannot share a session with contract journeys; " +
+        "run one group per process (npm run smoke does this).",
+    );
+  }
 
-  const runner = new SmokeRunner({ startupPath: fixtures.json });
+  const runner = new SmokeRunner({
+    startupPath: startAtHome ? null : fixtures.json,
+    startAtHome,
+  });
   try {
     await runner.start();
     for (const [name, journey] of selected) {

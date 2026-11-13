@@ -1,10 +1,18 @@
 /**
- * Guards the inherited location index used by single-object transactions.
+ * Guards the per-edit work budget of the chart transaction path.
  *
- * A single note or event edit must not scan the chart or rebuild the whole
- * line/note/event index, and the chart a commit publishes must still answer the
- * next lookup. These tests pin those two properties with the diagnostics
- * counters and check the position bookkeeping after splices and inserts.
+ * The CRUD benchmark (`scripts/benchmarkChartCrud.mjs`) measures wall-clock cost,
+ * which is too noisy for the unit suite. This test pins the work counters and
+ * content-digest invariants that make single-object edits cheap:
+ *
+ *   - a single note update, delete, or insert never rebuilds the full location index;
+ *   - the chart a commit publishes still answers the next lookup without rebuilding;
+ *   - an unchanged transaction leaves the chart object and fingerprint untouched;
+ *   - the canonical fingerprint round-trips through serialization after every edit kind;
+ *   - an importer-seeded session keeps that digest exact after a point edit.
+ *
+ * A regression here means an edit again scales with total chart size, which is the
+ * frame-budget failure the benchmark reports as a slow median.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -13,9 +21,16 @@ import {
   createEvent,
   createLine,
   createNote,
+  parseChart,
+  serializeChart,
 } from "../../../core/global/chart/chart.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import { applyChartTransaction } from "../../../core/edit/transaction/preview.ts";
+import {
+  chartFingerprint,
+  installChartRevisionSeed,
+} from "../../../core/edit/document/chartRevision.ts";
+import { lineContentFingerprintParts } from "../../../core/global/chart/chartContentHash.ts";
 import {
   chartLocationDiagnostics,
   ensureChartLocations,
@@ -36,13 +51,16 @@ import {
  */
 function makeChart(lineCount, notesPerLine) {
   const chart = createChart();
+  chart.META = { ...chart.META, name: "crud budget", charter: "bench" };
   chart.BPMList = [{ bpm: 180, startTime: [0, 0, 1] }];
   const lines = [];
   for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
     const line = createLine(`Line ${lineIndex}`);
     line.notes = [];
     for (let noteIndex = 0; noteIndex < notesPerLine; noteIndex += 1) {
-      line.notes.push(createNote(noteIndex % 7 === 0 ? 2 : 1, noteIndex / 4, noteIndex % 100));
+      line.notes.push(
+        createNote(noteIndex % 5 === 0 ? 2 : 1, noteIndex / 4, ((noteIndex * 37) % 1350) - 675),
+      );
     }
     line.numOfNotes = line.notes.reduce((sum, note) => sum + (note.type === 2 ? 0 : 1), 0);
     line.eventLayers[0].alphaEvents = [createEvent(255, 0, 0, 1), createEvent(0, 255, 1, 2)];
@@ -82,23 +100,25 @@ test("single note update, delete and insert build no full index", () => {
   const notes = session.chart.judgeLineList[lineIndex].notes;
 
   const updateTarget = notes[300];
-  apply(session, {
-    notes: { update: [{ id: updateTarget.id, patch: { positionX: 321 } }] },
+  assertNoIndexBuild(() => {
+    apply(session, {
+      notes: { update: [{ id: updateTarget.id, patch: { positionX: 321 } }] },
+    });
+    assert.equal(locateNote(session.chart, updateTarget.id)?.note.positionX, 321);
   });
-  assert.equal(session.chart.judgeLineList[lineIndex].notes[300].positionX, 321);
 
-  const deleteTarget = session.chart.judgeLineList[lineIndex].notes[301];
-  apply(session, { notes: { delete: [deleteTarget.id] } });
-  assert.equal(locateNote(session.chart, deleteTarget.id), null);
+  const deleteTarget = notes[301];
+  assertNoIndexBuild(() => {
+    apply(session, { notes: { delete: [deleteTarget.id] } });
+    assert.equal(locateNote(session.chart, deleteTarget.id), null);
+  });
 
   const inserted = createNote(1, 500, 42);
-  apply(session, { notes: { insert: [{ lineIndex, note: inserted }] } });
-  const locatedInserted = locateNote(session.chart, inserted.id);
-  assert.equal(locatedInserted?.lineIndex, lineIndex);
-  assert.equal(locatedInserted?.noteIndex, session.chart.judgeLineList[lineIndex].notes.length - 1);
-
   assertNoIndexBuild(() => {
-    assert.ok(locateNote(session.chart, session.chart.judgeLineList[lineIndex].notes[10].id));
+    apply(session, { notes: { insert: [{ lineIndex, note: inserted }] } });
+    const located = locateNote(session.chart, inserted.id);
+    assert.equal(located?.lineIndex, lineIndex);
+    assert.equal(located?.noteIndex, session.chart.judgeLineList[lineIndex].notes.length - 1);
   });
 });
 
@@ -196,4 +216,84 @@ test("repeated single-object edits keep the diagnostics flat", () => {
   for (let index = 0; index < 12; index += 1) {
     assert.equal(finalNotes[(index * 31) % 120].positionX, index - 6);
   }
+});
+
+test("a no-op transaction keeps the chart object and fingerprint untouched", () => {
+  const chart = makeChart(4, 100);
+  const session = new EditorSession(chart);
+  const before = chartFingerprint(session.chart);
+  const chartObject = session.chart;
+  const note = session.chart.judgeLineList[0].notes[10];
+
+  const result = applyChartTransaction(session, {
+    notes: { update: [{ id: note.id, patch: { positionX: note.positionX } }] },
+  });
+
+  assert.equal(result.status, "unchanged");
+  assert.equal(result.afterFingerprint, before);
+  assert.equal(session.chart, chartObject, "an unchanged edit must not replace the chart");
+  assert.equal(chartFingerprint(session.chart), before);
+  // A second read is served from the digest cache and must return the same value.
+  assert.equal(chartFingerprint(session.chart), before);
+
+  const rejected = applyChartTransaction(session, {
+    notes: { update: [{ id: "missing-note", patch: { positionX: 1 } }] },
+  });
+  assert.equal(rejected.status, "rejected");
+  assert.equal(session.chart, chartObject);
+  assert.equal(chartFingerprint(session.chart), before);
+});
+
+test("the canonical fingerprint round-trips through serialization after every edit", () => {
+  const chart = makeChart(3, 60);
+  const session = new EditorSession(chart);
+  const roundTrip = () => chartFingerprint(parseChart(serializeChart(session.chart)));
+  assert.equal(chartFingerprint(session.chart), roundTrip());
+
+  const note = session.chart.judgeLineList[1].notes[30];
+  const updated = applyChartTransaction(session, {
+    notes: { update: [{ id: note.id, patch: { positionX: 42, size: 1.5 } }] },
+  });
+  assert.equal(updated.status, "committed");
+  assert.equal(chartFingerprint(session.chart), roundTrip());
+  assert.equal(updated.afterFingerprint, roundTrip());
+
+  const deleted = applyChartTransaction(session, {
+    notes: { delete: [session.chart.judgeLineList[2].notes[40].id] },
+  });
+  assert.equal(deleted.status, "committed");
+  assert.equal(chartFingerprint(session.chart), roundTrip());
+
+  const insertion = applyChartTransaction(session, {
+    notes: { insert: [{ lineIndex: 0, note: createNote(1, 200, -10) }] },
+  });
+  assert.equal(insertion.status, "committed");
+  assert.equal(chartFingerprint(session.chart), roundTrip());
+
+  const event = session.chart.judgeLineList[1].eventLayers[0].alphaEvents[0];
+  const eventUpdate = applyChartTransaction(session, {
+    events: { update: [{ id: event.id, patch: { start: event.start === 200 ? 201 : 200 } }] },
+  });
+  assert.equal(eventUpdate.status, "committed");
+  assert.equal(chartFingerprint(session.chart), roundTrip());
+});
+
+test("an importer-seeded session keeps the exact digest after a point edit", () => {
+  const chart = makeChart(3, 80);
+  installChartRevisionSeed(chart, {
+    lines: chart.judgeLineList.map((line) =>
+      lineContentFingerprintParts(line, { includeValueDigests: true }),
+    ),
+  });
+  const session = new EditorSession(chart);
+  const note = session.chart.judgeLineList[1].notes[40];
+
+  const result = applyChartTransaction(session, {
+    notes: { update: [{ id: note.id, patch: { positionX: 77 } }] },
+  });
+
+  assert.equal(result.status, "committed");
+  const reparsed = chartFingerprint(parseChart(serializeChart(session.chart)));
+  assert.equal(chartFingerprint(session.chart), reparsed);
+  assert.equal(result.afterFingerprint, reparsed);
 });
