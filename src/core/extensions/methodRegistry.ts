@@ -271,6 +271,7 @@ const HANDLE_METHODS = {
   hitTest: [
     ["availability", "preview.read", "read", false],
     ["pick", "preview.read", "read", false],
+    ["queryAt", "hitTest.read", "read", false],
     ["geometry", "preview.read", "read", false],
   ],
   preview: [

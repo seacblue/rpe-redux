@@ -168,6 +168,7 @@ export function LinesPanel({
   return (
     <LinePanelView
       {...linePanel.props}
+      snapshotRevision={linePanel.revision}
       selectedLineIds={selectedLineIds}
       selectedFolderGroup={folderGroup}
       collapsedLineGroups={collapsedLineGroups}

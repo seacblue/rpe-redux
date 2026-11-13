@@ -72,6 +72,7 @@ const CAPABILITY_RISK = Object.freeze({
   styles: "write",
   timers: "write",
   diagnostics: "write",
+  "hitTest.read": "read",
   "preview.read": "read",
   "host.patch": "sensitive",
 } satisfies Record<ExtensionCapability, ExtensionMethodRisk>);

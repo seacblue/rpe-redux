@@ -35,6 +35,7 @@ interface PlannedTransaction {
   readonly previewId: string;
   readonly requestFingerprint: string;
   readonly beforeFingerprint: string;
+  readonly expectedGeneration?: number;
   readonly chart: Chart;
   readonly label: string;
   readonly affectedObjectIds: readonly ChartObjectId[];
@@ -102,6 +103,7 @@ function planChartTransaction(
   session: EditorSession | null,
   request: unknown,
   expectedFingerprint?: string,
+  currentGeneration?: number,
 ): TransactionPlanOutcome {
   if (!session) {
     return { result: result("unavailable", null, null, [], [issue("editor.unavailable")], null) };
@@ -136,6 +138,44 @@ function planChartTransaction(
         beforeFingerprint,
         [],
         [issue("request.object.required")],
+        null,
+      ),
+    };
+  }
+  if (
+    request.expectedGeneration !== undefined &&
+    (!Number.isSafeInteger(request.expectedGeneration) || request.expectedGeneration < 0)
+  ) {
+    return {
+      result: result(
+        "rejected",
+        beforeFingerprint,
+        beforeFingerprint,
+        [],
+        [issue("request.expectedGeneration.invalid")],
+        null,
+      ),
+    };
+  }
+  if (
+    request.expectedGeneration !== undefined &&
+    currentGeneration !== undefined &&
+    request.expectedGeneration !== currentGeneration
+  ) {
+    return {
+      result: result(
+        "rejected",
+        beforeFingerprint,
+        beforeFingerprint,
+        [],
+        [
+          issue(
+            "stale_read",
+            undefined,
+            undefined,
+            `Expected chart generation ${request.expectedGeneration}, current generation is ${currentGeneration}`,
+          ),
+        ],
         null,
       ),
     };
@@ -200,6 +240,7 @@ function planChartTransaction(
         previewId: `transaction-preview-${nextPreviewId++}`,
         requestFingerprint: requestKey,
         beforeFingerprint,
+        expectedGeneration: request.expectedGeneration,
         chart,
         label: transactionLabel(request),
         affectedObjectIds: freezeIds(changed ? state.affected : []),
@@ -236,6 +277,7 @@ function previewResultFor(plan: PlannedTransaction): ChartTransactionPreviewResu
 export function previewChartTransaction(
   session: EditorSession | null,
   request: unknown,
+  options: Pick<TransactionCommitOptions, "currentGeneration"> = {},
 ): ChartTransactionPreviewResult {
   if (session && isChartTransactionRequest(request)) {
     const active = previewPlans.get(session);
@@ -254,7 +296,7 @@ export function previewChartTransaction(
     }
   }
 
-  const outcome = planChartTransaction(session, request);
+  const outcome = planChartTransaction(session, request, undefined, options.currentGeneration);
   if ("result" in outcome) {
     return previewResult(
       outcome.result.status === "committed"
@@ -274,8 +316,9 @@ export function previewChartTransaction(
 export function validateChartTransaction(
   session: EditorSession | null,
   request: unknown,
+  options: Pick<TransactionCommitOptions, "currentGeneration"> = {},
 ): ChartTransactionPreviewResult {
-  const outcome = planChartTransaction(session, request);
+  const outcome = planChartTransaction(session, request, undefined, options.currentGeneration);
   if ("result" in outcome) {
     return previewResult(
       outcome.result.status === "committed"
@@ -314,6 +357,27 @@ function applyPreviewTransaction(
   }
   clearPlan(session, plan);
   const currentFingerprint = fingerprint(session.chart);
+  if (
+    plan.expectedGeneration !== undefined &&
+    options.currentGeneration !== undefined &&
+    plan.expectedGeneration !== options.currentGeneration
+  ) {
+    return result(
+      "rejected",
+      currentFingerprint,
+      currentFingerprint,
+      [],
+      [
+        issue(
+          "stale_read",
+          undefined,
+          undefined,
+          `Expected chart generation ${plan.expectedGeneration}, current generation is ${options.currentGeneration}`,
+        ),
+      ],
+      null,
+    );
+  }
   if (currentFingerprint !== plan.beforeFingerprint) {
     return result(
       "rejected",
@@ -369,7 +433,12 @@ export function applyChartTransaction(
       return applyPreviewTransaction(session, active.previewId, options);
     }
   }
-  const outcome = planChartTransaction(session, requestOrPreviewId, options.expectedFingerprint);
+  const outcome = planChartTransaction(
+    session,
+    requestOrPreviewId,
+    options.expectedFingerprint,
+    options.currentGeneration,
+  );
   if ("result" in outcome) {
     return outcome.result;
   }

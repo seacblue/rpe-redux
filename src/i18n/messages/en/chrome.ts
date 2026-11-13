@@ -37,6 +37,7 @@ export default {
   "chrome.toolbar.freeCameraPanX": "Pan X",
   "chrome.toolbar.freeCameraPanY": "Pan Y",
   "chrome.toolbar.freeCameraReset": "Reset view",
+  "chrome.toolbar.parentLine": "Parent line number",
   "chrome.toolbar.noiseRendering": "Actual noise rendering",
   "chrome.toolbar.noiseRenderingUnavailable":
     "Detailed noise rendering is unavailable. Switch to simplified rendering to keep editing.",

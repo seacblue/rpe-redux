@@ -23,6 +23,7 @@ import { isChartObjectId, type ChartObjectId } from "../../../../../core/global/
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { eventColumnBounds } from "../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { noteColor, readCanvasPalette } from "../../canvas/palette.ts";
+import { NOTE_GHOST_FILTER } from "../../canvas/noteGhostVisual.ts";
 import { notePaintLayer } from "../../canvas/noteSpriteGroups.ts";
 import { canvasFont } from "../../canvas/text.ts";
 import {
@@ -513,6 +514,7 @@ export class MultiEditPanel {
         if (horizontal != null) {
           context.save();
           context.globalAlpha = 0.5;
+          context.filter = NOTE_GHOST_FILTER;
           const color = Array.isArray(item.tint)
             ? item.tint
             : Array.isArray(item.color)

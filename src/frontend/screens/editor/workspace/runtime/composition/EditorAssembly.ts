@@ -32,6 +32,7 @@ import { bindClipboardHistoryPersistence } from "../../../../../../core/edit/cli
 import { openInspector, closeInspector } from "../../../inspector/controller.ts";
 import { nudgeBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { createEditorHomeRuntime } from "../../../../welcome/editorHome.ts";
+import { connectPeImport } from "../../../../welcome/peImportService.ts";
 import { connectRpeImport } from "../../../../welcome/rpeImportService.ts";
 import { connectExternalImport } from "../../../../welcome/externalImportService.ts";
 import { bindWorkspaceNavigation } from "../commands/workspaceNavigation.ts";
@@ -107,7 +108,11 @@ import { canvasShortcutTarget } from "../input/canvasShortcutTarget.ts";
 import type { CanvasShortcutTarget } from "../../../../../platform/shortcuts/canvasShortcuts.ts";
 import type { PrefixDigitSequenceSubmission } from "../../../../../../core/shortcuts/prefixDigitSequence.ts";
 import { bindEditorLanguageRefresh } from "../bindings/languageRefresh.ts";
-import { createHitTestPicker, createPreviewGeometryReader } from "../bindings/hitTestBindings.ts";
+import {
+  createHitTestPicker,
+  createHitTestTimeQuery,
+  createPreviewGeometryReader,
+} from "../bindings/hitTestBindings.ts";
 import { createPreviewApiHost } from "../bindings/previewBindings.ts";
 import { createLayoutApiHost } from "../bindings/layoutBindings.ts";
 import { bindPreviewSelection } from "../../preview/interaction/previewSelection.ts";
@@ -305,6 +310,7 @@ export function createEditorAssembly(
   scope.add(
     connectHitTestApi({
       pick: createHitTestPicker({ preview: realtimePreview, timeline }),
+      queryAt: createHitTestTimeQuery({ preview: realtimePreview, timeline }),
       getPreviewGeometry: createPreviewGeometryReader({ preview: realtimePreview }),
     }),
   );
@@ -603,6 +609,7 @@ export function createEditorAssembly(
     }
   };
   scope.add(connectRpeImport(() => home.chooseRpeImport()));
+  scope.add(connectPeImport(() => home.choosePeImport()));
   scope.add(connectExternalImport(() => home.chooseExternalImport()));
   // Debug and automation builds expose the same drop entry point the window
   // uses, so a test can route local paths without synthesizing an OS drag. The

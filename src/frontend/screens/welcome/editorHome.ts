@@ -48,6 +48,7 @@ import {
   importRpePath,
   type RpeImportDeps,
 } from "./rpeImport.ts";
+import { choosePeImport as choosePeFolderMigration, importPeFolder } from "./peImport.ts";
 import {
   chooseExternalImport as chooseExternalChartImport,
   importExternalPath,
@@ -384,6 +385,7 @@ export function createEditorHomeRuntime(deps: {
   const home = new ProjectHome({
     importRpePath: (path) => importRpePath(path, rpeDeps),
     importRpeInstallation: (path, details) => importRpePath(path, rpeDeps, details),
+    importPeInstallation: (path, details) => importPeFolder(path, rpeDeps, details),
     importExternalPath: (path) => importExternalPath(path, externalDeps),
     classifyPaths,
     importExtension: async (item) => offerPackageSettings(item, "extension"),
@@ -396,6 +398,7 @@ export function createEditorHomeRuntime(deps: {
     },
     importExternalChart: openExternalChartFile,
     chooseRpeImport: () => chooseRpeFolderMigration(rpeDeps),
+    choosePeImport: () => choosePeFolderMigration(rpeDeps),
     chooseExternalImport: () => chooseExternalChartImport(externalDeps),
     openProject: async (id) => {
       const found = await localService();

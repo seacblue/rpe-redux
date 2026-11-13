@@ -122,6 +122,8 @@ export interface TransactionTimingOperations {
 }
 
 export interface ChartTransactionRequest {
+  /** Reject the write with `stale_read` when the chart generation has changed. */
+  readonly expectedGeneration?: number;
   readonly label?: string;
   readonly metadata?: Partial<ChartMeta> & ChartPatch;
   readonly timing?: TransactionTimingOperations;
@@ -172,6 +174,10 @@ export interface ChartTransactionResult {
 
 export interface TransactionCommitOptions {
   readonly expectedFingerprint?: string;
+  /** Internal revision guard used by the public request's expectedGeneration. */
+  readonly expectedGeneration?: number;
+  /** Current host generation captured immediately before planning/commit. */
+  readonly currentGeneration?: number;
   readonly origin?: HistoryEntryOrigin;
   /**
    * Internal: the transaction planner already validated noise-line

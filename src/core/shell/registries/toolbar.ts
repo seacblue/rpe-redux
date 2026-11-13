@@ -261,6 +261,8 @@ export interface ToolbarNumberField extends ToolbarFieldCommon {
   accept?(value: string): boolean;
   /** Keep typed text in the box and parse it only when the field loses focus. */
   commitOnBlur?: boolean;
+  /** Commit an accepted empty value on blur, when empty has a real meaning. */
+  commitEmptyOnBlur?: boolean;
   /** Every keystroke and every step; nothing is finished yet. */
   input(value: string): void;
   /**

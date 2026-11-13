@@ -213,6 +213,37 @@ export function createEditorViewControls(
     applyRegionVisibility();
   }
 
+  /** Layout the authoring regions had before a playback preview hid them. */
+  let playbackPreviewSnapshot: EditorModeSnapshot | null = null;
+
+  /**
+   * Hide the authoring regions for RPE-style playback preview.
+   *
+   * The restore key brings back the exact layout the person was editing, so a
+   * start/stop cycle never leaves an editor with both regions hidden.
+   */
+  function enterPlaybackPreview(): void {
+    if (playbackPreviewSnapshot !== null) {
+      return;
+    }
+    playbackPreviewSnapshot = readModeSnapshot();
+    previewOnly.set(true);
+    applyRegionVisibility();
+  }
+
+  /** Show the authoring regions again after a playback preview. */
+  function exitPlaybackPreview(): void {
+    if (playbackPreviewSnapshot !== null) {
+      const snapshot = playbackPreviewSnapshot;
+      playbackPreviewSnapshot = null;
+      applyModeSnapshot(snapshot);
+    }
+    if (previewOnly.get()) {
+      previewOnly.set(false);
+    }
+    applyRegionVisibility();
+  }
+
   /** Materializes the effective preview-only view before another view command edits it. */
   function materializePreviewOnly(): void {
     if (!previewOnly.get()) {
@@ -361,6 +392,8 @@ export function createEditorViewControls(
     applyRegionVisibility,
     beginPreviewOnlyHold,
     endPreviewOnlyHold,
+    enterPlaybackPreview,
+    exitPlaybackPreview,
     toggleRegion,
     toggleRegions,
     resetCamera,
@@ -393,6 +426,8 @@ export const viewControls = Object.freeze({
   applyRegionVisibility: (): void => viewControlsBinding.value()?.applyRegionVisibility(),
   beginPreviewOnlyHold: (): void => viewControlsBinding.value()?.beginPreviewOnlyHold(),
   endPreviewOnlyHold: (): void => viewControlsBinding.value()?.endPreviewOnlyHold(),
+  enterPlaybackPreview: (): void => viewControlsBinding.value()?.enterPlaybackPreview(),
+  exitPlaybackPreview: (): void => viewControlsBinding.value()?.exitPlaybackPreview(),
   toggleRegion: (region: "showNotes" | "showEvents"): void =>
     viewControlsBinding.value()?.toggleRegion(region),
   toggleRegions: (): void => viewControlsBinding.value()?.toggleRegions(),

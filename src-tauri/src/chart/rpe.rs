@@ -47,6 +47,8 @@ pub struct RpeFolderScan {
     pub settings_text: Option<String>,
     pub hotkeys_text: Option<String>,
     pub ui_text: Option<String>,
+    /// RPE's dedicated beat-line palette (`division_color.txt`).
+    pub division_color_text: Option<String>,
     pub charts: Vec<RpeChartFolder>,
     pub warnings: Vec<String>,
 }
@@ -296,6 +298,9 @@ fn scan_rpe_root_unchecked(path: &str) -> Result<RpeFolderScan, String> {
         .or_else(|| find_child(&root, "UI.json"))
         .as_deref()
         .and_then(read_text);
+    let division_color_text = find_child(&root, "division_color.txt")
+        .as_deref()
+        .and_then(read_text);
 
     let mut folders = Vec::new();
     for name in ["Resources", "resources", "Charts", "charts"] {
@@ -349,6 +354,7 @@ fn scan_rpe_root_unchecked(path: &str) -> Result<RpeFolderScan, String> {
         settings_text,
         hotkeys_text,
         ui_text,
+        division_color_text,
         charts,
         warnings,
     })
@@ -370,6 +376,11 @@ mod tests {
         fs::write(root.path().join("Hotkey.txt"), "AddTap A\n").expect("hotkeys");
         fs::write(root.path().join("UI.txt"), "GridColor1=#FF0000\n").expect("ui");
         fs::write(
+            root.path().join("division_color.txt"),
+            "# comment\n8: 128, 128, 255, 0.5 // bright blue\n",
+        )
+        .expect("division colours");
+        fs::write(
             folder.join("info.txt"),
             "#\r\nName: Test Song\r\nChart: 12345.json\r\nGroup: WIP\r\nSong: song.mp3\r\nComposer: Composer Name\r\nCharter: Charter Name\r\n",
         )
@@ -382,6 +393,10 @@ mod tests {
         assert_eq!(scan.settings_text.as_deref(), Some("{\"FpsLimit\":120}"));
         assert_eq!(scan.hotkeys_text.as_deref(), Some("AddTap A\n"));
         assert_eq!(scan.ui_text.as_deref(), Some("GridColor1=#FF0000\n"));
+        assert_eq!(
+            scan.division_color_text.as_deref(),
+            Some("# comment\n8: 128, 128, 255, 0.5 // bright blue\n")
+        );
         assert_eq!(scan.charts.len(), 1);
         assert_eq!(scan.charts[0].name, "Test Song");
         assert_eq!(scan.charts[0].group, "WIP");

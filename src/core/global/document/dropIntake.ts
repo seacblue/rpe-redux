@@ -8,6 +8,7 @@
  */
 
 import type { RpeFolderScan } from "../../migration/rpe.ts";
+import type { PeFolderScan } from "../../migration/pe.ts";
 
 /** Owners the intake service can identify. */
 export type DropKind = "chart" | "extension" | "skin" | "unknown";
@@ -32,8 +33,12 @@ export interface DropClassification {
   packageId?: string;
   /** True when the folder root carries PhiEdit.exe and a Resources folder. */
   rpeInstallation?: boolean;
+  /** True when the root is an old PhiEditer installation. */
+  peInstallation?: boolean;
   /** Parsed settings and chart rows for a classified RPE root. */
   details?: RpeFolderScan;
+  /** Chart index and media rows for a classified PhiEditer root. */
+  peDetails?: PeFolderScan;
   /** False when the package shell was recognized but failed basic checks. */
   valid: boolean;
   /** English diagnostic for logs; not shown as a localized message. */
@@ -43,6 +48,7 @@ export interface DropClassification {
 /** Consequence of one classification. */
 export type DropRoute =
   | { action: "rpe-installation"; path: string }
+  | { action: "pe-installation"; path: string }
   | { action: "chart-rpe"; path: string; entry: string }
   | { action: "chart-external"; path: string; format: "official" | "pec" }
   | { action: "extension"; item: DropClassification }
@@ -68,6 +74,9 @@ export function dropRoute(item: DropClassification): DropRoute {
   }
   if (item.kind !== "chart") {
     return { action: "unsupported", item };
+  }
+  if (item.peInstallation) {
+    return { action: "pe-installation", path: item.path };
   }
   if (item.rpeInstallation) {
     return { action: "rpe-installation", path: item.path };
