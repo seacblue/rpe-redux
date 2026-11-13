@@ -1,0 +1,174 @@
+// Inspector page layer: the content model shared by every pane.
+//
+// The inspector frame contributes no inset. A page owns it through content
+// layers: a single page has one scroll region and one content layer; a split
+// page has two scroll regions, each with its own content layer, above and below
+// one full-width rule. Every scroll region is flush with the pane, so a
+// scrollbar rides the inspector's outer edge instead of an inner gutter.
+
+.inspector-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+// The scroll region is the pane-sized box: it never carries padding, because
+// that would pull the scrollbar inward. The content layer below owns the inset.
+.inspector-page-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.inspector-page-content {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
+  padding: var(--space-4) var(--inspector-gutter) var(--inspector-gutter);
+}
+
+// A split page divides the body into two scroll regions with one fixed rule
+// between them. The split is not adjustable: the two faces keep the authored
+// share of the body height. The upper share is a flex basis rather than a grid
+// track because the Inspector handoff animates it down to zero.
+.inspector-page-split {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.inspector-page-split-top {
+  flex: 0 0 42%;
+}
+
+.inspector-page-split-bottom {
+  flex: 1 1 auto;
+}
+
+// Both faces reserve the scrollbar column. A wide detail column also reserves
+// it, and the handoff swaps one for the other at the same size: without the
+// shared gutter the page would shift sideways by one scrollbar when it lands.
+.inspector-page-split-face {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+// The rule spans the whole inspector width, edge to edge, with no inset or
+// grip: the two faces only meet at this line.
+.inspector-page-split-rule {
+  flex: none;
+  height: 1px;
+  background: var(--edge-emphasis);
+  opacity: 0.45;
+}
+
+// The faces meet the rule with a shorter block inset than a page edge so the
+// two content layers read as one stacked page.
+.inspector-page-split-top > .inspector-page-content {
+  padding-bottom: var(--space-2);
+}
+
+.inspector-page-split-bottom > .inspector-page-content {
+  padding-top: var(--space-2);
+}
+
+// Handoff motion. While the Inspector expands into its workspace page, the
+// compact copy settles as that page's detail column: the upper face slides out
+// through the top while it gives its height to the lower face, the rule leaves
+// with it, and the lower face takes the wide page's block inset so the handoff
+// frame shows the same pixels before and after the copies trade places. The
+// reverse plays while the page collapses: the upper face returns and splits the
+// height with the lower one again.
+.inspector[data-mode-phase="opening"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top,
+.inspector[data-mode-phase="expanded"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top {
+  flex-basis: 0;
+}
+
+.inspector[data-mode-phase="opening"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top
+  > .inspector-page-content,
+.inspector[data-mode-phase="expanded"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-top
+  > .inspector-page-content {
+  transform: translateY(-100%);
+}
+
+.inspector[data-mode-phase="opening"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-rule,
+.inspector[data-mode-phase="expanded"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-rule {
+  height: 0;
+  opacity: 0;
+}
+
+.inspector[data-mode-phase="opening"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom
+  > .inspector-page-content,
+.inspector[data-mode-phase="expanded"]
+  .inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom
+  > .inspector-page-content {
+  padding-top: var(--space-4);
+}
+
+// The morph follows the panel width transition: the same duration and curve on
+// every part, so the compact copy lands exactly on the detail column.
+.inspector-body > [data-mode-underlay="true"] .inspector-page-split-top {
+  transition: flex-basis var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector-body > [data-mode-underlay="true"] .inspector-page-split-top > .inspector-page-content {
+  transition: transform var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector-body
+  > [data-mode-underlay="true"]
+  .inspector-page-split-bottom
+  > .inspector-page-content {
+  transition: padding var(--design-dur-enter) var(--design-ease-move);
+}
+
+.inspector-body > [data-mode-underlay="true"] .inspector-page-split-rule {
+  transition:
+    height var(--design-dur-enter) var(--design-ease-move),
+    opacity var(--design-dur-tint) linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector-body > [data-mode-underlay="true"] .inspector-page-split-top,
+  .inspector-body > [data-mode-underlay="true"] .inspector-page-split-top > .inspector-page-content,
+  .inspector-body
+    > [data-mode-underlay="true"]
+    .inspector-page-split-bottom
+    > .inspector-page-content {
+    transition: none;
+  }
+}

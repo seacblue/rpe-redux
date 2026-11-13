@@ -17,7 +17,6 @@ export function TimingPageLayout({ layout }: { layout: "compact" | "expanded" })
         bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
         top={list}
         bottom={properties}
-        resizable={false}
       />
     );
   }
@@ -26,7 +25,7 @@ export function TimingPageLayout({ layout }: { layout: "compact" | "expanded" })
     <div className="timing-studio">
       <div className="studio-body">
         <div className="studio-list-pane">{list}</div>
-        <div className="studio-detail-pane">{properties}</div>
+        <div className="studio-detail-pane mode-handoff-detail">{properties}</div>
       </div>
     </div>
   );

@@ -75,10 +75,14 @@ const mode: WorkspaceModeDefinition = {
 const disposePanel = registerInspectorPanel({
   id: "assets",
   component: AssetsInspectorPage,
+  layout: "split",
   label: "chrome.pane.assets",
   icon: "folder",
   tutorial: GLOBAL_PAGE_TUTORIALS.assets,
   workspaceMode: "assets",
+  // The asset workspace splits its two faces 0.9fr / 1.1fr, so the compact page
+  // settles on the larger details column when it expands.
+  modeDetailShare: 0.55,
   editsChart: true,
 });
 

@@ -719,7 +719,7 @@ export function LinePanelView({
       {split ? (
         <div className="line-panel-split">
           <div className="line-panel-split-tree">{treeFace}</div>
-          <div className="line-panel-split-properties">{propertyFace}</div>
+          <div className="line-panel-split-properties mode-handoff-detail">{propertyFace}</div>
         </div>
       ) : stacked ? (
         <InspectorPageSplit
@@ -727,7 +727,6 @@ export function LinePanelView({
           bottomLabel={t("editorPanels.linePanel.properties")}
           top={treeFace}
           bottom={propertyFace}
-          resizable={false}
         />
       ) : (
         <>

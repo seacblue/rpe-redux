@@ -183,17 +183,6 @@
   }
 }
 
-// The metadata page is a document-wide editor: give both columns the width of
-// the workbench instead of the inspector's usual readable column.
-.global-inspector[data-global-page="metadata"] .global-inspector-content {
-  padding-inline: var(--space-5);
-}
-
-.global-inspector[data-global-page="metadata"] .global-inspector-content > .metadata-panel-form {
-  width: 100%;
-  max-width: 1440px;
-}
-
 @media (max-width: 1050px) {
   .metadata-panel-form {
     grid-template-columns: minmax(0, 1fr);

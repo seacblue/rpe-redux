@@ -23,6 +23,15 @@ export interface InspectorPanelDefinition {
   id: string;
   component: ComponentType;
   /**
+   * How the pane fills the inspector body.
+   *
+   * `"scroll"` (the default) wraps the pane in one full-bleed scroll region and
+   * one content layer. `"split"` declares that the pane renders its own split
+   * page (two scroll regions and two content layers), so the frame hands it the
+   * body without a wrapper.
+   */
+  layout?: "scroll" | "split";
+  /**
    * The pane name shown in the inspector status bar.
    *
    * Optional so panels registered outside the built-in inspector tree keep
@@ -55,6 +64,16 @@ export interface InspectorPanelDefinition {
    * action that grows the inspector over the workspace.
    */
   workspaceMode?: string;
+  /**
+   * The share of the expanded page width taken by the page's detail column.
+   *
+   * Only split pages that also declare a `workspaceMode` hand their lower face
+   * over to that column, so they must state the column's share here. It has to
+   * equal the detail track of the wide page (for example `0.55` for a
+   * `0.9fr 1.1fr` split); the inspector reads it as `--mode-detail-share` to size
+   * the compact copy during the expansion and collapse.
+   */
+  modeDetailShare?: number;
   /**
    * Whether the pane holds chart-editing controls.
    *

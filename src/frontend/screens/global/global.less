@@ -1,317 +1,17 @@
-// Global-mode right navigation, workspace page, and inspector page.
+// Expanded workspace modes: the wide inspector page that a large document page
+// expands into. The compact inspector layout lives with the inspector frame
+// (screens/editor/inspector) and the shared page layer
+// (chrome/inspectorPage); this sheet only composes the wide list/detail layouts
+// and their handoff motion.
 
-.global-nav,
-.design-nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-}
-
-.global-workspace {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--surface-raised);
-}
-
-.global-page-body,
-.global-inspector-content {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: var(--space-4) var(--space-7);
-  scrollbar-gutter: stable;
-}
-
-// The inspector is a column of a title, the detail body, and sometimes an empty
-// placeholder. The placeholder owns the remaining height so its copy and
-// skeleton sit in the middle of the pane.
-.global-inspector-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.global-inspector-content > * {
-  flex: 0 0 auto;
-}
-
-.global-inspector-content > .inspector-empty-hint {
-  flex: 1 0 auto;
-}
-
-// The global pages share one readable inner column. The gutter and the
-// max-width together keep the workspace from stretching edge to edge on wide
-// windows; each page remains responsible for its own internal layout.
-.global-page-body > *,
-.global-inspector-content > * {
-  max-width: 1120px;
-  margin-inline: auto;
-}
-
-.global-workspace .global-page-body {
-  padding: var(--space-3) var(--space-7) var(--space-4);
-}
-
-// The three global workspaces pin their add/delete actions below the scroll
-// region through the shared compact footer arrangement.
-.global-inspector {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.global-inspector .panel-title {
-  padding-top: 0;
-}
-
-// The global page body stays bounded while line and asset trees own their scroll surfaces.
-.global-workspace[data-global-page="lines"] .global-page-body {
-  overflow: hidden;
-}
-
-// The asset tree is a peer of the line tree: it fills the page body and lets
-// its folder boxes scroll instead of living inside a second framed panel.
-.global-workspace[data-global-page="assets"] .global-page-body {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.global-workspace[data-global-page="lines"] .line-panel {
-  height: 100%;
-  min-height: 0;
-}
-
-// The asset workspace is a management surface, so its tree gets a wider rhythm
-// than the narrow inspector version.
-.global-workspace .asset-library-actions {
-  margin-bottom: var(--space-3);
-}
-
-// The inspector is the image viewer: a large contained preview on a checker
-// background, with the asset's actions and metadata underneath.
-.global-inspector .line-panel {
-  flex: 1 0 auto;
-}
-
-.global-inspector .asset-details {
-  display: grid;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.global-inspector .asset-details > .asset-image {
-  width: 100%;
-  height: min(42vh, 420px);
-  margin: 0;
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-control);
-  background-color: var(--surface);
-  background-image:
-    linear-gradient(45deg, var(--surface-muted) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--surface-muted) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--surface-muted) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--surface-muted) 75%);
-  background-position:
-    0 0,
-    0 8px,
-    8px -8px,
-    -8px 0;
-  background-size: 16px 16px;
-}
-
-.global-inspector .asset-details .asset-image img {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: cover;
-  object-position: center;
-  image-rendering: pixelated;
-}
-
-// A compact document page stacks its list and its properties. The page owns the
-// two faces; this split only gives each one an independent scroll region and a
-// seam the author can drag when a chart has many rows.
-.inspector-page-split {
-  display: grid;
-  flex: 1 1 0;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-// A stacked document page owns the inspector body, so the page wrapper must not
-// grow to its content height. The split's two faces scroll inside their own
-// tracks instead; otherwise the inspector column scrolls as one long page and
-// the lower face can sit below the visible frame.
-.inspector-content > [data-panel]:has(.inspector-page-split):not([hidden]) {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.inspector-page-split-top,
-.inspector-page-split-bottom {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.inspector-page-split-top {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding-bottom: var(--space-2);
-}
-
-.inspector-page-split-top > .line-tree {
-  flex: 1 1 auto;
-  max-height: none;
-  min-height: 0;
-}
-
-.inspector-page-split-top > .line-tree-footer,
-.inspector-page-split-top > .redux-footer-bar {
-  flex: none;
-}
-
-.inspector-page-split-bottom {
-  padding-top: var(--space-2);
-}
-
-.inspector-page-split-seam {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  min-height: 7px;
-  cursor: row-resize;
-  touch-action: none;
-
-  &::before {
-    content: "";
-    width: calc(100% - var(--space-4));
-    height: 1px;
-    background: var(--edge-emphasis);
-    opacity: 0.45;
-  }
-
-  &:hover::before,
-  &:focus-visible::before {
-    background: var(--accent);
-    opacity: 1;
-  }
-
-  &:focus-visible {
-    outline: none;
-  }
-}
-
-.inspector-page-split.is-static .inspector-page-split-seam {
-  min-height: var(--space-3);
-  cursor: default;
-  pointer-events: none;
-}
-
-.inspector-page-split.is-static .inspector-page-split-seam::before {
-  width: 100%;
-}
-
-.inspector-page-split.is-static .inspector-page-split-grip {
-  display: none;
-}
-
-.inspector-page-split.is-static > .inspector-page-split-top,
-.inspector-page-split.is-static > .inspector-page-split-bottom {
-  scrollbar-gutter: auto;
-}
-
-.inspector-page-split-grip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 28px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--edge-emphasis);
-  transform: translate(-50%, -50%);
-  opacity: 0.45;
-  transition: opacity var(--design-dur-tint) ease;
-}
-
-.inspector-page-split-seam:hover .inspector-page-split-grip,
-.inspector-page-split-seam:focus-visible .inspector-page-split-grip {
-  opacity: 1;
-}
-
-// The compact copy is the handoff mask. On open both faces travel upward and
-// uncover the wide copy below; on close they return from that same direction.
-.inspector[data-mode-phase="opening"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top,
-.inspector[data-mode-phase="opening"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom,
-.inspector[data-mode-phase="expanded"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top,
-.inspector[data-mode-phase="expanded"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom {
-  transform: translateY(-100%);
-}
-
-.inspector[data-mode-phase="closing"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top,
-.inspector[data-mode-phase="closing"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom {
-  transform: translateY(0);
-}
-
-.inspector[data-mode-phase="opening"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top,
-.inspector[data-mode-phase="opening"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom,
-.inspector[data-mode-phase="closing"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top,
-.inspector[data-mode-phase="closing"]
-  .inspector-content[data-mode-surface="true"]
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom {
-  transition: transform var(--design-dur-enter) var(--design-ease-move);
-}
-
-// Expanded page layouts: the list/tree takes the left column, the selected
-// object's properties the right. Only the workspace mode uses these.
+// The workspace mode fills the inspector body. Pages compose one studio body
+// that places a list face beside a detail face; the timing page uses the same
+// body with its own list and property faces. Every studio root is a column so
+// its body takes the whole authored height; without it the grid would size to
+// its content and both faces would stop short of the inspector's bottom edge.
 .lines-studio,
-.assets-studio {
+.assets-studio,
+.timing-studio {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -348,9 +48,14 @@
   border-right: 1px solid var(--edge-divider);
 }
 
+// The detail column uses the same content inset and the same reserved
+// scrollbar column as an Inspector page: the compact copy hands its lower face
+// over to this column at the same size, so both sides must place the same
+// content on the same pixels.
 .studio-detail-pane {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--inspector-gutter);
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .studio-list-pane > *,
@@ -453,20 +158,55 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+// While the frame moves, the detail column is the compact copy's cover width.
+// That makes the copy's left edge the column boundary: the list column is
+// exactly the part of the page the growing frame has uncovered, and nothing
+// sits behind the copy. On arrival the authored tracks take over; they describe
+// the same widths, so the last frame of the motion is the settled layout.
 .inspector[data-mode-phase="opening"] .inspector-mode-surface .timing-studio .studio-body,
-.inspector[data-mode-phase="expanded"] .inspector-mode-surface .timing-studio .studio-body,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .timing-studio .studio-body {
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .timing-studio .studio-body,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .lines-studio .line-panel-split,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .lines-studio .line-panel-split,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .assets-studio .asset-library-split,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .assets-studio .asset-library-split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--mode-cover));
+  // Both columns run the full body height while the frame moves. Without the
+  // explicit row the tree and property columns size to their content, and the
+  // tall list column would jump to full height on arrival.
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .timing-studio .studio-body {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .lines-studio .line-panel-split,
 .inspector[data-mode-phase="expanded"] .inspector-mode-surface .lines-studio .line-panel-split,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .lines-studio .line-panel-split,
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .assets-studio .asset-library-split,
-.inspector[data-mode-phase="expanded"] .inspector-mode-surface .assets-studio .asset-library-split,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .assets-studio .asset-library-split {
+.inspector[data-mode-phase="expanded"] .inspector-mode-surface .assets-studio .asset-library-split {
   grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.1fr);
   grid-template-rows: minmax(0, 1fr);
+}
+
+// The list column keeps its expanded layout for the whole handoff instead of
+// reflowing. Its width stays the wide page's list track and it is pinned to the
+// compact copy's left edge, so the shrinking frame covers it from the left like a
+// mask: the column reaches zero visible width exactly when the panel reaches its
+// rail, and the wide copy's unmount removes nothing that was still on screen.
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .timing-studio .studio-list-pane,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .timing-studio .studio-list-pane,
+.inspector[data-mode-phase="opening"] .inspector-mode-surface .lines-studio .line-panel-split-tree,
+.inspector[data-mode-phase="closing"] .inspector-mode-surface .lines-studio .line-panel-split-tree,
+.inspector[data-mode-phase="opening"]
+  .inspector-mode-surface
+  .assets-studio
+  .asset-library-split
+  > .asset-tree-shell,
+.inspector[data-mode-phase="closing"]
+  .inspector-mode-surface
+  .assets-studio
+  .asset-library-split
+  > .asset-tree-shell {
+  width: calc((1 - var(--mode-detail-share, 0.5)) * (100vw - var(--workbench-side-track, 0px)));
+  justify-self: end;
 }
 
 .inspector[data-mode-phase="opening"] .inspector-mode-surface .line-panel-split-tree,
@@ -488,91 +228,7 @@
   border-bottom: 0;
 }
 
-// The wide copy carries a small directional offset. It settles only after the
-// inspector reaches its target track, so the left face enters from the stage
-// and the right face rises into the full-height property column.
-.inspector-mode-surface .studio-list-pane,
-.inspector-mode-surface .studio-detail-pane,
-.inspector-mode-surface .line-panel-split-tree,
-.inspector-mode-surface .line-panel-split-properties,
-.inspector-mode-surface .asset-library-split > .asset-tree-shell,
-.inspector-mode-surface .asset-library-split-details {
-  transition: transform var(--design-dur-enter) var(--design-ease-move);
-}
-
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .studio-list-pane,
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .line-panel-split-tree,
-.inspector[data-mode-phase="opening"]
-  .inspector-mode-surface
-  .asset-library-split
-  > .asset-tree-shell {
-  transform: translateX(calc(-1 * var(--space-6)));
-}
-
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .studio-detail-pane,
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .line-panel-split-properties,
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .asset-library-split-details {
-  transform: translateY(var(--space-6));
-}
-
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .studio-list-pane,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .line-panel-split-tree,
-.inspector[data-mode-phase="closing"]
-  .inspector-mode-surface
-  .asset-library-split
-  > .asset-tree-shell {
-  transform: translateX(var(--space-6));
-}
-
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .studio-detail-pane,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .line-panel-split-properties,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .asset-library-split-details {
-  transform: translateY(var(--space-6));
-}
-
-// The compact stacked variants keep the tree and details in one scroll surface,
-// but each face still gets its own bounded area.
-.line-panel-stack,
-.asset-library-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-height: 0;
-}
-
-.line-panel-stack .line-tree {
-  flex: 1 1 auto;
-  max-height: none;
-  min-height: 0;
-}
-
-.line-panel-stack .line-panel-properties {
-  flex: 0 0 auto;
-}
-
-.asset-library-stack {
-  flex: 1 1 auto;
-}
-
-.asset-library-stack .asset-details {
-  margin: 0;
-  padding: var(--space-2) 0 var(--space-4);
-}
-
-.inspector-page-split .line-panel-stack,
-.inspector-page-split .asset-library-stack {
-  height: 100%;
-}
-
-.inspector-page-split .asset-tree-shell {
-  height: 100%;
-}
-
-.inspector-page-split .asset-details > .asset-image {
-  height: min(32vh, 300px);
-}
-
-@media (max-width: 900px) {
+@container inspector-mode (max-width: 900px) {
   .studio-body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 0.85fr) minmax(0, 1.15fr) auto;
@@ -594,12 +250,5 @@
   .assets-studio .asset-tree-shell {
     border-right: 0;
     border-bottom: 1px solid var(--edge-divider);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .line-panel-stack,
-  .asset-library-stack {
-    transition: none;
   }
 }

@@ -2,7 +2,8 @@
  * Timing page: the compact Inspector stack and the expanded timing workspace.
  *
  * Both layouts use the same list and property faces. The compact page stacks
- * them; the workspace places them side by side at full height.
+ * them as a split inspector page; the workspace places them side by side at
+ * full height.
  */
 import {
   registerWorkspaceMode,
@@ -14,9 +15,6 @@ import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../../../../core/edit/state/visibility.ts";
-import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
-import { useGlobalChart } from "../../useGlobalChart.ts";
-import { TimingDetectFooter } from "../../../editor/inspector/bpm/BpmPanel.tsx";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
 import { TimingPageLayout } from "./TimingPageLayout.tsx";
 
@@ -27,20 +25,6 @@ const hasDocument = {
 
 /** The compact page: timing rows above the selected point's properties. */
 function TimingInspectorPage() {
-  const chart = useGlobalChart();
-  if (!chart?.BPMList.length) {
-    // With no timing points there is no point property to inspect. Keep the
-    // offset/list/add surface full-height, and pin the detector entry below it
-    // so the author can still create the first timing.
-    return (
-      <div className="timing-empty-page">
-        <div className="timing-empty-list">
-          <GlobalTimingWorkspace />
-        </div>
-        <TimingDetectFooter disabled={!chart} />
-      </div>
-    );
-  }
   return <TimingPageLayout layout="compact" />;
 }
 
@@ -61,10 +45,14 @@ const mode: WorkspaceModeDefinition = {
 const disposePanel = registerInspectorPanel({
   id: "timing",
   component: TimingInspectorPage,
+  layout: "split",
   label: "chrome.pane.bpm",
   icon: "bpm",
   tutorial: GLOBAL_PAGE_TUTORIALS.timing,
   workspaceMode: "timing",
+  // The timing workspace splits its two faces evenly, so the compact page settles
+  // on the right half when it expands.
+  modeDetailShare: 0.5,
   editsChart: true,
 });
 

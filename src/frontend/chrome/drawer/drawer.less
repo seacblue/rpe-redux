@@ -43,7 +43,7 @@
   box-shadow: var(--drawer-edge-shadow);
 }
 
-.inspector.is-drawer .inspector-content {
+.inspector.is-drawer .inspector-body {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -91,18 +91,18 @@
 .drawer-split-properties {
   flex: 0 0 auto;
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
   padding: 0;
   background: var(--drawer-surface);
 }
 
-// The list column is the part the inspector exposes when it grows. Its fixed
-// width is what the panel adds, so the property column never narrows.
+// Only the list owns its own scroll surface; the property column delegates the
+// scrollbar to its page content layer, which keeps it on the column edge.
 .drawer-split-list {
   display: flex;
   flex-direction: column;
   width: var(--drawer-list-width);
+  overflow: auto;
+  overscroll-behavior: contain;
   background: var(--drawer-list-surface);
   border-right: 1px solid var(--edge-divider);
 }
@@ -117,8 +117,12 @@
   padding-bottom: var(--inspector-gutter);
 }
 
-// The property column always occupies the inspector's resting width.
+// The property column always occupies the inspector's resting width. It hosts
+// one page content layer, so the form scrolls inside the column while the
+// scrollbar stays on the column's outer edge.
 .drawer-split-properties {
+  display: flex;
+  flex-direction: column;
   width: var(--inspector-width);
   background: var(--drawer-surface);
   // Its width stays fixed while the drawer grows, so the field rows measure

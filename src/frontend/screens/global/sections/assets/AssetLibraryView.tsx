@@ -503,7 +503,7 @@ export function AssetLibraryView({
       {split ? (
         <div className="asset-library-split">
           {treeFace}
-          <div className="asset-library-split-details">{detailsFace}</div>
+          <div className="asset-library-split-details mode-handoff-detail">{detailsFace}</div>
         </div>
       ) : stacked ? (
         <InspectorPageSplit
@@ -511,7 +511,6 @@ export function AssetLibraryView({
           bottomLabel={t("editorPanels.assetLibrary.details")}
           top={treeFace}
           bottom={detailsFace}
-          resizable={false}
         />
       ) : (
         <>
