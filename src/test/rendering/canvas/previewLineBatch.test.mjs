@@ -4,9 +4,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  drawLinePasses,
-} from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
+import { drawLinePasses } from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
 import {
   DEFAULT_LINE_HEIGHT,
   DEFAULT_LINE_WIDTH,
@@ -101,7 +99,8 @@ test("default judge lines batch once and fall back to Canvas when disabled", () 
     assert.equal(batched.lines, 1);
     assert.deepEqual(calls, []);
     assert.equal(addLineCalls.length, 1);
-    const [descriptorArg, centerX, centerY, width, height, rotation, alpha, color] = addLineCalls[0];
+    const [descriptorArg, centerX, centerY, width, height, rotation, alpha, color] =
+      addLineCalls[0];
     assert.equal(descriptorArg, lineDescriptor);
     assert.equal(centerX, 50);
     assert.equal(centerY, 50);

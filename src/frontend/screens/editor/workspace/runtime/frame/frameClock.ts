@@ -59,10 +59,7 @@ export interface FrameRateSampleState {
  * subset that actually painted. Keeping both exposes the difference between a
  * 60 Hz host callback and a renderer that skips paints.
  */
-export function updateMeasuredFrameRates(
-  state: FrameRateSampleState,
-  timestamp: number,
-): void {
+export function updateMeasuredFrameRates(state: FrameRateSampleState, timestamp: number): void {
   const elapsed = timestamp - state.frameSampleStart;
   if (!(elapsed >= 500)) {
     return;
