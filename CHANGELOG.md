@@ -4,150 +4,124 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use two inline annotations: `@name` credits a GitHub user (rendered bold and underlined), and `<red>text</red>` colours a run of text. The tag name is the colour: `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown tag, so the release page still reads as plain words.
 
-## 1.0.8 (2026-11-10)
+## 1.0.9 (2026-11-13)
 
 ### 中文
 
 **新功能**
 
-- Hello, GitHub Pages!
-- 多线编辑部分新增对于 X、Y、Rotate、Alpha、Speed 轨道的隐藏功能。这是一项与 RPE 的功能对齐。
-- 按下 Esc 键可以取消仍未放置终点的 Hold 与事件操作。另一项我常用的功能对齐。
-- 改进了自动测量 BPM 与偏移值的功能，并且新增了“BPM 翻倍”“BPM 减半”“偏移值提前一拍”“偏移值延后一拍”的快捷按键。
-- Shader 现在会在选择之后进入预编译，减少预览播放时的卡顿。
-- 新增快捷键“时间轴快退（一整个节拍）”“时间轴快进（一整个节拍）”，默认 Shift + WheelUp / Down。我们知道有的用户想要将它们与时间轴缩放进行交换……
-- 新增快捷键“清空剪贴板”，默认 Ctrl + Shift + Delete。
-- 新增快捷键“应用采样草稿”“跳转到剪贴板开头”“跳转到剪贴板末尾”。
-- 新增设置项“撤销/重做时自动跳转”，撤销或重做后，把播放头/视图自动跳到被改动的位置。
-- 新增设置项“选中事件颜色”“协作选中音符颜色”“协作选中事件颜色”。
-- 新增自动保存设置项。
-- 新增光标渐显设置项，上一次放置的音符或事件，与鼠标附近的横线与竖线会显示，而其他的不显示。<建议来源：大只黄毛狗狗>
-- 为 Code Cell 提供截图功能，可以根据时间或拍数获取到对应谱面的截图。<建议来源：大只黄毛狗狗>
-- 时间轴左右的概览条现在会显示剪贴板与粘贴的区域了。新增设置项“在概览条显示剪贴板与粘贴范围”。
-- 可以通过左上角的 Logo 快速退回到谱面库了，我觉得可能有人还不知道我们可以退回到谱面库……
-- 可以通过欢迎界面右上角的协作按钮，快速加入到其他用户开启的房间。
-- 加入 gzip 压缩策略并已默认在数据库保存、联机协作启用。
-- 加入 HTTP 传输与分块逻辑，由于性能原因暂时不启用。
-- 谱面新增只读模式。
-- 右下角新增“Bug 反馈”按钮，请大家多多宣传 RPE Redux（可怜）。
+- Inspector 现在可以展开成「工作室」。
+- 判定线属性新增控制曲线编辑器。
+- 网页端与桌面端共用一套路由。桌面端支持 rperedux://chart/<id> 深链。
+- 重叠音符现在会按固定角度递增原地扇形展开。
+- 欢迎界面与谱面库重做。新增今日运势功能。
+- 新增 Q / E 在欢迎界面切换谱面的快捷键。新增重命名功能与新谱面标记。
+- 新增 Esc 键快捷打开设置功能。
+- 新增 Ctrl 快捷键：在时间轴上点选起止音符，就能在它们之间生成曲线音符。
+- 曲线音符现在能生成 Hold 了，与 RPE 的又一处对齐。
+- 现在应用会检测拖入的文件夹是否是 RPE 文件夹，自动导入并给出确认模态框。<贡献来源：@MatrixBlanchet>
+- 侧边栏新增音量控制按钮。
 
 **联机协作**
 
-- 创建房间会弹出过程模态框，且用户在完整获取到谱面包之前不会进入谱面。
-- 对于除房主之外的成员，谱面将不会保存到本地谱面库。
-- 删除协作 protocolVersion 握手和全部协议版本规则，能否进入房间只取决于与房主的版本是否一致。
-- 其他成员的播放头从进度条上方移动至下方。
-- 允许任意成员上传与修改资源文件。
-- 通过 rperedux:// 协议进入房间时，支持调整用户名和光标颜色。
-- 除房主之外的成员掉线时，重新加入会出现恢复提示且支持自动恢复。
-- 新增共享选中功能。
-- 现在在用户拥有与房间素材 hash 相同的文件时，会复用本地的文件。
-- 协作场景下的冲突与锁提示得到优化。
+- 协作房间的二进制资源改为流式传输，不再把整包资源塞进内存。
+- 重新加入房间时，内容没有变化的谱面会跳过重新下载，直接复用本地资源。
+- 联机协作的提示更加人性化。
+
+**网页端**
+
+- 皮肤包等外部内容，现在会存入浏览器 SQLite 的 app_packages / app_package_files，随 .sqlite 导出和备份一起带走。
+- 隐藏“打开应用数据文件夹”按钮。
 
 **改进**
 
-- 检查器展开改为几何形变，分两步完成：列表先随面板向左滑出、与详情块岔开，随后列表纵向长高、详情块展开为右侧栏；收起按相反顺序播放（先缩回各自尺寸，再横向合拢）。列表固定为紧凑宽度、只纵向拉伸，详情栏接管全部新增宽度，右侧不再出现一份复制出来的页面。展开/收起按钮改用“分栏”与“向右收起”图标；动画期间按钮不再置灰，随时点击都能原地反向。展开状态下点关闭（×）、Esc，或从侧栏切到不能展开的面板，都会在同一帧收起面板并替换页面，不再播放退场动画；只有收起按钮保留形变。从侧栏切到另一个可展开的面板会原地换页，不重播展开。素材库没有素材时不显示下栏，展开时该栏居中显示为单栏。
-- 谱面的渲染、修改与保存现在采用流式模式。打开谱面时的 JSON 解析时长可降低至 50 ~ 100 ms。
-- 对数据库存储规范进行大规模优化。
-- 现在在非桌面应用情况下，右上角的最小化、最大化与关闭按钮将会隐藏。
-- 谱面数据库实现增量更新，减少磁盘占用与复制开销。
-- 下载更新时，与更新相关的按钮都会失效。
-- 下载完成的更新包会缓存在本地，不再重复下载。
-- 后端会分析拖入的文件为谱面、皮肤包或插件包。
-- 改进了 Shader 轨道的渲染，我们将会在之后的大更新中重新优化故事板设计。
-- 音符时间轴与事件时间轴的框选颜色现在已经统一。
-- 删除了事件选择时的边框。
-- 删除了大部分开发者选项。新增“启用音符边框”“导出诊断包”与“一键复制摘要”开发者选项。
-- 优化了关闭应用时的提示框逻辑。
-- 谱面被占用时的提示文案更加清晰易懂。
-- 大谱面的保存不会阻塞 UI。
-- 因为 Esc 太通用，所以我们不会提供 Esc 的改键了，桀桀桀。
-- 移除了相当多的无用文案。
+- 优化了谱面 CRUD、启动相关的逻辑。
+- 优化重叠选择器，只显示必要信息。
+- 事件属性的起始值与终值不再被夹取。
+- 递增默认键改为 Ctrl + Wheel Up，递减默认键改为 Ctrl + Wheel Down。替换了部分快捷键的显示顺序。
+- 放置事件、显示结果虚影时不再显示程序化生成的皮肤，显示结果虚影时的皮肤更加暗淡。
+- 现在在播放时按下 T / U 键将会切换成仅预览界面。
+- 调整了波形透明度与波形增幅的设置默认值。
+- 竖线终于正确运用了小数参数。
+- 顶部工具栏新增父线输入框。
+- 导出诊断包现在会真的导出有用的东西。
 
 **代码质量**
 
-- 现在可以方便地启动浏览器调试功能，而无需重复构建应用。
-- 修改 AGENTS.md 以适应新的解决需求流程。
-- 现在可以在启动时指定 --collab-port 实例端口与 LAN/隧道房间端口。
-- 更新了部分依赖包。
+- 精简公开 API：移除 chart.placeNote、document.snapshot / document.fingerprint、库根级的 CRUD 接口、workspace 包句柄与 extensions getter。
+- SDK 文档与示例（中英）同步更新。
+- 移除 chrome.layout、chrome.metrics、titlebar.density 三个主题块，这些字段不再生效。
+- 设计基础抽层：边缘 token、文本截断 mixin、FieldRows、浮层锚点跟踪与层级、按压与过渡动效都改成了共享实现。
+- 路由契约补齐了 hash 路由与深链的单测，GitHub Pages 构建不再依赖 SPA 回退。
 
 **修复**
 
-- 修复了因为长条距离计算错误而导致的渲染 Bug。
-- 修复了协作写谱无法正常创建房间的 Bug。
-- 修复了底部红线层级在音符与事件之上的 Bug。
-- 修复了 RPE 元数据语义 background 与 illustration 混淆的 Bug。
-- 修复了一些下拉框或展开菜单的行为 Bug。
+- 修复了在素材库播放音频时，Space 按键错误控制谱面播放的 Bug。
+- 修复了展开 Inspector 时封面与紧凑态的边缘、色差问题：两侧 inset 一致、去掉了多出来的 1px 边框，封面沿用同一套模糊与色调。
+- 修复了展开与返回 Inspector 时 BPM 表单可能被清空的 Bug。
+- 修复了 J 键无法打开多线编辑、K 键无法正确切换事件与音符编辑的 Bug。<贡献来源：@MatrixBlanchet>
+- 修复了 Ctrl + 滚轮向上滑动判定线无法正确切换的 Bug。<贡献来源：@MatrixBlanchet>
+- 修复了 Hold 与其他音符 z-order 错误的 Bug。
+- 修复了多线编辑情况下的左键逻辑错误的 Bug。
+- 修复了一些 checkbox 未正确更新的 Bug。
+- Hold 尾部的问题终于修复了……？
 
 ### English
 
 **Features**
 
-- Hello, GitHub Pages!
-- Multi-line editing now supports hiding the X, Y, Rotate, Alpha, and Speed tracks. This is another RPE parity feature.
-- Pressing Esc now cancels an in-progress Hold or event before its endpoint is placed. Another feature alignment I use often.
-- Improved automatic BPM and offset detection, and added shortcuts for "Double BPM", "Halve BPM", "Move offset one beat earlier", and "Move offset one beat later".
-- Shaders now begin precompiling after selection, reducing stutter during preview playback.
-- Added "Rewind timeline (one full beat)" and "Advance timeline (one full beat)" shortcuts, defaulting to Shift + WheelUp / Down. We know some users want to swap them with timeline zoom...
-- Added a "Clear clipboard" shortcut, defaulting to Ctrl + Shift + Delete.
-- Added shortcuts for "Apply sampling draft", "Jump to clipboard start", and "Jump to clipboard end".
-- Added the "Jump to the changed time after undo or redo" setting. After an undo or redo, the playhead and view move to the edited position automatically.
-- Added the "Selected event colour", "Collaboration selected note colour", and "Collaboration selected event colour" settings.
-- Added autosave settings.
-- Added a cursor fade-in setting: the most recently placed note or event, plus the horizontal and vertical lines near the pointer, are shown while everything else is hidden.<suggested by 大只黄毛狗狗>
-- Code Cell can now capture chart screenshots by time or beat.<suggested by 大只黄毛狗狗>
-- The overview bars on both sides of the timeline now show the clipboard and paste ranges. Added the "Show clipboard and paste ranges on overview bars" setting.
-- The top-left logo can now return to the chart library quickly. I suspect some people still don't know we can go back to the library...
-- The collaboration button in the top-right corner of the welcome screen can now quickly join rooms opened by other users.
-- Added gzip compression, enabled by default for database saves and collaboration.
-- Added HTTP transport and chunking, currently disabled for performance reasons.
-- Added a read-only mode for charts.
-- Added a "Bug report" button in the bottom-right corner. Please help spread the word about RPE Redux (poor us).
+- The Inspector can now expand into a Studio.
+- Judge-line properties now include a control-curve editor.
+- Web and desktop now share one routing layer. Desktop supports `rperedux://chart/<id>` deep links.
+- Overlapping notes now fan out in place at a fixed incrementing angle.
+- Reworked the welcome screen and chart library. Added the daily fortune feature.
+- Added Q / E shortcuts to switch charts on the welcome screen. Added renaming and a new-chart marker.
+- Added an Esc shortcut to open settings.
+- Added a Ctrl shortcut: select the start and end notes on the timeline to generate curve notes between them.
+- Curve notes can now generate Holds, another step toward RPE parity.
+- The app now detects whether a dropped folder is an RPE folder, imports it automatically, and shows a confirmation modal. <contributed by @MatrixBlanchet>
+- Added volume controls to the sidebar.
 
 **Collaboration**
 
-- Creating a room now shows a progress modal, and the user does not enter the chart until the full chart bundle has been received.
-- For members other than the host, the chart is no longer saved to the local chart library.
-- Removed the collaboration protocolVersion handshake and all protocol version rules. Admission now depends only on matching the host's version.
-- Other members' playheads have moved from above the progress bar to below it.
-- Any member can now upload and modify asset files.
-- Joining a room through the rperedux:// protocol now supports adjusting the username and cursor colour.
-- When a non-host member disconnects, rejoining shows a recovery prompt and supports automatic recovery.
-- Added shared selection.
-- Local files with the same hash as a room asset are now reused.
-- Improved conflict and lock messages in collaboration.
+- Collaboration room binary assets now stream instead of loading the whole package into memory.
+- Rejoining a room skips re-downloading charts whose contents are unchanged and reuses local assets.
+- Collaboration prompts are friendlier.
+
+**Web**
+
+- External content such as skin packages is now stored in the browser SQLite `app_packages` / `app_package_files` tables, so it travels with `.sqlite` exports and backups.
+- Hid the "Open app data folder" button.
 
 **Improvements**
 
-- The Inspector expansion is now a geometric morph in two overlapping beats: the list slides out with the panel and parts from the detail block, and as soon as the faces have parted the list stretches to full height while the detail block expands into the right column, so the entrance never rests between the beats. Collapsing retracts both beats together: the panel edge carries the list to the right while the detail column gives up width at the same rate as the panel closes, so the right column stays joined to the list and the compact split lands on the panel edge. The list keeps its compact width and only stretches vertically while the detail column takes all of the added width, and no duplicate page appears on the right. The expand control now shows its own split and collapse glyphs, stays enabled while the motion plays, and reverses the motion in place when clicked again. Closing the task with × lands in one frame: the page leaves and the panel returns to the compact rectangle in the same commit, so the closed state appears immediately instead of after an exit animation. Switching to another expandable page from the rail keeps the task open and swaps the page in place without replaying the entrance, while selecting a plain pane also lands on the compact rectangle in one frame. Only the collapse control still plays the retraction, because it keeps the same page. The expand glyph is a pair of side-by-side rectangles and the collapse glyph is a rectangle with a right arrow. An asset library with no assets drops the details pane and expands as one centered column.
-- Chart rendering, editing, and saving now use a streaming mode. JSON parsing time when opening a chart can drop to 50 ~ 100 ms.
-- Large-scale optimization of database storage conventions.
-- The minimize, maximize, and close buttons in the top-right corner are now hidden outside the desktop app.
-- Chart database updates are now incremental, reducing disk usage and copy overhead.
-- Update-related buttons are disabled while an update downloads.
-- Downloaded update packages are cached locally and are no longer downloaded repeatedly.
-- The backend now classifies dropped files as charts, skin packs, or extension packages.
-- Improved Shader track rendering. We will reoptimize the storyboard design in a later major update.
-- Note and event timeline marquee colours are now unified.
-- Removed the border on event selection.
-- Removed most developer options. Added the "Enable note borders", "Export diagnostic bundle", and "Copy summary" developer options.
-- Improved the close-app prompt logic.
-- Occupied-chart messages are clearer and easier to understand.
-- Saving large charts no longer blocks the UI.
-- Because Esc is too ubiquitous, we will not offer rebinding for Esc. Mwahaha.
-- Removed quite a lot of useless copy.
+- Optimized chart CRUD and startup logic.
+- Improved the overlap picker to show only necessary information.
+- Event property start and end values are no longer clamped.
+- The default increment shortcut is now Ctrl + Wheel Up, and decrement is Ctrl + Wheel Down. Adjusted the display order of some shortcuts.
+- Procedurally generated skins no longer appear for pending events or result ghosts, and result ghosts are dimmer.
+- Pressing T / U during playback now switches to the preview-only surface.
+- Adjusted the default waveform opacity and waveform amplitude settings.
+- Vertical lines now correctly apply fractional parameters.
+- Added a parent-line input box to the top toolbar.
+- Diagnostic bundles now actually export useful data.
 
 **Code quality**
 
-- Browser debugging can now be started easily without rebuilding the app repeatedly.
-- Updated AGENTS.md for the new request-resolution workflow.
-- The --collab-port instance port and the LAN/tunnel room port can now be specified at startup.
-- Updated some dependencies.
+- Simplified the public API: removed `chart.placeNote`, `document.snapshot` / `document.fingerprint`, library-root CRUD interfaces, the workspace package handle, and the extensions getter.
+- Updated the SDK documentation and examples in both languages.
+- Removed the `chrome.layout`, `chrome.metrics`, and `titlebar.density` theme blocks; those fields no longer take effect.
+- Design foundation extraction: edge tokens, the text-truncation mixin, FieldRows, floating anchor tracking and layering, and press/transition motion are now shared implementations.
+- The router contract now covers hash routes and deep links with unit tests, and the GitHub Pages build no longer depends on an SPA fallback.
 
 **Fixes**
 
-- Fixed a rendering bug caused by incorrect hold distance calculations.
-- Fixed a bug where collaboration chart editing could not create a room.
-- Fixed the bottom red line layer appearing above notes and events.
-- Fixed confusion between the RPE metadata semantics of background and illustration.
-- Fixed behaviour bugs in some dropdowns and expanded menus.
+- Fixed a bug where Space controlled chart playback while audio was playing in the asset library.
+- Fixed edge and colour issues between the cover and compact states when expanding the Inspector: both sides use the same inset, the extra 1px border is gone, and the cover uses the same blur and tint.
+- Fixed a bug where the BPM form could be cleared when expanding and returning to the Inspector.
+- Fixed a bug where J could not open multi-line editing and K could not correctly switch between event and note editing. <contributed by @MatrixBlanchet>
+- Fixed a bug where Ctrl + wheel up could not correctly switch judge lines. <contributed by @MatrixBlanchet>
+- Fixed a bug with the z-order of Holds and other notes.
+- Fixed incorrect left-click behaviour in multi-line editing.
+- Fixed some checkboxes not updating correctly.
+- The Hold tail issue is finally fixed...?

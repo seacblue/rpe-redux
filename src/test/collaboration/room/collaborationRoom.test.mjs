@@ -77,7 +77,7 @@ test("a join and resume require the room's exact product version", () => {
     room.id,
     room.invite,
     { name: "Newer guest", color: "#00ff00" },
-    "1.0.8",
+    "1.0.9",
   );
   assert.equal(newerJoin.ok, false);
   assert.equal(newerJoin.code, "version_mismatch_client_newer");
@@ -105,7 +105,7 @@ test("a join and resume require the room's exact product version", () => {
   );
   assert.equal(matchedJoin.ok, true);
   assert.equal(matchedJoin.value.member.role, "editor");
-  const newerResume = rooms.resume(room.id, host.token, "1.0.8");
+  const newerResume = rooms.resume(room.id, host.token, "1.0.9");
   assert.equal(newerResume.ok, false);
   assert.equal(newerResume.code, "version_mismatch_client_newer");
   const olderResume = rooms.resume(room.id, host.token, "1.0.6");

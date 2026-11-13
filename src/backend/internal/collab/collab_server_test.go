@@ -47,7 +47,7 @@ func TestCollabVersionRequiresExactProductMatch(t *testing.T) {
 		code          string
 	}{
 		{"1.0.6", "version_mismatch_client_older"},
-		{"1.0.8", "version_mismatch_client_newer"},
+		{"1.0.9", "version_mismatch_client_newer"},
 		{"preview", "version_mismatch_unknown"},
 		{"", "version_mismatch_unknown"},
 	}
@@ -101,7 +101,7 @@ func TestCollabWebSocketNeedsNoProtocolVersionButRequiresSameProductVersion(t *t
 		})
 		return socket.readUntil(t, "rejected")
 	}
-	if rejected := join("1.0.8"); rejected["reason"] != "version_mismatch_client_newer" {
+	if rejected := join("1.0.9"); rejected["reason"] != "version_mismatch_client_newer" {
 		t.Fatalf("newer join mismatch = %v", rejected)
 	}
 	if rejected := join("1.0.6"); rejected["reason"] != "version_mismatch_client_older" {
@@ -134,7 +134,7 @@ func TestCollabWebSocketNeedsNoProtocolVersionButRequiresSameProductVersion(t *t
 	if rejected := resume("1.0.6"); rejected["reason"] != "version_mismatch_client_older" {
 		t.Fatalf("resume mismatch = %v", rejected)
 	}
-	if rejected := resume("1.0.8"); rejected["reason"] != "version_mismatch_client_newer" {
+	if rejected := resume("1.0.9"); rejected["reason"] != "version_mismatch_client_newer" {
 		t.Fatalf("newer resume mismatch = %v", rejected)
 	}
 
@@ -149,7 +149,7 @@ func TestCollabWebSocketNeedsNoProtocolVersionButRequiresSameProductVersion(t *t
 		})
 		return socket.readUntil(t, "rejected")
 	}
-	if rejected := inspect("1.0.8"); rejected["reason"] != "version_mismatch_client_newer" {
+	if rejected := inspect("1.0.9"); rejected["reason"] != "version_mismatch_client_newer" {
 		t.Fatalf("inspect mismatch = %v", rejected)
 	}
 	if rejected := inspect("1.0.6"); rejected["reason"] != "version_mismatch_client_older" {

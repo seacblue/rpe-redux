@@ -835,7 +835,7 @@ test("handshakes need no protocol revision and require the same product version"
         roomId: welcome.roomId,
         invite: welcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
-        appVersion: "1.0.8",
+        appVersion: "1.0.9",
       }),
     );
     const rejected = await guest.next();
@@ -862,7 +862,7 @@ test("handshakes need no protocol revision and require the same product version"
         type: "inspect-room",
         roomId: welcome.roomId,
         invite: welcome.invite,
-        appVersion: "1.0.8",
+        appVersion: "1.0.9",
       }),
     );
     const preview = await inspector.next();

@@ -22,7 +22,7 @@ function historyLimit(): number {
   return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_HISTORY_LIMIT;
 }
 
-const storageKey = "rpe-next-multi-edit-v1";
+const storageKey = "multi-edit-v1";
 const kinds: readonly MultiEditKind[] = ["notes", "events"];
 
 /** True for an integer easing id in the supported 1-29 range. */

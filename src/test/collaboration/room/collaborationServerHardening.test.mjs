@@ -311,7 +311,7 @@ test("joins, resumes, and previews require the same product version", async () =
         roomId: welcome.roomId,
         invite: welcome.invite,
         profile: { name: "Guest", color: "#00ff00" },
-        appVersion: "1.0.8",
+        appVersion: "1.0.9",
       }),
     );
     const joinRejected = await guest.next();
@@ -323,7 +323,7 @@ test("joins, resumes, and previews require the same product version", async () =
         type: "inspect-room",
         roomId: welcome.roomId,
         invite: welcome.invite,
-        appVersion: "1.0.8",
+        appVersion: "1.0.9",
       }),
     );
     const previewRejected = await guest.next();

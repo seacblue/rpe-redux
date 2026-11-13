@@ -17,7 +17,7 @@ test("dotted product versions compare numerically", () => {
 
 test("pre-release and build suffixes do not change the direction", () => {
   assert.equal(compareProductVersions("1.0.7-beta.1", "1.0.7"), 0);
-  assert.equal(compareProductVersions("v1.0.8", "1.0.7"), 1);
+  assert.equal(compareProductVersions("v1.0.9", "1.0.7"), 1);
   assert.equal(compareProductVersions("1.0.6+42", "1.0.7"), -1);
 });
 
@@ -28,15 +28,15 @@ test("unparsable versions report an unknown direction", () => {
 });
 
 test("mismatch codes name which client is out of date", () => {
-  assert.equal(versionMismatchCode("1.0.7", "1.0.8"), "version_mismatch_client_newer");
+  assert.equal(versionMismatchCode("1.0.7", "1.0.9"), "version_mismatch_client_newer");
   assert.equal(versionMismatchCode("1.0.7", "1.0.6"), "version_mismatch_client_older");
-  assert.equal(versionMismatchCode("1.0.7", "1.0.8-beta"), "version_mismatch_client_newer");
+  assert.equal(versionMismatchCode("1.0.7", "1.0.9-beta"), "version_mismatch_client_newer");
 });
 
 test("mismatch messages state the remedy for each direction", () => {
-  const newer = versionMismatchMessage("1.0.7", "1.0.8");
+  const newer = versionMismatchMessage("1.0.7", "1.0.9");
   assert.match(newer, /Ask the host to update RPE Redux/);
-  assert.match(newer, /newer \(1\.0\.8\)/);
+  assert.match(newer, /newer \(1\.0\.9\)/);
 
   const older = versionMismatchMessage("1.0.7", "1.0.6");
   assert.match(older, /Update RPE Redux/);
