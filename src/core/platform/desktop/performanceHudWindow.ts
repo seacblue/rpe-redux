@@ -20,6 +20,7 @@ export const PERFORMANCE_HUD_SNAP_EVENT = "performance-hud-snap";
 /** One frame's timing and memory readings sent to the HUD window. */
 export interface PerformanceHudFramePayload {
   fps: number;
+  paintFps: number;
   fpsSamples: readonly number[];
   drawTimeMs: number;
   frameTimesMs: readonly number[];
@@ -29,9 +30,13 @@ export interface PerformanceHudFramePayload {
   frameIntervalLoadPercent: number;
   frameIntervalLoadSamples: readonly number[];
   timelineDrawMs: number;
-  timelineDrawSamples: readonly number[];
   previewDrawMs: number;
-  previewDrawSamples: readonly number[];
+  previewLineDrawMs: number;
+  previewNoteDrawMs: number;
+  previewEffectsMs: number;
+  previewCompositeMs: number;
+  previewSampleMs: number;
+  previewVisibilityMs: number;
   memoryAvailable: boolean;
   memoryUsedMb: number;
   memoryLimitMb: number;

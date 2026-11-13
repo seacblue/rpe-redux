@@ -42,6 +42,39 @@ export interface VisualPlaybackClock {
   reset(): void;
 }
 
+/** Counters needed to derive the raw rAF and painted-frame rates. */
+export interface FrameRateSampleState {
+  frameSampleStart: number;
+  frameSampleCount: number;
+  frameSampleCallbacks: number;
+  measuredFps: number;
+  measuredPaintFps: number;
+  animationCallbacks: number;
+}
+
+/**
+ * Close one 500 ms rate window.
+ *
+ * `measuredFps` counts every display callback and `measuredPaintFps` counts the
+ * subset that actually painted. Keeping both exposes the difference between a
+ * 60 Hz host callback and a renderer that skips paints.
+ */
+export function updateMeasuredFrameRates(
+  state: FrameRateSampleState,
+  timestamp: number,
+): void {
+  const elapsed = timestamp - state.frameSampleStart;
+  if (!(elapsed >= 500)) {
+    return;
+  }
+  const callbacks = state.animationCallbacks - state.frameSampleCallbacks;
+  state.measuredFps = (callbacks * 1000) / elapsed;
+  state.measuredPaintFps = (state.frameSampleCount * 1000) / elapsed;
+  state.frameSampleStart = timestamp;
+  state.frameSampleCallbacks = state.animationCallbacks;
+  state.frameSampleCount = 0;
+}
+
 /** Build a visual-only clock over the authoritative audio and chart clocks. */
 export function createVisualPlaybackClock(options: {
   audio: Pick<AudioTransport, "playing" | "time" | "rate">;
@@ -125,10 +158,7 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
     /** Advances audio, scrolling, overlays, FPS sampling, and edit time. */
     advance(
       timestamp: number,
-      state: Pick<
-        EditorFrameState,
-        "lastTick" | "frameSampleStart" | "measuredFps" | "frameSampleCount"
-      >,
+      state: Pick<EditorFrameState, "lastTick"> & FrameRateSampleState,
       overlayDue: boolean,
     ): void {
       const elapsed = state.lastTick ? (timestamp - state.lastTick) / 1000 : 0;
@@ -140,11 +170,7 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
       if (!visibility.atHome()) {
         runtime.timeline.autoScroll(elapsed);
       }
-      if (timestamp - state.frameSampleStart >= 500) {
-        state.measuredFps = (state.frameSampleCount * 1000) / (timestamp - state.frameSampleStart);
-        state.frameSampleStart = timestamp;
-        state.frameSampleCount = 0;
-      }
+      updateMeasuredFrameRates(state, timestamp);
       runtime.editClock.advance(
         timestamp,
         visibility.hasDocument() && !visibility.atHome() && !visibility.documentHidden(),

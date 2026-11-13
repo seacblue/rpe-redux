@@ -142,22 +142,6 @@ export interface NoteState {
   showHead: boolean;
 }
 
-/** Create a mutable line-state target for repeated Hold anchoring samples. */
-function createLineStateScratch(): LineState {
-  return {
-    x: 0,
-    y: 0,
-    rotation: 0,
-    alpha: 0,
-    scaleX: 1,
-    scaleY: 1,
-    color: [255, 255, 255],
-    text: "",
-    incline: 0,
-    floor: 0,
-  };
-}
-
 /** Per-line visibility work measured for the most recent query. */
 export interface VisibilityQueryStats extends VisibilityDirectoryQueryStats {
   candidateCount: number;
@@ -338,10 +322,6 @@ export class LineRuntime {
   declare staticState: boolean;
   declare staticScaleY: number;
   declare staticColor: number[];
-  /** Cached line states used to anchor active zero-length Holds. */
-  private readonly holdStartStates = new WeakMap<NoteEntry, LineState>();
-  private readonly holdNowState = createLineStateScratch();
-  private holdNowSeconds = Number.NaN;
 
   /** Compile the line's layers, controls and note indexes for sampling. */
   constructor(
@@ -461,13 +441,18 @@ export class LineRuntime {
       }
       const start = this.tempo.seconds(note.startTime, this.factor);
       const end = this.tempo.seconds(note.endTime, this.factor);
+      const startFloor = this.floor(start);
+      const endFloor = this.floor(end);
+      const offset = note.yOffset ?? 0;
       const entry = {
         noteIndex: index,
         note,
         start,
         end,
-        floor: this.floor(start) + (note.yOffset ?? 0),
-        tail: this.floor(end) + (note.yOffset ?? 0),
+        startFloor,
+        endFloor,
+        floor: startFloor + offset,
+        tail: endFloor + offset,
       };
       this.notes.push(entry);
       let low = 0;
@@ -500,14 +485,19 @@ export class LineRuntime {
       }
       const start = next.tempo.seconds(note.startTime, factor);
       const end = next.tempo.seconds(note.endTime, factor);
+      const startFloor = next.floor(start);
+      const endFloor = next.floor(end);
+      const offset = note.yOffset ?? 0;
       return [
         {
           noteIndex,
           note,
           start,
           end,
-          floor: next.floor(start) + (note.yOffset ?? 0),
-          tail: next.floor(end) + (note.yOffset ?? 0),
+          startFloor,
+          endFloor,
+          floor: startFloor + offset,
+          tail: endFloor + offset,
         },
       ];
     });
@@ -823,32 +813,17 @@ export class LineRuntime {
     return 1 / Math.abs(speed);
   }
 
-  /** Sample the current line state once for all zero-length Holds in a frame. */
-  private sampleHoldNow(seconds: number): LineState {
-    if (this.holdNowSeconds !== seconds) {
-      this.state(seconds, this.holdNowState);
-      this.holdNowSeconds = seconds;
-    }
-    return this.holdNowState;
-  }
-
-  /** Sample a zero-length Hold's fixed start state once for its runtime entry. */
-  private sampleHoldStart(entry: NoteEntry): LineState {
-    const cached = this.holdStartStates.get(entry);
-    if (cached) {
-      return cached;
-    }
-    const sampled = createLineStateScratch();
-    this.state(entry.start, sampled);
-    this.holdStartStates.set(entry, sampled);
-    return sampled;
-  }
-
   /** Sample one note's local position and visuals relative to the line state. */
   noteState(entry: NoteEntry, state: LineState, seconds: number, result?: NoteState): NoteState {
     const note = entry.note;
     const activeHold = note.type === 2 && entry.start < seconds;
-    const distance = activeHold ? (note.yOffset ?? 0) : entry.floor - state.floor;
+    const offset = note.yOffset ?? 0;
+    // Subtract cumulative floors before adding the local
+    // offset. Adding the offset to a huge floor first loses precision and makes
+    // Hold lengths alternate around zero.
+    const startFloor = entry.startFloor ?? entry.floor - offset;
+    const endFloor = entry.endFloor ?? entry.tail - offset;
+    const distance = activeHold ? offset : startFloor - state.floor + offset;
     const speed = note.speed ?? 1;
     const side = noteIsAbove(note) ? 1 : -1;
     const isHold = note.type === 2;
@@ -859,7 +834,7 @@ export class LineRuntime {
         ({ x: 0, y: 0, tail: 0, size: 0, alpha: 0, skew: 0, showHead: false } satisfies NoteState);
       target.x = positionX;
       target.y = distance * speed * side;
-      target.tail = (entry.tail - state.floor) * speed * side;
+      target.tail = (endFloor - state.floor + offset) * speed * side;
       target.size = note.size ?? 1;
       target.alpha = (note.alpha ?? 255) / 255;
       target.skew = 0;
@@ -883,18 +858,7 @@ export class LineRuntime {
       ({ x: 0, y: 0, tail: 0, size: 0, alpha: 0, skew: 0, showHead: false } satisfies NoteState);
     target.x = horizontal;
     target.y = vertical;
-    target.tail = (entry.tail - state.floor) * speed * side;
-    if (activeHold && entry.tail === entry.floor) {
-      const localNow = this.sampleHoldNow(seconds);
-      const localStart = this.sampleHoldStart(entry);
-      const radians = (state.rotation * Math.PI) / 180;
-      // RPE Recorder anchors a zero-length Hold's tail to the line position
-      // from the Hold's start time. The body therefore spans the line's local
-      // motion instead of collapsing onto the head while the Hold is active.
-      target.tail +=
-        (localStart.x - localNow.x) * Math.sin(radians) +
-        (localStart.y - localNow.y) * Math.cos(radians);
-    }
+    target.tail = (endFloor - state.floor + offset) * speed * side;
     target.size =
       (note.size ?? 1) * (isHold || !this.hasSizeControl ? 1 : this.controls.size.value(distance));
     target.alpha =

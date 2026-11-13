@@ -62,10 +62,6 @@ import type {
 export interface PreviewDrawOptions {
   /** Build hit-test geometry only for an interaction or an explicit query. */
   readonly collectGeometry?: boolean;
-  /** Maximum cosmetic hit effects to draw in one frame. */
-  readonly maxHitEffects?: number;
-  /** Scale only the note-batch backing store during adaptive GPU recovery. */
-  readonly notePixelRatioScale?: number;
   /** Let a large chart edit repaint after the interaction frame. */
   readonly deferHeavyFrame?: boolean;
   /** All judge lines in the current selection; falls back to selectedLine. */
@@ -142,6 +138,11 @@ export class Preview {
   declare simultaneousCache: SimultaneousNotesCache<JudgeLineNote>;
   declare completionTimes: number[];
   declare passes: RenderPass[];
+  /** Whether every painted judge line shares the batched default line texture. */
+  lineBatchable = false;
+  private lineBatchChart: Chart | null = null;
+  private lineBatchSkin: PreviewSkin | null | undefined;
+  private lineBatchRevision: number | undefined;
   declare guides: LineGuide[] | null;
   declare viewport: PreviewViewport | null;
   /** Chart-content camera; only notes, lines, guides, and hit effects follow it. */
@@ -232,6 +233,10 @@ export class Preview {
     this.completionTimes = [];
     this.completionTimesCache.clear();
     this.passes = [];
+    this.lineBatchable = false;
+    this.lineBatchChart = null;
+    this.lineBatchSkin = undefined;
+    this.lineBatchRevision = undefined;
     this.noteHitAreas.length = 0;
     this.selectedNotes = new Map();
     this.overlapHighlight = null;
@@ -683,6 +688,42 @@ export class Preview {
     this.previewZOrder = sourceLines.map((line) => Number(line.zOrder ?? 0));
   }
 
+  /**
+   * Cache whether every painted line can share the default line texture batch.
+   *
+   * Custom textures and text lines keep the Canvas path so their relative paint
+   * order is unchanged. The answer only changes with the chart or skin bitmap.
+   */
+  private updateLineBatch(chart: Chart): void {
+    const skin = this.skin ?? null;
+    const revision = skin?.textureRevision;
+    if (
+      this.lineBatchChart === chart &&
+      this.lineBatchSkin === skin &&
+      this.lineBatchRevision === revision
+    ) {
+      return;
+    }
+    const lineTexture = skin?.lineTexture?.() ?? null;
+    if (!lineTexture) {
+      // The base skin can finish decoding after the first frame; retry instead
+      // of caching a missing texture as a permanent Canvas fallback.
+      this.lineBatchable = false;
+      this.lineBatchChart = null;
+      this.lineBatchSkin = undefined;
+      this.lineBatchRevision = undefined;
+      return;
+    }
+    this.lineBatchChart = chart;
+    this.lineBatchSkin = skin;
+    this.lineBatchRevision = revision;
+    const lines = chart.judgeLineList ?? [];
+    this.lineBatchable = lines.every(
+      (line) =>
+        !line.extended?.textEvents?.length && (!line.Texture || line.Texture === "line.png"),
+    );
+  }
+
   /** Prepare the clipped preview canvas and paint its chart background. */
   private prepareCanvasFrame(
     measurement: { width: number; height: number },
@@ -834,13 +875,7 @@ export class Preview {
     this.noteHitAreas.length = 0;
     this.lineFrames.length = 0;
     const notesStarted = performance.now();
-    this.noteBatch.begin(
-      frame.width,
-      frame.height,
-      this.skin ?? null,
-      frame.viewport,
-      options.notePixelRatioScale,
-    );
+    this.noteBatch.begin(frame.width, frame.height, this.skin ?? null, frame.viewport);
     const drawStats = drawLinePasses(this, frame);
     this.noteBatch.finish();
     const drawnNotes = drawStats.notes + drawStats.holds;
@@ -856,7 +891,7 @@ export class Preview {
     const notesMs = performance.now() - notesStarted;
     const effectsStarted = performance.now();
     if (this.showHitEffects) {
-      drawHitEffects(this, frame, options.maxHitEffects);
+      drawHitEffects(this, frame);
     }
     const effectsMs = performance.now() - effectsStarted;
     const compositeStarted = performance.now();
@@ -983,6 +1018,7 @@ export class Preview {
     this.drawCollectGeometry = collectGeometry;
     this.lastDrawRequest = { chart, tempo, seconds, selectedLine, selectedNotes };
     this.chart = chart;
+    this.updateLineBatch(chart);
     if (chartChanged || lineColorChanged) {
       this.scene.compile(chart, tempo, this.defaultLineColor);
     }

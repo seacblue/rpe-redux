@@ -22,7 +22,7 @@ import { toBlobPart } from "../../../../core/utils/bytes.ts";
 import { HIT_FRAME_COUNT } from "./hitFrame.ts";
 import { holdLayout } from "./noteGeometry.ts";
 import { splitPhiraHitFx, splitPhiraHoldAtlas } from "./phiraAtlas.ts";
-import type { NoteColor } from "./noteSpriteGroups.ts";
+import type { NoteColor, TextureDescriptor } from "./noteSpriteGroups.ts";
 
 /** Note type → normal texture name. */
 const names: Record<number, string> = { 1: "tap", 2: "hold_head", 3: "flick", 4: "drag" };
@@ -282,6 +282,17 @@ export class RpeSkin {
       }
     );
   }
+
+  /** Descriptor for the default judge-line texture, aligned by its useful rect. */
+  lineTexture(): TextureDescriptor | null {
+    const picture = this.images.get("line");
+    if (!picture) {
+      return null;
+    }
+    const rect = this.bounds("line", picture);
+    return rect.width > 0 && rect.height > 0 ? { source: picture, useful: rect } : null;
+  }
+
   /** Draw one texture aligned by its useful rectangle into a logical box. */
   drawAligned(
     context: CanvasRenderingContext2D,

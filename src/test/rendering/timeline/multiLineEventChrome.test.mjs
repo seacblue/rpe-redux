@@ -93,16 +93,21 @@ function fakeReceiver({ overlayActive }) {
   const layerCanvas = { kind: "cached-header-strip" };
   const session = fakeSession();
   const batchTexts = [];
+  const batchRects = [];
   const cacheLayerCalls = [];
   let layerFrames = 0;
   const eventOverlayBatch = {
     begin() {
       batchTexts.length = 0;
+      batchRects.length = 0;
       return overlayActive;
     },
     finish() {},
     isActive() {
       return overlayActive;
+    },
+    addRect(x, y, width, height, color) {
+      batchRects.push({ x, y, width, height, color });
     },
     addText(text, x, y, maxWidth, font, color, align) {
       batchTexts.push({ text, x, y, maxWidth, font, color, align });
@@ -160,7 +165,15 @@ function fakeReceiver({ overlayActive }) {
     eventBatch: { begin: () => true, finish() {}, add: () => true },
     eventsGridBatch: { begin() {}, finish() {} },
   };
-  return { receiver, live, layerContext, layerCanvas, batchTexts, cacheLayerCalls };
+  return {
+    receiver,
+    live,
+    layerContext,
+    layerCanvas,
+    batchTexts,
+    batchRects,
+    cacheLayerCalls,
+  };
 }
 
 test("an overlay frame hit still queues every multi-line event channel label", () => {
@@ -172,6 +185,9 @@ test("an overlay frame hit still queues every multi-line event channel label", (
     ["X"],
     "the first overlay frame queues the channel header",
   );
+  assert.deepEqual(fixture.batchRects, [
+    { x: 2, y: 0, width: 196, height: 23, color: palette.headerSurface },
+  ]);
   const fillsAfterFirstFrame = fixture.live.calls.fillRect.length;
 
   // The overlay clears its label batch on begin, so a cache-hit frame has to
@@ -197,6 +213,11 @@ test("an overlay frame hit still queues every multi-line event channel label", (
     fixture.live.calls.fillText.length,
     0,
     "a batched label is not also painted on the Canvas2D context",
+  );
+  assert.equal(
+    fixture.batchRects.length,
+    1,
+    "the overlay header fill is queued again after the curves on every frame",
   );
 });
 

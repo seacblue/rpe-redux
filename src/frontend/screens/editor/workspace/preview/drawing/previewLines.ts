@@ -3,6 +3,7 @@
  * bodies and line textures. Scene state is read through the preview frame; this
  * module owns painting and pass selection, not chart evaluation.
  */
+/* eslint-disable max-lines -- line, hold, and note passes share one draw order and scratch state. */
 import { DEFAULT_LINE_HEIGHT, DEFAULT_LINE_WIDTH, previewNoteWidth } from "../scene/constants.ts";
 import { noteSkewShear } from "../../../canvas/noteGeometry.ts";
 import { textureInViewport } from "./textureVisibility.ts";
@@ -33,6 +34,7 @@ import type {
   PreviewTextureSurface,
 } from "../scene/previewTypes.ts";
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { NoteColor } from "../../../canvas/noteSpriteGroups.ts";
 
 /** Screen-space quad of a judge line, including its texture size and rotated corners. */
 function lineGeometry(
@@ -125,6 +127,8 @@ export function isPreviewNoteSelected(
 /** State read by line/note drawing and hit areas written during the frame. */
 export interface PreviewLineSurface extends PreviewTextureSurface {
   noteBatch: NoteBatch;
+  /** Whether every painted judge line can use the shared line texture batch. */
+  lineBatchable: boolean;
   passes: RenderPass[];
   noteOpacity: number;
   selectedLines: readonly number[];
@@ -504,6 +508,10 @@ export function drawLinePasses(
   const preparedLines = preparedCache.entries;
   const preparedGeneration = preparedCache.generation;
   const batchActive = surface.noteBatch.isActive();
+  const lineBatch =
+    batchActive && surface.lineBatchable ? (surface.skin?.lineTexture?.() ?? null) : null;
+  /** Reused tint payload for batched judge lines; `addLine` copies it immediately. */
+  const lineColorStyle: NoteColor = { mode: "tint", color: [255, 255, 255] };
   /** Prepare one line's shared transform once for every draw pass in this frame. */
   const prepareLine = (index: number): PreparedPreviewLine | null => {
     const state = states[index];
@@ -637,17 +645,9 @@ export function drawLinePasses(
       }
       const lineCenterX = prepared.centerX;
       const lineCenterY = prepared.centerY;
-      // NoteBatch receives screen-space coordinates. Canvas needs the line
-      // transform only when it will paint the line or the fallback notes.
-      const usesCanvasLineTransform = singleLinePass || !batchActive;
-      if (usesCanvasLineTransform) {
-        context.save();
-        context.translate(lineCenterX, lineCenterY);
-      }
       const { rotation, cosine, sine } = prepared;
-      if (usesCanvasLineTransform) {
-        context.rotate(rotation);
-      }
+      let drawnByBatch = false;
+      let effectiveLineColor: readonly number[] = state.color;
       if (pass.kind === "line") {
         stats.lines += 1;
         if (surface.collectGeometry) {
@@ -682,19 +682,53 @@ export function drawLinePasses(
           surface.samplingFocus == null &&
           surface.selectedLineColor.length >= 3 &&
           (surface.overlapMenuOpen ? hoveredLine === index : surface.selectedLines.includes(index));
-        drawLine(
-          surface,
-          context,
-          runtime.line,
-          focused
-            ? { ...paintedState, color: [...(surface.focusLineColor ?? [255, 64, 64])] }
-            : samplingFocus
-              ? { ...paintedState, color: [...samplingFocus.color] }
-              : selected
-                ? { ...paintedState, color: [...surface.selectedLineColor] }
-                : paintedState,
-          scale,
-        );
+        effectiveLineColor = focused
+          ? (surface.focusLineColor ?? [255, 64, 64])
+          : samplingFocus
+            ? samplingFocus.color
+            : selected
+              ? surface.selectedLineColor
+              : state.color;
+        if (lineBatch && state.scaleX > 0 && state.scaleY > 0) {
+          lineColorStyle.color[0] = effectiveLineColor[0] ?? 255;
+          lineColorStyle.color[1] = effectiveLineColor[1] ?? 255;
+          lineColorStyle.color[2] = effectiveLineColor[2] ?? 255;
+          drawnByBatch = surface.noteBatch.addLine(
+            lineBatch,
+            lineCenterX,
+            lineCenterY,
+            DEFAULT_LINE_WIDTH * scale * state.scaleX,
+            DEFAULT_LINE_HEIGHT * surface.lineScale * scale * state.scaleY,
+            rotation,
+            clamp01((samplingAlpha ?? state.alpha) / 255) * clamp01(effectiveLineColor[3] ?? 1),
+            lineColorStyle,
+          );
+        }
+      }
+      // NoteBatch receives screen-space coordinates. Canvas needs the line
+      // transform only when it will paint the line or the fallback notes.
+      const usesCanvasLineTransform = pass.kind === "line" ? !drawnByBatch : !batchActive;
+      if (usesCanvasLineTransform) {
+        context.save();
+        context.translate(lineCenterX, lineCenterY);
+        context.rotate(rotation);
+      }
+      if (pass.kind === "line") {
+        if (!drawnByBatch) {
+          const canvasState =
+            samplingAlpha === null && effectiveLineColor === state.color
+              ? state
+              : {
+                  ...paintedState,
+                  color: [
+                    effectiveLineColor[0] ?? 255,
+                    effectiveLineColor[1] ?? 255,
+                    effectiveLineColor[2] ?? 255,
+                    effectiveLineColor[3] ?? 1,
+                  ],
+                };
+          drawLine(surface, context, runtime.line, canvasState, scale);
+        }
       } else {
         const isHoldPass = pass.kind === "hold";
         const entries = isHoldPass ? visibleHolds[index] : visibleNotes[index];

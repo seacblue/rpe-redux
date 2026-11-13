@@ -7,12 +7,9 @@ export interface RenderRequest {
   readonly seconds: number;
   readonly playing: boolean;
   readonly previewVisible: boolean;
-  readonly previewHighDensity: boolean;
   readonly contentRefreshRate: number;
   /** A live preview marquee needs geometry from every workspace frame. */
   readonly previewMarqueeActive?: boolean;
-  /** Skip optional hit effects after repeated over-budget frames. */
-  readonly reducedQuality?: boolean;
   readonly force?: boolean;
   readonly timelineRevision: number;
   readonly viewportOrigin: number;
@@ -38,9 +35,6 @@ export interface RenderWork {
   readonly preview: boolean;
   /** Explicit invalidation needs an immediate preview, even for dense charts. */
   readonly previewInvalidated: boolean;
-  readonly maxHitEffects: number;
-  /** GPU-only note backing-store scale; logical note geometry is unchanged. */
-  readonly notePixelRatioScale: number;
 }
 
 /** Outcome of one scheduling call. */
@@ -246,18 +240,6 @@ export class EditorRenderScheduler {
       playhead: playheadPending,
       preview: previewPending && contentDue,
       previewInvalidated,
-      // Hit-test geometry is demand-driven. `getCollisionGeometry()` requests
-      // one complete pass when a pointer actually needs it and reuses the cached
-      // revision afterwards; normal paint frames never allocate it.
-      // Hit effects are cosmetic. In a dense chart they can outnumber notes
-      // by several times and turn one synchronous frame into a long task.
-      // Keep the note/hold geometry complete and bound only this optional pass.
-      maxHitEffects: request.reducedQuality
-        ? 0
-        : request.previewHighDensity
-          ? 64
-          : Number.POSITIVE_INFINITY,
-      notePixelRatioScale: request.reducedQuality ? 0.8 : 1,
     };
   }
 

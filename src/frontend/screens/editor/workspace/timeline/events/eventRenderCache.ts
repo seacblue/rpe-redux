@@ -206,6 +206,15 @@ export function drawMultiLineEventChrome(
         : trackLabels();
     for (let channel = 0; channel < eventTypes.length; channel++) {
       context.fillRect(panelOffset + channel * channelWidth, 0, channelWidth, 23);
+      // The overlay's GPU curves paint above the canvas; queue the header fill
+      // on that layer too, after the curves were submitted.
+      labelBatch?.addRect(
+        panelOffset + channel * channelWidth,
+        0,
+        channelWidth,
+        23,
+        palette.headerSurface,
+      );
       if (channelWidth >= 48) {
         const label = eventColumnLabel(eventTypes[channel], rawTypes, labels);
         drawEventText(

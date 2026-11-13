@@ -17,8 +17,14 @@ import { FrameCadence } from "./frameCadence.ts";
 export interface EditorFrameState {
   lastInfoTick: number;
   frameSampleStart: number;
+  /** Frames that actually painted during the current 500 ms window. */
   frameSampleCount: number;
+  /** rAF callbacks counted at the previous window boundary. */
+  frameSampleCallbacks: number;
+  /** Raw rAF callback rate for the last window. */
   measuredFps: number;
+  /** Painted-frame rate for the last window. */
+  measuredPaintFps: number;
   animationCallbacks: number;
   paintedFrames: number;
   lastTick: number;
@@ -32,7 +38,9 @@ export function createEditorFrameState(): EditorFrameState {
     lastInfoTick: 0,
     frameSampleStart: 0,
     frameSampleCount: 0,
+    frameSampleCallbacks: 0,
     measuredFps: 0,
+    measuredPaintFps: 0,
     animationCallbacks: 0,
     paintedFrames: 0,
     lastTick: 0,

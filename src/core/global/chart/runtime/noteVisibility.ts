@@ -110,6 +110,10 @@ export interface NoteVisibilityEntry {
   end: number;
   floor: number;
   tail: number;
+  /** Cumulative line floor at the note start, before `yOffset`. */
+  startFloor?: number;
+  /** Cumulative line floor at the note end, before `yOffset`. */
+  endFloor?: number;
 }
 
 /** Supplies a conservative floor expansion for one note. */

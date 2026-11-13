@@ -21,6 +21,7 @@ import {
   renderLoadPercent,
 } from "./performanceHudMetrics.ts";
 import { performanceFrameTimingSnapshot } from "./performanceFrameTiming.ts";
+import { lastRenderTiming } from "../../../core/diagnostics/renderMetrics.ts";
 
 export const PERFORMANCE_HUD_ENABLED_ID = "settings.performance-hud-enabled";
 
@@ -84,6 +85,7 @@ export type PerformanceHudSnapshot = PerformanceHudFramePayload;
 const snapshot = createValue<PerformanceHudSnapshot>({
   initial: {
     fps: 0,
+    paintFps: 0,
     fpsSamples: [],
     drawTimeMs: 0,
     frameTimesMs: [],
@@ -93,9 +95,13 @@ const snapshot = createValue<PerformanceHudSnapshot>({
     frameIntervalLoadPercent: 0,
     frameIntervalLoadSamples: [],
     timelineDrawMs: 0,
-    timelineDrawSamples: [],
     previewDrawMs: 0,
-    previewDrawSamples: [],
+    previewLineDrawMs: 0,
+    previewNoteDrawMs: 0,
+    previewEffectsMs: 0,
+    previewCompositeMs: 0,
+    previewSampleMs: 0,
+    previewVisibilityMs: 0,
     memoryAvailable: false,
     memoryUsedMb: 0,
     memoryLimitMb: 0,
@@ -164,6 +170,12 @@ registerPerformanceHudBlock({
   value: (value) => value.fps.toFixed(1),
 });
 registerPerformanceHudBlock({
+  id: "paint-fps",
+  label: "chrome.performanceHud.paintFps",
+  kind: "text",
+  value: (value) => value.paintFps.toFixed(1),
+});
+registerPerformanceHudBlock({
   id: "fps-graph",
   label: "chrome.performanceHud.fpsGraph",
   kind: "bar",
@@ -182,22 +194,46 @@ registerPerformanceHudBlock({
   value: (value) => `${value.timelineDrawMs.toFixed(1)} ms`,
 });
 registerPerformanceHudBlock({
-  id: "timeline-draw-graph",
-  label: "chrome.performanceHud.timelineDrawGraph",
-  kind: "bar",
-  values: (value) => value.timelineDrawSamples,
-});
-registerPerformanceHudBlock({
   id: "preview-draw-time",
   label: "chrome.performanceHud.previewDrawTime",
   kind: "text",
   value: (value) => `${value.previewDrawMs.toFixed(1)} ms`,
 });
 registerPerformanceHudBlock({
-  id: "preview-draw-graph",
-  label: "chrome.performanceHud.previewDrawGraph",
-  kind: "bar",
-  values: (value) => value.previewDrawSamples,
+  id: "preview-line-draw-time",
+  label: "chrome.performanceHud.previewLineDrawTime",
+  kind: "text",
+  value: (value) => `${value.previewLineDrawMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "preview-note-draw-time",
+  label: "chrome.performanceHud.previewNoteDrawTime",
+  kind: "text",
+  value: (value) => `${value.previewNoteDrawMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "preview-effects-time",
+  label: "chrome.performanceHud.previewEffectsTime",
+  kind: "text",
+  value: (value) => `${value.previewEffectsMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "preview-composite-time",
+  label: "chrome.performanceHud.previewCompositeTime",
+  kind: "text",
+  value: (value) => `${value.previewCompositeMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "preview-sample-time",
+  label: "chrome.performanceHud.previewSampleTime",
+  kind: "text",
+  value: (value) => `${value.previewSampleMs.toFixed(1)} ms`,
+});
+registerPerformanceHudBlock({
+  id: "preview-visibility-time",
+  label: "chrome.performanceHud.previewVisibilityTime",
+  kind: "text",
+  value: (value) => `${value.previewVisibilityMs.toFixed(1)} ms`,
 });
 registerPerformanceHudBlock({
   id: "frame-time",
@@ -350,11 +386,13 @@ function readMemory(): {
 export function publishPerformanceHudFrame({
   timestamp,
   fps,
+  paintFps,
   drawTimeMs,
   targetRefreshRate,
 }: {
   timestamp: number;
   fps: number;
+  paintFps: number;
   drawTimeMs: number;
   targetRefreshRate: number;
 }): void {
@@ -377,6 +415,7 @@ export function publishPerformanceHudFrame({
   const renderLoad = renderLoadPercent(drawTimeMs, safeTargetRefreshRate);
   const intervalLoad = frameIntervalLoadPercent(frameIntervalMs, safeTargetRefreshRate);
   const paintTiming = performanceFrameTimingSnapshot();
+  const previewTiming = lastRenderTiming();
   // Keep over-budget values visible: 11 ms at 144 Hz is 158% of the budget.
   const renderLoadPercentValue = Math.max(0, renderLoad);
   const frameIntervalLoadValue = hasPreviousFrame ? Math.max(0, intervalLoad) : 0;
@@ -389,6 +428,7 @@ export function publishPerformanceHudFrame({
   lastSnapshotAt = timestamp;
   snapshot.set({
     fps,
+    paintFps,
     fpsSamples: [...fpsSamples],
     drawTimeMs,
     frameTimesMs: [...frameIntervals],
@@ -398,9 +438,13 @@ export function publishPerformanceHudFrame({
     frameIntervalLoadPercent: frameIntervalLoadValue,
     frameIntervalLoadSamples: [...frameIntervalLoadSamples],
     timelineDrawMs: paintTiming.timelineMs,
-    timelineDrawSamples: paintTiming.timelineSamples,
     previewDrawMs: paintTiming.previewMs,
-    previewDrawSamples: paintTiming.previewSamples,
+    previewLineDrawMs: previewTiming?.lineDrawMs ?? 0,
+    previewNoteDrawMs: previewTiming?.noteDrawMs ?? 0,
+    previewEffectsMs: previewTiming?.effectsMs ?? 0,
+    previewCompositeMs: previewTiming?.compositeMs ?? 0,
+    previewSampleMs: previewTiming?.sampleMs ?? 0,
+    previewVisibilityMs: previewTiming?.visibilityMs ?? 0,
     memoryAvailable: memory.available,
     memoryUsedMb: memory.usedMb,
     memoryLimitMb: memory.limitMb,

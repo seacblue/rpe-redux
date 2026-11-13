@@ -27,7 +27,7 @@ test("frame interval load reports a missed 144 Hz cadence", () => {
   assert.equal(frameIntervalLoadPercent(16.6666666667, 144) > 200, true);
 });
 
-test("frame timing keeps the latest bounded Timeline and Preview samples", () => {
+test("frame timing keeps the latest Timeline and Preview values", () => {
   resetPerformanceFrameTiming();
   recordPerformanceFrameTiming({ timelineMs: 12, previewMs: 4, totalMs: 18 });
 
@@ -35,28 +35,20 @@ test("frame timing keeps the latest bounded Timeline and Preview samples", () =>
     timelineMs: 12,
     previewMs: 4,
     totalMs: 18,
-    timelineSamples: [12],
-    previewSamples: [4],
-    totalSamples: [18],
   });
 });
 
-test("frame timing drops invalid durations and bounds its history", () => {
+test("frame timing drops invalid durations", () => {
   resetPerformanceFrameTiming();
-  for (let index = 0; index < 65; index += 1) {
-    recordPerformanceFrameTiming({
-      timelineMs: index === 64 ? Number.NaN : index,
-      previewMs: index === 63 ? -1 : index,
-      totalMs: index === 62 ? Number.POSITIVE_INFINITY : index,
-    });
-  }
-
-  const snapshot = performanceFrameTimingSnapshot();
-  assert.equal(snapshot.timelineSamples.length, 60);
-  assert.equal(snapshot.previewSamples.length, 60);
-  assert.equal(snapshot.totalSamples.length, 60);
+  recordPerformanceFrameTiming({ timelineMs: Number.NaN, previewMs: -1, totalMs: 12 });
+  let snapshot = performanceFrameTimingSnapshot();
   assert.equal(snapshot.timelineMs, 0);
-  assert.equal(snapshot.previewMs, 64);
-  assert.equal(snapshot.totalMs, 64);
-  assert.equal(snapshot.timelineSamples[0], 5);
+  assert.equal(snapshot.previewMs, 0);
+  assert.equal(snapshot.totalMs, 12);
+
+  recordPerformanceFrameTiming({ timelineMs: 5, previewMs: 3, totalMs: Number.POSITIVE_INFINITY });
+  snapshot = performanceFrameTimingSnapshot();
+  assert.equal(snapshot.timelineMs, 5);
+  assert.equal(snapshot.previewMs, 3);
+  assert.equal(snapshot.totalMs, 0);
 });

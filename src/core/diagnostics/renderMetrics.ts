@@ -351,6 +351,11 @@ export function resetRenderDiagnostics(): void {
   };
 }
 
+/** Latest preview timing sample, or null before the first painted preview frame. */
+export function lastRenderTiming(): Readonly<RenderTimingInput> | null {
+  return metrics.timing.last;
+}
+
 /** Return a detached renderer snapshot safe to serialize into a support zip. */
 export function renderDiagnosticsSnapshot(): RenderDiagnosticsSnapshot {
   return JSON.parse(JSON.stringify(metrics)) as RenderDiagnosticsSnapshot;

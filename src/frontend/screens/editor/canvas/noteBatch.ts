@@ -17,6 +17,7 @@ import {
   notePaintLayer,
   type NoteColor,
   type NotePaintLayer,
+  type SpriteGroup,
   type TextureDescriptor,
 } from "./noteSpriteGroups.ts";
 import {
@@ -43,6 +44,8 @@ export interface NoteBatchSkin {
   holdBodyTexture(highlight: boolean): TextureDescriptor | null;
   holdHeadTexture(highlight: boolean): TextureDescriptor | null;
   holdEndTexture(highlight: boolean): TextureDescriptor | null;
+  /** Optional default judge-line texture, batched beneath notes when available. */
+  lineTexture?: () => TextureDescriptor | null;
 }
 
 /**
@@ -306,6 +309,7 @@ export class NoteBatch {
       enqueue(skin.holdHeadTexture(highlight));
       enqueue(skin.holdEndTexture(highlight));
     }
+    enqueue(skin.lineTexture?.() ?? null);
     this.schedulePrewarm();
     this.reportState();
   }
@@ -598,6 +602,7 @@ export class NoteBatch {
       gl,
       this.instanceBuffer,
       this.uploadState,
+      this.groups.line.values(),
       this.groups.layers[HOLD_PAINT_LAYER].values(),
       this.groups.layers[HEAD_PAINT_LAYER].values(),
       this.groups.selected.values(),
@@ -743,16 +748,77 @@ export class NoteBatch {
     color: NoteColor | null | undefined,
     layer: NotePaintLayer,
   ): boolean {
+    const colorize = color?.mode === "selected";
+    return this.writeInstance(
+      this.groups.group(descriptor, layer, colorize),
+      centerX,
+      centerY,
+      width,
+      height,
+      rotation,
+      shear,
+      alpha,
+      flipV,
+      color,
+    );
+  }
+
+  /** Queue one judge-line quad beneath every note and Hold. */
+  addLine(
+    descriptor: TextureDescriptor,
+    centerX: number,
+    centerY: number,
+    width: number,
+    height: number,
+    rotation: number,
+    alpha: number,
+    color?: NoteColor | null,
+  ): boolean {
+    if (!this.active || this.isContextLost() || width <= 0 || height <= 0) {
+      return false;
+    }
+    return this.writeInstance(
+      this.groups.lineGroup(descriptor),
+      centerX,
+      centerY,
+      width,
+      height,
+      rotation,
+      0,
+      alpha,
+      false,
+      color,
+    );
+  }
+
+  /**
+   * Write one aligned, rotated quad into an already selected texture group.
+   *
+   * This is the hot path, so it avoids temporary objects. Returns false when the
+   * instance cannot be drawn.
+   */
+  private writeInstance(
+    group: SpriteGroup,
+    centerX: number,
+    centerY: number,
+    width: number,
+    height: number,
+    rotation: number,
+    shear: number,
+    alpha: number,
+    flipV: boolean,
+    color: NoteColor | null | undefined,
+  ): boolean {
     if (!this.active || this.isContextLost() || !width || !height) {
       return false;
     }
+    const descriptor = group.descriptor;
     const sourceWidth = descriptor.source.naturalWidth || descriptor.source.width;
     const sourceHeight = descriptor.source.naturalHeight || descriptor.source.height;
     if (!sourceWidth || !sourceHeight) {
       return false;
     }
     const colorize = color?.mode === "selected";
-    const group = this.groups.group(descriptor, layer, colorize);
     const offset = group.count * INSTANCE_STRIDE;
     if (offset + INSTANCE_STRIDE > group.instances.length) {
       const next = new Float32Array(group.instances.length * 2);

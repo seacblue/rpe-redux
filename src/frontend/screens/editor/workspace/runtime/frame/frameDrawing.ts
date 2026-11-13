@@ -87,10 +87,6 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
   const renderScheduler = new EditorRenderScheduler();
   let densityChart: unknown = null;
   let previewHighDensity = false;
-  let reducedQuality = false;
-  let slowStreak = 0;
-  let fastStreak = 0;
-  let previousFrameTimestamp = Number.NaN;
   let previousPreviewChart: unknown;
   let previousPreviewSession: unknown;
   let previousPreviewSelection: unknown;
@@ -180,10 +176,8 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           playing: runtime.audio.playing,
           previewVisible:
             runtime.realtimePreview.visible || Boolean(trajectoryView) || cameraPreview,
-          previewHighDensity,
           contentRefreshRate,
           previewMarqueeActive: Boolean(runtime.timeline.gestures.previewMarquee),
-          reducedQuality,
           previewChart: viewChart,
           previewRevision: runtime.realtimePreview.invalidationRevision,
           // Resource-backed timeline layers (skins and overview density) can
@@ -234,8 +228,6 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                 viewSession.lineIndex,
                 selectionMapForSession(viewSession),
                 {
-                  maxHitEffects: work.maxHitEffects,
-                  notePixelRatioScale: work.notePixelRatioScale,
                   deferHeavyFrame:
                     !runtime.audio.playing && previewHighDensity && !work.previewInvalidated,
                   selectedLines: viewSession.targetLineIndices,
@@ -263,32 +255,6 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       );
       if (outcome.status === "failed") {
         renderScheduler.reset();
-      }
-      // Adaptive recovery removes cosmetic hit effects and lowers only the GPU
-      // note layer's backing density. Logical note geometry, timeline, playhead,
-      // blur, guides, and the Canvas fallback stay intact.
-      const frameInterval = Number.isFinite(previousFrameTimestamp)
-        ? timestamp - previousFrameTimestamp
-        : 0;
-      previousFrameTimestamp = timestamp;
-      if (runtime.audio.playing && outcome.status !== "hidden") {
-        const frameBudget = 1000 / Math.max(1, Math.min(144, contentRefreshRate));
-        const missedDisplayDeadline = frameInterval > frameBudget * 1.35;
-        if (outcome.renderMs > 14 || missedDisplayDeadline) {
-          slowStreak += 1;
-          fastStreak = 0;
-        } else if (outcome.renderMs < 9 && !missedDisplayDeadline) {
-          fastStreak += 1;
-          slowStreak = 0;
-        } else {
-          slowStreak = 0;
-          fastStreak = 0;
-        }
-        if (!reducedQuality && slowStreak >= 3) {
-          reducedQuality = true;
-        } else if (reducedQuality && fastStreak >= 90) {
-          reducedQuality = false;
-        }
       }
       runtime.completeFirstRender();
 

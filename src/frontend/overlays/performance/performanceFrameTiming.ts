@@ -1,5 +1,4 @@
-/** Stores bounded per-surface editor paint timings for the performance HUD. */
-import { appendBoundedSample } from "./performanceHudMetrics.ts";
+/** Stores per-surface editor paint timings for the performance HUD. */
 
 /** One synchronous paint sample reported by the editor frame renderer. */
 export interface PerformanceFrameTimingSample {
@@ -8,34 +7,24 @@ export interface PerformanceFrameTimingSample {
   readonly totalMs: number;
 }
 
-/** The latest paint sample and its bounded history. */
-export interface PerformanceFrameTimingSnapshot extends PerformanceFrameTimingSample {
-  readonly timelineSamples: readonly number[];
-  readonly previewSamples: readonly number[];
-  readonly totalSamples: readonly number[];
-}
+/** The latest paint sample. */
+export interface PerformanceFrameTimingSnapshot extends PerformanceFrameTimingSample {}
 
-/** Mutable module state; snapshots hand out copies so callers cannot alias it. */
+/** Mutable module state; snapshots hand out a copy so callers cannot alias it. */
 interface FrameTimingState {
   timelineMs: number;
   previewMs: number;
   totalMs: number;
-  timelineSamples: number[];
-  previewSamples: number[];
-  totalSamples: number[];
 }
 
 let state: FrameTimingState = emptyState();
 
-/** Return fresh zeroed state with empty sample windows. */
+/** Return fresh zeroed state. */
 function emptyState(): FrameTimingState {
   return {
     timelineMs: 0,
     previewMs: 0,
     totalMs: 0,
-    timelineSamples: [],
-    previewSamples: [],
-    totalSamples: [],
   };
 }
 
@@ -49,9 +38,6 @@ export function recordPerformanceFrameTiming(sample: PerformanceFrameTimingSampl
   state.timelineMs = safeDuration(sample.timelineMs);
   state.previewMs = safeDuration(sample.previewMs);
   state.totalMs = safeDuration(sample.totalMs);
-  appendBoundedSample(state.timelineSamples, state.timelineMs);
-  appendBoundedSample(state.previewSamples, state.previewMs);
-  appendBoundedSample(state.totalSamples, state.totalMs);
 }
 
 /** Return a detached timing snapshot safe for HUD and window relays. */
@@ -60,9 +46,6 @@ export function performanceFrameTimingSnapshot(): PerformanceFrameTimingSnapshot
     timelineMs: state.timelineMs,
     previewMs: state.previewMs,
     totalMs: state.totalMs,
-    timelineSamples: [...state.timelineSamples],
-    previewSamples: [...state.previewSamples],
-    totalSamples: [...state.totalSamples],
   };
 }
 

@@ -59,6 +59,8 @@ export function notePaintLayer(type: number): NotePaintLayer {
 
 /** Texture groups per paint layer, plus the selected instances' foreground pass. */
 export class NoteSpriteGroups {
+  /** Judge-line groups paint beneath every note and Hold. */
+  readonly line: SpriteGroupMap = new Map();
   /** Ordinary groups per paint layer; lower layers are painted first. */
   readonly layers: [SpriteGroupMap, SpriteGroupMap] = [new Map(), new Map()];
   /** Selected instances render as a foreground pass so overlap cannot hide the selection. */
@@ -66,7 +68,15 @@ export class NoteSpriteGroups {
 
   /** Take the group of one instance, creating its buffer on first use. */
   group(descriptor: TextureDescriptor, layer: NotePaintLayer, selected: boolean): SpriteGroup {
-    const groups = selected ? this.selected : this.layers[layer];
+    return this.groupFor(selected ? this.selected : this.layers[layer], descriptor);
+  }
+
+  /** Take the group of one judge-line instance. */
+  lineGroup(descriptor: TextureDescriptor): SpriteGroup {
+    return this.groupFor(this.line, descriptor);
+  }
+
+  private groupFor(groups: SpriteGroupMap, descriptor: TextureDescriptor): SpriteGroup {
     let group = groups.get(descriptor.source);
     if (!group) {
       group = {
@@ -81,6 +91,9 @@ export class NoteSpriteGroups {
 
   /** Reset every group's instance count so the next frame rebuilds its uploads. */
   reset(): void {
+    for (const group of this.line.values()) {
+      group.count = 0;
+    }
     for (const groups of this.layers) {
       for (const group of groups.values()) {
         group.count = 0;
@@ -93,6 +106,7 @@ export class NoteSpriteGroups {
 
   /** Drop every group; the backing buffers rebuild on first use. */
   clear(): void {
+    this.line.clear();
     for (const groups of this.layers) {
       groups.clear();
     }

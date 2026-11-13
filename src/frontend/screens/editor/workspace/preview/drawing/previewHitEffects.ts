@@ -59,11 +59,7 @@ export function resolveParticleColor(
 }
 
 /** Draws the skin-owned hit frame and the four-square burst at each recent note hit. */
-export function drawHitEffects(
-  surface: PreviewHitEffectSurface,
-  frame: PreviewFrame,
-  maxEffects = Number.POSITIVE_INFINITY,
-): void {
+export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewFrame): void {
   if (!Number.isFinite(surface.effectsSince)) {
     return;
   }
@@ -77,12 +73,7 @@ export function drawHitEffects(
     hitStates.clear();
   }
   const { hits, particles } = scratch;
-  const limit = Number.isFinite(maxEffects) ? Math.max(0, Math.floor(maxEffects)) : Infinity;
-  let drawnEffects = 0;
   for (const index of order) {
-    if (drawnEffects >= limit) {
-      break;
-    }
     const runtime = frame.scene.lines[index];
     if (!runtime) {
       continue;
@@ -97,11 +88,7 @@ export function drawHitEffects(
       Math.max(particleDuration || HIT_DURATION, 2 / 3),
     );
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
-      if (drawnEffects >= limit) {
-        break;
-      }
       const hit = hits[hitIndex];
-      drawnEffects += 1;
       const { entry, time } = hit;
       const effectFrame = hitFrame(seconds - time, particleFrameCount);
       // An explicit chart tint wins; otherwise the user-configured default applies.

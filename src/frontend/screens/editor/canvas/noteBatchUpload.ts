@@ -37,6 +37,7 @@ export function submitNoteBatchGroups(
   gl: WebGL2RenderingContext,
   instanceBuffer: WebGLBuffer,
   state: NoteBatchUploadState,
+  lineLayer: Iterable<SpriteGroup>,
   holdLayer: Iterable<SpriteGroup>,
   headLayer: Iterable<SpriteGroup>,
   selected: Iterable<SpriteGroup>,
@@ -65,6 +66,7 @@ export function submitNoteBatchGroups(
       totalFloats += group.count * INSTANCE_STRIDE;
     }
   };
+  collect(lineLayer);
   collect(holdLayer);
   collect(headLayer);
   collect(selected);

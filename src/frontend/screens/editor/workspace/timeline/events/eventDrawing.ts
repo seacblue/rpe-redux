@@ -398,6 +398,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       this.drawShaderEvents(context, entries, channel, width, height, selectedIndexes);
       context.fillStyle = palette.headerSurface;
       context.fillRect(horizontal, 0, channelWidth, 23);
+      overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
       const shaderLabel = t("editorPanels.timeline.shaderTrack");
       const shaderX = horizontal + channelWidth / 2;
       const shaderWidth = Math.max(8, channelWidth - 8);
@@ -561,6 +562,9 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     }
     context.fillStyle = palette.headerSurface;
     context.fillRect(horizontal, 0, channelWidth, 23);
+    // The easing/curve overlay is a GPU layer above this canvas; queue the same
+    // header fill after its curves so easing never covers the column labels.
+    overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
     const headerLabel = headerLabels[channel];
     if (headerLabel) {
       drawEventText(

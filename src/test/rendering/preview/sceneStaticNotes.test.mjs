@@ -239,7 +239,31 @@ test("a zero-length Hold hides its head cap while active", () => {
   assert.equal(sampled.showHead, false, "only the tail cap is painted");
 });
 
-test("an active zero-speed Hold spans the line's motion since its start", () => {
+test("an active zero-length Hold keeps its speed-zero body length", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  line.eventLayers[0].moveYEvents = [createEvent(100, 0, 0, 10)];
+  line.eventLayers[0].speedEvents = [createEvent(0)];
+  const hold = createNote(2, 3, 0, 3);
+  hold.speed = 0;
+  line.notes = [hold];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const seconds = tempo.seconds(4);
+  const state = scene.sample(seconds)[0];
+  const entry = scene.lines[0].notes[0];
+  const sampled = scene.lines[0].noteState(entry, state, seconds);
+
+  assert.ok(
+    Math.abs(sampled.tail - sampled.y) < 1e-6,
+    "a speed-zero Hold does not trail the line's motion",
+  );
+  assert.equal(sampled.showHead, false, "only the tail cap is painted");
+});
+
+test("a timed speed-zero Hold does not trail the line's motion", () => {
   const chart = createChart();
   const line = chart.judgeLineList[0];
   line.eventLayers[0].moveYEvents = [createEvent(100, 0, 0, 10)];
@@ -257,10 +281,9 @@ test("an active zero-speed Hold spans the line's motion since its start", () => 
   const sampled = scene.lines[0].noteState(entry, state, seconds);
 
   assert.ok(
-    Math.abs(sampled.tail - sampled.y - 10) < 1e-6,
-    "the body reaches back to the line position where the Hold started",
+    Math.abs(sampled.tail - sampled.y) < 1e-6,
+    "a Hold with a real time span keeps its speed-zero body length",
   );
-  assert.equal(sampled.showHead, false, "only the tail cap is painted");
 });
 
 test("a future zero-length Hold keeps its head cap", () => {
