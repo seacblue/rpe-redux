@@ -98,4 +98,6 @@ export const ICON_SOURCES = {
   "icons/window_maximize.png": { collection: "fluent", name: "window-maximize" },
   "icons/window_restore.png": { collection: "fluent", name: "window-restore" },
   "icons/window_close.png": { collection: "fluent", name: "window-close" },
+  "icons/inspector_expand.png": { collection: "lucide", name: "panel-columns" },
+  "icons/inspector_collapse.png": { collection: "lucide", name: "panel-collapse-right" },
 };

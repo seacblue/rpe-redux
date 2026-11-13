@@ -30,7 +30,7 @@ export function AssetsPanel({
   variant = "all",
 }: {
   showTitle?: boolean;
-  variant?: "all" | "tree" | "details" | "stacked" | "split";
+  variant?: "all" | "stacked";
 } = {}) {
   const state = useEditorRuntimeValue(
     (runtime) => runtime.ui.assetLibrary,

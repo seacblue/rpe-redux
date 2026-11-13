@@ -13,7 +13,6 @@ const mode = (id, order = 10) => ({
   order,
   label: "chrome.pane.bpm",
   icon: "bpm",
-  component: () => null,
 });
 
 test("an unknown or blank mode never replaces the timeline", () => {

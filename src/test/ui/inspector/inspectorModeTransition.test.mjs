@@ -1,4 +1,4 @@
-/** Inspector workspace modes hand off to compact panes after their exit motion. */
+/** Inspector workspace modes morph the mounted page; no copy is handed over. */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -8,150 +8,384 @@ const read = (path) => readFileSync(new URL(path, root), "utf8");
 const inspectorSource = read("frontend/screens/editor/inspector/InspectorPanel.tsx");
 const inspectorStyles = read("frontend/screens/editor/inspector/inspector.less");
 const pageStyles = read("frontend/chrome/inspectorPage/inspectorPage.less");
-const globalStyles = read("frontend/screens/global/global.less");
+const shellStyles = read("frontend/app/shell.less");
+const assetStyles = read("frontend/screens/global/sections/assets/assetLibrary.less");
+const lineStyles = read("frontend/screens/global/sections/lines/linePanel.less");
+const workspaceModesSource = read("frontend/screens/editor/workspace/container/workspaceModes.ts");
+const timingPage = read("frontend/screens/global/sections/timing/page.tsx");
+const linesPage = read("frontend/screens/global/sections/lines/page.tsx");
+const assetsPage = read("frontend/screens/global/sections/assets/page.tsx");
+const timingLayout = read("frontend/screens/global/sections/timing/TimingPageLayout.tsx");
+const assetModelSource = read("frontend/screens/global/sections/assets/model.ts");
+const assetViewSource = read("frontend/screens/global/sections/assets/AssetLibraryView.tsx");
+const catalogSource = read("design/components/icon/iconAssets.ts");
+const sidebarSource = read("frontend/chrome/sidebar/Sidebar.tsx");
+const modeActionsSource = read(
+  "frontend/screens/editor/workspace/container/workspaceModeActions.ts",
+);
+const iconSourcesSource = readFileSync(
+  new URL("../../../../scripts/iconSources.mjs", import.meta.url),
+  "utf8",
+);
 
-test("workspace mode collapse waits for the panel transition before handoff", () => {
-  assert.match(inspectorSource, /transitionend/u);
-  assert.match(inspectorSource, /transitionDurationMs\(element, "width"\)/u);
-  assert.match(inspectorSource, /"compact" \| "opening" \| "expanded" \| "closing"/u);
-  assert.match(inspectorSource, /data-mode-phase=\{modeSurface \? modePhase : undefined\}/u);
+test("an expanded mode is the mounted page, not a second page copy", () => {
+  // The frame shows the pane the mode names and never mounts a studio surface.
   assert.match(
     inspectorSource,
-    /const isModeUnderlay = modeSurface && displayedMode\?\.id === id;/u,
+    /const shownPane = modeSurface && modeDefinition \? modeDefinition\.id : activePane;/u,
   );
-  assert.match(inspectorSource, /hidden=\{activeDrawerPane !== null \|\| !isActivePanel\}/u);
-  assert.doesNotMatch(inspectorSource, /data-mode-handoff|modeHandoff/u);
+  assert.match(
+    inspectorSource,
+    /const modeSurface = activeWorkspaceMode !== null \|\| modePhase !== "compact";/u,
+  );
+  // The collapse control keeps the mode record until the geometry lands, so the
+  // same page, header, and label stay authoritative through the exit animation.
+  // Only that control morphs; a close lands in one frame.
+  assert.match(inspectorSource, /const startCollapse = useCallback/u);
+  assert.match(inspectorSource, /collapseWorkspaceMode\(runtime\);/u);
+  assert.match(inspectorSource, /setModePhase\("compact"\);/u);
   assert.doesNotMatch(
     inspectorSource,
-    /setTimeout\(\(\) => \{\s*setDisplayedMode\(null\);\s*\},\s*280\)/u,
+    /modeDefinition\?\.component|activeWorkspaceMode\?\.component/u,
   );
+  assert.match(inspectorSource, /panels\.map\(/u);
+  assert.doesNotMatch(inspectorSource, /displayedMode|inspector-mode-surface|mode-handoff/u);
+  assert.doesNotMatch(inspectorSource, /data-mode-underlay|carryHandoffScroll|handoffScrollers/u);
+  // The one page is interactive for the whole motion.
+  assert.doesNotMatch(inspectorSource, /inert=\{locked \|\| modeSurface/u);
+  assert.match(inspectorSource, /inert=\{locked \|\| undefined\}/u);
 });
 
-test("the handoff sizes both copies from one animated cover length", () => {
-  // The cover is registered so it interpolates; the underlay width and the wide
-  // page's detail track read it, which is what keeps the two copies aligned.
-  assert.match(inspectorStyles, /@property --mode-cover \{[\s\S]*?syntax: "<length>";/u);
-  assert.match(
-    inspectorStyles,
-    /--mode-cover: calc\(var\(--inspector-compact-width, 400px\) - 1px\);/u,
-  );
-  assert.match(
-    inspectorStyles,
-    /\.inspector\[data-mode-phase="opening"\] \.inspector-body,[\s\S]*?--mode-cover: calc\(/u,
-  );
-  assert.match(
-    inspectorStyles,
-    /transition: --mode-cover var\(--design-dur-enter\) var\(--design-ease-move\);/u,
-  );
-  const underlayRule = inspectorStyles.match(
-    /\.inspector-body\[data-mode-surface="true"\] > \[data-mode-underlay="true"\]:not\(\[hidden\]\) \{([\s\S]*?)\}/u,
-  );
-  assert.ok(underlayRule);
-  assert.match(underlayRule[1], /width: var\(--mode-cover\);/u);
-  assert.match(
-    globalStyles,
-    /grid-template-columns: minmax\(0, 1fr\) minmax\(0, var\(--mode-cover\)\);/u,
-  );
-  assert.match(inspectorStyles, /var\(--mode-detail-share, 0\.5\)/u);
-  assert.match(inspectorSource, /--mode-detail-share/u);
-  assert.match(inspectorSource, /activeDefinition\?\.modeDetailShare/u);
-});
-
-test("workspace mode is a full-bleed surface and only the upper face leaves", () => {
-  const modeRule = inspectorStyles.match(/\.inspector-mode-surface \{([\s\S]*?)\}/u);
-  assert.ok(modeRule);
-  assert.doesNotMatch(modeRule[1], /padding:|margin:/u);
-  assert.doesNotMatch(inspectorStyles, /opacity var\(--design-dur-exit\)/u);
-  assert.doesNotMatch(inspectorStyles, /data-mode-handoff/u);
-  // The upper face gives its height to the lower one; the lower one takes the
-  // wide page's block inset so the handoff frame shows the same pixels.
-  assert.match(
-    pageStyles,
-    /data-mode-phase="opening"[\s\S]*?\.inspector-page-split-top \{[\s\S]*?flex-basis: 0;/u,
-  );
-  assert.match(
-    pageStyles,
-    /\.inspector-page-split-top\s*>\s*\.inspector-page-content \{[\s\S]*?transform: translateY\(-100%\);/u,
-  );
-  assert.match(
-    pageStyles,
-    /data-mode-phase="opening"[\s\S]*?\.inspector-page-split-bottom\s*>\s*\.inspector-page-content \{[\s\S]*?padding-top: var\(--space-4\);/u,
-  );
-  assert.match(pageStyles, /scrollbar-gutter: stable;/u);
-  // The wide copy's detail waits hidden while the compact copy still carries it.
-  assert.match(
-    inspectorStyles,
-    /data-mode-phase="opening"\] \.inspector-mode-surface \.mode-handoff-detail,[\s\S]*?visibility: hidden;/u,
-  );
-  // The old directional nudge is gone: the frame reveal is the only motion.
-  assert.doesNotMatch(globalStyles, /translateX\(calc\(-1 \* var\(--space-6\)\)\)/u);
-  const faceRule = pageStyles.match(/\.inspector-page-split-face \{([\s\S]*?)\}/u);
-  assert.ok(faceRule);
-  assert.doesNotMatch(faceRule[1], /translateY|transform/u);
-});
-
-test("the wide page's list column is masked out instead of reflowing", () => {
-  // The list column keeps the expanded layout for the whole motion: its width is
-  // the wide page's list track and it is pinned to the compact copy's left edge,
-  // so the narrowing frame covers it instead of squeezing it. It reaches zero
-  // visible width as the panel reaches its rail, so the unmount removes nothing
-  // that was still on screen and no collapsed strip survives the handoff.
-  const maskRule = globalStyles.match(
-    /\.inspector\[data-mode-phase="opening"\] \.inspector-mode-surface \.timing-studio \.studio-list-pane,[\s\S]*?justify-self: end;\s*\}/u,
-  );
-  assert.ok(maskRule, "mask rule is missing");
-  assert.match(
-    maskRule[0],
-    /width: calc\(\s*\(1 - var\(--mode-detail-share, 0\.5\)\) \* \(100vw - var\(--workbench-side-track, 0px\)\)\s*\);/u,
-  );
-  for (const selector of [
-    ".timing-studio .studio-list-pane",
-    ".lines-studio .line-panel-split-tree",
-    "> .asset-tree-shell",
+test("two overlapping progress numbers drive the panel and the page geometry", () => {
+  // The master clock runs the whole entrance; arrangement and fill are the two
+  // beats the rectangles read, and the fill starts while the arrangement is
+  // still moving so the motion never rests between them.
+  for (const property of [
+    "--inspector-morph",
+    "--inspector-morph-shift",
+    "--inspector-morph-grow",
   ]) {
-    assert.ok(maskRule[0].includes(selector), `mask rule is missing ${selector}`);
+    assert.match(
+      inspectorStyles,
+      new RegExp(`@property ${property} \\{[\\s\\S]*?syntax: "<number>";`, "u"),
+    );
+    assert.match(inspectorStyles, new RegExp(`  ${property}: 0;`, "u"));
   }
-  // The motion keeps both tracks on one full-height row, so neither column sizes
-  // to its content while the frame moves.
-  const motionTracks = globalStyles.match(
-    /\.inspector\[data-mode-phase="opening"\] \.inspector-mode-surface \.timing-studio \.studio-body,[\s\S]*?grid-template-rows: minmax\(0, 1fr\);/u,
-  );
-  assert.ok(motionTracks, "motion tracks are missing the full-height row");
   assert.match(
-    motionTracks[0],
-    /grid-template-columns: minmax\(0, 1fr\) minmax\(0, var\(--mode-cover\)\);/u,
+    inspectorStyles,
+    /--inspector-morph-ease: cubic-bezier\(0\.25, 0\.46, 0\.45, 0\.94\);/u,
+  );
+  assert.match(
+    inspectorStyles,
+    /--inspector-morph-shift-duration: calc\(var\(--design-dur-enter\) \* 0\.72\);/u,
+  );
+  assert.match(
+    inspectorStyles,
+    /--inspector-morph-grow-duration: calc\(var\(--design-dur-enter\) \* 0\.8\);/u,
+  );
+  assert.match(
+    inspectorStyles,
+    /transition:\s*--inspector-morph var\(--design-dur-enter\) var\(--design-ease-move\),\s*--inspector-morph-shift var\(--inspector-morph-shift-duration\)\s*var\(--inspector-morph-shift-ease\)\s*var\(--inspector-morph-shift-delay\),\s*--inspector-morph-grow var\(--inspector-morph-grow-duration\)\s*var\(--inspector-morph-grow-ease\)\s*var\(--inspector-morph-grow-delay\);/u,
+  );
+  // Opening leads with the arrangement and starts the fill at a fifth of the
+  // entrance, so the two beats overlap.
+  const surfaceRule = inspectorStyles.match(
+    /\.inspector\[data-mode-surface="true"\] \{([\s\S]*?)\n\}/u,
+  );
+  assert.ok(surfaceRule);
+  assert.match(surfaceRule[1], /--inspector-morph: 1;/u);
+  assert.match(surfaceRule[1], /--inspector-morph-shift: 1;/u);
+  assert.match(surfaceRule[1], /--inspector-morph-grow: 1;/u);
+  assert.match(surfaceRule[1], /--inspector-morph-shift-delay: 0ms;/u);
+  assert.match(
+    surfaceRule[1],
+    /--inspector-morph-grow-delay: calc\(var\(--design-dur-enter\) \* 0\.2\);/u,
+  );
+  assert.match(
+    surfaceRule[1],
+    /--inspector-morph-grow-duration: calc\(var\(--design-dur-enter\) \* 0\.8\);/u,
+  );
+  // Closing runs the same two numbers together: the panel edge carries the list
+  // face rightward while the detail column gives up width at the same rate, and
+  // the fold lands before the faces can meet.
+  const closingRule = inspectorStyles.match(
+    /\.inspector\[data-mode-phase="closing"\] \{([\s\S]*?)\n\}/u,
+  );
+  assert.ok(closingRule);
+  assert.match(closingRule[1], /--inspector-morph: 0;/u);
+  assert.match(closingRule[1], /--inspector-morph-shift: 0;/u);
+  assert.match(closingRule[1], /--inspector-morph-grow: 0;/u);
+  assert.match(closingRule[1], /--inspector-morph-shift-delay: 0ms;/u);
+  assert.match(closingRule[1], /--inspector-morph-shift-duration: var\(--design-dur-enter\);/u);
+  assert.match(closingRule[1], /--inspector-morph-shift-ease: ease-in-out;/u);
+  assert.match(closingRule[1], /--inspector-morph-grow-delay: 0ms;/u);
+  assert.match(
+    closingRule[1],
+    /--inspector-morph-grow-duration: calc\(var\(--design-dur-enter\) \* 0\.54\);/u,
+  );
+  assert.match(closingRule[1], /--inspector-morph-grow-ease: ease-in-out;/u);
+  // The panel grows out of the arrangement number, so its edge cannot drift
+  // away from the face geometry.
+  assert.match(shellStyles, /width: calc\([\s\S]*?var\(--inspector-compact-width\) \+/u);
+  assert.match(
+    shellStyles,
+    /\(100vw - var\(--workbench-side-track\) - var\(--inspector-compact-width\)\) \*/u,
+  );
+  assert.match(shellStyles, /var\(--inspector-morph-shift\)/u);
+  assert.match(
+    shellStyles,
+    /border-radius: calc\(var\(--radius-panel\) \* \(1 - var\(--inspector-morph-shift\)\)\);/u,
+  );
+  assert.doesNotMatch(shellStyles, /data-mode-expanded/u);
+  assert.doesNotMatch(shellStyles, /transition: width var\(--design-dur-enter\)/u);
+  assert.doesNotMatch(inspectorStyles, /--inspector-morph-phase-duration/u);
+});
+
+test("the fixed list column stretches first, then the detail column takes the width", () => {
+  // The compact content width feeds the upper face and the left column.
+  assert.match(
+    pageStyles,
+    /--inspector-face-width: calc\(\s*var\(--inspector-compact-width, 400px\) - var\(--inspector-frame-border, 2px\)\s*\);/u,
+  );
+  // Upper face: compact content width for the whole motion; only the fill beat
+  // stretches its height.
+  const topRule = pageStyles.match(
+    /\.inspector\[data-mode-surface="true"\] \.inspector-page-split-top \{([\s\S]*?)\}/u,
+  );
+  assert.ok(topRule);
+  assert.match(topRule[1], /width: var\(--inspector-face-width\);/u);
+  assert.match(topRule[1], /height: calc\(42% \+ 58% \* var\(--inspector-morph-grow\)\);/u);
+  // Lower face: pinned to the right edge during arrangement, then grown into
+  // the wide column by the fill beat.
+  const bottomRule = pageStyles.match(
+    /\.inspector\[data-mode-surface="true"\] \.inspector-page-split-bottom \{([\s\S]*?)\}/u,
+  );
+  assert.ok(bottomRule);
+  assert.match(
+    bottomRule[1],
+    /top: calc\(\(42% \+ 1px\) \* \(1 - var\(--inspector-morph-grow\)\)\);/u,
+  );
+  assert.match(
+    bottomRule[1],
+    /left: calc\(\s*\(100% - var\(--inspector-face-width\)\) \* \(1 - var\(--inspector-morph-grow\)\) \+[\s\S]*?var\(--inspector-face-width\) \* var\(--inspector-morph-grow\)\s*\);/u,
+  );
+  // The two faces never overlap in the ordered motion, so no clip is needed.
+  assert.doesNotMatch(bottomRule[1], /clip-path/u);
+  // Retracting keeps the lower face joined to the list face: the closing
+  // geometry holds its left edge at the compact width until the panel is
+  // narrower than two compact columns, then lets it slide with the panel edge.
+  // The frame carries the path a motion runs on, so a reversal continues on the
+  // path it started with instead of switching paths mid-flight.
+  const joinedRule = pageStyles.match(
+    /\.inspector\[data-mode-surface="true"\]\[data-mode-geometry="joined"\]\s*\.inspector-page-split-bottom \{([\s\S]*?)\}/u,
+  );
+  assert.ok(joinedRule);
+  assert.match(
+    joinedRule[1],
+    /left: clamp\(0px, calc\(100% - var\(--inspector-face-width\)\), var\(--inspector-face-width\)\);/u,
+  );
+  assert.doesNotMatch(
+    pageStyles,
+    /data-mode-phase="closing"\]\)?\s*\.inspector-page-split-bottom/u,
+  );
+  // The detail column reads as a document column instead of a stretched form.
+  assert.match(pageStyles, /max-width: var\(--inspector-detail-column-width, 760px\);/u);
+  // The compact rule returns only once both faces have folded back, and the
+  // vertical seam takes its place with the fill beat.
+  assert.match(
+    pageStyles,
+    /opacity: calc\(\(1 - var\(--inspector-morph-shift\)\) \* \(1 - var\(--inspector-morph-grow\)\)\);/u,
+  );
+  assert.match(pageStyles, /opacity: var\(--inspector-morph-grow\);\s*\n\s*pointer-events: none;/u);
+});
+
+test("the expanded detail face sizes its own content, not the frame", () => {
+  assert.match(
+    assetStyles,
+    /height: calc\(180px \+ \(min\(48vh, 460px\) - 180px\) \* var\(--inspector-morph-grow\)\);/u,
+  );
+  assert.match(
+    pageStyles,
+    /padding-top: calc\(\s*var\(--space-2\) \+ \(var\(--space-4\) - var\(--space-2\)\) \* var\(--inspector-morph-grow\)\s*\);/u,
   );
 });
 
-test("every expanding split page states the share of its detail column", () => {
-  const pages = {
-    timing: {
-      share: 0.5,
-      source: read("frontend/screens/global/sections/timing/page.tsx"),
-      tracks: /\.timing-studio \.studio-body \{[\s\S]*?minmax\(0, 1fr\) minmax\(0, 1fr\)/u,
-      styles: globalStyles,
-    },
-    lines: {
-      share: 0.55,
-      source: read("frontend/screens/global/sections/lines/page.tsx"),
-      tracks: /\.line-panel-split \{[\s\S]*?minmax\(240px, 0\.9fr\) minmax\(300px, 1\.1fr\)/u,
-      styles: read("frontend/screens/global/sections/lines/linePanel.less"),
-    },
-    assets: {
-      share: 0.55,
-      source: read("frontend/screens/global/sections/assets/page.tsx"),
-      tracks: /\.asset-library-split \{[\s\S]*?minmax\(240px, 0\.9fr\) minmax\(300px, 1\.1fr\)/u,
-      styles: read("frontend/screens/global/sections/assets/assetLibrary.less"),
-    },
-  };
-  for (const [id, page] of Object.entries(pages)) {
-    assert.match(page.source, new RegExp(`modeDetailShare: ${page.share},`, "u"), id);
-    // 0.9fr / 1.1fr gives the detail column 1.1 / 2 = 0.55 of the page.
-    assert.match(page.styles, page.tracks, id);
-    assert.match(
-      page.styles,
-      /padding: var\(--space-4\) var\(--inspector-gutter\);|padding: var\(--space-4\);/u,
-      id,
-    );
+test("pages register a mode, not a studio component", () => {
+  for (const [name, source] of [
+    ["timing", timingPage],
+    ["lines", linesPage],
+    ["assets", assetsPage],
+  ]) {
+    assert.match(source, /registerWorkspaceMode/u, name);
+    assert.match(source, /workspaceMode: "/u, name);
+    assert.doesNotMatch(source, /modeDetailShare/u, name);
+    assert.doesNotMatch(source, /Studio\(\)|className="(?:lines|assets|timing)-studio"/u, name);
   }
+  assert.match(timingPage, /component: TimingPageLayout/u);
+  assert.doesNotMatch(timingLayout, /layout="expanded"|timing-studio/u);
+  assert.match(timingLayout, /InspectorPageSplit/u);
+  assert.doesNotMatch(workspaceModesSource, /component: ComponentType|component: ComponentType;/u);
+});
+
+test("a motion interrupted at any point reverses in place on its own path", () => {
+  // A toggle click before the entrance settles must not wait for a fresh run's
+  // delays; the exit reverses both numbers together, on the entrance path.
+  assert.match(inspectorSource, /const \[modeReverse, setModeReverse\] = useState\(false\);/u);
+  assert.match(
+    inspectorSource,
+    /const \[modeGeometry, setModeGeometry\] = useState<InspectorGeometry>\("blend"\);/u,
+  );
+  assert.match(inspectorSource, /data-mode-reverse=\{modeReverse \? "true" : undefined\}/u);
+  assert.match(inspectorSource, /data-mode-geometry=\{modeSurface \? modeGeometry : undefined\}/u);
+  assert.match(
+    inspectorSource,
+    /const interrupted =\s*Number\.isFinite\(shift\) && Number\.isFinite\(grow\) && \(shift < 0\.999 \|\| grow < 0\.999\);/u,
+  );
+  // A settled entrance retracts along the joined path; anything mid-motion
+  // keeps the path it started on.
+  assert.match(inspectorSource, /if \(!interrupted\) \{[\s\S]*?setModeGeometry\("joined"\);/u);
+  // The exit can be resumed while it is still running.
+  assert.match(
+    inspectorSource,
+    /const startExpand = useCallback\(\(\) => \{[\s\S]*?setModePhase\(\(phase\) => \(phase === "closing" \? "opening" : phase\)\);/u,
+  );
+  assert.match(
+    inspectorSource,
+    /if \(modePhase === "closing"\) \{\s*startExpand\(\);\s*return;\s*\}/u,
+  );
+  // A running motion is never disabled: the toggle stays available so it can be
+  // reversed, and the close control can still close the task.
+  assert.doesNotMatch(inspectorSource, /disabled=\{modePhase === "closing"\}/u);
+  assert.match(inspectorSource, /icon=\{modeSurface \? "inspectorCollapse" : "inspectorExpand"\}/u);
+  // One reverse timing block covers both directions.
+  const reverseRule = inspectorStyles.match(
+    /\.inspector\[data-mode-surface="true"\]\[data-mode-reverse="true"\] \{([\s\S]*?)\n\}/u,
+  );
+  assert.ok(reverseRule);
+  assert.match(reverseRule[1], /--inspector-morph-grow-delay: 0ms;/u);
+  assert.match(reverseRule[1], /--inspector-morph-shift-delay: 0ms;/u);
+  assert.match(
+    reverseRule[1],
+    /--inspector-morph-grow-duration: calc\(var\(--design-dur-enter\) \* 0\.45\);/u,
+  );
+  assert.match(reverseRule[1], /--inspector-morph-shift-duration: var\(--design-dur-enter\);/u);
+  assert.match(reverseRule[1], /--inspector-morph-shift-ease: ease-in-out;/u);
+});
+
+test("closing from the task lands on the compact rectangle in one frame", () => {
+  // The close control and Escape name their destination. The page and the
+  // expanded surface leave in the same commit, so the user sees the closed state
+  // immediately instead of an exit they did not ask to watch.
+  assert.doesNotMatch(inspectorSource, /closeAfterCollapse/u);
+  assert.match(inspectorSource, /const landCompact = useCallback\(\(\) => \{/u);
+  assert.match(
+    inspectorSource,
+    /if \(activeWorkspaceMode \|\| modePhase !== "compact"\) \{[\s\S]*?landCompact\(\);[\s\S]*?closeInspector\(runtime\.ui\.activeInspector\);/u,
+  );
+  // The morph transitions belong to the expanded surface, so dropping the
+  // attribute in the same commit cancels them instead of retracting the panel.
+  const surfaceRule = inspectorStyles.match(
+    /\.inspector\[data-mode-surface="true"\] \{([\s\S]*?)\n\}/u,
+  );
+  assert.ok(surfaceRule);
+  assert.match(
+    surfaceRule[1],
+    /transition:\s*--inspector-morph var\(--design-dur-enter\) var\(--design-ease-move\),/u,
+  );
+  const frameRule = inspectorStyles.match(/\n\.inspector \{([\s\S]*?)\n\}/u);
+  assert.ok(frameRule);
+  assert.doesNotMatch(frameRule[1], /transition:/u);
+  // Reduced motion still removes the surface motion.
+  assert.match(
+    inspectorStyles,
+    /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.inspector\[data-mode-surface="true"\] \{\s*transition: none;/u,
+  );
+});
+
+test("an asset page without assets composes one column", () => {
+  // The details pane only previews a selected asset, so an empty library is a
+  // single column in the compact stack and in the expanded task.
+  assert.match(
+    assetModelSource,
+    /export function assetPageHasDetails\(assetCount: number\): boolean/u,
+  );
+  assert.match(assetViewSource, /const hasDetails = assetPageHasDetails\(assetCount\);/u);
+  assert.match(assetViewSource, /<InspectorPage>\{treeFace\}<\/InspectorPage>/u);
+  assert.match(assetViewSource, /hasDetails \? \(\s*<InspectorPageSplit/u);
+  // The single column reads as a centered document column in the task.
+  assert.match(
+    pageStyles,
+    /\.inspector\[data-mode-surface="true"\]\s*\.inspector-page\s*> \.inspector-page-scroll\s*> \.inspector-page-content \{[\s\S]*?max-width: var\(--inspector-detail-column-width, 760px\);/u,
+  );
+});
+
+test("the icon controls keep their own grow and collapse glyphs", () => {
+  assert.match(catalogSource, /inspectorExpand: "icons\/inspector_expand\.png",/u);
+  assert.match(catalogSource, /inspectorCollapse: "icons\/inspector_collapse\.png",/u);
+  assert.match(
+    iconSourcesSource,
+    /"icons\/inspector_expand\.png": \{ collection: "lucide", name: "panel-columns" \}/u,
+  );
+  assert.match(
+    iconSourcesSource,
+    /"icons\/inspector_collapse\.png": \{ collection: "lucide", name: "panel-collapse-right" \}/u,
+  );
+});
+
+test("the retired copy handoff leaves no tokens behind", () => {
+  for (const [name, source] of [
+    ["inspector frame", inspectorStyles],
+    ["page layer", pageStyles],
+    ["shell", shellStyles],
+    ["asset page", assetStyles],
+    ["line page", lineStyles],
+  ]) {
+    assert.doesNotMatch(source, /--mode-cover|--mode-detail-share|mode-handoff/u, name);
+    assert.doesNotMatch(source, /data-mode-underlay|data-mode-expanded/u, name);
+  }
+  assert.doesNotMatch(assetStyles, /asset-library-split/u);
+  assert.doesNotMatch(lineStyles, /line-panel-split/u);
+  assert.doesNotMatch(inspectorStyles, /inspector-mode-surface/u);
+});
+
+test("another route lands the frame without an exit of its own", () => {
+  // The rail only routes; the frame decides what taking the route means. A page
+  // that owns a mode takes the task over in place, and a plain pane lands the
+  // frame on the compact rectangle in the same commit the route is taken.
+  assert.doesNotMatch(sidebarSource, /closeWorkspaceMode/u);
+  assert.match(sidebarSource, /useActiveWorkspaceModeId/u);
+  assert.match(inspectorSource, /workspacePaneForMode/u);
+  assert.match(inspectorSource, /workspaceModeForPane/u);
+  assert.match(inspectorSource, /if \(!owner \|\| activePane === owner\) \{\s*return;\s*\}/u);
+  assert.match(inspectorSource, /switchWorkspaceMode\(nextMode, modeState\.returnPane\);/u);
+  // Another page can only take the task over once the expanded surface is open;
+  // that guard sits inside the mode branch.
+  assert.match(
+    inspectorSource,
+    /if \(modePhase === "opening" \|\| modePhase === "expanded"\) \{\s*switchWorkspaceMode\(nextMode, modeState\.returnPane\);/u,
+  );
+  assert.doesNotMatch(
+    inspectorSource,
+    /if \(modePhase !== "opening" && modePhase !== "expanded"\) \{\s*return;\s*\}/u,
+  );
+  // A plain pane cannot fill the task, so the frame does not play an exit for a
+  // page the user has already left; the landing covers a route taken mid-exit.
+  assert.match(
+    inspectorSource,
+    /const nextMode = workspaceModeForPane\(activePane\);[\s\S]*?landCompact\(\);/u,
+  );
+  // A drawer page owns the body when the surface leaves; no pane is restored
+  // behind it.
+  assert.match(inspectorSource, /getDrawerState\(\)\.open/u);
+  for (const name of ["workspacePaneForMode", "workspaceModeForPane", "switchWorkspaceMode"]) {
+    assert.match(modeActionsSource, new RegExp(`export function ${name}`, "u"), name);
+  }
+  assert.match(modeActionsSource, /inspectorPanels\.get\(\)\.find/u);
+});
+
+test("prefers-reduced-motion settles the morph without a transition", () => {
+  assert.match(
+    pageStyles,
+    /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.inspector \{\s*transition: none;/u,
+  );
 });

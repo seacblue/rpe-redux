@@ -1,9 +1,9 @@
 /**
- * Timing page: the compact Inspector stack and the expanded timing workspace.
+ * Timing page: the compact Inspector stack and its workspace mode.
  *
- * Both layouts use the same list and property faces. The compact page stacks
- * them as a split inspector page; the workspace places them side by side at
- * full height.
+ * The page registers one split layout and the mode that expands that same page.
+ * The expanded task is a geometry the split grows into; it is not a second page
+ * component.
  */
 import {
   registerWorkspaceMode,
@@ -23,36 +23,22 @@ const hasDocument = {
   subscribe: subscribeToEditorVisibility,
 };
 
-/** The compact page: timing rows above the selected point's properties. */
-function TimingInspectorPage() {
-  return <TimingPageLayout layout="compact" />;
-}
-
-/** The expanded workspace: full-height timing list and property faces. */
-function TimingStudio() {
-  return <TimingPageLayout layout="expanded" />;
-}
-
 const mode: WorkspaceModeDefinition = {
   id: "timing",
   order: 20,
   label: "chrome.pane.bpm",
   icon: "bpm",
-  component: TimingStudio,
   requiresDocument: true,
 };
 
 const disposePanel = registerInspectorPanel({
   id: "timing",
-  component: TimingInspectorPage,
+  component: TimingPageLayout,
   layout: "split",
   label: "chrome.pane.bpm",
   icon: "bpm",
   tutorial: GLOBAL_PAGE_TUTORIALS.timing,
   workspaceMode: "timing",
-  // The timing workspace splits its two faces evenly, so the compact page settles
-  // on the right half when it expands.
-  modeDetailShare: 0.5,
   editsChart: true,
 });
 

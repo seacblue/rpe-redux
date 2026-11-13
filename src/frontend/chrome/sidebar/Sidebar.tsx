@@ -17,10 +17,7 @@ import { Divider } from "../../../design/components/divider/Divider.tsx";
 import { iconName } from "../../../design/components/icon/Icon.tsx";
 import { ThemeRailItem } from "./ThemeRailItem.tsx";
 import { bindDrawerPaneTrigger, type DrawerState } from "../drawer/drawerPanes.ts";
-import {
-  closeWorkspaceMode,
-  useActiveWorkspaceModeId,
-} from "../../screens/editor/workspace/container/workspaceModes.ts";
+import { useActiveWorkspaceModeId } from "../../screens/editor/workspace/container/workspaceModes.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import type { MessageKey } from "../../../i18n/index.ts";
 import { useEditorHostValue } from "../../contracts/editorHostReact.tsx";
@@ -91,13 +88,17 @@ function SidebarEntry({
   }
   // The drawer owns the active state while it is open; otherwise the inspector
   // pane and feature-owned state decide. A hidden inspector never lights up a
-  // second entry behind the drawer.
+  // second entry behind the drawer. The pane is read first so a route chosen
+  // while a task plays its exit is the only active route, instead of the
+  // leaving task and the chosen pane lighting together.
   const active = drawer.open
     ? item.drawerPaneId !== undefined && drawer.pane === item.drawerPaneId
     : item.drawerPaneId === undefined &&
       (featureActive ||
         (item.panelId !== undefined &&
-          (activePanel === item.panelId || activeWorkspaceMode === item.panelId)));
+          (activePanel !== ""
+            ? activePanel === item.panelId
+            : activeWorkspaceMode === item.panelId)));
   return (
     <div className="sidebar-item">
       <ThemeRailItem
@@ -112,12 +113,10 @@ function SidebarEntry({
         data-pane={item.drawerPaneId === undefined ? (item.panelId ?? item.id) : undefined}
         data-drawer-pane={item.drawerPaneId}
         onClick={() => {
-          // Sidebar destinations belong to the compact shell. Choosing any of
-          // them while a document task is expanded returns to the compact
-          // inspector first, so the selected page is actually visible.
-          if (activeWorkspaceMode) {
-            closeWorkspaceMode();
-          }
+          // The Inspector frame turns a route into the motion that fits it: a
+          // page with a task mode takes the open task over in place, while a
+          // plain pane leaves the task first. Clearing the mode here would
+          // uncover the workspace in one frame, before that exit could play.
           item.onActivate();
         }}
       />

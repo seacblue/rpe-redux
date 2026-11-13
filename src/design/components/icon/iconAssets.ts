@@ -112,6 +112,8 @@ export const ICON_ASSETS = {
   windowMaximize: "icons/window_maximize.png",
   windowRestore: "icons/window_restore.png",
   windowClose: "icons/window_close.png",
+  inspectorExpand: "icons/inspector_expand.png",
+  inspectorCollapse: "icons/inspector_collapse.png",
 } as const;
 export type IconName = keyof typeof ICON_ASSETS;
 /** Every published icon name, in catalog order. */

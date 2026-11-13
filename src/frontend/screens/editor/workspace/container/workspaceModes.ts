@@ -2,12 +2,14 @@
  * The Workspace mode registry: one document task at a time expands the
  * inspector over the workspace.
  *
- * A registered mode owns the wide Inspector page (a studio). The timeline is
- * the implicit `""` mode and stays mounted behind it. This module owns the
- * registry, the single active-mode id, and the inspector pane to restore when
- * the mode closes; it never mounts a surface itself.
+ * A registered mode names the Inspector page that expands into the task; the
+ * page itself is mounted once and morphs in place, so the registry carries no
+ * second component. The timeline is the implicit `""` mode and stays mounted
+ * behind it. This module owns the registry, the single active-mode id, and the
+ * inspector pane to restore when the mode closes; it never mounts a surface
+ * itself.
  */
-import { useSyncExternalStore, type ComponentType } from "react";
+import { useSyncExternalStore } from "react";
 import { Contributions } from "../../../../../core/state/contributions.ts";
 import type { IconName } from "../../../../../design/components/icon/Icon.tsx";
 import type { MessageKey } from "../../../../../i18n/index.ts";
@@ -19,7 +21,6 @@ export interface WorkspaceModeDefinition {
   order: number;
   label: MessageKey;
   icon: IconName;
-  component: ComponentType;
   /** Close the mode when the editor has no document. */
   requiresDocument?: boolean;
 }

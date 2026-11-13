@@ -1,32 +1,25 @@
-/** Shared timing page composition for the compact Inspector and wide workspace. */
+/**
+ * The timing page: the timing-point list above the selected point's properties.
+ *
+ * The same two faces are the page in every frame: the compact split stacks them
+ * and the expanded workspace turns that split into a fixed list column beside
+ * the wide detail column. The page therefore has one composition, not one per
+ * layout.
+ */
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import { GlobalTimingInspector } from "./GlobalTimingInspector.tsx";
 import { GlobalTimingWorkspace } from "./GlobalTimingWorkspace.tsx";
 
-/** Places one timing list and one property face in the requested layout. */
-export function TimingPageLayout({ layout }: { layout: "compact" | "expanded" }) {
+/** Places the timing list and the selected point's property face in one split. */
+export function TimingPageLayout() {
   const { t } = useTranslation();
-  const list = <GlobalTimingWorkspace />;
-  const properties = <GlobalTimingInspector />;
-
-  if (layout === "compact") {
-    return (
-      <InspectorPageSplit
-        topLabel={t("editorPanels.inspector.form.bpm.title")}
-        bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
-        top={list}
-        bottom={properties}
-      />
-    );
-  }
-
   return (
-    <div className="timing-studio">
-      <div className="studio-body">
-        <div className="studio-list-pane">{list}</div>
-        <div className="studio-detail-pane mode-handoff-detail">{properties}</div>
-      </div>
-    </div>
+    <InspectorPageSplit
+      topLabel={t("editorPanels.inspector.form.bpm.title")}
+      bottomLabel={t("editorPanels.inspector.form.bpm.attributes")}
+      top={<GlobalTimingWorkspace />}
+      bottom={<GlobalTimingInspector />}
+    />
   );
 }

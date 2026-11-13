@@ -102,14 +102,15 @@
   overflow: hidden;
 }
 
-// The panel owns its width transition so the wrapper can keep its compact grid
-// track while a document task grows over the workspace.
+// The panel fills the wrapper's compact track. A document task pins it to the
+// same edge and derives a wider width from the frame's morph number, so the
+// edge and the page faces share one timing function instead of running two
+// transitions.
 .workbench-inspector > .inspector {
   flex: 1;
   width: 100%;
   min-width: 260px;
   min-height: 0;
-  transition: width var(--design-dur-enter) var(--design-ease-move);
 }
 
 // The compact inspector is a bounded side surface. Keep its frame visible
@@ -120,7 +121,9 @@
 
 // A document task expands the inspector itself. The wrapper stays in its grid
 // track and the panel is pinned to the same edge, growing across the workspace.
-// The workspace never resizes behind it.
+// The workspace never resizes behind it. The width follows the frame's
+// arrangement number: at 0 it is the compact track, at 1 the full task width,
+// and the two faces of the page read the same number for their columns.
 .workbench-inspector:has(> .inspector[data-mode-surface="true"]) {
   position: relative;
   overflow: visible;
@@ -133,16 +136,21 @@
   right: 0;
   bottom: 0;
   left: auto;
-  width: 100%;
+  width: calc(
+    var(--inspector-compact-width) +
+      (100vw - var(--workbench-side-track) - var(--inspector-compact-width)) *
+      var(--inspector-morph-shift)
+  );
   min-width: 0;
   max-width: none;
   overflow: hidden;
   isolation: isolate;
   background: var(--surface);
-  border: 0;
-  border-left: 1px solid var(--edge-emphasis);
-  border-radius: 0;
-  box-shadow: none;
+  // The frame border keeps its compact width while the panel grows; the radius
+  // and the page columns finish exactly on the compact rectangle when the
+  // collapse lands, so no edge jumps on the last frame.
+  border: 1px solid var(--edge-divider);
+  border-radius: calc(var(--radius-panel) * (1 - var(--inspector-morph-shift)));
 }
 
 // The expanded panel reuses the current cover image and its configured blur and
@@ -176,14 +184,11 @@
 
 // The chrome presets paint the compact inspector transparent so only its fields
 // carry a surface. The expanded task owns its area, so it restores the panel
-// surface and covers the workspace directly.
+// surface and covers the workspace directly. The frame border keeps the compact
+// width so the body box matches the compact panel at both ends of the morph.
 .redux-app-root .workbench-inspector > .inspector[data-mode-surface="true"] {
   background: var(--surface);
-  border: 0;
-}
-
-.workbench-inspector > .inspector[data-mode-surface="true"][data-mode-expanded="true"] {
-  width: calc(100vw - var(--workbench-side-track));
+  border: 1px solid var(--edge-divider);
 }
 
 @media (prefers-reduced-motion: reduce) {

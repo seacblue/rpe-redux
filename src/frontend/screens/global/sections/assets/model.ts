@@ -65,6 +65,18 @@ export interface AssetLibraryViewActions {
 }
 
 /**
+ * Whether the stacked inspector page has a detail face to compose.
+ *
+ * The details pane only exists to preview a selected asset, so a library with no
+ * assets renders as one column: the compact stack otherwise keeps an empty
+ * skeleton under the tree, and the expanded task would leave a blank detail
+ * column beside it.
+ */
+export function assetPageHasDetails(assetCount: number): boolean {
+  return assetCount > 0;
+}
+
+/**
  * All data needed to render the panel.
  *
  * `files` are the images that sit directly in the chart's folder and `folders`
@@ -92,8 +104,8 @@ export interface AssetLibraryPanelSnapshot {
 
 /** Complete props received by the view: data plus callbacks. */
 export interface AssetLibraryViewProps extends AssetLibraryPanelSnapshot, AssetLibraryViewActions {
-  /** Tree/detail composition: page, single face, split workspace, or stacked inspector. */
-  variant?: "all" | "tree" | "details" | "split" | "stacked";
+  /** Composition: one column, or the tree/stacked inspector page. */
+  variant?: "all" | "stacked";
 }
 
 /**

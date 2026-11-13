@@ -1,4 +1,4 @@
-/** Timing workspace presentation keeps the list focused on editable timing points. */
+/** Timing and line pages keep one composition for both compact and expanded states. */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -12,7 +12,6 @@ const linesRegistration = read("frontend/screens/global/sections/lines/page.tsx"
 const assetsViewSource = read("frontend/screens/global/sections/assets/AssetLibraryView.tsx");
 const assetsRegistration = read("frontend/screens/global/sections/assets/page.tsx");
 const workspaceSource = read("frontend/screens/global/sections/timing/GlobalTimingWorkspace.tsx");
-const styles = read("frontend/screens/global/global.less");
 const timingStyles = read("frontend/screens/global/sections/timing/timing.less");
 const lineStyles = read("frontend/screens/global/sections/lines/linePanel.less");
 const assetStyles = read("frontend/screens/global/sections/assets/assetLibrary.less");
@@ -25,11 +24,11 @@ const pageSplitSource = read("frontend/chrome/inspectorPage/InspectorPageSplit.t
 const pageStyles = read("frontend/chrome/inspectorPage/inspectorPage.less");
 
 test("timing inspector keeps one stable page and omits deleted extras", () => {
-  assert.match(pageSource, /TimingPageLayout layout="compact"/u);
-  assert.match(pageSource, /TimingPageLayout layout="expanded"/u);
+  assert.match(pageSource, /component: TimingPageLayout/u);
   assert.match(pageSource, /registerWorkspaceMode/u);
   assert.match(pageSource, /layout: "split"/u);
   assert.match(timingLayoutSource, /InspectorPageSplit/u);
+  assert.doesNotMatch(timingLayoutSource, /layout=/u);
   assert.match(linesPageSource, /top=\{treeFace\}/u);
   assert.match(linesRegistration, /layout: "split"/u);
   assert.match(assetsViewSource, /top=\{treeFace\}/u);
@@ -37,7 +36,6 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.doesNotMatch(pageSource, /TimingMap|timing-map/u);
   assert.doesNotMatch(workspaceSource, /global-timing-columns|data-variant/u);
   assert.match(workspaceSource, /global-timing-list-shell/u);
-  assert.doesNotMatch(styles, /timing-map|global-timing-columns|global-timing-/u);
   assert.match(
     timingStyles,
     /\.global-timing-list-shell[\s\S]*?margin-right: calc\(-1 \* var\(--space-2\)\);/u,
@@ -46,18 +44,13 @@ test("timing inspector keeps one stable page and omits deleted extras", () => {
   assert.doesNotMatch(bpmStyles, /\.bpm-tool\s*\{[\s\S]*?border-top:/u);
 });
 
-test("the expanded studio roots fill the inspector body height", () => {
-  const studioRoot = styles.match(
-    /\.lines-studio,\s*\n\.assets-studio,\s*\n\.timing-studio \{([\s\S]*?)\}/u,
-  );
-  assert.ok(studioRoot, "the timing studio shares the full-height studio root rule");
-  assert.match(studioRoot[1], /display: flex;/u);
-  assert.match(studioRoot[1], /flex-direction: column;/u);
-  assert.match(studioRoot[1], /height: 100%;/u);
-  const studioBody = styles.match(/\.studio-body \{([\s\S]*?)\}/u);
-  assert.ok(studioBody);
-  assert.match(studioBody[1], /flex: 1 1 auto;/u);
-  assert.match(timingLayoutSource, /className="timing-studio"/u);
+test("the page owns one split composition in both layouts", () => {
+  assert.match(timingLayoutSource, /<GlobalTimingWorkspace \/>/u);
+  assert.match(timingLayoutSource, /<GlobalTimingInspector \/>/u);
+  assert.doesNotMatch(timingLayoutSource, /layout=|className="timing-studio"/u);
+  assert.doesNotMatch(pageSource, /Studio|modeDetailShare/u);
+  assert.doesNotMatch(linesRegistration, /Studio|modeDetailShare/u);
+  assert.doesNotMatch(assetsRegistration, /Studio|modeDetailShare/u);
 });
 
 test("the frame owns no pane inset and each page supplies the content layer", () => {
@@ -84,7 +77,6 @@ test("a split page is two fixed faces above and below one full-width rule", () =
   assert.doesNotMatch(pageSplitSource, /resizable|aria-valuenow|PointerEvent/u);
   const splitRule = pageStyles.match(/\.inspector-page-split \{([\s\S]*?)\}/u);
   assert.ok(splitRule);
-  // Flex, not grid: the Inspector handoff animates the upper share to zero.
   assert.match(splitRule[1], /display: flex;/u);
   assert.match(splitRule[1], /flex-direction: column;/u);
   assert.match(pageStyles, /\.inspector-page-split-top \{\s*flex: 0 0 42%;/u);

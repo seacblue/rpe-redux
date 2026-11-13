@@ -125,48 +125,6 @@
   color: var(--foreground);
 }
 
-// Expanded workspace: the tree and the property form are two persistent columns,
-// so a bulk selection stays visible while its shared fields are edited.
-.line-panel-split {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.1fr);
-  gap: 0;
-  min-width: 0;
-  min-height: 0;
-}
-
-.line-panel-split-tree {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  padding: var(--space-3) var(--space-4);
-  border-right: 1px solid var(--edge-divider);
-  overflow: hidden;
-}
-
-// The properties column uses the same content inset and the same reserved
-// scrollbar column as an Inspector page, and it does not add spacing between
-// the page's own sections: the compact copy hands its lower face over to this
-// column at the same size, so both sides must place the same content on the
-// same pixels. Section spacing belongs to the sections.
-.line-panel-split-properties {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  padding: var(--space-4) var(--inspector-gutter);
-  overflow: auto;
-  scrollbar-gutter: stable;
-}
-
-.line-panel-split .line-tree {
-  flex: 1 1 auto;
-  max-height: none;
-  min-height: 0;
-}
-
 // The inspector wrapper is a flex column; the mounted line form must fill it so
 // the split's two faces can size against the available height.
 .inspector .line-panel {

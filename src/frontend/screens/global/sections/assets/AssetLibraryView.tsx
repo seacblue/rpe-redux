@@ -14,6 +14,7 @@ import { Input } from "../../../../../design/components/input/Input.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { TreeFolder } from "../../../../../design/patterns/tree/TreeFolder.tsx";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
+import { InspectorPage } from "../../../../chrome/inspectorPage/InspectorPage.tsx";
 import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import type { ShaderParameterOverrides } from "../../../../../core/global/chart/shader/shaderEvents.ts";
 import { tokenizeShader } from "./shaderSyntax.ts";
@@ -21,6 +22,7 @@ import { FILE_DRAG_EVENT } from "../../../../../core/shell/shellEventNames.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import type { GlobalView } from "../../globalView.ts";
 import { AssetDialogs } from "./AssetDialogs.tsx";
+import { assetPageHasDetails } from "./model.ts";
 import type {
   AssetLibraryViewProps,
   AssetViewFile,
@@ -314,6 +316,7 @@ function AssetFolderView({
  * to the selected folder, and the library follows the judge-line list layout.
  */
 export function AssetLibraryView({
+  assetCount,
   files,
   folders,
   empty,
@@ -353,21 +356,16 @@ export function AssetLibraryView({
     });
   };
   const stacked = variant === "stacked";
-  const split = variant === "split";
-  const showTree = variant !== "details";
-  const showDetails = variant !== "tree";
+  const hasDetails = assetPageHasDetails(assetCount);
 
   useEffect(() => {
-    if (!showTree) {
-      return;
-    }
     const onDragState = (event: Event): void => {
       const state = (event as CustomEvent<string>).detail;
       setImportDragging(state === "enter" || state === "over");
     };
     window.addEventListener(FILE_DRAG_EVENT, onDragState);
     return () => window.removeEventListener(FILE_DRAG_EVENT, onDragState);
-  }, [showTree]);
+  }, []);
 
   const folderName = selectedFolder || t("editorPanels.assetLibrary.defaultFolder");
   const deleteLabel = selected
@@ -384,7 +382,7 @@ export function AssetLibraryView({
     });
   }
 
-  const treeFace = showTree ? (
+  const treeFace = (
     <div className="asset-tree-shell">
       <input
         ref={addInputRef}
@@ -461,64 +459,64 @@ export function AssetLibraryView({
         </div>
       </div>
     </div>
-  ) : null;
-  const detailsFace = showDetails ? (
-    selected ? (
-      <div className="asset-details">
-        <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
-        {selected.kind === "audio" ? (
-          <AudioPlayer src={selected.url} label={assetLabel(selected.name)} />
-        ) : selected.kind === "shader" ? (
-          <>
-            <div className="asset-shader-preview">
-              <ShaderSourcePreview source={selected.text ?? ""} />
-            </div>
-            <ShaderParameterConfiguration selected={selected} onChange={onConfigureShader} />
-          </>
-        ) : (
-          <AssetThumb url={selected.url} alt={selected.name} kind={selected.kind} />
-        )}
-        <div className="asset-detail-actions">
-          <Button type="button" variant="outlined" onClick={() => onRename()}>
-            {t("common.action.rename")}
-          </Button>
-          <Button type="button" variant="outlined" onClick={onOpenExternal}>
-            <Icon name="external" size={14} />
-            {t("editorPanels.assetLibrary.openExternal")}
-          </Button>
-        </div>
+  );
+  const detailsFace = selected ? (
+    <div className="asset-details">
+      <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
+      {selected.kind === "audio" ? (
+        <AudioPlayer src={selected.url} label={assetLabel(selected.name)} />
+      ) : selected.kind === "shader" ? (
+        <>
+          <div className="asset-shader-preview">
+            <ShaderSourcePreview source={selected.text ?? ""} />
+          </div>
+          <ShaderParameterConfiguration selected={selected} onChange={onConfigureShader} />
+        </>
+      ) : (
+        <AssetThumb url={selected.url} alt={selected.name} kind={selected.kind} />
+      )}
+      <div className="asset-detail-actions">
+        <Button type="button" variant="outlined" onClick={() => onRename()}>
+          {t("common.action.rename")}
+        </Button>
+        <Button type="button" variant="outlined" onClick={onOpenExternal}>
+          <Icon name="external" size={14} />
+          {t("editorPanels.assetLibrary.openExternal")}
+        </Button>
       </div>
-    ) : (
-      <>
-        {/* The visible pane is a layout skeleton; the action hint stays in the
+    </div>
+  ) : (
+    <>
+      {/* The visible pane is a layout skeleton; the action hint stays in the
             accessibility tree so the empty pane is still explained aloud. */}
-        <p className="redux-visually-hidden">{t("editorPanels.assetLibrary.selectForDetails")}</p>
-        <AssetDetailsSkeleton />
-      </>
-    )
-  ) : null;
+      <p className="redux-visually-hidden">{t("editorPanels.assetLibrary.selectForDetails")}</p>
+      <AssetDetailsSkeleton />
+    </>
+  );
 
   return (
     <>
-      {split ? (
-        <div className="asset-library-split">
-          {treeFace}
-          <div className="asset-library-split-details mode-handoff-detail">{detailsFace}</div>
-        </div>
-      ) : stacked ? (
-        <InspectorPageSplit
-          topLabel={t("editorPanels.assetLibrary.title")}
-          bottomLabel={t("editorPanels.assetLibrary.details")}
-          top={treeFace}
-          bottom={detailsFace}
-        />
+      {stacked ? (
+        hasDetails ? (
+          <InspectorPageSplit
+            topLabel={t("editorPanels.assetLibrary.title")}
+            bottomLabel={t("editorPanels.assetLibrary.details")}
+            top={treeFace}
+            bottom={detailsFace}
+          />
+        ) : (
+          // A library with no assets has nothing to preview, so the stacked page
+          // is one column: the tree owns the page and the expanded task grows
+          // that single column instead of composing a blank detail face.
+          <InspectorPage>{treeFace}</InspectorPage>
+        )
       ) : (
         <>
           {treeFace}
           {detailsFace}
         </>
       )}
-      {showDetails && <AssetDialogs />}
+      <AssetDialogs />
     </>
   );
 }

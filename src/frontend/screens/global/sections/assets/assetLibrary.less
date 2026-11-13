@@ -1,8 +1,10 @@
 // Asset library page: the scrolling tree, media details, source preview, and
 // the shared drop overlay.
 
-// The workspace is one column: a view toolbar, the scrolling tree, and a fixed
-// footer with the same add/delete rhythm as judge lines and timing.
+// Inspector page: the tree is the upper face and the selected asset's details
+// the lower one. Expanded, those same faces become the fixed list column and the
+// wide detail column, so the tree keeps its pinned import footer while the
+// details column scrolls on its own.
 .asset-tree-shell {
   position: relative;
   display: flex;
@@ -13,58 +15,16 @@
   width: 100%;
 }
 
-// Expanded workspace: folder tree and a large preview/details face. The tree
-// keeps its pinned import footer while the details column scrolls on its own.
-.asset-library-split {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.1fr);
-  gap: 0;
-  min-width: 0;
-  min-height: 0;
+// The detail face gives the preview a taller plate as the panel opens. The
+// height follows the frame's fill number, so the plate and the column finish
+// together instead of swapping a short plate for a tall one on a later frame.
+.inspector[data-mode-surface="true"] .inspector-page-split-bottom .asset-details > .asset-image {
+  height: calc(180px + (min(48vh, 460px) - 180px) * var(--inspector-morph-grow));
 }
 
-.asset-library-split > .asset-tree-shell {
-  min-height: 0;
-  padding: var(--space-3) var(--space-4);
-  border-right: 1px solid var(--edge-divider);
-}
-
-.asset-library-split-details {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  scrollbar-gutter: stable;
-}
-
-// The workspace gives the preview a full-height plate. The compact copy grows
-// the plate to that size while the panel expands, so the handoff frame keeps
-// the same pixels instead of swapping a short plate for a tall one.
-.inspector[data-mode-phase="opening"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .asset-details
-  > .asset-image,
-.inspector[data-mode-phase="expanded"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .asset-details
-  > .asset-image {
-  height: min(48vh, 460px);
-}
-
-.inspector-body > [data-mode-underlay="true"] .asset-details > .asset-image {
-  transition: height var(--design-dur-enter) var(--design-ease-move);
-}
-
-.asset-library-split-details .asset-details {
-  margin: 0;
-  padding: var(--space-4);
-}
-
-// Compact Inspector: the tree gets the upper face and the details the lower
-// one. Both faces use the shared inspector page content layer for their inset;
-// these rules only keep the tree and its pinned footer usable inside the face.
+// The tree gets the upper face and the details the lower one. Both faces use the
+// shared inspector page content layer for their inset; these rules only keep the
+// tree and its pinned footer usable inside the face.
 .inspector-page-split-top .asset-tree-shell {
   flex: 1 1 auto;
   min-height: 0;

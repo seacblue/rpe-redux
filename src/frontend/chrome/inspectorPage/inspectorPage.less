@@ -36,7 +36,7 @@
 // A split page divides the body into two scroll regions with one fixed rule
 // between them. The split is not adjustable: the two faces keep the authored
 // share of the body height. The upper share is a flex basis rather than a grid
-// track because the Inspector handoff animates it down to zero.
+// track because the expansion grows it from the authored share to full height.
 .inspector-page-split {
   display: flex;
   flex: 1 1 auto;
@@ -53,9 +53,9 @@
   flex: 1 1 auto;
 }
 
-// Both faces reserve the scrollbar column. A wide detail column also reserves
-// it, and the handoff swaps one for the other at the same size: without the
-// shared gutter the page would shift sideways by one scrollbar when it lands.
+// Both faces reserve the scrollbar column. The expanded detail column keeps the
+// same reservation, so the detail content does not shift sideways by one
+// scrollbar when the panel lands.
 .inspector-page-split-face {
   min-width: 0;
   min-height: 0;
@@ -83,92 +83,130 @@
   padding-top: var(--space-2);
 }
 
-// Handoff motion. While the Inspector expands into its workspace page, the
-// compact copy settles as that page's detail column: the upper face slides out
-// through the top while it gives its height to the lower face, the rule leaves
-// with it, and the lower face takes the wide page's block inset so the handoff
-// frame shows the same pixels before and after the copies trade places. The
-// reverse plays while the page collapses: the upper face returns and splits the
-// height with the lower one again.
-.inspector[data-mode-phase="opening"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top,
-.inspector[data-mode-phase="expanded"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top {
-  flex-basis: 0;
+// Expanded frame geometry. While a workspace page owns the body, the split
+// becomes one positioned box and both faces take their rectangle from two
+// ordered progress numbers:
+//
+//   upper face  left 0, width = compact width,
+//               height = 42% + 58% * grow
+//   lower face  left = (body width - compact width) * (1 - grow)
+//                      + compact width * grow,
+//               top = (42% + rule) * (1 - grow), right 0, bottom 0
+//
+// The panel itself grows with the arrangement beat (shift) in the shell sheet,
+// so the upper face travels left with the panel edge while the lower face stays
+// pinned to the right edge. Only after the two have parted does the fill beat
+// stretch the upper face to full height and grow the lower face into the wide
+// column. At grow = 0 the two faces are the compact split, merely placed corner
+// to corner; at grow = 1 they are the expanded columns. The faces never
+// overlap, so the lower face needs no clip.
+//
+// Retracting from the expanded task derives the lower face differently: its
+// left edge is held at the compact width while the panel is wider than two
+// compact columns, so the detail column gives up width exactly as fast as the
+// panel closes and stays joined to the list face. Below that width it slides
+// left with the panel edge, which merges the compact stack onto the panel edge.
+.inspector[data-mode-surface="true"] .inspector-page-split {
+  position: relative;
+  display: block;
+  // The compact content width: the fixed list column and the upper face share
+  // it for the whole motion.
+  --inspector-face-width: calc(
+    var(--inspector-compact-width, 400px) - var(--inspector-frame-border, 2px)
+  );
 }
 
-.inspector[data-mode-phase="opening"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top
-  > .inspector-page-content,
-.inspector[data-mode-phase="expanded"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-top
+.inspector[data-mode-surface="true"] .inspector-page-split-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: var(--inspector-face-width);
+  height: calc(42% + 58% * var(--inspector-morph-grow));
+}
+
+.inspector[data-mode-surface="true"] .inspector-page-split-bottom {
+  position: absolute;
+  top: calc((42% + 1px) * (1 - var(--inspector-morph-grow)));
+  left: calc(
+    (100% - var(--inspector-face-width)) * (1 - var(--inspector-morph-grow)) +
+      var(--inspector-face-width) * var(--inspector-morph-grow)
+  );
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+}
+
+// Retracting from the expanded task keeps the lower face joined to the list
+// face: its left edge is the compact width while the panel is wider than two
+// compact columns, then it slides left with the panel edge, which merges the
+// compact stack onto the panel edge. The frame records the path a motion runs
+// on, so a reversal continues on the path it started with instead of switching
+// between this joined retraction and the entrance blend mid-flight. The two
+// paths meet at both endpoints, so the hand-off between motions is seamless.
+.inspector[data-mode-surface="true"][data-mode-geometry="joined"] .inspector-page-split-bottom {
+  left: clamp(0px, calc(100% - var(--inspector-face-width)), var(--inspector-face-width));
+}
+
+// The detail column reads as one calm document column instead of stretching a
+// compact form across the whole task width. The cap is applied to the content
+// layer, so the scroll container and its scrollbar keep owning the panel edge.
+.inspector[data-mode-surface="true"] .inspector-page-split-bottom > .inspector-page-content {
+  width: 100%;
+  max-width: var(--inspector-detail-column-width, 760px);
+  margin-inline: auto;
+  padding-top: calc(
+    var(--space-2) + (var(--space-4) - var(--space-2)) * var(--inspector-morph-grow)
+  );
+}
+
+// The upper face is the list column: its content width is the compact page's
+// content width at every point of the motion, so the list never reflows.
+.inspector[data-mode-surface="true"] .inspector-page-split-top > .inspector-page-content {
+  width: 100%;
+}
+
+// The compact rule between the stacked faces returns only once both faces have
+// folded back into the compact split: it fades with both beats so the open
+// panel never carries a horizontal line across a column. A vertical seam between
+// the two columns fades in with the fill beat, so neither direction is a hard
+// 90-degree rotation of the same line.
+.inspector[data-mode-surface="true"] .inspector-page-split-rule {
+  position: absolute;
+  top: calc(42% * (1 - var(--inspector-morph-grow)));
+  left: 0;
+  width: var(--inspector-face-width);
+  height: 1px;
+  opacity: calc((1 - var(--inspector-morph-shift)) * (1 - var(--inspector-morph-grow)));
+}
+
+.inspector[data-mode-surface="true"] .inspector-page-split::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--inspector-face-width);
+  z-index: 3;
+  width: 1px;
+  background: var(--edge-divider);
+  opacity: var(--inspector-morph-grow);
+  pointer-events: none;
+}
+
+// A page with no detail face is one column. Expanded, that column reads as a
+// centered document column: the list is the only face, so the task does not
+// stretch it across the whole panel width.
+.inspector[data-mode-surface="true"]
+  .inspector-page
+  > .inspector-page-scroll
   > .inspector-page-content {
-  transform: translateY(-100%);
-}
-
-.inspector[data-mode-phase="opening"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-rule,
-.inspector[data-mode-phase="expanded"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-rule {
-  height: 0;
-  opacity: 0;
-}
-
-.inspector[data-mode-phase="opening"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom
-  > .inspector-page-content,
-.inspector[data-mode-phase="expanded"]
-  .inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom
-  > .inspector-page-content {
-  padding-top: var(--space-4);
-}
-
-// The morph follows the panel width transition: the same duration and curve on
-// every part, so the compact copy lands exactly on the detail column.
-.inspector-body > [data-mode-underlay="true"] .inspector-page-split-top {
-  transition: flex-basis var(--design-dur-enter) var(--design-ease-move);
-}
-
-.inspector-body > [data-mode-underlay="true"] .inspector-page-split-top > .inspector-page-content {
-  transition: transform var(--design-dur-enter) var(--design-ease-move);
-}
-
-.inspector-body
-  > [data-mode-underlay="true"]
-  .inspector-page-split-bottom
-  > .inspector-page-content {
-  transition: padding var(--design-dur-enter) var(--design-ease-move);
-}
-
-.inspector-body > [data-mode-underlay="true"] .inspector-page-split-rule {
-  transition:
-    height var(--design-dur-enter) var(--design-ease-move),
-    opacity var(--design-dur-tint) linear;
+  width: 100%;
+  max-width: var(--inspector-detail-column-width, 760px);
+  margin-inline: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .inspector-body > [data-mode-underlay="true"] .inspector-page-split-top,
-  .inspector-body > [data-mode-underlay="true"] .inspector-page-split-top > .inspector-page-content,
-  .inspector-body
-    > [data-mode-underlay="true"]
-    .inspector-page-split-bottom
-    > .inspector-page-content {
+  .inspector {
     transition: none;
   }
 }

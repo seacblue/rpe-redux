@@ -96,8 +96,8 @@ export interface LinePanelViewProps extends LinePanelProps {
   onTextureBrowserOpen(open: boolean): void;
   /** The drawer renders the tree without its editor title. */
   showTitle?: boolean;
-  /** Split the tree and properties into separate workspace/inspector surfaces. */
-  variant?: "all" | "tree" | "properties" | "stacked" | "split";
+  /** Stack the tree above the properties, or list both faces in one column. */
+  variant?: "all" | "stacked";
 }
 
 /** A select value that cannot collide with a real group, mask, or binding. */
@@ -634,11 +634,8 @@ export function LinePanelView({
     );
   };
   const stacked = variant === "stacked";
-  const split = variant === "split";
-  const showTree = variant !== "properties" && (split || stacked || lineView === "lines");
-  const showProperties =
-    variant !== "tree" &&
-    (variant === "properties" || split || stacked || lineView === "properties");
+  const showTree = stacked || lineView === "lines";
+  const showProperties = stacked || lineView === "properties";
   const treeFace = showTree ? (
     <LineTree
       session={session}
@@ -719,12 +716,7 @@ export function LinePanelView({
           onChange={onLineViewChange}
         />
       )}
-      {split ? (
-        <div className="line-panel-split">
-          <div className="line-panel-split-tree">{treeFace}</div>
-          <div className="line-panel-split-properties mode-handoff-detail">{propertyFace}</div>
-        </div>
-      ) : stacked ? (
+      {stacked ? (
         <InspectorPageSplit
           topLabel={t("editorPanels.linePanel.title")}
           bottomLabel={t("editorPanels.linePanel.properties")}

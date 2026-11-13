@@ -46,6 +46,7 @@ Inside either language section the notes may use two inline annotations: `@name`
 
 **改进**
 
+- 检查器展开改为几何形变，分两步完成：列表先随面板向左滑出、与详情块岔开，随后列表纵向长高、详情块展开为右侧栏；收起按相反顺序播放（先缩回各自尺寸，再横向合拢）。列表固定为紧凑宽度、只纵向拉伸，详情栏接管全部新增宽度，右侧不再出现一份复制出来的页面。展开/收起按钮改用“分栏”与“向右收起”图标；动画期间按钮不再置灰，随时点击都能原地反向。展开状态下点关闭（×）、Esc，或从侧栏切到不能展开的面板，都会在同一帧收起面板并替换页面，不再播放退场动画；只有收起按钮保留形变。从侧栏切到另一个可展开的面板会原地换页，不重播展开。素材库没有素材时不显示下栏，展开时该栏居中显示为单栏。
 - 谱面的渲染、修改与保存现在采用流式模式。打开谱面时的 JSON 解析时长可降低至 50 ~ 100 ms。
 - 对数据库存储规范进行大规模优化。
 - 现在在非桌面应用情况下，右上角的最小化、最大化与关闭按钮将会隐藏。
@@ -118,6 +119,7 @@ Inside either language section the notes may use two inline annotations: `@name`
 
 **Improvements**
 
+- The Inspector expansion is now a geometric morph in two overlapping beats: the list slides out with the panel and parts from the detail block, and as soon as the faces have parted the list stretches to full height while the detail block expands into the right column, so the entrance never rests between the beats. Collapsing retracts both beats together: the panel edge carries the list to the right while the detail column gives up width at the same rate as the panel closes, so the right column stays joined to the list and the compact split lands on the panel edge. The list keeps its compact width and only stretches vertically while the detail column takes all of the added width, and no duplicate page appears on the right. The expand control now shows its own split and collapse glyphs, stays enabled while the motion plays, and reverses the motion in place when clicked again. Closing the task with × lands in one frame: the page leaves and the panel returns to the compact rectangle in the same commit, so the closed state appears immediately instead of after an exit animation. Switching to another expandable page from the rail keeps the task open and swaps the page in place without replaying the entrance, while selecting a plain pane also lands on the compact rectangle in one frame. Only the collapse control still plays the retraction, because it keeps the same page. The expand glyph is a pair of side-by-side rectangles and the collapse glyph is a rectangle with a right arrow. An asset library with no assets drops the details pane and expands as one centered column.
 - Chart rendering, editing, and saving now use a streaming mode. JSON parsing time when opening a chart can drop to 50 ~ 100 ms.
 - Large-scale optimization of database storage conventions.
 - The minimize, maximize, and close buttons in the top-right corner are now hidden outside the desktop app.

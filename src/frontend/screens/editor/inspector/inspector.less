@@ -1,24 +1,76 @@
 /*
- * Inspector frame: the fixed status bar, the pane host, the workspace-mode
+ * Inspector frame: the fixed status bar, the pane host, the expanded task
  * surface, and the empty placeholder.
  *
  * The frame contributes no margin or padding of its own. A pane fills the body
  * edge to edge and the page layer (chrome/inspectorPage) owns every content
  * inset, so scrollbars sit on the panel's outer edge.
  *
- * Expanding into a workspace page is one motion: the panel grows leftward while
- * the compact page slides out of its top face and settles as the wide page's
- * detail column. `--mode-cover` is the one length both copies read (the compact
- * copy's width and the wide page's detail track), so the two cannot drift apart
- * and the handoff ends on identical pixels.
+ * Expanding into a workspace page is one geometric morph of that same page,
+ * played as two overlapping beats. `--inspector-morph` is the master clock over
+ * the whole entrance, so the frame can report when the motion is over. The
+ * split page derives its arrangement from `--inspector-morph-shift` and its
+ * fill from `--inspector-morph-grow` (chrome/inspectorPage owns that geometry):
+ * the panel grows leftward and the list face travels with its left edge, and
+ * the fill joins as soon as the faces have parted, so the list face is still
+ * travelling while it stretches to full height and the detail face grows into
+ * the right column. The beats overlap instead of waiting for one another, so
+ * the entrance never comes to rest mid-way. The upper face keeps the compact
+ * content width throughout; the lower face is the detail column and takes every
+ * pixel of added width.
+ *
+ * Collapsing retracts both beats together: the panel edge carries the list face
+ * rightward while the detail column gives up width at the same rate, so the
+ * columns stay joined for the whole retraction. The fold lands before the panel
+ * is narrow enough for the faces to meet, and the last slide moves the list
+ * face onto the compact stack.
  */
-@property --mode-cover {
-  syntax: "<length>";
+@property --inspector-morph {
+  syntax: "<number>";
   inherits: true;
-  initial-value: 0px;
+  initial-value: 0;
+}
+
+@property --inspector-morph-shift {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --inspector-morph-grow {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
 .inspector {
+  // The master clock: 0 to 1 over the whole entrance. The four rectangles in
+  // the page sheet read the two beat numbers below, not this one, so no second
+  // transition can drift away from the panel edge.
+  --inspector-morph: 0;
+  // Both beats share one ease: a prompt start that settles, so the overlapping
+  // motion reads as a single gesture instead of two separately eased steps.
+  --inspector-morph-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  // Arrangement beat: the panel grows leftward and the list face travels with
+  // the panel's left edge while the detail face stays pinned to the right edge.
+  --inspector-morph-shift: 0;
+  --inspector-morph-shift-duration: calc(var(--design-dur-enter) * 0.72);
+  --inspector-morph-shift-delay: 0ms;
+  --inspector-morph-shift-ease: var(--inspector-morph-ease);
+  // Fill beat: the list face stretches to the full body height and the detail
+  // face grows leftward and upward into the wide column. Opening delays it only
+  // until the faces have parted, so the two beats overlap and the motion has no
+  // still frame between them.
+  --inspector-morph-grow: 0;
+  --inspector-morph-grow-duration: calc(var(--design-dur-enter) * 0.8);
+  --inspector-morph-grow-delay: 0ms;
+  --inspector-morph-grow-ease: var(--inspector-morph-ease);
+  // Both frame borders together: the page columns measure from the body box, so
+  // this is the width the compact track loses to the frame.
+  --inspector-frame-border: 2px;
+  // The expanded detail column reads as a document column; its content layer
+  // never stretches a compact form across the whole task width.
+  --inspector-detail-column-width: 760px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -28,6 +80,70 @@
   background: transparent;
   overflow: hidden;
   font-size: var(--type-body);
+}
+
+// A workspace page expands the panel; a closing phase keeps the surface until
+// the geometry has played back to the compact rectangle.
+.inspector[data-mode-surface="true"] {
+  --inspector-morph: 1;
+  --inspector-morph-shift: 1;
+  --inspector-morph-grow: 1;
+  // Opening: the arrangement leads and the fill joins it once the faces have
+  // parted, so the panel is still opening while the columns already fill.
+  --inspector-morph-shift-delay: 0ms;
+  --inspector-morph-shift-duration: calc(var(--design-dur-enter) * 0.72);
+  --inspector-morph-grow-delay: calc(var(--design-dur-enter) * 0.2);
+  --inspector-morph-grow-duration: calc(var(--design-dur-enter) * 0.8);
+  // The morph transitions belong to the expanded surface, not to the frame. A
+  // route that lands in one frame drops this attribute in the same commit that
+  // retargets the numbers, so the transitions vanish with it and the panel is
+  // at the compact rectangle at once. Entering and the collapse control keep
+  // the attribute for the whole run, so they keep the motion.
+  transition:
+    --inspector-morph var(--design-dur-enter) var(--design-ease-move),
+    --inspector-morph-shift var(--inspector-morph-shift-duration) var(--inspector-morph-shift-ease)
+      var(--inspector-morph-shift-delay),
+    --inspector-morph-grow var(--inspector-morph-grow-duration) var(--inspector-morph-grow-ease)
+      var(--inspector-morph-grow-delay);
+}
+
+// Retracting runs both beats at once: the panel edge carries the list face
+// rightward while the detail column gives up width at the same rate as the
+// panel closes, so the two columns stay joined instead of the detail column
+// narrowing inside a full-width panel. The fold (list height and detail top)
+// lands before the panel is narrow enough for the faces to meet, so the last
+// slide is a pure merge of the compact stack onto the panel edge.
+.inspector[data-mode-phase="closing"] {
+  --inspector-morph: 0;
+  --inspector-morph-shift: 0;
+  --inspector-morph-grow: 0;
+  --inspector-morph-shift-delay: 0ms;
+  --inspector-morph-shift-duration: var(--design-dur-enter);
+  --inspector-morph-shift-ease: ease-in-out;
+  --inspector-morph-grow-delay: 0ms;
+  --inspector-morph-grow-duration: calc(var(--design-dur-enter) * 0.54);
+  --inspector-morph-grow-ease: ease-in-out;
+}
+
+// A motion that starts from a midpoint uses the reverse timings: both beats run
+// without a delay and ease back over the interrupted run, so the toggle can
+// reverse an entrance or an exit in place instead of holding the frame while a
+// delay that belongs to a fresh run elapses.
+.inspector[data-mode-surface="true"][data-mode-reverse="true"] {
+  --inspector-morph-shift-delay: 0ms;
+  --inspector-morph-shift-duration: var(--design-dur-enter);
+  --inspector-morph-shift-ease: ease-in-out;
+  --inspector-morph-grow-delay: 0ms;
+  --inspector-morph-grow-duration: calc(var(--design-dur-enter) * 0.45);
+  --inspector-morph-grow-ease: ease-in-out;
+}
+
+// The surface rule carries the transitions, so it also carries their reduced
+// motion switch; the phase clock settles on the first style flush either way.
+@media (prefers-reduced-motion: reduce) {
+  .inspector[data-mode-surface="true"] {
+    transition: none;
+  }
 }
 
 .inspector-status {
@@ -122,17 +238,21 @@
 }
 
 // A document task owns the body. The header keeps equal side insets in that
-// mode; the body clips both the compact copy and the wide copy through the
-// width handoff.
+// mode; the trailing inset grows to the wider task padding with the fill beat,
+// so the compact resting frame stays pixel-identical to the ordinary panel.
 .inspector[data-mode-surface="true"] .inspector-status {
-  padding-right: var(--space-3);
+  padding-right: calc(
+    var(--space-2) + (var(--space-3) - var(--space-2)) * var(--inspector-morph-grow)
+  );
   border-bottom-color: var(--edge-divider);
 }
 
 // The body is the pane host. It is a frame-sized box: no padding, no margin,
-// and no scrollbar of its own. Every page supplies its scroll region.
+// and no scrollbar of its own. Every page supplies its scroll region. The
+// compact page is the only page copy: it stays mounted for the whole motion,
+// keeps its collapse state and scroll offsets, and becomes the wide page in
+// place. No second copy is mounted, hidden, or handed over.
 .inspector-body {
-  --mode-cover: calc(var(--inspector-compact-width, 400px) - 1px);
   position: relative;
   display: flex;
   flex: 1 1 auto;
@@ -141,15 +261,6 @@
   min-height: 0;
   overflow: hidden;
   background: transparent;
-  transition: --mode-cover var(--design-dur-enter) var(--design-ease-move);
-}
-
-// While a workspace page is open, the cover widens to the page's detail column:
-// the compact page's resting width on the way in, that column's width once the
-// panel arrives. The page's detail track reads the same value.
-.inspector[data-mode-phase="opening"] .inspector-body,
-.inspector[data-mode-phase="expanded"] .inspector-body {
-  --mode-cover: calc(var(--mode-detail-share, 0.5) * (100vw - var(--workbench-side-track, 0px)));
 }
 
 // One registered pane fills the body. The pane host is layout only; the page
@@ -164,60 +275,6 @@
 
 .inspector-pane[hidden] {
   display: none;
-}
-
-// The compact page stays mounted at its resting width and right edge while the
-// workspace width moves. During the handoff it sits above the wide copy at the
-// cover width so its upper and lower faces can leave and settle without a
-// content swap.
-.inspector-body[data-mode-surface="true"] > [data-mode-underlay="true"]:not([hidden]) {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--mode-cover);
-  z-index: 2;
-  pointer-events: none;
-  visibility: visible;
-}
-
-.inspector[data-mode-phase="expanded"]
-  .inspector-body[data-mode-surface="true"]
-  > [data-mode-underlay="true"]:not([hidden]) {
-  visibility: hidden;
-}
-
-// The wide copy follows the inspector's animated width, so its content moves
-// with the panel's left edge instead of appearing at its final position.
-.inspector-mode-surface {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  container-type: inline-size;
-  container-name: inspector-mode;
-  transform-origin: top right;
-}
-
-.inspector-mode-surface > * {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-}
-
-// The compact copy owns the detail face until the width transition ends. The
-// wide copy lays that same face out underneath at the same size, so it waits
-// hidden and takes over on the handoff frame: every control exists once on
-// screen, never twice.
-.inspector[data-mode-phase="opening"] .inspector-mode-surface .mode-handoff-detail,
-.inspector[data-mode-phase="closing"] .inspector-mode-surface .mode-handoff-detail {
-  visibility: hidden;
 }
 
 .inspector-empty-placeholder {

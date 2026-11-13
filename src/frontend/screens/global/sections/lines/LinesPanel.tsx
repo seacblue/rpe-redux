@@ -58,7 +58,7 @@ export function LinesPanel({
   variant = "all",
 }: {
   showTitle?: boolean;
-  variant?: "all" | "tree" | "properties" | "stacked" | "split";
+  variant?: "all" | "stacked";
 } = {}) {
   const linePanel = useEditorRuntimeValue(
     (runtime) => runtime.ui.linePanel,
@@ -100,8 +100,6 @@ export function LinesPanel({
   // Folder mode has no selected line, but the active line stays highlighted.
   const selectedLineIds =
     folderGroup !== null ? EMPTY_ID_SELECTION : present.has(primary) ? present : new Set([primary]);
-  const effectiveLineView: LineInspectorView =
-    variant === "properties" ? "properties" : variant === "tree" ? "lines" : lineView;
 
   useEffect(() => {
     // Bind the selection-mode rule before any external writer can set a line
@@ -175,7 +173,7 @@ export function LinesPanel({
       onToggleLineGroup={toggleLineGroup}
       onLineSelectionChange={changeLineSelection}
       onSelectFolder={selectFolder}
-      lineView={effectiveLineView}
+      lineView={lineView}
       onLineViewChange={setLineView}
       treeLayout={layout}
       textureBrowserOpen={textureBrowserOpen}

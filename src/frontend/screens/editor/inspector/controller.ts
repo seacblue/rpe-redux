@@ -65,16 +65,6 @@ export interface InspectorPanelDefinition {
    */
   workspaceMode?: string;
   /**
-   * The share of the expanded page width taken by the page's detail column.
-   *
-   * Only split pages that also declare a `workspaceMode` hand their lower face
-   * over to that column, so they must state the column's share here. It has to
-   * equal the detail track of the wide page (for example `0.55` for a
-   * `0.9fr 1.1fr` split); the inspector reads it as `--mode-detail-share` to size
-   * the compact copy during the expansion and collapse.
-   */
-  modeDetailShare?: number;
-  /**
    * Whether the pane holds chart-editing controls.
    *
    * Read-only documents keep the pane visible but make its body inert, so an

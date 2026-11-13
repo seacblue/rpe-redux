@@ -1,9 +1,9 @@
 /**
- * Judge-line page: the compact Inspector stack and the expanded line workspace.
+ * Judge-line page: the compact Inspector stack and its workspace mode.
  *
- * The tree, selection, bulk fields, texture picker, and folder operations are the
- * same components in both layouts. The compact page stacks tree above form; the
- * workspace shows both columns at full height.
+ * The tree, selection, bulk fields, texture picker, and folder operations are
+ * the same components in every frame. The expanded task is a geometry the same
+ * split grows into, not a second page.
  */
 import { useEffect, useSyncExternalStore } from "react";
 import {
@@ -35,7 +35,7 @@ const hasDocument = {
  * Keeps the line-panel snapshot bound to the installed session.
  *
  * The tree and form are two faces of one panel instance, so the page runs the
- * panel's render lifecycle once for whichever layout is mounted.
+ * panel's render lifecycle once, on the instance that morphs into the task.
  */
 function useLinePanelBinding(): LinePanelSnapshot | null {
   const runtime = useEditorRuntime();
@@ -77,24 +77,10 @@ function useLinePanelBinding(): LinePanelSnapshot | null {
   return linePanel;
 }
 
-/** One judge-line page at the compact or workspace layout. */
-function LinesPage({ layout }: { layout: "compact" | "workspace" }) {
-  useLinePanelBinding();
-  return <LinesPanel showTitle={false} variant={layout === "workspace" ? "split" : "stacked"} />;
-}
-
 /** The compact page: the tree above the selected line's properties. */
 function LinesInspectorPage() {
-  return <LinesPage layout="compact" />;
-}
-
-/** The expanded workspace with full-height tree/form columns. */
-function LinesStudio() {
-  return (
-    <div className="lines-studio">
-      <LinesPage layout="workspace" />
-    </div>
-  );
+  useLinePanelBinding();
+  return <LinesPanel showTitle={false} variant="stacked" />;
 }
 
 const mode: WorkspaceModeDefinition = {
@@ -102,7 +88,6 @@ const mode: WorkspaceModeDefinition = {
   order: 30,
   label: "chrome.pane.lines",
   icon: "grid",
-  component: LinesStudio,
   requiresDocument: true,
 };
 
@@ -114,9 +99,6 @@ const disposePanel = registerInspectorPanel({
   icon: "grid",
   tutorial: GLOBAL_PAGE_TUTORIALS.lines,
   workspaceMode: "lines",
-  // The line workspace splits its two faces 0.9fr / 1.1fr, so the compact page
-  // settles on the larger property column when it expands.
-  modeDetailShare: 0.55,
   editsChart: true,
 });
 
