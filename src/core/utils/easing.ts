@@ -275,15 +275,30 @@ export function easingWithRange(
 }
 
 /** Evaluate a cubic bezier on the unit square; invalid control points act as linear. */
-export function bezier(progress: number, points: readonly number[]): number {
+export function bezier(
+  progress: number,
+  points: ArrayLike<number> | null | undefined,
+  offset = 0,
+): number {
   const amount = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
-  if (!Array.isArray(points) || points.length !== 4 || !points.every(Number.isFinite)) {
+  if (!points || offset + 4 > points.length) {
     return amount;
   }
   if (amount === 0 || amount === 1) {
     return amount;
   }
-  const [firstX, firstY, secondX, secondY] = points;
+  const firstX = points[offset];
+  const firstY = points[offset + 1];
+  const secondX = points[offset + 2];
+  const secondY = points[offset + 3];
+  if (
+    !Number.isFinite(firstX) ||
+    !Number.isFinite(firstY) ||
+    !Number.isFinite(secondX) ||
+    !Number.isFinite(secondY)
+  ) {
+    return amount;
+  }
   /** Cubic interpolation of one axis at the resolved parameter. */
   const component = (parameter: number, first: number, second: number): number =>
     3 * parameter * (1 - parameter) ** 2 * first +
