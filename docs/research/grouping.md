@@ -94,7 +94,7 @@ Available sort fields are created, updated, name, composer, and charter; group i
 ### 4.1 Documentation
 
 - Architecture documentation identifies the library owner and the RPE, PhiEditer, and external import owners, but does not define group semantics or library-page interaction: [architecture.md](../architecture.md#L80-L105).
-- The backup research document includes `group` in a snapshot example, but focuses on backup/restore rather than grouping behavior: [library-backup-snapshots-zh.md](library-backup-snapshots-zh.md#L160-L215).
+- The backup manifest includes `group` in each project snapshot, but the backup implementation focuses on persistence rather than grouping behavior: [format.go](../../src/backend/internal/librarybackup/format.go#L91-L115).
 - The SDK guide exposes group in list/create/update shapes: [llm-guide.md](../../sdk/llm-guide.md#L454-L483), [llm-guide.md](../../sdk/llm-guide.md#L528-L545). It does not expose a groups API.
 - No existing document found in the repository describes the library grouping product behavior. This file is the first focused record of the current state.
 
