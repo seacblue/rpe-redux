@@ -61,6 +61,10 @@ export default {
   "system.library.nonJsonResponse":
     "The local service answered with something other than JSON (HTTP {status})",
   "system.library.requestFailed": "The request failed (HTTP {status})",
+  "system.library.requestFailedGeneric": "The local library could not complete the request.",
+  "system.library.notFound": "The requested local library item was not found.",
+  "system.library.invalidRequest": "The local library rejected the request.",
+  "system.library.unavailable": "The local library is currently unavailable.",
   "system.library.storageError":
     "Local data storage failed, possibly because the disk is full or the database is not writable. Export a backup and check the disk and permissions.",
   "system.library.notRunning": "The local service is not running",

@@ -8,6 +8,7 @@
  * cannot overwrite the official/PEC original.
  */
 import { localService } from "../../../core/global/library/service.ts";
+import type { FailureContext } from "../../../core/contracts/failure.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
 import { catalogIdFor, rememberCatalogPath } from "../../../core/global/library/libraryCatalog.ts";
 import { parseExternalChartText } from "../../../core/global/chart/formats/external.ts";
@@ -30,7 +31,7 @@ import {
 
 /** Host callbacks the external import needs from the mounted home runtime. */
 export interface ExternalImportDeps {
-  reportError(error: unknown): void;
+  reportError(error: unknown, context?: FailureContext): void;
   refresh(): Promise<void>;
 }
 
@@ -399,7 +400,7 @@ export async function importExternalPath(
         try {
           await deps.refresh();
         } catch (error) {
-          deps.reportError(error);
+          deps.reportError(error, { operation: "welcome.import.external.refresh" });
         }
         const source = t("workspace.welcome.external.title");
         const issues: ImportIssue[] = warnings.map((detail) => ({

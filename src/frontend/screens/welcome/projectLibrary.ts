@@ -6,6 +6,7 @@
  */
 import type { LibraryProjectSummary } from "../../../core/global/library/client.ts";
 import { dropRoute, type DropClassification } from "../../../core/global/document/dropIntake.ts";
+import type { FailureContext } from "../../../core/contracts/failure.ts";
 import { HomeProjectCardsAdapter } from "./homeProjectCards.ts";
 import { LibraryProjectsController } from "./libraryProjectsController.ts";
 import type { LibrarySort } from "./librarySort.ts";
@@ -52,9 +53,15 @@ interface ProjectHomeOptions {
    * Returns false when the path is not a supported external format.
    */
   importExternalChart?: (path: string) => Promise<boolean>;
+  /** Ask for an RPE root and run the confirmed migration. */
+  chooseRpeImport?: () => Promise<unknown>;
+  /** Ask for a PhiEditer root and run the confirmed import. */
+  choosePeImport?: () => Promise<unknown>;
+  /** Ask for an official/PEC chart and import it. */
+  chooseExternalImport?: () => Promise<unknown>;
   /** Write a library project to a chart file chosen by the user. */
   exportProject: (id: string) => Promise<unknown>;
-  reportError: (error: unknown) => void;
+  reportError: (error: unknown, context?: FailureContext) => void;
   /** Called after a rename/patch so the caller can repaint its own state. */
   changed?: (project: LibraryProjectSummary) => void;
 }
@@ -83,7 +90,10 @@ export class ProjectHome {
   private readonly importSkin?: (item: DropClassification) => Promise<unknown>;
   private readonly unsupportedDrop?: (item: DropClassification) => void;
   private readonly importExternalChart?: (path: string) => Promise<boolean>;
-  private readonly reportError: (error: unknown) => void;
+  private readonly chooseRpe?: () => Promise<unknown>;
+  private readonly choosePe?: () => Promise<unknown>;
+  private readonly chooseExternal?: () => Promise<unknown>;
+  private readonly reportError: (error: unknown, context?: FailureContext) => void;
 
   /** Wires the card adapter and the project controller to the host callbacks. */
   constructor({
@@ -99,6 +109,9 @@ export class ProjectHome {
     importSkin,
     unsupportedDrop,
     importExternalChart,
+    chooseRpeImport,
+    choosePeImport,
+    chooseExternalImport,
     exportProject,
     reportError,
     changed,
@@ -115,6 +128,9 @@ export class ProjectHome {
     this.importSkin = importSkin;
     this.unsupportedDrop = unsupportedDrop;
     this.importExternalChart = importExternalChart;
+    this.chooseRpe = chooseRpeImport;
+    this.choosePe = choosePeImport;
+    this.chooseExternal = chooseExternalImport;
     this.reportError = reportError;
     this.cards = new HomeProjectCardsAdapter({
       onOpenProject: (id) => {
@@ -152,6 +168,32 @@ export class ProjectHome {
     await this.library.refresh();
   }
 
+  /** Ask for an RPE root and import it; failures go through the shared reporter. */
+  async chooseRpeImport(): Promise<void> {
+    try {
+      await this.chooseRpe?.();
+    } catch (error) {
+      this.reportError(error, { operation: "welcome.import.rpe" });
+    }
+  }
+
+  /** Ask for a PhiEditer root and import it; failures go through the reporter. */
+  async choosePeImport(): Promise<void> {
+    try {
+      await this.choosePe?.();
+    } catch (error) {
+      this.reportError(error, { operation: "welcome.import.pe" });
+    }
+  }
+
+  /** Ask for an official/PEC chart and import it; failures go through the reporter. */
+  async chooseExternalImport(): Promise<void> {
+    try {
+      await this.chooseExternal?.();
+    } catch (error) {
+      this.reportError(error, { operation: "welcome.import.external" });
+    }
+  }
   /**
    * Convert one external chart package and open the project it imported.
    *
@@ -180,7 +222,7 @@ export class ProjectHome {
       try {
         classified = await this.classifyPaths(paths);
       } catch (error) {
-        this.reportError(error);
+        this.reportError(error, { operation: "welcome.import.classify" });
       }
     }
     const imported: string[] = [];
@@ -190,14 +232,14 @@ export class ProjectHome {
         const ids = item ? await this.importClassified(item) : await this.importSequentially(path);
         imported.push(...ids);
       } catch (error) {
-        this.reportError(error);
+        this.reportError(error, { operation: "welcome.import.drop" });
       }
     }
     if (imported.length) {
       try {
         await this.refresh();
       } catch (error) {
-        this.reportError(error);
+        this.reportError(error, { operation: "welcome.import.refresh" });
       }
     }
     return imported;

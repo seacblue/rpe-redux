@@ -178,7 +178,7 @@ async function migratePeScan(
           try {
             await deps.refresh();
           } catch (error) {
-            deps.reportError(error);
+            deps.reportError(error, { operation: "welcome.import.pe.refresh" });
           }
           const source = t("workspace.welcome.pe.title");
           const reportAction = issues.length

@@ -38,6 +38,43 @@ pub struct RuntimePorts {
     pub collab_port: u16,
 }
 
+/// Structured failure returned when the desktop cannot make the Go service
+/// ready. The frontend keeps `message` for diagnostics and routes by `code`.
+#[derive(Clone, Debug, Serialize)]
+pub struct BackendStartupFailure {
+    pub code: String,
+    pub message: String,
+    pub source: &'static str,
+    pub retryable: bool,
+}
+
+/// Classify a native startup error without exposing its text as user-facing
+/// policy. The original message remains available in the startup report.
+fn classify_startup_error(message: String) -> BackendStartupFailure {
+    let lower = message.to_lowercase();
+    let (code, retryable) = if lower.contains("already in use")
+        || lower.contains("address in use")
+        || lower.contains("port") && lower.contains("bound")
+    {
+        ("backend_port_conflict", true)
+    } else if lower.contains("timed out") || lower.contains("health check") {
+        ("backend_timeout", true)
+    } else if lower.contains("sqlite")
+        || lower.contains("database")
+        || lower.contains("library schema")
+    {
+        ("database_open", false)
+    } else {
+        ("backend_startup", true)
+    };
+    BackendStartupFailure {
+        code: code.to_owned(),
+        message,
+        source: "native",
+        retryable,
+    }
+}
+
 /// Missing or legacy configuration files use the standalone room port.
 fn default_collab_port() -> u16 {
     DEFAULT_COLLAB_PORT
@@ -893,8 +930,8 @@ fn post_json(addr: SocketAddr, path: &str, body: &serde_json::Value) -> Option<s
 
 /// The loading screen awaits this command. Retrying restarts an exited sidecar.
 #[tauri::command]
-pub async fn start_backend(app: AppHandle) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+pub async fn start_backend(app: AppHandle) -> Result<(), BackendStartupFailure> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         start(&app)?;
         let port = read_runtime_ports_file(&app)?.backend_port;
         let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
@@ -924,7 +961,8 @@ pub async fn start_backend(app: AppHandle) -> Result<(), String> {
         }
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|error| classify_startup_error(error.to_string()))?;
+    result.map_err(classify_startup_error)
 }
 
 /// Stop the sidecar on exit when no other frontend is still using it. The

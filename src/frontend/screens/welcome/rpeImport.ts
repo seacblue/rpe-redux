@@ -8,6 +8,7 @@
  * the rest.
  */
 import { applyRpeMigrationPlan } from "../../../core/migration/apply.ts";
+import type { FailureContext } from "../../../core/contracts/failure.ts";
 import {
   createRpeMigrationPlan,
   filterRpeMigrationPlan,
@@ -32,7 +33,7 @@ import { readRpeFolder } from "../../platform/desktop/rpeFolder.ts";
 /** Host callbacks the migration needs from the mounted editor. */
 export interface RpeImportDeps {
   readonly documents: TauriDocumentStore | null;
-  reportError(error: unknown): void;
+  reportError(error: unknown, context?: FailureContext): void;
   refresh(): Promise<void>;
 }
 
@@ -190,7 +191,7 @@ export async function migrateRpeScan(
           try {
             await deps.refresh();
           } catch (error) {
-            deps.reportError(error);
+            deps.reportError(error, { operation: "welcome.import.rpe.refresh" });
           }
           summary = Object.freeze({
             charts: imported,

@@ -12,7 +12,12 @@ import { PREFERENCE_SECTIONS, preferences } from "../../state/preferences.ts";
 import { browserDevPorts, getRuntimePorts } from "../../platform/runtimePorts.ts";
 import { isDesktop } from "../../platform/environment.ts";
 import { cachedProjectAssetUrl } from "./assetUrlCache.ts";
-import { LocalLibraryError, request, type RequestOptions } from "./http.ts";
+import {
+  libraryErrorFromResponse,
+  LocalLibraryError,
+  request,
+  type RequestOptions,
+} from "./http.ts";
 import { ChartFrameDecoder, decodeLinesFrame } from "../chart/streaming/chartStreamCodec.ts";
 import { CHART_FRAME } from "../chart/streaming/chartStreamTypes.ts";
 import type { LibraryViewState } from "./types.ts";
@@ -578,10 +583,7 @@ export class LocalLibrary {
       );
     }
     if (!response.ok) {
-      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
-        status: response.status,
-        code: "chart_stream",
-      });
+      throw await libraryErrorFromResponse(response, "chart_stream");
     }
     if (!response.body) {
       throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
@@ -636,10 +638,7 @@ export class LocalLibrary {
       );
     }
     if (!response.ok) {
-      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
-        status: response.status,
-        code: "chart_lines",
-      });
+      throw await libraryErrorFromResponse(response, "chart_lines");
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     const frame = new ChartFrameDecoder()
@@ -734,10 +733,7 @@ export class LocalLibrary {
       headers: { "x-redux-client": "1" },
     });
     if (!response.ok) {
-      throw new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
-        status: response.status,
-        code: "asset_request_failed",
-      });
+      throw await libraryErrorFromResponse(response, "asset_request_failed");
     }
     return new Uint8Array(await response.arrayBuffer());
   }
@@ -959,14 +955,7 @@ export class LocalLibrary {
         body: chunk,
       });
       if (!response.ok) {
-        let message = t("system.library.requestFailed", { status: response.status });
-        try {
-          const payload = (await response.json()) as { error?: { message?: string } };
-          message = payload.error?.message ?? message;
-        } catch {
-          // Keep the status-based message when the body is not JSON.
-        }
-        throw new LocalLibraryError(message, { status: response.status, code: "commit_chunk" });
+        throw await libraryErrorFromResponse(response, "commit_chunk");
       }
     }
     return request<LibraryCommitResult>(
