@@ -6,6 +6,7 @@
  * owns endpoint shapes; business callers keep importing that class.
  */
 import { t } from "../../../i18n/index.ts";
+import type { FailureSource } from "../../contracts/failure.ts";
 import { beginBackendTrace } from "../../diagnostics/backendTrace.ts";
 import { scheduleServiceRequest } from "./requestQueue.ts";
 
@@ -29,6 +30,8 @@ export class LocalLibraryError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: unknown;
+  readonly source: FailureSource;
+  readonly retryable?: boolean;
 
   /**
    * Build the error.
@@ -42,14 +45,71 @@ export class LocalLibraryError extends Error {
       status = 0,
       code = "transport",
       details,
-    }: { status?: number; code?: string; details?: unknown } = {},
+      source = "backend",
+      retryable,
+    }: {
+      status?: number;
+      code?: string;
+      details?: unknown;
+      source?: FailureSource;
+      retryable?: boolean;
+    } = {},
   ) {
     super(message);
     this.name = "LocalLibraryError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.source = source;
+    this.retryable = retryable;
   }
+}
+
+interface ServiceErrorPayload {
+  message?: string;
+  code?: string;
+  details?: unknown;
+  source?: FailureSource;
+  retryable?: boolean;
+}
+
+/** Decode one failed service response into the shared local-library envelope. */
+export async function libraryErrorFromResponse(
+  response: Response,
+  fallbackCode = "http_error",
+): Promise<LocalLibraryError> {
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    return new LocalLibraryError(t("system.library.requestFailed", { status: response.status }), {
+      status: response.status,
+      code: "bad_response",
+    });
+  }
+  let payload: { error?: ServiceErrorPayload } & Record<string, unknown>;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    return new LocalLibraryError(t("system.library.nonJsonResponse", { status: response.status }), {
+      status: response.status,
+      code: "bad_response",
+    });
+  }
+  const error = payload.error;
+  const code = error?.code ?? fallbackCode;
+  return new LocalLibraryError(
+    code === "storage_error"
+      ? t("system.library.storageError")
+      : (error?.message ?? t("system.library.requestFailed", { status: response.status })),
+    {
+      status: response.status,
+      code,
+      details: error?.details,
+      source: error?.source,
+      retryable: error?.retryable,
+    },
+  );
 }
 
 /**
@@ -98,7 +158,7 @@ async function performRequest<T>(
     });
   }
   let payload: {
-    error?: { message?: string; code?: string; details?: unknown };
+    error?: ServiceErrorPayload;
   } & Record<string, unknown>;
   try {
     payload = text ? JSON.parse(text) : {};
@@ -125,6 +185,8 @@ async function performRequest<T>(
         status: response.status,
         code,
         details: payload?.error?.details,
+        source: payload?.error?.source,
+        retryable: payload?.error?.retryable,
       },
     );
   }

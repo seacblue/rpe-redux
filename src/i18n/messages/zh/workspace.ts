@@ -177,6 +177,10 @@ export default {
   "workspace.welcome.rpe.desktopOnly": "RPE 导入仅在桌面应用中可用。",
   "workspace.welcome.rpe.notFound":
     "没有找到包含 PhiEdit.exe 和 Resources 的 RPE 文件夹、设置、快捷键或谱面目录。",
+  "workspace.welcome.pe.title": "从 PhiEdit 导入",
+  "workspace.welcome.pe.pickFolder": "选择 PhiEditer 安装文件夹",
+  "workspace.welcome.pe.desktopOnly": "PhiEdit 导入仅在桌面应用中可用。",
+  "workspace.welcome.pe.notFound": "没有找到 PhiEditer 谱面文件夹。",
   "workspace.welcome.external.title": "导入官谱或 PhiEdit 谱面",
   "workspace.welcome.external.importing": "正在导入 {name}…",
   "workspace.welcome.external.done": "已导入 {name}，{warnings} 条警告。",

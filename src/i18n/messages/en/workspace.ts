@@ -152,7 +152,6 @@ export default {
   "workspace.history.redoUnavailable": "Redo is unavailable while editing a room.",
   "workspace.history.codeCell": "Code cell",
   "workspace.history.discarded": "Snapshot discarded",
-
   "workspace.welcome.settings": "Settings",
   "workspace.welcome.more": "More",
   "workspace.welcome.moreMenu": "More actions",
@@ -190,6 +189,10 @@ export default {
   "workspace.welcome.rpe.desktopOnly": "RPE import is available in the desktop application.",
   "workspace.welcome.rpe.notFound":
     "No PhiEdit.exe with a Resources folder, RPE settings, hotkeys, or chart folders were found.",
+  "workspace.welcome.pe.title": "Import from PhiEdit",
+  "workspace.welcome.pe.pickFolder": "Choose a PhiEditer installation folder",
+  "workspace.welcome.pe.desktopOnly": "PhiEdit imports are available in the desktop application.",
+  "workspace.welcome.pe.notFound": "No PhiEditer chart folder was found.",
   "workspace.welcome.external.title": "Import official or PhiEdit chart",
   "workspace.welcome.external.importing": "Importing {name}…",
   "workspace.welcome.external.done": "Imported {name} with {warnings} warning(s).",

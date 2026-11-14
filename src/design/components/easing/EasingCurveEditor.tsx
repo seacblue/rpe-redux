@@ -48,6 +48,9 @@ export interface EasingCurveEditorProps {
   bezierPoints: readonly number[];
   easingLeft: number;
   easingRight: number;
+  /** Optional numeric event endpoints used to orient the value axis. */
+  startValue?: number;
+  endValue?: number;
   /** Apply one control's change to the owning domain. */
   onChange(patch: EasingCurvePatch): void;
   /** Publish a transient control change without committing the owning domain. */
@@ -114,6 +117,8 @@ export function EasingCurveEditor({
   bezierPoints,
   easingLeft,
   easingRight,
+  startValue,
+  endValue,
   onChange,
   onPreview,
   easingLabel,
@@ -141,6 +146,8 @@ export function EasingCurveEditor({
     easingType,
     easingLeft,
     easingRight,
+    startValue,
+    endValue,
   };
   // BezierEditor owns the interactive curve in Bezier mode. Rendering the
   // generic preview as well duplicated the curve and made the lower canvas

@@ -36,7 +36,6 @@ export function BrandLogo() {
       className="redux-titlebar-brand"
       aria-label={label}
       aria-disabled={atHome}
-      data-tip-title={atHome ? undefined : label}
       tabIndex={atHome ? -1 : undefined}
       onClick={() => {
         if (!atHome) {

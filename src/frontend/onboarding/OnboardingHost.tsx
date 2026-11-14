@@ -50,7 +50,6 @@ import {
 import { getOnboardingAnchor, useOnboardingAnchorVersion } from "./anchors.ts";
 import { drawerPaneIdFromTarget, holdDrawerPane } from "../chrome/drawer/drawerPanes.ts";
 import { openInspector } from "../screens/editor/inspector/controller.ts";
-import { openWelcomeImportDialog } from "../screens/welcome/welcomeImportDialog.ts";
 import {
   getHelpTutorial,
   getHelpTutorials,
@@ -309,9 +308,6 @@ export function OnboardingHost() {
       stepId: launch.stepId ?? tutorial?.steps[0]?.id ?? "start",
       ...(tutorial ? { tutorialId: tutorial.id } : {}),
     });
-    if (launch.choice === "rpe" && launch.openImportDialog === true) {
-      openWelcomeImportDialog();
-    }
   }, []);
 
   const choose = (next: OnboardingChoice) => {
@@ -323,7 +319,7 @@ export function OnboardingHost() {
       setChoice(null);
       return;
     }
-    beginTour({ choice: next, firstRun: true, openImportDialog: next === "rpe" });
+    beginTour({ choice: next, firstRun: true });
   };
 
   const next = () => {
