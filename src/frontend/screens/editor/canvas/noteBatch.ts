@@ -67,6 +67,7 @@ export class NoteBatch {
   private readonly canvas: HTMLCanvasElement;
   private readonly diagnostics: NoteBatchDiagnostics;
   private readonly backend: WebGlRenderBackend | null;
+  private readonly removeSharedLifecycle: (() => void) | null;
   private get gl(): WebGL2RenderingContext | null {
     return this.backend?.gl as WebGL2RenderingContext | null;
   }
@@ -121,17 +122,29 @@ export class NoteBatch {
   private prewarmIdle = false;
   private contextLost = false;
   /** Create the batch for one canvas; without WebGL2 every submit is a no-op. */
-  constructor(canvas: HTMLCanvasElement, surface: RenderSurface = "preview") {
+  constructor(
+    canvas: HTMLCanvasElement,
+    surface: RenderSurface = "preview",
+    sharedBackend: WebGlRenderBackend | null = null,
+  ) {
     this.canvas = canvas;
     this.diagnostics = new NoteBatchDiagnostics(surface);
-    this.backend = tryCreateWebGl2Backend(
-      canvas,
-      { alpha: true, antialias: false, depth: false },
-      {
-        onLost: this.handleContextLost,
-        onRestored: this.handleContextRestored,
-      },
-    );
+    this.backend =
+      sharedBackend ??
+      tryCreateWebGl2Backend(
+        canvas,
+        { alpha: true, antialias: false, depth: false },
+        {
+          onLost: this.handleContextLost,
+          onRestored: this.handleContextRestored,
+        },
+      );
+    this.removeSharedLifecycle = sharedBackend
+      ? sharedBackend.addLifecycle({
+          onLost: this.handleContextLost,
+          onRestored: this.handleContextRestored,
+        })
+      : null;
     this.reportState();
     if (!this.backend) {
       return;
@@ -696,6 +709,30 @@ export class NoteBatch {
 
   /** Upload the queued instance data and draw every group in layer order. */
   finish(): void {
+    if (this.gl && !this.isContextLost()) {
+      this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    }
+    this.submit(null, this.width, this.height);
+  }
+
+  /** Draw queued notes into a framebuffer owned by the shared shader context. */
+  finishToFramebuffer(
+    gl: WebGL2RenderingContext,
+    framebuffer: WebGLFramebuffer,
+    width: number,
+    height: number,
+  ): boolean {
+    if (this.gl !== gl) {
+      return false;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.viewport(0, 0, width, height);
+    return this.submit(framebuffer, width, height);
+  }
+
+  /** Submit the current instance groups to the selected framebuffer. */
+  private submit(_framebuffer: WebGLFramebuffer | null, width: number, height: number): boolean {
     if (!this.active || this.isContextLost() || !this.gl || !this.program || !this.instanceBuffer) {
       this.diagnostics.submit({
         groupCount: 0,
@@ -706,9 +743,11 @@ export class NoteBatch {
         textureBinds: 0,
         maxInstancesPerGroup: 0,
       });
-      return;
+      return false;
     }
     const gl = this.gl;
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.program);
     gl.activeTexture(gl.TEXTURE0);
     if (this.resolution) {
@@ -738,12 +777,16 @@ export class NoteBatch {
     this.diagnostics.submit(result.metrics);
     gl.disable(gl.SCISSOR_TEST);
     this.reportState();
+    return true;
   }
 
   /** Release every GL object and cached texture owned by the batch. */
   dispose(): void {
+    this.removeSharedLifecycle?.();
     if (!this.gl) {
-      this.backend?.dispose();
+      if (!this.removeSharedLifecycle) {
+        this.backend?.dispose();
+      }
       return;
     }
     if (!this.isContextLost()) {
@@ -770,7 +813,9 @@ export class NoteBatch {
     this.instanceBuffer = null;
     this.descriptorSkin = null;
     this.active = false;
-    this.backend?.dispose();
+    if (!this.removeSharedLifecycle) {
+      this.backend?.dispose();
+    }
     this.reportState();
   }
 

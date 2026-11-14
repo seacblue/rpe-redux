@@ -1,6 +1,6 @@
 /** Submits retained preview shader-composite packets to the shader pipeline. */
 import type { RenderDevice } from "../../../canvas/renderGraph.ts";
-import type { ShaderPipeline, ShaderPass, ShaderView } from "./shaderPipeline.ts";
+import type { ShaderInputLayer, ShaderPipeline, ShaderPass, ShaderView } from "./shaderPipeline.ts";
 
 /** Complete shader composite request for one preview frame. */
 export interface ShaderCompositeRenderPacket {
@@ -12,6 +12,7 @@ export interface ShaderCompositeRenderPacket {
   readonly viewport?: ShaderView | null;
   readonly sourceRevision?: number;
   readonly overlayCanvas?: HTMLCanvasElement | null;
+  readonly inputLayer?: ShaderInputLayer | null;
 }
 
 /** Render device that owns the shader pipeline submission seam. */
@@ -25,6 +26,18 @@ export class ShaderCompositeRenderDevice implements RenderDevice<ShaderComposite
 
   /** Submit one shader packet and return whether a visible pass was rendered. */
   render(packet: ShaderCompositeRenderPacket): boolean {
+    if (!packet.inputLayer) {
+      return this.pipeline.render(
+        packet.sourceCanvas,
+        packet.targetCanvas,
+        packet.passes,
+        packet.seconds,
+        packet.sourceFor,
+        packet.viewport,
+        packet.sourceRevision,
+        packet.overlayCanvas,
+      );
+    }
     return this.pipeline.render(
       packet.sourceCanvas,
       packet.targetCanvas,
@@ -34,6 +47,7 @@ export class ShaderCompositeRenderDevice implements RenderDevice<ShaderComposite
       packet.viewport,
       packet.sourceRevision,
       packet.overlayCanvas,
+      packet.inputLayer,
     );
   }
 

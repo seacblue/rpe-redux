@@ -112,6 +112,7 @@ export class Preview {
   /** Note heads by `type * 2 + highlight`, refreshed at the start of each paint. */
   noteTextures: NoteTextureTable = EMPTY_TEXTURES;
   private readonly noteBatchCanvas: HTMLCanvasElement;
+  readonly sharedNoteBatch: boolean;
   private readonly noiseAreas: NoiseAreaRenderer;
   /** Host notification for an unavailable detailed noise renderer. */
   noiseError?: () => void;
@@ -263,7 +264,11 @@ export class Preview {
     this.cameraTracker.reset();
     this.invalidateFrame();
     this.geometryCache.clear();
-    this.shaderCompositeDevice.dispose();
+    if (this.sharedNoteBatch) {
+      this.shaderPipeline.resetChartResources();
+    } else {
+      this.shaderCompositeDevice.dispose();
+    }
     this.shaderPrewarmChart = null;
     this.shaderPrewarmRevision = -1;
     this.noteBatch.clear();
@@ -547,6 +552,7 @@ export class Preview {
   /** Releases GPU, canvas, and noise resources owned by the preview. */
   dispose(): void {
     this.clearDocument();
+    this.shaderCompositeDevice.dispose();
     this.noiseAreas.dispose();
     this.noteBatch.dispose();
     this.display.dispose();
@@ -555,13 +561,25 @@ export class Preview {
   /** Creates the preview for `canvas`, optionally reusing caller-provided layers. */
   constructor(canvas: HTMLCanvasElement, layers: PreviewCanvasLayers | null = null) {
     this.canvas = canvas;
+    this.shaderCanvas = layers?.shader ?? null;
     this.scene = new SceneRuntime();
     this.simultaneousCache = new SimultaneousNotesCache();
     this.shaderRuntime = new ShaderRuntime(() => this.invalidate?.(), readShaderSource);
-    this.shaderPipeline = new ShaderPipeline(() => this.invalidate?.());
+    this.shaderPipeline = new ShaderPipeline(() => this.invalidate?.(), this.shaderCanvas);
     this.shaderCompositeDevice = new ShaderCompositeRenderDevice(this.shaderPipeline);
-    this.noteBatchCanvas = layers?.noteBatch ?? document.createElement("canvas");
-    this.noteBatch = new NoteBatch(this.noteBatchCanvas, "preview");
+    const sharedBackend = this.shaderPipeline.sharedBackend();
+    this.sharedNoteBatch = Boolean(
+      this.shaderCanvas && sharedBackend && this.shaderPipeline.webgl2,
+    );
+    this.noteBatchCanvas =
+      this.sharedNoteBatch && this.shaderCanvas
+        ? this.shaderCanvas
+        : (layers?.noteBatch ?? document.createElement("canvas"));
+    this.noteBatch = new NoteBatch(
+      this.noteBatchCanvas,
+      "preview",
+      this.sharedNoteBatch ? sharedBackend : null,
+    );
     this.noiseAreas = new NoiseAreaRenderer(
       () => {
         this.invalidateFrame();
@@ -606,7 +624,6 @@ export class Preview {
     this.samplingFocus = null;
     this.samplingAlpha = null;
     this.overlayCanvas = layers?.overlay ?? null;
-    this.shaderCanvas = layers?.shader ?? null;
   }
 
   /** Queues one deferred paint for the next task turn. */
@@ -912,25 +929,38 @@ export class Preview {
     }
     const effectsMs = performance.now() - effectsStarted;
     const compositeStarted = performance.now();
+    const shaderInputEligible =
+      this.sharedNoteBatch && this.applyShaders && frame.shaderEffects.length > 0;
+    if (!shaderInputEligible) {
+      this.noteBatch.finish();
+    }
     this.noiseComposited =
       this.soloLine === null &&
       this.noiseAreas.draw(
         frame,
         this.canvas,
-        this.noteBatch.isActive() ? this.noteBatchCanvas : null,
+        shaderInputEligible ? null : this.noteBatch.isActive() ? this.noteBatchCanvas : null,
         this.detailedNoise ?? detailedNoiseRendering.get(),
+        shaderInputEligible
+          ? () => {
+              this.noteBatch.finish();
+              return this.noteBatchCanvas;
+            }
+          : undefined,
       );
-    // Keep the GPU note layer separate until the shader upload. The shader
-    // staging canvas can fold it into the source without repainting the primary
-    // canvas, and the display adapter keeps it visible when the shader fails.
+    const shaderInput =
+      !this.noiseComposited && shaderInputEligible && this.noteBatch.isActive()
+        ? this.noteBatch
+        : null;
     const shaderOverlay =
       !this.noiseComposited &&
+      !this.sharedNoteBatch &&
       this.applyShaders &&
       frame.shaderEffects.length > 0 &&
       this.noteBatch.isActive()
         ? this.noteBatchCanvas
         : null;
-    drawComposite(this, frame, shaderOverlay);
+    drawComposite(this, frame, shaderOverlay, shaderInput);
     this.images?.trim?.();
     return {
       drawStats,

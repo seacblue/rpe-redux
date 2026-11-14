@@ -112,6 +112,7 @@ export class WebGlRenderBackend {
   private readonly uninstallLifecycle: () => void;
   private frame: RenderSurfaceFrame | null = null;
   private lost = false;
+  private readonly lifecycles = new Set<RenderContextLifecycle>();
 
   /** Creates a WebGL surface and installs the browser context lifecycle. */
   constructor(
@@ -125,14 +126,19 @@ export class WebGlRenderBackend {
       throw new Error("Cannot create WebGL render surface");
     }
     this.gl = gl;
+    this.lifecycles.add(lifecycle);
     const onLost = (event: Event): void => {
       event.preventDefault();
       this.lost = true;
-      lifecycle.onLost?.();
+      for (const entry of this.lifecycles) {
+        entry.onLost?.();
+      }
     };
     const onRestored = (): void => {
       this.lost = false;
-      lifecycle.onRestored?.();
+      for (const entry of this.lifecycles) {
+        entry.onRestored?.();
+      }
     };
     canvas.addEventListener("webglcontextlost", onLost);
     canvas.addEventListener("webglcontextrestored", onRestored);
@@ -140,6 +146,12 @@ export class WebGlRenderBackend {
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
     };
+  }
+
+  /** Attach another resource owner to this context's loss and restore events. */
+  addLifecycle(lifecycle: RenderContextLifecycle): () => void {
+    this.lifecycles.add(lifecycle);
+    return () => this.lifecycles.delete(lifecycle);
   }
 
   /** Whether GPU commands are safe to submit. */
@@ -173,6 +185,7 @@ export class WebGlRenderBackend {
   /** Release event listeners and forget surface state. */
   dispose(): void {
     this.uninstallLifecycle();
+    this.lifecycles.clear();
     this.frame = null;
     this.lost = true;
   }

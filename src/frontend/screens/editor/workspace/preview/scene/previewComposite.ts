@@ -8,9 +8,11 @@ import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import type { PreviewGuideSurface } from "../drawing/previewGuides.ts";
 import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
 import type { ShaderPipeline } from "../render/shaderPipeline.ts";
+import type { ShaderInputLayer } from "../render/shaderPipeline.ts";
 import type { ShaderCompositeRenderDevice } from "../render/shaderCompositeRenderDevice.ts";
 import type { PreviewFrame, PreviewShaderEffect } from "./previewTypes.ts";
 import { PreviewOverlayRenderDevice } from "./previewOverlayRenderDevice.ts";
+import type { NoteBatch } from "../../../canvas/noteBatch.ts";
 
 import {
   getEditorRegionSnapshot,
@@ -34,6 +36,8 @@ export interface PreviewCompositeSurface extends PreviewGuideSurface {
   forceOpaque?: boolean;
   duration?: number | null;
   completionTimes: number[];
+  noteBatch: NoteBatch;
+  sharedNoteBatch: boolean;
 }
 
 /** Draw the game UI and judge-line guides onto one preview layer. */
@@ -44,14 +48,14 @@ const overlayDevice = new PreviewOverlayRenderDevice();
  * layer opacity.
  *
  * The canvases clip themselves to the aspect frame, so this stage never paints
- * a mask over the surrounding stage. `shaderOverlay` is a separate GPU layer the
- * shader upload must fold in; when it is present the note batch stays hidden
- * only after the pass succeeds.
+ * a mask over the surrounding stage. `shaderInput` is the shared-context note
+ * layer; legacy `shaderOverlay` remains only for non-shared fallback surfaces.
  */
 export function drawComposite(
   surface: PreviewCompositeSurface,
   frame: PreviewFrame,
   shaderOverlay: HTMLCanvasElement | null = null,
+  shaderInput: ShaderInputLayer | null = null,
 ): void {
   const { context, seconds, viewport } = frame;
   // `Preview.draw` compiles the shader runtime before sampling `frame.shaderEffects`,
@@ -80,9 +84,13 @@ export function drawComposite(
       viewport,
       sourceRevision: frame.shaderSourceRevision,
       overlayCanvas: shaderOverlay,
+      inputLayer: shaderInput,
     });
     if (surface.shaderCanvas) {
       surface.display.setShaderVisible(shaderRendered);
+    }
+    if (!shaderRendered && shaderInput) {
+      surface.noteBatch.finish();
     }
   } else if (surface.shaderCanvas) {
     surface.display.setShaderVisible(false);
@@ -101,8 +109,13 @@ export function drawComposite(
   surface.display.setShaderOpacity(shaderRendered ? workspaceOpacity : 0);
   surface.display.setPrimaryOpacity(shaderRendered ? 0 : workspaceOpacity);
   surface.display.setNoteBatchOpacity(
-    shaderRendered || surface.noiseComposited ? 0 : workspaceOpacity,
+    surface.sharedNoteBatch || shaderRendered || surface.noiseComposited ? 0 : workspaceOpacity,
   );
+  if (surface.sharedNoteBatch) {
+    const noteLayerVisible = !shaderRendered && surface.noteBatch.isActive();
+    surface.display.setShaderVisible(shaderRendered || noteLayerVisible);
+    surface.display.setShaderOpacity(shaderRendered || noteLayerVisible ? workspaceOpacity : 0);
+  }
   surface.display.setOverlayOpacity(workspaceOpacity);
   if (!shaderRendered && shaderEffects.length && !globalShader) {
     overlayDevice.render({

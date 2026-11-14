@@ -202,6 +202,7 @@ export class NoiseAreaRenderer {
     primary: HTMLCanvasElement,
     notes: HTMLCanvasElement | null,
     detailed: boolean,
+    prepareNotes?: () => HTMLCanvasElement | null,
   ): boolean {
     const areas = this.areaSources;
     areas.length = 0;
@@ -309,8 +310,9 @@ export class NoiseAreaRenderer {
       sw = frame.viewport.width * ratio,
       sh = frame.viewport.height * ratio;
     scene.drawImage(primary, sx, sy, sw, sh, 0, 0, width, height);
-    if (notes) {
-      scene.drawImage(notes, sx, sy, sw, sh, 0, 0, width, height);
+    const preparedNotes = notes ?? prepareNotes?.() ?? null;
+    if (preparedNotes) {
+      scene.drawImage(preparedNotes, sx, sy, sw, sh, 0, 0, width, height);
     }
     let rendered: HTMLCanvasElement | null = null;
     if (detailed) {

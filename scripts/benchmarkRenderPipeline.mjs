@@ -182,6 +182,7 @@ function fakeShaderDevice(counters) {
     source,
     target,
     overlay,
+    pipeline,
     restore() {
       globalThis.document = previousDocument;
       globalThis.devicePixelRatio = previousDevicePixelRatio;
@@ -189,10 +190,26 @@ function fakeShaderDevice(counters) {
   };
 }
 
-function benchmarkShader(overlayEnabled, reuseUpload = false) {
-  const counters = { drawImage: 0, clearRect: 0, texImage2D: 0, drawArrays: 0, bufferSubData: 0 };
+function benchmarkShader(overlayEnabled, reuseUpload = false, sharedInput = false) {
+  const counters = {
+    drawImage: 0,
+    clearRect: 0,
+    texImage2D: 0,
+    drawArrays: 0,
+    bufferSubData: 0,
+    inputLayerDraws: 0,
+  };
   const shader = fakeShaderDevice(counters);
+  shader.pipeline.webgl2 = sharedInput;
   shader.packet.overlayCanvas = overlayEnabled ? shader.overlay : null;
+  shader.packet.inputLayer = sharedInput
+    ? {
+        finishToFramebuffer() {
+          counters.inputLayerDraws += 1;
+          return true;
+        },
+      }
+    : null;
   const durations = [];
   try {
     for (let warmup = 0; warmup < 20; warmup += 1) {
@@ -203,6 +220,7 @@ function benchmarkShader(overlayEnabled, reuseUpload = false) {
     counters.drawImage = 0;
     counters.texImage2D = 0;
     counters.drawArrays = 0;
+    counters.inputLayerDraws = 0;
     for (let frame = 0; frame < frames; frame += 1) {
       shader.packet.seconds = (frame + 20) / 60;
       shader.packet.sourceRevision = reuseUpload ? 1 : frame;
@@ -219,7 +237,9 @@ function benchmarkShader(overlayEnabled, reuseUpload = false) {
     frames,
     cpu: timingSummary(durations),
     apiCalls: counters,
-    note: "Mock WebGL; upload and draw submission CPU/API cost only, not driver GPU execution.",
+    note: sharedInput
+      ? "Mock shared WebGL input; note geometry is submitted into the shader source target without Canvas upload."
+      : "Mock WebGL; upload and draw submission CPU/API cost only, not driver GPU execution.",
   };
 }
 
@@ -368,6 +388,7 @@ console.log(
       withoutOverlay: benchmarkShader(false),
       withoutOverlayReuse: benchmarkShader(false, true),
       withOverlay: benchmarkShader(true),
+      withSharedInput: benchmarkShader(false, false, true),
     },
     timelineGpuBatch: benchmarkOverlayBatch(),
     timelineGpuStaticBatch: benchmarkRetainedBatch(),

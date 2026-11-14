@@ -52,3 +52,27 @@ test("shader composite device owns pipeline disposal", () => {
 
   assert.equal(disposed, 1);
 });
+
+test("shader composite device forwards a shared GPU input layer", () => {
+  const calls = [];
+  const inputLayer = { finishToFramebuffer() {} };
+  const pipeline = {
+    render: (...args) => {
+      calls.push(args);
+      return true;
+    },
+    dispose: () => {},
+  };
+  const device = new ShaderCompositeRenderDevice(pipeline);
+
+  device.render({
+    sourceCanvas: {},
+    targetCanvas: {},
+    passes: [],
+    seconds: 0,
+    sourceFor: () => null,
+    inputLayer,
+  });
+
+  assert.equal(calls[0]?.at(-1), inputLayer);
+});

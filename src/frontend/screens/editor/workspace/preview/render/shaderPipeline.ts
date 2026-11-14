@@ -95,6 +95,17 @@ export interface ShaderProgram {
 
 type GlContext = WebGL2RenderingContext | WebGLRenderingContext;
 
+/** GPU input layer rendered into the shader source texture before user passes. */
+export interface ShaderInputLayer {
+  /** Draw the layer without changing the source texture's existing pixels. */
+  finishToFramebuffer(
+    gl: WebGL2RenderingContext,
+    framebuffer: WebGLFramebuffer,
+    width: number,
+    height: number,
+  ): boolean;
+}
+
 /** Clip-space position and texture coordinates for one full-screen quad. */
 const FULLSCREEN_QUAD = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
 const EMPTY_UNIFORM_VALUES: Record<string, unknown> = Object.freeze({});
@@ -231,8 +242,8 @@ export class ShaderPipeline {
       lastErrorPresent: false,
     });
   }
-  /** Creates an idle pipeline; `invalidate` requests a repaint after GL work. */
-  constructor(invalidate: () => void = () => {}) {
+  /** Creates a pipeline, optionally owning the preview canvas context up front. */
+  constructor(invalidate: () => void = () => {}, sharedCanvas: HTMLCanvasElement | null = null) {
     this.invalidate = invalidate;
     this.gl = null;
     this.backend = null;
@@ -246,6 +257,35 @@ export class ShaderPipeline {
     this.buffer = null;
     this.disabled = false;
     this.webgl2 = false;
+    if (sharedCanvas) {
+      this.ensure(sharedCanvas);
+    }
+  }
+
+  /** Return the context that note and other input layers may share. */
+  sharedBackend(): WebGlRenderBackend | null {
+    return this.backend;
+  }
+
+  /** Clear chart-specific shader programs while preserving a shared GL context. */
+  resetChartResources(): void {
+    this.cacheEpoch += 1;
+    this.wantedSources.clear();
+    this.pendingSources.clear();
+    this.failedSources.clear();
+    this.precompileChain = Promise.resolve();
+    const gl = this.gl;
+    if (gl) {
+      for (const result of this.programs.values()) {
+        gl.deleteProgram(result.program);
+      }
+    }
+    this.programs.clear();
+    this.uploadedSource = null;
+    this.uploadedRevision = null;
+    this.uploadedWidth = 0;
+    this.uploadedHeight = 0;
+    this.lastError = null;
   }
 
   /** Context after `ensure()` succeeds; callers guarantee it is present. */
@@ -904,8 +944,8 @@ export class ShaderPipeline {
    * Returns false when there is nothing to draw or GL is unavailable. `viewport`
    * scopes the chart rect; `sourceFor` resolves each pass's GLSL source.
    * `sourceRevision` identifies the primary canvas's pixels; an unchanged
-   * revision reuses the uploaded texture. `overlayCanvas` is uploaded as a
-   * separate texture and composited by WebGL before the user shader passes.
+   * revision reuses the uploaded texture. `inputLayer` is rendered directly
+   * into that texture when it shares this pipeline's WebGL2 context.
    */
   render(
     sourceCanvas: HTMLCanvasElement,
@@ -916,6 +956,7 @@ export class ShaderPipeline {
     viewport?: ShaderView | null,
     sourceRevision?: number,
     overlayCanvas?: HTMLCanvasElement | null,
+    inputLayer?: ShaderInputLayer | null,
   ): boolean {
     renderProfileMark("preview.shader.render.start");
     if (!passes.length || !targetCanvas || !this.ensure(targetCanvas)) {
@@ -977,7 +1018,29 @@ export class ShaderPipeline {
     }
     let input = this.sourceTexture;
     let output = this.pingTexture;
-    if (overlayCanvas) {
+    if (inputLayer && this.framebuffer && this.sourceTexture && this.webgl2) {
+      renderProfileMark("preview.shader.input-layer.start");
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        this.sourceTexture,
+        0,
+      );
+      if (
+        !inputLayer.finishToFramebuffer(
+          gl as WebGL2RenderingContext,
+          this.framebuffer,
+          width,
+          height,
+        )
+      ) {
+        renderProfileMark("preview.shader.render.end");
+        return false;
+      }
+      renderProfileMark("preview.shader.input-layer.end");
+    } else if (overlayCanvas) {
       renderProfileMark("preview.shader.overlay-upload.start");
       const overlayStarted = performance.now();
       const uploadedOverlay = this.uploadCanvas(this.overlayTexture, overlayCanvas, width, height);
