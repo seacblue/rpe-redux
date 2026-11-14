@@ -112,6 +112,9 @@ export default {
   "chrome.changelog.skipVersion": "跳过此版本",
   "chrome.changelog.later": "暂不更新",
   "chrome.changelog.updateNow": "现在更新",
+  "chrome.changelog.resumeDownload": "恢复更新",
+  "chrome.changelog.pauseDownload": "暂停更新",
+  "chrome.changelog.stopDownload": "停止更新",
   "chrome.changelog.updating": "正在更新中…",
 
   "chrome.pane.notes": "音符编辑",

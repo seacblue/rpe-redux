@@ -21,8 +21,10 @@ import {
   checkForUpdates,
   getUpdateState,
   installUpdate,
+  pauseUpdateDownload,
   refreshUpdateSettings,
   skipUpdateVersion,
+  stopUpdateDownload,
 } from "./updateStore.ts";
 import { bindUpdatePromptLauncher } from "./updatePromptLauncher.ts";
 
@@ -64,6 +66,8 @@ export function openChangelog(mode: ChangelogMode = "current"): boolean {
             onUpdate: () => {
               void installUpdate();
             },
+            onPause: pauseUpdateDownload,
+            onStop: stopUpdateDownload,
             onComplete: close,
           }),
         }
