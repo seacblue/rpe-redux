@@ -723,3 +723,29 @@ test("a paused, unchanged frame does not repaint the playhead", () => {
   const moved = scheduler.tick({ ...request, now: 2000 / 144, seconds: 0.1 }, adapter);
   assert.equal(moved.work.playhead, true);
 });
+
+test("a paused viewport seek repaints the timeline after wheel movement settles", () => {
+  const scheduler = new EditorRenderScheduler();
+  const request = {
+    now: 0,
+    seconds: 0,
+    playing: false,
+    previewVisible: false,
+    previewHighDensity: false,
+    contentRefreshRate: 144,
+    timelineRevision: 1,
+    viewportOrigin: 0,
+    previewChart: {},
+    previewRevision: 0,
+    previewSession: null,
+    previewSelection: null,
+    authoringRegionVisible: true,
+  };
+  const adapter = { paint() {} };
+
+  scheduler.tick(request, adapter);
+  const settled = scheduler.tick({ ...request, now: 1000 / 144, viewportOrigin: 1 }, adapter);
+
+  assert.equal(settled.work.timeline, true);
+  assert.equal(settled.work.playhead, true);
+});

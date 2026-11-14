@@ -443,6 +443,9 @@ export default {
   "settings.field.key-press-label-enabled.label": "Show key-press label",
   "settings.field.mouse-trail-enabled.label": "Show mouse trail",
   "settings.field.hover-guides-enabled.label": "Highlight nearest grid lines",
+  "settings.field.nearby-guides-only-enabled.label": "Show only guides near the pointer",
+  "settings.field.nearby-guides-only-enabled.description":
+    "Keep opacity only on guides near the pointer and make all other guides transparent.",
   "settings.field.timeline-density-bars-enabled.label": "Show timeline overview bars",
   "settings.field.timeline-density-bars-enabled.description":
     "Shows the overview bars on both sides of the timeline.",

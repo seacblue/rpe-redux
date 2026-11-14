@@ -17,6 +17,7 @@ type AppearanceSettings = Pick<
   | "multiLineNoteLineNumbers"
   | "overlapThreshold"
   | "hoverGuidesEnabled"
+  | "nearbyGuidesOnly"
   | "barWidth"
   | "barAlpha"
   | "playheadWidth"
@@ -41,6 +42,7 @@ export class TimelineAppearance {
   multiLineNoteLineNumbers = true;
   overlapThreshold = DEFAULT_NOTE_OVERLAP_THRESHOLD;
   hoverGuidesEnabled = true;
+  nearbyGuidesOnly = false;
   skin: RpeSkin | null = null;
   barWidth?: number;
   barAlpha?: number;
@@ -65,6 +67,7 @@ export class TimelineAppearance {
     this.multiLineNoteLineNumbers = config.multiLineNoteLineNumbers;
     this.overlapThreshold = config.overlapThreshold;
     this.hoverGuidesEnabled = config.hoverGuidesEnabled;
+    this.nearbyGuidesOnly = config.nearbyGuidesOnly;
     this.barWidth = config.barWidth;
     this.barAlpha = config.barAlpha;
     this.playheadWidth = config.playheadWidth;
