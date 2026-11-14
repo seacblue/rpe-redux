@@ -47,17 +47,14 @@ import { values } from "../../../../core/state/values.ts";
 import { compareVersions, isVersion } from "../../../../core/utils/version.ts";
 import { t } from "../../../../i18n/index.ts";
 import { openSettings } from "../settingsWindowController.ts";
-import { requestChangelog } from "./changelogLauncher.ts";
+import { requestChangelog, requestUpdateChangelog } from "./changelogLauncher.ts";
 import { requestUpdatePrompt } from "./updatePromptLauncher.ts";
 import { classifyUpdateFailure } from "./updateFailure.ts";
-
 export { UPDATE_SETTING_KEYS };
-
 declarePersistedValue(UPDATE_SETTING_KEYS.autoCheck, DEFAULT_UPDATE_AUTO_CHECK);
 declarePersistedValue(UPDATE_SETTING_KEYS.prereleases, false);
 declarePersistedValue(UPDATE_SETTING_KEYS.downloadPolicy, DEFAULT_UPDATE_DOWNLOAD_POLICY);
 declarePersistedValue(UPDATE_SETTING_KEYS.skippedVersion, "");
-
 /** Every phase the update flow can publish. */
 export type UpdatePhase =
   | "idle"
@@ -73,7 +70,6 @@ export type UpdatePhase =
   | "installing"
   | "installed"
   | "error";
-
 /** Stable failure codes the update surfaces translate. */
 export type UpdateErrorCode =
   | GithubReleaseErrorCode
@@ -85,10 +81,8 @@ export type UpdateErrorCode =
   | "local-invalid"
   | "local-handoff"
   | "install";
-
 /** The first reason the current configuration cannot install, independent of layout. */
 type InstallBlock = "portable" | "public-key";
-
 /** Whether a phase owns the update controls. */
 export function isUpdateBusy(phase: UpdatePhase): boolean {
   return (
@@ -98,7 +92,6 @@ export function isUpdateBusy(phase: UpdatePhase): boolean {
     phase === "installing"
   );
 }
-
 /** The configuration reason installation is unavailable, or null when it can proceed. */
 export function installBlockReason(
   state: Pick<UpdateState, "portable" | "publicKey">,
@@ -111,14 +104,12 @@ export function installBlockReason(
   }
   return null;
 }
-
 /** The update applied by a previous launch, with its data backup path. */
 export interface UpdateApplied {
   from_version: string;
   to_version: string;
   backup: string;
 }
-
 /** A verified package kept from a previous launch instead of being fetched again. */
 export interface CachedUpdateInfo {
   version: string;
@@ -126,7 +117,6 @@ export interface CachedUpdateInfo {
   prerelease: boolean;
   kind: "installer" | "portable";
 }
-
 /** Build the release-shaped prompt target for one cached package. */
 export function releaseFromCachedUpdate(info: CachedUpdateInfo, repo: string): GithubRelease {
   const tag = info.tag.trim() || `v${info.version}`;
@@ -411,6 +401,8 @@ export async function checkForUpdates(): Promise<void> {
     errorDetail: "",
   });
   try {
+    const previousLatest = state.latest?.version;
+    const previouslyAvailable = state.available;
     const releases = await fetchGithubReleases(state.repo);
     const { release: latest, available } = latestEligibleRelease(
       releases,
@@ -448,6 +440,14 @@ export async function checkForUpdates(): Promise<void> {
       available: Boolean(preparedVersion) || (available && !skipped),
       preparedVersion,
     });
+    if (
+      !state.updated &&
+      state.available &&
+      state.latest &&
+      (!previouslyAvailable || previousLatest !== state.latest.version)
+    ) {
+      requestUpdateChangelog();
+    }
     if (state.autoCheck && available && latest) {
       void autoDownload(latest);
     }
