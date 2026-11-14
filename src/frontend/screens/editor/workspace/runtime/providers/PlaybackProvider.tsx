@@ -119,6 +119,10 @@ export function createPlaybackRuntime(options: {
   const playback = new EditorPlayback(audio, hitSounds, () => {
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
     options.timeline.viewport.setOrigin(currentBeat(), "seek");
+    // Seeking changes the time-dependent grid even when the viewport origin
+    // rounds to the same beat as the previous frame. Bump the timeline
+    // revision so the settled wheel frame cannot reuse a cleared layer.
+    options.timeline.changed();
     realtimePreview.effectsSince = chartSeconds();
     preloadAround(chartSeconds());
     options.invalidate();

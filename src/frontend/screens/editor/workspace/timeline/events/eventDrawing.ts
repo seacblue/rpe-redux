@@ -359,16 +359,18 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   const cached = this.cache.events(session.chart, indexKey, eventTypes, layer);
   const labels = noiseLineSettings(session.line) ? noiseTrackLabels() : trackLabels();
   const headerLabels = this.gestures.extended ? extendedLabels() : labels;
-  backdrop.context.strokeStyle = this.appearance.verticalGridColor;
   const eventInset = this.viewport.eventInset(width);
   const eventBeatRange = eventBeatRangeForTypes(this.viewport, height, eventTypes);
   for (let channel = 1; channel < eventTypeCount; channel++) {
     const x = eventColumnBoundary(channel, width, eventTypeCount, eventInset);
+    backdrop.context.strokeStyle = this.appearance.verticalGridColor;
     strokeVerticalGrid(backdrop.context, x, height);
   }
   const firstColumn = eventColumnBoundary(0, width, eventTypeCount, eventInset);
   const lastColumn = eventColumnBoundary(eventTypeCount, width, eventTypeCount, eventInset);
+  backdrop.context.strokeStyle = this.appearance.verticalGridColor;
   strokeVerticalGrid(backdrop.context, Math.max(0.5, firstColumn), height);
+  backdrop.context.strokeStyle = this.appearance.verticalGridColor;
   strokeVerticalGrid(backdrop.context, Math.min(width - 0.5, lastColumn), height);
   // Reuse per-channel work lists. Their contents are consumed before the next
   // channel starts, so only growth beyond the largest channel remains allocative.
@@ -585,11 +587,12 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   // field's right boundary, stays visible through the header band.
   context.globalAlpha = 1;
   context.lineWidth = 1;
-  context.strokeStyle = palette.gridMinor;
   for (let boundary = 0; boundary <= eventTypeCount; boundary += 1) {
     const x = eventColumnBoundary(boundary, width, eventTypeCount, eventInset);
+    context.strokeStyle = palette.gridMinor;
     strokeVerticalGrid(context, Math.max(0.5, Math.min(width - 0.5, x)), 23);
   }
+  context.globalAlpha = 1;
   this.gestures.eventInteraction.draw(context, width);
   this.eventBatch.finish();
   this.eventOverlayBatch.finish();
@@ -670,12 +673,16 @@ export function drawMultiLineEvents(
       resetChannelScratch(scratch);
       context.globalAlpha = lineOpacity;
       const barX = offset + channel * channelWidth + (channelWidth - barWidth) / 2;
+      const channelBoundary = offset + channel * channelWidth;
       separators.strokeStyle = this.appearance.verticalGridColor;
       if (channel === 0) {
+        separators.strokeStyle = this.appearance.verticalGridColor;
         strokeVerticalGrid(separators, Math.max(0.5, offset), height);
+        separators.strokeStyle = this.appearance.verticalGridColor;
         strokeVerticalGrid(separators, Math.min(width - 0.5, contentRight), height);
       }
-      strokeVerticalGrid(separators, offset + channel * channelWidth, height);
+      separators.strokeStyle = this.appearance.verticalGridColor;
+      strokeVerticalGrid(separators, channelBoundary, height);
       const events = layer[type] ?? EMPTY_EVENTS;
       const display = this.cache.eventDisplay(session.chart, events);
       const { ranges } = display;
@@ -851,6 +858,7 @@ export function drawMultiLineEvents(
         );
       }
     });
+    separators.globalAlpha = 1;
     context.globalAlpha = 1;
     if (this.viewport.panelCount("events") > 1) {
       separators.strokeStyle = palette.outline;
