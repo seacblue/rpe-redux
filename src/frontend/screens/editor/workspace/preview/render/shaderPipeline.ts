@@ -15,6 +15,8 @@ import {
 import { defaultShaderUniform } from "../../../../../../core/global/chart/shader/shader.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { canvasPixelRatio, measureCanvas } from "../../../canvas/canvas2d.ts";
+import type { WebGlRenderBackend } from "../../../canvas/renderBackend.ts";
+import { tryCreateWebGlBackend } from "../../../canvas/renderBackend.ts";
 import {
   configureTextureSampling,
   createCornerBuffer,
@@ -154,6 +156,7 @@ export function shaderViewport(
 export class ShaderPipeline {
   invalidate: () => void;
   gl: GlContext | null;
+  private backend: WebGlRenderBackend | null;
   canvas: HTMLCanvasElement | null;
   programs: Map<string, ShaderProgram>;
   sourceTexture: WebGLTexture | null;
@@ -192,24 +195,10 @@ export class ShaderPipeline {
     this.pendingSources.clear();
     this.failedSources.clear();
     this.precompileChain = Promise.resolve();
-    const gl = this.gl;
-    if (gl) {
-      for (const result of this.programs.values()) {
-        gl.deleteProgram(result.program);
-      }
-      for (const texture of [this.sourceTexture, this.pingTexture, this.pongTexture]) {
-        if (texture) {
-          gl.deleteTexture(texture);
-        }
-      }
-      if (this.framebuffer) {
-        gl.deleteFramebuffer(this.framebuffer);
-      }
-      if (this.buffer) {
-        gl.deleteBuffer(this.buffer);
-      }
-    }
+    this.releaseGpuResources();
     this.programs.clear();
+    this.backend?.dispose();
+    this.backend = null;
     this.gl = null;
     this.canvas = null;
     this.sourceStaging = null;
@@ -237,6 +226,7 @@ export class ShaderPipeline {
   constructor(invalidate: () => void = () => {}) {
     this.invalidate = invalidate;
     this.gl = null;
+    this.backend = null;
     this.canvas = null;
     this.programs = new Map();
     this.sourceTexture = null;
@@ -259,29 +249,26 @@ export class ShaderPipeline {
 
   /** Attaches a GL context to `canvas`, replacing any previous one; false when GL is unavailable. */
   ensure(canvas: HTMLCanvasElement): boolean {
-    if (this.canvas === canvas && this.gl) {
-      return true;
+    if (this.canvas === canvas && this.backend) {
+      this.gl = this.backend.isUsable() ? this.backend.gl : null;
+      return this.gl !== null;
     }
     if (this.gl || this.canvas) {
       this.dispose();
     }
     this.canvas = canvas;
-    try {
-      const options: WebGLContextAttributes = {
-        alpha: true,
-        premultipliedAlpha: false,
-        preserveDrawingBuffer: false,
-      };
-      // Keep the context types explicit; the union would select the broad string overload.
-      const webgl2: WebGL2RenderingContext | null = canvas.getContext("webgl2", options);
-      this.webgl2 = Boolean(webgl2);
-      const webgl1: WebGLRenderingContext | null = webgl2
-        ? null
-        : canvas.getContext("webgl", options);
-      this.gl = webgl2 ?? webgl1;
-    } catch {
-      this.gl = null;
-    }
+    this.backend = tryCreateWebGlBackend(
+      canvas,
+      { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: false },
+      {
+        onLost: this.handleContextLost,
+        onRestored: this.handleContextRestored,
+      },
+    );
+    this.gl = this.backend?.gl ?? null;
+    this.webgl2 = Boolean(
+      this.gl && typeof (this.gl as WebGL2RenderingContext).drawArraysInstanced === "function",
+    );
     if (!this.gl) {
       this.disabled = true;
       recordShaderState("preview", {
@@ -301,7 +288,16 @@ export class ShaderPipeline {
       programCount: this.programs.size,
       lastErrorPresent: Boolean(this.lastError),
     });
+    this.initializeGpuResources();
+    return true;
+  }
+
+  /** Recreate the small set of persistent GPU objects owned by the pipeline. */
+  private initializeGpuResources(): void {
     const gl = this.gl;
+    if (!gl) {
+      return;
+    }
     this.buffer = createCornerBuffer(gl, FULLSCREEN_QUAD);
     this.sourceTexture = gl.createTexture();
     this.pingTexture = gl.createTexture();
@@ -310,8 +306,61 @@ export class ShaderPipeline {
     for (const texture of [this.sourceTexture, this.pingTexture, this.pongTexture]) {
       this.configureTexture(texture);
     }
-    return true;
   }
+
+  /** Release GPU objects without discarding the caller's chart-side settings. */
+  private releaseGpuResources(): void {
+    const gl = this.gl;
+    if (gl) {
+      for (const result of this.programs.values()) {
+        gl.deleteProgram(result.program);
+      }
+      for (const texture of [this.sourceTexture, this.pingTexture, this.pongTexture]) {
+        if (texture) {
+          gl.deleteTexture(texture);
+        }
+      }
+      if (this.framebuffer) {
+        gl.deleteFramebuffer(this.framebuffer);
+      }
+      if (this.buffer) {
+        gl.deleteBuffer(this.buffer);
+      }
+    }
+    this.programs.clear();
+    this.sourceTexture = null;
+    this.pingTexture = null;
+    this.pongTexture = null;
+    this.framebuffer = null;
+    this.buffer = null;
+    this.sourceStaging = null;
+    this.uploadedSource = null;
+    this.uploadedRevision = null;
+    this.uploadedWidth = 0;
+    this.uploadedHeight = 0;
+    this.textureWidth = 0;
+    this.textureHeight = 0;
+  }
+
+  /** Drop invalid GPU handles after a browser context loss and schedule recovery. */
+  private readonly handleContextLost = (): void => {
+    this.releaseGpuResources();
+    this.gl = null;
+    this.cacheEpoch += 1;
+    this.pendingSources.clear();
+    this.precompileChain = Promise.resolve();
+    this.invalidate();
+  };
+
+  /** Recreate targets after the backend reports that the context is usable again. */
+  private readonly handleContextRestored = (): void => {
+    if (!this.backend || this.disabled) {
+      return;
+    }
+    this.gl = this.backend.gl;
+    this.initializeGpuResources();
+    this.invalidate();
+  };
 
   /** Applies the sampling parameters shared by every shader texture. */
   configureTexture(texture: WebGLTexture | null): void {
