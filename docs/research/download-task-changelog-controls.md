@@ -75,6 +75,8 @@ The current change adds Changelog footer controls and routes them through the sh
 
 **Stop download** uses the existing cancel-and-remove task policy and also removes both partial and completed updater cache files. The native command observes pause/stop between response chunks, so a stalled socket can still take the configured request timeout to settle. If the server does not honor `Range`, a `200` response restarts the payload from byte zero; a malformed `206 Content-Range` is rejected rather than appended.
 
+When an update check discovers a newly available release, the update Changelog is requested immediately if the chart is idle. If the chart is playing, the request remains queued and opens when the shared `editor.playing` value becomes false. Manual opening from the update badge is unaffected, and an already cached verified package continues to use the existing restart prompt.
+
 ## Open questions
 
 - Does “stop” need to stop native network I/O immediately, or is “request cancellation, discard verified bytes, and return to Available” sufficient?
