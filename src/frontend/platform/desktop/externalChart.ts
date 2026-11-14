@@ -7,9 +7,6 @@
  * unpacking stays in the shared ZIP reader.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { isDesktop } from "../../../core/platform/environment.ts";
-import { rememberDialogFile } from "../../../core/platform/desktop/dialogPath.ts";
-import { t } from "../../../i18n/index.ts";
 
 /** One metadata sidecar returned by the native folder scan. */
 export interface ExternalSidecar {
@@ -44,29 +41,6 @@ export function scanExternalChart(path: string): Promise<ExternalChartScan> {
 export async function readPickedBytes(path: string): Promise<Uint8Array> {
   const response = await invoke<ArrayBuffer | number[]>("read_picked_file", { path });
   return response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response);
-}
-
-/** Ask for one external chart file or package. */
-export async function chooseExternalChartFile(): Promise<string | null> {
-  if (!isDesktop()) {
-    return null;
-  }
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const selected = await open({
-    multiple: false,
-    directory: false,
-    filters: [
-      {
-        name: t("system.document.chartFilter"),
-        extensions: ["json", "pec", "txt", "zip", "pez"],
-      },
-    ],
-  });
-  if (typeof selected === "string") {
-    rememberDialogFile("chart", selected);
-    return selected;
-  }
-  return null;
 }
 
 /** Write one exported JSON or PEC text file chosen by the native save dialog. */

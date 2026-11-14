@@ -18,7 +18,6 @@ import { importChartToLibrary } from "../../../core/global/library/import.ts";
 import { catalogIdFor, rememberCatalogPath } from "../../../core/global/library/libraryCatalog.ts";
 import { localService } from "../../../core/global/library/service.ts";
 import { TauriDocumentStore } from "../../../core/platform/desktop/documentStore.ts";
-import { isDesktop } from "../../../core/platform/environment.ts";
 import { startLongTask, finishLongTask } from "../../../core/state/longTasks.ts";
 import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
@@ -28,7 +27,7 @@ import { openSettings } from "../settings/settingsWindowController.ts";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
 import { requestConfirm } from "../../overlays/modals/prompts.ts";
 import { requestRpeImportReview } from "./rpeImportReview.ts";
-import { chooseRpeFolder, readRpeFolder } from "../../platform/desktop/rpeFolder.ts";
+import { readRpeFolder } from "../../platform/desktop/rpeFolder.ts";
 
 /** Host callbacks the migration needs from the mounted editor. */
 export interface RpeImportDeps {
@@ -322,22 +321,4 @@ export async function importRpePath(
   }
   const summary = await migrateRpeScan(scan, deps);
   return summary.projectIds;
-}
-
-/** Ask for an RPE root and migrate it; false when the dialog or scan is cancelled. */
-export async function chooseRpeImport(deps: RpeImportDeps): Promise<boolean> {
-  if (!isDesktop()) {
-    showToast({ message: t("workspace.welcome.rpe.desktopOnly"), level: "warning" });
-    return false;
-  }
-  const path = await chooseRpeFolder();
-  if (!path) {
-    return false;
-  }
-  const ids = await importRpePath(path, deps);
-  if (ids === null) {
-    showToast({ message: t("workspace.welcome.rpe.notFound"), level: "warning" });
-    return false;
-  }
-  return ids.length > 0;
 }

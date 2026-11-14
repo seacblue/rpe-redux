@@ -9,22 +9,7 @@
 import { isDesktop } from "../../../core/platform/environment.ts";
 import { browserDevPorts } from "../../../core/platform/runtimePorts.ts";
 import { localService } from "../../../core/global/library/service.ts";
-import { t } from "../../../i18n/index.ts";
 import type { PeFolderScan } from "../../../core/migration/pe.ts";
-
-/** Ask the user for a PhiEditer root, or null when the dialog is cancelled. */
-export async function choosePeFolder(): Promise<string | null> {
-  if (!isDesktop()) {
-    return null;
-  }
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: t("workspace.welcome.pe.pickFolder"),
-  });
-  return typeof selected === "string" ? selected : null;
-}
 
 /** Read the classification details for one PhiEditer root. */
 export async function readPeFolder(path: string): Promise<PeFolderScan> {

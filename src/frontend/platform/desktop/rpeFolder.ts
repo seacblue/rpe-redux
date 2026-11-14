@@ -1,5 +1,5 @@
 /**
- * Adapter for choosing and reading a native RPE installation.
+ * Adapter for reading a native RPE installation.
  *
  * The picker returns a path; the local service classifies the folder and its
  * item carries the RPE sidecars and direct chart folders under Resources. The
@@ -10,22 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isDesktop } from "../../../core/platform/environment.ts";
 import { browserDevPorts } from "../../../core/platform/runtimePorts.ts";
 import { localService } from "../../../core/global/library/service.ts";
-import { t } from "../../../i18n/index.ts";
 import type { RpeFolderScan } from "../../../core/migration/rpe.ts";
-
-/** Ask the user for an RPE root, or null when the dialog is cancelled. */
-export async function chooseRpeFolder(): Promise<string | null> {
-  if (!isDesktop()) {
-    return null;
-  }
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: t("workspace.welcome.rpe.pickFolder"),
-  });
-  return typeof selected === "string" ? selected : null;
-}
 
 /**
  * Read the classification details for one RPE root.

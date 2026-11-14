@@ -32,9 +32,6 @@ import { bindClipboardHistoryPersistence } from "../../../../../../core/edit/cli
 import { openInspector, closeInspector } from "../../../inspector/controller.ts";
 import { nudgeBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { createEditorHomeRuntime } from "../../../../welcome/editorHome.ts";
-import { connectPeImport } from "../../../../welcome/peImportService.ts";
-import { connectRpeImport } from "../../../../welcome/rpeImportService.ts";
-import { connectExternalImport } from "../../../../welcome/externalImportService.ts";
 import { bindWorkspaceNavigation } from "../commands/workspaceNavigation.ts";
 import { planAppClose } from "../commands/leaveEditor.ts";
 import { collaborationRoomExit } from "../../collaboration/roomExit.ts";
@@ -648,9 +645,6 @@ export function createEditorAssembly(
       return false;
     }
   };
-  scope.add(connectRpeImport(() => home.chooseRpeImport()));
-  scope.add(connectPeImport(() => home.choosePeImport()));
-  scope.add(connectExternalImport(() => home.chooseExternalImport()));
   // Debug and automation builds expose the same drop entry point the window
   // uses, so a test can route local paths without synthesizing an OS drag. The
   // probe shares the test flag with the public facade and dies with the scope.

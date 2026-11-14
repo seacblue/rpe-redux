@@ -17,8 +17,6 @@ import { Icon } from "../../../design/components/icon/Icon.tsx";
 import { FILE_DRAG_EVENT } from "../../../core/shell/shellEventNames.ts";
 import { WelcomeSettings } from "./WelcomeSettings.tsx";
 import { WelcomeJoin } from "./WelcomeJoin.tsx";
-import { WelcomeMoreMenu } from "./WelcomeMoreMenu.tsx";
-import { WelcomeImportDialog } from "./WelcomeImportDialog.tsx";
 import { RpeImportReviewDialog } from "./RpeImportReviewDialog.tsx";
 import { LibraryPanel } from "./library/LibraryPanel.tsx";
 import { LibraryDetail } from "./library/LibraryDetail.tsx";
@@ -98,7 +96,6 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
         <header className="redux-welcome-header">
           <div className="redux-welcome-actions">
             <WelcomeSettings />
-            <WelcomeMoreMenu />
           </div>
         </header>
         <div className="redux-welcome-join">
@@ -137,7 +134,6 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
           </div>
         </div>
       )}
-      <WelcomeImportDialog />
       <RpeImportReviewDialog />
     </main>
   );

@@ -22,7 +22,6 @@ import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { showImportReport } from "../../overlays/modals/importReportPrompt.ts";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
 import {
-  chooseExternalChartFile,
   readPickedBytes,
   scanExternalChart,
   type ExternalChartScan,
@@ -445,22 +444,4 @@ export async function importExternalPath(
   // failed, so reaching here means the import completed.
   finishLongTask(taskId, { status: "completed" });
   return projectId;
-}
-
-/** Ask for one external chart and import it; false when cancelled or unsupported. */
-export async function chooseExternalImport(deps: ExternalImportDeps): Promise<boolean> {
-  if (!isDesktop()) {
-    showToast({ message: t("workspace.welcome.external.desktopOnly"), level: "warning" });
-    return false;
-  }
-  const path = await chooseExternalChartFile();
-  if (!path) {
-    return false;
-  }
-  const projectId = await importExternalPath(path, deps);
-  if (!projectId) {
-    showToast({ message: t("workspace.welcome.external.notFound"), level: "warning" });
-    return false;
-  }
-  return true;
 }

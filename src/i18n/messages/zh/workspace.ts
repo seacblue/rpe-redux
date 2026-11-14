@@ -141,16 +141,6 @@ export default {
   "workspace.history.discarded": "快照已丢弃",
 
   "workspace.welcome.settings": "设置",
-  "workspace.welcome.more": "更多",
-  "workspace.welcome.moreMenu": "更多操作",
-  "workspace.welcome.importRpe": "从 RPE 导入…",
-  "workspace.welcome.importDialog.title": "导入谱面",
-  "workspace.welcome.importDialog.dropTitle": "拖入文件夹或文件",
-  "workspace.welcome.importDialog.dropFormats":
-    "支持 RPE JSON / PEZ、PhiEdit PEC 和 Phigros 官谱 JSON",
-  "workspace.welcome.importDialog.dropActive": "松开即可导入",
-  "workspace.welcome.importDialog.rpe": "选择 RPE 文件夹",
-  "workspace.welcome.importDialog.external": "选择其它谱面",
   "workspace.welcome.drop.title": "松开即可导入",
   "workspace.welcome.drop.imported": "已导入 {name}",
   "workspace.welcome.drop.extensionDetected": "检测到扩展：{name}",
@@ -160,7 +150,6 @@ export default {
   "workspace.welcome.drop.unsupported": "拖入的内容不是谱面、扩展或皮肤：{name}",
   "workspace.welcome.rpe.title": "从 RPE 迁移",
   "workspace.welcome.rpe.viewHotkeys": "查看键位对照",
-  "workspace.welcome.rpe.pickFolder": "选择原版 RPE 安装文件夹",
   "workspace.welcome.rpe.chartCount": "{count} 张谱面",
   "workspace.welcome.rpe.settingsFound": "Settings.json",
   "workspace.welcome.rpe.hotkeysFound": "Hotkey.txt",
@@ -173,14 +162,9 @@ export default {
   "workspace.welcome.rpe.done":
     "已导入 {charts} 张谱面，迁移 {settings} 项设置和 {shortcuts} 个快捷键，{warnings} 条警告。",
   "workspace.welcome.rpe.desktopOnly": "RPE 导入仅在桌面应用中可用。",
-  "workspace.welcome.rpe.notFound":
-    "没有找到包含 PhiEdit.exe 和 Resources 的 RPE 文件夹、设置、快捷键或谱面目录。",
   "workspace.welcome.external.title": "导入官谱或 PhiEdit 谱面",
   "workspace.welcome.external.importing": "正在导入 {name}…",
   "workspace.welcome.external.done": "已导入 {name}，{warnings} 条警告。",
-  "workspace.welcome.external.desktopOnly": "官谱与 PhiEdit 导入仅在桌面应用中可用。",
-  "workspace.welcome.external.notFound":
-    "该文件或文件夹中没有找到 Phigros 官谱 JSON 或 PhiEdit PEC 谱面。",
   "workspace.welcome.external.missingChart": "压缩包中没有找到谱面文件。",
   "workspace.welcome.external.multipleCharts": "压缩包中有多个谱面文件：{names}。请逐个导入。",
   "workspace.welcome.external.mediaLimit": "谱面媒体文件超过 512 MB，其后的文件已被忽略。",
@@ -683,7 +667,7 @@ export default {
   "onboarding.choice.none.description": "直接进入首页。",
   "onboarding.start.rpe.title": "导入你的 RPE 谱面",
   "onboarding.start.rpe.body":
-    "随时点击高亮的更多菜单并选择导入。对话框支持 RPE 文件夹或其他受支持的谱面文件，主界面也接受直接拖入文件夹或文件。导入的谱面会出现在谱面库；打开任意一张，指引会自动继续。",
+    "点击高亮的导入按钮，或直接拖入 RPE 文件夹和谱面文件。导入的谱面会出现在谱面库；打开任意一张，指引会自动继续。",
   "onboarding.start.new.title": "新建一张谱面",
   "onboarding.start.new.body": "点击高亮的“新建谱面”按钮。空白谱面打开后，指引会自动继续。",
   "onboarding.metadata.title": "填写谱面信息",

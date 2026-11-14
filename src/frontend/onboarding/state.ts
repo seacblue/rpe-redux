@@ -20,7 +20,6 @@ export interface OnboardingLaunch {
   stepId?: string;
   /** Registered custom tutorial id; omitted for the built-in editor tour. */
   tutorialId?: string;
-  openImportDialog?: boolean;
   /** True only while resolving the first-run choice modal. */
   firstRun?: boolean;
 }

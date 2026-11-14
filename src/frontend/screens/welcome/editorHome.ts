@@ -43,17 +43,9 @@ import {
   createChartTextExport,
 } from "../../../core/global/document/export.ts";
 import { download } from "../../platform/download.ts";
-import {
-  chooseRpeImport as chooseRpeFolderMigration,
-  importRpePath,
-  type RpeImportDeps,
-} from "./rpeImport.ts";
-import { choosePeImport as choosePeFolderMigration, importPeFolder } from "./peImport.ts";
-import {
-  chooseExternalImport as chooseExternalChartImport,
-  importExternalPath,
-  type ExternalImportDeps,
-} from "./externalImport.ts";
+import { importRpePath, type RpeImportDeps } from "./rpeImport.ts";
+import { importPeFolder } from "./peImport.ts";
+import { importExternalPath, type ExternalImportDeps } from "./externalImport.ts";
 
 /** Error raised when the local library service is unavailable. */
 function libraryMissing(): Error {
@@ -397,9 +389,6 @@ export function createEditorHomeRuntime(deps: {
       });
     },
     importExternalChart: openExternalChartFile,
-    chooseRpeImport: () => chooseRpeFolderMigration(rpeDeps),
-    choosePeImport: () => choosePeFolderMigration(rpeDeps),
-    chooseExternalImport: () => chooseExternalChartImport(externalDeps),
     openProject: async (id) => {
       const found = await localService();
       if (!found) {

@@ -33,7 +33,7 @@ import { showImportReport } from "../../overlays/modals/importReportPrompt.ts";
 import { showImportProgress } from "../../overlays/modals/importProgressPrompt.tsx";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
 import { readPickedBytes } from "../../platform/desktop/externalChart.ts";
-import { choosePeFolder, readPeFolder } from "../../platform/desktop/peFolder.ts";
+import { readPeFolder } from "../../platform/desktop/peFolder.ts";
 import { requestRpeImportReview } from "./rpeImportReview.ts";
 import type { RpeImportDeps } from "./rpeImport.ts";
 
@@ -264,22 +264,4 @@ export async function importPeFolder(
     0,
   );
   return migratePeScan(scan, deps, selection, (taskId) => showImportProgress(taskId, total));
-}
-
-/** Ask for a PhiEditer root and import it; false when cancelled or unreadable. */
-export async function choosePeImport(deps: RpeImportDeps): Promise<boolean> {
-  if (!isDesktop()) {
-    showToast({ message: t("workspace.welcome.pe.desktopOnly"), level: "warning" });
-    return false;
-  }
-  const path = await choosePeFolder();
-  if (!path) {
-    return false;
-  }
-  const ids = await importPeFolder(path, deps);
-  if (ids === null) {
-    showToast({ message: t("workspace.welcome.pe.notFound"), level: "warning" });
-    return false;
-  }
-  return ids.length > 0;
 }
