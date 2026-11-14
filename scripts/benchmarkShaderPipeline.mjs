@@ -98,12 +98,18 @@ function benchmark(overlayEnabled) {
   pipeline.webgl2 = false;
   pipeline.canvas = target;
   pipeline.sourceTexture = gl.createTexture();
+  pipeline.overlayTexture = gl.createTexture();
   pipeline.pingTexture = gl.createTexture();
   pipeline.pongTexture = gl.createTexture();
   pipeline.framebuffer = gl.createFramebuffer();
   pipeline.buffer = gl.createBuffer();
   pipeline.ensure = () => true;
   pipeline.compile = () => program;
+  pipeline.compositeProgram = {};
+  pipeline.compositePosition = -1;
+  pipeline.compositeTexCoord = -1;
+  pipeline.compositeSourceUniform = null;
+  pipeline.compositeOverlayUniform = null;
   globalThis.document = { createElement: () => fakeCanvas(width, height, counters) };
   globalThis.devicePixelRatio = 1;
   const passes = Array.from({ length: passCount }, (_, index) => ({ shader: `pass-${index}` }));

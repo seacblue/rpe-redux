@@ -59,6 +59,64 @@ export const PLAYHEAD_GRID: GridParts = Object.freeze({
   playhead: true,
 });
 
+/** Return the complete invalidation key for a static timeline grid batch. */
+export function gridBatchKey(
+  receiver: Pick<
+    TimelineGridReceiver,
+    "appearance" | "cache" | "getSession" | "gestures" | "viewport"
+  >,
+  width: number,
+  height: number,
+  area: TimelineArea,
+): string {
+  const session = receiver.getSession();
+  const palette = receiver.cache.palette() ?? readCanvasPalette();
+  const cursor = area === "notes" ? receiver.gestures.cursor : receiver.gestures.eventCursor;
+  const viewport = receiver.viewport as unknown as {
+    origin: number;
+    scale: number;
+    division: number;
+    judgementOffset: number;
+    getMultiLineZoom?: (area: TimelineArea) => number;
+    panelCount?: (area?: TimelineArea) => number;
+    panelStride?: (width: number, area?: TimelineArea) => number;
+    multiLineViewportOffset?: (width: number, area?: TimelineArea) => number;
+    panelWidth?: (width: number, area?: TimelineArea) => number;
+    panelGap?: (width: number, area?: TimelineArea) => number;
+  };
+  return [
+    width,
+    height,
+    area,
+    viewport.origin,
+    viewport.scale,
+    viewport.division,
+    viewport.judgementOffset,
+    viewport.getMultiLineZoom?.(area),
+    viewport.panelCount?.(area),
+    viewport.panelStride?.(width, area),
+    viewport.multiLineViewportOffset?.(width, area),
+    viewport.panelWidth?.(width, area),
+    viewport.panelGap?.(width, area),
+    session.multiLineMode,
+    session.notesMode,
+    session.eventsMode,
+    session.targetLineIndices.join(","),
+    receiver.appearance.barWidth,
+    receiver.appearance.barAlpha,
+    receiver.appearance.hoverGuidesEnabled,
+    receiver.appearance.gridHighlightColor,
+    receiver.appearance.subdivisionColors.join(","),
+    palette.gridMajor,
+    palette.gridMinor,
+    palette.gridSubdivisions.join(","),
+    palette.foreground,
+    cursor?.x,
+    cursor?.y,
+    receiver.gestures.hoverArea,
+  ].join("|");
+}
+
 const draws = (parts: GridParts, part: keyof GridParts): boolean => parts[part] !== false;
 
 /** Include the hovered tick even when dense-grid culling skips its neighbours. */

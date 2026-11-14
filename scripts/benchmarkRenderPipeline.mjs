@@ -90,6 +90,7 @@ function fakeGl(counters) {
     FRAMEBUFFER: 8,
     COLOR_ATTACHMENT0: 9,
     TEXTURE0: 10,
+    TEXTURE1: 12,
     TRIANGLE_STRIP: 11,
     createBuffer: () => object("buffer"),
     bindBuffer: () => {},
@@ -151,12 +152,18 @@ function fakeShaderDevice(counters) {
   pipeline.webgl2 = false;
   pipeline.canvas = target;
   pipeline.sourceTexture = gl.createTexture();
+  pipeline.overlayTexture = gl.createTexture();
   pipeline.pingTexture = gl.createTexture();
   pipeline.pongTexture = gl.createTexture();
   pipeline.framebuffer = gl.createFramebuffer();
   pipeline.buffer = gl.createBuffer();
   pipeline.ensure = () => true;
   pipeline.compile = () => program;
+  pipeline.compositeProgram = {};
+  pipeline.compositePosition = -1;
+  pipeline.compositeTexCoord = -1;
+  pipeline.compositeSourceUniform = null;
+  pipeline.compositeOverlayUniform = null;
   globalThis.document = { createElement: () => fakeCanvas(width, height, counters) };
   globalThis.devicePixelRatio = 1;
   const device = new ShaderCompositeRenderDevice(pipeline);
@@ -282,6 +289,56 @@ function benchmarkOverlayBatch() {
   };
 }
 
+/** Benchmark the retained static batch path that skips unchanged begin/finish work. */
+function benchmarkRetainedBatch() {
+  const counters = { begin: 0, finish: 0, rectCommands: 0 };
+  const batch = {
+    active: true,
+    key: null,
+    beginRetained(_width, _height, key) {
+      if (this.active && this.key === key) {
+        return false;
+      }
+      this.key = key;
+      counters.begin += 1;
+      return true;
+    },
+    finish() {
+      counters.finish += 1;
+    },
+    addRect() {
+      counters.rectCommands += 1;
+    },
+  };
+  const commands = Array.from({ length: commandCount }, () => ({
+    kind: "fillRect",
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+    color: "#ffffff",
+    alpha: 1,
+  }));
+  const durations = [];
+  for (let frame = 0; frame < frames; frame += 1) {
+    const started = performance.now();
+    if (batch.beginRetained(width, height, "static-grid")) {
+      for (const command of commands) {
+        batch.addRect(command.x, command.y, command.width, command.height);
+      }
+      batch.finish();
+    }
+    durations.push(performance.now() - started);
+  }
+  return {
+    commands: commandCount,
+    frames,
+    cpu: timingSummary(durations),
+    lifecycle: counters,
+    note: "Fake retained GPU batch; unchanged static frames skip begin/finish and command submission.",
+  };
+}
+
 /** Benchmark the final cross-canvas capture pass separately from shader work. */
 function benchmarkCanvasComposite() {
   const counters = { drawImage: 0, clearRect: 0 };
@@ -313,6 +370,7 @@ console.log(
       withOverlay: benchmarkShader(true),
     },
     timelineGpuBatch: benchmarkOverlayBatch(),
+    timelineGpuStaticBatch: benchmarkRetainedBatch(),
     canvasComposite: benchmarkCanvasComposite(),
   }),
 );

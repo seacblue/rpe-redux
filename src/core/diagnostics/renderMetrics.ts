@@ -6,6 +6,15 @@ export type RenderSurface = "preview" | "timeline";
 /** High-level path used to paint the note portion of a preview frame. */
 export type RenderPath = "webgl_batch" | "canvas_fallback" | "mixed";
 
+/** Emit optional User Timing marks for a real browser Performance profile. */
+export function renderProfileMark(name: string): void {
+  const global = globalThis as typeof globalThis & { __reduxRenderProfile?: boolean };
+  if (!global.__reduxRenderProfile || typeof globalThis.performance?.mark !== "function") {
+    return;
+  }
+  globalThis.performance.mark(`redux.${name}`);
+}
+
 /** The timing fields needed by the renderer diagnostics store. */
 export interface RenderTimingInput {
   totalMs: number;
@@ -86,6 +95,10 @@ interface SurfaceMetrics {
     lastSourceUploadMs: number;
     maxSourceUploadMs: number;
     totalSourceUploadMs: number;
+    overlayUploads: number;
+    lastOverlayUploadMs: number;
+    maxOverlayUploadMs: number;
+    totalOverlayUploadMs: number;
   };
   batches: {
     frames: number;
@@ -152,6 +165,10 @@ function emptySurface(): SurfaceMetrics {
       lastSourceUploadMs: 0,
       maxSourceUploadMs: 0,
       totalSourceUploadMs: 0,
+      overlayUploads: 0,
+      lastOverlayUploadMs: 0,
+      maxOverlayUploadMs: 0,
+      totalOverlayUploadMs: 0,
     },
     batches: {
       frames: 0,
@@ -253,6 +270,10 @@ export function recordShaderState(surface: RenderSurface, state: ShaderStateInpu
     lastSourceUploadMs: shader.lastSourceUploadMs,
     maxSourceUploadMs: shader.maxSourceUploadMs,
     totalSourceUploadMs: shader.totalSourceUploadMs,
+    overlayUploads: shader.overlayUploads,
+    lastOverlayUploadMs: shader.lastOverlayUploadMs,
+    maxOverlayUploadMs: shader.maxOverlayUploadMs,
+    totalOverlayUploadMs: shader.totalOverlayUploadMs,
   };
 }
 
@@ -277,6 +298,16 @@ export function recordShaderSourceUpload(surface: RenderSurface, duration: numbe
   shader.lastSourceUploadMs = safeDuration;
   shader.maxSourceUploadMs = Math.max(shader.maxSourceUploadMs, safeDuration);
   shader.totalSourceUploadMs += safeDuration;
+}
+
+/** Record the CPU time spent uploading the separate preview note overlay texture. */
+export function recordShaderOverlayUpload(surface: RenderSurface, duration: number): void {
+  const shader = metrics[surface].shader;
+  const safeDuration = boundedDuration(duration);
+  shader.overlayUploads += 1;
+  shader.lastOverlayUploadMs = safeDuration;
+  shader.maxOverlayUploadMs = Math.max(shader.maxOverlayUploadMs, safeDuration);
+  shader.totalOverlayUploadMs += safeDuration;
 }
 
 /** Record one grouped note-batch submission. */

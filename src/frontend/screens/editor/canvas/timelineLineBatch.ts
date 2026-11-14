@@ -5,6 +5,7 @@
  * hit testing, and Canvas2D fallback drawing remain outside this module.
  */
 import { InstancedQuadBatch, type InstanceBatchAttribute } from "./instancedBatch.ts";
+import { renderProfileMark } from "../../../../core/diagnostics/renderMetrics.ts";
 
 const INSTANCE_STRIDE = 8;
 
@@ -16,6 +17,8 @@ const INSTANCE_ATTRIBUTES: readonly InstanceBatchAttribute[] = [
 
 /** GPU batch for horizontal and vertical timeline rectangles. */
 export class TimelineLineBatch extends InstancedQuadBatch {
+  private retainedKey: string | null = null;
+
   /** Create the line batch; Canvas2D remains the caller-owned fallback. */
   constructor(canvas: HTMLCanvasElement) {
     super(canvas, INSTANCE_STRIDE, INSTANCE_ATTRIBUTES);
@@ -24,7 +27,32 @@ export class TimelineLineBatch extends InstancedQuadBatch {
 
   /** Drop only the queued instances before a new frame. */
   clear(): void {
+    this.retainedKey = null;
     this.clearQueuedInstances();
+  }
+
+  /** Begin a static frame only when its geometry or surface dimensions changed. */
+  beginRetained(width: number, height: number, key: string): boolean {
+    if (this.retainedKey === key && this.isActive()) {
+      return false;
+    }
+    this.retainedKey = key;
+    renderProfileMark("timeline.line.begin");
+    return super.begin(width, height);
+  }
+
+  /** Begin a non-retained frame and invalidate the static packet identity. */
+  begin(width: number, height: number): boolean {
+    this.retainedKey = null;
+    renderProfileMark("timeline.line.begin");
+    return super.begin(width, height);
+  }
+
+  /** Upload and draw one line batch, marking the real browser profile boundary. */
+  finish(): void {
+    renderProfileMark("timeline.line.finish.start");
+    super.finish();
+    renderProfileMark("timeline.line.finish.end");
   }
 
   /** Queue one axis-aligned rectangle in CSS-pixel coordinates. */

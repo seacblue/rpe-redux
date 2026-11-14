@@ -2,6 +2,7 @@
 import { prepareCanvas } from "./canvas2d.ts";
 import type { RenderCommand, RenderDevice, RenderPacket } from "./renderGraph.ts";
 import type { TimelineOverlayBatch } from "./timelineOverlayBatch.ts";
+import { renderProfileMark } from "../../../../core/diagnostics/renderMetrics.ts";
 
 /** Draw one backend-neutral command through Canvas2D. */
 function drawCanvasCommand(context: CanvasRenderingContext2D, command: RenderCommand): void {
@@ -101,6 +102,7 @@ export class TimelineOverlayRenderDevice implements RenderDevice {
 
   /** Submit a retained packet to the GPU batch or Canvas2D fallback. */
   render(packet: RenderPacket): void {
+    renderProfileMark("timeline.overlay.begin.start");
     const gpuActive = this.gpuBatch.begin(packet.width, packet.height);
     const context = gpuActive ? null : prepareCanvas(this.fallbackCanvas).context;
     if (gpuActive) {
@@ -109,6 +111,7 @@ export class TimelineOverlayRenderDevice implements RenderDevice {
         drawGpuCommand(this.gpuBatch, command);
       }
       this.gpuBatch.finish();
+      renderProfileMark("timeline.overlay.finish.end");
       return;
     }
     for (const command of packet.commands) {

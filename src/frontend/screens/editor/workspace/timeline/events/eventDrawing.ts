@@ -14,7 +14,12 @@ import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/te
 import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { NOISE_ACTIVE_EVENTS } from "../../../../../../core/edit/events/eventTracks.ts";
-import { BACKGROUND_GRID, FOREGROUND_GRID, strokeVerticalGrid } from "../drawing/gridDrawing.ts";
+import {
+  BACKGROUND_GRID,
+  FOREGROUND_GRID,
+  gridBatchKey,
+  strokeVerticalGrid,
+} from "../drawing/gridDrawing.ts";
 import { eventLayerOf } from "../../../../../../core/edit/timeline/model.ts";
 import { eventColumnBoundary } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type {
@@ -311,9 +316,17 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       }
       context.restore();
     }
-    this.eventsGridBatch.begin(width, height);
-    this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "events", BACKGROUND_GRID);
-    this.eventsGridBatch.finish();
+    const gridStarted = this.eventsGridBatch.beginRetained
+      ? this.eventsGridBatch.beginRetained(
+          width,
+          height,
+          gridBatchKey(this, width, height, "events"),
+        )
+      : this.eventsGridBatch.begin(width, height);
+    if (gridStarted) {
+      this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "events", BACKGROUND_GRID);
+      this.eventsGridBatch.finish();
+    }
     this.drawMultiLineGrid(context, width, height, playBeat, "events", FOREGROUND_GRID);
     if (repaintBatch) {
       this.drawMultiLineEvents(playBeat, backdrop.context);
@@ -336,9 +349,13 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     this.gestures.finishEventRectFrame();
     return;
   }
-  this.eventsGridBatch.begin(width, height);
-  this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "events");
-  this.eventsGridBatch.finish();
+  const gridStarted = this.eventsGridBatch.beginRetained
+    ? this.eventsGridBatch.beginRetained(width, height, gridBatchKey(this, width, height, "events"))
+    : this.eventsGridBatch.begin(width, height);
+  if (gridStarted) {
+    this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "events");
+    this.eventsGridBatch.finish();
+  }
   this.grid(context, width, height, playBeat, FOREGROUND_GRID, "events");
   const layer: TimelineEventLayer = this.gestures.extended
     ? { ...session.line?.extended, paintEvents: eventList(session, "paintEvents") }

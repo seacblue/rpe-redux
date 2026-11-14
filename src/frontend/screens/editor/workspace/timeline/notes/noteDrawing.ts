@@ -12,6 +12,7 @@ import {
   BACKGROUND_GRID,
   FOREGROUND_GRID,
   PLAYHEAD_GRID,
+  gridBatchKey,
   strokeVerticalGrid,
 } from "../drawing/gridDrawing.ts";
 import {
@@ -293,13 +294,19 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     }
   }
   if (multiplePanels) {
-    this.notesGridBatch.begin(width, height);
-    this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "notes", BACKGROUND_GRID);
-    this.notesGridBatch.finish();
+    if (
+      this.notesGridBatch.beginRetained(width, height, gridBatchKey(this, width, height, "notes"))
+    ) {
+      this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "notes", BACKGROUND_GRID);
+      this.notesGridBatch.finish();
+    }
   } else {
-    this.notesGridBatch.begin(width, height);
-    this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
-    this.notesGridBatch.finish();
+    if (
+      this.notesGridBatch.beginRetained(width, height, gridBatchKey(this, width, height, "notes"))
+    ) {
+      this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
+      this.notesGridBatch.finish();
+    }
   }
   drawNoteLanes(this, backdrop.context, width, height);
   if (multiplePanels) {

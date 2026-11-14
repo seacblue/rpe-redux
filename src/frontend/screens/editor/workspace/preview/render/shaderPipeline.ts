@@ -9,6 +9,8 @@
 import { PREVIEW_LOGICAL_SIZE } from "../scene/constants.ts";
 import {
   recordShaderCompile,
+  recordShaderOverlayUpload,
+  renderProfileMark,
   recordShaderSourceUpload,
   recordShaderState,
 } from "../../../../../../core/diagnostics/renderMetrics.ts";
@@ -160,6 +162,7 @@ export class ShaderPipeline {
   canvas: HTMLCanvasElement | null;
   programs: Map<string, ShaderProgram>;
   sourceTexture: WebGLTexture | null;
+  overlayTexture: WebGLTexture | null;
   pingTexture: WebGLTexture | null;
   pongTexture: WebGLTexture | null;
   framebuffer: WebGLFramebuffer | null;
@@ -187,6 +190,11 @@ export class ShaderPipeline {
   private cacheEpoch = 0;
   /** Reusable pass list for one render submission. */
   private readonly usablePasses: { pass: ShaderPass; program: ShaderProgram }[] = [];
+  private compositeProgram: WebGLProgram | null = null;
+  private compositePosition = -1;
+  private compositeTexCoord = -1;
+  private compositeSourceUniform: WebGLUniformLocation | null = null;
+  private compositeOverlayUniform: WebGLUniformLocation | null = null;
 
   /** Releases every GL object this pipeline created. */
   dispose(): void {
@@ -209,6 +217,7 @@ export class ShaderPipeline {
     this.textureWidth = 0;
     this.textureHeight = 0;
     this.sourceTexture =
+      this.overlayTexture =
       this.pingTexture =
       this.pongTexture =
       this.framebuffer =
@@ -230,6 +239,7 @@ export class ShaderPipeline {
     this.canvas = null;
     this.programs = new Map();
     this.sourceTexture = null;
+    this.overlayTexture = null;
     this.pingTexture = null;
     this.pongTexture = null;
     this.framebuffer = null;
@@ -300,11 +310,38 @@ export class ShaderPipeline {
     }
     this.buffer = createCornerBuffer(gl, FULLSCREEN_QUAD);
     this.sourceTexture = gl.createTexture();
+    this.overlayTexture = gl.createTexture();
     this.pingTexture = gl.createTexture();
     this.pongTexture = gl.createTexture();
     this.framebuffer = gl.createFramebuffer();
-    for (const texture of [this.sourceTexture, this.pingTexture, this.pongTexture]) {
+    for (const texture of [
+      this.sourceTexture,
+      this.overlayTexture,
+      this.pingTexture,
+      this.pongTexture,
+    ]) {
       this.configureTexture(texture);
+    }
+    try {
+      this.compositeProgram = linkProgram(gl, this.vertexSource(), this.compositeFragmentSource());
+    } catch {
+      this.compositeProgram = null;
+    }
+    this.compositePosition = this.compositeProgram
+      ? gl.getAttribLocation(this.compositeProgram, "a_position")
+      : -1;
+    this.compositeTexCoord = this.compositeProgram
+      ? gl.getAttribLocation(this.compositeProgram, "a_texCoord")
+      : -1;
+    this.compositeSourceUniform = this.compositeProgram
+      ? gl.getUniformLocation(this.compositeProgram, "u_texture")
+      : null;
+    this.compositeOverlayUniform = this.compositeProgram
+      ? gl.getUniformLocation(this.compositeProgram, "u_overlay")
+      : null;
+    if (this.compositeProgram && this.compositeOverlayUniform) {
+      gl.useProgram(this.compositeProgram);
+      gl.uniform1i(this.compositeOverlayUniform, 1);
     }
   }
 
@@ -315,10 +352,18 @@ export class ShaderPipeline {
       for (const result of this.programs.values()) {
         gl.deleteProgram(result.program);
       }
-      for (const texture of [this.sourceTexture, this.pingTexture, this.pongTexture]) {
+      for (const texture of [
+        this.sourceTexture,
+        this.overlayTexture,
+        this.pingTexture,
+        this.pongTexture,
+      ]) {
         if (texture) {
           gl.deleteTexture(texture);
         }
+      }
+      if (this.compositeProgram) {
+        gl.deleteProgram(this.compositeProgram);
       }
       if (this.framebuffer) {
         gl.deleteFramebuffer(this.framebuffer);
@@ -329,6 +374,7 @@ export class ShaderPipeline {
     }
     this.programs.clear();
     this.sourceTexture = null;
+    this.overlayTexture = null;
     this.pingTexture = null;
     this.pongTexture = null;
     this.framebuffer = null;
@@ -340,6 +386,11 @@ export class ShaderPipeline {
     this.uploadedHeight = 0;
     this.textureWidth = 0;
     this.textureHeight = 0;
+    this.compositeProgram = null;
+    this.compositePosition = -1;
+    this.compositeTexCoord = -1;
+    this.compositeSourceUniform = null;
+    this.compositeOverlayUniform = null;
   }
 
   /** Drop invalid GPU handles after a browser context loss and schedule recovery. */
@@ -631,19 +682,25 @@ export class ShaderPipeline {
   /**
    * Upload `sourceCanvas` into the shader's source texture.
    *
-   * `overlay` is composited in the same pass when the caller keeps a separate
-   * layer (the GPU note batch) that must be part of the shader input. Folding it
-   * into the staging draw avoids a second full-canvas composite before upload.
+   * The source is uploaded at the shader target size when possible; a small
+   * Canvas2D staging surface is used only when the source backing store needs
+   * downsampling. Separate overlay layers use their own GPU texture and pass.
    */
-  private uploadSource(
+  private uploadCanvas(
+    texture: WebGLTexture | null,
     sourceCanvas: HTMLCanvasElement,
     width: number,
     height: number,
-    overlay: HTMLCanvasElement | null = null,
   ): boolean {
     const gl = this.gl;
-    if (!gl) {
+    if (!gl || !texture) {
       return false;
+    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    if (sourceCanvas.width === width && sourceCanvas.height === height) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
+      return true;
     }
     let staging = this.sourceStaging ?? null;
     if (!staging) {
@@ -661,13 +718,40 @@ export class ShaderPipeline {
     // The source draw covers the entire staging surface, including transparent
     // pixels, so clearing it first would be a redundant full-canvas pass.
     stagingContext.drawImage(sourceCanvas, 0, 0, width, height);
-    if (overlay) {
-      stagingContext.drawImage(overlay, 0, 0, width, height);
-    }
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, staging);
     return true;
+  }
+
+  /** Upload the primary source without compositing another Canvas2D layer. */
+  private uploadSource(sourceCanvas: HTMLCanvasElement, width: number, height: number): boolean {
+    return this.uploadCanvas(this.sourceTexture, sourceCanvas, width, height);
+  }
+
+  /** Link the small GPU-side source-plus-overlay composition pass. */
+  private compositeFragmentSource(): string {
+    return this.webgl2
+      ? `#version 300 es
+          precision mediump float;
+          uniform sampler2D u_texture;
+          uniform sampler2D u_overlay;
+          in vec2 v_texCoord;
+          out vec4 outColor;
+          void main() {
+            vec4 base = texture(u_texture, v_texCoord);
+            vec4 overlay = texture(u_overlay, v_texCoord);
+            outColor = overlay + base * (1.0 - overlay.a);
+          }
+        `
+      : `precision mediump float;
+          uniform sampler2D u_texture;
+          uniform sampler2D u_overlay;
+          varying vec2 v_texCoord;
+          void main() {
+            vec4 base = texture2D(u_texture, v_texCoord);
+            vec4 overlay = texture2D(u_overlay, v_texCoord);
+            gl_FragColor = overlay + base * (1.0 - overlay.a);
+          }
+        `;
   }
 
   /** Uploads the frame uniforms and the pass's value overrides. */
@@ -743,6 +827,45 @@ export class ShaderPipeline {
   }
 
   /** Draws one full-screen quad through `result` into `framebuffer`. */
+  private drawCompositeQuad(
+    sourceTexture: WebGLTexture,
+    overlayTexture: WebGLTexture,
+    outputTexture: WebGLTexture,
+    width: number,
+    height: number,
+  ): boolean {
+    const gl = this.context();
+    if (!this.compositeProgram || !this.buffer || !this.framebuffer) {
+      return false;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outputTexture, 0);
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(this.compositeProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    if (this.compositePosition >= 0) {
+      gl.enableVertexAttribArray(this.compositePosition);
+      gl.vertexAttribPointer(this.compositePosition, 2, gl.FLOAT, false, 16, 0);
+    }
+    if (this.compositeTexCoord >= 0) {
+      gl.enableVertexAttribArray(this.compositeTexCoord);
+      gl.vertexAttribPointer(this.compositeTexCoord, 2, gl.FLOAT, false, 16, 8);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, sourceTexture);
+    if (this.compositeSourceUniform) {
+      gl.uniform1i(this.compositeSourceUniform, 0);
+    }
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, overlayTexture);
+    if (this.compositeOverlayUniform) {
+      gl.uniform1i(this.compositeOverlayUniform, 1);
+    }
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    return true;
+  }
+
+  /** Draws one full-screen quad through `result` into `framebuffer`. */
   drawQuad(
     result: ShaderProgram,
     inputTexture: WebGLTexture | null,
@@ -781,8 +904,8 @@ export class ShaderPipeline {
    * Returns false when there is nothing to draw or GL is unavailable. `viewport`
    * scopes the chart rect; `sourceFor` resolves each pass's GLSL source.
    * `sourceRevision` identifies the primary canvas's pixels; an unchanged
-   * revision reuses the uploaded texture. `overlayCanvas` is folded into the
-   * uploaded frame so a separate GPU note layer needs no pre-composite.
+   * revision reuses the uploaded texture. `overlayCanvas` is uploaded as a
+   * separate texture and composited by WebGL before the user shader passes.
    */
   render(
     sourceCanvas: HTMLCanvasElement,
@@ -794,7 +917,9 @@ export class ShaderPipeline {
     sourceRevision?: number,
     overlayCanvas?: HTMLCanvasElement | null,
   ): boolean {
+    renderProfileMark("preview.shader.render.start");
     if (!passes.length || !targetCanvas || !this.ensure(targetCanvas)) {
+      renderProfileMark("preview.shader.render.end");
       return false;
     }
     const gl = this.context();
@@ -828,17 +953,19 @@ export class ShaderPipeline {
     const rect = shaderViewport(view, displayWidth, displayHeight);
     const resolution = [view.width / (view.scale || 1), view.height / (view.scale || 1)];
     const canReuseUpload =
-      !overlayCanvas &&
       sourceRevision !== undefined &&
       this.uploadedSource === sourceCanvas &&
       this.uploadedRevision === sourceRevision &&
       this.uploadedWidth === width &&
       this.uploadedHeight === height;
     if (!canReuseUpload) {
+      renderProfileMark("preview.shader.source-upload.start");
       const uploadStarted = performance.now();
-      const uploaded = this.uploadSource(sourceCanvas, width, height, overlayCanvas ?? null);
+      const uploaded = this.uploadSource(sourceCanvas, width, height);
       recordShaderSourceUpload("preview", performance.now() - uploadStarted);
+      renderProfileMark("preview.shader.source-upload.end");
       if (!uploaded) {
+        renderProfileMark("preview.shader.render.end");
         return false;
       }
       this.uploadedSource = sourceCanvas;
@@ -850,6 +977,33 @@ export class ShaderPipeline {
     }
     let input = this.sourceTexture;
     let output = this.pingTexture;
+    if (overlayCanvas) {
+      renderProfileMark("preview.shader.overlay-upload.start");
+      const overlayStarted = performance.now();
+      const uploadedOverlay = this.uploadCanvas(this.overlayTexture, overlayCanvas, width, height);
+      recordShaderOverlayUpload("preview", performance.now() - overlayStarted);
+      renderProfileMark("preview.shader.overlay-upload.end");
+      if (!uploadedOverlay || !this.overlayTexture || !this.pingTexture) {
+        renderProfileMark("preview.shader.render.end");
+        return false;
+      }
+      renderProfileMark("preview.shader.overlay-composite.start");
+      if (
+        !this.drawCompositeQuad(
+          this.sourceTexture!,
+          this.overlayTexture,
+          this.pingTexture,
+          width,
+          height,
+        )
+      ) {
+        renderProfileMark("preview.shader.render.end");
+        return false;
+      }
+      renderProfileMark("preview.shader.overlay-composite.end");
+      input = this.pingTexture;
+      output = this.pongTexture;
+    }
     let rendered = 0;
     const usable = this.usablePasses;
     usable.length = 0;
@@ -887,12 +1041,14 @@ export class ShaderPipeline {
     }
     if (!rendered) {
       usable.length = 0;
+      renderProfileMark("preview.shader.render.end");
       return false;
     }
     usable.length = 0;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.flush();
     targetCanvas.style.visibility = "visible";
+    renderProfileMark("preview.shader.render.end");
     return true;
   }
 }
