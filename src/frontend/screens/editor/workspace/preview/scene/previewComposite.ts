@@ -5,12 +5,11 @@
  */
 import { ShaderRuntime } from "../../../../../../core/global/chart/shader/shader.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
-import { prepareCanvas } from "../../../canvas/canvas2d.ts";
-import { drawGameUi } from "../render/gameUi.ts";
-import { drawGuides, type PreviewGuideSurface } from "../drawing/previewGuides.ts";
+import type { PreviewGuideSurface } from "../drawing/previewGuides.ts";
 import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
 import type { ShaderPipeline } from "../render/shaderPipeline.ts";
 import type { PreviewFrame, PreviewShaderEffect } from "./previewTypes.ts";
+import { PreviewOverlayRenderDevice } from "./previewOverlayRenderDevice.ts";
 
 import {
   getEditorRegionSnapshot,
@@ -36,40 +35,7 @@ export interface PreviewCompositeSurface extends PreviewGuideSurface {
 }
 
 /** Draw the game UI and judge-line guides onto one preview layer. */
-function drawCompositeOverlay(
-  surface: PreviewCompositeSurface,
-  frame: PreviewFrame,
-  target: CanvasRenderingContext2D,
-): void {
-  const { chart, states, seconds, selectedLine, scale, screenScale, viewport } = frame;
-  drawGameUi(
-    target,
-    chart,
-    states,
-    surface.completionTimes,
-    seconds,
-    selectedLine,
-    viewport,
-    screenScale,
-    surface.skin ?? null,
-    surface.duration ?? 600,
-    surface.gameUiCornerCompression,
-  );
-  drawGuides(surface, target, scale, selectedLine);
-}
-
-/** Draw whichever non-shader overlay the current preview configuration needs. */
-function drawUnshadedOverlay(
-  surface: PreviewCompositeSurface,
-  frame: PreviewFrame,
-  target: CanvasRenderingContext2D,
-): void {
-  if (surface.showGameUI) {
-    drawCompositeOverlay(surface, frame, target);
-  } else {
-    drawGuides(surface, target, frame.scale, frame.selectedLine);
-  }
-}
+const overlayDevice = new PreviewOverlayRenderDevice();
 
 /**
  * Finishes a frame: runs shader passes, draws game UI and guides, and writes
@@ -94,10 +60,10 @@ export function drawComposite(
   const shaderEffects = surface.applyShaders ? frame.shaderEffects : [];
   const globalShader = shaderEffects.some((effect) => effect.global);
   if (!shaderEffects.length) {
-    drawUnshadedOverlay(surface, frame, context);
+    overlayDevice.render({ surface, frame, target: context });
   }
   if (globalShader) {
-    drawUnshadedOverlay(surface, frame, context);
+    overlayDevice.render({ surface, frame, target: context });
   }
   context.restore();
   let shaderRendered = false;
@@ -137,17 +103,15 @@ export function drawComposite(
   );
   surface.display.setOverlayOpacity(workspaceOpacity);
   if (!shaderRendered && shaderEffects.length && !globalShader) {
-    context.save();
-    context.beginPath();
-    context.rect(viewport.left, viewport.top, viewport.width, viewport.height);
-    context.clip();
-    drawUnshadedOverlay(surface, frame, context);
-    context.restore();
+    overlayDevice.render({
+      surface,
+      frame,
+      target: context,
+      clip: viewport,
+    });
   }
   if (shaderRendered && !globalShader && surface.overlayCanvas) {
-    const overlay = prepareCanvas(surface.overlayCanvas);
-    const overlayContext = overlay.context;
-    drawUnshadedOverlay(surface, frame, overlayContext);
+    overlayDevice.renderCanvas(surface, frame, surface.overlayCanvas);
     surface.display.setOverlayVisible(true);
   } else if (surface.overlayCanvas) {
     surface.display.setOverlayVisible(false);

@@ -13,6 +13,7 @@ import type { NoteBatch } from "../../../canvas/noteBatch.ts";
 import type { TimelineLineBatch } from "../../../canvas/timelineLineBatch.ts";
 import type { TimelineSolidBatch } from "../../../canvas/timelineSolidBatch.ts";
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
+import type { TimelineGridRenderDevice } from "../../../canvas/timelineGridRenderDevice.ts";
 
 /**
  * Structural seam shared by the Timeline class and its independently
@@ -29,15 +30,19 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   readonly cache: TimelineCache;
   notesBackdrop: HTMLCanvasElement;
   notesGridBatch: TimelineLineBatch;
+  notesGridDevice: TimelineGridRenderDevice;
   notesPlayhead: HTMLCanvasElement;
   notesPlayheadBatch: TimelineLineBatch;
+  notesPlayheadDevice: TimelineGridRenderDevice;
   notesCanvas: HTMLCanvasElement;
   noteBatch: NoteBatch;
   noteSolidBatch: TimelineSolidBatch;
   eventsBackdrop: HTMLCanvasElement;
   eventsGridBatch: TimelineLineBatch;
+  eventsGridDevice: TimelineGridRenderDevice;
   eventsPlayhead: HTMLCanvasElement;
   eventsPlayheadBatch: TimelineLineBatch;
+  eventsPlayheadDevice: TimelineGridRenderDevice;
   eventsCanvas: HTMLCanvasElement;
   eventBatch: TimelineEventBatch;
   eventOverlayBatch: TimelineOverlayBatch;
@@ -64,14 +69,18 @@ export type TimelineGridReceiver = Pick<
   | "appearance"
   | "cache"
   | "eventsGridBatch"
+  | "eventsGridDevice"
   | "eventsPlayheadBatch"
+  | "eventsPlayheadDevice"
   | "getSession"
   | "gridForLine"
   | "gestures"
   | "notesGridBatch"
+  | "notesGridDevice"
   | "notesBackdrop"
   | "eventsBackdrop"
   | "notesPlayheadBatch"
+  | "notesPlayheadDevice"
   | "viewport"
 >;
 
