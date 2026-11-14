@@ -88,6 +88,10 @@ import {
 import { connectHitTestApi } from "../../../../../../core/edit/hitTest/api.ts";
 import { connectPreviewApi } from "../../../../../../core/edit/preview/api.ts";
 import { connectLayoutApi } from "../../../../../../core/edit/layout/api.ts";
+import {
+  IMPORT_AND_OPEN_CHART_EVENT,
+  IMPORT_CHART_EVENT,
+} from "../../../../../../core/shell/shellEventNames.ts";
 
 import { isDesktop } from "../../../../../../core/platform/environment.ts";
 import { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
@@ -648,6 +652,52 @@ export function createEditorAssembly(
       return false;
     }
   };
+  /** Open one imported project after preserving the editor's unsaved work. */
+  const openImportedProject = async (projectId: string): Promise<void> => {
+    const dirty = session.current.history.dirty || documentState.assetDirty;
+    if (dirty) {
+      const choice = await requestExitChoice({
+        title: t("editor.app.dialog.unsavedChangesTitle"),
+        description: t("editor.app.dialog.unsavedChangesBody"),
+        saveLabel: t("common.action.save"),
+        discardLabel: t("editor.app.dialog.openWithoutSaving"),
+        cancelLabel: t("common.action.cancel"),
+        priority: MODAL_PRIORITY.closePrompt,
+      });
+      if (choice === "cancel") {
+        return;
+      }
+      if (choice === "save") {
+        const result = await documentRuntime.save();
+        if (!result || result.status === "save_conflict") {
+          return;
+        }
+      }
+    }
+    await home.open(projectId);
+  };
+  /** Pick paths, import every one, and optionally open the single result. */
+  const chooseImport = async (openAfterImport: boolean): Promise<void> => {
+    if (!documents) {
+      notify(t("editor.app.notice.desktopEnvironment"), "warning");
+      return;
+    }
+    const paths = await documents.chooseImportPaths();
+    const imported = await home.importPaths(paths);
+    if (!openAfterImport || imported.length !== 1) {
+      if (openAfterImport && imported.length > 1) {
+        notify(t("editor.app.notice.droppedManyImported", { count: imported.length }), "info");
+      }
+      return;
+    }
+    await openImportedProject(imported[0]);
+  };
+  scope.listen(window, IMPORT_CHART_EVENT, () => {
+    void chooseImport(false).catch(reportError);
+  });
+  scope.listen(window, IMPORT_AND_OPEN_CHART_EVENT, () => {
+    void chooseImport(true).catch(reportError);
+  });
   scope.add(connectRpeImport(() => home.chooseRpeImport()));
   scope.add(connectPeImport(() => home.choosePeImport()));
   scope.add(connectExternalImport(() => home.chooseExternalImport()));
@@ -1185,9 +1235,8 @@ export function createEditorAssembly(
       documents,
       addCleanup: (cleanup) => scope.add(cleanup),
       openPaths: documentRuntime.openPaths,
-      // A drop is an import first: the file lands in the library whatever the
-      // current document is. Opening it is a second step that goes through the
-      // unsaved-changes decision, so a drop never silently discards edits.
+      // A drop is an import only: opening an imported project is an explicit
+      // action, so a drop never silently replaces the current document.
       dropPaths: async (paths) => {
         if (atHome()) {
           await home.importPaths(paths);
@@ -1213,28 +1262,7 @@ export function createEditorAssembly(
           notify(t("editor.app.notice.droppedManyImported", { count: imported.length }), "info");
           return;
         }
-        const target = imported[0];
-        const dirty = session.current.history.dirty || documentState.assetDirty;
-        if (dirty) {
-          const choice = await requestExitChoice({
-            title: t("editor.app.dialog.unsavedChangesTitle"),
-            description: t("editor.app.dialog.unsavedChangesBody"),
-            saveLabel: t("common.action.save"),
-            discardLabel: t("editor.app.dialog.openWithoutSaving"),
-            cancelLabel: t("common.action.cancel"),
-            priority: MODAL_PRIORITY.closePrompt,
-          });
-          if (choice === "cancel") {
-            return;
-          }
-          if (choice === "save") {
-            const result = await documentRuntime.save();
-            if (!result || result.status === "save_conflict") {
-              return;
-            }
-          }
-        }
-        await home.open(target);
+        // Keep the result in the library; the user can open it from the card.
       },
       restoreLastSession,
       markBootSettled,

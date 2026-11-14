@@ -62,12 +62,11 @@ export function ControlHost() {
     ) : (
       <ColorPopup key={popup.seq} state={popup} />
     );
-  // A modal dialog makes every node outside its top layer inert. Its controls'
-  // popup must belong to the same dialog to remain visible and interactive.
-  // Everything else stays inside the app root: the design sheets qualify their
-  // native-control rules with `.redux-app-root`, and a body portal would drop the popup's
-  // inputs and buttons back to unstyled platform chrome.
+  // Keep the popup in the app root rather than the owning dialog. Dialogs clip
+  // overflow by design, while the fixed popup must be able to use the viewport
+  // below or above a control. Modal policy explicitly exempts this overlay so
+  // it remains interactive while the rest of the page is inert.
   const appRoot = popup.element.closest(".redux-app-root");
-  const host = popup.element.closest("dialog[open]") ?? appRoot ?? popup.element.ownerDocument.body;
+  const host = appRoot ?? popup.element.ownerDocument.body;
   return createPortal(panel, host);
 }

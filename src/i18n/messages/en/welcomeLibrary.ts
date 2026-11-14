@@ -7,6 +7,11 @@
  */
 export default {
   "workspace.welcome.library.field.notes": "Notes",
+  "workspace.welcome.library.group.action": "Change group",
+  "workspace.welcome.library.group.editTitle": "Change group",
+  "workspace.welcome.library.group.new": "New group…",
+  "workspace.welcome.library.group.newLabel": "New group name",
+  "workspace.welcome.library.group.errorRequired": "Enter a group name.",
   "workspace.welcome.library.field.updated": "Updated",
   "workspace.welcome.library.welcome.morning": "Good morning",
   "workspace.welcome.library.welcome.afternoon": "Good afternoon",
@@ -188,4 +193,5 @@ export default {
   "workspace.welcome.library.detail.hint": "Pick a chart from the list to preview it here.",
   "workspace.welcome.library.preview.play": "Play preview",
   "workspace.welcome.library.preview.pause": "Pause preview",
+  "workspace.welcome.library.preview.seek": "Seek preview",
 };

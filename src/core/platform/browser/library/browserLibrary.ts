@@ -503,7 +503,7 @@ export class BrowserLibrary extends LocalLibrary {
   ): Promise<{ project: LibraryProjectSummary }> {
     return this.result("create", {
       name: input.name,
-      group: input.group ?? "",
+      group: input.group ?? "Default",
       chart: input.chart,
     });
   }
@@ -514,7 +514,7 @@ export class BrowserLibrary extends LocalLibrary {
   ): Promise<{ project: LibraryProjectSummary }> {
     return this.result("create", {
       name: input.name,
-      group: input.group ?? "",
+      group: input.group ?? "Default",
       chartJson: input.chartJson,
     });
   }

@@ -702,7 +702,9 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-bar {
 
 .redux-control-popup {
   position: fixed;
-  z-index: var(--z-menu);
+  // Control popups may be opened from a modal. They must sit above the modal
+  // scrim and dialog while still remaining below toasts and diagnostics.
+  z-index: var(--z-popover);
   padding: var(--space-1);
   background: var(--surface-raised);
   color: var(--foreground);

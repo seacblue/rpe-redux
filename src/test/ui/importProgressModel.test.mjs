@@ -2,6 +2,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { importProgressSnapshot } from "../../frontend/overlays/modals/importProgressModel.ts";
+import {
+  importLoadProgress,
+  importWriteProgress,
+} from "../../frontend/screens/welcome/importProgress.ts";
 
 test("a running import reports its percentage and completed count", () => {
   assert.deepEqual(importProgressSnapshot(0.5, 82, "running"), {
@@ -50,4 +54,17 @@ test("an unknown fraction stays indeterminate and a missing total stays zero", (
   assert.equal(importProgressSnapshot(0.5, 0, "running").done, 0);
   assert.equal(importProgressSnapshot(0.5, NaN, "running").done, 0);
   assert.equal(importProgressSnapshot(Number.NaN, 82, "running").percent, null);
+});
+
+test("maps native load phases into a monotonic import range", () => {
+  const readDone = importLoadProgress("read", 1, 1);
+  const unpackStart = importLoadProgress("unpack", 0, 10);
+  const parseStart = importLoadProgress("parse", 0, 10);
+  assert.equal(readDone, 0.35);
+  assert.equal(unpackStart, 0.35);
+  assert.equal(parseStart, 0.55);
+  assert.ok(readDone <= unpackStart);
+  assert.ok(unpackStart <= parseStart);
+  assert.equal(importWriteProgress(0), 0.8);
+  assert.equal(importWriteProgress(1), 1);
 });

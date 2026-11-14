@@ -137,6 +137,7 @@ export class ProjectHome {
       },
       onExportProject: (id) => exportProject(id).catch(reportError),
       onRenameProject: (project) => this.library.edit(project),
+      onEditGroup: (project, groups) => this.library.editGroup(project, groups),
       onDelete: (project) => this.library.remove(project),
       onSort: (sort: LibrarySort) => {
         void this.library.setSort(sort).catch(reportError);
@@ -225,23 +226,19 @@ export class ProjectHome {
         this.reportError(error);
       }
     }
-    const imported: string[] = [];
-    for (const path of paths) {
-      try {
-        const item = classified?.find((entry) => entry.path === path);
-        const ids = item ? await this.importClassified(item) : await this.importSequentially(path);
-        imported.push(...ids);
-      } catch (error) {
-        this.reportError(error);
-      }
-    }
-    if (imported.length) {
-      try {
-        await this.refresh();
-      } catch (error) {
-        this.reportError(error);
-      }
-    }
+    const imported = (
+      await Promise.all(
+        paths.map(async (path) => {
+          try {
+            const item = classified?.find((entry) => entry.path === path);
+            return item ? await this.importClassified(item) : await this.importSequentially(path);
+          } catch (error) {
+            this.reportError(error);
+            return [];
+          }
+        }),
+      )
+    ).flat();
     return imported;
   }
 
@@ -320,6 +317,10 @@ export class ProjectHome {
       if (id) {
         return [id];
       }
+      // The external importer owns every non-RPE format. Once it has examined
+      // the path, falling through to the native importer would misread PE/PEC
+      // input as RPE JSON and surface the wrong loading error.
+      return [];
     }
     const id = await this.importFile(path);
     return id ? [id] : [];

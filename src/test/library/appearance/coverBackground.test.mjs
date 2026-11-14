@@ -5,6 +5,7 @@ import { COVER_BACKGROUND_KEYS } from "../../../core/settings/features/coverBack
 import "../../../core/settings/features/appearance.ts";
 import { settingsRegistry } from "../../../core/settings/settings.ts";
 import { editorCoverUrl, editorDocumentCoverUrl } from "../../../frontend/app/coverBackdropUrl.ts";
+import { resourceReferences } from "../../../core/global/document/resources.ts";
 
 test("the editor cover URL prefers the library project, then document assets", () => {
   assert.equal(
@@ -37,6 +38,17 @@ test("the editor cover URL resolves an inferred document image", () => {
       "chart.json",
     ),
     "http://redux.localhost/doc/cover.png",
+  );
+});
+
+test("generated library thumbnails are not inferred as chart backgrounds", () => {
+  const assets = new Map([
+    ["__redux/thumbnail.png", new Uint8Array()],
+    ["cover.png", new Uint8Array()],
+  ]);
+  assert.equal(
+    resourceReferences({ META: { background: "", song: "" } }, assets, "chart.json").background,
+    "cover.png",
   );
 });
 

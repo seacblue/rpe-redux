@@ -100,6 +100,7 @@ type ProjectManifest struct {
 	Composer     string          `json:"composer"`
 	Level        string          `json:"level"`
 	Background   string          `json:"background"`
+	Thumbnail    string          `json:"thumbnail,omitempty"`
 	Song         string          `json:"song"`
 	NoteCount    int             `json:"noteCount"`
 	EventCount   int             `json:"eventCount"`

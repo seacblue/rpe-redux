@@ -1,7 +1,7 @@
 /**
  * The home library's rows and tiles.
  *
- * Entries carry the title, composer, and difficulty for the carousel; the
+ * Entries carry the title, composer, and group for the carousel; the
  * selected entry's remaining metadata lives in the detail pane. A click selects
  * only: opening is the detail pane's own Open button, so a stray click on a card
  * never replaces the chart being edited.
@@ -10,13 +10,24 @@
  * the "new" marker for a just-imported chart, and the skeleton that stands in
  * while a confirmed delete is in flight.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { useTranslation } from "../../../../i18n/react.ts";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
+import { useTranslation, type Translator } from "../../../../i18n/react.ts";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { AsyncImage } from "../../../../design/components/image/AsyncImage.tsx";
 import { usePresenceList } from "../../../../design/patterns/usePresenceList.ts";
 import type { LibraryView } from "../libraryView.ts";
-import { matchesLibraryQuery, type LibraryEntry } from "./libraryEntries.ts";
+import { matchesLibraryGroups, matchesLibraryQuery, type LibraryEntry } from "./libraryEntries.ts";
+import { librarySelectionScrollTop } from "./libraryCardNavigation.ts";
+import { normalizeLibraryGroup } from "./libraryGroups.ts";
 import { ProjectDialogs } from "./ProjectDialogs.tsx";
 import {
   ContextMenuPopup,
@@ -33,7 +44,7 @@ const entryKey = (entry: LibraryEntry): string => entry.key;
 const NEW_ENTRY_MARKER_MS = 2800;
 
 /** Cover image that lets the shared decode handshake choose the placeholder. */
-function CardCover({ url }: { url: string }) {
+const CardCover = memo(function CardCover({ url }: { url: string }) {
   return (
     <span className="project-cover-frame" aria-hidden="true">
       <AsyncImage
@@ -44,7 +55,78 @@ function CardCover({ url }: { url: string }) {
       />
     </span>
   );
+});
+
+/** Props for one library card, kept narrow so keyboard selection only updates two cards. */
+interface LibraryCardProps {
+  entry: LibraryEntry;
+  selected: boolean;
+  leaving: boolean;
+  skeleton: boolean;
+  entering: boolean;
+  translate: Translator["t"];
+  onSelect(entry: LibraryEntry, preview: boolean): void;
+  onOpen(entry: LibraryEntry): void;
+  onExport(entry: LibraryEntry): void;
+  onRename(entry: LibraryEntry): void;
+  onDelete(entry: LibraryEntry): void;
+  onContextMenu(event: MouseEvent<HTMLButtonElement>, entry: LibraryEntry): void;
 }
+
+/** Renders one stable card so changing the selection does not reconcile the whole list. */
+const LibraryCard = memo(function LibraryCard({
+  entry,
+  selected,
+  leaving,
+  skeleton,
+  entering,
+  translate,
+  onSelect,
+  onContextMenu,
+}: LibraryCardProps) {
+  return (
+    <Button
+      type="button"
+      variant="plain"
+      className={`project-card${skeleton ? " is-skeleton" : ""}`}
+      data-selected={selected && !skeleton}
+      data-entering={entering ? "true" : undefined}
+      data-leaving={leaving ? "true" : undefined}
+      data-entry-key={entry.key}
+      data-project-id={entry.source.project.id}
+      disabled={skeleton}
+      aria-busy={skeleton || undefined}
+      aria-current={selected && !skeleton ? "true" : undefined}
+      onClick={() => onSelect(entry, true)}
+      onContextMenu={(event) => {
+        if (!skeleton) {
+          onContextMenu(event, entry);
+        }
+      }}
+    >
+      {skeleton ? (
+        <CardSkeleton />
+      ) : (
+        <span className="project-information">
+          <CardCover key={`${entry.key}:${entry.cover}`} url={entry.cover} />
+          <span className="project-copy">
+            <span className="project-title">{entry.title}</span>
+            <span className="project-composer">{entry.composer}</span>
+          </span>
+          <span
+            className="project-level"
+            data-tip-title={`${translate("editor.home.field.groupLabel")}: ${normalizeLibraryGroup(entry.source.project.group)}`}
+          >
+            {normalizeLibraryGroup(entry.source.project.group)}
+          </span>
+          {entering && (
+            <span className="project-new">{translate("workspace.welcome.library.new")}</span>
+          )}
+        </span>
+      )}
+    </Button>
+  );
+});
 
 /** Placeholder anatomy shared by the first-read skeleton and a pending delete. */
 function CardSkeleton() {
@@ -133,6 +215,8 @@ export interface LibraryCardsProps {
   entries: readonly LibraryEntry[];
   /** Lower-cased search text; filtering never plays the removal animation. */
   query: string;
+  /** Stored group values selected by the filter popover; empty means all. */
+  groups: ReadonlySet<string>;
   /** The library has finished its first read, so the first list is not "new". */
   loaded: boolean;
   selectedKey: string | null;
@@ -143,6 +227,7 @@ export interface LibraryCardsProps {
   onOpen(entry: LibraryEntry): void;
   onExport(entry: LibraryEntry): void;
   onRename(entry: LibraryEntry): void;
+  onEditGroup(entry: LibraryEntry, groups: readonly string[]): void;
   onDelete(entry: LibraryEntry): void;
 }
 
@@ -150,6 +235,7 @@ export interface LibraryCardsProps {
 export function LibraryCards({
   entries,
   query,
+  groups,
   loaded,
   selectedKey,
   view,
@@ -158,6 +244,7 @@ export function LibraryCards({
   onOpen,
   onExport,
   onRename,
+  onEditGroup,
   onDelete,
 }: LibraryCardsProps): React.JSX.Element {
   const { t: translate } = useTranslation();
@@ -166,59 +253,96 @@ export function LibraryCards({
   const container = useRef<HTMLDivElement>(null);
   const menu = useMemo(() => createContextMenuState<ContextMenuSnapshot>(), []);
   const removingKey = removingProjectId ? `project:${removingProjectId}` : null;
-  const visible = presence.items.filter((entry) => matchesLibraryQuery(entry, query));
+  const visible = useMemo(
+    () =>
+      presence.items.filter(
+        (entry) => matchesLibraryGroups(entry, groups) && matchesLibraryQuery(entry, query),
+      ),
+    [groups, presence.items, query],
+  );
+  // A stable key signature lets layout correction react to list replacement or
+  // reordering without running after every ordinary React render.
+  const visibleKeys = useMemo(() => visible.map((entry) => entry.key).join("\u0000"), [visible]);
+  const groupOptions = useMemo(
+    () => [...new Set(entries.map((entry) => entry.source.project.group))].sort(),
+    [entries],
+  );
 
   // Keyboard navigation can move the selection beyond the scroll viewport; a
   // card that is already visible must not move the list under the pointer.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedKey) {
       return;
     }
-    const node = [
-      ...(container.current?.querySelectorAll<HTMLElement>("[data-entry-key]") ?? []),
-    ].find((element) => element.dataset.entryKey === selectedKey);
-    node?.scrollIntoView({ block: "nearest" });
-  }, [selectedKey]);
+    const list = container.current;
+    const node = list?.querySelector<HTMLElement>(`[data-entry-key="${CSS.escape(selectedKey)}"]`);
+    if (!list || !node) {
+      return;
+    }
+    const listRect = list.getBoundingClientRect();
+    const cardRect = node.getBoundingClientRect();
+    const nextScrollTop = librarySelectionScrollTop(
+      {
+        scrollTop: list.scrollTop,
+        clientHeight: list.clientHeight,
+        scrollHeight: list.scrollHeight,
+        top: listRect.top,
+      },
+      { top: cardRect.top, bottom: cardRect.bottom },
+    );
+    if (nextScrollTop !== null && nextScrollTop !== list.scrollTop) {
+      list.scrollTop = nextScrollTop;
+    }
+  }, [selectedKey, view, visibleKeys]);
 
   /** Opens the card menu at the pointer and selects the chart it belongs to. */
-  const openMenu = (event: MouseEvent<HTMLButtonElement>, entry: LibraryEntry) => {
-    event.preventDefault();
-    onSelect(entry, false);
-    const actions: ContextMenuAction[] = [
-      {
-        id: "library.open",
-        label: translate("workspace.welcome.library.open"),
-        icon: "open",
-        run: () => onOpen(entry),
-      },
-      {
-        id: "library.export",
-        label: translate("workspace.welcome.library.export"),
-        icon: "export",
-        run: () => onExport(entry),
-      },
-      {
-        id: "library.rename",
-        label: translate("workspace.welcome.library.rename"),
-        icon: "pencil",
-        run: () => onRename(entry),
-      },
-      {
-        id: "library.delete",
-        label: translate("workspace.welcome.library.delete"),
-        icon: "trash",
-        danger: true,
-        run: () => onDelete(entry),
-      },
-    ];
-    menu.set({
-      owner: event.currentTarget,
-      x: event.clientX,
-      y: event.clientY,
-      align: "start",
-      actions,
-    });
-  };
+  const openMenu = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, entry: LibraryEntry) => {
+      event.preventDefault();
+      onSelect(entry, false);
+      const actions: ContextMenuAction[] = [
+        {
+          id: "library.open",
+          label: translate("workspace.welcome.library.open"),
+          icon: "open",
+          run: () => onOpen(entry),
+        },
+        {
+          id: "library.export",
+          label: translate("workspace.welcome.library.export"),
+          icon: "export",
+          run: () => onExport(entry),
+        },
+        {
+          id: "library.rename",
+          label: translate("workspace.welcome.library.rename"),
+          icon: "pencil",
+          run: () => onRename(entry),
+        },
+        {
+          id: "library.group",
+          label: translate("workspace.welcome.library.group.action"),
+          icon: "folder",
+          run: () => onEditGroup(entry, groupOptions),
+        },
+        {
+          id: "library.delete",
+          label: translate("workspace.welcome.library.delete"),
+          icon: "trash",
+          danger: true,
+          run: () => onDelete(entry),
+        },
+      ];
+      menu.set({
+        owner: event.currentTarget,
+        x: event.clientX,
+        y: event.clientY,
+        align: "start",
+        actions,
+      });
+    },
+    [groupOptions, menu, onDelete, onEditGroup, onExport, onOpen, onRename, onSelect, translate],
+  );
 
   return (
     <>
@@ -229,51 +353,21 @@ export function LibraryCards({
           const skeleton = entry.key === removingKey || leaving;
           const entering = !skeleton && newKeys.has(entry.key);
           return (
-            <Button
-              type="button"
-              variant="plain"
-              className={`project-card${skeleton ? " is-skeleton" : ""}`}
-              data-selected={selected && !skeleton}
-              data-entering={entering ? "true" : undefined}
-              data-leaving={leaving ? "true" : undefined}
-              data-entry-key={entry.key}
-              data-project-id={entry.source.project.id}
-              disabled={skeleton}
-              aria-busy={skeleton || undefined}
+            <LibraryCard
               key={entry.key}
-              aria-current={selected && !skeleton ? "true" : undefined}
-              onClick={() => onSelect(entry, true)}
-              onContextMenu={(event) => {
-                if (!skeleton) {
-                  openMenu(event, entry);
-                }
-              }}
-            >
-              {skeleton ? (
-                <CardSkeleton />
-              ) : (
-                <span className="project-information">
-                  <CardCover key={`${entry.key}:${entry.cover}`} url={entry.cover} />
-                  <span className="project-copy">
-                    <span className="project-title">{entry.title}</span>
-                    <span className="project-composer">{entry.composer}</span>
-                  </span>
-                  {entry.level && (
-                    <span
-                      className="project-level"
-                      data-tip-title={`${translate("workspace.welcome.library.field.level")}: ${entry.level}`}
-                    >
-                      {entry.level}
-                    </span>
-                  )}
-                  {entering && (
-                    <span className="project-new">
-                      {translate("workspace.welcome.library.new")}
-                    </span>
-                  )}
-                </span>
-              )}
-            </Button>
+              entry={entry}
+              selected={selected}
+              leaving={leaving}
+              skeleton={skeleton}
+              entering={entering}
+              translate={translate}
+              onSelect={onSelect}
+              onOpen={onOpen}
+              onExport={onExport}
+              onRename={onRename}
+              onDelete={onDelete}
+              onContextMenu={openMenu}
+            />
           );
         })}
       </div>

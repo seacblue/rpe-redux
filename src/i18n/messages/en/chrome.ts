@@ -19,6 +19,7 @@ export default {
   "chrome.tasks.cancel": "Cancel",
   "chrome.tasks.cancelAndDismiss": "Cancel and remove task",
   "chrome.tasks.dismiss": "Dismiss",
+  "chrome.tasks.removedToast": "Removed background task: {name}",
   "chrome.tasks.status.running": "Running",
   "chrome.tasks.status.cancelling": "Cancelling",
   "chrome.tasks.status.completed": "Completed",

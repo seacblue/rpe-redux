@@ -136,11 +136,17 @@ export function startLongTask(options: {
   for (const listener of listeners) {
     listener();
   }
+  let lastProgress: number | null = null;
   const report = (stage: string, progress: number | null = null) => {
     if (!controller.signal.aborted) {
+      const nextProgress =
+        progress === null ? null : Math.max(lastProgress ?? 0, Math.max(0, Math.min(1, progress)));
+      if (nextProgress !== null) {
+        lastProgress = nextProgress;
+      }
       change(id, {
         stage,
-        progress: progress === null ? null : Math.max(0, Math.min(1, progress)),
+        progress: nextProgress,
       });
     }
   };
