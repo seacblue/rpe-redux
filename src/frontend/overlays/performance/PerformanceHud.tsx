@@ -67,6 +67,151 @@ function trafficPoints(samples: readonly number[], maximum: number): string {
     .join(" ");
 }
 
+/** Converts frame intervals into SVG points with a stable budget reference. */
+function frameIntervalPoints(
+  samples: readonly number[],
+  maximum: number,
+  width: number,
+  height: number,
+): string {
+  const values = samples.length > 0 ? samples : [0];
+  return values
+    .map((value, index) => {
+      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+      const y = height - (Math.max(0, value) / maximum) * height;
+      return `${x.toFixed(1)},${Math.min(height, Math.max(0, y)).toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+/** Shows recent frame intervals against the refresh-rate budget. */
+function FrameIntervalGraph({ snapshot }: { snapshot: PerformanceHudSnapshot }) {
+  const { t } = useTranslation();
+  const width = 240;
+  const height = 72;
+  const maximum = Math.max(1, snapshot.frameBudgetMs * 1.25, ...snapshot.frameTimesMs);
+  const budgetY = height - (snapshot.frameBudgetMs / maximum) * height;
+  return (
+    <section
+      className="redux-performance-hud-frame-interval"
+      data-testid="performance-hud-frame-interval"
+      aria-label={t("chrome.performanceHud.frameTime")}
+    >
+      <div className="redux-performance-hud-frame-interval-heading">
+        <span className="redux-performance-hud-label">{t("chrome.performanceHud.frameTime")}</span>
+        <span className="redux-performance-hud-frame-interval-current">
+          {snapshot.frameIntervalMs.toFixed(1)} ms
+        </span>
+      </div>
+      <svg
+        className="redux-performance-hud-frame-interval-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={t("chrome.performanceHud.frameIntervalGraph")}
+        preserveAspectRatio="none"
+      >
+        <line
+          className="redux-performance-hud-frame-interval-grid"
+          x1="0"
+          y1="0"
+          x2={width}
+          y2="0"
+        />
+        <line
+          className="redux-performance-hud-frame-interval-budget"
+          x1="0"
+          y1={budgetY}
+          x2={width}
+          y2={budgetY}
+        />
+        <polyline
+          className="redux-performance-hud-frame-interval-line"
+          points={frameIntervalPoints(snapshot.frameTimesMs, maximum, width, height)}
+        />
+      </svg>
+      <div className="redux-performance-hud-frame-interval-legend">
+        <span className="redux-performance-hud-frame-interval-key is-actual">
+          <i aria-hidden="true" />
+          <span>{t("chrome.performanceHud.frameIntervalActual")}</span>
+        </span>
+        <span className="redux-performance-hud-frame-interval-key is-budget">
+          <i aria-hidden="true" />
+          <span>{t("chrome.performanceHud.frameIntervalBudget")}</span>
+        </span>
+      </div>
+    </section>
+  );
+}
+
+/** Shows where the current draw time is spent without adding a row per phase. */
+function HotspotGraph({ snapshot }: { snapshot: PerformanceHudSnapshot }) {
+  const { t } = useTranslation();
+  const segments = [
+    {
+      id: "timeline",
+      label: "chrome.performanceHud.timelineDrawTime",
+      value: Math.max(0, snapshot.timelineDrawMs),
+    },
+    {
+      id: "selection",
+      label: "chrome.performanceHud.selectionTime",
+      value: Math.max(0, snapshot.selectionMs),
+    },
+    {
+      id: "preview",
+      label: "chrome.performanceHud.previewDrawTime",
+      value: Math.max(0, snapshot.previewDrawMs),
+    },
+    {
+      id: "other",
+      label: "chrome.performanceHud.previewOtherTime",
+      value: Math.max(
+        0,
+        snapshot.drawTimeMs -
+          snapshot.timelineDrawMs -
+          snapshot.selectionMs -
+          snapshot.previewDrawMs,
+      ),
+    },
+  ] as const;
+  const total = Math.max(0.1, snapshot.drawTimeMs, ...segments.map((segment) => segment.value));
+  return (
+    <section
+      className="redux-performance-hud-hotspots"
+      data-testid="performance-hud-hotspots"
+      aria-label={t("chrome.performanceHud.hotspots")}
+    >
+      <div className="redux-performance-hud-hotspots-heading">
+        <span className="redux-performance-hud-label">{t("chrome.performanceHud.hotspots")}</span>
+        <strong>{snapshot.drawTimeMs.toFixed(1)} ms</strong>
+      </div>
+      <div
+        className="redux-performance-hud-hotspots-track"
+        role="img"
+        aria-label={segments
+          .map((segment) => `${t(segment.label)} ${segment.value.toFixed(1)} ms`)
+          .join(", ")}
+      >
+        {segments.map((segment) => (
+          <i
+            className={`is-${segment.id}`}
+            key={segment.id}
+            style={{ width: `${(segment.value / total) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="redux-performance-hud-hotspots-legend">
+        {segments.map((segment) => (
+          <span className={`redux-performance-hud-hotspots-key is-${segment.id}`} key={segment.id}>
+            <i aria-hidden="true" />
+            <span>{t(segment.label)}</span>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Formats a traffic rate using the same binary units as the byte counters. */
 function formatTrafficRate(kilobytesPerSecond: number): string {
   if (kilobytesPerSecond >= 1024) {
@@ -450,21 +595,30 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
           <div className="redux-performance-hud-blocks">
             {blocks.map((block) => (
               <div className="redux-performance-hud-block" key={block.id} data-hud-block={block.id}>
-                <span className="redux-performance-hud-label">{t(block.label)}</span>
-                {block.kind === "text" ? (
-                  <strong>{block.value(snapshot)}</strong>
+                {block.kind === "frame-graph" ? (
+                  <FrameIntervalGraph snapshot={snapshot} />
+                ) : block.kind === "hotspot-graph" ? (
+                  <HotspotGraph snapshot={snapshot} />
+                ) : block.kind === "text" ? (
+                  <>
+                    <span className="redux-performance-hud-label">{t(block.label)}</span>
+                    <strong>{block.value(snapshot)}</strong>
+                  </>
                 ) : (
-                  <div className="redux-performance-hud-bar" aria-label={t(block.label)}>
-                    {block.values(snapshot).map((value, index, values) => {
-                      const maximum = Math.max(1, ...values);
-                      return (
-                        <i
-                          key={`${index}-${value}`}
-                          style={{ height: `${Math.max(4, (value / maximum) * 100)}%` }}
-                        />
-                      );
-                    })}
-                  </div>
+                  <>
+                    <span className="redux-performance-hud-label">{t(block.label)}</span>
+                    <div className="redux-performance-hud-bar" aria-label={t(block.label)}>
+                      {block.values(snapshot).map((value, index, values) => {
+                        const maximum = Math.max(1, ...values);
+                        return (
+                          <i
+                            key={`${index}-${value}`}
+                            style={{ height: `${Math.max(4, (value / maximum) * 100)}%` }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
             ))}

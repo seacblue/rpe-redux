@@ -1246,6 +1246,8 @@ export class SceneRuntime {
   private sampledSeconds = Number.NaN;
   private sampledTempo: TempoSource | null = null;
   private sampledStates: SampledLineState[] | null = null;
+  /** Local states stay separate from world states because parent composition mutates the latter. */
+  private localStates: Array<SampledLineState | undefined> = [];
   private lineSamples = new WeakMap<LineRuntime, { seconds: number; state: SampledLineState }>();
   /** Parent-before-child order used by the allocation-free frame sampler. */
   private parentOrder: number[] | null = null;
@@ -1273,6 +1275,7 @@ export class SceneRuntime {
     this.sampledSeconds = Number.NaN;
     this.sampledTempo = null;
     this.sampledStates = null;
+    this.localStates = [];
     this.lineSamples = new WeakMap();
     this.parentOrder = null;
     this.hasParentLines = false;
@@ -1336,6 +1339,7 @@ export class SceneRuntime {
       return runtime;
     });
     this.allStatesStatic = this.lines.every((runtime) => !runtime || runtime.staticState);
+    this.localStates = new Array(this.lines.length);
     this.parentOrder = parentSampleOrder(sourceLines);
     const sameOrder =
       sourceLines.length === this.orderLines.length &&
@@ -1376,6 +1380,30 @@ export class SceneRuntime {
       this.lineSamples.set(runtime, { seconds, state: localState });
     }
     return state;
+  }
+
+  /** Sample a topologically ordered line into its reusable local state. */
+  private sampledLocalState(
+    index: number,
+    runtime: LineRuntime,
+    seconds: number,
+  ): SampledLineState {
+    const cached =
+      this.localStates[index] ??
+      (runtime.staticState ? this.lineSamples.get(runtime)?.state : undefined);
+    if (cached && runtime.staticState) {
+      this.localStates[index] = cached;
+      return cached;
+    }
+    const local = runtime.state(seconds, cached);
+    this.localStates[index] = local;
+    // The defensive sampler still needs a static local cache, while the
+    // topological path itself stays indexed and does not touch a WeakMap for
+    // dynamic lines on every playback frame.
+    if (runtime.staticState && !this.lineSamples.has(runtime)) {
+      this.lineSamples.set(runtime, { seconds, state: local });
+    }
+    return local;
   }
 
   /**
@@ -1479,13 +1507,14 @@ export class SceneRuntime {
           target[index] = emptyLineState();
           continue;
         }
-        target[index] = this.sampledLineState(runtime, seconds, target[index]);
+        const local = this.sampledLocalState(index, runtime, seconds);
+        target[index] = copyLineState(target[index], local);
         const parent = lineParentIndex(runtime.line.father);
         if (Number.isInteger(parent) && parent >= 0 && parent < this.lines.length) {
           const ancestor = target[parent];
-          const local = target[index];
-          if (ancestor && local) {
-            composeParentState(ancestor, local, runtime.line);
+          const world = target[index];
+          if (ancestor && world) {
+            composeParentState(ancestor, world, runtime.line);
           }
         }
       }

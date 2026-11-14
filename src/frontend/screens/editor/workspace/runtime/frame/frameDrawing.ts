@@ -28,6 +28,7 @@ interface FrameTimingProbe {
     playhead: boolean;
     timelineMs: number;
     previewMs: number;
+    selectionMs: number;
     totalMs: number;
     previewChartChanged: boolean;
     previewSessionChanged: boolean;
@@ -45,6 +46,7 @@ function reportFrameTiming(sample: Parameters<FrameTimingProbe>[0]): void {
     recordPerformanceFrameTiming({
       timelineMs: sample.timelineMs,
       previewMs: sample.previewMs,
+      selectionMs: sample.selectionMs,
       totalMs: sample.totalMs,
     });
   }
@@ -52,8 +54,8 @@ function reportFrameTiming(sample: Parameters<FrameTimingProbe>[0]): void {
 
 type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession"> & {
   renderRevision: number;
+  selectionOverlayRevision: number;
   drawPlayhead(playBeat: number): void;
-  refreshRectangleSelection(): void;
   gestures: Pick<
     Timeline["gestures"],
     "drag" | "eventInteraction" | "previewMarquee" | "previewRefresh"
@@ -138,12 +140,16 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       if (runtime.audio.playing) {
         runtime.timeline.viewport.setOrigin(beat, "playback");
       }
-      runtime.timeline.refreshRectangleSelection();
+      const selectionStarted = performance.now();
       runtime.timeline.gestures.previewRefresh?.();
-      const marqueeActive =
+      const selectionMs = performance.now() - selectionStarted;
+      const selectionOverlayActive = Boolean(
         runtime.timeline.gestures.drag?.kind === "rectangle" ||
         runtime.timeline.gestures.eventInteraction.drag?.kind === "rectangle" ||
-        Boolean(runtime.timeline.gestures.previewMarquee);
+        runtime.timeline.gestures.drag?.kind === "sweep" ||
+        runtime.timeline.gestures.eventInteraction.drag?.kind === "sweep" ||
+        runtime.timeline.gestures.previewMarquee,
+      );
       runtime.realtimePreview.duration = runtime.audio.duration;
       const viewSession = runtime.timeline.getSession();
       const trajectoryView = runtime.trajectoryPanel.tick(
@@ -189,8 +195,10 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           // Resource-backed timeline layers (skins and overview density) can
           // change without changing the chart revision. The HUD cadence is a
           // bounded refresh path for those asynchronous visual changes.
-          force: force || refreshHud || marqueeActive,
+          force: force || refreshHud,
           timelineRevision: runtime.timeline.renderRevision,
+          selectionOverlayRevision: runtime.timeline.selectionOverlayRevision,
+          selectionOverlayActive,
           viewportOrigin: runtime.timeline.viewport.origin,
           beatsPerPixel: runtime.timeline.viewport.beatsPerPixel(),
           previewSession,
@@ -213,8 +221,12 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
               runtime.audioAnalysis.draw(runtime.offsetSeconds());
               timelineMs = performance.now() - started;
             }
-            // Keep the marquee canvas above the timeline content.
-            runtime.selectionOverlay.draw();
+            // Keep the retained marquee canvas above the timeline content. It
+            // is independent from Timeline content and must not be submitted
+            // on every playback frame.
+            if (work.selectionOverlay) {
+              runtime.selectionOverlay.draw();
+            }
             if (work.playhead) {
               runtime.timeline.drawPlayhead(beat);
               runtime.timelineOverview.draw(frameSeconds);
@@ -251,6 +263,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
               playhead: work.playhead,
               timelineMs: timelineMs ?? 0,
               previewMs: previewMs ?? 0,
+              selectionMs,
               totalMs: performance.now() - paintStarted,
               previewChartChanged,
               previewSessionChanged,

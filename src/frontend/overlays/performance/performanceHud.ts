@@ -96,6 +96,7 @@ const snapshot = createValue<PerformanceHudSnapshot>({
     frameIntervalLoadSamples: [],
     timelineDrawMs: 0,
     previewDrawMs: 0,
+    selectionMs: 0,
     previewLineDrawMs: 0,
     previewNoteDrawMs: 0,
     previewEffectsMs: 0,
@@ -128,13 +129,23 @@ export const getPerformanceHudSnapEdges = snapEdges.get;
 export const subscribePerformanceHudSnapEdges = snapEdges.subscribe;
 export const setPerformanceHudSnapEdges = snapEdges.set;
 
-/** A readout row the HUD draws, either as text or as a sample bar. */
+/** A compact signal the HUD draws as text, a graph, or a sample bar. */
 export type PerformanceHudBlock =
   | {
       id: string;
       label: MessageKey;
       kind: "text";
       value(snapshot: PerformanceHudSnapshot): string;
+    }
+  | {
+      id: string;
+      label: MessageKey;
+      kind: "frame-graph";
+    }
+  | {
+      id: string;
+      label: MessageKey;
+      kind: "hotspot-graph";
     }
   | {
       id: string;
@@ -167,107 +178,17 @@ registerPerformanceHudBlock({
   id: "fps",
   label: "chrome.performanceHud.rafFps",
   kind: "text",
-  value: (value) => value.fps.toFixed(1),
-});
-registerPerformanceHudBlock({
-  id: "paint-fps",
-  label: "chrome.performanceHud.paintFps",
-  kind: "text",
-  value: (value) => value.paintFps.toFixed(1),
-});
-registerPerformanceHudBlock({
-  id: "fps-graph",
-  label: "chrome.performanceHud.fpsGraph",
-  kind: "bar",
-  values: (value) => value.fpsSamples,
-});
-registerPerformanceHudBlock({
-  id: "draw-time",
-  label: "chrome.performanceHud.drawTime",
-  kind: "text",
-  value: (value) => `${value.drawTimeMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "timeline-draw-time",
-  label: "chrome.performanceHud.timelineDrawTime",
-  kind: "text",
-  value: (value) => `${value.timelineDrawMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-draw-time",
-  label: "chrome.performanceHud.previewDrawTime",
-  kind: "text",
-  value: (value) => `${value.previewDrawMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-line-draw-time",
-  label: "chrome.performanceHud.previewLineDrawTime",
-  kind: "text",
-  value: (value) => `${value.previewLineDrawMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-note-draw-time",
-  label: "chrome.performanceHud.previewNoteDrawTime",
-  kind: "text",
-  value: (value) => `${value.previewNoteDrawMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-effects-time",
-  label: "chrome.performanceHud.previewEffectsTime",
-  kind: "text",
-  value: (value) => `${value.previewEffectsMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-composite-time",
-  label: "chrome.performanceHud.previewCompositeTime",
-  kind: "text",
-  value: (value) => `${value.previewCompositeMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-sample-time",
-  label: "chrome.performanceHud.previewSampleTime",
-  kind: "text",
-  value: (value) => `${value.previewSampleMs.toFixed(1)} ms`,
-});
-registerPerformanceHudBlock({
-  id: "preview-visibility-time",
-  label: "chrome.performanceHud.previewVisibilityTime",
-  kind: "text",
-  value: (value) => `${value.previewVisibilityMs.toFixed(1)} ms`,
+  value: (value) => `${value.fps.toFixed(0)} FPS`,
 });
 registerPerformanceHudBlock({
   id: "frame-time",
   label: "chrome.performanceHud.frameTime",
-  kind: "bar",
-  values: (value) => value.frameTimesMs,
+  kind: "frame-graph",
 });
 registerPerformanceHudBlock({
-  id: "frame-budget",
-  label: "chrome.performanceHud.frameBudget",
-  kind: "text",
-  value: (value) =>
-    `${value.frameBudgetMs.toFixed(2)} ms @ ${value.targetRefreshRate.toFixed(0)} Hz`,
-});
-registerPerformanceHudBlock({
-  id: "frame-load",
-  label: "chrome.performanceHud.frameLoad",
-  kind: "text",
-  value: (value) => `${value.frameIntervalLoadPercent.toFixed(0)}%`,
-});
-registerPerformanceHudBlock({
-  id: "frame-load-graph",
-  label: "chrome.performanceHud.frameLoadGraph",
-  kind: "bar",
-  values: (value) => value.frameIntervalLoadSamples,
-});
-registerPerformanceHudBlock({
-  id: "memory",
-  label: "chrome.performanceHud.memory",
-  kind: "text",
-  value: (value) =>
-    value.memoryAvailable
-      ? `${value.memoryUsedMb.toFixed(1)} / ${value.memoryLimitMb.toFixed(0)} MB`
-      : "—",
+  id: "hotspots",
+  label: "chrome.performanceHud.hotspots",
+  kind: "hotspot-graph",
 });
 registerPerformanceHudBlock({
   id: "cpu",
@@ -439,6 +360,7 @@ export function publishPerformanceHudFrame({
     frameIntervalLoadSamples: [...frameIntervalLoadSamples],
     timelineDrawMs: paintTiming.timelineMs,
     previewDrawMs: paintTiming.previewMs,
+    selectionMs: paintTiming.selectionMs ?? 0,
     previewLineDrawMs: previewTiming?.lineDrawMs ?? 0,
     previewNoteDrawMs: previewTiming?.noteDrawMs ?? 0,
     previewEffectsMs: previewTiming?.effectsMs ?? 0,

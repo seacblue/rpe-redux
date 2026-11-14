@@ -172,7 +172,7 @@ export function updateRectangle(this: TimelineSelectionReceiver, event: PointerE
   if (selection.drag.startFactor !== undefined) {
     updateRectangleSeconds(this, selection.drag);
   }
-  this.changed();
+  this.changedSelectionOverlay();
 }
 
 /** Advance the active freehand gesture and apply only the newly swept segment. */

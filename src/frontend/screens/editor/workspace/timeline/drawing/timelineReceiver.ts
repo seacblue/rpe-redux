@@ -48,6 +48,7 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   /** Event ids another room member selected, drawn with the collaboration tint. */
   readonly remoteSelectedEventIds: ReadonlySet<string>;
   changed: () => void;
+  changedSelectionOverlay: () => void;
   eventTypes: string[];
 }
 
@@ -79,6 +80,7 @@ export type TimelineSelectionReceiver = Pick<
   TimelineRuntimeSurface,
   | "appearance"
   | "changed"
+  | "changedSelectionOverlay"
   | "cache"
   | "eventTypes"
   | "eventsCanvas"

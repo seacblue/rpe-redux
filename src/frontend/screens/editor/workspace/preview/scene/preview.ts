@@ -844,7 +844,9 @@ export class Preview {
       const runtime = lines[index];
       const bucket = visibleNotes[index] ?? (visibleNotes[index] = []);
       const holdBucket = visibleHolds[index] ?? (visibleHolds[index] = []);
-      if (!runtime || !state) {
+      // Empty lines cannot contribute visible notes. Avoid entering the per-line
+      // directory and timer path for the many structural lines in large charts.
+      if (!runtime || runtime.notes.length === 0 || !state) {
         bucket.length = 0;
         holdBucket.length = 0;
         continue;
@@ -915,22 +917,17 @@ export class Preview {
         this.noteBatch.isActive() ? this.noteBatchCanvas : null,
         this.detailedNoise ?? detailedNoiseRendering.get(),
       );
-    // Shader passes consume the primary canvas. Include the GPU note layer
-    // before those passes when noise has not already composed it there.
-    if (
+    // Keep the GPU note layer separate until the shader upload. The shader
+    // staging canvas can fold it into the source without repainting the primary
+    // canvas, and the display adapter keeps it visible when the shader fails.
+    const shaderOverlay =
       !this.noiseComposited &&
       this.applyShaders &&
       frame.shaderEffects.length > 0 &&
-      this.noteBatch.isActive() &&
-      this.noteBatchCanvas
-    ) {
-      frame.context.save();
-      frame.context.setTransform(1, 0, 0, 1, 0, 0);
-      frame.context.drawImage(this.noteBatchCanvas, 0, 0, this.canvas.width, this.canvas.height);
-      frame.context.restore();
-      this.noiseComposited = true;
-    }
-    drawComposite(this, frame);
+      this.noteBatch.isActive()
+        ? this.noteBatchCanvas
+        : null;
+    drawComposite(this, frame, shaderOverlay);
     this.images?.trim?.();
     return {
       drawStats,

@@ -104,6 +104,10 @@ export class Timeline {
   }
 
   changed: () => void;
+  /** Revision for the retained selection overlay, independent of content. */
+  selectionOverlayRevision = 0;
+  /** Schedule only the selection overlay without invalidating timeline content. */
+  changedSelectionOverlay: () => void;
 
   /** The injected live session, kept apart so the preview cannot replace it. */
   private readonly liveSession: () => EditorSession;
@@ -172,6 +176,10 @@ export class Timeline {
     this.gestures.onEvent = onEvent;
     this.changed = () => {
       this.renderRevision += 1;
+      changed();
+    };
+    this.changedSelectionOverlay = () => {
+      this.selectionOverlayRevision += 1;
       changed();
     };
     this.gestures.onContextMenu = onContextMenu;

@@ -9,6 +9,7 @@
 import { PREVIEW_LOGICAL_SIZE } from "../scene/constants.ts";
 import {
   recordShaderCompile,
+  recordShaderSourceUpload,
   recordShaderState,
 } from "../../../../../../core/diagnostics/renderMetrics.ts";
 import { defaultShaderUniform } from "../../../../../../core/global/chart/shader/shader.ts";
@@ -608,7 +609,8 @@ export class ShaderPipeline {
     if (!stagingContext) {
       return false;
     }
-    stagingContext.clearRect(0, 0, width, height);
+    // The source draw covers the entire staging surface, including transparent
+    // pixels, so clearing it first would be a redundant full-canvas pass.
     stagingContext.drawImage(sourceCanvas, 0, 0, width, height);
     if (overlay) {
       stagingContext.drawImage(overlay, 0, 0, width, height);
@@ -784,7 +786,10 @@ export class ShaderPipeline {
       this.uploadedWidth === width &&
       this.uploadedHeight === height;
     if (!canReuseUpload) {
-      if (!this.uploadSource(sourceCanvas, width, height, overlayCanvas ?? null)) {
+      const uploadStarted = performance.now();
+      const uploaded = this.uploadSource(sourceCanvas, width, height, overlayCanvas ?? null);
+      recordShaderSourceUpload("preview", performance.now() - uploadStarted);
+      if (!uploaded) {
         return false;
       }
       this.uploadedSource = sourceCanvas;

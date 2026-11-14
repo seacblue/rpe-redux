@@ -47,3 +47,35 @@ test("a reversed event range is ignored by the runtime track", () => {
     "reversed events never enter the runtime sampling track",
   );
 });
+
+test("a future flat event is not folded when its fallback differs", () => {
+  const future = new EventTrack(
+    [{ startTime: 4, endTime: 4, start: 5, end: 5, easingType: 1 }],
+    tempo,
+    1,
+    0,
+  );
+
+  assert.equal(future.constantValue(), null);
+  assert.equal(future.value(0), 0);
+  assert.equal(future.value(4), 5);
+});
+
+test("an equal-endpoint trajectory is not treated as constant", () => {
+  const trajectory = new EventTrack(
+    [
+      {
+        startTime: 0,
+        endTime: 4,
+        start: 0,
+        end: 0,
+        easingType: 1,
+        trajectory: {},
+      },
+    ],
+    tempo,
+  );
+
+  assert.equal(trajectory.constantValue(), null);
+  assert.notEqual(trajectory.value(0.5), trajectory.value(1.5));
+});

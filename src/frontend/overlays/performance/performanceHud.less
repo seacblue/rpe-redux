@@ -152,6 +152,165 @@
   opacity: 0.78;
 }
 
+.redux-performance-hud-frame-interval {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-1-5);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.redux-performance-hud-frame-interval-heading,
+.redux-performance-hud-frame-interval-legend,
+.redux-performance-hud-frame-interval-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.redux-performance-hud-frame-interval-heading {
+  justify-content: space-between;
+}
+
+.redux-performance-hud-frame-interval-current {
+  color: var(--foreground);
+}
+
+.redux-performance-hud-frame-interval-chart {
+  display: block;
+  width: 100%;
+  height: 72px;
+  overflow: visible;
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface-sunken) 72%, transparent);
+}
+
+.redux-performance-hud-frame-interval-grid {
+  stroke: var(--edge-divider);
+  stroke-width: 1;
+}
+
+.redux-performance-hud-frame-interval-budget,
+.redux-performance-hud-frame-interval-line {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.redux-performance-hud-frame-interval-budget {
+  stroke: var(--warning);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.redux-performance-hud-frame-interval-line {
+  stroke: var(--accent);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.redux-performance-hud-frame-interval-legend {
+  color: var(--foreground-muted);
+}
+
+.redux-performance-hud-frame-interval-key {
+  flex: 1 1 0;
+}
+
+.redux-performance-hud-frame-interval-key i {
+  display: block;
+  width: 14px;
+  height: 2px;
+  flex: none;
+}
+
+.redux-performance-hud-frame-interval-key.is-actual i {
+  background: var(--accent);
+}
+
+.redux-performance-hud-frame-interval-key.is-budget i {
+  background: var(--warning);
+}
+
+.redux-performance-hud-hotspots {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-1-5);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.redux-performance-hud-hotspots-heading,
+.redux-performance-hud-hotspots-legend,
+.redux-performance-hud-hotspots-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.redux-performance-hud-hotspots-heading {
+  justify-content: space-between;
+}
+
+.redux-performance-hud-hotspots-heading strong {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.redux-performance-hud-hotspots-track {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid var(--edge-divider);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+}
+
+.redux-performance-hud-hotspots-track i {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.redux-performance-hud-hotspots-track .is-timeline,
+.redux-performance-hud-hotspots-key.is-timeline i {
+  background: var(--accent);
+}
+
+.redux-performance-hud-hotspots-track .is-selection,
+.redux-performance-hud-hotspots-key.is-selection i {
+  background: var(--warning);
+}
+
+.redux-performance-hud-hotspots-track .is-preview,
+.redux-performance-hud-hotspots-key.is-preview i {
+  background: color-mix(in srgb, var(--accent) 48%, var(--warning));
+}
+
+.redux-performance-hud-hotspots-track .is-other,
+.redux-performance-hud-hotspots-key.is-other i {
+  background: color-mix(in srgb, var(--foreground) 48%, var(--edge-divider));
+}
+
+.redux-performance-hud-hotspots-legend {
+  flex-wrap: wrap;
+  color: var(--foreground-muted);
+}
+
+.redux-performance-hud-hotspots-key {
+  min-width: 0;
+}
+
+.redux-performance-hud-hotspots-key i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--radius-control);
+}
+
 .redux-performance-hud-traffic {
   display: grid;
   gap: var(--space-1-5);

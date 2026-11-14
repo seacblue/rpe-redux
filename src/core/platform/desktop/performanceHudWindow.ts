@@ -31,6 +31,7 @@ export interface PerformanceHudFramePayload {
   frameIntervalLoadSamples: readonly number[];
   timelineDrawMs: number;
   previewDrawMs: number;
+  selectionMs: number;
   previewLineDrawMs: number;
   previewNoteDrawMs: number;
   previewEffectsMs: number;

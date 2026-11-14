@@ -23,6 +23,7 @@
     "test:unit": "node --test \"src/test/**/*.test.mjs\"",
     "benchmark:streaming": "node --expose-gc scripts/benchmarkChartStreaming.mjs",
     "benchmark:crud": "node --expose-gc scripts/benchmarkChartCrud.mjs",
+    "benchmark:shader": "node scripts/benchmarkShaderPipeline.mjs",
     "test:server": "go -C src/backend test ./...",
     "smoke": "node scripts/smoke.mjs",
     "icons:check": "node scripts/checkThemeIcons.mjs",

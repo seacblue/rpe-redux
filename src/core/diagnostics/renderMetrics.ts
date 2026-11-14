@@ -82,6 +82,10 @@ interface SurfaceMetrics {
     compileAttempts: number;
     compileSuccesses: number;
     compileFailures: number;
+    sourceUploads: number;
+    lastSourceUploadMs: number;
+    maxSourceUploadMs: number;
+    totalSourceUploadMs: number;
   };
   batches: {
     frames: number;
@@ -144,6 +148,10 @@ function emptySurface(): SurfaceMetrics {
       compileAttempts: 0,
       compileSuccesses: 0,
       compileFailures: 0,
+      sourceUploads: 0,
+      lastSourceUploadMs: 0,
+      maxSourceUploadMs: 0,
+      totalSourceUploadMs: 0,
     },
     batches: {
       frames: 0,
@@ -241,6 +249,10 @@ export function recordShaderState(surface: RenderSurface, state: ShaderStateInpu
     compileAttempts: shader.compileAttempts,
     compileSuccesses: shader.compileSuccesses,
     compileFailures: shader.compileFailures,
+    sourceUploads: shader.sourceUploads,
+    lastSourceUploadMs: shader.lastSourceUploadMs,
+    maxSourceUploadMs: shader.maxSourceUploadMs,
+    totalSourceUploadMs: shader.totalSourceUploadMs,
   };
 }
 
@@ -255,6 +267,16 @@ export function recordShaderCompile(surface: RenderSurface, success: boolean): v
     shader.compileFailures += 1;
     shader.lastErrorPresent = true;
   }
+}
+
+/** Record the CPU time spent staging and uploading one shader source frame. */
+export function recordShaderSourceUpload(surface: RenderSurface, duration: number): void {
+  const shader = metrics[surface].shader;
+  const safeDuration = boundedDuration(duration);
+  shader.sourceUploads += 1;
+  shader.lastSourceUploadMs = safeDuration;
+  shader.maxSourceUploadMs = Math.max(shader.maxSourceUploadMs, safeDuration);
+  shader.totalSourceUploadMs += safeDuration;
 }
 
 /** Record one grouped note-batch submission. */

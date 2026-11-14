@@ -10,6 +10,10 @@ export interface RenderRequest {
   readonly contentRefreshRate: number;
   /** A live preview marquee needs geometry from every workspace frame. */
   readonly previewMarqueeActive?: boolean;
+  /** Revision of the retained timeline selection overlay. */
+  readonly selectionOverlayRevision?: number;
+  /** Whether the retained selection overlay currently has geometry to paint. */
+  readonly selectionOverlayActive?: boolean;
   readonly force?: boolean;
   readonly timelineRevision: number;
   readonly viewportOrigin: number;
@@ -40,6 +44,7 @@ export interface RenderRequest {
 /** Work selected by the scheduler; the caller does not decide the ordering. */
 export interface RenderWork {
   readonly timeline: boolean;
+  readonly selectionOverlay: boolean;
   readonly playhead: boolean;
   readonly preview: boolean;
   /** Explicit invalidation needs an immediate preview, even for dense charts. */
@@ -81,6 +86,8 @@ interface CommittedState {
   playheadSeconds: number;
   playheadOrigin: number;
   preview: boolean;
+  selectionOverlayRevision: number;
+  selectionOverlayActive: boolean;
 }
 
 /**
@@ -104,6 +111,8 @@ export class EditorRenderScheduler {
     playheadSeconds: Number.NaN,
     playheadOrigin: Number.NaN,
     preview: false,
+    selectionOverlayRevision: -1,
+    selectionOverlayActive: false,
   };
   private frameId = 0;
   private forcedTimeline = false;
@@ -129,7 +138,7 @@ export class EditorRenderScheduler {
       }
     }
     const work = this.workFor(request);
-    if (!request.previewVisible && !work.timeline && !work.playhead) {
+    if (!request.previewVisible && !work.timeline && !work.selectionOverlay && !work.playhead) {
       return {
         status: "hidden",
         work,
@@ -160,6 +169,10 @@ export class EditorRenderScheduler {
       this.committed.timelinePreviewSession = request.previewSession;
       this.forcedTimeline = false;
     }
+    if (work.selectionOverlay) {
+      this.committed.selectionOverlayRevision = request.selectionOverlayRevision ?? 0;
+      this.committed.selectionOverlayActive = request.selectionOverlayActive ?? false;
+    }
     if (work.playhead) {
       this.committed.playheadSeconds = request.seconds;
       this.committed.playheadOrigin = request.viewportOrigin;
@@ -177,7 +190,7 @@ export class EditorRenderScheduler {
     this.frameId += 1;
     const renderMs = performance.now() - started;
     return {
-      status: work.timeline || work.preview ? "committed" : "reused",
+      status: work.timeline || work.selectionOverlay || work.preview ? "committed" : "reused",
       work,
       frameId: this.frameId,
       renderMs,
@@ -201,6 +214,8 @@ export class EditorRenderScheduler {
       playheadSeconds: Number.NaN,
       playheadOrigin: Number.NaN,
       preview: false,
+      selectionOverlayRevision: -1,
+      selectionOverlayActive: false,
     };
     this.frameId = 0;
     this.forcedTimeline = false;
@@ -211,6 +226,8 @@ export class EditorRenderScheduler {
   /** Selects the layers stale relative to the last committed frame. */
   private workFor(request: RenderRequest): RenderWork {
     const previewInvalidated = request.previewRevision !== this.committed.previewRevision;
+    const selectionOverlayRevision = request.selectionOverlayRevision ?? 0;
+    const selectionOverlayActive = request.selectionOverlayActive ?? false;
     // Playback moves the origin every frame, but the note field only changes
     // once that movement crosses a device pixel. Reusing the timeline content
     // for a sub-pixel move is exactly what a scroll would do on its own.
@@ -256,6 +273,10 @@ export class EditorRenderScheduler {
       // cadence applies only to the optional preview layer; a user-configured
       // lower preview rate must never make the timeline feel throttled.
       timeline: timelinePending,
+      selectionOverlay:
+        selectionOverlayRevision !== this.committed.selectionOverlayRevision ||
+        selectionOverlayActive !== this.committed.selectionOverlayActive ||
+        (timelinePending && selectionOverlayActive),
       playhead: playheadPending,
       preview: previewPending && contentDue,
       previewInvalidated,

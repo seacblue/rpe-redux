@@ -55,6 +55,22 @@ export function clampTimelineScale(value: number, fallback = TIMELINE_SCALE_DEFA
   return Math.max(TIMELINE_SCALE_MIN, Math.min(TIMELINE_SCALE_MAX, candidate));
 }
 
+/** Return the local beat delta represented by one pixel at a timeline origin. */
+export function beatsPerPixelAtOrigin(
+  tempo: Pick<TempoMap, "beat" | "seconds">,
+  origin: number,
+  scale: number,
+  factor = 1,
+): number {
+  if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(origin)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const originSeconds = tempo.seconds(origin, factor);
+  const nextBeat = tempo.beat(originSeconds + 1 / scale, factor);
+  const delta = nextBeat - origin;
+  return Number.isFinite(delta) && delta > 0 ? delta : Number.POSITIVE_INFINITY;
+}
+
 /** Return the origin that places beat zero at the top of a timeline viewport. */
 export function minimumTimelineBeatAtTop(
   tempo: Pick<TempoMap, "beat" | "seconds">,
@@ -264,14 +280,30 @@ export class TimelineViewport {
    * degenerate scale, which callers treat as "never sub-pixel".
    */
   beatsPerPixel(): number {
-    const scale = Math.max(0, this.scale);
-    if (!Number.isFinite(scale) || scale <= 0) {
-      return Number.POSITIVE_INFINITY;
+    const session = this.getSession();
+    let minimum = Number.POSITIVE_INFINITY;
+    const visit = (area: "notes" | "events", lineIndex: number): void => {
+      const canvas = area === "notes" ? this.notesCanvas : this.eventsCanvas;
+      if (canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
+        return;
+      }
+      const scale = this.scaleForArea(area);
+      minimum = Math.min(
+        minimum,
+        beatsPerPixelAtOrigin(this.tempo, this.origin, scale, this.factorForLine(lineIndex)),
+      );
+    };
+    if (session.multiLineActive) {
+      for (const lineIndex of session.targetLineIndices) {
+        visit(session.multiLineMode, lineIndex);
+      }
+    } else {
+      visit("notes", session.lineIndex);
+      visit("events", session.lineIndex);
     }
-    // Seconds per pixel, then beats per second at the active line's factor.
-    const seconds = 1 / scale;
-    const beats = this.tempo.beat(seconds, this.factor);
-    return Number.isFinite(beats) && beats > 0 ? beats : Number.POSITIVE_INFINITY;
+    return Number.isFinite(minimum)
+      ? minimum
+      : beatsPerPixelAtOrigin(this.tempo, this.origin, this.scale, this.factor);
   }
 
   /** Beat multiplier of the active line. */
