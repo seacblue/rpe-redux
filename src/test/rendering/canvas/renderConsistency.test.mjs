@@ -472,7 +472,8 @@ test("active note batches skip line transforms while fallback notes restore them
       scene: { lines: [runtime] },
     };
     const surface = {
-      noteBatch: { isActive: () => true, addHead: () => true, addHold: () => true },
+      noteBatch: { isActive: () => true, addHeadSlotted: () => true, addHold: () => true },
+      noteTextures: [],
       passes: [{ kind: "note", depth: 1000 }],
       noteOpacity: 1,
       selectedLines: [],
@@ -490,7 +491,7 @@ test("active note batches skip line transforms while fallback notes restore them
     assert.equal(batched.notes, 1);
     assert.deepEqual(calls, []);
 
-    surface.noteBatch.addHead = () => false;
+    surface.noteBatch.addHeadSlotted = () => false;
     const fallback = drawLinePasses(surface, frame);
     assert.equal(fallback.batchFallbacks, 1);
     assert.deepEqual(calls, [

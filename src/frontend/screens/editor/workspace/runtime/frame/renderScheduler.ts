@@ -13,6 +13,15 @@ export interface RenderRequest {
   readonly force?: boolean;
   readonly timelineRevision: number;
   readonly viewportOrigin: number;
+  /**
+   * Beat range that one device pixel covers, or undefined when unknown.
+   *
+   * Playback advances the origin continuously while the note field only changes
+   * when a scroll moves it by a visible pixel. When the caller knows the pixel
+   * scale, an origin move smaller than that cannot change the painted frame and
+   * the timeline content does not need a repaint.
+   */
+  readonly beatsPerPixel?: number;
   /** Identity of the chart actually sampled by the preview surface. */
   readonly previewChart: unknown;
   /** Revision of external preview resources and explicit frame invalidations. */
@@ -202,10 +211,20 @@ export class EditorRenderScheduler {
   /** Selects the layers stale relative to the last committed frame. */
   private workFor(request: RenderRequest): RenderWork {
     const previewInvalidated = request.previewRevision !== this.committed.previewRevision;
+    // Playback moves the origin every frame, but the note field only changes
+    // once that movement crosses a device pixel. Reusing the timeline content
+    // for a sub-pixel move is exactly what a scroll would do on its own.
+    const originShift = request.viewportOrigin - this.committed.viewportOrigin;
+    const subPixelShift =
+      request.beatsPerPixel !== undefined &&
+      Number.isFinite(originShift) &&
+      Math.abs(originShift) < request.beatsPerPixel;
     const timelinePending =
       this.forcedTimeline ||
       request.timelineRevision !== this.committed.timelineRevision ||
-      (request.playing && request.viewportOrigin !== this.committed.viewportOrigin) ||
+      (request.playing &&
+        request.viewportOrigin !== this.committed.viewportOrigin &&
+        !subPixelShift) ||
       request.previewSession !== this.committed.timelinePreviewSession;
     const previewPending =
       request.previewVisible &&
@@ -242,7 +261,6 @@ export class EditorRenderScheduler {
       previewInvalidated,
     };
   }
-
   /** Milliseconds between the requested and last painted preview time, if known. */
   private staleMs(request: RenderRequest): number | null {
     if (!this.committed.preview || !Number.isFinite(this.committed.seconds)) {

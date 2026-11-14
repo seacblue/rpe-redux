@@ -8,7 +8,9 @@
  */
 import { normalizedCssColor } from "../../../../core/utils/colors.ts";
 import { sizeCanvasBackingStore, type CanvasBackingStore } from "./canvas2d.ts";
+import { nextBufferCapacity } from "./noteBatchUpload.ts";
 import {
+  acquireWebGl2,
   bindInstanceAttributes,
   createCornerBuffer,
   installContextLossHandlers,
@@ -64,7 +66,7 @@ export abstract class WebGlBatchSurface {
   /** Create the layer for one canvas; nothing runs without WebGL2. */
   protected constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false });
+    this.gl = acquireWebGl2(canvas);
   }
 
   /** Whether this batch can submit the current frame through WebGL2. */
@@ -226,10 +228,12 @@ export abstract class InstancedQuadBatch extends WebGlBatchSurface {
     }
     const upload = this.instances.subarray(0, this.instanceCount * this.stride);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    const uploadBytes = upload.byteLength;
-    if (uploadBytes > this.instanceBufferCapacity) {
-      this.instanceBufferCapacity = uploadBytes;
-      gl.bufferData(gl.ARRAY_BUFFER, this.instanceBufferCapacity, gl.STREAM_DRAW);
+    // Follow this frame's size instead of the largest frame ever recorded, so a
+    // single dense frame cannot raise every later frame's allocation.
+    const capacity = nextBufferCapacity(upload.byteLength, this.instanceBufferCapacity);
+    if (capacity !== this.instanceBufferCapacity || capacity === 0) {
+      this.instanceBufferCapacity = capacity;
+      gl.bufferData(gl.ARRAY_BUFFER, capacity, gl.STREAM_DRAW);
     }
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
     bindInstanceAttributes(gl, this.attributes, this.stride);

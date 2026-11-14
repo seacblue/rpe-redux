@@ -157,6 +157,24 @@ export function configureTextureSampling(gl: GlContext, filter: number = gl.LINE
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
+/**
+ * Choose the WebGL2 context a batch paints through.
+ *
+ * Every batch in the editor wants the same attribute set, and a missing context
+ * is an ordinary state rather than an error: the caller keeps its Canvas 2D
+ * path. A host that throws from `getContext` degrades the same way.
+ */
+export function acquireWebGl2(
+  canvas: HTMLCanvasElement,
+  options: WebGLContextAttributes = { alpha: true, antialias: false, depth: false },
+): WebGL2RenderingContext | null {
+  try {
+    return canvas.getContext("webgl2", options);
+  } catch {
+    return null;
+  }
+}
+
 /** Callbacks for one canvas's WebGL context loss and restoration cycle. */
 export interface ContextLossHandlers {
   onLost?(event: Event): void;

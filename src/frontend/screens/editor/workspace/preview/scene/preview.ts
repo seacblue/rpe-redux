@@ -25,6 +25,7 @@ import { drawLinePasses } from "../drawing/previewLines.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { ShaderPipeline, type ShaderProgramSource } from "../render/shaderPipeline.ts";
 import { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { NoteTextureTable } from "../../../canvas/noteBatch.ts";
 import { PreviewBackground, type TextureImage } from "../render/background.ts";
 import { NoiseAreaRenderer } from "../render/noiseAreaRenderer.ts";
 import { detailedNoiseRendering } from "../../../../../../core/edit/state/noiseRendering.ts";
@@ -57,6 +58,9 @@ import type {
   PreviewOverlapHighlight,
   PreviewShaderEffect,
 } from "./previewTypes.ts";
+
+/** A shared empty texture table, used when the batch cannot paint. */
+const EMPTY_TEXTURES: NoteTextureTable = Object.freeze([]);
 
 /** Per-call switches for one preview paint. */
 export interface PreviewDrawOptions {
@@ -103,6 +107,8 @@ export class Preview {
   declare shaderRuntime: ShaderRuntime;
   declare shaderPipeline: ShaderPipeline;
   declare noteBatch: NoteBatch;
+  /** Note heads by `type * 2 + highlight`, refreshed at the start of each paint. */
+  noteTextures: NoteTextureTable = EMPTY_TEXTURES;
   private readonly noteBatchCanvas: HTMLCanvasElement;
   private readonly noiseAreas: NoiseAreaRenderer;
   /** Host notification for an unavailable detailed noise renderer. */
@@ -878,6 +884,10 @@ export class Preview {
     this.lineFrames.length = 0;
     const notesStarted = performance.now();
     this.noteBatch.begin(frame.width, frame.height, this.skin ?? null, frame.viewport);
+    // Resolve every note texture once for this pass; the per-note path then reads a slot
+    // instead of calling the skin. `null` means the batch is inactive, so no note is
+    // submitted and an empty table is never read.
+    this.noteTextures = this.noteBatch.prepareNoteTextures(this.skin ?? null) ?? EMPTY_TEXTURES;
     const drawStats = drawLinePasses(this, frame);
     this.noteBatch.finish();
     const drawnNotes = drawStats.notes + drawStats.holds;

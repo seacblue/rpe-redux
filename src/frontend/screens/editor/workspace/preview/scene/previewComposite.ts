@@ -76,9 +76,15 @@ function drawUnshadedOverlay(
  * layer opacity.
  *
  * The canvases clip themselves to the aspect frame, so this stage never paints
- * a mask over the surrounding stage.
+ * a mask over the surrounding stage. `shaderOverlay` is a separate GPU layer the
+ * shader upload must fold in; when it is present the note batch stays hidden
+ * only after the pass succeeds.
  */
-export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFrame): void {
+export function drawComposite(
+  surface: PreviewCompositeSurface,
+  frame: PreviewFrame,
+  shaderOverlay: HTMLCanvasElement | null = null,
+): void {
   const { context, seconds, viewport } = frame;
   // `Preview.draw` compiles the shader runtime before sampling `frame.shaderEffects`,
   // so composite consumes that compiled state instead of re-running the check.
@@ -105,6 +111,7 @@ export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFr
         surface.shaderRuntime.source(effect.shader, effect.sourceName),
       viewport,
       frame.shaderSourceRevision,
+      shaderOverlay,
     );
     if (surface.shaderCanvas) {
       surface.display.setShaderVisible(shaderRendered);

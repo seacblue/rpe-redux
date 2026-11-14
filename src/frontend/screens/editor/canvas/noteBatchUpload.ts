@@ -32,6 +32,28 @@ export function createNoteBatchUploadState(): NoteBatchUploadState {
   return { groups: [], textures: [], offsets: [], staging: new Float32Array(0) };
 }
 
+/**
+ * Size the streamed instance store for one frame's upload.
+ *
+ * The store follows the current frame rather than the largest frame ever
+ * recorded, so a single dense frame cannot raise every later frame's allocation.
+ * It only shrinks below half the previous capacity, which keeps a dense/sparse
+ * alternation on one reused store.
+ */
+export function nextBufferCapacity(requiredBytes: number, currentCapacity: number): number {
+  if (requiredBytes <= 0) {
+    return 0;
+  }
+  let capacity = Math.max(4096, currentCapacity || 0);
+  if (requiredBytes > capacity || requiredBytes * 2 < capacity) {
+    capacity = 4096;
+    while (capacity < requiredBytes) {
+      capacity *= 2;
+    }
+  }
+  return capacity;
+}
+
 /** Submit all groups in layer order and return capacity plus bounded counters. */
 export function submitNoteBatchGroups(
   gl: WebGL2RenderingContext,
@@ -92,12 +114,17 @@ export function submitNoteBatchGroups(
   }
   const upload = state.staging.subarray(0, totalFloats);
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-  if (upload.byteLength > instanceBufferCapacity) {
-    instanceBufferCapacity = upload.byteLength;
-  }
   // Orphan the previous store before writing the next frame. Reusing a store
   // that the compositor still consumes can make bufferSubData wait for the
-  // Intel driver even when the CPU-side upload is small.
+  // driver even when the CPU-side upload is small.
+  //
+  // The store is sized for the next power-of-two above this frame's upload, not
+  // the largest frame ever seen: one dense frame otherwise raises the per-frame
+  // allocation for the rest of the session. Capacity only shrinks when this
+  // frame needs less than half of it, so an alternating dense/sparse pattern
+  // still reuses one store.
+  const targetCapacity = nextBufferCapacity(upload.byteLength, instanceBufferCapacity);
+  instanceBufferCapacity = targetCapacity;
   gl.bufferData(gl.ARRAY_BUFFER, instanceBufferCapacity, gl.STREAM_DRAW);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
   metrics.bufferSubDataCalls = 1;
