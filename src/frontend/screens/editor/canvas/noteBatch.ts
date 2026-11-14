@@ -21,6 +21,7 @@ import {
   type TextureDescriptor,
 } from "./noteSpriteGroups.ts";
 import {
+  acquireWebGl2,
   configureTextureSampling,
   createCornerBuffer,
   installContextLossHandlers,
@@ -28,6 +29,10 @@ import {
 } from "./webgl.ts";
 
 const ROTATION_CACHE_LIMIT = 512;
+/** Note type slots resolved without building a cache key on every note. */
+const NOTE_TYPE_SLOTS = 5;
+/** Slot order: type × 2 + (highlight ? 1 : 0). */
+const NOTE_SLOT_COUNT = NOTE_TYPE_SLOTS * 2;
 /** Resolved Hold textures and skin-specific cap ratios for the current skin. */
 interface HoldTextureSet {
   body: TextureDescriptor | null;
@@ -36,6 +41,14 @@ interface HoldTextureSet {
   endRatio: number;
   headRatio: number | undefined;
 }
+
+/**
+ * Note textures addressed by `type * 2 + (highlight ? 1 : 0)`.
+ *
+ * The table is a plain array so a paint pass can submit thousands of notes
+ * without a cache key, a closure, or a Map lookup per note.
+ */
+export type NoteTextureTable = readonly (TextureDescriptor | null | undefined)[];
 
 export interface NoteBatchSkin {
   /** Bumped whenever the skin swaps its decoded bitmaps. */
@@ -87,6 +100,12 @@ export class NoteBatch {
   private descriptorSkin: NoteBatchSkin | null = null;
   private descriptorRevision: number | undefined;
   private readonly descriptorCache = new Map<string, TextureDescriptor | null>();
+  /** Note textures by `type * 2 + highlight`; empty until the skin resolves them. */
+  private readonly noteTextures: (TextureDescriptor | null | undefined)[] = new Array(
+    NOTE_SLOT_COUNT,
+  ).fill(undefined);
+  /** Set once any note slot is resolved, so a hot frame can skip the slot check. */
+  private noteTextureSlotsReady = false;
   private readonly holdDescriptorSets: [HoldTextureSet | null, HoldTextureSet | null] = [
     null,
     null,
@@ -107,7 +126,7 @@ export class NoteBatch {
   constructor(canvas: HTMLCanvasElement, surface: RenderSurface = "preview") {
     this.canvas = canvas;
     this.diagnostics = new NoteBatchDiagnostics(surface);
-    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false });
+    this.gl = acquireWebGl2(canvas);
     this.reportState();
     if (!this.gl) {
       return;
@@ -163,8 +182,7 @@ export class NoteBatch {
     this.colorizeLocation = -1;
     this.textures.clear();
     this.groups.clear();
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.clearDescriptorCaches();
     this.instanceBufferCapacity = 0;
     this.reportState();
   };
@@ -175,8 +193,7 @@ export class NoteBatch {
     this.contextLost = false;
     this.descriptorSkin = null;
     this.descriptorRevision = undefined;
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.clearDescriptorCaches();
     this.groups.clear();
     this.textures.clear();
     this.instanceBufferCapacity = 0;
@@ -367,6 +384,38 @@ export class NoteBatch {
   ): void {
     this.width = width;
     this.height = height;
+    this.markActive(skin, clip, pixelRatioScale, width, height);
+  }
+
+  /**
+   * Resolve every note texture once so a paint pass can submit without lookups.
+   *
+   * A dense frame submits thousands of notes through one skin; the returned
+   * table turns the per-note descriptor resolution into an array read.
+   */
+  prepareNoteTextures(skin: NoteBatchSkin | null): NoteTextureTable | null {
+    if (!skin) {
+      return null;
+    }
+    if (!this.noteTextureSlotsReady) {
+      for (let type = 0; type < NOTE_TYPE_SLOTS; type++) {
+        for (let highlight = 0; highlight < 2; highlight++) {
+          this.noteTextures[type * 2 + highlight] = skin.noteTexture(type, highlight === 1) ?? null;
+        }
+      }
+      this.noteTextureSlotsReady = true;
+    }
+    return this.noteTextures;
+  }
+
+  /** Set the skin, refresh its caches, and answer whether the batch can paint. */
+  private markActive(
+    skin: NoteBatchSkin | null,
+    clip: { left: number; top: number; width: number; height: number } | undefined,
+    pixelRatioScale: number,
+    width: number,
+    height: number,
+  ): void {
     if (this.descriptorSkin !== skin || this.descriptorRevision !== skin?.textureRevision) {
       this.descriptorSkin = skin;
       this.descriptorRevision = skin?.textureRevision;
@@ -426,11 +475,7 @@ export class NoteBatch {
     if (!this.active || this.isContextLost()) {
       return false;
     }
-    const descriptor = this.descriptor(
-      skin,
-      `note:${type}:${highlight ? 1 : 0}`,
-      () => skin?.noteTexture(type, highlight) ?? null,
-    );
+    const descriptor = this.noteTexture(skin, type, highlight);
     if (!descriptor) {
       return false;
     }
@@ -448,6 +493,77 @@ export class NoteBatch {
       color,
       notePaintLayer(type),
     );
+  }
+
+  /**
+   * Queue one note head from an already prepared texture table.
+   *
+   * This is the per-note entry point for a paint pass: the table replaces the
+   * type-slot lookup and the skin method call that `addHead` performs.
+   */
+  addHeadSlotted(
+    table: NoteTextureTable,
+    type: number,
+    highlight: boolean,
+    centerX: number,
+    centerY: number,
+    width: number,
+    rotation: number,
+    shear: number,
+    alpha: number,
+    color?: NoteColor | null,
+  ): boolean {
+    if (!this.active || this.isContextLost()) {
+      return false;
+    }
+    const slot = type * 2 + (highlight ? 1 : 0);
+    const descriptor = slot >= 0 && slot < NOTE_SLOT_COUNT ? (table[slot] ?? null) : null;
+    if (!descriptor) {
+      return false;
+    }
+    const height = (width * descriptor.useful.height) / descriptor.useful.width;
+    return this.add(
+      descriptor,
+      centerX,
+      centerY,
+      width,
+      height,
+      rotation,
+      shear,
+      alpha,
+      false,
+      color,
+      notePaintLayer(type),
+    );
+  }
+
+  /**
+   * Resolve one note texture from its type slot.
+   *
+   * The slot table replaces a template-literal cache key and a closure per note,
+   * which was the largest remaining per-note cost in a dense frame. Slots are
+   * filled on first use and cleared whenever the skin bitmap set changes.
+   */
+  private noteTexture(
+    skin: NoteBatchSkin | null,
+    type: number,
+    highlight: boolean,
+  ): TextureDescriptor | null {
+    if (!skin) {
+      return null;
+    }
+    const slot = type * 2 + (highlight ? 1 : 0);
+    if (slot < 0 || slot >= NOTE_SLOT_COUNT) {
+      return skin.noteTexture(type, highlight) ?? null;
+    }
+    const cached = this.noteTextures[slot];
+    if (cached !== undefined) {
+      return cached;
+    }
+    const descriptor = skin.noteTexture(type, highlight) ?? null;
+    this.noteTextures[slot] = descriptor;
+    this.noteTextureSlotsReady = true;
+    return descriptor;
   }
 
   /** Queue a Hold body, tail cap, and optional head cap as one sprite set. */
@@ -641,8 +757,7 @@ export class NoteBatch {
     this.textures.clear();
     this.clear();
     this.groups.clear();
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.clearDescriptorCaches();
     this.instanceBufferCapacity = 0;
     this.program = null;
     this.cornerBuffer = null;
@@ -666,8 +781,7 @@ export class NoteBatch {
   /** Drop descriptors and GPU textures after the skin replaces its bitmaps. */
   private resetTextureCache(): void {
     this.cancelPrewarm();
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.clearDescriptorCaches();
     this.groups.clear();
     if (this.gl && !this.isContextLost()) {
       for (const texture of this.textures.values()) {
@@ -726,6 +840,14 @@ export class NoteBatch {
   private clearHoldDescriptorCache(): void {
     this.holdDescriptorSets[0] = null;
     this.holdDescriptorSets[1] = null;
+  }
+
+  /** Drop every skin-derived descriptor, including the note type slots. */
+  private clearDescriptorCaches(): void {
+    this.descriptorCache.clear();
+    this.clearHoldDescriptorCache();
+    this.noteTextures.fill(undefined);
+    this.noteTextureSlotsReady = false;
   }
 
   /**

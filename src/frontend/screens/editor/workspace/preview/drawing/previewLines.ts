@@ -34,6 +34,7 @@ import type {
   PreviewTextureSurface,
 } from "../scene/previewTypes.ts";
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { NoteTextureTable } from "../../../canvas/noteBatch.ts";
 import type { NoteColor } from "../../../canvas/noteSpriteGroups.ts";
 
 /** Screen-space quad of a judge line, including its texture size and rotated corners. */
@@ -127,6 +128,14 @@ export function isPreviewNoteSelected(
 /** State read by line/note drawing and hit areas written during the frame. */
 export interface PreviewLineSurface extends PreviewTextureSurface {
   noteBatch: NoteBatch;
+  /**
+   * Note heads by `type * 2 + highlight`, refreshed by the owner when the paint begins.
+   *
+   * Reading the descriptor from this array is what keeps a dense pass from calling the
+   * skin's `noteTexture` per note. An empty table means the batch is inactive, in which
+   * case no note is submitted at all.
+   */
+  noteTextures: NoteTextureTable;
   /** Whether every painted judge line can use the shared line texture batch. */
   lineBatchable: boolean;
   passes: RenderPass[];
@@ -277,6 +286,36 @@ function appendPreviewNoteHitArea(
   });
 }
 
+/**
+ * One note's tint, written into caller-owned storage.
+ *
+ * The caller reuses `style.color` across every note in a frame, so a dense pass allocates
+ * nothing per note. Both consumers copy the channels immediately: the batch writes them
+ * into the instance buffer, and the Canvas fallback formats them into a fill string.
+ */
+interface TintTarget {
+  mode: "selected" | "tint";
+  color: number[];
+}
+
+/** Fill `target` with one note's tint, or return null when the note has none. */
+function previewNoteTintInto(
+  target: TintTarget,
+  note: Pick<JudgeLineNote, "color"> & { tint?: unknown },
+  selected: boolean,
+  selectionTint: readonly number[] | null,
+): TintTarget | null {
+  const tint = selected ? selectionTint : previewNoteTint(note);
+  if (!tint) {
+    return null;
+  }
+  target.mode = selected ? "selected" : "tint";
+  target.color[0] = tint[0] ?? 255;
+  target.color[1] = tint[1] ?? 255;
+  target.color[2] = tint[2] ?? 255;
+  return target;
+}
+
 /** Submit one visible note to the batch, falling back to Canvas when needed. */
 function drawPreviewNoteEntry(
   surface: PreviewLineSurface,
@@ -297,6 +336,8 @@ function drawPreviewNoteEntry(
   lineRotationRadians: number,
   selected: boolean,
   highlight: boolean,
+  tintTarget: TintTarget,
+  selectionTint: readonly number[] | null,
 ): boolean {
   const isHold = entry.note.type === 2;
   const holdRotation = rotation + (noteIsAbove(entry.note) ? Math.PI : 0);
@@ -314,10 +355,7 @@ function drawPreviewNoteEntry(
     );
   }
   const noteOpacity = lineIndex === selectedLine ? 1 : clamp01(surface.noteOpacity);
-  const tint = selected ? selectionHighlightColor(palette) : previewNoteTint(entry.note);
-  const noteColorStyle = tint
-    ? { mode: selected ? ("selected" as const) : ("tint" as const), color: tint }
-    : undefined;
+  const noteColorStyle = previewNoteTintInto(tintTarget, entry.note, selected, selectionTint);
   const noteAlpha = holdFallbackAlpha(position.alpha, noteOpacity);
   const skewShear = noteSkewShear(position.skew);
   const batchAdded = isHold
@@ -335,8 +373,8 @@ function drawPreviewNoteEntry(
         holdRotation,
         holdCapScale,
       )
-    : surface.noteBatch.addHead(
-        surface.skin ?? null,
+    : surface.noteBatch.addHeadSlotted(
+        surface.noteTextures,
         entry.note.type,
         highlight,
         geometry.headX,
@@ -370,7 +408,7 @@ function drawPreviewNoteEntry(
     selected,
     highlight,
     noteAlpha,
-    tint,
+    noteColorStyle,
     skewShear,
     holdRotation,
     holdCapScale,
@@ -399,16 +437,14 @@ function paintPreviewNoteFallback(
   selected: boolean,
   highlight: boolean,
   alpha: number,
-  tint: number[] | undefined,
+  noteColorStyle: TintTarget | null,
   skewShear: number,
   holdRotation: number,
   holdCapScale: number,
 ): void {
   context.save();
   context.globalAlpha = alpha;
-  const noteColorStyle = tint
-    ? { mode: selected ? ("selected" as const) : ("tint" as const), color: tint }
-    : undefined;
+  const tint = noteColorStyle?.color;
   context.fillStyle = selected
     ? palette.selectionHighlightStroke
     : Array.isArray(tint)
@@ -577,16 +613,28 @@ export function drawLinePasses(
     tailX: 0,
     tailY: 0,
   };
+  // One tint holder for the whole pass: a dense frame would otherwise allocate a style
+  // object and a colour array per visible note.
+  const noteTint: TintTarget = { mode: "tint", color: [255, 255, 255] };
+  const selectionTint = selectionHighlightColor(palette);
   surface.noteHitAreas.length = 0;
   surface.lineFrames.length = 0;
   // A sampled line is lifted above the other judge lines so its focus colour
   // and opacity preview stay visible when lines overlap. Notes and holds keep
   // their own later passes.
   const passes = passesForSampling(surface.passes, surface.samplingFocus?.lineIndex);
+  // One clock pair for the whole pass loop.
+  //
+  // Timing each pass separately cost 743 `performance.now()` pairs on a 741-line chart,
+  // measured at ~114 ns per pair: 86 us of every frame. That is 1.2% of a 144 Hz budget
+  // spent on a diagnostic, so the split is accumulated per pass kind from one outer
+  // reading instead. The line and note totals stay meaningful; per-pass precision was only
+  // ever used to attribute the same two buckets.
+  const drawStarted = performance.now();
   for (const pass of passes) {
     const singleLinePass = pass.kind === "line";
     const passLength = singleLinePass ? 1 : order.length;
-    const passStarted = performance.now();
+    const passStarted = singleLinePass ? 0 : performance.now();
     for (let passIndex = 0; passIndex < passLength; passIndex++) {
       const index = singleLinePass ? pass.index : order[passIndex];
       if (surface.soloLine != null && index !== surface.soloLine) {
@@ -790,6 +838,8 @@ export function drawLinePasses(
               rotation,
               selected,
               highlight,
+              noteTint,
+              selectionTint,
             )
           ) {
             stats.batchFallbacks += 1;
@@ -802,12 +852,12 @@ export function drawLinePasses(
         context.restore();
       }
     }
-    const passMs = performance.now() - passStarted;
-    if (singleLinePass) {
-      stats.lineMs += passMs;
-    } else {
-      stats.noteMs += passMs;
+    if (!singleLinePass) {
+      stats.noteMs += performance.now() - passStarted;
     }
   }
+  // The line passes ran between the outer reading and the note passes that followed them,
+  // so subtracting the accounted note time leaves the line total.
+  stats.lineMs = Math.max(0, performance.now() - drawStarted - stats.noteMs);
   return stats;
 }

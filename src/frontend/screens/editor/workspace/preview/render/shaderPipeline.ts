@@ -578,6 +578,47 @@ export class ShaderPipeline {
     }
   }
 
+  /**
+   * Upload `sourceCanvas` into the shader's source texture.
+   *
+   * `overlay` is composited in the same pass when the caller keeps a separate
+   * layer (the GPU note batch) that must be part of the shader input. Folding it
+   * into the staging draw avoids a second full-canvas composite before upload.
+   */
+  private uploadSource(
+    sourceCanvas: HTMLCanvasElement,
+    width: number,
+    height: number,
+    overlay: HTMLCanvasElement | null = null,
+  ): boolean {
+    const gl = this.gl;
+    if (!gl) {
+      return false;
+    }
+    let staging = this.sourceStaging ?? null;
+    if (!staging) {
+      staging = document.createElement("canvas");
+      this.sourceStaging = staging;
+    }
+    if (staging.width !== width || staging.height !== height) {
+      staging.width = width;
+      staging.height = height;
+    }
+    const stagingContext = staging.getContext("2d");
+    if (!stagingContext) {
+      return false;
+    }
+    stagingContext.clearRect(0, 0, width, height);
+    stagingContext.drawImage(sourceCanvas, 0, 0, width, height);
+    if (overlay) {
+      stagingContext.drawImage(overlay, 0, 0, width, height);
+    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, staging);
+    return true;
+  }
+
   /** Uploads the frame uniforms and the pass's value overrides. */
   setUniforms(
     result: ShaderProgram,
@@ -689,7 +730,8 @@ export class ShaderPipeline {
    * Returns false when there is nothing to draw or GL is unavailable. `viewport`
    * scopes the chart rect; `sourceFor` resolves each pass's GLSL source.
    * `sourceRevision` identifies the primary canvas's pixels; an unchanged
-   * revision reuses the uploaded texture.
+   * revision reuses the uploaded texture. `overlayCanvas` is folded into the
+   * uploaded frame so a separate GPU note layer needs no pre-composite.
    */
   render(
     sourceCanvas: HTMLCanvasElement,
@@ -699,6 +741,7 @@ export class ShaderPipeline {
     sourceFor: (pass: ShaderPass) => string | null | undefined,
     viewport?: ShaderView | null,
     sourceRevision?: number,
+    overlayCanvas?: HTMLCanvasElement | null,
   ): boolean {
     if (!passes.length || !targetCanvas || !this.ensure(targetCanvas)) {
       return false;
@@ -734,30 +777,16 @@ export class ShaderPipeline {
     const rect = shaderViewport(view, displayWidth, displayHeight);
     const resolution = [view.width / (view.scale || 1), view.height / (view.scale || 1)];
     const canReuseUpload =
+      !overlayCanvas &&
       sourceRevision !== undefined &&
       this.uploadedSource === sourceCanvas &&
       this.uploadedRevision === sourceRevision &&
       this.uploadedWidth === width &&
       this.uploadedHeight === height;
     if (!canReuseUpload) {
-      let staging = this.sourceStaging ?? null;
-      if (!staging) {
-        staging = document.createElement("canvas");
-        this.sourceStaging = staging;
-      }
-      if (staging.width !== width || staging.height !== height) {
-        staging.width = width;
-        staging.height = height;
-      }
-      const stagingContext = staging.getContext("2d");
-      if (!stagingContext) {
+      if (!this.uploadSource(sourceCanvas, width, height, overlayCanvas ?? null)) {
         return false;
       }
-      stagingContext.clearRect(0, 0, width, height);
-      stagingContext.drawImage(sourceCanvas, 0, 0, width, height);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, staging);
       this.uploadedSource = sourceCanvas;
       this.uploadedRevision = sourceRevision ?? null;
       this.uploadedWidth = width;

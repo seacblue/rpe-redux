@@ -243,14 +243,19 @@ export function noteSkewShear(skewDegrees: number): number {
 /**
  * The line's skew sampler, or null when the control cannot tilt a note.
  *
- * Matches the preview runtime: one control point is the neutral value and does
- * not enable skew, while two or more points interpolate by floor distance.
+ * Matches the preview runtime: one point is a constant and does not enable skew, and a
+ * multi-point curve that never leaves `skew:0` is neutral too. Exported charts write a flat
+ * two-point curve on every line, so the point count alone cannot decide this.
  */
 export function noteSkewCurve(
   line: Pick<JudgeLine, "skewControl"> | null | undefined,
 ): ControlCurve | null {
   const points = line?.skewControl;
-  return points && points.length > 1 ? new ControlCurve(points, "skew") : null;
+  if (!points || points.length <= 1) {
+    return null;
+  }
+  const curve = new ControlCurve(points, "skew", 0);
+  return curve.isNeutral ? null : curve;
 }
 
 /**

@@ -7,6 +7,11 @@
  */
 
 import { lowerBound, upperBound } from "./search.ts";
+import {
+  createIntervalBlock,
+  type IntervalBlock,
+  type IntervalBlockSource,
+} from "./intervalBlock.ts";
 
 /** A time span as the directory returns it: the payload plus its start/end. */
 export interface IntervalEntry<T> {
@@ -14,16 +19,6 @@ export interface IntervalEntry<T> {
   index: number;
   start: number;
   end: number;
-}
-
-interface IntervalBlock {
-  indices: Uint32Array;
-  starts: Float64Array;
-  ends: Float64Array;
-  maxEnd: number;
-  maxExpansionFactor: number;
-  minSecondaryStart: number;
-  maxSecondaryEnd: number;
 }
 
 const BLOCK_SIZE = 256;
@@ -62,6 +57,8 @@ export class IntervalIndex<T> {
   private blockFirstIndices = new Uint32Array(0);
   /** Prefix maximum of block end values, used to skip expired blocks. */
   private prefixMaxEnds = new Float64Array(0);
+  /** Largest expansion factor in the directory, used to widen a range once. */
+  private maxExpansionFactor = 0;
 
   /**
    * Build the directory for an initial item array.
@@ -286,19 +283,23 @@ export class IntervalIndex<T> {
       return result;
     }
     const safeRadius = Math.max(0, radius);
-    for (const block of this.blocks) {
+    const [firstBlock, lastBlock] = this.expandedBlockRange(start, end, safeRadius);
+    for (let blockIndex = firstBlock; blockIndex <= lastBlock; blockIndex++) {
+      const block = this.blocks[blockIndex];
       const expansion = safeRadius * block.maxExpansionFactor;
       if (block.maxEnd + expansion < start || block.starts[0] - expansion > end) {
         continue;
       }
+      // Every position is tested; see the note in the secondary query above for
+      // why a leading-position skip cannot be sound without the per-query
+      // expansion already folded into the suffix bound.
       for (let position = 0; position < block.indices.length; position++) {
-        const item = this.items[block.indices[position]];
-        const itemExpansion = safeRadius * this.expansionFactorOf(item);
+        const itemExpansion = safeRadius * block.expansions[position];
         if (
           block.ends[position] + itemExpansion >= start &&
           block.starts[position] - itemExpansion <= end
         ) {
-          result.push(item);
+          result.push(this.items[block.indices[position]]);
         }
       }
     }
@@ -329,7 +330,9 @@ export class IntervalIndex<T> {
       return result;
     }
     const safeRadius = Math.max(0, radius);
-    for (const block of this.blocks) {
+    const [firstBlock, lastBlock] = this.expandedBlockRange(start, end, safeRadius);
+    for (let blockIndex = firstBlock; blockIndex <= lastBlock; blockIndex++) {
+      const block = this.blocks[blockIndex];
       const expansion = safeRadius * block.maxExpansionFactor;
       if (
         block.maxEnd + expansion < start ||
@@ -339,16 +342,22 @@ export class IntervalIndex<T> {
       ) {
         continue;
       }
+      // Every position is tested. A leading-position skip needs a suffix bound
+      // that already accounts for each item's own expansion factor, and the
+      // expansion is only known per query. Widening by the block maximum is
+      // unsound (it forgets items with a smaller factor) and not widening at all
+      // is unsound too (an item whose `end` is short can still reach the query
+      // through its expansion). The differential suite pins this: see
+      // `intervalIndexDifferential.test.mjs`.
       for (let position = 0; position < block.indices.length; position++) {
-        const item = this.items[block.indices[position]];
-        const itemExpansion = safeRadius * this.expansionFactorOf(item);
+        const itemExpansion = safeRadius * block.expansions[position];
         if (
           block.ends[position] + itemExpansion >= start &&
           block.starts[position] - itemExpansion <= end &&
-          this.secondaryEndOf(item) >= secondaryStart &&
-          this.secondaryStartOf(item) <= secondaryEnd
+          block.secondaryEnds[position] >= secondaryStart &&
+          block.secondaryStarts[position] <= secondaryEnd
         ) {
-          result.push(item);
+          result.push(this.items[block.indices[position]]);
         }
       }
     }
@@ -381,6 +390,26 @@ export class IntervalIndex<T> {
     const firstBlock = lowerBound(this.prefixMaxEnds, start);
     const lastBlock = upperBound(this.blockFirstStarts, end) - 1;
     return [firstBlock, lastBlock];
+  }
+
+  /**
+   * Restrict an expanded block scan without scanning every block.
+   *
+   * Blocks are ordered by start, so a query only needs the blocks whose start
+   * could still reach the range. That bound is independent of the expansion
+   * factor, which keeps the range exact: the per-block and per-item envelopes
+   * still perform the finer rejection afterwards.
+   */
+  private expandedBlockRange(start: number, end: number, safeRadius: number): [number, number] {
+    if (!this.blocks.length) {
+      return [0, -1];
+    }
+    // A block far past `end` cannot reach it even with the widest expansion.
+    const lastBlock = Math.min(
+      upperBound(this.blockFirstStarts, end + safeRadius * this.maxExpansionFactor) - 1,
+      this.blocks.length - 1,
+    );
+    return [0, lastBlock];
   }
 
   /** Project items to index/start/end records sorted by start. */
@@ -433,13 +462,18 @@ export class IntervalIndex<T> {
     this.blockFirstIndices = new Uint32Array(this.blocks.length);
     this.prefixMaxEnds = new Float64Array(this.blocks.length);
     let maximum = -Infinity;
+    let widest = 0;
     for (let index = 0; index < this.blocks.length; index++) {
       const block = this.blocks[index];
       this.blockFirstStarts[index] = block.starts[0];
       this.blockFirstIndices[index] = block.indices[0];
       maximum = Math.max(maximum, block.maxEnd);
       this.prefixMaxEnds[index] = maximum;
+      if (block.maxExpansionFactor > widest) {
+        widest = block.maxExpansionFactor;
+      }
     }
+    this.maxExpansionFactor = widest;
   }
 
   /** Check that `items` is `this.items` with a non-empty suffix removed in order. */
@@ -681,48 +715,22 @@ export class IntervalIndex<T> {
     );
   }
 
-  /** Wrap existing arrays as a block and compute its maximum end. */
+  /** Wrap existing arrays as a block and compute its envelope. */
   private createBlockFromArrays(
     indices: Uint32Array,
     starts: Float64Array,
     ends: Float64Array,
   ): IntervalBlock {
-    let maxEnd = -Infinity;
-    for (const end of ends) {
-      maxEnd = Math.max(maxEnd, end);
-    }
-    let maxExpansionFactor = 0;
-    for (let position = 0; position < indices.length; position++) {
-      maxExpansionFactor = Math.max(
-        maxExpansionFactor,
-        this.expansionFactorOf(this.items[indices[position]]),
-      );
-    }
-    return {
-      indices,
-      starts,
-      ends,
-      maxEnd,
-      maxExpansionFactor,
-      ...this.secondaryEnvelope(indices),
-    };
+    return createIntervalBlock(this.blockSource(), indices, starts, ends);
   }
 
-  /** Compute the conservative secondary envelope for one block. */
-  private secondaryEnvelope(indices: Uint32Array): {
-    minSecondaryStart: number;
-    maxSecondaryEnd: number;
-  } {
-    if (!this.secondaryStartOf || !this.secondaryEndOf) {
-      return { minSecondaryStart: -Infinity, maxSecondaryEnd: Infinity };
-    }
-    let minSecondaryStart = Infinity;
-    let maxSecondaryEnd = -Infinity;
-    for (const index of indices) {
-      const item = this.items[index];
-      minSecondaryStart = Math.min(minSecondaryStart, this.secondaryStartOf(item));
-      maxSecondaryEnd = Math.max(maxSecondaryEnd, this.secondaryEndOf(item));
-    }
-    return { minSecondaryStart, maxSecondaryEnd };
+  /** The item accessors a block reads once while it is built. */
+  private blockSource(): IntervalBlockSource<T> {
+    return {
+      items: this.items,
+      expansionFactor: this.expansionFactorOf,
+      secondaryStart: this.secondaryStartOf,
+      secondaryEnd: this.secondaryEndOf,
+    };
   }
 }

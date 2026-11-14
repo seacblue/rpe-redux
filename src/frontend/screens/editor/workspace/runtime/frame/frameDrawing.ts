@@ -58,7 +58,10 @@ type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession">
     Timeline["gestures"],
     "drag" | "eventInteraction" | "previewMarquee" | "previewRefresh"
   >;
-  viewport: Pick<Timeline["viewport"], "origin" | "setOrigin" | "setPlaybackActive">;
+  viewport: Pick<
+    Timeline["viewport"],
+    "origin" | "setOrigin" | "setPlaybackActive" | "beatsPerPixel"
+  >;
 };
 
 /** Services one editor frame paints through. */
@@ -189,6 +192,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           force: force || refreshHud || marqueeActive,
           timelineRevision: runtime.timeline.renderRevision,
           viewportOrigin: runtime.timeline.viewport.origin,
+          beatsPerPixel: runtime.timeline.viewport.beatsPerPixel(),
           previewSession,
           previewSelection,
           authoringRegionVisible: runtime.authoringRegionVisible(),

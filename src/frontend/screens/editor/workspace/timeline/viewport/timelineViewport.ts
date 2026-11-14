@@ -256,6 +256,24 @@ export class TimelineViewport {
     };
   }
 
+  /**
+   * Beats covered by one device pixel on the vertical axis.
+   *
+   * The note field is drawn from `origin`, so playback only changes its pixels
+   * once the origin moves by at least this much. Returns Infinity for a
+   * degenerate scale, which callers treat as "never sub-pixel".
+   */
+  beatsPerPixel(): number {
+    const scale = Math.max(0, this.scale);
+    if (!Number.isFinite(scale) || scale <= 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+    // Seconds per pixel, then beats per second at the active line's factor.
+    const seconds = 1 / scale;
+    const beats = this.tempo.beat(seconds, this.factor);
+    return Number.isFinite(beats) && beats > 0 ? beats : Number.POSITIVE_INFINITY;
+  }
+
   /** Beat multiplier of the active line. */
   get factor(): number {
     return this.getSession().line?.bpmfactor ?? 1;

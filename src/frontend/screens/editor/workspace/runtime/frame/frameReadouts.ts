@@ -99,10 +99,9 @@ export function createFrameReadouts(options: FrameReadoutOptions, visibility: Fr
       const draggedLineIndex = Number.isInteger(runtime.timeline.gestures.drag?.lineIndex)
         ? (runtime.timeline.gestures.drag?.lineIndex ?? session.lineIndex)
         : session.lineIndex;
-      const draggedSource =
-        session.chart.judgeLineList?.[draggedLineIndex]?.notes?.[
-          dragAnchor(runtime.timeline.gestures.drag) ?? -1
-        ];
+      const draggedSource = session.chart.judgeLineList?.[draggedLineIndex]?.notes?.at(
+        dragAnchor(runtime.timeline.gestures.drag) ?? -1,
+      );
       const draggedNote =
         ["move", "startTime", "endTime"].includes(runtime.timeline.gestures.drag?.kind ?? "") &&
         draggedSource

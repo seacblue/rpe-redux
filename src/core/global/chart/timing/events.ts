@@ -197,6 +197,32 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       end: this.ends[index],
     }));
   }
+  /**
+   * The value this track returns everywhere, or null when it can vary.
+   *
+   * Exported RPE charts write a flat event on every track: a real chart carries one
+   * `inclineEvents` entry per line with `start:0 end:0`, which cannot incline anything but
+   * still puts the line on the slow sample path. Reporting the flat value lets a caller
+   * treat the track as absent, while a track that is flat at a non-neutral value stays
+   * distinguishable instead of being silently dropped.
+   */
+  constantValue(): number | null {
+    if (this.sources.length === 0) {
+      return Number(this.fallback);
+    }
+    const first = this.startValues[0];
+    const second = this.endValues[0];
+    if (!Number.isFinite(first) || first !== second) {
+      return null;
+    }
+    for (let index = 1; index < this.sources.length; index += 1) {
+      if (this.startValues[index] !== first || this.endValues[index] !== first) {
+        return null;
+      }
+    }
+    return first;
+  }
+
   /** Sample the active event at `seconds`, or the fallback before the first event. */
   value(seconds: number): LineEventValue {
     if (!this.sources.length) {

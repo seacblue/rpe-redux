@@ -409,7 +409,7 @@ function noteMenuActions(
 ): OverlapMenuAction[] {
   const chart = preview.chart;
   return candidates.map((candidate) => {
-    const note = chart?.judgeLineList?.[candidate.lineIndex]?.notes?.[candidate.noteIndex ?? -1];
+    const note = chart?.judgeLineList?.[candidate.lineIndex]?.notes?.at(candidate.noteIndex ?? -1);
     const noteIndex = candidate.noteIndex ?? -1;
     return {
       id: `note:${candidate.lineIndex}:${noteIndex}`,
