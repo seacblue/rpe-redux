@@ -629,7 +629,7 @@ GitHub Pages 不支持自定义响应头。因此：
 验证目录（一次性，未提交）：
 
 ```text
-C:\Users\Administrator\AppData\Local\Temp\opencode\sqlite-pages-spike
+<temp-dir>/sqlite-pages-spike
 ```
 
 关键文件：
@@ -643,7 +643,7 @@ C:\Users\Administrator\AppData\Local\Temp\opencode\sqlite-pages-spike
 运行：
 
 ```powershell
-cd C:\Users\Administrator\AppData\Local\Temp\opencode\sqlite-pages-spike
+cd <temp-dir>/sqlite-pages-spike
 node test-solo.mjs
 node test-multi.mjs
 node test-subpath.mjs
