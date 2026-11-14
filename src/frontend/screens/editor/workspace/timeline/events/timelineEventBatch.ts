@@ -6,13 +6,13 @@
  * the canvas path as the fallback when WebGL is unavailable.
  */
 import type { TimelineEventRect } from "../../../../../../core/edit/timeline/types.ts";
-import { sizeCanvasBackingStore } from "../../../canvas/canvas2d.ts";
+import type { WebGlRenderBackend } from "../../../canvas/renderBackend.ts";
+import { tryCreateWebGl2Backend } from "../../../canvas/renderBackend.ts";
 import type { RpeSkin } from "../../../canvas/skin.ts";
 import {
   bindInstanceAttribute,
   configureTextureSampling,
   createCornerBuffer,
-  installContextLossHandlers,
   linkProgram,
 } from "../../../canvas/webgl.ts";
 
@@ -32,7 +32,10 @@ interface SkinTextureDescriptor {
 /** GPU batch for repeated timeline event bars. */
 export class TimelineEventBatch {
   private readonly canvas: HTMLCanvasElement;
-  private readonly gl: WebGL2RenderingContext | null;
+  private readonly backend: WebGlRenderBackend | null;
+  private get gl(): WebGL2RenderingContext | null {
+    return this.backend?.gl as WebGL2RenderingContext | null;
+  }
   private program: WebGLProgram | null = null;
   private cornerBuffer: WebGLBuffer | null = null;
   private instanceBuffer: WebGLBuffer | null = null;
@@ -55,19 +58,21 @@ export class TimelineEventBatch {
   private descriptor: SkinTextureDescriptor | null = null;
   private renderKey: string | null = null;
   private contextLost = false;
-  private uninstallContextLoss: (() => void) | null = null;
 
   /** Create the WebGL2 batch, falling back to canvas when WebGL is unavailable. */
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false });
-    if (!this.gl) {
+    this.backend = tryCreateWebGl2Backend(
+      this.canvas,
+      { alpha: true, antialias: false, depth: false },
+      {
+        onLost: this.handleContextLost,
+        onRestored: this.handleContextRestored,
+      },
+    );
+    if (!this.backend) {
       return;
     }
-    this.uninstallContextLoss = installContextLossHandlers(this.canvas, {
-      onLost: this.handleContextLost,
-      onRestored: this.handleContextRestored,
-    });
     this.initializeResources();
   }
 
@@ -82,8 +87,7 @@ export class TimelineEventBatch {
   }
 
   /** Prevent the default loss handling and stop submitting GPU work. */
-  private readonly handleContextLost = (event: Event): void => {
-    event.preventDefault();
+  private readonly handleContextLost = (): void => {
     this.contextLost = true;
     this.active = false;
     // Some hosts keep the last presented pixels after a loss. Resizing the
@@ -190,7 +194,7 @@ export class TimelineEventBatch {
       return true;
     }
     const descriptor = skin?.eventBarTexture() ?? null;
-    const active = Boolean(this.gl && this.program && this.texture && descriptor);
+    const active = Boolean(this.backend?.isUsable() && this.program && this.texture && descriptor);
     if (
       renderKey &&
       this.renderKey === renderKey &&
@@ -209,13 +213,13 @@ export class TimelineEventBatch {
     this.descriptor = descriptor;
     this.active = active;
     this.renderKey = renderKey ?? null;
-    if (!this.gl) {
+    if (!this.backend) {
       return true;
     }
-    const backing = sizeCanvasBackingStore(this.canvas, { width, height });
-    this.gl.viewport(0, 0, backing.width, backing.height);
-    this.gl.clearColor(0, 0, 0, 0);
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+    this.backend.resize({ width, height });
+    if (!this.backend.begin(true)) {
+      this.active = false;
+    }
     return true;
   }
 
@@ -298,9 +302,8 @@ export class TimelineEventBatch {
 
   /** Release the GPU buffers, texture, and program. */
   dispose(): void {
-    this.uninstallContextLoss?.();
-    this.uninstallContextLoss = null;
     if (!this.gl) {
+      this.backend?.dispose();
       return;
     }
     if (!this.isContextLost()) {
@@ -328,6 +331,7 @@ export class TimelineEventBatch {
     this.textureSource = null;
     this.active = false;
     this.renderKey = null;
+    this.backend?.dispose();
   }
 
   /** Grow the instance buffer geometrically to hold `required` floats. */

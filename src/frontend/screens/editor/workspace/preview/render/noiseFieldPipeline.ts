@@ -14,10 +14,11 @@ import blockNoise from "./noiseField/tex/BlockNoise1.png";
 import pointNoise from "./noiseField/tex/PointNoise.png";
 import fieldNoise from "./noiseField/tex/FD_Noise.png";
 import type { NoiseAreaSample } from "../../../../../../core/global/chart/noise/noiseRuntime.ts";
+import type { WebGlRenderBackend } from "../../../canvas/renderBackend.ts";
+import { tryCreateWebGl2Backend } from "../../../canvas/renderBackend.ts";
 import {
   configureTextureSampling,
   createCornerBuffer,
-  installContextLossHandlers,
   linkProgram,
 } from "../../../canvas/webgl.ts";
 import { noiseMaskBitsForEntry, noiseThemeEntryBelongsToPass } from "./noiseGeometry.ts";
@@ -158,7 +159,10 @@ export interface NoiseMaskEntry {
 /** Fixed NoiseField renderer; the caller owns scene composition and the canvas being displayed. */
 export class NoiseFieldPipeline {
   private canvas = document.createElement("canvas");
-  private gl: WebGL2RenderingContext | null = null;
+  private backend: WebGlRenderBackend | null = null;
+  private get gl(): WebGL2RenderingContext | null {
+    return this.backend?.gl as WebGL2RenderingContext | null;
+  }
   private programs = new Map<string, Program>();
   private targets = new Map<string, TargetPair>();
   private resources: Target[] = [];
@@ -184,7 +188,6 @@ export class NoiseFieldPipeline {
   private ready = false;
   private failed = false;
   private disposed = false;
-  private uninstallContextLoss: (() => void) | null = null;
   private initialization: Promise<void> = Promise.resolve();
   private readonly parameters = new Map<string, Uniform>();
   private readonly touchPoints = new Float32Array(128);
@@ -201,26 +204,26 @@ export class NoiseFieldPipeline {
       const values = match[3].split(",").map(Number);
       this.parameters.set(match[2], values.length === 1 ? values[0] : values);
     }
-    this.gl = this.canvas.getContext("webgl2", {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-      preserveDrawingBuffer: true,
-      depth: false,
-      stencil: true,
-    });
-    if (!this.gl) {
+    this.backend = tryCreateWebGl2Backend(
+      this.canvas,
+      {
+        alpha: true,
+        premultipliedAlpha: false,
+        antialias: false,
+        preserveDrawingBuffer: true,
+        depth: false,
+        stencil: true,
+      },
+      {
+        onLost: () => this.fail(),
+      },
+    );
+    if (!this.backend) {
       this.fail();
       return;
     }
-    this.uninstallContextLoss = installContextLossHandlers(this.canvas, {
-      onLost: (event) => {
-        event.preventDefault();
-        this.fail();
-      },
-    });
     try {
-      const gl = this.gl;
+      const gl = this.context();
       this.quadBuffer = createCornerBuffer(gl, quad);
       this.geometryBuffer = gl.createBuffer();
       if (this.geometryBuffer) {
@@ -264,10 +267,10 @@ export class NoiseFieldPipeline {
   }
   /** Returns the live GL context or throws when initialization failed. */
   private context(): WebGL2RenderingContext {
-    if (!this.gl) {
+    if (!this.backend?.isUsable()) {
       throw new Error("WebGL2 unavailable");
     }
-    return this.gl;
+    return this.backend.gl as WebGL2RenderingContext;
   }
   /** Compiles and links one program, throwing with the GL log on failure. */
   private compile(source: string, vertexSource = vertex): Program {
@@ -769,10 +772,9 @@ export class NoiseFieldPipeline {
   /** Release programs, render targets and image textures when the preview is disposed. */
   dispose(): void {
     this.disposed = true;
-    this.uninstallContextLoss?.();
-    this.uninstallContextLoss = null;
     const gl = this.gl;
     if (!gl) {
+      this.backend?.dispose();
       return;
     }
     for (const target of this.resources) {
@@ -791,6 +793,7 @@ export class NoiseFieldPipeline {
     this.targets.clear();
     this.images.clear();
     this.programs.clear();
-    this.gl = null;
+    this.backend?.dispose();
+    this.backend = null;
   }
 }

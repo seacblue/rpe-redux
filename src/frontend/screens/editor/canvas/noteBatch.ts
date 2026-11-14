@@ -4,7 +4,9 @@
  * buffers, and per-frame instance data.
  */
 /* eslint-disable max-lines -- the batch keeps texture, instance, and context-loss ownership together. */
-import { canvasPixelRatio, sizeCanvasBackingStore } from "./canvas2d.ts";
+import { canvasPixelRatio } from "./canvas2d.ts";
+import type { WebGlRenderBackend } from "./renderBackend.ts";
+import { tryCreateWebGl2Backend } from "./renderBackend.ts";
 import { createHoldLayoutScratch, holdLayoutInto, holdRenderRotation } from "./noteGeometry.ts";
 import { createNoteBatchUploadState, submitNoteBatchGroups } from "./noteBatchUpload.ts";
 import { NoteBatchDiagnostics } from "./noteBatchDiagnostics.ts";
@@ -20,13 +22,7 @@ import {
   type SpriteGroup,
   type TextureDescriptor,
 } from "./noteSpriteGroups.ts";
-import {
-  acquireWebGl2,
-  configureTextureSampling,
-  createCornerBuffer,
-  installContextLossHandlers,
-  linkProgram,
-} from "./webgl.ts";
+import { configureTextureSampling, createCornerBuffer, linkProgram } from "./webgl.ts";
 
 const ROTATION_CACHE_LIMIT = 512;
 /** Note type slots resolved without building a cache key on every note. */
@@ -70,7 +66,10 @@ export interface NoteBatchSkin {
 export class NoteBatch {
   private readonly canvas: HTMLCanvasElement;
   private readonly diagnostics: NoteBatchDiagnostics;
-  private readonly gl: WebGL2RenderingContext | null;
+  private readonly backend: WebGlRenderBackend | null;
+  private get gl(): WebGL2RenderingContext | null {
+    return this.backend?.gl as WebGL2RenderingContext | null;
+  }
   private program: WebGLProgram | null = null;
   private cornerBuffer: WebGLBuffer | null = null;
   private instanceBuffer: WebGLBuffer | null = null;
@@ -121,20 +120,22 @@ export class NoteBatch {
   private prewarmTimer: number | ReturnType<typeof setTimeout> | null = null;
   private prewarmIdle = false;
   private contextLost = false;
-  private uninstallContextLoss: (() => void) | null = null;
   /** Create the batch for one canvas; without WebGL2 every submit is a no-op. */
   constructor(canvas: HTMLCanvasElement, surface: RenderSurface = "preview") {
     this.canvas = canvas;
     this.diagnostics = new NoteBatchDiagnostics(surface);
-    this.gl = acquireWebGl2(canvas);
+    this.backend = tryCreateWebGl2Backend(
+      canvas,
+      { alpha: true, antialias: false, depth: false },
+      {
+        onLost: this.handleContextLost,
+        onRestored: this.handleContextRestored,
+      },
+    );
     this.reportState();
-    if (!this.gl) {
+    if (!this.backend) {
       return;
     }
-    this.uninstallContextLoss = installContextLossHandlers(this.canvas, {
-      onLost: this.handleContextLost,
-      onRestored: this.handleContextRestored,
-    });
     this.initializeResources();
     this.reportState();
   }
@@ -156,8 +157,7 @@ export class NoteBatch {
   }
 
   /** Prevent the default loss handling and stop submitting GPU work. */
-  private readonly handleContextLost = (event: Event): void => {
-    event.preventDefault();
+  private readonly handleContextLost = (): void => {
     this.diagnostics.context("lost");
     this.contextLost = true;
     this.active = false;
@@ -428,33 +428,40 @@ export class NoteBatch {
       this.reportState();
       return;
     }
-    this.active = Boolean(this.gl && this.program && this.instanceBuffer && skin);
-    if (!this.gl) {
+    this.active = Boolean(this.backend?.isUsable() && this.program && this.instanceBuffer && skin);
+    if (!this.backend) {
       this.reportState();
       return;
     }
     const safeScale = Number.isFinite(pixelRatioScale)
       ? Math.max(0.5, Math.min(1, pixelRatioScale))
       : 1;
-    const backing = sizeCanvasBackingStore(
-      this.canvas,
+    const backing = this.backend.resize(
       { width, height },
       Math.max(1, canvasPixelRatio() * safeScale),
     );
-    this.gl.viewport(0, 0, backing.width, backing.height);
-    this.gl.disable(this.gl.SCISSOR_TEST);
-    this.gl.clearColor(0, 0, 0, 0);
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+    if (!this.backend.begin(true)) {
+      this.active = false;
+      this.reportState();
+      return;
+    }
+    const gl = this.gl;
+    if (!gl) {
+      this.active = false;
+      this.reportState();
+      return;
+    }
+    gl.disable(gl.SCISSOR_TEST);
     if (clip) {
-      this.gl.enable(this.gl.SCISSOR_TEST);
-      this.gl.scissor(
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(
         Math.max(0, Math.round(clip.left * backing.ratio)),
         Math.max(0, Math.round((height - clip.top - clip.height) * backing.ratio)),
         Math.max(0, Math.round(clip.width * backing.ratio)),
         Math.max(0, Math.round(clip.height * backing.ratio)),
       );
     } else {
-      this.gl.disable(this.gl.SCISSOR_TEST);
+      gl.disable(gl.SCISSOR_TEST);
     }
     this.reportState();
   }
@@ -735,9 +742,8 @@ export class NoteBatch {
 
   /** Release every GL object and cached texture owned by the batch. */
   dispose(): void {
-    this.uninstallContextLoss?.();
-    this.uninstallContextLoss = null;
     if (!this.gl) {
+      this.backend?.dispose();
       return;
     }
     if (!this.isContextLost()) {
@@ -764,6 +770,7 @@ export class NoteBatch {
     this.instanceBuffer = null;
     this.descriptorSkin = null;
     this.active = false;
+    this.backend?.dispose();
     this.reportState();
   }
 

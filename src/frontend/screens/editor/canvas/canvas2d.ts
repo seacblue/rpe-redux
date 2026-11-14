@@ -1,5 +1,6 @@
 /** Shared Canvas 2D preparation for preview, timeline, and inspector surfaces. */
 import { t } from "../../../../i18n/index.ts";
+import { Canvas2DRenderBackend } from "./renderBackend.ts";
 
 /** Highest device-pixel ratio used for a canvas backing store. */
 export const MAX_CANVAS_PIXEL_RATIO = 2;
@@ -40,6 +41,7 @@ interface CachedMeasurement extends CanvasMeasurement {
 }
 
 const measurements = new WeakMap<HTMLCanvasElement, CachedMeasurement>();
+const renderBackends = new WeakMap<HTMLCanvasElement, Canvas2DRenderBackend>();
 
 /** Minimal element shape whose layout rectangle can be cached. */
 export interface MeasurableElement {
@@ -210,11 +212,17 @@ export function prepareCanvas(
   height: number;
 } {
   const rectangle = measurement ?? measureCanvas(canvas);
-  const size = sizeCanvasBackingStore(canvas, rectangle);
   const context = context2d(canvas);
-  context.setTransform(size.ratio, 0, 0, size.ratio, 0, 0);
-  if (clear) {
-    context.clearRect(0, 0, rectangle.width, rectangle.height);
+  let backend = renderBackends.get(canvas);
+  if (!backend) {
+    backend = new Canvas2DRenderBackend(canvas, context);
+    renderBackends.set(canvas, backend);
   }
-  return { context, width: rectangle.width, height: rectangle.height };
+  const frame = backend.resize(rectangle);
+  backend.begin(clear);
+  return {
+    context: backend.context,
+    width: frame.logicalWidth,
+    height: frame.logicalHeight,
+  };
 }
