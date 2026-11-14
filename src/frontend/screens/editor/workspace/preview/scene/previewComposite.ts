@@ -8,6 +8,7 @@ import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import type { PreviewGuideSurface } from "../drawing/previewGuides.ts";
 import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
 import type { ShaderPipeline } from "../render/shaderPipeline.ts";
+import type { ShaderCompositeRenderDevice } from "../render/shaderCompositeRenderDevice.ts";
 import type { PreviewFrame, PreviewShaderEffect } from "./previewTypes.ts";
 import { PreviewOverlayRenderDevice } from "./previewOverlayRenderDevice.ts";
 
@@ -20,6 +21,7 @@ import {
 export interface PreviewCompositeSurface extends PreviewGuideSurface {
   canvas: HTMLCanvasElement;
   shaderPipeline: ShaderPipeline;
+  shaderCompositeDevice: ShaderCompositeRenderDevice;
   shaderRuntime: ShaderRuntime;
   display: PreviewDisplayAdapter;
   shaderCanvas: HTMLCanvasElement | null;
@@ -68,17 +70,17 @@ export function drawComposite(
   context.restore();
   let shaderRendered = false;
   if (shaderEffects.length) {
-    shaderRendered = surface.shaderPipeline.render(
-      surface.canvas,
-      surface.shaderCanvas,
-      shaderEffects,
+    shaderRendered = surface.shaderCompositeDevice.render({
+      sourceCanvas: surface.canvas,
+      targetCanvas: surface.shaderCanvas,
+      passes: shaderEffects,
       seconds,
-      (effect: PreviewShaderEffect) =>
+      sourceFor: (effect: PreviewShaderEffect) =>
         surface.shaderRuntime.source(effect.shader, effect.sourceName),
       viewport,
-      frame.shaderSourceRevision,
-      shaderOverlay,
-    );
+      sourceRevision: frame.shaderSourceRevision,
+      overlayCanvas: shaderOverlay,
+    });
     if (surface.shaderCanvas) {
       surface.display.setShaderVisible(shaderRendered);
     }

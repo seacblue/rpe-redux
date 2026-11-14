@@ -51,8 +51,8 @@ export interface RenderPacket {
 }
 
 /** Adapter that knows how to submit one backend-neutral packet. */
-export interface RenderDevice {
-  render(packet: RenderPacket): void;
+export interface RenderDevice<Packet = RenderPacket> {
+  render(packet: Packet): void;
   dispose(): void;
 }
 
@@ -66,7 +66,7 @@ export class RenderGraph {
   private readonly retained = new Map<string, RetainedPacket>();
 
   /** Submit only when the packet key differs from the last committed surface. */
-  submit(packet: RenderPacket, device: RenderDevice): boolean {
+  submit(packet: RenderPacket, device: RenderDevice<RenderPacket>): boolean {
     const previous = this.retained.get(packet.surface);
     if (previous?.key === packet.key) {
       return false;
@@ -82,7 +82,7 @@ export class RenderGraph {
   }
 
   /** Forget retained packet metadata and release every device. */
-  dispose(devices: Iterable<RenderDevice>): void {
+  dispose(devices: Iterable<RenderDevice<RenderPacket>>): void {
     this.retained.clear();
     for (const device of devices) {
       device.dispose();

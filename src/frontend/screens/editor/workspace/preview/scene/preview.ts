@@ -24,6 +24,7 @@ import { drawHitEffects } from "../drawing/previewHitEffects.ts";
 import { drawLinePasses } from "../drawing/previewLines.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { ShaderPipeline, type ShaderProgramSource } from "../render/shaderPipeline.ts";
+import { ShaderCompositeRenderDevice } from "../render/shaderCompositeRenderDevice.ts";
 import { NoteBatch } from "../../../canvas/noteBatch.ts";
 import type { NoteTextureTable } from "../../../canvas/noteBatch.ts";
 import { PreviewBackground, type TextureImage } from "../render/background.ts";
@@ -106,6 +107,7 @@ export class Preview {
   declare scene: SceneRuntime;
   declare shaderRuntime: ShaderRuntime;
   declare shaderPipeline: ShaderPipeline;
+  declare shaderCompositeDevice: ShaderCompositeRenderDevice;
   declare noteBatch: NoteBatch;
   /** Note heads by `type * 2 + highlight`, refreshed at the start of each paint. */
   noteTextures: NoteTextureTable = EMPTY_TEXTURES;
@@ -261,7 +263,7 @@ export class Preview {
     this.cameraTracker.reset();
     this.invalidateFrame();
     this.geometryCache.clear();
-    this.shaderPipeline.dispose();
+    this.shaderCompositeDevice.dispose();
     this.shaderPrewarmChart = null;
     this.shaderPrewarmRevision = -1;
     this.noteBatch.clear();
@@ -557,6 +559,7 @@ export class Preview {
     this.simultaneousCache = new SimultaneousNotesCache();
     this.shaderRuntime = new ShaderRuntime(() => this.invalidate?.(), readShaderSource);
     this.shaderPipeline = new ShaderPipeline(() => this.invalidate?.());
+    this.shaderCompositeDevice = new ShaderCompositeRenderDevice(this.shaderPipeline);
     this.noteBatchCanvas = layers?.noteBatch ?? document.createElement("canvas");
     this.noteBatch = new NoteBatch(this.noteBatchCanvas, "preview");
     this.noiseAreas = new NoiseAreaRenderer(
