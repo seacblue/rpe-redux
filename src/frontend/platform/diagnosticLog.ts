@@ -16,6 +16,13 @@ export function diagnosticText(error: unknown): string {
   if (error && typeof error === "object" && "stack" in error && typeof error.stack === "string") {
     return error.stack;
   }
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    const code = (error as { code?: unknown }).code;
+    if (typeof message === "string") {
+      return typeof code === "string" && code ? `${code}: ${message}` : message;
+    }
+  }
   return String(error);
 }
 

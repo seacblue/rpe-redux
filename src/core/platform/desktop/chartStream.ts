@@ -267,7 +267,10 @@ function channelBytes(value: ArrayBuffer | number[] | Uint8Array): Uint8Array {
  */
 export async function openNativeChartStream(
   path: string,
-  options: { allowExternalResources?: boolean } = {},
+  options: {
+    allowExternalResources?: boolean;
+    onProgress?: (completed: number, total: number) => void;
+  } = {},
 ): Promise<NativeChartStream> {
   const onStream = new Channel<ArrayBuffer | number[]>();
   const onProgress = new Channel<{ completed: number; total: number }>();
@@ -294,7 +297,7 @@ export async function openNativeChartStream(
       }
     }
   };
-  onProgress.onmessage = () => undefined;
+  onProgress.onmessage = ({ completed, total }) => options.onProgress?.(completed, total);
   const opened = await invoke<OpenedStreamDocument>("open_document_stream", {
     path,
     onStream,

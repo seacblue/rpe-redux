@@ -34,9 +34,6 @@ test("both previews draw a closed outer frame", async () => {
     readFile(easingPreview, "utf8"),
     readFile(bezierEditor, "utf8"),
   ]);
-  assert.match(
-    easingSource,
-    /draw\.strokeRect\(LEFT, VALUE_TOP, PLOT_WIDTH, VALUE_BOTTOM - VALUE_TOP\)/,
-  );
+  assert.match(easingSource, /draw\.strokeRect\(\s*EASING_PLOT_LEFT[\s\S]*?BOTTOM - TOP\s*\)/);
   assert.match(bezierSource, /draw\.strokeRect\(LEFT, TOP, PLOT_WIDTH, PLOT_HEIGHT\)/);
 });

@@ -7,7 +7,6 @@
  * clear transfer buffers.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";
 import { Progress } from "../../../../../design/components/progress/Progress.tsx";
 import { useTranslation, type Translator } from "../../../../../i18n/react.ts";
@@ -18,6 +17,7 @@ import {
   type CollaborationProgressState,
 } from "../../../../../core/collaboration/progress.ts";
 import { useCollaboration } from "./collaborationRuntime.tsx";
+import { FailureAlert } from "../runtime/session/FailureAlert.tsx";
 
 /** Current phase as one continuous bar, matching the chart-loading surface. */
 function progressRatio(progress: CollaborationProgressState): number {
@@ -214,9 +214,11 @@ export function RoomProgressDialog() {
         <p className="collab-progress-percent">{percent}%</p>
       </div>
       {progress.error && (
-        <InlineAlert tone="danger" className="collab-progress-error">
-          {progress.error}
-        </InlineAlert>
+        <FailureAlert
+          error={progress.error}
+          context={{ operation: "collaboration.progress" }}
+          className="collab-progress-error"
+        />
       )}
     </Modal>
   );

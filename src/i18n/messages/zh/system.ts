@@ -49,6 +49,10 @@ export default {
   "system.library.unreachable": "无法连接本地服务：{message}",
   "system.library.nonJsonResponse": "本地服务返回了非 JSON 响应（HTTP {status}）",
   "system.library.requestFailed": "请求失败（HTTP {status}）",
+  "system.library.requestFailedGeneric": "本地素材库无法完成此请求。",
+  "system.library.notFound": "找不到请求的本地素材库项目。",
+  "system.library.invalidRequest": "本地素材库拒绝了此请求。",
+  "system.library.unavailable": "本地素材库当前不可用。",
   "system.library.storageError":
     "本地数据存储失败，可能是磁盘空间不足或数据库不可写。请先导出备份，再检查磁盘和权限。",
   "system.library.notRunning": "本地服务未运行",

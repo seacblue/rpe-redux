@@ -77,6 +77,22 @@ test("removing active work aborts it and retains the row until cleanup", async (
   );
 });
 
+test("a cooperative task is removed after the cancel signal is observed", async () => {
+  const id = startLongTask({
+    label: "import",
+    run: async ({ signal }) => {
+      await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  removeLongTask(id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(
+    getLongTasks().some((task) => task.id === id),
+    false,
+  );
+});
+
 test("publishes a streaming path and restores the destination on completion", async () => {
   let finish;
   const waiting = new Promise((resolve) => {
@@ -98,6 +114,29 @@ test("publishes a streaming path and restores the destination on completion", as
   const task = getLongTasks().find((item) => item.id === id);
   assert.equal(task?.detail, "final.mp4");
   assert.equal(task?.status, "completed");
+  dismissLongTask(id);
+});
+
+test("keeps reported progress bounded and monotonic", async () => {
+  let release;
+  const waiting = new Promise((resolve) => {
+    release = resolve;
+  });
+  const id = startLongTask({
+    label: "import",
+    async run({ report }) {
+      report("reading", 0.4);
+      report("reading", -0.2);
+      report("converting", 0.2);
+      report("converting", 1.4);
+      await waiting;
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const task = getLongTasks().find((item) => item.id === id);
+  assert.equal(task?.progress, 1);
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   dismissLongTask(id);
 });
 

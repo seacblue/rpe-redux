@@ -23,6 +23,8 @@ export interface PreviewHitEffectSurface {
   noteSize: number;
   hitEffectScale: number;
   effectsSince: number;
+  /** True when the authoring timeline shares the stage with the preview. */
+  authoringRegionVisible?: boolean;
   defaultParticleColor: readonly number[];
   hitStateCache?: Map<number, SampleAt>;
 }
@@ -60,7 +62,7 @@ export function resolveParticleColor(
 
 /** Draws the skin-owned hit frame and the four-square burst at each recent note hit. */
 export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewFrame): void {
-  if (!Number.isFinite(surface.effectsSince)) {
+  if (surface.authoringRegionVisible || !Number.isFinite(surface.effectsSince)) {
     return;
   }
   const { context, order, seconds, width, height, centerX, centerY, scaleX, scaleY } = frame;

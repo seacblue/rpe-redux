@@ -74,7 +74,10 @@ export interface FrameDrawingOptions {
   timelineOverview: Pick<TimelineOverview, "draw">;
   trajectoryPanel: Pick<TrajectoryPanel, "active" | "tick">;
   audioAnalysis: Pick<AudioAnalysis, "draw">;
-  realtimePreview: Pick<Preview, "duration" | "visible" | "draw" | "invalidationRevision"> &
+  realtimePreview: Pick<
+    Preview,
+    "duration" | "visible" | "draw" | "invalidationRevision" | "authoringRegionVisible"
+  > &
     Parameters<TrajectoryPanel["tick"]>[3];
   offsetSeconds(): number;
   updateLineInfo(): void;
@@ -221,6 +224,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
               if (trajectoryView || cameraPreview) {
                 runtime.realtimePreview.visible = true;
               }
+              runtime.realtimePreview.authoringRegionVisible = runtime.authoringRegionVisible();
               runtime.realtimePreview.draw(
                 viewChart,
                 tempo,

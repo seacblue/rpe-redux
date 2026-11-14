@@ -27,6 +27,99 @@
   font-size: var(--type-caption);
 }
 
+.redux-library-group-filter {
+  position: relative;
+  flex: none;
+}
+
+.redux-library-group-filter-popover {
+  position: fixed;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  width: min(260px, calc(100vw - var(--space-4)));
+  max-height: min(480px, calc(100vh - var(--space-4)));
+  margin: 0;
+  padding: var(--space-1);
+  overflow: hidden;
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-panel);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(-1 * var(--space-1-5))) scale(0.985);
+  transform-origin: var(--popover-origin-x, 100%) var(--popover-origin-y, 0);
+  transition:
+    opacity var(--design-dur-exit) var(--design-ease-exit),
+    transform var(--design-dur-exit) var(--design-ease-exit),
+    visibility 0s linear var(--design-dur-exit);
+
+  &.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition:
+      opacity var(--design-dur-enter) var(--design-ease-enter),
+      transform var(--design-dur-enter) var(--design-ease-enter),
+      visibility 0s;
+  }
+}
+
+.redux-library-group-filter-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.redux-library-group-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--control-height-compact);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--foreground);
+  font-size: var(--type-caption);
+  cursor: var(--app-cursor-pointer);
+
+  &:hover,
+  &:focus-within {
+    background: var(--surface-hover);
+  }
+
+  .redux-library-group-filter-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .redux-input[type="checkbox"] {
+    flex: none;
+    margin: 0;
+  }
+}
+
+.redux-library-group-filter-empty {
+  padding: var(--space-3) var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+// Group editing is a compact choice, not a wide document form. The select's
+// options are rendered by the shared control host, so this width only sizes
+// the modal sheet and never constrains the portalled list.
+.redux-app-root dialog.redux-project-group-dialog-modal {
+  width: min(440px, calc(100vw - 32px));
+}
+
 .redux-library-search {
   flex: 1 1 160px;
   min-width: 0;
@@ -229,6 +322,32 @@
       color-mix(in srgb, var(--media-surface) 20%, transparent),
       transparent 24%
     );
+}
+
+.redux-library-detail-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--media-surface) 70%, transparent);
+  cursor: var(--app-cursor-pointer);
+  transition: height var(--design-dur-tint) var(--design-ease-move);
+
+  &:hover,
+  &:focus-visible {
+    height: 8px;
+  }
+}
+
+.redux-library-detail-progress-fill {
+  display: block;
+  width: var(--library-preview-progress, 0%);
+  height: 100%;
+  background: var(--canvas-event-hooked-fill);
+  transition: width var(--design-dur-tint) linear;
 }
 
 .redux-library-detail-level {
@@ -712,6 +831,17 @@
 .redux-home-page .redux-library-cards[data-skeleton="true"] {
   align-content: start;
   overflow: hidden;
+
+  // The first read can show dozens of placeholders at once. A per-card
+  // opacity animation keeps repainting the whole column while Q/E is idle or
+  // repeating, so the initial skeleton stays static and cheap to composite.
+  .project-card.is-skeleton {
+    .project-cover-frame,
+    .project-title-skeleton,
+    .project-composer-skeleton {
+      animation: none;
+    }
+  }
 }
 
 .redux-home-page .redux-library-cards[data-view="grid"] {

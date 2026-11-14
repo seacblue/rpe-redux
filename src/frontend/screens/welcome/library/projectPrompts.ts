@@ -1,8 +1,8 @@
 ﻿/**
  * The questions the home library waits on.
  *
- * Rename and remove requests carry their own submit work and are presented one at a
- * time through the shared dialog queue.
+ * Rename, group-edit, and remove requests carry their own submit work and are
+ * presented one at a time through the shared dialog queue.
  */
 import { createModalRequests } from "../../../overlays/modals/requests.ts";
 
@@ -41,10 +41,21 @@ export interface ProjectEditPrompt extends ProjectEditValues {
   submit(values: ProjectEditValues): Promise<void>;
 }
 
-export type ProjectPrompt = ProjectRemovePrompt | ProjectEditPrompt;
+/** A focused group-edit request for the card context menu. */
+export interface ProjectGroupPrompt {
+  kind: "group";
+  id: number;
+  title: string;
+  group: string;
+  groups: readonly string[];
+  submit(group: string): Promise<void>;
+}
+
+export type ProjectPrompt = ProjectRemovePrompt | ProjectEditPrompt | ProjectGroupPrompt;
 
 /** What a caller hands over; the module owns the identity. */
-export type ProjectPromptRequest = Omit<ProjectRemovePrompt, "id"> | Omit<ProjectEditPrompt, "id">;
+export type ProjectPromptRequest =
+  Omit<ProjectRemovePrompt, "id"> | Omit<ProjectEditPrompt, "id"> | Omit<ProjectGroupPrompt, "id">;
 
 const prompt = createModalRequests<ProjectPrompt>("project");
 

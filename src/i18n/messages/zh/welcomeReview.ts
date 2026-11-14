@@ -30,12 +30,8 @@ export default {
   "workspace.welcome.rpe.review.chartsEmpty": "Resources 下没有找到谱面文件夹。",
   "workspace.welcome.rpe.review.apply": "导入所选内容",
 
-  "workspace.welcome.importDialog.pe": "选择 PhiEditer 文件夹",
   "workspace.welcome.pe.title": "从 PhiEditer 导入",
   "workspace.welcome.pe.review.title": "确认 PhiEditer 导入",
-  "workspace.welcome.pe.pickFolder": "选择 PhiEditer 安装文件夹",
-  "workspace.welcome.pe.notFound":
-    "没有找到包含 PhiEditer.exe、Resources 和 PEC 谱面的 PhiEditer 安装目录。",
   "workspace.welcome.pe.desktopOnly": "PhiEditer 导入仅在桌面应用中可用。",
   "workspace.welcome.pe.importing": "正在导入 PhiEditer 谱面…",
   "workspace.welcome.pe.progressTitle": "正在导入 PhiEditer 谱面",

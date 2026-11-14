@@ -6,6 +6,11 @@
  */
 export default {
   "workspace.welcome.library.field.notes": "音符",
+  "workspace.welcome.library.group.action": "修改分组",
+  "workspace.welcome.library.group.editTitle": "修改分组",
+  "workspace.welcome.library.group.new": "新建分组…",
+  "workspace.welcome.library.group.newLabel": "新分组名称",
+  "workspace.welcome.library.group.errorRequired": "请输入分组名称。",
   "workspace.welcome.library.field.updated": "更新",
   "workspace.welcome.library.welcome.morning": "早上好",
   "workspace.welcome.library.welcome.afternoon": "下午好",
@@ -187,4 +192,5 @@ export default {
   "workspace.welcome.library.detail.hint": "从右侧列表选择一张谱面，在这里查看信息。",
   "workspace.welcome.library.preview.play": "试听",
   "workspace.welcome.library.preview.pause": "暂停试听",
+  "workspace.welcome.library.preview.seek": "调整试听进度",
 };

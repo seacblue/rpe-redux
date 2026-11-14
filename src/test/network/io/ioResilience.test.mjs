@@ -117,3 +117,20 @@ test("resource state reports a first-load failure and ignores a superseded load"
   assert.equal(failed.getSnapshot().phase, "failed");
   assert.equal(failed.getSnapshot().error, "missing");
 });
+
+test("resource state can publish an optimistic mutation without another read", async () => {
+  let loads = 0;
+  const state = new ResourceState({
+    initial: ["keep", "remove"],
+    load: async () => {
+      loads += 1;
+      return ["from-service"];
+    },
+  });
+  state.replace(["keep"]);
+  assert.deepEqual(state.getSnapshot().value, ["keep"]);
+  assert.equal(loads, 0);
+  assert.equal(state.getSnapshot().phase, "ready");
+  await state.load();
+  assert.equal(loads, 1);
+});

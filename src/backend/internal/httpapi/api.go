@@ -204,7 +204,12 @@ func methodGuard(next http.Handler) http.Handler {
 			code = "method_not_allowed"
 			message = "method " + r.Method + " is not allowed for this resource"
 		}
-		body, _ := json.Marshal(errorBody{Error: errorDetail{Code: code, Message: message}})
+		body, _ := json.Marshal(errorBody{Error: errorDetail{
+			Code:      code,
+			Message:   message,
+			Source:    errorSource(code),
+			Retryable: errorRetryable(code),
+		}})
 		w.Header().Del("Content-Length")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(status)
@@ -270,17 +275,51 @@ type errorBody struct {
 
 // errorDetail is one machine-readable error code and its message.
 type errorDetail struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Source    string `json:"source"`
+	Retryable bool   `json:"retryable"`
 }
 
 // writeError emits {"error":{"code":...,"message":...}}.
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	body, _ := json.Marshal(errorBody{Error: errorDetail{Code: code, Message: message}})
+	writeErrorWithSource(w, status, code, message, errorSource(code))
+}
+
+// writeErrorWithSource emits the shared failure envelope with an explicit
+// producer source. Database adapters use this when a generic SQLite error
+// cannot be safely exposed as a backend implementation detail.
+func writeErrorWithSource(w http.ResponseWriter, status int, code, message, source string) {
+	body, _ := json.Marshal(errorBody{Error: errorDetail{
+		Code:      code,
+		Message:   message,
+		Source:    source,
+		Retryable: errorRetryable(code),
+	}})
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+// errorSource classifies the origin that the frontend should record and use
+// for localized fallback copy. Error codes remain the stable public contract.
+func errorSource(code string) string {
+	if code == "storage_error" || strings.HasPrefix(code, "database_") {
+		return "database"
+	}
+	return "backend"
+}
+
+// errorRetryable identifies codes for which an automatic or user retry is
+// meaningful without first changing the request or recovering the database.
+func errorRetryable(code string) bool {
+	switch code {
+	case "unavailable", "transport", "codecell_endpoint_unavailable", "session_unavailable":
+		return true
+	default:
+		return false
+	}
 }
 
 // writeStoreError maps store sentinels onto HTTP statuses.
@@ -295,6 +334,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 			"error": map[string]any{
 				"code":            "revision_conflict",
 				"message":         "the project changed since it was loaded",
+				"source":          "database",
+				"retryable":       false,
 				"currentRevision": conflict.CurrentRevision,
 			},
 		})
@@ -307,7 +348,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInsufficientStorage, "storage_error", "the local database could not be written")
 		return
 	}
-	writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+	writeErrorWithSource(w, http.StatusInternalServerError, "database_error", "the local database could not complete the request", "database")
 }
 
 // isStorageError reports whether err looks like a full or unwritable database.

@@ -8,6 +8,7 @@
  * cannot overwrite the official/PEC original.
  */
 import { localService } from "../../../core/global/library/service.ts";
+import type { FailureContext } from "../../../core/contracts/failure.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
 import { catalogIdFor, rememberCatalogPath } from "../../../core/global/library/libraryCatalog.ts";
 import { parseExternalChartText } from "../../../core/global/chart/formats/external.ts";
@@ -21,6 +22,7 @@ import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { showImportReport } from "../../overlays/modals/importReportPrompt.ts";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
+import { throwIfAborted } from "./importProgress.ts";
 import {
   chooseExternalChartFile,
   readPickedBytes,
@@ -31,7 +33,7 @@ import {
 
 /** Host callbacks the external import needs from the mounted home runtime. */
 export interface ExternalImportDeps {
-  reportError(error: unknown): void;
+  reportError(error: unknown, context?: FailureContext): void;
   refresh(): Promise<void>;
 }
 
@@ -370,15 +372,21 @@ export async function importExternalPath(
   // The library write is one retained task: the notice that follows is the short
   // answer, and the row keeps the progress reachable from the task list.
   let taskId = "";
-  const projectId = await new Promise<string>((resolve, reject) => {
+  let cancelled = false;
+  const projectId = await new Promise<string | null>((resolve, reject) => {
     taskId = startLongTask({
       label: "workspace.welcome.external.title",
       detail: displayName,
       stage: t("workspace.welcome.external.importing", { name: displayName }),
-      async run({ report }) {
+      async run({ report, signal }) {
         const existing = catalogIdFor(loaded.chartPath);
         let result: Awaited<ReturnType<typeof importChartToLibrary>>;
         try {
+          throwIfAborted(signal);
+          const reportProgress = (value: number) => {
+            throwIfAborted(signal);
+            report(t("workspace.welcome.external.importing", { name: displayName }), value);
+          };
           result = await importChartToLibrary({
             library: found.library,
             ...(existing ? { projectId: existing } : {}),
@@ -386,21 +394,26 @@ export async function importExternalPath(
             name: displayName,
             group: converted.format === "official" ? "Phigros" : "PhiEdit",
             assets: loaded.assets,
-            onProgress: (value) =>
-              report(t("workspace.welcome.external.importing", { name: displayName }), value),
+            signal,
+            onProgress: reportProgress,
           });
         } catch (error) {
           // The task lifecycle records this failure; the caller keeps the
           // rejection so the import affordance can report it.
-          reject(error);
+          if (signal.aborted) {
+            cancelled = true;
+            resolve(null);
+          } else {
+            reject(error);
+          }
           throw error;
         }
         rememberCatalogPath(loaded.chartPath, result.projectId);
         report("", 1);
         try {
-          await deps.refresh();
+          void deps.refresh().catch((error) => deps.reportError(error));
         } catch (error) {
-          deps.reportError(error);
+          deps.reportError(error, { operation: "welcome.import.external.refresh" });
         }
         const source = t("workspace.welcome.external.title");
         const issues: ImportIssue[] = warnings.map((detail) => ({
@@ -441,6 +454,9 @@ export async function importExternalPath(
       },
     });
   });
+  if (cancelled || projectId === null) {
+    return null;
+  }
   // A failure rejects before this line; the lifecycle already recorded it as
   // failed, so reaching here means the import completed.
   finishLongTask(taskId, { status: "completed" });

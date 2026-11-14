@@ -12,6 +12,8 @@ export interface LibraryProjectRef {
   group?: string;
   /** Cover asset name resolved by the library when the chart was written. */
   background?: string;
+  /** Generated low-resolution cover used by welcome-page previews. */
+  thumbnail?: string;
   assetFolders?: string[];
   viewState?: LibraryViewState;
 }

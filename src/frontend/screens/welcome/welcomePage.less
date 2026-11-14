@@ -139,57 +139,6 @@
   min-width: 0;
 }
 
-.redux-welcome-more-menu {
-  display: inline-flex;
-  flex: none;
-  min-width: 0;
-}
-
-dialog.redux-welcome-import-dialog {
-  width: min(560px, calc(100vw - 32px));
-}
-
-.redux-welcome-import-dropzone {
-  display: grid;
-  place-items: center;
-  gap: var(--space-2);
-  padding: var(--space-7);
-  border: 1px dashed var(--edge-emphasis);
-  border-radius: var(--radius-panel);
-  background: var(--surface-muted);
-  text-align: center;
-
-  &[data-active="true"] {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, var(--surface-muted));
-  }
-
-  strong {
-    color: var(--foreground);
-    font-size: var(--type-title);
-    font-weight: 600;
-  }
-}
-
-.redux-welcome-import-drop-formats {
-  .meta-text();
-}
-
-.redux-welcome-import-drop-icon {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
-  background: var(--surface-raised);
-  color: var(--foreground-muted);
-
-  .redux-icon {
-    --icon-color: currentColor;
-  }
-}
-
 // ------------------------------------------------------------ drop overlay
 
 .redux-welcome-drop {

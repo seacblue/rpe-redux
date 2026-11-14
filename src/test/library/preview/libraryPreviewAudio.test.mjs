@@ -46,6 +46,7 @@ class FakeAudio {
   volume = 0;
   src = "";
   currentTime = 0;
+  duration = 120;
   constructor() {
     FakeAudio.instances.push(this);
   }
@@ -65,6 +66,34 @@ class FakeAudio {
   }
 }
 
+test("preview seeking moves the active track by five seconds and clamps at its ends", async () => {
+  const previous = { Audio: globalThis.Audio, AudioContext: globalThis.AudioContext };
+  FakeAudio.instances = [];
+  FakeContext.instances = [];
+  globalThis.Audio = FakeAudio;
+  globalThis.AudioContext = FakeContext;
+  try {
+    const player = new LibraryPreviewAudio(() => {});
+    player.select({
+      key: "project:seek",
+      audio: { name: "seek.ogg", url: "http://localhost/seek" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const audio = FakeAudio.instances[0];
+    audio.currentTime = 10;
+    player.seekBy(5);
+    assert.equal(audio.currentTime, 15);
+    player.seekBy(-50);
+    assert.equal(audio.currentTime, 0);
+    player.seekBy(200);
+    assert.equal(audio.currentTime, 120);
+    player.dispose();
+  } finally {
+    globalThis.Audio = previous.Audio;
+    globalThis.AudioContext = previous.AudioContext;
+  }
+});
+
 test("background volume fades without stopping or restarting the preview", async () => {
   const previous = { Audio: globalThis.Audio, AudioContext: globalThis.AudioContext };
   FakeAudio.instances = [];
@@ -75,7 +104,7 @@ test("background volume fades without stopping or restarting the preview", async
     const player = new LibraryPreviewAudio(() => {});
     const entry = { key: "project:a", audio: { name: "song.ogg", url: "http://localhost/song" } };
     player.select(entry);
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 150));
     const audio = FakeAudio.instances[0];
     const master = FakeContext.instances[0].gains[0].gain;
     assert.equal(audio.paused, false);
@@ -90,6 +119,32 @@ test("background volume fades without stopping or restarting the preview", async
     assert.equal(audio.paused, false);
     player.dispose();
     assert.equal(audio.paused, true);
+  } finally {
+    globalThis.Audio = previous.Audio;
+    globalThis.AudioContext = previous.AudioContext;
+  }
+});
+
+test("rapid selection starts only the final preview", async () => {
+  const previous = { Audio: globalThis.Audio, AudioContext: globalThis.AudioContext };
+  FakeAudio.instances = [];
+  FakeContext.instances = [];
+  globalThis.Audio = FakeAudio;
+  globalThis.AudioContext = FakeContext;
+  try {
+    const player = new LibraryPreviewAudio(() => {});
+    player.select({ key: "project:a", audio: { name: "a.ogg", url: "http://localhost/a" } });
+    player.select({ key: "project:b", audio: { name: "b.ogg", url: "http://localhost/b" } });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(
+      FakeAudio.instances.some((audio) => audio.src === "http://localhost/a"),
+      false,
+    );
+    assert.equal(
+      FakeAudio.instances.some((audio) => audio.src === "http://localhost/b"),
+      true,
+    );
+    player.dispose();
   } finally {
     globalThis.Audio = previous.Audio;
     globalThis.AudioContext = previous.AudioContext;

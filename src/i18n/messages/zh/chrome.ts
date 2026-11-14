@@ -8,6 +8,7 @@ export default {
   "chrome.tasks.cancel": "取消",
   "chrome.tasks.cancelAndDismiss": "取消并移除任务",
   "chrome.tasks.dismiss": "移除",
+  "chrome.tasks.removedToast": "已移除后台任务：{name}",
   "chrome.tasks.status.running": "运行中",
   "chrome.tasks.status.cancelling": "正在取消",
   "chrome.tasks.status.completed": "已完成",

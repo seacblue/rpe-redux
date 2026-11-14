@@ -14,6 +14,7 @@ import { materializeAssets } from "./document.ts";
 import { saveLibraryDocument, type LibrarySaveResult } from "./save.ts";
 import { LocalLibraryError, type LocalLibrary } from "./client.ts";
 import type { LibraryViewState } from "./types.ts";
+import { throwIfAborted } from "../../utils/abort.ts";
 
 /** Input for importing an opened document into the library. */
 export interface LibraryImportInput {
@@ -29,6 +30,8 @@ export interface LibraryImportInput {
   /** Reuse text the caller already produced. */
   chartJson?: string;
   onProgress?: (value: number) => void;
+  /** Cooperatively cancel between chart serialization and library writes. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -56,8 +59,11 @@ async function serializeImportedChart(chart: unknown): Promise<string> {
 
 /** Import one opened document into the library. */
 export async function importChartToLibrary(input: LibraryImportInput): Promise<LibrarySaveResult> {
+  throwIfAborted(input.signal);
   const chartJson = input.chartJson ?? (await serializeImportedChart(input.chart));
+  throwIfAborted(input.signal);
   const assets = await materializeAssets(input.assets);
+  throwIfAborted(input.signal);
   const saveInput = {
     library: input.library,
     ...(input.projectId ? { projectId: input.projectId } : {}),
@@ -69,6 +75,7 @@ export async function importChartToLibrary(input: LibraryImportInput): Promise<L
     ...(input.viewState ? { viewState: input.viewState } : {}),
     ...(input.assetFolders ? { assetFolders: input.assetFolders } : {}),
     ...(input.onProgress ? { onProgress: input.onProgress } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
   };
   try {
     return await saveLibraryDocument(saveInput);
