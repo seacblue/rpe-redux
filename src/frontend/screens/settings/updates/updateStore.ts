@@ -10,6 +10,10 @@
 import { getDocumentApi } from "../../../../core/edit/document/api.ts";
 import { acquireLongTaskFence, getLongTasks } from "../../../../core/state/longTasks.ts";
 import {
+  cancelActiveDownload,
+  clearActiveDownloadTask,
+  removeActiveDownload,
+  setActiveDownloadTask,
   startDownloadTask,
   type DownloadTaskOutcome,
 } from "../../../../core/state/downloadTask.ts";
@@ -45,6 +49,7 @@ import { t } from "../../../../i18n/index.ts";
 import { openSettings } from "../settingsWindowController.ts";
 import { requestChangelog } from "./changelogLauncher.ts";
 import { requestUpdatePrompt } from "./updatePromptLauncher.ts";
+import { classifyUpdateFailure } from "./updateFailure.ts";
 
 export { UPDATE_SETTING_KEYS };
 
@@ -163,6 +168,7 @@ export interface UpdateState {
   downloadPolicy: UpdateDownloadPolicy;
   skippedVersion: string;
   preparedVersion: string | null;
+  downloadPaused: boolean;
 }
 
 /** Subscribers notified after each snapshot replacement. */
@@ -188,6 +194,7 @@ let state: UpdateState = {
   downloadPolicy: DEFAULT_UPDATE_DOWNLOAD_POLICY,
   skippedVersion: "",
   preparedVersion: null,
+  downloadPaused: false,
 };
 
 /** Shared initialization promise so concurrent callers join one load. */
@@ -208,13 +215,11 @@ function formatMegabytes(value: number): string {
 export function getUpdateState(): UpdateState {
   return state;
 }
-
 /** Subscribe to state changes; returns the disposer. */
 export function subscribeUpdates(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
-
 /** Replace the snapshot and notify every subscriber. */
 function set(patch: Partial<UpdateState>): void {
   state = { ...state, ...patch };
@@ -222,7 +227,6 @@ function set(patch: Partial<UpdateState>): void {
     listener();
   }
 }
-
 /** Read a boolean setting or its fallback when unset. */
 const settingFlag = (key: string, fallback: boolean): boolean =>
   values.byId.get<boolean | undefined>(key) ?? fallback;
@@ -477,6 +481,7 @@ export function skipUpdateVersion(version: string): void {
     skippedVersion: version,
     available: false,
     preparedVersion: null,
+    downloadPaused: false,
     phase: "up-to-date",
     errorCode: null,
     errorDetail: "",
@@ -494,7 +499,6 @@ export function updateSafetyBlock(): "save-first" | "tasks-active" | null {
   }
   return null;
 }
-
 /** Download a selected release, then share the guarded installation handoff. */
 export async function installUpdate(): Promise<void> {
   if (isUpdateBusy(state.phase) || state.phase === "scheduled") {
@@ -523,6 +527,29 @@ export async function installUpdate(): Promise<void> {
 
 /** A single in-flight package download shared by automatic and manual callers. */
 let downloadInFlight: Promise<void> | null = null;
+/** Pause the current package download, retaining the release for a later resume. */
+export function pauseUpdateDownload(): void {
+  if (state.phase !== "downloading") {
+    return;
+  }
+  void invoke("update_download_pause").catch(() => undefined);
+  if (!cancelActiveDownload()) {
+    return;
+  }
+  set({ downloadPaused: true });
+}
+
+/** Stop and remove the current package-download task. */
+export function stopUpdateDownload(): void {
+  if (state.phase !== "downloading") {
+    return;
+  }
+  void invoke("update_download_stop").catch(() => undefined);
+  if (!removeActiveDownload()) {
+    return;
+  }
+  set({ downloadPaused: false });
+}
 
 /** Download and hold a selected release without preparing the installation. */
 async function downloadUpdate(release: GithubRelease): Promise<void> {
@@ -539,7 +566,14 @@ async function downloadUpdate(release: GithubRelease): Promise<void> {
     return;
   }
   const operation = (async () => {
-    set({ phase: "downloading", errorCode: null, errorDetail: "", downloaded: 0, total: null });
+    set({
+      phase: "downloading",
+      errorCode: null,
+      errorDetail: "",
+      downloaded: 0,
+      total: null,
+      downloadPaused: false,
+    });
     await ensureProgressListener();
     const task = startDownloadTask({
       label: "settings.updates.task.label",
@@ -586,20 +620,25 @@ async function downloadUpdate(release: GithubRelease): Promise<void> {
         }
       },
     });
-    const outcome: DownloadTaskOutcome = await task.done;
-    if (outcome.status === "completed") {
-      if (compareVersions(outcome.version, release.version) !== 0) {
-        const failure = new Error("The verified update does not match the selected release.");
-        set({ phase: "error", errorCode: "install", errorDetail: failure.message });
-        return;
+    setActiveDownloadTask(task.id);
+    try {
+      const outcome: DownloadTaskOutcome = await task.done;
+      if (outcome.status === "completed") {
+        if (compareVersions(outcome.version, release.version) !== 0) {
+          const failure = new Error("The verified update does not match the selected release.");
+          set({ phase: "error", errorCode: "install", errorDetail: failure.message });
+          return;
+        }
+        set({ phase: "downloaded", preparedVersion: outcome.version });
+        void promptForPreparedUpdate(release);
+      } else if (outcome.status === "cancelled") {
+        set({ phase: "available", preparedVersion: null, errorCode: null, errorDetail: "" });
+      } else {
+        const failure = classifyUpdateFailure(outcome.error);
+        set({ phase: "error", errorCode: failure.code, errorDetail: failure.detail });
       }
-      set({ phase: "downloaded", preparedVersion: outcome.version });
-      void promptForPreparedUpdate(release);
-    } else if (outcome.status === "cancelled") {
-      set({ phase: "available", preparedVersion: null, errorCode: null, errorDetail: "" });
-    } else {
-      const failure = classifyUpdateFailure(outcome.error);
-      set({ phase: "error", errorCode: failure.code, errorDetail: failure.detail });
+    } finally {
+      clearActiveDownloadTask(task.id);
     }
   })();
   downloadInFlight = operation;
@@ -612,11 +651,11 @@ async function downloadUpdate(release: GithubRelease): Promise<void> {
 
 /** Download automatically only when the selected connection policy allows it. */
 async function autoDownload(release: GithubRelease): Promise<void> {
-  if (!state.autoCheck) {
+  if (!state.autoCheck || state.downloadPaused) {
     return;
   }
   const connection = await networkStatus();
-  if (!state.autoCheck) {
+  if (!state.autoCheck || state.downloadPaused) {
     return;
   }
   if (!allowsAutomaticDownload(state.downloadPolicy, connection)) {
@@ -656,29 +695,6 @@ async function promptForPreparedUpdate(release: GithubRelease): Promise<void> {
       preparedPromptInFlight = null;
     }
   }
-}
-
-/** Translate a failed install or local verification into the shared error vocabulary. */
-export function classifyUpdateFailure(error: unknown): {
-  code: UpdateErrorCode;
-  detail: string;
-} {
-  const detail = error instanceof Error ? error.message : String(error);
-  const marker = "update_resource_conflict:";
-  const position = detail.indexOf(marker);
-  return {
-    code:
-      position >= 0
-        ? "resource-conflict"
-        : detail.includes("local_update_key_missing")
-          ? "public-key"
-          : detail.includes("local_update_helper_")
-            ? "local-handoff"
-            : detail.includes("local_update_")
-              ? "local-invalid"
-              : "install",
-    detail: position >= 0 ? detail.slice(position + marker.length) : detail,
-  };
 }
 
 /** Reverify a local installer, then apply it through the same guarded handoff. */

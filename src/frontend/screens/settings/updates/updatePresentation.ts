@@ -28,14 +28,21 @@ export function shouldShowUpdateBadge(
 }
 
 /** The changelog footer while an update owns the flow: every action is locked. */
-export function changelogUpdateAction(phase: UpdatePhase): {
+export function changelogUpdateAction(
+  phase: UpdatePhase,
+  downloadPaused = false,
+): {
   locked: boolean;
   labelKey: MessageKey;
 } {
   const locked = isUpdateBusy(phase);
   return {
     locked,
-    labelKey: locked ? "chrome.changelog.updating" : "chrome.changelog.updateNow",
+    labelKey: locked
+      ? "chrome.changelog.updating"
+      : downloadPaused && phase === "available"
+        ? "chrome.changelog.resumeDownload"
+        : "chrome.changelog.updateNow",
   };
 }
 

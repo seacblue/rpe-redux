@@ -193,6 +193,8 @@ fn main() {
             update::updater::update_cached_remove,
             update::updater::update_load_local,
             update::updater::update_discard,
+            update::updater::update_download_pause,
+            update::updater::update_download_stop,
             update::updater::update_install,
             update::updater::update_result,
             update::updater::install_kind

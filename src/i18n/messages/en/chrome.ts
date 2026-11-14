@@ -128,6 +128,9 @@ export default {
   "chrome.changelog.skipVersion": "Skip this version",
   "chrome.changelog.later": "Later",
   "chrome.changelog.updateNow": "Update now",
+  "chrome.changelog.resumeDownload": "Resume update",
+  "chrome.changelog.pauseDownload": "Pause update",
+  "chrome.changelog.stopDownload": "Stop update",
   "chrome.changelog.updating": "Updating…",
 
   "chrome.pane.notes": "Note editing",

@@ -49,3 +49,14 @@ test("an active update locks the changelog footer and renames its primary action
     });
   }
 });
+
+test("a paused package offers resume instead of starting a new update", () => {
+  assert.deepEqual(changelogUpdateAction("available", true), {
+    locked: false,
+    labelKey: "chrome.changelog.resumeDownload",
+  });
+  assert.deepEqual(changelogUpdateAction("available", false), {
+    locked: false,
+    labelKey: "chrome.changelog.updateNow",
+  });
+});
