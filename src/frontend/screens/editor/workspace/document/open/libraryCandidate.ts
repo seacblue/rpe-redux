@@ -51,6 +51,7 @@ export function libraryDocumentCandidate(
   return {
     chart: document.chart,
     chartDocument: document,
+    ...(document.dispose ? { disposeDocument: () => document.dispose?.() } : {}),
     name,
     project: {
       id,

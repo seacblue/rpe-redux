@@ -200,9 +200,11 @@ func TestCommitFallsBackToTheOnlyMediaAssets(t *testing.T) {
 	project := createTestProject(t, store)
 	ctx := context.Background()
 	cover := stage(t, store, project.ID, "cover.png", "image bytes")
+	thumbnail := stage(t, store, project.ID, libraryThumbnailAsset, "thumbnail bytes")
 	track := stage(t, store, project.ID, "track.ogg", "music bytes")
 	manifest := []AssetMapping{
 		{Name: cover.Name, Hash: cover.Hash},
+		{Name: thumbnail.Name, Hash: thumbnail.Hash},
 		{Name: track.Name, Hash: track.Hash},
 	}
 	committed, err := store.CommitProject(ctx, CommitProjectInput{
@@ -215,6 +217,9 @@ func TestCommitFallsBackToTheOnlyMediaAssets(t *testing.T) {
 	}
 	if committed.Background != "cover.png" {
 		t.Fatalf("background = %q, want cover.png", committed.Background)
+	}
+	if committed.Thumbnail != libraryThumbnailAsset {
+		t.Fatalf("thumbnail = %q, want %q", committed.Thumbnail, libraryThumbnailAsset)
 	}
 	if committed.Song != "track.ogg" {
 		t.Fatalf("song = %q, want track.ogg", committed.Song)

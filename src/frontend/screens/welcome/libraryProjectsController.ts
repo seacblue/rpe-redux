@@ -19,8 +19,7 @@ import { getLibrarySort, setLibrarySort, type LibrarySort } from "./librarySort.
 import { openProjectPrompt, closeProjectPrompt } from "./library/projectPrompts.ts";
 import type { ProjectEditValues } from "./library/projectPrompts.ts";
 import type { HomeProjectCardsUpdate } from "./homeProjectCards.ts";
-
-const GROUP_FALLBACK = () => t("editor.home.ungrouped");
+import { normalizeLibraryGroup } from "./library/libraryGroups.ts";
 
 /** Monotonic so a recreated controller still reports a fresh failure to the page. */
 let nextRemoveFailureNonce = 0;
@@ -41,6 +40,10 @@ export class LibraryProjectsController {
   private sort: LibrarySort = getLibrarySort();
   private removingProjectId: string | null = null;
   private removeFailure: HomeProjectCardsUpdate["removeFailure"] = null;
+  /** Current list read; concurrent callers share it instead of duplicating I/O. */
+  private refreshInFlight: Promise<void> | null = null;
+  /** Whether a completion arrived while the current read was in flight. */
+  private refreshAgain = false;
   private readonly options: LibraryProjectsControllerOptions;
 
   /** Stores the host callbacks and starts from the persisted sort. */
@@ -72,7 +75,27 @@ export class LibraryProjectsController {
 
   /** Reloads the listing with the current sort, ignoring stale responses. */
   async refresh(): Promise<void> {
-    await this.state.load();
+    if (this.disposed) {
+      return;
+    }
+    if (this.refreshInFlight) {
+      this.refreshAgain = true;
+      await this.refreshInFlight;
+      return;
+    }
+    const request = this.state.load().then(() => undefined);
+    this.refreshInFlight = request;
+    try {
+      await request;
+    } finally {
+      if (this.refreshInFlight === request) {
+        this.refreshInFlight = null;
+      }
+    }
+    if (this.refreshAgain) {
+      this.refreshAgain = false;
+      await this.refresh();
+    }
   }
 
   /** Aborts an in-flight read and loads the sort or mutation result again. */
@@ -136,8 +159,19 @@ export class LibraryProjectsController {
       composer: project.composer,
       charter: project.charter,
       level: project.level,
-      group: project.group || GROUP_FALLBACK(),
+      group: normalizeLibraryGroup(project.group),
       submit: (values) => this.submitEdit(project, values),
+    });
+  }
+
+  /** Opens the focused group editor with the groups currently visible in the library. */
+  editGroup(project: LibraryProjectSummary, groups: readonly string[]): void {
+    openProjectPrompt({
+      kind: "group",
+      title: t("workspace.welcome.library.group.editTitle"),
+      group: project.group,
+      groups,
+      submit: (group) => this.submitGroup(project, group),
     });
   }
 
@@ -158,11 +192,18 @@ export class LibraryProjectsController {
     this.removeFailure = null;
     this.publish();
     try {
-      await this.withLibrary(async (library) => {
-        const result = await library.remove(project.id);
+      const found = await localService();
+      if (!found) {
+        throw new Error(t("editor.home.error.libraryServiceDown"));
+      }
+      const result = await found.library.remove(project.id);
+      if (result.deleted) {
         forgetCatalogProject(project.id);
-        return result;
-      });
+        const current = this.state.getSnapshot().value;
+        if (current) {
+          this.state.replace(current.filter((entry) => entry.id !== project.id));
+        }
+      }
     } catch (error) {
       this.removeFailure = {
         projectId: project.id,
@@ -187,7 +228,7 @@ export class LibraryProjectsController {
     const composer = values.composer.trim();
     const charter = values.charter.trim();
     const level = values.level.trim();
-    const group = values.group.trim() || GROUP_FALLBACK();
+    const group = normalizeLibraryGroup(values.group);
     const metadataChanged =
       composer !== project.composer || charter !== project.charter || level !== project.level;
     const updated = await this.withLibrary(async (library) => {
@@ -209,6 +250,13 @@ export class LibraryProjectsController {
       return library.update(project.id, patch);
     });
     this.options.changedProject?.({ ...project, ...updated.project });
+  }
+
+  /** Persists a focused group change and lets the normal list reload publish it. */
+  private async submitGroup(project: LibraryProjectSummary, value: string): Promise<void> {
+    await this.withLibrary((library) =>
+      library.update(project.id, { group: normalizeLibraryGroup(value) }),
+    );
   }
 
   /** Sends the current list and load state to the card adapter. */

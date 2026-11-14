@@ -26,16 +26,17 @@ import { importChartToLibrary } from "../../../core/global/library/import.ts";
 import { catalogIdFor, rememberCatalogPath } from "../../../core/global/library/libraryCatalog.ts";
 import { localService } from "../../../core/global/library/service.ts";
 import { isDesktop } from "../../../core/platform/environment.ts";
-import { startLongTask, finishLongTask } from "../../../core/state/longTasks.ts";
+import { startLongTask } from "../../../core/state/longTasks.ts";
 import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { showImportReport } from "../../overlays/modals/importReportPrompt.ts";
-import { showImportProgress } from "../../overlays/modals/importProgressPrompt.tsx";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
 import { readPickedBytes } from "../../platform/desktop/externalChart.ts";
-import { readPeFolder } from "../../platform/desktop/peFolder.ts";
+import { choosePeFolder, readPeFolder } from "../../platform/desktop/peFolder.ts";
 import { requestRpeImportReview } from "./rpeImportReview.ts";
 import type { RpeImportDeps } from "./rpeImport.ts";
+import { importWriteProgress, throwIfAborted } from "./importProgress.ts";
+import { ImportTaskScheduler } from "./importTaskScheduler.ts";
 
 /** Counts reported after one confirmed PhiEditer import. */
 export interface PeImportSummary {
@@ -75,8 +76,13 @@ async function importPeChart(
   chart: PeChart,
   group: string,
   assets: AssetMap,
+  onProgress?: (value: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ projectId: string; warnings: readonly string[] }> {
+  throwIfAborted(signal);
   const text = await readChartText(chart.path);
+  throwIfAborted(signal);
+  onProgress?.(0.2);
   const { song: songName, picture: pictureName } = peChartMediaNames(chart);
   const converted = parseExternalChartText(text, {
     name: chart.name,
@@ -89,6 +95,7 @@ async function importPeChart(
   if (!converted) {
     throw new Error(`PhiEditer chart could not be converted: ${chart.chart || chart.folder}`);
   }
+  onProgress?.(0.45);
   // The converter keeps the metadata it was given; the asset names only become
   // references when the importer actually stages those bytes.
   converted.chart.META.song = songName && assets.has(songName) ? songName : "";
@@ -105,7 +112,10 @@ async function importPeChart(
     name: chart.name,
     group,
     assets,
+    signal,
+    onProgress: (value) => onProgress?.(importWriteProgress(value)),
   });
+  onProgress?.(1);
   return { projectId: result.projectId, warnings: converted.warnings };
 }
 
@@ -114,7 +124,6 @@ async function migratePeScan(
   scan: PeFolderScan,
   deps: RpeImportDeps,
   selection: RpeImportSelection,
-  onTaskStart?: (taskId: string, total: number) => void,
 ): Promise<readonly string[]> {
   const plan: RpeMigrationPlan = createPeMigrationPlan(scan.settingsText);
   const approved = filterRpeMigrationPlan(plan, selection);
@@ -126,102 +135,126 @@ async function migratePeScan(
     ...applied.warnings.map((detail) => ({ scope: "", detail })),
   ];
   const issues: ImportIssue[] = [...batchIssues];
-  const projectIds: string[] = [];
-  let taskId = "";
-  await new Promise<void>((resolve) => {
-    taskId = startLongTask({
-      label: "workspace.welcome.pe.title",
-      stage: t("workspace.welcome.rpe.importing", { count: charts.length }),
-      async run({ report }) {
-        const chartReports: ImportReport[] = [];
+  const chartReports: ImportReport[] = [];
+  const projectIds = new Array<string | undefined>(charts.length);
+  const scheduler = new ImportTaskScheduler(charts.map((chart) => chart.estimatedBytes));
+  const taskRuns = charts.map(
+    (chart, index) =>
+      new Promise<void>((resolve) => {
         try {
-          for (const [index, chart] of charts.entries()) {
-            report(
-              t("workspace.welcome.rpe.importingChart", { name: chart.name }),
-              charts.length ? index / charts.length : null,
-            );
-            const assets = new Map<string, Uint8Array>();
-            try {
-              const { song: songName, picture: pictureName } = peChartMediaNames(chart);
-              if (chart.songPath && songName) {
-                assets.set(songName, await readPickedBytes(chart.songPath));
+          startLongTask({
+            label: "workspace.welcome.import.chartTask",
+            detail: chart.name,
+            stage: t("workspace.welcome.rpe.importingChart", { name: chart.name }),
+            async run({ report, signal }) {
+              const stage = t("workspace.welcome.rpe.importingChart", { name: chart.name });
+              const assets = new Map<string, Uint8Array>();
+              try {
+                report(stage, 0);
+                await scheduler.acquire(index, signal);
+                report(stage, 0);
+                const { song: songName, picture: pictureName } = peChartMediaNames(chart);
+                if (chart.songPath && songName) {
+                  assets.set(songName, await readPickedBytes(chart.songPath));
+                  throwIfAborted(signal);
+                }
+                if (chart.picturePath && pictureName) {
+                  assets.set(pictureName, await readPickedBytes(chart.picturePath));
+                  throwIfAborted(signal);
+                }
+                report(stage, 0.15);
+                const imported = await importPeChart(
+                  chart,
+                  "PhiEditer",
+                  assets,
+                  (value) => {
+                    throwIfAborted(signal);
+                    report(stage, value);
+                  },
+                  signal,
+                );
+                projectIds[index] = imported.projectId;
+                rememberCatalogPath(chart.path, imported.projectId);
+                if (imported.warnings.length) {
+                  const chartIssues: ImportIssue[] = imported.warnings.map((detail) => ({
+                    scope: chart.name,
+                    detail,
+                  }));
+                  const issueReport: ImportReport = {
+                    projectId: imported.projectId,
+                    title: chart.name,
+                    source: t("workspace.welcome.pe.title"),
+                    issues: chartIssues,
+                  };
+                  recordImportReport(issueReport);
+                  chartReports.push(issueReport);
+                  issues.push(...chartIssues);
+                }
+                report("", 1);
+                try {
+                  void deps.refresh().catch((error) => deps.reportError(error));
+                } catch (error) {
+                  deps.reportError(error);
+                }
+              } catch (error) {
+                if (!signal.aborted) {
+                  issues.push({
+                    scope: chart.name,
+                    detail: error instanceof Error ? error.message : String(error),
+                  });
+                }
+                throw error;
+              } finally {
+                assets.clear();
+                scheduler.release(index);
+                resolve();
               }
-              if (chart.picturePath && pictureName) {
-                assets.set(pictureName, await readPickedBytes(chart.picturePath));
-              }
-              const imported = await importPeChart(chart, "PhiEditer", assets);
-              projectIds.push(imported.projectId);
-              rememberCatalogPath(chart.path, imported.projectId);
-              if (imported.warnings.length) {
-                const chartIssues: ImportIssue[] = imported.warnings.map((detail) => ({
-                  scope: chart.name,
-                  detail,
-                }));
-                const issueReport: ImportReport = {
-                  projectId: imported.projectId,
-                  title: chart.name,
-                  source: t("workspace.welcome.pe.title"),
-                  issues: chartIssues,
-                };
-                recordImportReport(issueReport);
-                chartReports.push(issueReport);
-                issues.push(...chartIssues);
-              }
-            } catch (error) {
-              issues.push({
-                scope: chart.name,
-                detail: error instanceof Error ? error.message : String(error),
-              });
-            }
-          }
-          report("", charts.length ? 1 : null);
-          try {
-            await deps.refresh();
-          } catch (error) {
-            deps.reportError(error, { operation: "welcome.import.pe.refresh" });
-          }
-          const source = t("workspace.welcome.pe.title");
-          const reportAction = issues.length
-            ? [
-                {
-                  label: t("workspace.welcome.importReport.action"),
-                  onSelect: () =>
-                    showImportReport(source, [
-                      ...chartReports,
-                      ...(batchIssues.length
-                        ? [
-                            {
-                              projectId: "__batch__",
-                              title: source,
-                              source,
-                              issues: batchIssues,
-                            },
-                          ]
-                        : []),
-                    ]),
-                },
-              ]
-            : [];
-          showToast({
-            message: t("workspace.welcome.rpe.done", {
-              charts: projectIds.length,
-              settings: applied.settings,
-              shortcuts: 0,
-              warnings: issues.length,
-            }),
-            level: issues.length ? "warning" : "success",
-            ...(reportAction.length ? { actions: reportAction } : {}),
+            },
           });
-        } finally {
+        } catch (error) {
+          issues.push({
+            scope: chart.name,
+            detail: error instanceof Error ? error.message : String(error),
+          });
           resolve();
         }
-      },
-    });
-    // Expose the bar only after the task exists; a fast import settles it at once.
-    onTaskStart?.(taskId, charts.length);
+      }),
+  );
+  await Promise.all(taskRuns);
+  const importedProjectIds = projectIds.filter((id): id is string => id !== undefined);
+  const source = t("workspace.welcome.pe.title");
+  const reportAction = issues.length
+    ? [
+        {
+          label: t("workspace.welcome.importReport.action"),
+          onSelect: () =>
+            showImportReport(source, [
+              ...chartReports,
+              ...(batchIssues.length
+                ? [
+                    {
+                      projectId: "__batch__",
+                      title: source,
+                      source,
+                      issues: batchIssues,
+                    },
+                  ]
+                : []),
+            ]),
+        },
+      ]
+    : [];
+  showToast({
+    message: t("workspace.welcome.rpe.done", {
+      charts: importedProjectIds.length,
+      settings: applied.settings,
+      shortcuts: 0,
+      warnings: issues.length,
+    }),
+    level: issues.length ? "warning" : "success",
+    ...(reportAction.length ? { actions: reportAction } : {}),
   });
-  finishLongTask(taskId, { status: "completed" });
-  return Object.freeze(projectIds);
+  return Object.freeze(importedProjectIds);
 }
 
 /**
@@ -258,10 +291,23 @@ export async function importPeFolder(
   if (!selection) {
     return [];
   }
-  const selected = new Set(selection.chartPaths);
-  const total = scan.charts.reduce(
-    (count, chart) => (selected.has(chart.path) ? count + 1 : count),
-    0,
-  );
-  return migratePeScan(scan, deps, selection, (taskId) => showImportProgress(taskId, total));
+  return migratePeScan(scan, deps, selection);
+}
+
+/** Ask for a PhiEditer root and import it; false when cancelled or unreadable. */
+export async function choosePeImport(deps: RpeImportDeps): Promise<boolean> {
+  if (!isDesktop()) {
+    showToast({ message: t("workspace.welcome.pe.desktopOnly"), level: "warning" });
+    return false;
+  }
+  const path = await choosePeFolder();
+  if (!path) {
+    return false;
+  }
+  const ids = await importPeFolder(path, deps);
+  if (ids === null) {
+    showToast({ message: t("workspace.welcome.pe.notFound"), level: "warning" });
+    return false;
+  }
+  return ids.length > 0;
 }

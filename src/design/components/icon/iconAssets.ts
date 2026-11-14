@@ -92,6 +92,8 @@ export const ICON_ASSETS = {
   grid: "icons/grid.png",
   layers: "icons/layers.png",
   search: "icons/search.png",
+  // Gentleface filter, MIT licensed: https://gentleface.com/icons/filter
+  filter: "icons/filter.png",
   zoom: "icons/zoom.png",
   calendar: "icons/calendar.png",
   clock: "icons/clock.png",

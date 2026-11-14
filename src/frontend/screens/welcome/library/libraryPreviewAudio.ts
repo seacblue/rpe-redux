@@ -10,7 +10,14 @@ import type { LibraryEntry } from "./libraryEntries.ts";
 import { rampGain } from "../../../../core/media/gainRamp.ts";
 
 const FADE_MS = 360;
+const PREVIEW_START_SETTLE_MS = 120;
 const TARGET_VOLUME = 0.45;
+
+/** The playhead snapshot the welcome detail card paints below its cover. */
+export interface LibraryPreviewProgress {
+  currentTime: number;
+  duration: number;
+}
 
 /** Identity of an entry's audio source, empty when it has none. */
 function sourceId(entry: LibraryEntry | null): string {
@@ -27,6 +34,7 @@ export class LibraryPreviewAudio {
   private fading: HTMLAudioElement | null = null;
   private starting: HTMLAudioElement | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private startTimer: ReturnType<typeof setTimeout> | null = null;
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private readonly gains = new Map<HTMLAudioElement, GainNode>();
@@ -36,10 +44,15 @@ export class LibraryPreviewAudio {
   private playingId = "";
   private reported = false;
   private readonly onPlayingChange: (playing: boolean) => void;
+  private readonly onProgressChange: (progress: LibraryPreviewProgress) => void;
 
   /** Prepares both silent elements and binds the failure handler. */
-  constructor(onPlayingChange: (playing: boolean) => void) {
+  constructor(
+    onPlayingChange: (playing: boolean) => void,
+    onProgressChange: (progress: LibraryPreviewProgress) => void = () => undefined,
+  ) {
     this.onPlayingChange = onPlayingChange;
+    this.onProgressChange = onProgressChange;
     for (const element of this.elements) {
       element.autoplay = false;
       element.loop = true;
@@ -51,8 +64,12 @@ export class LibraryPreviewAudio {
           this.active = null;
           this.stopElement(element);
           this.report(false);
+          this.reportProgress(null);
         }
       });
+      element.addEventListener("timeupdate", () => this.reportProgress(element));
+      element.addEventListener("loadedmetadata", () => this.reportProgress(element));
+      element.addEventListener("durationchange", () => this.reportProgress(element));
     }
   }
 
@@ -66,11 +83,16 @@ export class LibraryPreviewAudio {
     const revision = ++this.revision;
     this.stopFade();
     this.stopStarting();
+    this.stopScheduledStart();
+    this.reportProgress(null);
     if (!entry?.audio) {
       this.fadeOutCurrent();
       return;
     }
-    void this.start(entry, revision);
+    this.startTimer = setTimeout(() => {
+      this.startTimer = null;
+      void this.start(entry, revision);
+    }, PREVIEW_START_SETTLE_MS);
   }
 
   /** Stops every element immediately; the next selection starts a fresh track. */
@@ -79,11 +101,13 @@ export class LibraryPreviewAudio {
     this.playingId = "";
     this.stopFade();
     this.stopStarting();
+    this.stopScheduledStart();
     for (const element of this.elements) {
       this.stopElement(element);
     }
     this.active = null;
     this.report(false);
+    this.reportProgress(null);
   }
 
   /** Stops playback and releases both elements. */
@@ -116,6 +140,32 @@ export class LibraryPreviewAudio {
         element === this.active ? this.targetVolume() : 0,
       );
     }
+  }
+
+  /** Moves the active preview playhead by a signed number of seconds. */
+  seekBy(seconds: number): void {
+    if (!Number.isFinite(seconds) || !this.active) {
+      return;
+    }
+    const duration = Number.isFinite(this.active.duration) ? Math.max(0, this.active.duration) : 0;
+    if (duration <= 0) {
+      return;
+    }
+    this.active.currentTime = Math.max(0, Math.min(duration, this.active.currentTime + seconds));
+    this.reportProgress(this.active);
+  }
+
+  /** Seeks the active preview to a normalized position on its progress rail. */
+  seekTo(ratio: number): void {
+    if (!this.active || !Number.isFinite(ratio)) {
+      return;
+    }
+    const duration = Number.isFinite(this.active.duration) ? Math.max(0, this.active.duration) : 0;
+    if (duration <= 0) {
+      return;
+    }
+    this.active.currentTime = Math.max(0, Math.min(1, ratio)) * duration;
+    this.reportProgress(this.active);
   }
 
   /** Creates the audio-thread mixer on the first user-initiated playback. */
@@ -184,6 +234,7 @@ export class LibraryPreviewAudio {
     this.starting = null;
     this.active = next;
     this.report(true);
+    this.reportProgress(next);
     this.fade(previous, next);
   }
 
@@ -250,6 +301,14 @@ export class LibraryPreviewAudio {
     }
   }
 
+  /** Cancels a preview start that was superseded during keyboard navigation. */
+  private stopScheduledStart(): void {
+    if (this.startTimer !== null) {
+      clearTimeout(this.startTimer);
+      this.startTimer = null;
+    }
+  }
+
   /** Pauses an element and drops its source so the next load starts clean. */
   private stopElement(element: HTMLAudioElement): void {
     element.pause();
@@ -269,5 +328,18 @@ export class LibraryPreviewAudio {
     }
     this.reported = playing;
     this.onPlayingChange(playing);
+  }
+
+  /** Publishes a finite, clamped playhead snapshot for the detail card. */
+  private reportProgress(element: HTMLAudioElement | null): void {
+    if (!element) {
+      this.onProgressChange({ currentTime: 0, duration: 0 });
+      return;
+    }
+    const duration = Number.isFinite(element.duration) ? Math.max(0, element.duration) : 0;
+    const currentTime = Number.isFinite(element.currentTime)
+      ? Math.max(0, Math.min(duration || element.currentTime, element.currentTime))
+      : 0;
+    this.onProgressChange({ currentTime, duration });
   }
 }

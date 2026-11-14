@@ -11,7 +11,15 @@
  * Files dropped on the window are imported by the desktop lifecycle, which
  * broadcasts its drag state here for the drop overlay.
  */
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useTranslation } from "../../../i18n/react.ts";
 import { Icon } from "../../../design/components/icon/Icon.tsx";
 import { FILE_DRAG_EVENT } from "../../../core/shell/shellEventNames.ts";
@@ -32,6 +40,9 @@ import {
   subscribeToEditorVisibility,
 } from "../../../core/edit/state/visibility.ts";
 
+/** Wait briefly before replacing the full-window welcome backdrop during key repeat. */
+const WELCOME_COVER_SETTLE_MS = 180;
+
 /** Home screen composing the selected-chart card and the chart library. */
 export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: string) => void }) {
   const { t } = useTranslation();
@@ -47,15 +58,20 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
   );
   const entries = useMemo(() => buildLibraryEntries(cards), [cards]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const selectedKeyRef = useRef<string | null>(null);
   const [armedKey, setArmedKey] = useState<string | null>(null);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [handledRemoveFailure, setHandledRemoveFailure] = useState(0);
   const removeFailure = cards?.removeFailure ?? null;
+  useLayoutEffect(() => {
+    selectedKeyRef.current = selectedKey;
+  }, [selectedKey]);
   if (removeFailure && removeFailure.nonce !== handledRemoveFailure) {
     // A refused delete leaves the chart in place. Put the selection back on it
     // so the failure has a visible target and the user can retry in place.
     setHandledRemoveFailure(removeFailure.nonce);
-    setSelectedKey(`project:${removeFailure.projectId}`);
+    const failedKey = `project:${removeFailure.projectId}`;
+    setSelectedKey(failedKey);
     setArmedKey(null);
   }
   // Selection stays explicit: a populated library starts on the welcome panel
@@ -67,8 +83,19 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
   );
   const detailState = libraryDetailState(entries, selected);
   const previewArmed = selected !== null && armedKey === selected.key;
+  /** Applies a list selection without recreating the callback on every chart. */
+  const handleSelect = useCallback((key: string, preview: boolean) => {
+    const nextKey = nextLibrarySelection(selectedKeyRef.current, key, preview);
+    selectedKeyRef.current = nextKey;
+    setSelectedKey(nextKey);
+    setArmedKey(nextKey !== null && preview ? nextKey : null);
+  }, []);
   useEffect(() => {
-    onCoverUrlChange(selected?.cover ?? "");
+    const timer = window.setTimeout(
+      () => onCoverUrlChange(selected?.cover ?? ""),
+      WELCOME_COVER_SETTLE_MS,
+    );
+    return () => window.clearTimeout(timer);
   }, [onCoverUrlChange, selected?.cover]);
   useEffect(() => {
     const onDragState = (event: Event): void => {
@@ -114,14 +141,7 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
               onDelete={deleteEntry}
             />
           </div>
-          <LibraryPanel
-            selectedKey={selected?.key ?? null}
-            onSelect={(key, preview) => {
-              const nextKey = nextLibrarySelection(selected?.key ?? null, key, preview);
-              setSelectedKey(nextKey);
-              setArmedKey(nextKey !== null && preview ? nextKey : null);
-            }}
-          />
+          <LibraryPanel selectedKey={selected?.key ?? null} onSelect={handleSelect} />
         </div>
       </div>
       {draggingFiles && editorVisibility.atHome && (

@@ -43,6 +43,7 @@ export interface QueuedCandidateLoaderOptions {
    */
   readonly prepareCandidate?: (
     candidate: EditorCandidate,
+    task?: LoadTask,
   ) => Promise<PreparedEditorCandidate | null>;
   /**
    * Persist a converted document once its replacement has left the change
@@ -78,11 +79,14 @@ export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOption
     : null;
 
   /** Runs the optional candidate validation and dismisses loading on cancel. */
-  const prepare = async (candidate: EditorCandidate): Promise<PreparedEditorCandidate | null> => {
+  const prepare = async (
+    candidate: EditorCandidate,
+    task?: LoadTask,
+  ): Promise<PreparedEditorCandidate | null> => {
     if (!options.prepareCandidate) {
       return candidate;
     }
-    const prepared = await options.prepareCandidate(candidate);
+    const prepared = await options.prepareCandidate(candidate, task);
     if (!prepared) {
       // A prompt can be shown while a desktop open still owns the progress
       // surface; cancel closes it rather than leaving a stuck loading modal.
@@ -198,12 +202,12 @@ export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOption
       return;
     }
     try {
-      const prepared = await prepare(candidate);
+      task ??= beginLoading(candidate.name);
+      const prepared = await prepare(candidate, task);
       if (!prepared) {
         await lease?.cancel();
         return;
       }
-      task ??= beginLoading(prepared.name);
       const admitted = await options.coordinator.submitReplacement(async (load) => {
         await loadInsideReplacement(load, prepared, assets, task!, reason, finalizeReplacement);
       }, expected);
@@ -238,7 +242,7 @@ export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOption
     try {
       const admitted = await options.coordinator.submitReplacement(async (load) => {
         const opened = await openWithExternalResources(path);
-        prepared = await prepare(opened.candidate);
+        prepared = await prepare(opened.candidate, opened.task);
         if (!prepared) {
           cancelled = true;
           if (!load.restore()) {

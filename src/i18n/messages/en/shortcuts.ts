@@ -4,17 +4,6 @@
  * the key model.
  */
 export default {
-  "shortcuts.rpeSection.title": "Shortcuts migrated from RPE",
-  "shortcuts.rpeSection.summary": "{mapped} mapped, {unmapped} not mapped.",
-  "shortcuts.rpeSection.mapped": "Mapped",
-  "shortcuts.rpeSection.unmapped": "Not mapped (RPE has this action, this editor does not)",
-  "shortcuts.rpeSection.revealHint": "Jump to this command",
-  "shortcuts.rpeSection.unknownAction": "No matching command",
-  "shortcuts.rpeSection.invalidBinding": "Key could not be parsed",
-  "shortcuts.rpeSection.clear": "Clear migration record",
-  "shortcuts.rpeSection.expand": "Expand",
-  "shortcuts.rpeSection.collapse": "Collapse",
-  "shortcuts.rpeSection.more": "{count} more entries are not shown.",
   "shortcuts.category.workspace": "Workspace",
   "shortcuts.category.file": "File",
   "shortcuts.category.developer": "Developer",
@@ -29,6 +18,8 @@ export default {
 
   "shortcuts.library.previous": "Previous chart",
   "shortcuts.library.next": "Next chart",
+  "shortcuts.library.seekBackward": "Seek preview backward 5 seconds",
+  "shortcuts.library.seekForward": "Seek preview forward 5 seconds",
 
   "shortcuts.editor.save": "Save chart",
   "shortcuts.editor.undo": "Undo",

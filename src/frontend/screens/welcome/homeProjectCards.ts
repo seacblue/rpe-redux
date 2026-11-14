@@ -26,6 +26,8 @@ export interface HomeLibraryRemoveFailure {
 export interface HomeLibraryProject extends LibraryProjectSummary {
   /** Server URL for the project's stored cover, when it has one. */
   coverUrl?: string;
+  /** Server URL for the generated low-resolution welcome-page cover. */
+  thumbnailUrl?: string;
   /** Server URL for the project's stored audio track, when it has one. */
   audioUrl?: string;
 }
@@ -48,6 +50,7 @@ export interface HomeProjectCardsSnapshot extends HomeLibraryStatus {
   onOpenProject(id: string): void;
   onExportProject(id: string): void;
   onRenameProject(project: LibraryProjectSummary): void;
+  onEditGroup(project: LibraryProjectSummary, groups: readonly string[]): void;
   onDelete(project: LibraryProjectSummary): void;
   onSort(sort: LibrarySort): void;
   onRetry(): void;
@@ -58,6 +61,7 @@ export interface HomeProjectCardsActions {
   onOpenProject(id: string): void;
   onExportProject(id: string): void;
   onRenameProject(project: LibraryProjectSummary): void;
+  onEditGroup(project: LibraryProjectSummary, groups: readonly string[]): void;
   onDelete(project: LibraryProjectSummary): void;
   onSort(sort: LibrarySort): void;
   onRetry(): void;
@@ -133,10 +137,14 @@ export class HomeProjectCardsAdapter {
       const coverUrl = project.background
         ? projectAssetUrl(origin, project.id, project.background)
         : "";
+      const thumbnailUrl = project.thumbnail
+        ? projectAssetUrl(origin, project.id, project.thumbnail)
+        : "";
       const audioUrl = project.song ? projectAssetUrl(origin, project.id, project.song) : "";
       return {
         ...project,
         ...(coverUrl ? { coverUrl } : {}),
+        ...(thumbnailUrl ? { thumbnailUrl } : {}),
         ...(audioUrl ? { audioUrl } : {}),
       };
     });

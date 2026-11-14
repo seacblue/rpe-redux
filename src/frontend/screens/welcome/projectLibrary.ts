@@ -6,7 +6,6 @@
  */
 import type { LibraryProjectSummary } from "../../../core/global/library/client.ts";
 import { dropRoute, type DropClassification } from "../../../core/global/document/dropIntake.ts";
-import type { FailureContext } from "../../../core/contracts/failure.ts";
 import { HomeProjectCardsAdapter } from "./homeProjectCards.ts";
 import { LibraryProjectsController } from "./libraryProjectsController.ts";
 import type { LibrarySort } from "./librarySort.ts";
@@ -61,7 +60,7 @@ interface ProjectHomeOptions {
   chooseExternalImport?: () => Promise<unknown>;
   /** Write a library project to a chart file chosen by the user. */
   exportProject: (id: string) => Promise<unknown>;
-  reportError: (error: unknown, context?: FailureContext) => void;
+  reportError: (error: unknown) => void;
   /** Called after a rename/patch so the caller can repaint its own state. */
   changed?: (project: LibraryProjectSummary) => void;
 }
@@ -93,7 +92,7 @@ export class ProjectHome {
   private readonly chooseRpe?: () => Promise<unknown>;
   private readonly choosePe?: () => Promise<unknown>;
   private readonly chooseExternal?: () => Promise<unknown>;
-  private readonly reportError: (error: unknown, context?: FailureContext) => void;
+  private readonly reportError: (error: unknown) => void;
 
   /** Wires the card adapter and the project controller to the host callbacks. */
   constructor({
@@ -138,6 +137,7 @@ export class ProjectHome {
       },
       onExportProject: (id) => exportProject(id).catch(reportError),
       onRenameProject: (project) => this.library.edit(project),
+      onEditGroup: (project, groups) => this.library.editGroup(project, groups),
       onDelete: (project) => this.library.remove(project),
       onSort: (sort: LibrarySort) => {
         void this.library.setSort(sort).catch(reportError);
@@ -173,7 +173,7 @@ export class ProjectHome {
     try {
       await this.chooseRpe?.();
     } catch (error) {
-      this.reportError(error, { operation: "welcome.import.rpe" });
+      this.reportError(error);
     }
   }
 
@@ -182,7 +182,7 @@ export class ProjectHome {
     try {
       await this.choosePe?.();
     } catch (error) {
-      this.reportError(error, { operation: "welcome.import.pe" });
+      this.reportError(error);
     }
   }
 
@@ -191,9 +191,10 @@ export class ProjectHome {
     try {
       await this.chooseExternal?.();
     } catch (error) {
-      this.reportError(error, { operation: "welcome.import.external" });
+      this.reportError(error);
     }
   }
+
   /**
    * Convert one external chart package and open the project it imported.
    *
@@ -222,26 +223,22 @@ export class ProjectHome {
       try {
         classified = await this.classifyPaths(paths);
       } catch (error) {
-        this.reportError(error, { operation: "welcome.import.classify" });
+        this.reportError(error);
       }
     }
-    const imported: string[] = [];
-    for (const path of paths) {
-      try {
-        const item = classified?.find((entry) => entry.path === path);
-        const ids = item ? await this.importClassified(item) : await this.importSequentially(path);
-        imported.push(...ids);
-      } catch (error) {
-        this.reportError(error, { operation: "welcome.import.drop" });
-      }
-    }
-    if (imported.length) {
-      try {
-        await this.refresh();
-      } catch (error) {
-        this.reportError(error, { operation: "welcome.import.refresh" });
-      }
-    }
+    const imported = (
+      await Promise.all(
+        paths.map(async (path) => {
+          try {
+            const item = classified?.find((entry) => entry.path === path);
+            return item ? await this.importClassified(item) : await this.importSequentially(path);
+          } catch (error) {
+            this.reportError(error);
+            return [];
+          }
+        }),
+      )
+    ).flat();
     return imported;
   }
 
@@ -320,6 +317,10 @@ export class ProjectHome {
       if (id) {
         return [id];
       }
+      // The external importer owns every non-RPE format. Once it has examined
+      // the path, falling through to the native importer would misread PE/PEC
+      // input as RPE JSON and surface the wrong loading error.
+      return [];
     }
     const id = await this.importFile(path);
     return id ? [id] : [];

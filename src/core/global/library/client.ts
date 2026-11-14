@@ -47,6 +47,8 @@ export interface LibraryProjectSummary {
   level: string;
   /** Cover asset name, resolved by the service when the chart was written. */
   background?: string;
+  /** Generated low-resolution cover used by welcome-page previews. */
+  thumbnail?: string;
   /** Audio asset name, resolved by the service when the chart was written. */
   song?: string;
   noteCount: number;

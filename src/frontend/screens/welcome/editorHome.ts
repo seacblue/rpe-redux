@@ -1,14 +1,14 @@
 /**
  * Home-screen runtime for opening projects and importing files.
  *
- * A file import writes the chart and its resources to SQLite, then opens the
- * resulting library document. A project with no assets can still find the file
- * it was mirrored from once and repair its resource store.
+ * A file import writes the chart and its resources to SQLite without opening
+ * the resulting library document. Explicit open actions own document loading;
+ * a project with no assets can still find its source file and repair resources.
  */
 import { localService } from "../../../core/global/library/service.ts";
 import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
-import { loadingProgress } from "../../../core/global/document/loading.ts";
+import { beginLoading, loadingProgress } from "../../../core/global/document/loading.ts";
 import { TauriDocumentStore } from "../../../core/platform/desktop/documentStore.ts";
 import type { LibraryProjectSummary } from "../../../core/global/library/client.ts";
 import type { DropClassification } from "../../../core/global/document/dropIntake.ts";
@@ -22,10 +22,7 @@ import { openSettings } from "../settings/settingsWindowController.ts";
 import type { AssetMap, EditorCandidate } from "../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../core/global/library/types.ts";
 import type { Chart } from "../../../core/global/chart/chart.ts";
-import {
-  libraryCandidate,
-  libraryDocumentCandidate,
-} from "../editor/workspace/document/open/libraryCandidate.ts";
+import { libraryDocumentCandidate } from "../editor/workspace/document/open/libraryCandidate.ts";
 import {
   catalogIdFor,
   catalogPathFor,
@@ -33,19 +30,30 @@ import {
 } from "../../../core/global/library/libraryCatalog.ts";
 import {
   materializeAssets,
-  openLibraryProject,
   openLibraryChartDocument,
+  openLibraryProject,
 } from "../../../core/global/library/document.ts";
 import { importChartToLibrary } from "../../../core/global/library/import.ts";
+import { shouldRepairLibraryAssetsFromNativeRpe } from "./libraryAssetRepair.ts";
+import { startLongTask, finishLongTask } from "../../../core/state/longTasks.ts";
 import {
   chartExportWarnings,
   createChartExport,
   createChartTextExport,
 } from "../../../core/global/document/export.ts";
 import { download } from "../../platform/download.ts";
-import { importRpePath, type RpeImportDeps } from "./rpeImport.ts";
-import { importPeFolder } from "./peImport.ts";
-import { importExternalPath, type ExternalImportDeps } from "./externalImport.ts";
+import {
+  chooseRpeImport as chooseRpeFolderMigration,
+  importRpePath,
+  type RpeImportDeps,
+} from "./rpeImport.ts";
+import { choosePeImport as choosePeFolderMigration, importPeFolder } from "./peImport.ts";
+import {
+  chooseExternalImport as chooseExternalChartImport,
+  importExternalPath,
+  type ExternalImportDeps,
+} from "./externalImport.ts";
+import { importLoadProgress, importWriteProgress, throwIfAborted } from "./importProgress.ts";
 
 /** Error raised when the local library service is unavailable. */
 function libraryMissing(): Error {
@@ -120,26 +128,61 @@ export function createEditorHomeRuntime(deps: {
   getLibraryProject(): LibraryProjectRef | null;
   setLibraryProject(project: LibraryProjectRef | null): void;
 }): ProjectHome {
-  /** Opens a library project by id into the editor. */
-  const openLibrary = async (id: string): Promise<void> => {
-    const found = await localService();
-    if (!found) {
-      throw libraryMissing();
-    }
-    if (found.library.supportsChartStream()) {
-      try {
-        const opened = await openLibraryChartDocument(found.library, id);
-        await deps.loadCandidate(
-          libraryDocumentCandidate(opened.project, id, opened.chartDocument),
-          opened.assets,
-        );
+  let latestOpenRequest = 0;
+
+  /** Opens a library project and keeps feedback visible across the initial read. */
+  const openLibraryProjectById = async (id: string): Promise<void> => {
+    const requestId = ++latestOpenRequest;
+    const task = beginLoading(id);
+    try {
+      const found = await localService();
+      if (!found) {
+        throw libraryMissing();
+      }
+      const opened = await openLibraryChartDocument(found.library, id);
+      if (requestId !== latestOpenRequest) {
+        opened.chartDocument.dispose?.();
         return;
-      } catch {
-        // Older services or malformed streams use the whole-project fallback.
+      }
+      if (!opened.project) {
+        throw new Error(t("editor.app.error.projectMissing"));
+      }
+      await installOpenedProject(id, opened, task);
+      if (loadingProgress.getSnapshot()?.id === task.id) {
+        loadingProgress.dismiss();
+      }
+    } catch (error) {
+      if (requestId !== latestOpenRequest) {
+        return;
+      }
+      task.fail(error);
+      throw error;
+    }
+  };
+
+  /** Loads one already-read library project into the editor. */
+  const installOpenedProject = async (
+    id: string,
+    opened: Awaited<ReturnType<typeof openLibraryChartDocument>>,
+    task?: LoadTask,
+  ): Promise<boolean> => {
+    const candidate = libraryDocumentCandidate(opened.project, id, opened.chartDocument);
+    if ([...(opened.assets.names?.() ?? [])].length === 0) {
+      try {
+        await repairAssets(id, { chart: candidate.chart, name: candidate.name });
+      } catch (error) {
+        // A missing source file must not make a chart with no resources
+        // unopenable; the editor can still add assets later.
+        console.warn("Unable to migrate library assets", error);
       }
     }
-    const opened = await openLibraryProject(found.library, id);
-    await deps.loadCandidate(libraryCandidate(opened.project, id), opened.assets);
+    await deps.documents?.close();
+    await deps.loadCandidate(candidate, opened.assets, task);
+    const current = loadingProgress.getSnapshot();
+    if (task && current?.id === task.id && current.status === "loading") {
+      task.complete();
+    }
+    return true;
   };
 
   /** Asks for the export container, then writes the library project. */
@@ -240,6 +283,20 @@ export function createEditorHomeRuntime(deps: {
     if (!found) {
       return;
     }
+    // Asset repair is only valid for an RPE JSON source. PE/PEC and official
+    // charts have already been converted during import; reopening their source
+    // through the native loader would surface the misleading "RPE JSON not
+    // found" modal while the library project itself is perfectly usable.
+    let item: DropClassification | undefined;
+    try {
+      const sourcePath = path.split("#", 1)[0];
+      item = (await found.library.classifyDropped([sourcePath])).items[0];
+    } catch {
+      return;
+    }
+    if (!shouldRepairLibraryAssetsFromNativeRpe(item)) {
+      return;
+    }
     const opened = await documents.open(path);
     try {
       await importChartToLibrary({
@@ -265,38 +322,74 @@ export function createEditorHomeRuntime(deps: {
     if (!deps.documents) {
       throw new Error(t("editor.app.notice.desktopOnlyOpenFile"));
     }
-    const loader = new TauriDocumentStore();
-    let task: { complete(): void; fail(error: unknown): void } | null = null;
-    try {
-      const opened = await loader.open(path);
-      task = opened.task;
-      const found = await localService();
-      if (!found) {
-        throw libraryMissing();
-      }
-      const existing = catalogIdFor(path);
-      const imported = await importChartToLibrary({
-        library: found.library,
-        ...(existing ? { projectId: existing } : {}),
-        chart: opened.candidate.chart,
-        name: chartTitle(opened.candidate.chart, opened.candidate.name),
-        assets: opened.assets,
-        onProgress: (value) => opened.task.update("read", Math.round(value * 100), 100),
+    const name = pathLabel(path);
+    let taskId = "";
+    let cancelled = false;
+    const projectId = await new Promise<string | null>((resolve, reject) => {
+      taskId = startLongTask({
+        label: "workspace.welcome.import.title",
+        detail: name,
+        stage: t("workspace.welcome.importing", { name }),
+        async run({ report, signal }) {
+          const loader = new TauriDocumentStore();
+          try {
+            const opened = await loader.openForImport(
+              path,
+              (loadStage, completed, total) =>
+                report(
+                  t("workspace.welcome.importing", { name }),
+                  importLoadProgress(loadStage, completed, total),
+                ),
+              signal,
+            );
+            throwIfAborted(signal);
+            const found = await localService();
+            if (!found) {
+              throw libraryMissing();
+            }
+            throwIfAborted(signal);
+            const existing = catalogIdFor(path);
+            const imported = await importChartToLibrary({
+              library: found.library,
+              ...(existing ? { projectId: existing } : {}),
+              chart: opened.candidate.chart,
+              name: chartTitle(opened.candidate.chart, opened.candidate.name),
+              assets: opened.assets,
+              signal,
+              onProgress: (value) =>
+                report(t("workspace.welcome.importing", { name }), importWriteProgress(value)),
+            });
+            rememberCatalogPath(path, imported.projectId);
+            report("", 1);
+            try {
+              void refreshHome().catch((error) => deps.reportError(error));
+            } catch (error) {
+              deps.reportError(error);
+            }
+            showToast({
+              message: t("workspace.welcome.drop.imported", { name: imported.name }),
+              level: "success",
+            });
+            resolve(imported.projectId);
+          } catch (error) {
+            if (signal.aborted) {
+              cancelled = true;
+              resolve(null);
+            } else {
+              reject(error);
+            }
+            throw error;
+          } finally {
+            await loader.close().catch(() => undefined);
+          }
+        },
       });
-      rememberCatalogPath(path, imported.projectId);
-      task.complete();
-      showToast({
-        message: t("workspace.welcome.drop.imported", { name: imported.name }),
-        level: "success",
-      });
-      return imported.projectId;
-    } catch (error) {
-      task?.fail(error);
-      loadingProgress.dismiss();
-      throw error;
-    } finally {
-      await loader.close().catch(() => undefined);
+    });
+    if (cancelled || projectId === null) {
+      return null;
     }
+    finishLongTask(taskId, { status: "completed" });
+    return projectId;
   };
 
   /**
@@ -307,34 +400,7 @@ export function createEditorHomeRuntime(deps: {
    * Used by the drop flow after the save prompt.
    */
   const openImported = async (id: string): Promise<void> => {
-    const found = await localService();
-    if (!found) {
-      throw libraryMissing();
-    }
-    const opened = await openLibraryProject(found.library, id);
-    if (!opened.project) {
-      throw new Error(t("editor.app.error.projectMissing"));
-    }
-    await installOpenedProject(id, opened);
-  };
-
-  /** Repairs missing assets, closes the old document, and installs the project. */
-  const installOpenedProject = async (
-    id: string,
-    opened: Awaited<ReturnType<typeof openLibraryProject>>,
-  ): Promise<boolean> => {
-    if ([...(opened.assets.names?.() ?? [])].length === 0) {
-      try {
-        await repairAssets(id, opened.project as { chart: unknown; name: string });
-      } catch (error) {
-        // A missing source file must not make a chart with no resources
-        // unopenable; the editor can still add assets later.
-        console.warn("Unable to migrate library assets", error);
-      }
-    }
-    await deps.documents?.close();
-    await openLibrary(id);
-    return true;
+    await openLibraryProjectById(id);
   };
 
   let projectHome: ProjectHome | null = null;
@@ -389,16 +455,11 @@ export function createEditorHomeRuntime(deps: {
       });
     },
     importExternalChart: openExternalChartFile,
+    chooseRpeImport: () => chooseRpeFolderMigration(rpeDeps),
+    choosePeImport: () => choosePeFolderMigration(rpeDeps),
+    chooseExternalImport: () => chooseExternalChartImport(externalDeps),
     openProject: async (id) => {
-      const found = await localService();
-      if (!found) {
-        throw libraryMissing();
-      }
-      const opened = await openLibraryProject(found.library, id);
-      if (!opened.project) {
-        throw new Error(t("editor.app.error.projectMissing"));
-      }
-      return deps.guardReplace(() => installOpenedProject(id, opened));
+      return deps.guardReplace(() => openLibraryProjectById(id));
     },
     openImported,
     importFile,

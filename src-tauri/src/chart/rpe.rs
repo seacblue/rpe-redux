@@ -19,6 +19,8 @@ use std::{
 pub struct RpeChartFolder {
     /// Full path to the chart JSON.
     pub path: String,
+    /// Conservative decoded/staged memory estimate in bytes.
+    pub estimated_bytes: u64,
     /// Folder name under Resources.
     pub folder: String,
     /// Display name from Info.txt, or the chart file stem.
@@ -170,6 +172,26 @@ fn autosave_count(folder: &Path) -> usize {
         .unwrap_or(0)
 }
 
+/// Estimate the retained memory for one chart folder and its direct assets.
+fn estimated_import_bytes(folder: &Path) -> u64 {
+    let raw = fs::read_dir(folder)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map(|kind| kind.is_file())
+                .unwrap_or(false)
+        })
+        .filter_map(|entry| entry.metadata().ok().map(|metadata| metadata.len()))
+        .fold(0u64, u64::saturating_add);
+    raw.saturating_mul(2)
+        .saturating_add(16 * 1024 * 1024)
+        .clamp(16 * 1024 * 1024, 2 * 1024 * 1024 * 1024)
+}
+
 /// Build one chart entry; folders without a chart file are ignored.
 fn chart_entry(folder: &Path) -> Option<RpeChartFolder> {
     let info_path = find_child(folder, "info.txt");
@@ -199,6 +221,7 @@ fn chart_entry(folder: &Path) -> Option<RpeChartFolder> {
         .to_owned();
     Some(RpeChartFolder {
         path: chart.to_string_lossy().into_owned(),
+        estimated_bytes: estimated_import_bytes(folder),
         folder: folder_name,
         name,
         group,

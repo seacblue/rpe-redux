@@ -22,7 +22,9 @@ import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { showImportReport } from "../../overlays/modals/importReportPrompt.ts";
 import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
+import { throwIfAborted } from "./importProgress.ts";
 import {
+  chooseExternalChartFile,
   readPickedBytes,
   scanExternalChart,
   type ExternalChartScan,
@@ -370,15 +372,21 @@ export async function importExternalPath(
   // The library write is one retained task: the notice that follows is the short
   // answer, and the row keeps the progress reachable from the task list.
   let taskId = "";
-  const projectId = await new Promise<string>((resolve, reject) => {
+  let cancelled = false;
+  const projectId = await new Promise<string | null>((resolve, reject) => {
     taskId = startLongTask({
       label: "workspace.welcome.external.title",
       detail: displayName,
       stage: t("workspace.welcome.external.importing", { name: displayName }),
-      async run({ report }) {
+      async run({ report, signal }) {
         const existing = catalogIdFor(loaded.chartPath);
         let result: Awaited<ReturnType<typeof importChartToLibrary>>;
         try {
+          throwIfAborted(signal);
+          const reportProgress = (value: number) => {
+            throwIfAborted(signal);
+            report(t("workspace.welcome.external.importing", { name: displayName }), value);
+          };
           result = await importChartToLibrary({
             library: found.library,
             ...(existing ? { projectId: existing } : {}),
@@ -386,19 +394,24 @@ export async function importExternalPath(
             name: displayName,
             group: converted.format === "official" ? "Phigros" : "PhiEdit",
             assets: loaded.assets,
-            onProgress: (value) =>
-              report(t("workspace.welcome.external.importing", { name: displayName }), value),
+            signal,
+            onProgress: reportProgress,
           });
         } catch (error) {
           // The task lifecycle records this failure; the caller keeps the
           // rejection so the import affordance can report it.
-          reject(error);
+          if (signal.aborted) {
+            cancelled = true;
+            resolve(null);
+          } else {
+            reject(error);
+          }
           throw error;
         }
         rememberCatalogPath(loaded.chartPath, result.projectId);
         report("", 1);
         try {
-          await deps.refresh();
+          void deps.refresh().catch((error) => deps.reportError(error));
         } catch (error) {
           deps.reportError(error, { operation: "welcome.import.external.refresh" });
         }
@@ -441,8 +454,29 @@ export async function importExternalPath(
       },
     });
   });
+  if (cancelled || projectId === null) {
+    return null;
+  }
   // A failure rejects before this line; the lifecycle already recorded it as
   // failed, so reaching here means the import completed.
   finishLongTask(taskId, { status: "completed" });
   return projectId;
+}
+
+/** Ask for one external chart and import it; false when cancelled or unsupported. */
+export async function chooseExternalImport(deps: ExternalImportDeps): Promise<boolean> {
+  if (!isDesktop()) {
+    showToast({ message: t("workspace.welcome.external.desktopOnly"), level: "warning" });
+    return false;
+  }
+  const path = await chooseExternalChartFile();
+  if (!path) {
+    return false;
+  }
+  const projectId = await importExternalPath(path, deps);
+  if (!projectId) {
+    showToast({ message: t("workspace.welcome.external.notFound"), level: "warning" });
+    return false;
+  }
+  return true;
 }
