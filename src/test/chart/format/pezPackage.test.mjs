@@ -9,7 +9,7 @@ import {
 } from "../../../core/global/chart/exportProjection.ts";
 import { buildInfoText } from "../../../core/global/document/info.ts";
 import { createChartExport } from "../../../core/global/document/export.ts";
-import { packageEntries } from "../../../core/global/document/package.ts";
+import { packageEntries, preparePezExportAssets } from "../../../core/global/document/package.ts";
 
 const decoder = new TextDecoder();
 
@@ -163,6 +163,34 @@ test("package layout uses the project id as the root chart entry", () => {
   assert.match(info, /^#\r\n/);
   assert.match(info, new RegExp(`^Path: ${id}$`, "m"));
   assert.match(info, new RegExp(`^Chart: ${id}\\.json$`, "m"));
+});
+
+test("native PEZ export replaces a stale extra sidecar with current effects", () => {
+  const chart = createChart();
+  chart.META.id = "1234567890123456";
+  chart.effects = [
+    {
+      shader: "shaders/tokonagi.glsl",
+      order: 99,
+      vars: { amount: 0.5 },
+    },
+  ];
+  const stale = new TextEncoder().encode(
+    JSON.stringify({
+      effects: [{ shader: "shaders/tokonagi.glsl", order: 0, vars: { amount: 1 } }],
+    }),
+  );
+  const assets = new Map([
+    ["extra.json", stale],
+    ["shaders/tokonagi.glsl", new Uint8Array([1, 2, 3])],
+  ]);
+
+  const output = preparePezExportAssets(chart, assets, "chart.json");
+  const extra = JSON.parse(decoder.decode(output.get("extra.json")));
+
+  assert.deepEqual(extra.effects, chart.effects);
+  assert.notEqual(output.get("extra.json"), stale);
+  assert.deepEqual(output.get("shaders/tokonagi.glsl"), assets.get("shaders/tokonagi.glsl"));
 });
 
 test("Info.txt keeps caller fields while the package identity wins", () => {

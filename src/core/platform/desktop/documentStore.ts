@@ -18,6 +18,7 @@ import {
   type LoadTask,
 } from "../../global/document/loading.ts";
 import { projectChartForExport } from "../../global/chart/exportProjection.ts";
+import { preparePezExportAssets } from "../../global/document/package.ts";
 import { registeredChartDocument } from "../../global/chart/streaming/chartDocumentRegistry.ts";
 import { dialogDefaultPath, rememberDialogFile } from "./dialogPath.ts";
 import { throwIfAborted } from "../../utils/abort.ts";
@@ -600,9 +601,13 @@ export class TauriDocumentStore {
         options.name ?? options.path ?? current?.chart_name ?? "",
       );
     }
+    const saveAssets =
+      options.export && options.format === "pez" && typeof chart !== "string"
+        ? preparePezExportAssets(chart as Chart, assets, current?.chart_name ?? "")
+        : assets;
     const changes: AssetChange[] = store
-      ? store.changes(assets)
-      : [...assets].map(([name, bytes]) => ({ name, bytes }));
+      ? store.changes(saveAssets)
+      : [...saveAssets].map(([name, bytes]) => ({ name, bytes }));
     const extension = options.format ?? (current?.packed || changes.length ? "pez" : "json");
     let path =
       options.path ??
@@ -624,7 +629,7 @@ export class TauriDocumentStore {
       return null;
     }
     rememberDialogFile("chart", path);
-    const assetNames = new Set(assets.names?.() ?? assets.keys());
+    const assetNames = new Set((saveAssets as AssetMap).names?.() ?? saveAssets.keys());
     if (!/\.(json|pez)$/i.test(path)) {
       path += `.${extension}`;
     }
