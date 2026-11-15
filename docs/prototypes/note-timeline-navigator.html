@@ -1,0 +1,346 @@
+<!doctype html>
+<!-- Throwaway UI prototype: three note-timeline navigator structures, switchable with ?variant=a|b|c. -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RPE Redux · Note timeline navigator prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: #0b0f15;
+        color: #e7edf5;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 50% -20%, #1d2a3d, #0b0f15 52%);
+      }
+      main {
+        width: min(1100px, calc(100vw - 32px));
+        margin: 30px auto 100px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 26px;
+      }
+      .lead {
+        color: #9daabd;
+        margin: 0 0 22px;
+      }
+      .surface {
+        border: 1px solid #334255;
+        border-radius: 12px;
+        background: #0e141d;
+        overflow: hidden;
+        box-shadow: 0 14px 38px #0008;
+      }
+      .surface-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #293646;
+        color: #9daabd;
+      }
+      .timeline-wrap {
+        position: relative;
+        height: 440px;
+        padding: 16px 20px 0;
+        background: #080b10;
+      }
+      .timeline {
+        position: relative;
+        height: 100%;
+        overflow: hidden;
+        border: 1px solid #536579;
+        background:
+          repeating-linear-gradient(to bottom, transparent 0 73px, #263443 74px),
+          repeating-linear-gradient(to right, transparent 0 95px, #21342b 96px);
+      }
+      .panels {
+        display: flex;
+        gap: 16px;
+        height: 100%;
+        width: max-content;
+        transform: translateX(-210px);
+        transition: transform 180ms ease;
+      }
+      .panel {
+        flex: 0 0 300px;
+        position: relative;
+        background: linear-gradient(#1b2734aa, #101820aa);
+        border-right: 1px solid #62768b;
+      }
+      .panel h2 {
+        margin: 10px 12px;
+        color: #a8bbd1;
+        font-size: 14px;
+      }
+      .note {
+        position: absolute;
+        height: 24px;
+        border-radius: 8px;
+        background: #68c8ff;
+        box-shadow: 0 0 0 1px #d7f2ff55;
+      }
+      .edge {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 5px;
+        background: linear-gradient(to right, transparent, #fff);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease;
+      }
+      .edge.right {
+        inset: 0 0 0 auto;
+        background: linear-gradient(to left, transparent, #fff);
+      }
+      .has-left .edge.left,
+      .has-right .edge.right {
+        opacity: 0.82;
+      }
+      .state {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        color: #9daabd;
+        font-size: 13px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #74b2ff;
+      }
+      .navigator {
+        height: 54px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        background: #172231;
+        border-top: 1px solid #405267;
+      }
+      button {
+        color: #e7f1ff;
+        border: 1px solid #6481a2;
+        background: #24374d;
+        border-radius: 8px;
+        min-width: 36px;
+        height: 36px;
+        cursor: pointer;
+        font: inherit;
+      }
+      button:hover,
+      button:focus-visible {
+        background: #315272;
+        outline: 2px solid #80b7ff;
+        outline-offset: 2px;
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      .range {
+        min-width: 140px;
+        text-align: center;
+        font-size: 13px;
+        color: #d7e5f4;
+      }
+      .track {
+        position: relative;
+        flex: 1;
+        height: 14px;
+        border-radius: 8px;
+        background: #0c121b;
+        border: 1px solid #405267;
+      }
+      .thumb {
+        position: absolute;
+        top: 2px;
+        height: 8px;
+        border-radius: 5px;
+        background: #72a6d8;
+        transition: left 180ms ease;
+      }
+      .hint {
+        min-height: 28px;
+        padding: 12px 16px;
+        color: #9daabd;
+        font-size: 13px;
+      }
+      .variant-b .navigator {
+        height: 88px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 7px;
+      }
+      .variant-b .navigator-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .variant-b .mini-map {
+        display: flex;
+        height: 22px;
+        gap: 4px;
+      }
+      .variant-b .mini-map span {
+        flex: 1;
+        border-radius: 4px;
+        background: #315272;
+        opacity: 0.55;
+      }
+      .variant-b .mini-map span.active {
+        opacity: 1;
+        background: #8bc8ff;
+      }
+      .variant-c .navigator {
+        position: absolute;
+        left: 32px;
+        right: 32px;
+        bottom: 16px;
+        opacity: 0.05;
+        transform: translateY(32px);
+        transition:
+          opacity 160ms,
+          transform 160ms;
+      }
+      .variant-c .timeline-wrap:hover .navigator,
+      .variant-c .navigator:focus-within {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .variant-c .edge {
+        opacity: 0.16;
+      }
+      .variant-c .has-left .edge.left,
+      .variant-c .has-right .edge.right {
+        opacity: 0.95;
+      }
+      .switcher {
+        position: fixed;
+        z-index: 5;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 999px;
+        background: #202c3b;
+        border: 1px solid #58718e;
+        box-shadow: 0 8px 24px #0009;
+      }
+      .switcher button {
+        min-width: 82px;
+        height: 32px;
+        font-size: 12px;
+      }
+      .switcher .selected {
+        background: #4a78a4;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        padding: 12px 16px 0;
+      }
+      .metric {
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #273547;
+        background: #101822;
+        color: #9daabd;
+        font-size: 12px;
+      }
+      @media (max-width: 680px) {
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+        .surface-head {
+          flex-direction: column;
+        }
+        .range {
+          min-width: 110px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Note timeline 横向归位导航</h1>
+      <p class="lead">PROTOTYPE · 只验证信息层级和状态，不连接真实 chart 数据。</p>
+      <section class="surface" id="app"></section>
+      <div class="metrics" id="metrics"></div>
+    </main>
+    <nav class="switcher" aria-label="Prototype variants">
+      <button data-variant="a">A · 推荐</button>
+      <button data-variant="b">B · Mini-map</button>
+      <button data-variant="c">C · Reveal</button>
+    </nav>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const variant = ["a", "b", "c"].includes(params.get("variant")) ? params.get("variant") : "a";
+      const app = document.querySelector("#app");
+      const metrics = document.querySelector("#metrics");
+      let offset = 1;
+      const count = 8;
+      const visible = 3;
+      const max = count - visible;
+
+      function panelMarkup() {
+        return Array.from(
+          { length: count },
+          (_, index) =>
+            `<article class="panel"><h2>线 ${index}</h2><span class="note" style="left:${32 + ((index * 31) % 210)}px;top:${72 + ((index * 43) % 290)}px;width:${80 + ((index * 17) % 95)}px"></span><span class="note" style="left:${104 + ((index * 29) % 130)}px;top:${210 + ((index * 23) % 150)}px;width:${52 + ((index * 13) % 80)}px"></span></article>`,
+        ).join("");
+      }
+
+      function render() {
+        const first = offset;
+        const last = Math.min(count - 1, offset + visible - 1);
+        const left = offset > 0;
+        const right = offset < max;
+        const trackLeft = (offset / max) * 52;
+        const trackWidth = 48;
+        const extra =
+          variant === "b"
+            ? `<div class="mini-map">${Array.from({ length: count }, (_, index) => `<span class="${index >= first && index <= last ? "active" : ""}"></span>`).join("")}</div>`
+            : "";
+        const navigator =
+          variant === "b"
+            ? `<div class="navigator"><div class="navigator-top"><button data-move="-1" aria-label="向左移动一组判定线" ${!left ? "disabled" : ""}>◀</button><span class="range">第 ${first}–${last} 个 panel / 共 ${count} 个</span><button data-move="1" aria-label="向右移动一组判定线" ${!right ? "disabled" : ""}>▶</button></div>${extra}</div>`
+            : `<div class="navigator"><button data-move="-1" aria-label="向左移动一组判定线" ${!left ? "disabled" : ""}>◀</button><span class="range">第 ${first}–${last} 个 panel / 共 ${count} 个</span><div class="track"><span class="thumb" style="left:${trackLeft}%;width:${trackWidth}%"></span></div><button data-move="1" aria-label="向右移动一组判定线" ${!right ? "disabled" : ""}>▶</button></div>`;
+        app.className = `surface variant-${variant} ${left ? "has-left" : ""} ${right ? "has-right" : ""}`;
+        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线分屏</span><span class="state"><i class="dot"></i>当前可见 ${first}–${last} / ${count}</span></header><div class="timeline-wrap"><div class="timeline"><div class="panels" style="transform:translateX(-${offset * 316 - 12}px)">${panelMarkup()}</div><span class="edge left"></span><span class="edge right"></span></div>${navigator}</div><p class="hint">${variant === "a" ? "按钮移动一个 panel stride；白条只提示还有内容。" : variant === "b" ? "Mini-map 显示全部 panel，适合判定线很多的高级模式。" : "移动指针到时间轴底部，控制层渐进显示。"}</p>`;
+        metrics.innerHTML = `<div class="metric">value: <b>${offset}</b></div><div class="metric">max: <b>${max}</b></div><div class="metric">边界状态: <b>${left ? "左有溢出" : "左起点"} · ${right ? "右有溢出" : "右终点"}</b></div>`;
+        app.querySelectorAll("[data-move]").forEach((button) =>
+          button.addEventListener("click", () => {
+            offset = Math.max(0, Math.min(max, offset + Number(button.dataset.move)));
+            render();
+          }),
+        );
+        document
+          .querySelectorAll(".switcher [data-variant]")
+          .forEach((button) =>
+            button.classList.toggle("selected", button.dataset.variant === variant),
+          );
+      }
+      document.querySelectorAll(".switcher [data-variant]").forEach((button) =>
+        button.addEventListener("click", () => {
+          const next = new URL(location.href);
+          next.searchParams.set("variant", button.dataset.variant);
+          location.href = next.toString();
+        }),
+      );
+      render();
+    </script>
+  </body>
+</html>

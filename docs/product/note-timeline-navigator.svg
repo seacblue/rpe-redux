@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
+  <title>Note timeline horizontal navigator recommended layout</title>
+  <desc>Dark RPE Redux timeline mock showing bottom left and right buttons, clipped multi-line panels, and edge white overflow indicators.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#12161e"/><stop offset="1" stop-color="#090b10"/></linearGradient>
+    <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1d2935"/><stop offset="1" stop-color="#111820"/></linearGradient>
+    <linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity=".35"/></filter>
+    <style>
+      .ui { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; fill: #dbe5f0; }
+      .muted { fill: #8997a7; }
+      .tiny { font-size: 12px; }
+      .small { font-size: 15px; }
+      .label { font-size: 17px; font-weight: 600; }
+      .title { font-size: 26px; font-weight: 700; }
+      .call { stroke: #80b7ff; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+  <rect width="1280" height="760" fill="url(#bg)"/>
+  <rect x="32" y="28" width="1216" height="704" rx="14" fill="#0d1118" stroke="#293342"/>
+  <text x="68" y="72" class="ui title">推荐方案 A：底部横向归位 rail</text>
+  <text x="68" y="101" class="ui small muted">只在多线、非合并且存在横向溢出时出现；左右竖向概览条仍然负责歌曲时间定位。</text>
+  <rect x="68" y="135" width="1060" height="418" rx="8" fill="#0b0e13" stroke="#44515f"/>
+  <rect x="68" y="135" width="20" height="418" fill="#242c36"/>
+  <rect x="1108" y="135" width="20" height="418" fill="#242c36"/>
+  <text x="71" y="124" class="ui tiny muted">时间 overview strip</text>
+  <text x="1006" y="124" class="ui tiny muted">时间 overview strip</text>
+  <g transform="translate(110 135)">
+    <rect width="978" height="418" fill="#0a0d12"/>
+    <path d="M0 74H978 M0 148H978 M0 222H978 M0 296H978 M0 370H978" stroke="#243242" stroke-width="1"/>
+    <path d="M100 0V418 M200 0V418 M300 0V418 M400 0V418 M500 0V418 M600 0V418 M700 0V418 M800 0V418 M900 0V418" stroke="#263b32" stroke-width="1"/>
+    <rect x="0" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+    <rect x="316" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+    <rect x="632" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+    <rect x="948" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+    <g fill="#6fc9ff" opacity=".9">
+      <rect x="92" y="98" width="116" height="26" rx="8"/><rect x="176" y="256" width="72" height="26" rx="8"/>
+      <rect x="368" y="146" width="128" height="26" rx="8"/><rect x="504" y="326" width="70" height="26" rx="8"/>
+      <rect x="724" y="88" width="120" height="26" rx="8"/><rect x="842" y="224" width="80" height="26" rx="8"/>
+      <rect x="1040" y="168" width="140" height="26" rx="8"/>
+    </g>
+    <g class="ui small" text-anchor="middle"><text x="150" y="24">线 0</text><text x="466" y="24">线 1</text><text x="782" y="24">线 2</text><text x="1098" y="24">线 3</text></g>
+    <rect x="0" y="0" width="5" height="418" fill="url(#edge)" opacity="0"/>
+    <rect x="973" y="0" width="5" height="418" fill="#fff" opacity=".85"/>
+  </g>
+  <g transform="translate(118 531)" filter="url(#shadow)">
+    <rect width="962" height="48" rx="10" fill="#192333" stroke="#536b84"/>
+    <rect x="8" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/>
+    <path d="M29 17L19 24L29 31" stroke="#dbeeff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="61" y="30" class="ui small">第 0–2 个 panel / 共 8 个</text>
+    <rect x="382" y="15" width="400" height="18" rx="9" fill="#0d131c" stroke="#405267"/>
+    <rect x="386" y="18" width="184" height="12" rx="6" fill="#6f9fd0"/>
+    <rect x="920" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/>
+    <path d="M931 17L941 24L931 31" stroke="#dbeeff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M1035 315C1156 315 1185 270 1185 219" class="call"/>
+  <rect x="1035" y="160" width="180" height="62" rx="8" fill="#162538" stroke="#80b7ff"/>
+  <text x="1051" y="185" class="ui small">右白条 = 右侧还有</text><text x="1051" y="207" class="ui small">未显示的 panel</text>
+  <path d="M515 579C515 633 444 647 398 677" class="call"/>
+  <rect x="68" y="654" width="480" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
+  <text x="86" y="684" class="ui small">按钮每次移动一个 panel stride；最后一段直接吸附到 max。</text>
+  <path d="M240 386C185 419 155 458 142 515" class="call"/>
+  <rect x="610" y="654" width="570" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
+  <text x="628" y="684" class="ui small">不覆盖 canvas；rail 有溢出才占 28px，高亮仅在交互时增强。</text>
+</svg>
