@@ -65,12 +65,18 @@ export function PlaybackButton() {
  * releasing restores the layout and starting position.
  */
 export function AuditionButton() {
+  const auditioning = useSyncExternalStore(
+    editorAuditioning.subscribe,
+    editorAuditioning.get,
+    editorAuditioning.get,
+  );
   return (
     <IconButton
       id="audition"
       icon="headphones"
       label={t("chrome.playback.audition")}
       className="toolbar-audition-button"
+      active={auditioning}
       data-tip-title={t("chrome.playback.audition")}
       data-tip-desc={t("chrome.playback.auditionHint")}
       data-tip-key="T"
