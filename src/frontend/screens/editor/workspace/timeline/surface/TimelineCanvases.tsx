@@ -14,6 +14,7 @@ import { useEditorRuntimeValue } from "../../runtime/composition/EditorRuntime.t
 import { useTimelineRuntime } from "../../runtime/providers/TimelineProvider.tsx";
 import { useTimelineDomSurface } from "./TimelineDomSurface.tsx";
 import type { TimelinePointerCanvasBindings, TimelineStripBindings } from "./timelineBindings.ts";
+import { TimelineMultiLineNavigator } from "../multiLine/TimelineMultiLineNavigator.tsx";
 
 /** One overview strip canvas with its pointer bindings. */
 function OverviewStrip({
@@ -190,6 +191,7 @@ export function TimelineCanvases() {
         surfaceRef={surface.attach.history}
         hidden={!activeOverview || !densityBarsEnabled}
       />
+      <TimelineMultiLineNavigator />
     </>
   );
 }

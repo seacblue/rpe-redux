@@ -167,8 +167,40 @@
   grid-template-columns:
     var(--timeline-strip-width, 24px) minmax(0, 1fr) minmax(0, 1fr)
     var(--timeline-strip-width, 24px);
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   column-gap: var(--space-3);
+}
+
+// The navigator is a second-row chrome element, aligned to whichever field owns
+// the active multi-line viewport. It is hidden by the DOM when there is no
+// horizontal overflow, so the canvas keeps its full height in ordinary modes.
+.timeline-multi-line-navigator {
+  grid-row: 2;
+  grid-column: 2;
+  min-width: 0;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-1) 0 0;
+  color: var(--foreground-muted);
+}
+
+.timeline-multi-line-navigator:not([hidden]) {
+  display: flex;
+}
+
+.timeline-multi-line-navigator[data-area="events"] {
+  grid-column: 3;
+}
+
+.timeline-multi-line-navigator-range {
+  min-width: 96px;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 // Hiding the strips also drops their gaps: the note/event field keeps the exact
@@ -455,6 +487,10 @@ canvas {
 
   & .timeline-history-strip {
     grid-column: 5;
+  }
+
+  & .timeline-multi-line-navigator {
+    grid-column: 3;
   }
 }
 

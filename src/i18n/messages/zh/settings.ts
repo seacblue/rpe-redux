@@ -381,6 +381,12 @@ export default {
     "只有鼠标附近的辅助线保留透明度，其余辅助线完全透明。",
   "settings.field.timeline-density-bars-enabled.label": "显示时间轴概览条",
   "settings.field.timeline-density-bars-enabled.description": "在时间轴左右两侧显示概览条。",
+  "settings.field.timeline-offscreen-region-enabled.label": "显示离屏时间轴区域",
+  "settings.field.timeline-offscreen-region-enabled.description":
+    "给超出音符坐标区间 -675 到 675 的时间轴背景加色。",
+  "settings.field.timeline-offscreen-region-color.label": "离屏区域颜色",
+  "settings.field.timeline-offscreen-region-color.description":
+    "颜色的透明度会控制背景区域的显示强度。",
   "settings.field.timeline-overview-strip-width.label": "概览条宽度",
   "settings.field.timeline-overview-strip-width.description": "时间轴两侧概览条的宽度。",
   "settings.field.timeline-hover-preview-enabled.label": "显示概览悬停预览",

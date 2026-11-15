@@ -32,6 +32,8 @@ type AppearanceSettings = Pick<
   | "verticalGridColor"
   | "verticalGridCenterColor"
   | "gridHighlightColor"
+  | "offscreenRegionEnabled"
+  | "offscreenRegionColor"
 >;
 
 /** Drawing preferences only; no cursor, viewport or document caches. */
@@ -58,6 +60,8 @@ export class TimelineAppearance {
   verticalGridColor = "#61640E";
   verticalGridCenterColor = "#9DA00B";
   gridHighlightColor = "#FFFFFF80";
+  offscreenRegionEnabled = true;
+  offscreenRegionColor = "#FF4D4D66";
 
   /** Copy the current timeline display settings into this instance. */
   apply(config: AppearanceSettings): void {
@@ -82,5 +86,7 @@ export class TimelineAppearance {
     this.verticalGridColor = config.verticalGridColor;
     this.verticalGridCenterColor = config.verticalGridCenterColor;
     this.gridHighlightColor = config.gridHighlightColor;
+    this.offscreenRegionEnabled = config.offscreenRegionEnabled;
+    this.offscreenRegionColor = config.offscreenRegionColor;
   }
 }

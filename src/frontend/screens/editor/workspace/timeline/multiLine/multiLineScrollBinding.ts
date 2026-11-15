@@ -9,14 +9,22 @@ import { createLateBound, type LateBound } from "../../../../../../core/utils/la
 import { clamp } from "../../../../../../core/utils/numbers.ts";
 import { createValue, type ValueCell } from "../../../../../../core/state/values.ts";
 export interface MultiLineScrollSnapshot {
+  area: MultiLineScrollArea;
   visible: boolean;
   max: string;
   value: string;
+  step: string;
+  firstPanel: string;
+  lastPanel: string;
+  panelCount: string;
 }
 
 interface MultiLineScrollActions {
   setValue(rawValue: string): void;
   setFromPointer(event: PointerEvent, control: HTMLInputElement): void;
+  moveByPanel(direction: -1 | 1): void;
+  moveToStart(): void;
+  moveToEnd(): void;
 }
 
 export interface MultiLineScrollState {
@@ -28,7 +36,16 @@ export interface MultiLineScrollState {
 export function createMultiLineScrollState(): MultiLineScrollState {
   return Object.freeze({
     snapshot: createValue<MultiLineScrollSnapshot>({
-      initial: { visible: false, max: "0", value: "0" },
+      initial: {
+        area: "notes",
+        visible: false,
+        max: "0",
+        value: "0",
+        step: "0",
+        firstPanel: "0",
+        lastPanel: "0",
+        panelCount: "0",
+      },
     }),
     actions: createLateBound<MultiLineScrollActions>(),
   });
@@ -51,8 +68,10 @@ export function bindMultiLineScroll(
           events: timeline.viewport.multiLineScroll,
         };
       }
-      timeline.viewport.multiLineScroll[getArea()] = Number(rawValue) || 0;
-      state.snapshot.update({ value: rawValue });
+      const maximum = Number(state.snapshot.get().max) || 0;
+      const next = clamp(Number(rawValue) || 0, 0, maximum);
+      timeline.viewport.multiLineScroll[getArea()] = next;
+      state.snapshot.update({ value: String(next) });
       invalidate();
     },
     setFromPointer(event, control) {
@@ -63,6 +82,19 @@ export function bindMultiLineScroll(
       const ratio = clamp((event.clientX - rectangle.left) / rectangle.width, 0, 1);
       const maximum = Number(state.snapshot.get().max) || 0;
       this.setValue(String(Math.round(maximum * ratio)));
+    },
+    moveByPanel(direction) {
+      const snapshot = state.snapshot.get();
+      const current = Number(snapshot.value) || 0;
+      const step = Number(snapshot.step) || 0;
+      const maximum = Number(snapshot.max) || 0;
+      this.setValue(String(Math.min(maximum, Math.max(0, current + direction * step))));
+    },
+    moveToStart() {
+      this.setValue("0");
+    },
+    moveToEnd() {
+      this.setValue(state.snapshot.get().max);
     },
   };
   return state.actions.bind(current);
@@ -80,4 +112,19 @@ export function setMultiLineScrollFromPointer(
   control: HTMLInputElement,
 ): void {
   state.actions.value()?.setFromPointer(event, control);
+}
+
+/** Move the active multi-line viewport by one panel stride. */
+export function moveMultiLineScrollByPanel(state: MultiLineScrollState, direction: -1 | 1): void {
+  state.actions.value()?.moveByPanel(direction);
+}
+
+/** Return the active multi-line viewport to its leftmost position. */
+export function resetMultiLineScroll(state: MultiLineScrollState): void {
+  state.actions.value()?.moveToStart();
+}
+
+/** Move the active multi-line viewport to its rightmost position. */
+export function endMultiLineScroll(state: MultiLineScrollState): void {
+  state.actions.value()?.moveToEnd();
 }

@@ -176,7 +176,16 @@ export class TimelineViewport {
     this.originalPanelWidth = 0;
     this.columnGap = undefined;
     this.multiLineScroll = { notes: 0, events: 0 };
-    this.multiLineScrollState.snapshot.set({ visible: false, max: "0", value: "0" });
+    this.multiLineScrollState.snapshot.set({
+      area: "notes",
+      visible: false,
+      max: "0",
+      value: "0",
+      step: "0",
+      firstPanel: "0",
+      lastPanel: "0",
+      panelCount: "0",
+    });
   }
 
   /** Set and clamp the horizontal zoom for one area. */

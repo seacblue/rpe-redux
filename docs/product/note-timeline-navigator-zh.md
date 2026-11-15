@@ -11,7 +11,7 @@
 在 **note timeline 的底部增加一条只在必要时出现的横向导航 rail**：
 
 - 左右各一个按钮，点击后按“一个判定线面板的 stride”移动，并自动吸附到面板边界。
-- 当左侧仍有被裁切的判定线面板时，在 note timeline 的左内边缘显示一条短白色提示条；右侧同理。
+- 当当前 playhead 所在这一拍的 note 被裁切到视口外时，在对应的 note timeline 内边缘显示一条短提示条；没有这一拍的离屏 note 时不显示白条。
 - 中间显示当前可见的判定线范围，例如 `0–2 / 8`，帮助用户理解“当前移动的是判定线面板，不是歌曲时间”。
 - rail 只在 **多线、分屏（非合并音符）且确实存在横向溢出** 时出现；单线、合并音符、所有面板刚好可见时完全不占空间。
 - 现有左右竖向 overview strip 继续只负责歌曲时间定位、密度/历史提示；不把它改造成横向面板滚动条。
@@ -92,6 +92,7 @@ showRail = session.multiLineActive
 
 ```ts
 interface MultiLineScrollSnapshot {
+  area: "notes" | "events";
   visible: boolean;
   max: string;
   value: string;
@@ -102,6 +103,8 @@ interface MultiLineScrollSnapshot {
 }
 ```
 
+这里的 `visible` 只控制底部三按钮 rail 是否占位；它要求当前 area 有横向溢出。左右边缘提示条不是 snapshot 的简单状态，而是 note renderer 根据当前 `playBeat`、note 的纵向区间和水平裁切结果逐帧绘制。
+
 `step` 使用当前 note 的 `panelStride(width, "notes")`。`firstPanel/lastPanel` 来自 `visiblePanelRange()`，只用于文案和可访问性，不参与第二套布局计算。
 
 ### 4.3 左右白条的判定
@@ -111,16 +114,20 @@ hasLeftOverflow  = value > 0
 hasRightOverflow = value < max
 ```
 
-使用一个很小的 epsilon（建议 `0.5px`）避免浮点误差导致两端闪烁。白条不是可点击控件，也不代表“有 note”；它只代表还有判定线 panel 未出现在视口内。
+使用一个很小的 epsilon（建议 `0.5px`）避免浮点误差导致两端闪烁。这里的 `hasLeftOverflow` / `hasRightOverflow` 只控制底部按钮是否可用，不控制 note 白条。
 
-| 状态   | 左白条 | 右白条               | 左按钮   | 右按钮   |
-| ------ | ------ | -------------------- | -------- | -------- |
-| 起点   | 隐藏   | 显示（若 `max > 0`） | disabled | enabled  |
-| 中间   | 显示   | 显示                 | enabled  | enabled  |
-| 终点   | 显示   | 隐藏                 | enabled  | disabled |
-| 无溢出 | 隐藏   | 隐藏                 | 不渲染   | 不渲染   |
+| 状态   | 左按钮   | 右按钮   |
+| ------ | -------- | -------- |
+| 起点   | disabled | enabled  |
+| 中间   | enabled  | enabled  |
+| 终点   | enabled  | disabled |
+| 无溢出 | 不渲染   | 不渲染   |
 
-白条建议使用 `var(--foreground)` 或主题前景色，而不是硬编码 `#fff`；默认不透明度约 `0.48`，滚动、hover、focus 时提升到 `0.9`。
+note 白条另有一层判断：`noteContainsBeat(noteStart, noteEnd, playBeat)` 且 note body 越过左/右视口边界才绘制。白条不是可点击控件，也不代表还有 panel；它使用主题前景色，仅作为“当前拍的 note 被裁切”的边缘提示，不改变 note 本身的颜色。
+
+### 4.4 authored field 外的背景区域
+
+`-675..675` 是 note 的 authored 横坐标区间。`cameraX` 让这段区间在画布中发生偏移后，超出该区间但仍落在当前 panel 内的部分，在 grid 和 note 之下绘制 `timeline-offscreen-region-color` 背景。默认值是半透明红色 `#FF4D4D66`；`timeline-offscreen-region-enabled` 负责总开关，颜色的 alpha 通道负责透明度。这个区域不是 note 颜色，也不参与命中测试或编辑数据。
 
 ## 5. 交互规格
 
@@ -179,7 +186,7 @@ hasRightOverflow = value < max
 
 ### 事件多线
 
-第一版只在 note timeline 上落地，但状态和 action 应继续以 `area: "notes" | "events"` 设计。这样未来切换到 events 时可以复用同一 rail，而不会把 notes 专属判断散落到几何层。
+底部 rail 复用同一套 `area: "notes" | "events"` 状态和 action；切换到事件模式时，rail 跟随事件 timeline 的底部，不改变 note timeline 的时间坐标。左右 note 白条仍只由 note renderer 绘制，不会出现在事件区域。
 
 ## 7. 缩放与响应式规则
 
@@ -187,7 +194,7 @@ hasRightOverflow = value < max
 
 1. **时间纵向缩放**：继续由现有 timeline zoom 控制。rail 在 canvas 外部，固定 `28px`，不随纵向 scale 变高或变矮。
 2. **panel 横向尺寸**：继续由 `panelLayout()` 的 `visibleCount / panelWidth / panelGap` 决定。按钮 step 永远读取实际 `panelStride`，不写死像素。
-3. **窗口缩窄或选中更多判定线**：`max` 变大后保留当前 offset，再 clamp；如果当前 active panel 不再可见，应把 active panel 调整到最近可见边界，并让白条/文案随新值更新。
+3. **窗口缩窄或选中更多判定线**：`max` 变大后保留当前 offset，再 clamp；如果当前 active panel 不再可见，应把 active panel 调整到最近可见边界，并让范围文案随新值更新；note 白条继续按当前拍和裁切结果独立计算。
 4. **浏览器缩放 / 高 DPI**：按钮与白条使用 CSS 尺寸，canvas 内部继续走现有 device-pixel-ratio 流程，不混用 canvas 像素与 CSS 像素。
 
 第一版不额外增加“水平缩放”按钮。否则用户会同时面对时间缩放、panel 宽度缩放、窗口布局三套尺度，容易把“看更多判定线”和“看更长歌曲时间”混淆。若未来真的需要水平缩放，应在 rail 中明确标为“每屏 panel 数”，而不是使用放大镜图标。
@@ -197,8 +204,8 @@ hasRightOverflow = value < max
 推荐做 **渐进式对比度**，而不是渐进式改变布局：
 
 1. 没有溢出：完全不渲染，不留 28px 空白。
-2. 有溢出但 idle：rail 保留，按钮与文案使用低对比度；白条约 `0.48` 不透明度，始终可见。
-3. pointer 进入 note timeline 底部 64px、点击按钮、发生空白区横向拖拽、或键盘 focus：rail 和白条提升对比度，约 `1.2s` 无输入后回落。
+2. 有溢出但 idle：rail 保留，按钮与文案使用低对比度；当前拍 note 的白条约 `0.48` 不透明度，始终可见。
+3. pointer 进入 note timeline 底部 64px、点击按钮、发生空白区横向拖拽、或键盘 focus：rail 和当前拍 note 的白条提升对比度，约 `1.2s` 无输入后回落。
 4. 用户第一次进入“多线 + 非合并 + 有溢出”状态时，显示一次非阻塞提示：
 
    > 多线音符可以横向浏览；使用时间轴底部箭头，或拖动空白区域移动判定线。
@@ -208,7 +215,7 @@ hasRightOverflow = value < max
 ## 9. 错误与边界
 
 - `max <= 0` 时不允许按钮事件触发；不要让 UI 依赖 disabled 之后的 action 防御。
-- panel 数量变化、退出多线、切换 notes/events 后，先 clamp 再发布 snapshot，避免短暂显示错误的白条。
+- panel 数量变化、退出多线、切换 notes/events 后，先 clamp 再发布 snapshot，避免短暂显示错误的按钮状态或范围文案；note 白条由 note renderer 逐帧重算。
 - `width <= 0` 或 canvas 尚未完成 layout 时，snapshot 暂时为 `visible: false`；第一次有效 resize 后再显示。
 - 数据加载、音频加载、无谱面状态只影响 timeline 是否可见，不应制造一个“看起来可移动但没有内容”的空 rail。
 - 播放时不自动跟随横向 panel；播放头的纵向移动与判定线 panel 的横向位置是两个独立状态。
@@ -227,7 +234,7 @@ hasRightOverflow = value < max
 
 建议测试：
 
-- `max=0 / value=0 / value=max` 的按钮与白条状态。
+- `max=0 / value=0 / value=max` 的按钮状态，以及当前拍 note 白条的左右组合状态。
 - `panelStride` 变化后按钮仍到达正确边界。
 - 多线非合并、合并模式、events 模式之间的显示条件。
 - resize、增加/移除判定线、session restore 后的 clamp 与范围文案。
@@ -237,10 +244,10 @@ hasRightOverflow = value < max
 
 - 单线编辑截图与现状相比没有新增控件或空白。
 - 多线非合并且存在溢出时，note timeline 底部出现 rail；按钮可达、可读、可聚焦。
-- 起点只显示右白条，终点只显示左白条，中间两条都显示；白条不与 note 内容重叠到无法辨认。
+- 当前拍的 note 越过左边界时只显示左白条，越过右边界时只显示右白条；两侧都有越界时两条都显示，没有当前拍离屏 note 时两条都隐藏。
 - 点击右按钮后至少能看到下一个 panel；点击到尾部时不会出现半个无法解释的“死区”。
 - rail 不改变当前歌曲时间、播放头、active line 或编辑历史。
-- 合并音符时 rail 和白条都不出现。
+- 合并音符时 rail 不出现；没有当前拍的 note 越过边界时，白条不出现。
 - `Alt+Wheel` 的时间缩放行为不受影响，现有空白区拖拽仍可平移。
 - 退出多线或切换到 events 后，note rail 立即消失且布局回收高度。
 
