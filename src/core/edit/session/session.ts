@@ -17,6 +17,7 @@ import {
   createChart,
   createLine,
   normalizeChartObjectIds,
+  EVENT_TRACKS,
 } from "../../global/chart/chart.ts";
 import { createChartObjectId } from "../../global/chart/identity.ts";
 import type { Chart, JudgeLine, JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
@@ -37,6 +38,66 @@ import {
 } from "../../global/chart/noise/noiseLine.ts";
 import { lineNoiseConflicts } from "../../global/chart/noise/lineNoiseConflicts.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
+
+/** Counts chart objects newly placed by one local history entry. */
+export interface PlacementStats {
+  notes: number;
+  events: number;
+}
+
+/** Collects stable note and event ids from one chart. */
+function chartObjectIds(chart: Chart): { notes: Set<string>; events: Set<string> } {
+  const notes = new Set<string>();
+  const events = new Set<string>();
+  for (const line of chart.judgeLineList ?? []) {
+    for (const note of line.notes ?? []) {
+      if (typeof note.id === "string") {
+        notes.add(note.id);
+      }
+    }
+    for (const layer of [...(line.eventLayers ?? []), line.extended]) {
+      if (!layer) {
+        continue;
+      }
+      for (const type of EVENT_TRACKS) {
+        for (const event of layer[type] ?? []) {
+          if (typeof event.id === "string") {
+            events.add(event.id);
+          }
+        }
+      }
+    }
+  }
+  return { notes, events };
+}
+
+/** Returns the number of new note and event ids in a chart transition. */
+function placedObjectsBetween(
+  before: { notes: Set<string>; events: Set<string> },
+  after: { notes: Set<string>; events: Set<string> },
+): PlacementStats {
+  let notes = 0;
+  let events = 0;
+  for (const id of after.notes) {
+    if (!before.notes.has(id)) {
+      notes += 1;
+    }
+  }
+  for (const id of after.events) {
+    if (!before.events.has(id)) {
+      events += 1;
+    }
+  }
+  return { notes, events };
+}
+
+/** Applies a placement delta while keeping the local counters non-negative. */
+function addPlacementStats(current: PlacementStats, delta: PlacementStats): PlacementStats {
+  return {
+    notes: Math.max(0, current.notes + delta.notes),
+    events: Math.max(0, current.events + delta.events),
+  };
+}
 
 /** Which object kind the inspector and the keyboard act on. */
 export type EditorFocus = "notes" | "events";
@@ -130,6 +191,8 @@ export class EditorSession extends EventTarget {
   multiLineSelection: Map<number, Set<number>>;
   multiEventSelection: Map<number, Set<string>>;
   multiSelectionIntent: unknown;
+  /** Local placement totals since this editor session was created. */
+  localPlacementStats: PlacementStats;
   editSeconds: number;
   recentEdits: RecentEdit[];
   /** Beat span of the latest commit or history move, used by undo jump. */
@@ -155,6 +218,8 @@ export class EditorSession extends EventTarget {
   collaborationActorId = "";
   private mutationGate: SessionMutationGate | null = null;
   private fingerprintWarm?: Promise<string>;
+  /** Placement contribution attached to each retained history entry. */
+  private readonly placementStatsByHistoryId = new Map<number, PlacementStats>();
 
   /** Runtime editing switches kept with this editor session; unset values use caller defaults. */
   declare cutDensity: number;
@@ -203,6 +268,7 @@ export class EditorSession extends EventTarget {
     this.multiLineSelection = new Map();
     this.multiEventSelection = new Map();
     this.multiSelectionIntent = null;
+    this.localPlacementStats = { notes: 0, events: 0 };
     this.editSeconds = 0;
     this.recentEdits = [];
     this.lastEditBeatRange = null;
@@ -541,6 +607,8 @@ export class EditorSession extends EventTarget {
                 },
           }
         : metadata;
+    // Capture ids before a paged document mutates its live facade during record.
+    const previousObjectIds = chartObjectIds(this.chart);
     const beforeHook = extensionRegistry.hasHook("session:before-commit");
     const before = beforeHook
       ? {
@@ -598,10 +666,17 @@ export class EditorSession extends EventTarget {
     );
     if (committed) {
       this.lastEditBeatRange = beatRange ?? null;
+      const placement = remote
+        ? { notes: 0, events: 0 }
+        : placedObjectsBetween(previousObjectIds, chartObjectIds(this.chart));
       if (options.afterSelection) {
         restoreSelection(this, options.afterSelection);
       }
       const entry = this.history.undoStack.at(-1);
+      if (entry) {
+        this.placementStatsByHistoryId.set(entry.id, placement);
+        this.localPlacementStats = addPlacementStats(this.localPlacementStats, placement);
+      }
       const time = Number.isFinite(this.editSeconds) ? Math.max(0, this.editSeconds) : 0;
       if (entry) {
         this.recentEdits.push({
@@ -861,6 +936,11 @@ export class EditorSession extends EventTarget {
     if (!this.history[direction]()) {
       return false;
     }
+    const placement = this.placementStatsByHistoryId.get(command.id) ?? { notes: 0, events: 0 };
+    this.localPlacementStats = addPlacementStats(
+      this.localPlacementStats,
+      direction === "undo" ? { notes: -placement.notes, events: -placement.events } : placement,
+    );
     restoreSelection(
       this,
       sameSelection(current, from) && to ? to : remapSelection(source, this.chart, current),

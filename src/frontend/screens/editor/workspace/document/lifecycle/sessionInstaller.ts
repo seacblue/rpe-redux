@@ -28,6 +28,8 @@ export interface DocumentInstallOptions {
     document: Pick<DocumentReplacement, "assets" | "folders" | "name" | "diagnostics" | "readOnly">,
   ): void;
   resetEditClock(): void;
+  /** Attach the new document to the installation-local charting ledger. */
+  attachLocalStats?(session: EditorSession): void;
   hitSounds: Pick<HitSounds, "setProject">;
   images: Pick<ProjectImages, "load">;
   /** Re-applies editor preferences to the new session before the first frame. */
@@ -46,6 +48,7 @@ export function createSessionInstaller(options: DocumentInstallOptions) {
       : new EditorSession(replacement.chart, replacement.readOnly);
     session.setMutationGate(options.mutationGate);
     options.session.replace(session);
+    options.attachLocalStats?.(session);
     options.history.clipboard.attach(session);
     options.resetSelectionView();
     session.history.limit = options.history.limit();
