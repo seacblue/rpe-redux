@@ -75,6 +75,7 @@ test("a failure line keeps its first line and a bounded length", () => {
 });
 
 test("backend port conflicts get an actionable startup diagnosis", () => {
+  assert.equal(isBackendPortConflict("backend_port_conflict: address already in use"), true);
   assert.equal(
     isBackendPortConflict(
       "Backend port 47821 is already in use. Start the next copy with --backend-port=<different-port>.",

@@ -125,6 +125,7 @@ import {
 } from "../runtime/providers/DocumentProvider.tsx";
 import { useEditorSession } from "../runtime/providers/SessionProvider.tsx";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
+import { createFeedbackDedupe } from "../runtime/session/feedbackPolicy.ts";
 import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
 import { takePendingDesktopInvite } from "../../../../platform/desktopDeepLink.ts";
 import { inspectRoomInvite } from "./roomInvitePreview.ts";
@@ -732,6 +733,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const roomAttempt = useRef(0);
   const joinedRecoveryFingerprint = useRef<string | null>(null);
   const roomDocumentAdopted = useRef(false);
+  const failureDedupe = useRef(createFeedbackDedupe()).current;
   const storedHostSession = useRef<StoredHostSession | null>(null);
   const storedGuestSession = useRef<StoredHostSession | null>(null);
   const guestResumeAttempted = useRef(false);
@@ -1147,12 +1149,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
             publicUrl = normalizeRoomServerUrl(await invoke<string>("start_collab_tunnel"));
           }
         } catch (error) {
-          showToast(
-            t("workspace.collaboration.hostFailed", {
-              detail: error instanceof Error ? error.message : String(error),
-            }),
-            "error",
-          );
+          const message = t("workspace.collaboration.hostFailed", {
+            detail: error instanceof Error ? error.message : String(error),
+          });
+          const progress = collaborationProgress.get();
+          if (progress.visible && !progress.ready) {
+            failProgress(message);
+          } else {
+            showToast({ message, level: "error", source: "collaboration" });
+          }
         }
       }
       const currentClient = clientRef.current;
@@ -1488,8 +1493,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   // Callbacks read the latest editor closures; installing them after each
   // commit keeps the client independent of React's render cycle.
   useEffect(() => {
-    const showNotice = (description: string, level = "warning") => {
-      showToast(description, level);
+    const showNotice = (description: string, level = "warning", code?: string) => {
+      const roomId = stateCell.get().roomId ?? "no-room";
+      const key = `collaboration:${roomId}:${code ?? description}`;
+      if (level === "error" && !failureDedupe.claim(key)) {
+        return;
+      }
+      showToast({ message: description, level, key, source: "collaboration" });
     };
     const connectionErrorText = (message: string, code?: string): string => {
       switch (code) {
@@ -1557,19 +1567,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           parsed = normalizeChartObjectIds(chart);
         } catch (error) {
           const detail = error instanceof Error ? error.message : String(error);
+          const message = t("workspace.collaboration.invalidSnapshot", { detail });
           if (collaborationProgress.get().visible) {
-            failProgress(
-              t("workspace.collaboration.invalidSnapshot", {
-                detail,
-              }),
-            );
+            failProgress(message);
+          } else {
+            showNotice(message, "error", "invalid_snapshot");
           }
-          showNotice(
-            t("workspace.collaboration.invalidSnapshot", {
-              detail,
-            }),
-            "error",
-          );
           client.requestSnapshot();
           return;
         }
@@ -1745,17 +1748,19 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       },
       error: (message, code) => {
         const progress = collaborationProgress.get();
-        if (progress.visible && !progress.ready) {
-          failProgress(connectionErrorText(message, code));
+        const text = connectionErrorText(message, code);
+        const ownsProgress = progress.visible && !progress.ready;
+        if (ownsProgress) {
+          failProgress(text);
         }
         if (code === "removed") {
           finishRoomExit();
-          showNotice(connectionErrorText(message, code), "warning");
+          showNotice(text, "warning", code);
           return;
         }
         if (code === "room_closed") {
           finishRoomExit();
-          showNotice(connectionErrorText(message, code), "warning");
+          showNotice(text, "warning", code);
           return;
         }
         if (
@@ -1799,7 +1804,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           retainRecovery(sessionRuntime.current.chart, sessionRuntime.current.chartDocument);
           clientRef.current?.requestSnapshot();
         }
-        showNotice(connectionErrorText(message, code), "error");
+        if (!ownsProgress) {
+          showNotice(text, "error", code);
+        }
       },
       assetProgress: (event) => {
         const current = collaborationProgress.get();
@@ -1827,7 +1834,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       },
       assetError: (message, assetName) => {
         markGuestAssetError(assetName, message);
-        showNotice(message, "error");
+        const progress = collaborationProgress.get();
+        if (!progress.visible || progress.ready) {
+          showNotice(message, "error", "asset_error");
+        }
       },
       memberLeft: (memberId) => {
         const member = clientRef.current?.state
@@ -1913,7 +1923,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
               t("workspace.collaboration.assetUploadFailed"),
               "asset_upload_failed",
             );
-            showToast(t("workspace.collaboration.assetUploadFailed"), "error");
+            showToast({
+              message: t("workspace.collaboration.assetUploadFailed"),
+              level: "error",
+              source: "collaboration",
+            });
             return;
           }
           const keys = changeLockKeys(changes);
@@ -1974,10 +1988,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       sessionRuntime.current.chart,
     ).then((ok) => {
       if (!ok) {
-        showToast(t("workspace.collaboration.assetUploadFailed"), "error");
         const progress = collaborationProgress.get();
-        if (progress.visible && progress.role === "host") {
+        if (progress.visible && progress.role === "host" && !progress.ready) {
           failProgress(t("workspace.collaboration.assetUploadFailed"));
+        } else {
+          showToast({
+            message: t("workspace.collaboration.assetUploadFailed"),
+            level: "error",
+            source: "collaboration",
+          });
         }
         return;
       }
@@ -2029,7 +2048,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       true,
     ).then((ok) => {
       if (!ok) {
-        showToast(t("workspace.collaboration.assetUploadFailed"), "error");
+        showToast({
+          message: t("workspace.collaboration.assetUploadFailed"),
+          level: "error",
+          source: "collaboration",
+        });
         return;
       }
       void requestChartAssets(clientRef.current, contextRef.current.documentRuntime, chart).then(
@@ -2386,7 +2409,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         joinedRecoveryFingerprint.current = null;
         collaborationRoomDocument.set(false);
         setJoiningRoom(false);
-        showToast(t("workspace.collaboration.recoveryWriteFailed"), "error");
         failProgress(t("workspace.collaboration.recoveryWriteFailed"));
         return;
       }

@@ -3,17 +3,6 @@
  * and validation messages.
  */
 export default {
-  "shortcuts.rpeSection.title": "从 RPE 迁移的快捷键",
-  "shortcuts.rpeSection.summary": "已映射 {mapped} 个，未映射 {unmapped} 个。",
-  "shortcuts.rpeSection.mapped": "已映射",
-  "shortcuts.rpeSection.unmapped": "未映射（原版 RPE 有、这里没有对应命令）",
-  "shortcuts.rpeSection.revealHint": "跳到这条命令",
-  "shortcuts.rpeSection.unknownAction": "这里没有对应命令",
-  "shortcuts.rpeSection.invalidBinding": "按键无法解析",
-  "shortcuts.rpeSection.clear": "清除迁移记录",
-  "shortcuts.rpeSection.expand": "展开",
-  "shortcuts.rpeSection.collapse": "收起",
-  "shortcuts.rpeSection.more": "另有 {count} 条未显示。",
   "shortcuts.category.workspace": "工作区",
   "shortcuts.category.file": "文件",
   "shortcuts.category.developer": "开发者",
@@ -28,6 +17,8 @@ export default {
 
   "shortcuts.library.previous": "上一张谱面",
   "shortcuts.library.next": "下一张谱面",
+  "shortcuts.library.seekBackward": "试听后退 5 秒",
+  "shortcuts.library.seekForward": "试听前进 5 秒",
 
   "shortcuts.editor.save": "保存谱面",
   "shortcuts.editor.undo": "撤销",

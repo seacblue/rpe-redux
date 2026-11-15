@@ -531,7 +531,13 @@ export function ShaderInspectorView({
                     }
                   />
                 </FieldRows>
-                <EasingPreview event={segment} />
+                <EasingPreview
+                  event={{
+                    ...segment,
+                    startValue: typeof segment.start === "number" ? segment.start : undefined,
+                    endValue: typeof segment.end === "number" ? segment.end : undefined,
+                  }}
+                />
                 <Button
                   type="button"
                   variant="danger"

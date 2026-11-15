@@ -25,6 +25,7 @@
  * }
  * ```
  */
+import { toBlobPart } from "../../utils/bytes.ts";
 
 /** A blob URL that stays valid until `releaseObjectUrl` is called with it. */
 export function objectUrlFor(blob: Blob): string {
@@ -75,6 +76,72 @@ export function hasImageBitmap(): boolean {
  */
 export function decodeImageBitmap(blob: Blob, options: ImageBitmapOptions): Promise<ImageBitmap> {
   return createImageBitmap(blob, options);
+}
+
+/** Decode and encode a bounded cover thumbnail for the local library. */
+export async function createImageThumbnail(
+  bytes: Uint8Array,
+  maxWidth: number,
+  maxHeight: number,
+): Promise<Uint8Array | null> {
+  const blob = new Blob([toBlobPart(bytes)]);
+  let source: ImageBitmap | HTMLImageElement | null = null;
+  let objectUrl = "";
+  try {
+    if (hasImageBitmap()) {
+      source = await decodeImageBitmap(blob, {});
+    } else if (typeof Image !== "undefined") {
+      objectUrl = objectUrlFor(blob);
+      const image = createImageElement();
+      image.src = objectUrl;
+      await image.decode();
+      source = image;
+    }
+    if (!source) {
+      return null;
+    }
+    const sourceWidth = "naturalWidth" in source ? source.naturalWidth : source.width;
+    const sourceHeight = "naturalHeight" in source ? source.naturalHeight : source.height;
+    if (!sourceWidth || !sourceHeight) {
+      return null;
+    }
+    const scale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
+    const canvas =
+      typeof OffscreenCanvas !== "undefined"
+        ? new OffscreenCanvas(width, height)
+        : typeof document !== "undefined"
+          ? Object.assign(document.createElement("canvas"), { width, height })
+          : null;
+    if (!canvas) {
+      return null;
+    }
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+    context.drawImage(source, 0, 0, width, height);
+    const output = await canvasToBlob(canvas);
+    return output ? new Uint8Array(await output.arrayBuffer()) : null;
+  } catch {
+    return null;
+  } finally {
+    if (source && "close" in source) {
+      source.close();
+    }
+    if (objectUrl) {
+      releaseObjectUrl(objectUrl);
+    }
+  }
+}
+
+/** Ask either canvas implementation for a PNG blob. */
+function canvasToBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Blob | null> {
+  if ("convertToBlob" in canvas) {
+    return canvas.convertToBlob({ type: "image/png" });
+  }
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
 
 /** Window metrics for sizing decoded media, with unavailable values reported as 0. */

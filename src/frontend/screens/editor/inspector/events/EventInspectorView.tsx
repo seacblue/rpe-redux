@@ -433,6 +433,8 @@ export function EventInspectorView({
         bezierPoints={curveValues.bezierPoints}
         easingLeft={curveValues.easingLeft}
         easingRight={curveValues.easingRight}
+        startValue={typeof event.start === "number" ? event.start : undefined}
+        endValue={typeof event.end === "number" ? event.end : undefined}
         onChange={changeCurve}
         onPreview={onCurvePreview}
         easingLabel={t("editorPanels.inspector.event.easing")}

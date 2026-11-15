@@ -183,10 +183,35 @@ export class Timeline {
           return false;
         }
         event.preventDefault();
-        const changed = this.gestures.onWheel(event);
-        if (changed) {
-          this.changed();
+        // A wheel can arrive before a coalesced pointermove. Keep the guide
+        // pointer in sync with the actual wheel target so the final seek frame
+        // does not lose its nearby-only reveal state.
+        const rectangle = canvas.getBoundingClientRect();
+        const pointer = {
+          x: event.clientX - rectangle.left,
+          y: event.clientY - rectangle.top,
+        };
+        // Synthetic/programmatic wheel events may report (0, 0), which is
+        // outside a canvas mounted below the toolbar. Do not replace a valid
+        // hover point with that sentinel or the whole guide field fades out.
+        if (
+          pointer.x >= 0 &&
+          pointer.x <= canvas.clientWidth &&
+          pointer.y >= 0 &&
+          pointer.y <= canvas.clientHeight
+        ) {
+          if (canvas === notesCanvas) {
+            this.gestures.cursor = pointer;
+            this.gestures.hoverArea = "notes";
+          } else {
+            this.gestures.eventCursor = pointer;
+            this.gestures.hoverArea = "events";
+          }
         }
+        const changed = this.gestures.onWheel(event);
+        // The guide pointer is visual state even when a small trackpad delta
+        // has not accumulated into a seek notch yet.
+        this.changed();
         return changed;
       },
       contextMenu: (event: MouseEvent) => {

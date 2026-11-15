@@ -128,13 +128,13 @@ func (s *Service) writeRestoreProject(ctx context.Context, tx *sql.Tx, manifest 
         INSERT INTO projects
             (id, name, grp, archived, charter, composer, level, note_count, event_count,
              edit_seconds, chart, size, revision, chart_hash, view_state, asset_folders,
-             background, song, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             background, thumbnail, song, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		manifest.ID, manifest.Name, manifest.Group, boolInt(manifest.Archived),
 		manifest.Charter, manifest.Composer, manifest.Level, manifest.NoteCount, eventCount,
 		manifest.EditSeconds, string(chart), len(chart), manifest.Revision, manifest.Chart.Hash,
 		string(validJSON(manifest.ViewState, "{}")), string(validJSON(manifest.AssetFolders, "[]")),
-		manifest.Background, manifest.Song, manifest.CreatedAt, manifest.UpdatedAt); err != nil {
+		manifest.Background, manifest.Thumbnail, manifest.Song, manifest.CreatedAt, manifest.UpdatedAt); err != nil {
 		return fmt.Errorf("insert restored project %s: %w", manifest.ID, err)
 	}
 	for _, asset := range manifest.Assets {

@@ -156,6 +156,7 @@ function convertLine(line: unknown, sourceVersion: number | null): unknown {
 export function convertChartToCurrentVersion(
   value: unknown,
   report: ChartCompatibilityReport = detectChartCompatibility(value),
+  onProgress?: (completed: number, total: number) => void,
 ): ChartConversion | null {
   if (!isRecord(value) || !isRecord(value.META)) {
     return null;
@@ -163,8 +164,14 @@ export function convertChartToCurrentVersion(
   if (!report.requiresConversion) {
     return { chart: value as Chart, report, converted: false };
   }
-  const lines = Array.isArray(value.judgeLineList)
-    ? value.judgeLineList.map((line) => convertLine(line, report.rpeVersion))
+  const sourceLines = Array.isArray(value.judgeLineList) ? value.judgeLineList : null;
+  onProgress?.(0, sourceLines?.length ?? 0);
+  const lines = sourceLines
+    ? sourceLines.map((line, index) => {
+        const converted = convertLine(line, report.rpeVersion);
+        onProgress?.(index + 1, sourceLines.length);
+        return converted;
+      })
     : value.judgeLineList;
   return {
     chart: {

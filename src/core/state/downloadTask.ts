@@ -1,5 +1,10 @@
 /** Adapt a cancellable package download into the retained long-task surface. */
-import { startLongTask, type LongTaskContext } from "./longTasks.ts";
+import {
+  cancelLongTask,
+  removeLongTask,
+  startLongTask,
+  type LongTaskContext,
+} from "./longTasks.ts";
 
 /** The terminal result observed by the download owner. */
 export type DownloadTaskOutcome =
@@ -11,6 +16,38 @@ export type DownloadTaskOutcome =
 export interface DownloadTaskHandle {
   readonly id: string;
   readonly done: Promise<DownloadTaskOutcome>;
+}
+
+let activeDownloadTaskId: string | null = null;
+
+/** Remember the one update download exposed to global controls. */
+export function setActiveDownloadTask(id: string): void {
+  activeDownloadTaskId = id;
+}
+
+/** Release the active update download after its task settles. */
+export function clearActiveDownloadTask(id: string): void {
+  if (activeDownloadTaskId === id) {
+    activeDownloadTaskId = null;
+  }
+}
+
+/** Request cancellation for the active update download. */
+export function cancelActiveDownload(): boolean {
+  if (!activeDownloadTaskId) {
+    return false;
+  }
+  cancelLongTask(activeDownloadTaskId);
+  return true;
+}
+
+/** Cancel and remove the active update download after cleanup. */
+export function removeActiveDownload(): boolean {
+  if (!activeDownloadTaskId) {
+    return false;
+  }
+  removeLongTask(activeDownloadTaskId);
+  return true;
 }
 
 /** Download callback used by the long-task adapter and by deterministic mocks. */

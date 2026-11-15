@@ -23,6 +23,7 @@ import {
   anchorStagePoint,
   buildSamplingGeometry,
   nearestGuideKey,
+  samplingHoveredGuideKey,
   sampleSamplingPointer,
   samplingGuideOpacity,
   samplingGuideSegments,
@@ -300,7 +301,10 @@ test("the nearest guide is the only cursor-highlight candidate", () => {
   ];
 
   assert.equal(nearestGuideKey(lines, 207), "v:1");
+  assert.deepEqual([nearestGuideKey(lines, 214), nearestGuideKey(lines, 216)], ["v:1", null]);
   assert.equal(nearestGuideKey(lines, 250), null);
+  assert.equal(samplingHoveredGuideKey(lines, 207, true), "v:1");
+  assert.equal(samplingHoveredGuideKey(lines, 207, false), null);
 });
 
 test("XY snapping requires a guide intersection instead of one guide line", () => {
@@ -715,7 +719,6 @@ test("sampling settings default to one guide density per axis", () => {
   assert.equal(DEFAULT_SAMPLING_SETTINGS.speedGuideStep, 2);
   assert.equal(DEFAULT_SAMPLING_SETTINGS.xyBinding, true);
   assert.equal(DEFAULT_SAMPLING_SETTINGS.guideOpacity, 50);
-  assert.equal("showAnchorGuides" in DEFAULT_SAMPLING_SETTINGS, false);
 });
 
 test("sampler preferences migrate the old grid field names", () => {

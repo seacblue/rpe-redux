@@ -379,6 +379,9 @@ export class HitSounds {
     }
     this.sources.clear();
     this.revision = -1;
+    // A replay restarts on the same timestamps, so the per-timestamp voice
+    // budget belongs to one transport run and must not accumulate across runs.
+    this.soundPolicy.reset();
   }
 
   /** Advance the trigger cursor and schedule sounds within the look-ahead window. */

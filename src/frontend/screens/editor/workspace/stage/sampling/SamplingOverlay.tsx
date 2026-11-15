@@ -34,6 +34,7 @@ import {
 } from "../../../sampling/samplingSession.ts";
 import { SamplingGuideLayer } from "./SamplingGuideLayer.tsx";
 import { SamplingEasingPanel } from "./SamplingEasingPanel.tsx";
+import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
 import {
   anchorStagePoint,
   buildSamplingGeometry,
@@ -101,6 +102,11 @@ export function SamplingOverlay() {
     samplingSettings.subscribe,
     samplingSettings.get,
     samplingSettings.get,
+  );
+  const hoverGuidesEnabled = useSyncExternalStore(
+    displayValues.hoverGuidesEnabled.subscribe,
+    displayValues.hoverGuidesEnabled.get,
+    displayValues.hoverGuidesEnabled.get,
   );
   const shortcutViews = useSyncExternalStore(
     shortcutRegistry.subscribe,
@@ -542,6 +548,7 @@ export function SamplingOverlay() {
           startPoint={startPoint}
           endPoint={endPoint}
           showGuides={showGuides}
+          hoverGuidesEnabled={hoverGuidesEnabled}
           showAnchors={showAnchors}
           cursor={cursor}
           dragging={session.dragging}

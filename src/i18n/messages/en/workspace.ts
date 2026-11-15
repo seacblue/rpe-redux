@@ -2,10 +2,6 @@
  * The workspace surface: the timeline header, the canvas stage, the welcome
  * page and the dialogs the shell renders around them.
  *
- * `src/frontend/screens/editor/workspace/runtime/` is the imperative editor and keeps its own
- * namespace; everything here is rendered by the React shell, so a reviewer
- * looking at `src/frontend/screens/editor/workspace/stage/` finds its text in `workspace.stage.*`.
- *
  * Generic words are not repeated here: the modal's delete and apply buttons and
  * its close tooltip are the same words everywhere and come from `common.*`.
  */
@@ -156,9 +152,6 @@ export default {
   "workspace.history.redoUnavailable": "Redo is unavailable while editing a room.",
   "workspace.history.codeCell": "Code cell",
   "workspace.history.discarded": "Snapshot discarded",
-
-  /** Not shown: the library menu carries the reachable copy of these actions. */
-
   "workspace.welcome.settings": "Settings",
   "workspace.welcome.more": "More",
   "workspace.welcome.moreMenu": "More actions",
@@ -177,8 +170,10 @@ export default {
   "workspace.welcome.drop.openSettings": "Open settings",
   "workspace.welcome.drop.invalidPackage": "The package {name} could not be validated.",
   "workspace.welcome.drop.unsupported": "This drop is not a chart, Extension, or note skin: {name}",
+  "workspace.welcome.import.title": "Import chart",
+  "workspace.welcome.import.chartTask": "Import chart {name}",
+  "workspace.welcome.importing": "Importing {name}…",
   "workspace.welcome.rpe.title": "Migrate from RPE",
-  "workspace.welcome.rpe.viewHotkeys": "View key mapping",
   "workspace.welcome.rpe.pickFolder": "Choose an RPE installation folder",
   "workspace.welcome.rpe.chartCount": "{count} chart(s)",
   "workspace.welcome.rpe.settingsFound": "Settings.json",
@@ -194,6 +189,10 @@ export default {
   "workspace.welcome.rpe.desktopOnly": "RPE import is available in the desktop application.",
   "workspace.welcome.rpe.notFound":
     "No PhiEdit.exe with a Resources folder, RPE settings, hotkeys, or chart folders were found.",
+  "workspace.welcome.pe.title": "Import from PhiEdit",
+  "workspace.welcome.pe.pickFolder": "Choose a PhiEditer installation folder",
+  "workspace.welcome.pe.desktopOnly": "PhiEdit imports are available in the desktop application.",
+  "workspace.welcome.pe.notFound": "No PhiEditer chart folder was found.",
   "workspace.welcome.external.title": "Import official or PhiEdit chart",
   "workspace.welcome.external.importing": "Importing {name}…",
   "workspace.welcome.external.done": "Imported {name} with {warnings} warning(s).",
@@ -244,6 +243,8 @@ export default {
   "workspace.welcome.library.sort.oldest": "Oldest first",
   "workspace.welcome.library.sort.az": "A > Z",
   "workspace.welcome.library.sort.za": "Z > A",
+  "workspace.welcome.library.filter.label": "Filter by group",
+  "workspace.welcome.library.filter.empty": "No groups",
   "workspace.welcome.library.view.label": "Chart view",
   "workspace.welcome.library.view.list": "List",
   "workspace.welcome.library.view.grid": "Grid",

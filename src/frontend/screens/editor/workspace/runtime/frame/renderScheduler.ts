@@ -205,7 +205,7 @@ export class EditorRenderScheduler {
     const timelinePending =
       this.forcedTimeline ||
       request.timelineRevision !== this.committed.timelineRevision ||
-      (request.playing && request.viewportOrigin !== this.committed.viewportOrigin) ||
+      request.viewportOrigin !== this.committed.viewportOrigin ||
       request.previewSession !== this.committed.timelinePreviewSession;
     const previewPending =
       request.previewVisible &&

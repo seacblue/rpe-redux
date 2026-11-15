@@ -134,7 +134,7 @@ function refreshModal() {
     for (const node of parent.children) {
       if (
         !(node instanceof HTMLElement) ||
-        node.matches(".redux-modal-scrim, .app-toasts, .redux-popconfirm")
+        node.matches(".redux-modal-scrim, .app-toasts, .redux-popconfirm, .redux-control-popup")
       ) {
         continue;
       }
@@ -491,7 +491,7 @@ function installListeners() {
       active &&
       target instanceof HTMLElement &&
       !active.contains(target) &&
-      !target.closest(".redux-window-controls")
+      !target.closest(".redux-window-controls, .redux-control-popup")
     ) {
       active.querySelector<HTMLElement>("button, input, [tabindex]")?.focus();
     }

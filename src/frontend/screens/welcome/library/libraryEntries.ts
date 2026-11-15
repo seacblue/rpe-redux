@@ -5,6 +5,7 @@
  * pane only need one shape.
  */
 import type { HomeLibraryProject, HomeProjectCardsSnapshot } from "../homeProjectCards.ts";
+import { normalizeLibraryGroup } from "./libraryGroups.ts";
 
 /** Where an entry is opened from. */
 export type LibraryEntrySource = { kind: "project"; project: HomeLibraryProject };
@@ -37,16 +38,23 @@ export function buildLibraryEntries(snapshot: HomeProjectCardsSnapshot | null): 
   if (!snapshot) {
     return [];
   }
-  return snapshot.libraryProjects.map((project) => ({
-    key: `project:${project.id}`,
-    title: project.name || project.id,
-    composer: project.composer,
-    charter: project.charter,
-    level: project.level,
-    cover: project.coverUrl ?? "",
-    audio: project.song && project.audioUrl ? { name: project.song, url: project.audioUrl } : null,
-    source: { kind: "project", project },
-  }));
+  return snapshot.libraryProjects.map((project) => {
+    const normalizedProject = {
+      ...project,
+      group: normalizeLibraryGroup(project.group),
+    };
+    return {
+      key: `project:${project.id}`,
+      title: project.name || project.id,
+      composer: project.composer,
+      charter: project.charter,
+      level: project.level,
+      cover: project.thumbnailUrl ?? project.coverUrl ?? "",
+      audio:
+        project.song && project.audioUrl ? { name: project.song, url: project.audioUrl } : null,
+      source: { kind: "project", project: normalizedProject },
+    };
+  });
 }
 
 /** Keeps entries whose displayed and detail metadata match the query. */
@@ -58,4 +66,12 @@ export function matchesLibraryQuery(entry: LibraryEntry, needle: string): boolea
     .join(" ")
     .toLocaleLowerCase()
     .includes(needle);
+}
+
+/** Keeps an entry when no group is selected or its stored group is selected. */
+export function matchesLibraryGroups(
+  entry: LibraryEntry,
+  selectedGroups: ReadonlySet<string>,
+): boolean {
+  return selectedGroups.size === 0 || selectedGroups.has(entry.source.project.group);
 }

@@ -147,6 +147,7 @@ export function resourceReferences(
   const infer = (extensions: RegExp): string => {
     const candidates = [...assetNames(assets)].filter(
       (name) =>
+        !name.startsWith("__redux/") &&
         extensions.test(name) &&
         cachedNormalizePath(name).split("/").slice(0, -1).join("/") === directory,
     );
