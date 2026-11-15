@@ -696,4 +696,10 @@ export default {
   "settings.field.timeline-range-bar-opacity.label": "范围区域透明度",
   "settings.field.timeline-range-bar-opacity.description":
     "时间轴两侧概览条上剪贴板与粘贴范围的透明度。",
+  "settings.field.timeline-offscreen-region-enabled.label": "显示离屏时间轴区域",
+  "settings.field.timeline-offscreen-region-enabled.description":
+    "给超出音符时间轴 X 坐标范围 -675 到 675 的背景加色。",
+  "settings.field.timeline-offscreen-region-color.label": "离屏区域颜色",
+  "settings.field.timeline-offscreen-region-color.description":
+    "颜色的透明度会控制背景区域的显示强度。",
 } as const;

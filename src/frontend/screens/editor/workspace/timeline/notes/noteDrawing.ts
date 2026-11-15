@@ -41,6 +41,8 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
+import { noteContainsBeat, offscreenCueSides } from "./noteOffscreenCue.ts";
+import { offscreenRegionSegments } from "./noteOffscreenRegion.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -122,6 +124,131 @@ function cachedNoteVerticalProjection(
     projection.project(
       receiver.cache.tempoSeconds(receiver.viewport.tempo, beat, projection.factor),
     );
+}
+
+/** Paint current-beat note cues at each visible note timeline's side edges. */
+function drawOffscreenNoteCues(
+  receiver: TimelineNoteDrawingReceiver,
+  context: CanvasRenderingContext2D,
+  palette: CanvasPalette,
+  playBeat: number,
+  width: number,
+  height: number,
+): void {
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+  const session = receiver.getSession();
+  const multiplePanels = session.multiLineActive && receiver.viewport.panelCount("notes") > 1;
+  const lineIndices = multiplePanels ? session.targetLineIndices : [session.lineIndex];
+  const panelWidth = receiver.viewport.panelWidth(width, "notes");
+  const panelStride = receiver.viewport.panelStride(width, "notes");
+  const panelOffset = receiver.viewport.multiLineViewportOffset(width, "notes");
+  const [firstPanel, lastPanel] = multiplePanels
+    ? receiver.viewport.visiblePanelRange(width, "notes")
+    : [0, 0];
+  const startPanel = multiplePanels ? firstPanel : 0;
+  const endPanel = multiplePanels ? Math.min(lastPanel, lineIndices.length - 1) : 0;
+  const cueWidth = Math.min(6, Math.max(2, width / 80));
+  context.save();
+  context.fillStyle = palette.foreground;
+  context.globalAlpha = 0.82;
+  for (let panel = startPanel; panel <= endPanel; panel++) {
+    const lineIndex = lineIndices[panel] ?? session.lineIndex;
+    const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
+    const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
+    const [bottomBeat, topBeat] = receiver.viewport.noteBeatRangeForLine(
+      lineIndex,
+      height,
+      "notes",
+    );
+    const line = session.chart.judgeLineList?.[lineIndex];
+    receiver.cache.refreshNotes(lineIndex, line?.notes ?? []);
+    const noteIndex = receiver.cache.noteIndex(lineIndex);
+    if (!noteIndex) {
+      continue;
+    }
+    const projection = noteProjectionFor(receiver, lineIndex, height);
+    const panelProjection = receiver.viewport.notePanelProjectionForLine(width, lineIndex);
+    const cachedNoteData = receiver.cache.noteRenderDataSet(
+      noteIndex.notes,
+      receiver.viewport.tempo,
+      projection.factor,
+      receiver.viewport.gridCount,
+    );
+    for (let index = 0; index < noteIndex.notes.length; index++) {
+      const note = noteIndex.notes[index];
+      const prepared = cachedNoteData[index];
+      if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
+        continue;
+      }
+      if (Math.min(prepared.start, prepared.end) > topBeat) {
+        break;
+      }
+      if (!noteContainsBeat(prepared.start, prepared.end, playBeat)) {
+        continue;
+      }
+      const horizontal = panelProjection.horizontal(note.positionX);
+      const sides = offscreenCueSides(
+        horizontal,
+        receiver.viewport.noteWidth(note),
+        panelLeft,
+        panelRight,
+      );
+      if (!sides.length) {
+        continue;
+      }
+      const vertical = projection.project(prepared.startSeconds);
+      const endVertical = projection.project(prepared.endSeconds);
+      const top = Math.max(0, Math.min(height - 1, Math.min(vertical, endVertical) - 3));
+      const cueHeight = Math.max(6, Math.min(height - top, Math.abs(endVertical - vertical) || 6));
+      for (const side of sides) {
+        const x = side === "left" ? Math.max(0, panelLeft) : Math.min(width, panelRight) - cueWidth;
+        if (x >= 0 && x + cueWidth <= width) {
+          context.fillRect(x, top, cueWidth, cueHeight);
+        }
+      }
+    }
+  }
+  context.restore();
+}
+
+/** Paint the X-coordinate overflow outside the authored -675..675 range. */
+function drawOffscreenRegion(
+  receiver: TimelineNoteDrawingReceiver,
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  if (!receiver.appearance.offscreenRegionEnabled || width <= 0 || height <= 0) {
+    return;
+  }
+  const session = receiver.getSession();
+  const multiplePanels = session.multiLineActive && receiver.viewport.panelCount("notes") > 1;
+  const panelCount = receiver.viewport.panelCount("notes");
+  const panelWidth = receiver.viewport.panelWidth(width, "notes");
+  const panelStride = receiver.viewport.panelStride(width, "notes");
+  const panelOffset = receiver.viewport.multiLineViewportOffset(width, "notes");
+  const [firstPanel, lastPanel] = multiplePanels
+    ? receiver.viewport.visiblePanelRange(width, "notes")
+    : [0, 0];
+  const startPanel = multiplePanels ? firstPanel : 0;
+  const endPanel = multiplePanels ? Math.min(lastPanel, panelCount - 1) : 0;
+  context.save();
+  context.fillStyle = receiver.appearance.offscreenRegionColor;
+  for (let panel = startPanel; panel <= endPanel; panel++) {
+    const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
+    const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
+    for (const segment of offscreenRegionSegments(
+      panelLeft,
+      panelRight,
+      receiver.viewport.cameraX ?? 0,
+      width,
+    )) {
+      context.fillRect(segment.x, 0, segment.width, height);
+    }
+  }
+  context.restore();
 }
 
 /** Paint one note for both the normal and multi-line timelines. */
@@ -301,6 +428,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
     this.notesGridBatch.finish();
   }
+  drawOffscreenRegion(this, backdrop.context, width, height);
   drawNoteLanes(this, backdrop.context, width, height);
   if (multiplePanels) {
     const panelWidth = this.viewport.panelWidth(width, "notes");
@@ -499,6 +627,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   if (multiNotes) {
     this.drawMultiLineBeatLabels(context, width, height, "notes");
   }
+  drawOffscreenNoteCues(this, context, palette, playBeat, width, height);
   this.noteBatch.finish();
   this.noteSolidBatch.finish();
   if (!(session.multiLineActive && session.multiLineMode === "notes")) {

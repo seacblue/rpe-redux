@@ -171,6 +171,29 @@
   column-gap: var(--space-3);
 }
 
+// The note camera controls float over the bottom of the note field like the
+// event layer strip. They do not create a new grid row or change canvas height.
+.note-timeline-range-overlay {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  justify-self: center;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  pointer-events: auto;
+}
+
+.editor.notes-hidden .note-timeline-range-overlay {
+  display: none;
+}
+
 // Hiding the strips also drops their gaps: the note/event field keeps the exact
 // width its layout promises instead of shrinking by two gutters.
 .editor.density-bars-hidden .canvases {
@@ -403,6 +426,12 @@ canvas {
     calc(var(--timeline-middle) * var(--timeline-exclusive-ratio, 0.75))
     calc(var(--timeline-middle) * (1 - var(--timeline-exclusive-ratio, 0.75)) / 2)
     var(--timeline-strip-width, 24px);
+}
+
+.editor:is(.notes-hidden, .events-hidden, .multi-notes, .multi-events)
+  .canvases
+  .note-timeline-range-overlay {
+  grid-column: 3;
 }
 
 // Without the strips the middle is the whole workspace, and the field keeps the

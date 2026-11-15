@@ -29,6 +29,9 @@ export type EditorRegionSnapshot = {
 
 /** The authoring timeline that a view command can reveal. */
 export type EditorTimelineMode = "notes" | "events";
+
+/** One authored note-field width used by the note timeline camera buttons. */
+export const NOTE_TIMELINE_CAMERA_STEP = 1350;
 /**
  * Whether the stage currently shows a note or event surface beside the preview.
  *
@@ -313,6 +316,14 @@ export function createEditorViewControls(
     runtime.persist();
   }
 
+  /** Move the note timeline camera by one authored field width. */
+  function moveCameraX(direction: -1 | 1): void {
+    const current = Number(displayValues.cameraX.get()) || 0;
+    displayValues.cameraX.set(String(current + direction * NOTE_TIMELINE_CAMERA_STEP));
+    runtime.applyDisplaySettings();
+    runtime.persist();
+  }
+
   /** Toggles the preview's game-UI overlay. */
   function toggleGameUi(): void {
     displayValues.showGameUI.set(!runtime.realtimePreview.showGameUI);
@@ -397,6 +408,7 @@ export function createEditorViewControls(
     toggleRegion,
     toggleRegions,
     resetCamera,
+    moveCameraX,
     toggleGameUi,
     toggleStagePreview,
     togglePreviewOnly,
@@ -433,6 +445,7 @@ export const viewControls = Object.freeze({
   toggleRegions: (): void => viewControlsBinding.value()?.toggleRegions(),
   resetCamera: (resetPreview = false): void =>
     viewControlsBinding.value()?.resetCamera(resetPreview),
+  moveCameraX: (direction: -1 | 1): void => viewControlsBinding.value()?.moveCameraX(direction),
   toggleGameUi: (): void => viewControlsBinding.value()?.toggleGameUi(),
   toggleStagePreview: (): void => viewControlsBinding.value()?.toggleStagePreview(),
   togglePreviewOnly: (): void => viewControlsBinding.value()?.togglePreviewOnly(),

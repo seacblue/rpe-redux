@@ -16,6 +16,11 @@ export interface TimelineScale {
   judgementOffset: number;
 }
 
+/** Authored horizontal interval represented by one note timeline viewport. */
+export const NOTE_X_MIN = -675;
+export const NOTE_X_MAX = 675;
+export const NOTE_X_SPAN = NOTE_X_MAX - NOTE_X_MIN;
+
 /** A reusable beat-to-pixel projection for one timeline frame and scale. */
 export type VerticalBeatProjection = (beat: number) => number;
 
@@ -417,7 +422,7 @@ export function noteHorizontal(
   scroll: number,
 ): number {
   const contentWidth = Math.max(1, panelWidthValue - inset * 2);
-  const local = inset + ((position - cameraX + 675) / 1350) * contentWidth;
+  const local = inset + ((position - cameraX - NOTE_X_MIN) / NOTE_X_SPAN) * contentWidth;
   return panelHorizontal(local, linePanel, canvasWidth, layout, scroll);
 }
 
@@ -439,7 +444,7 @@ export function notePositionAt(
     horizontal +
     viewportOffset(canvasWidth, layout, scroll) -
     linePanel * panelStride(canvasWidth, layout);
-  const value = ((local - inset) / contentWidth) * 1350 - 675 + cameraX;
+  const value = ((local - inset) / contentWidth) * NOTE_X_SPAN + NOTE_X_MIN + cameraX;
   return snapXPosition(value, gridCount, snapX);
 }
 

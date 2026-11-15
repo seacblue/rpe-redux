@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700">
-  <title>Note timeline navigator states</title>
-  <desc>Four states showing no overflow, left overflow, both-side overflow, and merged multi-line mode.</desc>
+  <title>Note timeline X range states</title>
+  <desc>Four states show the default X range, a right shift, a left shift, and multi-line shared controls.</desc>
   <defs>
     <linearGradient id="bg2" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#151a22"/><stop offset="1" stop-color="#0b0e13"/></linearGradient>
     <style>
@@ -8,46 +8,49 @@
       .muted { fill: #93a2b4; }
       .heading { font-size: 21px; font-weight: 700; }
       .small { font-size: 14px; }
-      .tiny { font-size: 12px; }
     </style>
   </defs>
   <rect width="1280" height="700" fill="url(#bg2)"/>
-  <text x="54" y="48" class="ui heading">白条与显示条件</text>
-  <text x="54" y="75" class="ui small muted">白条表示 panel 溢出，不表示 note 密度，也不表示歌曲时间。</text>
+  <text x="54" y="48" class="ui heading">X 范围、背景和白条的独立状态</text>
+  <text x="54" y="75" class="ui small muted">按钮移动 cameraX；红色只表示 authored -675..675 之外的背景，白条只表示当前拍 note 越过本条 timeline 边缘。</text>
 
   <g transform="translate(54 110)">
     <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
-    <text x="24" y="34" class="ui heading">A 起点</text><text x="24" y="58" class="ui small muted">value = 0，右侧还有 panel</text>
+    <text x="24" y="34" class="ui heading">A 默认范围</text><text x="24" y="58" class="ui small muted">cameraX = 0 · -675 ～ 675</text>
     <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
     <rect x="40" y="76" width="150" height="100" fill="#233244"/><rect x="202" y="76" width="150" height="100" fill="#233244"/><rect x="364" y="76" width="150" height="100" fill="#233244"/>
-    <rect x="524" y="76" width="5" height="100" fill="#fff" opacity=".9"/>
-    <text x="24" y="207" class="ui small">左按钮 disabled · 右白条 visible · 右按钮 enabled</text>
+    <rect x="68" y="116" width="70" height="20" rx="6" fill="#68c8ff"/>
+    <text x="24" y="207" class="ui small">无离屏底色 · 当前拍 note 在范围内时无白条</text>
   </g>
 
   <g transform="translate(666 110)">
     <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
-    <text x="24" y="34" class="ui heading">B 中间</text><text x="24" y="58" class="ui small muted">0 &lt; value &lt; max，两边都有未显示 panel</text>
+    <text x="24" y="34" class="ui heading">B 向右移动</text><text x="24" y="58" class="ui small muted">cameraX = 675 · 0 ～ 1350</text>
     <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
-    <rect x="24" y="76" width="5" height="100" fill="#fff" opacity=".9"/><rect x="52" y="76" width="150" height="100" fill="#233244"/><rect x="214" y="76" width="150" height="100" fill="#233244"/><rect x="376" y="76" width="150" height="100" fill="#233244"/>
-    <text x="24" y="207" class="ui small">左白条 visible · 右白条 visible · 两个按钮 enabled</text>
+    <rect x="24" y="76" width="180" height="100" fill="#ff4d4d" opacity=".4"/>
+    <rect x="204" y="76" width="150" height="100" fill="#233244"/><rect x="366" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="514" y="76" width="5" height="100" fill="#fff" opacity=".9"/>
+    <text x="24" y="207" class="ui small">左侧红色是离屏背景 · 当前拍越过右边界时显示右白条</text>
   </g>
 
   <g transform="translate(54 390)">
     <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
-    <text x="24" y="34" class="ui heading">C 终点</text><text x="24" y="58" class="ui small muted">value = max，左侧还有 panel</text>
+    <text x="24" y="34" class="ui heading">C 向左移动</text><text x="24" y="58" class="ui small muted">cameraX = -675 · -1350 ～ 0</text>
     <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
-    <rect x="36" y="76" width="150" height="100" fill="#233244"/><rect x="198" y="76" width="150" height="100" fill="#233244"/><rect x="360" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="40" y="76" width="150" height="100" fill="#233244"/><rect x="202" y="76" width="150" height="100" fill="#233244"/><rect x="364" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="24" y="76" width="180" height="100" fill="#ff4d4d" opacity=".4"/>
     <rect x="24" y="76" width="5" height="100" fill="#fff" opacity=".9"/>
-    <text x="24" y="207" class="ui small">左白条 visible · 右白条 hidden · 左按钮 enabled</text>
+    <text x="24" y="207" class="ui small">右侧红色是离屏背景 · 当前拍越过左边界时显示左白条</text>
   </g>
 
   <g transform="translate(666 390)">
     <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
-    <text x="24" y="34" class="ui heading">D 合并音符</text><text x="24" y="58" class="ui small muted">多个判定线合成一个 panel，不显示横向 rail</text>
+    <text x="24" y="34" class="ui heading">D Multi-line</text><text x="24" y="58" class="ui small muted">多条 note timeline 共用一组浮层和 cameraX</text>
     <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
-    <rect x="24" y="76" width="512" height="100" fill="#233244"/>
-    <path d="M130 110h300M130 142h300" stroke="#314a5c" stroke-width="2"/>
-    <text x="24" y="207" class="ui small">无 rail · 无白条 · 继续显示判定线号设置</text>
+    <rect x="40" y="76" width="150" height="100" fill="#233244"/><rect x="202" y="76" width="150" height="100" fill="#233244"/><rect x="364" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="86" y="112" width="70" height="20" rx="6" fill="#68c8ff"/><rect x="360" y="136" width="70" height="20" rx="6" fill="#68c8ff"/>
+    <rect x="208" y="185" width="144" height="32" rx="8" fill="#24374d" stroke="#6f91b6"/>
+    <text x="226" y="206" class="ui small">◀　⌂　X 范围　▶</text>
+    <text x="24" y="207" class="ui small">不是 panel 导航；不复制按钮、不改变 panel 顺序</text>
   </g>
 </svg>
-
