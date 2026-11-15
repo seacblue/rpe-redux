@@ -41,8 +41,6 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
-import { noteContainsBeat, offscreenCueSides } from "../multiLine/noteOffscreenCue.ts";
-import { offscreenRegionSegments } from "../multiLine/offscreenRegion.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -124,121 +122,6 @@ function cachedNoteVerticalProjection(
     projection.project(
       receiver.cache.tempoSeconds(receiver.viewport.tempo, beat, projection.factor),
     );
-}
-
-/** Paint edge cues for notes at the current beat that extend beyond the field. */
-function drawOffscreenNoteCues(
-  receiver: TimelineNoteDrawingReceiver,
-  context: CanvasRenderingContext2D,
-  palette: CanvasPalette,
-  playBeat: number,
-  width: number,
-  height: number,
-): void {
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-  const session = receiver.getSession();
-  const lineIndices =
-    session.multiLineActive && session.multiLineMode === "notes"
-      ? session.targetLineIndices
-      : [session.lineIndex];
-  const cueWidth = Math.min(6, Math.max(2, width / 80));
-  context.save();
-  context.fillStyle = palette.foreground;
-  context.globalAlpha = 0.78;
-  for (const lineIndex of lineIndices) {
-    const line = session.chart.judgeLineList?.[lineIndex];
-    const [bottomBeat, topBeat] = receiver.viewport.noteBeatRangeForLine(
-      lineIndex,
-      height,
-      "notes",
-    );
-    receiver.cache.refreshNotes(lineIndex, line?.notes ?? []);
-    const noteIndex = receiver.cache.noteIndex(lineIndex);
-    if (!noteIndex) {
-      continue;
-    }
-    const projection = noteProjectionFor(receiver, lineIndex, height);
-    const panelProjection = receiver.viewport.notePanelProjectionForLine(width, lineIndex);
-    const cachedNoteData = receiver.cache.noteRenderDataSet(
-      noteIndex.notes,
-      receiver.viewport.tempo,
-      projection.factor,
-      receiver.viewport.gridCount,
-    );
-    for (let index = 0; index < noteIndex.notes.length; index++) {
-      const note = noteIndex.notes[index];
-      const prepared = cachedNoteData[index];
-      if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
-        continue;
-      }
-      if (Math.min(prepared.start, prepared.end) > topBeat) {
-        break;
-      }
-      if (!noteContainsBeat(prepared.start, prepared.end, playBeat)) {
-        continue;
-      }
-      const horizontal = panelProjection.horizontal(note.positionX);
-      const noteWidth = receiver.viewport.noteWidth(note);
-      const sides = offscreenCueSides(horizontal, noteWidth, width);
-      if (!sides.length) {
-        continue;
-      }
-      const vertical = projection.project(prepared.startSeconds);
-      const endVertical = projection.project(prepared.endSeconds);
-      const top = Math.max(0, Math.min(height - 6, Math.min(vertical, endVertical) - 3));
-      const cueHeight = Math.max(6, Math.min(height - top, Math.abs(endVertical - vertical) || 6));
-      for (const side of sides) {
-        context.fillRect(side === "left" ? 0 : width - cueWidth, top, cueWidth, cueHeight);
-      }
-    }
-  }
-  context.restore();
-}
-
-/** Paint the authored note-field overflow as a background region under the grid. */
-function drawOffscreenRegion(
-  receiver: TimelineNoteDrawingReceiver,
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-): void {
-  if (!receiver.appearance.offscreenRegionEnabled || width <= 0 || height <= 0) {
-    return;
-  }
-  const session = receiver.getSession();
-  const panelCount = receiver.viewport.panelCount("notes");
-  const multiplePanels = session.notesMode !== "single" && panelCount > 1;
-  const lineIndices = multiplePanels ? session.targetLineIndices : [session.lineIndex];
-  const panelWidth = receiver.viewport.panelWidth(width, "notes");
-  const panelStride = receiver.viewport.panelStride(width, "notes");
-  const offset = receiver.viewport.multiLineViewportOffset(width, "notes");
-  const [firstPanel, lastPanel] = multiplePanels
-    ? receiver.viewport.visiblePanelRange(width, "notes")
-    : [0, 0];
-  const startPanel = multiplePanels ? firstPanel : 0;
-  const endPanel = multiplePanels ? Math.min(lastPanel, lineIndices.length - 1) : 0;
-  context.save();
-  context.fillStyle = receiver.appearance.offscreenRegionColor;
-  for (let panel = startPanel; panel <= endPanel; panel++) {
-    const lineIndex = lineIndices[panel] ?? session.lineIndex;
-    const panelLeft = panel * panelStride - offset;
-    const panelRight = panelLeft + panelWidth;
-    const projection = receiver.viewport.notePanelProjectionForLine(width, lineIndex);
-    const authoredLeft = projection.horizontal(-675);
-    const authoredRight = projection.horizontal(675);
-    for (const segment of offscreenRegionSegments(
-      panelLeft,
-      panelRight,
-      authoredLeft,
-      authoredRight,
-      width,
-    )) {
-      context.fillRect(segment.x, 0, segment.width, height);
-    }
-  }
-  context.restore();
 }
 
 /** Paint one note for both the normal and multi-line timelines. */
@@ -418,7 +301,6 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
     this.notesGridBatch.finish();
   }
-  drawOffscreenRegion(this, backdrop.context, width, height);
   drawNoteLanes(this, backdrop.context, width, height);
   if (multiplePanels) {
     const panelWidth = this.viewport.panelWidth(width, "notes");
@@ -617,7 +499,6 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   if (multiNotes) {
     this.drawMultiLineBeatLabels(context, width, height, "notes");
   }
-  drawOffscreenNoteCues(this, context, palette, playBeat, width, height);
   this.noteBatch.finish();
   this.noteSolidBatch.finish();
   if (!(session.multiLineActive && session.multiLineMode === "notes")) {

@@ -20,8 +20,6 @@ export interface MultiLineChromeLayout {
   panelCount(area?: TimelineArea): number;
   panelWidth(width: number, area?: TimelineArea): number;
   panelGap(width: number, area?: TimelineArea): number;
-  panelStride(width: number, area?: TimelineArea): number;
-  visiblePanelRange(width: number, area?: TimelineArea): [number, number];
 }
 
 /** Publish the scroll range for the currently visible multi-line area. */
@@ -31,8 +29,8 @@ export function syncMultiLineChrome(
   width: number,
 ): void {
   const session = layout.getSession();
-  const active = area === "notes" ? session.notesMode !== "single" : session.eventsMode === "multi";
-  const validWidth = width > 0;
+  const visible =
+    area === "notes" ? session.notesMode !== "single" : session.eventsMode === "multi";
   const count = layout.panelCount(area);
   const total =
     count * layout.panelWidth(width, area) + Math.max(0, count - 1) * layout.panelGap(width, area);
@@ -42,15 +40,9 @@ export function syncMultiLineChrome(
       ? layout.multiLineScroll
       : (layout.multiLineScroll[area] ?? 0);
 
-  const [firstPanel, lastPanel] = validWidth ? layout.visiblePanelRange(width, area) : [0, 0];
   layout.multiLineScrollState.snapshot.update({
-    area: area === "notes" ? "notes" : "events",
-    visible: active && validWidth && maximum > 0,
+    visible,
     max: String(maximum),
     value: String(Math.min(maximum, Math.max(0, scroll))),
-    step: String(layout.panelStride(width, area)),
-    firstPanel: String(firstPanel),
-    lastPanel: String(lastPanel),
-    panelCount: String(count),
   });
 }

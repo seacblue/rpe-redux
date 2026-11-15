@@ -62,18 +62,6 @@
           repeating-linear-gradient(to bottom, transparent 0 73px, #263443 74px),
           repeating-linear-gradient(to right, transparent 0 95px, #21342b 96px);
       }
-      .offscreen-region {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        width: 28px;
-        background: #ff4d4d66;
-        pointer-events: none;
-      }
-      .offscreen-region.right {
-        right: 0;
-      }
       .panels {
         display: flex;
         gap: 16px;
@@ -138,10 +126,6 @@
         padding: 8px 12px;
         background: #172231;
         border-top: 1px solid #405267;
-      }
-      .navigator-actions {
-        display: inline-flex;
-        gap: 8px;
       }
       button {
         color: #e7f1ff;
@@ -332,16 +316,14 @@
             : "";
         const navigator =
           variant === "b"
-            ? `<div class="navigator"><div class="navigator-top"><div class="navigator-actions"><button data-move="-1" aria-label="向左移动一组判定线" ${!left ? "disabled" : ""}>◀</button><button data-reset aria-label="回到最左侧面板">⌂</button></div><span class="range">第 ${first}–${last} 个 panel / 共 ${count} 个</span><button data-move="1" aria-label="向右移动一组判定线" ${!right ? "disabled" : ""}>▶</button></div>${extra}</div>`
-            : `<div class="navigator"><div class="navigator-actions"><button data-move="-1" aria-label="向左移动一组判定线" ${!left ? "disabled" : ""}>◀</button><button data-reset aria-label="回到最左侧面板">⌂</button></div><span class="range">第 ${first}–${last} 个 panel / 共 ${count} 个</span><div class="track"><span class="thumb" style="left:${trackLeft}%;width:${trackWidth}%"></span></div><button data-move="1" aria-label="向右移动一组判定线" ${!right ? "disabled" : ""}>▶</button></div>`;
+            ? `<div class="navigator"><div class="navigator-top"><button data-move="-1" aria-label="向左移动一组判定线" ${!left ? "disabled" : ""}>◀</button><span class="range">第 ${first}–${last} 个 panel / 共 ${count} 个</span><button data-move="1" aria-label="向右移动一组判定线" ${!right ? "disabled" : ""}>▶</button></div>${extra}</div>`
+            : `<div class="navigator"><button data-move="-1" aria-label="向左移动一组判定线" ${!left ? "disabled" : ""}>◀</button><span class="range">第 ${first}–${last} 个 panel / 共 ${count} 个</span><div class="track"><span class="thumb" style="left:${trackLeft}%;width:${trackWidth}%"></span></div><button data-move="1" aria-label="向右移动一组判定线" ${!right ? "disabled" : ""}>▶</button></div>`;
         app.className = `surface variant-${variant} ${left ? "has-left" : ""} ${right ? "has-right" : ""}`;
-        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线分屏</span><span class="state"><i class="dot"></i>当前可见 ${first}–${last} / ${count}</span></header><div class="timeline-wrap"><div class="timeline"><div class="panels" style="transform:translateX(-${offset * 316 - 12}px)">${panelMarkup()}</div><span class="offscreen-region"></span><span class="offscreen-region right"></span><span class="edge left"></span><span class="edge right"></span></div>${navigator}</div><p class="hint">${variant === "a" ? "三按钮移动一个 panel stride；白条只提示当前拍 note 触及边缘，红色背景表示 -675..675 外的区域。" : variant === "b" ? "Mini-map 显示全部 panel，适合判定线很多的高级模式。" : "移动指针到时间轴底部，控制层渐进显示。"}</p>`;
+        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线分屏</span><span class="state"><i class="dot"></i>当前可见 ${first}–${last} / ${count}</span></header><div class="timeline-wrap"><div class="timeline"><div class="panels" style="transform:translateX(-${offset * 316 - 12}px)">${panelMarkup()}</div><span class="edge left"></span><span class="edge right"></span></div>${navigator}</div><p class="hint">${variant === "a" ? "按钮移动一个 panel stride；白条只提示还有内容。" : variant === "b" ? "Mini-map 显示全部 panel，适合判定线很多的高级模式。" : "移动指针到时间轴底部，控制层渐进显示。"}</p>`;
         metrics.innerHTML = `<div class="metric">value: <b>${offset}</b></div><div class="metric">max: <b>${max}</b></div><div class="metric">边界状态: <b>${left ? "左有溢出" : "左起点"} · ${right ? "右有溢出" : "右终点"}</b></div>`;
-        app.querySelectorAll("[data-move], [data-reset]").forEach((button) =>
+        app.querySelectorAll("[data-move]").forEach((button) =>
           button.addEventListener("click", () => {
-            offset = button.hasAttribute("data-reset")
-              ? 0
-              : Math.max(0, Math.min(max, offset + Number(button.dataset.move)));
+            offset = Math.max(0, Math.min(max, offset + Number(button.dataset.move)));
             render();
           }),
         );

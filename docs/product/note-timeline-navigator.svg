@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
   <title>Note timeline horizontal navigator recommended layout</title>
-  <desc>Dark RPE Redux timeline mock showing three bottom navigation buttons, clipped multi-line panels, current-beat note edge cues, and a translucent offscreen background region.</desc>
+  <desc>Dark RPE Redux timeline mock showing bottom left and right buttons, clipped multi-line panels, and edge white overflow indicators.</desc>
   <defs>
     <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#12161e"/><stop offset="1" stop-color="#090b10"/></linearGradient>
     <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1d2935"/><stop offset="1" stop-color="#111820"/></linearGradient>
@@ -33,7 +33,6 @@
     <rect x="316" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
     <rect x="632" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
     <rect x="948" y="0" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
-    <rect x="0" y="0" width="28" height="418" fill="#ff4d4d" opacity=".4"/>
     <g fill="#6fc9ff" opacity=".9">
       <rect x="92" y="98" width="116" height="26" rx="8"/><rect x="176" y="256" width="72" height="26" rx="8"/>
       <rect x="368" y="146" width="128" height="26" rx="8"/><rect x="504" y="326" width="70" height="26" rx="8"/>
@@ -48,9 +47,7 @@
     <rect width="962" height="48" rx="10" fill="#192333" stroke="#536b84"/>
     <rect x="8" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/>
     <path d="M29 17L19 24L29 31" stroke="#dbeeff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="50" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/>
-    <path d="M59 25C59 20 63 17 67 17C72 17 75 20 75 25C75 29 72 32 67 32C63 32 60 30 59 27" stroke="#dbeeff" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <text x="102" y="30" class="ui small">第 0–2 个 panel / 共 8 个</text>
+    <text x="61" y="30" class="ui small">第 0–2 个 panel / 共 8 个</text>
     <rect x="382" y="15" width="400" height="18" rx="9" fill="#0d131c" stroke="#405267"/>
     <rect x="386" y="18" width="184" height="12" rx="6" fill="#6f9fd0"/>
     <rect x="920" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/>
@@ -58,11 +55,11 @@
   </g>
   <path d="M1035 315C1156 315 1185 270 1185 219" class="call"/>
   <rect x="1035" y="160" width="180" height="62" rx="8" fill="#162538" stroke="#80b7ff"/>
-  <text x="1051" y="185" class="ui small">白条 = 当前拍 note</text><text x="1051" y="207" class="ui small">触及可见边缘</text>
+  <text x="1051" y="185" class="ui small">右白条 = 右侧还有</text><text x="1051" y="207" class="ui small">未显示的 panel</text>
   <path d="M515 579C515 633 444 647 398 677" class="call"/>
   <rect x="68" y="654" width="480" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
   <text x="86" y="684" class="ui small">按钮每次移动一个 panel stride；最后一段直接吸附到 max。</text>
   <path d="M240 386C185 419 155 458 142 515" class="call"/>
   <rect x="610" y="654" width="570" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
-  <text x="628" y="684" class="ui small">红色背景 = authored -675..675 外的区域；开关和颜色 alpha 可配置。</text>
+  <text x="628" y="684" class="ui small">不覆盖 canvas；rail 有溢出才占 28px，高亮仅在交互时增强。</text>
 </svg>
