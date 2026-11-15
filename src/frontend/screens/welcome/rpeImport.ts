@@ -19,16 +19,16 @@ import { catalogIdFor, rememberCatalogPath } from "../../../core/global/library/
 import { localService } from "../../../core/global/library/service.ts";
 import { TauriDocumentStore } from "../../../core/platform/desktop/documentStore.ts";
 import { isDesktop } from "../../../core/platform/environment.ts";
-import { startLongTask, finishLongTask } from "../../../core/state/longTasks.ts";
+import { startLongTask } from "../../../core/state/longTasks.ts";
 import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { showImportReport } from "../../overlays/modals/importReportPrompt.ts";
-import { writeRpeHotkeyRecord } from "../settings/shortcuts/rpeHotkeyReport.ts";
-import { openSettings } from "../settings/settingsWindowController.ts";
-import { recordImportReport, type ImportIssue, type ImportReport } from "./importReport.ts";
+import { type ImportIssue, type ImportReport } from "./importReport.ts";
 import { requestConfirm } from "../../overlays/modals/prompts.ts";
 import { requestRpeImportReview } from "./rpeImportReview.ts";
 import { chooseRpeFolder, readRpeFolder } from "../../platform/desktop/rpeFolder.ts";
+import { importLoadProgress, importWriteProgress, throwIfAborted } from "./importProgress.ts";
+import { ImportTaskScheduler } from "./importTaskScheduler.ts";
 
 /** Host callbacks the migration needs from the mounted editor. */
 export interface RpeImportDeps {
@@ -66,10 +66,10 @@ function summaryText(scan: RpeFolderScan): string {
  * Import the selected charts and apply the selected settings sidecars.
  *
  * Without a selection the whole scan is applied, which keeps the smaller
- * single-folder confirmation working. The scan runs as one retained background
- * task, so its progress stays reachable from the task list after the review is
- * gone. The summary stays a normal notice: it is the short answer an import
- * produces, not a job that can still be cancelled.
+ * single-folder confirmation working. Each selected chart gets its own
+ * retained background task, so one completed chart can settle independently
+ * while the next chart continues. The summary stays a normal notice: it is the
+ * short answer an import produces, not a job that can still be cancelled.
  */
 export async function migrateRpeScan(
   scan: RpeFolderScan,
@@ -88,12 +88,6 @@ export async function migrateRpeScan(
     ? scan.charts.filter((chart) => selectedCharts.has(chart.path))
     : scan.charts;
   const applied = applyRpeMigrationPlan(approved);
-  // Keep the hotkey mapping for the shortcut page: applied entries explain the
-  // new bindings, and the rest explain why a familiar key is missing. Skipped
-  // shortcuts leave the previous record alone.
-  if (!selection || selection.applyShortcuts) {
-    writeRpeHotkeyRecord(approved.hotkeys.entries);
-  }
   // Batch-level differences (the folder's own sidecars) have no single chart to
   // attach to; per-chart failures are recorded beside their project instead.
   const batchIssues: ImportIssue[] = [
@@ -101,7 +95,6 @@ export async function migrateRpeScan(
     ...applied.warnings.map((detail) => ({ scope: "", detail })),
   ];
   const issues: ImportIssue[] = [...batchIssues];
-  const total = charts.length;
   const documents = deps.documents;
   if (!documents) {
     showToast({ message: t("workspace.welcome.rpe.desktopOnly"), level: "warning" });
@@ -113,157 +106,121 @@ export async function migrateRpeScan(
       projectIds: [],
     });
   }
-  let summary: RpeImportSummary = Object.freeze({
-    charts: 0,
+  const chartReports: ImportReport[] = [];
+  const projectIds = new Array<string | undefined>(charts.length);
+  const scheduler = new ImportTaskScheduler(charts.map((chart) => chart.estimatedBytes));
+  const taskRuns = charts.map(
+    (chart, index) =>
+      new Promise<void>((resolve) => {
+        try {
+          startLongTask({
+            label: "workspace.welcome.import.chartTask",
+            detail: chart.name,
+            stage: t("workspace.welcome.rpe.importingChart", { name: chart.name }),
+            async run({ report, signal }) {
+              const stage = t("workspace.welcome.rpe.importingChart", { name: chart.name });
+              const loader = new TauriDocumentStore();
+              try {
+                report(stage, 0);
+                await scheduler.acquire(index, signal);
+                report(stage, 0);
+                const opened = await loader.openForImport(
+                  chart.path,
+                  (loadStage, completed, total) =>
+                    report(stage, importLoadProgress(loadStage, completed, total)),
+                  signal,
+                );
+                throwIfAborted(signal);
+                const found = await localService();
+                if (!found) {
+                  throw new Error(t("editor.app.error.libraryServiceDown"));
+                }
+                throwIfAborted(signal);
+                const existing = catalogIdFor(chart.path);
+                const result = await importChartToLibrary({
+                  library: found.library,
+                  ...(existing ? { projectId: existing } : {}),
+                  chart: opened.candidate.chart,
+                  name: chart.name || opened.candidate.name,
+                  group: chart.group,
+                  assets: opened.assets,
+                  signal,
+                  onProgress: (value) => report(stage, importWriteProgress(value)),
+                });
+                rememberCatalogPath(chart.path, result.projectId);
+                projectIds[index] = result.projectId;
+                report("", 1);
+                try {
+                  void deps.refresh().catch((error) => deps.reportError(error));
+                } catch (error) {
+                  deps.reportError(error);
+                }
+              } catch (error) {
+                if (!signal.aborted) {
+                  issues.push({
+                    scope: chart.name,
+                    detail: error instanceof Error ? error.message : String(error),
+                  });
+                }
+                throw error;
+              } finally {
+                await loader.close().catch(() => undefined);
+                scheduler.release(index);
+                resolve();
+              }
+            },
+          });
+        } catch (error) {
+          issues.push({
+            scope: chart.name,
+            detail: error instanceof Error ? error.message : String(error),
+          });
+          resolve();
+        }
+      }),
+  );
+  await Promise.all(taskRuns);
+  const importedProjectIds = projectIds.filter((id): id is string => id !== undefined);
+  const summary: RpeImportSummary = Object.freeze({
+    charts: importedProjectIds.length,
     settings: applied.settings,
     shortcuts: applied.shortcuts,
     warnings: issues.length,
-    projectIds: [],
+    projectIds: importedProjectIds,
   });
-  // One task id is reserved before work starts and settled from the run's own
-  // outcome, so a failure still leaves a finished row in the list.
-  let taskId = "";
-  let failed = false;
-  await new Promise<void>((resolve) => {
-    taskId = startLongTask({
-      label: "workspace.welcome.rpe.title",
-      stage: t("workspace.welcome.rpe.importing", { count: total }),
-      async run({ report }) {
-        let imported = 0;
-        // Per-chart issues become that project's compatibility report; the
-        // aggregate list feeds the notice's single "view" action.
-        const chartReports: ImportReport[] = [];
-        const projectIds: string[] = [];
-        try {
-          for (const [index, chart] of charts.entries()) {
-            report(
-              t("workspace.welcome.rpe.importingChart", { name: chart.name }),
-              total ? index / total : null,
-            );
-            const loader = new TauriDocumentStore();
-            const chartIssues: ImportIssue[] = [];
-            let loadTask: { complete(): void; fail(error: unknown): void } | null = null;
-            try {
-              const opened = await loader.open(chart.path);
-              loadTask = opened.task;
-              const found = await localService();
-              if (!found) {
-                throw new Error(t("editor.app.error.libraryServiceDown"));
-              }
-              const existing = catalogIdFor(chart.path);
-              const result = await importChartToLibrary({
-                library: found.library,
-                ...(existing ? { projectId: existing } : {}),
-                chart: opened.candidate.chart,
-                name: chart.name || opened.candidate.name,
-                group: chart.group,
-                assets: opened.assets,
-                onProgress: (value) => opened.task.update("read", Math.round(value * 100), 100),
-              });
-              rememberCatalogPath(chart.path, result.projectId);
-              loadTask.complete();
-              imported += 1;
-              projectIds.push(result.projectId);
-              if (chartIssues.length) {
-                const report: ImportReport = {
-                  projectId: result.projectId,
-                  title: chart.name || opened.candidate.name,
-                  source: t("workspace.welcome.rpe.title"),
-                  issues: [...chartIssues],
-                };
-                recordImportReport(report);
-                chartReports.push(report);
-                issues.push(...chartIssues);
-              }
-            } catch (error) {
-              loadTask?.fail(error);
-              const issue: ImportIssue = {
-                scope: chart.name,
-                detail: error instanceof Error ? error.message : String(error),
-              };
-              chartIssues.push(issue);
-              issues.push(issue);
-            } finally {
-              await loader.close().catch(() => undefined);
-            }
-          }
-          report("", total ? 1 : null);
-          try {
-            await deps.refresh();
-          } catch (error) {
-            deps.reportError(error);
-          }
-          summary = Object.freeze({
-            charts: imported,
-            settings: applied.settings,
-            shortcuts: applied.shortcuts,
-            warnings: issues.length,
-            projectIds: [...projectIds],
-          });
-          const source = t("workspace.welcome.rpe.title");
-          const reportAction =
-            chartReports.length || batchIssues.length
-              ? [
-                  {
-                    label: t("workspace.welcome.importReport.action"),
-                    onSelect: () =>
-                      showImportReport(source, [
-                        ...chartReports,
-                        ...(batchIssues.length
-                          ? [
-                              {
-                                projectId: "__batch__",
-                                title: source,
-                                source,
-                                issues: batchIssues,
-                              },
-                            ]
-                          : []),
-                      ]),
-                  },
-                ]
-              : [];
-          const hotkeyAction = approved.hotkeys.entries.length
-            ? [
-                {
-                  label: t("workspace.welcome.rpe.viewHotkeys"),
-                  onSelect: () => openSettings("shortcuts"),
-                },
-              ]
-            : [];
-          const actions = [...reportAction, ...hotkeyAction];
-          showToast({
-            message: t("workspace.welcome.rpe.done", {
-              charts: summary.charts,
-              settings: summary.settings,
-              shortcuts: summary.shortcuts,
-              warnings: summary.warnings,
-            }),
-            level: summary.warnings ? "warning" : "success",
-            ...(actions.length ? { actions } : {}),
-          });
-        } catch (error) {
-          // A chart-level failure is collected above; anything that escapes is
-          // the scan itself failing, and the row must say so instead of ending
-          // as a completed job.
-          failed = true;
-          summary = Object.freeze({
-            charts: imported,
-            settings: applied.settings,
-            shortcuts: applied.shortcuts,
-            warnings: issues.length + 1,
-            projectIds: [],
-          });
-          throw error instanceof Error ? error : new Error(String(error));
-        } finally {
-          resolve();
-        }
-      },
-    });
+  const source = t("workspace.welcome.rpe.title");
+  const reportAction =
+    chartReports.length || batchIssues.length
+      ? [
+          {
+            label: t("workspace.welcome.importReport.action"),
+            onSelect: () =>
+              showImportReport(source, [
+                ...chartReports,
+                ...(batchIssues.length
+                  ? [
+                      {
+                        projectId: "__batch__",
+                        title: source,
+                        source,
+                        issues: batchIssues,
+                      },
+                    ]
+                  : []),
+              ]),
+          },
+        ]
+      : [];
+  showToast({
+    message: t("workspace.welcome.rpe.done", {
+      charts: summary.charts,
+      settings: summary.settings,
+      shortcuts: summary.shortcuts,
+      warnings: summary.warnings,
+    }),
+    level: summary.warnings ? "warning" : "success",
+    ...(reportAction.length ? { actions: reportAction } : {}),
   });
-  if (!failed) {
-    finishLongTask(taskId, { status: "completed" });
-  }
   return summary;
 }
 

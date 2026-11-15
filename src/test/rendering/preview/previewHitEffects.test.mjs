@@ -110,6 +110,47 @@ test("minimal hit-effect surfaces do not retain sampled positions across frames"
   assert.equal(secondCenter, 180);
 });
 
+test("timeline-visible previews do not draw hit effects", () => {
+  const hit = { start: 1, end: 1, note: { type: 1 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  const pictures = [];
+  const bursts = [];
+  drawHitEffects(
+    {
+      skin: { particleFrameCount: 30, tinted: () => ({}) },
+      noteSize: 175,
+      hitEffectScale: 1,
+      effectsSince: 0,
+      defaultParticleColor: [255, 255, 255],
+      authoringRegionVisible: true,
+    },
+    {
+      context: {
+        drawImage: (...args) => pictures.push(args),
+        fillRect: (...args) => bursts.push(args),
+      },
+      scene: {
+        lines: [line],
+        sampler: () => () => ({ x: 0, y: 0, rotation: 0 }),
+      },
+      order: [0],
+      seconds: 1.1,
+      width: 200,
+      height: 200,
+      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
+    },
+  );
+
+  assert.equal(pictures.length, 0);
+  assert.equal(bursts.length, 0);
+});
+
 test("a hit samples both the line and its parent after simultaneous teleports", () => {
   const chart = createChart();
   const parent = chart.judgeLineList[0];

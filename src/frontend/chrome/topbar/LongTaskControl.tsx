@@ -18,6 +18,7 @@ import {
 } from "../../../core/state/longTasks.ts";
 import { playTaskCompletionChime } from "../../platform/taskCompletionSound.ts";
 import { useTranslation } from "../../../i18n/react.ts";
+import { showToast } from "../../../design/patterns/ToastHost.tsx";
 
 const PANEL_GAP = 6;
 const COMPLETED_VISIBLE_MS = 5000;
@@ -29,10 +30,13 @@ export function LongTaskControl() {
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
+  const pendingRemovals = useRef(new Map<string, { label: string; detail?: string }>());
   const active = tasks.filter(
     (task) => task.status === "running" || task.status === "cancelling",
   ).length;
   const lastStatuses = useRef(new Map<string, string>());
+  const activeBatch = useRef(false);
+  const batchCompleted = useRef(false);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -45,17 +49,37 @@ export function LongTaskControl() {
     return () => timers.forEach(clearTimeout);
   }, [tasks]);
 
-  // A finished task is the only event that rings the chime and pops the
-  // trigger. Statuses are compared here so a panel reopened on an old task
-  // never replays the notification.
   useEffect(() => {
-    let completed = false;
+    for (const [id, pending] of pendingRemovals.current) {
+      if (tasks.some((task) => task.id === id)) {
+        continue;
+      }
+      pendingRemovals.current.delete(id);
+      showToast(
+        t("chrome.tasks.removedToast", {
+          name: tRaw(pending.label, pending.detail ? { name: pending.detail } : undefined),
+        }),
+        "info",
+      );
+    }
+  }, [tasks, t, tRaw]);
+
+  // A batch rings once, when its last active task settles. Statuses are
+  // compared here so a panel reopened on old task history never replays the
+  // notification, and one completed chart cannot chime ahead of its siblings.
+  useEffect(() => {
+    const hasActiveTasks = active > 0;
+    if (hasActiveTasks && !activeBatch.current) {
+      activeBatch.current = true;
+      batchCompleted.current = false;
+    }
     const seen = new Set<string>();
     for (const task of tasks) {
       seen.add(task.id);
       const previous = lastStatuses.current.get(task.id);
-      if (previous && previous !== "completed" && task.status === "completed") {
-        completed = true;
+      if (task.status === "completed" && (previous === undefined || previous !== "completed")) {
+        activeBatch.current = true;
+        batchCompleted.current = true;
       }
       lastStatuses.current.set(task.id, task.status);
     }
@@ -64,6 +88,12 @@ export function LongTaskControl() {
         lastStatuses.current.delete(id);
       }
     }
+    if (hasActiveTasks || !activeBatch.current) {
+      return;
+    }
+    const completed = batchCompleted.current;
+    activeBatch.current = false;
+    batchCompleted.current = false;
     if (!completed) {
       return;
     }
@@ -81,7 +111,7 @@ export function LongTaskControl() {
         { duration: 420, easing: "ease-out" },
       );
     }
-  }, [tasks]);
+  }, [active, tasks]);
 
   const popover = useAnchoredPopover({
     open,
@@ -125,12 +155,13 @@ export function LongTaskControl() {
           {tasks.length === 0 && <EmptyState icon="list" title={t("chrome.tasks.empty")} />}
           {tasks.map((task) => {
             const working = task.status === "running" || task.status === "cancelling";
+            const label = tRaw(task.label, task.detail ? { name: task.detail } : undefined);
             const status = tRaw(`chrome.tasks.status.${task.status}`);
             const stage = working && task.stage ? tRaw(task.stage) : status;
             return (
               <article className="long-task-row" key={task.id} data-status={task.status}>
                 <div className="long-task-row-header">
-                  <strong className="long-task-row-title">{tRaw(task.label)}</strong>
+                  <strong className="long-task-row-title">{label}</strong>
                   <IconButton
                     icon="trash"
                     size="small"
@@ -139,6 +170,10 @@ export function LongTaskControl() {
                     label={t(working ? "chrome.tasks.cancelAndDismiss" : "chrome.tasks.dismiss")}
                     disabled={task.status === "cancelling"}
                     onClick={() => {
+                      pendingRemovals.current.set(task.id, {
+                        label: task.label,
+                        ...(task.detail ? { detail: task.detail } : {}),
+                      });
                       removeLongTask(task.id);
                       trigger.current?.focus();
                     }}
@@ -153,7 +188,7 @@ export function LongTaskControl() {
                   <Progress
                     max={1}
                     value={task.progress ?? undefined}
-                    label={tRaw(task.label)}
+                    label={label}
                     size="compact"
                     className="long-task-progress"
                   />

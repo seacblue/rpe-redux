@@ -20,7 +20,9 @@ const DB_PATH = "/redux.db";
 const POOL_DIR = "/rpe-redux-pool";
 const POOL_NAME = "rpe-redux-browser";
 const LIBRARY_APPLICATION_ID = 1380992338;
-const LIBRARY_SCHEMA_VERSION = 4;
+const LIBRARY_SCHEMA_VERSION = 5;
+const DEFAULT_LIBRARY_GROUP = "Default";
+const LIBRARY_THUMBNAIL_ASSET = "__redux/thumbnail.png";
 
 const BACKUP_DIR = "library-history";
 const BACKUP_OBJECT_MAGIC = "RPEB";
@@ -115,6 +117,7 @@ interface BackupProjectManifest {
   composer: string;
   level: string;
   background: string;
+  thumbnail: string;
   song: string;
   noteCount: number;
   eventCount: number;
@@ -178,7 +181,7 @@ interface BackupSummary {
   sourceHost: string;
 }
 
-const PROJECT_COLUMNS = `id, name, grp, archived, charter, composer, level, background, song,
+const PROJECT_COLUMNS = `id, name, grp, archived, charter, composer, level, background, thumbnail, song,
   note_count, event_count, edit_seconds, revision, view_state, asset_folders, created_at,
   updated_at, size`;
 
@@ -186,7 +189,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
     id            TEXT PRIMARY KEY,
     name          TEXT NOT NULL,
-    grp           TEXT NOT NULL DEFAULT '',
+    grp           TEXT NOT NULL DEFAULT 'Default',
     archived      INTEGER NOT NULL DEFAULT 0,
     charter       TEXT NOT NULL DEFAULT '',
     composer      TEXT NOT NULL DEFAULT '',
@@ -201,6 +204,7 @@ CREATE TABLE IF NOT EXISTS projects (
     view_state    TEXT NOT NULL DEFAULT '{}',
     asset_folders TEXT NOT NULL DEFAULT '[]',
     background    TEXT NOT NULL DEFAULT '',
+    thumbnail     TEXT NOT NULL DEFAULT '',
     song          TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
@@ -429,7 +433,10 @@ function chartBackground(meta: ChartMeta, assets: readonly { name: string }[]): 
   if (meta.background) {
     return meta.background;
   }
-  return assets.find((asset) => IMAGE_ASSET.test(asset.name))?.name ?? "";
+  return (
+    assets.find((asset) => asset.name !== LIBRARY_THUMBNAIL_ASSET && IMAGE_ASSET.test(asset.name))
+      ?.name ?? ""
+  );
 }
 
 function chartSong(meta: ChartMeta, assets: readonly { name: string }[]): string {
@@ -491,12 +498,13 @@ function summary(row: Record<string, unknown>): LibraryProjectSummary {
   return {
     id: String(row.id),
     name: String(row.name),
-    group: String(row.grp ?? ""),
+    group: normalizeLibraryGroup(String(row.grp ?? "")),
     archived: Number(row.archived) !== 0,
     charter: String(row.charter ?? ""),
     composer: String(row.composer ?? ""),
     level: String(row.level ?? ""),
     ...(String(row.background ?? "") ? { background: String(row.background) } : {}),
+    ...(String(row.thumbnail ?? "") ? { thumbnail: String(row.thumbnail) } : {}),
     ...(String(row.song ?? "") ? { song: String(row.song) } : {}),
     noteCount: Number(row.note_count ?? 0),
     eventCount: Number(row.event_count ?? 0),
@@ -511,6 +519,11 @@ function summary(row: Record<string, unknown>): LibraryProjectSummary {
       ? { assetFolders }
       : {}),
   };
+}
+
+/** Trims a browser-library group and supplies the canonical default. */
+function normalizeLibraryGroup(group: string): string {
+  return group.trim() || DEFAULT_LIBRARY_GROUP;
 }
 
 function parseJson(value: unknown, fallback: unknown): unknown {
@@ -646,6 +659,7 @@ async function migrateSchema(): Promise<void> {
     "chart_hash",
     "ALTER TABLE revisions ADD COLUMN chart_hash TEXT NOT NULL DEFAULT ''",
   );
+  run(`UPDATE projects SET grp = ? WHERE trim(grp) = ''`, [DEFAULT_LIBRARY_GROUP]);
   const hasEventCount =
     Number(
       requireDb().selectValue(
@@ -667,6 +681,11 @@ async function migrateSchema(): Promise<void> {
     "projects",
     "edit_seconds",
     "ALTER TABLE projects ADD COLUMN edit_seconds INTEGER NOT NULL DEFAULT 0",
+  );
+  ensureColumn(
+    "projects",
+    "thumbnail",
+    "ALTER TABLE projects ADD COLUMN thumbnail TEXT NOT NULL DEFAULT ''",
   );
   const now = nowString();
   run(`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('database_id', ?)`, [
@@ -1110,7 +1129,7 @@ async function backupSnapshot(reason: string): Promise<BackupSummary> {
   }
   const data = requireDb();
   const projectRows = data.selectObjects(`
-    SELECT id, name, grp, archived, charter, composer, level, background, song,
+    SELECT id, name, grp, archived, charter, composer, level, background, thumbnail, song,
            note_count, event_count, edit_seconds, revision, view_state, asset_folders,
            created_at, updated_at, chart_hash
       FROM projects ORDER BY id`);
@@ -1229,6 +1248,7 @@ async function backupSnapshot(reason: string): Promise<BackupSummary> {
       composer: String(row.composer ?? ""),
       level: String(row.level ?? ""),
       background: String(row.background ?? ""),
+      thumbnail: String(row.thumbnail ?? ""),
       song: String(row.song ?? ""),
       noteCount: Number(row.note_count ?? 0),
       eventCount: Number(row.event_count ?? 0),
@@ -1528,12 +1548,12 @@ async function backupRestoreCommit(target: { id: string; commit: BackupCommit })
         sql: `INSERT INTO projects
           (id, name, grp, archived, charter, composer, level, note_count, event_count,
            edit_seconds, chart, size, revision, chart_hash, view_state, asset_folders,
-           background, song, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           background, thumbnail, song, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         bind: [
           manifest.id,
           manifest.name,
-          manifest.group,
+          normalizeLibraryGroup(manifest.group),
           manifest.archived ? 1 : 0,
           manifest.charter,
           manifest.composer,
@@ -1548,6 +1568,7 @@ async function backupRestoreCommit(target: { id: string; commit: BackupCommit })
           JSON.stringify(manifest.viewState ?? {}),
           JSON.stringify(manifest.assetFolders ?? []),
           manifest.background,
+          manifest.thumbnail ?? "",
           manifest.song,
           manifest.createdAt,
           manifest.updatedAt,
@@ -1858,7 +1879,7 @@ async function create(params: Record<string, unknown>): Promise<Record<string, u
   if (!name) {
     throw new DbError("invalid_request", "name must not be blank");
   }
-  const group = typeof params.group === "string" ? params.group : "";
+  const group = normalizeLibraryGroup(typeof params.group === "string" ? params.group : "");
   const chartJson =
     typeof params.chartJson === "string" ? params.chartJson : JSON.stringify(params.chart ?? {});
   const chart = parseJson(chartJson, null);
@@ -1871,7 +1892,7 @@ async function create(params: Record<string, unknown>): Promise<Record<string, u
   const hash = await sha256Hex(chartJson);
   run(
     `INSERT INTO projects
-      (id, name, grp, archived, charter, composer, level, background, song, note_count,
+      (id, name, grp, archived, charter, composer, level, background, thumbnail, song, note_count,
        event_count, chart, size, revision, chart_hash, view_state, asset_folders, created_at,
        updated_at)
       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '{}', '[]', ?, ?)`,
@@ -1883,6 +1904,7 @@ async function create(params: Record<string, unknown>): Promise<Record<string, u
       meta.composer,
       meta.level,
       meta.background,
+      "",
       meta.song,
       meta.noteCount,
       meta.eventCount,
@@ -1912,7 +1934,7 @@ async function update(params: Record<string, unknown>): Promise<Record<string, u
   }
   if (typeof patch.group === "string") {
     sets.push("grp = ?");
-    bind.push(patch.group);
+    bind.push(normalizeLibraryGroup(patch.group));
   }
   if (typeof patch.archived === "boolean") {
     sets.push("archived = ?");
@@ -1974,10 +1996,10 @@ function duplicate(params: Record<string, unknown>): Record<string, unknown> {
   const now = nowString();
   run(
     `INSERT INTO projects
-      (id, name, grp, archived, charter, composer, level, background, song, note_count,
+      (id, name, grp, archived, charter, composer, level, background, thumbnail, song, note_count,
        event_count, chart, size, revision, chart_hash, view_state, asset_folders, created_at,
        updated_at)
-      SELECT ?, ?, grp, archived, charter, composer, level, background, song, note_count,
+      SELECT ?, ?, grp, archived, charter, composer, level, background, thumbnail, song, note_count,
              event_count, chart, size, 1, chart_hash, view_state, asset_folders, ?, ?
         FROM projects WHERE id = ?`,
     [target, name, now, now, id],
@@ -2237,6 +2259,11 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
   const nextBackground =
     meta.background ||
     (input.assets ? chartBackground(meta, input.assets) : String(current.background ?? ""));
+  const nextThumbnail = input.assets
+    ? input.assets.some((asset) => asset.name === LIBRARY_THUMBNAIL_ASSET)
+      ? LIBRARY_THUMBNAIL_ASSET
+      : ""
+    : String(current.thumbnail ?? "");
   const nextSong =
     meta.song || (input.assets ? chartSong(meta, input.assets) : String(current.song ?? ""));
   const editSeconds = Math.max(0, Math.floor(Number(input.editSeconds ?? 0)));
@@ -2255,6 +2282,7 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
       !changed &&
       input.chartJson === String(current.chart) &&
       nextName === String(current.name) &&
+      nextThumbnail === String(current.thumbnail ?? "") &&
       nextView === String(current.view_state) &&
       nextFolders === String(current.asset_folders)
     ) {
@@ -2287,7 +2315,7 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
     run(
       `UPDATE projects
           SET name = ?, chart = ?, size = ?, charter = ?, composer = ?, level = ?,
-              background = ?, song = ?, note_count = ?, event_count = ?,
+              background = ?, thumbnail = ?, song = ?, note_count = ?, event_count = ?,
               edit_seconds = edit_seconds + ?, chart_hash = ?, revision = ?,
               view_state = ?, asset_folders = ?, updated_at = ?
         WHERE id = ?`,
@@ -2299,6 +2327,7 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
         meta.composer,
         meta.level,
         nextBackground,
+        nextThumbnail,
         nextSong,
         meta.noteCount,
         meta.eventCount,

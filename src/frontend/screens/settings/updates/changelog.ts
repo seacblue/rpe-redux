@@ -10,7 +10,7 @@ import { createElement } from "react";
 import { t } from "../../../../i18n/index.ts";
 import { dismissModal, MODAL_PRIORITY, presentModal } from "../../../overlays/modals/modalQueue.ts";
 import { requestConfirm } from "../../../overlays/modals/prompts.ts";
-import { bindChangelogLauncher } from "./changelogLauncher.ts";
+import { bindChangelogLauncher, bindUpdateChangelogLauncher } from "./changelogLauncher.ts";
 import {
   ChangelogContent,
   ChangelogTitleMeta,
@@ -21,8 +21,10 @@ import {
   checkForUpdates,
   getUpdateState,
   installUpdate,
+  pauseUpdateDownload,
   refreshUpdateSettings,
   skipUpdateVersion,
+  stopUpdateDownload,
 } from "./updateStore.ts";
 import { bindUpdatePromptLauncher } from "./updatePromptLauncher.ts";
 
@@ -64,6 +66,8 @@ export function openChangelog(mode: ChangelogMode = "current"): boolean {
             onUpdate: () => {
               void installUpdate();
             },
+            onPause: pauseUpdateDownload,
+            onStop: stopUpdateDownload,
             onComplete: close,
           }),
         }
@@ -78,6 +82,7 @@ export function openUpdateChangelog(): boolean {
 }
 
 bindChangelogLauncher(openChangelog);
+bindUpdateChangelogLauncher(openUpdateChangelog);
 
 bindUpdatePromptLauncher((version) =>
   requestConfirm({

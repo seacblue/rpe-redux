@@ -20,6 +20,7 @@ import { getExtensionStartupState } from "../../platform/extensionLoader.ts";
 import { useDocumentSurface } from "./useDocumentSurface.ts";
 import {
   classifyStartupFailure,
+  isBackendPortConflict,
   startupExtensionCandidates,
   startupFailureMessage,
   type StartupFailureCategory,
@@ -89,8 +90,9 @@ export function StartupView({
   const candidates = startupExtensionCandidates(startup.failures, startup.activations);
   const omitted =
     candidates.kind === "activations" ? candidates.total - candidates.items.length : 0;
-  const descriptionKey =
-    category === "extension" && startup.safeMode
+  const descriptionKey = isBackendPortConflict(error)
+    ? "startup.backendPortConflict.description"
+    : category === "extension" && startup.safeMode
       ? "startup.failure.extensionSafeMode"
       : FAILURE_DESCRIPTIONS[category];
   /** Copies the failure report and records the outcome for the button label. */

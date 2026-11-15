@@ -6,7 +6,11 @@
  * them; no menu descriptor sits in between.
  */
 import { toolbar } from "../../../../core/shell/registries/toolbar.ts";
-import { EXPORT_DOCUMENT_EVENT } from "../../../../core/shell/shellEventNames.ts";
+import {
+  EXPORT_DOCUMENT_EVENT,
+  IMPORT_AND_OPEN_CHART_EVENT,
+  IMPORT_CHART_EVENT,
+} from "../../../../core/shell/shellEventNames.ts";
 import { getEditorVisibility } from "../../../../core/edit/state/visibility.ts";
 import { editorChromeCommands } from "../../../contracts/editorCommands.ts";
 import { SHORTCUT_CATEGORIES } from "../../../../core/shortcuts/categories.ts";
@@ -45,7 +49,12 @@ export function registerFileActions() {
       shortcuts: [{ key: "O", modifiers: ["CTRL"] }],
       shortcutCategory: SHORTCUT_CATEGORIES.file,
       shortcutScope: "app",
-      run: () => editorChromeCommands()?.documents.openDocument(),
+      run: () =>
+        window.dispatchEvent(
+          new Event(
+            getEditorVisibility().atHome ? IMPORT_CHART_EVENT : IMPORT_AND_OPEN_CHART_EVENT,
+          ),
+        ),
     }),
     toolbar.register({
       kind: "action",

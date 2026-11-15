@@ -132,6 +132,8 @@ export class Preview {
   /** Free camera is the only region on screen, so the underlay must be opaque. */
   declare forceOpaque: boolean;
   declare showHitEffects: boolean;
+  /** Whether an authoring timeline is currently painted over this preview. */
+  authoringRegionVisible = false;
   declare noteHitAreas: PreviewHitArea[];
   declare chart: Chart | null;
   declare simultaneous: Set<unknown> | null;

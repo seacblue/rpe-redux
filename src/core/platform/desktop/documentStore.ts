@@ -5,15 +5,22 @@
  * commands, streams large charts line by line, and `DesktopAssetStore` persists
  * assets; chart rules stay in the document and chart modules.
  */
+/* eslint-disable max-lines -- the desktop store owns the complete native document lifecycle. */
 import { t } from "../../../i18n/index.ts";
 import { normalizeChartObjectIdsAsync, type Chart } from "../../global/chart/chart.ts";
 import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import { beginLoading, loadingPaint } from "../../global/document/loading.ts";
+import {
+  beginLoading,
+  loadingPaint,
+  type LoadStage,
+  type LoadTask,
+} from "../../global/document/loading.ts";
 import { projectChartForExport } from "../../global/chart/exportProjection.ts";
 import { registeredChartDocument } from "../../global/chart/streaming/chartDocumentRegistry.ts";
 import { dialogDefaultPath, rememberDialogFile } from "./dialogPath.ts";
+import { throwIfAborted } from "../../utils/abort.ts";
 import { openNativeChartStream } from "./chartStream.ts";
 import { AssetStore } from "../../media/assetStore.ts";
 import { values } from "../../state/values.ts";
@@ -313,6 +320,39 @@ export interface OpenDocumentOptions {
    * only. The native host records the grant before reading the chart again.
    */
   allowExternalResources?: boolean;
+  /** Use a caller-owned progress task instead of the blocking loading surface. */
+  task?: LoadTask;
+  /** Receive timely phase progress while the native document is being opened. */
+  onProgress?: ImportProgressReporter;
+  /** Cooperatively cancel the native read at its await boundaries. */
+  signal?: AbortSignal;
+}
+
+/** Reports native chart-reading progress to a caller-owned background task. */
+export type ImportProgressReporter = (stage: LoadStage, completed: number, total: number) => void;
+
+/** Creates a load handle that forwards progress without publishing a modal. */
+function createImportTask(onProgress?: ImportProgressReporter): LoadTask {
+  return {
+    id: -1,
+    update(stage, completed = 0, total = 0) {
+      onProgress?.(stage, completed, total);
+    },
+    complete() {},
+    fail() {},
+  };
+}
+
+/** Update the open task and notify an optional observer at the same moment. */
+function updateOpenProgress(
+  task: LoadTask,
+  options: OpenDocumentOptions,
+  stage: LoadStage,
+  completed = 0,
+  total = 0,
+): void {
+  task.update(stage, completed, total);
+  options.onProgress?.(stage, completed, total);
 }
 
 /** Tauri-backed document store for open, save, recovery, and close. */
@@ -352,20 +392,29 @@ export class TauriDocumentStore {
    * native document is closed before throwing.
    */
   async open(path: string, options: OpenDocumentOptions = {}): Promise<OpenResult> {
-    const task = beginLoading(path.split(/[\\/]/).at(-1) ?? path);
+    const task = options.task ?? beginLoading(path.split(/[\\/]/).at(-1) ?? path);
     try {
-      await loadingPaint();
+      throwIfAborted(options.signal);
+      if (!options.task) {
+        await loadingPaint();
+      }
+      throwIfAborted(options.signal);
       const revision = ++this.openRevision;
-      task.update("read", 1, 1);
+      updateOpenProgress(task, options, "read", 0, 0);
       try {
-        const streamed = await openNativeChartStream(path, options);
+        const streamed = await openNativeChartStream(path, {
+          allowExternalResources: options.allowExternalResources,
+          onProgress: (completed, total) =>
+            updateOpenProgress(task, options, "read", completed, total),
+        });
+        throwIfAborted(options.signal);
         if (revision !== this.openRevision) {
           await invoke("close_document", { id: streamed.opened.id });
           throw Object.assign(new Error(t("system.document.loadCancelled")), {
             name: "AbortError",
           });
         }
-        task.update("parse", 1, 1);
+        updateOpenProgress(task, options, "parse", 1, 1);
         const opened = streamed.opened as OpenedDocument;
         delete opened.chart;
         const previous = this.current;
@@ -377,6 +426,7 @@ export class TauriDocumentStore {
           await invoke("close_document", { id: previous.id });
         }
         await this.assets.materialize(/(?:info\.txt|extra\.json|\.(?:glsl|vsh))$/i);
+        throwIfAborted(options.signal);
         return {
           candidate: {
             chart: streamed.document.chart,
@@ -395,7 +445,8 @@ export class TauriDocumentStore {
         // whole-chart open command.
       }
       const onProgress = new Channel<{ completed: number; total: number }>();
-      onProgress.onmessage = ({ completed, total }) => task.update("unpack", completed, total);
+      onProgress.onmessage = ({ completed, total }) =>
+        updateOpenProgress(task, options, "unpack", completed, total);
       const onChart = new Channel<ChartStreamMessage>();
       let chartHeader: Record<string, unknown> | null = null;
       const chartLines: unknown[] = [];
@@ -412,7 +463,7 @@ export class TauriDocumentStore {
           resolveChartDone();
         }
       };
-      task.update("read", 1, 1);
+      updateOpenProgress(task, options, "read", 0, 0);
       let opened: OpenedDocument;
       try {
         opened = await invoke<OpenedDocument>("open_document", {
@@ -424,12 +475,14 @@ export class TauriDocumentStore {
       } catch (error) {
         throw localizeOpenError(error);
       }
-      task.update("parse", 1, 1);
+      throwIfAborted(options.signal);
+      updateOpenProgress(task, options, "parse", 1, 1);
       if (revision !== this.openRevision) {
         await invoke("close_document", { id: opened.id });
         throw Object.assign(new Error(t("system.document.loadCancelled")), { name: "AbortError" });
       }
       await chartDone;
+      throwIfAborted(options.signal);
       const streamedHeader = chartHeader as Record<string, unknown> | null;
       const chart = streamedHeader
         ? { ...streamedHeader, judgeLineList: chartLines }
@@ -447,6 +500,7 @@ export class TauriDocumentStore {
         await invoke("close_document", { id: previous.id });
       }
       await this.assets.materialize(/(?:info\.txt|extra\.json|\.(?:glsl|vsh))$/i);
+      throwIfAborted(options.signal);
       return {
         candidate: { chart, name: opened.chart_name, desktop: opened },
         assets: this.assets.assets,
@@ -457,12 +511,20 @@ export class TauriDocumentStore {
       throw error;
     }
   }
+  /** Read a chart for library import without publishing the blocking load modal. */
+  openForImport(
+    path: string,
+    onProgress?: ImportProgressReporter,
+    signal?: AbortSignal,
+  ): Promise<OpenResult> {
+    return this.open(path, { task: createImportTask(onProgress), signal });
+  }
   /** Ask for a chart file and open it; returns null when the picker is cancelled. */
   async chooseOpen(): Promise<OpenResult | null> {
     const path = await this.chooseOpenPath();
     return path ? this.open(path) : null;
   }
-  /** Ask for a chart path and remember its folder; null on cancel. */
+  /** Ask for one chart path and remember its folder; null on cancel. */
   async chooseOpenPath(): Promise<string | null> {
     const path = await (
       await import("@tauri-apps/plugin-dialog")
@@ -475,6 +537,21 @@ export class TauriDocumentStore {
       rememberDialogFile("chart", path);
     }
     return path;
+  }
+  /** Ask for one or more chart paths for background import; an empty list means cancel. */
+  async chooseImportPaths(): Promise<readonly string[]> {
+    const selected = await (
+      await import("@tauri-apps/plugin-dialog")
+    ).open({
+      multiple: true,
+      defaultPath: dialogDefaultPath("chart"),
+      filters: [{ name: t("system.document.chartFilter"), extensions: ["json", "pez", "zip"] }],
+    });
+    const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
+    for (const path of paths) {
+      rememberDialogFile("chart", path);
+    }
+    return paths;
   }
   /** Read the current document's disk snapshot for self-write detection. */
   diskSnapshot(): Promise<string | null> {

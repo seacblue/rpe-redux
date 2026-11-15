@@ -3,25 +3,36 @@
  * welcome panel shown before a chart is selected.
  *
  * The cover is the visual anchor: it fills a square frame, carries the title
- * and composer on a dark caption, and holds the difficulty badge and preview
+ * and composer on a dark caption, and holds the group badge and preview
  * control. The body below it keeps the useful library metadata and one primary
  * Open action; exporting and deleting stay available as compact icon actions.
  * Without a selected entry the column shows the welcome panel, whose check-in
  * and fortune live in `LibraryWelcome`. Opening, exporting, and deleting stay
  * with the published card actions.
  */
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+} from "react";
 import { AsyncImage } from "../../../../design/components/image/AsyncImage.tsx";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../../design/components/button/IconButton.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { LibraryPreviewAudio } from "./libraryPreviewAudio.ts";
+import type { LibraryPreviewProgress } from "./libraryPreviewAudio.ts";
+import { registerLibraryPreviewShortcuts } from "./libraryShortcuts.ts";
 import type { LibraryEntry } from "./libraryEntries.ts";
-import { formatCount, formatRelativeTime } from "./libraryFormat.ts";
+import { formatRelativeTime } from "./libraryFormat.ts";
 import { LibraryWelcome } from "./LibraryWelcome.tsx";
+import { normalizeLibraryGroup } from "./libraryGroups.ts";
 import { bindBackgroundVolume } from "../../../platform/backgroundVolume.ts";
 import { audioMixer } from "../../../../core/media/audioMixer.ts";
+import { formatMediaTime } from "../../../../design/components/media/mediaTime.ts";
 
 /** Cover layer that fades in the selected project's artwork over the empty-cover placeholder. */
 function DetailCover({ url }: { url: string }) {
@@ -105,8 +116,19 @@ export function LibraryDetail({
 }) {
   const { t, language } = useTranslation();
   const player = useRef<LibraryPreviewAudio | null>(null);
+  const progressEntryKey = useRef<string | null>(null);
   const tiltCard = useRef<HTMLElement>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState<{
+    entryKey: string | null;
+    value: LibraryPreviewProgress;
+  }>({
+    entryKey: null,
+    value: { currentTime: 0, duration: 0 },
+  });
+  useLayoutEffect(() => {
+    progressEntryKey.current = entry?.key ?? null;
+  }, [entry?.key]);
   /** Maps the pointer inside the untransformed column to a slight card tilt. */
   const tilt = (event: PointerEvent<HTMLElement>) => {
     if (event.pointerType !== "mouse") {
@@ -135,7 +157,14 @@ export function LibraryDetail({
     card.style.setProperty("--sleeve-tilt-y", "0deg");
   };
   useEffect(() => {
-    const audio = new LibraryPreviewAudio((playing) => setPreviewPlaying(playing));
+    const audio = new LibraryPreviewAudio(
+      (playing) => setPreviewPlaying(playing),
+      (progress) =>
+        setPreviewProgress({
+          entryKey: progressEntryKey.current,
+          value: progress,
+        }),
+    );
     player.current = audio;
     const removeAudioOwner = audioMixer.registerOwner({
       setMusicVolume: (value) => audio.setMusicVolume(value),
@@ -148,6 +177,14 @@ export function LibraryDetail({
       audio.dispose();
     };
   }, []);
+  useEffect(
+    () =>
+      registerLibraryPreviewShortcuts({
+        seekBackward: () => player.current?.seekBy(-5),
+        seekForward: () => player.current?.seekBy(5),
+      }),
+    [],
+  );
   useEffect(() => {
     player.current?.select(visible && preview ? entry : null);
   }, [entry, preview, visible]);
@@ -155,9 +192,26 @@ export function LibraryDetail({
     return <LibraryWelcome entries={entries} loading={loading} />;
   }
   const project = entry.source.project;
-  const group = project.group || t("editor.home.ungrouped");
-  const notes = formatCount(project.noteCount, language);
+  const group = normalizeLibraryGroup(project.group);
   const updated = formatRelativeTime(project.updatedAt, language);
+  const progress =
+    previewProgress.entryKey === entry.key
+      ? previewProgress.value
+      : { currentTime: 0, duration: 0 };
+  const duration = progress.duration;
+  const currentTime = Math.max(0, Math.min(duration, progress.currentTime));
+  const progressRatio = duration > 0 ? currentTime / duration : 0;
+  const progressStyle = {
+    "--library-preview-progress": `${progressRatio * 100}%`,
+  } as CSSProperties;
+  /** Seek the preview rail from a pointer position in its own bounds. */
+  const seekPreviewFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    if (box.width <= 0) {
+      return;
+    }
+    player.current?.seekTo((event.clientX - box.left) / box.width);
+  };
   return (
     <aside className="redux-library-detail" onPointerMove={tilt} onPointerLeave={settleTilt}>
       <article ref={tiltCard} className="redux-library-card">
@@ -171,6 +225,37 @@ export function LibraryDetail({
             >
               {entry.level}
             </span>
+          )}
+          {entry.audio && (
+            <div
+              className="redux-library-detail-progress"
+              role="slider"
+              tabIndex={0}
+              aria-label={t("workspace.welcome.library.preview.seek")}
+              aria-valuemin={0}
+              aria-valuemax={duration}
+              aria-valuenow={currentTime}
+              aria-valuetext={`${formatMediaTime(currentTime)} / ${formatMediaTime(duration)}`}
+              data-playing={previewPlaying ? "true" : undefined}
+              style={progressStyle}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                seekPreviewFromPointer(event);
+              }}
+              onPointerMove={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  seekPreviewFromPointer(event);
+                }
+              }}
+              onPointerUp={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+              }}
+            >
+              <span className="redux-library-detail-progress-fill" aria-hidden="true" />
+            </div>
           )}
           {entry.audio && (
             <IconButton
@@ -205,8 +290,8 @@ export function LibraryDetail({
               <dd>{entry.charter || "—"}</dd>
             </div>
             <div>
-              <dt>{t("workspace.welcome.library.field.notes")}</dt>
-              <dd>{notes}</dd>
+              <dt>{t("workspace.welcome.library.field.level")}</dt>
+              <dd>{entry.level || "—"}</dd>
             </div>
             <div>
               <dt>{t("editor.home.field.groupLabel")}</dt>

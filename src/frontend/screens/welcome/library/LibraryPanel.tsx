@@ -5,13 +5,24 @@
  * controls, and asks the welcome page to select or open an entry. The selection
  * itself lives one level up because the detail pane is its sibling.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { LibrarySortField } from "../../../../core/global/library/client.ts";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { Button } from "../../../../design/components/button/Button.tsx";
+import { IconButton } from "../../../../design/components/button/IconButton.tsx";
 import { EmptyState } from "../../../../design/components/empty-state/EmptyState.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
 import { SearchField } from "../../../../design/components/input/SearchField.tsx";
+import { Input } from "../../../../design/components/input/Input.tsx";
 import { Segmented } from "../../../../design/components/segmented/Segmented.tsx";
 import { Select } from "../../../../design/components/select/Select.tsx";
 import { LibraryActions } from "./LibraryActions.tsx";
@@ -19,8 +30,19 @@ import { LibraryCards } from "./LibraryCards.tsx";
 import { getHomeProjectCardsSnapshot, subscribeHomeProjectCards } from "../homeProjectCards.ts";
 import { getLibraryView, setLibraryView, type LibraryView } from "../libraryView.ts";
 import { getLibrarySort, type LibrarySort } from "../librarySort.ts";
-import { buildLibraryEntries, matchesLibraryQuery, type LibraryEntry } from "./libraryEntries.ts";
+import {
+  buildLibraryEntries,
+  matchesLibraryGroups,
+  matchesLibraryQuery,
+  type LibraryEntry,
+} from "./libraryEntries.ts";
 import { registerLibraryShortcuts } from "./libraryShortcuts.ts";
+import {
+  createLibraryNavigationScheduler,
+  type LibraryNavigationState,
+} from "./libraryNavigation.ts";
+import { useAnchoredPopover } from "../../../../design/patterns/useAnchoredPopover.ts";
+import { getLibraryGroupFilter, setLibraryGroupFilter } from "../libraryGroupFilter.ts";
 
 /**
  * Placeholder counts for the first library read. They cover the card region of
@@ -30,31 +52,7 @@ import { registerLibraryShortcuts } from "./libraryShortcuts.ts";
 const LIBRARY_SKELETON_ROWS = 20;
 /** Wider tiles leave fewer rows visible; extra tiles fill a tall grid view. */
 const LIBRARY_SKELETON_TILES = 30;
-
-/** The live list walk behind Q/E; the ref is refreshed after every commit. */
-interface LibraryNavigation {
-  entries: readonly LibraryEntry[];
-  selectedKey: string | null;
-  select(key: string, preview: boolean): void;
-}
-
-/** Moves the selection one visible row, stopping at either end. */
-function stepLibrarySelection(state: LibraryNavigation, direction: -1 | 1): void {
-  const { entries, selectedKey, select } = state;
-  if (!entries.length) {
-    return;
-  }
-  const current = entries.findIndex((entry) => entry.key === selectedKey);
-  const next =
-    current < 0
-      ? direction > 0
-        ? 0
-        : entries.length - 1
-      : Math.min(entries.length - 1, Math.max(0, current + direction));
-  if (next !== current) {
-    select(entries[next].key, true);
-  }
-}
+const EMPTY_GROUPS: ReadonlySet<string> = new Set();
 
 /** Placeholder rows shown while the first library page is read. */
 function LibrarySkeleton({ view }: { view: LibraryView }) {
@@ -88,6 +86,11 @@ export function LibraryPanel({
   const [query, setQuery] = useState("");
   const [view, setView] = useState<LibraryView>(getLibraryView);
   const [sort, setSortState] = useState<LibrarySort>(getLibrarySort);
+  const [selectedGroups, setSelectedGroups] = useState<ReadonlySet<string> | null>(() => {
+    const saved = getLibraryGroupFilter();
+    return saved === null ? null : new Set(saved);
+  });
+  const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const cards = useSyncExternalStore(
     subscribeHomeProjectCards,
     getHomeProjectCardsSnapshot,
@@ -95,27 +98,95 @@ export function LibraryPanel({
   );
   const entries = useMemo(() => buildLibraryEntries(cards), [cards]);
   const needle = query.trim().toLocaleLowerCase();
-  const visibleEntries = entries.filter((entry) => matchesLibraryQuery(entry, needle));
+  const visibleEntries = useMemo(
+    () =>
+      entries.filter(
+        (entry) =>
+          matchesLibraryGroups(entry, selectedGroups ?? EMPTY_GROUPS) &&
+          matchesLibraryQuery(entry, needle),
+      ),
+    [entries, needle, selectedGroups],
+  );
+  const groupOptions = useMemo(() => {
+    const values = new Set(entries.map((entry) => entry.source.project.group));
+    return [...values].sort((left, right) => left.localeCompare(right));
+  }, [entries]);
+  const allGroups = useMemo(() => new Set(groupOptions), [groupOptions]);
+  const effectiveSelectedGroups = selectedGroups ?? allGroups;
+  const groupFilterActive = groupOptions.some((group) => !effectiveSelectedGroups.has(group));
+  const groupFilterAnchor = useRef<HTMLButtonElement>(null);
+  const [groupFilterHost, setGroupFilterHost] = useState<HTMLElement | null>(null);
+  const attachGroupFilterAnchor = useCallback((node: HTMLButtonElement | null) => {
+    groupFilterAnchor.current = node;
+    setGroupFilterHost(node?.closest(".redux-app-root") ?? null);
+    if (!node) {
+      setGroupFilterOpen((open) => (open ? false : open));
+    }
+  }, []);
+  const groupFilterPanel = useRef<HTMLElement>(null);
+  const groupFilterPopover = useAnchoredPopover({
+    open: groupFilterOpen,
+    anchor: groupFilterAnchor,
+    panel: groupFilterPanel,
+    onClose: () => setGroupFilterOpen(false),
+    align: "end",
+    gap: 6,
+    maxHeight: 480,
+  });
   // Q/E walk the rows the search currently shows. The registry registration is
   // stable, so the handler reads the latest list and selection from a ref that
   // commits after each render instead of re-registering (and resetting a
   // user's custom key) on every change.
-  const navigate = useRef<LibraryNavigation>({
+  const navigate = useRef<LibraryNavigationState>({
     entries: [],
     selectedKey: null,
     select: () => undefined,
   });
+  const navigationScheduler = useRef<ReturnType<typeof createLibraryNavigationScheduler> | null>(
+    null,
+  );
+  /** Publishes any selection to the navigation cursor immediately. */
+  const selectKey = useCallback(
+    (key: string, preview: boolean) => {
+      const nextKey = preview && navigate.current.selectedKey === key ? null : key;
+      navigationScheduler.current?.sync(nextKey);
+      navigate.current.selectedKey = nextKey;
+      onSelect(key, preview);
+    },
+    [onSelect],
+  );
+  const selectEntry = useCallback(
+    (entry: LibraryEntry, preview: boolean) => selectKey(entry.key, preview),
+    [selectKey],
+  );
   useLayoutEffect(() => {
-    navigate.current = { entries: visibleEntries, selectedKey, select: onSelect };
-  });
+    navigate.current = { entries: visibleEntries, selectedKey, select: selectKey };
+  }, [selectedKey, selectKey, visibleEntries]);
+  useEffect(() => {
+    const scheduler = createLibraryNavigationScheduler(
+      () => navigate.current,
+      (callback) => window.requestAnimationFrame(callback),
+      (frame) => window.cancelAnimationFrame(frame),
+    );
+    navigationScheduler.current = scheduler;
+    return () => {
+      scheduler.dispose();
+      navigationScheduler.current = null;
+    };
+  }, []);
   useEffect(
     () =>
       registerLibraryShortcuts({
-        previous: () => stepLibrarySelection(navigate.current, -1),
-        next: () => stepLibrarySelection(navigate.current, 1),
+        previous: () => navigationScheduler.current?.move(-1),
+        next: () => navigationScheduler.current?.move(1),
       }),
     [],
   );
+  useEffect(() => {
+    if (selectedGroups !== null) {
+      setLibraryGroupFilter([...selectedGroups]);
+    }
+  }, [selectedGroups]);
   // The empty state owns the creation actions, so the footer does not repeat
   // them underneath. A ready empty library is the only state that moves them.
   const libraryEmpty =
@@ -133,6 +204,39 @@ export function LibraryPanel({
     setSortState(next);
     cards?.onSort(next);
   };
+  /** Toggles one stored group without closing the multi-select popover. */
+  const toggleGroup = (group: string) => {
+    setSelectedGroups((previous) => {
+      const next = new Set(previous ?? groupOptions);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  };
+  const openEntry = useCallback(
+    (entry: LibraryEntry) => cards?.onOpenProject(entry.source.project.id),
+    [cards],
+  );
+  const exportEntry = useCallback(
+    (entry: LibraryEntry) => cards?.onExportProject(entry.source.project.id),
+    [cards],
+  );
+  const renameEntry = useCallback(
+    (entry: LibraryEntry) => cards?.onRenameProject(entry.source.project),
+    [cards],
+  );
+  const editGroupEntry = useCallback(
+    (entry: LibraryEntry, groups: readonly string[]) =>
+      cards?.onEditGroup(entry.source.project, groups),
+    [cards],
+  );
+  const deleteEntry = useCallback(
+    (entry: LibraryEntry) => cards?.onDelete(entry.source.project),
+    [cards],
+  );
   // Each option names both the field and the direction, so the control never
   // leaves the user guessing what its arrow means.
   const newest = t("workspace.welcome.library.sort.newest");
@@ -151,6 +255,43 @@ export function LibraryPanel({
     ["charter:asc", `${t("workspace.welcome.library.sort.charter")}, ${ascending}`],
     ["charter:desc", `${t("workspace.welcome.library.sort.charter")}, ${descending}`],
   ] as const;
+  const groupFilterPanelView = (
+    <section
+      ref={groupFilterPanel}
+      className={`redux-library-group-filter-popover${groupFilterOpen ? " is-open" : ""}`}
+      role="dialog"
+      aria-label={t("workspace.welcome.library.filter.label")}
+      aria-hidden={!groupFilterOpen}
+      inert={!groupFilterOpen}
+      data-placement={groupFilterPopover.side}
+      style={groupFilterPopover.style}
+    >
+      <div className="redux-library-group-filter-list">
+        {groupOptions.length === 0 ? (
+          <span className="redux-library-group-filter-empty">
+            {t("workspace.welcome.library.filter.empty")}
+          </span>
+        ) : (
+          groupOptions.map((group) => {
+            const label = group;
+            const id = `library-group-filter-${group}`;
+            return (
+              <label className="redux-library-group-filter-row" htmlFor={id} key={group}>
+                <span className="redux-library-group-filter-label">{label}</span>
+                <Input
+                  id={id}
+                  type="checkbox"
+                  checked={effectiveSelectedGroups.has(group)}
+                  aria-label={label}
+                  onChange={() => toggleGroup(group)}
+                />
+              </label>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
   return (
     <section className="redux-welcome-library">
       <div className="redux-library-toolbar">
@@ -182,6 +323,19 @@ export function LibraryPanel({
               </option>
             ))}
           </Select>
+          <div className="redux-library-group-filter">
+            <IconButton
+              ref={attachGroupFilterAnchor}
+              icon="filter"
+              size="md"
+              label={t("workspace.welcome.library.filter.label")}
+              active={groupFilterOpen || groupFilterActive}
+              aria-haspopup="dialog"
+              aria-expanded={groupFilterOpen}
+              onClick={() => setGroupFilterOpen((open) => !open)}
+            />
+            {groupFilterHost && createPortal(groupFilterPanelView, groupFilterHost)}
+          </div>
           <Segmented
             className="redux-library-view-switch"
             ariaLabel={t("workspace.welcome.library.view.label")}
@@ -226,15 +380,17 @@ export function LibraryPanel({
         <LibraryCards
           entries={entries}
           query={needle}
+          groups={effectiveSelectedGroups}
           loaded={cards.phase === "ready" || cards.phase === "degraded"}
           selectedKey={selectedKey}
           view={view}
           removingProjectId={cards.removingProjectId}
-          onSelect={(entry, preview) => onSelect(entry.key, preview)}
-          onOpen={(entry) => cards.onOpenProject(entry.source.project.id)}
-          onExport={(entry) => cards.onExportProject(entry.source.project.id)}
-          onRename={(entry) => cards.onRenameProject(entry.source.project)}
-          onDelete={(entry) => cards.onDelete(entry.source.project)}
+          onSelect={selectEntry}
+          onOpen={openEntry}
+          onExport={exportEntry}
+          onRename={renameEntry}
+          onEditGroup={editGroupEntry}
+          onDelete={deleteEntry}
         />
       )}
       {libraryEmpty && (
@@ -246,7 +402,6 @@ export function LibraryPanel({
           <span className="redux-library-empty-copy">
             {t("workspace.welcome.library.emptyDescription")}
           </span>
-          <LibraryActions />
         </div>
       )}
       {needle && !visibleEntries.length && (
@@ -256,7 +411,7 @@ export function LibraryPanel({
           className="redux-library-search-empty"
         />
       )}
-      {!libraryEmpty && <LibraryActions />}
+      <LibraryActions />
     </section>
   );
 }

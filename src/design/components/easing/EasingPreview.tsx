@@ -4,8 +4,11 @@
  * The picture answers three questions at once: which family the curve belongs to,
  * which part of it the left/right bounds cut out (the bright segment, with the
  * discarded part dimmed), and — when Bézier is on — what the control points draw.
- * It only reads the easing fields, so a chart event or a shader segment can be
- * passed unchanged.
+ * Its horizontal axis is numeric value ordered from left to right and its
+ * vertical axis is transition progress from bottom to top. Each point uses the
+ * actual interpolation `start + (end - start) * easedProgress`, so a descending
+ * `0 → -3` transition runs from the right edge to the left edge. Without
+ * endpoints it falls back to the normalized `0..1` value domain.
  *
  * Sampling uses the same `easing`/`bezier` functions the renderer uses, so the
  * drawing cannot drift from the animation. The base curve is sampled with no
@@ -15,7 +18,16 @@
 import { useEffect, useRef, useState } from "react";
 import { bezier, easing } from "../../../core/utils/easing.ts";
 import { clamp01 } from "../../../core/utils/numbers.ts";
-import { EASING_CANVAS_HEIGHT, EASING_CANVAS_WIDTH, resizeEasingCanvas } from "./easingCanvas.ts";
+import {
+  EASING_CANVAS_HEIGHT,
+  EASING_CANVAS_WIDTH,
+  EASING_PLOT_LEFT,
+  EASING_PLOT_RIGHT,
+  easingPreviewValue,
+  easingPreviewValueDomain,
+  easingPreviewX,
+  resizeEasingCanvas,
+} from "./easingCanvas.ts";
 
 /**
  * Only the fields the preview draws. Naming the shape here keeps chart-model
@@ -30,23 +42,17 @@ interface EasingPreviewEvent {
   easingType?: number;
   easingLeft?: number;
   easingRight?: number;
+  startValue?: number;
+  endValue?: number;
 }
 
 const WIDTH = EASING_CANVAS_WIDTH;
 const HEIGHT = EASING_CANVAS_HEIGHT;
-const LEFT = 10;
 const TOP = 12;
 const BOTTOM = 88;
-const PLOT_WIDTH = WIDTH - LEFT * 2;
-// Back/Elastic leave the 0..1 band; a margin keeps their overshoot inside the box.
-const RANGE_MIN = -0.15;
-const RANGE_MAX = 1.15;
+const PLOT_WIDTH = EASING_PLOT_RIGHT - EASING_PLOT_LEFT;
 
-const xOf = (progress: number): number => LEFT + progress * PLOT_WIDTH;
-const yOf = (value: number): number =>
-  BOTTOM - ((value - RANGE_MIN) / (RANGE_MAX - RANGE_MIN)) * (BOTTOM - TOP);
-const VALUE_TOP = yOf(1);
-const VALUE_BOTTOM = yOf(0);
+const yOfProgress = (progress: number): number => BOTTOM - progress * (BOTTOM - TOP);
 
 /** Stroke one sampled segment of a curve into the canvas. */
 function drawCurve(
@@ -54,18 +60,19 @@ function drawCurve(
   from: number,
   to: number,
   curve: (progress: number) => number,
+  xOfEasedValue: (easedProgress: number) => number,
 ): void {
   draw.beginPath();
   for (let index = 0; index <= 120; index++) {
     const progress = from + ((to - from) * index) / 120;
-    const value = curve(progress);
-    if (!Number.isFinite(value)) {
+    const easedProgress = curve(progress);
+    if (!Number.isFinite(easedProgress)) {
       continue;
     }
     if (index === 0) {
-      draw.moveTo(xOf(progress), yOf(value));
+      draw.moveTo(xOfEasedValue(easedProgress), yOfProgress(progress));
     } else {
-      draw.lineTo(xOf(progress), yOf(value));
+      draw.lineTo(xOfEasedValue(easedProgress), yOfProgress(progress));
     }
   }
   draw.stroke();
@@ -75,7 +82,15 @@ function drawCurve(
 export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawVersion, setDrawVersion] = useState(0);
-  const { bezier: isBezier, bezierPoints, easingType, easingLeft, easingRight } = event;
+  const {
+    bezier: isBezier,
+    bezierPoints,
+    easingType,
+    easingLeft,
+    easingRight,
+    startValue,
+    endValue,
+  } = event;
 
   useEffect(() => {
     const redraw = () => setDrawVersion((version) => version + 1);
@@ -106,6 +121,9 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
       return;
     }
     const rect = canvas.getBoundingClientRect();
+    const valueDomain = easingPreviewValueDomain(startValue, endValue);
+    const xOfEasedValue = (easedProgress: number) =>
+      easingPreviewX(valueDomain, easingPreviewValue(valueDomain, easedProgress));
     const { pixelWidth, pixelHeight, scaleX, scaleY } = resizeEasingCanvas(
       canvas,
       rect.width || WIDTH,
@@ -120,7 +138,7 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
     draw.strokeStyle = quiet;
     draw.lineWidth = 1;
     draw.setLineDash([2, 3]);
-    draw.strokeRect(LEFT, VALUE_TOP, PLOT_WIDTH, VALUE_BOTTOM - VALUE_TOP);
+    draw.strokeRect(EASING_PLOT_LEFT, TOP, PLOT_WIDTH, BOTTOM - TOP);
     draw.setLineDash([]);
 
     if (isBezier) {
@@ -128,30 +146,32 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
       draw.strokeStyle = quiet;
       draw.setLineDash([3, 3]);
       draw.beginPath();
-      draw.moveTo(xOf(0), yOf(0));
-      draw.lineTo(xOf(points[0] ?? 0), yOf(points[1] ?? 0));
-      draw.moveTo(xOf(1), yOf(1));
-      draw.lineTo(xOf(points[2] ?? 1), yOf(points[3] ?? 1));
+      draw.moveTo(xOfEasedValue(0), yOfProgress(0));
+      draw.lineTo(xOfEasedValue(points[1] ?? 0), yOfProgress(points[0] ?? 0));
+      draw.moveTo(xOfEasedValue(1), yOfProgress(1));
+      draw.lineTo(xOfEasedValue(points[3] ?? 1), yOfProgress(points[2] ?? 1));
       draw.stroke();
       draw.setLineDash([]);
       draw.strokeStyle = accent;
       draw.lineWidth = 2;
-      drawCurve(draw, 0, 1, (progress) => bezier(progress, points));
+      drawCurve(draw, 0, 1, (progress) => bezier(progress, points), xOfEasedValue);
       return;
     }
 
     const left = clamp01(easingLeft ?? 0);
     const right = clamp01(easingRight ?? 1);
     const type = easingType ?? 1;
-    const curve = (progress: number) => easing(progress, type, 0, 1);
+    const baseCurve = (progress: number) => easing(progress, type, 0, 1);
+    const activeCurve = (progress: number) =>
+      right > left ? easing(progress, type, left, right) : baseCurve(progress);
     draw.strokeStyle = quiet;
     draw.lineWidth = 1.5;
-    drawCurve(draw, 0, 1, curve);
+    drawCurve(draw, 0, 1, baseCurve, xOfEasedValue);
+    // The active event curve is normalized back to its actual start/end values.
+    draw.strokeStyle = accent;
+    draw.lineWidth = 2;
+    drawCurve(draw, 0, 1, activeCurve, xOfEasedValue);
     if (right > left) {
-      // The kept sub-range: the same curve, brighter, plus its two edges.
-      draw.strokeStyle = accent;
-      draw.lineWidth = 2;
-      drawCurve(draw, left, right, curve);
       draw.strokeStyle = quiet;
       draw.lineWidth = 1;
       draw.setLineDash([3, 3]);
@@ -160,13 +180,22 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
           continue;
         }
         draw.beginPath();
-        draw.moveTo(xOf(boundary), VALUE_TOP);
-        draw.lineTo(xOf(boundary), VALUE_BOTTOM);
+        draw.moveTo(xOfEasedValue(baseCurve(boundary)), TOP);
+        draw.lineTo(xOfEasedValue(baseCurve(boundary)), BOTTOM);
         draw.stroke();
       }
       draw.setLineDash([]);
     }
-  }, [drawVersion, isBezier, bezierPoints, easingType, easingLeft, easingRight]);
+  }, [
+    drawVersion,
+    isBezier,
+    bezierPoints,
+    easingType,
+    easingLeft,
+    easingRight,
+    startValue,
+    endValue,
+  ]);
 
   return (
     <canvas

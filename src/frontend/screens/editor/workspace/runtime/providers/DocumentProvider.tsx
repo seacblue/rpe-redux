@@ -506,6 +506,7 @@ export function createDocumentRuntime(options: {
   /** Validates a candidate and offers conversion when the chart format needs it. */
   const prepareCandidate = async (
     candidate: EditorCandidate,
+    task?: LoadTask,
   ): Promise<PreparedEditorCandidate | null> => {
     const report = detectChartCompatibility(candidate.chart);
     if (!report.requiresConversion) {
@@ -541,7 +542,9 @@ export function createDocumentRuntime(options: {
     if (!confirmed) {
       return null;
     }
-    const conversion = convertChartToCurrentVersion(candidate.chart, report);
+    const conversion = convertChartToCurrentVersion(candidate.chart, report, (completed, total) =>
+      task?.update("parse", completed, total),
+    );
     return conversion
       ? {
           ...candidate,

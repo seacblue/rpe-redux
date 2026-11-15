@@ -29,6 +29,7 @@ import {
 import { saveLibraryDocument } from "../../../../../../core/global/library/save.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import { collaborationRoomDocument } from "../../../../../../core/collaboration/ui.ts";
+import { markFailurePresented } from "../../../../../../core/contracts/failure.ts";
 import type { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { LibraryProjectRef } from "../../../../../../core/global/library/types.ts";
@@ -66,8 +67,8 @@ export interface SaveOptions {
   onProgress?: (value: number) => void;
 }
 
-/** A no-op toast handle for background saves that report elsewhere. */
-const quietToast: ToastHandle = {
+/** An explicit progress owner for background saves that report elsewhere. */
+const backgroundProgressOwner: ToastHandle = {
   id: 0,
   update() {},
   setProgress() {},
@@ -106,7 +107,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
     const backgroundPath = assetPath(captured, snapshot.META?.background, deps.currentChartName());
     const background = backgroundPath ? captured.uri?.(backgroundPath) : undefined;
     const progressToast = options.quiet
-      ? quietToast
+      ? backgroundProgressOwner
       : showProgressToast(
           t("workspace.document.saving"),
           "info",
@@ -332,6 +333,9 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
               : t("workspace.document.solution.saveGeneric");
         const message = `${baseMessage} ${t("workspace.document.solutionLabel")}: ${solution}`;
         progressToast.fail(message);
+        if (!options.quiet) {
+          markFailurePresented(error, "progress");
+        }
         throw error;
       })
       .finally(() => {

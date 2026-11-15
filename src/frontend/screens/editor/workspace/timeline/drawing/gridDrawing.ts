@@ -19,6 +19,7 @@ import {
   type BeatLineColorKey,
 } from "../../../canvas/beatLineColors.ts";
 import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
+import { horizontalGuideHoverOpacity } from "./timelineHoverGuides.ts";
 
 /**
  * Which parts of the beat grid a pass draws.
@@ -227,7 +228,10 @@ function strokeGridBatches(
 }
 
 type TimelineHoverGuideReceiver = {
-  appearance: Pick<TimelineAppearance, "hoverGuidesEnabled" | "gridHighlightColor">;
+  appearance: Pick<
+    TimelineAppearance,
+    "hoverGuidesEnabled" | "nearbyGuidesOnly" | "gridHighlightColor"
+  >;
   cache: TempoSecondsCache;
   gestures: Pick<TimelineGestures, "cursor" | "eventCursor" | "hoverArea">;
   viewport: TimelineViewport;
@@ -239,8 +243,14 @@ function hoveredGridLine(
   width: number,
   height: number,
   area: TimelineArea,
-): { lineIndex: number; beat: number } | null {
-  if (receiver.appearance.hoverGuidesEnabled === false || receiver.gestures.hoverArea !== area) {
+): { lineIndex: number; beat: number; pointerY: number } | null {
+  if (
+    receiver.appearance.hoverGuidesEnabled === false &&
+    receiver.appearance.nearbyGuidesOnly !== true
+  ) {
+    return null;
+  }
+  if (receiver.gestures.hoverArea !== area) {
     return null;
   }
   const pointer = area === "events" ? receiver.gestures.eventCursor : receiver.gestures.cursor;
@@ -254,7 +264,7 @@ function hoveredGridLine(
     (height - receiver.viewport.judgementOffset - pointer.y) / receiver.viewport.scaleForArea(area);
   const beat = receiver.viewport.tempo.beat(seconds, factor);
   const snapped = Math.round(beat * receiver.viewport.division) / receiver.viewport.division;
-  return Number.isFinite(snapped) ? { lineIndex, beat: snapped } : null;
+  return Number.isFinite(snapped) ? { lineIndex, beat: snapped, pointerY: pointer.y } : null;
 }
 
 /** Spatial guides end at beat zero rather than continuing into negative time. */
@@ -322,13 +332,8 @@ export function grid(
       scale;
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
-  const localBeatHeight = Math.abs(
-    verticalAt(this.viewport.origin + 1) - verticalAt(this.viewport.origin),
-  );
-  const stride = Math.max(
-    1,
-    Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
-  );
+  // Every visible tick is retained; nearby-only mode controls alpha, not geometry.
+  const stride = 1;
   const hovered = hoveredGridLine(this, width, height, area);
   const highlightedTick = hovered ? Math.round(hovered.beat * this.viewport.division) : null;
   context.font = canvasFont("caption");
@@ -357,11 +362,22 @@ export function grid(
       1,
       (this.appearance.barAlpha ?? 1) * (major ? 0.9 : tick % 2 === 0 ? 0.6 : 0.4),
     );
-    const highlighted = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const nearestHover = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const hoverOpacity =
+      this.appearance.nearbyGuidesOnly === true
+        ? horizontalGuideHoverOpacity(vertical, hovered?.pointerY ?? null)
+        : nearestHover
+          ? 1
+          : 0;
+    // Only the nearest snapped beat line receives the highlight colour. The
+    // surrounding lines keep their own colours and use hoverOpacity solely as
+    // the sampling-style fade.
+    const highlighted = this.appearance.hoverGuidesEnabled !== false && nearestHover;
     const color = highlighted
-      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor, baseAlpha)
+      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
       : baseColor;
-    const alpha = highlighted ? 1 : baseAlpha;
+    const alpha =
+      this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
     if (draws(parts, "lines")) {
       if (lineBatch?.isActive?.()) {
         lineBatch.addRect(0, vertical, width, Math.max(0.5, context.lineWidth), color, alpha);
@@ -422,14 +438,8 @@ export function gridForLine(
   const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical), factor);
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
-  const localBeatHeight = Math.abs(
-    this.viewport.verticalForLine(this.viewport.origin + 1, lineIndex, height, area) -
-      this.viewport.verticalForLine(this.viewport.origin, lineIndex, height, area),
-  );
-  const stride = Math.max(
-    1,
-    Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
-  );
+  // Every visible tick is retained; nearby-only mode controls alpha, not geometry.
+  const stride = 1;
   const canvasWidth =
     area === "events"
       ? this.viewport.eventsCanvas.clientWidth
@@ -442,7 +452,12 @@ export function gridForLine(
   context.rect(left, 0, width, height);
   context.clip();
   context.font = canvasFont("caption");
-  context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
+  // Grid-line thickness is a canvas-space setting, not a panel-space setting.
+  // Scaling it from `width` makes the same beat line shrink as more multi-line
+  // panels are fitted into the viewport; low-opacity hover segments can then
+  // disappear during WebGL rasterisation. Keep every panel at the full canvas
+  // thickness used by the single-line path.
+  context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * canvasWidth) / 1920);
   const scratch = scratchFor(this);
   resetGridBatches(scratch);
   const batches = scratch.batches;
@@ -467,11 +482,21 @@ export function gridForLine(
       1,
       (this.appearance.barAlpha ?? 1) * (major ? 0.9 : tick % 2 === 0 ? 0.6 : 0.4),
     );
-    const highlighted = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const nearestHover = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const hoverOpacity =
+      this.appearance.nearbyGuidesOnly === true
+        ? horizontalGuideHoverOpacity(vertical, hovered?.pointerY ?? null)
+        : nearestHover
+          ? 1
+          : 0;
+    // Match note-lane guides: colour only the nearest snapped line, while the
+    // neighbouring lines retain their base colours and fade by pixel distance.
+    const highlighted = this.appearance.hoverGuidesEnabled !== false && nearestHover;
     const color = highlighted
-      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor, baseAlpha)
+      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
       : baseColor;
-    const alpha = highlighted ? 1 : baseAlpha;
+    const alpha =
+      this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
     if (draws(parts, "lines")) {
       if (lineBatch?.isActive?.()) {
         lineBatch.addRect(left, vertical, width, Math.max(0.5, context.lineWidth), color, alpha);

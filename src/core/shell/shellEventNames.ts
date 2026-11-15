@@ -9,6 +9,10 @@
 
 /** Asks the editor to open its export dialog. */
 export const EXPORT_DOCUMENT_EVENT = "redux:export-document";
+/** Requests chart import without opening any imported project. */
+export const IMPORT_CHART_EVENT = "redux:import-chart";
+/** Requests chart import followed by an explicit open action for one result. */
+export const IMPORT_AND_OPEN_CHART_EVENT = "redux:import-and-open-chart";
 /** Broadcasts the window's file-drag phase so the active surface can answer it. */
 export const FILE_DRAG_EVENT = "redux:file-drag";
 /** Requests the mounted workspace to activate one inspector pane. */

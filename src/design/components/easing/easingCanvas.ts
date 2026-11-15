@@ -7,6 +7,60 @@
  */
 export const EASING_CANVAS_WIDTH = 260;
 export const EASING_CANVAS_HEIGHT = 100;
+export const EASING_PLOT_LEFT = 10;
+export const EASING_PLOT_RIGHT = EASING_CANVAS_WIDTH - EASING_PLOT_LEFT;
+
+/** The numeric value domain used by one easing preview. */
+export interface EasingPreviewValueDomain {
+  start: number;
+  end: number;
+  minimum: number;
+  maximum: number;
+}
+
+/**
+ * Resolve the horizontal value domain for a preview.
+ *
+ * The x axis is numeric value ordered from left to right, not event time.
+ * Consequently a transition from `0` to `-3` travels from the right edge to
+ * the left edge. Missing or non-finite endpoints use the normalized `0..1`
+ * domain used by generic easing previews.
+ */
+export function easingPreviewValueDomain(
+  startValue?: number,
+  endValue?: number,
+): EasingPreviewValueDomain {
+  const start = Number.isFinite(startValue) ? Number(startValue) : 0;
+  const end = Number.isFinite(endValue) ? Number(endValue) : 1;
+  if (start === end) {
+    return { start, end, minimum: start - 0.5, maximum: end + 0.5 };
+  }
+  return {
+    start,
+    end,
+    minimum: Math.min(start, end),
+    maximum: Math.max(start, end),
+  };
+}
+
+/** Interpolate one actual event value from a normalized easing output. */
+export function easingPreviewValue(
+  domain: EasingPreviewValueDomain,
+  easedProgress: number,
+): number {
+  const amount = Number.isFinite(easedProgress) ? easedProgress : 0;
+  return domain.start + (domain.end - domain.start) * amount;
+}
+
+/** Map one actual event value onto the numeric value axis. */
+export function easingPreviewX(domain: EasingPreviewValueDomain, value: number): number {
+  const actualValue = Number.isFinite(value) ? value : domain.start;
+  return (
+    EASING_PLOT_LEFT +
+    ((actualValue - domain.minimum) / (domain.maximum - domain.minimum)) *
+      (EASING_PLOT_RIGHT - EASING_PLOT_LEFT)
+  );
+}
 
 export interface EasingCanvasMetrics {
   pixelWidth: number;

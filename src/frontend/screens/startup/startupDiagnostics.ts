@@ -28,7 +28,7 @@ export const STARTUP_FAILURE_MESSAGE_LIMIT = 160;
 
 /** Whether a backend startup error offers a different-port recovery path. */
 export function isBackendPortConflict(error: string): boolean {
-  return /backend port \d+ is already in use/iu.test(error);
+  return /backend_port_conflict|backend[_ ]port(?: \d+)?(?: is)? already in use/iu.test(error);
 }
 
 /** The package rows a failure screen should render. */

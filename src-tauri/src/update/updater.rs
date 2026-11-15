@@ -8,8 +8,12 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -30,9 +34,18 @@ pub struct UpdateBackup {
 }
 
 /// Verified bytes remain in the host until the frontend completes its final checks.
-#[derive(Default)]
 pub struct UpdateHost {
     prepared: Arc<Mutex<Option<PreparedUpdate>>>,
+    download_control: Arc<AtomicU8>,
+}
+
+impl Default for UpdateHost {
+    fn default() -> Self {
+        Self {
+            prepared: Arc::new(Mutex::new(None)),
+            download_control: Arc::new(AtomicU8::new(DOWNLOAD_RUNNING)),
+        }
+    }
 }
 
 /// Which handoff applies one verified update.
@@ -68,6 +81,26 @@ const CACHE_PAYLOAD: &str = "payload.bin";
 const CACHE_SIGNATURE: &str = "payload.sig";
 /// Cached release metadata.
 const CACHE_META: &str = "meta.json";
+/// Unverified bytes retained between pause and resume.
+const PARTIAL_PAYLOAD: &str = "partial.bin";
+/// Metadata binding the partial bytes to one signed release.
+const PARTIAL_META: &str = "partial.json";
+
+const DOWNLOAD_RUNNING: u8 = 0;
+const DOWNLOAD_PAUSE: u8 = 1;
+const DOWNLOAD_STOP: u8 = 2;
+
+/// Metadata required before a partial response may be appended to a download.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartialUpdateInfo {
+    version: String,
+    url: String,
+    signature: String,
+    tag: String,
+    prerelease: bool,
+    kind: String,
+}
 
 /// Cached release metadata shared with the frontend at launch.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -125,6 +158,96 @@ fn cache_dir(data: &Path) -> PathBuf {
 /// Remove the cached package and its metadata.
 fn remove_cache(data: &Path) {
     let _ = fs::remove_dir_all(cache_dir(data));
+}
+
+/// Remove only the unverified bytes so a completed package cache stays intact.
+fn remove_partial_cache(data: &Path) {
+    let directory = cache_dir(data);
+    let _ = fs::remove_file(directory.join(PARTIAL_PAYLOAD));
+    let _ = fs::remove_file(directory.join(PARTIAL_META));
+}
+
+/// Return the size of a partial file that is still within the installer limit.
+fn partial_length(data: &Path) -> u64 {
+    let path = cache_dir(data).join(PARTIAL_PAYLOAD);
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.len() <= crate::update::local_update::MAX_INSTALLER_BYTES => {
+            metadata.len()
+        }
+        _ => {
+            remove_partial_cache(data);
+            0
+        }
+    }
+}
+
+/// Bind the partial cache to the exact release URL and signature being fetched.
+fn write_partial_info(
+    data: &Path,
+    update: &Update,
+    kind: PreparedKind,
+    tag: &str,
+    prerelease: bool,
+) -> Result<(), String> {
+    let directory = cache_dir(data);
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let info = PartialUpdateInfo {
+        version: update.version.clone(),
+        url: update.download_url.to_string(),
+        signature: update.signature.clone(),
+        tag: tag.to_owned(),
+        prerelease,
+        kind: cache_kind_name(kind).to_owned(),
+    };
+    let bytes = serde_json::to_vec_pretty(&info).map_err(|error| error.to_string())?;
+    write_cache_file(&directory.join(PARTIAL_META), &bytes)
+}
+
+/// Accept partial bytes only when their release identity is unchanged.
+fn partial_matches(
+    data: &Path,
+    update: &Update,
+    kind: PreparedKind,
+    tag: &str,
+    prerelease: bool,
+) -> bool {
+    let path = cache_dir(data).join(PARTIAL_META);
+    let Some(info) = crate::storage::read_json::<PartialUpdateInfo>(&path) else {
+        return false;
+    };
+    info.version == update.version
+        && info.url == update.download_url.to_string()
+        && info.signature == update.signature
+        && info.tag == tag
+        && info.prerelease == prerelease
+        && info.kind == cache_kind_name(kind)
+}
+
+/// Parse the total size from a server's Content-Range header.
+fn content_range_total(value: Option<&reqwest::header::HeaderValue>) -> Option<u64> {
+    let text = value?.to_str().ok()?;
+    text.split('/').nth(1)?.parse().ok()
+}
+
+/// Parse the starting byte from a server's Content-Range header.
+fn content_range_start(value: Option<&reqwest::header::HeaderValue>) -> Option<u64> {
+    let text = value?.to_str().ok()?;
+    let range = text.strip_prefix("bytes ")?;
+    range.split('-').next()?.parse().ok()
+}
+
+/// Whether the download command was ended by one of the user controls.
+fn is_download_controlled(error: &str) -> bool {
+    matches!(error, "update_download_paused" | "update_download_stopped")
+}
+
+/// Convert the native control state into the command error used by the renderer.
+fn controlled_download_error(control: u8) -> Option<&'static str> {
+    match control {
+        DOWNLOAD_PAUSE => Some("update_download_paused"),
+        DOWNLOAD_STOP => Some("update_download_stopped"),
+        _ => None,
+    }
 }
 
 /// Replace a cache file through a sibling temporary file.
@@ -363,6 +486,8 @@ pub async fn update_download(
     tag: Option<String>,
     prerelease: bool,
 ) -> Result<String, String> {
+    host.download_control
+        .store(DOWNLOAD_RUNNING, Ordering::SeqCst);
     let key = UPDATE_PUBLIC_KEY.trim();
     if key.is_empty() {
         return Err("Configure the updater public key before installing an update.".to_owned());
@@ -379,35 +504,76 @@ pub async fn update_download(
     // manifest falls back to the installer endpoint.
     #[cfg(windows)]
     if let Ok(endpoint) = portable_endpoint_for(&repo, tag.as_deref()) {
-        if let Ok((update, bytes)) = download_release(&app, endpoint, key).await {
-            let version = update.version.clone();
-            let signature = update.signature.clone();
-            keep_cached_download(
-                &app,
-                PreparedKind::Portable,
-                &version,
-                &cache_tag,
-                prerelease,
-                &bytes,
-                &signature,
-            );
-            *host.prepared.lock().map_err(|error| error.to_string())? = Some(PreparedUpdate {
-                id: uuid::Uuid::new_v4(),
-                kind: PreparedKind::Portable,
-                update: Some(update),
-                version: version.clone(),
-                bytes,
-                signature: None,
-                portable_signature: Some(signature),
-                backup: None,
-                resources: None,
-            });
-            return Ok(version);
+        match download_release(
+            &app,
+            endpoint,
+            key,
+            host.download_control.clone(),
+            PreparedKind::Portable,
+            &cache_tag,
+            prerelease,
+        )
+        .await
+        {
+            Ok((update, bytes)) => {
+                if let Some(error) =
+                    controlled_download_error(host.download_control.load(Ordering::SeqCst))
+                {
+                    if error == "update_download_stopped" {
+                        if let Ok(data) = crate::storage::data_dir(&app) {
+                            remove_cache(&data);
+                        }
+                    }
+                    return Err(error.to_owned());
+                }
+                let version = update.version.clone();
+                let signature = update.signature.clone();
+                keep_cached_download(
+                    &app,
+                    PreparedKind::Portable,
+                    &version,
+                    &cache_tag,
+                    prerelease,
+                    &bytes,
+                    &signature,
+                );
+                *host.prepared.lock().map_err(|error| error.to_string())? = Some(PreparedUpdate {
+                    id: uuid::Uuid::new_v4(),
+                    kind: PreparedKind::Portable,
+                    update: Some(update),
+                    version: version.clone(),
+                    bytes,
+                    signature: None,
+                    portable_signature: Some(signature),
+                    backup: None,
+                    resources: None,
+                });
+                return Ok(version);
+            }
+            Err(error) if is_download_controlled(&error) => return Err(error),
+            Err(_) => {}
         }
     }
 
     let endpoint = endpoint_for(&repo, tag.as_deref())?;
-    let (update, bytes) = download_release(&app, endpoint, key).await?;
+    let (update, bytes) = download_release(
+        &app,
+        endpoint,
+        key,
+        host.download_control.clone(),
+        PreparedKind::Installer,
+        &cache_tag,
+        prerelease,
+    )
+    .await?;
+    if let Some(error) = controlled_download_error(host.download_control.load(Ordering::SeqCst)) {
+        if error == "update_download_stopped" {
+            if let Ok(data) = crate::storage::data_dir(&app) {
+                remove_cache(&data);
+            }
+        }
+        return Err(error.to_owned());
+    }
     let version = update.version.clone();
     let signature_text = update.signature.clone();
     let signature = signature_text.as_bytes().to_vec();
@@ -439,6 +605,10 @@ async fn download_release(
     app: &AppHandle,
     endpoint: tauri::Url,
     key: &str,
+    control: Arc<AtomicU8>,
+    kind: PreparedKind,
+    tag: &str,
+    prerelease: bool,
 ) -> Result<(Update, Vec<u8>), String> {
     let exit_handle = app.clone();
     let updater = app
@@ -462,25 +632,148 @@ async fn download_release(
         .await
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "No newer signed release is available at the update endpoint.".to_owned())?;
-    let progress_handle = app.clone();
-    let mut downloaded = 0u64;
-    let bytes = update
-        .download(
-            move |chunk, total| {
-                downloaded = downloaded.saturating_add(chunk as u64);
-                let _ = progress_handle.emit(
-                    "redux-update-progress",
-                    UpdateProgress {
-                        phase: "downloading",
-                        downloaded,
-                        total,
-                    },
-                );
-            },
-            || {},
-        )
+    let data = crate::storage::data_dir(app).ok();
+    let resume = data
+        .as_deref()
+        .filter(|root| partial_matches(root, &update, kind, tag, prerelease))
+        .map(partial_length)
+        .unwrap_or(0);
+    if let Some(root) = data.as_deref() {
+        if resume == 0 {
+            remove_partial_cache(root);
+        }
+        write_partial_info(root, &update, kind, tag, prerelease)?;
+    }
+    let mut headers = update.headers.clone();
+    headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static("application/octet-stream"),
+    );
+    if resume > 0 {
+        let value = format!("bytes={resume}-");
+        headers.insert(
+            reqwest::header::RANGE,
+            reqwest::header::HeaderValue::from_str(&value).map_err(|error| error.to_string())?,
+        );
+    }
+    let mut client = reqwest::Client::builder()
+        .user_agent("RPE-Redux updater")
+        .timeout(Duration::from_secs(60));
+    if update.no_proxy {
+        client = client.no_proxy();
+    } else if let Some(proxy) = &update.proxy {
+        client =
+            client.proxy(reqwest::Proxy::all(proxy.as_str()).map_err(|error| error.to_string())?);
+    }
+    let response = client
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(update.download_url.clone())
+        .headers(headers)
+        .send()
         .await
         .map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Download request failed with status: {}",
+            response.status()
+        ));
+    }
+    let appending = resume > 0
+        && response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+        && content_range_start(response.headers().get(reqwest::header::CONTENT_RANGE))
+            == Some(resume);
+    if resume > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT && !appending {
+        if let Some(root) = data.as_deref() {
+            remove_partial_cache(root);
+        }
+        return Err("The update server returned an invalid resume range.".to_owned());
+    }
+    let offset = if appending { resume } else { 0 };
+    let total = if appending {
+        content_range_total(response.headers().get(reqwest::header::CONTENT_RANGE))
+            .or_else(|| response.content_length().map(|length| offset + length))
+    } else {
+        response.content_length()
+    };
+    let path = data
+        .as_deref()
+        .map(|root| cache_dir(root).join(PARTIAL_PAYLOAD));
+    let mut file = if let Some(path) = path {
+        let mut options = fs::OpenOptions::new();
+        options.create(true).write(true);
+        if appending {
+            options.append(true);
+        } else {
+            options.truncate(true);
+        }
+        Some(options.open(path).map_err(|error| error.to_string())?)
+    } else {
+        None
+    };
+    let progress_handle = app.clone();
+    let mut downloaded = offset;
+    let mut stream = response;
+    while let Some(chunk) = stream.chunk().await.map_err(|error| error.to_string())? {
+        match control.load(Ordering::SeqCst) {
+            DOWNLOAD_PAUSE => {
+                if let Some(file) = file.as_mut() {
+                    file.flush().map_err(|error| error.to_string())?;
+                    file.sync_data().map_err(|error| error.to_string())?;
+                }
+                return Err("update_download_paused".to_owned());
+            }
+            DOWNLOAD_STOP => {
+                drop(file);
+                if let Some(root) = data.as_deref() {
+                    remove_cache(root);
+                }
+                return Err("update_download_stopped".to_owned());
+            }
+            _ => {}
+        }
+        if let Some(file) = file.as_mut() {
+            file.write_all(&chunk).map_err(|error| error.to_string())?;
+        }
+        downloaded = downloaded.saturating_add(chunk.len() as u64);
+        let _ = progress_handle.emit(
+            "redux-update-progress",
+            UpdateProgress {
+                phase: "downloading",
+                downloaded,
+                total,
+            },
+        );
+    }
+    match control.load(Ordering::SeqCst) {
+        DOWNLOAD_PAUSE => return Err("update_download_paused".to_owned()),
+        DOWNLOAD_STOP => {
+            drop(file);
+            if let Some(root) = data.as_deref() {
+                remove_cache(root);
+            }
+            return Err("update_download_stopped".to_owned());
+        }
+        _ => {}
+    }
+    if let Some(file) = file.as_mut() {
+        file.flush().map_err(|error| error.to_string())?;
+        file.sync_data().map_err(|error| error.to_string())?;
+    }
+    let bytes = if let Some(root) = data.as_deref() {
+        fs::read(cache_dir(root).join(PARTIAL_PAYLOAD)).map_err(|error| error.to_string())?
+    } else {
+        return Err("The update data directory is unavailable.".to_owned());
+    };
+    if let Err(error) = update.verify(&bytes) {
+        if let Some(root) = data.as_deref() {
+            remove_partial_cache(root);
+        }
+        return Err(error.to_string());
+    }
+    if let Some(root) = data.as_deref() {
+        remove_partial_cache(root);
+    }
     Ok((update, bytes))
 }
 
@@ -581,6 +874,21 @@ pub async fn update_load_local(
 #[tauri::command]
 pub fn update_discard(host: State<'_, UpdateHost>) -> Result<(), String> {
     *host.prepared.lock().map_err(|error| error.to_string())? = None;
+    Ok(())
+}
+
+/// Request a pause; the current response keeps its partial bytes for resume.
+#[tauri::command]
+pub fn update_download_pause(host: State<'_, UpdateHost>) -> Result<(), String> {
+    host.download_control
+        .store(DOWNLOAD_PAUSE, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Request a stop; the download flow drops its partial bytes after closing the file.
+#[tauri::command]
+pub fn update_download_stop(_app: AppHandle, host: State<'_, UpdateHost>) -> Result<(), String> {
+    host.download_control.store(DOWNLOAD_STOP, Ordering::SeqCst);
     Ok(())
 }
 

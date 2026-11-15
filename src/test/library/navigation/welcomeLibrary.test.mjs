@@ -9,13 +9,16 @@ import {
   defaultLibraryDirection,
   getLibrarySort,
 } from "../../../frontend/screens/welcome/librarySort.ts";
-import { buildLibraryEntries } from "../../../frontend/screens/welcome/library/libraryEntries.ts";
+import {
+  buildLibraryEntries,
+  matchesLibraryGroups,
+} from "../../../frontend/screens/welcome/library/libraryEntries.ts";
 
-function project(id, name) {
+function project(id, name, group = "") {
   return {
     id,
     name,
-    group: "",
+    group,
     archived: false,
     charter: "",
     composer: "",
@@ -69,6 +72,30 @@ test("the home card adapter publishes every loaded project", () => {
   } finally {
     adapter.dispose();
   }
+});
+
+test("welcome entries prefer the generated thumbnail over the full-size cover", () => {
+  const [entry] = buildLibraryEntries({
+    libraryProjects: [
+      {
+        ...project("thumb", "Thumbnail chart"),
+        thumbnailUrl: "http://redux.localhost/thumbnail.png",
+        coverUrl: "http://redux.localhost/original.png",
+      },
+    ],
+    ...actions(),
+  });
+  assert.equal(entry.cover, "http://redux.localhost/thumbnail.png");
+});
+
+test("group filtering keeps all groups by default and matches stored values", () => {
+  const [rpe, phi] = buildLibraryEntries({
+    libraryProjects: [project("rpe", "RPE chart", "RPE"), project("phi", "Phi chart", "PhiEdit")],
+    ...actions(),
+  });
+  assert.equal(matchesLibraryGroups(rpe, new Set()), true);
+  assert.equal(matchesLibraryGroups(rpe, new Set(["RPE"])), true);
+  assert.equal(matchesLibraryGroups(phi, new Set(["RPE"])), false);
 });
 
 test("timestamps sort newest first and text sorts ascending by default", () => {

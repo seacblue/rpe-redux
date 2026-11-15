@@ -26,6 +26,8 @@ const (
 type RpeChart struct {
 	// Path is the absolute chart JSON the importer opens.
 	Path string `json:"path"`
+	// EstimatedBytes is a conservative decoded/staged memory estimate.
+	EstimatedBytes int64 `json:"estimatedBytes"`
 	// Folder is the chart folder name below Resources.
 	Folder string `json:"folder"`
 	// Name is the song title from Info.txt, or a file-name fallback.
@@ -205,17 +207,18 @@ func rpeChartEntry(folder string) (RpeChart, bool) {
 		group = "RPE"
 	}
 	return RpeChart{
-		Path:      chart,
-		Folder:    folderName,
-		Name:      name,
-		Group:     group,
-		Song:      strings.TrimSpace(info["song"]),
-		Picture:   strings.TrimSpace(info["picture"]),
-		Chart:     chartName,
-		Composer:  firstNonEmpty(info["composer"], info["artist"]),
-		Charter:   firstNonEmpty(info["charter"], info["mapper"]),
-		LastEdit:  strings.TrimSpace(info["lastedittime"]),
-		Autosaves: countRpeAutosaves(folder),
+		Path:           chart,
+		EstimatedBytes: estimateImportFolderBytes(folder),
+		Folder:         folderName,
+		Name:           name,
+		Group:          group,
+		Song:           strings.TrimSpace(info["song"]),
+		Picture:        strings.TrimSpace(info["picture"]),
+		Chart:          chartName,
+		Composer:       firstNonEmpty(info["composer"], info["artist"]),
+		Charter:        firstNonEmpty(info["charter"], info["mapper"]),
+		LastEdit:       strings.TrimSpace(info["lastedittime"]),
+		Autosaves:      countRpeAutosaves(folder),
 	}, true
 }
 

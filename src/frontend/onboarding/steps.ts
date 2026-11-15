@@ -108,7 +108,7 @@ export function buildOnboardingSteps(
     const rpe = choice === "rpe";
     steps.push({
       id: "start",
-      targets: [rpe ? "home-rpe" : "home-new"],
+      targets: [rpe ? "home-import" : "home-new"],
       placement: "top",
       title: t(rpe ? "onboarding.start.rpe.title" : "onboarding.start.new.title"),
       body: t(rpe ? "onboarding.start.rpe.body" : "onboarding.start.new.body"),

@@ -8,6 +8,7 @@ import { Button } from "../../../../design/components/button/Button.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
 import { ShortcutBindings } from "../../../../design/components/keyboardHint/Kbd.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
+import { IMPORT_CHART_EVENT } from "../../../../core/shell/shellEventNames.ts";
 import { documents } from "../../editor/workspace/document/lifecycle/service.ts";
 import { onboardingAnchorRef } from "../../../onboarding/anchors.ts";
 import { useShortcuts } from "../../settings/shortcuts/useShortcuts.ts";
@@ -41,7 +42,7 @@ export function LibraryActions() {
         size="lg"
         className="redux-library-action"
         data-onboarding="import"
-        onClick={() => documents.openDocument()}
+        onClick={() => window.dispatchEvent(new Event(IMPORT_CHART_EVENT))}
       >
         <span className="redux-library-action-icon">
           <Icon name="open" size={16} />

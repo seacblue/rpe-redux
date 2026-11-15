@@ -366,7 +366,7 @@ export default {
   "settings.field.scroll-speed.label": "滚轮跳转速度",
   "settings.field.timeline-exclusive-width.label": "独占时的时间轴宽度",
   "settings.field.multi-edit-history-limit.label": "批量编辑历史条数",
-  "settings.field.multi-edit-history-limit.description": "保留的可复用参数组数量；最新的排在最前。",
+  "settings.field.multi-edit-history-limit.description": "保留的可复用参数组数量；最新的排在末尾。",
   "settings.field.multi-line-merge-notes.label": "合并音符",
   "settings.field.multi-line-merge-notes.description":
     "在一个多线编辑音符区域中显示所选判定线的音符。",
@@ -376,6 +376,9 @@ export default {
   "settings.field.key-press-label-enabled.label": "显示按键标签",
   "settings.field.mouse-trail-enabled.label": "显示鼠标轨迹",
   "settings.field.hover-guides-enabled.label": "高亮最近网格线",
+  "settings.field.nearby-guides-only-enabled.label": "仅显示鼠标附近辅助线",
+  "settings.field.nearby-guides-only-enabled.description":
+    "只有鼠标附近的辅助线保留透明度，其余辅助线完全透明。",
   "settings.field.timeline-density-bars-enabled.label": "显示时间轴概览条",
   "settings.field.timeline-density-bars-enabled.description": "在时间轴左右两侧显示概览条。",
   "settings.field.timeline-overview-strip-width.label": "概览条宽度",

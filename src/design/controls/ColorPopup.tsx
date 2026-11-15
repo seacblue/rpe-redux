@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../components/button/Button.tsx";
 import { Input } from "../components/input/Input.tsx";
 import { useTranslation } from "../../i18n/react.ts";
-import { closeControlPopup, handleControlPopupEscape, popupDialogBoxOf } from "./controlActions.ts";
+import { closeControlPopup, handleControlPopupEscape } from "./controlActions.ts";
 import { writeInputValue } from "./nativeValue.ts";
 import type { ColorPopupState } from "./controlActions.ts";
 import { clamp01 } from "../../core/utils/numbers.ts";
@@ -187,12 +187,10 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
   const width = 392;
   const height = allowAlpha ? 370 : 312;
   const viewport = { width: window.innerWidth, height: window.innerHeight };
-  const dialogBox = popupDialogBoxOf(element);
   const { style } = placeControlPopup({
     anchor,
     panelWidth: width,
     panelHeight: height,
-    dialog: dialogBox,
     viewport,
     flipAboveInset: 0,
   });

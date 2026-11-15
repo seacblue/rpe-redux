@@ -152,6 +152,13 @@ export class ResourceState<T> {
     return this.load();
   }
 
+  /** Replace the visible value without performing another transport read. */
+  replace(value: T): void {
+    this.cancel();
+    const revision = ++this.revision;
+    this.publish({ phase: "ready", value, error: "", stale: false, revision });
+  }
+
   /** Abort the active load and drop subscribers. */
   dispose(): void {
     this.cancel();
