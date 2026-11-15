@@ -8,9 +8,13 @@ test("the default camera fills the authored field without tinting", () => {
 });
 
 test("a right camera shift tints the visible area beyond the authored range", () => {
-  assert.deepEqual(offscreenRegionSegments(0, 300, 675, 300), [{ x: 150, width: 150 }]);
+  assert.deepEqual(offscreenRegionSegments(0, 300, 675, 300), [
+    { x: 150, width: 150, side: "right" },
+  ]);
 });
 
 test("a left camera shift tints the visible area below the authored range", () => {
-  assert.deepEqual(offscreenRegionSegments(0, 300, -675, 300), [{ x: 0, width: 150 }]);
+  assert.deepEqual(offscreenRegionSegments(0, 300, -675, 300), [
+    { x: 0, width: 150, side: "left" },
+  ]);
 });

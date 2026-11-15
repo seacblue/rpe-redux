@@ -86,8 +86,13 @@
         position: absolute;
         top: 0;
         bottom: 0;
-        background: #ff4d4d66;
         pointer-events: none;
+      }
+      .offscreen-region.left {
+        background: linear-gradient(90deg, #d9909040 0%, #d9909040 78%, transparent 100%);
+      }
+      .offscreen-region.right {
+        background: linear-gradient(90deg, transparent 0%, #d9909040 22%, #d9909040 100%);
       }
       .note {
         position: absolute;
@@ -201,8 +206,10 @@
       const metrics = document.querySelector("#metrics");
       const min = -675;
       const max = 675;
-      const step = 1350;
+      const step = 100;
       let cameraX = 0;
+      let targetCameraX = 0;
+      let cameraFrame = null;
       const panels = [
         {
           label: "线 0",
@@ -254,23 +261,37 @@
               `<span class="note${note.current ? " current" : ""}" style="left:${positionFor(note.x, 220) - note.w / 2}px;top:${note.y}px;width:${note.w}px"></span>`,
           )
           .join("");
-        return `<article class="panel ${cueLeft ? "cue-left" : ""} ${cueRight ? "cue-right" : ""}"><h2>${panel.label}</h2><span class="offscreen-region" style="left:0;width:${left}px"></span><span class="offscreen-region" style="right:0;width:${right}px"></span>${notes}<span class="edge left"></span><span class="edge right"></span></article>`;
+        return `<article class="panel ${cueLeft ? "cue-left" : ""} ${cueRight ? "cue-right" : ""}"><h2>${panel.label}</h2><span class="offscreen-region left" style="left:0;width:${left}px"></span><span class="offscreen-region right" style="right:0;width:${right}px"></span>${notes}<span class="edge left"></span><span class="edge right"></span></article>`;
+      }
+
+      function animateCamera(next) {
+        targetCameraX = next;
+        if (cameraFrame !== null) return;
+        const tick = () => {
+          cameraX += (targetCameraX - cameraX) * 0.2;
+          if (Math.abs(targetCameraX - cameraX) < 0.25) {
+            cameraX = targetCameraX;
+            cameraFrame = null;
+          } else {
+            cameraFrame = requestAnimationFrame(tick);
+          }
+          render();
+        };
+        cameraFrame = requestAnimationFrame(tick);
       }
 
       function render() {
         const visibleMin = cameraX + min;
         const visibleMax = cameraX + max;
-        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线示意</span><span class="state">当前 X 范围：${visibleMin} ～ ${visibleMax}</span></header><div class="timeline-wrap"><div class="timeline">${panels.map(panelMarkup).join("")}</div><div class="navigator" role="group" aria-label="音符时间轴 X 坐标范围控制"><button data-direction="-1" aria-label="向左移动音符可见范围">◀</button><button data-reset aria-label="回到默认 X 坐标范围" ${cameraX === 0 ? "disabled" : ""}>⌂</button><span class="range">X：${visibleMin} ～ ${visibleMax}</span><button data-direction="1" aria-label="向右移动音符可见范围">▶</button></div></div><p class="hint">红色背景属于整个 timeline 区域；白条只属于当前拍 note，不代表 panel 导航。</p>`;
-        metrics.innerHTML = `<div class="metric">cameraX: <b>${cameraX}</b></div><div class="metric">默认区间: <b>-675 ～ 675</b></div><div class="metric">移动步长: <b>${step}</b></div>`;
+        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线示意</span><span class="state">当前 X 范围：${visibleMin} ～ ${visibleMax}</span></header><div class="timeline-wrap"><div class="timeline">${panels.map(panelMarkup).join("")}</div><div class="navigator" role="group" aria-label="音符时间轴 X 坐标范围控制"><button data-direction="-1" aria-label="向左移动音符可见范围">◀</button><button data-reset aria-label="回到默认 X 坐标范围" ${cameraX === 0 ? "disabled" : ""}>⌂</button><span class="range">X：${visibleMin} ～ ${visibleMax}</span><button data-direction="1" aria-label="向右移动音符可见范围">▶</button></div></div><p class="hint">离屏背景使用柔和红色并在接缝处渐变；白条只属于当前拍 note，不代表 panel 导航。左右按钮单击移动 100，长按持续移动。</p>`;
+        metrics.innerHTML = `<div class="metric">cameraX: <b>${Math.round(cameraX)}</b></div><div class="metric">默认区间: <b>-675 ～ 675</b></div><div class="metric">移动步长: <b>${step}</b></div>`;
         app.querySelectorAll("[data-direction]").forEach((button) =>
           button.addEventListener("click", () => {
-            cameraX += Number(button.dataset.direction) * step;
-            render();
+            animateCamera(targetCameraX + Number(button.dataset.direction) * step);
           }),
         );
         app.querySelector("[data-reset]").addEventListener("click", () => {
-          cameraX = 0;
-          render();
+          animateCamera(0);
         });
       }
 

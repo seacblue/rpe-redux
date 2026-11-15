@@ -272,7 +272,7 @@ const TimelineSettingsSchema: SettingDefinition[] = [
     label: "settings.field.timeline-offscreen-region-color.label",
     description: "settings.field.timeline-offscreen-region-color.description",
     control: "color",
-    default: "#FF4D4D66",
+    default: "#D9909040",
     enabledWhen: { key: "timeline-offscreen-region-enabled", equals: true },
   },
   {

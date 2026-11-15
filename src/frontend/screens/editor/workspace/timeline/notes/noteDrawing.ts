@@ -1,10 +1,4 @@
-/**
- * Draws the note field: backdrop grid, note bars and holds, selection state,
- * lane labels, multi-line panels, and the playhead.
- *
- * It owns canvas painting; note filtering, geometry, and hit rules come from core
- * and the viewport.
- */
+/** Draws note timelines, their multi-line panels, and the moving playhead. */
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import { prepareCanvas } from "../../../canvas/canvas2d.ts";
 import { noteSkewAtHit, noteSkewCurve, noteSkewShear } from "../../../canvas/noteGeometry.ts";
@@ -42,7 +36,7 @@ import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
 import { noteContainsBeat, offscreenCueSides } from "./noteOffscreenCue.ts";
-import { offscreenRegionSegments } from "./noteOffscreenRegion.ts";
+import { offscreenRegionGradient, offscreenRegionSegments } from "./noteOffscreenRegion.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -235,7 +229,6 @@ function drawOffscreenRegion(
   const startPanel = multiplePanels ? firstPanel : 0;
   const endPanel = multiplePanels ? Math.min(lastPanel, panelCount - 1) : 0;
   context.save();
-  context.fillStyle = receiver.appearance.offscreenRegionColor;
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
     const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
@@ -245,6 +238,11 @@ function drawOffscreenRegion(
       receiver.viewport.cameraX ?? 0,
       width,
     )) {
+      context.fillStyle = offscreenRegionGradient(
+        context,
+        segment,
+        receiver.appearance.offscreenRegionColor,
+      );
       context.fillRect(segment.x, 0, segment.width, height);
     }
   }
@@ -793,6 +791,5 @@ export function drawMultiLineNotes(
       }
     }
   }
-  context.globalAlpha = 1;
   context.restore();
 }

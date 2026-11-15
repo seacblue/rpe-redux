@@ -19,7 +19,7 @@
   <rect width="1280" height="760" fill="url(#bg)"/>
   <rect x="32" y="28" width="1216" height="704" rx="14" fill="#0d1118" stroke="#293342"/>
   <text x="68" y="72" class="ui title">Note timeline：X 坐标范围浮层</text>
-  <text x="68" y="101" class="ui small muted">三条 note timeline 共用 cameraX；按钮移动坐标视口，不移动 panel、不移动歌曲时间。</text>
+  <text x="68" y="101" class="ui small muted">三条 note timeline 共用 cameraX；按钮以 100 为小步缓动移动，不移动 panel、不移动歌曲时间。</text>
   <rect x="68" y="135" width="1060" height="418" rx="8" fill="#0b0e13" stroke="#44515f"/>
   <g transform="translate(110 135)">
     <path d="M0 74H978 M0 148H978 M0 222H978 M0 296H978 M0 370H978" stroke="#243242" stroke-width="1"/>
@@ -28,8 +28,8 @@
       <rect x="316" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
       <rect x="632" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
       <g class="ui small" text-anchor="middle"><text x="150" y="24">note timeline · 线 0</text><text x="466" y="24">note timeline · 线 1</text><text x="782" y="24">note timeline · 线 2</text></g>
-      <rect x="0" y="0" width="46" height="418" fill="#ff4d4d" opacity=".4"/>
-      <rect x="586" y="0" width="30" height="418" fill="#ff4d4d" opacity=".4"/>
+      <rect x="0" y="0" width="46" height="418" fill="#d99090" opacity=".25"/>
+      <rect x="586" y="0" width="30" height="418" fill="#d99090" opacity=".25"/>
       <g fill="#6fc9ff" opacity=".9"><rect x="82" y="100" width="116" height="26" rx="8"/><rect x="385" y="160" width="128" height="26" rx="8"/><rect x="724" y="92" width="120" height="26" rx="8"/></g>
       <g fill="#d8f3ff" stroke="#ffffff" stroke-width="2"><rect x="-24" y="255" width="72" height="26" rx="8"/><rect x="906" y="286" width="82" height="26" rx="8"/></g>
       <rect x="0" y="0" width="5" height="418" fill="url(#edge)"/>
@@ -51,5 +51,5 @@
   <text x="86" y="684" class="ui small">三按钮只移动 cameraX；中间按钮回到 0，不切换判定线。</text>
   <path d="M240 386C185 419 155 458 142 515" class="call"/>
   <rect x="610" y="654" width="570" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
-  <text x="628" y="684" class="ui small">红色背景 = -675..675 外的整块 timeline 区域，可独立设置显示和透明度。</text>
+  <text x="628" y="684" class="ui small">柔和红色背景 = -675..675 外的整块 timeline 区域，接缝处渐变，可独立设置显示和透明度。</text>
 </svg>

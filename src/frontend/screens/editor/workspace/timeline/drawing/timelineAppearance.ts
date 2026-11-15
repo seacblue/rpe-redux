@@ -61,7 +61,7 @@ export class TimelineAppearance {
   verticalGridCenterColor = "#9DA00B";
   gridHighlightColor = "#FFFFFF80";
   offscreenRegionEnabled = true;
-  offscreenRegionColor = "#FF4D4D66";
+  offscreenRegionColor = "#D9909040";
 
   /** Copy the current timeline display settings into this instance. */
   apply(config: AppearanceSettings): void {
