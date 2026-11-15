@@ -431,7 +431,7 @@ export default {
   "settings.field.timeline-exclusive-width.label": "Exclusive timeline width",
   "settings.field.multi-edit-history-limit.label": "Batch edit history entries",
   "settings.field.multi-edit-history-limit.description":
-    "Applied parameter sets kept for reuse; newest first.",
+    "Applied parameter sets kept for reuse; newest last.",
   "settings.field.multi-line-merge-notes.label": "Merge notes",
   "settings.field.multi-line-merge-notes.description":
     "Show notes from selected judge lines in one multi-line editing field.",

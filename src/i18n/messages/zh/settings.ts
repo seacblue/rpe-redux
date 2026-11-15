@@ -366,7 +366,7 @@ export default {
   "settings.field.scroll-speed.label": "滚轮跳转速度",
   "settings.field.timeline-exclusive-width.label": "独占时的时间轴宽度",
   "settings.field.multi-edit-history-limit.label": "批量编辑历史条数",
-  "settings.field.multi-edit-history-limit.description": "保留的可复用参数组数量；最新的排在最前。",
+  "settings.field.multi-edit-history-limit.description": "保留的可复用参数组数量；最新的排在末尾。",
   "settings.field.multi-line-merge-notes.label": "合并音符",
   "settings.field.multi-line-merge-notes.description":
     "在一个多线编辑音符区域中显示所选判定线的音符。",

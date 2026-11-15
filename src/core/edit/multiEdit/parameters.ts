@@ -2,8 +2,8 @@
  * The batch parameter set, its defaults and its persisted form.
  *
  * Parameter sets are decoded defensively because they come from storage and
- * panel state. The stored history limit falls back to the documented default
- * when its settings value is unavailable.
+ * panel state. Drafts are durable preferences, while applied history belongs
+ * to the open chart and is intentionally kept in memory only.
  */
 import { t } from "../../../i18n/index.ts";
 import { values } from "../../state/values.ts";
@@ -52,6 +52,8 @@ export type BatchParameters = {
   cycle: string;
   disturbance: string;
   seed: number;
+  /** Event batch ordering mode; notes leave this absent. */
+  eventApplicationMode?: string;
 };
 
 /**
@@ -84,6 +86,7 @@ export function defaultBatchParameters(kind: MultiEditKind): BatchParameters {
     cycle: "1",
     disturbance: "0",
     seed: 1,
+    ...(kind === "events" ? { eventApplicationMode: "per-line" } : {}),
   };
 }
 
@@ -116,12 +119,7 @@ function parameters(kind: MultiEditKind, value: unknown): BatchParameters {
   return result as BatchParameters;
 }
 
-/**
- * Whether a stored entry came from the form editing mode.
- *
- * Entries from other modes describe edits this panel cannot reproduce, so the
- * loader keeps only form entries.
- */
+/** Whether a stored draft came from the form editing mode. */
 function isFormMode(value: unknown): boolean {
   if (!value || typeof value !== "object") {
     return true;
@@ -130,14 +128,14 @@ function isFormMode(value: unknown): boolean {
   return mode === undefined || mode === "form";
 }
 
-/** Loads, validates, and persists batch-edit drafts and their applied history. */
+/** Loads, validates, and persists batch-edit drafts and their chart-local history. */
 export class MultiEditParameters {
   storage: DraftStorage;
   onError: (message: string) => void;
   drafts: Record<MultiEditKind, BatchParameters>;
   history: Record<MultiEditKind, BatchParameters[]>;
 
-  /** Restores drafts and history from `storage`, reporting errors through `onError`. */
+  /** Restores durable drafts from `storage`, reporting errors through `onError`. */
   constructor(
     storage: DraftStorage = memoryStorage(),
     onError: (message: string) => void = () => {},
@@ -167,23 +165,16 @@ export class MultiEditParameters {
       this.drafts[kind] = isFormMode(draft)
         ? parameters(kind, draft)
         : defaultBatchParameters(kind);
-      const history = section("history")?.[kind];
-      this.history[kind] = Array.isArray(history)
-        ? history
-            .filter((value) => isFormMode(value))
-            .slice(-historyLimit())
-            .map((value) => parameters(kind, value))
-        : [];
+      // History is deliberately not restored from storage: it belongs to the
+      // chart session and is cleared whenever a different chart is opened.
+      this.history[kind] = [];
     }
   }
 
-  /** Writes the current drafts and history; reports storage failures. */
+  /** Writes durable drafts; applied history is scoped to the open chart. */
   persist(): void {
     try {
-      this.storage?.setItem(
-        storageKey,
-        JSON.stringify({ drafts: this.drafts, history: this.history }),
-      );
+      this.storage?.setItem(storageKey, JSON.stringify({ drafts: this.drafts }));
     } catch {
       this.onError(t("editor.commands.multiEditParameters.error.storage"));
     }
@@ -196,6 +187,12 @@ export class MultiEditParameters {
   update(kind: MultiEditKind, value: unknown): void {
     this.drafts[kind] = parameters(kind, value);
     this.persist();
+  }
+  /** Clears the applied parameter history for the current chart session. */
+  clearHistory(): void {
+    for (const kind of kinds) {
+      this.history[kind] = [];
+    }
   }
   /** Append an applied set, newest last; a repeat of an old one is promoted, not duplicated. */
   remember(kind: MultiEditKind, value: unknown): number {

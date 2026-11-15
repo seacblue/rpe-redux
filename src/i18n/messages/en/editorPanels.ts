@@ -464,6 +464,9 @@ export default {
   "editorPanels.multiEdit.previewToggle": "Show the result ghost",
   "editorPanels.multiEdit.apply": "Apply changes",
   "editorPanels.multiEdit.appliedNotify": "Applied a batch edit to {count} objects",
+  "editorPanels.multiEdit.history": "Batch edit history",
+  "editorPanels.multiEdit.historyPrevious": "Previous batch edit",
+  "editorPanels.multiEdit.historyNext": "Next batch edit",
 
   "editorPanels.trajectory.field.trimStart": "Trim start (0–1)",
   "editorPanels.trajectory.field.trimEnd": "Trim end (0–1)",

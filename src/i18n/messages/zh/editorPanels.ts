@@ -442,6 +442,9 @@ export default {
   "editorPanels.multiEdit.previewToggle": "显示结果虚影",
   "editorPanels.multiEdit.apply": "应用更改",
   "editorPanels.multiEdit.appliedNotify": "已应用 {count} 个物件的批量编辑",
+  "editorPanels.multiEdit.history": "批量编辑历史",
+  "editorPanels.multiEdit.historyPrevious": "上一条批量编辑",
+  "editorPanels.multiEdit.historyNext": "下一条批量编辑",
 
   "editorPanels.trajectory.field.trimStart": "截取起点（0–1）",
   "editorPanels.trajectory.field.trimEnd": "截取终点（0–1）",

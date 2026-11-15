@@ -131,6 +131,7 @@ export function createInspectorRuntime(options: {
       options.inspector.scrollTop = 0;
     },
   });
+  options.scope.add(options.session.subscribe(() => multiEdit.resetForDocument()));
   const trajectoryPanel = new TrajectoryPanel(
     options.trajectoryOverlay,
     () => ({
