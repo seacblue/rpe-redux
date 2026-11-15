@@ -8,7 +8,7 @@
  * author typed stays in place and the chart keeps its old value — and the two
  * lists only offer the combinations the format defines.
  */
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FieldRow } from "../field/FieldRow.tsx";
 import { Input } from "../input/Input.tsx";
 import { Select } from "../select/Select.tsx";
@@ -21,6 +21,9 @@ import {
   easingId,
   easingParts,
   isEasingId,
+  rotateEasingDirection,
+  rotateEasingFamily,
+  stepEasingId,
   type EasingDirection,
   type EasingFamily,
 } from "./easingTable.ts";
@@ -64,6 +67,9 @@ const DIRECTION_KEYS: Record<EasingDirection, MessageKey> = {
 /** Labelled easing editor: numeric id, family, and direction as one value. */
 export function EasingField({ value, onChange, label, disabled = false }: EasingFieldProps) {
   const [draft, setDraft] = useState({ source: value, text: String(value) });
+  const idInput = useRef<HTMLInputElement>(null);
+  const familySelect = useRef<HTMLSelectElement>(null);
+  const directionSelect = useRef<HTMLSelectElement>(null);
   if (draft.source !== value) {
     setDraft({ source: value, text: String(value) });
   }
@@ -88,18 +94,71 @@ export function EasingField({ value, onChange, label, disabled = false }: Easing
   };
 
   /** Move to a family, keeping the current direction when that family supports it. */
-  const setFamily = (next: EasingFamily) => {
-    if (next === "Linear") {
-      onChange(1);
-      return;
-    }
-    const nextDirections = easingDirections(next);
-    const nextDirection = nextDirections.includes(direction) ? direction : nextDirections[0];
-    const id = easingId(next, nextDirection ?? "Out");
-    if (id !== null) {
-      onChange(id);
-    }
-  };
+  const setFamily = useCallback(
+    (next: EasingFamily) => {
+      if (next === "Linear") {
+        onChange(1);
+        return;
+      }
+      const nextDirections = easingDirections(next);
+      const nextDirection = nextDirections.includes(direction) ? direction : nextDirections[0];
+      const id = easingId(next, nextDirection ?? "Out");
+      if (id !== null) {
+        onChange(id);
+      }
+    },
+    [direction, onChange],
+  );
+
+  // Each easing box owns its wheel: the id steps numerically, while the two
+  // lists rotate through their available options. Native listeners keep the
+  // inspector from scrolling, including when the pointer is over a select.
+  useEffect(() => {
+    const id = idInput.current;
+    const familyControl = familySelect.current;
+    const directionControlElement = directionSelect.current;
+    const listen = (element: HTMLElement | null, handle: (direction: number) => void) => {
+      if (!element) {
+        return () => {};
+      }
+      const wheel = (event: WheelEvent) => {
+        if (disabled || !event.deltaY || event.defaultPrevented) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        handle(-Math.sign(event.deltaY));
+      };
+      element.addEventListener("wheel", wheel, { passive: false });
+      return () => element.removeEventListener("wheel", wheel);
+    };
+
+    const removeIdWheel = listen(id, (step) => {
+      const enteredValue = text.trim() === "" ? Number.NaN : Number(text);
+      const next = stepEasingId(isEasingId(enteredValue) ? enteredValue : value, step);
+      setDraft({ source: value, text: String(next) });
+      if (next !== value) {
+        onChange(next);
+      }
+    });
+    const removeFamilyWheel = listen(familyControl, (step) => {
+      setFamily(rotateEasingFamily(family, step));
+    });
+    const removeDirectionWheel = listen(directionControlElement, (step) => {
+      const next = rotateEasingDirection(directions, direction, step);
+      if (next !== null) {
+        const id = easingId(family, next);
+        if (id !== null) {
+          onChange(id);
+        }
+      }
+    });
+    return () => {
+      removeIdWheel();
+      removeFamilyWheel();
+      removeDirectionWheel();
+    };
+  }, [disabled, direction, directions, family, onChange, setFamily, text, value]);
 
   return (
     <FieldRow
@@ -111,6 +170,7 @@ export function EasingField({ value, onChange, label, disabled = false }: Easing
       control={(id) => (
         <div className="easing-field-controls">
           <Input
+            ref={idInput}
             id={id}
             className="easing-field-id"
             type="number"
@@ -144,6 +204,7 @@ export function EasingField({ value, onChange, label, disabled = false }: Easing
             }}
           />
           <Select
+            ref={familySelect}
             className="easing-field-family"
             value={family}
             disabled={disabled}
@@ -157,6 +218,7 @@ export function EasingField({ value, onChange, label, disabled = false }: Easing
             ))}
           </Select>
           <Select
+            ref={directionSelect}
             className="easing-field-direction"
             value={directions.length ? (direction ?? DASH) : DASH}
             disabled={directionControl.disabled}
