@@ -184,8 +184,6 @@ export interface PreviewFrame {
   /** Independent axis mapping from the 1350×900 logical box to the frame. */
   scaleX: number;
   scaleY: number;
-  /** Uniform fitted scale for screen-anchored HUD; the free camera never changes it. */
-  screenScale: number;
   viewport: PreviewViewport;
   /** Shader effects sampled once for this frame and shared by composition passes. */
   shaderEffects: readonly PreviewShaderEffect[];

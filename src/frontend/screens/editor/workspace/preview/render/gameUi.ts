@@ -9,6 +9,13 @@ import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import type { LineState } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { PreviewViewport } from "../scene/viewport.ts";
 
+/** Screen-space camera projection used to place the HUD inside the chart frame. */
+export interface GameUiView {
+  centerX: number;
+  centerY: number;
+  scale: number;
+}
+
 /** Chart fields used by the game UI. */
 export interface GameUiChart {
   META: { offset?: number; name?: string; level?: string };
@@ -59,11 +66,11 @@ export function gameUiCornerAvailableWidth(
 function itemScreenX(
   item: GameUiItem,
   binding: { x?: number } | undefined,
-  viewport: PreviewViewport,
+  centerX: number,
   baseScale: number,
   viewScale: number,
 ): number {
-  return viewport.left + viewport.width / 2 + item.x * baseScale + (binding?.x ?? 0) * viewScale;
+  return centerX + item.x * baseScale + (binding?.x ?? 0) * viewScale;
 }
 
 /** Draws the chart's `attachUI` HUD elements for the current frame. */
@@ -75,7 +82,7 @@ export function drawGameUi(
   seconds: number,
   selectedLine: number,
   viewport: PreviewViewport,
-  viewScale: number,
+  view: GameUiView,
   skin: GameUiSkin | null,
   duration: number,
   cornerCompression = true,
@@ -90,13 +97,11 @@ export function drawGameUi(
     name: chart.META.name ?? "",
     level: chart.META.level ?? "",
   };
+  const { centerX, centerY, scale: viewScale } = view;
   const baseScale = viewScale;
-  // The HUD is anchored to the *screen frame* the preview currently targets, not to the
-  // fixed 1350×900 chart box. The chart content is contained inside that frame and stays
-  // 1350×900, so passing the frame's logical size here lets `gameUiLayout` move the
-  // edge-anchored elements to the frame edges (a wider screen pushes score/level further
-  // out) while the centred ones stay centred. Element sizes still use `viewScale`, so
-  // nothing is stretched by the wider box.
+  // The HUD follows the projected chart frame, not the fixed preview viewport. The
+  // logical layout still comes from the viewport's fitted dimensions, while the
+  // camera-projected centre and scale carry every item with pan and zoom.
   const frameLogicalWidth = viewport.width / Math.max(viewport.scale, Number.EPSILON);
   const frameLogicalHeight = viewport.height / Math.max(viewport.scale, Number.EPSILON);
   const items = gameUiLayout(frameLogicalWidth, frameLogicalHeight);
@@ -105,8 +110,8 @@ export function drawGameUi(
   // Budget the corner labels from the authored layout, not the animated
   // binding, so their available width stays stable while the combo moves.
   const centerBudgetX = centerItem
-    ? itemScreenX(centerItem, undefined, viewport, baseScale, viewScale)
-    : viewport.left + viewport.width / 2;
+    ? itemScreenX(centerItem, undefined, centerX, baseScale, viewScale)
+    : centerX;
   const centerFont = centerItem
     ? `${(centerItem.fontSize ?? 0) * baseScale}px Saira, 'Source Han Sans CN', sans-serif`
     : "0px sans-serif";
@@ -138,8 +143,8 @@ export function drawGameUi(
         : [255, 255, 255];
     context.save();
     context.translate(
-      viewport.left + viewport.width / 2 + item.x * baseScale + (binding?.x ?? 0) * viewScale,
-      viewport.top + viewport.height / 2 - item.y * baseScale - (binding?.y ?? 0) * viewScale,
+      centerX + item.x * baseScale + (binding?.x ?? 0) * viewScale,
+      centerY - item.y * baseScale - (binding?.y ?? 0) * viewScale,
     );
     context.rotate(((binding?.rotation ?? 0) * Math.PI) / 180);
     context.scale(binding?.scaleX ?? 1, binding?.scaleY ?? 1);
@@ -178,7 +183,7 @@ export function drawGameUi(
       if (item.key === "name" || item.key === "level") {
         const text = texts[item.key];
         const textWidth = context.measureText(text).width;
-        const cornerX = itemScreenX(item, undefined, viewport, baseScale, viewScale);
+        const cornerX = itemScreenX(item, undefined, centerX, baseScale, viewScale);
         const availableWidth = gameUiCornerAvailableWidth(
           item.key === "name" ? "left" : "right",
           cornerX,

@@ -41,7 +41,7 @@ function drawCompositeOverlay(
   frame: PreviewFrame,
   target: CanvasRenderingContext2D,
 ): void {
-  const { chart, states, seconds, selectedLine, scale, screenScale, viewport } = frame;
+  const { chart, states, seconds, selectedLine, scale, centerX, centerY, viewport } = frame;
   drawGameUi(
     target,
     chart,
@@ -50,7 +50,7 @@ function drawCompositeOverlay(
     seconds,
     selectedLine,
     viewport,
-    screenScale,
+    { centerX, centerY, scale },
     surface.skin ?? null,
     surface.duration ?? 600,
     surface.gameUiCornerCompression,

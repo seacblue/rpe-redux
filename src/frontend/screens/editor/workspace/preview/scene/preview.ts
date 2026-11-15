@@ -736,7 +736,6 @@ export class Preview {
     height: number;
     viewport: PreviewViewport;
     divisor: number;
-    screenScale: number;
     contentFrame: ReturnType<typeof previewCameraView>;
     setupMs: number;
   } {
@@ -748,7 +747,6 @@ export class Preview {
     );
     const divisor = Math.max(0.01, Number(this.viewDivisor) || 1);
     // The clip is screen-fixed; the camera moves only the chart content inside it.
-    const screenScale = viewport.scale / divisor;
     const contentFrame = previewCameraView(viewport, this.camera, divisor);
     this.display.setViewportClip(viewport, divisor, contentFrame);
     const { scale } = contentFrame;
@@ -802,7 +800,6 @@ export class Preview {
       height,
       viewport,
       divisor,
-      screenScale,
       contentFrame,
       setupMs: performance.now() - drawStarted,
     };
@@ -1038,8 +1035,7 @@ export class Preview {
       ? this.shaderRuntime.activeInto(seconds)
       : [];
     const prepared = this.prepareCanvasFrame(measurement, drawStarted);
-    const { context, width, height, viewport, divisor, screenScale, contentFrame, setupMs } =
-      prepared;
+    const { context, width, height, viewport, divisor, contentFrame, setupMs } = prepared;
     const { scale, scaleX, scaleY, centerX, centerY } = contentFrame;
     // Each frame samples into a fresh state array.
     const states = this.scene.sampleInto(seconds, this.sampledStates);
@@ -1102,7 +1098,6 @@ export class Preview {
       scale,
       scaleX,
       scaleY,
-      screenScale,
       viewport,
       shaderEffects,
       shaderSourceRevision: this.shaderSourceRevision,
