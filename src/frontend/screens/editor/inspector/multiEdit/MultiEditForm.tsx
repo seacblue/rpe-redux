@@ -16,6 +16,7 @@ import { IconButton } from "../../../../../design/components/button/IconButton.t
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { EasingField } from "../../../../../design/components/easing/EasingField.tsx";
 import { t } from "../../../../../i18n/index.ts";
+import { formatBeat, parseBeat, type Beat } from "../../../../../core/global/chart/timing/beat.ts";
 import {
   BATCH_OPERATIONS,
   NOTE_BATCH_FIELDS,
@@ -27,6 +28,7 @@ import {
   type MultiEditKind,
 } from "../../../../../core/edit/multiEdit/parameters.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
+import { BeatField } from "../beat/BeatField.tsx";
 
 type Option = readonly [string | number, string];
 
@@ -59,18 +61,29 @@ function shortLabel(label: string): string {
   return label.split(/[·,，、]/u)[0]?.trim() || label;
 }
 
+/** Converts a persisted batch bound to a BeatField value, falling back to zero. */
+function batchBeat(value: string | number): Beat {
+  try {
+    return parseBeat(value);
+  } catch {
+    return [0, 0, 1];
+  }
+}
+
 /** Renders one labeled input or select for a batch parameter. */
 function Field({
   title,
   value,
   options,
   type = "text",
+  beat,
   onChange,
 }: {
   title: string;
   value: string | number;
   options?: readonly Option[];
   type?: string;
+  beat?: Beat;
   onChange(value: string): void;
 }) {
   return (
@@ -86,6 +99,16 @@ function Field({
             value={String(value)}
             options={options.map(([key, label]) => ({ value: String(key), label }))}
             onChange={(next) => onChange(String(next))}
+          />
+        ) : beat ? (
+          <BeatField
+            id={id}
+            value={beat}
+            onCommit={(next) => {
+              onChange(formatBeat(next));
+              return true;
+            }}
+            dataField={title}
           />
         ) : (
           <SchemaControl
@@ -146,7 +169,10 @@ export function MultiEditForm({
           eventApplicationMode: "per-line",
           ...next,
         } as MultiEditFormValues;
-        if (noiseActivation && !["t1", "t2", "duration"].includes(value.field)) {
+        if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === value.field)) {
+          value.field = "both";
+        }
+        if (noiseActivation && !["t1", "t2"].includes(value.field)) {
           value.field = "t1";
         }
         setValues(value);
@@ -180,12 +206,11 @@ export function MultiEditForm({
     kind === "notes"
       ? NOTE_BATCH_FIELDS.filter(([key]) => noteFieldsEnabled[key] ?? true)
       : EVENT_BATCH_FIELDS.filter(([key]) =>
-          noiseActivation
-            ? ["t1", "t2", "duration"].includes(key)
-            : key !== "linkgroup" || linkgroupEnabled,
+          noiseActivation ? ["t1", "t2"].includes(key) : key !== "linkgroup" || linkgroupEnabled,
         )
   ).map(([key, label]) => [key, shortLabel(label)] as const);
   const operations = BATCH_OPERATIONS.map(([key, label]) => [key, shortLabel(label)] as const);
+  const beatBounds = kind === "events" && (values.field === "t1" || values.field === "t2");
   const historyIndex = Number(historySelection);
   const selectedHistoryIndex =
     Number.isInteger(historyIndex) && historyIndex >= 0 && historyIndex < history.length
@@ -229,11 +254,13 @@ export function MultiEditForm({
         <Field
           title={t("editorPanels.multiEdit.distribution.lower")}
           value={values.lower}
+          beat={beatBounds ? batchBeat(values.lower) : undefined}
           onChange={(lower) => update({ lower })}
         />
         <Field
           title={t("editorPanels.multiEdit.distribution.upper")}
           value={values.upper}
+          beat={beatBounds ? batchBeat(values.upper) : undefined}
           onChange={(upper) => update({ upper })}
         />
         <EasingField

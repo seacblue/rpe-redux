@@ -13,6 +13,7 @@ import { captureSelection } from "../../../../../core/edit/selection/snapshot.ts
 import type { SelectionSnapshot } from "../../../../../core/edit/selection/snapshot.ts";
 import { commitSelectionEdit } from "../../../../../core/edit/selection/edits.ts";
 import { previewMultiEdit } from "../../../../../core/edit/multiEdit/plan.ts";
+import { EVENT_BATCH_FIELDS } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import type {
   BatchChange,
   MultiEditResult,
@@ -211,7 +212,10 @@ export class MultiEditPanel {
         eventApplicationMode: "per-line",
       };
       const next = { ...current, ...value };
-      if (this.noiseActivationSelected && !["t1", "t2", "duration"].includes(next.field)) {
+      if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === next.field)) {
+        next.field = "both";
+      }
+      if (this.noiseActivationSelected && !["t1", "t2"].includes(next.field)) {
         next.field = "t1";
       }
       this.seed = next.seed ?? this.seed;

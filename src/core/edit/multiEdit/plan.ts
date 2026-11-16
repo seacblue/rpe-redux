@@ -15,7 +15,7 @@ import { eventList, eventKey, chartWithEventLists } from "../events/eventTracks.
 import type { EventSession } from "../events/eventTracks.ts";
 import type { MultiEditKind } from "./parameters.ts";
 import type { SelectionSnapshot } from "../selection/snapshot.ts";
-import { batchOperation, distribution, randomSource } from "./distribution.ts";
+import { batchOperation, beatDistribution, distribution, randomSource } from "./distribution.ts";
 import type {
   BatchItem,
   BatchEditOptions,
@@ -399,7 +399,12 @@ export function previewMultiEdit(
   const field = options.field ?? (kind === "notes" ? "x" : "both");
   const operation = options.operation ?? "By";
   const random = randomSource(options.seed ?? 1);
-  const modifier = field === "hitSound" ? null : distribution(options, random);
+  const modifier =
+    field === "hitSound"
+      ? null
+      : field === "t1" || field === "t2"
+        ? beatDistribution(options, random)
+        : distribution(options, random);
   const groups = new Map<string, BatchEntry[]>();
   const applicationMode =
     kind === "events" && options.eventApplicationMode === "global" ? "global" : "per-line";

@@ -8,6 +8,7 @@
 import { t } from "../../../i18n/index.ts";
 import { easing } from "../../utils/easing.ts";
 import { compileExpression } from "../../utils/batchScript.ts";
+import { beatValue, parseBeat } from "../../global/chart/timing/beat.ts";
 
 /** A compiled value distribution; `null` means "skip this object". */
 export type Distribution = (index: number, progress: number) => number | null;
@@ -65,6 +66,23 @@ export function randomSource(seed: unknown): () => number {
 export function distribution(options: DistributionInput, random: () => number): Distribution {
   const lower = compileExpression(String(options.lower ?? 0))({});
   const upper = compileExpression(String(options.upper ?? 0))({});
+  return createDistribution(options, random, lower, upper);
+}
+
+/** Compiles a distribution whose bounds are entered as chart beats. */
+export function beatDistribution(options: DistributionInput, random: () => number): Distribution {
+  const lower = beatValue(parseBeat(options.lower ?? 0));
+  const upper = beatValue(parseBeat(options.upper ?? 0));
+  return createDistribution(options, random, lower, upper);
+}
+
+/** Builds the shared distribution behavior after resolving its two bounds. */
+function createDistribution(
+  options: DistributionInput,
+  random: () => number,
+  lower: number,
+  upper: number,
+): Distribution {
   const cycle = sequence(options.cycle, [1], true);
   const disturbance = sequence(options.disturbance, []);
   const easingType = Number(options.easingType ?? 1);

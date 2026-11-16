@@ -24,15 +24,13 @@ export const NOTE_BATCH_FIELDS = [
 
 export const EVENT_BATCH_FIELDS = [
   ["both", t("editor.commands.multiEdit.eventField.both")],
-  ["end", t("editor.commands.multiEdit.eventField.end")],
   ["start", t("editor.commands.multiEdit.eventField.start")],
+  ["end", t("editor.commands.multiEdit.eventField.end")],
   ["easing", t("editor.commands.multiEdit.eventField.easing")],
   ["t1", t("editor.commands.multiEdit.eventField.t1")],
   ["t2", t("editor.commands.multiEdit.eventField.t2")],
   ["line", t("editor.commands.multiEdit.eventField.line")],
   ["linkgroup", t("editor.commands.multiEdit.eventField.linkgroup")],
-  ["duration", t("editor.commands.multiEdit.eventField.duration")],
-  ["order", t("editor.commands.multiEdit.eventField.order")],
 ];
 
 export const BATCH_OPERATIONS = [
