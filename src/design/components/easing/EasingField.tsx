@@ -1,5 +1,5 @@
 /**
- * Three connected boxes for one easing value: id, family, direction.
+ * Three connected boxes for one easing value: id, direction, family.
  *
  * It is a labelled row like every other inspector field, so it can be dropped
  * between ordinary fields. The id box keeps a text draft: a half-typed number is
@@ -204,20 +204,6 @@ export function EasingField({ value, onChange, label, disabled = false }: Easing
             }}
           />
           <Select
-            ref={familySelect}
-            className="easing-field-family"
-            value={family}
-            disabled={disabled}
-            aria-label={t("design.easing.family")}
-            onChange={(event) => setFamily(event.currentTarget.value as EasingFamily)}
-          >
-            {EASING_FAMILIES.map((name) => (
-              <option key={name} value={name}>
-                {t(FAMILY_KEYS[name])}
-              </option>
-            ))}
-          </Select>
-          <Select
             ref={directionSelect}
             className="easing-field-direction"
             value={directions.length ? (direction ?? DASH) : DASH}
@@ -241,6 +227,20 @@ export function EasingField({ value, onChange, label, disabled = false }: Easing
             ) : (
               <option value={DASH}>{DASH}</option>
             )}
+          </Select>
+          <Select
+            ref={familySelect}
+            className="easing-field-family"
+            value={family}
+            disabled={disabled}
+            aria-label={t("design.easing.family")}
+            onChange={(event) => setFamily(event.currentTarget.value as EasingFamily)}
+          >
+            {EASING_FAMILIES.map((name) => (
+              <option key={name} value={name}>
+                {t(FAMILY_KEYS[name])}
+              </option>
+            ))}
           </Select>
         </div>
       )}

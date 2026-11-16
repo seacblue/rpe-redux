@@ -19,4 +19,9 @@ test("compound easing rows opt out of whole-row disabled styling", async () => {
     /:has\(:is\(input, select, textarea, button\):disabled\):not\(\[data-partial-disabled="true"\]\)/,
   );
   assert.match(easing, /partialDisabled=\{!disabled && directionControl\.disabled\}/);
+  assert.ok(
+    easing.indexOf('className="easing-field-direction"') <
+      easing.indexOf('className="easing-field-family"'),
+    "the direction selector should precede the easing family selector",
+  );
 });

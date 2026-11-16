@@ -1,11 +1,11 @@
 ﻿// Easing row layout: the compact inline FieldRow and the three-column
-// id/family/direction control.
+// id/direction/family control.
 
 // The easing row uses the shared compact inline FieldRow, so its label, row
 // height, padding, and value column follow the fields above and below. The
 // three controls divide that one value column: the id keeps a compact column,
-// the family list takes five tenths, and the direction list three tenths — one
-// quarter shorter than the family list so a longer family name still fits.
+// the direction list takes three tenths, and the family list five tenths — the
+// shorter direction list stays beside the id while longer family names fit.
 .easing-field {
   &.is-disabled {
     opacity: 0.55;
@@ -15,7 +15,7 @@
 .easing-field-controls {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(2.5em, 2fr) minmax(0, 5fr) minmax(0, 3fr);
+  grid-template-columns: minmax(2.5em, 2fr) minmax(0, 3fr) minmax(0, 5fr);
   gap: var(--space-1);
   width: 100%;
   min-width: 0;
