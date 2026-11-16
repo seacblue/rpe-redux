@@ -18,7 +18,13 @@ import { FieldReset } from "../../../../../design/components/field/FieldReset.ts
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
 import { compareBeats, type Beat } from "../../../../../core/global/chart/timing/beat.ts";
+import {
+  NOTE_POSITION_X_OUTER_STEP_SETTING,
+  NOTE_POSITION_X_STEP_SETTING,
+} from "../../../../../core/settings/stepperSettings.ts";
+import { values as settingsValues } from "../../../../../core/state/values.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
+import { useSetting } from "../../../settings/useSetting.ts";
 
 export interface CurveFieldValues {
   startTime: Beat;
@@ -83,6 +89,16 @@ export function CurveFieldsView({
   onPreviewChange(preview: boolean): void;
 }) {
   const { t } = useTranslation();
+  const configuredPositionStep = useSetting<string>(NOTE_POSITION_X_STEP_SETTING, "5");
+  const parsedPositionStep = Number(configuredPositionStep);
+  const positionStep =
+    Number.isFinite(parsedPositionStep) && parsedPositionStep > 0 ? parsedPositionStep : 5;
+  const configuredPositionOuterStep = useSetting<string>(NOTE_POSITION_X_OUTER_STEP_SETTING, "100");
+  const parsedPositionOuterStep = Number(configuredPositionOuterStep);
+  const positionOuterStep =
+    Number.isFinite(parsedPositionOuterStep) && parsedPositionOuterStep > 0
+      ? parsedPositionOuterStep
+      : positionStep * 10;
   const [draft, setDraft] = useState(() => toDraft(values));
   const fields = useRef<
     Partial<Record<NumberFieldKey, HTMLInputElement | HTMLSelectElement | null>>
@@ -161,6 +177,26 @@ export function CurveFieldsView({
       step="any"
       value={draft[key]}
       aria-describedby={describedBy}
+      stepper={
+        key === "startX" || key === "endX"
+          ? {
+              decrease: positionStep,
+              increase: positionStep,
+              decreaseOuter: positionOuterStep,
+              increaseOuter: positionOuterStep,
+              min: 0.01,
+              max: 1000,
+              onStepChange: (_direction, slot, next) => {
+                settingsValues.byId.set(
+                  slot === "outer"
+                    ? NOTE_POSITION_X_OUTER_STEP_SETTING
+                    : NOTE_POSITION_X_STEP_SETTING,
+                  String(next),
+                );
+              },
+            }
+          : undefined
+      }
       onWheel={wheel(key, step)}
       onChange={(event) => {
         // A half-typed number (`-`, `.`) is not a value: the draft holds it and
@@ -190,12 +226,12 @@ export function CurveFieldsView({
         <FieldRow
           layout="inline"
           label={labels.startX}
-          control={(id, describedBy) => numberInput("startX", 1, id, describedBy)}
+          control={(id, describedBy) => numberInput("startX", positionStep, id, describedBy)}
         />
         <FieldRow
           layout="inline"
           label={labels.endX}
-          control={(id, describedBy) => numberInput("endX", 1, id, describedBy)}
+          control={(id, describedBy) => numberInput("endX", positionStep, id, describedBy)}
         />
         <FieldRow
           layout="inline"

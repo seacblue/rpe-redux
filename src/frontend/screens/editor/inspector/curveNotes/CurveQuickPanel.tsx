@@ -6,18 +6,12 @@
  * type and easing before the one generation action. The pane owns the draft and
  * the commit, so the panel never touches the chart.
  */
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { EasingField } from "../../../../../design/components/easing/EasingField.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
+import { FloatingPanel } from "../../../../../design/components/floatingPanel/FloatingPanel.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { beatValue } from "../../../../../core/global/chart/timing/beat.ts";
@@ -29,7 +23,6 @@ import {
 } from "../../workspace/runtime/composition/EditorRuntime.tsx";
 import { curveActions } from "./actions.ts";
 import {
-  clampDraggedPanel,
   quickPanelPosition,
   QUICK_PANEL_MARGIN,
   type QuickPanelSize,
@@ -79,14 +72,6 @@ function quickAnchorPoint(
   return start ?? end;
 }
 
-/** The title row is the one top surface a floating card may not cover. */
-function titleBarInset(): number {
-  const value = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--titlebar-height"),
-  );
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
-}
-
 /** The current timeline rectangle, or the window when the notes field is hidden. */
 function timelineViewport(timeline: Timeline): QuickViewportRect {
   const bounds = timeline.notesCanvas.getBoundingClientRect();
@@ -116,59 +101,6 @@ function CurveQuickPanelView({
   const [anchor, setAnchor] = useState(() => quickAnchorPoint(timeline, quick));
   const [size, setSize] = useState<QuickPanelSize>({ width: PANEL_WIDTH, height: 320 });
   const [manualPosition, setManualPosition] = useState<{ left: number; top: number } | null>(null);
-  const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
-
-  /** Drag the card by its title row and keep it inside the window. */
-  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-    const element = panel.current;
-    if (!element) {
-      return;
-    }
-    const bounds = element.getBoundingClientRect();
-    event.preventDefault();
-    const pointerId = event.pointerId;
-    const minimumTop = titleBarInset();
-    drag.current = {
-      pointerId,
-      offsetX: event.clientX - bounds.left,
-      offsetY: event.clientY - bounds.top,
-    };
-    const move = (moveEvent: PointerEvent) => {
-      const current = drag.current;
-      if (!current || moveEvent.pointerId !== current.pointerId) {
-        return;
-      }
-      const card = panel.current;
-      if (!card) {
-        return;
-      }
-      // The card may cover the toolbar, but never the title row above it.
-      setManualPosition(
-        clampDraggedPanel(
-          moveEvent.clientX - current.offsetX,
-          moveEvent.clientY - current.offsetY,
-          { width: card.offsetWidth, height: card.offsetHeight },
-          minimumTop,
-          { width: window.innerWidth, height: window.innerHeight },
-        ),
-      );
-    };
-    const finish = (finishEvent: PointerEvent) => {
-      if (finishEvent.pointerId !== pointerId) {
-        return;
-      }
-      drag.current = null;
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
-  };
 
   // Follow timeline scrolling, zoom, and camera changes while the panel is up.
   useEffect(() => {
@@ -244,56 +176,60 @@ function CurveQuickPanelView({
   const style: CSSProperties = { left: position.left, top: position.top, width, maxHeight };
 
   return (
-    <div
+    <FloatingPanel
       ref={panel}
       className="curve-quick-float"
       style={style}
-      role="dialog"
       aria-label={t("editorPanels.curve.quickTitle")}
+      title={t("editorPanels.curve.quickTitle")}
+      position={manualPosition ?? undefined}
+      onPositionChange={setManualPosition}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outlined"
+            size="sm"
+            onClick={() => curveActions.dismissCurveQuick()}
+          >
+            {t("editorPanels.curve.quickCancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="solid"
+            size="sm"
+            onClick={() => curveActions.generateCurve()}
+          >
+            {t("editorPanels.curve.quickGenerate")}
+          </Button>
+        </>
+      }
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <div className="curve-quick-header" onPointerDown={beginDrag}>
-        <span className="curve-quick-title">{t("editorPanels.curve.quickTitle")}</span>
-        <span className="curve-quick-grip" aria-hidden="true">
-          ⠿
-        </span>
-      </div>
-      <div className="curve-quick-body">
-        <FieldRow
-          layout="inline"
-          density="compact"
-          label={t("editor.app.curve.type")}
-          control={(id) => (
-            <Select
-              id={id}
-              className="curve-quick-type"
-              value={String(quick.type)}
-              onChange={(event) =>
-                curveActions.setCurveQuickType(Number(event.currentTarget.value))
-              }
-            >
-              <option value="1">{t("editorPanels.inspector.noteType.tap")}</option>
-              <option value="2">{t("editorPanels.inspector.noteType.hold")}</option>
-              <option value="3">{t("editorPanels.inspector.noteType.flick")}</option>
-              <option value="4">{t("editorPanels.inspector.noteType.drag")}</option>
-            </Select>
-          )}
-        />
-        <EasingField
-          label={t("editor.app.curve.easing")}
-          value={quick.easingType}
-          onChange={(easingType) => curveActions.setCurveEasing(easingType)}
-        />
-      </div>
-      <div className="curve-quick-footer">
-        <Button type="button" variant="outlined" onClick={() => curveActions.dismissCurveQuick()}>
-          {t("editorPanels.curve.quickCancel")}
-        </Button>
-        <Button type="button" variant="solid" onClick={() => curveActions.generateCurve()}>
-          {t("editorPanels.curve.quickGenerate")}
-        </Button>
-      </div>
-    </div>
+      <FieldRow
+        layout="inline"
+        density="compact"
+        label={t("editor.app.curve.type")}
+        control={(id) => (
+          <Select
+            id={id}
+            className="curve-quick-type"
+            value={String(quick.type)}
+            onChange={(event) => curveActions.setCurveQuickType(Number(event.currentTarget.value))}
+          >
+            <option value="1">{t("editorPanels.inspector.noteType.tap")}</option>
+            <option value="2">{t("editorPanels.inspector.noteType.hold")}</option>
+            <option value="3">{t("editorPanels.inspector.noteType.flick")}</option>
+            <option value="4">{t("editorPanels.inspector.noteType.drag")}</option>
+          </Select>
+        )}
+      />
+      <EasingField
+        label={t("editor.app.curve.easing")}
+        value={quick.easingType}
+        onChange={(easingType) => curveActions.setCurveEasing(easingType)}
+      />
+    </FloatingPanel>
   );
 }
 

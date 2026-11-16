@@ -11,23 +11,10 @@ import type { EditorSession } from "../session/session.ts";
 import { values } from "../../state/values.ts";
 import "../../settings/editorRuntime.ts";
 import "../../settings/features/index.ts";
+import { EVENT_STEP_SETTINGS } from "../../settings/stepperSettings.ts";
 
 const hitSoundLimitEnabled = values.getHandle<boolean>("hitsound-limit-enabled");
 const hitSoundLimit = values.getHandle<string | undefined>("hitsound-limit");
-const eventWheelIncrements = values.getHandle<string | undefined>("event-wheel-increments");
-
-/** Decodes persisted runtime settings for the session and playback owners. */
-function numberArray(value: string | undefined): number[] {
-  if (!value) {
-    return [];
-  }
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map((entry) => Number(entry)) : [];
-  } catch {
-    return [];
-  }
-}
 
 /** True when both offset maps agree on every hitsound kind. */
 function sameOffsets(left: HitSoundOffsetMap, right: HitSoundOffsetMap): boolean {
@@ -58,18 +45,10 @@ export function applySessionRuntimeSettings(
     hitSounds.offsets = offsets;
     hitSounds.compiled = null;
   }
-  const scrollIncrements = numberArray(eventWheelIncrements.get());
   session.eventWheelSteps = Object.fromEntries(
-    [
-      "moveXEvents",
-      "moveYEvents",
-      "rotateEvents",
-      "alphaEvents",
-      "speedEvents",
-      "scaleXEvents",
-      "scaleYEvents",
-    ].flatMap((key, index) =>
-      Number.isFinite(scrollIncrements[index]) ? [[key, scrollIncrements[index]]] : [],
-    ),
+    Object.entries(EVENT_STEP_SETTINGS).flatMap(([eventType, key]) => {
+      const step = Number(values.byId.get<string | undefined>(key));
+      return Number.isFinite(step) && step > 0 ? [[eventType, step]] : [];
+    }),
   );
 }

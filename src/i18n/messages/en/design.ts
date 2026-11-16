@@ -18,6 +18,8 @@ export default {
 
   "design.numberInput.increase": "Increase",
   "design.numberInput.decrease": "Decrease",
+  "design.numberInput.stepValue": "Step value",
+  "design.numberInput.stepBy": "Changes by {value} each time",
 
   "design.video.play": "Play",
   "design.video.pause": "Pause",

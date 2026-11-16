@@ -201,43 +201,94 @@
   margin: 0;
 }
 
-// The same stepping, drawn: a field with `redux-stepper` gets the buttons the
-// browser's spinners were, pinned inside its right edge. `Input.tsx` measures the
-// native control and renders them as siblings, so the column follows the field
-// wherever a panel puts it. A press steps at once, then repeats while held.
+// The same stepping, drawn: a field with `redux-stepper` gets two buttons on
+// each edge. `Input.tsx` measures the native control and renders them as
+// siblings, so the buttons follow the field wherever a panel puts it. A press
+// steps at once, then repeats while held.
 .redux-app-root input[type="number"].redux-stepper {
-  --redux-field-inset: 18px;
+  --redux-stepper-button-width: var(--space-6);
+  --redux-field-inset: calc(var(--redux-stepper-button-width) * 2);
+  padding-right: var(--redux-field-inset);
+  padding-left: var(--redux-field-inset);
+  text-align: center;
 }
 
 .redux-stepper-buttons {
+  --redux-stepper-button-width: var(--space-6);
   position: absolute;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
+  justify-content: space-between;
+  width: 100%;
   pointer-events: none;
   z-index: 2;
 }
 
+.redux-stepper-side {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  pointer-events: auto;
+}
+
 .redux-stepper-button {
   display: flex;
-  flex: 1 1 50%;
-  min-height: 0;
+  flex: 0 0 var(--redux-stepper-button-width);
   align-items: center;
   justify-content: center;
-  width: 16px;
+  height: 100%;
   padding: 0;
   border: 0;
-  border-radius: 0 var(--radius-control, 6px) var(--radius-control, 6px) 0;
-  background: transparent;
-  color: var(--foreground-muted);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--foreground-muted) 8%, transparent);
+  color: transparent;
   cursor: var(--app-cursor-pointer);
-  pointer-events: auto;
+  transition:
+    background-color var(--design-dur-tint),
+    color var(--design-dur-tint);
   touch-action: none;
 }
 
+.redux-stepper-value {
+  color: var(--foreground);
+  font-size: var(--type-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  opacity: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--design-dur-tint);
+  white-space: nowrap;
+}
+
+.redux-stepper-decrease-side .redux-stepper-button:first-child {
+  border-radius: var(--radius-control, 6px) 0 0 var(--radius-control, 6px);
+}
+
+.redux-stepper-increase-side .redux-stepper-button:last-child {
+  border-radius: 0 var(--radius-control, 6px) var(--radius-control, 6px) 0;
+}
+
+.redux-stepper-button:nth-child(2) {
+  background: color-mix(in srgb, var(--foreground-muted) 18%, transparent);
+}
+
+.redux-stepper-decrease-side .redux-stepper-button:first-child {
+  background: color-mix(in srgb, var(--foreground-muted) 18%, transparent);
+}
+
+.redux-stepper-decrease-side .redux-stepper-button:nth-child(2) {
+  background: color-mix(in srgb, var(--foreground-muted) 8%, transparent);
+}
+
 .redux-stepper-button:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface-hover));
+}
+
+.redux-stepper-button:hover:not(:disabled) .redux-stepper-value,
+.redux-stepper-button:focus-visible .redux-stepper-value {
   color: var(--accent);
+  opacity: 1;
 }
 
 .redux-stepper-button:disabled {
@@ -245,9 +296,28 @@
   color: var(--placeholder-text);
 }
 
-// One glyph, two directions: the asset is a chevron that points down.
-.redux-stepper-up .redux-icon {
-  transform: rotate(180deg);
+.redux-floating-panel.redux-stepper-popup {
+  z-index: var(--z-popover);
+  padding: 0;
+}
+
+.redux-stepper-popup .redux-floating-panel-body > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-stepper-popup .redux-floating-panel-body > label > span {
+  flex: 0 0 auto;
+}
+
+.redux-stepper-popup .redux-floating-panel-body input {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
 }
 
 // --------------------------------------------------------------- select
@@ -699,6 +769,82 @@ input[type="checkbox"]:disabled:indeterminate ~ .redux-check-bar {
 // --------------------------------------------------------------- panels
 // One top-level host for both panels (see `ControlHost.tsx`): fixed positioning
 // is what lets a panel escape the scrolling, clipped rail it was opened in.
+
+// Shared anatomy for floating editor panels. The title bar owns drag affordance
+// and the body/footer keep compact editor surfaces on the same rhythm.
+.redux-floating-panel {
+  position: fixed;
+  z-index: var(--z-floating);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-panel);
+  animation: redux-control-in var(--design-dur-overlay) var(--design-ease-enter);
+}
+
+.redux-floating-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--edge-divider);
+  background: var(--panel-header);
+  user-select: none;
+}
+
+.redux-floating-panel-header[data-draggable="true"] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.redux-floating-panel-header[data-draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.redux-floating-panel-title {
+  font-size: var(--type-label);
+  font-weight: 600;
+  line-height: var(--line-label);
+}
+
+.redux-floating-panel-grip {
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.redux-floating-panel-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+}
+
+.redux-floating-panel-body > * {
+  flex: none;
+}
+
+.redux-floating-panel-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--edge-divider);
+  background: var(--surface-raised);
+}
 
 .redux-control-popup {
   position: fixed;

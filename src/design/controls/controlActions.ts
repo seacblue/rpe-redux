@@ -16,6 +16,7 @@ export interface PopupAnchor {
 interface PopupBase {
   seq: number;
   anchor: PopupAnchor;
+  element: HTMLElement;
 }
 export interface SelectPopupState extends PopupBase {
   kind: "select";
@@ -25,7 +26,19 @@ export interface ColorPopupState extends PopupBase {
   kind: "color";
   element: HTMLInputElement;
 }
-export type ControlPopupState = SelectPopupState | ColorPopupState;
+export type StepperDirection = "decrease" | "increase";
+export type StepperSlot = "outer" | "inner";
+export interface StepperPopupState extends PopupBase {
+  kind: "stepper";
+  element: HTMLButtonElement;
+  direction: StepperDirection;
+  slot: StepperSlot;
+  value: number;
+  min?: number;
+  max?: number;
+  onCommit: (value: number) => void;
+}
+export type ControlPopupState = SelectPopupState | ColorPopupState | StepperPopupState;
 /** The one popup currently attached to a control, if any. */
 const popup = createValue<ControlPopupState | null>({ initial: null });
 /** Subscribe to popup changes. */
@@ -110,6 +123,31 @@ export function openControlColor(input: HTMLInputElement): void {
     seq: openPopupSequence++,
     element: input,
     anchor: popupAnchorOf(input),
+  });
+}
+
+/** Opens the step value editor for one of an input's pointer buttons. */
+export function openControlStepper(
+  button: HTMLButtonElement,
+  direction: StepperDirection,
+  slot: StepperSlot,
+  value: number,
+  min: number | undefined,
+  max: number | undefined,
+  onCommit: (value: number) => void,
+): void {
+  closeControlPopup();
+  openPopup({
+    kind: "stepper",
+    seq: openPopupSequence++,
+    element: button,
+    anchor: popupAnchorOf(button),
+    direction,
+    slot,
+    value,
+    min,
+    max,
+    onCommit,
   });
 }
 

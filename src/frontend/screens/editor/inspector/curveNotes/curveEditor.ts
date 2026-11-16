@@ -29,8 +29,6 @@ export interface CurveEditorDependencies {
   getNotes(): readonly JudgeLineNote[];
   setPickMode(mode: "start" | "end" | null): void;
   activatePane(): void;
-  /** Leave multi-line editing and show the ordinary note timeline for picking. */
-  showSingleNoteTimeline(): void;
   closePane(): void;
   invalidate(): void;
   notify(message: string, severity?: string): void;
@@ -203,7 +201,6 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
       openPanel();
     }
     hideQuick();
-    deps.showSingleNoteTimeline();
     anchorMode = endAnchor ? "end" : "start";
     if (endAnchor && !start) {
       anchorMode = null;
@@ -277,7 +274,6 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
     if (!open) {
       openPanel();
     }
-    deps.showSingleNoteTimeline();
     const anchor: CurveAnchor = {
       startTime: beatCopy(note.startTime),
       positionX: note.positionX,

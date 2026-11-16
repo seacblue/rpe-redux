@@ -9,6 +9,7 @@ import {
   useRef,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useState,
   type CSSProperties,
   type InputHTMLAttributes,
@@ -19,10 +20,23 @@ import { Icon } from "../icon/Icon.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import { ratioOf, readoutText, writeRangeValueAtPointer } from "../../controls/sliderMode.ts";
 import { writeInputValue } from "../../controls/nativeValue.ts";
+import {
+  openControlStepper,
+  type StepperDirection,
+  type StepperSlot,
+} from "../../controls/controlActions.ts";
 
 /** Where a control's own text sits inside its box. */
 export type InputTextAlign = "left" | "center" | "right";
-
+export interface InputStepperOptions {
+  decrease: number;
+  increase: number;
+  decreaseOuter?: number;
+  increaseOuter?: number;
+  min?: number;
+  max?: number;
+  onStepChange?: (direction: StepperDirection, slot: StepperSlot, value: number) => void;
+}
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   "data-tip-title"?: string;
   "data-tip-desc"?: string;
@@ -39,6 +53,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   textAlign?: InputTextAlign;
   /** A bounded step field that is a ring rather than a line: past `max` comes `min`. */
   stepWrap?: boolean;
+  /** Draw left/right step buttons around the centered numeric value. */
+  stepper?: InputStepperOptions;
   /**
    * Tri-state checkbox: `true` draws the design's minus and sets the native
    * `indeterminate` property. The click policy stays with the caller.
@@ -100,8 +116,9 @@ function steppedValue(
   direction: number,
   multiplier: number,
   wrap: boolean,
+  stepOverride?: number,
 ): number {
-  const step = stepSize(input);
+  const step = stepOverride && stepOverride > 0 ? stepOverride : stepSize(input);
   const minimum = bound(input.min);
   const maximum = bound(input.max);
   const current = input.value === "" ? undefined : Number(input.value);
@@ -120,12 +137,22 @@ function steppedValue(
 }
 
 /** Writes a stepped value back and lets the field's own listeners hear about it. */
-function stepField(input: HTMLInputElement, direction: number, multiplier = 1, wrap = false): void {
-  writeInputValue(input, String(steppedValue(input, direction, multiplier, wrap)));
+function stepField(
+  input: HTMLInputElement,
+  direction: number,
+  multiplier = 1,
+  wrap = false,
+  stepOverride?: number,
+): void {
+  writeInputValue(input, String(steppedValue(input, direction, multiplier, wrap, stepOverride)));
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
-
+function stepperAmount(options: InputStepperOptions, direction: -1 | 1, slot: StepperSlot): number {
+  const inner = direction > 0 ? options.increase : options.decrease;
+  const outer = direction > 0 ? options.increaseOuter : options.decreaseOuter;
+  return slot === "outer" ? (outer ?? inner) : inner;
+}
 /** The readout style a range input declares, defaulting to the filled level bar. */
 function rangeMode(props: InputProps): "level" | "range" {
   const explicit = props["data-slider"];
@@ -167,6 +194,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     onPointerCancel,
     onLostPointerCapture,
     onNumericWheel,
+    stepper,
     stepWrap = false,
     indeterminate = false,
     textAlign = "right",
@@ -204,7 +232,22 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const readoutMode = props["data-readout"];
   const numericWheelMode = props["data-redux-wheel"];
   const isDecoratedCheckbox = props.type === "checkbox";
-  const isStepper = props.type === "number" && className.split(/\s+/).includes(STEPPER_CLASS);
+  const isStepper =
+    props.type === "number" &&
+    (stepper !== undefined || className.split(/\s+/).includes(STEPPER_CLASS));
+  const defaultStepperStep = Number(props.step);
+  const fallbackStepperStep =
+    Number.isFinite(defaultStepperStep) && defaultStepperStep > 0 ? defaultStepperStep : 1;
+  const stepperOptions = useMemo(
+    () =>
+      stepper ?? {
+        decrease: fallbackStepperStep,
+        increase: fallbackStepperStep,
+        decreaseOuter: fallbackStepperStep,
+        increaseOuter: fallbackStepperStep,
+      },
+    [fallbackStepperStep, stepper],
+  );
 
   const hold = useRef({ delay: 0, repeat: 0 });
   const stopHold = () => {
@@ -308,8 +351,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       setDecorationBounds({
         left: inputBox.left - hostBox.left - borderLeft,
         top: inputBox.top - hostBox.top - borderTop,
-        width: input.clientWidth,
-        height: input.clientHeight,
+        width: inputBox.width,
+        height: inputBox.height,
       });
     };
     place();
@@ -423,9 +466,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     [],
   );
 
-  const startHold = (event: ReactPointerEvent<HTMLButtonElement>, direction: 1 | -1) => {
+  const startHold = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    direction: 1 | -1,
+    slot: StepperSlot,
+  ) => {
     const input = element.current;
-    if (!input || input.disabled || input.readOnly) {
+    if (!input || event.button !== 0 || input.disabled || input.readOnly) {
       return;
     }
     // Capture so the release lands here even when the pointer has left the
@@ -433,7 +480,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     event.currentTarget.setPointerCapture(event.pointerId);
     stopHold();
     const tick = () => {
-      stepField(input, direction, 1, stepWrap);
+      const amount = stepperAmount(stepperOptions, direction, slot);
+      stepField(input, direction, 1, stepWrap, amount);
       onNumericWheel?.(input.value, input);
     };
     tick();
@@ -519,7 +567,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       // The wheel takes the same path the buttons do, `stepWrap` and all; the
       // native step would stop dead at either end.
       if (isStepper) {
-        stepField(input, event.deltaY < 0 ? 1 : -1, multiplier, stepWrap);
+        const direction = event.deltaY < 0 ? 1 : -1;
+        const amount = direction > 0 ? stepperOptions.increase : stepperOptions.decrease;
+        stepField(input, direction, multiplier, stepWrap, amount);
         onNumericWheel?.(input.value, input);
         return;
       }
@@ -542,6 +592,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     customWheel,
     isStepper,
     stepWrap,
+    stepperOptions,
     onNumericWheel,
   ]);
   // The stepper column and the slider readout are siblings of a control whose
@@ -553,10 +604,48 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     width: `${decorationBounds.width}px`,
     height: `${decorationBounds.height}px`,
   };
+  const renderStepperButton = (direction: -1 | 1, slot: StepperSlot) => {
+    const directionName = direction > 0 ? "increase" : "decrease";
+    const amount = stepperAmount(stepperOptions, direction, slot);
+    const signedAmount = direction > 0 ? `+${amount}` : `-${amount}`;
+    const label = t(`design.numberInput.${directionName}`);
+    return (
+      <button
+        key={`${directionName}-${slot}`}
+        type="button"
+        className={`redux-stepper-button redux-stepper-${directionName} redux-stepper-${directionName}-${slot}`}
+        // The field itself stays the keyboard path: arrows already step it,
+        // so the buttons are the pointer affordance and add no tab stop.
+        tabIndex={-1}
+        aria-label={label}
+        disabled={props.disabled === true || props.readOnly === true}
+        onPointerDown={(event) => startHold(event, direction, slot)}
+        onPointerUp={stopHold}
+        onPointerCancel={stopHold}
+        onLostPointerCapture={stopHold}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          openControlStepper(
+            event.currentTarget,
+            directionName,
+            slot,
+            amount,
+            stepperOptions.min,
+            stepperOptions.max,
+            (value) => stepper?.onStepChange?.(directionName, slot, value),
+          );
+        }}
+      >
+        <span className="redux-stepper-value" aria-hidden="true">
+          {signedAmount}
+        </span>
+      </button>
+    );
+  };
   const control = (
     <input
       ref={element}
-      className={`redux-input ${className}`}
+      className={`redux-input ${className}${isStepper && !className.split(/\s+/).includes(STEPPER_CLASS) ? ` ${STEPPER_CLASS}` : ""}`}
       // Some inspector fields attach a feature-specific nonpassive wheel
       // handler; this marker prevents the generic handler from duplicating it.
       data-redux-wheel={props["data-redux-wheel"]}
@@ -651,36 +740,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {control}
       {isStepper && (
         <span ref={decoration} className="redux-stepper-buttons" style={overlayBox}>
-          <button
-            type="button"
-            className="redux-stepper-button redux-stepper-up"
-            // The field itself stays the keyboard path: arrows already step it,
-            // so the buttons are the pointer affordance and add no tab stop.
-            tabIndex={-1}
-            aria-label={t("design.numberInput.increase")}
-            data-tip-title={t("design.numberInput.increase")}
-            disabled={props.disabled === true || props.readOnly === true}
-            onPointerDown={(event) => startHold(event, 1)}
-            onPointerUp={stopHold}
-            onPointerCancel={stopHold}
-            onLostPointerCapture={stopHold}
-          >
-            <Icon name="chevronDown" size={14} />
-          </button>
-          <button
-            type="button"
-            className="redux-stepper-button redux-stepper-down"
-            tabIndex={-1}
-            aria-label={t("design.numberInput.decrease")}
-            data-tip-title={t("design.numberInput.decrease")}
-            disabled={props.disabled === true || props.readOnly === true}
-            onPointerDown={(event) => startHold(event, -1)}
-            onPointerUp={stopHold}
-            onPointerCancel={stopHold}
-            onLostPointerCapture={stopHold}
-          >
-            <Icon name="chevronDown" size={14} />
-          </button>
+          <span className="redux-stepper-side redux-stepper-decrease-side">
+            {renderStepperButton(-1, "outer")}
+            {renderStepperButton(-1, "inner")}
+          </span>
+          <span className="redux-stepper-side redux-stepper-increase-side">
+            {renderStepperButton(1, "inner")}
+            {renderStepperButton(1, "outer")}
+          </span>
         </span>
       )}
       {isLevelRange && !manualEntry && (

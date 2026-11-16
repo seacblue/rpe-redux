@@ -14,6 +14,8 @@ export default {
 
   "design.numberInput.increase": "增加",
   "design.numberInput.decrease": "减少",
+  "design.numberInput.stepValue": "步进值",
+  "design.numberInput.stepBy": "每次改变 {value}",
 
   "design.video.play": "播放",
   "design.video.pause": "暂停",

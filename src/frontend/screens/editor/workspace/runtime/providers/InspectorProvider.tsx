@@ -214,7 +214,6 @@ export function createInspectorRuntime(options: {
     state: options.ui.curve,
     setPickMode: options.ui.curve.pickMode.set,
     activatePane: () => activatePane("curve"),
-    showSingleNoteTimeline: () => viewControls.showSingleNoteTimeline(),
     closePane,
     invalidate: options.invalidate,
     notify: options.notify,

@@ -7,8 +7,112 @@
  */
 import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition } from "../types.ts";
+import { values } from "../../state/values.ts";
+import "../editorRuntime.ts";
+import {
+  EVENT_OUTER_STEP_SETTINGS,
+  EVENT_STEP_SETTINGS,
+  NOTE_POSITION_X_OUTER_STEP_SETTING,
+  NOTE_POSITION_X_STEP_SETTING,
+  STEPPER_DEFAULTS,
+} from "../stepperSettings.ts";
+
+const EVENT_STEPPER_LABELS = [
+  [
+    "moveXEvents",
+    "settings.field.event-move-x-step.label",
+    "settings.field.event-move-x-step.description",
+  ],
+  [
+    "moveYEvents",
+    "settings.field.event-move-y-step.label",
+    "settings.field.event-move-y-step.description",
+  ],
+  [
+    "rotateEvents",
+    "settings.field.event-rotate-step.label",
+    "settings.field.event-rotate-step.description",
+  ],
+  [
+    "alphaEvents",
+    "settings.field.event-alpha-step.label",
+    "settings.field.event-alpha-step.description",
+  ],
+  [
+    "speedEvents",
+    "settings.field.event-speed-step.label",
+    "settings.field.event-speed-step.description",
+  ],
+  [
+    "scaleXEvents",
+    "settings.field.event-scale-x-step.label",
+    "settings.field.event-scale-x-step.description",
+  ],
+  [
+    "scaleYEvents",
+    "settings.field.event-scale-y-step.label",
+    "settings.field.event-scale-y-step.description",
+  ],
+] as const;
+
+const eventStepperSettings = EVENT_STEPPER_LABELS.flatMap(([eventType, label, description]) => {
+  const key = EVENT_STEP_SETTINGS[eventType];
+  const outerKey = EVENT_OUTER_STEP_SETTINGS[eventType];
+  const base = {
+    navigation: "editor.events" as const,
+    group: "settings.group.stepper" as const,
+    control: "number" as const,
+    min: 0.01,
+    max: 1000,
+    step: 0.01,
+  };
+  return [
+    {
+      ...base,
+      key,
+      label: label as SettingDefinition["label"],
+      description: description as SettingDefinition["description"],
+      default: STEPPER_DEFAULTS[key],
+    },
+    {
+      ...base,
+      key: outerKey,
+      label: label.replace(".label", ".outer.label") as SettingDefinition["label"],
+      description: description.replace(
+        ".description",
+        ".outer.description",
+      ) as SettingDefinition["description"],
+      default: STEPPER_DEFAULTS[outerKey],
+    },
+  ];
+});
 
 const EditingSettingsSchema: SettingDefinition[] = [
+  {
+    key: NOTE_POSITION_X_STEP_SETTING,
+    navigation: "editor.events",
+    group: "settings.group.stepper",
+    label: "settings.field.note-position-x-step.label",
+    description: "settings.field.note-position-x-step.description",
+    control: "number",
+    default: STEPPER_DEFAULTS[NOTE_POSITION_X_STEP_SETTING],
+    min: 0.01,
+    max: 1000,
+    step: 0.01,
+  },
+  {
+    key: NOTE_POSITION_X_OUTER_STEP_SETTING,
+    navigation: "editor.events",
+    group: "settings.group.stepper",
+    label: "settings.field.note-position-x-outer-step.label",
+    description: "settings.field.note-position-x-outer-step.description",
+    control: "number",
+    default: STEPPER_DEFAULTS[NOTE_POSITION_X_OUTER_STEP_SETTING],
+    min: 0.01,
+    max: 1000,
+    step: 0.01,
+  },
+  ...(eventStepperSettings as SettingDefinition[]),
   {
     key: "bar-width",
     navigation: "editor.beat-lines",
@@ -159,3 +263,30 @@ const EditingSettingsSchema: SettingDefinition[] = [
   },
 ];
 settingsRegistry.registerSettings(EditingSettingsSchema);
+
+/** Adopt the old imported event-wheel array into the named settings once. */
+const legacyEventSteps = values.getHandle<string>("event-wheel-increments");
+const legacyValues = (() => {
+  try {
+    const parsed: unknown = JSON.parse(legacyEventSteps.get() || "");
+    return Array.isArray(parsed) ? parsed.map(Number) : [];
+  } catch {
+    return [];
+  }
+})();
+const legacyEventTypes = Object.keys(EVENT_STEP_SETTINGS) as Array<
+  keyof typeof EVENT_STEP_SETTINGS
+>;
+for (const [index, eventType] of legacyEventTypes.entries()) {
+  const key = EVENT_STEP_SETTINGS[eventType];
+  const legacy = legacyValues[index];
+  if (Number.isFinite(legacy)) {
+    const setting = values.getHandle<string>(key);
+    if (setting.get() === String(STEPPER_DEFAULTS[key])) {
+      setting.set(String(legacy));
+    }
+  }
+}
+if (legacyValues.length > 0) {
+  legacyEventSteps.set("");
+}

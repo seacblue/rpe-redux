@@ -33,6 +33,12 @@ import { writeInputValue } from "../../../../../design/controls/nativeValue.ts";
 import { EVENT_WHEEL_STEPS } from "../../../../../core/global/chart/editing/noteEditing.ts";
 import { judgeLineTraits } from "../../../../../core/global/chart/line/lineTraits.ts";
 import { t } from "../../../../../i18n/index.ts";
+import { useSetting } from "../../../settings/useSetting.ts";
+import { values } from "../../../../../core/state/values.ts";
+import {
+  eventOuterStepSettingKey,
+  eventStepSettingKey,
+} from "../../../../../core/settings/stepperSettings.ts";
 
 interface EventFieldProps {
   session: EditorSession;
@@ -95,13 +101,27 @@ export function EventField({
   const noiseSize =
     judgeLineTraits(session.line).isNoise &&
     (eventType === "scaleXEvents" || eventType === "scaleYEvents");
-  const step =
+  const fallbackStep =
     field === "easingLeft" || field === "easingRight"
       ? 0.05
       : field === "linkgroup"
         ? 1
         : (session.eventWheelSteps?.[eventType] ??
           (noiseSize ? 5 : (EVENT_WHEEL_STEPS[eventType] ?? 1)));
+  const stepSettingKey = field === "linkgroup" ? undefined : eventStepSettingKey(eventType);
+  const outerStepSettingKey =
+    field === "linkgroup" ? undefined : eventOuterStepSettingKey(eventType);
+  const configuredStepText = useSetting<string>(stepSettingKey ?? "", String(fallbackStep));
+  const configuredStep = Number(configuredStepText);
+  const step =
+    Number.isFinite(configuredStep) && configuredStep > 0 ? configuredStep : fallbackStep;
+  const configuredOuterStepText = useSetting<string>(outerStepSettingKey ?? "", String(step * 10));
+  const configuredOuterStep = Number(configuredOuterStepText);
+  const outerStep =
+    Number.isFinite(configuredOuterStep) && configuredOuterStep > 0
+      ? configuredOuterStep
+      : step * 10;
+  const usesStepper = kind === "number" && field !== "linkgroup";
 
   /** Parses the input by field kind and writes it through the event transform. */
   const update = useCallback(
@@ -228,6 +248,24 @@ export function EventField({
       type={kind === "number" ? "number" : "text"}
       data-redux-wheel={kind === "number" ? "custom" : undefined}
       step={nativeStep}
+      stepper={
+        usesStepper
+          ? {
+              decrease: step,
+              increase: step,
+              decreaseOuter: outerStep,
+              increaseOuter: outerStep,
+              min: 0.01,
+              max: 1000,
+              onStepChange: (_direction, slot, next) => {
+                const settingKey = slot === "outer" ? outerStepSettingKey : stepSettingKey;
+                if (settingKey) {
+                  values.byId.set(settingKey, String(next));
+                }
+              },
+            }
+          : undefined
+      }
       min={bounds.min}
       max={bounds.max}
       data-inspector-field={field}

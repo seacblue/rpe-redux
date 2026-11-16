@@ -1,10 +1,9 @@
 /**
- * Placement and drag bounds for the curve-note quick panel.
+ * Initial placement for the curve-note quick panel.
  *
  * The panel prefers the side of the picked path with more room and then clamps
- * itself into the visible timeline. Once the author drags its title row, the
- * card may cover the toolbar but stays below the window's title row and inside
- * the window.
+ * itself into the visible timeline. Dragging is shared by the design
+ * `FloatingPanel` primitive.
  */
 
 /** Space between the panel edge and the timeline viewport edge. */
@@ -60,21 +59,4 @@ export function quickPanelPosition(
   const maximumTop = viewport.bottom - QUICK_PANEL_MARGIN - size.height;
   top = Math.min(Math.max(minimumTop, top), Math.max(minimumTop, maximumTop));
   return { left, top };
-}
-
-/** Clamp a dragged panel inside the window and below its title row. */
-export function clampDraggedPanel(
-  left: number,
-  top: number,
-  size: QuickPanelSize,
-  safeTop: number,
-  windowSize: { width: number; height: number },
-): { left: number; top: number } {
-  const minimumTop = Math.max(0, safeTop);
-  const maxLeft = Math.max(0, windowSize.width - size.width);
-  const maxTop = Math.max(minimumTop, windowSize.height - size.height);
-  return {
-    left: Math.min(Math.max(0, left), maxLeft),
-    top: Math.min(Math.max(minimumTop, top), maxTop),
-  };
 }

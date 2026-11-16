@@ -29,6 +29,7 @@ import enEditor from "./en/editor.ts";
 import enEditorPanels from "./en/editorPanels.ts";
 import enTimingDetection from "./en/timingDetection.ts";
 import enSettings from "./en/settings.ts";
+import enSettingsStepper from "./en/settingsStepper.ts";
 import enSkinWorkbench from "./en/skinWorkbench.ts";
 import enStartup from "./en/startup.ts";
 import enCapabilities from "./en/capabilities.ts";
@@ -49,6 +50,7 @@ import zhEditor from "./zh/editor.ts";
 import zhEditorPanels from "./zh/editorPanels.ts";
 import zhTimingDetection from "./zh/timingDetection.ts";
 import zhSettings from "./zh/settings.ts";
+import zhSettingsStepper from "./zh/settingsStepper.ts";
 import zhSkinWorkbench from "./zh/skinWorkbench.ts";
 import zhStartup from "./zh/startup.ts";
 import zhCapabilities from "./zh/capabilities.ts";
@@ -71,6 +73,7 @@ export const en = {
   ...enEditorPanels,
   ...enTimingDetection,
   ...enSettings,
+  ...enSettingsStepper,
   ...enSkinWorkbench,
   ...enStartup,
   ...enCapabilities,
@@ -97,6 +100,7 @@ export const zh: Record<MessageKey, string> = {
   ...zhEditorPanels,
   ...zhTimingDetection,
   ...zhSettings,
+  ...zhSettingsStepper,
   ...zhSkinWorkbench,
   ...zhStartup,
   ...zhCapabilities,

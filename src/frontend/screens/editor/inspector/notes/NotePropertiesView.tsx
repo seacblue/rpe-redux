@@ -16,6 +16,12 @@ import { Select } from "../../../../../design/components/select/Select.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { useEditorRuntimeValue } from "../../workspace/runtime/composition/EditorRuntime.tsx";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
+import { useSetting } from "../../../settings/useSetting.ts";
+import { values } from "../../../../../core/state/values.ts";
+import {
+  NOTE_POSITION_X_OUTER_STEP_SETTING,
+  NOTE_POSITION_X_STEP_SETTING,
+} from "../../../../../core/settings/stepperSettings.ts";
 import type { NotePropertyField } from "./model.ts";
 
 interface ControlProps {
@@ -29,6 +35,18 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
   const focusValue = useRef<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(field.value);
+  const configuredPositionStep = useSetting<string>(NOTE_POSITION_X_STEP_SETTING, "5");
+  const parsedPositionStep = Number(configuredPositionStep);
+  const positionStep =
+    Number.isFinite(parsedPositionStep) && parsedPositionStep > 0
+      ? parsedPositionStep
+      : (field.step ?? 1);
+  const configuredPositionOuterStep = useSetting<string>(NOTE_POSITION_X_OUTER_STEP_SETTING, "100");
+  const parsedPositionOuterStep = Number(configuredPositionOuterStep);
+  const positionOuterStep =
+    Number.isFinite(parsedPositionOuterStep) && parsedPositionOuterStep > 0
+      ? parsedPositionOuterStep
+      : positionStep * 10;
   const preservesDraft = field.preservesDraft;
   useEffect(() => {
     const element = input.current;
@@ -149,6 +167,7 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
   }
 
   const positionField = field.key === "positionX";
+  const step = positionField ? positionStep : (field.step ?? 1);
   const appliesOnInput = positionField;
   const controlledValue = positionField || field.kind === "duration";
   const inputProps = {
@@ -227,7 +246,27 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             {...inputProps}
             ref={input as Ref<HTMLInputElement>}
             type={field.kind === "text" ? "text" : "number"}
-            step={field.kind === "number" ? (field.step ?? 1) : undefined}
+            step={field.kind === "number" ? step : undefined}
+            stepper={
+              positionField
+                ? {
+                    decrease: step,
+                    increase: step,
+                    decreaseOuter: positionOuterStep,
+                    increaseOuter: positionOuterStep,
+                    min: 0.01,
+                    max: 1000,
+                    onStepChange: (_direction, slot, next) => {
+                      values.byId.set(
+                        slot === "outer"
+                          ? NOTE_POSITION_X_OUTER_STEP_SETTING
+                          : NOTE_POSITION_X_STEP_SETTING,
+                        String(next),
+                      );
+                    },
+                  }
+                : undefined
+            }
           />
         )
       }

@@ -18,6 +18,7 @@ import { trackFloatingAnchor } from "../patterns/floatingAnchor.ts";
 import { useHoldFloatingSurface } from "../patterns/floatingSurface.ts";
 import { SelectPopup } from "./SelectPopup.tsx";
 import { ColorPopup } from "./ColorPopup.tsx";
+import { StepperPopup } from "./StepperPopup.tsx";
 import { installControls } from "./enhance.ts";
 
 /**
@@ -59,8 +60,10 @@ export function ControlHost() {
   const panel =
     popup.kind === "select" ? (
       <SelectPopup key={popup.seq} state={popup} />
-    ) : (
+    ) : popup.kind === "color" ? (
       <ColorPopup key={popup.seq} state={popup} />
+    ) : (
+      <StepperPopup key={popup.seq} state={popup} />
     );
   // Keep the popup in the app root rather than the owning dialog. Dialogs clip
   // overflow by design, while the fixed popup must be able to use the viewport
