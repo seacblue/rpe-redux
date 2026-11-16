@@ -128,7 +128,6 @@ function drawOffscreenNoteCues(
   width: number,
   height: number,
 ): void {
-  const showDiagnosticFill = true;
   if (width <= 0 || height <= 0) {
     return;
   }
@@ -149,15 +148,7 @@ function drawOffscreenNoteCues(
   context.fillStyle = cueColor;
   context.shadowColor = cueColor;
   context.shadowBlur = 12;
-  context.globalAlpha = 0.96;
-  if (showDiagnosticFill) {
-    // Diagnostic fill: prove that the dedicated cue canvas is visible before
-    // narrowing the layer back to the current note's edge indicator.
-    context.globalAlpha = 1;
-    context.fillRect(0, 0, width, height);
-    context.restore();
-    return;
-  }
+  context.globalAlpha = 1;
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const lineIndex = lineIndices[panel] ?? session.lineIndex;
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
