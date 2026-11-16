@@ -76,6 +76,7 @@ import {
   useWorkspaceModeState,
 } from "../workspace/container/workspaceModes.ts";
 import { guideSectionForContext } from "../../../overlays/help/onboardingGuideContent.ts";
+import { registerEscapeHandler } from "../../../platform/shortcuts/escapeHandlers.ts";
 import {
   openOnboardingGuide,
   openOnboardingTutorial,
@@ -439,7 +440,6 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
         (navigationEntry ? iconName(navigationEntry.icon) : "panelRight"));
   const showHeader = modeSurface || activeDrawerPane !== null || activePane !== "";
   const expandMode = activeDefinition?.workspaceMode;
-  const escapeCloseTimer = useRef<number | null>(null);
   /**
    * Closes the expanded task, the drawer page, or the active pane.
    *
@@ -448,19 +448,19 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
    * screen immediately. The collapse control is the only exit that morphs,
    * because it keeps the same page and only changes its size.
    */
-  const closeActive = useCallback(() => {
+  const closeActive = useCallback((): boolean => {
     if (activeDrawerPane) {
       // A guided step anchored to this page keeps it open; closing would leave
       // the card without its target.
       if (drawerHeld) {
-        return;
+        return false;
       }
       closeDrawer();
       if (runtime) {
         closeInspector(runtime.ui.activeInspector);
       }
       focusDrawerPaneTrigger(activeDrawerPane.id);
-      return;
+      return true;
     }
     if (activeWorkspaceMode || modePhase !== "compact") {
       // The close control and Escape name their destination: the page and the
@@ -469,11 +469,13 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
       if (runtime && runtime.ui.activeInspector.get() !== "") {
         closeInspector(runtime.ui.activeInspector);
       }
-      return;
+      return true;
     }
     if (runtime && activePane !== "") {
       closeInspector(runtime.ui.activeInspector);
+      return true;
     }
+    return false;
   }, [
     activeDrawerPane,
     activePane,
@@ -483,38 +485,14 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
     modePhase,
     runtime,
   ]);
-  // Escape is the last resort: an open dialog, popover, capture surface, or
-  // menu consumes it first and prevents or stops the event. Only a plain Escape
-  // that reaches the window closes the inspector.
+  // The App gives active surfaces a turn to consume a plain Escape before
+  // the root no-op. Dialogs, popovers, menus, and text fields return earlier
+  // from the App's context check, so they retain their own Escape behavior.
   useEffect(() => {
     if (!showHeader) {
       return undefined;
     }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.isComposing) {
-        return;
-      }
-      // Run after every other Escape listener has had a chance to claim the
-      // event. A dialog, popover, menu, or capture surface that handles Escape
-      // prevents the default and keeps the inspector open.
-      if (escapeCloseTimer.current !== null) {
-        window.clearTimeout(escapeCloseTimer.current);
-      }
-      escapeCloseTimer.current = window.setTimeout(() => {
-        escapeCloseTimer.current = null;
-        if (!event.defaultPrevented) {
-          closeActive();
-        }
-      }, 0);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      if (escapeCloseTimer.current !== null) {
-        window.clearTimeout(escapeCloseTimer.current);
-        escapeCloseTimer.current = null;
-      }
-    };
+    return registerEscapeHandler(closeActive);
   }, [closeActive, showHeader]);
   const themeItems: ThemeUiItem[] = availableItems.map((item) => ({
     id: item.id,

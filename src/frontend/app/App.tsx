@@ -9,7 +9,6 @@ import { EditorBackdrop } from "./EditorBackdrop.tsx";
 import { useTooltipHost, setShortcutLookup } from "../../design/patterns/TooltipHost.tsx";
 import { ControlHost } from "../../design/controls/ControlHost.tsx";
 import { SettingsWindow } from "../screens/settings/SettingsWindow.tsx";
-import { openSettings } from "../screens/settings/settingsWindowController.ts";
 import { initializeUpdates } from "../screens/settings/updates/updateStore.ts";
 import { preferences } from "../../core/state/preferences.ts";
 import { values } from "../../core/state/values.ts";
@@ -87,6 +86,7 @@ import {
   type WindowDisplayMode,
 } from "../platform/desktop/windowDisplay.ts";
 import { readShortcutContext } from "../platform/shortcuts/shortcutContext.ts";
+import { consumeEscape } from "../platform/shortcuts/escapeHandlers.ts";
 
 // Install the note-skin bridge at module load so the media layer can resolve
 // bundled skins and announce changes before any skin is read.
@@ -280,9 +280,9 @@ function AppContent() {
     }
   }, [ready]);
 
-  // Escape is the last-resort settings entry point. Menus, dialogs, control
-  // popups, onboarding, and text fields all answer first; when none of them
-  // owns the key, the home screen or editor opens Settings.
+  // Escape is a cancel/close key only. Menus, dialogs, control popups,
+  // onboarding, text fields, and active editor surfaces answer first; when no
+  // surface owns it, the key is consumed without changing the destination.
   useEffect(() => {
     if (!ready) {
       return undefined;
@@ -300,8 +300,15 @@ function AppContent() {
       ) {
         return;
       }
-      event.preventDefault();
-      openSettings();
+      // Give surface-owned Escape handlers one turn to claim the key. If no
+      // surface can close, Escape remains a no-op instead of opening Settings.
+      window.setTimeout(() => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        event.preventDefault();
+        consumeEscape();
+      }, 0);
     };
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);

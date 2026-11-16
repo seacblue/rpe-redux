@@ -12,6 +12,7 @@ import { restoreSelection } from "../../../core/edit/session/selectionHistory.ts
 import { timelineNoteCandidates } from "../../../core/edit/timeline/hitTest.ts";
 import { createSessionSelection } from "../../../frontend/screens/editor/workspace/runtime/bridge/sessionSelection.ts";
 import { resolveSelectionPane } from "../../../frontend/screens/editor/workspace/runtime/bridge/selectionPaneRouting.ts";
+import { publishAreaSelectionMode } from "../../../frontend/screens/editor/workspace/timeline/selection/rectangleSelection.ts";
 import { previewNoteContains } from "../../../frontend/screens/editor/workspace/preview/interaction/previewHitGeometry.ts";
 
 const paneState = {
@@ -88,6 +89,56 @@ test("multi-selection intent stays multi when one selected object remains", () =
     kind: "open-multi",
     focus: "notes",
   });
+});
+
+test("a direct multi-selection replaces an active trajectory inspector", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes.push(createNote(1, 1, 0), createNote(2, 1, 0));
+  const session = new EditorSession(chart);
+  session.focus = "notes";
+  session.selectionMode = "multi";
+  session.selection.add(0);
+  session.selection.add(1);
+
+  assert.deepEqual(
+    resolveSelectionPane(session, 0, {
+      ...paneState,
+      trajectoryActive: true,
+      pointerSelection: true,
+    }).action,
+    { kind: "open-multi", focus: "notes" },
+  );
+});
+
+test("the first object from a marquee or sweep publishes multi-edit immediately", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes.push(createNote(1, 1, 0));
+  const session = new EditorSession(chart);
+  session.focus = "notes";
+  session.marqueeSelection = "notes";
+  session.selection.add(0);
+  session.selectionMode = "none";
+  const actions = [];
+  const routing = createSessionSelection({
+    layer: () => 0,
+    state: () => ({ multiEditCommitting: false, trajectoryActive: false, curveEditorOpen: false }),
+    effects: {
+      syncMulti: () => undefined,
+      activatePane: (name) => actions.push(name),
+      openMulti: () => actions.push("open-multi"),
+      deactivateCurve: () => undefined,
+      openTrajectory: () => undefined,
+      closePane: () => undefined,
+    },
+  });
+  session.addEventListener("change", () => routing.route(session, "notes"));
+
+  session.beginSelectionNotificationBatch();
+  session.notifySelection();
+  publishAreaSelectionMode(session, "notes");
+  session.endSelectionNotificationBatch();
+
+  assert.deepEqual(actions, ["multi", "open-multi"]);
 });
 
 test("undo restores the multi-selection intent separately from its count", () => {

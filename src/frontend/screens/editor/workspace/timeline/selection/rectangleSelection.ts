@@ -146,6 +146,20 @@ export function rectangleStart(
   );
 }
 
+/** Publish the multi-edit intent after a marquee or sweep changes its target. */
+export function publishAreaSelectionMode(
+  session: ReturnType<TimelineSelectionReceiver["getSession"]>,
+  area: TimelineArea,
+): boolean {
+  const nextMode = hasAreaSelection(session, area) ? "multi" : "none";
+  if (session.selectionMode === nextMode) {
+    return false;
+  }
+  session.selectionMode = nextMode;
+  session.notifySelection();
+  return true;
+}
+
 /** The marquee's beat range as `[bottom, top]`. */
 export function rectangleTimes(
   this: TimelineSelectionReceiver,
@@ -239,6 +253,7 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
     remove: selection.drag.remove,
   };
   const session = this.getSession();
+  session.beginSelectionNotificationBatch();
   let result: SelectionGestureResult;
   if (selection.area === "notes") {
     result = selectNotesAlongSegment(session, sweep, {
@@ -298,8 +313,9 @@ export function updateSweep(this: TimelineSelectionReceiver, event: PointerEvent
     });
   }
   if (result.changed || result.matched) {
-    session.selectionMode = hasAreaSelection(session, selection.area) ? "multi" : "none";
+    publishAreaSelectionMode(session, selection.area);
   }
+  session.endSelectionNotificationBatch();
   selection.drag.lastSweepPoint = current;
   selection.drag.lastSweepWorldX = currentWorldX;
   this.changed();
@@ -367,6 +383,8 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
   selection.drag.lastSelectionKey = key;
   const session = this.getSession();
   const intentChanged = session.marqueeSelection !== selection.area;
+  let modeChanged = false;
+  session.beginSelectionNotificationBatch();
   session.marqueeSelection = selection.area;
   if (intentChanged) {
     session.selectionRevision += 1;
@@ -431,11 +449,12 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
   }
   pointerTimingEnd(queryStarted, "marqueeQuery");
   if (result.changed || result.matched) {
-    session.selectionMode = hasAreaSelection(session, selection.area) ? "multi" : "none";
+    modeChanged = publishAreaSelectionMode(session, selection.area);
   }
-  if (intentChanged) {
-    session.notify();
+  if (intentChanged && !modeChanged) {
+    session.notifySelection();
   }
+  session.endSelectionNotificationBatch();
 }
 
 /** Cheap identity for a chart/undo change while a live marquee is open. */

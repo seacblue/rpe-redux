@@ -100,8 +100,11 @@ export function resolveSelectionPane(
   } else if (
     state.trajectoryActive &&
     count !== 1 &&
-    !(count > 0 && session.marqueeSelection === session.focus)
+    !(count > 0 && (state.pointerSelection || session.marqueeSelection === session.focus))
   ) {
+    // A direct pointer selection is a new Inspector target. In particular, a
+    // Ctrl-click multi-selection must replace the trajectory page instead of
+    // letting the old trajectory state reclaim the pane.
     action = { kind: "activate-trajectory" };
   } else if (state.curveEditorOpen && !pointerSelection) {
     action = { kind: "activate-curve" };

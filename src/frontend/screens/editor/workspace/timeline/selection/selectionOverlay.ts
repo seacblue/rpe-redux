@@ -13,6 +13,7 @@ import { TimelineOverlayRenderDevice } from "../../../canvas/timelineOverlayRend
 import { type Timeline } from "../surface/timeline.ts";
 import { marqueeRectangleCommands, selectionSweepCommands } from "./selectionOverlayDrawing.ts";
 import { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
+import { finishCapturedSelectionGesture } from "./selectionGestureCompletion.ts";
 
 /** Event target shape needed for the line-switcher exclusion check. */
 interface ClosestTarget {
@@ -48,10 +49,7 @@ export class SelectionOverlay {
       true,
     );
     const finishWindowDrag = (event: PointerEvent) => {
-      if (!timeline.rectangleSelection() && !timeline.sweepSelection()) {
-        return;
-      }
-      if (timeline.finishRectangle(event)) {
+      if (finishCapturedSelectionGesture(timeline, event)) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -84,7 +82,7 @@ export class SelectionOverlay {
         if (target?.closest?.(".line-switcher")) {
           return;
         }
-        if (timeline.finishRectangle(event)) {
+        if (finishCapturedSelectionGesture(timeline, event)) {
           event.preventDefault();
           event.stopImmediatePropagation();
         }
