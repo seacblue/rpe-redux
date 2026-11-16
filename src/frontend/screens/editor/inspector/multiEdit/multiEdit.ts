@@ -10,6 +10,7 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import { captureSelection } from "../../../../../core/edit/selection/snapshot.ts";
+import type { SelectionSnapshot } from "../../../../../core/edit/selection/snapshot.ts";
 import { commitSelectionEdit } from "../../../../../core/edit/selection/edits.ts";
 import { previewMultiEdit } from "../../../../../core/edit/multiEdit/plan.ts";
 import type {
@@ -147,6 +148,10 @@ export class MultiEditPanel {
   formModule?: Promise<MultiEditFormModule>;
   /** Retains the paint order for an unchanged batch result. */
   private ghostChanges?: { result: MultiEditResult; changes: readonly BatchChange[] };
+  /** Keeps selected events addressable while the visible event layer changes. */
+  private selectionSnapshot?: SelectionSnapshot;
+  /** Selection membership associated with `selectionSnapshot`. */
+  private selectionSnapshotSignature?: string;
   /** These closures are assigned inside `open()` before any caller invokes them. */
   updateHistory?: (event?: Event) => void;
   load?: (value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }) => void;
@@ -192,6 +197,8 @@ export class MultiEditPanel {
     this.seed = 1;
     this.result = null;
     this.ghostChanges = undefined;
+    this.selectionSnapshot = undefined;
+    this.selectionSnapshotSignature = undefined;
     this.signature = null;
     this.updateHistory = () => this.renderForm(kind);
     this.read = () =>
@@ -264,14 +271,20 @@ export class MultiEditPanel {
           const amount = result.changes.length;
           this.committing = true;
           try {
+            const session = this.getSession();
+            const visibleEventLayer = session.eventLayer;
+            const commitResult =
+              result.eventLayer === visibleEventLayer
+                ? result
+                : { ...result, eventLayer: visibleEventLayer };
             const values = this.read?.() ?? this.parameters.read(kind);
             const name = recipeName(values);
             commitSelectionEdit(
-              this.getSession(),
-              result,
+              session,
+              commitResult,
               name,
               {
-                affectedObjectIds: affectedObjectIds(this.getSession(), result),
+                affectedObjectIds: affectedObjectIds(session, result),
                 recipe: {
                   id: `builtin.multi-edit.${kind}`,
                   name,
@@ -281,11 +294,19 @@ export class MultiEditPanel {
               },
               { normalized: true },
             );
+            if (result.eventLayer !== visibleEventLayer) {
+              // The retained selection belongs to the edited layer, while the
+              // active timeline still shows the layer the user switched to.
+              session.eventSelection.clear();
+              session.notify();
+            }
             this.parameters.remember(kind, values);
             this.updateHistory?.();
             this.form?.selectHistory("");
             this.result = null;
             this.ghostChanges = undefined;
+            this.selectionSnapshot = undefined;
+            this.selectionSnapshotSignature = undefined;
             this.chart = this.getSession().chart;
             this.signature = this.selectionSignature();
             this.form?.setResult("", false);
@@ -314,6 +335,8 @@ export class MultiEditPanel {
     this.active = false;
     this.result = null;
     this.ghostChanges = undefined;
+    this.selectionSnapshot = undefined;
+    this.selectionSnapshotSignature = undefined;
     this.invalidate();
   }
 
@@ -322,6 +345,8 @@ export class MultiEditPanel {
     this.parameters.clearHistory();
     this.form?.selectHistory("");
     this.result = null;
+    this.selectionSnapshot = undefined;
+    this.selectionSnapshotSignature = undefined;
     this.updateHistory?.();
     this.invalidate();
   }
@@ -330,6 +355,8 @@ export class MultiEditPanel {
   clearPreview(): void {
     this.result = null;
     this.ghostChanges = undefined;
+    this.selectionSnapshot = undefined;
+    this.selectionSnapshotSignature = undefined;
     this.chart = this.getSession().chart;
     this.signature = this.selectionSignature();
     this.form?.setResult("", false);
@@ -371,14 +398,18 @@ export class MultiEditPanel {
     this.refresh();
   }
 
-  /** Compact key of the current line, layer, division, and selection. */
+  /** Compact key of the current line, division, and selection membership. */
   selectionSignature(): string {
     const session = this.getSession();
+    const currentEventSelection =
+      session.multiLineActive && session.multiLineMode === "events"
+        ? []
+        : [...session.eventSelection];
     const multiEvents = [...(session.multiEventSelection ?? new Map())]
       .map(([line, values]) => `${line}:${[...values].sort().join(",")}`)
       .sort()
       .join("|");
-    return `${session.lineIndex}:${session.eventLayer}:${this.timeline.viewport.division}:${[...session.selection]}:${[...session.eventSelection]}:${multiEvents}`;
+    return `${session.lineIndex}:${this.timeline.viewport.division}:${[...session.selection]}:${currentEventSelection}:${multiEvents}`;
   }
 
   /** Recomputes the batch preview and reports errors to the form. */
@@ -388,7 +419,25 @@ export class MultiEditPanel {
     let summary: string;
     let isError = false;
     try {
-      const snapshot = captureSelection(this.getSession());
+      const session = this.getSession();
+      const selectionSignature = this.selectionSignature();
+      const liveSnapshot = captureSelection(session);
+      const previousSnapshot = this.selectionSnapshot;
+      const snapshot =
+        this.kind === "events" &&
+        previousSnapshot &&
+        previousSnapshot.chart === session.chart &&
+        this.selectionSnapshotSignature === selectionSignature &&
+        previousSnapshot.eventLayer !== session.eventLayer
+          ? previousSnapshot
+          : liveSnapshot;
+      if (snapshot.notes.length || snapshot.events.length) {
+        this.selectionSnapshot = snapshot;
+        this.selectionSnapshotSignature = selectionSignature;
+      } else {
+        this.selectionSnapshot = undefined;
+        this.selectionSnapshotSignature = undefined;
+      }
       const options = values ?? this.read?.() ?? this.parameters.read(this.kind);
       this.result = previewMultiEdit(snapshot, this.kind, options);
       // The ghost overlay carries the affected count; the form keeps its status empty.

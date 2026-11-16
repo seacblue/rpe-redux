@@ -75,6 +75,27 @@ export function createBatchControlsState(): BatchControlsState {
   });
 }
 
+/** Return whether the selected objects still belong to the visible timeline area. */
+export function hasVisibleBatchSelection(area: TimelineArea, session: EditorSession): boolean {
+  const snapshot = captureSelection(session);
+  const selected = area === "notes" ? snapshot.notes : snapshot.events;
+  if (!selected.length) {
+    return false;
+  }
+  // A layer switch clears the active-line projection but intentionally leaves the
+  // multi-line selection available to the Inspector's retained batch snapshot.
+  // In that state the objects are editable, but their three stage controls must
+  // not float over a different visible event layer.
+  const activeLineSelection = session.multiEventSelection.get(session.lineIndex)?.size ?? 0;
+  return !(
+    area === "events" &&
+    session.multiLineActive &&
+    session.multiLineMode === "events" &&
+    activeLineSelection > 0 &&
+    session.eventSelection.size === 0
+  );
+}
+
 type BatchTimeline = Pick<
   Timeline,
   "notesCanvas" | "eventsCanvas" | "cancelPlacement" | "changed" | "setPreview"
@@ -373,7 +394,7 @@ export class BatchControls {
           : multiMode
             ? multiSelection > 0 && multiIntent
             : selection >= 2 || (selection > 0 && multiIntent);
-      const visible = this.enabled() && canShow;
+      const visible = this.enabled() && canShow && hasVisibleBatchSelection(area, session);
       this.state.presentations.update({
         ...this.state.presentations.get(),
         [area]: {
