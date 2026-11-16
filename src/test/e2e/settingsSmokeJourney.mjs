@@ -40,6 +40,22 @@ export async function settingsSmoke(runner) {
     );
   }
 
+  const modalShadow = await runner.evaluate(`(() => {
+    const dialog = document.querySelector('dialog.redux-settings[open]');
+    const search = dialog?.querySelector('#settings-search');
+    if (!dialog || !search) return null;
+    dialog.focus();
+    const dialogFocusShadow = getComputedStyle(dialog).boxShadow;
+    search.focus();
+    const searchFocusShadow = getComputedStyle(dialog).boxShadow;
+    return { dialogFocusShadow, searchFocusShadow };
+  })()`);
+  runner.assert(Boolean(modalShadow), "settings dialog has no focusable search field");
+  runner.assert(
+    modalShadow.dialogFocusShadow === modalShadow.searchFocusShadow,
+    `settings modal shadow changed with focus: ${JSON.stringify(modalShadow)}`,
+  );
+
   // Rebinding through the real pointer path: pressing Save moves focus off the
   // capture body, and that element blur must not end the recording session
   // before the click handler writes the new binding.
