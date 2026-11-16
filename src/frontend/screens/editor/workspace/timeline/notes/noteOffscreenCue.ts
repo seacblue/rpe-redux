@@ -27,9 +27,10 @@ export function offscreenCueX(
     return null;
   }
   const maxX = Math.max(0, width - cueWidth);
+  const edgeInset = Math.min(4, Math.max(2, cueWidth / 2));
   return side === "left"
-    ? Math.min(maxX, visibleLeft)
-    : Math.min(maxX, Math.max(0, visibleRight - cueWidth));
+    ? Math.min(maxX, visibleLeft + edgeInset)
+    : Math.min(maxX, Math.max(0, visibleRight - cueWidth - edgeInset));
 }
 
 /** Return whether a note interval contains the current playhead beat. */

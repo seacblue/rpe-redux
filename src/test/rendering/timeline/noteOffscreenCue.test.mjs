@@ -23,7 +23,7 @@ test("a note body crossing both timeline edges reports both sides", () => {
 });
 
 test("edge cues stay pinned to the visible timeline edges", () => {
-  assert.equal(offscreenCueX("left", -12, 188, 200, 8), 0);
-  assert.equal(offscreenCueX("right", 12, 212, 200, 8), 192);
+  assert.equal(offscreenCueX("left", -12, 188, 200, 8), 4);
+  assert.equal(offscreenCueX("right", 12, 212, 200, 8), 188);
   assert.equal(offscreenCueX("left", -240, -40, 200, 8), null);
 });
