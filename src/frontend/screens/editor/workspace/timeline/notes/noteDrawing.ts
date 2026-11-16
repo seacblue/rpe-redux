@@ -35,7 +35,6 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
-import { noteContainsBeat, offscreenCueSides } from "./noteOffscreenCue.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -119,12 +118,11 @@ function cachedNoteVerticalProjection(
     );
 }
 
-/** Paint a full-width current-beat cue across each affected note timeline. */
-function drawOffscreenNoteCues(
+/** Paint a full-width cue around every note's vertical position. */
+function drawNoteTimelineCues(
   receiver: TimelineNoteDrawingReceiver,
   context: CanvasRenderingContext2D,
   palette: CanvasPalette,
-  playBeat: number,
   width: number,
   height: number,
 ): void {
@@ -165,7 +163,6 @@ function drawOffscreenNoteCues(
       continue;
     }
     const projection = noteProjectionFor(receiver, lineIndex, height);
-    const panelProjection = receiver.viewport.notePanelProjectionForLine(width, lineIndex);
     const cachedNoteData = receiver.cache.noteRenderDataSet(
       noteIndex.notes,
       receiver.viewport.tempo,
@@ -173,7 +170,6 @@ function drawOffscreenNoteCues(
       receiver.viewport.gridCount,
     );
     for (let index = 0; index < noteIndex.notes.length; index++) {
-      const note = noteIndex.notes[index];
       const prepared = cachedNoteData[index];
       if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
         continue;
@@ -182,19 +178,6 @@ function drawOffscreenNoteCues(
         // The chart format normally keeps notes ordered, but the cue must not
         // disappear when an imported or edited line has a later note before a
         // current-beat note in its source array.
-        continue;
-      }
-      if (!noteContainsBeat(prepared.start, prepared.end, playBeat)) {
-        continue;
-      }
-      const horizontal = panelProjection.horizontal(note.positionX);
-      const sides = offscreenCueSides(
-        horizontal,
-        receiver.viewport.noteWidth(note),
-        panelLeft,
-        panelRight,
-      );
-      if (!sides.length) {
         continue;
       }
       const vertical = projection.project(prepared.startSeconds);
@@ -590,7 +573,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   this.noteSolidBatch.finish();
   // Paint the edge cue after note batches so it remains visible above every
   // note layer while staying clipped to the current note's vertical span.
-  drawOffscreenNoteCues(this, cueCanvas.context, palette, playBeat, width, height);
+  drawNoteTimelineCues(this, cueCanvas.context, palette, width, height);
   if (!(session.multiLineActive && session.multiLineMode === "notes")) {
     this.drawEvents(playBeat);
   }
