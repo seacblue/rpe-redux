@@ -196,6 +196,51 @@ export class CdpClient {
     return response.result.value;
   }
 
+  /**
+   * Calls a fixed browser function with structured CDP arguments.
+   *
+   * The function declaration is kept separate from argument values so callers
+   * do not have to construct executable JavaScript from runtime data.
+   */
+  async callFunction(
+    functionDeclaration,
+    args = [],
+    { noValueMessage = "Runtime.callFunctionOn returned no value", timeoutMs = 10000 } = {},
+  ) {
+    const global = await this.command(
+      "Runtime.evaluate",
+      { expression: "globalThis", returnByValue: false },
+      timeoutMs,
+    );
+    const objectId = global.result?.objectId;
+    if (!objectId) {
+      throw new Error("Runtime.evaluate did not return a global object");
+    }
+    const response = await this.command(
+      "Runtime.callFunctionOn",
+      {
+        objectId,
+        functionDeclaration,
+        arguments: args.map((value) => ({ value })),
+        awaitPromise: true,
+        returnByValue: true,
+        userGesture: true,
+      },
+      timeoutMs,
+    );
+    if (response.exceptionDetails) {
+      const description =
+        response.exceptionDetails.exception?.description ??
+        response.exceptionDetails.text ??
+        "Runtime.callFunctionOn failed";
+      throw new Error(description);
+    }
+    if (!Object.hasOwn(response.result, "value")) {
+      throw new Error(noValueMessage);
+    }
+    return response.result.value;
+  }
+
   close() {
     if (
       this.socket.readyState === WebSocket.OPEN ||
