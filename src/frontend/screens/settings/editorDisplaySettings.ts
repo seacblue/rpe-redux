@@ -144,6 +144,8 @@ export const displayValues = {
   backgroundAlpha: display("background-alpha", String(80 / 255)),
   /** Preview and timeline content cadence; ordinary overlays remain at 60 Hz. */
   renderFps: settingDisplay("render-fps"),
+  /** Whether the sampling stage highlights the guide nearest the pointer. */
+  hoverGuidesEnabled: settingFlag("hover-guides-enabled"),
 } as const;
 
 /** A persisted value, decoded; a stored blank falls back to the declared default. */
@@ -290,6 +292,7 @@ export function readEditorDisplaySettings() {
       keyPressLabelEnabled: contributedFlag("key-press-label-enabled"),
       mouseTrailEnabled: contributedFlag("mouse-trail-enabled"),
       hoverGuidesEnabled: contributedFlag("hover-guides-enabled"),
+      nearbyGuidesOnly: contributedFlag("nearby-guides-only-enabled"),
       densityBarsEnabled: contributedFlag("timeline-density-bars-enabled"),
       hoverPreviewEnabled: contributedFlag("timeline-hover-preview-enabled"),
       barWidth: contributedNumber("bar-width"),

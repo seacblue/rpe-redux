@@ -54,6 +54,7 @@ import { editorProjectId } from "../../../../../../core/edit/state/publishedValu
 import { showToast } from "../../../../../../design/patterns/ToastHost.tsx";
 import { createMusicLoader } from "../../document/open/musicLoader.ts";
 import { createMetadataMedia } from "../../document/open/metadataMedia.ts";
+import { createLocalChartingStatsTracker } from "../../../../../platform/localChartingStats.ts";
 import { createCandidateLoader } from "../../document/open/candidateLoader.ts";
 import { openNativeChartPath } from "../../document/open/nativeOpenFallback.ts";
 import {
@@ -253,6 +254,9 @@ export function createDocumentRuntime(options: {
   const getSession = () => options.session.current;
   const getAssets = () => options.document.assets;
   const getChartName = () => options.document.chartName;
+  const localStats = createLocalChartingStatsTracker({
+    currentEditSeconds: options.currentEditSeconds,
+  });
   const { preview, timeline, playback, inspector } = options.resources;
   const documentCoordinator = createDocumentChangeCoordinator();
   const mutationGate: SessionMutationGate = {
@@ -306,6 +310,7 @@ export function createDocumentRuntime(options: {
       clearLibraryProject: () => {
         assignLibraryProject(null);
       },
+      discardLocalStats: localStats.discard,
     }),
     install: createSessionInstaller({
       session: {
@@ -355,6 +360,7 @@ export function createDocumentRuntime(options: {
         mediaState.current?.reset();
       },
       resetEditClock: options.resetEditClock,
+      attachLocalStats: localStats.attach,
       hitSounds: preview.hitSounds,
       images: preview.images,
       applySettings: options.applySessionSettings ?? (() => {}),
@@ -513,6 +519,7 @@ export function createDocumentRuntime(options: {
   /** Validates a candidate and offers conversion when the chart format needs it. */
   const prepareCandidate = async (
     candidate: EditorCandidate,
+    task?: LoadTask,
   ): Promise<PreparedEditorCandidate | null> => {
     const report = detectChartCompatibility(candidate.chart);
     if (!report.requiresConversion) {
@@ -548,7 +555,9 @@ export function createDocumentRuntime(options: {
     if (!confirmed) {
       return null;
     }
-    const conversion = convertChartToCurrentVersion(candidate.chart, report);
+    const conversion = convertChartToCurrentVersion(candidate.chart, report, (completed, total) =>
+      task?.update("parse", completed, total),
+    );
     return conversion
       ? {
           ...candidate,
@@ -633,7 +642,6 @@ export function createDocumentRuntime(options: {
     currentLibraryProject: () => options.document.libraryProject,
     currentSourcePath: () => options.documents?.current?.path ?? null,
     currentAssetFolders: () => [...options.document.assetFolders],
-    currentEditSeconds: options.currentEditSeconds,
     setAssetDirty: (dirty) => {
       options.document.assetDirty = dirty;
     },
@@ -656,6 +664,9 @@ export function createDocumentRuntime(options: {
       }
       if (result.disk_snapshot) {
         diskObserver?.markSelfWrite(result.disk_snapshot);
+      }
+      if (result.storage === "library") {
+        localStats.markSaved();
       }
       // runSave publishes the saved fingerprint and rescans after the
       // coordinator accepts the save; this callback only records the native

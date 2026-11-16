@@ -86,21 +86,39 @@ export function ChangelogUpdateActions({
   onSkip,
   onLater,
   onUpdate,
+  onPause,
+  onStop,
   onComplete,
 }: {
   onSkip(): void;
   onLater(): void;
   onUpdate(): void;
+  onPause(): void;
+  onStop(): void;
   onComplete(): void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const state = useUpdateState();
-  const action = changelogUpdateAction(state.phase);
+  const action = changelogUpdateAction(state.phase, state.downloadPaused);
+  const downloading = state.phase === "downloading";
+  const paused = state.downloadPaused && state.phase === "available";
   useEffect(() => {
     if (state.phase === "scheduled" || state.phase === "installed") {
       onComplete();
     }
   }, [onComplete, state.phase]);
+  if (downloading || paused) {
+    return (
+      <>
+        <Button variant="outlined" onClick={onStop}>
+          {t("chrome.changelog.stopDownload")}
+        </Button>
+        <Button variant="solid" onClick={downloading ? onPause : onUpdate} aria-busy={downloading}>
+          {t(downloading ? "chrome.changelog.pauseDownload" : action.labelKey)}
+        </Button>
+      </>
+    );
+  }
   return (
     <>
       <Button variant="outlined" onClick={onSkip} disabled={action.locked}>

@@ -17,6 +17,10 @@ import { Button } from "../../../../design/components/button/Button.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import {
+  readLocalChartingStats,
+  subscribeLocalChartingStats,
+} from "../../../platform/localChartingStats.ts";
+import {
   advanceHoldFill,
   holdFillFraction,
   holdShake,
@@ -350,26 +354,12 @@ function timeSlot(hour: number): keyof typeof TIME_GREETINGS {
 /** A frame longer than this is a wake-up gap, not a real frame. */
 const HOLD_FRAME_CLAMP_MS = 64;
 
-/** Library-wide totals shown in the welcome panel's stat grid. */
+/** Totals shown in the welcome panel's stat grid. */
 interface LibraryTotals {
   charts: number;
   notes: number;
   events: number;
   editing: number;
-}
-
-/** Sums the entries without disturbing the list's own order or filtering. */
-function sumEntries(entries: readonly LibraryEntry[]): LibraryTotals {
-  let notes = 0;
-  let events = 0;
-  let editing = 0;
-  for (const entry of entries) {
-    const project = entry.source.project;
-    notes += project.noteCount;
-    events += Number.isFinite(project.eventCount) ? project.eventCount : 0;
-    editing += Number.isFinite(project.editSeconds) ? project.editSeconds : 0;
-  }
-  return { charts: entries.length, notes, events, editing };
 }
 
 /** Borderless welcome, statistics, and daily draw panel for the empty column. */
@@ -385,6 +375,7 @@ export function LibraryWelcome({
   const { t, language } = useTranslation();
   const panelId = useId();
   const [now, setNow] = useState(() => new Date());
+  const [localStats, setLocalStats] = useState(readLocalChartingStats);
   const today = localDay(now);
   const [checkedInDay, setCheckedInDay] = useState(readCheckInDay);
   const checkedIn = checkedInDay === today;
@@ -393,7 +384,28 @@ export function LibraryWelcome({
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const totals = useMemo(() => sumEntries(entries), [entries]);
+  useEffect(() => {
+    const unsubscribe = subscribeLocalChartingStats(() => setLocalStats(readLocalChartingStats()));
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "redux.localChartingStats") {
+        setLocalStats(readLocalChartingStats());
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+  const totals = useMemo<LibraryTotals>(
+    () => ({
+      charts: entries.length,
+      notes: localStats.notes,
+      events: localStats.events,
+      editing: localStats.seconds,
+    }),
+    [entries.length, localStats],
+  );
   // Only the first read is unknown; a refresh keeps the settled totals visible.
   const pending = loading && entries.length === 0;
   const hour = now.getHours();

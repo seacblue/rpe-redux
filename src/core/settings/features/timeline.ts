@@ -176,6 +176,15 @@ const TimelineSettingsSchema: SettingDefinition[] = [
     default: true,
   },
   {
+    key: "nearby-guides-only-enabled",
+    navigation: "editor.pointer",
+    group: "settings.group.pointer",
+    label: "settings.field.nearby-guides-only-enabled.label",
+    description: "settings.field.nearby-guides-only-enabled.description",
+    control: "toggle",
+    default: false,
+  },
+  {
     key: "timeline-density-bars-enabled",
     navigation: "editor.timeline",
     group: "settings.group.overview",

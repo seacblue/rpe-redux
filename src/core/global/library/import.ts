@@ -14,6 +14,7 @@ import { materializeAssets } from "./document.ts";
 import { saveLibraryDocument, type LibrarySaveResult } from "./save.ts";
 import { LocalLibraryError, type LocalLibrary } from "./client.ts";
 import type { LibraryViewState } from "./types.ts";
+import { throwIfAborted } from "../../utils/abort.ts";
 
 /** Keep ordinary JSON requests below the sidecar's 64 MiB request cap. */
 const STREAMED_IMPORT_THRESHOLD_BYTES = 48 * 1024 * 1024;
@@ -39,6 +40,8 @@ export interface LibraryImportInput {
   /** Reuse text the caller already produced. */
   chartJson?: string;
   onProgress?: (value: number) => void;
+  /** Cooperatively cancel between chart serialization and library writes. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -178,10 +181,12 @@ async function* chunkSerializedChart(chartJson: string): AsyncIterable<string> {
 
 /** Import one opened document into the library. */
 export async function importChartToLibrary(input: LibraryImportInput): Promise<LibrarySaveResult> {
+  throwIfAborted(input.signal);
   const serialized =
     input.chartJson !== undefined
       ? { chartJson: input.chartJson }
       : await serializeImportedChart(input.chart);
+  throwIfAborted(input.signal);
   const chartJson = serialized.chartJson;
   const chartChunks =
     serialized.chartChunks ??
@@ -189,6 +194,7 @@ export async function importChartToLibrary(input: LibraryImportInput): Promise<L
       ? chunkSerializedChart(chartJson)
       : undefined);
   const assets = await materializeAssets(input.assets);
+  throwIfAborted(input.signal);
   const saveInput = {
     library: input.library,
     ...(input.projectId ? { projectId: input.projectId } : {}),
@@ -201,6 +207,7 @@ export async function importChartToLibrary(input: LibraryImportInput): Promise<L
     ...(input.viewState ? { viewState: input.viewState } : {}),
     ...(input.assetFolders ? { assetFolders: input.assetFolders } : {}),
     ...(input.onProgress ? { onProgress: input.onProgress } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
   };
   try {
     return await saveLibraryDocument(saveInput);

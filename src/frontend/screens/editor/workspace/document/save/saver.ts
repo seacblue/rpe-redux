@@ -46,8 +46,6 @@ export interface DocumentSaverDependencies {
   currentLibraryProject?: () => LibraryProjectRef | null;
   currentSourcePath?: () => string | null;
   currentAssetFolders?: () => string[];
-  /** Active seconds on the editor clock, used to accumulate charting time. */
-  currentEditSeconds?: () => number;
   /** Test seam; production resolves the shared sidecar connection. */
   openLibrary?: () => Promise<LocalLibrary | null>;
   setAssetDirty: (dirty: boolean) => void;
@@ -82,9 +80,6 @@ const backgroundProgressOwner: ToastHandle = {
 /** Save a stable snapshot into the library, or export it when a path is given. */
 export function createDocumentSaver(deps: DocumentSaverDependencies) {
   let saving: Promise<SaveResult | null> | null = null;
-  // The edit clock resets with the document; the last reported value keeps
-  // each commit carrying only the active seconds added since the previous one.
-  let editReport = { generation: -1, seconds: 0 };
   /** Resolves the shared library connection. */
   const library = deps.openLibrary ?? (async () => (await localService())?.library ?? null);
 
@@ -183,11 +178,6 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
         }
       }
       const projectName = target?.name || metaName || deps.currentChartName();
-      const currentEditSeconds = Math.max(0, Math.floor(deps.currentEditSeconds?.() ?? 0));
-      if (editReport.generation !== generation || currentEditSeconds < editReport.seconds) {
-        editReport = { generation, seconds: 0 };
-      }
-      const editSeconds = Math.max(0, currentEditSeconds - editReport.seconds);
       const saved = await saveLibraryDocument({
         library: client,
         ...(target?.id ? { projectId: target.id } : {}),
@@ -203,7 +193,6 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           : target?.assetFolders
             ? { assetFolders: target.assetFolders }
             : {}),
-        ...(editSeconds > 0 ? { editSeconds } : {}),
         duplicate: saveAs,
         ...(saveAs
           ? {
@@ -214,7 +203,6 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           : {}),
         onProgress: (value) => reportProgress(0.2 + value * 0.75),
       });
-      editReport = { generation, seconds: currentEditSeconds };
       // Cache the committed hashes on the live map. A document first imported
       // from a file (or a brand-new chart) otherwise re-uploads every unchanged
       // asset on the next save.

@@ -1224,9 +1224,15 @@ pub(crate) fn write_document(
                 remap_chart(&mut chart, &remap);
                 chart_changed |= !remap.is_empty();
                 saved_remap = remap;
-                if let Ok(bytes) = super::open::resource_bytes(d, "extra.json") {
-                    writer.start_file("extra.json", options).map_err(error)?;
-                    writer.write_all(&bytes).map_err(error)?;
+                let has_staged_extra = assets
+                    .names()
+                    .iter()
+                    .any(|name| name.rsplit('/').next() == Some("extra.json"));
+                if !has_staged_extra {
+                    if let Ok(bytes) = super::open::resource_bytes(d, "extra.json") {
+                        writer.start_file("extra.json", options).map_err(error)?;
+                        writer.write_all(&bytes).map_err(error)?;
+                    }
                 }
             }
         }
@@ -1268,8 +1274,14 @@ mod tests {
     use super::{update_info, write_document, AssetSource, SaveFailure, SaveOutcome};
     use crate::documents::{watch, Document};
     use serde_json::json;
-    use std::{collections::HashMap, fs, path::PathBuf};
+    use std::{
+        collections::HashMap,
+        fs,
+        io::{Read, Write},
+        path::PathBuf,
+    };
     use tempfile::tempdir;
+    use zip::write::SimpleFileOptions;
 
     fn document(path: PathBuf) -> Document {
         Document {
@@ -1308,6 +1320,67 @@ mod tests {
         let mut archive = zip::ZipArchive::new(fs::File::open(&target).unwrap()).unwrap();
         assert!(archive.by_name("song.ogg").is_ok());
         assert!(archive.by_name("info.txt").is_ok());
+    }
+
+    #[test]
+    fn pez_export_replaces_the_existing_extra_sidecar() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("source.pez");
+        let target = root.path().join("export.pez");
+        let options = SimpleFileOptions::default();
+        let mut archive = zip::ZipWriter::new(fs::File::create(&source).unwrap());
+        archive.start_file("chart.json", options).unwrap();
+        archive
+            .write_all(br#"{"META":{"id":"1234567890123456"}}"#)
+            .unwrap();
+        archive.start_file("extra.json", options).unwrap();
+        archive.write_all(br#"{"effects":[{"order":0}]}"#).unwrap();
+        archive.start_file("info.txt", options).unwrap();
+        archive
+            .write_all(b"#\r\nPath: 1234567890123456\r\nChart: chart.json\r\n")
+            .unwrap();
+        archive.finish().unwrap();
+
+        let document = Document {
+            path: source,
+            chart_name: "chart.json".into(),
+            packed: true,
+            resources: HashMap::new(),
+        };
+        let updates = [crate::documents::AssetUpdate {
+            name: "extra.json".into(),
+            bytes: br#"{"effects":[{"order":99,"vars":{"amount":0.5}}]}"#.to_vec(),
+        }];
+
+        write_document(
+            Some(&document),
+            &target,
+            json!({
+                "META": {"id": "1234567890123456"},
+                "effects": [{"order": 99, "vars": {"amount": 0.5}}]
+            }),
+            AssetSource::Memory(&updates),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let mut archive = zip::ZipArchive::new(fs::File::open(target).unwrap()).unwrap();
+        let mut extra = String::new();
+        archive
+            .by_name("extra.json")
+            .unwrap()
+            .read_to_string(&mut extra)
+            .unwrap();
+        assert!(extra.contains("\"order\":99"));
+        assert_eq!(
+            archive
+                .file_names()
+                .filter(|name| *name == "extra.json")
+                .count(),
+            1
+        );
     }
 
     #[test]

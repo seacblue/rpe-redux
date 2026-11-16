@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/react.ts";
-import { closeControlPopup, handleControlPopupEscape, popupDialogBoxOf } from "./controlActions.ts";
+import { closeControlPopup, handleControlPopupEscape } from "./controlActions.ts";
 import type { SelectPopupState } from "./controlActions.ts";
 import { placeControlPopup } from "./controlPopupPlacement.ts";
 
@@ -138,12 +138,7 @@ export function SelectPopup({ state }: { state: SelectPopupState }) {
   }, [active, choose, options]);
 
   const viewport = { width: window.innerWidth, height: window.innerHeight };
-  const dialogBox = popupDialogBoxOf(element);
-  const width = Math.min(
-    Math.max(anchor.width, 1),
-    Math.max(1, viewport.width - 12),
-    Math.max(1, (dialogBox?.width ?? viewport.width) - 12),
-  );
+  const width = Math.min(Math.max(anchor.width, 1), Math.max(1, viewport.width - 12));
   const groupCount = options.filter(
     (option, index) => option.group && option.group !== options[index - 1]?.group,
   ).length;
@@ -152,7 +147,6 @@ export function SelectPopup({ state }: { state: SelectPopupState }) {
     anchor,
     panelWidth: width,
     panelHeight: naturalHeight,
-    dialog: dialogBox,
     viewport,
     clampHeight: true,
     flipThreshold: Math.min(naturalHeight, 120),

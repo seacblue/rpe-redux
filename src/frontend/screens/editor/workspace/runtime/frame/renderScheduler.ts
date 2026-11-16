@@ -242,6 +242,7 @@ export class EditorRenderScheduler {
     const timelinePending =
       this.forcedTimeline ||
       request.timelineRevision !== this.committed.timelineRevision ||
+      (!request.playing && request.viewportOrigin !== this.committed.viewportOrigin) ||
       (request.playing &&
         request.viewportOrigin !== this.committed.viewportOrigin &&
         !subPixelShift) ||

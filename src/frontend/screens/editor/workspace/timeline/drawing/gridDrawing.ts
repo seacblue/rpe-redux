@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- grid geometry, hover rules, and retained packet submission share one drawing contract. */
 /**
  * Paints the timeline beat grid, subdivision labels, hover guides, playhead, and
  * multi-line panel chrome across the backdrop and foreground canvases.
@@ -24,6 +25,7 @@ import {
   TimelineGridRenderDevice,
   type TimelineGridRenderPacket,
 } from "../../../canvas/timelineGridRenderDevice.ts";
+import { horizontalGuideHoverOpacity } from "./timelineHoverGuides.ts";
 
 /**
  * Which parts of the beat grid a pass draws.
@@ -240,12 +242,12 @@ function gridDevice(
   if (area === "notes") {
     return (
       (playhead ? receiver.notesPlayheadDevice : receiver.notesGridDevice) ??
-      new TimelineGridRenderDevice()
+      new TimelineGridRenderDevice(playhead ? receiver.notesPlayheadBatch : receiver.notesGridBatch)
     );
   }
   return (
     (playhead ? receiver.eventsPlayheadDevice : receiver.eventsGridDevice) ??
-    new TimelineGridRenderDevice()
+    new TimelineGridRenderDevice(playhead ? receiver.eventsPlayheadBatch : receiver.eventsGridBatch)
   );
 }
 
@@ -266,7 +268,10 @@ function renderGridPacket(
 }
 
 type TimelineHoverGuideReceiver = {
-  appearance: Pick<TimelineAppearance, "hoverGuidesEnabled" | "gridHighlightColor">;
+  appearance: Pick<
+    TimelineAppearance,
+    "hoverGuidesEnabled" | "nearbyGuidesOnly" | "gridHighlightColor"
+  >;
   cache: TempoSecondsCache;
   gestures: Pick<TimelineGestures, "cursor" | "eventCursor" | "hoverArea">;
   viewport: TimelineViewport;
@@ -278,8 +283,14 @@ function hoveredGridLine(
   width: number,
   height: number,
   area: TimelineArea,
-): { lineIndex: number; beat: number } | null {
-  if (receiver.appearance.hoverGuidesEnabled === false || receiver.gestures.hoverArea !== area) {
+): { lineIndex: number; beat: number; pointerY: number } | null {
+  if (
+    receiver.appearance.hoverGuidesEnabled === false &&
+    receiver.appearance.nearbyGuidesOnly !== true
+  ) {
+    return null;
+  }
+  if (receiver.gestures.hoverArea !== area) {
     return null;
   }
   const pointer = area === "events" ? receiver.gestures.eventCursor : receiver.gestures.cursor;
@@ -293,7 +304,7 @@ function hoveredGridLine(
     (height - receiver.viewport.judgementOffset - pointer.y) / receiver.viewport.scaleForArea(area);
   const beat = receiver.viewport.tempo.beat(seconds, factor);
   const snapped = Math.round(beat * receiver.viewport.division) / receiver.viewport.division;
-  return Number.isFinite(snapped) ? { lineIndex, beat: snapped } : null;
+  return Number.isFinite(snapped) ? { lineIndex, beat: snapped, pointerY: pointer.y } : null;
 }
 
 /** Spatial guides end at beat zero rather than continuing into negative time. */
@@ -361,13 +372,8 @@ export function grid(
       scale;
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
-  const localBeatHeight = Math.abs(
-    verticalAt(this.viewport.origin + 1) - verticalAt(this.viewport.origin),
-  );
-  const stride = Math.max(
-    1,
-    Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
-  );
+  // Every visible tick is retained; nearby-only mode controls alpha, not geometry.
+  const stride = 1;
   const hovered = hoveredGridLine(this, width, height, area);
   const highlightedTick = hovered ? Math.round(hovered.beat * this.viewport.division) : null;
   const scratch = scratchFor(this);
@@ -392,11 +398,22 @@ export function grid(
       1,
       (this.appearance.barAlpha ?? 1) * (major ? 0.9 : tick % 2 === 0 ? 0.6 : 0.4),
     );
-    const highlighted = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const nearestHover = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const hoverOpacity =
+      this.appearance.nearbyGuidesOnly === true
+        ? horizontalGuideHoverOpacity(vertical, hovered?.pointerY ?? null)
+        : nearestHover
+          ? 1
+          : 0;
+    // Only the nearest snapped beat line receives the highlight colour. The
+    // surrounding lines keep their own colours and use hoverOpacity solely as
+    // the sampling-style fade.
+    const highlighted = this.appearance.hoverGuidesEnabled !== false && nearestHover;
     const color = highlighted
-      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor, baseAlpha)
+      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
       : baseColor;
-    const alpha = highlighted ? 1 : baseAlpha;
+    const alpha =
+      this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
     if (draws(parts, "lines")) {
       commands.push({
         kind: "fillRect",
@@ -464,14 +481,8 @@ export function gridForLine(
   const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical), factor);
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
-  const localBeatHeight = Math.abs(
-    this.viewport.verticalForLine(this.viewport.origin + 1, lineIndex, height, area) -
-      this.viewport.verticalForLine(this.viewport.origin, lineIndex, height, area),
-  );
-  const stride = Math.max(
-    1,
-    Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
-  );
+  // Every visible tick is retained; nearby-only mode controls alpha, not geometry.
+  const stride = 1;
   const canvasWidth =
     area === "events"
       ? this.viewport.eventsCanvas.clientWidth
@@ -480,7 +491,9 @@ export function gridForLine(
   const highlightedTick =
     hovered?.lineIndex === lineIndex ? Math.round(hovered.beat * this.viewport.division) : null;
   const scratch = scratchFor(this);
-  const lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
+  // Grid-line thickness is canvas-space, not panel-space; retained packets
+  // still need the full-canvas width when several panels are fitted together.
+  const lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * canvasWidth) / 1920);
   const commands: RenderCommand[] = [];
   const fallbackColors = gridFallbackColors(palette, scratch.fallbackColors);
   const colorKeys = beatLineColorKeys(this.viewport.division);
@@ -501,11 +514,21 @@ export function gridForLine(
       1,
       (this.appearance.barAlpha ?? 1) * (major ? 0.9 : tick % 2 === 0 ? 0.6 : 0.4),
     );
-    const highlighted = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const nearestHover = highlightedTick !== null && tick === highlightedTick && beat >= 0;
+    const hoverOpacity =
+      this.appearance.nearbyGuidesOnly === true
+        ? horizontalGuideHoverOpacity(vertical, hovered?.pointerY ?? null)
+        : nearestHover
+          ? 1
+          : 0;
+    // Match note-lane guides: colour only the nearest snapped line, while the
+    // neighbouring lines retain their base colours and fade by pixel distance.
+    const highlighted = this.appearance.hoverGuidesEnabled !== false && nearestHover;
     const color = highlighted
-      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor, baseAlpha)
+      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
       : baseColor;
-    const alpha = highlighted ? 1 : baseAlpha;
+    const alpha =
+      this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
     if (draws(parts, "lines")) {
       commands.push({
         kind: "fillRect",

@@ -75,3 +75,31 @@ export function packageEntries(
   }
   return output;
 }
+
+/**
+ * Prepare the generated sidecar for a native PEZ export.
+ *
+ * Native export already owns chart and archive writing. This helper only
+ * replaces the sidecar entry in the staged asset map so the native writer
+ * cannot copy an outdated `extra.json` from the opened document.
+ */
+export function preparePezExportAssets(
+  chart: Chart,
+  assets: ReadonlyMap<string, Uint8Array>,
+  chartName: string,
+): Map<string, Uint8Array> {
+  const packaged = packageEntries(chart, assets, chartName, { projected: true });
+  const extraName = [...packaged.keys()].find(
+    (name) => normalizePath(name) === normalizePath("extra.json"),
+  );
+  if (!extraName) {
+    return new Map(assets);
+  }
+  const extra = packaged.get(extraName);
+  if (!extra) {
+    return new Map(assets);
+  }
+  const output = new Map(assets);
+  output.set(extraName, extra);
+  return output;
+}

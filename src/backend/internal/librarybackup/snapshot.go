@@ -20,6 +20,7 @@ type projectRow struct {
 	Composer     string
 	Level        string
 	Background   string
+	Thumbnail    string
 	Song         string
 	NoteCount    int
 	EventCount   int
@@ -247,6 +248,7 @@ func (s *Service) buildFullCommit(ctx context.Context, reason, parent string) (*
 			Composer:     project.Composer,
 			Level:        project.Level,
 			Background:   project.Background,
+			Thumbnail:    project.Thumbnail,
 			Song:         project.Song,
 			NoteCount:    project.NoteCount,
 			EventCount:   project.EventCount,
@@ -520,7 +522,7 @@ func (s *Service) preferences(ctx context.Context, tx *sql.Tx) []byte {
 
 func (s *Service) projectRows(ctx context.Context, tx *sql.Tx) ([]projectRow, error) {
 	rows, err := tx.QueryContext(ctx, `
-        SELECT id, name, grp, archived, charter, composer, level, background, song,
+        SELECT id, name, grp, archived, charter, composer, level, background, thumbnail, song,
                note_count, event_count, edit_seconds, revision, view_state, asset_folders,
                created_at, updated_at, chart_hash
           FROM projects ORDER BY id`)
@@ -535,7 +537,7 @@ func (s *Service) projectRows(ctx context.Context, tx *sql.Tx) ([]projectRow, er
 		var viewState, assetFolders string
 		if err := rows.Scan(&project.ID, &project.Name, &project.Group, &archived,
 			&project.Charter, &project.Composer, &project.Level, &project.Background,
-			&project.Song, &project.NoteCount, &project.EventCount, &project.EditSeconds,
+			&project.Thumbnail, &project.Song, &project.NoteCount, &project.EventCount, &project.EditSeconds,
 			&project.Revision, &viewState, &assetFolders, &project.CreatedAt,
 			&project.UpdatedAt, &project.ChartHash); err != nil {
 			return nil, fmt.Errorf("scan project for snapshot: %w", err)

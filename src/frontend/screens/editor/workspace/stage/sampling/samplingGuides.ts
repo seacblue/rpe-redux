@@ -154,11 +154,14 @@ export function samplingGuideOpacity(
   return unit(boundaryOpacity + cursorOpacity);
 }
 
+/** Pixel distance at which a sampling guide starts responding to the pointer. */
+export const SAMPLING_GUIDE_HOVER_DISTANCE = 15;
+
 /** Return the nearest guide key when the pointer is close enough to one line. */
 export function nearestGuideKey(
   lines: readonly SamplingGuideLine[],
   pointerPosition: number,
-  maxDistance = 10,
+  maxDistance = SAMPLING_GUIDE_HOVER_DISTANCE,
 ): string | null {
   let nearest: SamplingGuideLine | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
@@ -170,6 +173,16 @@ export function nearestGuideKey(
     }
   }
   return nearest && nearestDistance <= maxDistance ? nearest.key : null;
+}
+
+/** Resolve the hovered sampling guide while honoring the editor preference. */
+export function samplingHoveredGuideKey(
+  lines: readonly SamplingGuideLine[],
+  pointerPosition: number,
+  enabled: boolean,
+  maxDistance = SAMPLING_GUIDE_HOVER_DISTANCE,
+): string | null {
+  return enabled ? nearestGuideKey(lines, pointerPosition, maxDistance) : null;
 }
 
 /**

@@ -30,6 +30,8 @@ const (
 type PeChart struct {
 	// Path is the absolute PEC file.
 	Path string `json:"path"`
+	// EstimatedBytes is a conservative decoded/staged memory estimate.
+	EstimatedBytes int64 `json:"estimatedBytes"`
 	// Folder is the file stem, used when metadata has no display name.
 	Folder string `json:"folder"`
 	// Name is the song title from Settings.txt, or the file stem.
@@ -253,6 +255,7 @@ func peChartFromEntry(root, resources string, entry peSettingsEntry) (*PeChart, 
 	}
 	chart.SongPath = peMediaPath(resources, chart.Song)
 	chart.PicturePath = peMediaPath(resources, chart.Picture)
+	chart.EstimatedBytes = estimateImportBytes(chart.Path, chart.SongPath, chart.PicturePath)
 	chart.Autosaves = peAutosaveCount(root, stem)
 	return chart, ""
 }
@@ -281,13 +284,14 @@ func peLooseCharts(root, resources string, indexed map[string]bool, limit int) [
 		}
 		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		chart := PeChart{
-			Path:        path,
-			Folder:      stem,
-			Name:        stem,
-			Group:       "PhiEditer",
-			Chart:       entry.Name(),
-			SongPath:    peMediaPathByStem(resources, stem, true),
-			PicturePath: peMediaPathByStem(resources, stem, false),
+			Path:           path,
+			EstimatedBytes: estimateImportBytes(path),
+			Folder:         stem,
+			Name:           stem,
+			Group:          "PhiEditer",
+			Chart:          entry.Name(),
+			SongPath:       peMediaPathByStem(resources, stem, true),
+			PicturePath:    peMediaPathByStem(resources, stem, false),
 		}
 		if chart.SongPath != "" {
 			chart.Song = filepath.Base(chart.SongPath)
@@ -295,6 +299,7 @@ func peLooseCharts(root, resources string, indexed map[string]bool, limit int) [
 		if chart.PicturePath != "" {
 			chart.Picture = filepath.Base(chart.PicturePath)
 		}
+		chart.EstimatedBytes = estimateImportBytes(chart.Path, chart.SongPath, chart.PicturePath)
 		charts = append(charts, chart)
 		if len(charts) >= limit {
 			break

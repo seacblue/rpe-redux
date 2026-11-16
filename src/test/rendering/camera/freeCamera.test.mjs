@@ -24,6 +24,8 @@ import {
   previewCameraFrame,
 } from "../../../frontend/screens/editor/workspace/preview/scene/previewCamera.ts";
 import { previewViewport } from "../../../frontend/screens/editor/workspace/preview/scene/viewport.ts";
+import { drawGameUi } from "../../../frontend/screens/editor/workspace/preview/render/gameUi.ts";
+import { gameUiLayout } from "../../../frontend/screens/editor/workspace/preview/drawing/gameUi.ts";
 
 test("free-camera surfaces accept left and right drag buttons", () => {
   assert.equal(isFreeCameraDragButton(0), true);
@@ -187,4 +189,62 @@ test("free camera scales and moves the chart frame with its background", () => {
     width: 1200,
     height: 900,
   });
+});
+
+test("free camera carries game UI with the projected chart frame", () => {
+  const viewport = previewViewport(1200, 900, 4 / 3);
+  const fitted = previewCameraFrame(viewport, DEFAULT_PREVIEW_CAMERA);
+  const moved = previewCameraFrame(viewport, {
+    active: true,
+    zoom: 2,
+    panX: 120,
+    panY: -40,
+  });
+  const translationsFor = (view) => {
+    const translations = [];
+    const context = {
+      save() {},
+      restore() {},
+      translate(x, y) {
+        translations.push({ x, y });
+      },
+      rotate() {},
+      scale() {},
+      fillRect() {},
+      fillText() {},
+      measureText() {
+        return { width: 10 };
+      },
+      drawImage() {},
+      set font(value) {},
+      set fillStyle(value) {},
+      set globalAlpha(value) {},
+    };
+    drawGameUi(
+      context,
+      { META: { name: "chart", level: "1" }, judgeLineList: [] },
+      [],
+      [],
+      0,
+      -1,
+      viewport,
+      view,
+      null,
+      600,
+    );
+    return translations;
+  };
+  const fittedTranslations = translationsFor(fitted);
+  const movedTranslations = translationsFor(moved);
+  const pause = gameUiLayout(
+    viewport.width / viewport.scale,
+    viewport.height / viewport.scale,
+  ).find((item) => item.key === "pause");
+
+  assert.ok(pause);
+  assert.deepEqual(movedTranslations[0], {
+    x: moved.centerX + pause.x * moved.scale,
+    y: moved.centerY - pause.y * moved.scale,
+  });
+  assert.notDeepEqual(movedTranslations[0], fittedTranslations[0]);
 });

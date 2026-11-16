@@ -14,7 +14,7 @@ import {
   type SamplingGeometry,
   type SamplingProjection,
   type SamplingViewport,
-  nearestGuideKey,
+  samplingHoveredGuideKey,
 } from "./samplingGuides.ts";
 import type { SamplingValue } from "../../../../../../core/edit/sampling/sampling.ts";
 
@@ -28,6 +28,8 @@ interface SamplingGuideLayerProps {
   endPoint: { x: number; y: number } | null;
   /** Guide lines and scalar endpoint labels are painted when true. */
   showGuides: boolean;
+  /** Whether the nearest guide line is highlighted under the pointer. */
+  hoverGuidesEnabled: boolean;
   /** Draft anchor markers and the path are painted when true. */
   showAnchors: boolean;
   /** Stage-local pointer position used to reveal guides outside the frame. */
@@ -98,6 +100,7 @@ export function SamplingGuideLayer({
   startPoint,
   endPoint,
   showGuides,
+  hoverGuidesEnabled,
   showAnchors,
   cursor,
   dragging,
@@ -112,9 +115,13 @@ export function SamplingGuideLayer({
     ? Math.max(1, Math.min(viewport.width, viewport.height) * GUIDE_FADE_RATIO)
     : 0;
   const hoveredVerticalKey =
-    cursor && showGuides && !dragging ? nearestGuideKey(geometry.vertical, cursor.x) : null;
+    cursor && showGuides && !dragging
+      ? samplingHoveredGuideKey(geometry.vertical, cursor.x, hoverGuidesEnabled)
+      : null;
   const hoveredHorizontalKey =
-    cursor && showGuides && !dragging ? nearestGuideKey(geometry.horizontal, cursor.y) : null;
+    cursor && showGuides && !dragging
+      ? samplingHoveredGuideKey(geometry.horizontal, cursor.y, hoverGuidesEnabled)
+      : null;
   const readoutVisible = Boolean(cursor && dragging && start && end);
   const readoutX = cursor
     ? Math.min(Math.max(8, cursor.x + 14), Math.max(8, projection.stageWidth - READOUT_WIDTH - 8))

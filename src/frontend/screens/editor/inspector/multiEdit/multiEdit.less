@@ -7,47 +7,29 @@
 // Apply is the panel's one commit action and belongs at the bottom-right.
 .batch-apply {
   margin-top: var(--space-3);
+  border-top: 0;
 }
 
-// Applied parameter sets, newest first. The strip scrolls instead of growing:
-// a long history must not push the form's controls off screen.
+// The applied parameter history sits below the complete form and uses one
+// centered pager instead of a row of variable-width labels.
 .batch-history {
-  border-top: 1px solid var(--edge-divider);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: var(--control-height-compact);
+  margin-top: var(--space-2);
   padding-top: var(--space-2);
 }
 
-.batch-history-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  max-height: 120px;
-  overflow-y: auto;
+.batch-history-position {
+  min-width: 4ch;
+  color: var(--foreground-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-label);
+  text-align: center;
 }
 
-.batch-history-tab {
-  max-width: 100%;
-  padding: 2px var(--space-2);
-  border: 1px solid var(--edge-emphasis);
-  border-radius: var(--radius-control);
-  background: var(--input-surface);
-  .meta-text();
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: var(--app-cursor-pointer);
-
-  &:hover {
-    border-color: var(--accent);
-    color: var(--foreground);
-  }
-
-  &.is-selected {
-    border-color: var(--accent);
-    background: var(--active-accent-fill);
-    color: var(--foreground);
-  }
-}
-
-.batch-history-empty {
-  margin: 0;
+.batch-history-button {
+  flex: none;
 }

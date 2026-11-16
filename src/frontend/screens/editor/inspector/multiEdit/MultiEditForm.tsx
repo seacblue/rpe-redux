@@ -5,14 +5,14 @@
  * element is created outside this component's tree. Field state and validation
  * messages stay local to the form.
  */
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { FieldReset } from "../../../../../design/components/field/FieldReset.tsx";
 import { SchemaControl } from "../../../../../design/components/field/SchemaControl.tsx";
-import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
+import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { EasingField } from "../../../../../design/components/easing/EasingField.tsx";
 import { t } from "../../../../../i18n/index.ts";
@@ -34,9 +34,9 @@ export type MultiEditFormValues = BatchParameters & { eventApplicationMode: stri
 
 export interface MultiEditFormHandle {
   read(): MultiEditFormValues;
-  load(value: Partial<MultiEditFormValues>): void;
+  load(value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }): void;
   selectHistory(value: string): void;
-  setResult(message: string, error: boolean, canApply: boolean): void;
+  setResult(message: string, error: boolean): void;
   isPreviewEnabled(): boolean;
 }
 
@@ -128,18 +128,19 @@ export function MultiEditForm({
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [resultMessage, setResultMessage] = useState("");
   const [resultError, setResultError] = useState(false);
-  const [canApply, setCanApply] = useState(false);
+  const currentValues = useRef(values);
   const update = (next: Partial<MultiEditFormValues>) => {
     const value = { ...values, ...next } as MultiEditFormValues;
     setValues(value);
-    // A field change diverges from the loaded history entry, so its tab clears.
+    currentValues.current = value;
+    // A field change diverges from the loaded history entry, so its marker clears.
     setHistorySelection("");
     onChange(value);
   };
   const handle = useMemo<MultiEditFormHandle>(
     () => ({
       read: () => values,
-      load: (next) => {
+      load: (next, options) => {
         const value = {
           ...defaultBatchParameters(kind),
           eventApplicationMode: "per-line",
@@ -149,12 +150,14 @@ export function MultiEditForm({
           value.field = "t1";
         }
         setValues(value);
+        if (!options?.preserveCurrent) {
+          currentValues.current = value;
+        }
       },
       selectHistory: setHistorySelection,
-      setResult: (message, error, enabled) => {
+      setResult: (message, error) => {
         setResultMessage(message);
         setResultError(error);
-        setCanApply(enabled);
       },
       isPreviewEnabled: () => previewEnabled,
     }),
@@ -183,9 +186,30 @@ export function MultiEditForm({
         )
   ).map(([key, label]) => [key, shortLabel(label)] as const);
   const operations = BATCH_OPERATIONS.map(([key, label]) => [key, shortLabel(label)] as const);
-  const operationLabels = Object.fromEntries(operations) as Record<string, string>;
-  // Newest first: the entry the author just applied is the one they reach for.
-  const recent = [...history].reverse();
+  const historyIndex = Number(historySelection);
+  const selectedHistoryIndex =
+    Number.isInteger(historyIndex) && historyIndex >= 0 && historyIndex < history.length
+      ? historyIndex
+      : history.length - 1;
+  const currentIndex = history.length;
+  const activeIndex = historySelection === "" ? currentIndex : selectedHistoryIndex;
+  const historyPosition = activeIndex + 1;
+  const canLoadPrevious = activeIndex > 0;
+  const canLoadNext = activeIndex < currentIndex;
+  const loadHistory = (index: number) => {
+    if (index < 0 || index > currentIndex) {
+      return;
+    }
+    if (index === currentIndex) {
+      const value = currentValues.current;
+      setValues(value);
+      setHistorySelection("");
+      onChange(value);
+      return;
+    }
+    setHistorySelection(String(index));
+    onHistory(index);
+  };
   return (
     <div className="multi-edit-form">
       {noiseActivation && <p className="hint">{t("editorPanels.linePanel.noiseActiveHint")}</p>}
@@ -273,38 +297,30 @@ export function MultiEditForm({
           {resultMessage}
         </InlineAlert>
       )}
-      {/* No history, no strip: an empty band under the apply button reads as a
-          panel that failed to load. */}
-      {recent.length > 0 && (
-        <div className="batch-history" role="tablist">
-          <div className="batch-history-tabs">
-            {recent.map((entry, position) => {
-              const index = history.length - 1 - position;
-              const selected = String(index) === historySelection;
-              return (
-                <ListRow
-                  as="button"
-                  type="button"
-                  key={`${index}:${entry.operation}:${entry.lower}:${entry.upper}`}
-                  role="tab"
-                  selected={selected}
-                  aria-selected={selected}
-                  className="batch-history-tab"
-                  onClick={() => {
-                    setHistorySelection(String(index));
-                    onHistory(index);
-                  }}
-                >
-                  {`${operationLabels[entry.operation] ?? entry.operation} ${entry.lower}…${entry.upper}`}
-                </ListRow>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <div className="batch-history" aria-label={t("editorPanels.multiEdit.history")}>
+        <IconButton
+          icon="chevronLeft"
+          size="small"
+          className="batch-history-button"
+          label={t("editorPanels.multiEdit.historyPrevious")}
+          disabled={!canLoadPrevious}
+          onClick={() => loadHistory(activeIndex - 1)}
+        />
+        <span className="batch-history-position" aria-live="polite">
+          {`${historyPosition}/${currentIndex + 1}`}
+        </span>
+        <IconButton
+          icon="chevronRight"
+          size="small"
+          className="batch-history-button"
+          label={t("editorPanels.multiEdit.historyNext")}
+          disabled={!canLoadNext}
+          onClick={() => loadHistory(activeIndex + 1)}
+        />
+      </div>
       <div className="batch-apply redux-footer-bar">
         <div className="redux-footer-actions">
-          <Button type="button" variant="solid" disabled={!canApply} onClick={onApply}>
+          <Button type="button" variant="solid" onClick={onApply}>
             {t("editorPanels.multiEdit.apply")}
           </Button>
         </div>

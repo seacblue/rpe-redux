@@ -86,7 +86,7 @@ export class PreviewOverlayRenderDevice {
         seconds,
         selectedLine,
         viewport,
-        screenScale,
+        { centerX: frame.centerX, centerY: frame.centerY, scale: screenScale },
         surface.skin ?? null,
         surface.duration ?? 600,
         surface.gameUiCornerCompression,

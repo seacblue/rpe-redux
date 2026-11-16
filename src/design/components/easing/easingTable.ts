@@ -108,3 +108,31 @@ export function easingDirections(family: EasingFamily): EasingDirection[] {
         : ids.inOut !== undefined,
   );
 }
+
+/** Step an easing id without leaving the chart format's valid range. */
+export function stepEasingId(value: number, direction: number): number {
+  const base = isEasingId(value) ? value : EASING_MIN;
+  return Math.min(EASING_MAX, Math.max(EASING_MIN, base + Math.sign(direction)));
+}
+
+/** Rotate the family list, wrapping from either end back to the other. */
+export function rotateEasingFamily(family: EasingFamily, direction: number): EasingFamily {
+  const index = EASING_FAMILIES.indexOf(family);
+  const offset = Math.sign(direction);
+  const next = (index + offset + EASING_FAMILIES.length) % EASING_FAMILIES.length;
+  return EASING_FAMILIES[next];
+}
+
+/** Rotate a family's available directions, or return `null` for Linear. */
+export function rotateEasingDirection(
+  directions: readonly EasingDirection[],
+  current: EasingDirection | undefined,
+  direction: number,
+): EasingDirection | null {
+  if (directions.length === 0) {
+    return null;
+  }
+  const index = Math.max(0, directions.indexOf(current ?? directions[0]));
+  const offset = Math.sign(direction);
+  return directions[(index + offset + directions.length) % directions.length] ?? null;
+}

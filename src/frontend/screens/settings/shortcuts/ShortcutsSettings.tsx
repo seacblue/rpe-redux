@@ -29,11 +29,6 @@ import { developerReveal, isDeveloperRevealed } from "../../../../core/state/dev
 import { useShortcuts } from "./useShortcuts.ts";
 import { advanceShortcutCapture, createShortcutCaptureState } from "./shortcutCapture.ts";
 import { setShortcutRecording } from "./recordingState.ts";
-import {
-  clearRpeHotkeyRecord,
-  readRpeHotkeyRecord,
-  type RpeHotkeyRecord,
-} from "./rpeHotkeyReport.ts";
 import type {
   Shortcut,
   ShortcutEventLike,
@@ -102,134 +97,6 @@ const subscribeDeveloperAvailability = (listener: () => void): (() => void) => {
   };
 };
 
-/**
- * One migration's hotkey mapping, shown above the editor.
- *
- * Applied rows point at the command they changed, so the user can see the new
- * binding in place. Rows without a command are the ones that explain why a
- * familiar key does nothing here; they are listed with their original key.
- */
-const MAX_MAPPED_ROWS = 200;
-const MAX_UNMAPPED_ROWS = 200;
-
-function RpeHotkeySection({
-  record,
-  onClear,
-  findRow,
-}: {
-  record: RpeHotkeyRecord;
-  onClear(): void;
-  findRow(id: string): HTMLElement | null;
-}) {
-  const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const mapped = record.entries.filter((entry) => entry.target);
-  const unmapped = record.entries.filter((entry) => !entry.target);
-  // A tampered or enormous Hotkey.txt must not build thousands of buttons.
-  const mappedShown = mapped.slice(0, MAX_MAPPED_ROWS);
-  const unmappedShown = unmapped.slice(0, MAX_UNMAPPED_ROWS);
-  /** Scrolls to one edited command and marks it so the row is findable. */
-  const reveal = (id: string) => {
-    const row = findRow(id);
-    if (!row) {
-      return;
-    }
-    row.scrollIntoView({ block: "center" });
-    row.dataset.flash = "true";
-    window.setTimeout(() => delete row.dataset.flash, 1200);
-  };
-  return (
-    <section
-      className="redux-shortcut-category redux-shortcut-rpe"
-      data-expanded={String(expanded)}
-    >
-      <div className="redux-shortcut-rpe-head">
-        <h3>{t("shortcuts.rpeSection.title")}</h3>
-        <IconButton
-          icon={expanded ? "chevronDown" : "chevronRight"}
-          size={16}
-          label={t(expanded ? "shortcuts.rpeSection.collapse" : "shortcuts.rpeSection.expand")}
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        />
-      </div>
-      <p className="redux-shortcut-rpe-summary">
-        {t("shortcuts.rpeSection.summary", { mapped: mapped.length, unmapped: unmapped.length })}
-      </p>
-      {expanded && (
-        <>
-          {mapped.length > 0 && (
-            <div className="redux-shortcut-rpe-group">
-              <h4>{t("shortcuts.rpeSection.mapped")}</h4>
-              <div className="redux-shortcut-rpe-chips">
-                {mappedShown.map((entry, index) => (
-                  <Button
-                    key={`${index}:${entry.action}`}
-                    variant="outlined"
-                    className="redux-shortcut-rpe-chip"
-                    data-tip-title={t("shortcuts.rpeSection.revealHint")}
-                    onClick={() => entry.target && reveal(entry.target)}
-                  >
-                    <span className="redux-shortcut-rpe-keys">{entry.binding}</span>
-                    <span className="redux-shortcut-rpe-action">{entry.action}</span>
-                  </Button>
-                ))}
-              </div>
-              {mapped.length > mappedShown.length && (
-                <p className="redux-shortcut-rpe-summary">
-                  {t("shortcuts.rpeSection.more", {
-                    count: mapped.length - mappedShown.length,
-                  })}
-                </p>
-              )}
-            </div>
-          )}
-          {unmapped.length > 0 && (
-            <div className="redux-shortcut-rpe-group">
-              <h4>{t("shortcuts.rpeSection.unmapped")}</h4>
-              <ul className="redux-shortcut-rpe-list">
-                {unmappedShown.map((entry, index) => (
-                  <li key={`${index}:${entry.action}`} className="redux-shortcut-rpe-row">
-                    <span className="redux-shortcut-rpe-keys">{entry.binding}</span>
-                    <span className="redux-shortcut-rpe-action">{entry.action}</span>
-                    <span className="redux-shortcut-rpe-reason">
-                      {t(
-                        entry.reason === "invalid-binding"
-                          ? "shortcuts.rpeSection.invalidBinding"
-                          : "shortcuts.rpeSection.unknownAction",
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {unmapped.length > unmappedShown.length && (
-                <p className="redux-shortcut-rpe-summary">
-                  {t("shortcuts.rpeSection.more", {
-                    count: unmapped.length - unmappedShown.length,
-                  })}
-                </p>
-              )}
-            </div>
-          )}
-          <div className="redux-footer-bar">
-            <div className="redux-footer-actions">
-              <Button
-                variant="plain"
-                onClick={() => {
-                  clearRpeHotkeyRecord();
-                  onClear();
-                }}
-              >
-                {t("shortcuts.rpeSection.clear")}
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
 /** The shortcut editor for every binding the registry exposes. */
 export function ShortcutsSettings({ query }: SettingsPageContext) {
   const { t, tRaw } = useTranslation();
@@ -246,7 +113,6 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
   const [recording, setRecording] = useState<string | null>(null);
   const [recordingOpen, setRecordingOpen] = useState(false);
   const [recordingBindings, setRecordingBindings] = useState<readonly string[]>([]);
-  const [rpeRecord, setRpeRecord] = useState<RpeHotkeyRecord | null>(readRpeHotkeyRecord);
   const [bindingIndex, setBindingIndex] = useState<number | null>(null);
   const [modifierPreview, setModifierPreview] = useState("");
   const [pendingShortcut, setPendingShortcut] = useState<Shortcut | null>(null);
@@ -254,7 +120,6 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
   const pendingShortcutRef = useRef<Shortcut | null>(null);
   /** Guards handlers that may still run between closing the dialog and their cleanup. */
   const recordingOpenRef = useRef(false);
-  const shortcutRows = useRef(new Map<string, HTMLElement>());
 
   // Clear global recording ownership when the editor unmounts.
   useEffect(() => () => setShortcutRecording(false), []);
@@ -535,30 +400,12 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
           {message}
         </p>
       )}
-      {!filtering && rpeRecord && rpeRecord.entries.length > 0 && (
-        <RpeHotkeySection
-          record={rpeRecord}
-          onClear={() => setRpeRecord(null)}
-          findRow={(id) => shortcutRows.current.get(id) ?? null}
-        />
-      )}
       {groups.map(({ category, entries }) => (
         <section key={category.id} className="redux-shortcut-category">
           <h3>{tRaw(category.title)}</h3>
           {entries.map((view) => {
             return (
-              <div
-                className="redux-shortcut-row"
-                key={view.id}
-                data-command={view.id}
-                ref={(node) => {
-                  if (node) {
-                    shortcutRows.current.set(view.id, node);
-                  } else {
-                    shortcutRows.current.delete(view.id);
-                  }
-                }}
-              >
+              <div className="redux-shortcut-row" key={view.id} data-command={view.id}>
                 <span className="redux-shortcut-label">{tRaw(view.title)}</span>
                 <div className="redux-shortcut-actions">
                   <IconButton

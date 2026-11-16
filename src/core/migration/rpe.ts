@@ -59,6 +59,8 @@ export interface RpeMigrationPlan {
 /** One chart folder discovered under an RPE Resources directory. */
 export interface RpeChartFolder {
   readonly path: string;
+  /** Conservative retained-memory estimate supplied by the native scanner. */
+  readonly estimatedBytes?: number;
   readonly folder: string;
   readonly name: string;
   readonly group: string;

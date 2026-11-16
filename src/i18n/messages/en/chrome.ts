@@ -19,6 +19,7 @@ export default {
   "chrome.tasks.cancel": "Cancel",
   "chrome.tasks.cancelAndDismiss": "Cancel and remove task",
   "chrome.tasks.dismiss": "Dismiss",
+  "chrome.tasks.removedToast": "Removed background task: {name}",
   "chrome.tasks.status.running": "Running",
   "chrome.tasks.status.cancelling": "Cancelling",
   "chrome.tasks.status.completed": "Completed",
@@ -134,6 +135,9 @@ export default {
   "chrome.changelog.skipVersion": "Skip this version",
   "chrome.changelog.later": "Later",
   "chrome.changelog.updateNow": "Update now",
+  "chrome.changelog.resumeDownload": "Resume update",
+  "chrome.changelog.pauseDownload": "Pause update",
+  "chrome.changelog.stopDownload": "Stop update",
   "chrome.changelog.updating": "Updating…",
 
   "chrome.pane.notes": "Note editing",

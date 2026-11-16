@@ -23,6 +23,8 @@ export interface DocumentReleaseOptions {
   hitSounds: Pick<HitSounds, "stop" | "onlyCurrentLine">;
   images: Pick<ProjectImages, "clear">;
   clearLibraryProject(): void;
+  /** Roll back local counters that belonged to an unsaved outgoing session. */
+  discardLocalStats(): void;
   /** Release a stream worker or source owned by the outgoing document. */
   disposeChartDocument(): void;
 }
@@ -43,6 +45,7 @@ export function createDocumentRelease(options: DocumentReleaseOptions): () => vo
     options.hitSounds.onlyCurrentLine = false;
     options.images.clear();
     options.disposeChartDocument();
+    options.discardLocalStats();
     options.clearLibraryProject();
   };
 }

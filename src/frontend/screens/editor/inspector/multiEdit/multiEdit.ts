@@ -147,7 +147,7 @@ export class MultiEditPanel {
   private ghostChanges?: { result: MultiEditResult; changes: readonly BatchChange[] };
   /** These closures are assigned inside `open()` before any caller invokes them. */
   updateHistory?: (event?: Event) => void;
-  load?: (value: Partial<MultiEditFormValues>) => void;
+  load?: (value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }) => void;
   read?: () => MultiEditFormValues;
 
   /** Binds the panel to the live session, timeline, and host callbacks. */
@@ -194,7 +194,7 @@ export class MultiEditPanel {
     this.updateHistory = () => this.renderForm(kind);
     this.read = () =>
       this.form?.read() ?? { ...this.parameters.read(kind), eventApplicationMode: "per-line" };
-    this.load = (value: Partial<MultiEditFormValues>) => {
+    this.load = (value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }) => {
       // Load over what the form shows now: a history entry carries only the batch
       // parameters, so the multi-line application mode must survive the load.
       const current = this.read?.() ?? {
@@ -206,7 +206,7 @@ export class MultiEditPanel {
         next.field = "t1";
       }
       this.seed = next.seed ?? this.seed;
-      this.form?.load(next);
+      this.form?.load(next, options);
       this.parameters.update(kind, next);
       this.refresh(next);
     };
@@ -250,7 +250,7 @@ export class MultiEditPanel {
           if (entries.length) {
             const position = (index + entries.length) % entries.length;
             this.form?.selectHistory(String(position));
-            this.load?.(entries[position]);
+            this.load?.(entries[position], { preserveCurrent: true });
           }
         },
         onApply: () => {
@@ -279,14 +279,14 @@ export class MultiEditPanel {
               },
               { normalized: true },
             );
-            const position = this.parameters.remember(kind, values);
+            this.parameters.remember(kind, values);
             this.updateHistory?.();
-            this.form?.selectHistory(String(position));
+            this.form?.selectHistory("");
             this.result = null;
             this.ghostChanges = undefined;
             this.chart = this.getSession().chart;
             this.signature = this.selectionSignature();
-            this.form?.setResult("", false, false);
+            this.form?.setResult("", false);
             this.notify(t("editorPanels.multiEdit.appliedNotify", { count: amount }), "success");
             this.invalidate();
           } catch (error) {
@@ -315,13 +315,22 @@ export class MultiEditPanel {
     this.invalidate();
   }
 
+  /** Clears chart-local batch history when the document session is replaced. */
+  resetForDocument(): void {
+    this.parameters.clearHistory();
+    this.form?.selectHistory("");
+    this.result = null;
+    this.updateHistory?.();
+    this.invalidate();
+  }
+
   /** Drop a stale inspector proposal after another editor command owns the chart. */
   clearPreview(): void {
     this.result = null;
     this.ghostChanges = undefined;
     this.chart = this.getSession().chart;
     this.signature = this.selectionSignature();
-    this.form?.setResult("", false, false);
+    this.form?.setResult("", false);
     this.invalidate();
   }
 
@@ -386,7 +395,7 @@ export class MultiEditPanel {
       summary = error instanceof Error ? error.message : String(error);
       isError = true;
     }
-    this.form?.setResult(summary, isError, Boolean(this.result));
+    this.form?.setResult(summary, isError);
     this.invalidate();
   }
 

@@ -124,6 +124,9 @@ export function createPlaybackRuntime(options: {
     () => {
       options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
       options.timeline.viewport.setOrigin(currentBeat(), "seek");
+      // Seeking changes the time-dependent grid even when the viewport origin
+      // rounds to the same beat as the previous frame.
+      options.timeline.changed();
       realtimePreview.effectsSince = chartSeconds();
       preloadAround(chartSeconds());
       options.invalidate();
