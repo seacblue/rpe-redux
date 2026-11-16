@@ -19,6 +19,9 @@ import {
 } from "../timelineGridColors.ts";
 import { DEFAULT_NOTE_OVERLAP_THRESHOLD } from "../../edit/timeline/noteOverlap.ts";
 
+/** Maximum number of event windows shown side by side in multi-line editing. */
+export const MULTI_LINE_EVENT_WINDOW_MAX = 20;
+
 const EditorSettingsNavigation: SettingsNavigation = {
   key: "editor",
   label: "settings.category.editor.label",
@@ -276,7 +279,7 @@ const TimelineSettingsSchema: SettingDefinition[] = [
     control: "number",
     default: 3,
     min: 1,
-    max: 100,
+    max: MULTI_LINE_EVENT_WINDOW_MAX,
     step: 1,
     integer: true,
   },

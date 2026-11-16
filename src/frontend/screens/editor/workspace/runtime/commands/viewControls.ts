@@ -431,7 +431,7 @@ export function createEditorViewControls(
     cancelPreviewOnlyHold();
     previewOnly.set(false);
     session.setMultiLineEnabled(false, mode);
-    session.setMultiLineSelection([session.lineIndex]);
+    session.setMultiLineSelection([session.lineIndex], { persist: false });
     displayValues.showNotes.set(mode === "notes");
     displayValues.showEvents.set(mode === "events");
     recordModeChange();

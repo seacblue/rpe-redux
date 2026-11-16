@@ -166,7 +166,7 @@ export function createWorkspaceSessionRuntime(
     const indices = saved.view.multiLine.indices.filter(
       (index) => current.chart.judgeLineList?.[index],
     );
-    current.setMultiLineSelection(indices);
+    current.setMultiLineSelection(indices, { persist: false });
     current.setMultiLineMode(saved.view.multiLine.mode);
     current.setMultiLineMerge(saved.view.multiLine.merge);
     if (saved.view.multiLineZoom) {

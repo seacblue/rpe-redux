@@ -24,10 +24,12 @@ import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx"
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
+import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
 import { t } from "../../../../../i18n/index.ts";
+import { MULTI_LINE_EVENT_WINDOW_MAX } from "../../../../../core/settings/features/timeline.ts";
 import { displayValues } from "../../../settings/editorDisplaySettings.ts";
 import { MultiLineEventTracks } from "./MultiLineEventTracks.tsx";
 import {
@@ -36,7 +38,7 @@ import {
   editorLineSelection,
 } from "../../../../../core/edit/state/publishedValues.ts";
 import {
-  formatLineSelectionDisplay,
+  formatLineSelection,
   parseLineSelectionInput,
 } from "../../../../../core/edit/state/lineSelectionInput.ts";
 import {
@@ -100,8 +102,10 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     displayValues.multiLineNoteLineNumbers.get,
     displayValues.multiLineNoteLineNumbers.get,
   );
-  const [eventWindowCountDraft, setEventWindowCountDraft] = useState<string | null>(null);
-  const eventWindowCountValue = eventWindowCountDraft ?? eventWindowCount;
+  const [eventWindowCountDraft, setEventWindowCountDraft] = useState<number | null>(null);
+  const eventWindowCountValue =
+    eventWindowCountDraft ??
+    Math.max(1, Math.min(MULTI_LINE_EVENT_WINDOW_MAX, Math.floor(Number(eventWindowCount) || 3)));
   const lineOptions = useSyncExternalStore(
     editorLineOptions.subscribe,
     editorLineOptions.get,
@@ -160,9 +164,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     return `${Math.max(1, String(highest).length)}ch`;
   }, [lineOptions]);
   const lines = session.chart.judgeLineList ?? [];
-  const lineText =
-    formatLineSelectionDisplay(session.multiLineIndices, session.lineIndex) ||
-    String(session.lineIndex);
+  const lineText = formatLineSelection(session.multiLineIndices) || String(session.lineIndex);
 
   /** Applies a parsed line-selection expression to the session. */
   const commitLines = (raw: string, input: HTMLInputElement) => {
@@ -174,9 +176,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       input.value = lineText;
       return;
     }
-    // The parenthesized annotation is the active line; text without one keeps
-    // the historical focus on the last selected line.
-    const focus = parsed.current ?? parsed.lines.at(-1) ?? session.lineIndex;
+    // Keep the active line when it remains selected; otherwise focus the last
+    // line in the expression, matching the field's compact display.
+    const focus =
+      parsed.current ??
+      (parsed.lines.includes(session.lineIndex)
+        ? session.lineIndex
+        : (parsed.lines.at(-1) ?? session.lineIndex));
     editorLineSelection.set(parsed.lines);
     editorLine.set(String(focus));
     renderSession();
@@ -448,12 +454,9 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
   };
 
   /** Stores a valid event-window count and requests a timeline repaint. */
-  const commitEventWindowCount = (raw: string, target?: HTMLInputElement) => {
-    if (target && !target.validity.valid) {
-      return;
-    }
-    const count = Number(raw);
-    if (!Number.isSafeInteger(count) || count < 1 || count > 100) {
+  const commitEventWindowCount = (raw: number) => {
+    const count = Math.max(1, Math.min(MULTI_LINE_EVENT_WINDOW_MAX, Math.round(raw)));
+    if (!Number.isSafeInteger(count)) {
       return;
     }
     if (String(count) !== eventWindowCount) {
@@ -637,20 +640,15 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
             density="compact"
             label={t("settings.field.multi-line-event-window-count.label")}
             control={(id) => (
-              <Input
+              <SliderField
                 id={id}
-                type="number"
                 min={1}
-                max={100}
+                max={MULTI_LINE_EVENT_WINDOW_MAX}
                 step={1}
-                inputMode="numeric"
                 value={eventWindowCountValue}
-                onChange={(event) => setEventWindowCountDraft(event.currentTarget.value)}
-                onBlur={(event) => {
-                  commitEventWindowCount(event.currentTarget.value, event.currentTarget);
-                  setEventWindowCountDraft(null);
-                }}
-                onNumericWheel={(nextValue, target) => commitEventWindowCount(nextValue, target)}
+                aria-label={t("settings.field.multi-line-event-window-count.label")}
+                onChange={(event) => setEventWindowCountDraft(Number(event.currentTarget.value))}
+                onCommit={commitEventWindowCount}
               />
             )}
           />

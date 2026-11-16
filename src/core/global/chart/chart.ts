@@ -193,6 +193,8 @@ export interface Chart {
   META: ChartMeta;
   BPMList: BpmEntry[];
   judgeLineGroup?: string[];
+  /** RPE-compatible persisted line expression used by multi-line editing. */
+  multiLineString?: string;
   judgeLineList?: JudgeLine[];
   /** Noise areas, stored in RPE coordinates and beats. */
   blockAreaList?: BlockArea[];

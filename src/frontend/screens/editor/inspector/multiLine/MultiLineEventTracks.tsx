@@ -11,6 +11,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
+import { Section } from "../../../../../design/components/section/Section.tsx";
 import { parseEventKey } from "../../../../../core/edit/events/eventTracks.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { t } from "../../../../../i18n/index.ts";
@@ -154,14 +155,11 @@ export function MultiLineEventTracks({
   };
 
   return (
-    <div
+    <Section
       className="multi-line-event-tracks-block"
-      role="group"
-      aria-label={t("editorPanels.multiLine.eventTracks")}
+      title={t("editorPanels.multiLine.eventTracks")}
+      separated
     >
-      <span className="multi-line-event-tracks-label">
-        {t("editorPanels.multiLine.eventTracks")}
-      </span>
       <FieldRows>
         {xyBinding ? (
           <FieldRow
@@ -247,6 +245,6 @@ export function MultiLineEventTracks({
           )}
         />
       </FieldRows>
-    </div>
+    </Section>
   );
 }

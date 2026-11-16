@@ -21,7 +21,7 @@ import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
 export function leaveMultiLineEditing(session: EditorSession): void {
   session.multiLineRestore = [...session.multiLineIndices];
   session.setMultiLineEnabled(false);
-  session.setMultiLineSelection([session.lineIndex]);
+  session.setMultiLineSelection([session.lineIndex], { persist: false });
 }
 
 /** Keeps valid unique line indices in ascending order. */

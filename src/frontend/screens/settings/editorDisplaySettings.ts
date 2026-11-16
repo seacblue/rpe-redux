@@ -31,6 +31,7 @@ import {
 } from "../../../core/settings/timelineGridColors.ts";
 import { PREFERENCE_SECTIONS } from "../../../core/state/preferences.ts";
 import { COVER_BACKGROUND_KEYS } from "../../../core/settings/features/coverBackground.ts";
+import { MULTI_LINE_EVENT_WINDOW_MAX } from "../../../core/settings/features/timeline.ts";
 import { cssColor, parseHexColor } from "../../../core/utils/colors.ts";
 // A contributed setting declares its own value when its feature registers it, and the
 // reads below go straight to those values; importing the built-in catalog is what puts
@@ -227,7 +228,10 @@ export function readEditorDisplaySettings() {
   const timelineNoteSize = numberOf(displayValues.timelineNoteSize);
   const multiLineEventWindowCount = Math.max(
     1,
-    Math.floor(numberOf(displayValues.multiLineEventWindowCount) || 3),
+    Math.min(
+      MULTI_LINE_EVENT_WINDOW_MAX,
+      Math.floor(numberOf(displayValues.multiLineEventWindowCount) || 3),
+    ),
   );
   const highlight = contributedFlag("highlight-notes");
   const view = readEditorViewSettings();

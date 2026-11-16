@@ -39,6 +39,7 @@ import {
 import { lineNoiseConflicts } from "../../global/chart/noise/lineNoiseConflicts.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
 import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
+import { formatLineSelection, parseLineSelectionInput } from "../state/lineSelectionInput.ts";
 
 /** Counts chart objects newly placed by one local history entry. */
 export interface PlacementStats {
@@ -124,6 +125,26 @@ export type EventTimelineMode = "single" | "multi";
 
 export interface SessionMutationGate {
   run<T>(kind: "ui" | "history", operation: () => T): T;
+}
+
+/** Read a persisted multi-line selection from the chart's RPE-compatible fields. */
+function persistedMultiLineIndices(chart: Chart): number[] {
+  const lineCount = chart.judgeLineList?.length ?? 0;
+  const available = Array.from({ length: lineCount }, (unused, index) => index);
+  if (typeof chart.multiLineString === "string") {
+    return parseLineSelectionInput(chart.multiLineString, available)?.lines.slice() ?? [];
+  }
+  const legacy = chart.multiLine;
+  return Array.isArray(legacy)
+    ? legacy.filter(
+        (index): index is number => Number.isInteger(index) && index >= 0 && index < lineCount,
+      )
+    : [];
+}
+
+/** Format a selection in the colon-range syntax written by native RPE charts. */
+function formatPersistedMultiLineIndices(indices: readonly number[]): string {
+  return formatLineSelection(indices).replaceAll("-", ":");
 }
 
 export type SessionCommitOptions = HistoryRecordOptions & {
@@ -276,7 +297,8 @@ export class EditorSession extends EventTarget {
       150,
       chartDocument,
     );
-    this.lineIndex = 0;
+    const persistedLines = persistedMultiLineIndices(chart);
+    this.lineIndex = persistedLines[0] ?? 0;
     this.selection = new Set();
     this.selectionRevision = 0;
     this.selectionProjectionRevision = 0;
@@ -295,7 +317,7 @@ export class EditorSession extends EventTarget {
     this.multiLineMode = "notes";
     this.multiLineMerge = true;
     this.multiLineIndices = [];
-    this.multiLineRestore = [];
+    this.multiLineRestore = persistedLines;
     this.targetLineIndicesCache = null;
     this.targetLineIndicesCacheSource = null;
     this.targetLineIndicesCacheLine = -1;
@@ -380,7 +402,7 @@ export class EditorSession extends EventTarget {
    * Replaces the shared line list; two or more lines enable multi-line
    * rendering. An empty result falls back to the current line while one exists.
    */
-  setMultiLineSelection(indices: readonly number[]): void {
+  setMultiLineSelection(indices: readonly number[], options: { persist?: boolean } = {}): void {
     const length = this.chart.judgeLineList?.length ?? 0;
     const next = [
       ...new Set(
@@ -390,7 +412,25 @@ export class EditorSession extends EventTarget {
     this.multiLineIndices =
       next.length || !length ? next : [Math.max(0, Math.min(this.lineIndex, length - 1))];
     this.multiLineEnabled = this.multiLineIndices.length > 1;
+    if (options.persist !== false) {
+      this.persistMultiLineSelection(this.multiLineIndices);
+    }
     this.notify();
+  }
+
+  /** Persist the current multi-line line expression as chart metadata. */
+  private persistMultiLineSelection(indices: readonly number[]): void {
+    const expression = formatPersistedMultiLineIndices(indices);
+    if (this.chart.multiLineString === expression) {
+      return;
+    }
+    this.commitChart(
+      t("editor.session.selectionChanged"),
+      { ...this.chart, multiLineString: expression },
+      this.selectionState(),
+      {},
+      { normalized: true },
+    );
   }
   /** Enables or hides multi-line editing without discarding its line list. */
   setMultiLineEnabled(enabled = true, mode: MultiLineMode = this.multiLineMode): void {
@@ -442,26 +482,24 @@ export class EditorSession extends EventTarget {
   }
   /** Adds one line to the multi-line selection and enables the mode. */
   addMultiLine(index = this.lineIndex): void {
-    this.multiLineEnabled = true;
-    if (Number.isInteger(index)) {
-      this.multiLineIndices = [...this.multiLineIndices, index];
-    }
-    this.normalizeMultiLine();
-    this.notify();
+    this.setMultiLineSelection(
+      Number.isInteger(index) ? [...this.multiLineIndices, index] : this.multiLineIndices,
+    );
   }
   /** Removes one line, keeping at least the active line selected. */
   removeMultiLine(index = this.lineIndex): void {
     const next = this.multiLineIndices.filter((value) => value !== index);
     const length = this.chart.judgeLineList?.length ?? 0;
-    this.multiLineIndices =
-      next.length || !length ? next : [Math.max(0, Math.min(this.lineIndex, length - 1))];
-    this.normalizeMultiLine();
-    this.notify();
+    this.setMultiLineSelection(
+      next.length || !length ? next : [Math.max(0, Math.min(this.lineIndex, length - 1))],
+    );
   }
   /** Resets the selection to the active line and disables multi-line. */
   clearMultiLines(): void {
     const length = this.chart.judgeLineList?.length ?? 0;
-    this.multiLineIndices = length ? [Math.max(0, Math.min(this.lineIndex, length - 1))] : [];
+    this.setMultiLineSelection(length ? [Math.max(0, Math.min(this.lineIndex, length - 1))] : [], {
+      persist: false,
+    });
     this.multiLineEnabled = false;
     this.notify();
   }
