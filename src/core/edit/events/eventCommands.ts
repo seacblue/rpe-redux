@@ -28,6 +28,7 @@ import {
   NOISE_ACTIVE_EVENTS,
   globalXYBindingEnabled,
   sameEventSpan,
+  synchronizeXYEventTimes,
   xyCounterpartType,
 } from "./eventTracks.ts";
 import { commitEventLists, selectedEvents } from "./eventEdits.ts";
@@ -394,12 +395,19 @@ export function updateEventsAtTarget(
   if (hasEventOverlap(session, target.lineIndex, target.layer as number, type, nextEvents)) {
     return rejected("event.overlap");
   }
+  const updates = new Map<string, JudgeLineEvent[]>([[type, nextEvents]]);
+  synchronizeXYEventTimes(
+    (counterpartType) =>
+      eventListAt(session, target.lineIndex, counterpartType, target.layer as number),
+    updates,
+    indices.map((index) => ({ type, before: events[index], after: nextEvents[index] })),
+  );
   const beforeSelection = session.selectionState();
   const chart = chartWithEventLists(
     session.chart,
     target.lineIndex,
     target.layer as number,
-    new Map([[type, nextEvents]]),
+    updates,
   );
   session.selectLine(target.lineIndex);
   session.eventLayer = target.layer as number;

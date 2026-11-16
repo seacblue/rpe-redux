@@ -14,7 +14,10 @@ import {
   transformEvents,
   assertMultiEventSelectionStructure,
 } from "../../../core/edit/events/eventEdits.ts";
-import { insertEventAt } from "../../../core/edit/events/eventCommands.ts";
+import { editCapturedSelection, commitSelectionEdit } from "../../../core/edit/selection/edits.ts";
+import { captureSelection } from "../../../core/edit/selection/snapshot.ts";
+import { shiftSelectedEvents } from "../../../core/edit/timeline/selection.ts";
+import { insertEventAt, updateEventsAtTarget } from "../../../core/edit/events/eventCommands.ts";
 import { deleteObjects, pasteObjects } from "../../../core/edit/clipboard/operations.ts";
 import "../../../core/settings/features/editingSettings.ts";
 import { values } from "../../../core/state/values.ts";
@@ -46,6 +49,20 @@ function countCommits(session) {
     return original(...args);
   };
   return () => count;
+}
+
+/** Build a session with matching X/Y events so binding edits have a counterpart. */
+function xyBoundEventSession() {
+  const chart = createChart();
+  const xEvent = createEvent(0, 10, 2, 6);
+  const yEvent = createEvent(20, 30, 2, 6);
+  chart.judgeLineList[0].eventLayers[0].moveXEvents = [xEvent];
+  chart.judgeLineList[0].eventLayers[0].moveYEvents = [yEvent];
+  const session = new EditorSession(chart);
+  session.lineIndex = 0;
+  session.eventLayer = 0;
+  session.focus = "events";
+  return session;
 }
 
 test("one event-field edit commits once and a repeated value is deduped", () => {
@@ -233,6 +250,97 @@ test("XY binding fills the missing counterpart when pasting an event", () => {
       beatValue(session.chart.judgeLineList[0].eventLayers[0].moveYEvents[0].endTime),
       beatValue(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0].endTime),
     );
+  } finally {
+    values.byId.set("xy-binding", previous);
+  }
+});
+
+test("XY binding synchronizes both endpoints when an event field changes", () => {
+  const previous = values.byId.get("xy-binding");
+  try {
+    values.byId.set("xy-binding", true);
+    const session = xyBoundEventSession();
+    session.eventSelection = new Set(["moveYEvents:0"]);
+
+    transformEvents(session, "change event time", (event) => ({
+      ...event,
+      startTime: fromNumber(3),
+      endTime: fromNumber(8),
+    }));
+
+    const xEvent = session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0];
+    assert.equal(beatValue(xEvent.startTime), 3);
+    assert.equal(beatValue(xEvent.endTime), 8);
+  } finally {
+    values.byId.set("xy-binding", previous);
+  }
+});
+
+test("XY binding synchronizes a single endpoint moved by the timeline", () => {
+  const previous = values.byId.get("xy-binding");
+  try {
+    values.byId.set("xy-binding", true);
+    const session = xyBoundEventSession();
+    session.eventSelection = new Set(["moveXEvents:0"]);
+
+    shiftSelectedEvents(session, "startTime", fromNumber(1), "move event start");
+
+    const yEvent = session.chart.judgeLineList[0].eventLayers[0].moveYEvents[0];
+    assert.equal(beatValue(yEvent.startTime), 3);
+    assert.equal(beatValue(yEvent.endTime), 6);
+  } finally {
+    values.byId.set("xy-binding", previous);
+  }
+});
+
+test("XY binding synchronizes time changes from the event command API", () => {
+  const previous = values.byId.get("xy-binding");
+  try {
+    values.byId.set("xy-binding", true);
+    const session = xyBoundEventSession();
+
+    const result = updateEventsAtTarget(session, {
+      target: {
+        lineIndex: 0,
+        layer: 0,
+        eventType: "moveXEvents",
+        from: { beat: 2, positionX: 0 },
+        to: { beat: 6, positionX: 0 },
+      },
+      payload: { nextStartBeat: 4, nextEndBeat: 9 },
+    });
+
+    assert.equal(result.status, "committed");
+    const nextXEvent = session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0];
+    const yEvent = session.chart.judgeLineList[0].eventLayers[0].moveYEvents[0];
+    assert.equal(beatValue(nextXEvent.startTime), 4);
+    assert.equal(beatValue(nextXEvent.endTime), 9);
+    assert.equal(beatValue(yEvent.startTime), 4);
+    assert.equal(beatValue(yEvent.endTime), 9);
+  } finally {
+    values.byId.set("xy-binding", previous);
+  }
+});
+
+test("XY binding synchronizes multi-line event edits", () => {
+  const previous = values.byId.get("xy-binding");
+  try {
+    values.byId.set("xy-binding", true);
+    const session = xyBoundEventSession();
+    session.chart.judgeLineList.push(createChart().judgeLineList[0]);
+    session.setMultiLineSelection([0, 1]);
+    session.setMultiLineMode("events");
+    session.multiEventSelection = new Map([[0, new Set(["moveXEvents:0"])]]);
+    session.eventSelection = new Set(["moveXEvents:0"]);
+
+    const result = editCapturedSelection(captureSelection(session), {
+      event: (event) => ({ ...event, startTime: fromNumber(4), endTime: fromNumber(9) }),
+    });
+    commitSelectionEdit(session, result, "change multi-line event time");
+
+    const yEvent = session.chart.judgeLineList[0].eventLayers[0].moveYEvents[0];
+    assert.equal(beatValue(yEvent.startTime), 4);
+    assert.equal(beatValue(yEvent.endTime), 9);
   } finally {
     values.byId.set("xy-binding", previous);
   }

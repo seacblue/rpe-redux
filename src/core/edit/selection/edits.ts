@@ -20,7 +20,13 @@ import {
 } from "../../global/chart/timing/beat.ts";
 import { verticalGrid } from "../../global/chart/editing/editGrid.ts";
 import { alignShaderParameters } from "../../global/chart/shader/shaderEvents.ts";
-import { chartWithEventLists, eventKey, eventList } from "../events/eventTracks.ts";
+import {
+  chartWithEventLists,
+  eventKey,
+  eventList,
+  synchronizeXYEventTimes,
+  type EventTimeChange,
+} from "../events/eventTracks.ts";
 import type { EventSession } from "../events/eventTracks.ts";
 import type { HistoryEntryMetadata, HistoryRecordOptions } from "../session/history.ts";
 import type { EditorFocus, EditorSession } from "../session/session.ts";
@@ -149,6 +155,7 @@ export function editCapturedSelection(
   }
   const sourceUpdatesByLine = new Map<number, Map<string, JudgeLineEvent[]>>();
   const targetUpdatesByLine = new Map<number, Map<string, JudgeLineEvent[]>>();
+  const timeChangesByLine = new Map<number, EventTimeChange[]>();
   const multiEventSelection = new Map<number, Set<string>>();
   for (const [entrySource, entries] of entriesByLine) {
     const entryTarget = (((entrySource + lineOffset) % count) + count) % count;
@@ -165,6 +172,15 @@ export function editCapturedSelection(
               compareBeats(next.startTime, entry.event.startTime) !== 0
             ) {
               next = alignShaderParameters(next);
+            }
+            if (
+              entrySource === entryTarget &&
+              (Math.abs(compareBeats(next.startTime, entry.event.startTime)) >= 1e-9 ||
+                Math.abs(compareBeats(next.endTime, entry.event.endTime)) >= 1e-9)
+            ) {
+              const changes = timeChangesByLine.get(entrySource) ?? [];
+              changes.push({ type, before: entry.event, after: next });
+              timeChangesByLine.set(entrySource, changes);
             }
             return [entry.index, next];
           }),
@@ -213,6 +229,17 @@ export function editCapturedSelection(
         multiEventSelection.set(entryTarget, targetSelection);
       }
     }
+  }
+  for (const [lineIndex, changes] of timeChangesByLine) {
+    const updates = sourceUpdatesByLine.get(lineIndex);
+    if (!updates) {
+      continue;
+    }
+    synchronizeXYEventTimes(
+      (type) => eventList(eventSession(chart, lineIndex, snapshot.eventLayer), type),
+      updates,
+      changes,
+    );
   }
   for (const [lineIndex, updates] of sourceUpdatesByLine) {
     if (updates.size) {

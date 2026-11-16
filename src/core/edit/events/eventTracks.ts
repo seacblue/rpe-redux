@@ -107,6 +107,48 @@ export function sameEventSpan(left: JudgeLineEvent, right: JudgeLineEvent): bool
   );
 }
 
+/** One event transform together with the event span it replaced. */
+export interface EventTimeChange {
+  readonly type: string;
+  readonly before: JudgeLineEvent;
+  readonly after: JudgeLineEvent;
+}
+
+/** Synchronize existing exact-span X/Y counterparts after an event time edit. */
+export function synchronizeXYEventTimes(
+  getEvents: (type: string) => readonly JudgeLineEvent[],
+  updates: Map<string, JudgeLineEvent[]>,
+  changes: readonly EventTimeChange[],
+): void {
+  if (!globalXYBindingEnabled()) {
+    return;
+  }
+  for (const change of changes) {
+    const counterpartType = xyCounterpartType(change.type);
+    if (!counterpartType || sameEventSpan(change.before, change.after)) {
+      continue;
+    }
+    const counterpartEvents = getEvents(counterpartType);
+    const counterpartIndex = counterpartEvents.findIndex((event) =>
+      sameEventSpan(event, change.before),
+    );
+    if (counterpartIndex < 0) {
+      continue;
+    }
+    const nextCounterparts = updates.get(counterpartType) ?? [...counterpartEvents];
+    const counterpart = nextCounterparts[counterpartIndex];
+    if (!counterpart) {
+      continue;
+    }
+    nextCounterparts[counterpartIndex] = {
+      ...counterpart,
+      startTime: structuredClone(change.after.startTime),
+      endTime: structuredClone(change.after.endTime),
+    };
+    updates.set(counterpartType, nextCounterparts);
+  }
+}
+
 /** Decode an event-selection key; the track is the prefix before the last colon. */
 export function parseEventKey(key: string): { type: string; index: number } | null {
   const colon = key.lastIndexOf(":");

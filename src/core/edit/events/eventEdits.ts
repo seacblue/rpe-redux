@@ -20,6 +20,8 @@ import {
   eventListAt,
   NOISE_ACTIVE_EVENTS,
   parseEventKey,
+  synchronizeXYEventTimes,
+  type EventTimeChange,
   type EventSession,
 } from "./eventTracks.ts";
 
@@ -169,6 +171,7 @@ export function transformEvents(
 ): void {
   const updates = new Map<string, JudgeLineEvent[]>();
   const linked = new Map<string, JudgeLineEvent>();
+  const timeChanges: EventTimeChange[] = [];
   for (const { type, index, event } of selectedEvents(session)) {
     let track = updates.get(type);
     if (!track) {
@@ -184,6 +187,12 @@ export function transformEvents(
       next = alignShaderParameters(next);
     }
     track[index] = next;
+    if (
+      Math.abs(beatValue(next.startTime) - beatValue(event.startTime)) >= 1e-9 ||
+      Math.abs(beatValue(next.endTime) - beatValue(event.endTime)) >= 1e-9
+    ) {
+      timeChanges.push({ type, before: event, after: next });
+    }
     const link = Number(event.linkgroup ?? 0);
     if (link > 0 && type !== "paintEvents") {
       linked.set(`${type}:${link}`, next);
@@ -214,6 +223,7 @@ export function transformEvents(
     }
     updates.set(type, events);
   }
+  synchronizeXYEventTimes((type) => eventList(session, type), updates, timeChanges);
   if (updates.size) {
     commitEventLists(session, label, updates);
   }
