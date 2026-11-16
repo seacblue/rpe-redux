@@ -666,7 +666,7 @@ async function autoDownload(release: GithubRelease): Promise<void> {
 }
 
 /** Ask whether a verified package should restart now or install on the next close. */
-async function promptForPreparedUpdate(release: GithubRelease): Promise<void> {
+export async function promptForPreparedUpdate(release: GithubRelease): Promise<void> {
   if (
     state.preparedVersion !== release.version ||
     state.phase === "scheduled" ||

@@ -8,14 +8,14 @@ import {
 
 const release = { version: "1.0.6" };
 
-test("the update badge hides after the package has been downloaded", () => {
+test("the update badge stays available until the restart choice is made", () => {
   assert.equal(
     shouldShowUpdateBadge({ available: true, latest: release, phase: "available" }),
     true,
   );
   assert.equal(
     shouldShowUpdateBadge({ available: true, latest: release, phase: "downloaded" }),
-    false,
+    true,
   );
   assert.equal(
     shouldShowUpdateBadge({ available: true, latest: release, phase: "scheduled" }),

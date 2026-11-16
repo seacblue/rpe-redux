@@ -21,7 +21,6 @@ export function shouldShowUpdateBadge(
   return (
     state.available &&
     state.latest !== null &&
-    state.phase !== "downloaded" &&
     state.phase !== "scheduled" &&
     state.phase !== "installed"
   );

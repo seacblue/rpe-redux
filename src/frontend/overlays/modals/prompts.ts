@@ -58,6 +58,8 @@ export function requestConfirm(
   options: PromptMessage & {
     label?: string;
     cancelLabel?: string;
+    /** Prevent an outside click from dismissing a confirmation that must be answered. */
+    dismissOnScrim?: boolean;
     /** Marks an answer that discards data, so its button carries the danger surface. */
     destructive?: boolean;
     signal?: AbortSignal;
@@ -87,6 +89,7 @@ export function requestConfirm(
       className: "redux-confirm",
       closeButton: false,
       role: "alertdialog",
+      dismissOnScrim: options.dismissOnScrim,
       onClose: () => settle(false),
       priority: options.priority,
       actions: createElement(PromptActions, {
