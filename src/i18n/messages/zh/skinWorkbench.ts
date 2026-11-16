@@ -85,7 +85,7 @@ export default {
   "settings.skin.export.filter": "皮肤资源包",
   "settings.skin.export.incomplete.title": "皮肤素材不完整",
   "settings.skin.export.incomplete.description":
-    "以下部分未填写：{parts}。导出时会从 Built-in 或第一个可用皮肤补齐。",
+    "以下部分未填写：{parts}。导出时会从内置皮肤或第一个可用皮肤补齐。",
   "settings.skin.export.incomplete.confirm": "继续导出",
   "settings.skin.export.incomplete.cancel": "取消",
   "settings.skin.export.unresolved.title": "部分皮肤素材无法导出",

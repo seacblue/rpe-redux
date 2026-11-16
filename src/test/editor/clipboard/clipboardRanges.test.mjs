@@ -14,6 +14,8 @@ import {
   pasteObjects,
 } from "../../../core/edit/clipboard/operations.ts";
 import { createHistoryTravel } from "../../../core/edit/operations/editing.ts";
+import { applyChartTransaction } from "../../../core/edit/transaction/preview.ts";
+import { setLanguage } from "../../../i18n/index.ts";
 
 /** A chart with one line holding the supplied notes and move-X events. */
 function chartWith(notes, events) {
@@ -93,4 +95,24 @@ test("history travel reveals the successful entry range only", () => {
     { start: 12, end: 12 },
     { start: 12, end: 12 },
   ]);
+});
+
+test("history travel resolves dynamic operation labels before notifying", () => {
+  setLanguage("zh");
+  const session = new EditorSession(chartWith([], []));
+  applyChartTransaction(session, {
+    label: "editor.commands.multiEdit.operation.by",
+    metadata: { name: "changed" },
+  });
+  const messages = [];
+  const travel = createHistoryTravel({
+    getSession: () => session,
+    cancelPlacement: () => {},
+    notify: (message) => messages.push(message),
+  });
+
+  travel.travel("undo");
+
+  assert.equal(messages.at(-1), "撤销：By，增减");
+  setLanguage("en");
 });

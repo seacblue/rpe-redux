@@ -230,7 +230,7 @@ export default {
     "Chart opened, but {name} was not found; choose the music by hand. Files outside the chart folder are not loaded by default.",
   "editor.app.status.savedTo": "Saved to {path}",
   "editor.app.status.savedToLibrary": "Saved to the chart library: {name}",
-  "editor.app.status.savedWithPendingChanges": "Saved; later edits are not saved yet",
+  "editor.app.status.savedWithPendingChanges": "Saved successfully",
   "editor.app.transport.pause": "Pause",
   "editor.app.transport.play": "Play",
 

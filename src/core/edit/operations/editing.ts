@@ -6,7 +6,7 @@
  * current editor focus surface. Nothing is connected while the shell is at the
  * start page, and every operation here does nothing then.
  */
-import { t } from "../../../i18n/index.ts";
+import { t, tRaw } from "../../../i18n/index.ts";
 import type { HistoryBeatRange } from "../session/history.ts";
 import type { EditorSession } from "../session/session.ts";
 import { selectiveUndoLatest, type SelectiveUndoResult } from "../session/selectiveUndo.ts";
@@ -95,7 +95,7 @@ export function createHistoryTravel({
     notify(
       t("editor.app.notice.travel", {
         action: direction === "undo" ? t("common.action.undo") : t("common.action.redo"),
-        label: entry.label,
+        label: tRaw(entry.label),
       }),
       "success",
     );

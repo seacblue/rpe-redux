@@ -31,7 +31,7 @@ import {
   type MultiEditKind,
 } from "../../../../../core/edit/multiEdit/parameters.ts";
 import { PREFERENCE_SECTIONS, preferenceStorage } from "../../../../../core/state/preferences.ts";
-import { t } from "../../../../../i18n/index.ts";
+import { t, tRaw } from "../../../../../i18n/index.ts";
 import type {
   MultiEditFormHandle,
   MultiEditFormModule,
@@ -53,7 +53,9 @@ const OPERATION_LABELS: Readonly<Record<string, string>> = {
 
 /** Localized recipe name for the current operation. */
 function recipeName(values: Pick<MultiEditFormValues, "operation">): string {
-  return OPERATION_LABELS[values.operation] ?? "editor.commands.multiEdit.error.unknownOperation";
+  return tRaw(
+    OPERATION_LABELS[values.operation] ?? "editor.commands.multiEdit.error.unknownOperation",
+  );
 }
 
 /** Compares two batch items by their serialized form. */

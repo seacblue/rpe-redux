@@ -132,7 +132,7 @@ export default {
   "workspace.history.undo": "撤销历史",
   "workspace.history.redo": "重做分支",
   "workspace.history.affected": "影响 {count} 个对象",
-  "workspace.history.revert": "撤回到这一步",
+  "workspace.history.revert": "回退到这一步",
   "workspace.history.collaborativeUndo": "协作撤销",
   "workspace.history.undoUnavailable": "房间里没有可撤销的本人编辑。",
   "workspace.history.undoConflict": "无法撤销，这些路径已被修改：{paths}",
@@ -269,7 +269,7 @@ export default {
   "workspace.collaboration.serverPortPlaceholder": "例如 47831",
   "workspace.collaboration.secureProtocol": "启用安全协议",
   "workspace.collaboration.serverUrlHint":
-    "内网托管会在本机监听一个协作服务端口。同一局域网内的成员可以通过内网地址加入；如需跨网络访问，请使用 VPN、路由器端口转发或内网穿透服务，将此端口映射到其他成员可以访问的地址。请确保网络转发支持 WebSocket，并让加入者使用映射后的地址和端口。我们不会为您自动配置 NAT、防火墙或内网穿透。",
+    "内网托管会在本机监听一个协作服务端口。同一局域网内的成员可以通过内网地址加入；如需跨网络访问，请使用 VPN、路由器端口转发或内网穿透服务，将此端口映射到其他成员可以访问的地址。请确保网络转发支持 WebSocket，并让加入者使用映射后的地址和端口。我们不会为你自动配置 NAT、防火墙或内网穿透。",
   "workspace.collaboration.changePassword": "更新房间密码",
   "workspace.collaboration.changePasswordHint":
     "设置新的房间密码。已在房间里的成员不会被断开，但旧邀请链接会失效。",
@@ -366,7 +366,7 @@ export default {
   "workspace.collaboration.hostMustClose": "房主不能离开房间，请关闭房间。",
   "workspace.collaboration.roomLimit": "这台设备的协作房间数量已达上限，请先关闭旧房间后重试。",
   "workspace.collaboration.roomFull": "房间人数已满。",
-  "workspace.collaboration.removed": "您已被请离房间。",
+  "workspace.collaboration.removed": "你已被移出房间。",
   "workspace.collaboration.left": "已离开房间，临时房间谱面已删除。",
   "workspace.collaboration.connectionTimeout": "连接联机服务器超时，请检查地址和网络。",
   "workspace.collaboration.handshakeTimeout": "联机服务器已接受连接，但没有及时响应，请重试。",
@@ -437,9 +437,9 @@ export default {
     "工具栏决定显示内容和时间划分；时间线适合精确选择，画布适合观察和摆放。",
   "guide.section.overview.tip3":
     "大多数编辑都可以撤销。导出前可以使用 Ctrl+Z、历史面板和谱面错误检查。",
-  "guide.section.inspector.title": "Inspector 基础",
+  "guide.section.inspector.title": "检查器基础",
   "guide.section.inspector.summary":
-    "Inspector 是右侧随上下文变化的属性面板，会根据选中的音符、事件、判定线或工具切换内容。",
+    "检查器是右侧随上下文变化的属性面板，会根据选中的音符、事件、判定线或工具切换内容。",
   "guide.section.inspector.tip1":
     "没有选中对象时，可以通过面板卡片打开谱面信息、时值、判定线、资源、历史等工作流。",
   "guide.section.inspector.tip2":
@@ -447,7 +447,7 @@ export default {
   "guide.section.inspector.tip3":
     "字段由所属功能负责提交；无效值会保留并显示原因，不会悄悄修改谱面。",
   "guide.section.inspector.tip4":
-    "Inspector 和侧边栏使用同一套注册入口，从任意位置打开的面板行为都一致。",
+    "检查器和侧边栏使用同一套注册入口，从任意位置打开的面板行为都一致。",
   "guide.section.home.title": "首页与谱面库",
   "guide.section.home.summary":
     "在首页新建空白谱面、导入已有 RPE 谱面、重新打开最近作品，并管理本地谱面库。",
@@ -483,10 +483,10 @@ export default {
   "guide.section.stage.tip2": "拖动判定线控制点，并通过判定线信息覆盖层确认当前操作的是哪一条线。",
   "guide.section.stage.tip3":
     "采样工具会显示起点、终点和缓动；拖动辅助线时按住 Shift 可以临时隐藏辅助线。",
-  "guide.section.stage.tip4": "曲线预览、批量控制、音频分析和 Extension 覆盖层也会显示在画布中。",
+  "guide.section.stage.tip4": "曲线预览、批量控制、音频分析和扩展覆盖层也会显示在画布中。",
   "guide.section.metadata.title": "谱面信息",
   "guide.section.metadata.summary":
-    "谱面信息是文档的第一个 Inspector 目的地，包含身份、作者信息、难度、时值和媒体引用。",
+    "谱面信息是文档的第一个检查器目的地，包含身份、作者信息、难度、时值和媒体引用。",
   "guide.section.metadata.tip1":
     "尽早填写曲名、曲师、谱师、难度和时值，让导出文件和谱面库卡片更容易识别。",
   "guide.section.metadata.tip2":
@@ -504,7 +504,7 @@ export default {
   "guide.section.notes.tip4": "多选编辑可以对一组对象应用同一属性变化；大范围提交前请先检查预览。",
   "guide.section.events.title": "事件编辑",
   "guide.section.events.summary":
-    "事件在一段拍子范围内改变判定线属性和视觉效果；Inspector 负责编辑选中事件及其缓动。",
+    "事件在一段拍子范围内改变判定线属性和视觉效果；检查器负责编辑选中事件及其缓动。",
   "guide.section.events.tip1":
     "先设置开始和结束拍，再调整数值；范围必须保持有序并处于谱面可用时间内。",
   "guide.section.events.tip2": "可以选择缓动预设，也可以编辑曲线来制作自定义的加速过程。",
@@ -514,7 +514,7 @@ export default {
   "guide.section.lines.summary":
     "判定线负责游玩区域的几何和事件。“判定线”抽屉编辑单条判定线，“多线编辑”用于并排比较多条线。",
   "guide.section.lines.tip1":
-    "使用工具栏的判定线选择器跳转；Inspector 中的判定线表单是该判定线属性的编辑入口。",
+    "使用工具栏的判定线选择器跳转；检查器中的判定线表单是该判定线属性的编辑入口。",
   "guide.section.lines.tip2": "多线编辑适合批量应用表达式，或不离开当前谱面就比较多条线的数值。",
   "guide.section.lines.tip3":
     "保持判定线顺序和父子关系清晰；一处视觉变化可能影响挂在该线上的全部音符。",
@@ -524,7 +524,7 @@ export default {
   "guide.section.timing.tip2": "自动测时适合作为起点；放置密集配置前，请结合实际音频试听并核对。",
   "guide.section.timing.tip3":
     "修改时值会改变拍子的解释，不会直接改写音符拍子。大范围调整前建议先保存一个检查点。",
-  "guide.section.assets.title": "资源库",
+  "guide.section.assets.title": "素材库",
   "guide.section.assets.summary":
     "“资源”抽屉整理谱面图片、音频、皮肤和其他资源，并显示选中资源的属性。",
   "guide.section.assets.tip1": "在左侧列表选择资源，在属性列检查它的用途、路径或谱面引用。",
@@ -575,13 +575,12 @@ export default {
   "guide.section.audio.tip2": "音频分析只是视觉参考；提交密集音符前仍应结合播放和时值点确认。",
   "guide.section.audio.tip3": "音频显示异常时先检查谱面信息和资源面板；修改音符不能修复缺失资源。",
   "guide.section.scripts.title": "扩展与脚本",
-  "guide.section.scripts.summary":
-    "“脚本”面板运行已安装 Extension 提供的动作，并显示动作声明的参数。",
-  "guide.section.scripts.tip1": "运行前先阅读 Extension 的说明和所请求的能力。",
+  "guide.section.scripts.summary": "“脚本”面板运行已安装扩展提供的动作，并显示动作声明的参数。",
+  "guide.section.scripts.tip1": "运行前先阅读扩展的说明和所请求的能力。",
   "guide.section.scripts.tip2":
     "参数表单会在边界校验；动作失败时，除非动作报告已提交编辑，否则谱面不会被修改。",
   "guide.section.scripts.tip3":
-    "Extension 的安装、启用和权限在设置中管理；脚本面板是执行入口，不是包管理器。",
+    "扩展的安装、启用和权限在设置中管理；脚本面板是执行入口，不是包管理器。",
   "guide.section.ai.title": "AI 活动",
   "guide.section.ai.summary":
     "AI 活动面板展示通过本地代码单元桥接发送的请求，让编辑器侧的审计记录可见。",
@@ -615,7 +614,7 @@ export default {
     "应用或服务恢复草稿时，先与上次保存的项目比较，再决定是否替换已知正常的文件。",
   "guide.section.settings.title": "设置与外观",
   "guide.section.settings.summary":
-    "设置控制应用行为、编辑器密度、快捷键、音频、Extension、语言、主题和帮助入口。",
+    "设置控制应用行为、编辑器密度、快捷键、音频、扩展、语言、主题和帮助入口。",
   "guide.section.settings.tip1":
     "使用设置搜索快速定位选项；每个描述都会说明它影响首页、编辑器还是运行时。",
   "guide.section.settings.tip2":

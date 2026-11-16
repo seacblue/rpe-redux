@@ -9,7 +9,7 @@ export default {
   "editorPanels.timingDetection.newChart.skip": "本次跳过",
   "editorPanels.timingDetection.button": "自动检测 BPM 与偏移值",
   "editorPanels.timingDetection.title": "检测 BPM 与偏移值",
-  "editorPanels.timingDetection.intro": "检测到 BPM 与偏移值，已为您填入，您可以调整至合适的数值。",
+  "editorPanels.timingDetection.intro": "检测到 BPM 与偏移值，已为你填入，你可以调整至合适的数值。",
   "editorPanels.timingDetection.analyzing": "正在分析节拍…",
   "editorPanels.timingDetection.analyzingHint": "正在分析整首曲子的主节拍。",
   "editorPanels.timingDetection.notFound": "查不到清晰的节拍，请手动填写 BPM 与偏移值。",

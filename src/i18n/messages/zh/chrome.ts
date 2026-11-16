@@ -32,7 +32,7 @@ export default {
   "chrome.toolbar.noiseRenderingUnavailable": "实际噪域渲染不可用，请切换到简化渲染以继续编辑。",
   "chrome.toolbar.previewBatchUnavailable":
     "GPU 音符批量渲染不可用，预览正在使用较慢的 Canvas 路径；密集谱面可能会掉帧。",
-  "chrome.toolbar.noiseRenderingHint": "用纯色填充代替动态噪域，并关闭 Shader",
+  "chrome.toolbar.noiseRenderingHint": "用纯色填充代替动态噪域，并关闭着色器",
   "chrome.toolbar.noiseRenderingSimple": "简化渲染",
   "chrome.toolbar.lineField": "判定线编号",
   "chrome.toolbar.lineSelection": "选择判定线",
@@ -53,8 +53,8 @@ export default {
   "chrome.performanceHud.paintFps": "绘制 FPS",
   "chrome.performanceHud.fpsGraph": "FPS 图",
   "chrome.performanceHud.drawTime": "绘制耗时",
-  "chrome.performanceHud.timelineDrawTime": "Timeline 绘制",
-  "chrome.performanceHud.previewDrawTime": "Preview 绘制",
+  "chrome.performanceHud.timelineDrawTime": "时间线绘制",
+  "chrome.performanceHud.previewDrawTime": "预览绘制",
   "chrome.performanceHud.previewLineDrawTime": "判定线绘制",
   "chrome.performanceHud.previewNoteDrawTime": "音符绘制",
   "chrome.performanceHud.previewEffectsTime": "打击特效",
@@ -219,8 +219,8 @@ export default {
   "chrome.menu.file.closeDocument": "返回谱面库",
   "chrome.menu.file.closeDocumentHint": "返回谱面库前检查未保存修改",
   "chrome.menu.file.titleScreen": "显示谱面库",
-  "chrome.menu.edit.undoHint": "回退上一次谱面修改",
-  "chrome.menu.edit.redoHint": "恢复刚刚撤销的修改",
+  "chrome.menu.edit.undoHint": "撤销上一次谱面修改",
+  "chrome.menu.edit.redoHint": "重做刚刚撤销的修改",
 
   "chrome.menu.edit.pasteHint": "在当前时间位置粘贴剪贴板",
 

@@ -218,7 +218,7 @@ export default {
     "谱面已打开，未找到音乐：{name}，请手动选择音乐。文档目录外的文件默认不会加载。",
   "editor.app.status.savedTo": "已保存 {path}",
   "editor.app.status.savedToLibrary": "已保存到谱面库：{name}",
-  "editor.app.status.savedWithPendingChanges": "已保存；后续修改尚未保存",
+  "editor.app.status.savedWithPendingChanges": "保存成功",
   "editor.app.transport.pause": "暂停",
   "editor.app.transport.play": "播放",
 
@@ -235,7 +235,7 @@ export default {
   "editor.home.field.groupLabel": "分组",
   "editor.home.field.nameLabel": "名称",
   "editor.home.removeBody":
-    "确认删除吗？这将会从谱面库中删除该谱面与自动保存快照，且该操作无法撤回！",
+    "确认删除吗？这将会从谱面库中删除该谱面与自动保存快照，且该操作无法撤销！",
   "editor.home.removeTitle": "删除谱面",
   "editor.home.ungrouped": "未分组",
   "editor.skin.loadFailed": "音符皮肤载入失败：{message}；已保留上次有效皮肤。",
