@@ -35,7 +35,7 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
-import { offscreenCueDistance, offscreenCueSides } from "./noteOffscreenCue.ts";
+import { offscreenCueAlpha, offscreenCueDistance, offscreenCueSides } from "./noteOffscreenCue.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -205,12 +205,21 @@ function drawNoteTimelineCues(
           if (distance === null) {
             continue;
           }
-          const alpha = 0.2 + Math.min(1, distance / viewportWidth) * 0.3;
+          const alpha = offscreenCueAlpha(distance, viewportWidth);
           context.globalAlpha = alpha;
           const edgeLeft = side === "left" ? panelLeft : panelRight - cueWidth;
           const visibleLeft = Math.max(0, edgeLeft);
           const visibleRight = Math.min(width, edgeLeft + cueWidth);
           if (visibleRight > visibleLeft) {
+            const gradient = context.createLinearGradient(edgeLeft, 0, edgeLeft + cueWidth, 0);
+            if (side === "left") {
+              gradient.addColorStop(0, cueColor);
+              gradient.addColorStop(1, "transparent");
+            } else {
+              gradient.addColorStop(0, "transparent");
+              gradient.addColorStop(1, cueColor);
+            }
+            context.fillStyle = gradient;
             context.fillRect(visibleLeft, top, visibleRight - visibleLeft, cueHeight);
           }
         }

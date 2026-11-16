@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  offscreenCueAlpha,
   offscreenCueDistance,
   offscreenCueSides,
 } from "../../../frontend/screens/editor/workspace/timeline/notes/noteOffscreenCue.ts";
@@ -11,6 +12,11 @@ test("a scaled note body can produce a cue on either timeline edge", () => {
   assert.deepEqual(offscreenCueSides(212, 20, 0, 200), ["right"]);
   assert.equal(offscreenCueDistance(-12, 20, 0, 200, "left"), 2);
   assert.equal(offscreenCueDistance(212, 20, 0, 200, "right"), 2);
+  assert.equal(offscreenCueAlpha(0, 200), 0);
+  assert(offscreenCueAlpha(1, 200) > 0);
+  assert(offscreenCueAlpha(1, 200) < 0.2);
+  assert.equal(offscreenCueAlpha(16, 200), 0.2);
+  assert.equal(offscreenCueAlpha(200, 200), 0.5);
 });
 
 test("a fully visible note produces no cue", () => {
