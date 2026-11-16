@@ -123,6 +123,43 @@ function drawNoteLanesInto(
   const chartRight = cameraX + NOTE_X_MAX;
   const firstGrid = Math.max(0, Math.ceil(chartLeft / grid.spacing - grid.first));
   const lastGrid = Math.min(grid.lineCount - 1, Math.floor(chartRight / grid.spacing - grid.first));
+  // Paint authored boundaries first so the camera-centre guide keeps its
+  // configured centre colour when a boundary happens to cross it.
+  if (Math.abs(cameraX) > 1e-7) {
+    const palette = receiver.cache.palette() ?? readCanvasPalette();
+    context.save();
+    context.strokeStyle = palette.foreground;
+    context.shadowColor = palette.foreground;
+    context.shadowBlur = 5;
+    context.globalAlpha = 0.55;
+    context.lineWidth = 1;
+    for (let panel = firstPanel; panel <= Math.min(lastPanel, panelCount - 1); panel++) {
+      const lineIndex = targetLines[panel];
+      if (lineIndex === undefined) {
+        continue;
+      }
+      const panelLeft = panel * panelStride - panelOffset;
+      const panelRight = panelLeft + panelWidth;
+      const horizontalForBoundary = (boundary: number): number => {
+        const local = inset + ((boundary - cameraX - NOTE_X_MIN) / NOTE_X_SPAN) * contentWidth;
+        return panelLeft + Math.max(0, Math.min(panelWidth, local));
+      };
+      const boundaryPositions = [
+        horizontalForBoundary(NOTE_X_MIN),
+        horizontalForBoundary(NOTE_X_MAX),
+      ];
+      for (const horizontal of boundaryPositions) {
+        if (horizontal <= panelLeft || horizontal >= panelRight) {
+          continue;
+        }
+        context.beginPath();
+        context.moveTo(horizontal + 0.5, 0);
+        context.lineTo(horizontal + 0.5, height);
+        context.stroke();
+      }
+    }
+    context.restore();
+  }
   for (let panel = firstPanel; panel <= Math.min(lastPanel, panelCount - 1); panel++) {
     const lineIndex = targetLines[panel];
     if (lineIndex === undefined) {
@@ -161,41 +198,6 @@ function drawNoteLanesInto(
         receiver.appearance.nearbyGuidesOnly === true,
       );
     }
-  }
-  if (Math.abs(cameraX) > 1e-7) {
-    const palette = receiver.cache.palette() ?? readCanvasPalette();
-    context.save();
-    context.strokeStyle = palette.foreground;
-    context.shadowColor = palette.foreground;
-    context.shadowBlur = 5;
-    context.globalAlpha = 0.55;
-    context.lineWidth = 1;
-    for (let panel = firstPanel; panel <= Math.min(lastPanel, panelCount - 1); panel++) {
-      const lineIndex = targetLines[panel];
-      if (lineIndex === undefined) {
-        continue;
-      }
-      const panelLeft = panel * panelStride - panelOffset;
-      const panelRight = panelLeft + panelWidth;
-      const horizontalForBoundary = (boundary: number): number => {
-        const local = inset + ((boundary - cameraX - NOTE_X_MIN) / NOTE_X_SPAN) * contentWidth;
-        return panelLeft + Math.max(0, Math.min(panelWidth, local));
-      };
-      const boundaryPositions = [
-        horizontalForBoundary(NOTE_X_MIN),
-        horizontalForBoundary(NOTE_X_MAX),
-      ];
-      for (const horizontal of boundaryPositions) {
-        if (horizontal <= panelLeft || horizontal >= panelRight) {
-          continue;
-        }
-        context.beginPath();
-        context.moveTo(horizontal + 0.5, 0);
-        context.lineTo(horizontal + 0.5, height);
-        context.stroke();
-      }
-    }
-    context.restore();
   }
   context.lineWidth = 1;
 }

@@ -19,7 +19,6 @@ export function NoteTimelineRangeOverlay() {
   const [pressedDirection, setPressedDirection] = useState<CameraDirection | null>(null);
   const holdDelay = useRef<number | null>(null);
   const holdRepeat = useRef<number | null>(null);
-  const didRepeat = useRef(false);
   const skipNextClick = useRef(false);
   const cameraX = Number(
     useSyncExternalStore(
@@ -47,11 +46,12 @@ export function NoteTimelineRangeOverlay() {
     }
     event.currentTarget.setPointerCapture?.(event.pointerId);
     clearHoldTimers();
-    didRepeat.current = false;
-    skipNextClick.current = false;
+    // A pointer press is itself the first move; suppress the native click so
+    // a short press does not move twice.
+    skipNextClick.current = true;
+    viewControls.moveCameraX(direction);
     setPressedDirection(direction);
     holdDelay.current = window.setTimeout(() => {
-      didRepeat.current = true;
       viewControls.moveCameraX(direction);
       holdRepeat.current = window.setInterval(
         () => viewControls.moveCameraX(direction),
@@ -62,13 +62,9 @@ export function NoteTimelineRangeOverlay() {
 
   const endHold = (cancelled = false): void => {
     clearHoldTimers();
-    if (didRepeat.current && !cancelled) {
-      skipNextClick.current = true;
-    }
     if (cancelled) {
       skipNextClick.current = false;
     }
-    didRepeat.current = false;
     setPressedDirection(null);
   };
 
