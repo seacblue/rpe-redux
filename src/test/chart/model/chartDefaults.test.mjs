@@ -10,6 +10,12 @@ test("created judge lines carry the bundled line texture", () => {
   assert.equal(createChart().judgeLineList?.[0]?.Texture, "line.png");
 });
 
+test("new judge lines start with zero alpha", () => {
+  const alphaEvent = createLine("Line").eventLayers?.[0]?.alphaEvents?.[0];
+  assert.equal(alphaEvent?.start, 0);
+  assert.equal(alphaEvent?.end, 0);
+});
+
 test("a new document starts with the starter judge lines and no notes", () => {
   const chart = createStarterChart();
   assert.equal(chart.judgeLineList?.length, STARTER_LINE_COUNT);
