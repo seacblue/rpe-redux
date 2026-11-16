@@ -90,6 +90,12 @@ npm run dev:collab           # standalone collaboration room server
 
 `npm run check` is the gate; [Testing](testing.md) explains what each part covers, how to run a single test, and where fixtures live.
 
+### Changesets and release notes
+
+Every product pull request adds a `.changeset/*.md` file. The file declares the `rpe-redux` bump and contains both Chinese and English sections with the same category-and-list shape used by the root changelog. The PR workflow rejects a non-release pull request without a valid bilingual Changeset; the generated release-preparation PR is the only exception because it consumes the pending files.
+
+Use `npm run changeset` to create a file, `npm run check:changeset` to validate active files, and `npm run check:changelog` to validate the current release notes. Before versioning a release, run `npm run release:changelog -- --version <version>`; it merges all active Changesets into the bilingual `CHANGELOG.md`. Then run `npx changeset version` to apply the package bump and remove the consumed Changesets, and align `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` to the same version. The release workflow validates the matching changelog section again before it creates a GitHub Release.
+
 ### Publishing a desktop release
 
 Every path below produces the same GitHub Release with the same signed assets. The prepare job creates the Release when it does not exist yet and reuses it when it does, so re-running a release is safe: existing assets are replaced with `--clobber`.

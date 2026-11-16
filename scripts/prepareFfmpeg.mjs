@@ -49,12 +49,12 @@ const plans = {
   "windows-x86": {
     label: "n8.1.3 x86",
     binary: "ffmpeg.exe",
-    directory: "ffmpeg-n8.1.3-32-g760d10603e-win32-gpl-8.1",
+    directory: "ffmpeg-n8.1.3-35-gf1acb0a266-win32-gpl-8.1",
     url:
       "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/" +
-      "autobuild-2026-11-01-17-50/ffmpeg-n8.1.3-32-g760d10603e-win32-gpl-8.1.zip",
-    archiveHash: "66f276bb20c5113e78c9d51577980b00b0d75b01a645fffc862ae364db8878c5",
-    binaryHash: "1bb24af0836b5c3bedd2aaef6094f8418e3d774590d107548890b104f5541485",
+      "autobuild-2026-11-15-18-40/ffmpeg-n8.1.3-35-gf1acb0a266-win32-gpl-8.1.zip",
+    archiveHash: "c020e1fb07f11bde0b0b5b2807b2aae84ec7531ce3e3d23a265da8061b352fc3",
+    binaryHash: "941a1476846dce9d9e286b6d0b5df87e83f6e9f49241334fcc59cf3a86cd3dae",
     licenseFile: "LICENSE.txt",
     readmeFile: null,
     cache: join(
@@ -62,7 +62,7 @@ const plans = {
       ".local-tools",
       "ffmpeg",
       "x86",
-      "ffmpeg-n8.1.3-32-g760d10603e-win32-gpl-8.1.zip",
+      "ffmpeg-n8.1.3-35-gf1acb0a266-win32-gpl-8.1.zip",
     ),
   },
   "linux-x64": {

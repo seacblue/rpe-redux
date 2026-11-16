@@ -48,6 +48,25 @@ jobs:
             echo "src_tauri=false" >> "$GITHUB_OUTPUT"
           fi
 
+  changeset:
+    name: Changeset
+    # The generated release-preparation PR consumes the active changesets, so
+    # it is the only pull request exempt from adding another one.
+    if: github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'chore(release):')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a bilingual Changeset
+        env:
+          CHANGESET_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CHANGESET_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/checkChangesets.mjs --require
+
   check:
     runs-on: windows-latest
     steps:

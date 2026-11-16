@@ -78,6 +78,7 @@ jobs:
           if [[ "$failed" -ne 0 ]]; then
             exit 1
           fi
+          node scripts/checkChangelog.mjs "$version"
           echo "Releasing version $version."
 
       - name: Create or reuse the GitHub Release
