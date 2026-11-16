@@ -37,6 +37,7 @@ import {
 } from "../../global/chart/noise/noiseLine.ts";
 import { lineNoiseConflicts } from "../../global/chart/noise/lineNoiseConflicts.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
+import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
 
 /** Which object kind the inspector and the keyboard act on. */
 export type EditorFocus = "notes" | "events";
@@ -53,6 +54,8 @@ function collaborationRequestId(): string {
 export type MultiLineMode = "notes" | "events";
 /** Selection intent: no object, a normal single pick, or a multi-select gesture. */
 export type SelectionMode = "none" | "single" | "multi";
+/** Identifies whether a session publication changes chart data or only selection state. */
+export type SessionChangeKind = "document" | "selection";
 /** The note field is single, merged multi-line, or split multi-line. */
 export type NoteTimelineMode = "single" | "multi_merged" | "multi";
 /** The event field is single or multi-line. */
@@ -71,6 +74,8 @@ export type SessionCommitOptions = HistoryRecordOptions & {
    * so the commit boundary keeps its check whenever a hook is registered.
    */
   validatedNoise?: boolean;
+  /** Internal note deltas supplied by the transaction planner for render caches. */
+  noteChangeHints?: readonly NoteChangeHint[];
 };
 
 /** One note addressed by the line it lives on. */
@@ -102,6 +107,8 @@ export class EditorSession extends EventTarget {
   selection: Set<number>;
   /** Bumped by pointer selection gestures so pane routing runs even when the set is unchanged. */
   selectionRevision: number;
+  /** Bumped on every session publication so retained selection projections can skip deep walks. */
+  selectionProjectionRevision: number;
   /** The most recent rectangle selection's target, including a one-item result. */
   marqueeSelection: "notes" | "events" | null;
   /** Whether the active object selection came from a single click or a multi-select gesture. */
@@ -155,6 +162,33 @@ export class EditorSession extends EventTarget {
   collaborationActorId = "";
   private mutationGate: SessionMutationGate | null = null;
   private fingerprintWarm?: Promise<string>;
+  private selectionNotificationDepth = 0;
+  private pendingSelectionNotification = false;
+  /** Judge-line slots changed by the last document publication. */
+  lastChangedLineIndexes: readonly number[] = [];
+  /** Note-level deltas from the last document publication, when known. */
+  lastNoteChangeHints: readonly NoteChangeHint[] = [];
+
+  /** Return the line slots whose object identity changed between two snapshots. */
+  private changedLineIndexes(
+    before: Chart,
+    next: Chart,
+    hint?: readonly number[],
+  ): readonly number[] {
+    if (hint) {
+      return Object.freeze([...hint]);
+    }
+    const beforeLines = before.judgeLineList ?? [];
+    const nextLines = next.judgeLineList ?? [];
+    const changed: number[] = [];
+    const count = Math.max(beforeLines.length, nextLines.length);
+    for (let index = 0; index < count; index += 1) {
+      if (beforeLines[index] !== nextLines[index]) {
+        changed.push(index);
+      }
+    }
+    return Object.freeze(changed);
+  }
 
   /** Runtime editing switches kept with this editor session; unset values use caller defaults. */
   declare cutDensity: number;
@@ -180,6 +214,7 @@ export class EditorSession extends EventTarget {
     this.lineIndex = 0;
     this.selection = new Set();
     this.selectionRevision = 0;
+    this.selectionProjectionRevision = 0;
     this.marqueeSelection = null;
     this.selectionMode = "none";
     this.clipboard = [];
@@ -420,9 +455,48 @@ export class EditorSession extends EventTarget {
     return this.fingerprintWarm;
   }
 
-  /** Dispatches the session's change event. */
-  notify(): void {
-    this.dispatchEvent(new Event("change"));
+  /** Dispatches the session's change event with the smallest useful publication kind. */
+  notify(kind: SessionChangeKind = "document"): void {
+    this.selectionProjectionRevision += 1;
+    const event = new CustomEvent("change", { detail: { kind } });
+    const probe = (
+      globalThis as typeof globalThis & {
+        __reduxSessionNotifyTimingProbe?: (sample: { durationMs: number }) => void;
+      }
+    ).__reduxSessionNotifyTimingProbe;
+    if (!probe) {
+      this.dispatchEvent(event);
+      return;
+    }
+    const started = performance.now();
+    this.dispatchEvent(event);
+    probe({ durationMs: performance.now() - started });
+  }
+
+  /** Begin coalescing selection-only notifications during a pointer gesture. */
+  beginSelectionNotificationBatch(): void {
+    this.selectionNotificationDepth += 1;
+  }
+
+  /** End a selection notification batch and publish its final state once. */
+  endSelectionNotificationBatch(): void {
+    if (this.selectionNotificationDepth === 0) {
+      return;
+    }
+    this.selectionNotificationDepth -= 1;
+    if (this.selectionNotificationDepth === 0 && this.pendingSelectionNotification) {
+      this.pendingSelectionNotification = false;
+      this.notify("selection");
+    }
+  }
+
+  /** Publish a selection-only change immediately or at the end of its gesture batch. */
+  notifySelection(): void {
+    if (this.selectionNotificationDepth > 0) {
+      this.pendingSelectionNotification = true;
+      return;
+    }
+    this.notify("selection");
   }
 
   /** Installs the gate that serializes UI and history mutations. */
@@ -450,7 +524,7 @@ export class EditorSession extends EventTarget {
     const operation = () => {
       const changed = this.history.recordSelection(label, beforeSelection, this.selectionState());
       if (notify) {
-        this.notify();
+        this.notifySelection();
       }
       return changed;
     };
@@ -577,6 +651,17 @@ export class EditorSession extends EventTarget {
       }
     }
     const afterSelection = options.afterSelection ?? this.selectionState();
+    const changedLineIndexes = this.changedLineIndexes(
+      this.chart,
+      before.chart,
+      options.changedLineIndexes,
+    );
+    // A transaction has already checked its revisions before entering this
+    // boundary. Extension hooks may replace the chart, so only reuse those
+    // tokens when no hook can invalidate the planned fingerprint.
+    const historyOptions = beforeHook
+      ? { ...options, beforeFingerprint: undefined, afterFingerprint: undefined }
+      : options;
     const beatRange =
       options.beatRange ??
       selectionBeatRange(before.chart, afterSelection) ??
@@ -590,6 +675,7 @@ export class EditorSession extends EventTarget {
       },
       before.metadata,
       {
+        ...historyOptions,
         normalized: options.normalized && !beforeHook,
         skipValidation: options.skipValidation,
         estimatedBytes: options.estimatedBytes,
@@ -597,6 +683,8 @@ export class EditorSession extends EventTarget {
       },
     );
     if (committed) {
+      this.lastChangedLineIndexes = changedLineIndexes;
+      this.lastNoteChangeHints = options.noteChangeHints ?? [];
       this.lastEditBeatRange = beatRange ?? null;
       if (options.afterSelection) {
         restoreSelection(this, options.afterSelection);
@@ -861,6 +949,8 @@ export class EditorSession extends EventTarget {
     if (!this.history[direction]()) {
       return false;
     }
+    this.lastChangedLineIndexes = this.changedLineIndexes(source, this.chart);
+    this.lastNoteChangeHints = [];
     restoreSelection(
       this,
       sameSelection(current, from) && to ? to : remapSelection(source, this.chart, current),

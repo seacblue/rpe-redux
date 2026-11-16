@@ -103,6 +103,16 @@ import {
 } from "../../timingDetection/timingDetectionState.ts";
 import { readTimingDetectionPreference } from "../../document/lifecycle/newChartDetectionPreference.ts";
 
+/** Report one public document-open stage to the optional browser benchmark. */
+function reportDocumentOpenTiming(stage: string, durationMs: number): void {
+  const probe = (
+    globalThis as typeof globalThis & {
+      __reduxDocumentLoadTimingProbe?: (sample: { stage: string; durationMs: number }) => void;
+    }
+  ).__reduxDocumentLoadTimingProbe;
+  probe?.({ stage, durationMs });
+}
+
 /** Mutable document fields shared by the inspectors and save paths. */
 export interface WorkspaceDocumentState {
   assets: AssetMap;
@@ -215,6 +225,8 @@ export function createDocumentRuntime(options: {
    * archive open finds no RPE chart entry.
    */
   openExternalChart?: (path: string) => Promise<boolean>;
+  /** Imports a native chart into the library and opens the imported project. */
+  openFileThroughLibrary?: (path: string) => Promise<boolean>;
   session: Pick<EditorSessionRuntime, "current" | "replace">;
   /** Re-applies editor preferences a replacement session does not inherit. */
   applySessionSettings?: () => void;
@@ -436,6 +448,7 @@ export function createDocumentRuntime(options: {
     selectLine: (index) => getSession().selectLine(index),
     invalidate: options.invalidate,
     waitForFirstRender: options.waitForFirstRender,
+    reportError: options.reportError,
   });
   const documentLeases = createDocumentLeaseManager({
     library: async () => (await localService())?.library ?? null,
@@ -589,7 +602,15 @@ export function createDocumentRuntime(options: {
    */
   const openNativeChart = (path: string): Promise<void> =>
     openNativeChartPath(path, {
-      open: (target) => candidateLoader.openPath(target),
+      open: async (target) => {
+        if (options.openFileThroughLibrary) {
+          const imported = await options.openFileThroughLibrary(target);
+          if (imported) {
+            return;
+          }
+        }
+        await candidateLoader.openPath(target);
+      },
       ...(options.openExternalChart ? { importExternalChart: options.openExternalChart } : {}),
     });
   /** Ask for one chart file and open it through the native/external path. */
@@ -1115,6 +1136,7 @@ export function createDocumentRuntime(options: {
     bytes: Uint8Array,
     name: string,
   ): Promise<"loaded" | "multiple"> => {
+    const openStarted = performance.now();
     const opened = await openFiles(
       [
         {
@@ -1127,6 +1149,7 @@ export function createDocumentRuntime(options: {
       readZipOffThread,
       openChartDocumentFromBytes,
     );
+    reportDocumentOpenTiming("open.files", performance.now() - openStarted);
     if (!opened) {
       throw new Error(t("workspace.document.error.bytesMissing"));
     }
@@ -1138,6 +1161,7 @@ export function createDocumentRuntime(options: {
       }
       return "multiple";
     }
+    const loadStarted = performance.now();
     await loadCandidate(
       opened.candidates[0],
       opened.assets,
@@ -1148,6 +1172,7 @@ export function createDocumentRuntime(options: {
         await options.documents?.close();
       },
     );
+    reportDocumentOpenTiming("open.candidate", performance.now() - loadStarted);
     return "loaded";
   };
   /** Saves for the public API, returning the native result status. */

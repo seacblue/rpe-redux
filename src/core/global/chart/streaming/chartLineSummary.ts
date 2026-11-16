@@ -262,21 +262,30 @@ export function summarizeChartLineIncremental(
   previous: ChartLineSummary,
   line: JudgeLine,
   index: number,
+  previousLine?: JudgeLine,
 ): ChartLineSummary {
   const { digest, childDigests } = lineContentFingerprintParts(line);
   const notes = Array.isArray(line.notes) ? line.notes : [];
-  const layers = [...(Array.isArray(line.eventLayers) ? line.eventLayers : []), line.extended];
-  let eventCount = 0;
-  let hasShader = false;
-  for (const layer of layers) {
-    if (!isRecord(layer)) {
-      continue;
-    }
-    for (const type of EVENT_TRACKS) {
-      const events = layer[type];
-      if (Array.isArray(events)) {
-        eventCount += events.length;
-        hasShader ||= type === "paintEvents" && events.length > 0;
+  const eventSourcesUnchanged =
+    previousLine &&
+    line.eventLayers === previousLine.eventLayers &&
+    line.extended === previousLine.extended;
+  let eventCount = previous.eventCount;
+  let hasShader = (previous.flags & LINE_FLAG_SHADER) !== 0;
+  if (!eventSourcesUnchanged) {
+    const layers = [...(Array.isArray(line.eventLayers) ? line.eventLayers : []), line.extended];
+    eventCount = 0;
+    hasShader = false;
+    for (const layer of layers) {
+      if (!isRecord(layer)) {
+        continue;
+      }
+      for (const type of EVENT_TRACKS) {
+        const events = layer[type];
+        if (Array.isArray(events)) {
+          eventCount += events.length;
+          hasShader ||= type === "paintEvents" && events.length > 0;
+        }
       }
     }
   }

@@ -29,10 +29,13 @@ import { trajectoryHasRotation } from "../trajectory/curveTrajectory.ts";
 import { beatValue, isOrderedBeatRange } from "../timing/beat.ts";
 import { isPlaceholderLine } from "../streaming/chartDocument.ts";
 import { noteAlpha } from "../optionalFeatures.ts";
+import { renderDetailedProfileEnabled } from "../../../diagnostics/renderMetrics.ts";
+import { contentFingerprint } from "../chartContentHash.ts";
 import type { JudgeLine, JudgeLineEvent, LineEventValue } from "../chart.ts";
 import type { ControlPoint } from "../chart.ts";
 import type { Chart } from "../chart.ts";
 import type { TempoSource } from "../timing/events.ts";
+import type { NoteChangeHint } from "./noteChangeHints.ts";
 
 /** A point of a line control curve, tagged with the property it interpolates. */
 export type ControlCurvePoint = ControlPoint;
@@ -45,6 +48,19 @@ export const DEFAULT_LINE_COLOR = [237, 236, 176] as const;
 /** The geometric channels a line samples each frame, in `sampleChannels` order. */
 const CHANNELS = ["moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents"] as const;
 const CHANNEL_COUNT = CHANNELS.length;
+
+/** Reusable broad-phase candidates for a line whose spatial query is invariant. */
+interface VisibilityCandidateCache {
+  floor: number;
+  radius: number;
+  entries: NoteEntry[];
+}
+
+/** Retains the expensive Y-control ordering while the directory returns the same candidates. */
+interface VisibilityOrderCache {
+  candidates: NoteEntry[];
+  ordered: NoteEntry[];
+}
 
 /** Fill missing channels from `DEFAULT_LINE_COLOR` and keep finite values. */
 function normalizedColor(color: readonly number[]): number[] {
@@ -177,6 +193,33 @@ export interface VisibilityQueryStats extends VisibilityDirectoryQueryStats {
 
 export type SampledLineState = LineState;
 
+/** Low-overhead counters for one SceneRuntime sample pass. */
+export interface SceneSampleStats {
+  sampledLineCount: number;
+  staticLineCacheHits: number;
+  continuousLineCount: number;
+  parentComposeCount: number;
+  stateCopyCount: number;
+}
+
+/** Retains one composed world state while both its local and parent inputs stay identical. */
+interface WorldStateCacheEntry {
+  localVersion: number;
+  parentVersion: number;
+  state: SampledLineState;
+}
+
+/** Create reusable sample counters without retaining frame data. */
+function emptySceneSampleStats(): SceneSampleStats {
+  return {
+    sampledLineCount: 0,
+    staticLineCacheHits: 0,
+    continuousLineCount: 0,
+    parentComposeCount: 0,
+    stateCopyCount: 0,
+  };
+}
+
 /** Create a zeroed visibility sample before the first line query. */
 function emptyVisibilityStats(): VisibilityQueryStats {
   return {
@@ -213,8 +256,8 @@ function computeSimpleNoteState(runtime: LineRuntime): boolean {
 /** True when every extended visual track and control curve is constant. */
 function computeSimpleState(runtime: LineRuntime): boolean {
   return (
-    !runtime.extended.scaleXEvents.sources.length &&
-    !runtime.extended.scaleYEvents.sources.length &&
+    constantTrackEquals(runtime.extended.scaleXEvents, 1) &&
+    constantTrackEquals(runtime.extended.scaleYEvents, runtime.staticScaleY) &&
     !runtime.extended.colorEvents.sources.length &&
     !runtime.extended.textEvents.sources.length &&
     // A flat incline at its neutral value cannot tilt a note, and exported charts put one
@@ -228,23 +271,40 @@ function computeSimpleState(runtime: LineRuntime): boolean {
   );
 }
 
+/** True when a numeric event track has the same value as its fallback everywhere. */
+function constantTrackEquals(track: EventTrack, expected: number): boolean {
+  return track.constantValue() === expected;
+}
+
 /** True when an incline track cannot move a note away from zero. */
 function isNeutralIncline(track: EventTrack): boolean {
   return track.constantValue() === 0;
 }
 
+/** Sample one pre-filtered channel track list without allocating a temporary array. */
+function sampleTrackList(tracks: readonly EventTrack[], offset: number, seconds: number): number {
+  if (tracks.length === 0) {
+    return offset;
+  }
+  if (tracks.length === 1) {
+    return offset + tracks[0].sampleNumeric(seconds);
+  }
+  let result = offset;
+  for (let index = 0; index < tracks.length; index += 1) {
+    result += tracks[index].sampleNumeric(seconds);
+  }
+  return result;
+}
+
 /** True when sampling can skip all event-track and floor lookups. */
 function computeStaticState(runtime: LineRuntime): boolean {
   return (
-    !runtime.extended.scaleXEvents.sources.length &&
-    !runtime.extended.scaleYEvents.sources.length &&
+    constantTrackEquals(runtime.extended.scaleXEvents, 1) &&
+    constantTrackEquals(runtime.extended.scaleYEvents, runtime.staticScaleY) &&
     !runtime.extended.colorEvents.sources.length &&
     !runtime.extended.textEvents.sources.length &&
     isNeutralIncline(runtime.extended.inclineEvents) &&
-    runtime.tracks.moveXEvents.every((track) => track.sources.length === 0) &&
-    runtime.tracks.moveYEvents.every((track) => track.sources.length === 0) &&
-    runtime.tracks.rotateEvents.every((track) => track.sources.length === 0) &&
-    runtime.tracks.alphaEvents.every((track) => track.sources.length === 0) &&
+    runtime.animatedTrackList.every((tracks) => tracks.length === 0) &&
     runtime.speeds.every((speed) => speed.sources.length === 0)
   );
 }
@@ -366,11 +426,15 @@ export class LineRuntime {
   >;
   declare controls: Record<ControlProperty, ControlCurve>;
   declare notes: NoteEntry[];
+  /** Direct source-index lookup used by copy-on-write visual note edits. */
+  declare noteEntriesByIndex: Array<NoteEntry | undefined>;
   declare hitTimes: NoteEntry[];
   /** Time directory used by hit effects; separate from visibility culling. */
   declare holdIndex: IntervalIndex<NoteEntry>;
   declare visibility: NoteVisibilityDirectory<NoteEntry>;
   declare lastVisibilityStats: VisibilityQueryStats;
+  private visibilityCandidateCache?: VisibilityCandidateCache;
+  private visibilityOrderCache?: VisibilityOrderCache;
   declare hasPositionControl: boolean;
   declare hasSizeControl: boolean;
   declare hasAlphaControl: boolean;
@@ -474,6 +538,13 @@ export class LineRuntime {
         },
       ];
     });
+    this.noteEntriesByIndex = [];
+    for (const entry of this.notes) {
+      this.noteEntriesByIndex[entry.noteIndex ?? 0] = entry;
+    }
+    if ((line.notes?.length ?? 0) >= 64) {
+      contentFingerprint(line.notes, { ignoreIds: true });
+    }
     this.hitTimes = [...this.notes].sort((left, right) => left.start - right.start);
     this.holdIndex = new IntervalIndex(
       this.notes.filter((entry) => entry.note.type === 2),
@@ -524,6 +595,7 @@ export class LineRuntime {
         tail: endFloor + offset,
       };
       this.notes.push(entry);
+      this.noteEntriesByIndex[index] = entry;
       let low = 0;
       let high = this.hitTimes.length;
       while (low < high) {
@@ -538,15 +610,41 @@ export class LineRuntime {
     }
     this.holdIndex.replaceItems(this.notes.filter((entry) => entry.note.type === 2));
     this.visibility.replaceItems(this.notes);
+    this.visibilityCandidateCache = undefined;
+    this.visibilityOrderCache = undefined;
   }
 
   /** Rebuild only note state and indexes while reusing the compiled event tracks. */
-  withLine(line: JudgeLine): LineRuntime {
+  withLine(line: JudgeLine, hint?: NoteChangeHint): LineRuntime {
     const next = Object.create(LineRuntime.prototype) as LineRuntime;
     Object.assign(next, this);
     next.line = line;
     const factor = line.bpmfactor ?? 1;
     next.factor = factor;
+    const sourceNotes = line.notes ?? [];
+    const reusableChanges =
+      hint?.kind === "visual" && sourceNotes.length === (this.line.notes ?? []).length
+        ? hint.noteIndexes
+        : hint
+          ? null
+          : reusableNoteChanges(this, line);
+    if (reusableChanges) {
+      // Position, size, alpha and above/below edits do not change timing,
+      // floor bounds, or broad-phase membership. Keep the expensive indexes
+      // and transfer the entry storage to the replacement runtime. Updating
+      // the entry references keeps the renderer's direct `entry.note` reads
+      // correct without rebuilding every NoteEntry for a one-note edit.
+      for (const noteIndex of reusableChanges) {
+        const entry = next.noteEntriesByIndex[noteIndex];
+        const current = sourceNotes[noteIndex];
+        if (entry && current) {
+          entry.note = current;
+        }
+      }
+      return next;
+    }
+    next.visibilityCandidateCache = undefined;
+    next.visibilityOrderCache = undefined;
     next.floorCursor = new LineFloorCursor(next.speeds);
     next.notes = (line.notes ?? []).flatMap((note, noteIndex) => {
       if (!isOrderedBeatRange(note.startTime, note.endTime)) {
@@ -570,6 +668,10 @@ export class LineRuntime {
         },
       ];
     });
+    next.noteEntriesByIndex = [];
+    for (const entry of next.notes) {
+      next.noteEntriesByIndex[entry.noteIndex ?? 0] = entry;
+    }
     next.hitTimes = [...next.notes].sort((left, right) => left.start - right.start);
     next.visibility = next.createVisibilityDirectory();
     next.holdIndex = new IntervalIndex(
@@ -719,18 +821,18 @@ export class LineRuntime {
    * sampling a 741-line chart does most of.
    */
   sampleChannels(seconds: number, into: Float64Array): void {
-    for (let channel = 0; channel < CHANNEL_COUNT; channel += 1) {
-      const tracks = this.animatedTrackList[channel];
-      let result = this.trackOffsetList[channel];
-      for (let index = 0; index < tracks.length; index += 1) {
-        result += Number(tracks[index].value(seconds));
-      }
-      into[channel] = result;
-    }
+    // The channel count is fixed and most exported lines have zero or one
+    // animated track per channel. Unroll that hot path so playback does not
+    // pay for a channel-index loop and repeated array/property lookups on all
+    // 741 lines. Multi-track channels keep the general accumulation path.
+    into[0] = sampleTrackList(this.animatedTrackList[0], this.trackOffsetList[0], seconds);
+    into[1] = sampleTrackList(this.animatedTrackList[1], this.trackOffsetList[1], seconds);
+    into[2] = sampleTrackList(this.animatedTrackList[2], this.trackOffsetList[2], seconds);
+    into[3] = sampleTrackList(this.animatedTrackList[3], this.trackOffsetList[3], seconds);
   }
 
-  /** Sample the line's transform and visual channels, writing into `target` when given. */
-  state(seconds: number, target?: LineState): LineState {
+  /** Sample the line's transform and visual channels, optionally skipping floor on empty lines. */
+  state(seconds: number, target?: LineState, includeFloorForEmptyLines = true): LineState {
     if (this.staticState) {
       const result =
         target ??
@@ -788,7 +890,7 @@ export class LineRuntime {
       result.scaleY = this.staticScaleY;
       result.text = "";
       result.incline = 0;
-      result.floor = this.floor(seconds);
+      result.floor = includeFloorForEmptyLines || this.notes.length > 0 ? this.floor(seconds) : 0;
       return result;
     }
     const scaleXTrack = this.extended.scaleXEvents;
@@ -805,9 +907,20 @@ export class LineRuntime {
       : (target?.color ?? [...(colorTrack.fallback as number[])]);
     const text = textTrack.sources.length ? String(textTrack.value(seconds)) : "";
     const incline = inclineTrack.sources.length ? Number(inclineTrack.value(seconds)) : 0;
-    const floor = this.floor(seconds);
+    const floor = includeFloorForEmptyLines || this.notes.length > 0 ? this.floor(seconds) : 0;
     if (!target) {
-      return { x, y, rotation, alpha, scaleX, scaleY, color, text, incline, floor };
+      return {
+        x,
+        y,
+        rotation,
+        alpha,
+        scaleX,
+        scaleY,
+        color,
+        text,
+        incline,
+        floor,
+      };
     }
     target.x = x;
     target.y = y;
@@ -842,6 +955,7 @@ export class LineRuntime {
     radius = 1600,
     result: NoteEntry[] = [],
     holdResult?: NoteEntry[],
+    measureIndex = renderDetailedProfileEnabled(),
   ): NoteEntry[] {
     result.length = 0;
     if (holdResult) {
@@ -855,39 +969,70 @@ export class LineRuntime {
       resetVisibilityStats(this.lastVisibilityStats);
       return result;
     }
-    const queryStarted = performance.now();
-    this.visibility.query(seconds, state.floor, radius, result);
-    const indexMs = performance.now() - queryStarted;
-    if (this.hasYControl && result.length > 1) {
-      let ordered = true;
-      let previousIndex = result[0].noteIndex ?? 0;
-      for (let index = 1; index < result.length; index += 1) {
-        const noteIndex = result[index].noteIndex ?? 0;
-        if (noteIndex < previousIndex) {
-          ordered = false;
-          break;
-        }
-        previousIndex = noteIndex;
+    const reusableSpatialQuery =
+      this.visibility.spatialOnly &&
+      this.speeds.every((speed) => speed.sources.length === 0) &&
+      this.visibilityCandidateCache?.floor === state.floor &&
+      this.visibilityCandidateCache.radius === radius;
+    let indexMs = 0;
+    if (reusableSpatialQuery) {
+      result.push(...this.visibilityCandidateCache!.entries);
+    } else {
+      const queryStarted = measureIndex ? performance.now() : 0;
+      this.visibility.query(seconds, state.floor, radius, result);
+      indexMs = measureIndex ? performance.now() - queryStarted : 0;
+      if (this.visibility.spatialOnly && this.speeds.every((speed) => speed.sources.length === 0)) {
+        this.visibilityCandidateCache = {
+          floor: state.floor,
+          radius,
+          entries: [...result],
+        };
       }
-      if (!ordered) {
-        result.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
+    }
+    if (this.hasYControl && result.length > 1) {
+      const orderCache = this.visibilityOrderCache;
+      const sameCandidates =
+        orderCache?.candidates.length === result.length &&
+        orderCache.candidates.every((entry, index) => entry === result[index]);
+      if (sameCandidates) {
+        result.length = 0;
+        result.push(...orderCache!.ordered);
+      } else {
+        let ordered = true;
+        let previousIndex = result[0].noteIndex ?? 0;
+        for (let index = 1; index < result.length; index += 1) {
+          const noteIndex = result[index].noteIndex ?? 0;
+          if (noteIndex < previousIndex) {
+            ordered = false;
+            break;
+          }
+          previousIndex = noteIndex;
+        }
+        if (!ordered) {
+          result.sort((left, right) => (left.noteIndex ?? 0) - (right.noteIndex ?? 0));
+        }
+        this.visibilityOrderCache = {
+          candidates: [...(reusableSpatialQuery ? this.visibilityCandidateCache!.entries : result)],
+          ordered: [...result],
+        };
       }
     }
     const candidateCount = result.length;
     let write = 0;
     let holdWrite = 0;
     for (const entry of result) {
-      if (entry.end < seconds || entry.start - seconds > (entry.note.visibleTime ?? 999999)) {
+      const note = entry.note;
+      if (entry.end < seconds || entry.start - seconds > (note.visibleTime ?? 999999)) {
         continue;
       }
       if (
         this.line.isCover === 1 &&
-        (entry.note.speed ?? 1) !== 0 &&
-        (entry.note.type === 2 ? entry.tail : entry.floor) < state.floor
+        (note.speed ?? 1) !== 0 &&
+        (note.type === 2 ? entry.tail : entry.floor) < state.floor
       ) {
         continue;
       }
-      if (holdResult && entry.note.type === 2) {
+      if (holdResult && note.type === 2) {
         holdResult[holdWrite++] = entry;
       } else {
         result[write++] = entry;
@@ -1029,6 +1174,19 @@ function composeParentState(
   child: SampledLineState,
   line: JudgeLine,
 ): void {
+  // Most exported charts use parent links for grouping while the parent stays at
+  // the origin. Avoid two trigonometric calls and the full rotation matrix for
+  // that common case; the exact zero check preserves the general path for every
+  // genuinely rotated parent.
+  if (parent.rotation === 0) {
+    if (parent.x !== 0) {
+      child.x += parent.x;
+    }
+    if (parent.y !== 0) {
+      child.y += parent.y;
+    }
+    return;
+  }
   const angle = (-parent.rotation * Math.PI) / 180;
   const cosine = Math.cos(angle);
   const sine = Math.sin(angle);
@@ -1213,6 +1371,37 @@ function extendsNotes(previous: JudgeLine, next: JudgeLine): boolean {
   return true;
 }
 
+/** Return changed source indexes when a note edit preserves visibility broad phases. */
+function reusableNoteChanges(runtime: LineRuntime, line: JudgeLine): number[] | null {
+  const previous = runtime.line.notes ?? [];
+  const next = line.notes ?? [];
+  if (previous.length !== next.length) {
+    return null;
+  }
+  const changes: number[] = [];
+  for (let index = 0; index < previous.length; index += 1) {
+    const before = previous[index];
+    const after = next[index];
+    if (!before || !after) {
+      return null;
+    }
+    if (
+      before.startTime !== after.startTime ||
+      before.endTime !== after.endTime ||
+      (before.yOffset ?? 0) !== (after.yOffset ?? 0) ||
+      (before.speed ?? 1) !== (after.speed ?? 1) ||
+      (before.visibleTime ?? 999999) !== (after.visibleTime ?? 999999) ||
+      before.type !== after.type
+    ) {
+      return null;
+    }
+    if (before !== after) {
+      changes.push(index);
+    }
+  }
+  return changes;
+}
+
 /** True when both lines share every event, control and factor source. */
 function sameLineSources(previous: JudgeLine, next: JudgeLine): boolean {
   return (
@@ -1236,24 +1425,46 @@ export class SceneRuntime {
   declare tempo: TempoSource | null;
   declare lines: LineRuntime[];
   declare order: number[];
+  /** Render-order subset containing lines with notes for visibility and note passes. */
+  declare noteOrder: number[];
   declare orderLines: JudgeLine[];
   declare orderValues: Float64Array;
   declare sortedOrder: number[];
   declare defaultLineColor: number[];
   /** True when every rendered line's world state is time-invariant. */
   declare allStatesStatic: boolean;
+  /** World-state staticness after parent transforms have been propagated. */
+  private worldStateStatic = new Uint8Array();
   private sampleStatus = new Uint8Array();
   private sampledSeconds = Number.NaN;
   private sampledTempo: TempoSource | null = null;
+  private sampledIncludeFloorForEmptyLines = true;
   private sampledStates: SampledLineState[] | null = null;
   /** Local states stay separate from world states because parent composition mutates the latter. */
   private localStates: Array<SampledLineState | undefined> = [];
-  private lineSamples = new WeakMap<LineRuntime, { seconds: number; state: SampledLineState }>();
+  /** Parent-composed states keyed by line index; entries are valid only for these exact inputs. */
+  private worldStateCache: Array<WorldStateCacheEntry | undefined> = [];
+  /** Monotonic input/output versions avoid mistaking an in-place state update for reuse. */
+  private localStateVersions = new Uint32Array();
+  private worldStateVersions = new Uint32Array();
+  private lineSamples = new WeakMap<
+    LineRuntime,
+    { seconds: number; state: SampledLineState; includeFloorForEmptyLines: boolean }
+  >();
   /** Parent-before-child order used by the allocation-free frame sampler. */
   private parentOrder: number[] | null = null;
+  /** Lines whose world state must be recomputed after the first sampled frame. */
+  private dynamicSampleOrder: number[] = [];
   /** Parentless charts can sample each line without recursive resolution. */
   private hasParentLines = false;
   private runtimeById = new Map<string, LineRuntime>();
+  /** Counters exposed to the preview timing sample without allocating per frame. */
+  readonly lastSampleStats: SceneSampleStats = emptySceneSampleStats();
+
+  /** Return whether a line's world transform is time-invariant, including its parent chain. */
+  isWorldStateStatic(index: number): boolean {
+    return this.worldStateStatic[index] === 1;
+  }
 
   /** Create an empty runtime with the default line colour. */
   constructor() {
@@ -1267,19 +1478,31 @@ export class SceneRuntime {
     this.tempo = null;
     this.lines = [];
     this.order = [];
+    this.noteOrder = [];
     this.orderLines = [];
     this.orderValues = new Float64Array();
     this.sortedOrder = [];
     this.allStatesStatic = false;
+    this.worldStateStatic = new Uint8Array();
     this.sampleStatus = new Uint8Array();
     this.sampledSeconds = Number.NaN;
     this.sampledTempo = null;
+    this.sampledIncludeFloorForEmptyLines = true;
     this.sampledStates = null;
     this.localStates = [];
+    this.worldStateCache = [];
+    this.localStateVersions = new Uint32Array();
+    this.worldStateVersions = new Uint32Array();
     this.lineSamples = new WeakMap();
     this.parentOrder = null;
+    this.dynamicSampleOrder = [];
     this.hasParentLines = false;
     this.runtimeById.clear();
+    this.lastSampleStats.sampledLineCount = 0;
+    this.lastSampleStats.staticLineCacheHits = 0;
+    this.lastSampleStats.continuousLineCount = 0;
+    this.lastSampleStats.parentComposeCount = 0;
+    this.lastSampleStats.stateCopyCount = 0;
   }
 
   /** Compile `chart`, reusing or incrementally updating line runtimes where possible. */
@@ -1287,13 +1510,17 @@ export class SceneRuntime {
     chart: Chart,
     tempo: TempoSource,
     defaultLineColor: readonly number[] = this.defaultLineColor,
+    changedLineIndexes?: readonly number[],
+    noteChangeHints?: readonly NoteChangeHint[],
   ): void {
     const nextColor = normalizedColor(defaultLineColor);
     const colorChanged = !colorsEqual(this.defaultLineColor, nextColor);
     if (this.chart === chart && this.tempo === tempo && !colorChanged) {
       return;
     }
-    if (this.tempo !== tempo || colorChanged) {
+    const tempoChanged = this.tempo !== tempo;
+    const previousChart = this.chart;
+    if (tempoChanged || colorChanged) {
       this.cache = new WeakMap();
       this.runtimeById.clear();
       this.tempo = tempo;
@@ -1308,10 +1535,23 @@ export class SceneRuntime {
       return Number.isInteger(parent) && parent >= 0;
     });
     const previousById = this.runtimeById;
-    this.runtimeById = new Map();
-    this.lines = sourceLines.map((line) => {
+    const noteHintsByLine = new Map(
+      (noteChangeHints ?? []).map((hint) => [hint.lineIndex, hint] as const),
+    );
+    const canPatch =
+      !tempoChanged &&
+      !colorChanged &&
+      changedLineIndexes !== undefined &&
+      previousChart !== null &&
+      sourceLines.length === (previousChart.judgeLineList ?? []).length &&
+      this.lines.length === sourceLines.length &&
+      changedLineIndexes.every((index) => index >= 0 && index < sourceLines.length);
+    const compileLine = (
+      line: (typeof sourceLines)[number],
+      noteHint?: NoteChangeHint,
+    ): LineRuntime | undefined => {
       if (isPlaceholderLine(line)) {
-        return undefined as unknown as LineRuntime;
+        return undefined;
       }
       let runtime = this.cache.get(line);
       if (!runtime) {
@@ -1325,7 +1565,7 @@ export class SceneRuntime {
             this.cache.delete(previousLine);
             runtime = previous;
           } else {
-            runtime = previous.withLine(line);
+            runtime = previous.withLine(line, noteHint);
           }
         } else {
           const eventRuntime = previous?.withEventLine(line);
@@ -1337,10 +1577,74 @@ export class SceneRuntime {
         this.runtimeById.set(line.id, runtime);
       }
       return runtime;
-    });
+    };
+    if (canPatch) {
+      this.runtimeById = new Map(previousById);
+      const previousLines = previousChart.judgeLineList ?? [];
+      for (const index of changedLineIndexes) {
+        const previousLine = previousLines[index];
+        const nextLine = sourceLines[index];
+        if (previousLine && previousLine !== nextLine) {
+          this.cache.delete(previousLine);
+          if (typeof previousLine.id === "string" && previousLine.id !== nextLine?.id) {
+            this.runtimeById.delete(previousLine.id);
+          }
+        }
+        this.lines[index] = compileLine(
+          nextLine,
+          noteHintsByLine.get(index),
+        ) as unknown as LineRuntime;
+      }
+    } else {
+      this.runtimeById = new Map();
+      this.lines = sourceLines.map(
+        (line, index) => compileLine(line, noteHintsByLine.get(index)) as unknown as LineRuntime,
+      );
+    }
     this.allStatesStatic = this.lines.every((runtime) => !runtime || runtime.staticState);
-    this.localStates = new Array(this.lines.length);
-    this.parentOrder = parentSampleOrder(sourceLines);
+    if (canPatch && this.localStates.length === this.lines.length) {
+      // A copy-on-write edit replaces only the listed line runtimes. Keep the
+      // reusable local state objects for every untouched line; dropping the
+      // whole array makes the next frame allocate one state per dynamic line
+      // and turns a one-note CRUD edit into a GC-sized playback hitch.
+      for (const index of changedLineIndexes) {
+        this.localStates[index] = undefined;
+      }
+    } else {
+      this.localStates = new Array(this.lines.length);
+    }
+    // A line patch can change an ancestor, inheritance mode, or local transform. The
+    // identity checks below make frame reuse safe, while this reset prevents a stale
+    // world object from surviving a chart topology change.
+    this.worldStateCache = new Array(this.lines.length);
+    this.localStateVersions = new Uint32Array(this.lines.length);
+    this.worldStateVersions = new Uint32Array(this.lines.length);
+    const parentOrder = parentSampleOrder(sourceLines);
+    this.parentOrder = parentOrder;
+    this.worldStateStatic = new Uint8Array(this.lines.length);
+    const staticOrder = parentOrder ?? sourceLines.map((unused, index) => index);
+    for (const index of staticOrder) {
+      const runtime = this.lines[index];
+      if (!runtime) {
+        this.worldStateStatic[index] = 1;
+        continue;
+      }
+      const parent = lineParentIndex(runtime.line.father);
+      this.worldStateStatic[index] =
+        runtime.staticState &&
+        (!Number.isInteger(parent) ||
+          parent < 0 ||
+          parent >= this.lines.length ||
+          this.worldStateStatic[parent] === 1)
+          ? 1
+          : 0;
+    }
+    this.dynamicSampleOrder =
+      this.hasParentLines && parentOrder
+        ? parentOrder.filter((index) => this.worldStateStatic[index] !== 1)
+        : sourceLines
+            .map((unused, index) => index)
+            .filter((index) => this.worldStateStatic[index] !== 1);
     const sameOrder =
       sourceLines.length === this.orderLines.length &&
       sourceLines.every(
@@ -1355,6 +1659,7 @@ export class SceneRuntime {
         .sort((left, right) => this.orderValues[left] - this.orderValues[right] || left - right);
     }
     this.order = this.sortedOrder;
+    this.noteOrder = this.order.filter((index) => (this.lines[index]?.notes.length ?? 0) > 0);
   }
 
   /**
@@ -1367,17 +1672,27 @@ export class SceneRuntime {
     runtime: LineRuntime,
     seconds: number,
     slot: SampledLineState | undefined,
+    includeFloorForEmptyLines: boolean,
   ): SampledLineState {
     const cached = this.lineSamples.get(runtime);
-    if (cached && (cached.seconds === seconds || runtime.staticState)) {
+    if (
+      cached &&
+      (cached.seconds === seconds || runtime.staticState) &&
+      cached.includeFloorForEmptyLines === includeFloorForEmptyLines
+    ) {
       return copyLineState(slot, cached.state);
     }
-    const localState = runtime.state(seconds, cached?.state);
+    const localState = runtime.state(seconds, cached?.state, includeFloorForEmptyLines);
     const state = copyLineState(slot, localState);
     if (cached) {
       cached.seconds = seconds;
+      cached.includeFloorForEmptyLines = includeFloorForEmptyLines;
     } else {
-      this.lineSamples.set(runtime, { seconds, state: localState });
+      this.lineSamples.set(runtime, {
+        seconds,
+        state: localState,
+        includeFloorForEmptyLines,
+      });
     }
     return state;
   }
@@ -1387,6 +1702,7 @@ export class SceneRuntime {
     index: number,
     runtime: LineRuntime,
     seconds: number,
+    includeFloorForEmptyLines: boolean,
   ): SampledLineState {
     const cached =
       this.localStates[index] ??
@@ -1395,13 +1711,17 @@ export class SceneRuntime {
       this.localStates[index] = cached;
       return cached;
     }
-    const local = runtime.state(seconds, cached);
+    const local = runtime.state(seconds, cached, includeFloorForEmptyLines);
     this.localStates[index] = local;
     // The defensive sampler still needs a static local cache, while the
     // topological path itself stays indexed and does not touch a WeakMap for
     // dynamic lines on every playback frame.
     if (runtime.staticState && !this.lineSamples.has(runtime)) {
-      this.lineSamples.set(runtime, { seconds, state: local });
+      this.lineSamples.set(runtime, {
+        seconds,
+        state: local,
+        includeFloorForEmptyLines,
+      });
     }
     return local;
   }
@@ -1409,12 +1729,14 @@ export class SceneRuntime {
   /**
    * Return a sampler resolving one line's world state at `seconds`.
    *
-   * Parent transforms are resolved lazily and cached per sample time.
+   * Parent transforms are resolved lazily and cached per sample time. Preview may disable
+   * floor sampling for lines without notes because that value is not consumed by drawing.
    */
   sampler(
     seconds: number,
     states: SampledLineState[] = [],
     status = new Uint8Array(this.lines.length),
+    includeFloorForEmptyLines = true,
   ): (index: number) => SampledLineState {
     states.length = this.lines.length;
     const resolve = (index: number): boolean => {
@@ -1433,7 +1755,12 @@ export class SceneRuntime {
       }
       const line = runtime.line;
       const parent = lineParentIndex(line.father);
-      states[index] = this.sampledLineState(runtime, seconds, states[index]);
+      states[index] = this.sampledLineState(
+        runtime,
+        seconds,
+        states[index],
+        includeFloorForEmptyLines,
+      );
       if (Number.isInteger(parent) && parent >= 0 && parent < this.lines.length) {
         if (!resolve(parent)) {
           status[index] = 2;
@@ -1471,9 +1798,28 @@ export class SceneRuntime {
     return this.sampleInto(seconds, []);
   }
 
-  /** Sample into caller-owned storage so frame renderers can avoid array churn. */
-  sampleInto(seconds: number, target: SampledLineState[]): SampledLineState[] {
-    if (this.sampledStates && this.sampledSeconds === seconds && this.sampledTempo === this.tempo) {
+  /**
+   * Sample into caller-owned storage so frame renderers can avoid array churn.
+   *
+   * `includeFloorForEmptyLines` keeps the full runtime contract by default; preview passes
+   * `false` because empty structural lines never query floor distance.
+   */
+  sampleInto(
+    seconds: number,
+    target: SampledLineState[],
+    includeFloorForEmptyLines = true,
+  ): SampledLineState[] {
+    this.lastSampleStats.sampledLineCount = 0;
+    this.lastSampleStats.staticLineCacheHits = 0;
+    this.lastSampleStats.continuousLineCount = 0;
+    this.lastSampleStats.parentComposeCount = 0;
+    this.lastSampleStats.stateCopyCount = 0;
+    if (
+      this.sampledStates &&
+      this.sampledSeconds === seconds &&
+      this.sampledTempo === this.tempo &&
+      this.sampledIncludeFloorForEmptyLines === includeFloorForEmptyLines
+    ) {
       if (target === this.sampledStates) {
         return target;
       }
@@ -1486,40 +1832,117 @@ export class SceneRuntime {
     if (!this.hasParentLines) {
       target.length = this.lines.length;
       const previous = this.sampledStates;
-      for (let index = 0; index < this.lines.length; index++) {
+      const reuseStaticStates = previous === target && previous.length === this.lines.length;
+      const indexes = reuseStaticStates
+        ? this.dynamicSampleOrder
+        : Array.from({ length: this.lines.length }, (unused, index) => index);
+      for (const index of indexes) {
         const runtime = this.lines[index];
         if (runtime?.staticState && previous?.[index]) {
+          this.lastSampleStats.staticLineCacheHits += 1;
           target[index] = previous[index];
+        } else if (runtime) {
+          this.lastSampleStats.sampledLineCount += 1;
+          this.lastSampleStats.continuousLineCount += 1;
+          target[index] = runtime.state(seconds, target[index], includeFloorForEmptyLines);
         } else {
-          target[index] = runtime ? runtime.state(seconds, target[index]) : emptyLineState();
+          target[index] = emptyLineState();
         }
       }
       this.sampledSeconds = seconds;
       this.sampledTempo = this.tempo;
+      this.sampledIncludeFloorForEmptyLines = includeFloorForEmptyLines;
       this.sampledStates = target;
       return target;
     }
     if (this.parentOrder !== null) {
       target.length = this.lines.length;
-      for (const index of this.parentOrder) {
+      const previous = this.sampledStates;
+      const reuseStaticStates = previous === target && previous.length === this.lines.length;
+      const indexes = reuseStaticStates ? this.dynamicSampleOrder : this.parentOrder;
+      for (const index of indexes) {
         const runtime = this.lines[index];
         if (!runtime) {
           target[index] = emptyLineState();
           continue;
         }
-        const local = this.sampledLocalState(index, runtime, seconds);
-        target[index] = copyLineState(target[index], local);
+        // A static local line under a static parent has a stable world state too.
+        // Reuse the complete sampled object instead of resolving its local tracks and
+        // entering the parent composition path on every playback frame.
+        if (this.worldStateStatic[index] === 1 && previous?.[index]) {
+          this.lastSampleStats.staticLineCacheHits += 1;
+          target[index] = previous[index];
+          continue;
+        }
+        this.lastSampleStats.sampledLineCount += 1;
+        this.lastSampleStats.continuousLineCount += 1;
+        const local = this.sampledLocalState(index, runtime, seconds, includeFloorForEmptyLines);
+        if (!runtime.staticState) {
+          this.localStateVersions[index] = (this.localStateVersions[index] + 1) >>> 0;
+        }
+        this.localStates[index] = local;
         const parent = lineParentIndex(runtime.line.father);
-        if (Number.isInteger(parent) && parent >= 0 && parent < this.lines.length) {
+        if (!Number.isInteger(parent) || parent < 0 || parent >= this.lines.length) {
+          // A root has no world-space composition to apply. Reusing its local state avoids
+          // copying every field into a second object on every playback frame.
+          const wasComposed = this.worldStateCache[index] !== undefined;
+          if (wasComposed) {
+            this.worldStateVersions[index] = (this.worldStateVersions[index] + 1) >>> 0;
+          } else {
+            this.worldStateVersions[index] = this.localStateVersions[index];
+          }
+          this.worldStateCache[index] = undefined;
+          target[index] = local;
+        } else {
           const ancestor = target[parent];
-          const world = target[index];
-          if (ancestor && world) {
-            composeParentState(ancestor, world, runtime.line);
+          const parentVersion = this.worldStateVersions[parent];
+          // Most parent links are structural: the parent remains at the origin
+          // and carries no rotation. In that case the child's local state is
+          // already its world state, so avoid copying every field before the
+          // no-op composition. Preserve the full copy path for translated or
+          // rotated parents, where the local object must stay reusable.
+          if (ancestor && ancestor.x === 0 && ancestor.y === 0 && ancestor.rotation === 0) {
+            const wasComposed = this.worldStateCache[index] !== undefined;
+            if (wasComposed) {
+              this.worldStateVersions[index] = (this.worldStateVersions[index] + 1) >>> 0;
+            } else {
+              this.worldStateVersions[index] = this.localStateVersions[index];
+            }
+            this.worldStateCache[index] = undefined;
+            target[index] = local;
+          } else {
+            const cachedWorld = this.worldStateCache[index];
+            if (
+              cachedWorld?.localVersion === this.localStateVersions[index] &&
+              cachedWorld.parentVersion === parentVersion
+            ) {
+              target[index] = cachedWorld.state;
+              continue;
+            }
+            // A prior frame may have aliased this slot to `local` through the
+            // identity fast path. Never compose into that local cache when a
+            // parent starts moving; allocate a separate world-state object.
+            const world = copyLineState(target[index] === local ? undefined : target[index], local);
+            this.lastSampleStats.stateCopyCount += 1;
+            if (ancestor && world) {
+              composeParentState(ancestor, world, runtime.line);
+              this.lastSampleStats.parentComposeCount += 1;
+            }
+            if (ancestor && world) {
+              this.worldStateCache[index] = {
+                localVersion: this.localStateVersions[index],
+                parentVersion,
+                state: world,
+              };
+              this.worldStateVersions[index] = (this.worldStateVersions[index] + 1) >>> 0;
+            }
+            target[index] = world;
           }
         }
       }
       this.sampledSeconds = seconds;
       this.sampledTempo = this.tempo;
+      this.sampledIncludeFloorForEmptyLines = includeFloorForEmptyLines;
       this.sampledStates = target;
       return target;
     }
@@ -1528,7 +1951,7 @@ export class SceneRuntime {
     } else {
       this.sampleStatus.fill(0);
     }
-    const sample = this.sampler(seconds, target, this.sampleStatus);
+    const sample = this.sampler(seconds, target, this.sampleStatus, includeFloorForEmptyLines);
     for (let index = 0; index < this.lines.length; index++) {
       if (!this.lines[index]) {
         target[index] = emptyLineState();
@@ -1538,6 +1961,7 @@ export class SceneRuntime {
     }
     this.sampledSeconds = seconds;
     this.sampledTempo = this.tempo;
+    this.sampledIncludeFloorForEmptyLines = includeFloorForEmptyLines;
     this.sampledStates = target;
     return target;
   }

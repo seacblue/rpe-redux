@@ -73,6 +73,136 @@ test("note-only controls keep the line state static during playback", () => {
   assert.strictEqual(second[0], first[0]);
 });
 
+test("flat endpoint events fold into the static line path", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers[0] = {
+    moveXEvents: [createEvent(0, 0, 0, 100000)],
+    moveYEvents: [createEvent(0, 0, 0, 100000)],
+    rotateEvents: [createEvent(0, 0, 0, 100000)],
+    alphaEvents: [createEvent(0, 0, 0, 100000)],
+    scaleXEvents: [createEvent(1, 1, 0, 100000)],
+    scaleYEvents: [createEvent(1.2, 1.2, 0, 100000)],
+  };
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+
+  assert.equal(scene.lines[0].staticState, true);
+  assert.equal(scene.allStatesStatic, true);
+  assert.deepEqual(scene.sample(0)[0], scene.sample(120)[0]);
+});
+
+test("mixed step and continuous channels preserve both contributions", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers = [
+    { moveXEvents: [createEvent(5, 5, 0, 10)] },
+    { moveXEvents: [createEvent(0, 10, 10, 20)] },
+  ];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+
+  const sampleAtBeat = (beat) => scene.sampleInto(tempo.seconds(beat), [])[0].x;
+  assert.equal(sampleAtBeat(5), 5);
+  assert.equal(sampleAtBeat(15), 10);
+  assert.equal(sampleAtBeat(25), 15);
+  assert.equal(sampleAtBeat(5), 5, "backward seeks reset the step contribution exactly");
+});
+
+test("equal endpoint events use the normal event cursor path", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers = [
+    {
+      moveYEvents: [createEvent(3, 3, 0, 4), createEvent(7, 7, 4, 8)],
+    },
+  ];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const sampleAtBeat = (beat) => scene.sampleInto(tempo.seconds(beat), [])[0].y;
+  assert.equal(sampleAtBeat(1), 3);
+  assert.equal(sampleAtBeat(4), 7);
+  assert.equal(sampleAtBeat(7), 7);
+});
+
+test("static-floor visibility reuses the spatial candidate query", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers[0].speedEvents = [];
+  chart.judgeLineList[0].notes = [createNote(1, 0, 0), createNote(1, 2, 0)];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const line = scene.lines[0];
+  const state = scene.sample(0)[0];
+  const originalQuery = line.visibility.query.bind(line.visibility);
+  let queryCalls = 0;
+  line.visibility.query = (...args) => {
+    queryCalls += 1;
+    return originalQuery(...args);
+  };
+
+  line.visibleNotes(0, state, 1000, []);
+  line.visibleNotes(0.1, state, 1000, []);
+  assert.equal(queryCalls, 1);
+});
+
+test("visual-only note edits reuse the compiled visibility directory", () => {
+  const chart = createChart();
+  const note = createNote(1, 0, 4);
+  chart.judgeLineList[0].notes = [note];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const before = scene.lines[0];
+  const beforeVisibility = before.visibility;
+
+  const changedNote = { ...note, positionX: 123 };
+  const next = {
+    ...chart,
+    judgeLineList: [{ ...chart.judgeLineList[0], notes: [changedNote] }],
+  };
+  scene.compile(
+    next,
+    tempo,
+    undefined,
+    [0],
+    [
+      {
+        lineIndex: 0,
+        noteIndexes: [0],
+        kind: "visual",
+        overlapChanged: true,
+      },
+    ],
+  );
+  const after = scene.lines[0];
+  const state = scene.sample(0)[0];
+
+  assert.strictEqual(after.visibility, beforeVisibility);
+  assert.strictEqual(after.notes[0].note, changedNote);
+  assert.equal(after.noteState(after.notes[0], state, 0).x, 123);
+});
+
+test("retained sample storage skips static line evaluation on later frames", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers = [{}];
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const line = scene.lines[0];
+  const originalState = line.state.bind(line);
+  let stateCalls = 0;
+  line.state = (...args) => {
+    stateCalls += 1;
+    return originalState(...args);
+  };
+
+  const first = scene.sampleInto(0, []);
+  scene.sampleInto(1, first);
+
+  assert.equal(stateCalls, 1);
+});
+
 test("repeated samplers do not reapply a parent transform", () => {
   const chart = createChart();
   const parent = chart.judgeLineList[0];
@@ -115,6 +245,30 @@ test("parent sampling reuses static local state across playback times", () => {
   assert.equal(stateCalls, 1);
   assert.equal(scene.allStatesStatic, true);
   assert.deepEqual(second[1], expected);
+});
+
+test("incremental scene recompiles retain untouched dynamic local states", () => {
+  const chart = createChart();
+  const changed = chart.judgeLineList[0];
+  const retained = createLine("Retained");
+  retained.father = 0;
+  retained.eventLayers[0].moveXEvents = [createEvent(100, 0, 0, 8)];
+  chart.judgeLineList.push(retained);
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const before = scene.sampleInto(1, []);
+
+  const nextChanged = { ...changed, name: "Changed" };
+  const next = { ...chart, judgeLineList: [nextChanged, retained] };
+  scene.compile(next, tempo, undefined, [0]);
+  const after = scene.sampleInto(2, []);
+
+  assert.strictEqual(
+    after[1],
+    before[1],
+    "an untouched dynamic line keeps its reusable state object after a patched compile",
+  );
 });
 
 test("topological parent sampling matches the defensive sampler", () => {

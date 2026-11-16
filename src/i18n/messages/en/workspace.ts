@@ -19,6 +19,7 @@ export default {
   "workspace.loading.unpack": "Reading package",
   "workspace.loading.notes": "Parsing notes",
   "workspace.loading.events": "Parsing events",
+  "workspace.loading.content": "Parsing chart objects",
   "workspace.loading.render": "Rendering first frame",
   "workspace.loading.parse": "Validating chart",
   "workspace.loading.textures": "Loading textures",

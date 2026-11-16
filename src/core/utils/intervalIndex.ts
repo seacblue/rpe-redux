@@ -187,6 +187,18 @@ export class IntervalIndex<T> {
     return "rebuilt";
   }
 
+  /** Replace payload references when every indexed start and end value is unchanged. */
+  replaceItemsPreservingRanges(items: readonly T[]): "same" | "visual" {
+    if (items === this.items) {
+      return "same";
+    }
+    if (items.length !== this.items.length) {
+      throw new RangeError("Cannot preserve interval ranges for a changed item count");
+    }
+    this.items = items;
+    return "visual";
+  }
+
   /** Return every entry overlapping the inclusive range `[start, end]`. */
   query(start: number, end: number): IntervalEntry<T>[] {
     return this.queryInto(start, end, []);

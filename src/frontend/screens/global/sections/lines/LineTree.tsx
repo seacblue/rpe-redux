@@ -9,8 +9,10 @@
  * never start a move operation.
  */
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -34,6 +36,7 @@ import type { EditorSession } from "../../../../../core/edit/session/session.ts"
 import { t } from "../../../../../i18n/index.ts";
 import { lineGroupLabels } from "../../../editor/workspace/lineLabels.ts";
 import { lineTreeKey } from "./lineTreeModel.ts";
+import { lineTreePropsEqual } from "./lineTreeMemo.ts";
 import {
   LineTreeCreatePrompt,
   MAX_BATCH_LINES,
@@ -76,7 +79,7 @@ function sameGroupName(a: string, b: string): boolean {
   return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
 }
 
-export function LineTree({
+export const LineTree = memo(function LineTree({
   session,
   chart,
   showGroups,
@@ -144,16 +147,44 @@ export function LineTree({
     return indices.slice(start, start + LARGE_TREE_LIMIT);
   };
 
-  const selected = new Set<string>(folderSelected ? [] : selectedLineIds);
-  if (!folderSelected && !selected.size) {
-    selected.add(lineTreeKey(lines, session.lineIndex));
-  }
+  const selected = useMemo(() => {
+    const next = new Set<string>(folderSelected ? [] : selectedLineIds);
+    if (!folderSelected && !next.size) {
+      next.add(lineTreeKey(lines, session.lineIndex));
+    }
+    return next;
+  }, [folderSelected, selectedLineIds, lines, session.lineIndex]);
   const selectedIndices = new Set(
     [...selected].flatMap((key) => {
       const index = lineIndices.get(key);
       return index === undefined ? [] : [index];
     }),
   );
+  const selectionRef = useRef<{
+    lines: readonly JudgeLine[];
+    selected: ReadonlySet<string>;
+    lineIndices: ReadonlyMap<string, number>;
+    lineIndex: number;
+    onSelectionChange(ids: ReadonlySet<string>): void;
+    onSelectLine(index: number, scrollTop: number): void;
+  }>({
+    lines,
+    selected,
+    lineIndices,
+    lineIndex: session.lineIndex,
+    onSelectionChange,
+    onSelectLine,
+  });
+  useEffect(() => {
+    selectionRef.current = {
+      lines,
+      selected,
+      lineIndices,
+      lineIndex: session.lineIndex,
+      onSelectionChange,
+      onSelectLine,
+    };
+  }, [lines, selected, lineIndices, session.lineIndex, onSelectionChange, onSelectLine]);
   useLayoutEffect(() => {
     if (listRef.current && scrollTopRef.current !== null) {
       listRef.current.scrollTop = Math.max(0, scrollTopRef.current);
@@ -212,9 +243,10 @@ export function LineTree({
   };
 
   /** Toggles Shift multi-selection for a row and focuses the remaining selection. */
-  const selectRow = (index: number, event?: ReactMouseEvent<HTMLElement>) => {
-    const key = lineTreeKey(lines, index);
-    const next = new Set(selected);
+  const selectRow = useCallback((index: number, event?: ReactMouseEvent<HTMLElement>) => {
+    const current = selectionRef.current;
+    const key = lineTreeKey(current.lines, index);
+    const next = new Set(current.selected);
     if (event?.shiftKey) {
       if (next.has(key)) {
         if (next.size > 1) {
@@ -230,10 +262,24 @@ export function LineTree({
     if (!next.size) {
       next.add(key);
     }
-    const focusIndex = next.has(key) ? index : focusAfterRemoval(index, next);
-    onSelectionChange(next);
-    onSelectLine(focusIndex, currentScroll());
-  };
+    let focusIndex = index;
+    if (!next.has(key)) {
+      let bestDistance = Infinity;
+      for (const id of next) {
+        const candidate = current.lineIndices.get(id);
+        if (candidate === undefined) {
+          continue;
+        }
+        const distance = Math.abs(candidate - index);
+        if (distance < bestDistance) {
+          focusIndex = candidate;
+          bestDistance = distance;
+        }
+      }
+    }
+    current.onSelectionChange(next);
+    current.onSelectLine(focusIndex, listRef.current?.scrollTop ?? 0);
+  }, []);
 
   /** Selects a folder instead of its first line; line focus stays unchanged. */
   const selectGroup = (group: number) => {
@@ -735,4 +781,4 @@ export function LineTree({
       />
     </>
   );
-}
+}, lineTreePropsEqual);

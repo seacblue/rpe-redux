@@ -143,6 +143,8 @@ export class MultiEditPanel {
   previewEnabled?: { checked: boolean };
   form?: MultiEditFormHandle;
   formModule?: Promise<MultiEditFormModule>;
+  /** Retains the paint order for an unchanged batch result. */
+  private ghostChanges?: { result: MultiEditResult; changes: readonly BatchChange[] };
   /** These closures are assigned inside `open()` before any caller invokes them. */
   updateHistory?: (event?: Event) => void;
   load?: (value: Partial<MultiEditFormValues>) => void;
@@ -187,6 +189,7 @@ export class MultiEditPanel {
     this.kind = kind;
     this.seed = 1;
     this.result = null;
+    this.ghostChanges = undefined;
     this.signature = null;
     this.updateHistory = () => this.renderForm(kind);
     this.read = () =>
@@ -280,6 +283,7 @@ export class MultiEditPanel {
             this.updateHistory?.();
             this.form?.selectHistory(String(position));
             this.result = null;
+            this.ghostChanges = undefined;
             this.chart = this.getSession().chart;
             this.signature = this.selectionSignature();
             this.form?.setResult("", false, false);
@@ -307,12 +311,14 @@ export class MultiEditPanel {
   hide(): void {
     this.active = false;
     this.result = null;
+    this.ghostChanges = undefined;
     this.invalidate();
   }
 
   /** Drop a stale inspector proposal after another editor command owns the chart. */
   clearPreview(): void {
     this.result = null;
+    this.ghostChanges = undefined;
     this.chart = this.getSession().chart;
     this.signature = this.selectionSignature();
     this.form?.setResult("", false, false);
@@ -367,6 +373,7 @@ export class MultiEditPanel {
   /** Recomputes the batch preview and reports errors to the form. */
   refresh(values?: Partial<MultiEditFormValues>): void {
     this.result = null;
+    this.ghostChanges = undefined;
     let summary: string;
     let isError = false;
     try {
@@ -459,10 +466,18 @@ export class MultiEditPanel {
     }
     // Ghosts follow the real note paint order, so a ghost Hold body stays
     // beneath the ghost heads it would otherwise cover.
-    const changes =
-      this.kind === "notes"
-        ? [...result.changes].sort((left, right) => batchPaintLayer(left) - batchPaintLayer(right))
-        : result.changes;
+    let changes: readonly BatchChange[] = result.changes;
+    if (this.kind === "notes") {
+      if (this.ghostChanges?.result !== result) {
+        this.ghostChanges = {
+          result,
+          changes: [...result.changes].sort(
+            (left, right) => batchPaintLayer(left) - batchPaintLayer(right),
+          ),
+        };
+      }
+      changes = this.ghostChanges.changes;
+    }
     for (const change of changes) {
       const item = change.after;
       const lineIndex = Number.isInteger(change.lineIndex) ? change.lineIndex : session.lineIndex;

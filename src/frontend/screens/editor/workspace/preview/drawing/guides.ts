@@ -61,6 +61,37 @@ export function lineGuides(
 type GuideGrid = Map<number, Map<number, Map<number, number[]>>>;
 const guideGroupPools = new WeakMap<LineGuideGroup[], LineGuideGroup[]>();
 
+/** Insert one finite guide group into the validation grid. */
+function insertGuideGroup(
+  target: GuideGrid,
+  group: LineGuideGroup,
+  index: number,
+  radius: number,
+): void {
+  if (!Number.isFinite(group.x) || !Number.isFinite(group.y) || !Number.isFinite(group.rotation)) {
+    return;
+  }
+  const x = Math.floor(group.x / radius);
+  const y = Math.floor(group.y / radius);
+  const rotation = Math.floor(group.rotation / 0.01);
+  let column = target.get(x);
+  if (!column) {
+    column = new Map();
+    target.set(x, column);
+  }
+  let cell = column.get(y);
+  if (!cell) {
+    cell = new Map();
+    column.set(y, cell);
+  }
+  let bucket = cell.get(rotation);
+  if (!bucket) {
+    bucket = [];
+    cell.set(rotation, bucket);
+  }
+  bucket.push(index);
+}
+
 /**
  * Merge guides that share a screen anchor.
  *
@@ -90,37 +121,9 @@ export function mergeGuidesInto(
   }
   groups.length = 0;
   const radius = 10 * scale;
+  const radiusSquared = radius * radius;
   const indexable = enabled && guides.length >= 64 && Number.isFinite(radius) && radius > 0;
   let grid: GuideGrid | null = null;
-  /** Adds a group to the spatial index under its anchor cell. */
-  const insert = (target: GuideGrid, guide: LineGuide, index: number): void => {
-    if (
-      !Number.isFinite(guide.x) ||
-      !Number.isFinite(guide.y) ||
-      !Number.isFinite(guide.rotation)
-    ) {
-      return;
-    }
-    const x = Math.floor(guide.x / radius);
-    const y = Math.floor(guide.y / radius);
-    const rotation = Math.floor(guide.rotation / 0.01);
-    let column = target.get(x);
-    if (!column) {
-      column = new Map();
-      target.set(x, column);
-    }
-    let cell = column.get(y);
-    if (!cell) {
-      cell = new Map();
-      column.set(y, cell);
-    }
-    let bucket = cell.get(rotation);
-    if (!bucket) {
-      bucket = [];
-      cell.set(rotation, bucket);
-    }
-    bucket.push(index);
-  };
   for (const guide of guides) {
     let group: LineGuideGroup | undefined;
     // A handful of shared anchors is cheaper to scan directly; only build the
@@ -128,7 +131,16 @@ export function mergeGuidesInto(
     if (!grid && indexable && groups.length >= 32) {
       const built: GuideGrid = new Map();
       grid = built;
-      groups.forEach((candidate, index) => insert(built, candidate, index));
+      groups.forEach((candidate, index) => {
+        const guide = candidate;
+        if (
+          Number.isFinite(guide.x) &&
+          Number.isFinite(guide.y) &&
+          Number.isFinite(guide.rotation)
+        ) {
+          insertGuideGroup(built, candidate, index, radius);
+        }
+      });
     }
     const indexed =
       grid !== null &&
@@ -160,7 +172,7 @@ export function mergeGuidesInto(
               if (
                 index < first &&
                 Math.abs(candidate.rotation - guide.rotation) < 0.01 &&
-                Math.hypot(candidate.x - guide.x, candidate.y - guide.y) < radius
+                (candidate.x - guide.x) ** 2 + (candidate.y - guide.y) ** 2 < radiusSquared
               ) {
                 group = candidate;
                 first = index;
@@ -172,16 +184,13 @@ export function mergeGuidesInto(
     } else if (enabled) {
       group = groups.find(
         (candidate) =>
-          Math.hypot(candidate.x - guide.x, candidate.y - guide.y) < radius &&
+          (candidate.x - guide.x) ** 2 + (candidate.y - guide.y) ** 2 < radiusSquared &&
           Math.abs(candidate.rotation - guide.rotation) < 0.01,
       );
     }
     if (group) {
       group.indices.push(guide.index);
     } else {
-      if (grid && indexed) {
-        insert(grid, guide, groups.length);
-      }
       const next = pool.pop() ?? { ...guide, indices: [] };
       next.index = guide.index;
       next.x = guide.x;
@@ -189,6 +198,9 @@ export function mergeGuidesInto(
       next.rotation = guide.rotation;
       next.indices.push(guide.index);
       groups.push(next);
+      if (grid && indexed) {
+        insertGuideGroup(grid, next, groups.length - 1, radius);
+      }
     }
   }
   guideGroupPools.set(groups, pool);

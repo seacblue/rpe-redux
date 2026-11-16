@@ -12,6 +12,7 @@ export default {
   "workspace.loading.unpack": "读取谱面包",
   "workspace.loading.notes": "正在解析音符",
   "workspace.loading.events": "正在解析事件",
+  "workspace.loading.content": "正在解析谱面对象",
   "workspace.loading.render": "正在渲染首帧",
   "workspace.loading.parse": "校验谱面",
   "workspace.loading.textures": "加载纹理",

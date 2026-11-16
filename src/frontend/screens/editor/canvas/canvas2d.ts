@@ -212,10 +212,9 @@ export function prepareCanvas(
   height: number;
 } {
   const rectangle = measurement ?? measureCanvas(canvas);
-  const context = context2d(canvas);
   let backend = renderBackends.get(canvas);
   if (!backend) {
-    backend = new Canvas2DRenderBackend(canvas, context);
+    backend = new Canvas2DRenderBackend(canvas, context2d(canvas));
     renderBackends.set(canvas, backend);
   }
   const frame = backend.resize(rectangle);

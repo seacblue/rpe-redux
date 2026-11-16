@@ -138,9 +138,15 @@ export interface PreviewLineSurface extends PreviewTextureSurface {
   noteTextures: NoteTextureTable;
   /** Whether every painted judge line can use the shared line texture batch. */
   lineBatchable: boolean;
+  /** Skip the CPU line pass when the retained static GPU line layer is valid. */
+  skipStaticLinePass: boolean;
+  /** Route world-static lines to the retained GPU layer while dynamic lines stream each frame. */
+  retainStaticLineBatch: boolean;
   passes: RenderPass[];
   noteOpacity: number;
   selectedLines: readonly number[];
+  /** Membership index for the current multi-line selection. */
+  selectedLineSet: ReadonlySet<number>;
   selectedLineColor: readonly number[];
   selectedNotes: PreviewNoteSelection;
   /** Transient highlight driven by the overlap picker's hovered row. */
@@ -557,9 +563,30 @@ export function drawLinePasses(
     }
     const cached = preparedLines[index];
     if (cached?.frame === preparedGeneration) {
+      cached.selectedNotes = surface.selectedNotes.get(index);
       return cached;
     }
     const rotation = (state.rotation * Math.PI) / 180;
+    const preparedCenterX = centerX + state.x * scaleX;
+    const preparedCenterY = centerY - state.y * scaleY;
+    // Reuse the derived trigonometry and scale factors whenever the projected
+    // geometry is unchanged. A dynamic line may animate only alpha, colour, or
+    // a track that does not affect this projection, so limiting this fast path
+    // to `staticState` needlessly repeats cos/sin/hypot for those lines.
+    if (
+      cached &&
+      cached.runtime === runtime &&
+      cached.state === state &&
+      cached.centerX === preparedCenterX &&
+      cached.centerY === preparedCenterY &&
+      cached.rotation === rotation &&
+      cached.lineScaleX === state.scaleX &&
+      cached.lineScaleY === state.scaleY
+    ) {
+      cached.frame = preparedGeneration;
+      cached.selectedNotes = surface.selectedNotes.get(index);
+      return cached;
+    }
     const prepared = cached ?? {
       frame: 0,
       state,
@@ -579,8 +606,8 @@ export function drawLinePasses(
     prepared.state = state;
     prepared.runtime = runtime;
     prepared.selectedNotes = surface.selectedNotes.get(index);
-    prepared.centerX = centerX + state.x * scaleX;
-    prepared.centerY = centerY - state.y * scaleY;
+    prepared.centerX = preparedCenterX;
+    prepared.centerY = preparedCenterY;
     prepared.rotation = rotation;
     prepared.cosine = Math.cos(rotation);
     prepared.sine = Math.sin(rotation);
@@ -632,11 +659,19 @@ export function drawLinePasses(
   // ever used to attribute the same two buckets.
   const drawStarted = performance.now();
   for (const pass of passes) {
+    if (
+      pass.kind === "line" &&
+      surface.skipStaticLinePass &&
+      frame.scene.isWorldStateStatic(pass.index)
+    ) {
+      continue;
+    }
     const singleLinePass = pass.kind === "line";
-    const passLength = singleLinePass ? 1 : order.length;
+    const passOrder = singleLinePass ? order : (frame.scene.noteOrder ?? order);
+    const passLength = singleLinePass ? 1 : passOrder.length;
     const passStarted = singleLinePass ? 0 : performance.now();
     for (let passIndex = 0; passIndex < passLength; passIndex++) {
-      const index = singleLinePass ? pass.index : order[passIndex];
+      const index = singleLinePass ? pass.index : passOrder[passIndex];
       if (surface.soloLine != null && index !== surface.soloLine) {
         continue;
       }
@@ -729,7 +764,7 @@ export function drawLinePasses(
         const selected =
           surface.samplingFocus == null &&
           surface.selectedLineColor.length >= 3 &&
-          (surface.overlapMenuOpen ? hoveredLine === index : surface.selectedLines.includes(index));
+          (surface.overlapMenuOpen ? hoveredLine === index : surface.selectedLineSet.has(index));
         effectiveLineColor = focused
           ? (surface.focusLineColor ?? [255, 64, 64])
           : samplingFocus
@@ -750,6 +785,7 @@ export function drawLinePasses(
             rotation,
             clamp01((samplingAlpha ?? state.alpha) / 255) * clamp01(effectiveLineColor[3] ?? 1),
             lineColorStyle,
+            surface.retainStaticLineBatch && frame.scene.isWorldStateStatic?.(index) === true,
           );
         }
       }

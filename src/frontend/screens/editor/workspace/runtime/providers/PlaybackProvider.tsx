@@ -86,6 +86,8 @@ export function createPlaybackRuntime(options: {
   invalidate(): void;
   offsetSeconds(): number;
   tempo(): TempoMap;
+  /** Notify the shell when playback leaves its pending/playing state. */
+  onPlaybackStateChange?: () => void;
 }): PlaybackRuntime {
   const { audio, hitSounds, realtimePreview } = options.preview;
   const chartSeconds = () => audio.time - options.offsetSeconds();
@@ -116,13 +118,18 @@ export function createPlaybackRuntime(options: {
   };
   const currentBeat = () =>
     options.tempo().beat(chartSeconds(), options.session.current.line?.bpmfactor ?? 1);
-  const playback = new EditorPlayback(audio, hitSounds, () => {
-    options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
-    options.timeline.viewport.setOrigin(currentBeat(), "seek");
-    realtimePreview.effectsSince = chartSeconds();
-    preloadAround(chartSeconds());
-    options.invalidate();
-  });
+  const playback = new EditorPlayback(
+    audio,
+    hitSounds,
+    () => {
+      options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
+      options.timeline.viewport.setOrigin(currentBeat(), "seek");
+      realtimePreview.effectsSince = chartSeconds();
+      preloadAround(chartSeconds());
+      options.invalidate();
+    },
+    options.onPlaybackStateChange,
+  );
   const playbackMetrics = new PlaybackMetrics();
   let wheelSeek: WheelSeekState | null = null;
 

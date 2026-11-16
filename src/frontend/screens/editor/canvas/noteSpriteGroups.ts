@@ -61,6 +61,8 @@ export function notePaintLayer(type: number): NotePaintLayer {
 export class NoteSpriteGroups {
   /** Judge-line groups paint beneath every note and Hold. */
   readonly line: SpriteGroupMap = new Map();
+  /** Dynamic judge-line groups are rebuilt beside notes while static lines are retained. */
+  readonly dynamicLine: SpriteGroupMap = new Map();
   /** Ordinary groups per paint layer; lower layers are painted first. */
   readonly layers: [SpriteGroupMap, SpriteGroupMap] = [new Map(), new Map()];
   /** Selected instances render as a foreground pass so overlap cannot hide the selection. */
@@ -76,6 +78,11 @@ export class NoteSpriteGroups {
     return this.groupFor(this.line, descriptor);
   }
 
+  /** Take the group of one dynamic judge-line instance. */
+  dynamicLineGroup(descriptor: TextureDescriptor): SpriteGroup {
+    return this.groupFor(this.dynamicLine, descriptor);
+  }
+
   private groupFor(groups: SpriteGroupMap, descriptor: TextureDescriptor): SpriteGroup {
     let group = groups.get(descriptor.source);
     if (!group) {
@@ -89,9 +96,14 @@ export class NoteSpriteGroups {
     return group;
   }
 
-  /** Reset every group's instance count so the next frame rebuilds its uploads. */
-  reset(): void {
-    for (const group of this.line.values()) {
+  /** Reset note groups; a retained line layer may keep its previous instances. */
+  reset(retainLine = false): void {
+    if (!retainLine) {
+      for (const group of this.line.values()) {
+        group.count = 0;
+      }
+    }
+    for (const group of this.dynamicLine.values()) {
       group.count = 0;
     }
     for (const groups of this.layers) {
@@ -104,9 +116,47 @@ export class NoteSpriteGroups {
     }
   }
 
+  /** Return whether the retained judge-line layer still has drawable instances. */
+  hasLineInstances(): boolean {
+    for (const group of this.line.values()) {
+      if (group.count > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Return whether this frame has any queued instance to submit. */
+  hasInstances(): boolean {
+    for (const group of this.line.values()) {
+      if (group.count > 0) {
+        return true;
+      }
+    }
+    for (const group of this.dynamicLine.values()) {
+      if (group.count > 0) {
+        return true;
+      }
+    }
+    for (const groups of this.layers) {
+      for (const group of groups.values()) {
+        if (group.count > 0) {
+          return true;
+        }
+      }
+    }
+    for (const group of this.selected.values()) {
+      if (group.count > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Drop every group; the backing buffers rebuild on first use. */
   clear(): void {
     this.line.clear();
+    this.dynamicLine.clear();
     for (const groups of this.layers) {
       groups.clear();
     }

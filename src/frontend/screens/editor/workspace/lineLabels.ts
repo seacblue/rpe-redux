@@ -10,13 +10,20 @@ import type { Chart, JudgeLine } from "../../../../core/global/chart/chart.ts";
 import { groupNames, lineGroupIndex } from "../../../../core/global/chart/line/lineGroups.ts";
 
 /** Recognises generated line names written by any supported language. */
-function generatedLineNames(index: number): Set<string> {
+const generatedLineNameCache = new Map<number, ReadonlySet<string>>();
+
+function generatedLineNames(index: number): ReadonlySet<string> {
+  const cached = generatedLineNameCache.get(index);
+  if (cached) {
+    return cached;
+  }
   const names = new Set<string>();
   for (const catalog of Object.values(CATALOGS)) {
     const name = interpolate(catalog["model.line.defaultName"], { index });
     names.add(name);
     names.add(name.replace(" ", ""));
   }
+  generatedLineNameCache.set(index, names);
   return names;
 }
 

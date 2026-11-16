@@ -25,6 +25,7 @@
     "benchmark:crud": "node --expose-gc scripts/benchmarkChartCrud.mjs",
     "benchmark:shader": "node scripts/benchmarkShaderPipeline.mjs",
     "benchmark:render": "node scripts/benchmarkRenderPipeline.mjs",
+    "benchmark:browser": "node scripts/benchmarkBrowserPreview.mjs",
     "test:server": "go -C src/backend test ./...",
     "smoke": "node scripts/smoke.mjs",
     "icons:check": "node scripts/checkThemeIcons.mjs",

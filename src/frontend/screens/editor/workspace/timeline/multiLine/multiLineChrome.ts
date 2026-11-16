@@ -39,10 +39,11 @@ export function syncMultiLineChrome(
     typeof layout.multiLineScroll === "number"
       ? layout.multiLineScroll
       : (layout.multiLineScroll[area] ?? 0);
-
-  layout.multiLineScrollState.snapshot.update({
-    visible,
-    max: String(maximum),
-    value: String(Math.min(maximum, Math.max(0, scroll))),
-  });
+  const max = String(maximum);
+  const value = String(Math.min(maximum, Math.max(0, scroll)));
+  const previous = layout.multiLineScrollState.snapshot.get();
+  if (previous.visible === visible && previous.max === max && previous.value === value) {
+    return;
+  }
+  layout.multiLineScrollState.snapshot.set({ visible, max, value });
 }

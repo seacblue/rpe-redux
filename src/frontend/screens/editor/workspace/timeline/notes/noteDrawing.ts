@@ -46,9 +46,11 @@ import { drawNoteLanes } from "./noteLaneDrawing.ts";
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
   readonly range: TimelineRenderRange;
+  readonly mergedLineIndices: number[];
 }
 
 const multiLineNoteScratch = new WeakMap<object, MultiLineNoteScratch>();
+const targetLineSets = new WeakMap<readonly number[], ReadonlySet<number>>();
 
 /** Reuse multi-line label and range storage across timeline frames. */
 function multiLineNoteScratchFor(receiver: object): MultiLineNoteScratch {
@@ -59,6 +61,7 @@ function multiLineNoteScratchFor(receiver: object): MultiLineNoteScratch {
   const created: MultiLineNoteScratch = {
     lineLabelCuller: new TimelineLabelCuller(),
     range: { start: 0, end: 0, invalid: false },
+    mergedLineIndices: [],
   };
   multiLineNoteScratch.set(receiver, created);
   return created;
@@ -274,6 +277,7 @@ export function drawNote(
 /** Draw the note field for the current mode: grid, notes, ghosts, and multi-line chrome. */
 export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void {
   const session = this.getSession();
+  this.cache.setNoteChangeHints(session.lastNoteChangeHints);
   const palette = this.cache.palette() ?? readCanvasPalette();
   const { context, width, height } = prepareCanvas(this.notesCanvas);
   this.viewport.syncMultiLineChrome("notes", width);
@@ -551,15 +555,67 @@ export function drawMultiLineNotes(
   const lineIndices = session.targetLineIndices;
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const multiplePanels = this.viewport.panelCount("notes") > 1;
+  // Merged notes share the active line's time axis. Compute this projection
+  // once instead of repeating the same tempo/viewport work for every line.
+  const mergedBeatRange =
+    session.notesMode === "multi_merged"
+      ? this.viewport.noteBeatRangeForLine(session.lineIndex, height, "notes")
+      : null;
+  const mergedLineCandidates = mergedBeatRange
+    ? this.cache.noteLinesInBeatRange(session.chart, mergedBeatRange[0], mergedBeatRange[1])
+    : null;
+  let mergedLineIndices = lineIndices;
+  let mergedCandidatesFiltered = false;
+  if (mergedLineCandidates && mergedLineCandidates.indices.length < lineIndices.length) {
+    let selected = targetLineSets.get(lineIndices);
+    if (!selected) {
+      selected = new Set(lineIndices);
+      targetLineSets.set(lineIndices, selected);
+    }
+    scratch.mergedLineIndices.length = 0;
+    for (const lineIndex of mergedLineCandidates.indices) {
+      if (selected.has(lineIndex)) {
+        scratch.mergedLineIndices.push(lineIndex);
+      }
+    }
+    mergedLineIndices = scratch.mergedLineIndices;
+    mergedCandidatesFiltered = true;
+  }
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, "notes");
   const startPanel = multiplePanels ? firstPanel : 0;
   const endPanel = multiplePanels
     ? Math.min(lastPanel, lineIndices.length - 1)
-    : lineIndices.length - 1;
+    : mergedLineIndices.length - 1;
+  const beatRangesByFactor = new Map<number, [number, number]>();
   context.save();
   for (let panel = startPanel; panel <= endPanel; panel++) {
-    const lineIndex = lineIndices[panel];
+    const lineIndex = multiplePanels ? lineIndices[panel] : mergedLineIndices[panel];
     if (lineIndex === undefined) {
+      continue;
+    }
+    const line = session.chart.judgeLineList?.[lineIndex];
+    let lineBeatRange = mergedBeatRange;
+    if (!lineBeatRange) {
+      const factor = this.viewport.noteFactorForLine(lineIndex);
+      const cachedRange = beatRangesByFactor.get(factor);
+      if (cachedRange) {
+        lineBeatRange = cachedRange;
+      } else {
+        lineBeatRange = this.viewport.noteBeatRangeForLine(lineIndex, height, "notes");
+        beatRangesByFactor.set(factor, lineBeatRange);
+      }
+    }
+    const [bottomBeat, topBeat] = lineBeatRange;
+    if (
+      mergedLineCandidates &&
+      !mergedCandidatesFiltered &&
+      mergedLineCandidates.marks[lineIndex] !== mergedLineCandidates.generation
+    ) {
+      continue;
+    }
+    this.cache.refreshNotes(lineIndex, line?.notes ?? []);
+    const noteIndex = this.cache.noteIndex(lineIndex);
+    if (!noteIndex || !this.cache.hasNotesInBeatRange(lineIndex, bottomBeat, topBeat)) {
       continue;
     }
     const lineOpacity = multiLineLineOpacity(
@@ -567,14 +623,7 @@ export function drawMultiLineNotes(
       session.lineIndex,
       this.appearance.multiLineNonCurrentOpacity,
     );
-    const line = session.chart.judgeLineList?.[lineIndex];
     const skewCurve = noteSkewCurve(line);
-    const [bottomBeat, topBeat] = this.viewport.noteBeatRangeForLine(lineIndex, height, "notes");
-    this.cache.refreshNotes(lineIndex, line?.notes ?? []);
-    const noteIndex = this.cache.noteIndex(lineIndex);
-    if (!noteIndex) {
-      continue;
-    }
     const overlapRanks = this.cache.noteOverlapRanks(
       noteIndex.notes,
       this.appearance.overlapThreshold,

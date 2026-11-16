@@ -119,6 +119,13 @@ export class TimelineViewport {
   readonly getSession: () => EditorSession;
   private readonly types: (lineIndex?: number) => string[];
   private readonly appearance: TimelineAppearance;
+  /** Factors visible in the current multi-line viewport, deduplicated for playback math. */
+  private beatsPerPixelFactors: {
+    chart: unknown;
+    targets: readonly number[];
+    mode: TimelineArea | "single";
+    values: readonly number[];
+  } | null = null;
   /** Bind the viewport to its canvases, session, tempo, and scroll state. */
   constructor(
     notesCanvas: HTMLCanvasElement,
@@ -281,25 +288,61 @@ export class TimelineViewport {
    */
   beatsPerPixel(): number {
     const session = this.getSession();
+    const area = session.multiLineActive ? session.multiLineMode : null;
+    const factors: readonly number[] = (() => {
+      if (!session.multiLineActive) {
+        return [session.line?.bpmfactor ?? 1];
+      }
+      const targets = session.targetLineIndices;
+      const mode = session.multiLineMode;
+      const canvas = mode === "notes" ? this.notesCanvas : this.eventsCanvas;
+      // Split multi-line mode paints only the panels inside the current viewport.
+      // Off-screen BPM factors cannot change the visible timeline's pixel cadence,
+      // so do not scan all 741 targets on every playback frame.
+      if (this.panelCount(mode) > 1 && canvas.clientWidth > 0) {
+        const [first, last] = this.visiblePanelRange(canvas.clientWidth, mode);
+        const visible: number[] = [];
+        for (let panel = first; panel <= last; panel += 1) {
+          const factor = this.factorForLine(targets[panel] ?? session.lineIndex);
+          if (!visible.includes(factor)) {
+            visible.push(factor);
+          }
+        }
+        return visible.length ? visible : [session.line?.bpmfactor ?? 1];
+      }
+      const cached = this.beatsPerPixelFactors;
+      if (
+        cached &&
+        cached.chart === session.chart &&
+        cached.targets === targets &&
+        cached.mode === mode
+      ) {
+        return cached.values;
+      }
+      const unique = new Set<number>();
+      for (const lineIndex of targets) {
+        unique.add(this.factorForLine(lineIndex));
+      }
+      const values = [...unique];
+      this.beatsPerPixelFactors = { chart: session.chart, targets, mode, values };
+      return values;
+    })();
     let minimum = Number.POSITIVE_INFINITY;
-    const visit = (area: "notes" | "events", lineIndex: number): void => {
-      const canvas = area === "notes" ? this.notesCanvas : this.eventsCanvas;
+    const visit = (currentArea: "notes" | "events", factor: number): void => {
+      const canvas = currentArea === "notes" ? this.notesCanvas : this.eventsCanvas;
       if (canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
         return;
       }
-      const scale = this.scaleForArea(area);
-      minimum = Math.min(
-        minimum,
-        beatsPerPixelAtOrigin(this.tempo, this.origin, scale, this.factorForLine(lineIndex)),
-      );
+      const scale = this.scaleForArea(currentArea);
+      minimum = Math.min(minimum, beatsPerPixelAtOrigin(this.tempo, this.origin, scale, factor));
     };
-    if (session.multiLineActive) {
-      for (const lineIndex of session.targetLineIndices) {
-        visit(session.multiLineMode, lineIndex);
+    if (area) {
+      for (const factor of factors) {
+        visit(area, factor);
       }
     } else {
-      visit("notes", session.lineIndex);
-      visit("events", session.lineIndex);
+      visit("notes", factors[0] ?? 1);
+      visit("events", factors[0] ?? 1);
     }
     return Number.isFinite(minimum)
       ? minimum

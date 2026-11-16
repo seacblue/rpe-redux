@@ -7,7 +7,11 @@
  * rules stay in their own modules.
  */
 import { TimelineViewport } from "../viewport/timelineViewport.ts";
-import { TimelineGestures } from "../interaction/timelineGestures.ts";
+import {
+  pointerTimingEnd,
+  pointerTimingStart,
+  TimelineGestures,
+} from "../interaction/timelineGestures.ts";
 import { TimelineAppearance } from "../drawing/timelineAppearance.ts";
 import { TimelineCache } from "../drawing/timelineCache.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
@@ -184,8 +188,10 @@ export class Timeline {
     );
     this.gestures.onEvent = onEvent;
     this.changed = () => {
+      const started = pointerTimingStart();
       this.renderRevision += 1;
       changed();
+      pointerTimingEnd(started, "timelineInvalidate");
     };
     this.changedSelectionOverlay = () => {
       this.selectionOverlayRevision += 1;

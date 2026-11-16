@@ -11,6 +11,7 @@ export type ChartWorkerRequest =
   | { readonly id: number; readonly kind: "open"; readonly bytes?: ArrayBuffer }
   | { readonly id: number; readonly kind: "append"; readonly chunk: ArrayBuffer }
   | { readonly id: number; readonly kind: "finish" }
+  | { readonly id: number; readonly kind: "fingerprints" }
   | { readonly id: number; readonly kind: "line"; readonly index: number }
   | { readonly id: number; readonly kind: "close" };
 

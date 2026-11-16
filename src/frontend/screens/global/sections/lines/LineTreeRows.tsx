@@ -5,7 +5,7 @@
  * creation, and rename state machine stays in `LineTree.tsx`. List rows are
  * intentionally static: moving a line or folder is not a list gesture.
  */
-import type { MouseEvent as ReactMouseEvent, ReactNode, Ref } from "react";
+import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
 import { TreeFolder } from "../../../../../design/patterns/tree/TreeFolder.tsx";
@@ -25,45 +25,53 @@ export interface LineRowProps {
 }
 
 /** One static line row; selection is the only list-level line action. */
-export function LineRow({
-  line,
-  index,
-  group,
-  active,
-  selected,
-  rowRef,
-  onPointerDown,
-  onSelect,
-}: LineRowProps) {
-  return (
-    <ListRow
-      selected={selected}
-      ref={rowRef}
-      current={active}
-      className="line-row"
-      role="treeitem"
-      aria-selected={selected}
-      aria-current={active ? "true" : undefined}
-      tabIndex={0}
-      data-line-index={index}
-      data-group-index={group}
-      onPointerDown={onPointerDown}
-      onClick={(event) => onSelect(index, event)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) {
-          return;
-        }
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(index);
-        }
-      }}
-    >
-      <span className="line-list-index">{index}</span>
-      <span className="line-list-name">{lineNameLabel(line, index)}</span>
-    </ListRow>
-  );
-}
+export const LineRow = memo(
+  function LineRow({
+    line,
+    index,
+    group,
+    active,
+    selected,
+    rowRef,
+    onPointerDown,
+    onSelect,
+  }: LineRowProps) {
+    return (
+      <ListRow
+        selected={selected}
+        ref={rowRef}
+        current={active}
+        className="line-row"
+        role="treeitem"
+        aria-selected={selected}
+        aria-current={active ? "true" : undefined}
+        tabIndex={0}
+        data-line-index={index}
+        data-group-index={group}
+        onPointerDown={onPointerDown}
+        onClick={(event) => onSelect(index, event)}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) {
+            return;
+          }
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect(index);
+          }
+        }}
+      >
+        <span className="line-list-index">{index}</span>
+        <span className="line-list-name">{lineNameLabel(line, index)}</span>
+      </ListRow>
+    );
+  },
+  (previous, next) =>
+    previous.line === next.line &&
+    previous.index === next.index &&
+    previous.group === next.group &&
+    previous.active === next.active &&
+    previous.selected === next.selected,
+);
 
 export interface LineCardProps {
   chart: Chart;
@@ -77,45 +85,53 @@ export interface LineCardProps {
 }
 
 /** One static line card for the optional grid presentation. */
-export function LineCard({
-  chart,
-  line,
-  index,
-  active,
-  selected,
-  rowRef,
-  onPointerDown,
-  onSelect,
-}: LineCardProps) {
-  const notes = line.numOfNotes ?? line.notes?.length ?? 0;
-  return (
-    <Button
-      type="button"
-      ref={rowRef}
-      variant="plain"
-      className={`line-grid-card${active ? " current" : ""}${selected ? " is-selected" : ""}`}
-      role="treeitem"
-      data-selected={selected ? "true" : undefined}
-      aria-selected={selected}
-      aria-current={active ? "true" : undefined}
-      data-line-index={index}
-      onPointerDown={onPointerDown}
-      onClick={(event) => onSelect(index, event)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(index);
-        }
-      }}
-    >
-      <span className="line-grid-index">{index}</span>
-      <strong className="line-grid-name">{lineDisplayName(chart, index)}</strong>
-      <span className="line-grid-meta">
-        {t("editorPanels.linePanel.noteCount", { count: notes })}
-      </span>
-    </Button>
-  );
-}
+export const LineCard = memo(
+  function LineCard({
+    chart,
+    line,
+    index,
+    active,
+    selected,
+    rowRef,
+    onPointerDown,
+    onSelect,
+  }: LineCardProps) {
+    const notes = line.numOfNotes ?? line.notes?.length ?? 0;
+    return (
+      <Button
+        type="button"
+        ref={rowRef}
+        variant="plain"
+        className={`line-grid-card${active ? " current" : ""}${selected ? " is-selected" : ""}`}
+        role="treeitem"
+        data-selected={selected ? "true" : undefined}
+        aria-selected={selected}
+        aria-current={active ? "true" : undefined}
+        data-line-index={index}
+        onPointerDown={onPointerDown}
+        onClick={(event) => onSelect(index, event)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect(index);
+          }
+        }}
+      >
+        <span className="line-grid-index">{index}</span>
+        <strong className="line-grid-name">{lineDisplayName(chart, index)}</strong>
+        <span className="line-grid-meta">
+          {t("editorPanels.linePanel.noteCount", { count: notes })}
+        </span>
+      </Button>
+    );
+  },
+  (previous, next) =>
+    previous.chart === next.chart &&
+    previous.line === next.line &&
+    previous.index === next.index &&
+    previous.active === next.active &&
+    previous.selected === next.selected,
+);
 
 export interface FolderDropSectionProps {
   group: number;

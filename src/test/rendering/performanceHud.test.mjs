@@ -20,7 +20,7 @@ import { getPerformanceHudBlocks } from "../../frontend/overlays/performance/per
 test("performance HUD keeps only the focused playback signals visible", () => {
   assert.deepEqual(
     getPerformanceHudBlocks().map((block) => block.id),
-    ["fps", "frame-time", "hotspots", "cpu"],
+    ["fps", "hotspots", "cpu", "memory"],
   );
 });
 

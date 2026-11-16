@@ -76,6 +76,8 @@ export interface TrustedExtensionManifest {
   entry?: string;
   i18n?: string;
   capabilities?: readonly ExtensionCapability[];
+  /** Built-in-only declaration that the package tolerates paged chart facades. */
+  pagedChartSafe?: boolean;
   /**
    * Collaboration scope. `local` is the default; `chart` affects shared chart
    * state through ordinary transactions; `shared-service` requires the same

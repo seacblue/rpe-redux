@@ -134,7 +134,12 @@ export class ProjectHome {
     this.reportError = reportError;
     this.cards = new HomeProjectCardsAdapter({
       onOpenProject: (id) => {
-        void this.openProject(id).catch(reportError);
+        if (!this.cards.beginOpening(id)) {
+          return;
+        }
+        void this.openProject(id)
+          .catch(reportError)
+          .finally(() => this.cards.finishOpening(id));
       },
       onExportProject: (id) => exportProject(id).catch(reportError),
       onRenameProject: (project) => this.library.edit(project),
@@ -328,6 +333,17 @@ export class ProjectHome {
   /** Opens one library project after an import; the caller handled unsaved work. */
   async open(id: string): Promise<void> {
     await (this.openImported ?? this.openProjectAction)(id);
+  }
+
+  /** Imports one chart into the library, refreshes the cards, and opens it. */
+  async importAndOpenFile(path: string): Promise<boolean> {
+    const id = await this.importFile(path);
+    if (!id) {
+      return false;
+    }
+    await this.refresh();
+    await this.open(id);
+    return true;
   }
 
   /** Releases the controller and the card adapter. */

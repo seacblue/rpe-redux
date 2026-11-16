@@ -136,6 +136,8 @@ export interface LibraryCardsProps {
   /** The library has finished its first read, so the first list is not "new". */
   loaded: boolean;
   selectedKey: string | null;
+  /** Project currently being opened; context-menu opens are locked meanwhile. */
+  openingProjectId: string | null;
   view: LibraryView;
   /** Project id whose delete request is in flight. */
   removingProjectId: string | null;
@@ -152,6 +154,7 @@ export function LibraryCards({
   query,
   loaded,
   selectedKey,
+  openingProjectId,
   view,
   removingProjectId,
   onSelect,
@@ -182,6 +185,9 @@ export function LibraryCards({
 
   /** Opens the card menu at the pointer and selects the chart it belongs to. */
   const openMenu = (event: MouseEvent<HTMLButtonElement>, entry: LibraryEntry) => {
+    if (openingProjectId !== null) {
+      return;
+    }
     event.preventDefault();
     onSelect(entry, false);
     const actions: ContextMenuAction[] = [

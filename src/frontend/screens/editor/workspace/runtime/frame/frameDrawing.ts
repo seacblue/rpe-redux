@@ -27,6 +27,9 @@ interface FrameTimingProbe {
     preview: boolean;
     playhead: boolean;
     timelineMs: number;
+    timelineDrawMs: number;
+    multiEditTimelineMs: number;
+    audioAnalysisMs: number;
     previewMs: number;
     selectionMs: number;
     totalMs: number;
@@ -34,6 +37,10 @@ interface FrameTimingProbe {
     previewSessionChanged: boolean;
     previewSelectionChanged: boolean;
     previewSecondsChanged: boolean;
+    timelineLineCount: number;
+    timelineTargetLineCount: number;
+    timelinePanelCount: number;
+    timelineVisiblePanelRange: readonly [number, number];
   }): void;
 }
 
@@ -52,7 +59,7 @@ function reportFrameTiming(sample: Parameters<FrameTimingProbe>[0]): void {
   }
 }
 
-type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession"> & {
+type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession" | "notesCanvas"> & {
   renderRevision: number;
   selectionOverlayRevision: number;
   drawPlayhead(playBeat: number): void;
@@ -62,7 +69,12 @@ type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession">
   >;
   viewport: Pick<
     Timeline["viewport"],
-    "origin" | "setOrigin" | "setPlaybackActive" | "beatsPerPixel"
+    | "origin"
+    | "setOrigin"
+    | "setPlaybackActive"
+    | "beatsPerPixel"
+    | "panelCount"
+    | "visiblePanelRange"
   >;
 };
 
@@ -209,16 +221,24 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           paint: (request, work) => {
             const paintStarted = performance.now();
             let timelineMs: number | undefined;
+            let timelineDrawMs = 0;
+            let multiEditTimelineMs = 0;
+            let audioAnalysisMs = 0;
             let previewMs: number | undefined;
             if (work.timeline) {
               const started = performance.now();
               runtime.timeline.draw(beat);
+              timelineDrawMs = performance.now() - started;
               // A batch drag owns the timeline proposal, so the inspector's
               // independent ghost layer is omitted while that preview is live.
               if (!runtime.timeline.getPreviewSession()) {
+                const multiEditStarted = performance.now();
                 runtime.multiEdit.drawTimeline();
+                multiEditTimelineMs = performance.now() - multiEditStarted;
               }
+              const audioAnalysisStarted = performance.now();
               runtime.audioAnalysis.draw(runtime.offsetSeconds());
+              audioAnalysisMs = performance.now() - audioAnalysisStarted;
               timelineMs = performance.now() - started;
             }
             // Keep the retained marquee canvas above the timeline content. It
@@ -251,6 +271,12 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                   deferHeavyFrame:
                     !runtime.audio.playing && previewHighDensity && !work.previewInvalidated,
                   selectedLines: viewSession.targetLineIndices,
+                  changedLineIndexes:
+                    viewChart === viewSession.chart
+                      ? viewSession.lastChangedLineIndexes
+                      : undefined,
+                  noteChangeHints:
+                    viewChart === viewSession.chart ? viewSession.lastNoteChangeHints : undefined,
                 },
               );
               runtime.realtimePreview.visible = visible;
@@ -262,6 +288,9 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
               preview: work.preview,
               playhead: work.playhead,
               timelineMs: timelineMs ?? 0,
+              timelineDrawMs,
+              multiEditTimelineMs,
+              audioAnalysisMs,
               previewMs: previewMs ?? 0,
               selectionMs,
               totalMs: performance.now() - paintStarted,
@@ -269,6 +298,13 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
               previewSessionChanged,
               previewSelectionChanged,
               previewSecondsChanged,
+              timelineLineCount: session.chart.judgeLineList?.length ?? 0,
+              timelineTargetLineCount: session.targetLineIndices.length,
+              timelinePanelCount: runtime.timeline.viewport.panelCount("notes"),
+              timelineVisiblePanelRange: runtime.timeline.viewport.visiblePanelRange(
+                runtime.timeline.notesCanvas.clientWidth,
+                "notes",
+              ),
             });
             return { timelineMs, previewMs } satisfies RenderTiming;
           },

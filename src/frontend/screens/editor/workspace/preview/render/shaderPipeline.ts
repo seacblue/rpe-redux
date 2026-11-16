@@ -91,11 +91,13 @@ export interface ShaderProgram {
   types: Map<string, number>;
   defaults: Record<string, number | number[]>;
   builtin: boolean;
+  /** Last uploaded values for uniforms that are stable across frames. */
+  uniformCache: Map<string, number | number[]>;
 }
 
 type GlContext = WebGL2RenderingContext | WebGLRenderingContext;
 
-/** GPU input layer rendered into the shader source texture before user passes. */
+/** GPU input layer rendered into the shader overlay texture before user passes. */
 export interface ShaderInputLayer {
   /** Draw the layer without changing the source texture's existing pixels. */
   finishToFramebuffer(
@@ -104,6 +106,12 @@ export interface ShaderInputLayer {
     width: number,
     height: number,
   ): boolean;
+}
+
+/** CPU-side upload timings captured for the most recent shader frame. */
+export interface ShaderFrameMetrics {
+  sourceUploadMs: number;
+  overlayUploadMs: number;
 }
 
 /** Clip-space position and texture coordinates for one full-screen quad. */
@@ -185,6 +193,7 @@ export class ShaderPipeline {
   textureWidth?: number;
   textureHeight?: number;
   private sourceStaging?: HTMLCanvasElement | null;
+  private sourceStagingContext?: CanvasRenderingContext2D | null;
   private uploadedSource?: HTMLCanvasElement | null;
   private uploadedRevision?: number | null;
   private uploadedWidth?: number;
@@ -206,6 +215,8 @@ export class ShaderPipeline {
   private compositeTexCoord = -1;
   private compositeSourceUniform: WebGLUniformLocation | null = null;
   private compositeOverlayUniform: WebGLUniformLocation | null = null;
+  /** Upload work from the most recent render call, exposed to frame diagnostics. */
+  readonly lastFrameMetrics: ShaderFrameMetrics = { sourceUploadMs: 0, overlayUploadMs: 0 };
 
   /** Releases every GL object this pipeline created. */
   dispose(): void {
@@ -221,6 +232,7 @@ export class ShaderPipeline {
     this.gl = null;
     this.canvas = null;
     this.sourceStaging = null;
+    this.sourceStagingContext = null;
     this.uploadedSource = null;
     this.uploadedRevision = null;
     this.uploadedWidth = 0;
@@ -309,7 +321,11 @@ export class ShaderPipeline {
     this.canvas = canvas;
     this.backend = tryCreateWebGlBackend(
       canvas,
-      { alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: false },
+      // The shared note batch writes source-over pixels with premultiplied RGB
+      // (`SRC_ALPHA` for colour and `ONE` for alpha). Keep the presentation
+      // surface in the same alpha convention, otherwise a fading judge line
+      // is displayed as dark RGB instead of becoming transparent.
+      { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: false },
       {
         onLost: this.handleContextLost,
         onRestored: this.handleContextRestored,
@@ -420,6 +436,7 @@ export class ShaderPipeline {
     this.framebuffer = null;
     this.buffer = null;
     this.sourceStaging = null;
+    this.sourceStagingContext = null;
     this.uploadedSource = null;
     this.uploadedRevision = null;
     this.uploadedWidth = 0;
@@ -604,6 +621,7 @@ export class ShaderPipeline {
       types,
       defaults,
       builtin,
+      uniformCache: new Map(),
     };
     this.programs.set(source, result);
     this.failedSources.delete(source);
@@ -739,7 +757,10 @@ export class ShaderPipeline {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     if (sourceCanvas.width === width && sourceCanvas.height === height) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
+      // Storage is allocated once when the render target changes size. Updating
+      // an existing store avoids a per-frame texImage2D reallocation on the
+      // Canvas2D -> WebGL upload path.
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
       return true;
     }
     let staging = this.sourceStaging ?? null;
@@ -751,14 +772,18 @@ export class ShaderPipeline {
       staging.width = width;
       staging.height = height;
     }
-    const stagingContext = staging.getContext("2d");
+    let stagingContext = this.sourceStagingContext ?? null;
+    if (!stagingContext) {
+      stagingContext = staging.getContext("2d");
+      this.sourceStagingContext = stagingContext;
+    }
     if (!stagingContext) {
       return false;
     }
     // The source draw covers the entire staging surface, including transparent
     // pixels, so clearing it first would be a redundant full-canvas pass.
     stagingContext.drawImage(sourceCanvas, 0, 0, width, height);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, staging);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, staging);
     return true;
   }
 
@@ -819,6 +844,21 @@ export class ShaderPipeline {
         normalized = normalized[0];
       }
       const type = result.types.get(name);
+      const cacheable = name !== "u_time" && name !== "time";
+      if (cacheable && (typeof normalized === "number" || Array.isArray(normalized))) {
+        const previous = result.uniformCache.get(name);
+        const equal =
+          typeof normalized === "number" && typeof previous === "number"
+            ? normalized === previous
+            : Array.isArray(normalized) && Array.isArray(previous)
+              ? normalized.length === previous.length &&
+                normalized.every((entry, index) => entry === previous[index])
+              : false;
+        if (equal) {
+          return;
+        }
+        result.uniformCache.set(name, Array.isArray(normalized) ? [...normalized] : normalized);
+      }
       if (type === gl.SAMPLER_2D || type === gl.INT || type === gl.BOOL) {
         gl.uniform1i(location, Number(normalized) || 0);
         return;
@@ -881,6 +921,7 @@ export class ShaderPipeline {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outputTexture, 0);
     gl.viewport(0, 0, width, height);
+    gl.disable(gl.BLEND);
     gl.useProgram(this.compositeProgram);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     if (this.compositePosition >= 0) {
@@ -920,6 +961,7 @@ export class ShaderPipeline {
     const gl = this.context();
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
     gl.viewport(0, 0, width, height);
+    gl.disable(gl.BLEND);
     gl.useProgram(result.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     const position = result.positionAttribute;
@@ -944,8 +986,9 @@ export class ShaderPipeline {
    * Returns false when there is nothing to draw or GL is unavailable. `viewport`
    * scopes the chart rect; `sourceFor` resolves each pass's GLSL source.
    * `sourceRevision` identifies the primary canvas's pixels; an unchanged
-   * revision reuses the uploaded texture. `inputLayer` is rendered directly
-   * into that texture when it shares this pipeline's WebGL2 context.
+   * revision reuses the uploaded texture. `inputLayer` is rendered into the
+   * transparent overlay texture when it shares this pipeline's WebGL2 context,
+   * then uses the same GPU composite equation as the Canvas overlay path.
    */
   render(
     sourceCanvas: HTMLCanvasElement,
@@ -959,6 +1002,8 @@ export class ShaderPipeline {
     inputLayer?: ShaderInputLayer | null,
   ): boolean {
     renderProfileMark("preview.shader.render.start");
+    this.lastFrameMetrics.sourceUploadMs = 0;
+    this.lastFrameMetrics.overlayUploadMs = 0;
     if (!passes.length || !targetCanvas || !this.ensure(targetCanvas)) {
       renderProfileMark("preview.shader.render.end");
       return false;
@@ -979,6 +1024,8 @@ export class ShaderPipeline {
     ) {
       targetCanvas.width = width;
       targetCanvas.height = height;
+      this.resizeTexture(this.sourceTexture, width, height);
+      this.resizeTexture(this.overlayTexture, width, height);
       this.resizeTexture(this.pingTexture, width, height);
       this.resizeTexture(this.pongTexture, width, height);
       this.textureWidth = width;
@@ -1003,7 +1050,9 @@ export class ShaderPipeline {
       renderProfileMark("preview.shader.source-upload.start");
       const uploadStarted = performance.now();
       const uploaded = this.uploadSource(sourceCanvas, width, height);
-      recordShaderSourceUpload("preview", performance.now() - uploadStarted);
+      const uploadMs = performance.now() - uploadStarted;
+      this.lastFrameMetrics.sourceUploadMs = uploadMs;
+      recordShaderSourceUpload("preview", uploadMs);
       renderProfileMark("preview.shader.source-upload.end");
       if (!uploaded) {
         renderProfileMark("preview.shader.render.end");
@@ -1018,16 +1067,36 @@ export class ShaderPipeline {
     }
     let input = this.sourceTexture;
     let output = this.pingTexture;
-    if (inputLayer && this.framebuffer && this.sourceTexture && this.webgl2) {
+    if (
+      inputLayer &&
+      this.framebuffer &&
+      this.sourceTexture &&
+      this.overlayTexture &&
+      this.pingTexture &&
+      this.webgl2
+    ) {
       renderProfileMark("preview.shader.input-layer.start");
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
       gl.framebufferTexture2D(
         gl.FRAMEBUFFER,
         gl.COLOR_ATTACHMENT0,
         gl.TEXTURE_2D,
-        this.sourceTexture,
+        this.overlayTexture,
         0,
       );
+      gl.viewport(0, 0, width, height);
+      // The overlay is a reusable texture. Clear it before the note batch
+      // writes into it so alpha from a previous frame cannot survive. Preserve
+      // the note batch's clip state while clearing the full target.
+      const scissorEnabled = gl.isEnabled(gl.SCISSOR_TEST);
+      const scissorBox = scissorEnabled ? (gl.getParameter(gl.SCISSOR_BOX) as Int32Array) : null;
+      gl.disable(gl.SCISSOR_TEST);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      if (scissorEnabled && scissorBox) {
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+      }
       if (
         !inputLayer.finishToFramebuffer(
           gl as WebGL2RenderingContext,
@@ -1039,12 +1108,28 @@ export class ShaderPipeline {
         renderProfileMark("preview.shader.render.end");
         return false;
       }
+      if (
+        !this.drawCompositeQuad(
+          this.sourceTexture,
+          this.overlayTexture,
+          this.pingTexture,
+          width,
+          height,
+        )
+      ) {
+        renderProfileMark("preview.shader.render.end");
+        return false;
+      }
       renderProfileMark("preview.shader.input-layer.end");
+      input = this.pingTexture;
+      output = this.pongTexture;
     } else if (overlayCanvas) {
       renderProfileMark("preview.shader.overlay-upload.start");
       const overlayStarted = performance.now();
       const uploadedOverlay = this.uploadCanvas(this.overlayTexture, overlayCanvas, width, height);
-      recordShaderOverlayUpload("preview", performance.now() - overlayStarted);
+      const uploadMs = performance.now() - overlayStarted;
+      this.lastFrameMetrics.overlayUploadMs = uploadMs;
+      recordShaderOverlayUpload("preview", uploadMs);
       renderProfileMark("preview.shader.overlay-upload.end");
       if (!uploadedOverlay || !this.overlayTexture || !this.pingTexture) {
         renderProfileMark("preview.shader.render.end");
@@ -1109,7 +1194,6 @@ export class ShaderPipeline {
     }
     usable.length = 0;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.flush();
     targetCanvas.style.visibility = "visible";
     renderProfileMark("preview.shader.render.end");
     return true;

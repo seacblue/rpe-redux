@@ -64,6 +64,9 @@ export interface RenderOutcome {
 /** Per-layer paint times reported by the adapter. */
 export interface RenderTiming {
   readonly timelineMs?: number;
+  readonly timelineDrawMs?: number;
+  readonly multiEditTimelineMs?: number;
+  readonly audioAnalysisMs?: number;
   readonly previewMs?: number;
 }
 

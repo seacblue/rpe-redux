@@ -12,7 +12,9 @@ import type { ShaderInputLayer } from "../render/shaderPipeline.ts";
 import type { ShaderCompositeRenderDevice } from "../render/shaderCompositeRenderDevice.ts";
 import type { PreviewFrame, PreviewShaderEffect } from "./previewTypes.ts";
 import { PreviewOverlayRenderDevice } from "./previewOverlayRenderDevice.ts";
+import type { GuideDrawStats } from "../drawing/previewGuides.ts";
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { PreviewGuideBatch } from "../render/previewGuideBatch.ts";
 
 import {
   getEditorRegionSnapshot,
@@ -38,6 +40,7 @@ export interface PreviewCompositeSurface extends PreviewGuideSurface {
   completionTimes: number[];
   noteBatch: NoteBatch;
   sharedNoteBatch: boolean;
+  guideBatch?: PreviewGuideBatch | null;
 }
 
 /** Draw the game UI and judge-line guides onto one preview layer. */
@@ -56,8 +59,9 @@ export function drawComposite(
   frame: PreviewFrame,
   shaderOverlay: HTMLCanvasElement | null = null,
   shaderInput: ShaderInputLayer | null = null,
-): void {
+): GuideDrawStats | null {
   const { context, seconds, viewport } = frame;
+  let guideStats: GuideDrawStats | null = null;
   // `Preview.draw` compiles the shader runtime before sampling `frame.shaderEffects`,
   // so composite consumes that compiled state instead of re-running the check.
   // Guides are cheap and identify the selected line; never put them behind the
@@ -66,10 +70,10 @@ export function drawComposite(
   const shaderEffects = surface.applyShaders ? frame.shaderEffects : [];
   const globalShader = shaderEffects.some((effect) => effect.global);
   if (!shaderEffects.length) {
-    overlayDevice.render({ surface, frame, target: context });
+    guideStats = overlayDevice.render({ surface, frame, target: context });
   }
   if (globalShader) {
-    overlayDevice.render({ surface, frame, target: context });
+    guideStats = overlayDevice.render({ surface, frame, target: context });
   }
   context.restore();
   let shaderRendered = false;
@@ -118,7 +122,7 @@ export function drawComposite(
   }
   surface.display.setOverlayOpacity(workspaceOpacity);
   if (!shaderRendered && shaderEffects.length && !globalShader) {
-    overlayDevice.render({
+    guideStats = overlayDevice.render({
       surface,
       frame,
       target: context,
@@ -126,9 +130,10 @@ export function drawComposite(
     });
   }
   if (shaderRendered && !globalShader && surface.overlayCanvas) {
-    overlayDevice.renderCanvas(surface, frame, surface.overlayCanvas);
+    guideStats = overlayDevice.renderCanvas(surface, frame, surface.overlayCanvas);
     surface.display.setOverlayVisible(true);
   } else if (surface.overlayCanvas) {
     surface.display.setOverlayVisible(false);
   }
+  return guideStats;
 }

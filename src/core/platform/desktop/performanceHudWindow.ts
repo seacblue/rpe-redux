@@ -29,6 +29,10 @@ export interface PerformanceHudFramePayload {
   targetRefreshRate: number;
   frameIntervalLoadPercent: number;
   frameIntervalLoadSamples: readonly number[];
+  drawTimeSamples: readonly number[];
+  timelineDrawSamples: readonly number[];
+  previewDrawSamples: readonly number[];
+  selectionSamples: readonly number[];
   timelineDrawMs: number;
   previewDrawMs: number;
   selectionMs: number;

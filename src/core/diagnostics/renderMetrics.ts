@@ -15,9 +15,23 @@ export function renderProfileMark(name: string): void {
   globalThis.performance.mark(`redux.${name}`);
 }
 
+/** Return whether per-line renderer timings should pay their diagnostic cost. */
+export function renderDetailedProfileEnabled(): boolean {
+  const global = globalThis as typeof globalThis & {
+    __reduxRenderProfile?: boolean;
+    __reduxDetailedRenderProfile?: boolean;
+  };
+  return global.__reduxRenderProfile === true && global.__reduxDetailedRenderProfile === true;
+}
+
 /** The timing fields needed by the renderer diagnostics store. */
 export interface RenderTimingInput {
   totalMs: number;
+  sceneCompileMs?: number;
+  sceneCollectionsMs?: number;
+  shaderCompileMs?: number;
+  shaderPrewarmMs?: number;
+  canvasPrepareMs?: number;
   setupMs: number;
   sampleMs: number;
   visibilityMs: number;
@@ -39,6 +53,20 @@ export interface RenderTimingInput {
   collectGeometry: boolean;
   noteBatchActive: boolean;
   renderPath: RenderPath;
+  sampledLineCount?: number;
+  staticLineCacheHits?: number;
+  continuousLineCount?: number;
+  parentComposeCount?: number;
+  stateCopyCount?: number;
+  eventCursorHits?: number;
+  eventCursorMisses?: number;
+  guideDrawMs?: number;
+  guideGroupCount?: number;
+  guideVisibleGroupCount?: number;
+  guideTextCacheHits?: number;
+  guideTextCacheMisses?: number;
+  guideDrawCalls?: number;
+  guideRenderPath?: "webgl_atlas" | "canvas_atlas" | "canvas_fallback";
 }
 
 /** Current WebGL and skin-batch state for one renderer surface. */
@@ -349,6 +377,11 @@ export function recordPreviewTiming(sample: RenderTimingInput): void {
   );
   const safeSample: RenderTimingInput = {
     totalMs: boundedDuration(sample.totalMs),
+    sceneCompileMs: boundedDuration(sample.sceneCompileMs ?? 0),
+    sceneCollectionsMs: boundedDuration(sample.sceneCollectionsMs ?? 0),
+    shaderCompileMs: boundedDuration(sample.shaderCompileMs ?? 0),
+    shaderPrewarmMs: boundedDuration(sample.shaderPrewarmMs ?? 0),
+    canvasPrepareMs: boundedDuration(sample.canvasPrepareMs ?? 0),
     setupMs: boundedDuration(sample.setupMs),
     sampleMs: boundedDuration(sample.sampleMs),
     visibilityMs: boundedDuration(sample.visibilityMs),
@@ -370,6 +403,20 @@ export function recordPreviewTiming(sample: RenderTimingInput): void {
     collectGeometry: Boolean(sample.collectGeometry),
     noteBatchActive: Boolean(sample.noteBatchActive),
     renderPath: sample.renderPath,
+    sampledLineCount: boundedCount(sample.sampledLineCount ?? 0),
+    staticLineCacheHits: boundedCount(sample.staticLineCacheHits ?? 0),
+    continuousLineCount: boundedCount(sample.continuousLineCount ?? 0),
+    parentComposeCount: boundedCount(sample.parentComposeCount ?? 0),
+    stateCopyCount: boundedCount(sample.stateCopyCount ?? 0),
+    eventCursorHits: boundedCount(sample.eventCursorHits ?? 0),
+    eventCursorMisses: boundedCount(sample.eventCursorMisses ?? 0),
+    guideDrawMs: boundedDuration(sample.guideDrawMs ?? 0),
+    guideGroupCount: boundedCount(sample.guideGroupCount ?? 0),
+    guideVisibleGroupCount: boundedCount(sample.guideVisibleGroupCount ?? 0),
+    guideTextCacheHits: boundedCount(sample.guideTextCacheHits ?? 0),
+    guideTextCacheMisses: boundedCount(sample.guideTextCacheMisses ?? 0),
+    guideDrawCalls: boundedCount(sample.guideDrawCalls ?? 0),
+    guideRenderPath: sample.guideRenderPath ?? "canvas_fallback",
   };
   timing.frames += 1;
   timing.fallbackFrames += safeSample.batchFallbackCount > 0 ? 1 : 0;

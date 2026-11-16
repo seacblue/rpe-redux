@@ -13,6 +13,13 @@ import {
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineViewportReceiver } from "./timelineViewportReceiver.ts";
 
+interface PanelIndexCache {
+  readonly source: readonly number[];
+  readonly byLine: ReadonlyMap<number, number>;
+}
+
+const panelIndexCaches = new WeakMap<object, PanelIndexCache>();
+
 /** Canvas-local pointer position. */
 export function point(
   this: TimelineViewportReceiver,
@@ -165,8 +172,25 @@ export function panelIndex(
   area: TimelineArea = "notes",
 ): number {
   const session = this.getSession();
-  const index = session.targetLineIndices.indexOf(lineIndex);
-  return this.panelCount(area) === 1 ? 0 : Math.max(0, index);
+  // Merged notes and single-line views use one panel. Do not search the full
+  // selection here: merged multi-line painting calls this once per selected
+  // line, so an indexOf before this check turns a linear pass into O(n²).
+  if (this.panelCount(area) === 1) {
+    return 0;
+  }
+  const targets = session.targetLineIndices;
+  let cache = panelIndexCaches.get(this);
+  if (!cache || cache.source !== targets) {
+    const byLine = new Map<number, number>();
+    for (const [index, target] of targets.entries()) {
+      if (!byLine.has(target)) {
+        byLine.set(target, index);
+      }
+    }
+    cache = { source: targets, byLine };
+    panelIndexCaches.set(this, cache);
+  }
+  return Math.max(0, cache.byLine.get(lineIndex) ?? -1);
 }
 
 /** Width of one panel; every layout consumer derives from the same layout. */

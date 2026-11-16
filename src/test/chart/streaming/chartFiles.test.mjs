@@ -11,6 +11,7 @@ import {
   serializeChart,
 } from "../../../core/global/chart/chart.ts";
 import { chartFingerprint } from "../../../core/edit/document/chartRevision.ts";
+import { loadingProgress } from "../../../core/global/document/loading.ts";
 import { openChartFiles } from "../../../frontend/screens/editor/workspace/document/open/chartFiles.ts";
 
 /** A small chart with one note. */
@@ -34,11 +35,13 @@ test("single JSON file reaches loadCandidate with a streaming document", async (
     guardReplace: (action) => {
       action();
     },
-    loadCandidate: async (candidate) => {
+    loadCandidate: async (candidate, unusedAssets, task) => {
       try {
+        assert.ok(task);
         assert.ok(candidate.chartDocument);
         const materialized = await candidate.chartDocument.materializeAll();
         assert.equal(chartFingerprint(materialized), expected);
+        task.complete();
         settle.resolve();
       } catch (error) {
         settle.reject(error);
@@ -50,4 +53,5 @@ test("single JSON file reaches loadCandidate with a streaming document", async (
     reportError: (error) => settle.reject(error),
   });
   await done;
+  loadingProgress.dismiss();
 });

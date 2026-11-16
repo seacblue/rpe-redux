@@ -22,6 +22,7 @@ import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../../../../core/edit/state/visibility.ts";
+import { editorPlaying } from "../../../../../core/edit/state/publishedValues.ts";
 import { LinesPanel } from "./LinesPanel.tsx";
 import type { LinePanelSnapshot } from "./model.ts";
 import { GLOBAL_PAGE_TUTORIALS } from "../../tutorials.ts";
@@ -50,6 +51,11 @@ function useLinePanelBinding(): LinePanelSnapshot | null {
     () => sessionRuntime.current,
     () => sessionRuntime.current,
   );
+  const playbackActive = useSyncExternalStore(
+    editorPlaying.subscribe,
+    editorPlaying.get,
+    editorPlaying.get,
+  );
   useEffect(() => {
     if (!runtime || !inspector) {
       return;
@@ -57,6 +63,9 @@ function useLinePanelBinding(): LinePanelSnapshot | null {
     let frame = 0;
     const render = () => inspector.linePanel.render();
     const schedule = () => {
+      if (editorPlaying.get()) {
+        return;
+      }
       if (frame) {
         return;
       }
@@ -73,7 +82,7 @@ function useLinePanelBinding(): LinePanelSnapshot | null {
       }
       session.removeEventListener("change", schedule);
     };
-  }, [runtime, inspector, session]);
+  }, [runtime, inspector, session, playbackActive]);
   return linePanel;
 }
 

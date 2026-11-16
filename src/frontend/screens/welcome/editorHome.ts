@@ -8,7 +8,7 @@
 import { localService } from "../../../core/global/library/service.ts";
 import { t } from "../../../i18n/index.ts";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
-import { loadingProgress } from "../../../core/global/document/loading.ts";
+import { beginLoading, loadingProgress } from "../../../core/global/document/loading.ts";
 import { TauriDocumentStore } from "../../../core/platform/desktop/documentStore.ts";
 import type { LibraryProjectSummary } from "../../../core/global/library/client.ts";
 import type { DropClassification } from "../../../core/global/document/dropIntake.ts";
@@ -121,25 +121,29 @@ export function createEditorHomeRuntime(deps: {
   setLibraryProject(project: LibraryProjectRef | null): void;
 }): ProjectHome {
   /** Opens a library project by id into the editor. */
-  const openLibrary = async (id: string): Promise<void> => {
+  const openLibrary = async (id: string, task?: LoadTask): Promise<void> => {
     const found = await localService();
     if (!found) {
       throw libraryMissing();
     }
     if (found.library.supportsChartStream()) {
+      let opened: Awaited<ReturnType<typeof openLibraryChartDocument>> | null = null;
       try {
-        const opened = await openLibraryChartDocument(found.library, id);
-        await deps.loadCandidate(
-          libraryDocumentCandidate(opened.project, id, opened.chartDocument),
-          opened.assets,
-        );
-        return;
+        opened = await openLibraryChartDocument(found.library, id);
       } catch {
         // Older services or malformed streams use the whole-project fallback.
       }
+      if (opened) {
+        await deps.loadCandidate(
+          libraryDocumentCandidate(opened.project, id, opened.chartDocument),
+          opened.assets,
+          task,
+        );
+        return;
+      }
     }
     const opened = await openLibraryProject(found.library, id);
-    await deps.loadCandidate(libraryCandidate(opened.project, id), opened.assets);
+    await deps.loadCandidate(libraryCandidate(opened.project, id), opened.assets, task);
   };
 
   /** Asks for the export container, then writes the library project. */
@@ -322,6 +326,7 @@ export function createEditorHomeRuntime(deps: {
   const installOpenedProject = async (
     id: string,
     opened: Awaited<ReturnType<typeof openLibraryProject>>,
+    task?: LoadTask,
   ): Promise<boolean> => {
     if ([...(opened.assets.names?.() ?? [])].length === 0) {
       try {
@@ -333,7 +338,7 @@ export function createEditorHomeRuntime(deps: {
       }
     }
     await deps.documents?.close();
-    await openLibrary(id);
+    await openLibrary(id, task);
     return true;
   };
 
@@ -390,15 +395,25 @@ export function createEditorHomeRuntime(deps: {
     },
     importExternalChart: openExternalChartFile,
     openProject: async (id) => {
-      const found = await localService();
-      if (!found) {
-        throw libraryMissing();
+      const task = beginLoading(id);
+      try {
+        const found = await localService();
+        if (!found) {
+          throw libraryMissing();
+        }
+        const opened = await openLibraryProject(found.library, id);
+        if (!opened.project) {
+          throw new Error(t("editor.app.error.projectMissing"));
+        }
+        const accepted = await deps.guardReplace(() => installOpenedProject(id, opened, task));
+        if (!accepted) {
+          loadingProgress.dismiss();
+        }
+        return accepted;
+      } catch (error) {
+        task.fail(error);
+        throw error;
       }
-      const opened = await openLibraryProject(found.library, id);
-      if (!opened.project) {
-        throw new Error(t("editor.app.error.projectMissing"));
-      }
-      return deps.guardReplace(() => installOpenedProject(id, opened));
     },
     openImported,
     importFile,

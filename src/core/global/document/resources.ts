@@ -27,6 +27,7 @@ export function snapshotAssets(assets: AssetMap): AssetMap {
   snapshot.names = () => names;
   snapshot.uri = assets.uri?.bind(assets);
   snapshot.read = assets.read?.bind(assets);
+  snapshot.openChartDocument = assets.openChartDocument?.bind(assets);
   const metadata = assets as AssetMap & {
     hashes?: Map<string, string>;
     original?: Map<string, Uint8Array>;

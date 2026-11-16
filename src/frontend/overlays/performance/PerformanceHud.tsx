@@ -4,7 +4,14 @@
  * It draws the snapshot the runtime publishes and owns the dock gesture, the snap
  * edges, and the hand-off to the torn-off window.
  */
-import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type PointerEvent,
+} from "react";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import {
@@ -35,8 +42,29 @@ import {
   subscribePerformanceHudVisibility,
   setPerformanceHudSnapEdges,
   type PerformanceHudPosition,
+  type PerformanceHudBlock,
+  type PerformanceHudSeries,
   type PerformanceHudSnapshot,
+  type PerformanceHudSize,
+  performanceHudSize,
+  setPerformanceHudSize,
 } from "./performanceHud.ts";
+const MIN_PANEL_WIDTH = 360;
+const MIN_PANEL_HEIGHT = 220;
+const BASE_PANEL_WIDTH = 760;
+
+type ResizeEdge =
+  "top" | "right" | "bottom" | "left" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+interface ResizeState {
+  pointerId: number;
+  edge: ResizeEdge;
+  startX: number;
+  startY: number;
+  startSize: PerformanceHudSize;
+  startPosition: PerformanceHudPosition;
+  size: PerformanceHudSize;
+  position: PerformanceHudPosition;
+}
 
 /** Keeps the HUD fully inside the given viewport bounds. */
 function clampPosition(
@@ -53,6 +81,47 @@ function clampPosition(
   };
 }
 
+/** Keeps a user-resized HUD inside the viewport's practical bounds. */
+function clampPanelSize(
+  size: PerformanceHudSize,
+  width: number,
+  height: number,
+  aspectRatio: number,
+): PerformanceHudSize {
+  const ratio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1.5;
+  const maxWidth = Math.max(MIN_PANEL_WIDTH, width - 32);
+  const maxHeight = Math.max(MIN_PANEL_HEIGHT, height - 16);
+  const minWidth = Math.min(MIN_PANEL_WIDTH, maxWidth, maxHeight * ratio);
+  const minHeight = Math.min(MIN_PANEL_HEIGHT, maxHeight, maxWidth / ratio);
+  let nextWidth = Math.min(Math.max(minWidth, size.width), maxWidth);
+  let nextHeight = nextWidth / ratio;
+  if (nextHeight > maxHeight) {
+    nextHeight = maxHeight;
+    nextWidth = nextHeight * ratio;
+  }
+  if (nextHeight < minHeight) {
+    nextHeight = minHeight;
+    nextWidth = nextHeight * ratio;
+  }
+  return {
+    width: nextWidth,
+    height: nextHeight,
+  };
+}
+
+/** Scale the retained HUD layout so resizing also scales every child surface. */
+function panelContentScale(size: PerformanceHudSize | null, detached: boolean): number {
+  if (detached || !size || size.width <= 0) {
+    return 1;
+  }
+  return size.width / BASE_PANEL_WIDTH;
+}
+
+/** Returns whether a resize edge changes the corresponding axis from its origin. */
+function hasResizeEdge(edge: ResizeEdge, side: "left" | "right" | "top" | "bottom"): boolean {
+  return edge === side || edge.startsWith(`${side}-`) || edge.endsWith(`-${side}`);
+}
+
 /** Converts one rolling traffic series into SVG polyline coordinates. */
 function trafficPoints(samples: readonly number[], maximum: number): string {
   const values = samples.length > 0 ? samples : [0];
@@ -67,8 +136,8 @@ function trafficPoints(samples: readonly number[], maximum: number): string {
     .join(" ");
 }
 
-/** Converts frame intervals into SVG points with a stable budget reference. */
-function frameIntervalPoints(
+/** Converts one retained history series into SVG polyline coordinates. */
+function historyPoints(
   samples: readonly number[],
   maximum: number,
   width: number,
@@ -84,132 +153,117 @@ function frameIntervalPoints(
     .join(" ");
 }
 
-/** Shows recent frame intervals against the refresh-rate budget. */
-function FrameIntervalGraph({ snapshot }: { snapshot: PerformanceHudSnapshot }) {
+/** Formats the latest point of a graph without turning the panel into a table. */
+function historyCurrent(series: PerformanceHudSeries, snapshot: PerformanceHudSnapshot): string {
+  const values = series.values(snapshot);
+  const value = values.at(-1) ?? 0;
+  return `${value.toFixed(series.unit === "FPS" ? 0 : 1)} ${series.unit}`;
+}
+
+/** Shows one or more rolling history series with a single current readout. */
+function HistoryGraph({
+  block,
+  snapshot,
+}: {
+  block: Extract<PerformanceHudBlock, { kind: "history-graph" }>;
+  snapshot: PerformanceHudSnapshot;
+}) {
   const { t } = useTranslation();
-  const width = 240;
-  const height = 72;
-  const maximum = Math.max(1, snapshot.frameBudgetMs * 1.25, ...snapshot.frameTimesMs);
-  const budgetY = height - (snapshot.frameBudgetMs / maximum) * height;
+  const width = 360;
+  const height = 104;
+  const maximum = Math.max(
+    1,
+    block.maximum?.(snapshot) ?? 0,
+    ...block.series.flatMap((series) => series.values(snapshot)),
+  );
   return (
-    <section
-      className="redux-performance-hud-frame-interval"
-      data-testid="performance-hud-frame-interval"
-      aria-label={t("chrome.performanceHud.frameTime")}
-    >
-      <div className="redux-performance-hud-frame-interval-heading">
-        <span className="redux-performance-hud-label">{t("chrome.performanceHud.frameTime")}</span>
-        <span className="redux-performance-hud-frame-interval-current">
-          {snapshot.frameIntervalMs.toFixed(1)} ms
-        </span>
+    <section className="redux-performance-hud-history" aria-label={t(block.label)}>
+      <div className="redux-performance-hud-history-heading">
+        <span className="redux-performance-hud-label">{t(block.label)}</span>
+        <div className="redux-performance-hud-history-current">
+          {block.series.map((series) => (
+            <strong className={`is-${series.color}`} key={series.id}>
+              {historyCurrent(series, snapshot)}
+            </strong>
+          ))}
+          {block.secondaryCurrent && (
+            <span className="redux-performance-hud-history-secondary">
+              {block.secondaryCurrent(snapshot)}
+            </span>
+          )}
+        </div>
       </div>
       <svg
-        className="redux-performance-hud-frame-interval-chart"
+        className="redux-performance-hud-history-chart"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={t("chrome.performanceHud.frameIntervalGraph")}
+        aria-label={t(block.label)}
         preserveAspectRatio="none"
       >
+        <line className="redux-performance-hud-history-grid" x1="0" y1="0" x2={width} y2="0" />
         <line
-          className="redux-performance-hud-frame-interval-grid"
+          className="redux-performance-hud-history-grid"
           x1="0"
-          y1="0"
+          y1={height / 2}
           x2={width}
-          y2="0"
+          y2={height / 2}
         />
-        <line
-          className="redux-performance-hud-frame-interval-budget"
-          x1="0"
-          y1={budgetY}
-          x2={width}
-          y2={budgetY}
-        />
-        <polyline
-          className="redux-performance-hud-frame-interval-line"
-          points={frameIntervalPoints(snapshot.frameTimesMs, maximum, width, height)}
-        />
+        {block.series.map((series) => (
+          <polyline
+            className={`redux-performance-hud-history-line is-${series.color}`}
+            key={series.id}
+            points={historyPoints(series.values(snapshot), maximum, width, height)}
+          />
+        ))}
       </svg>
-      <div className="redux-performance-hud-frame-interval-legend">
-        <span className="redux-performance-hud-frame-interval-key is-actual">
-          <i aria-hidden="true" />
-          <span>{t("chrome.performanceHud.frameIntervalActual")}</span>
-        </span>
-        <span className="redux-performance-hud-frame-interval-key is-budget">
-          <i aria-hidden="true" />
-          <span>{t("chrome.performanceHud.frameIntervalBudget")}</span>
-        </span>
-      </div>
+      {block.series.length > 1 && (
+        <div className="redux-performance-hud-history-legend">
+          {block.series.map((series) => (
+            <span
+              className={`redux-performance-hud-history-key is-${series.color}`}
+              key={series.id}
+            >
+              <i aria-hidden="true" />
+              <span>{t(series.label)}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-/** Shows where the current draw time is spent without adding a row per phase. */
+/** Shows the retained draw-phase history without adding a row per phase. */
 function HotspotGraph({ snapshot }: { snapshot: PerformanceHudSnapshot }) {
-  const { t } = useTranslation();
-  const segments = [
-    {
-      id: "timeline",
-      label: "chrome.performanceHud.timelineDrawTime",
-      value: Math.max(0, snapshot.timelineDrawMs),
-    },
-    {
-      id: "selection",
-      label: "chrome.performanceHud.selectionTime",
-      value: Math.max(0, snapshot.selectionMs),
-    },
-    {
-      id: "preview",
-      label: "chrome.performanceHud.previewDrawTime",
-      value: Math.max(0, snapshot.previewDrawMs),
-    },
-    {
-      id: "other",
-      label: "chrome.performanceHud.previewOtherTime",
-      value: Math.max(
-        0,
-        snapshot.drawTimeMs -
-          snapshot.timelineDrawMs -
-          snapshot.selectionMs -
-          snapshot.previewDrawMs,
-      ),
-    },
-  ] as const;
-  const total = Math.max(0.1, snapshot.drawTimeMs, ...segments.map((segment) => segment.value));
-  return (
-    <section
-      className="redux-performance-hud-hotspots"
-      data-testid="performance-hud-hotspots"
-      aria-label={t("chrome.performanceHud.hotspots")}
-    >
-      <div className="redux-performance-hud-hotspots-heading">
-        <span className="redux-performance-hud-label">{t("chrome.performanceHud.hotspots")}</span>
-        <strong>{snapshot.drawTimeMs.toFixed(1)} ms</strong>
-      </div>
-      <div
-        className="redux-performance-hud-hotspots-track"
-        role="img"
-        aria-label={segments
-          .map((segment) => `${t(segment.label)} ${segment.value.toFixed(1)} ms`)
-          .join(", ")}
-      >
-        {segments.map((segment) => (
-          <i
-            className={`is-${segment.id}`}
-            key={segment.id}
-            style={{ width: `${(segment.value / total) * 100}%` }}
-          />
-        ))}
-      </div>
-      <div className="redux-performance-hud-hotspots-legend">
-        {segments.map((segment) => (
-          <span className={`redux-performance-hud-hotspots-key is-${segment.id}`} key={segment.id}>
-            <i aria-hidden="true" />
-            <span>{t(segment.label)}</span>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
+  const block: Extract<PerformanceHudBlock, { kind: "history-graph" }> = {
+    id: "hotspots-history",
+    label: "chrome.performanceHud.hotspots",
+    kind: "history-graph",
+    series: [
+      {
+        id: "draw",
+        label: "chrome.performanceHud.drawTime",
+        color: "accent",
+        unit: "ms",
+        values: (value) => value.drawTimeSamples,
+      },
+      {
+        id: "timeline",
+        label: "chrome.performanceHud.timelineDrawTime",
+        color: "warning",
+        unit: "ms",
+        values: (value) => value.timelineDrawSamples,
+      },
+      {
+        id: "preview",
+        label: "chrome.performanceHud.previewDrawTime",
+        color: "preview",
+        unit: "ms",
+        values: (value) => value.previewDrawSamples,
+      },
+    ],
+  };
+  return <HistoryGraph block={block} snapshot={snapshot} />;
 }
 
 /** Formats a traffic rate using the same binary units as the byte counters. */
@@ -298,6 +352,10 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
     getPerformanceHudSnapEdges,
   );
   const [position, setPosition] = useState(() => performanceHudPosition.get());
+  const storedSize = performanceHudSize.get();
+  const [panelSize, setPanelSize] = useState<PerformanceHudSize | null>(() =>
+    storedSize.height > 0 ? storedSize : null,
+  );
   const panel = useRef<HTMLDivElement>(null);
   const redocking = useRef(false);
   const inspectingMove = useRef(false);
@@ -308,6 +366,7 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
     offsetY: number;
     position: PerformanceHudPosition;
   } | null>(null);
+  const resize = useRef<ResizeState | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -491,6 +550,7 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
   }
 
   const blocks = getPerformanceHudBlocks();
+  const contentScale = panelContentScale(panelSize, detachedPresentation);
   /** Starts a panel drag, or the native window drag while torn off. */
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
@@ -507,6 +567,30 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
       void startTornOffPerformanceHudDrag().catch(() => {});
       return;
     }
+    const resizeHandle = target.closest<HTMLElement>("[data-performance-hud-resize]");
+    if (resizeHandle) {
+      const node = panel.current;
+      const edge = resizeHandle.dataset.performanceHudResize as ResizeEdge | undefined;
+      if (!node || !edge) {
+        return;
+      }
+      const rect = node.getBoundingClientRect();
+      const startSize = { width: rect.width, height: rect.height };
+      event.preventDefault();
+      event.stopPropagation();
+      resize.current = {
+        pointerId: event.pointerId,
+        edge,
+        startX: event.clientX,
+        startY: event.clientY,
+        startSize,
+        startPosition: position,
+        size: startSize,
+        position,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     drag.current = {
       pointerId: event.pointerId,
       offsetX: event.clientX - position.x,
@@ -517,6 +601,50 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
   };
   /** Moves the floating panel with the captured pointer, clamped to the viewport. */
   const onPointerMove = (event: PointerEvent<HTMLElement>) => {
+    if (resize.current?.pointerId === event.pointerId) {
+      const activeResize = resize.current;
+      const deltaX = event.clientX - activeResize.startX;
+      const deltaY = event.clientY - activeResize.startY;
+      const growsLeft = hasResizeEdge(activeResize.edge, "left");
+      const growsTop = hasResizeEdge(activeResize.edge, "top");
+      const changesHorizontal =
+        hasResizeEdge(activeResize.edge, "left") || hasResizeEdge(activeResize.edge, "right");
+      const changesVertical =
+        hasResizeEdge(activeResize.edge, "top") || hasResizeEdge(activeResize.edge, "bottom");
+      const proposedWidth = activeResize.startSize.width + (growsLeft ? -deltaX : deltaX);
+      const proposedHeight = activeResize.startSize.height + (growsTop ? -deltaY : deltaY);
+      const widthDriven =
+        changesHorizontal &&
+        (!changesVertical ||
+          Math.abs(proposedWidth - activeResize.startSize.width) >=
+            Math.abs(proposedHeight - activeResize.startSize.height));
+      const aspectRatio = activeResize.startSize.width / activeResize.startSize.height;
+      const primary = widthDriven ? proposedWidth : proposedHeight * aspectRatio;
+      const nextSize = clampPanelSize(
+        { width: primary, height: primary / aspectRatio },
+        window.innerWidth,
+        window.innerHeight,
+        aspectRatio,
+      );
+      const nextPosition = {
+        x: growsLeft
+          ? activeResize.startPosition.x + activeResize.startSize.width - nextSize.width
+          : activeResize.startPosition.x,
+        y: growsTop
+          ? activeResize.startPosition.y + activeResize.startSize.height - nextSize.height
+          : activeResize.startPosition.y,
+      };
+      activeResize.size = nextSize;
+      activeResize.position = clampPosition(
+        nextPosition,
+        window.innerWidth,
+        window.innerHeight,
+        panel.current,
+      );
+      setPanelSize(nextSize);
+      setPosition(activeResize.position);
+      return;
+    }
     if (drag.current?.pointerId !== event.pointerId) {
       return;
     }
@@ -535,6 +663,14 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
   };
   /** Ends the drag and persists the final position. */
   const onPointerUp = (event: PointerEvent<HTMLElement>) => {
+    if (resize.current?.pointerId === event.pointerId) {
+      const activeResize = resize.current;
+      resize.current = null;
+      setPerformanceHudSize(activeResize.size);
+      setPerformanceHudPosition(activeResize.position);
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     if (drag.current?.pointerId !== event.pointerId) {
       return;
     }
@@ -564,67 +700,98 @@ export function PerformanceHud({ detached = false }: { detached?: boolean }) {
         <div
           ref={panel}
           className="redux-performance-hud-panel"
-          data-tip-title={t("chrome.performanceHud.drag")}
+          style={{
+            width: detachedPresentation ? undefined : panelSize?.width,
+            height: detachedPresentation ? undefined : panelSize?.height || undefined,
+          }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
-          <header className="redux-performance-hud-header">
-            <span>{t("chrome.performanceHud.title")}</span>
-            <span className="redux-performance-hud-header-actions">
-              {!detachedPresentation && <span className="redux-performance-hud-shortcut">F3</span>}
-              {detachedPresentation && (
-                <IconButton
-                  icon="panelRight"
-                  size="small"
-                  variant="plain"
-                  className="redux-performance-hud-dock"
-                  label={t("chrome.performanceHud.dock")}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => {
-                    onTornOff();
-                    void announcePerformanceHudDock()
-                      .then(closeTornOffPerformanceHud)
-                      .catch(() => {});
-                  }}
-                />
-              )}
-            </span>
-          </header>
-          <div className="redux-performance-hud-blocks">
-            {blocks.map((block) => (
-              <div className="redux-performance-hud-block" key={block.id} data-hud-block={block.id}>
-                {block.kind === "frame-graph" ? (
-                  <FrameIntervalGraph snapshot={snapshot} />
-                ) : block.kind === "hotspot-graph" ? (
-                  <HotspotGraph snapshot={snapshot} />
-                ) : block.kind === "text" ? (
-                  <>
-                    <span className="redux-performance-hud-label">{t(block.label)}</span>
-                    <strong>{block.value(snapshot)}</strong>
-                  </>
-                ) : (
-                  <>
-                    <span className="redux-performance-hud-label">{t(block.label)}</span>
-                    <div className="redux-performance-hud-bar" aria-label={t(block.label)}>
-                      {block.values(snapshot).map((value, index, values) => {
-                        const maximum = Math.max(1, ...values);
-                        return (
-                          <i
-                            key={`${index}-${value}`}
-                            style={{ height: `${Math.max(4, (value / maximum) * 100)}%` }}
-                          />
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+          {!detachedPresentation &&
+            (
+              [
+                "top",
+                "right",
+                "bottom",
+                "left",
+                "top-left",
+                "top-right",
+                "bottom-left",
+                "bottom-right",
+              ] as const
+            ).map((edge) => (
+              <i
+                aria-hidden="true"
+                className={`redux-performance-hud-resize-handle is-${edge}`}
+                data-performance-hud-resize={edge}
+                key={edge}
+              />
             ))}
-            {snapshot.collaborationTrafficActive && (
-              <CollaborationTrafficGraph snapshot={snapshot} />
-            )}
+          <div
+            className="redux-performance-hud-content"
+            style={{ "--performance-hud-scale": contentScale } as CSSProperties}
+          >
+            <header className="redux-performance-hud-header">
+              <span>{t("chrome.performanceHud.title")}</span>
+              <span className="redux-performance-hud-header-actions">
+                {detachedPresentation && (
+                  <IconButton
+                    icon="panelRight"
+                    size="small"
+                    variant="plain"
+                    className="redux-performance-hud-dock"
+                    label={t("chrome.performanceHud.dock")}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => {
+                      onTornOff();
+                      void announcePerformanceHudDock()
+                        .then(closeTornOffPerformanceHud)
+                        .catch(() => {});
+                    }}
+                  />
+                )}
+              </span>
+            </header>
+            <div className="redux-performance-hud-blocks">
+              {blocks.map((block) => (
+                <div
+                  className="redux-performance-hud-block"
+                  key={block.id}
+                  data-hud-block={block.id}
+                >
+                  {block.kind === "hotspot-graph" ? (
+                    <HotspotGraph snapshot={snapshot} />
+                  ) : block.kind === "history-graph" ? (
+                    <HistoryGraph block={block} snapshot={snapshot} />
+                  ) : block.kind === "text" ? (
+                    <>
+                      <span className="redux-performance-hud-label">{t(block.label)}</span>
+                      <strong>{block.value(snapshot)}</strong>
+                    </>
+                  ) : (
+                    <>
+                      <span className="redux-performance-hud-label">{t(block.label)}</span>
+                      <div className="redux-performance-hud-bar" aria-label={t(block.label)}>
+                        {block.values(snapshot).map((value, index, values) => {
+                          const maximum = Math.max(1, ...values);
+                          return (
+                            <i
+                              key={`${index}-${value}`}
+                              style={{ height: `${Math.max(4, (value / maximum) * 100)}%` }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {snapshot.collaborationTrafficActive && (
+                <CollaborationTrafficGraph snapshot={snapshot} />
+              )}
+            </div>
           </div>
         </div>
       </aside>

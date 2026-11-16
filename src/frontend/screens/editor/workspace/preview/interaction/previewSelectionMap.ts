@@ -3,6 +3,7 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import { cloneSelection } from "./previewNoteSelection.ts";
 
 const selectionMapCache = new WeakMap<object, Map<number, Set<number>>>();
+const selectionMapRevisionCache = new WeakMap<object, number>();
 
 /** Whether two index sets hold the same selected indices. */
 function sameIndexSet(left: ReadonlySet<number> | undefined, right: ReadonlySet<number>): boolean {
@@ -20,9 +21,9 @@ function sameIndexSet(left: ReadonlySet<number> | undefined, right: ReadonlySet<
 /**
  * Whether `value` still equals what `cloneSelection(session)` would return.
  *
- * Session code mutates its selection sets in place, so set identity and
- * `selectionRevision` alone cannot invalidate this cache; compare the content
- * instead. The walk allocates nothing, which keeps the frame path cheap.
+ * This remains the compatibility fallback for structural test doubles and older
+ * session-like hosts. Real sessions use `selectionProjectionRevision`, which is
+ * bumped by `notify()` and avoids this O(line-count) walk during playback.
  */
 function matchesSelection(
   session: EditorSession,
@@ -46,10 +47,22 @@ function matchesSelection(
 /** Return a stable private selection map until the session selection content changes. */
 export function selectionMapForSession(session: EditorSession): Map<number, Set<number>> {
   const cached = selectionMapCache.get(session);
-  if (cached && matchesSelection(session, cached)) {
+  const projectedRevision = (
+    session as EditorSession & {
+      selectionProjectionRevision?: number;
+    }
+  ).selectionProjectionRevision;
+  const cachedRevision = selectionMapRevisionCache.get(session);
+  if (cached && projectedRevision !== undefined && cachedRevision === projectedRevision) {
+    return cached;
+  }
+  if (cached && projectedRevision === undefined && matchesSelection(session, cached)) {
     return cached;
   }
   const value = cloneSelection(session);
   selectionMapCache.set(session, value);
+  if (projectedRevision !== undefined) {
+    selectionMapRevisionCache.set(session, projectedRevision);
+  }
   return value;
 }

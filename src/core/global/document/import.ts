@@ -9,7 +9,7 @@ import { t } from "../../../i18n/index.ts";
 import { ChartLoadError } from "../chart/diagnostics.ts";
 import { readPez, type ArchiveReader, type ChartDocumentFactory } from "./pez.ts";
 import type { LoadTask } from "./loading.ts";
-import type { OpenCandidate } from "./types.ts";
+import type { AssetMap, OpenCandidate } from "./types.ts";
 import { attachExternalEffects } from "./effects.ts";
 import { parseChartEntries, type ChartEntryParser } from "./chartParsing.ts";
 
@@ -32,12 +32,12 @@ export async function openFiles(
   parseCharts: ChartEntryParser = parseChartEntries,
   readArchive?: ArchiveReader,
   createChartDocument?: ChartDocumentFactory,
-): Promise<{ candidates: OpenCandidate[]; assets: Map<string, Uint8Array> } | null> {
+): Promise<{ candidates: OpenCandidate[]; assets: AssetMap } | null> {
   const files = [...fileList];
   if (!files.length) {
     return null;
   }
-  const assets = new Map<string, Uint8Array>();
+  const assets: AssetMap = new Map();
   if (files.length === 1 && /\.(pez|zip)$/i.test(files[0].name)) {
     const buffer = await files[0].arrayBuffer();
     task?.update("read", 1, 1);

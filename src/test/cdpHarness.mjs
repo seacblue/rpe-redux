@@ -148,7 +148,7 @@ export class CdpClient {
     }
   }
 
-  async command(method, params = {}) {
+  async command(method, params = {}, timeoutMs = 10000) {
     await this.ready;
     const id = ++this.nextId;
     const result = new Promise((resolvePromise, reject) => {
@@ -160,7 +160,7 @@ export class CdpClient {
         this.pending.delete(id);
         pending.reject(new Error(`CDP command timed out: ${method}`));
       }
-    }, 10000);
+    }, timeoutMs);
     this.socket.send(JSON.stringify({ id, method, params }));
     try {
       return await result;
@@ -169,13 +169,20 @@ export class CdpClient {
     }
   }
 
-  async evaluate(expression, { noValueMessage = "Runtime.evaluate returned no value" } = {}) {
-    const response = await this.command("Runtime.evaluate", {
-      expression,
-      awaitPromise: true,
-      returnByValue: true,
-      userGesture: true,
-    });
+  async evaluate(
+    expression,
+    { noValueMessage = "Runtime.evaluate returned no value", timeoutMs = 10000 } = {},
+  ) {
+    const response = await this.command(
+      "Runtime.evaluate",
+      {
+        expression,
+        awaitPromise: true,
+        returnByValue: true,
+        userGesture: true,
+      },
+      timeoutMs,
+    );
     if (response.exceptionDetails) {
       const description =
         response.exceptionDetails.exception?.description ??

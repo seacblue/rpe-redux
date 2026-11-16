@@ -114,6 +114,19 @@ test("monitor publishes once, reuses unchanged lines, and ignores selection resc
   unsubscribe();
 });
 
+test("a cloned line refreshes issue context while reusing unchanged range inputs", () => {
+  const original = line("line-1", "First", [{ moveXEvents: [event(4, 4, "bad")] }]);
+  const monitor = new EventIssueMonitor();
+  const first = monitor.update(chart([original]));
+  const cloned = { ...original, Name: "Renamed" };
+  const second = monitor.update(chart([cloned]));
+
+  assert.equal(first.issues.length, 1);
+  assert.equal(second.issues.length, 1);
+  assert.equal(second.issues[0].lineName, "Renamed");
+  assert.notEqual(second.issues[0], first.issues[0]);
+});
+
 test("monitor isolates tracks and reports the extended layer's synthetic index", () => {
   const monitor = new EventIssueMonitor();
   const snapshot = monitor.update(

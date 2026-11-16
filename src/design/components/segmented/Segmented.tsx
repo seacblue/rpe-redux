@@ -45,6 +45,18 @@ export function Segmented<T extends string>({
 }: SegmentedProps<T>) {
   const optionsRef = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState<{ x: number; width: number } | null>(null);
+  // Callers commonly create this small options array inline. Depend on the
+  // layout-relevant shape instead of that array identity, otherwise every
+  // unrelated inspector render forces synchronous offset measurements.
+  const optionLayoutKey = options
+    .map((option) =>
+      [
+        option.value,
+        option.disabled ? "disabled" : "enabled",
+        typeof option.label === "string" ? option.label : "node",
+      ].join("\u0000"),
+    )
+    .join("\u0001");
 
   useLayoutEffect(() => {
     const container = optionsRef.current;
@@ -77,7 +89,7 @@ export function Segmented<T extends string>({
     const observer = new ResizeObserver(measure);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [options, value]);
+  }, [optionLayoutKey, value]);
 
   return (
     <div className={`redux-segmented ${className}`}>

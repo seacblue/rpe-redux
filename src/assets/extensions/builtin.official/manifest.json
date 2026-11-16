@@ -5,5 +5,6 @@
   "engines": { "rpe-redux": 1 },
   "entry": "index.js",
   "i18n": "i18n.json",
+  "pagedChartSafe": true,
   "capabilities": ["scripts", "chart.read", "selection.read", "chart.write", "ui.notice"]
 }

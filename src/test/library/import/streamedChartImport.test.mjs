@@ -11,6 +11,7 @@ import {
   serializeChart,
 } from "../../../core/global/chart/chart.ts";
 import { ChartDocument } from "../../../core/global/chart/streaming/chartDocument.ts";
+import { registerChartDocument } from "../../../core/global/chart/streaming/chartDocumentRegistry.ts";
 import { scanChartJson } from "../../../core/global/chart/streaming/chartJsonScanner.ts";
 import {
   buildChartIndex,
@@ -77,4 +78,89 @@ test("a streamed chart import stores its lines instead of facade placeholders", 
   // The facade keeps placeholder lines; only the document serializer can see
   // the real notes, which is why serializing the facade directly lost them.
   assert.equal(document.chart.judgeLineList[0].notes.length, 0);
+});
+
+test("a large chart import uses the streamed library commit", async () => {
+  const chartJson = `{"META":{"name":"${"x".repeat(48 * 1024 * 1024)}"}}`;
+  let createRawCalled = false;
+  let commitCalled = false;
+  let received = "";
+  const library = {
+    async createRaw() {
+      createRawCalled = true;
+      return { project: { id: "large-project", revision: 1 } };
+    },
+    async stageAsset() {
+      throw new Error("no asset uploads expected");
+    },
+    async commit() {
+      commitCalled = true;
+      throw new Error("large imports must not use the JSON body commit");
+    },
+    async remove() {
+      return { deleted: true };
+    },
+    async commitStream(_id, _input, chunks) {
+      for await (const chunk of chunks) {
+        received += chunk;
+      }
+      return { project: { id: "large-project", revision: 2 } };
+    },
+  };
+
+  const result = await importChartToLibrary({
+    library,
+    chart: {},
+    chartJson,
+    name: "Large import",
+    assets: new Map(),
+  });
+
+  assert.equal(result.projectId, "large-project");
+  assert.equal(createRawCalled, true);
+  assert.equal(commitCalled, false);
+  assert.equal(received, chartJson);
+});
+
+test("a large paged chart streams from the document without joining all lines", async () => {
+  const chart = {};
+  registerChartDocument(chart, {
+    index: { lines: [{ byteLength: 49 * 1024 * 1024 }] },
+    fingerprint: () => "large-document",
+    materializeAll: async () => sampleChart(),
+    async serialize(sink) {
+      await sink('{"judgeLineList":[]}');
+    },
+  });
+  let committed = "";
+  let usedInlineCommit = false;
+  const library = {
+    async createRaw() {
+      return { project: { id: "paged-project", revision: 1 } };
+    },
+    async stageAsset() {
+      throw new Error("no asset uploads expected");
+    },
+    async commit() {
+      usedInlineCommit = true;
+      throw new Error("paged imports must stream");
+    },
+    async commitStream(_id, _input, chunks) {
+      for await (const chunk of chunks) {
+        committed += chunk;
+      }
+      return { project: { id: "paged-project", revision: 2 } };
+    },
+  };
+
+  const result = await importChartToLibrary({
+    library,
+    chart,
+    name: "Large paged import",
+    assets: new Map(),
+  });
+
+  assert.equal(result.projectId, "paged-project");
+  assert.equal(usedInlineCommit, false);
+  assert.equal(committed, '{"judgeLineList":[]}');
 });

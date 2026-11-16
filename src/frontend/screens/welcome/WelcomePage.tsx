@@ -109,6 +109,7 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
               loading={!cards || cards.phase === "loading"}
               visible={editorVisibility.atHome}
               preview={previewArmed}
+              opening={Boolean(cards?.openingProjectId)}
               onOpen={openEntry}
               onExport={exportEntry}
               onDelete={deleteEntry}
@@ -116,6 +117,7 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
           </div>
           <LibraryPanel
             selectedKey={selected?.key ?? null}
+            openingProjectId={cards?.openingProjectId ?? null}
             onSelect={(key, preview) => {
               const nextKey = nextLibrarySelection(selected?.key ?? null, key, preview);
               setSelectedKey(nextKey);

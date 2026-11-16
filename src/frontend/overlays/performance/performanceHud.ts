@@ -31,6 +31,12 @@ export interface PerformanceHudPosition {
   y: number;
 }
 
+/** User-adjusted size of the floating performance HUD. Height zero keeps the automatic height. */
+export interface PerformanceHudSize {
+  width: number;
+  height: number;
+}
+
 export const performanceHudEnabled = defineValue<boolean>({
   id: PERFORMANCE_HUD_ENABLED_ID,
   initial: false,
@@ -44,6 +50,22 @@ export const performanceHudPosition = defineValue<PerformanceHudPosition>({
   validate(value) {
     if (!Number.isFinite(value.x) || !Number.isFinite(value.y) || value.x < 0 || value.y < 0) {
       throw new Error("Performance HUD position must be a non-negative point");
+    }
+  },
+});
+
+export const performanceHudSize = defineValue<PerformanceHudSize>({
+  id: "performance-hud-size",
+  initial: { width: 760, height: 0 },
+  persist: PREFERENCE_SECTIONS.layout,
+  validate(value) {
+    if (
+      !Number.isFinite(value.width) ||
+      !Number.isFinite(value.height) ||
+      value.width <= 0 ||
+      value.height < 0
+    ) {
+      throw new Error("Performance HUD size must be a positive width and non-negative height");
     }
   },
 });
@@ -94,6 +116,10 @@ const snapshot = createValue<PerformanceHudSnapshot>({
     targetRefreshRate: 60,
     frameIntervalLoadPercent: 0,
     frameIntervalLoadSamples: [],
+    drawTimeSamples: [],
+    timelineDrawSamples: [],
+    previewDrawSamples: [],
+    selectionSamples: [],
     timelineDrawMs: 0,
     previewDrawMs: 0,
     selectionMs: 0,
@@ -140,7 +166,10 @@ export type PerformanceHudBlock =
   | {
       id: string;
       label: MessageKey;
-      kind: "frame-graph";
+      kind: "history-graph";
+      series: readonly PerformanceHudSeries[];
+      maximum?(snapshot: PerformanceHudSnapshot): number;
+      secondaryCurrent?(snapshot: PerformanceHudSnapshot): string;
     }
   | {
       id: string;
@@ -153,6 +182,15 @@ export type PerformanceHudBlock =
       kind: "bar";
       values(snapshot: PerformanceHudSnapshot): readonly number[];
     };
+
+/** One labelled line in a retained history graph. */
+export interface PerformanceHudSeries {
+  id: string;
+  label: MessageKey;
+  color: "accent" | "warning" | "preview" | "memory";
+  unit: "FPS" | "ms" | "%" | "MB";
+  values(snapshot: PerformanceHudSnapshot): readonly number[];
+}
 
 const blocks = new Map<string, PerformanceHudBlock>();
 
@@ -177,13 +215,17 @@ export function getPerformanceHudBlocks(): readonly PerformanceHudBlock[] {
 registerPerformanceHudBlock({
   id: "fps",
   label: "chrome.performanceHud.rafFps",
-  kind: "text",
-  value: (value) => `${value.fps.toFixed(0)} FPS`,
-});
-registerPerformanceHudBlock({
-  id: "frame-time",
-  label: "chrome.performanceHud.frameTime",
-  kind: "frame-graph",
+  kind: "history-graph",
+  series: [
+    {
+      id: "fps",
+      label: "chrome.performanceHud.rafFps",
+      color: "accent",
+      unit: "FPS",
+      values: (value) => value.fpsSamples,
+    },
+  ],
+  secondaryCurrent: (value) => `${value.frameIntervalMs.toFixed(1)} ms`,
 });
 registerPerformanceHudBlock({
   id: "hotspots",
@@ -193,8 +235,31 @@ registerPerformanceHudBlock({
 registerPerformanceHudBlock({
   id: "cpu",
   label: "chrome.performanceHud.cpu",
-  kind: "text",
-  value: (value) => `${value.renderLoadPercent.toFixed(0)}%`,
+  kind: "history-graph",
+  series: [
+    {
+      id: "cpu",
+      label: "chrome.performanceHud.cpu",
+      color: "warning",
+      unit: "%",
+      values: (value) => value.renderLoadSamples,
+    },
+  ],
+  maximum: () => 100,
+});
+registerPerformanceHudBlock({
+  id: "memory",
+  label: "chrome.performanceHud.memory",
+  kind: "history-graph",
+  series: [
+    {
+      id: "memory",
+      label: "chrome.performanceHud.memory",
+      color: "memory",
+      unit: "MB",
+      values: (value) => value.memorySamplesMb,
+    },
+  ],
 });
 let lastSnapshotAt = -Infinity;
 const frameIntervals: number[] = [];
@@ -202,6 +267,10 @@ const fpsSamples: number[] = [];
 const frameIntervalLoadSamples: number[] = [];
 const memorySamplesMb: number[] = [];
 const renderLoadSamples: number[] = [];
+const drawTimeSamples: number[] = [];
+const timelineDrawSamples: number[] = [];
+const previewDrawSamples: number[] = [];
+const selectionSamples: number[] = [];
 let lastFrameTimestamp = Number.NaN;
 const collaborationUploadSamples: number[] = [];
 const collaborationDownloadSamples: number[] = [];
@@ -337,6 +406,13 @@ export function publishPerformanceHudFrame({
   const intervalLoad = frameIntervalLoadPercent(frameIntervalMs, safeTargetRefreshRate);
   const paintTiming = performanceFrameTimingSnapshot();
   const previewTiming = lastRenderTiming();
+  const timelineDrawMs = Math.max(0, paintTiming.timelineMs);
+  const previewDrawMs = Math.max(0, paintTiming.previewMs);
+  const selectionMs = Math.max(0, paintTiming.selectionMs ?? 0);
+  appendBoundedSample(drawTimeSamples, Math.max(0, drawTimeMs));
+  appendBoundedSample(timelineDrawSamples, timelineDrawMs);
+  appendBoundedSample(previewDrawSamples, previewDrawMs);
+  appendBoundedSample(selectionSamples, selectionMs);
   // Keep over-budget values visible: 11 ms at 144 Hz is 158% of the budget.
   const renderLoadPercentValue = Math.max(0, renderLoad);
   const frameIntervalLoadValue = hasPreviousFrame ? Math.max(0, intervalLoad) : 0;
@@ -358,9 +434,13 @@ export function publishPerformanceHudFrame({
     targetRefreshRate: safeTargetRefreshRate,
     frameIntervalLoadPercent: frameIntervalLoadValue,
     frameIntervalLoadSamples: [...frameIntervalLoadSamples],
-    timelineDrawMs: paintTiming.timelineMs,
-    previewDrawMs: paintTiming.previewMs,
-    selectionMs: paintTiming.selectionMs ?? 0,
+    drawTimeSamples: [...drawTimeSamples],
+    timelineDrawSamples: [...timelineDrawSamples],
+    previewDrawSamples: [...previewDrawSamples],
+    selectionSamples: [...selectionSamples],
+    timelineDrawMs,
+    previewDrawMs,
+    selectionMs,
     previewLineDrawMs: previewTiming?.lineDrawMs ?? 0,
     previewNoteDrawMs: previewTiming?.noteDrawMs ?? 0,
     previewEffectsMs: previewTiming?.effectsMs ?? 0,
@@ -387,6 +467,14 @@ export function setPerformanceHudPosition(position: PerformanceHudPosition): voi
   performanceHudPosition.set({
     x: Math.max(0, position.x),
     y: Math.max(0, position.y),
+  });
+}
+
+/** Persists a user-resized HUD while keeping dimensions finite and usable. */
+export function setPerformanceHudSize(size: PerformanceHudSize): void {
+  performanceHudSize.set({
+    width: Math.max(1, size.width),
+    height: Math.max(0, size.height),
   });
 }
 

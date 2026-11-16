@@ -89,6 +89,15 @@ export interface HistoryRecordOptions {
   estimatedBytes?: number;
   /** The edited beat span, used to reveal the change after undo or redo. */
   beatRange?: HistoryBeatRange;
+  /** Trusted revision computed before the commit boundary, when available. */
+  beforeFingerprint?: string;
+  /** Trusted revision computed for the next chart, when available. */
+  afterFingerprint?: string;
+  /**
+   * Line slots changed by a copy-on-write transaction. The paged document can
+   * update only these summaries when the line count and tempo map are stable.
+   */
+  changedLineIndexes?: readonly number[];
 }
 
 /** One undoable document change, with the bytes it is estimated to retain. */
@@ -268,9 +277,12 @@ export class History {
       // header snapshots rather than aliases of the current document.
       const before = { ...this.document, judgeLineList: beforeLines } as Chart;
       const beforeHeader = this.chartDocument.header;
-      const beforeFingerprint = this.chartDocument.fingerprint();
+      const beforeFingerprint = options.beforeFingerprint ?? this.chartDocument.fingerprint();
       const afterLines = [...(next.judgeLineList ?? [])];
-      this.chartDocument.syncFromChart(next);
+      this.chartDocument.syncFromChart(next, {
+        changedLineIndexes: options.changedLineIndexes,
+        normalized: options.normalized,
+      });
       const after = { ...this.chartDocument.chart, judgeLineList: afterLines } as Chart;
       invalidateChartLocations(this.chartDocument.chart);
       const command: HistoryCommand = {
@@ -281,7 +293,7 @@ export class History {
         after,
         bytes: options.estimatedBytes ?? Math.max(64, afterLines.length * 8),
         beforeFingerprint,
-        afterFingerprint: this.chartDocument.fingerprint(),
+        afterFingerprint: options.afterFingerprint ?? this.chartDocument.fingerprint(),
         affectedObjectIds: Object.freeze([...(metadata.affectedObjectIds ?? [])]),
         issues: Object.freeze([...(metadata.issues ?? [])]),
         origin: metadata.origin ? structuredClone(metadata.origin) : undefined,
@@ -317,8 +329,8 @@ export class History {
       before,
       after: next,
       bytes,
-      beforeFingerprint: chartFingerprint(before),
-      afterFingerprint: chartFingerprint(next),
+      beforeFingerprint: options.beforeFingerprint ?? chartFingerprint(before),
+      afterFingerprint: options.afterFingerprint ?? chartFingerprint(next),
       affectedObjectIds: Object.freeze([...(metadata.affectedObjectIds ?? [])]),
       issues: Object.freeze([...(metadata.issues ?? [])]),
       origin: metadata.origin ? structuredClone(metadata.origin) : undefined,
