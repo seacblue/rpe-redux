@@ -1,4 +1,4 @@
-/** Verifies batch-control drag feedback stays on the whole control group. */
+/** Verifies each batch-control drag feedback stays on the active control ball. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EditorSession } from "../../../core/edit/session/session.ts";
@@ -11,14 +11,23 @@ function controllerForDrag() {
   const button = {
     style: { transform: "" },
     parentElement: null,
+    hasPointerCapture: () => false,
+    animate(frames) {
+      this.animationFrames = frames;
+    },
   };
   const group = {
     style: { transform: "" },
     getAnimations: () => [],
+    animate(frames) {
+      this.animationFrames = frames;
+    },
   };
   button.parentElement = group;
   const controller = Object.create(BatchControls.prototype);
   controller.anchorMode = 0;
+  controller.getSession = () => session;
+  controller.groups = new Map([["events", { signature: "" }]]);
   controller.state = { hints: { set() {} } };
   controller.timeline = {
     notesCanvas: { clientWidth: 100, clientHeight: 100 },
@@ -73,13 +82,23 @@ function controllerForDrag() {
   return { controller, button, group };
 }
 
-test("batch drag translates the whole control group immediately", () => {
+test("batch drag translates only the active control ball immediately", () => {
   const { controller, button, group } = controllerForDrag();
 
   controller.update();
 
-  assert.equal(group.style.transform, "translate(20px, 30px)");
-  assert.equal(button.style.transform, "");
+  assert.equal(button.style.transform, "translate(20px, 30px)");
+  assert.equal(group.style.transform, "");
+});
+
+test("batch drag returns only the active control ball to the dock", () => {
+  const { controller, button, group } = controllerForDrag();
+  controller.active.canvas.getBoundingClientRect = () => ({ width: 100, height: 100 });
+
+  controller.returnBall(controller.active, false);
+
+  assert.equal(button.animationFrames.length, 61);
+  assert.equal(group.animationFrames, undefined);
 });
 
 test("multi-line note drags convert time with the active area scale", () => {

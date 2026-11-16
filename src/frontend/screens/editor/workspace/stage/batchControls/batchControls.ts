@@ -162,8 +162,6 @@ interface ActiveBatch {
   kind: string;
   /** The ball element that follows the pointer, and whose pointer capture this drag owns. */
   button: HTMLButtonElement;
-  /** The control group that moves as one unit while the pointer is down. */
-  group: HTMLElement;
   /** Undo-history action name supplied by the control-ball definition. */
   label: string;
   /** Which of the two timelines the drag belongs to; decides the panel geometry. */
@@ -491,11 +489,6 @@ export class BatchControls {
     for (const animation of button.getAnimations()) {
       animation.cancel();
     }
-    const group = button.parentElement ?? button;
-    for (const animation of group.getAnimations()) {
-      animation.cancel();
-    }
-    group.style.transform = "";
     const canvas = area === "notes" ? this.timeline.notesCanvas : this.timeline.eventsCanvas;
     const rawPoint = this.timeline.viewport.point(event, canvas);
     const bounds = this.selectionBounds(area, snapshot, canvas);
@@ -510,7 +503,6 @@ export class BatchControls {
       snapshot,
       kind,
       button,
-      group,
       label: spec ? t(spec.label ?? spec.title) : kind,
       area,
       lineIndex: activeLineIndex,
@@ -591,10 +583,10 @@ export class BatchControls {
     this.timeline.gestures.scaleAxisLine = kind === "note-scale" ? active.lineIndex : null;
     const deltaX = point.x - start.x;
     const deltaY = point.y - start.y;
-    // Move the whole control group directly on the pointer path. The frame/HUD
-    // cadence is intentionally independent of pointer feedback, so React state
-    // and the 12 Hz HUD refresh must not be part of this visual loop.
-    active.group.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+    // Move only the active control ball directly on the pointer path. The
+    // frame/HUD cadence is intentionally independent of pointer feedback, so
+    // React state and the 12 Hz HUD refresh must not be part of this visual loop.
+    active.button.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
     const panelWidth =
       active.area === "notes"
         ? (this.timeline.viewport.panelWidth?.(active.canvas.clientWidth, "notes") ??
@@ -717,7 +709,7 @@ export class BatchControls {
     this.state.hints.set(active.area, "");
     const deltaX = active.point.x - active.start.x;
     const deltaY = active.point.y - active.start.y;
-    active.group.style.transform = "";
+    active.button.style.transform = "";
     // A larger ease-out exponent pulls the ball home through the middle of the
     // animation instead of letting it hover near the dock for the last second.
     const returnCoefficient = 3;
@@ -728,7 +720,7 @@ export class BatchControls {
         offset: index / 60,
       };
     });
-    active.group.animate(frames, { duration: 1600 });
+    active.button.animate(frames, { duration: 1600 });
   }
 
   cancel(preservePointerCapture = false): void {
