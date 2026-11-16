@@ -50,13 +50,13 @@ visibleMax = cameraX + 675
 - 浮层使用 `align-self: end` 和 `z-index` 叠在 canvas 上，不占额外高度。
 - 三个按钮使用现有 `IconButton` 尺寸和 tooltip，不添加自定义按钮形状。
 
-## 4. X 范围边界与当前拍提示
+## 4. 离屏竖线与当前拍提示
 
-不再绘制整块离屏背景，也不新增离屏颜色设置。移动到非常规 X 范围后，只显示 authored 范围的边界竖线；归位按钮在 `cameraX = 0` 时 disabled，偏离默认范围后 enabled。
+不再绘制整块离屏背景，也不新增离屏颜色设置。竖向网格线以默认 `-675..675` 范围内的 spacing 为基准，移动到非常规 X 范围后继续按同样的 spacing 和水平倍率绘制，不在接缝处压缩或重新铺排。归位按钮在 `cameraX = 0` 时 disabled，偏离默认范围后 enabled。
 
-边界竖线使用当前主题的前景色，并带轻微发光：暗色模式接近白色，亮色模式自动改用深色高对比线，避免白线在白色 canvas 上消失。
+中心竖线仍使用现有的中心竖线颜色和粗细；离屏延伸的普通网格线继续使用普通竖线颜色，不覆盖中心线。
 
-当前拍 note 越过某条 timeline 边缘时，边缘会出现两层提示：
+当前拍 note 越过某条 timeline 边缘时，只在对应边缘出现 note 高度范围内的白光 indicator：
 
 - 白条只检查当前 playhead 这一拍的 note。
 - 每条 note timeline 单独判断自己的左右边界。
@@ -64,7 +64,7 @@ visibleMax = cameraX + 675
 - note 完全在视口外也显示对应一侧白条，不要求 note 主体仍可见。
 - 当前拍没有越界 note 时不显示白条。
 - 白光 indicator 使用主题前景色和轻微 glow，不修改 note 本身颜色。
-- 边缘竖线贯穿本条 timeline 高度，白光短条只覆盖当前 note 的垂直范围。
+- indicator 不绘制全高边缘线，只覆盖当前 note 的垂直范围。
 
 多线时，白条画在对应 note timeline 的左右边缘，而不是整个多线 canvas 的最外侧。
 
@@ -90,7 +90,7 @@ visibleMax = cameraX + 675
 - 左右按钮始终可用，因为 X 坐标没有固定最大边界。
 - 白条只在当前拍存在越界 note 时出现。
 - 左右按钮按住超过短暂延迟后开始重复移动，按钮保持 active 状态作为反馈。
-- 偏离默认范围后显示 authored 边界竖线；归位后竖线消失。
+- 偏离默认范围后网格线继续延伸；归位后回到默认 `-675..675` 网格范围。
 
 后续如果需要降低遮挡，可以只降低浮层和白条的对比度，再在 hover/focus 时恢复；不能通过改变布局高度来出现或消失。
 
@@ -109,9 +109,9 @@ visibleMax = cameraX + 675
 - 单线 note timeline 底部可以看到三个按钮，且不增加 timeline 高度。
 - multi-line note timeline 只出现一组浮层，所有 note timeline 同步改变 X 范围。
 - event timeline 不显示 note X 范围浮层。
-- `cameraX = 0` 时可见范围为 `-675..675`，归位按钮 disabled，且没有边界竖线。
-- 偏离默认范围后不绘制红色或其他离屏背景，只显示 authored 边界竖线。
-- 当前拍越过某条 note timeline 左边界时显示左竖线和白光短条，越过右边界时显示右侧对应提示；两侧都有越界时两侧都显示。
+- `cameraX = 0` 时可见范围为 `-675..675`，归位按钮 disabled，中心竖线保持原有颜色。
+- 偏离默认范围后不绘制红色或其他离屏背景，普通竖向网格线按相同 spacing 和倍率延伸。
+- 当前拍越过某条 note timeline 左边界时只显示左侧 note 高度白光，越过右边界时只显示右侧对应提示；两侧都有越界时两侧都显示。
 - 亮色模式下 indicator 使用深色主题前景色并保留 glow，保证对比度。
 - 非当前拍的 note 不产生白条。
 - 点击回归后回到 `cameraX = 0`，所有 timeline 同步恢复默认 X 范围。

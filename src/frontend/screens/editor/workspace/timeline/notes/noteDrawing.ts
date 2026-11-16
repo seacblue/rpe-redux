@@ -145,10 +145,9 @@ function drawOffscreenNoteCues(
   const cueWidth = Math.min(6, Math.max(2, width / 80));
   const cueColor = palette.foreground;
   context.save();
-  context.strokeStyle = cueColor;
   context.fillStyle = cueColor;
   context.shadowColor = cueColor;
-  context.shadowBlur = 5;
+  context.shadowBlur = 7;
   context.globalAlpha = 0.72;
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const lineIndex = lineIndices[panel] ?? session.lineIndex;
@@ -202,16 +201,7 @@ function drawOffscreenNoteCues(
       for (const side of sides) {
         const x = side === "left" ? Math.max(0, panelLeft) : Math.min(width, panelRight) - cueWidth;
         if (x >= 0 && x + cueWidth <= width) {
-          context.beginPath();
-          context.lineWidth = 1;
-          context.moveTo(side === "left" ? x + 0.5 : x + cueWidth - 0.5, 0);
-          context.lineTo(side === "left" ? x + 0.5 : x + cueWidth - 0.5, height);
-          context.stroke();
-          context.shadowBlur = 7;
-          context.globalAlpha = 0.9;
           context.fillRect(x, top, cueWidth, cueHeight);
-          context.shadowBlur = 5;
-          context.globalAlpha = 0.72;
         }
       }
     }

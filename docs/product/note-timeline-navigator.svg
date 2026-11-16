@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
   <title>Note timeline X coordinate range controls</title>
-  <desc>Three note timelines share one X camera. The bottom floating overlay has left, reset, and right buttons. Authored-range boundary lines and theme-adaptive white edge indicators mark current-beat notes outside a timeline edge.</desc>
+  <desc>Three note timelines share one X camera. The bottom floating overlay has left, reset, and right buttons. Vertical grid lines keep the same spacing outside the normal X range, while theme-adaptive white indicators mark current-beat notes outside a timeline edge.</desc>
   <defs>
     <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#12161e"/><stop offset="1" stop-color="#090b10"/></linearGradient>
     <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1d2935"/><stop offset="1" stop-color="#111820"/></linearGradient>
@@ -30,8 +30,8 @@
       <g class="ui small" text-anchor="middle"><text x="150" y="24">note timeline · 线 0</text><text x="466" y="24">note timeline · 线 1</text><text x="782" y="24">note timeline · 线 2</text></g>
       <g fill="#6fc9ff" opacity=".9"><rect x="82" y="100" width="116" height="26" rx="8"/><rect x="385" y="160" width="128" height="26" rx="8"/><rect x="724" y="92" width="120" height="26" rx="8"/></g>
       <g fill="#d8f3ff" stroke="#ffffff" stroke-width="2"><rect x="-24" y="255" width="72" height="26" rx="8"/><rect x="906" y="286" width="82" height="26" rx="8"/></g>
-      <rect x="0" y="0" width="5" height="418" fill="url(#edge)"/>
-      <rect x="611" y="0" width="5" height="418" fill="#fff" opacity=".88"/>
+      <rect x="0" y="255" width="5" height="26" fill="url(#edge)"/>
+      <rect x="927" y="286" width="5" height="26" fill="#fff" opacity=".88"/>
     </g>
   </g>
   <g transform="translate(442 531)" filter="url(#shadow)">
@@ -43,11 +43,11 @@
   </g>
   <path d="M1035 315C1156 315 1185 270 1185 219" class="call"/>
   <rect x="1035" y="160" width="180" height="62" rx="8" fill="#162538" stroke="#80b7ff"/>
-  <text x="1051" y="185" class="ui small">白条 = 当前拍 note</text><text x="1051" y="207" class="ui small">触及本条 timeline 边缘</text>
+  <text x="1051" y="185" class="ui small">白光 indicator = 当前拍 note</text><text x="1051" y="207" class="ui small">只覆盖 note 高度</text>
   <path d="M515 579C515 633 444 647 398 677" class="call"/>
   <rect x="68" y="654" width="480" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
   <text x="86" y="684" class="ui small">三按钮只移动 cameraX；中间按钮回到 0，不切换判定线。</text>
   <path d="M240 386C185 419 155 458 142 515" class="call"/>
   <rect x="610" y="654" width="570" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
-  <text x="628" y="684" class="ui small">不绘制离屏背景；偏离默认范围时画 authored 边界竖线，当前拍 note 越界时画主题自适应白光提示。</text>
+  <text x="628" y="684" class="ui small">不绘制离屏背景；竖向网格线在默认范围外按相同 spacing 延续，当前拍 note 越界时只画 note 高度白光。</text>
 </svg>

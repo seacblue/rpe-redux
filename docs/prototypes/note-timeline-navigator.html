@@ -82,16 +82,6 @@
         color: #a8bbd1;
         font-size: 14px;
       }
-      .boundary {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: #f3f7ff;
-        box-shadow: 0 0 7px #f3f7ff99;
-        opacity: 0.58;
-        pointer-events: none;
-      }
       .note {
         position: absolute;
         height: 24px;
@@ -104,26 +94,26 @@
         background: #d8f3ff;
         box-shadow: 0 0 0 2px #fff8;
       }
-      .edge {
+      .indicator {
         position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 5px;
+        width: 6px;
+        height: 24px;
         background: linear-gradient(to right, transparent, #fff);
+        box-shadow: 0 0 8px #fff;
         opacity: 0;
         pointer-events: none;
         transition: opacity 140ms ease;
       }
-      .edge.left {
+      .indicator.left {
         left: 0;
       }
-      .edge.right {
+      .indicator.right {
         right: 0;
         transform: scaleX(-1);
       }
-      .cue-left .edge.left,
-      .cue-right .edge.right {
-        opacity: 0.88;
+      .cue-left .indicator.left,
+      .cue-right .indicator.right {
+        opacity: 0.8;
       }
       .navigator {
         position: relative;
@@ -193,8 +183,8 @@
     <main>
       <h1>Note timeline · X 坐标范围</h1>
       <p class="lead">
-        按钮移动每条 note timeline 看到的 X 视口；不绘制离屏背景，偏离默认范围时显示 authored
-        边界竖线，白光只提示当前拍 note 触及本条 timeline 边缘。
+        按钮移动每条 note timeline 看到的 X 视口；不绘制离屏背景，竖向网格线在离开默认范围后仍按
+        相同间距延续，白光只提示当前拍 note 触及本条 timeline 边缘。
       </p>
       <section class="surface" id="app"></section>
       <div class="metrics" id="metrics"></div>
@@ -256,11 +246,10 @@
               `<span class="note${note.current ? " current" : ""}" style="left:${positionFor(note.x, 220) - note.w / 2}px;top:${note.y}px;width:${note.w}px"></span>`,
           )
           .join("");
-        const boundaries =
-          Math.abs(cameraX) > 0.5
-            ? `<span class="boundary" style="left:${positionFor(min, 220)}px"></span><span class="boundary" style="left:${positionFor(max, 220)}px"></span>`
-            : "";
-        return `<article class="panel ${cueLeft ? "cue-left" : ""} ${cueRight ? "cue-right" : ""}"><h2>${panel.label}</h2>${boundaries}${notes}<span class="edge left"></span><span class="edge right"></span></article>`;
+        const cueNote = panel.notes.find((note) => note.current);
+        const cueTop = cueNote?.y ?? 0;
+        const indicators = `<span class="indicator left" style="top:${cueTop}px"></span><span class="indicator right" style="top:${cueTop}px"></span>`;
+        return `<article class="panel ${cueLeft ? "cue-left" : ""} ${cueRight ? "cue-right" : ""}"><h2>${panel.label}</h2>${notes}${indicators}</article>`;
       }
 
       function animateCamera(next) {
@@ -282,7 +271,7 @@
       function render() {
         const visibleMin = cameraX + min;
         const visibleMax = cameraX + max;
-        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线示意</span><span class="state">当前 X 范围：${visibleMin} ～ ${visibleMax}</span></header><div class="timeline-wrap"><div class="timeline">${panels.map(panelMarkup).join("")}</div><div class="navigator" role="group" aria-label="音符时间轴 X 坐标范围控制"><button data-direction="-1" aria-label="向左移动音符可见范围">◀</button><button data-reset aria-label="回到默认 X 坐标范围" ${cameraX === 0 ? "disabled" : ""}>⌂</button><span class="range">X：${visibleMin} ～ ${visibleMax}</span><button data-direction="1" aria-label="向右移动音符可见范围">▶</button></div></div><p class="hint">不绘制离屏背景；当前拍 note 越界时显示主题自适应的竖线和白光短条。左右按钮单击移动 100，长按持续移动。</p>`;
+        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线示意</span><span class="state">当前 X 范围：${visibleMin} ～ ${visibleMax}</span></header><div class="timeline-wrap"><div class="timeline">${panels.map(panelMarkup).join("")}</div><div class="navigator" role="group" aria-label="音符时间轴 X 坐标范围控制"><button data-direction="-1" aria-label="向左移动音符可见范围">◀</button><button data-reset aria-label="回到默认 X 坐标范围" ${cameraX === 0 ? "disabled" : ""}>⌂</button><span class="range">X：${visibleMin} ～ ${visibleMax}</span><button data-direction="1" aria-label="向右移动音符可见范围">▶</button></div></div><p class="hint">不绘制离屏背景；竖向网格线在默认范围外按相同间距延续，当前拍 note 越界时只显示 note 高度范围内的白光 indicator。左右按钮单击移动 100，长按持续移动。</p>`;
         metrics.innerHTML = `<div class="metric">cameraX: <b>${Math.round(cameraX)}</b></div><div class="metric">默认区间: <b>-675 ～ 675</b></div><div class="metric">移动步长: <b>${step}</b></div>`;
         app.querySelectorAll("[data-direction]").forEach((button) =>
           button.addEventListener("click", () => {
