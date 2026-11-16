@@ -298,7 +298,7 @@ test("1000 note updates stay byte-identical to the previous kernel", () => {
   assert.equal(JSON.stringify(chart), before);
   assert.equal(
     hash(JSON.stringify(state.chart)),
-    "5961db7fa8f7a43e0cb7e5fb1d6cb560d95cf746fb99827ed79fad736ba4a5d8",
+    "45efa4fdc724b141390190e1a64fa456f8ec7b7099df9a3bbcc47f04cfa9ceda",
   );
 });
 

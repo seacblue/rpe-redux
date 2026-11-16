@@ -644,7 +644,7 @@ export function drawMultiLineGrid(
   }
 }
 
-/** Draw beat numbers in the gaps between multi-line panels. */
+/** Draw beat numbers only inside the screen-leftmost visible multi-line panel. */
 export function drawMultiLineBeatLabels(
   this: TimelineGridReceiver,
   context: CanvasRenderingContext2D,
@@ -655,61 +655,57 @@ export function drawMultiLineBeatLabels(
   if (this.viewport.panelCount(area) < 2) {
     return;
   }
-  const panelWidth = this.viewport.panelWidth(width, area);
   const stride = this.viewport.panelStride(width, area);
   const offset = this.viewport.multiLineViewportOffset(width, area);
-  const gap = this.viewport.panelGap(width, area);
   const palette = this.cache.palette() ?? readCanvasPalette();
   const targetLines = this.getSession().targetLineIndices;
-  const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, area);
+  const [firstPanel] = this.viewport.visiblePanelRange(width, area);
+  const lineIndex = targetLines[firstPanel];
+  if (lineIndex === undefined) {
+    return;
+  }
   const commands: RenderCommand[] = [];
-  for (let panel = firstPanel; panel <= Math.min(lastPanel, targetLines.length - 2); panel++) {
-    const lineIndex = targetLines[panel];
-    if (lineIndex === undefined) {
-      continue;
-    }
-    const factor = this.viewport.factorForLine(lineIndex);
-    const originSeconds = cachedTempoSeconds(
-      this.cache,
-      this.viewport.tempo,
-      this.viewport.origin,
-      factor,
-    );
-    const secondsAt = (vertical: number) =>
-      originSeconds +
-      (height - this.viewport.judgementOffset - vertical) / this.viewport.scaleForArea(area);
-    const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical), factor);
-    const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
-    const last = Math.ceil(beatAt(0) * this.viewport.division);
-    const localBeatHeight = Math.abs(
-      this.viewport.verticalForLine(this.viewport.origin + 1, lineIndex, height, area) -
-        this.viewport.verticalForLine(this.viewport.origin, lineIndex, height, area),
-    );
-    const tickStride = Math.max(
-      1,
-      Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
-    );
-    const labelStride = Math.max(
-      this.viewport.division,
-      Math.ceil(tickStride / this.viewport.division) * this.viewport.division,
-    );
-    const labelFirst = Math.ceil(first / this.viewport.division) * this.viewport.division;
-    const x = panel * stride - offset + panelWidth + gap / 2;
-    for (let tick = labelFirst; tick <= last; tick += labelStride) {
-      const beat = tick / this.viewport.division;
-      const vertical = this.viewport.verticalForLine(beat, lineIndex, height, area);
-      if (vertical >= 0 && vertical <= height) {
-        commands.push({
-          kind: "text",
-          text: String(beat),
-          x,
-          y: vertical - 4,
-          font: canvasFont(gap < 20 ? "micro" : "caption"),
-          color: palette.foreground,
-          align: "center",
-          alpha: 1,
-        });
-      }
+  const factor = this.viewport.factorForLine(lineIndex);
+  const originSeconds = cachedTempoSeconds(
+    this.cache,
+    this.viewport.tempo,
+    this.viewport.origin,
+    factor,
+  );
+  const secondsAt = (vertical: number) =>
+    originSeconds +
+    (height - this.viewport.judgementOffset - vertical) / this.viewport.scaleForArea(area);
+  const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical), factor);
+  const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
+  const last = Math.ceil(beatAt(0) * this.viewport.division);
+  const localBeatHeight = Math.abs(
+    this.viewport.verticalForLine(this.viewport.origin + 1, lineIndex, height, area) -
+      this.viewport.verticalForLine(this.viewport.origin, lineIndex, height, area),
+  );
+  const tickStride = Math.max(
+    1,
+    Math.ceil((6 * this.viewport.division) / Math.max(1, localBeatHeight)),
+  );
+  const labelStride = Math.max(
+    this.viewport.division,
+    Math.ceil(tickStride / this.viewport.division) * this.viewport.division,
+  );
+  const labelFirst = Math.ceil(first / this.viewport.division) * this.viewport.division;
+  const x = firstPanel * stride - offset + 5;
+  for (let tick = labelFirst; tick <= last; tick += labelStride) {
+    const beat = tick / this.viewport.division;
+    const vertical = this.viewport.verticalForLine(beat, lineIndex, height, area);
+    if (vertical >= 0 && vertical <= height) {
+      commands.push({
+        kind: "text",
+        text: String(beat),
+        x,
+        y: vertical - 4,
+        font: canvasFont("caption"),
+        color: palette.foreground,
+        align: "left",
+        alpha: 1,
+      });
     }
   }
   renderGridPacket(this, context, area, false, commands);
