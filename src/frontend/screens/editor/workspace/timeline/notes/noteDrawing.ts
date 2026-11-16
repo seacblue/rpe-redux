@@ -35,7 +35,7 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
-import { offscreenCueSides } from "./noteOffscreenCue.ts";
+import { offscreenCueDistance, offscreenCueSides } from "./noteOffscreenCue.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -151,7 +151,7 @@ function drawNoteTimelineCues(
   context.fillStyle = cueColor;
   context.shadowColor = cueColor;
   context.shadowBlur = 12;
-  context.globalAlpha = 0.58;
+  const cueWidth = Math.min(24, Math.max(12, width / 40));
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
     const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
@@ -198,10 +198,21 @@ function drawNoteTimelineCues(
         const vertical = projection.project(prepared.startSeconds);
         const top = Math.max(0, Math.min(height - 1, vertical - cueHalfHeight));
         const cueHeight = Math.min(height - top, cueHalfHeight * 2);
-        const visibleLeft = Math.max(0, panelLeft);
-        const visibleRight = Math.min(width, panelRight);
-        if (visibleRight > visibleLeft) {
-          context.fillRect(visibleLeft, top, visibleRight - visibleLeft, cueHeight);
+        const noteWidth = receiver.viewport.noteWidth(note);
+        const viewportWidth = Math.max(1, panelRight - panelLeft);
+        for (const side of sides) {
+          const distance = offscreenCueDistance(horizontal, noteWidth, panelLeft, panelRight, side);
+          if (distance === null) {
+            continue;
+          }
+          const alpha = 0.2 + Math.min(1, distance / viewportWidth) * 0.3;
+          context.globalAlpha = alpha;
+          const edgeLeft = side === "left" ? panelLeft : panelRight - cueWidth;
+          const visibleLeft = Math.max(0, edgeLeft);
+          const visibleRight = Math.min(width, edgeLeft + cueWidth);
+          if (visibleRight > visibleLeft) {
+            context.fillRect(visibleLeft, top, visibleRight - visibleLeft, cueHeight);
+          }
         }
       }
     }
