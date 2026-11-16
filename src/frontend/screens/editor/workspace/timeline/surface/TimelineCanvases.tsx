@@ -186,6 +186,8 @@ export function TimelineCanvases() {
         className="timeline-event-overlay-batch"
         surfaceRef={surface.attach.eventOverlayBatch}
       />
+      {/* The event boundary is a DOM layer so the canvas header cannot cover it. */}
+      <div className="timeline-event-edges" aria-hidden="true" />
       <OverviewStrip
         name="history-strip"
         bindings={activeOverview?.history}
