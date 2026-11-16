@@ -17,6 +17,11 @@ export {
   subscribeHomeProjectCards,
 } from "./homeProjectCards.ts";
 
+/** Normalize native paths before joining classifier results to drop inputs. */
+function dropPathKey(value: string): string {
+  return value.trim().replaceAll("\\", "/").replace(/\/+/g, "/").toLowerCase();
+}
+
 /** Host callbacks the home library needs to open, import, export, and report. */
 interface ProjectHomeOptions {
   /** Open a project stored in the local SQLite library; false when cancelled. */
@@ -223,19 +228,23 @@ export class ProjectHome {
     if (!paths.length) {
       return [];
     }
+    // Native drag-drop can report the same path more than once while a single
+    // gesture is finishing. Import each path once so duplicate classification
+    // results cannot create duplicate projects or duplicate toasts.
+    const uniquePaths = [...new Map(paths.map((path) => [dropPathKey(path), path])).values()];
     let classified: readonly DropClassification[] | null = null;
     if (this.classifyPaths) {
       try {
-        classified = await this.classifyPaths(paths);
+        classified = await this.classifyPaths(uniquePaths);
       } catch (error) {
         this.reportError(error);
       }
     }
     const imported = (
       await Promise.all(
-        paths.map(async (path) => {
+        uniquePaths.map(async (path) => {
           try {
-            const item = classified?.find((entry) => entry.path === path);
+            const item = classified?.find((entry) => dropPathKey(entry.path) === dropPathKey(path));
             return item ? await this.importClassified(item) : await this.importSequentially(path);
           } catch (error) {
             this.reportError(error);

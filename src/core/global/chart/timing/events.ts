@@ -7,6 +7,7 @@ import {
   easing,
   easingIntegral,
   easingParameters,
+  easingWithKnownRange,
   easingWithRange,
 } from "../../../utils/easing.ts";
 import { trajectoryEventValue } from "../trajectory/curveTrajectory.ts";
@@ -16,6 +17,12 @@ import { compactFlatNumericEvents } from "./eventCompaction.ts";
 
 let eventCursorHits = 0;
 let eventCursorMisses = 0;
+let eventCursorStatsEnabled = true;
+
+/** Enable cursor counters only for an active detailed renderer profile. */
+export function setEventTrackSamplingStatsEnabled(enabled: boolean): void {
+  eventCursorStatsEnabled = enabled;
+}
 
 /** Reset low-overhead event cursor counters before a profiled frame. */
 export function resetEventTrackSamplingStats(): void {
@@ -59,11 +66,14 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   declare inverseDurations: Float64Array;
   declare startValues: Float64Array;
   declare endValues: Float64Array;
+  declare normalizedStartValues: Float64Array;
+  declare normalizedEndValues: Float64Array;
   declare easingTypes: Int16Array;
   declare easingLefts: Float64Array;
   declare easingRights: Float64Array;
   declare easingBases: Float64Array;
   declare easingRanges: Float64Array;
+  declare easingRangeValid: Uint8Array;
   declare bezierFlags: Uint8Array;
   declare linearFlags: Uint8Array;
   declare numericOnly: boolean;
@@ -104,6 +114,12 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
     );
     this.startValues = Float64Array.from(compacted, (entry) => Number(entry.event.start));
     this.endValues = Float64Array.from(compacted, (entry) => Number(entry.event.end));
+    this.normalizedStartValues = Float64Array.from(this.startValues, (value) =>
+      integerEndpoints ? channelInteger(value) : value,
+    );
+    this.normalizedEndValues = Float64Array.from(this.endValues, (value) =>
+      integerEndpoints ? channelInteger(value) : value,
+    );
     this.easingTypes = Int16Array.from(compacted, (entry) => entry.event.easingType ?? 1);
     this.easingLefts = Float64Array.from(compacted, (entry) => entry.event.easingLeft ?? 0);
     this.easingRights = Float64Array.from(compacted, (entry) => entry.event.easingRight ?? 1);
@@ -126,6 +142,12 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       const event = entry.event;
       return easingParameters(event.easingType ?? 1, event.easingLeft ?? 0, event.easingRight ?? 1)
         .range;
+    });
+    this.easingRangeValid = Uint8Array.from(compacted, (entry, index) => {
+      const event = entry.event;
+      const width = (event.easingRight ?? 1) - (event.easingLeft ?? 0);
+      const range = this.easingRanges[index];
+      return Number.isFinite(range) && Math.abs(range) >= 1e-15 && Math.abs(width) >= 1e-15 ? 1 : 0;
     });
     this.linearFlags = Uint8Array.from(compacted, (entry) =>
       (entry.event.easingType ?? 1) === 1 ? 1 : 0,
@@ -175,11 +197,20 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
         next.inverseDurations = Float64Array.from(indices, (index) => this.inverseDurations[index]);
         next.startValues = Float64Array.from(indices, (index) => this.startValues[index]);
         next.endValues = Float64Array.from(indices, (index) => this.endValues[index]);
+        next.normalizedStartValues = Float64Array.from(
+          indices,
+          (index) => this.normalizedStartValues[index],
+        );
+        next.normalizedEndValues = Float64Array.from(
+          indices,
+          (index) => this.normalizedEndValues[index],
+        );
         next.easingTypes = Int16Array.from(indices, (index) => this.easingTypes[index]);
         next.easingLefts = Float64Array.from(indices, (index) => this.easingLefts[index]);
         next.easingRights = Float64Array.from(indices, (index) => this.easingRights[index]);
         next.easingBases = Float64Array.from(indices, (index) => this.easingBases[index]);
         next.easingRanges = Float64Array.from(indices, (index) => this.easingRanges[index]);
+        next.easingRangeValid = Uint8Array.from(indices, (index) => this.easingRangeValid[index]);
         next.bezierFlags = Uint8Array.from(indices, (index) => this.bezierFlags[index]);
         next.linearFlags = Uint8Array.from(indices, (index) => this.linearFlags[index]);
         next.linearNumeric = this.linearNumeric;
@@ -258,37 +289,43 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
     if (!this.numericOnly) {
       return Number(this.value(seconds));
     }
-    if (!this.sources.length) {
+    const starts = this.starts;
+    const sourceCount = starts.length;
+    if (!sourceCount) {
       return Number(this.fallback);
     }
     if (seconds < this.starts[0]) {
       return Number(this.fallback);
     }
-    if (this.sources.length === 1) {
+    if (sourceCount === 1) {
       return this.sampleNumber(seconds, this.sources[0], 0);
     }
-    if (seconds >= this.ends[this.ends.length - 1]) {
-      const value = this.endValues[this.endValues.length - 1];
-      return this.integerEndpoints ? channelInteger(value) : value;
+    const ends = this.ends;
+    const lastIndex = sourceCount - 1;
+    if (seconds >= ends[lastIndex]) {
+      return this.normalizedEndValues[lastIndex];
     }
     const cachedIndex = this.cachedValueIndex;
+    // `NaN` naturally fails the comparison, so the hot path avoids a separate
+    // Number.isFinite call for every geometric channel on every line.
+    const cachedSeconds = this.cachedValueSeconds;
+    const nextIndex = cachedIndex + 1;
     const cursorHit =
-      Number.isFinite(this.cachedValueSeconds) &&
-      seconds >= this.cachedValueSeconds &&
-      cachedIndex < this.starts.length &&
-      seconds >= this.starts[cachedIndex] &&
-      (cachedIndex + 1 >= this.starts.length || seconds < this.starts[cachedIndex + 1]);
+      seconds >= cachedSeconds &&
+      cachedIndex < sourceCount &&
+      seconds >= starts[cachedIndex] &&
+      (nextIndex >= sourceCount || seconds < starts[nextIndex]);
     if (cursorHit) {
-      eventCursorHits += 1;
-    } else {
+      if (eventCursorStatsEnabled) {
+        eventCursorHits += 1;
+      }
+    } else if (eventCursorStatsEnabled) {
       eventCursorMisses += 1;
     }
     const index = cursorHit ? cachedIndex : this.valueIndex(seconds);
     if (this.linearNumeric) {
-      const start = this.startValues[index];
-      const end = this.endValues[index];
-      const normalizedStart = this.integerEndpoints ? channelInteger(start) : start;
-      const normalizedEnd = this.integerEndpoints ? channelInteger(end) : end;
+      const normalizedStart = this.normalizedStartValues[index];
+      const normalizedEnd = this.normalizedEndValues[index];
       if (seconds > this.ends[index]) {
         return normalizedEnd;
       }
@@ -318,8 +355,7 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
     // walking the playback cursor and re-evaluating easing for tracks whose
     // authored animation already ended before the current preview time.
     if (this.numericOnly && seconds >= this.ends[this.ends.length - 1]) {
-      const value = this.endValues[this.endValues.length - 1];
-      return this.integerEndpoints ? channelInteger(value) : value;
+      return this.normalizedEndValues[this.normalizedEndValues.length - 1];
     }
     // Reuse the active segment in either playback direction; a seek that crosses a
     // segment boundary is resolved by valueIndex() and primes the cursor there.
@@ -330,22 +366,24 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       seconds >= this.starts[cachedIndex] &&
       (cachedIndex + 1 >= this.starts.length || seconds < this.starts[cachedIndex + 1])
     ) {
-      eventCursorHits += 1;
+      if (eventCursorStatsEnabled) {
+        eventCursorHits += 1;
+      }
       return this.valueAtIndex(seconds, cachedIndex);
     }
-    eventCursorMisses += 1;
+    if (eventCursorStatsEnabled) {
+      eventCursorMisses += 1;
+    }
     const index = this.valueIndex(seconds);
     return this.valueAtIndex(seconds, index);
   }
 
   /** Numeric sampling path using the precomputed easing tables. */
   private sampleNumber(seconds: number, source: T, index: number): number {
-    const start = this.startValues[index];
-    const end = this.endValues[index];
     const startTime = this.starts[index];
     const endTime = this.ends[index];
-    const normalizedStart = this.integerEndpoints ? channelInteger(start) : start;
-    const normalizedEnd = this.integerEndpoints ? channelInteger(end) : end;
+    const normalizedStart = this.normalizedStartValues[index];
+    const normalizedEnd = this.normalizedEndValues[index];
     if (seconds > endTime) {
       return normalizedEnd;
     }
@@ -364,14 +402,23 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       ? bezier(progress, source.bezierPoints ?? [])
       : this.linearFlags[index]
         ? progress
-        : easingWithRange(
-            progress,
-            easingType,
-            this.easingLefts[index],
-            this.easingRights[index],
-            this.easingBases[index],
-            this.easingRanges[index],
-          );
+        : this.easingRangeValid[index] && Number.isFinite(progress)
+          ? easingWithKnownRange(
+              progress,
+              easingType,
+              this.easingLefts[index],
+              this.easingRights[index],
+              this.easingBases[index],
+              this.easingRanges[index],
+            )
+          : easingWithRange(
+              progress,
+              easingType,
+              this.easingLefts[index],
+              this.easingRights[index],
+              this.easingBases[index],
+              this.easingRanges[index],
+            );
     return normalizedStart + (normalizedEnd - normalizedStart) * amount;
   }
 

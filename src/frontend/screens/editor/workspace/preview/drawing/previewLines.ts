@@ -448,7 +448,6 @@ function paintPreviewNoteFallback(
   holdRotation: number,
   holdCapScale: number,
 ): void {
-  context.save();
   context.globalAlpha = alpha;
   const tint = noteColorStyle?.color;
   context.fillStyle = selected
@@ -483,14 +482,17 @@ function paintPreviewNoteFallback(
     );
   }
   if (position.showHead && !drawnHold) {
+    // Hold skins already isolate their own rotation. Only note heads need a
+    // local transform, so do not pay for a save/restore on every hold body.
+    context.save();
     context.globalAlpha = alpha;
     context.translate(horizontal, -position.y * scaleY);
     context.transform(1, 0, skewShear, 1, 0, 0);
     if (!surface.skin?.head(context, noteType, 0, 0, noteWidth, highlight, noteColorStyle)) {
       context.fillRect(-noteWidth / 2, -2, noteWidth, 4);
     }
+    context.restore();
   }
-  context.restore();
 }
 
 /** Per-frame draw counts and elapsed time split between lines and notes. */

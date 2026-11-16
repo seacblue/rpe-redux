@@ -36,6 +36,8 @@ const splitMultiLine = args.includes("--split-multi-line");
 const marqueeStress = args.includes("--marquee-stress");
 const nativeMarquee = args.includes("--native-marquee");
 const verbose = args.includes("--verbose");
+const disableGpu = args.includes("--disable-gpu");
+const softwareOnly = args.includes("--software-only");
 const lineLabelsArgument = args.find((value) => value.startsWith("--line-labels="));
 const lineLabels = lineLabelsArgument ? lineLabelsArgument.slice(14) !== "off" : null;
 const multiLineCount = Number(
@@ -634,7 +636,11 @@ async function main() {
       "--disable-extensions",
       "--disable-features=Translate,BackForwardCache",
       "--disable-sync",
-      "--enable-gpu",
+      ...(softwareOnly
+        ? ["--disable-gpu", "--disable-gpu-compositing", "--disable-webgl", "--disable-webgl2"]
+        : disableGpu
+          ? ["--disable-gpu", "--disable-gpu-compositing"]
+          : ["--enable-gpu"]),
       ...(muteAudio ? ["--mute-audio"] : []),
       "--force-device-scale-factor=1",
       `--remote-debugging-port=${cdpPort}`,

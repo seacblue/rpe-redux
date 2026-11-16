@@ -18,7 +18,12 @@ import { linePasses, type RenderPass } from "../drawing/previewLines.ts";
 import { PREVIEW_LOGICAL_SIZE } from "./constants.ts";
 import { lineGuides, type LineGuide } from "../drawing/guides.ts";
 import { readShaderSource } from "../../../../../platform/shaderSource.ts";
-import { canvasPixelRatio, measureCanvas, prepareCanvas } from "../../../canvas/canvas2d.ts";
+import {
+  canvasPixelRatio,
+  fallbackCanvasPixelRatio,
+  measureCanvas,
+  prepareCanvas,
+} from "../../../canvas/canvas2d.ts";
 import { drawComposite } from "./previewComposite.ts";
 import type { GuideDrawStats } from "../drawing/previewGuides.ts";
 import { drawHitEffects } from "../drawing/previewHitEffects.ts";
@@ -41,6 +46,7 @@ import type { TempoSource } from "../../../../../../core/global/chart/timing/eve
 import {
   eventTrackSamplingStats,
   resetEventTrackSamplingStats,
+  setEventTrackSamplingStatsEnabled,
 } from "../../../../../../core/global/chart/timing/events.ts";
 import type {
   HitTestPreviewGeometry,
@@ -165,6 +171,12 @@ export class Preview {
   private lastVisibleNoteCount = 0;
   /** Bumps whenever a paint can change the primary canvas pixels. */
   private shaderSourceRevision = 0;
+  private lastCanvasClearRect: {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  } | null = null;
   private readonly geometryCache = new PreviewGeometryCache();
   private readonly completionTimesCache = new CompletionTimesCache();
   private readonly geometryObservers = new Set<(geometry: HitTestPreviewGeometry | null) => void>();
@@ -898,7 +910,13 @@ export class Preview {
     contentFrame: ReturnType<typeof previewCameraView>;
     setupMs: number;
   } {
-    const { context, width, height } = prepareCanvas(this.canvas, true, measurement);
+    const canvasFallback = !this.shaderPipeline.webgl2;
+    const { context, width, height } = prepareCanvas(
+      this.canvas,
+      !canvasFallback,
+      measurement,
+      canvasFallback ? fallbackCanvasPixelRatio() : canvasPixelRatio(),
+    );
     const viewport = previewViewport(
       width,
       height,
@@ -909,6 +927,16 @@ export class Preview {
     const screenScale = viewport.scale / divisor;
     const contentFrame = previewCameraView(viewport, this.camera, divisor);
     this.display.setViewportClip(viewport, divisor, contentFrame);
+    if (canvasFallback) {
+      const previous = this.lastCanvasClearRect;
+      if (previous) {
+        context.clearRect(previous.left, previous.top, previous.width, previous.height);
+      }
+      context.clearRect(viewport.left, viewport.top, viewport.width, viewport.height);
+      this.lastCanvasClearRect = viewport;
+    } else {
+      this.lastCanvasClearRect = null;
+    }
     const { scale } = contentFrame;
     context.save();
     context.beginPath();
@@ -1309,6 +1337,7 @@ export class Preview {
     // Preview only needs floor distance on lines that own notes; structural lines still
     // need their transform and alpha, but integrating their speed layers is wasted work.
     const sampleStarted = performance.now();
+    setEventTrackSamplingStatsEnabled(renderDetailedProfileEnabled());
     resetEventTrackSamplingStats();
     const states = this.scene.sampleInto(seconds, this.sampledStates, false);
     const sampleMs = performance.now() - sampleStarted;

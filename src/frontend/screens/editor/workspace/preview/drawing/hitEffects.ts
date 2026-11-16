@@ -19,6 +19,17 @@ export interface HitRuntime {
   holdIndex: IntervalIndex<NoteEntry>;
 }
 
+interface HitTimeCursor {
+  hitTimes: NoteEntry[];
+  seconds: number;
+  since: number;
+  lifetime: number;
+  first: number;
+  last: number;
+}
+
+const hitTimeCursors = new WeakMap<HitRuntime, HitTimeCursor>();
+
 /** One rendered hit: the note entry, its time in seconds, and its particle seed. */
 export interface Hit {
   entry: NoteEntry;
@@ -35,14 +46,44 @@ export function recentHitsInto(
   lifetime = 2 / 3,
 ): number {
   hits.length = 0;
-  const first = upperBound(
-    runtime.hitTimes,
-    Math.max(seconds - lifetime, since),
-    (entry) => entry.start,
-  );
-  const last = upperBound(runtime.hitTimes, seconds, (entry) => entry.start);
+  const lower = Math.max(seconds - lifetime, since);
+  const hitTimes = runtime.hitTimes;
+  if (hitTimes.length === 0) {
+    return 0;
+  }
+  const cached = hitTimeCursors.get(runtime);
+  let first: number;
+  let last: number;
+  if (
+    cached &&
+    cached.hitTimes === hitTimes &&
+    cached.since === since &&
+    cached.lifetime === lifetime &&
+    seconds >= cached.seconds
+  ) {
+    first = cached.first;
+    while (first < hitTimes.length && hitTimes[first].start <= lower) {
+      first += 1;
+    }
+    last = cached.last;
+    while (last < hitTimes.length && hitTimes[last].start <= seconds) {
+      last += 1;
+    }
+  } else {
+    first = upperBound(hitTimes, lower, (entry) => entry.start);
+    last = upperBound(hitTimes, seconds, (entry) => entry.start);
+  }
+  if (cached && cached.hitTimes === hitTimes) {
+    cached.seconds = seconds;
+    cached.since = since;
+    cached.lifetime = lifetime;
+    cached.first = first;
+    cached.last = last;
+  } else {
+    hitTimeCursors.set(runtime, { hitTimes, seconds, since, lifetime, first, last });
+  }
   for (let index = first; index < last; index++) {
-    const entry = runtime.hitTimes[index];
+    const entry = hitTimes[index];
     if (entry.note.type !== 2 && !entry.note.isFake) {
       const slot = hits.length;
       const hit = hits[slot] ?? (hits[slot] = { entry, time: 0, seed: 0 });

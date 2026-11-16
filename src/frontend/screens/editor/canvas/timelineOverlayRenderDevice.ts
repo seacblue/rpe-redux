@@ -1,15 +1,15 @@
 /** Executes retained overlay packets through Canvas2D or the timeline GPU batch. */
-import { prepareCanvas } from "./canvas2d.ts";
+import { fallbackCanvasPixelRatio, prepareCanvas } from "./canvas2d.ts";
 import type { RenderCommand, RenderDevice, RenderPacket } from "./renderGraph.ts";
 import type { TimelineOverlayBatch } from "./timelineOverlayBatch.ts";
 import { renderProfileMark } from "../../../../core/diagnostics/renderMetrics.ts";
 
 /** Draw one backend-neutral command through Canvas2D. */
 function drawCanvasCommand(context: CanvasRenderingContext2D, command: RenderCommand): void {
-  context.save();
   context.globalAlpha = command.alpha;
   if (command.kind === "fillRect") {
     context.fillStyle = command.color;
+    context.setLineDash([]);
     context.fillRect(command.x, command.y, command.width, command.height);
   } else if (command.kind === "strokeRect") {
     context.strokeStyle = command.color;
@@ -43,13 +43,13 @@ function drawCanvasCommand(context: CanvasRenderingContext2D, command: RenderCom
     context.fillStyle = command.color;
     context.textAlign = command.align;
     context.textBaseline = "alphabetic";
+    context.setLineDash([]);
     if (command.maxWidth === undefined) {
       context.fillText(command.text, command.x, command.y);
     } else {
       context.fillText(command.text, command.x, command.y, Math.max(1, command.maxWidth));
     }
   }
-  context.restore();
 }
 
 /** Queue one backend-neutral command through the GPU overlay batch. */
@@ -104,7 +104,9 @@ export class TimelineOverlayRenderDevice implements RenderDevice {
   render(packet: RenderPacket): void {
     renderProfileMark("timeline.overlay.begin.start");
     const gpuActive = this.gpuBatch.begin(packet.width, packet.height);
-    const context = gpuActive ? null : prepareCanvas(this.fallbackCanvas).context;
+    const context = gpuActive
+      ? null
+      : prepareCanvas(this.fallbackCanvas, true, undefined, fallbackCanvasPixelRatio()).context;
     if (gpuActive) {
       prepareCanvas(this.fallbackCanvas);
       for (const command of packet.commands) {
@@ -114,9 +116,11 @@ export class TimelineOverlayRenderDevice implements RenderDevice {
       renderProfileMark("timeline.overlay.finish.end");
       return;
     }
+    context!.save();
     for (const command of packet.commands) {
       drawCanvasCommand(context!, command);
     }
+    context!.restore();
   }
 
   /** Dispose the GPU adapter; the fallback canvas remains DOM-owned. */

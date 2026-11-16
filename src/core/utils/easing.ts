@@ -274,6 +274,19 @@ export function easingWithRange(
   return Number.isFinite(value) ? value : amount;
 }
 
+/** Evaluate a compiled range whose finite, non-flat invariant was checked at build time. */
+export function easingWithKnownRange(
+  progress: number,
+  type: number,
+  left: number,
+  right: number,
+  base: number,
+  range: number,
+): number {
+  const curve = curves[type - 1] ?? curves[0];
+  return (curve(left + (right - left) * progress) - base) / range;
+}
+
 /** Evaluate a cubic bezier on the unit square; invalid control points act as linear. */
 export function bezier(
   progress: number,

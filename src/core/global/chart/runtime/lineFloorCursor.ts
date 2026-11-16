@@ -10,6 +10,8 @@ import { SpeedIntegral } from "../timing/events.ts";
 export class LineFloorCursor {
   private readonly speeds: readonly SpeedIntegral[];
   private readonly constantRate: number;
+  /** True when every speed layer contributes zero distance at every time. */
+  readonly isStatic: boolean;
   private cachedSeconds = Number.NaN;
   private cachedValue = 0;
 
@@ -26,6 +28,7 @@ export class LineFloorCursor {
     }
     this.speeds = dynamic;
     this.constantRate = constantRate;
+    this.isStatic = dynamic.length === 0 && constantRate === 0;
   }
 
   /** Return the exact accumulated floor at `seconds`. */

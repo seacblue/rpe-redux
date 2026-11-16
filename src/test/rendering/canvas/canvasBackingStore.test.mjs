@@ -6,8 +6,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   MAX_CANVAS_PIXEL_RATIO,
+  MAX_FALLBACK_CANVAS_PIXEL_RATIO,
   canvasBackingStoreSize,
   canvasPixelRatio,
+  fallbackCanvasPixelRatio,
   prepareCanvas,
   sizeCanvasBackingStore,
 } from "../../../frontend/screens/editor/canvas/canvas2d.ts";
@@ -52,6 +54,15 @@ test("sizeCanvasBackingStore clamps the ratio at the shared limit", () => {
     assert.equal(size.ratio, 2);
     assert.equal(canvas.width, 200);
     assert.equal(canvas.height, 100);
+  });
+});
+
+test("fallback canvas ratio avoids a 2x software surface", () => {
+  withPixelRatio(2, () => {
+    assert.equal(MAX_FALLBACK_CANVAS_PIXEL_RATIO, 1.25);
+    assert.equal(fallbackCanvasPixelRatio(), 1.25);
+    assert.equal(fallbackCanvasPixelRatio(1), 1);
+    assert.equal(fallbackCanvasPixelRatio(3), 1.25);
   });
 });
 

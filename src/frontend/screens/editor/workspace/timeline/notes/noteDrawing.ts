@@ -6,7 +6,11 @@
  * and the viewport.
  */
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
-import { prepareCanvas } from "../../../canvas/canvas2d.ts";
+import {
+  fallbackCanvasPixelRatio,
+  measureCanvas,
+  prepareCanvas,
+} from "../../../canvas/canvas2d.ts";
 import { noteSkewAtHit, noteSkewCurve, noteSkewShear } from "../../../canvas/noteGeometry.ts";
 import {
   BACKGROUND_GRID,
@@ -279,13 +283,21 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   const session = this.getSession();
   this.cache.setNoteChangeHints(session.lastNoteChangeHints);
   const palette = this.cache.palette() ?? readCanvasPalette();
-  const { context, width, height } = prepareCanvas(this.notesCanvas);
+  const measurement = measureCanvas(this.notesCanvas);
+  const width = measurement.width;
+  const height = measurement.height;
+  const noteBatchActive = this.noteBatch.begin(width, height, this.appearance.skin);
+  const solidBatchActive = this.noteSolidBatch.begin(width, height);
+  const { context } = prepareCanvas(
+    this.notesCanvas,
+    true,
+    measurement,
+    noteBatchActive || solidBatchActive ? undefined : fallbackCanvasPixelRatio(),
+  );
   this.viewport.syncMultiLineChrome("notes", width);
   // The note backdrop is anchored to the live viewport, so repaint it with the
   // frame rather than keeping a translated bitmap.
-  const backdrop = prepareCanvas(this.notesBackdrop);
-  this.noteBatch.begin(width, height, this.appearance.skin);
-  this.noteSolidBatch.begin(width, height);
+  const backdrop = prepareCanvas(this.notesBackdrop, true, undefined, fallbackCanvasPixelRatio());
   const multiNotes = session.notesMode !== "single";
   const multiplePanels = multiNotes && this.viewport.panelCount("notes") > 1;
   if (session.multiLineActive && this.viewport.panelCount("notes") > 1) {

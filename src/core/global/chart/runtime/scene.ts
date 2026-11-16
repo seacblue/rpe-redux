@@ -283,11 +283,30 @@ function isNeutralIncline(track: EventTrack): boolean {
 
 /** Sample one pre-filtered channel track list without allocating a temporary array. */
 function sampleTrackList(tracks: readonly EventTrack[], offset: number, seconds: number): number {
-  if (tracks.length === 0) {
-    return offset;
-  }
-  if (tracks.length === 1) {
-    return offset + tracks[0].sampleNumeric(seconds);
+  switch (tracks.length) {
+    case 0:
+      return offset;
+    case 1:
+      return offset + tracks[0].sampleNumeric(seconds);
+    case 2:
+      return offset + tracks[0].sampleNumeric(seconds) + tracks[1].sampleNumeric(seconds);
+    case 3:
+      return (
+        offset +
+        tracks[0].sampleNumeric(seconds) +
+        tracks[1].sampleNumeric(seconds) +
+        tracks[2].sampleNumeric(seconds)
+      );
+    case 4:
+      return (
+        offset +
+        tracks[0].sampleNumeric(seconds) +
+        tracks[1].sampleNumeric(seconds) +
+        tracks[2].sampleNumeric(seconds) +
+        tracks[3].sampleNumeric(seconds)
+      );
+    default:
+      break;
   }
   let result = offset;
   for (let index = 0; index < tracks.length; index += 1) {
@@ -410,6 +429,8 @@ export class LineRuntime {
    * string-keyed lookups per line per frame.
    */
   declare animatedTrackList: EventTrack[][];
+  /** True when at least one geometric channel has a time-varying track. */
+  declare hasAnimatedChannels: boolean;
   declare trackOffsetList: Float64Array;
   /**
    * Per-line channel output reused by every `state` call.
@@ -420,6 +441,8 @@ export class LineRuntime {
   declare readonly channelScratch: Float64Array;
   declare speeds: SpeedIntegral[];
   declare floorCursor: LineFloorCursor;
+  /** True when the line's accumulated floor is zero for every sample time. */
+  declare floorIsStatic: boolean;
   declare extended: Record<
     "scaleXEvents" | "scaleYEvents" | "colorEvents" | "textEvents" | "inclineEvents",
     EventTrack
@@ -487,6 +510,7 @@ export class LineRuntime {
       .slice(0, 5)
       .map((layer) => new SpeedIntegral(layer?.speedEvents, tempo, factor));
     this.floorCursor = new LineFloorCursor(this.speeds);
+    this.floorIsStatic = this.floorCursor.isStatic;
     this.holdActivationCoveredBySpatial = canCoverActiveHoldsSpatially(this.speeds);
     const defaultLine =
       !line.attachUI &&
@@ -780,6 +804,7 @@ export class LineRuntime {
     this.trackOffsets = trackOffsets;
     this.animatedTrackList = animatedTrackList;
     this.trackOffsetList = trackOffsetList;
+    this.hasAnimatedChannels = animatedTrackList.some((tracks) => tracks.length > 0);
   }
 
   /** Accumulated floor distance at `seconds` across every speed layer. */
@@ -860,13 +885,27 @@ export class LineRuntime {
       result.floor = 0;
       return result;
     }
-    // One index loop fills all four channels, replacing four string-keyed `value` calls.
-    const channels = this.channelScratch;
-    this.sampleChannels(seconds, channels);
-    const x = channels[0];
-    const y = channels[1];
-    const rotation = channels[2];
-    const alpha = channels[3];
+    let x: number;
+    let y: number;
+    let rotation: number;
+    let alpha: number;
+    if (this.hasAnimatedChannels) {
+      // One index loop fills all four channels, replacing four string-keyed `value` calls.
+      const channels = this.channelScratch;
+      this.sampleChannels(seconds, channels);
+      x = channels[0];
+      y = channels[1];
+      rotation = channels[2];
+      alpha = channels[3];
+    } else {
+      // Extended tracks and note controls can animate a line without changing its
+      // four geometric channels. Reuse the folded constants and avoid four empty
+      // track-list calls for those lines on every frame.
+      x = this.trackOffsetList[0];
+      y = this.trackOffsetList[1];
+      rotation = this.trackOffsetList[2];
+      alpha = this.trackOffsetList[3];
+    }
     if (this.simpleState) {
       const result =
         target ??
@@ -890,7 +929,10 @@ export class LineRuntime {
       result.scaleY = this.staticScaleY;
       result.text = "";
       result.incline = 0;
-      result.floor = includeFloorForEmptyLines || this.notes.length > 0 ? this.floor(seconds) : 0;
+      result.floor =
+        !this.floorIsStatic && (includeFloorForEmptyLines || this.notes.length > 0)
+          ? this.floor(seconds)
+          : 0;
       return result;
     }
     const scaleXTrack = this.extended.scaleXEvents;
@@ -907,7 +949,10 @@ export class LineRuntime {
       : (target?.color ?? [...(colorTrack.fallback as number[])]);
     const text = textTrack.sources.length ? String(textTrack.value(seconds)) : "";
     const incline = inclineTrack.sources.length ? Number(inclineTrack.value(seconds)) : 0;
-    const floor = includeFloorForEmptyLines || this.notes.length > 0 ? this.floor(seconds) : 0;
+    const floor =
+      !this.floorIsStatic && (includeFloorForEmptyLines || this.notes.length > 0)
+        ? this.floor(seconds)
+        : 0;
     if (!target) {
       return {
         x,
@@ -971,7 +1016,7 @@ export class LineRuntime {
     }
     const reusableSpatialQuery =
       this.visibility.spatialOnly &&
-      this.speeds.every((speed) => speed.sources.length === 0) &&
+      this.floorIsStatic &&
       this.visibilityCandidateCache?.floor === state.floor &&
       this.visibilityCandidateCache.radius === radius;
     let indexMs = 0;
@@ -981,7 +1026,7 @@ export class LineRuntime {
       const queryStarted = measureIndex ? performance.now() : 0;
       this.visibility.query(seconds, state.floor, radius, result);
       indexMs = measureIndex ? performance.now() - queryStarted : 0;
-      if (this.visibility.spatialOnly && this.speeds.every((speed) => speed.sources.length === 0)) {
+      if (this.visibility.spatialOnly && this.floorIsStatic) {
         this.visibilityCandidateCache = {
           floor: state.floor,
           radius,
@@ -1453,6 +1498,8 @@ export class SceneRuntime {
   >();
   /** Parent-before-child order used by the allocation-free frame sampler. */
   private parentOrder: number[] | null = null;
+  /** Predecoded parent indexes used by the frame sampler and defensive resolver. */
+  private parentIndexes = new Int32Array();
   /** Lines whose world state must be recomputed after the first sampled frame. */
   private dynamicSampleOrder: number[] = [];
   /** Parentless charts can sample each line without recursive resolution. */
@@ -1495,6 +1542,7 @@ export class SceneRuntime {
     this.worldStateVersions = new Uint32Array();
     this.lineSamples = new WeakMap();
     this.parentOrder = null;
+    this.parentIndexes = new Int32Array();
     this.dynamicSampleOrder = [];
     this.hasParentLines = false;
     this.runtimeById.clear();
@@ -1530,10 +1578,11 @@ export class SceneRuntime {
     this.sampledSeconds = Number.NaN;
     this.sampledStates = null;
     const sourceLines = chart.judgeLineList ?? [];
-    this.hasParentLines = sourceLines.some((line) => {
+    this.parentIndexes = Int32Array.from(sourceLines, (line) => {
       const parent = lineParentIndex(line.father);
-      return Number.isInteger(parent) && parent >= 0;
+      return Number.isInteger(parent) ? parent : -1;
     });
+    this.hasParentLines = this.parentIndexes.some((parent) => parent >= 0);
     const previousById = this.runtimeById;
     const noteHintsByLine = new Map(
       (noteChangeHints ?? []).map((hint) => [hint.lineIndex, hint] as const),
@@ -1629,7 +1678,7 @@ export class SceneRuntime {
         this.worldStateStatic[index] = 1;
         continue;
       }
-      const parent = lineParentIndex(runtime.line.father);
+      const parent = this.parentIndexes[index];
       this.worldStateStatic[index] =
         runtime.staticState &&
         (!Number.isInteger(parent) ||
@@ -1754,14 +1803,14 @@ export class SceneRuntime {
         return true;
       }
       const line = runtime.line;
-      const parent = lineParentIndex(line.father);
+      const parent = this.parentIndexes[index];
       states[index] = this.sampledLineState(
         runtime,
         seconds,
         states[index],
         includeFloorForEmptyLines,
       );
-      if (Number.isInteger(parent) && parent >= 0 && parent < this.lines.length) {
+      if (parent >= 0 && parent < this.lines.length) {
         if (!resolve(parent)) {
           status[index] = 2;
           return false;
@@ -1881,8 +1930,8 @@ export class SceneRuntime {
           this.localStateVersions[index] = (this.localStateVersions[index] + 1) >>> 0;
         }
         this.localStates[index] = local;
-        const parent = lineParentIndex(runtime.line.father);
-        if (!Number.isInteger(parent) || parent < 0 || parent >= this.lines.length) {
+        const parent = this.parentIndexes[index];
+        if (parent < 0 || parent >= this.lines.length) {
           // A root has no world-space composition to apply. Reusing its local state avoids
           // copying every field into a second object on every playback frame.
           const wasComposed = this.worldStateCache[index] !== undefined;

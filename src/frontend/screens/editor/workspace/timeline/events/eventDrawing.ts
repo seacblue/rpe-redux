@@ -9,7 +9,12 @@
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import { eventList, eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
 import { t } from "../../../../../../i18n/index.ts";
-import { context2d, prepareCanvas } from "../../../canvas/canvas2d.ts";
+import {
+  context2d,
+  fallbackCanvasPixelRatio,
+  measureCanvas,
+  prepareCanvas,
+} from "../../../canvas/canvas2d.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
 import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
@@ -260,7 +265,9 @@ function drawSelectedEventValues(
 export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number): void {
   this.gestures.beginEventRectFrame();
   const palette = this.cache.palette() ?? readCanvasPalette();
-  const { context, width, height } = prepareCanvas(this.eventsCanvas);
+  const measurement = measureCanvas(this.eventsCanvas);
+  const width = measurement.width;
+  const height = measurement.height;
   const overlayActive = this.eventOverlayBatch.begin(width, height);
   const overlayBatch = overlayActive ? this.eventOverlayBatch : null;
   this.viewport.syncMultiLineChrome("events", width);
@@ -269,10 +276,22 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   scratch.selectedIndexesBySelection.clear();
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const multiEvents = session.eventsMode === "multi";
+  const repaintBatch = this.eventBatch.begin(
+    width,
+    height,
+    this.appearance.skin,
+    eventBarOpacity(this.appearance.eventOpacity),
+  );
+  const { context } = prepareCanvas(
+    this.eventsCanvas,
+    true,
+    measurement,
+    overlayActive || repaintBatch ? undefined : fallbackCanvasPixelRatio(),
+  );
   // The event backdrop holds the beat grid and the panel/channel separators.
   // Both are projected from the live origin, so they are rebuilt every frame
   // rather than translated as a cached bitmap.
-  const backdrop = prepareCanvas(this.eventsBackdrop);
+  const backdrop = prepareCanvas(this.eventsBackdrop, true, undefined, fallbackCanvasPixelRatio());
   const factor = this.viewport.factor;
   const verticalAt = createVerticalAtBeat(this, factor, height);
   // Multi-line event bars are a time-dependent GPU batch and are submitted on
@@ -293,12 +312,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   if (chrome?.repaint) {
     drawMultiLineEventChrome(this, chrome.context, width);
   }
-  const repaintBatch = this.eventBatch.begin(
-    width,
-    height,
-    this.appearance.skin,
-    eventBarOpacity(this.appearance.eventOpacity),
-  );
   if (multiEvents) {
     if (this.viewport.panelCount("events") > 1) {
       const panelWidth = this.viewport.panelWidth(width, "events");
