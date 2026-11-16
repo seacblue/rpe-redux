@@ -3361,7 +3361,7 @@ dependencies = [
 
 [[package]]
 name = "rpe-redux"
-version = "1.0.9"
+version = "1.0.10"
 dependencies = [
  "base64 0.23.1",
  "hex",
