@@ -12,6 +12,7 @@ import { appVersion } from "../../core/platform/appInfo.ts";
 import { BUILD_APP_VERSION } from "../../core/platform/buildInfo.ts";
 import { isDesktop } from "../../core/platform/environment.ts";
 import { isPrereleaseVersion } from "../../core/utils/version.ts";
+import { DEFAULT_WEBGL_CONTEXT_ATTRIBUTES } from "../screens/editor/canvas/webgl.ts";
 
 /** The build channel derived from the version and the running bundle. */
 export type DeveloperChannel = "stable" | "beta" | "development";
@@ -98,7 +99,8 @@ export function describeGpu(): string | null {
     return null;
   }
   const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  const options: WebGLContextAttributes = { ...DEFAULT_WEBGL_CONTEXT_ATTRIBUTES };
+  const gl = canvas.getContext("webgl2", options) ?? canvas.getContext("webgl", options);
   if (!gl) {
     return null;
   }

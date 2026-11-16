@@ -1,4 +1,6 @@
 /** Owns canvas render-surface lifetimes so Canvas2D and WebGL share one contract. */
+import { DEFAULT_WEBGL_CONTEXT_ATTRIBUTES } from "./webgl.ts";
+
 /** Highest device-pixel ratio allowed by editor render surfaces. */
 const MAX_RENDER_PIXEL_RATIO = 2;
 
@@ -117,11 +119,13 @@ export class WebGlRenderBackend {
   /** Creates a WebGL surface and installs the browser context lifecycle. */
   constructor(
     canvas: HTMLCanvasElement,
-    options: WebGLContextAttributes = { alpha: true, antialias: false, depth: false },
+    options: WebGLContextAttributes = DEFAULT_WEBGL_CONTEXT_ATTRIBUTES,
     lifecycle: RenderContextLifecycle = {},
   ) {
     this.canvas = canvas;
-    const gl = canvas.getContext("webgl2", options) ?? canvas.getContext("webgl", options);
+    const contextOptions = { ...DEFAULT_WEBGL_CONTEXT_ATTRIBUTES, ...options };
+    const gl =
+      canvas.getContext("webgl2", contextOptions) ?? canvas.getContext("webgl", contextOptions);
     if (!gl) {
       throw new Error("Cannot create WebGL render surface");
     }

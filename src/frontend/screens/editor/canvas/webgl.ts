@@ -7,6 +7,14 @@
 
 type GlContext = WebGLRenderingContext | WebGL2RenderingContext;
 
+/** Default attributes used when an editor surface asks Chromium for WebGL. */
+export const DEFAULT_WEBGL_CONTEXT_ATTRIBUTES = Object.freeze({
+  alpha: true,
+  antialias: false,
+  depth: false,
+  powerPreference: "high-performance" as WebGLPowerPreference,
+});
+
 /** The unit corner quad used by instanced sprite batches, as x/y pairs. */
 const UNIT_CORNER_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -166,10 +174,10 @@ export function configureTextureSampling(gl: GlContext, filter: number = gl.LINE
  */
 export function acquireWebGl2(
   canvas: HTMLCanvasElement,
-  options: WebGLContextAttributes = { alpha: true, antialias: false, depth: false },
+  options: WebGLContextAttributes = DEFAULT_WEBGL_CONTEXT_ATTRIBUTES,
 ): WebGL2RenderingContext | null {
   try {
-    return canvas.getContext("webgl2", options);
+    return canvas.getContext("webgl2", { ...DEFAULT_WEBGL_CONTEXT_ATTRIBUTES, ...options });
   } catch {
     return null;
   }
