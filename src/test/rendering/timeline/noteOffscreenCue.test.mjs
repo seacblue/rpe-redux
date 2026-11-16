@@ -1,4 +1,4 @@
-/** Edge cues appear when a scaled note body crosses its timeline viewport. */
+/** Edge cues appear when a scaled note body is fully outside its timeline viewport. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { offscreenCueSides } from "../../../frontend/screens/editor/workspace/timeline/notes/noteOffscreenCue.ts";
@@ -12,6 +12,11 @@ test("a fully visible note produces no cue", () => {
   assert.deepEqual(offscreenCueSides(100, 20, 0, 200), []);
 });
 
-test("a note body crossing both timeline edges reports both sides", () => {
-  assert.deepEqual(offscreenCueSides(100, 240, 0, 200), ["left", "right"]);
+test("a partially visible note produces no cue", () => {
+  assert.deepEqual(offscreenCueSides(5, 20, 0, 200), []);
+  assert.deepEqual(offscreenCueSides(195, 20, 0, 200), []);
+});
+
+test("a note body spanning the viewport remains without a cue", () => {
+  assert.deepEqual(offscreenCueSides(100, 240, 0, 200), []);
 });
