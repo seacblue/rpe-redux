@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  drawMultiLineBeatLabels,
   grid,
   gridForLine,
   visibleGridTicks,
@@ -95,6 +96,50 @@ test("timeline grids keep every visible horizontal guide", () => {
     visibleGridTicks(0, 12, 1, null),
     Array.from({ length: 13 }, (_, i) => i),
   );
+});
+
+test("multi-line beat labels only render in the screen-leftmost visible panel", () => {
+  const labels = [];
+  const factors = [];
+  const context = {
+    save() {},
+    restore() {},
+    fillText(text, x) {
+      labels.push({ text, x });
+    },
+  };
+  const receiver = {
+    cache: {
+      palette: () => ({ foreground: "foreground" }),
+    },
+    getSession: () => ({ targetLineIndices: [2, 4, 6] }),
+    viewport: {
+      panelCount: () => 3,
+      panelWidth: () => 80,
+      panelStride: () => 100,
+      multiLineViewportOffset: () => 90,
+      visiblePanelRange: () => [1, 2],
+      factorForLine: (lineIndex) => {
+        factors.push(lineIndex);
+        return 1;
+      },
+      tempo: {
+        seconds: (beat) => beat,
+        beat: (seconds) => seconds,
+      },
+      origin: 0,
+      division: 4,
+      judgementOffset: 0,
+      scaleForArea: () => 100,
+      verticalForLine: (beat, _lineIndex, height) => height - beat * 20,
+    },
+  };
+
+  drawMultiLineBeatLabels.call(receiver, context, 200, 200, "notes");
+
+  assert.ok(labels.length > 0);
+  assert.deepEqual(new Set(labels.map(({ x }) => x)), new Set([15]));
+  assert.deepEqual(factors, [4]);
 });
 
 test("a constant-tempo division-six grid keeps evenly spaced horizontal guides", () => {
