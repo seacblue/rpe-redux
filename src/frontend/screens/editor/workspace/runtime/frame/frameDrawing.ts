@@ -19,6 +19,7 @@ import { EditorRenderScheduler, type RenderTiming } from "./renderScheduler.ts";
 import { freeCameraState } from "../../stage/freeCamera/freeCamera.ts";
 import { isPerformanceHudVisible } from "../../../../../overlays/performance/performanceHud.ts";
 import { recordPerformanceFrameTiming } from "../../../../../overlays/performance/performanceFrameTiming.ts";
+import { updatePlaybackViewportOrigin } from "./playbackOrigin.ts";
 
 interface FrameTimingProbe {
   (sample: {
@@ -147,11 +148,12 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       if (refreshHud) {
         runtime.updateLineInfo();
       }
-      const playbackActive = runtime.audio.playing || runtime.playbackPending();
-      runtime.timeline.viewport.setPlaybackActive(playbackActive);
-      if (runtime.audio.playing) {
-        runtime.timeline.viewport.setOrigin(beat, "playback");
-      }
+      updatePlaybackViewportOrigin(
+        runtime.timeline.viewport,
+        beat,
+        runtime.audio.playing,
+        runtime.playbackPending(),
+      );
       const selectionStarted = performance.now();
       runtime.timeline.gestures.previewRefresh?.();
       const selectionMs = performance.now() - selectionStarted;
