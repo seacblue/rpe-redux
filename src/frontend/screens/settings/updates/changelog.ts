@@ -22,6 +22,7 @@ import {
   getUpdateState,
   installUpdate,
   pauseUpdateDownload,
+  promptForPreparedUpdate,
   refreshUpdateSettings,
   skipUpdateVersion,
   stopUpdateDownload,
@@ -78,6 +79,15 @@ export function openChangelog(mode: ChangelogMode = "current"): boolean {
 
 /** Open the future-release notes attached to the update badge. */
 export function openUpdateChangelog(): boolean {
+  const state = getUpdateState();
+  if (
+    state.phase === "downloaded" &&
+    state.latest &&
+    state.preparedVersion === state.latest.version
+  ) {
+    void promptForPreparedUpdate(state.latest);
+    return true;
+  }
   return openChangelog("update");
 }
 
@@ -91,5 +101,6 @@ bindUpdatePromptLauncher((version) =>
     cancelLabel: t("settings.updates.restartPrompt.defer"),
     label: t("settings.updates.restartPrompt.restartNow"),
     priority: MODAL_PRIORITY.consent,
+    dismissOnScrim: false,
   }),
 );
