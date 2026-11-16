@@ -311,7 +311,6 @@ canvas {
 .timeline-events {
   grid-column: 3;
   grid-row: 1;
-  border-left: 1px solid var(--edge-emphasis);
   position: relative;
   z-index: 3;
   background: transparent;
@@ -331,6 +330,19 @@ canvas {
   z-index: 4;
   pointer-events: none;
   background: transparent;
+}
+
+// The event boundary is separate from the editing canvas because the canvas
+// paints its header after the grid. Keeping this line in a later DOM layer
+// makes it visible through both the header fill and its labels.
+.timeline-event-edges {
+  grid-column: 3;
+  grid-row: 1;
+  z-index: 5;
+  box-sizing: border-box;
+  border-left: 1px solid var(--edge-emphasis);
+  border-right: 1px solid var(--edge-emphasis);
+  pointer-events: none;
 }
 
 .timeline-strip {
@@ -413,6 +425,7 @@ canvas {
 .editor.events-hidden .timeline-events-playhead-batch,
 .editor.events-hidden .timeline-event-batch,
 .editor.events-hidden .timeline-event-overlay-batch,
+.editor.events-hidden .timeline-event-edges,
 .editor.events-hidden .layer-buttons {
   display: none;
 }
@@ -499,10 +512,6 @@ canvas {
   & .timeline-history-strip {
     grid-column: 5;
   }
-}
-
-.editor.notes-hidden:not(.events-hidden) .timeline-events {
-  border-left: 0;
 }
 
 .editor.notes-hidden.events-hidden .canvases,
