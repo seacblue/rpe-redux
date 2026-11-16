@@ -301,7 +301,9 @@ canvas {
 .timeline-notes-cue {
   grid-column: 2;
   grid-row: 1;
-  z-index: 4;
+  // Temporarily keep the cue above every timeline and developer overlay while
+  // validating that the indicator is not hidden by a sibling canvas layer.
+  z-index: var(--z-performance-hud);
   pointer-events: none;
   background: transparent;
 }
