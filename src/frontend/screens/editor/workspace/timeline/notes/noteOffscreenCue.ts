@@ -5,34 +5,6 @@
 
 export type NoteOffscreenCueSide = "left" | "right";
 
-/** Resolve a cue's X coordinate on the visible edge of one note panel. */
-export function offscreenCueX(
-  side: NoteOffscreenCueSide,
-  panelLeft: number,
-  panelRight: number,
-  width: number,
-  cueWidth: number,
-): number | null {
-  if (
-    ![panelLeft, panelRight, width, cueWidth].every(Number.isFinite) ||
-    panelRight <= panelLeft ||
-    width <= 0 ||
-    cueWidth <= 0
-  ) {
-    return null;
-  }
-  const visibleLeft = Math.max(0, panelLeft);
-  const visibleRight = Math.min(width, panelRight);
-  if (visibleRight <= visibleLeft) {
-    return null;
-  }
-  const maxX = Math.max(0, width - cueWidth);
-  const edgeInset = Math.min(4, Math.max(2, cueWidth / 2));
-  return side === "left"
-    ? Math.min(maxX, visibleLeft + edgeInset)
-    : Math.min(maxX, Math.max(0, visibleRight - cueWidth - edgeInset));
-}
-
 /** Return whether a note interval contains the current playhead beat. */
 export function noteContainsBeat(start: number, end: number, beat: number): boolean {
   if (![start, end, beat].every(Number.isFinite)) {
