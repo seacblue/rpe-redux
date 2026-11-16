@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
   <title>Note timeline X coordinate range controls</title>
-  <desc>Three note timelines share one X camera. The bottom floating overlay has left, reset, and right buttons. Translucent red marks coordinates outside minus 675 to 675, and white edge bars mark current-beat notes touching a timeline edge.</desc>
+  <desc>Three note timelines share one X camera. The bottom floating overlay has left, reset, and right buttons. Authored-range boundary lines and theme-adaptive white edge indicators mark current-beat notes outside a timeline edge.</desc>
   <defs>
     <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#12161e"/><stop offset="1" stop-color="#090b10"/></linearGradient>
     <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1d2935"/><stop offset="1" stop-color="#111820"/></linearGradient>
@@ -28,8 +28,6 @@
       <rect x="316" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
       <rect x="632" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
       <g class="ui small" text-anchor="middle"><text x="150" y="24">note timeline · 线 0</text><text x="466" y="24">note timeline · 线 1</text><text x="782" y="24">note timeline · 线 2</text></g>
-      <rect x="0" y="0" width="46" height="418" fill="#d99090" opacity=".25"/>
-      <rect x="586" y="0" width="30" height="418" fill="#d99090" opacity=".25"/>
       <g fill="#6fc9ff" opacity=".9"><rect x="82" y="100" width="116" height="26" rx="8"/><rect x="385" y="160" width="128" height="26" rx="8"/><rect x="724" y="92" width="120" height="26" rx="8"/></g>
       <g fill="#d8f3ff" stroke="#ffffff" stroke-width="2"><rect x="-24" y="255" width="72" height="26" rx="8"/><rect x="906" y="286" width="82" height="26" rx="8"/></g>
       <rect x="0" y="0" width="5" height="418" fill="url(#edge)"/>
@@ -51,5 +49,5 @@
   <text x="86" y="684" class="ui small">三按钮只移动 cameraX；中间按钮回到 0，不切换判定线。</text>
   <path d="M240 386C185 419 155 458 142 515" class="call"/>
   <rect x="610" y="654" width="570" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
-  <text x="628" y="684" class="ui small">柔和红色背景 = -675..675 外的整块 timeline 区域，接缝处渐变，可独立设置显示和透明度。</text>
+  <text x="628" y="684" class="ui small">不绘制离屏背景；偏离默认范围时画 authored 边界竖线，当前拍 note 越界时画主题自适应白光提示。</text>
 </svg>

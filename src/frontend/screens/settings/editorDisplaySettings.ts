@@ -294,8 +294,6 @@ export function readEditorDisplaySettings() {
       hoverGuidesEnabled: contributedFlag("hover-guides-enabled"),
       nearbyGuidesOnly: contributedFlag("nearby-guides-only-enabled"),
       densityBarsEnabled: contributedFlag("timeline-density-bars-enabled"),
-      offscreenRegionEnabled: contributedFlag("timeline-offscreen-region-enabled"),
-      offscreenRegionColor: contributedHex("timeline-offscreen-region-color"),
       hoverPreviewEnabled: contributedFlag("timeline-hover-preview-enabled"),
       barWidth: contributedNumber("bar-width"),
       barAlpha: contributedNumber("bar-alpha"),

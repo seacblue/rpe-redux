@@ -791,10 +791,4 @@ export default {
   "settings.field.timeline-range-bar-opacity.label": "Range area opacity",
   "settings.field.timeline-range-bar-opacity.description":
     "Opacity of the clipboard and paste ranges on the timeline overview bars.",
-  "settings.field.timeline-offscreen-region-enabled.label": "Show offscreen timeline region",
-  "settings.field.timeline-offscreen-region-enabled.description":
-    "Tints the note timeline background outside the authored -675 to 675 X range.",
-  "settings.field.timeline-offscreen-region-color.label": "Offscreen region color",
-  "settings.field.timeline-offscreen-region-color.description":
-    "The alpha channel controls the strength of the background tint.",
 } as const;

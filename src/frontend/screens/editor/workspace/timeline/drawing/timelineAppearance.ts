@@ -18,8 +18,6 @@ type AppearanceSettings = Pick<
   | "overlapThreshold"
   | "hoverGuidesEnabled"
   | "nearbyGuidesOnly"
-  | "offscreenRegionEnabled"
-  | "offscreenRegionColor"
   | "barWidth"
   | "barAlpha"
   | "playheadWidth"
@@ -60,8 +58,6 @@ export class TimelineAppearance {
   verticalGridColor = "#61640E";
   verticalGridCenterColor = "#9DA00B";
   gridHighlightColor = "#FFFFFF80";
-  offscreenRegionEnabled = true;
-  offscreenRegionColor = "#D9909040";
 
   /** Copy the current timeline display settings into this instance. */
   apply(config: AppearanceSettings): void {
@@ -86,7 +82,5 @@ export class TimelineAppearance {
     this.verticalGridColor = config.verticalGridColor;
     this.verticalGridCenterColor = config.verticalGridCenterColor;
     this.gridHighlightColor = config.gridHighlightColor;
-    this.offscreenRegionEnabled = config.offscreenRegionEnabled;
-    this.offscreenRegionColor = config.offscreenRegionColor;
   }
 }

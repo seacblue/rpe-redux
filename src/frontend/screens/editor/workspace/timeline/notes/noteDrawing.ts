@@ -36,7 +36,6 @@ import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
 import { noteContainsBeat, offscreenCueSides } from "./noteOffscreenCue.ts";
-import { offscreenRegionGradient, offscreenRegionSegments } from "./noteOffscreenRegion.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -144,9 +143,13 @@ function drawOffscreenNoteCues(
   const startPanel = multiplePanels ? firstPanel : 0;
   const endPanel = multiplePanels ? Math.min(lastPanel, lineIndices.length - 1) : 0;
   const cueWidth = Math.min(6, Math.max(2, width / 80));
+  const cueColor = palette.foreground;
   context.save();
-  context.fillStyle = palette.foreground;
-  context.globalAlpha = 0.82;
+  context.strokeStyle = cueColor;
+  context.fillStyle = cueColor;
+  context.shadowColor = cueColor;
+  context.shadowBlur = 5;
+  context.globalAlpha = 0.72;
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const lineIndex = lineIndices[panel] ?? session.lineIndex;
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
@@ -199,51 +202,18 @@ function drawOffscreenNoteCues(
       for (const side of sides) {
         const x = side === "left" ? Math.max(0, panelLeft) : Math.min(width, panelRight) - cueWidth;
         if (x >= 0 && x + cueWidth <= width) {
+          context.beginPath();
+          context.lineWidth = 1;
+          context.moveTo(side === "left" ? x + 0.5 : x + cueWidth - 0.5, 0);
+          context.lineTo(side === "left" ? x + 0.5 : x + cueWidth - 0.5, height);
+          context.stroke();
+          context.shadowBlur = 7;
+          context.globalAlpha = 0.9;
           context.fillRect(x, top, cueWidth, cueHeight);
+          context.shadowBlur = 5;
+          context.globalAlpha = 0.72;
         }
       }
-    }
-  }
-  context.restore();
-}
-
-/** Paint the X-coordinate overflow outside the authored -675..675 range. */
-function drawOffscreenRegion(
-  receiver: TimelineNoteDrawingReceiver,
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-): void {
-  if (!receiver.appearance.offscreenRegionEnabled || width <= 0 || height <= 0) {
-    return;
-  }
-  const session = receiver.getSession();
-  const multiplePanels = session.multiLineActive && receiver.viewport.panelCount("notes") > 1;
-  const panelCount = receiver.viewport.panelCount("notes");
-  const panelWidth = receiver.viewport.panelWidth(width, "notes");
-  const panelStride = receiver.viewport.panelStride(width, "notes");
-  const panelOffset = receiver.viewport.multiLineViewportOffset(width, "notes");
-  const [firstPanel, lastPanel] = multiplePanels
-    ? receiver.viewport.visiblePanelRange(width, "notes")
-    : [0, 0];
-  const startPanel = multiplePanels ? firstPanel : 0;
-  const endPanel = multiplePanels ? Math.min(lastPanel, panelCount - 1) : 0;
-  context.save();
-  for (let panel = startPanel; panel <= endPanel; panel++) {
-    const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
-    const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
-    for (const segment of offscreenRegionSegments(
-      panelLeft,
-      panelRight,
-      receiver.viewport.cameraX ?? 0,
-      width,
-    )) {
-      context.fillStyle = offscreenRegionGradient(
-        context,
-        segment,
-        receiver.appearance.offscreenRegionColor,
-      );
-      context.fillRect(segment.x, 0, segment.width, height);
     }
   }
   context.restore();
@@ -426,7 +396,6 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
     this.notesGridBatch.finish();
   }
-  drawOffscreenRegion(this, backdrop.context, width, height);
   drawNoteLanes(this, backdrop.context, width, height);
   if (multiplePanels) {
     const panelWidth = this.viewport.panelWidth(width, "notes");
