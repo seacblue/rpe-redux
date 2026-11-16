@@ -258,14 +258,7 @@ export function createLine(name = t("model.line.untitled")): JudgeLine {
   const layer: LineEventLayer = Object.fromEntries(
     EVENT_TYPES.map((type) => [
       type,
-      [
-        createEvent(
-          type === "alphaEvents" ? 255 : type === "speedEvents" ? 10 : 0,
-          undefined,
-          0,
-          1,
-        ),
-      ],
+      [createEvent(type === "speedEvents" ? 10 : 0, undefined, 0, 1)],
     ]),
   );
   return {
