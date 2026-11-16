@@ -255,7 +255,7 @@ async function loadChart(client, port, index, path) {
   const inputName = jsonOnly ? `${basename(path).replace(/\.[^.]+$/u, "")}.json` : basename(path);
   const result = await evaluate(
     client,
-    `(async()=>{const bytes=new Uint8Array(await (await fetch('http://127.0.0.1:${port}/chart/${index}')).arrayBuffer());return await window.redux.document.openBytes(bytes,{name:${JSON.stringify(inputName)},replace:'discard'});})()`,
+    `(async()=>{const chartPort=Number.parseInt(new URLSearchParams(window.location.search).get('bench-chart-port')??'',10);if(!Number.isInteger(chartPort)||chartPort<1||chartPort>65535)throw new Error('Invalid benchmark chart server port');const chartUrl=new URL('/chart/${index}',\`http://127.0.0.1:\${chartPort}\`);const bytes=new Uint8Array(await (await fetch(chartUrl)).arrayBuffer());return await window.redux.document.openBytes(bytes,{name:${JSON.stringify(inputName)},replace:'discard'});})()`,
     300000,
   );
   if (!result?.ok) {
@@ -643,7 +643,9 @@ async function main() {
     await client.command("Page.addScriptToEvaluateOnNewDocument", {
       source: "globalThis.__REDUX_TEST_API__=true;",
     });
-    await client.command("Page.navigate", { url: `http://127.0.0.1:${frontendPort}/#/editor` });
+    await client.command("Page.navigate", {
+      url: `http://127.0.0.1:${frontendPort}/?bench-chart-port=${chartPort}#/editor`,
+    });
     await sleep(2500);
     const initial = await waitForRedux(client);
     const documentRuntime = await waitForDocumentRuntime(client);
