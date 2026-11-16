@@ -44,7 +44,8 @@
 .editor.multi-events .timeline-notes-playhead,
 .editor.multi-events .timeline-notes-playhead-batch,
 .editor.multi-events .timeline-note-batch,
-.editor.multi-events .timeline-note-solid-batch {
+.editor.multi-events .timeline-note-solid-batch,
+.editor.multi-events .timeline-notes-cue {
   display: none;
 }
 
@@ -297,6 +298,14 @@ canvas {
   background: transparent;
 }
 
+.timeline-notes-cue {
+  grid-column: 2;
+  grid-row: 1;
+  z-index: 4;
+  pointer-events: none;
+  background: transparent;
+}
+
 .timeline-events {
   grid-column: 3;
   grid-row: 1;
@@ -389,6 +398,7 @@ canvas {
 .editor.notes-hidden .timeline-notes-grid-batch,
 .editor.notes-hidden .timeline-note-batch,
 .editor.notes-hidden .timeline-note-solid-batch,
+.editor.notes-hidden .timeline-notes-cue,
 .editor.notes-hidden .timeline-notes-playhead,
 .editor.notes-hidden .timeline-notes-playhead-batch {
   display: none;
@@ -452,6 +462,7 @@ canvas {
   & .timeline-playhead-batch,
   & .timeline-note-batch,
   & .timeline-note-solid-batch,
+  & .timeline-notes-cue,
   & .timeline-events,
   & .timeline-event-batch,
   & .timeline-event-overlay-batch {
@@ -476,6 +487,7 @@ canvas {
   & .timeline-playhead-batch,
   & .timeline-note-batch,
   & .timeline-note-solid-batch,
+  & .timeline-notes-cue,
   & .timeline-events,
   & .timeline-event-batch,
   & .timeline-event-overlay-batch {

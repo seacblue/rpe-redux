@@ -158,6 +158,7 @@ export function TimelineCanvases() {
         className="timeline-note-solid-batch"
         surfaceRef={surface.attach.noteSolidBatch}
       />
+      <BatchCanvas className="timeline-notes-cue" surfaceRef={surface.attach.notesCue} />
       <BatchCanvas
         className="timeline-backdrop timeline-events-backdrop"
         surfaceRef={surface.attach.eventsBackdrop}

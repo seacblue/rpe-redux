@@ -205,6 +205,7 @@ export function createTimelineRuntime(options: {
     options.shell.eventsGridBatch,
     options.shell.eventsPlayheadBatch,
     options.shell.noteSolidBatch,
+    options.shell.notesCue,
     options.shell.eventOverlayBatch,
   );
   options.scope.add(() => timeline.dispose());

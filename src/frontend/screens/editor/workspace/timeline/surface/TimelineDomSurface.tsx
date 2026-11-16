@@ -19,6 +19,7 @@ const timelineSurface = createDomSurface<TimelineSurface>(
     "notes",
     "noteBatch",
     "noteSolidBatch",
+    "notesCue",
     "eventsBackdrop",
     "eventsGridBatch",
     "eventsPlayhead",

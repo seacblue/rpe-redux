@@ -32,6 +32,7 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   notesPlayhead: HTMLCanvasElement;
   notesPlayheadBatch: TimelineLineBatch;
   notesCanvas: HTMLCanvasElement;
+  notesCue: HTMLCanvasElement;
   noteBatch: NoteBatch;
   noteSolidBatch: TimelineSolidBatch;
   eventsBackdrop: HTMLCanvasElement;
@@ -147,6 +148,7 @@ export type TimelineNoteDrawingReceiver = Pick<
   | "notesBackdrop"
   | "notesGridBatch"
   | "notesCanvas"
+  | "notesCue"
   | "remoteSelectedNoteIds"
   | "rectangleStart"
   | "viewport"

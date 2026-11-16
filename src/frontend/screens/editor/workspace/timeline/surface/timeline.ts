@@ -47,6 +47,7 @@ export class Timeline {
   notesCanvas: HTMLCanvasElement;
   readonly noteBatch: NoteBatch;
   readonly noteSolidBatch: TimelineSolidBatch;
+  notesCue: HTMLCanvasElement;
   /** The event field's own backdrop layer; see `notesBackdrop`. */
   eventsBackdrop: HTMLCanvasElement;
   readonly eventsGridBatch: TimelineLineBatch;
@@ -136,6 +137,7 @@ export class Timeline {
     eventsGridBatchCanvas: HTMLCanvasElement,
     eventsPlayheadBatchCanvas: HTMLCanvasElement,
     noteSolidBatchCanvas: HTMLCanvasElement,
+    notesCueCanvas: HTMLCanvasElement,
     eventOverlayBatchCanvas: HTMLCanvasElement,
   ) {
     this.notesCanvas = notesCanvas;
@@ -145,6 +147,7 @@ export class Timeline {
     this.notesPlayheadBatch = new TimelineLineBatch(notesPlayheadBatchCanvas);
     this.noteBatch = new NoteBatch(noteBatchCanvas, "timeline");
     this.noteSolidBatch = new TimelineSolidBatch(noteSolidBatchCanvas);
+    this.notesCue = notesCueCanvas;
     this.eventsCanvas = eventsCanvas;
     this.eventsBackdrop = eventsBackdropCanvas;
     this.eventsPlayhead = eventsPlayheadCanvas;

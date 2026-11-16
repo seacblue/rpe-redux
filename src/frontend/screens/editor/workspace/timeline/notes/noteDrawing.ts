@@ -179,7 +179,10 @@ function drawOffscreenNoteCues(
         continue;
       }
       if (Math.min(prepared.start, prepared.end) > topBeat) {
-        break;
+        // The chart format normally keeps notes ordered, but the cue must not
+        // disappear when an imported or edited line has a later note before a
+        // current-beat note in its source array.
+        continue;
       }
       if (!noteContainsBeat(prepared.start, prepared.end, playBeat)) {
         continue;
@@ -361,6 +364,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   const session = this.getSession();
   const palette = this.cache.palette() ?? readCanvasPalette();
   const { context, width, height } = prepareCanvas(this.notesCanvas);
+  const cueCanvas = prepareCanvas(this.notesCue);
   this.viewport.syncMultiLineChrome("notes", width);
   // The note backdrop is anchored to the live viewport, so repaint it with the
   // frame rather than keeping a translated bitmap.
@@ -589,7 +593,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   this.noteSolidBatch.finish();
   // Paint the edge cue after note batches so it remains visible above every
   // note layer while staying clipped to the current note's vertical span.
-  drawOffscreenNoteCues(this, context, palette, playBeat, width, height);
+  drawOffscreenNoteCues(this, cueCanvas.context, palette, playBeat, width, height);
   if (!(session.multiLineActive && session.multiLineMode === "notes")) {
     this.drawEvents(playBeat);
   }
