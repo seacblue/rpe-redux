@@ -71,7 +71,7 @@
 
 // The product uses pointer-driven controls for most navigation, but keyboard
 // users still need a visible focus answer on actionable controls.
-.redux-app-root :where(*):focus:not(:focus-visible) {
+.redux-app-root :where(*):not(dialog):focus:not(:focus-visible) {
   outline: none;
   box-shadow: none;
 }
@@ -105,8 +105,8 @@
 // interface. Keep Tab focus visible and drop the ring for every other modality.
 // The doubled root id outranks per-surface focus rules that predate this policy,
 // so individual components do not need their own activation workarounds.
-:root[data-input-mode="pointer"] .redux-app-root.redux-app-root :focus-visible,
-:root[data-input-mode="keyboard"] .redux-app-root.redux-app-root :focus-visible {
+:root[data-input-mode="pointer"] .redux-app-root.redux-app-root :not(dialog):focus-visible,
+:root[data-input-mode="keyboard"] .redux-app-root.redux-app-root :not(dialog):focus-visible {
   outline: none;
   box-shadow: none;
 }
