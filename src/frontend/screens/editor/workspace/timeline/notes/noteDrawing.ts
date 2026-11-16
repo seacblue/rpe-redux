@@ -142,13 +142,14 @@ function drawOffscreenNoteCues(
     : [0, 0];
   const startPanel = multiplePanels ? firstPanel : 0;
   const endPanel = multiplePanels ? Math.min(lastPanel, lineIndices.length - 1) : 0;
-  const cueWidth = Math.min(8, Math.max(4, width / 60));
+  const cueWidth = Math.min(10, Math.max(6, width / 54));
+  const cueHalfHeight = Math.min(28, Math.max(18, height / 24));
   const cueColor = palette.foreground;
   context.save();
   context.fillStyle = cueColor;
   context.shadowColor = cueColor;
   context.shadowBlur = 12;
-  context.globalAlpha = 1;
+  context.globalAlpha = 0.58;
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const lineIndex = lineIndices[panel] ?? session.lineIndex;
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
@@ -198,16 +199,8 @@ function drawOffscreenNoteCues(
         continue;
       }
       const vertical = projection.project(prepared.startSeconds);
-      const endVertical = projection.project(prepared.endSeconds);
-      const cuePadding = Math.min(10, Math.max(6, height / 100));
-      const noteTop = Math.min(vertical, endVertical);
-      const noteBottom = Math.max(vertical, endVertical);
-      const top = Math.max(0, Math.min(height - 1, noteTop - cuePadding));
-      const cueBottom = Math.min(height, noteBottom + cuePadding);
-      const cueHeight = Math.min(
-        height - top,
-        Math.max(20, cueBottom - top, Math.abs(endVertical - vertical) + cuePadding * 2),
-      );
+      const top = Math.max(0, Math.min(height - 1, vertical - cueHalfHeight));
+      const cueHeight = Math.min(height - top, cueHalfHeight * 2);
       for (const side of sides) {
         const x = offscreenCueX(side, panelLeft, panelRight, width, cueWidth);
         if (x === null) {
