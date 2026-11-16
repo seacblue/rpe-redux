@@ -88,10 +88,10 @@ export function releaseScriptJudgeLines(allocations: readonly ScriptJudgeLineAll
     if (currentIndex < 0 || !isFreeJudgeLine(session.chart, currentIndex)) {
       continue;
     }
-    session.commitChart(
+    session.commitLineChart(
       t("workspace.scripts.parameters.judgeLine.remove"),
       deleteLine(session.chart, currentIndex),
-      session.selectionState(),
+      session.lineIndex,
     );
   }
 }

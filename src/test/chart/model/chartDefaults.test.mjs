@@ -24,9 +24,7 @@ test("a new document starts with the starter judge lines and no notes", () => {
     assert.equal(line.notes?.length, 0);
     assert.equal(line.numOfNotes, 0);
   }
-  // Index 0 and the last line both exist, so the toolbar can step the full range.
-  assert.equal(chart.judgeLineList?.[0]?.Name, "Line 1");
-  assert.equal(chart.judgeLineList?.[23]?.Name, "Line 24");
+  assert.ok(chart.judgeLineList?.every((line) => line.Name === "Untitled"));
 });
 
 test("metadata media uses root-level names and keeps older bytes addressable", () => {

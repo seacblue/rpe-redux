@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart } from "../../../core/global/chart/chart.ts";
+import { createStarterChart } from "../../../core/global/chart/starterChart.ts";
 import { History } from "../../../core/edit/session/history.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import {
@@ -107,6 +108,12 @@ test("new charts and added lines use the shared Untitled name", () => {
   const session = new EditorSession(chart);
   session.addLine();
   assert.equal(session.chart.judgeLineList[1].Name, "Untitled");
+});
+
+test("starter charts give every default judge line the shared Untitled name", () => {
+  const chart = createStarterChart();
+  assert.ok(chart.judgeLineList?.length > 1);
+  assert.ok(chart.judgeLineList?.every((line) => line.Name === "Untitled"));
 });
 
 test("lines.insert appends a line and later operations can target it by index", () => {

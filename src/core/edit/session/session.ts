@@ -650,6 +650,53 @@ export class EditorSession extends EventTarget {
     );
   }
 
+  /**
+   * Commit a chart whose judge-line structure may have changed.
+   *
+   * Line indices are positional, so deleting or reordering a line can leave
+   * the active line and multi-line selection pointing at different objects
+   * even when their numeric values still look valid. Stable line ids remap the
+   * selection first; a replacement at the active index clears selections that
+   * belonged to the line which left the chart.
+   */
+  commitLineChart(
+    label: string,
+    chart: Chart,
+    index = this.lineIndex,
+    options: SessionCommitOptions = {},
+  ): boolean {
+    const beforeSelection = this.selectionState();
+    const sourceLine = this.chart.judgeLineList?.[this.lineIndex];
+    const nextLines = chart.judgeLineList ?? [];
+    const nextIndex = Math.max(0, Math.min(index, nextLines.length - 1));
+    const targetLine = nextLines[nextIndex];
+    const sameLine =
+      sourceLine === targetLine ||
+      (typeof sourceLine?.id === "string" &&
+        sourceLine.id !== "" &&
+        sourceLine.id === targetLine?.id);
+    const replacement = !sameLine;
+    const afterSelection = remapSelection(this.chart, chart, beforeSelection);
+    afterSelection.lineIndex = nextIndex;
+    if (replacement) {
+      afterSelection.selection = [];
+      afterSelection.eventSelection = [];
+      this.selection.clear();
+      this.eventSelection.clear();
+    }
+    this.lineIndex = nextIndex;
+    return this.commitChart(
+      label,
+      chart,
+      beforeSelection,
+      {},
+      {
+        ...options,
+        afterSelection,
+      },
+    );
+  }
+
   /** Applies an authoritative room transaction despite the local read-only gate. */
   commitRemoteChart(
     label: string,

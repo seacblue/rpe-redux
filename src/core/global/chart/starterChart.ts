@@ -6,7 +6,6 @@
  * about how much room a new author should begin with.
  */
 import { createChart, createLine, type Chart } from "./chart.ts";
-import { t } from "../../../i18n/index.ts";
 
 /**
  * How many judge lines a brand-new chart starts with.
@@ -27,8 +26,6 @@ export const STARTER_LINE_COUNT = 24;
  */
 export function createStarterChart(): Chart {
   const chart = createChart();
-  chart.judgeLineList = Array.from({ length: STARTER_LINE_COUNT }, (_, index) =>
-    createLine(t("model.line.defaultName", { index: index + 1 })),
-  );
+  chart.judgeLineList = Array.from({ length: STARTER_LINE_COUNT }, () => createLine());
   return chart;
 }

@@ -188,17 +188,7 @@ export class LinePanel {
     normalized = false,
   ): void {
     const session = this.getSession();
-    const beforeSelection = session.selectionState();
-    const nextIndex = Math.max(0, Math.min(index, (chart.judgeLineList?.length ?? 1) - 1));
-    // Committing the active line must not behave like a line switch: pane
-    // navigation and field blur can repeat the current index, and the notes or
-    // events selected on that line should remain selected.
-    if (nextIndex !== session.lineIndex) {
-      session.lineIndex = nextIndex;
-      session.selection.clear();
-      session.eventSelection.clear();
-    }
-    session.commitChart(label, chart, beforeSelection, undefined, { normalized });
+    session.commitLineChart(label, chart, index, { normalized });
   }
 
   /**
