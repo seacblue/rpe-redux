@@ -319,7 +319,7 @@ test("root event updates and deletes use the same batch path", () => {
   assert.equal(findEvent(state.chart, deleted.id), null);
 });
 
-test("31 note updates build the note index once instead of scanning per id", () => {
+test("31 note updates build the full location index once instead of scanning per id", () => {
   const chart = createChart();
   chart.judgeLineList[0].notes = Array.from({ length: 40 }, (_, index) =>
     createNote(1, index, index),

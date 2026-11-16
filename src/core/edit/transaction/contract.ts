@@ -8,6 +8,7 @@ import type {
 } from "../../global/chart/chart.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import type { HistoryEntryOrigin } from "../session/history.ts";
+import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
 
 export type TransactionStatus = "committed" | "unchanged" | "rejected" | "conflict" | "unavailable";
 
@@ -188,6 +189,10 @@ export interface TransactionCommitOptions {
   readonly afterFingerprint?: string;
   /** Internal COW estimate; avoids recursively sizing shared chart subtrees. */
   readonly estimatedBytes?: number;
+  /** Internal COW line slots, used to update a paged document locally. */
+  readonly changedLineIndexes?: readonly number[];
+  /** Internal line-local note deltas used to preserve render-side derived caches. */
+  readonly noteChangeHints?: readonly NoteChangeHint[];
 }
 
 export type TransactionPreviewStatus = "previewed" | "unchanged" | "rejected" | "unavailable";

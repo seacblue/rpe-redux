@@ -7,17 +7,18 @@ import {
   beginLoading,
   loadingPaint,
   loadingProgress,
+  type LoadTask,
 } from "../../../../../../core/global/document/loading.ts";
 import { openFiles } from "../../../../../../core/global/document/import.ts";
-import type { OpenCandidate } from "../../../../../../core/global/document/types.ts";
+import type { AssetMap, OpenCandidate } from "../../../../../../core/global/document/types.ts";
 import { parseChartEntriesOffThread } from "./chartParseOffThread.ts";
 import { openChartDocumentFromBytes, openChartStreamFromChunks } from "./chartStreamOffThread.ts";
 import { readZipOffThread } from "./zipReadOffThread.ts";
 
 interface ChartFileOpenOptions {
   guardReplace: (action: () => unknown) => unknown;
-  loadCandidate: (candidate: OpenCandidate, assets: Map<string, Uint8Array>) => Promise<void>;
-  chooseCandidates: (candidates: OpenCandidate[], assets: Map<string, Uint8Array>) => void;
+  loadCandidate: (candidate: OpenCandidate, assets: AssetMap, task?: LoadTask) => Promise<void>;
+  chooseCandidates: (candidates: OpenCandidate[], assets: AssetMap, task: LoadTask) => void;
   reportError: (error: unknown) => void;
 }
 
@@ -50,9 +51,8 @@ export async function openChartFiles(
           chartDocument: opened.document,
           disposeDocument: () => opened.dispose(),
         };
-        loadingProgress.dismiss();
         options.guardReplace(() => {
-          options.loadCandidate(candidate, new Map()).catch(options.reportError);
+          options.loadCandidate(candidate, new Map(), task).catch(options.reportError);
         });
         return;
       } catch {
@@ -73,12 +73,11 @@ export async function openChartFiles(
     }
     const proceed = () => {
       if (loaded.candidates.length === 1) {
-        options.loadCandidate(loaded.candidates[0], loaded.assets).catch(options.reportError);
+        options.loadCandidate(loaded.candidates[0], loaded.assets, task).catch(options.reportError);
       } else {
-        options.chooseCandidates(loaded.candidates, loaded.assets);
+        options.chooseCandidates(loaded.candidates, loaded.assets, task);
       }
     };
-    loadingProgress.dismiss();
     options.guardReplace(proceed);
   } catch (error) {
     task.fail(error);

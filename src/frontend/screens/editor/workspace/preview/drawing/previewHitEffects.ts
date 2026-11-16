@@ -17,6 +17,37 @@ import type { SampledLineState } from "../../../../../../core/global/chart/runti
 
 type SampleAt = (index: number) => SampledLineState;
 
+/** One resolved hit colour: its CSS form and its channels. */
+interface ResolvedHitColor {
+  readonly source: readonly number[];
+  readonly css: string;
+  readonly alpha: number;
+}
+
+/** Resolve a hit colour array to CSS and channels once per distinct array. */
+function resolveHitColor(
+  color: readonly number[],
+  cache: WeakMap<object, ResolvedHitColor>,
+): ResolvedHitColor {
+  const cached = cache.get(color);
+  if (cached) {
+    return cached;
+  }
+  const red = Math.min(255, Math.max(0, Math.round(color[0] ?? 0)));
+  const green = Math.min(255, Math.max(0, Math.round(color[1] ?? 0)));
+  const blue = Math.min(255, Math.max(0, Math.round(color[2] ?? 0)));
+  const resolved: ResolvedHitColor = {
+    source: color,
+    css: `rgb(${red},${green},${blue})`,
+    alpha: Math.max(0, Math.min(1, color[3] ?? 1)),
+  };
+  cache.set(color, resolved);
+  return resolved;
+}
+
+/** Cached hit colours; skin tints reuse the same arrays frame after frame. */
+const hitColorCache = new WeakMap<object, ResolvedHitColor>();
+
 /** Skin and timing state required by hit effects. */
 export interface PreviewHitEffectSurface {
   skin?: PreviewSkin | null;
@@ -94,12 +125,14 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
       const { entry, time } = hit;
       const effectFrame = hitFrame(seconds - time, particleFrameCount);
       // An explicit chart tint wins; otherwise the user-configured default applies.
-      const hitColor = resolveParticleColor(
-        entry.note.tintHitEffects,
-        surface.defaultParticleColor,
+      const hitColor = resolveHitColor(
+        resolveParticleColor(entry.note.tintHitEffects, surface.defaultParticleColor),
+        hitColorCache,
       );
       const picture =
-        effectFrame === null ? null : surface.skin?.tinted(`img-${effectFrame}`, hitColor);
+        effectFrame === null
+          ? null
+          : surface.skin?.tinted(`img-${effectFrame}`, hitColor.source as number[]);
       let sampleAt = hitStates.get(time);
       if (!sampleAt) {
         // Event tracks retain the preceding event at the exact boundary. The
@@ -119,10 +152,10 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
       // The skin supplies its own animation; the burst stays correct without one.
       if (picture && effectFrame !== null) {
         const size = previewNoteWidth(surface.noteSize) * surface.hitEffectScale * 1.4 * scaleX;
-        context.globalAlpha = Math.max(0, Math.min(1, hitColor[3] ?? 1));
+        context.globalAlpha = hitColor.alpha;
         context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
       }
-      context.fillStyle = `rgb(${Math.min(255, Math.max(0, Math.round(hitColor[0] ?? 0)))},${Math.min(255, Math.max(0, Math.round(hitColor[1] ?? 0)))},${Math.min(255, Math.max(0, Math.round(hitColor[2] ?? 0)))})`;
+      context.fillStyle = hitColor.css;
       const particleCount = hitParticlesInto(
         seconds - time,
         index * 65537 + hit.seed,
@@ -132,7 +165,7 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
       );
       for (let particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {
         const particle = particles[particleIndex];
-        context.globalAlpha = particle.alpha * Math.max(0, Math.min(1, hitColor[3] ?? 1));
+        context.globalAlpha = particle.alpha * hitColor.alpha;
         context.fillRect(
           horizontal + particle.x - particle.radius,
           vertical + particle.y - particle.radius,

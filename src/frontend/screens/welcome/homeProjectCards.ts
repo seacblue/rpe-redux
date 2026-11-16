@@ -43,6 +43,8 @@ export interface HomeLibraryStatus {
 /** Published home cards plus the actions each card invokes. */
 export interface HomeProjectCardsSnapshot extends HomeLibraryStatus {
   libraryProjects: HomeLibraryProject[];
+  /** Project whose open request is currently loading. */
+  openingProjectId: string | null;
   /** Project whose delete has been confirmed and is still in flight. */
   removingProjectId: string | null;
   /** The last failed delete; cleared when the next delete starts. */
@@ -83,6 +85,7 @@ export const setHomeProjectCardsSnapshot = cards.set;
 export class HomeProjectCardsAdapter {
   private projects: LibraryProjectSummary[] = [];
   private removingProjectId: string | null = null;
+  private openingProjectId: string | null = null;
   private removeFailure: HomeLibraryRemoveFailure | null = null;
   private status: HomeLibraryStatus = Object.freeze({
     phase: "loading",
@@ -121,6 +124,25 @@ export class HomeProjectCardsAdapter {
     this.publish();
   }
 
+  /** Claim the open action before any asynchronous work begins. */
+  beginOpening(projectId: string): boolean {
+    if (this.disposed || this.openingProjectId !== null) {
+      return false;
+    }
+    this.openingProjectId = projectId;
+    this.publish();
+    return true;
+  }
+
+  /** Release the open-action lock after the request settles. */
+  finishOpening(projectId: string): void {
+    if (this.openingProjectId !== projectId) {
+      return;
+    }
+    this.openingProjectId = null;
+    this.publish();
+  }
+
   /** Release the shared snapshot when the home surface unmounts. */
   dispose(): void {
     this.disposed = true;
@@ -152,6 +174,7 @@ export class HomeProjectCardsAdapter {
       ...this.status,
       libraryProjects,
       removingProjectId: this.removingProjectId,
+      openingProjectId: this.openingProjectId,
       removeFailure: this.removeFailure,
       ...this.actions,
     });

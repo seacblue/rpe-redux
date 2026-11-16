@@ -93,6 +93,7 @@ interface EventIndexEntry {
 }
 
 interface ChartLocationIndex {
+  readonly kind: "full";
   /** The line array the index addresses; a replaced array means the index is stale. */
   lineList: readonly unknown[] | undefined;
   lineCount: number;
@@ -116,9 +117,7 @@ interface ChartLocationIndex {
  * not retain indexes; the transaction kernel detaches the index from its working
  * chart before committing and installs it on the document the session keeps.
  */
-export interface ChartLocationSnapshot {
-  readonly lineCount: number;
-}
+export type ChartLocationSnapshot = ChartLocationIndex;
 
 /** Counters that let tests prove an edit batch stays linear in chart size. */
 export interface ChartLocationDiagnostics {
@@ -339,6 +338,7 @@ function createLocationIndex(chart: Chart): ChartLocationIndex {
     }
   }
   return {
+    kind: "full",
     lineList: chart.judgeLineList,
     lineCount: lines.length,
     complete: true,
@@ -396,7 +396,10 @@ export function collectChartObjectIds(chart: Chart): Set<ChartObjectId> {
 }
 
 /** True while the cached index still describes the chart's line array shape. */
-function indexIsCurrent(index: ChartLocationIndex, chart: Chart): boolean {
+function indexIsCurrent(
+  index: Pick<ChartLocationIndex, "lineList" | "lineCount">,
+  chart: Chart,
+): boolean {
   return (
     index.lineList === chart.judgeLineList && index.lineCount === (chart.judgeLineList?.length ?? 0)
   );
@@ -444,22 +447,24 @@ function installLocations(chart: Chart, index: ChartLocationIndex, complete: boo
  * source would keep an index for a chart that becomes a history snapshot.
  */
 export function inheritChartLocations(source: Chart, target: Chart): void {
-  const index = locationIndexes.get(source);
-  if (!index || !indexIsCurrent(index, source) || source === target) {
+  if (source === target) {
     return;
   }
-  locationIndexes.delete(source);
-  installLocations(target, index, index.complete);
+  const index = locationIndexes.get(source);
+  if (index && indexIsCurrent(index, source)) {
+    locationIndexes.delete(source);
+    installLocations(target, index, index.complete);
+  }
 }
 
 /** Detaches a current index so a commit can install it on the live document. */
 export function detachChartLocations(chart: Chart): ChartLocationSnapshot | null {
   const index = locationIndexes.get(chart);
-  if (!index || !indexIsCurrent(index, chart)) {
-    return null;
+  if (index && indexIsCurrent(index, chart)) {
+    locationIndexes.delete(chart);
+    return index;
   }
-  locationIndexes.delete(chart);
-  return index;
+  return null;
 }
 
 /** Installs an index detached from a plan on the chart the session now treats as live. */
@@ -467,31 +472,36 @@ export function adoptChartLocations(chart: Chart, snapshot: ChartLocationSnapsho
   if (!snapshot) {
     return;
   }
-  const index = snapshot as ChartLocationIndex;
   // A paged document keeps a facade line array that the plan copied; installing
   // the index there still addresses the same line objects, but a later page-in
   // can add ids the index has not seen, so misses must scan again.
-  installLocations(chart, index, index.complete && index.lineList === chart.judgeLineList);
+  installLocations(chart, snapshot, snapshot.complete && snapshot.lineList === chart.judgeLineList);
 }
 
 /** Records a line appended to the chart's line list so a carried index addresses it. */
 export function registerLineInIndex(chart: Chart, lineIndex: number): void {
   const index = locationIndexes.get(chart);
   const lineList = chart.judgeLineList;
-  if (!index || !lineList || index.lineList !== lineList) {
+  if (!lineList) {
+    return;
+  }
+  if (!index || index.lineList !== lineList) {
     return;
   }
   const line = lineList[lineIndex];
   if (!line) {
     return;
   }
-  index.lineCount = lineList.length;
-  index.lineNotes[lineIndex] = {
+  const lineNotes = {
     lineId: line.id,
     notes: (line.notes ?? []) as JudgeLineNote[],
   };
-  if (indexableId(line.id) && !index.lineById.has(line.id)) {
-    index.lineById.set(line.id, lineIndex);
+  if (index && index.lineList === lineList) {
+    index.lineCount = lineList.length;
+    index.lineNotes[lineIndex] = lineNotes;
+    if (indexableId(line.id) && !index.lineById.has(line.id)) {
+      index.lineById.set(line.id, lineIndex);
+    }
   }
 }
 
@@ -516,17 +526,18 @@ export function noteLineSpliced(
   const notes = (line.notes ?? []) as JudgeLineNote[];
   refreshObjectIdView(notes, removedIndices);
   const index = locationIndexes.get(chart);
-  if (!index || !lineList || index.lineList !== lineList) {
+  const active = index && index.lineList === lineList ? index : null;
+  if (!active) {
     return;
   }
-  const lookup = index.lineNotes[lineIndex];
+  const lookup = active.lineNotes[lineIndex];
   if (lookup && lookup.lineId === line.id) {
     lookup.notes = notes;
   }
   for (const id of removedIds) {
-    index.noteById.delete(id);
+    active.noteById.delete(id);
   }
-  index.noteShifts.add(lineIndex);
+  active.noteShifts.add(lineIndex);
 }
 
 /**
@@ -641,10 +652,11 @@ export function ensureChartLocations(chart: Chart): void {
 /**
  * Finds a note's current line/array position.
  *
- * A cached index answers in constant time; a line whose note array was spliced
- * resolves its shifted positions through that line's id view. Without a cached
- * index the chart's containers are scanned through their id views, which reads
- * one cheap key per note instead of one indexed position per note.
+ * A cached full index answers in constant time; a line whose note array was
+ * spliced resolves its shifted positions through that line's id view. A single
+ * uncached lookup scans the existing per-container id views directly. It must
+ * not build a note-only Map here: that would turn one visual edit into a
+ * whole-chart allocation and scan before the actual patch starts.
  */
 export function locateNote(chart: Chart, id: ChartObjectId): NoteLocation | null {
   const index = locationIndexes.get(chart);
@@ -666,7 +678,7 @@ export function locateNote(chart: Chart, id: ChartObjectId): NoteLocation | null
 
 /** Looks up one note without rebuilding; null means missing or stale. */
 function lookupNote(
-  index: ChartLocationIndex,
+  index: Pick<ChartLocationIndex, "lineNotes" | "noteById" | "noteShifts">,
   chart: Chart,
   id: ChartObjectId,
 ): NoteLocation | null {
@@ -738,11 +750,12 @@ export function locateLine(chart: Chart, id: ChartObjectId): LocatedLine | null 
  */
 export function setLineNotesRef(chart: Chart, lineIndex: number, notes: JudgeLineNote[]): void {
   const index = locationIndexes.get(chart);
-  if (!index || !indexIsCurrent(index, chart)) {
+  const active = index && indexIsCurrent(index, chart) ? index : null;
+  if (!active) {
     return;
   }
   const line = chart.judgeLineList?.[lineIndex];
-  const lookup = index.lineNotes[lineIndex];
+  const lookup = active.lineNotes[lineIndex];
   if (!line || !lookup || lookup.lineId !== line.id) {
     return;
   }
@@ -760,16 +773,17 @@ export function registerNoteInIndex(
   noteIndex: number,
 ): void {
   const index = locationIndexes.get(chart);
-  if (!index || !indexIsCurrent(index, chart)) {
+  const active = index && indexIsCurrent(index, chart) ? index : null;
+  if (!active) {
     return;
   }
   const line = chart.judgeLineList?.[lineIndex];
-  const lookup = index.lineNotes[lineIndex];
+  const lookup = active.lineNotes[lineIndex];
   if (!line || !lookup || lookup.lineId !== line.id || lookup.notes !== line.notes) {
     return;
   }
-  if (!index.noteById.has(id)) {
-    index.noteById.set(id, { lineIndex, noteIndex });
+  if (!active.noteById.has(id)) {
+    active.noteById.set(id, { lineIndex, noteIndex });
   }
 }
 

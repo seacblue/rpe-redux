@@ -49,11 +49,13 @@ function DetailCover({ url }: { url: string }) {
 /** Open, export, and delete actions for the selected entry. */
 function DetailActions({
   entry,
+  opening,
   onOpen,
   onExport,
   onDelete,
 }: {
   entry: LibraryEntry;
+  opening: boolean;
   onOpen(entry: LibraryEntry): void;
   onExport(entry: LibraryEntry): void;
   onDelete(entry: LibraryEntry): void;
@@ -65,6 +67,7 @@ function DetailActions({
         variant="solid"
         size="lg"
         className="redux-library-card-open"
+        disabled={opening}
         onClick={() => onOpen(entry)}
       >
         <Icon name="open" size={16} />
@@ -97,6 +100,7 @@ export function LibraryDetail({
   loading,
   visible,
   preview,
+  opening,
   onOpen,
   onExport,
   onDelete,
@@ -110,6 +114,8 @@ export function LibraryDetail({
   visible: boolean;
   /** Preview audio starts after the user makes an explicit selection. */
   preview: boolean;
+  /** Disable another open request while the selected project is loading. */
+  opening: boolean;
   onOpen(entry: LibraryEntry): void;
   onExport(entry: LibraryEntry): void;
   onDelete(entry: LibraryEntry): void;
@@ -302,7 +308,13 @@ export function LibraryDetail({
               <dd>{updated}</dd>
             </div>
           </dl>
-          <DetailActions entry={entry} onOpen={onOpen} onExport={onExport} onDelete={onDelete} />
+          <DetailActions
+            entry={entry}
+            opening={opening}
+            onOpen={onOpen}
+            onExport={onExport}
+            onDelete={onDelete}
+          />
         </div>
       </article>
     </aside>

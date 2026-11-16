@@ -60,6 +60,9 @@ export class AudioAnalysis {
   worker?: Worker | null;
   cancelPending?: (() => void) | null;
   pending?: Promise<void> | null;
+  /** Retained waveform pixels keyed by the audio and viewport projection. */
+  private retainedCanvas: HTMLCanvasElement | null = null;
+  private retainedKey: string | null = null;
 
   /** Create the controller around the overlay canvas and its runtime seams. */
   constructor(
@@ -89,6 +92,8 @@ export class AudioAnalysis {
     this.cancelPending = null;
     this.worker = null;
     this.pending = null;
+    this.retainedCanvas = null;
+    this.retainedKey = null;
   }
   /** Set the audio source to decode lazily; clears the previous graph. */
   setSource(source: unknown): void {
@@ -242,7 +247,7 @@ export class AudioAnalysis {
     if (!canvas.getContext("2d")) {
       return;
     }
-    const { context } = prepareCanvas(canvas, true, { width, height });
+    const { context: targetContext } = prepareCanvas(canvas, true, { width, height });
     const top = Math.max(0, notesRect.top - stageRect.top);
     const bottom = Math.min(height, notesRect.bottom - stageRect.top);
     const left = Math.max(0, notesRect.left - stageRect.left);
@@ -259,6 +264,38 @@ export class AudioAnalysis {
     const alpha = clamp01(this.alpha);
     const curve = this.curve;
     const stereo = source.channels > 1;
+    const viewportStart = timeline.viewport.timeAt(0);
+    const viewportEnd = timeline.viewport.timeAt(height);
+    const retainedKey = [
+      this.revision ?? 0,
+      width,
+      height,
+      top,
+      bottom,
+      left,
+      right,
+      offsetSeconds,
+      viewportStart,
+      viewportEnd,
+      this.width,
+      this.alpha,
+      this.curve,
+      palette.foreground,
+      palette.gridMajor,
+    ].join("|");
+    if (
+      this.retainedCanvas &&
+      this.retainedKey === retainedKey &&
+      this.retainedCanvas.width > 0 &&
+      this.retainedCanvas.height > 0
+    ) {
+      targetContext.drawImage(this.retainedCanvas, 0, 0, width, height);
+      return;
+    }
+    const retainedCanvas = this.retainedCanvas ?? document.createElement("canvas");
+    const { context } = prepareCanvas(retainedCanvas, true, { width, height });
+    this.retainedCanvas = retainedCanvas;
+    this.retainedKey = retainedKey;
     const chartTimeAt = (y: number) => timeline.viewport.timeAt(y - top);
     const sampleChannel = (
       channel: WaveformChannel,
@@ -385,5 +422,6 @@ export class AudioAnalysis {
     context.lineTo(center + 0.5, bottom);
     context.stroke();
     context.restore();
+    targetContext.drawImage(retainedCanvas, 0, 0, width, height);
   }
 }

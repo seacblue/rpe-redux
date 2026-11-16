@@ -7,7 +7,11 @@
  * rules stay in their own modules.
  */
 import { TimelineViewport } from "../viewport/timelineViewport.ts";
-import { TimelineGestures } from "../interaction/timelineGestures.ts";
+import {
+  pointerTimingEnd,
+  pointerTimingStart,
+  TimelineGestures,
+} from "../interaction/timelineGestures.ts";
 import { TimelineAppearance } from "../drawing/timelineAppearance.ts";
 import { TimelineCache } from "../drawing/timelineCache.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
@@ -18,6 +22,7 @@ import { NoteBatch } from "../../../canvas/noteBatch.ts";
 import { TimelineLineBatch } from "../../../canvas/timelineLineBatch.ts";
 import { TimelineSolidBatch } from "../../../canvas/timelineSolidBatch.ts";
 import { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
+import { TimelineGridRenderDevice } from "../../../canvas/timelineGridRenderDevice.ts";
 
 import { eventColumnsForLine, visibleEventTypesForLine } from "../events/eventColumns.ts";
 
@@ -42,8 +47,10 @@ export class Timeline {
   /** The layer that draws the beat grid, playhead and lane separators. */
   notesBackdrop: HTMLCanvasElement;
   readonly notesGridBatch: TimelineLineBatch;
+  readonly notesGridDevice: TimelineGridRenderDevice;
   notesPlayhead: HTMLCanvasElement;
   readonly notesPlayheadBatch: TimelineLineBatch;
+  readonly notesPlayheadDevice: TimelineGridRenderDevice;
   notesCanvas: HTMLCanvasElement;
   readonly noteBatch: NoteBatch;
   readonly noteSolidBatch: TimelineSolidBatch;
@@ -51,8 +58,10 @@ export class Timeline {
   /** The event field's own backdrop layer; see `notesBackdrop`. */
   eventsBackdrop: HTMLCanvasElement;
   readonly eventsGridBatch: TimelineLineBatch;
+  readonly eventsGridDevice: TimelineGridRenderDevice;
   eventsPlayhead: HTMLCanvasElement;
   readonly eventsPlayheadBatch: TimelineLineBatch;
+  readonly eventsPlayheadDevice: TimelineGridRenderDevice;
   eventsCanvas: HTMLCanvasElement;
   readonly eventBatch: TimelineEventBatch;
   readonly eventOverlayBatch: TimelineOverlayBatch;
@@ -105,6 +114,10 @@ export class Timeline {
   }
 
   changed: () => void;
+  /** Revision for the retained selection overlay, independent of content. */
+  selectionOverlayRevision = 0;
+  /** Schedule only the selection overlay without invalidating timeline content. */
+  changedSelectionOverlay: () => void;
 
   /** The injected live session, kept apart so the preview cannot replace it. */
   private readonly liveSession: () => EditorSession;
@@ -144,7 +157,9 @@ export class Timeline {
     this.notesBackdrop = notesBackdropCanvas;
     this.notesPlayhead = notesPlayheadCanvas;
     this.notesGridBatch = new TimelineLineBatch(notesGridBatchCanvas);
+    this.notesGridDevice = new TimelineGridRenderDevice(this.notesGridBatch);
     this.notesPlayheadBatch = new TimelineLineBatch(notesPlayheadBatchCanvas);
+    this.notesPlayheadDevice = new TimelineGridRenderDevice(this.notesPlayheadBatch);
     this.noteBatch = new NoteBatch(noteBatchCanvas, "timeline");
     this.noteSolidBatch = new TimelineSolidBatch(noteSolidBatchCanvas);
     this.notesCue = notesCueCanvas;
@@ -152,7 +167,9 @@ export class Timeline {
     this.eventsBackdrop = eventsBackdropCanvas;
     this.eventsPlayhead = eventsPlayheadCanvas;
     this.eventsGridBatch = new TimelineLineBatch(eventsGridBatchCanvas);
+    this.eventsGridDevice = new TimelineGridRenderDevice(this.eventsGridBatch);
     this.eventsPlayheadBatch = new TimelineLineBatch(eventsPlayheadBatchCanvas);
+    this.eventsPlayheadDevice = new TimelineGridRenderDevice(this.eventsPlayheadBatch);
     this.eventBatch = new TimelineEventBatch(eventBatchCanvas);
     this.eventOverlayBatch = new TimelineOverlayBatch(eventOverlayBatchCanvas);
     this.liveSession = getSession;
@@ -174,7 +191,13 @@ export class Timeline {
     );
     this.gestures.onEvent = onEvent;
     this.changed = () => {
+      const started = pointerTimingStart();
       this.renderRevision += 1;
+      changed();
+      pointerTimingEnd(started, "timelineInvalidate");
+    };
+    this.changedSelectionOverlay = () => {
+      this.selectionOverlayRevision += 1;
       changed();
     };
     this.gestures.onContextMenu = onContextMenu;

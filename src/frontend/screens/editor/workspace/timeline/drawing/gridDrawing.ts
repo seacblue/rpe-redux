@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- grid geometry, hover rules, and retained packet submission share one drawing contract. */
 /**
  * Paints the timeline beat grid, subdivision labels, hover guides, playhead, and
  * multi-line panel chrome across the backdrop and foreground canvases.
@@ -19,6 +20,11 @@ import {
   type BeatLineColorKey,
 } from "../../../canvas/beatLineColors.ts";
 import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
+import type { RenderCommand } from "../../../canvas/renderGraph.ts";
+import {
+  TimelineGridRenderDevice,
+  type TimelineGridRenderPacket,
+} from "../../../canvas/timelineGridRenderDevice.ts";
 import { horizontalGuideHoverOpacity } from "./timelineHoverGuides.ts";
 
 /**
@@ -54,6 +60,64 @@ export const PLAYHEAD_GRID: GridParts = Object.freeze({
   labels: false,
   playhead: true,
 });
+
+/** Return the complete invalidation key for a static timeline grid batch. */
+export function gridBatchKey(
+  receiver: Pick<
+    TimelineGridReceiver,
+    "appearance" | "cache" | "getSession" | "gestures" | "viewport"
+  >,
+  width: number,
+  height: number,
+  area: TimelineArea,
+): string {
+  const session = receiver.getSession();
+  const palette = receiver.cache.palette() ?? readCanvasPalette();
+  const cursor = area === "notes" ? receiver.gestures.cursor : receiver.gestures.eventCursor;
+  const viewport = receiver.viewport as unknown as {
+    origin: number;
+    scale: number;
+    division: number;
+    judgementOffset: number;
+    getMultiLineZoom?: (area: TimelineArea) => number;
+    panelCount?: (area?: TimelineArea) => number;
+    panelStride?: (width: number, area?: TimelineArea) => number;
+    multiLineViewportOffset?: (width: number, area?: TimelineArea) => number;
+    panelWidth?: (width: number, area?: TimelineArea) => number;
+    panelGap?: (width: number, area?: TimelineArea) => number;
+  };
+  return [
+    width,
+    height,
+    area,
+    viewport.origin,
+    viewport.scale,
+    viewport.division,
+    viewport.judgementOffset,
+    viewport.getMultiLineZoom?.(area),
+    viewport.panelCount?.(area),
+    viewport.panelStride?.(width, area),
+    viewport.multiLineViewportOffset?.(width, area),
+    viewport.panelWidth?.(width, area),
+    viewport.panelGap?.(width, area),
+    session.multiLineMode,
+    session.notesMode,
+    session.eventsMode,
+    session.targetLineIndices.join(","),
+    receiver.appearance.barWidth,
+    receiver.appearance.barAlpha,
+    receiver.appearance.hoverGuidesEnabled,
+    receiver.appearance.gridHighlightColor,
+    receiver.appearance.subdivisionColors.join(","),
+    palette.gridMajor,
+    palette.gridMinor,
+    palette.gridSubdivisions.join(","),
+    palette.foreground,
+    cursor?.x,
+    cursor?.y,
+    receiver.gestures.hoverArea,
+  ].join("|");
+}
 
 const draws = (parts: GridParts, part: keyof GridParts): boolean => parts[part] !== false;
 
@@ -134,16 +198,8 @@ export function gridStrokeColor(
   return subdivisionColors[index] ?? fallbackColors[index] ?? palette.gridMinor;
 }
 
-interface GridStrokeBatch {
-  color: string;
-  alpha: number;
-  positions: number[];
-}
-
 interface GridScratch {
   readonly ticks: number[];
-  readonly batches: Map<string, GridStrokeBatch>;
-  readonly batchPool: GridStrokeBatch[];
   readonly fallbackColors: string[];
 }
 
@@ -157,21 +213,10 @@ function scratchFor(receiver: object): GridScratch {
   }
   const created: GridScratch = {
     ticks: [],
-    batches: new Map(),
-    batchPool: [],
     fallbackColors: new Array<string>(9),
   };
   gridScratch.set(receiver, created);
   return created;
-}
-
-/** Return completed stroke batches to the receiver-owned pool for the next pass. */
-function resetGridBatches(scratch: GridScratch): void {
-  for (const batch of scratch.batches.values()) {
-    batch.positions.length = 0;
-    scratch.batchPool.push(batch);
-  }
-  scratch.batches.clear();
 }
 
 type TempoSecondsCache = {
@@ -188,43 +233,38 @@ function cachedTempoSeconds(
   return cache.tempoSeconds?.call(cache, tempo, beat, factor) ?? tempo.seconds(beat, factor);
 }
 
-/** Add one grid line to the batch with the same colour and alpha. */
-function addGridPosition(
-  batches: Map<string, GridStrokeBatch>,
-  batchPool: GridStrokeBatch[],
-  color: string,
-  alpha: number,
-  position: number,
-): void {
-  const key = `${color}|${alpha}`;
-  let batch = batches.get(key);
-  if (!batch) {
-    batch = batchPool.pop() ?? { color, alpha, positions: [] };
-    batch.color = color;
-    batch.alpha = alpha;
-    batches.set(key, batch);
+/** Pick the retained device for one timeline area and one moving/static layer. */
+function gridDevice(
+  receiver: TimelineGridReceiver,
+  area: TimelineArea,
+  playhead: boolean,
+): TimelineGridReceiver["notesGridDevice"] {
+  if (area === "notes") {
+    return (
+      (playhead ? receiver.notesPlayheadDevice : receiver.notesGridDevice) ??
+      new TimelineGridRenderDevice(playhead ? receiver.notesPlayheadBatch : receiver.notesGridBatch)
+    );
   }
-  batch.positions.push(position);
+  return (
+    (playhead ? receiver.eventsPlayheadDevice : receiver.eventsGridDevice) ??
+    new TimelineGridRenderDevice(playhead ? receiver.eventsPlayheadBatch : receiver.eventsGridBatch)
+  );
 }
 
-/** Stroke every queued grid line with one path per colour and alpha. */
-function strokeGridBatches(
+/** Submit one grid packet while keeping Canvas2D and batch operations in the device. */
+function renderGridPacket(
+  receiver: TimelineGridReceiver,
   context: CanvasRenderingContext2D,
-  batches: Map<string, GridStrokeBatch>,
-  left: number,
-  right: number,
+  area: TimelineArea,
+  playhead: boolean,
+  commands: readonly RenderCommand[],
+  clip?: TimelineGridRenderPacket["clip"],
 ): void {
-  for (const batch of batches.values()) {
-    context.strokeStyle = batch.color;
-    context.globalAlpha = batch.alpha;
-    context.beginPath();
-    for (const position of batch.positions) {
-      context.moveTo(left, position);
-      context.lineTo(right, position);
-    }
-    context.stroke();
-  }
-  context.globalAlpha = 1;
+  gridDevice(receiver, area, playhead).render({
+    context,
+    commands,
+    clip,
+  });
 }
 
 type TimelineHoverGuideReceiver = {
@@ -336,13 +376,9 @@ export function grid(
   const stride = 1;
   const hovered = hoveredGridLine(this, width, height, area);
   const highlightedTick = hovered ? Math.round(hovered.beat * this.viewport.division) : null;
-  context.font = canvasFont("caption");
-  context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
   const scratch = scratchFor(this);
-  resetGridBatches(scratch);
-  const batches = scratch.batches;
-  const lineBatch = area === "notes" ? this.notesGridBatch : this.eventsGridBatch;
-  const playheadBatch = area === "notes" ? this.notesPlayheadBatch : this.eventsPlayheadBatch;
+  const lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * width) / 1920);
+  const commands: RenderCommand[] = [];
   const fallbackColors = gridFallbackColors(palette, scratch.fallbackColors);
   const colorKeys = beatLineColorKeys(this.viewport.division);
   const ticks = visibleGridTicksInto(first, last, stride, highlightedTick, scratch.ticks);
@@ -379,36 +415,43 @@ export function grid(
     const alpha =
       this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
     if (draws(parts, "lines")) {
-      if (lineBatch?.isActive?.()) {
-        lineBatch.addRect(0, vertical, width, Math.max(0.5, context.lineWidth), color, alpha);
-      } else {
-        addGridPosition(batches, scratch.batchPool, color, alpha, vertical);
-      }
+      commands.push({
+        kind: "fillRect",
+        x: 0,
+        y: vertical,
+        width,
+        height: lineWidth,
+        color,
+        alpha,
+      });
     }
     if (draws(parts, "labels") && tick % this.viewport.division === 0) {
-      context.globalAlpha = 1;
-      context.fillStyle = palette.foreground;
-      context.fillText(String(beat), 5, vertical - 4);
+      commands.push({
+        kind: "text",
+        text: String(beat),
+        x: 5,
+        y: vertical - 4,
+        font: canvasFont("caption"),
+        color: palette.foreground,
+        align: "left",
+        alpha: 1,
+      });
     }
   }
-  strokeGridBatches(context, batches, 0, width);
-  context.globalAlpha = 1;
   if (draws(parts, "playhead")) {
     const vertical = verticalAt(playBeat);
     const color = this.appearance.playheadColor ?? palette.playhead;
-    const lineWidth = playheadLineWidth(this.appearance);
-    if (playheadBatch?.isActive?.()) {
-      playheadBatch.addRect(0, vertical, width, lineWidth, color);
-    } else {
-      context.strokeStyle = color;
-      context.lineWidth = lineWidth;
-      context.beginPath();
-      context.moveTo(0, vertical);
-      context.lineTo(width, vertical);
-      context.stroke();
-    }
+    commands.push({
+      kind: "fillRect",
+      x: 0,
+      y: vertical,
+      width,
+      height: playheadLineWidth(this.appearance),
+      color,
+      alpha: 1,
+    });
   }
-  context.lineWidth = 1;
+  renderGridPacket(this, context, area, draws(parts, "playhead"), commands);
 }
 
 /** Draw the grid clipped to a single multi-line panel at `left`. */
@@ -447,22 +490,11 @@ export function gridForLine(
   const hovered = hoveredGridLine(this, canvasWidth, height, area);
   const highlightedTick =
     hovered?.lineIndex === lineIndex ? Math.round(hovered.beat * this.viewport.division) : null;
-  context.save();
-  context.beginPath();
-  context.rect(left, 0, width, height);
-  context.clip();
-  context.font = canvasFont("caption");
-  // Grid-line thickness is a canvas-space setting, not a panel-space setting.
-  // Scaling it from `width` makes the same beat line shrink as more multi-line
-  // panels are fitted into the viewport; low-opacity hover segments can then
-  // disappear during WebGL rasterisation. Keep every panel at the full canvas
-  // thickness used by the single-line path.
-  context.lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * canvasWidth) / 1920);
   const scratch = scratchFor(this);
-  resetGridBatches(scratch);
-  const batches = scratch.batches;
-  const lineBatch = area === "notes" ? this.notesGridBatch : this.eventsGridBatch;
-  const playheadBatch = area === "notes" ? this.notesPlayheadBatch : this.eventsPlayheadBatch;
+  // Grid-line thickness is canvas-space, not panel-space; retained packets
+  // still need the full-canvas width when several panels are fitted together.
+  const lineWidth = Math.max(0.5, ((this.appearance.barWidth ?? 3) * 2 * canvasWidth) / 1920);
+  const commands: RenderCommand[] = [];
   const fallbackColors = gridFallbackColors(palette, scratch.fallbackColors);
   const colorKeys = beatLineColorKeys(this.viewport.division);
   const ticks = visibleGridTicksInto(first, last, stride, highlightedTick, scratch.ticks);
@@ -498,39 +530,50 @@ export function gridForLine(
     const alpha =
       this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
     if (draws(parts, "lines")) {
-      if (lineBatch?.isActive?.()) {
-        lineBatch.addRect(left, vertical, width, Math.max(0.5, context.lineWidth), color, alpha);
-      } else {
-        addGridPosition(batches, scratch.batchPool, color, alpha, vertical);
-      }
+      commands.push({
+        kind: "fillRect",
+        x: left,
+        y: vertical,
+        width,
+        height: lineWidth,
+        color,
+        alpha,
+      });
     }
     if (draws(parts, "labels") && major && showBeatLabels) {
-      context.globalAlpha = 1;
-      context.fillStyle = palette.foreground;
-      context.fillText(String(beat), left + 5, vertical - 4);
+      commands.push({
+        kind: "text",
+        text: String(beat),
+        x: left + 5,
+        y: vertical - 4,
+        font: canvasFont("caption"),
+        color: palette.foreground,
+        align: "left",
+        alpha: 1,
+      });
     }
   }
-  strokeGridBatches(context, batches, left, left + width);
-  context.globalAlpha = 1;
   if (draws(parts, "playhead")) {
     const playSeconds = this.viewport.tempo.seconds(playBeat, this.viewport.factor);
     const playLineBeat = this.viewport.tempo.beat(playSeconds, factor);
     const vertical = this.viewport.verticalForLine(playLineBeat, lineIndex, height, area);
     const color = this.appearance.playheadColor ?? palette.playhead;
-    const lineWidth = playheadLineWidth(this.appearance);
-    if (playheadBatch?.isActive?.()) {
-      playheadBatch.addRect(left, vertical, width, lineWidth, color);
-    } else {
-      context.strokeStyle = color;
-      context.lineWidth = lineWidth;
-      context.beginPath();
-      context.moveTo(left, vertical);
-      context.lineTo(left + width, vertical);
-      context.stroke();
-    }
+    commands.push({
+      kind: "fillRect",
+      x: left,
+      y: vertical,
+      width,
+      height: playheadLineWidth(this.appearance),
+      color,
+      alpha: 1,
+    });
   }
-  context.restore();
-  context.lineWidth = 1;
+  renderGridPacket(this, context, area, draws(parts, "playhead"), commands, {
+    left,
+    top: 0,
+    width,
+    height,
+  });
 }
 
 /** Draw the grid and playhead for every visible multi-line panel. */
@@ -551,17 +594,10 @@ export function drawMultiLineGrid(
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, area);
   if (parts.playhead && !parts.lines && !parts.labels) {
     const palette = this.cache.palette() ?? readCanvasPalette();
-    const playheadBatch = area === "notes" ? this.notesPlayheadBatch : this.eventsPlayheadBatch;
-    const active = playheadBatch?.isActive?.() === true;
     const lineWidth = playheadLineWidth(this.appearance);
     const color = this.appearance.playheadColor ?? palette.playhead;
     const playSeconds = this.viewport.tempo.seconds(playBeat, this.viewport.factor);
-    if (!active) {
-      context.save();
-      context.strokeStyle = color;
-      context.lineWidth = lineWidth;
-      context.beginPath();
-    }
+    const commands: RenderCommand[] = [];
     for (let panel = firstPanel; panel <= lastPanel; panel++) {
       const lineIndex = targetLines[panel];
       if (lineIndex === undefined) {
@@ -576,17 +612,17 @@ export function drawMultiLineGrid(
       if (!Number.isFinite(vertical)) {
         continue;
       }
-      if (active) {
-        playheadBatch.addRect(left, vertical, panelWidth, lineWidth, color);
-      } else {
-        context.moveTo(left, vertical);
-        context.lineTo(left + panelWidth, vertical);
-      }
+      commands.push({
+        kind: "fillRect",
+        x: left,
+        y: vertical,
+        width: panelWidth,
+        height: lineWidth,
+        color,
+        alpha: 1,
+      });
     }
-    if (!active) {
-      context.stroke();
-      context.restore();
-    }
+    renderGridPacket(this, context, area, true, commands);
     return;
   }
   for (let panel = firstPanel; panel <= lastPanel; panel++) {
@@ -623,8 +659,10 @@ export function drawMultiLineBeatLabels(
   const stride = this.viewport.panelStride(width, area);
   const offset = this.viewport.multiLineViewportOffset(width, area);
   const gap = this.viewport.panelGap(width, area);
+  const palette = this.cache.palette() ?? readCanvasPalette();
   const targetLines = this.getSession().targetLineIndices;
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, area);
+  const commands: RenderCommand[] = [];
   for (let panel = firstPanel; panel <= Math.min(lastPanel, targetLines.length - 2); panel++) {
     const lineIndex = targetLines[panel];
     if (lineIndex === undefined) {
@@ -657,19 +695,24 @@ export function drawMultiLineBeatLabels(
     );
     const labelFirst = Math.ceil(first / this.viewport.division) * this.viewport.division;
     const x = panel * stride - offset + panelWidth + gap / 2;
-    context.save();
-    context.font = canvasFont(gap < 20 ? "micro" : "caption");
-    context.textAlign = "center";
-    context.fillStyle = this.cache.palette()?.foreground ?? "#dddddd";
     for (let tick = labelFirst; tick <= last; tick += labelStride) {
       const beat = tick / this.viewport.division;
       const vertical = this.viewport.verticalForLine(beat, lineIndex, height, area);
       if (vertical >= 0 && vertical <= height) {
-        context.fillText(String(beat), x, vertical - 4);
+        commands.push({
+          kind: "text",
+          text: String(beat),
+          x,
+          y: vertical - 4,
+          font: canvasFont(gap < 20 ? "micro" : "caption"),
+          color: palette.foreground,
+          align: "center",
+          alpha: 1,
+        });
       }
     }
-    context.restore();
   }
+  renderGridPacket(this, context, area, false, commands);
 }
 
 /**
@@ -698,7 +741,7 @@ export function drawMultiLinePanelLabels(
     if (layer.repaint) {
       drawMultiLinePanelLabelsInto.call(this, layer.context, width, height, area);
     }
-    context.drawImage(layer.canvas, 0, 0, width, height);
+    gridDevice(this, area, false).blit(context, layer.canvas, width, height);
     return;
   }
   drawMultiLinePanelLabelsInto.call(this, context, width, height, area);
@@ -744,13 +787,7 @@ function drawMultiLinePanelLabelsInto(
   const stride = this.viewport.panelStride(width, area);
   const offset = this.viewport.multiLineViewportOffset(width, area);
   const palette = this.cache.palette() ?? readCanvasPalette();
-  context.save();
-  context.beginPath();
-  context.rect(0, 0, width, height);
-  context.clip();
-  context.fillStyle = palette.bottomValue;
-  context.font = canvasFont("caption");
-  context.textAlign = "left";
+  const commands: RenderCommand[] = [];
   const targetLines = this.getSession().targetLineIndices;
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, area);
   for (let panel = firstPanel; panel <= lastPanel; panel++) {
@@ -759,7 +796,21 @@ function drawMultiLinePanelLabelsInto(
       continue;
     }
     const left = panel * stride - offset;
-    context.fillText(String(lineIndex), left + 6, LINE_LABEL_BASELINE);
+    commands.push({
+      kind: "text",
+      text: String(lineIndex),
+      x: left + 6,
+      y: LINE_LABEL_BASELINE,
+      font: canvasFont("caption"),
+      color: palette.bottomValue,
+      align: "left",
+      alpha: 1,
+    });
   }
-  context.restore();
+  renderGridPacket(this, context, area, false, commands, {
+    left: 0,
+    top: 0,
+    width,
+    height,
+  });
 }

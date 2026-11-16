@@ -274,16 +274,44 @@ export function easingWithRange(
   return Number.isFinite(value) ? value : amount;
 }
 
+/** Evaluate a compiled range whose finite, non-flat invariant was checked at build time. */
+export function easingWithKnownRange(
+  progress: number,
+  type: number,
+  left: number,
+  right: number,
+  base: number,
+  range: number,
+): number {
+  const curve = curves[type - 1] ?? curves[0];
+  return (curve(left + (right - left) * progress) - base) / range;
+}
+
 /** Evaluate a cubic bezier on the unit square; invalid control points act as linear. */
-export function bezier(progress: number, points: readonly number[]): number {
+export function bezier(
+  progress: number,
+  points: ArrayLike<number> | null | undefined,
+  offset = 0,
+): number {
   const amount = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
-  if (!Array.isArray(points) || points.length !== 4 || !points.every(Number.isFinite)) {
+  if (!points || offset + 4 > points.length) {
     return amount;
   }
   if (amount === 0 || amount === 1) {
     return amount;
   }
-  const [firstX, firstY, secondX, secondY] = points;
+  const firstX = points[offset];
+  const firstY = points[offset + 1];
+  const secondX = points[offset + 2];
+  const secondY = points[offset + 3];
+  if (
+    !Number.isFinite(firstX) ||
+    !Number.isFinite(firstY) ||
+    !Number.isFinite(secondX) ||
+    !Number.isFinite(secondY)
+  ) {
+    return amount;
+  }
   /** Cubic interpolation of one axis at the resolved parameter. */
   const component = (parameter: number, first: number, second: number): number =>
     3 * parameter * (1 - parameter) ** 2 * first +

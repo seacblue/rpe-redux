@@ -10,16 +10,16 @@ import type {
 import type { NoteOverlapRanks } from "../../../../../../core/edit/timeline/noteOverlap.ts";
 import type { TimelineNoteHitTestReceiver } from "../drawing/timelineReceiver.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
+import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
 
 /** Refresh one line's cached note index from the chart. */
 export function refreshIndex(
   this: TimelineNoteHitTestReceiver,
   lineIndex: number = this.getSession().lineIndex,
 ): void {
-  this.cache.refreshNotes(
-    lineIndex,
-    this.getSession().chart.judgeLineList?.[lineIndex]?.notes ?? [],
-  );
+  const session = this.getSession();
+  this.cache.setNoteChangeHints(session.lastNoteChangeHints);
+  this.cache.refreshNotes(lineIndex, session.chart.judgeLineList?.[lineIndex]?.notes ?? []);
 }
 
 /** The notes currently inside the viewport on one line. */
@@ -106,8 +106,12 @@ export function hit(
   position: TimelinePoint,
 ): TimelineNoteEntry | undefined {
   const lineIndex = this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes");
+  const visibleStarted = pointerTimingStart();
   const entries = this.visible(lineIndex);
+  pointerTimingEnd(visibleStarted, "hitVisibleQuery");
+  const overlapStarted = pointerTimingStart();
   const rotations = noteRotations.call(this, [lineIndex]);
+  pointerTimingEnd(overlapStarted, "hitOverlapRanks");
   return hitTimelineNote(entries, position, {
     horizontal: (note, lineIndex) => this.viewport.noteHorizontal(note.positionX, lineIndex),
     width: (note) => this.viewport.noteWidth(note),

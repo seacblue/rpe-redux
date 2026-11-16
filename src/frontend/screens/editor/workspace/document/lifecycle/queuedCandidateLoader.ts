@@ -22,6 +22,16 @@ import type { DocumentLeaseHandle } from "../open/documentLease.ts";
 import { createExternalResourceOpenSession } from "../open/externalResourceOpen.ts";
 import type { DocumentLoadReason } from "./service.ts";
 
+/** Report one replacement stage to the optional browser benchmark. */
+function reportDocumentLoadTiming(stage: string, durationMs: number): void {
+  const probe = (
+    globalThis as typeof globalThis & {
+      __reduxDocumentLoadTimingProbe?: (sample: { stage: string; durationMs: number }) => void;
+    }
+  ).__reduxDocumentLoadTimingProbe;
+  probe?.({ stage, durationMs });
+}
+
 /** A candidate plus the conversion state the replacement still has to persist. */
 export interface PreparedEditorCandidate extends EditorCandidate {
   /** Conversion materialized current-format fields; the caller should save once. */
@@ -132,9 +142,11 @@ export function createQueuedCandidateLoader(options: QueuedCandidateLoaderOption
         }
       }
       await options.loadCandidateResources(candidate, assets, task);
+      const fingerprintStarted = performance.now();
       const fingerprint = options.awaitFingerprint
         ? await options.awaitFingerprint()
         : options.currentChartFingerprint();
+      reportDocumentLoadTiming("document.fingerprint", performance.now() - fingerprintStarted);
       task.complete();
       if (
         !load.complete({

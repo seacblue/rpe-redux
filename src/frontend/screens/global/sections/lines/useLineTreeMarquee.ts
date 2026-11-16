@@ -7,6 +7,7 @@
  * for one gesture and removed on release, cancel, blur, or unmount.
  */
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -66,6 +67,40 @@ export function useLineTreeMarquee({
   const [marquee, setMarquee] = useState<MarqueeBox | null>(null);
   const marqueeRef = useRef<MarqueeGesture | null>(null);
   const marqueeCleanup = useRef<(() => void) | null>(null);
+  const optionsRef = useRef<MarqueeOptions>({
+    listRef,
+    rowRefs,
+    lines,
+    selectedIds,
+    lineIndices,
+    focusAfterRemoval,
+    currentScroll,
+    onSelectionChange,
+    onSelectLine,
+  });
+  useEffect(() => {
+    optionsRef.current = {
+      listRef,
+      rowRefs,
+      lines,
+      selectedIds,
+      lineIndices,
+      focusAfterRemoval,
+      currentScroll,
+      onSelectionChange,
+      onSelectLine,
+    };
+  }, [
+    listRef,
+    rowRefs,
+    lines,
+    selectedIds,
+    lineIndices,
+    focusAfterRemoval,
+    currentScroll,
+    onSelectionChange,
+    onSelectLine,
+  ]);
 
   useEffect(
     () => () => {
@@ -74,14 +109,15 @@ export function useLineTreeMarquee({
     [],
   );
 
-  const beginMarquee = (event: ReactPointerEvent<HTMLElement>) => {
+  const beginMarquee = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    const currentOptions = optionsRef.current;
     if (event.button !== 0 || !event.shiftKey) {
       return;
     }
     const startIndex = Number(event.currentTarget.dataset.lineIndex);
     const startKey =
-      Number.isInteger(startIndex) && startIndex >= 0 && startIndex < lines.length
-        ? lineTreeKey(lines, startIndex)
+      Number.isInteger(startIndex) && startIndex >= 0 && startIndex < currentOptions.lines.length
+        ? lineTreeKey(currentOptions.lines, startIndex)
         : null;
     event.preventDefault();
     const gesture: MarqueeGesture = {
@@ -90,8 +126,8 @@ export function useLineTreeMarquee({
       currentX: event.clientX,
       currentY: event.clientY,
       startKey,
-      initial: new Set(selectedIds),
-      hits: new Set(selectedIds),
+      initial: new Set(currentOptions.selectedIds),
+      hits: new Set(currentOptions.selectedIds),
       moved: false,
     };
     marqueeRef.current = gesture;
@@ -125,20 +161,20 @@ export function useLineTreeMarquee({
       const right = Math.max(current.startX, current.currentX);
       const bottom = Math.max(current.startY, current.currentY);
       const hits = new Set(current.initial);
-      if (listRef.current) {
-        for (const node of rowRefs.current.values()) {
+      if (currentOptions.listRef.current) {
+        for (const node of currentOptions.rowRefs.current.values()) {
           if (!node.isConnected || node.hidden) {
             continue;
           }
           const index = Number(node.dataset.lineIndex);
-          if (!Number.isInteger(index) || index < 0 || index >= lines.length) {
+          if (!Number.isInteger(index) || index < 0 || index >= currentOptions.lines.length) {
             continue;
           }
           const box = node.getBoundingClientRect();
           if (box.bottom < top || box.top > bottom || box.right < left || box.left > right) {
             continue;
           }
-          hits.add(lineTreeKey(lines, index));
+          hits.add(lineTreeKey(currentOptions.lines, index));
         }
       }
       current.hits = hits;
@@ -170,7 +206,7 @@ export function useLineTreeMarquee({
           return;
         }
         blockNextClick();
-        const index = lineIndices.get(current.startKey);
+        const index = optionsRef.current.lineIndices.get(current.startKey);
         if (index === undefined) {
           return;
         }
@@ -185,9 +221,12 @@ export function useLineTreeMarquee({
         if (!next.size) {
           next.add(current.startKey);
         }
-        const focusIndex = next.has(current.startKey) ? index : focusAfterRemoval(index, next);
-        onSelectionChange(next);
-        onSelectLine(focusIndex, currentScroll());
+        const latest = optionsRef.current;
+        const focusIndex = next.has(current.startKey)
+          ? index
+          : latest.focusAfterRemoval(index, next);
+        latest.onSelectionChange(next);
+        latest.onSelectLine(focusIndex, latest.currentScroll());
         return;
       }
       blockNextClick();
@@ -199,7 +238,7 @@ export function useLineTreeMarquee({
       }
       const hitIndices = [...current.hits]
         .flatMap((id) => {
-          const index = lineIndices.get(id);
+          const index = optionsRef.current.lineIndices.get(id);
           return index === undefined ? [] : [index];
         })
         .sort((left, right) => left - right);
@@ -207,8 +246,9 @@ export function useLineTreeMarquee({
         return;
       }
       const focus = hitIndices[0];
-      onSelectionChange(new Set(current.hits));
-      onSelectLine(focus, currentScroll());
+      const latest = optionsRef.current;
+      latest.onSelectionChange(new Set(current.hits));
+      latest.onSelectLine(focus, latest.currentScroll());
     };
 
     const cancel = () => {
@@ -222,7 +262,7 @@ export function useLineTreeMarquee({
     window.addEventListener("pointerup", finish, true);
     window.addEventListener("pointercancel", cancel, true);
     window.addEventListener("blur", cancel);
-  };
+  }, []);
 
   return { marquee, beginMarquee };
 }

@@ -5,6 +5,7 @@
  * queue functions, so a marquee rectangle or sweep keeps one projection.
  */
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
+import type { RenderCommand } from "../../../canvas/renderGraph.ts";
 
 export type MarqueeArea = "notes" | "events";
 
@@ -93,6 +94,74 @@ function marqueeSweepPoints(
     marqueeSweepPoint(origin, overlay, point, projected);
   }
   return projected;
+}
+
+/** Build retained commands for one marquee rectangle without selecting a backend. */
+export function marqueeRectangleCommands(
+  origin: MarqueeOrigin,
+  overlay: MarqueeOrigin,
+  start: MarqueePoint,
+  current: MarqueePoint,
+  area: MarqueeArea,
+  palette: MarqueePalette,
+  preview = false,
+): readonly RenderCommand[] {
+  const rectangle = marqueeRectangleGeometry(
+    origin,
+    overlay,
+    start,
+    current,
+    area,
+    palette,
+    preview,
+  );
+  return [
+    {
+      kind: "fillRect",
+      x: rectangle.x,
+      y: rectangle.y,
+      width: rectangle.width,
+      height: rectangle.height,
+      color: rectangle.fill,
+      alpha: 1,
+    },
+    {
+      kind: "strokeRect",
+      x: rectangle.x,
+      y: rectangle.y,
+      width: rectangle.width,
+      height: rectangle.height,
+      color: rectangle.stroke,
+      lineWidth: rectangle.strokeWidth,
+      alpha: 1,
+      offset: rectangle.offset,
+    },
+  ];
+}
+
+/** Build a retained command for a freehand sweep in overlay-local coordinates. */
+export function selectionSweepCommands(
+  origin: MarqueeOrigin,
+  overlay: MarqueeOrigin,
+  points: readonly MarqueePoint[],
+  area: MarqueeArea,
+  palette: MarqueePalette,
+  strokeColor?: string,
+): readonly RenderCommand[] {
+  if (points.length < 2) {
+    return [];
+  }
+  return [
+    {
+      kind: "polyline",
+      points: marqueeSweepPoints(origin, overlay, points),
+      color:
+        strokeColor ??
+        (area === "notes" ? palette.selectionNotesStroke : palette.selectionEventsStroke),
+      lineWidth: 2,
+      alpha: 1,
+    },
+  ];
 }
 
 /** Paint one marquee rectangle in overlay-local coordinates. */

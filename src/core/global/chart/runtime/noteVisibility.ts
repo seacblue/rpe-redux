@@ -256,6 +256,11 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
    * broad phase; callers must not use it as the final note-distance result.
    */
   query(seconds: number, floor: number, radius: number, result: T[]): T[] {
+    if (this.spatialOnly) {
+      this.spatialIndex.queryItemsExpandedInto(floor, floor, radius, result);
+      writeQueryStats(this.lastQueryStats, result.length, 0, 0);
+      return result;
+    }
     result.length = 0;
     this.spatialIndex.queryItemsExpandedAndSecondaryInto(
       floor,
@@ -266,10 +271,6 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
       result,
     );
     const spatialCandidateCount = result.length;
-    if (this.spatialOnly) {
-      writeQueryStats(this.lastQueryStats, spatialCandidateCount, 0, 0);
-      return result;
-    }
     if (this.hasTemporalItems) {
       this.temporalIndex.queryItemsInto(seconds, seconds, this.temporalQuery);
     } else {

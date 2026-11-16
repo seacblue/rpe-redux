@@ -77,6 +77,16 @@ interface LineIssueCache {
   issues: readonly ChartIssue[];
 }
 
+/** Line-independent data for an invalid event or Hold range. */
+interface InvalidRangeCacheEntry {
+  index: number;
+  id: string;
+  startTime: Beat;
+  endTime: Beat;
+  beat: number;
+  endBeat: number;
+}
+
 /** Whether two snapshots describe the same visible issue list. */
 function sameIssue(left: ChartIssue, right: ChartIssue): boolean {
   return (
@@ -121,6 +131,16 @@ export class EventIssueMonitor {
   private readonly trackCache = new WeakMap<
     readonly JudgeLineEvent[],
     readonly EventOverlapPair[]
+  >();
+  /** Reuses invalid-range scans when a line clone changes an unrelated field. */
+  private readonly invalidEventCache = new WeakMap<
+    readonly JudgeLineEvent[],
+    readonly InvalidRangeCacheEntry[]
+  >();
+  /** Reuses invalid-Hold scans when an event edit leaves the notes array intact. */
+  private readonly invalidHoldCache = new WeakMap<
+    readonly JudgeLineNote[],
+    readonly InvalidRangeCacheEntry[]
   >();
 
   /** Scan one chart, publishing only when the visible issue list changes. */
@@ -266,14 +286,29 @@ export class EventIssueMonitor {
   ): void {
     const lineId = String(line.id ?? `line-${lineIndex}`);
     const lineName = line.Name?.trim() ?? "";
-    for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
-      const event = events[eventIndex];
-      if (!event || compareBeats(event.endTime, event.startTime) > 0) {
-        continue;
+    let invalid = this.invalidEventCache.get(events);
+    if (!invalid) {
+      const next: InvalidRangeCacheEntry[] = [];
+      for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+        const event = events[eventIndex];
+        if (!event || compareBeats(event.endTime, event.startTime) > 0) {
+          continue;
+        }
+        next.push({
+          index: eventIndex,
+          id: String(event.id ?? eventIndex),
+          startTime: event.startTime,
+          endTime: event.endTime,
+          beat: beatValue(event.startTime),
+          endBeat: beatValue(event.endTime),
+        });
       }
-      const eventId = String(event.id ?? eventIndex);
+      invalid = Object.freeze(next);
+      this.invalidEventCache.set(events, invalid);
+    }
+    for (const entry of invalid) {
       issues.push({
-        id: `${lineId}:${layer}:${track}:invalid:${eventId}:${eventIndex}`,
+        id: `${lineId}:${layer}:${track}:invalid:${entry.id}:${entry.index}`,
         kind: "invalid-range",
         target: "event",
         lineIndex,
@@ -282,14 +317,14 @@ export class EventIssueMonitor {
         layer,
         extended,
         track,
-        firstEventIndex: eventIndex,
-        secondEventIndex: eventIndex,
-        firstEventId: eventId,
-        secondEventId: eventId,
-        startTime: [...event.startTime] as Beat,
-        endTime: [...event.endTime] as Beat,
-        beat: beatValue(event.startTime),
-        endBeat: beatValue(event.endTime),
+        firstEventIndex: entry.index,
+        secondEventIndex: entry.index,
+        firstEventId: entry.id,
+        secondEventId: entry.id,
+        startTime: [...entry.startTime] as Beat,
+        endTime: [...entry.endTime] as Beat,
+        beat: entry.beat,
+        endBeat: entry.endBeat,
       });
     }
   }
@@ -299,14 +334,29 @@ export class EventIssueMonitor {
     const notes = line.notes ?? [];
     const lineId = String(line.id ?? `line-${lineIndex}`);
     const lineName = line.Name?.trim() ?? "";
-    for (let noteIndex = 0; noteIndex < notes.length; noteIndex += 1) {
-      const note: JudgeLineNote | undefined = notes[noteIndex];
-      if (!note || note.type !== 2 || compareBeats(note.endTime, note.startTime) > 0) {
-        continue;
+    let invalid = this.invalidHoldCache.get(notes);
+    if (!invalid) {
+      const next: InvalidRangeCacheEntry[] = [];
+      for (let noteIndex = 0; noteIndex < notes.length; noteIndex += 1) {
+        const note: JudgeLineNote | undefined = notes[noteIndex];
+        if (!note || note.type !== 2 || compareBeats(note.endTime, note.startTime) > 0) {
+          continue;
+        }
+        next.push({
+          index: noteIndex,
+          id: String(note.id ?? noteIndex),
+          startTime: note.startTime,
+          endTime: note.endTime,
+          beat: beatValue(note.startTime),
+          endBeat: beatValue(note.endTime),
+        });
       }
-      const noteId = String(note.id ?? noteIndex);
+      invalid = Object.freeze(next);
+      this.invalidHoldCache.set(notes, invalid);
+    }
+    for (const entry of invalid) {
       issues.push({
-        id: `${lineId}:notes:invalid:${noteId}:${noteIndex}`,
+        id: `${lineId}:notes:invalid:${entry.id}:${entry.index}`,
         kind: "invalid-range",
         target: "hold",
         lineIndex,
@@ -315,14 +365,14 @@ export class EventIssueMonitor {
         layer: -1,
         extended: false,
         track: "notes",
-        firstEventIndex: noteIndex,
-        secondEventIndex: noteIndex,
-        firstEventId: noteId,
-        secondEventId: noteId,
-        startTime: [...note.startTime] as Beat,
-        endTime: [...note.endTime] as Beat,
-        beat: beatValue(note.startTime),
-        endBeat: beatValue(note.endTime),
+        firstEventIndex: entry.index,
+        secondEventIndex: entry.index,
+        firstEventId: entry.id,
+        secondEventId: entry.id,
+        startTime: [...entry.startTime] as Beat,
+        endTime: [...entry.endTime] as Beat,
+        beat: entry.beat,
+        endBeat: entry.endBeat,
       });
     }
   }

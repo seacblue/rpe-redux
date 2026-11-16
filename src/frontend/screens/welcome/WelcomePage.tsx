@@ -136,12 +136,17 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
               loading={!cards || cards.phase === "loading"}
               visible={editorVisibility.atHome}
               preview={previewArmed}
+              opening={Boolean(cards?.openingProjectId)}
               onOpen={openEntry}
               onExport={exportEntry}
               onDelete={deleteEntry}
             />
           </div>
-          <LibraryPanel selectedKey={selected?.key ?? null} onSelect={handleSelect} />
+          <LibraryPanel
+            selectedKey={selected?.key ?? null}
+            openingProjectId={cards?.openingProjectId ?? null}
+            onSelect={handleSelect}
+          />
         </div>
       </div>
       {draggingFiles && editorVisibility.atHome && (

@@ -72,6 +72,14 @@ func TestClassifyChartFiles(t *testing.T) {
 	}
 }
 
+func TestDetectJSONChartHeaderDoesNotNeedTheNotePayload(t *testing.T) {
+	data := []byte(`{"BPMList":[{"bpm":169}],"META":{"name":"Large RPE Song"},"judgeLineList":[`)
+	format, name, ok := detectJSONChartHeader(data)
+	if !ok || format != FormatRPE || name != "Large RPE Song" {
+		t.Fatalf("large RPE header = format %q name %q ok %v", format, name, ok)
+	}
+}
+
 func TestClassifyChartFolders(t *testing.T) {
 	root := t.TempDir()
 	rpe := filepath.Join(root, "rpe-folder")

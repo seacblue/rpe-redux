@@ -134,8 +134,10 @@ export class ProjectImages {
       ),
     );
     for (const name of names) {
-      const bytes = assetBytes(assets, name, chartName);
       const path = assetPath(assets, name, chartName);
+      const bytes =
+        assetBytes(assets, name, chartName) ??
+        (path && assets.read ? ((await assets.read(path)) ?? null) : null);
       const uri = path ? assets.uri?.(path) : null;
       if (!bytes && !uri) {
         if (name !== "line.png") {

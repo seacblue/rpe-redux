@@ -13,6 +13,7 @@ import type { NoteBatch } from "../../../canvas/noteBatch.ts";
 import type { TimelineLineBatch } from "../../../canvas/timelineLineBatch.ts";
 import type { TimelineSolidBatch } from "../../../canvas/timelineSolidBatch.ts";
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
+import type { TimelineGridRenderDevice } from "../../../canvas/timelineGridRenderDevice.ts";
 
 /**
  * Structural seam shared by the Timeline class and its independently
@@ -29,16 +30,20 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   readonly cache: TimelineCache;
   notesBackdrop: HTMLCanvasElement;
   notesGridBatch: TimelineLineBatch;
+  notesGridDevice: TimelineGridRenderDevice;
   notesPlayhead: HTMLCanvasElement;
   notesPlayheadBatch: TimelineLineBatch;
+  notesPlayheadDevice: TimelineGridRenderDevice;
   notesCanvas: HTMLCanvasElement;
   notesCue: HTMLCanvasElement;
   noteBatch: NoteBatch;
   noteSolidBatch: TimelineSolidBatch;
   eventsBackdrop: HTMLCanvasElement;
   eventsGridBatch: TimelineLineBatch;
+  eventsGridDevice: TimelineGridRenderDevice;
   eventsPlayhead: HTMLCanvasElement;
   eventsPlayheadBatch: TimelineLineBatch;
+  eventsPlayheadDevice: TimelineGridRenderDevice;
   eventsCanvas: HTMLCanvasElement;
   eventBatch: TimelineEventBatch;
   eventOverlayBatch: TimelineOverlayBatch;
@@ -49,6 +54,7 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   /** Event ids another room member selected, drawn with the collaboration tint. */
   readonly remoteSelectedEventIds: ReadonlySet<string>;
   changed: () => void;
+  changedSelectionOverlay: () => void;
   eventTypes: string[];
 }
 
@@ -64,14 +70,18 @@ export type TimelineGridReceiver = Pick<
   | "appearance"
   | "cache"
   | "eventsGridBatch"
+  | "eventsGridDevice"
   | "eventsPlayheadBatch"
+  | "eventsPlayheadDevice"
   | "getSession"
   | "gridForLine"
   | "gestures"
   | "notesGridBatch"
+  | "notesGridDevice"
   | "notesBackdrop"
   | "eventsBackdrop"
   | "notesPlayheadBatch"
+  | "notesPlayheadDevice"
   | "viewport"
 >;
 
@@ -80,6 +90,7 @@ export type TimelineSelectionReceiver = Pick<
   TimelineRuntimeSurface,
   | "appearance"
   | "changed"
+  | "changedSelectionOverlay"
   | "cache"
   | "eventTypes"
   | "eventsCanvas"

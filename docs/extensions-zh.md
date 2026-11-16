@@ -37,6 +37,8 @@ Extension 在独立的 iframe 沙箱中运行，用于添加快捷键、工具�
 
 ## Manifest
 
+内置包可以声明 `pagedChartSafe`，表示它能处理尚未完全加载的谱面线；外部包不会凭此声明跳过完整解析。
+
 `manifest.json` 声明 `id`、`version`、可选的 `kind`、`name`、`author`、`license`、可选的来源 URL、`engines`、`entry`、`i18n` 和 `capabilities`。`kind` 的 `"extension"` 与已弃用的 `"mod"` 别名对两种包形态都有效；`"data-only"` 要求声明 `scripts` 且没有 `entry`，`"script"` 要求有 `entry`。声明未知 `kind` 返回 `invalidKind`，与实际包形态不一致返回 `kindMismatch`。数据型包不写 `entry`，改为声明 `scripts` 数组；每项有包内唯一的 `id`、可选的标签/描述、可选参数 schema 和 steps。宿主会校验字段形状、宿主版本声明和 provenance，并拒绝无效声明。旧 data-only manifest 如果漏写 `scripts` capability 仍可加载：宿主会补上隐式授权并写弃用警告，因为运行时本来就在启用时要求它。
 
 `engines["rpe-redux"]` 可以使用旧版整数主版本，也可以使用针对完整宿主版本的semver 范围。范围支持精确/部分版本、`x`/`*` 通配符、`^`、`~`、比较运算符、连字符范围、空格 AND 和 `||` OR：

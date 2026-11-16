@@ -28,6 +28,7 @@ import { EditorSession } from "../../../core/edit/session/session.ts";
 import { applyChartTransaction } from "../../../core/edit/transaction/preview.ts";
 import {
   chartFingerprint,
+  chartFingerprintWithLineChanges,
   installChartRevisionSeed,
 } from "../../../core/edit/document/chartRevision.ts";
 import { lineContentFingerprintParts } from "../../../core/global/chart/chartContentHash.ts";
@@ -104,6 +105,14 @@ test("single note update, delete and insert build no full index", () => {
     apply(session, {
       notes: { update: [{ id: updateTarget.id, patch: { positionX: 321 } }] },
     });
+    assert.deepEqual(session.lastNoteChangeHints, [
+      {
+        lineIndex,
+        noteIndexes: [300],
+        kind: "visual",
+        overlapChanged: true,
+      },
+    ]);
     assert.equal(locateNote(session.chart, updateTarget.id)?.note.positionX, 321);
   });
 
@@ -296,4 +305,26 @@ test("an importer-seeded session keeps the exact digest after a point edit", () 
   const reparsed = chartFingerprint(parseChart(serializeChart(session.chart)));
   assert.equal(chartFingerprint(session.chart), reparsed);
   assert.equal(result.afterFingerprint, reparsed);
+});
+
+test("a copy-on-write line edit can fold a chart fingerprint from changed lines", () => {
+  const source = makeChart(741, 8);
+  const target = {
+    ...source,
+    META: { ...source.META },
+    judgeLineList: [...source.judgeLineList],
+  };
+  const changedIndex = 517;
+  const sourceLine = target.judgeLineList[changedIndex];
+  const changedLine = {
+    ...sourceLine,
+    notes: sourceLine.notes.map((note, index) =>
+      index === 3 ? { ...note, positionX: note.positionX + 0.25 } : note,
+    ),
+  };
+  target.judgeLineList[changedIndex] = changedLine;
+
+  const incremental = chartFingerprintWithLineChanges(source, target, [changedIndex]);
+  const cold = chartFingerprint(parseChart(serializeChart(target)));
+  assert.equal(incremental, cold);
 });

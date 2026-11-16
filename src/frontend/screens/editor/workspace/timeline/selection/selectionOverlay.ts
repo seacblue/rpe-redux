@@ -7,16 +7,11 @@
  * Canvas2D and WebGL sinks share one projection.
  */
 import type { ResourceScope } from "../../../../../../core/utils/resourceScope.ts";
-import { prepareCanvas } from "../../../canvas/canvas2d.ts";
 import { readCanvasPalette, rgbChannels, selectionColor } from "../../../canvas/palette.ts";
+import { RenderGraph, type RenderPacket } from "../../../canvas/renderGraph.ts";
+import { TimelineOverlayRenderDevice } from "../../../canvas/timelineOverlayRenderDevice.ts";
 import { type Timeline } from "../surface/timeline.ts";
-import { drawPreviewMarquee } from "../../preview/interaction/previewSelection.ts";
-import {
-  drawMarqueeRectangle,
-  drawSelectionSweep,
-  queueMarqueeRectangle,
-  queueSelectionSweep,
-} from "./selectionOverlayDrawing.ts";
+import { marqueeRectangleCommands, selectionSweepCommands } from "./selectionOverlayDrawing.ts";
 import { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 
 /** Event target shape needed for the line-switcher exclusion check. */
@@ -28,8 +23,8 @@ interface ClosestTarget {
 export class SelectionOverlay {
   timeline: Timeline;
   canvas: HTMLCanvasElement;
-  private readonly gpuBatch: TimelineOverlayBatch;
-  private hasPaintedSelection = false;
+  private readonly graph = new RenderGraph();
+  private readonly device: TimelineOverlayRenderDevice;
 
   /** Attach marquee listeners and mark the timeline as overlay-driven. */
   constructor(
@@ -41,8 +36,8 @@ export class SelectionOverlay {
   ) {
     this.timeline = timeline;
     this.canvas = canvas;
-    this.gpuBatch = new TimelineOverlayBatch(gpuCanvas);
-    scope.add(() => this.gpuBatch.dispose());
+    this.device = new TimelineOverlayRenderDevice(canvas, new TimelineOverlayBatch(gpuCanvas));
+    scope.add(() => this.graph.dispose([this.device]));
     scope.listen(
       window,
       "pointermove",
@@ -103,22 +98,6 @@ export class SelectionOverlay {
     const previewMarquee = this.timeline.gestures.previewMarquee;
     const selection = this.timeline.rectangleSelection();
     const sweep = this.timeline.sweepSelection();
-    if (!previewMarquee && !selection && !sweep) {
-      if (this.hasPaintedSelection) {
-        this.gpuBatch.begin(this.canvas.clientWidth, this.canvas.clientHeight);
-        prepareCanvas(this.canvas);
-        this.gpuBatch.finish();
-        this.hasPaintedSelection = false;
-      }
-      return;
-    }
-
-    const gpuActive = this.gpuBatch.begin(this.canvas.clientWidth, this.canvas.clientHeight);
-    // Keep the Canvas2D fallback surface transparent while the GPU sibling is active.
-    if (gpuActive) {
-      prepareCanvas(this.canvas);
-    }
-    const context = gpuActive ? null : prepareCanvas(this.canvas).context;
     const palette = this.timeline.cache.palette() ?? readCanvasPalette();
     const noteColor = selectionColor("timeline-note-marquee-color", palette.selectionNotesStroke);
     const eventColor = selectionColor(
@@ -136,92 +115,54 @@ export class SelectionOverlay {
       selectionEventsFill: `rgba(${eventRgb.join(", ")}, 0.24)`,
       selectionEventsStroke: eventColor,
     };
+    let commands;
     if (previewMarquee) {
-      if (gpuActive) {
-        queueMarqueeRectangle(
-          this.gpuBatch,
-          { left: 0, top: 0 },
-          { left: 0, top: 0 },
-          previewMarquee.start,
-          previewMarquee.current,
-          "notes",
-          marqueePalette,
-          true,
-        );
-        this.gpuBatch.finish();
-      } else {
-        drawPreviewMarquee(context!, previewMarquee.start, previewMarquee.current);
-      }
-      this.hasPaintedSelection = true;
-      return;
-    }
-    if (!selection) {
-      if (sweep) {
-        const origin = sweep.canvas.getBoundingClientRect();
-        const overlay = this.canvas.getBoundingClientRect();
-        const points = sweep.drag.sweepPoints ?? [sweep.drag.start, sweep.drag.current];
-        const strokeColor = sweep.drag.remove ? sweepRemoveColor : sweepAddColor;
-        const originPoint = { left: origin.left, top: origin.top };
-        const overlayPoint = { left: overlay.left, top: overlay.top };
-        if (gpuActive) {
-          queueSelectionSweep(
-            this.gpuBatch,
-            originPoint,
-            overlayPoint,
-            points,
-            sweep.area,
-            marqueePalette,
-            strokeColor,
-          );
-          this.gpuBatch.finish();
-        } else {
-          drawSelectionSweep(
-            context!,
-            originPoint,
-            overlayPoint,
-            points,
-            sweep.area,
-            marqueePalette,
-            strokeColor,
-          );
-        }
-        this.hasPaintedSelection = true;
-      } else {
-        if (gpuActive) {
-          this.gpuBatch.finish();
-        }
-        this.hasPaintedSelection = false;
-      }
-      return;
-    }
-    const origin = selection.canvas.getBoundingClientRect();
-    const overlay = this.canvas.getBoundingClientRect();
-    const start = this.timeline.rectangleStart(selection.drag);
-    const { current } = selection.drag;
-    const originPoint = { left: origin.left, top: origin.top };
-    const overlayPoint = { left: overlay.left, top: overlay.top };
-    if (gpuActive) {
-      queueMarqueeRectangle(
-        this.gpuBatch,
-        originPoint,
-        overlayPoint,
+      commands = marqueeRectangleCommands(
+        { left: 0, top: 0 },
+        { left: 0, top: 0 },
+        previewMarquee.start,
+        previewMarquee.current,
+        "notes",
+        marqueePalette,
+        true,
+      );
+    } else if (!selection && sweep) {
+      const origin = sweep.canvas.getBoundingClientRect();
+      const overlay = this.canvas.getBoundingClientRect();
+      const points = sweep.drag.sweepPoints ?? [sweep.drag.start, sweep.drag.current];
+      const strokeColor = sweep.drag.remove ? sweepRemoveColor : sweepAddColor;
+      commands = selectionSweepCommands(
+        { left: origin.left, top: origin.top },
+        { left: overlay.left, top: overlay.top },
+        points,
+        sweep.area,
+        marqueePalette,
+        strokeColor,
+      );
+    } else if (selection) {
+      const origin = selection.canvas.getBoundingClientRect();
+      const overlay = this.canvas.getBoundingClientRect();
+      const start = this.timeline.rectangleStart(selection.drag);
+      commands = marqueeRectangleCommands(
+        { left: origin.left, top: origin.top },
+        { left: overlay.left, top: overlay.top },
         start,
-        current,
+        selection.drag.current,
         selection.area,
         marqueePalette,
       );
-      this.gpuBatch.finish();
     } else {
-      drawMarqueeRectangle(
-        context!,
-        originPoint,
-        overlayPoint,
-        start,
-        current,
-        selection.area,
-        marqueePalette,
-      );
+      commands = [];
     }
-    this.hasPaintedSelection = true;
+    const packet: RenderPacket = {
+      surface: "timeline-selection-overlay",
+      key: `${this.timeline.renderRevision}:${this.timeline.selectionOverlayRevision}:${
+        this.canvas.clientWidth
+      }x${this.canvas.clientHeight}:${JSON.stringify(commands)}`,
+      width: this.canvas.clientWidth,
+      height: this.canvas.clientHeight,
+      commands,
+    };
+    this.graph.submit(packet, this.device);
   }
 }

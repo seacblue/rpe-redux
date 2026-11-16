@@ -36,12 +36,14 @@ export interface OpenedChartStream {
 export async function openChartDocumentFromBytes(
   bytes: Uint8Array,
   name: string,
+  options: { transferBytes?: boolean } = {},
 ): Promise<{ chartDocument: ChartDocument; dispose(): void }> {
   const opened = await openChartStreamFromChunks(
     (async function* () {
       yield bytes;
     })(),
     name,
+    options.transferBytes === true,
   );
   return { chartDocument: opened.document, dispose: opened.dispose };
 }
@@ -204,6 +206,7 @@ export async function openChartStreamOffThread(
 export async function openChartStreamFromChunks(
   chunks: AsyncIterable<Uint8Array>,
   name: string,
+  transferFirstChunk = false,
 ): Promise<OpenedChartStream> {
   if (typeof Worker === "undefined") {
     return localDocument(await collectChunks(chunks));
@@ -288,9 +291,16 @@ export async function openChartStreamFromChunks(
   };
   try {
     worker.postMessage({ id: sessionId, kind: "open" });
+    let firstChunk = true;
     for await (const chunk of chunks) {
-      const copy = chunk.slice();
+      const canTransfer =
+        transferFirstChunk &&
+        firstChunk &&
+        chunk.byteOffset === 0 &&
+        chunk.byteLength === chunk.buffer.byteLength;
+      const copy = canTransfer ? chunk : chunk.slice();
       worker.postMessage({ id: sessionId, kind: "append", chunk: copy.buffer }, [copy.buffer]);
+      firstChunk = false;
     }
     worker.postMessage({ id: sessionId, kind: "finish" });
     await opened;
@@ -322,5 +332,9 @@ export async function openChartStreamFromChunks(
     worker.terminate();
   };
   document.dispose = dispose;
+  // Let initial materialization request its lines before the worker spends CPU
+  // on the semantic fingerprint pass. The pass remains asynchronous and still
+  // completes before any save/conflict decision consumes the document.
+  worker.postMessage({ id: sessionId, kind: "fingerprints" });
   return { document, dispose };
 }

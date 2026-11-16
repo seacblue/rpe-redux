@@ -24,7 +24,10 @@ import {
   type ChartObjectId,
 } from "../../global/chart/identity.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
-import { removeValueContentFingerprint } from "../../global/chart/chartContentHash.ts";
+import {
+  markValueContentFingerprintDirty,
+  removeValueContentFingerprint,
+} from "../../global/chart/chartContentHash.ts";
 import { isRecord } from "../../utils/guards.ts";
 import { containsCycle } from "../../global/chart/cycles.ts";
 import type { EditorSession } from "../session/session.ts";
@@ -43,6 +46,7 @@ import type {
   TransactionIssue,
 } from "./contract.ts";
 import type { HistoryEntryMetadata, HistoryEntryOrigin } from "../session/history.ts";
+import type { NoteChangeKind } from "../../global/chart/runtime/noteChangeHints.ts";
 import { t } from "../../../i18n/index.ts";
 import {
   adoptChartLocations,
@@ -78,6 +82,38 @@ import { applyTiming } from "./timing.ts";
 const NOTE_PATCH_BLOCKLIST = new Set(["id"]);
 const EVENT_PATCH_BLOCKLIST = new Set(["id", "line", "lineIndex", "eventType", "layer"]);
 const UNSAFE_PATCH_FIELDS = new Set(["__proto__", "prototype", "constructor"]);
+
+/** Record one note delta, keeping the strongest invalidation kind for a line. */
+function markNoteChange(
+  state: MutableTransactionState,
+  lineIndex: number,
+  noteIndex: number,
+  kind: NoteChangeKind,
+  overlapChanged: boolean,
+): void {
+  const hints = (state.noteChangeHints ??= new Map());
+  const previous = hints.get(lineIndex);
+  const rank = (value: NoteChangeKind): number =>
+    value === "structure" ? 2 : value === "timing" ? 1 : 0;
+  const nextKind = previous && rank(previous.kind) >= rank(kind) ? previous.kind : kind;
+  const indexes = previous?.noteIndexes ?? new Set<number>();
+  indexes.add(noteIndex);
+  hints.set(lineIndex, {
+    noteIndexes: indexes,
+    kind: nextKind,
+    overlapChanged: Boolean(previous?.overlapChanged || overlapChanged),
+  });
+}
+
+/** Report optional apply-kernel timings without coupling the core to the browser probe. */
+function reportApplyTiming(stage: string, durationMs: number): void {
+  const probe = (
+    globalThis as typeof globalThis & {
+      __reduxTransactionTimingProbe?: (value: { stage: string; durationMs: number }) => void;
+    }
+  ).__reduxTransactionTimingProbe;
+  probe?.({ stage, durationMs });
+}
 
 /**
  * Applies one line's scoring-count delta.
@@ -234,6 +270,13 @@ function nextId(
 
 /** Detaches a patch value from the request object. */
 function clonePatchValue(value: unknown): unknown {
+  // Primitive patch fields cannot alias the request graph or contain cycles.
+  // CRUD updates overwhelmingly use numeric note/event fields, so avoid
+  // structuredClone's graph setup for those values and reserve the deep copy
+  // for arrays and records that can retain mutable request-owned data.
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) {
+    return value;
+  }
   return structuredClone(value);
 }
 
@@ -260,7 +303,7 @@ function applyPatch(
     }
     try {
       const cloned = clonePatchValue(value);
-      if (containsCycle(cloned)) {
+      if (cloned !== null && typeof cloned === "object" && containsCycle(cloned)) {
         issues.push(issue("patch.value.cyclic", `${path}.${key}`));
         continue;
       }
@@ -375,12 +418,14 @@ function insertNote(
     markChartObjectIdNormalized(note);
   }
   notes.push(note);
+  markValueContentFingerprintDirty(notes, notes.length - 1);
   appendObjectIdView(notes, id);
   (state.changedNotes ??= new Set()).add({
     note,
     lineIndex: located.index,
     noteIndex: notes.length - 1,
   });
+  markNoteChange(state, located.index, notes.length - 1, "structure", true);
   registerNoteInIndex(state.chart, located.index, id, notes.length - 1);
   adjustNoteCount(line, noteScoringWeight(note));
   addAffected(state, id);
@@ -484,16 +529,21 @@ function updateNotes(
       continue;
     }
     touched.add(id);
+    const locateStarted = performance.now();
     const located = locateNote(state.chart, id);
+    reportApplyTiming("apply.notes.locate", performance.now() - locateStarted);
     if (!located) {
       state.issues.push(issue("note.id.notFound", `notes.update[${index}].id`, id));
       continue;
     }
     const previousWeight = noteScoringWeight(located.note);
     const previousNotes = located.notes;
+    const cloneStarted = performance.now();
     const line = mutableLine(state, { line: located.line, index: located.lineIndex });
     const notes = mutableNotes(state, line, located.lineIndex);
     inheritObjectIdView(previousNotes, notes);
+    reportApplyTiming("apply.notes.clone", performance.now() - cloneStarted);
+    const patchStarted = performance.now();
     applyPatch(
       mutableNote(notes, located.noteIndex),
       update.patch,
@@ -501,6 +551,7 @@ function updateNotes(
       `notes.update[${index}].patch`,
       state.issues,
     );
+    reportApplyTiming("apply.notes.patch", performance.now() - patchStarted);
     const changedNote = notes[located.noteIndex];
     if (changedNote) {
       (state.changedNotes ??= new Set()).add({
@@ -508,6 +559,22 @@ function updateNotes(
         lineIndex: located.lineIndex,
         noteIndex: located.noteIndex,
       });
+      const timingChanged =
+        located.note.startTime !== changedNote.startTime ||
+        located.note.endTime !== changedNote.endTime ||
+        (located.note.yOffset ?? 0) !== (changedNote.yOffset ?? 0) ||
+        (located.note.speed ?? 1) !== (changedNote.speed ?? 1) ||
+        (located.note.visibleTime ?? 999999) !== (changedNote.visibleTime ?? 999999) ||
+        located.note.type !== changedNote.type ||
+        Boolean(located.note.isFake) !== Boolean(changedNote.isFake);
+      markNoteChange(
+        state,
+        located.lineIndex,
+        located.noteIndex,
+        timingChanged ? "timing" : "visual",
+        located.note.type !== changedNote.type ||
+          (located.note.positionX ?? 0) !== (changedNote.positionX ?? 0),
+      );
     }
     adjustNoteCount(line, noteScoringWeight(changedNote) - previousWeight);
     addAffected(state, id);
@@ -569,6 +636,9 @@ function updateNotes(
     line.notes = sourceNotes;
     markChartObjectCollectionNormalized(sourceNotes);
     noteLineSpliced(state.chart, lineIndex, deleted.indices, deleted.ids);
+    for (const noteIndex of deleted.indices) {
+      markNoteChange(state, lineIndex, noteIndex, "structure", true);
+    }
     adjustNoteCount(line, -removedWeight);
   }
 }
@@ -902,7 +972,17 @@ export function commitTransaction(
   affectedObjectIds: readonly ChartObjectId[],
   options: TransactionCommitOptions = {},
 ): ChartTransactionResult {
+  const currentFingerprintStarted = performance.now();
   const currentFingerprint = fingerprint(session.chart);
+  const timingProbe = (
+    globalThis as typeof globalThis & {
+      __reduxTransactionTimingProbe?: (value: { stage: string; durationMs: number }) => void;
+    }
+  ).__reduxTransactionTimingProbe;
+  timingProbe?.({
+    stage: "commit.beforeFingerprint",
+    durationMs: performance.now() - currentFingerprintStarted,
+  });
   const expectedFingerprint = options.expectedFingerprint ?? beforeFingerprint;
   if (currentFingerprint !== expectedFingerprint || currentFingerprint !== beforeFingerprint) {
     const conflict: TransactionConflict = {
@@ -927,17 +1007,24 @@ export function commitTransaction(
   // snapshots do not retain it; carry the planned chart's index across and hand
   // it to the document the session keeps next.
   const locations = detachChartLocations(chart);
+  const commitOptions = {
+    validatedNoise: options.validatedNoise,
+    estimatedBytes: options.estimatedBytes,
+    beforeFingerprint,
+    afterFingerprint,
+    normalized: true,
+    changedLineIndexes: options.changedLineIndexes,
+    noteChangeHints: options.noteChangeHints,
+  };
+  const commitStarted = performance.now();
   const committed = session.commitChart(
     label,
     chart,
     session.selectionState(),
     metadata,
-    options.validatedNoise
-      ? { validatedNoise: true, estimatedBytes: options.estimatedBytes }
-      : options.estimatedBytes === undefined
-        ? undefined
-        : { estimatedBytes: options.estimatedBytes },
+    commitOptions,
   );
+  timingProbe?.({ stage: "commit.session", durationMs: performance.now() - commitStarted });
   if (!committed) {
     adoptChartLocations(chart, locations);
     return result(

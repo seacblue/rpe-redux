@@ -33,6 +33,39 @@ export interface SessionPanelOptions {
 }
 /** Refresh only the relevant panel contents, leaving routing to its own module. */
 export function createSessionPanels(runtime: SessionPanelOptions) {
+  /** Refresh inspector-owned values after a selection-only session change. */
+  const refreshSelection = (
+    session: EditorSession,
+    currentTempo: TempoMap,
+    activePane: string,
+  ): void => {
+    if (activePane === "multi") {
+      runtime.multiEdit.sync();
+    }
+    renderProperties(
+      session,
+      runtime.ui.notes,
+      currentTempo,
+      runtime.reportError,
+      runtime.nudgeBeatInput,
+    );
+    if (!session.liveEventEdit) {
+      renderEventInspector(
+        session,
+        currentTempo,
+        runtime.currentBeat,
+        runtime.reportError,
+        runtime.notify,
+        runtime.nudgeBeatInput,
+        runtime.timeline,
+        runtime.ui.events,
+      );
+    }
+    if (session.eventSelection.size) {
+      const firstEventKey = session.eventSelection.values().next().value ?? "";
+      runtime.timeline.gestures.eventPlacementType = firstEventKey.split(":")[0];
+    }
+  };
   return {
     /** Refreshes the active pane plus the note and event inspectors. */
     refresh(session: EditorSession, currentTempo: TempoMap, activePane: string): void {
@@ -67,5 +100,6 @@ export function createSessionPanels(runtime: SessionPanelOptions) {
         runtime.timeline.gestures.eventPlacementType = firstEventKey.split(":")[0];
       }
     },
+    refreshSelection,
   };
 }

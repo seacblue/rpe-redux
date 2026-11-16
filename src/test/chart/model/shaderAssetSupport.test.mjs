@@ -54,6 +54,21 @@ test("active shader effects preserve order and sampled values across frames", ()
   );
 });
 
+test("reuses shader effect indexes for a note-only chart revision", () => {
+  const runtime = new ShaderRuntime(
+    () => {},
+    async () => null,
+  );
+  const effects = [{ shader: "rain", line: 0, order: 1, start: [0, 0, 1], end: [1, 0, 1] }];
+  const firstLine = { bpmfactor: 1, notes: [] };
+  const first = { META: {}, BPMList: [], judgeLineList: [firstLine], effects };
+  runtime.compile(first, null);
+  const index = runtime.activeIndex;
+  runtime.compile({ ...first, judgeLineList: [{ ...firstLine, notes: [{ type: 1 }] }] }, null);
+  assert.strictEqual(runtime.activeIndex, index);
+  assert.equal(runtime.active(0.5)[0]?.shader, "rain");
+});
+
 test("keeps Phira built-in preview references on the built-in path", () => {
   assert.equal(builtinShaderReference("/rain_pr.glsl"), true);
   assert.equal(shaderIdentity({ shader: "/rain_pr.glsl" }), "rain");

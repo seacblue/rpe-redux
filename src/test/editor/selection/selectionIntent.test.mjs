@@ -22,6 +22,19 @@ const paneState = {
   pointerSelection: true,
 };
 
+test("selection snapshots omit empty multi-line buckets", () => {
+  const session = new EditorSession(createChart());
+  session.multiLineSelection.set(3, new Set());
+  session.multiEventSelection.set(4, new Set());
+  session.multiLineSelection.set(5, new Set([2]));
+  session.multiEventSelection.set(6, new Set(["moveXEvents:1"]));
+
+  const state = session.selectionState();
+
+  assert.deepEqual(state.multiLineSelection, [[5, [2]]]);
+  assert.deepEqual(state.multiEventSelection, [[6, ["moveXEvents:1"]]]);
+});
+
 test("one marquee-selected note or event opens multi-edit, while a click opens its single pane", () => {
   const chart = createChart();
   chart.judgeLineList[0].notes.push(createNote(1, 1, 0));

@@ -179,6 +179,8 @@ export default {
   "editor.app.dialog.returnRoomDocumentConfirm": "离开房间并返回",
   "editor.app.dialog.unsavedChangesTitle": "未保存的修改",
 
+  "editor.feedback.source": "编辑器反馈",
+
   "editor.app.error.libraryServiceDown": "本地服务未运行，无法打开谱面库项目",
 
   "editor.app.error.missingShellNode": "缺少 DOM 节点 {selector}",

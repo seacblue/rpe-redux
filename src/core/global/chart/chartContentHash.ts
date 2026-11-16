@@ -17,9 +17,7 @@
  * is re-folded, so an edit costs one integer fold instead of a full per-child
  * FNV walk with a `WeakMap` lookup per child and a whole-array copy.
  */
-
 import type { ChartLineRevisionSeed } from "./chartRevisionSeed.ts";
-
 const HASH_SEED = 0x811c9dc5;
 const HASH_PRIME = 0x01000193;
 /** Charts are shallow; deeper data is malformed or hostile and hashes as a marker. */
@@ -30,7 +28,6 @@ const PRIMITIVE_HASH_CACHE_LIMIT = 8192;
 const ARRAY_BLOCK_SIZE = 256;
 /** Shorter arrays are cheap to re-fold directly, so they skip seed allocation. */
 const ARRAY_SEED_MIN_LENGTH = 64;
-
 const valueCache = new WeakMap<object, number>();
 const lineCache = new WeakMap<object, number>();
 const sortedKeyCache = new Map<string, readonly string[]>();
@@ -58,11 +55,12 @@ interface ArrayFingerprintSeed {
   checkpoints: readonly number[] | null;
   clean: boolean;
   partial: boolean;
+  /** Known in-place child edits; null means the dirty range is unknown. */
+  dirtyFrom?: number;
+  dirtyTo?: number;
 }
-
 const arraySeedCache = new WeakMap<object, ArrayFingerprintSeed>();
 const primitiveHashCache = new Map<string, number>();
-
 /** Hashes for object containers and their object-array children. */
 export interface ChartValueDigestGroup {
   readonly path: readonly (string | number)[];
@@ -70,7 +68,6 @@ export interface ChartValueDigestGroup {
   readonly children?: readonly (number | undefined)[];
   readonly childDigests?: Readonly<Record<string, number>>;
 }
-
 /** FNV-1a hash over a string, optionally continuing an earlier hash. */
 export function hashText(text: string, initial = HASH_SEED): number {
   let hash = initial;
@@ -80,7 +77,6 @@ export function hashText(text: string, initial = HASH_SEED): number {
   }
   return hash >>> 0;
 }
-
 /** Fold one 32-bit word into a running hash. */
 function hashWord(hash: number, value: number): number {
   let next = hash;
@@ -89,12 +85,10 @@ function hashWord(hash: number, value: number): number {
   next = Math.imul(next ^ ((value >>> 16) & 0xff), HASH_PRIME);
   return Math.imul(next ^ ((value >>> 24) & 0xff), HASH_PRIME) >>> 0;
 }
-
 /** Return the cache for one hashing mode. */
 function cacheFor(ignoreIds: boolean): WeakMap<object, number> {
   return ignoreIds ? lineCache : valueCache;
 }
-
 /** Encode an object-key sequence without collisions from separators in keys. */
 function keyShape(keys: readonly string[]): string {
   let shape = "";
@@ -103,7 +97,6 @@ function keyShape(keys: readonly string[]): string {
   }
   return shape;
 }
-
 /** Reuse sorted key arrays for the repeated object shapes in event tracks. */
 function sortedKeys(record: Record<string, unknown>): readonly string[] {
   const keys = Object.keys(record);
@@ -352,6 +345,15 @@ function primeValueDigestGroups(line: object, groups: readonly ChartValueDigestG
 
 /** Carry reusable object and array hashes onto a copy-on-write shell. */
 export function inheritValueContentFingerprint(source: object, target: object): void {
+  const needsArraySeed =
+    Array.isArray(source) &&
+    Array.isArray(target) &&
+    source.length >= ARRAY_SEED_MIN_LENGTH &&
+    !arraySeedCache.has(source);
+  if (needsArraySeed) {
+    lineCache.delete(source);
+    valueHash(source, true);
+  }
   const valueSeed = valueSeedCache.get(source);
   if (valueSeed) {
     valueSeedCache.set(target, valueSeed);
@@ -371,18 +373,31 @@ export function inheritValueContentFingerprint(source: object, target: object): 
       checkpoints: arraySeed.checkpoints,
       clean: anchored,
       partial: arraySeed.partial,
+      dirtyFrom: arraySeed.dirtyFrom,
+      dirtyTo: arraySeed.dirtyTo,
     });
   }
 }
 
 /** Mark a copied array seed dirty before its contents are changed. */
-export function markValueContentFingerprintDirty(value: object): void {
+export function markValueContentFingerprintDirty(value: object, changedIndex?: number): void {
   if (!Array.isArray(value)) {
     return;
   }
   const seed = arraySeedCache.get(value);
   if (seed) {
     seed.clean = false;
+    const index =
+      typeof changedIndex === "number" && changedIndex >= 0 && Number.isInteger(changedIndex)
+        ? changedIndex
+        : undefined;
+    if (index !== undefined) {
+      seed.dirtyFrom = seed.dirtyFrom === undefined ? index : Math.min(seed.dirtyFrom, index);
+      seed.dirtyTo = seed.dirtyTo === undefined ? index : Math.max(seed.dirtyTo, index);
+    } else {
+      seed.dirtyFrom = undefined;
+      seed.dirtyTo = undefined;
+    }
   }
   lineCache.delete(value);
 }
@@ -409,6 +424,8 @@ export function removeValueContentFingerprint(
   }
   if (source === target) {
     seed.clean = false;
+    seed.dirtyFrom = undefined;
+    seed.dirtyTo = undefined;
   } else {
     const anchored = Array.isArray(source) && seed.clean;
     arraySeedCache.set(target, {
@@ -418,6 +435,8 @@ export function removeValueContentFingerprint(
       checkpoints: seed.checkpoints,
       clean: false,
       partial: seed.partial,
+      dirtyFrom: undefined,
+      dirtyTo: undefined,
     });
   }
   lineCache.delete(target);
@@ -456,9 +475,13 @@ function foldArrayHashes(
   checkpoints: number[],
 ): number {
   let next = state;
-  for (let index = start; index < end; index += 1) {
-    next = hashWord(next, hashes[index]);
-    if ((index + 1) % ARRAY_BLOCK_SIZE === 0 && index + 1 < end) {
+  // Checkpoints are block boundaries; keep their branch out of the child loop.
+  for (let blockStart = start; blockStart < end; blockStart += ARRAY_BLOCK_SIZE) {
+    const blockEnd = Math.min(end, blockStart + ARRAY_BLOCK_SIZE);
+    for (let index = blockStart; index < blockEnd; index += 1) {
+      next = hashWord(next, hashes[index]);
+    }
+    if (blockEnd < end) {
       checkpoints.push(next);
     }
   }
@@ -487,17 +510,33 @@ function reconcileArraySeed(
   if (length === anchorLength) {
     let hashes: (number | undefined)[] | null = null;
     let changedAt = length;
-    for (let index = 0; index < length; index += 1) {
-      if (anchor[index] === value[index]) {
-        continue;
+    const hintedFrom = seed.dirtyFrom;
+    const hintedTo = seed.dirtyTo;
+    if (
+      hintedFrom !== undefined &&
+      hintedTo !== undefined &&
+      hintedFrom >= 0 &&
+      hintedTo < length &&
+      hintedFrom <= hintedTo
+    ) {
+      hashes = seed.hashes.slice();
+      changedAt = hintedFrom;
+      for (let index = hintedFrom; index <= hintedTo; index += 1) {
+        hashes[index] = valueHash(value[index], ignoreIds, stack, depth + 1);
       }
-      if (changedAt === length) {
-        changedAt = index;
+    } else {
+      for (let index = 0; index < length; index += 1) {
+        if (anchor[index] === value[index]) {
+          continue;
+        }
+        if (changedAt === length) {
+          changedAt = index;
+        }
+        if (!hashes) {
+          hashes = seed.hashes.slice();
+        }
+        hashes[index] = valueHash(value[index], ignoreIds, stack, depth + 1);
       }
-      if (!hashes) {
-        hashes = seed.hashes.slice();
-      }
-      hashes[index] = valueHash(value[index], ignoreIds, stack, depth + 1);
     }
     if (!hashes) {
       seed.anchor = value;
@@ -529,6 +568,8 @@ function reconcileArraySeed(
     seed.checkpoints = checkpoints;
     seed.clean = true;
     seed.partial = false;
+    seed.dirtyFrom = undefined;
+    seed.dirtyTo = undefined;
     return hash;
   }
   // A changed length may combine appends, removals, and replaced children, so
@@ -568,6 +609,8 @@ function reconcileArraySeed(
   seed.checkpoints = checkpoints;
   seed.clean = true;
   seed.partial = false;
+  seed.dirtyFrom = undefined;
+  seed.dirtyTo = undefined;
   return hash;
 }
 
@@ -724,7 +767,20 @@ export function contentFingerprint(value: unknown, options: { ignoreIds?: boolea
 
 /** Hash a line while ignoring editor-only object ids. */
 export function lineContentFingerprint(line: unknown): string {
-  return contentFingerprint(line, { ignoreIds: true });
+  if (!line || typeof line !== "object" || Array.isArray(line)) {
+    return contentFingerprint(line, { ignoreIds: true });
+  }
+  const children: Record<string, number> = {};
+  const digest = valueHash(line, true, new WeakSet<object>(), 0, children)
+    .toString(16)
+    .padStart(8, "0");
+  const record = line as Record<string, unknown>;
+  const seed = new Map<string, { value: unknown; hash: number }>();
+  for (const [key, hash] of Object.entries(children)) {
+    seed.set(key, { value: record[key], hash });
+  }
+  lineSeedCache.set(line, seed);
+  return digest;
 }
 
 /** Hash the chart fields outside `judgeLineList`, including `META.id`. */

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- render-cache, paint-order, opacity, and context recovery share one regression harness. */
 /** Verifies render-cache, paint-order, opacity, and WebGL context-recovery contracts. */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -31,7 +32,13 @@ import { EditorRenderScheduler } from "../../../frontend/screens/editor/workspac
 function fakeWebGLCanvas() {
   const listeners = new Map();
   let lost = false;
-  const calls = { draws: 0, uploads: [], bufferAllocations: [], drawSources: [] };
+  const calls = {
+    draws: 0,
+    uploads: [],
+    bufferAllocations: [],
+    drawSources: [],
+    blendSeparates: [],
+  };
   const textureSources = new Map();
   let pendingTexture = null;
   let boundTexture = null;
@@ -55,6 +62,7 @@ function fakeWebGLCanvas() {
       BLEND: 15,
       SRC_ALPHA: 16,
       ONE_MINUS_SRC_ALPHA: 17,
+      ONE: 23,
       COLOR_BUFFER_BIT: 18,
       SCISSOR_TEST: 19,
       TRIANGLE_STRIP: 20,
@@ -92,6 +100,9 @@ function fakeWebGLCanvas() {
         if (typeof size === "number") {
           calls.bufferAllocations.push(size);
         }
+      },
+      blendFuncSeparate: (...args) => {
+        calls.blendSeparates.push(args);
       },
     },
     {
@@ -241,6 +252,46 @@ test("preview note buffers orphan each frame while keeping a stable capacity", (
   assert.notDeepEqual(calls.uploads[1], firstUpload);
   assert.equal(calls.uploads[1][0], 80);
   assert.equal(calls.uploads[1][1], 80);
+});
+
+test("preview note batch keeps source-over alpha separate from color alpha", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const batch = new NoteBatch(canvas);
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+  };
+
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addHead(skin, 1, false, 20, 20, 8, 0, 0, 0.5), true);
+  batch.finish();
+
+  assert.deepEqual(calls.blendSeparates.at(-1), [16, 17, 23, 17]);
+});
+
+test("preview batches retain static judge lines across note frames", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const batch = new NoteBatch(canvas);
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+    lineTexture: () => descriptor,
+  };
+
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addLine(descriptor, 20, 20, 40, 4, 0, 1), true);
+  batch.finish();
+  batch.retainLineBatch();
+
+  assert.equal(batch.begin(100, 100, skin, undefined, 1, true), true);
+  batch.finish();
+
+  assert.equal(calls.draws, 2);
+  assert.equal(calls.uploads.length, 1);
 });
 
 test("preview note rotations reuse trigonometry across stable frames", () => {
@@ -472,10 +523,12 @@ test("active note batches skip line transforms while fallback notes restore them
       scene: { lines: [runtime] },
     };
     const surface = {
-      noteBatch: { isActive: () => true, addHead: () => true, addHold: () => true },
+      noteBatch: { isActive: () => true, addHeadSlotted: () => true, addHold: () => true },
+      noteTextures: [],
       passes: [{ kind: "note", depth: 1000 }],
       noteOpacity: 1,
       selectedLines: [],
+      selectedLineSet: new Set(),
       selectedLineColor: [],
       selectedNotes: new Map(),
       simultaneous: null,
@@ -490,29 +543,15 @@ test("active note batches skip line transforms while fallback notes restore them
     assert.equal(batched.notes, 1);
     assert.deepEqual(calls, []);
 
-    surface.noteBatch.addHead = () => false;
+    surface.noteBatch.addHeadSlotted = () => false;
     const fallback = drawLinePasses(surface, frame);
     assert.equal(fallback.batchFallbacks, 1);
-    assert.deepEqual(calls, [
-      "save",
-      ["translate", 50, 50],
-      ["rotate", 0],
-      "save",
-      "restore",
-      "restore",
-    ]);
+    assert.deepEqual(calls, ["save", ["translate", 50, 50], ["rotate", 0], "restore"]);
 
     calls.length = 0;
     const movedFrame = { ...frame, states: [{ ...state, x: 10 }] };
     drawLinePasses(surface, movedFrame);
-    assert.deepEqual(calls, [
-      "save",
-      ["translate", 60, 50],
-      ["rotate", 0],
-      "save",
-      "restore",
-      "restore",
-    ]);
+    assert.deepEqual(calls, ["save", ["translate", 60, 50], ["rotate", 0], "restore"]);
   } finally {
     if (previousDocument === undefined) {
       delete globalThis.document;

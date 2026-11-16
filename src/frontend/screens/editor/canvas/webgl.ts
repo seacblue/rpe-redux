@@ -7,6 +7,14 @@
 
 type GlContext = WebGLRenderingContext | WebGL2RenderingContext;
 
+/** Default attributes used when an editor surface asks Chromium for WebGL. */
+export const DEFAULT_WEBGL_CONTEXT_ATTRIBUTES = Object.freeze({
+  alpha: true,
+  antialias: false,
+  depth: false,
+  powerPreference: "high-performance" as WebGLPowerPreference,
+});
+
 /** The unit corner quad used by instanced sprite batches, as x/y pairs. */
 const UNIT_CORNER_QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -155,6 +163,24 @@ export function configureTextureSampling(gl: GlContext, filter: number = gl.LINE
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+/**
+ * Choose the WebGL2 context a batch paints through.
+ *
+ * Every batch in the editor wants the same attribute set, and a missing context
+ * is an ordinary state rather than an error: the caller keeps its Canvas 2D
+ * path. A host that throws from `getContext` degrades the same way.
+ */
+export function acquireWebGl2(
+  canvas: HTMLCanvasElement,
+  options: WebGLContextAttributes = DEFAULT_WEBGL_CONTEXT_ATTRIBUTES,
+): WebGL2RenderingContext | null {
+  try {
+    return canvas.getContext("webgl2", { ...DEFAULT_WEBGL_CONTEXT_ATTRIBUTES, ...options });
+  } catch {
+    return null;
+  }
 }
 
 /** Callbacks for one canvas's WebGL context loss and restoration cycle. */

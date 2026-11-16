@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 type projectRow struct {
@@ -41,9 +42,39 @@ type revisionRow struct {
 	CreatedAt string
 }
 
+// snapshotIndex keeps immutable references and the change key for the last
+// published snapshot. The first snapshot after a restart uses the full path;
+// later snapshots materialize only projects whose key changed.
+type snapshotIndex struct {
+	commitID        string
+	tree            ObjectRef
+	preferences     ObjectRef
+	preferencesHash string
+	projects        map[string]cachedProject
+}
+
+type cachedProject struct {
+	changeKey string
+	manifest  ObjectRef
+	refs      []ObjectRef
+	assets    int
+	revisions int
+}
+
+func projectChangeKey(project projectRow) string {
+	value, _ := json.Marshal([]any{
+		project.ID, project.Name, project.Group, project.Archived, project.Charter,
+		project.Composer, project.Level, project.Background, project.Song,
+		project.NoteCount, project.EventCount, project.EditSeconds, project.Revision,
+		string(project.ViewState), string(project.AssetFolders), project.CreatedAt,
+		project.UpdatedAt, project.ChartHash,
+	})
+	return string(value)
+}
+
 // snapshotLocked builds and publishes one commit. The caller holds s.mu.
 func (s *Service) snapshotLocked(ctx context.Context, reason string) (*headResult, error) {
-	commit, err := s.buildCommit(ctx, reason)
+	commit, index, err := s.buildCommit(ctx, reason)
 	if err != nil {
 		return nil, err
 	}
@@ -54,49 +85,60 @@ func (s *Service) snapshotLocked(ctx context.Context, reason string) (*headResul
 	if _, err := s.writeRef(ref.Hash); err != nil {
 		return nil, fmt.Errorf("write ref: %w", err)
 	}
+	index.commitID = ref.Hash
+	s.snapshotIndex = index
 	return &headResult{commitID: ref.Hash, commit: commit}, nil
 }
 
 // buildCommit reads the library and returns a commit whose referenced objects
 // have already been published.
-func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, error) {
+func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, *snapshotIndex, error) {
 	s.objects.cleanTemp()
-	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, fmt.Errorf("begin library read: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	parent := ""
 	if head, err := s.readHead(ctx); err == nil && head != nil {
 		parent = head.commitID
 	}
+	if s.snapshotIndex != nil && s.snapshotIndex.commitID == parent {
+		return s.buildIncrementalCommit(ctx, reason, parent)
+	}
+	return s.buildFullCommit(ctx, reason, parent)
+}
+
+// buildFullCommit is the safe baseline used for the first snapshot in a
+// process. It also seeds the in-process incremental index.
+func (s *Service) buildFullCommit(ctx context.Context, reason, parent string) (*Commit, *snapshotIndex, error) {
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin library read: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	databaseID := s.databaseID(ctx, tx)
 	preferencesRaw := s.preferences(ctx, tx)
 	portable, err := portablePreferences(preferencesRaw)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	preferencesRef, _, err := s.objects.writeJSON(kindPreferences, json.RawMessage(portable))
 	if err != nil {
-		return nil, fmt.Errorf("write preferences: %w", err)
+		return nil, nil, fmt.Errorf("write preferences: %w", err)
 	}
 
 	projects, err := s.projectRows(ctx, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	projectAssets, err := s.projectAssetMap(ctx, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	revisions, err := s.revisionRows(ctx, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	revisionAssets, err := s.revisionAssetMap(ctx, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	seen := make(map[string]int64)
@@ -112,17 +154,18 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 	add(preferencesRef)
 
 	byProjectRevisions := make(map[string][]RevisionRecord)
+	byProjectRefs := make(map[string][]ObjectRef)
 	for _, revision := range revisions {
 		chart, err := s.revisionChart(ctx, tx, revision)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		add(chart)
 		assets := make([]AssetRef, 0, len(revisionAssets[revision.ID]))
 		for _, asset := range revisionAssets[revision.ID] {
 			ref, err := s.assetRef(ctx, tx, asset.Hash)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			add(ref)
 			assets = append(assets, AssetRef{
@@ -140,21 +183,34 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 			Chart:     chart,
 			Assets:    assets,
 		})
+		byProjectRefs[revision.ProjectID] = append(byProjectRefs[revision.ProjectID], chart)
+		for _, asset := range assets {
+			byProjectRefs[revision.ProjectID] = append(byProjectRefs[revision.ProjectID], ObjectRef{
+				Hash: asset.Hash, Encoding: asset.Encoding, Size: asset.Size,
+			})
+		}
 		stats.Revisions++
 	}
 
 	tree := Tree{Format: TreeFormat, Version: 1, Projects: make([]TreeItem, 0, len(projects))}
+	index := &snapshotIndex{
+		preferences:     preferencesRef,
+		preferencesHash: hashBytes(portable),
+		projects:        make(map[string]cachedProject, len(projects)),
+	}
 	for _, project := range projects {
 		chart, err := s.projectChart(ctx, tx, project)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		projectRefs := append([]ObjectRef{}, byProjectRefs[project.ID]...)
+		projectRefs = append(projectRefs, chart)
 		add(chart)
 		assets := make([]AssetRef, 0, len(projectAssets[project.ID]))
 		for _, asset := range projectAssets[project.ID] {
 			ref, err := s.assetRef(ctx, tx, asset.Hash)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			add(ref)
 			assets = append(assets, AssetRef{
@@ -163,6 +219,7 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 				Encoding: ref.Encoding,
 				Size:     ref.Size,
 			})
+			projectRefs = append(projectRefs, ref)
 			stats.Assets++
 		}
 		revisionSet := RevisionSet{
@@ -176,8 +233,9 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 		}
 		revisionsRef, _, err := s.objects.writeJSON(kindRevisions, revisionSet)
 		if err != nil {
-			return nil, fmt.Errorf("write revisions for %s: %w", project.ID, err)
+			return nil, nil, fmt.Errorf("write revisions for %s: %w", project.ID, err)
 		}
+		projectRefs = append(projectRefs, revisionsRef)
 		add(revisionsRef)
 		manifest := ProjectManifest{
 			Format:       ProjectFormat,
@@ -209,7 +267,15 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 		}
 		manifestRef, _, err := s.objects.writeJSON(kindProject, manifest)
 		if err != nil {
-			return nil, fmt.Errorf("write project %s: %w", project.ID, err)
+			return nil, nil, fmt.Errorf("write project %s: %w", project.ID, err)
+		}
+		projectRefs = append(projectRefs, manifestRef)
+		index.projects[project.ID] = cachedProject{
+			changeKey: projectChangeKey(project),
+			manifest:  manifestRef,
+			refs:      projectRefs,
+			assets:    len(assets),
+			revisions: len(byProjectRevisions[project.ID]),
 		}
 		add(manifestRef)
 		tree.Projects = append(tree.Projects, TreeItem{ID: project.ID, Manifest: manifestRef})
@@ -219,8 +285,9 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 	})
 	treeRef, _, err := s.objects.writeJSON(kindTree, tree)
 	if err != nil {
-		return nil, fmt.Errorf("write tree: %w", err)
+		return nil, nil, fmt.Errorf("write tree: %w", err)
 	}
+	index.tree = treeRef
 	add(treeRef)
 
 	commit := &Commit{
@@ -239,9 +306,202 @@ func (s *Service) buildCommit(ctx context.Context, reason string) (*Commit, erro
 		Stats:            stats,
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit library read: %w", err)
+		return nil, nil, fmt.Errorf("commit library read: %w", err)
 	}
-	return commit, nil
+	commit.Stats = snapshotStats(index, treeRef, preferencesRef)
+	return commit, index, nil
+}
+
+// buildIncrementalCommit reuses immutable project objects whose store change
+// key is unchanged. The live project listing is still read so additions and
+// deletions remain visible, but chart bytes, assets, revisions, and JSON
+// manifests are touched only for changed projects.
+func (s *Service) buildIncrementalCommit(ctx context.Context, reason, parent string) (*Commit, *snapshotIndex, error) {
+	previous := s.snapshotIndex
+	tx, err := s.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin incremental library read: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	databaseID := s.databaseID(ctx, tx)
+	portable, err := portablePreferences(s.preferences(ctx, tx))
+	if err != nil {
+		return nil, nil, err
+	}
+	preferencesRef := previous.preferences
+	if hashBytes(portable) != previous.preferencesHash {
+		preferencesRef, _, err = s.objects.writeJSON(kindPreferences, json.RawMessage(portable))
+		if err != nil {
+			return nil, nil, fmt.Errorf("write preferences: %w", err)
+		}
+	}
+
+	projects, err := s.projectRows(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+	changed := make(map[string]bool)
+	for _, project := range projects {
+		old, ok := previous.projects[project.ID]
+		changed[project.ID] = !ok || old.changeKey != projectChangeKey(project)
+	}
+	changedIDs := make([]string, 0)
+	for _, project := range projects {
+		if changed[project.ID] {
+			changedIDs = append(changedIDs, project.ID)
+		}
+	}
+
+	next := &snapshotIndex{
+		preferences:     preferencesRef,
+		preferencesHash: hashBytes(portable),
+		projects:        make(map[string]cachedProject, len(projects)),
+	}
+	for _, project := range projects {
+		if old, ok := previous.projects[project.ID]; ok && !changed[project.ID] {
+			next.projects[project.ID] = old
+		}
+	}
+
+	projectAssets := make(map[string][]assetMapping)
+	byProjectRevisions := make(map[string][]RevisionRecord)
+	byProjectRefs := make(map[string][]ObjectRef)
+	if len(changedIDs) > 0 {
+		projectAssets, err = s.projectAssetMapForProjects(ctx, tx, changedIDs)
+		if err != nil {
+			return nil, nil, err
+		}
+		revisions, err := s.revisionRowsForProjects(ctx, tx, changedIDs)
+		if err != nil {
+			return nil, nil, err
+		}
+		revisionIDs := make([]string, 0, len(revisions))
+		for _, revision := range revisions {
+			revisionIDs = append(revisionIDs, revision.ID)
+		}
+		revisionAssets, err := s.revisionAssetMapForRevisions(ctx, tx, revisionIDs)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, revision := range revisions {
+			chart, err := s.revisionChart(ctx, tx, revision)
+			if err != nil {
+				return nil, nil, err
+			}
+			byProjectRefs[revision.ProjectID] = append(byProjectRefs[revision.ProjectID], chart)
+			assets := make([]AssetRef, 0, len(revisionAssets[revision.ID]))
+			for _, asset := range revisionAssets[revision.ID] {
+				ref, err := s.assetRef(ctx, tx, asset.Hash)
+				if err != nil {
+					return nil, nil, err
+				}
+				assets = append(assets, AssetRef{Name: asset.Name, Hash: ref.Hash, Encoding: ref.Encoding, Size: ref.Size})
+				byProjectRefs[revision.ProjectID] = append(byProjectRefs[revision.ProjectID], ref)
+			}
+			byProjectRevisions[revision.ProjectID] = append(byProjectRevisions[revision.ProjectID], RevisionRecord{
+				ID: revision.ID, Label: revision.Label, CreatedAt: revision.CreatedAt,
+				Size: revision.Size, Chart: chart, Assets: assets,
+			})
+		}
+	}
+
+	for _, project := range projects {
+		if !changed[project.ID] {
+			continue
+		}
+		chart, err := s.projectChart(ctx, tx, project)
+		if err != nil {
+			return nil, nil, err
+		}
+		refs := append([]ObjectRef{}, byProjectRefs[project.ID]...)
+		refs = append(refs, chart)
+		assets := make([]AssetRef, 0, len(projectAssets[project.ID]))
+		for _, asset := range projectAssets[project.ID] {
+			ref, err := s.assetRef(ctx, tx, asset.Hash)
+			if err != nil {
+				return nil, nil, err
+			}
+			assets = append(assets, AssetRef{Name: asset.Name, Hash: ref.Hash, Encoding: ref.Encoding, Size: ref.Size})
+			refs = append(refs, ref)
+		}
+		revisionSet := RevisionSet{
+			Format: RevisionsFormat, Version: 1, ProjectID: project.ID,
+			Revisions: byProjectRevisions[project.ID],
+		}
+		if revisionSet.Revisions == nil {
+			revisionSet.Revisions = []RevisionRecord{}
+		}
+		revisionsRef, _, err := s.objects.writeJSON(kindRevisions, revisionSet)
+		if err != nil {
+			return nil, nil, fmt.Errorf("write revisions for %s: %w", project.ID, err)
+		}
+		refs = append(refs, revisionsRef)
+		manifest := ProjectManifest{
+			Format: ProjectFormat, Version: 1, ID: project.ID, Name: project.Name,
+			Group: project.Group, Archived: project.Archived, Charter: project.Charter,
+			Composer: project.Composer, Level: project.Level, Background: project.Background,
+			Song: project.Song, NoteCount: project.NoteCount, EventCount: project.EventCount,
+			EditSeconds: project.EditSeconds, Revision: project.Revision,
+			ViewState: validJSON(project.ViewState, "{}"), AssetFolders: validJSON(project.AssetFolders, "[]"),
+			CreatedAt: project.CreatedAt, UpdatedAt: project.UpdatedAt, Chart: chart,
+			Assets: assets, Revisions: revisionsRef,
+		}
+		manifestRef, _, err := s.objects.writeJSON(kindProject, manifest)
+		if err != nil {
+			return nil, nil, fmt.Errorf("write project %s: %w", project.ID, err)
+		}
+		refs = append(refs, manifestRef)
+		next.projects[project.ID] = cachedProject{
+			changeKey: projectChangeKey(project),
+			manifest:  manifestRef, refs: refs, assets: len(assets),
+			revisions: len(byProjectRevisions[project.ID]),
+		}
+	}
+
+	tree := Tree{Format: TreeFormat, Version: 1, Projects: make([]TreeItem, 0, len(projects))}
+	for _, project := range projects {
+		tree.Projects = append(tree.Projects, TreeItem{ID: project.ID, Manifest: next.projects[project.ID].manifest})
+	}
+	treeChanged := len(changedIDs) > 0 || len(previous.projects) != len(projects)
+	treeRef := previous.tree
+	if treeChanged {
+		treeRef, _, err = s.objects.writeJSON(kindTree, tree)
+		if err != nil {
+			return nil, nil, fmt.Errorf("write incremental tree: %w", err)
+		}
+	}
+	next.tree = treeRef
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("commit incremental library read: %w", err)
+	}
+	commit := &Commit{
+		Format: CommitFormat, Version: 1, Parent: parent, Reason: reason, CreatedAt: now(),
+		SchemaVersion: SchemaVersion, AppVersion: s.appVersion, SourceHost: s.sourceHost,
+		DatabaseID: databaseID, PreferencePolicy: PreferencePolicy, Tree: treeRef,
+		Preferences: preferencesRef, Stats: snapshotStats(next, treeRef, preferencesRef),
+	}
+	return commit, next, nil
+}
+
+func snapshotStats(index *snapshotIndex, tree, preferences ObjectRef) SnapshotStats {
+	stats := SnapshotStats{Projects: len(index.projects)}
+	refs := map[string]ObjectRef{tree.Hash: tree, preferences.Hash: preferences}
+	for _, project := range index.projects {
+		stats.Assets += project.assets
+		stats.Revisions += project.revisions
+		for _, ref := range project.refs {
+			refs[ref.Hash] = ref
+		}
+	}
+	for hash, ref := range refs {
+		if hash == "" {
+			continue
+		}
+		stats.Objects++
+		stats.RawBytes += ref.Size
+	}
+	return stats
 }
 
 func (s *Service) databaseID(ctx context.Context, tx *sql.Tx) string {
@@ -317,6 +577,29 @@ func (s *Service) projectAssetMap(ctx context.Context, tx *sql.Tx) (map[string][
 	return out, rows.Err()
 }
 
+func (s *Service) projectAssetMapForProjects(ctx context.Context, tx *sql.Tx, ids []string) (map[string][]assetMapping, error) {
+	out := make(map[string][]assetMapping, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT project_id, name, hash FROM project_assets WHERE project_id IN (`+placeholders(len(ids))+`) ORDER BY project_id, name`,
+		stringArgs(ids)...)
+	if err != nil {
+		return nil, fmt.Errorf("list changed project assets for snapshot: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var projectID string
+		var asset assetMapping
+		if err := rows.Scan(&projectID, &asset.Name, &asset.Hash); err != nil {
+			return nil, fmt.Errorf("scan changed project asset for snapshot: %w", err)
+		}
+		out[projectID] = append(out[projectID], asset)
+	}
+	return out, rows.Err()
+}
+
 func (s *Service) revisionRows(ctx context.Context, tx *sql.Tx) ([]revisionRow, error) {
 	rows, err := tx.QueryContext(ctx, `
         SELECT id, project_id, label, chart_hash, size, created_at
@@ -331,6 +614,30 @@ func (s *Service) revisionRows(ctx context.Context, tx *sql.Tx) ([]revisionRow, 
 		if err := rows.Scan(&revision.ID, &revision.ProjectID, &revision.Label,
 			&revision.ChartHash, &revision.Size, &revision.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan revision for snapshot: %w", err)
+		}
+		out = append(out, revision)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) revisionRowsForProjects(ctx context.Context, tx *sql.Tx, ids []string) ([]revisionRow, error) {
+	if len(ids) == 0 {
+		return []revisionRow{}, nil
+	}
+	rows, err := tx.QueryContext(ctx, `
+        SELECT id, project_id, label, chart_hash, size, created_at
+          FROM revisions WHERE project_id IN (`+placeholders(len(ids))+`)
+          ORDER BY project_id, created_at, id`, stringArgs(ids)...)
+	if err != nil {
+		return nil, fmt.Errorf("list changed revisions for snapshot: %w", err)
+	}
+	defer rows.Close()
+	out := make([]revisionRow, 0)
+	for rows.Next() {
+		var revision revisionRow
+		if err := rows.Scan(&revision.ID, &revision.ProjectID, &revision.Label,
+			&revision.ChartHash, &revision.Size, &revision.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan changed revision for snapshot: %w", err)
 		}
 		out = append(out, revision)
 	}
@@ -354,6 +661,41 @@ func (s *Service) revisionAssetMap(ctx context.Context, tx *sql.Tx) (map[string]
 		out[revisionID] = append(out[revisionID], asset)
 	}
 	return out, rows.Err()
+}
+
+func (s *Service) revisionAssetMapForRevisions(ctx context.Context, tx *sql.Tx, ids []string) (map[string][]assetMapping, error) {
+	out := make(map[string][]assetMapping, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT revision_id, name, hash FROM revision_assets WHERE revision_id IN (`+placeholders(len(ids))+`) ORDER BY revision_id, name`,
+		stringArgs(ids)...)
+	if err != nil {
+		return nil, fmt.Errorf("list changed revision assets for snapshot: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var revisionID string
+		var asset assetMapping
+		if err := rows.Scan(&revisionID, &asset.Name, &asset.Hash); err != nil {
+			return nil, fmt.Errorf("scan changed revision asset for snapshot: %w", err)
+		}
+		out[revisionID] = append(out[revisionID], asset)
+	}
+	return out, rows.Err()
+}
+
+func placeholders(count int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", count), ",")
+}
+
+func stringArgs(values []string) []any {
+	args := make([]any, len(values))
+	for index, value := range values {
+		args[index] = value
+	}
+	return args
 }
 
 func (s *Service) projectChart(ctx context.Context, tx *sql.Tx, project projectRow) (ObjectRef, error) {

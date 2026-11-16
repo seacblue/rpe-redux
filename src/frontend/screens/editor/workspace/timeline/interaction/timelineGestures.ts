@@ -23,6 +23,25 @@ import type { EventInteractionHandle } from "../drawing/canvas.ts";
 
 const EMPTY_EVENT_RECTS: readonly TimelineEventRect[] = [];
 
+/** Start an optional pointer phase sample without adding work to normal input. */
+export function pointerTimingStart(): number | null {
+  const global = globalThis as typeof globalThis & {
+    __reduxTimelinePointerTimingProbe?: (stage: string, durationMs: number) => void;
+  };
+  return global.__reduxTimelinePointerTimingProbe ? performance.now() : null;
+}
+
+/** Publish one optional pointer phase sample for browser benchmark diagnostics. */
+export function pointerTimingEnd(started: number | null, stage: string): void {
+  if (started === null) {
+    return;
+  }
+  const global = globalThis as typeof globalThis & {
+    __reduxTimelinePointerTimingProbe?: (stage: string, durationMs: number) => void;
+  };
+  global.__reduxTimelinePointerTimingProbe?.(stage, performance.now() - started);
+}
+
 /** The note or event row under the pointer in an open overlap picker. */
 export interface TimelineOverlapHover {
   kind: "notes" | "events";
@@ -203,7 +222,10 @@ export class TimelineGestures {
 
   /** Capture the selection baseline a drag will restore on commit. */
   beginSelectionHistory(session: EditorSession): void {
+    session.beginSelectionNotificationBatch();
+    const started = pointerTimingStart();
     this.selectionHistoryBaseline = session.selectionState();
+    pointerTimingEnd(started, "historySnapshot");
     this.selectionHistorySession = session;
     this.selectionHistoryChart = session.chart;
   }
@@ -219,6 +241,7 @@ export class TimelineGestures {
     if (baseline && trackedSession === session && trackedChart === session.chart) {
       session.recordSelection(undefined, baseline);
     }
+    (trackedSession ?? session).endSelectionNotificationBatch();
   }
 
   /**
@@ -245,15 +268,18 @@ export class TimelineGestures {
     if (eventDrag?.kind === "rectangle" || eventDrag?.kind === "sweep") {
       this.eventInteraction.drag = null;
     }
+    const trackedSession = this.selectionHistorySession;
     this.selectionHistoryBaseline = null;
     this.selectionHistorySession = null;
     this.selectionHistoryChart = null;
+    trackedSession?.endSelectionNotificationBatch();
     this.suppressContextMenu = false;
     return true;
   }
 
   /** Drop pending placement, drags, and preview state. */
   cancelPlacement(): void {
+    const trackedSession = this.selectionHistorySession;
     this.pendingHold = null;
     this.eventInteraction.pending = null;
     this.drag = null;
@@ -263,6 +289,7 @@ export class TimelineGestures {
     this.selectionHistoryBaseline = null;
     this.selectionHistorySession = null;
     this.selectionHistoryChart = null;
+    trackedSession?.endSelectionNotificationBatch();
     this.suppressContextMenu = false;
   }
 

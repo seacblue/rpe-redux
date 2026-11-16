@@ -1,11 +1,16 @@
 /** Draws note timelines, their multi-line panels, and the moving playhead. */
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
-import { prepareCanvas } from "../../../canvas/canvas2d.ts";
+import {
+  fallbackCanvasPixelRatio,
+  measureCanvas,
+  prepareCanvas,
+} from "../../../canvas/canvas2d.ts";
 import { noteSkewAtHit, noteSkewCurve, noteSkewShear } from "../../../canvas/noteGeometry.ts";
 import {
   BACKGROUND_GRID,
   FOREGROUND_GRID,
   PLAYHEAD_GRID,
+  gridBatchKey,
   strokeVerticalGrid,
 } from "../drawing/gridDrawing.ts";
 import {
@@ -35,14 +40,16 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
-import { offscreenCueAlpha, offscreenCueDistance, offscreenCueSides } from "./noteOffscreenCue.ts";
+import { drawNoteTimelineCues } from "./noteOffscreenCueDrawing.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
   readonly range: TimelineRenderRange;
+  readonly mergedLineIndices: number[];
 }
 
 const multiLineNoteScratch = new WeakMap<object, MultiLineNoteScratch>();
+const targetLineSets = new WeakMap<readonly number[], ReadonlySet<number>>();
 
 /** Reuse multi-line label and range storage across timeline frames. */
 function multiLineNoteScratchFor(receiver: object): MultiLineNoteScratch {
@@ -53,6 +60,7 @@ function multiLineNoteScratchFor(receiver: object): MultiLineNoteScratch {
   const created: MultiLineNoteScratch = {
     lineLabelCuller: new TimelineLabelCuller(),
     range: { start: 0, end: 0, invalid: false },
+    mergedLineIndices: [],
   };
   multiLineNoteScratch.set(receiver, created);
   return created;
@@ -117,116 +125,6 @@ function cachedNoteVerticalProjection(
     projection.project(
       receiver.cache.tempoSeconds(receiver.viewport.tempo, beat, projection.factor),
     );
-}
-
-/** Paint a full-width cue when a scaled note crosses its panel's X viewport. */
-function drawNoteTimelineCues(
-  receiver: TimelineNoteDrawingReceiver,
-  context: CanvasRenderingContext2D,
-  palette: CanvasPalette,
-  width: number,
-  height: number,
-): void {
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-  const session = receiver.getSession();
-  const multiplePanels = session.multiLineActive && receiver.viewport.panelCount("notes") > 1;
-  const lineIndices = session.multiLineActive
-    ? session.targetLineIndices.length > 0
-      ? session.targetLineIndices
-      : [session.lineIndex]
-    : [session.lineIndex];
-  const panelWidth = receiver.viewport.panelWidth(width, "notes");
-  const panelStride = receiver.viewport.panelStride(width, "notes");
-  const panelOffset = receiver.viewport.multiLineViewportOffset(width, "notes");
-  const [firstPanel, lastPanel] = multiplePanels
-    ? receiver.viewport.visiblePanelRange(width, "notes")
-    : [0, 0];
-  const startPanel = multiplePanels ? firstPanel : 0;
-  const endPanel = multiplePanels ? Math.min(lastPanel, lineIndices.length - 1) : 0;
-  const cueHalfHeight = Math.min(28, Math.max(18, height / 24));
-  const cueColor = palette.foreground;
-  context.save();
-  context.fillStyle = cueColor;
-  context.shadowColor = cueColor;
-  context.shadowBlur = 12;
-  const cueWidth = Math.min(24, Math.max(12, width / 40));
-  for (let panel = startPanel; panel <= endPanel; panel++) {
-    const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
-    const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
-    const panelLines = multiplePanels ? [lineIndices[panel] ?? session.lineIndex] : lineIndices;
-    for (const lineIndex of panelLines) {
-      const [bottomBeat, topBeat] = receiver.viewport.noteBeatRangeForLine(
-        lineIndex,
-        height,
-        "notes",
-      );
-      const line = session.chart.judgeLineList?.[lineIndex];
-      receiver.cache.refreshNotes(lineIndex, line?.notes ?? []);
-      const noteIndex = receiver.cache.noteIndex(lineIndex);
-      if (!noteIndex) {
-        continue;
-      }
-      const projection = noteProjectionFor(receiver, lineIndex, height);
-      const panelProjection = receiver.viewport.notePanelProjectionForLine(width, lineIndex);
-      const cachedNoteData = receiver.cache.noteRenderDataSet(
-        noteIndex.notes,
-        receiver.viewport.tempo,
-        projection.factor,
-        receiver.viewport.gridCount,
-      );
-      for (let index = 0; index < noteIndex.notes.length; index++) {
-        const note = noteIndex.notes[index];
-        const prepared = cachedNoteData[index];
-        if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
-          continue;
-        }
-        if (Math.min(prepared.start, prepared.end) > topBeat) {
-          continue;
-        }
-        const horizontal = panelProjection.horizontal(note.positionX);
-        const sides = offscreenCueSides(
-          horizontal,
-          receiver.viewport.noteWidth(note),
-          panelLeft,
-          panelRight,
-        );
-        if (!sides.length) {
-          continue;
-        }
-        const vertical = projection.project(prepared.startSeconds);
-        const top = Math.max(0, Math.min(height - 1, vertical - cueHalfHeight));
-        const cueHeight = Math.min(height - top, cueHalfHeight * 2);
-        const noteWidth = receiver.viewport.noteWidth(note);
-        const viewportWidth = Math.max(1, panelRight - panelLeft);
-        for (const side of sides) {
-          const distance = offscreenCueDistance(horizontal, noteWidth, panelLeft, panelRight, side);
-          if (distance === null) {
-            continue;
-          }
-          const alpha = offscreenCueAlpha(distance, viewportWidth);
-          context.globalAlpha = alpha;
-          const edgeLeft = side === "left" ? panelLeft : panelRight - cueWidth;
-          const visibleLeft = Math.max(0, edgeLeft);
-          const visibleRight = Math.min(width, edgeLeft + cueWidth);
-          if (visibleRight > visibleLeft) {
-            const gradient = context.createLinearGradient(edgeLeft, 0, edgeLeft + cueWidth, 0);
-            if (side === "left") {
-              gradient.addColorStop(0, cueColor);
-              gradient.addColorStop(1, "transparent");
-            } else {
-              gradient.addColorStop(0, "transparent");
-              gradient.addColorStop(1, cueColor);
-            }
-            context.fillStyle = gradient;
-            context.fillRect(visibleLeft, top, visibleRight - visibleLeft, cueHeight);
-          }
-        }
-      }
-    }
-  }
-  context.restore();
 }
 
 /** Paint one note for both the normal and multi-line timelines. */
@@ -378,15 +276,24 @@ export function drawNote(
 /** Draw the note field for the current mode: grid, notes, ghosts, and multi-line chrome. */
 export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void {
   const session = this.getSession();
+  this.cache.setNoteChangeHints(session.lastNoteChangeHints);
   const palette = this.cache.palette() ?? readCanvasPalette();
-  const { context, width, height } = prepareCanvas(this.notesCanvas);
-  const cueCanvas = prepareCanvas(this.notesCue);
+  const measurement = measureCanvas(this.notesCanvas);
+  const width = measurement.width;
+  const height = measurement.height;
+  const noteBatchActive = this.noteBatch.begin(width, height, this.appearance.skin);
+  const solidBatchActive = this.noteSolidBatch.begin(width, height);
+  const { context } = prepareCanvas(
+    this.notesCanvas,
+    true,
+    measurement,
+    noteBatchActive || solidBatchActive ? undefined : fallbackCanvasPixelRatio(),
+  );
+  const cueCanvas = prepareCanvas(this.notesCue, true, measurement, fallbackCanvasPixelRatio());
   this.viewport.syncMultiLineChrome("notes", width);
   // The note backdrop is anchored to the live viewport, so repaint it with the
   // frame rather than keeping a translated bitmap.
-  const backdrop = prepareCanvas(this.notesBackdrop);
-  this.noteBatch.begin(width, height, this.appearance.skin);
-  this.noteSolidBatch.begin(width, height);
+  const backdrop = prepareCanvas(this.notesBackdrop, true, undefined, fallbackCanvasPixelRatio());
   const multiNotes = session.notesMode !== "single";
   const multiplePanels = multiNotes && this.viewport.panelCount("notes") > 1;
   if (session.multiLineActive && this.viewport.panelCount("notes") > 1) {
@@ -399,13 +306,19 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     }
   }
   if (multiplePanels) {
-    this.notesGridBatch.begin(width, height);
-    this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "notes", BACKGROUND_GRID);
-    this.notesGridBatch.finish();
+    if (
+      this.notesGridBatch.beginRetained(width, height, gridBatchKey(this, width, height, "notes"))
+    ) {
+      this.drawMultiLineGrid(backdrop.context, width, height, playBeat, "notes", BACKGROUND_GRID);
+      this.notesGridBatch.finish();
+    }
   } else {
-    this.notesGridBatch.begin(width, height);
-    this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
-    this.notesGridBatch.finish();
+    if (
+      this.notesGridBatch.beginRetained(width, height, gridBatchKey(this, width, height, "notes"))
+    ) {
+      this.grid(backdrop.context, width, height, playBeat, BACKGROUND_GRID, "notes");
+      this.notesGridBatch.finish();
+    }
   }
   drawNoteLanes(this, backdrop.context, width, height);
   if (multiplePanels) {
@@ -609,7 +522,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   this.noteSolidBatch.finish();
   // Paint the edge cue after note batches so it remains visible above every
   // note layer while staying clipped to the current note's vertical span.
-  drawNoteTimelineCues(this, cueCanvas.context, palette, width, height);
+  drawNoteTimelineCues(this, cueCanvas.context, palette, width, height, noteProjectionFor);
   if (!(session.multiLineActive && session.multiLineMode === "notes")) {
     this.drawEvents(playBeat);
   }
@@ -653,15 +566,67 @@ export function drawMultiLineNotes(
   const lineIndices = session.targetLineIndices;
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
   const multiplePanels = this.viewport.panelCount("notes") > 1;
+  // Merged notes share the active line's time axis. Compute this projection
+  // once instead of repeating the same tempo/viewport work for every line.
+  const mergedBeatRange =
+    session.notesMode === "multi_merged"
+      ? this.viewport.noteBeatRangeForLine(session.lineIndex, height, "notes")
+      : null;
+  const mergedLineCandidates = mergedBeatRange
+    ? this.cache.noteLinesInBeatRange(session.chart, mergedBeatRange[0], mergedBeatRange[1])
+    : null;
+  let mergedLineIndices = lineIndices;
+  let mergedCandidatesFiltered = false;
+  if (mergedLineCandidates && mergedLineCandidates.indices.length < lineIndices.length) {
+    let selected = targetLineSets.get(lineIndices);
+    if (!selected) {
+      selected = new Set(lineIndices);
+      targetLineSets.set(lineIndices, selected);
+    }
+    scratch.mergedLineIndices.length = 0;
+    for (const lineIndex of mergedLineCandidates.indices) {
+      if (selected.has(lineIndex)) {
+        scratch.mergedLineIndices.push(lineIndex);
+      }
+    }
+    mergedLineIndices = scratch.mergedLineIndices;
+    mergedCandidatesFiltered = true;
+  }
   const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, "notes");
   const startPanel = multiplePanels ? firstPanel : 0;
   const endPanel = multiplePanels
     ? Math.min(lastPanel, lineIndices.length - 1)
-    : lineIndices.length - 1;
+    : mergedLineIndices.length - 1;
+  const beatRangesByFactor = new Map<number, [number, number]>();
   context.save();
   for (let panel = startPanel; panel <= endPanel; panel++) {
-    const lineIndex = lineIndices[panel];
+    const lineIndex = multiplePanels ? lineIndices[panel] : mergedLineIndices[panel];
     if (lineIndex === undefined) {
+      continue;
+    }
+    const line = session.chart.judgeLineList?.[lineIndex];
+    let lineBeatRange = mergedBeatRange;
+    if (!lineBeatRange) {
+      const factor = this.viewport.noteFactorForLine(lineIndex);
+      const cachedRange = beatRangesByFactor.get(factor);
+      if (cachedRange) {
+        lineBeatRange = cachedRange;
+      } else {
+        lineBeatRange = this.viewport.noteBeatRangeForLine(lineIndex, height, "notes");
+        beatRangesByFactor.set(factor, lineBeatRange);
+      }
+    }
+    const [bottomBeat, topBeat] = lineBeatRange;
+    if (
+      mergedLineCandidates &&
+      !mergedCandidatesFiltered &&
+      mergedLineCandidates.marks[lineIndex] !== mergedLineCandidates.generation
+    ) {
+      continue;
+    }
+    this.cache.refreshNotes(lineIndex, line?.notes ?? []);
+    const noteIndex = this.cache.noteIndex(lineIndex);
+    if (!noteIndex || !this.cache.hasNotesInBeatRange(lineIndex, bottomBeat, topBeat)) {
       continue;
     }
     const lineOpacity = multiLineLineOpacity(
@@ -669,14 +634,7 @@ export function drawMultiLineNotes(
       session.lineIndex,
       this.appearance.multiLineNonCurrentOpacity,
     );
-    const line = session.chart.judgeLineList?.[lineIndex];
     const skewCurve = noteSkewCurve(line);
-    const [bottomBeat, topBeat] = this.viewport.noteBeatRangeForLine(lineIndex, height, "notes");
-    this.cache.refreshNotes(lineIndex, line?.notes ?? []);
-    const noteIndex = this.cache.noteIndex(lineIndex);
-    if (!noteIndex) {
-      continue;
-    }
     const overlapRanks = this.cache.noteOverlapRanks(
       noteIndex.notes,
       this.appearance.overlapThreshold,

@@ -8,11 +8,59 @@
  * playback smooth while preserving pitch.
  */
 import processorUrl from "./timeStretchProcessor.ts?worker&url";
-import { detectTransients } from "./timeStretchCore.ts";
+import transientWorkerUrl from "./timeStretchTransients.ts?worker&url";
 
 const PROCESSOR_NAME = "rpe-time-stretch";
 const STOP_FADE_SECONDS = 0.008;
 const RESTART_CROSSFADE_SECONDS = 0.008;
+
+interface TransientWorkerScope {
+  onmessage: ((event: MessageEvent<{ transients: Int32Array }>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+  postMessage(message: unknown, transfer: Transferable[]): void;
+  terminate(): void;
+}
+
+/** Detect optional stretch transients without blocking the browser main thread. */
+async function detectTransientsOffThread(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+): Promise<Int32Array> {
+  if (typeof Worker === "undefined") {
+    // Transient hints improve slow-rate articulation but are not required for correct audio.
+    return new Int32Array(0);
+  }
+  let worker: TransientWorkerScope;
+  try {
+    worker = new Worker(transientWorkerUrl, {
+      type: "module",
+    }) as unknown as TransientWorkerScope;
+  } catch {
+    return new Int32Array(0);
+  }
+  const copies = channels.map((channel) => channel.slice());
+  return await new Promise<Int32Array>((resolve) => {
+    let settled = false;
+    const finish = (result: Int32Array): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      worker.terminate();
+      resolve(result);
+    };
+    worker.onmessage = (event) => finish(event.data?.transients ?? new Int32Array(0));
+    worker.onerror = () => finish(new Int32Array(0));
+    try {
+      worker.postMessage(
+        { channels: copies, sampleRate },
+        copies.map((channel) => channel.buffer),
+      );
+    } catch {
+      finish(new Int32Array(0));
+    }
+  });
+}
 
 /** One worklet-backed stretcher for a decoded song. */
 export class TimeStretchStretcher {
@@ -35,6 +83,12 @@ export class TimeStretchStretcher {
     buffer: AudioBuffer,
     destination: AudioNode,
   ): Promise<TimeStretchStretcher> {
+    const transientsPromise = detectTransientsOffThread(
+      Array.from({ length: buffer.numberOfChannels }, (_, channel) =>
+        buffer.getChannelData(channel),
+      ),
+      buffer.sampleRate,
+    );
     await context.audioWorklet.addModule(processorUrl);
     const channelCount = buffer.numberOfChannels;
     const node = new AudioWorkletNode(context, PROCESSOR_NAME, {
@@ -50,7 +104,7 @@ export class TimeStretchStretcher {
     const channels = Array.from({ length: channelCount }, (_, channel) =>
       buffer.getChannelData(channel).slice(),
     );
-    const transients = detectTransients(channels, buffer.sampleRate);
+    const transients = await transientsPromise;
     try {
       node.port.postMessage(
         {

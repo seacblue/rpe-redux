@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- timeline cache owns the shared note/event derived data. */
 /**
  * Caches the timeline's derived note and event queries, overlap chains, palette,
  * and reusable canvas layers so drawing and hit testing avoid rebuilding chart
@@ -12,9 +13,11 @@ import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import type {
   Chart,
   JudgeLineEvent,
+  JudgeLine,
   JudgeLineNote,
 } from "../../../../../../core/global/chart/chart.ts";
 import type { TempoSource } from "../../../../../../core/global/chart/timing/events.ts";
+import type { NoteChangeHint } from "../../../../../../core/global/chart/runtime/noteChangeHints.ts";
 import {
   eventChains,
   overlappingEventIndexes,
@@ -42,6 +45,23 @@ import type { TimelinePalette } from "./canvas.ts";
 import { readCanvasPalette, selectionColor } from "../../../canvas/palette.ts";
 import { sizeCanvasBackingStore } from "../../../canvas/canvas2d.ts";
 import { notePaintLayer } from "../../../canvas/noteSpriteGroups.ts";
+
+interface TimelineCacheTimingSample {
+  readonly lineIndex: number;
+  readonly noteCount: number;
+  readonly mode: "build" | "same" | "visual" | "incremental" | "rebuilt";
+  readonly durationMs: number;
+}
+
+/** Report optional browser-only note-index timings without coupling the cache to the harness. */
+function reportTimelineCacheTiming(sample: TimelineCacheTimingSample): void {
+  const probe = (
+    globalThis as typeof globalThis & {
+      __reduxTimelineCacheTimingProbe?: (value: TimelineCacheTimingSample) => void;
+    }
+  ).__reduxTimelineCacheTimingProbe;
+  probe?.(sample);
+}
 
 export interface TimelineEventDisplay {
   readonly length: number;
@@ -89,6 +109,32 @@ interface CachedNoteQuery {
   readonly paintEntries: TimelineNoteEntry[];
 }
 
+interface NoteLineRangeEntry {
+  readonly lineIndex: number;
+  readonly start: number;
+  readonly end: number;
+}
+
+interface NoteLineRangeIndex {
+  readonly chart: Chart;
+  readonly lines: readonly JudgeLine[];
+  readonly sources: readonly (readonly JudgeLineNote[])[];
+  readonly entries: readonly (NoteLineRangeEntry | undefined)[];
+  readonly index: IntervalIndex<NoteLineRangeEntry>;
+}
+
+interface NoteLineRangeQuery {
+  readonly marks: Uint32Array;
+  readonly generation: number;
+  /** Line indices with note bounds intersecting the current merged window. */
+  readonly indices: readonly number[];
+}
+
+interface NoteBeatBounds {
+  readonly start: number;
+  readonly end: number;
+}
+
 interface CanvasLayerState {
   readonly key: string;
   readonly width: number;
@@ -108,13 +154,27 @@ export class TimelineCache {
   private readonly noteQueries = new Map<number, CachedNoteQuery>();
   /** Reusable interval-entry buffers keep playback queries out of the GC path. */
   private readonly noteQueryBuffers = new Map<number, IntervalEntry<TimelineNote>[]>();
+  /** Reusable interval-entry buffers for live rectangle selection queries. */
+  private readonly noteSelectionQueryBuffers = new Map<number, IntervalEntry<TimelineNote>[]>();
   private validatedNoteArrays = new WeakSet<JudgeLineNote[]>();
   private noteOverlaps = new WeakMap<
     readonly TimelineNote[],
     { threshold: number; ranks: NoteOverlapRanks }
   >();
+  /** Aliases visual-only copy-on-write arrays to their unchanged timing data. */
+  private noteOverlapAliases = new WeakMap<readonly TimelineNote[], readonly TimelineNote[]>();
+  /** Conservative beat bounds let merged multi-line painting skip off-screen lines. */
+  private noteBeatBoundsCache = new WeakMap<readonly TimelineNote[], NoteBeatBounds>();
+  private noteBeatBoundsAliases = new WeakMap<readonly TimelineNote[], readonly TimelineNote[]>();
   /** Whether each immutable note array can use the linear paint partition. */
   private notePaintOrderFastPaths = new WeakMap<readonly TimelineNote[], boolean>();
+  private notePaintOrderAliases = new WeakMap<readonly TimelineNote[], readonly TimelineNote[]>();
+  /** Cross-line beat bounds used by merged multi-line note painting. */
+  private noteLineRangeIndex: NoteLineRangeIndex | undefined;
+  private noteLineRangeBuffer: IntervalEntry<NoteLineRangeEntry>[] = [];
+  private noteLineRangeIndices: number[] = [];
+  private noteLineRangeMarks = new Uint32Array();
+  private noteLineRangeGeneration = 0;
 
   private eventDisplays = new WeakMap<readonly JudgeLineEvent[], TimelineEventDisplay>();
   private eventQueries = new WeakMap<readonly JudgeLineEvent[], CachedEventQuery>();
@@ -125,13 +185,18 @@ export class TimelineCache {
   >();
   private canvasLayers = new WeakMap<
     HTMLCanvasElement,
-    Map<string, { canvas: HTMLCanvasElement; state?: CanvasLayerState }>
+    Map<
+      string,
+      { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D; state?: CanvasLayerState }
+    >
   >();
   private tempoSecondsCache = new WeakMap<object, Map<number, Map<number, number>>>();
   private noteRenderDataCache = new WeakMap<
     object,
     WeakMap<readonly TimelineNote[], Map<string, readonly TimelineNoteRenderData[]>>
   >();
+  private noteRenderDataAliases = new WeakMap<readonly TimelineNote[], readonly TimelineNote[]>();
+  private noteChangeHints: readonly NoteChangeHint[] = [];
   private eventData?: {
     chart: Chart;
     key: string;
@@ -168,7 +233,12 @@ export class TimelineCache {
     }
     let cached = layers.get(slot);
     if (!cached) {
-      cached = { canvas: document.createElement("canvas") };
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return undefined;
+      }
+      cached = { canvas, context };
       layers.set(slot, cached);
     }
     const canvas = cached.canvas;
@@ -184,10 +254,7 @@ export class TimelineCache {
     if (repaint) {
       cached.state = { key, width, height };
     }
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return undefined;
-    }
+    const context = cached.context;
     context.setTransform(size.ratio, 0, 0, size.ratio, 0, 0);
     if (repaint) {
       context.clearRect(0, 0, width, height);
@@ -205,7 +272,37 @@ export class TimelineCache {
    * Validation is memoized here because drawing and hit testing both refresh
    * the same line on every frame.
    */
-  refreshNotes(lineIndex: number, source: JudgeLineNote[]): NoteIndex | undefined {
+  /** Set the note deltas for the current chart publication before drawing or hit testing. */
+  setNoteChangeHints(hints: readonly NoteChangeHint[]): void {
+    this.noteChangeHints = hints;
+  }
+
+  refreshNotes(
+    lineIndex: number,
+    source: JudgeLineNote[],
+    hint = this.noteChangeHints.find((entry) => entry.lineIndex === lineIndex),
+  ): NoteIndex | undefined {
+    const timingProbe = (
+      globalThis as typeof globalThis & {
+        __reduxTimelineCacheTimingProbe?: unknown;
+      }
+    ).__reduxTimelineCacheTimingProbe;
+    const started = timingProbe ? performance.now() : 0;
+    const previous = this.noteIndexes.get(lineIndex);
+    if (previous?.notes === source && this.validatedNoteArrays.has(source)) {
+      // Playback revisits the same immutable note array every frame. The
+      // interval index already owns this identity, so avoid repeating the
+      // validation and map lookup on the hot paint path.
+      if (timingProbe) {
+        reportTimelineCacheTiming({
+          lineIndex,
+          noteCount: source.length,
+          mode: "same",
+          durationMs: performance.now() - started,
+        });
+      }
+      return previous;
+    }
     let notes: TimelineNote[];
     if (this.validatedNoteArrays.has(source)) {
       notes = source as TimelineNote[];
@@ -213,17 +310,174 @@ export class TimelineCache {
       notes = checkedNotes(source);
       this.validatedNoteArrays.add(source);
     }
-    const previous = this.noteIndexes.get(lineIndex);
+    if (
+      previous &&
+      previous.notes !== notes &&
+      hint?.kind === "visual" &&
+      previous.notes.length === notes.length
+    ) {
+      this.noteRenderDataAliases.set(notes, previous.notes);
+      this.noteBeatBoundsAliases.set(notes, previous.notes);
+      this.notePaintOrderAliases.set(notes, previous.notes);
+      if (!hint.overlapChanged) {
+        this.noteOverlapAliases.set(notes, previous.notes);
+      }
+      previous.index.replaceItemsPreservingRanges(notes);
+      previous.notes = notes;
+      this.noteQueries.delete(lineIndex);
+      if (timingProbe) {
+        reportTimelineCacheTiming({
+          lineIndex,
+          noteCount: notes.length,
+          mode: "visual",
+          durationMs: performance.now() - started,
+        });
+      }
+      return previous;
+    }
+    const previousRebuilds = previous?.index.rebuildCount ?? 0;
+    const previousIncrementalUpdates = previous?.index.incrementalUpdateCount ?? 0;
     refreshNoteIndex(this.noteIndexes, lineIndex, notes);
     if (previous?.notes !== notes) {
       this.noteQueries.delete(lineIndex);
     }
-    return this.noteIndexes.get(lineIndex);
+    const current = this.noteIndexes.get(lineIndex);
+    if (timingProbe) {
+      const mode =
+        previous === undefined
+          ? "build"
+          : current?.index.rebuildCount !== previousRebuilds
+            ? "rebuilt"
+            : current?.index.incrementalUpdateCount !== previousIncrementalUpdates
+              ? "incremental"
+              : "same";
+      reportTimelineCacheTiming({
+        lineIndex,
+        noteCount: notes.length,
+        mode,
+        durationMs: performance.now() - started,
+      });
+    }
+    return current;
   }
 
   /** The reader: whatever `refreshNotes` built last, untouched. */
   noteIndex(lineIndex: number): NoteIndex | undefined {
     return this.noteIndexes.get(lineIndex);
+  }
+
+  /** Return conservative beat bounds for one immutable note array. */
+  noteBeatBounds(notes: readonly TimelineNote[]): NoteBeatBounds {
+    const cached = this.noteBeatBoundsCache.get(notes);
+    if (cached) {
+      return cached;
+    }
+    const alias = this.noteBeatBoundsAliases.get(notes);
+    const aliased = alias ? this.noteBeatBoundsCache.get(alias) : undefined;
+    if (aliased) {
+      this.noteBeatBoundsCache.set(notes, aliased);
+      return aliased;
+    }
+    let start = Number.POSITIVE_INFINITY;
+    let end = Number.NEGATIVE_INFINITY;
+    for (const note of notes) {
+      const noteStart = beatValue(note.startTime);
+      const noteEnd = beatValue(note.endTime);
+      if (!Number.isFinite(noteStart) || !Number.isFinite(noteEnd)) {
+        const unbounded = { start: Number.NEGATIVE_INFINITY, end: Number.POSITIVE_INFINITY };
+        this.noteBeatBoundsCache.set(notes, unbounded);
+        return unbounded;
+      }
+      start = Math.min(start, noteStart, noteEnd);
+      end = Math.max(end, noteStart, noteEnd);
+    }
+    const bounds = notes.length ? { start, end } : { start: 0, end: 0 };
+    this.noteBeatBoundsCache.set(notes, bounds);
+    return bounds;
+  }
+
+  /** Report whether one line can contribute a note to the visible beat range. */
+  hasNotesInBeatRange(lineIndex: number, bottom: number, top: number): boolean {
+    const notes = this.noteIndexes.get(lineIndex)?.notes;
+    if (!notes?.length) {
+      return false;
+    }
+    const bounds = this.noteBeatBounds(notes);
+    return bounds.end >= bottom && bounds.start <= top;
+  }
+
+  /** Mark chart lines whose note bounds overlap one merged timeline window. */
+  noteLinesInBeatRange(chart: Chart, bottom: number, top: number): NoteLineRangeQuery {
+    const sourceLines = chart.judgeLineList ?? [];
+    const cached = this.noteLineRangeIndex;
+    if (cached?.chart !== chart || cached.lines !== sourceLines) {
+      const sources = new Array<readonly JudgeLineNote[]>(sourceLines.length);
+      const entries = new Array<NoteLineRangeEntry | undefined>(sourceLines.length);
+      let indexChanged = !cached || cached.sources.length !== sourceLines.length;
+      for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex += 1) {
+        const source = sourceLines[lineIndex]?.notes ?? [];
+        sources[lineIndex] = source;
+        if (cached?.sources[lineIndex] === source) {
+          entries[lineIndex] = cached.entries[lineIndex];
+          continue;
+        }
+        indexChanged = true;
+        const noteIndex = this.refreshNotes(lineIndex, source);
+        const notes = noteIndex?.notes;
+        if (notes?.length) {
+          const bounds = this.noteBeatBounds(notes);
+          entries[lineIndex] = { lineIndex, start: bounds.start, end: bounds.end };
+        }
+      }
+      const rangeIndex =
+        cached && !indexChanged
+          ? cached.index
+          : new IntervalIndex(
+              entries.filter((entry): entry is NoteLineRangeEntry => entry !== undefined),
+              (entry) => entry.start,
+              (entry) => entry.end,
+            );
+      this.noteLineRangeIndex = {
+        chart,
+        lines: sourceLines,
+        sources,
+        entries,
+        index: rangeIndex,
+      };
+      this.noteLineRangeMarks = new Uint32Array(sourceLines.length);
+      this.noteLineRangeGeneration = 0;
+    }
+    let generation = this.noteLineRangeGeneration + 1;
+    if (generation > 0xffffffff) {
+      this.noteLineRangeMarks.fill(0);
+      generation = 1;
+    }
+    this.noteLineRangeGeneration = generation;
+    const currentGeneration = this.noteLineRangeGeneration;
+    const entries = this.noteLineRangeIndex!.index.queryInto(bottom, top, this.noteLineRangeBuffer);
+    const indices = this.noteLineRangeIndices;
+    indices.length = 0;
+    for (const entry of entries) {
+      this.noteLineRangeMarks[entry.item.lineIndex] = currentGeneration;
+      indices.push(entry.item.lineIndex);
+    }
+    indices.sort((left, right) => left - right);
+    return { marks: this.noteLineRangeMarks, generation: currentGeneration, indices };
+  }
+
+  /** Query one line's notes into a stable per-line buffer for marquee selection. */
+  noteEntriesInRange(
+    lineIndex: number,
+    bottom: number,
+    top: number,
+  ): readonly IntervalEntry<TimelineNote>[] {
+    const noteIndex = this.noteIndexes.get(lineIndex);
+    if (!noteIndex) {
+      return [];
+    }
+    const entries = this.noteSelectionQueryBuffers.get(lineIndex) ?? [];
+    this.noteSelectionQueryBuffers.set(lineIndex, entries);
+    return noteIndex.index.queryInto(bottom, top, entries);
   }
 
   /**
@@ -238,6 +492,12 @@ export class TimelineCache {
     if (cached?.threshold === threshold) {
       return cached.ranks;
     }
+    const alias = this.noteOverlapAliases.get(notes);
+    const aliased = alias ? this.noteOverlaps.get(alias) : undefined;
+    if (aliased?.threshold === threshold) {
+      this.noteOverlaps.set(notes, aliased);
+      return aliased.ranks;
+    }
     const ranks = overlappingNoteRanks(notes, threshold);
     this.noteOverlaps.set(notes, { threshold, ranks });
     return ranks;
@@ -248,6 +508,12 @@ export class TimelineCache {
     const cached = this.notePaintOrderFastPaths.get(notes);
     if (cached !== undefined) {
       return cached;
+    }
+    const alias = this.notePaintOrderAliases.get(notes);
+    const aliased = alias ? this.notePaintOrderFastPaths.get(alias) : undefined;
+    if (aliased !== undefined) {
+      this.notePaintOrderFastPaths.set(notes, aliased);
+      return aliased;
     }
     let previousStart = Number.NEGATIVE_INFINITY;
     let ordered = true;
@@ -367,6 +633,19 @@ export class TimelineCache {
     const normalizedFactor = Number.isFinite(factor) && Math.abs(factor) >= 0.001 ? factor : 1;
     const key = `${normalizedFactor}:${Math.max(1, Math.round(gridCount))}`;
     let values = byConfiguration.get(key);
+    if (!values) {
+      const alias = this.noteRenderDataAliases.get(notes);
+      const aliased = alias
+        ? this.noteRenderDataCache
+            .get(tempo as object)
+            ?.get(alias)
+            ?.get(key)
+        : undefined;
+      if (aliased?.length === notes.length) {
+        values = aliased;
+        byConfiguration.set(key, values);
+      }
+    }
     if (!values || values.length !== notes.length) {
       const next = new Array<TimelineNoteRenderData>(notes.length);
       for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
@@ -573,6 +852,10 @@ export class TimelineCache {
     this.eventQueryBuffers = new WeakMap();
     this.tempoSecondsCache = new WeakMap();
     this.noteRenderDataCache = new WeakMap();
+    this.noteRenderDataAliases = new WeakMap();
+    this.noteOverlapAliases = new WeakMap();
+    this.noteBeatBoundsAliases = new WeakMap();
+    this.notePaintOrderAliases = new WeakMap();
     this.canvasLayers = new WeakMap();
   }
   /** Drop every cached index, query, and canvas layer. */
@@ -582,6 +865,14 @@ export class TimelineCache {
     this.noteQueryBuffers.clear();
     this.validatedNoteArrays = new WeakSet();
     this.noteOverlaps = new WeakMap();
+    this.noteChangeHints = [];
+    this.noteBeatBoundsAliases = new WeakMap();
+    this.notePaintOrderAliases = new WeakMap();
+    this.noteBeatBoundsCache = new WeakMap();
+    this.noteLineRangeIndex = undefined;
+    this.noteLineRangeBuffer = [];
+    this.noteLineRangeMarks = new Uint32Array();
+    this.noteLineRangeGeneration = 0;
     this.invalidateEvents();
   }
 }

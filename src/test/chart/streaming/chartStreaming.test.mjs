@@ -187,6 +187,24 @@ test("paged document materializes to the same content fingerprint", async () => 
   assert.equal(await document.fingerprint(), chartFingerprint(chart));
 });
 
+test("materialization reports line and object progress", async () => {
+  const chart = trickyChart();
+  const document = documentFromScan(scanChartJson(serializeChart(chart)));
+  const progress = [];
+  await document.materializeAll({ onProgress: (value) => progress.push(value) });
+  const last = progress.at(-1);
+  assert.ok(last);
+  assert.equal(last.completedLines, last.totalLines);
+  assert.equal(last.completedNotes, last.totalNotes);
+  assert.equal(last.completedEvents, last.totalEvents);
+  assert.equal(last.totalLines, chart.judgeLineList.length);
+  assert.equal(
+    last.totalNotes,
+    chart.judgeLineList.reduce((total, line) => total + line.notes.length, 0),
+  );
+  assert.ok(progress.length > 1);
+});
+
 test("editor-only ids do not change the content fingerprint", () => {
   const chart = trickyChart();
   const clone = structuredClone(chart);
@@ -334,6 +352,41 @@ test("archive chart entries can use the paged document factory", async () => {
   assert.equal(factoryCalls, 1);
   assert.equal(opened.candidates.length, 1);
   assert.equal(opened.candidates[0].chartDocument?.chart, opened.candidates[0].chart);
+});
+
+test("archive chart streaming ignores the extra.json sidecar", async () => {
+  const chartBytes = new TextEncoder().encode(serializeChart(trickyChart()));
+  const assets = new Map([
+    ["chart.json", chartBytes],
+    ["extra.json", new TextEncoder().encode('{"effects":[]}')],
+  ]);
+  assets.names = () => ["chart.json", "extra.json"];
+  const openedNames = [];
+  assets.openChartDocument = async (name) => {
+    openedNames.push(name);
+    return {
+      chartDocument: ChartDocument.fromChart(
+        parseChart(new TextDecoder().decode(assets.get(name))),
+      ),
+      dispose() {},
+    };
+  };
+
+  const opened = await readPez(
+    new Uint8Array(),
+    undefined,
+    undefined,
+    async () => assets,
+    async () => {
+      throw new Error("the AssetMap opener should be used");
+    },
+  );
+
+  assert.deepEqual(openedNames, ["chart.json"]);
+  assert.deepEqual(
+    opened.candidates.map((candidate) => candidate.name),
+    ["chart.json"],
+  );
 });
 
 test("archive stream fallback parses only entries the paged factory rejects", async () => {

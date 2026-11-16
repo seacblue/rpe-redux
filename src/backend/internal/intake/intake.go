@@ -6,6 +6,7 @@ package intake
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -35,8 +36,14 @@ const (
 )
 
 const (
-	// maxChartBytes bounds a chart or chart-bearing archive entry.
-	maxChartBytes = 64 << 20
+	// maxChartBytes bounds a chart or chart-bearing archive entry. The chart
+	// opener accepts larger RPE JSON files, so intake must not reject a valid
+	// large chart before the owning importer gets a chance to stream it.
+	maxChartBytes = 256 << 20
+	// maxChartHeaderBytes bounds the bytes inflated during classification. A
+	// large JSON chart is identified from its root header, not by materializing
+	// the complete note list in the intake service.
+	maxChartHeaderBytes = 1 << 20
 	// maxTextBytes bounds PEC text read for detection.
 	maxTextBytes = 8 << 20
 	// maxManifestBytes matches the Extension discovery limit.
@@ -134,11 +141,11 @@ func classifyFile(file string) Item {
 	case ".zip", ".pez":
 		return classifyArchive(file)
 	case ".json":
-		data, err := readBoundedFile(file, maxChartBytes)
+		data, err := readBoundedJSONHeader(file)
 		if err != nil {
 			return unknown(file, "chart JSON could not be read")
 		}
-		format, name, ok := detectJSONChart(data)
+		format, name, ok := detectJSONChartHeader(data)
 		if !ok {
 			// A Re:PhiEdit PEC export can use a .json extension.
 			format, name, ok = detectPEC(data)
@@ -305,14 +312,14 @@ func classifyArchive(file string) Item {
 		if entry.UncompressedSize64 > maxChartBytes {
 			continue
 		}
-		data, err := readZipEntry(entry, maxChartBytes)
+		data, err := readChartEntryHeader(entry)
 		if err != nil {
 			continue
 		}
 		var ok bool
 		switch strings.ToLower(path.Ext(candidate)) {
 		case ".json":
-			format, name, ok = detectJSONChart(data)
+			format, name, ok = detectJSONChartHeader(data)
 			if !ok {
 				// A Re:PhiEdit PEC export can use a .json extension.
 				format, name, ok = detectPEC(data)
@@ -702,6 +709,70 @@ func detectJSONChart(data []byte) (string, string, bool) {
 	return "", "", false
 }
 
+// detectJSONChartHeader recognizes the chart roots needed by intake without
+// decoding a potentially enormous judgeLineList. RPE files place META and
+// BPMList before the note-heavy payload; once both are complete, classification
+// can return without reading the remainder of the entry.
+func detectJSONChartHeader(data []byte) (string, string, bool) {
+	if format, name, ok := detectJSONChart(data); ok {
+		return format, name, true
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	start, err := decoder.Token()
+	if err != nil {
+		return "", "", false
+	}
+	delimiter, ok := start.(json.Delim)
+	if !ok || delimiter != '{' {
+		return "", "", false
+	}
+
+	hasMeta := false
+	hasBPM := false
+	name := ""
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return "", "", false
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return "", "", false
+		}
+		switch keyText {
+		case "META":
+			var raw json.RawMessage
+			if err := decoder.Decode(&raw); err != nil || !isJSONObject(raw) {
+				return "", "", false
+			}
+			hasMeta = true
+			var header map[string]any
+			if json.Unmarshal(raw, &header) == nil {
+				name, _ = header["name"].(string)
+			}
+		case "BPMList":
+			var raw json.RawMessage
+			if err := decoder.Decode(&raw); err != nil || !isJSONArray(raw) {
+				return "", "", false
+			}
+			hasBPM = true
+		default:
+			// Keep the decoder aligned for the small root fields that precede
+			// META/BPMList. If a future chart puts a huge value first, the
+			// bounded header read fails safely instead of inflating the chart.
+			var ignored json.RawMessage
+			if err := decoder.Decode(&ignored); err != nil {
+				return "", "", false
+			}
+		}
+		if hasMeta && hasBPM {
+			return FormatRPE, strings.TrimSpace(name), true
+		}
+	}
+	return "", "", false
+}
+
 // detectPEC reports whether the text starts with a numeric time and carries a
 // PhiEdit command line.
 func detectPEC(data []byte) (string, string, bool) {
@@ -786,6 +857,24 @@ func readBoundedFile(file string, limit int64) ([]byte, error) {
 	return data, nil
 }
 
+// readBoundedJSONHeader reads only the prefix needed to classify a JSON chart.
+func readBoundedJSONHeader(file string) ([]byte, error) {
+	info, err := os.Stat(file)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxChartBytes {
+		return nil, errors.New("chart JSON is not a regular file or exceeds the limit")
+	}
+	handle, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer handle.Close()
+	data, err := io.ReadAll(io.LimitReader(handle, maxChartHeaderBytes))
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // readZipEntry reads one bounded archive entry.
 func readZipEntry(file *zip.File, limit int64) ([]byte, error) {
 	if file.UncompressedSize64 > uint64(limit) {
@@ -804,6 +893,16 @@ func readZipEntry(file *zip.File, limit int64) ([]byte, error) {
 		return nil, errors.New("archive entry exceeds the limit")
 	}
 	return data, nil
+}
+
+// readChartEntryHeader inflates only the prefix used by archive classification.
+func readChartEntryHeader(file *zip.File) ([]byte, error) {
+	reader, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(io.LimitReader(reader, maxChartHeaderBytes))
 }
 
 // normalizeArchiveName converts ZIP separators, removes one leading ./ and

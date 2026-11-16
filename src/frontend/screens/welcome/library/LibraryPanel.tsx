@@ -77,9 +77,11 @@ function LibrarySkeleton({ view }: { view: LibraryView }) {
 /** Library section: search, sort, view switch, cards, and empty states. */
 export function LibraryPanel({
   selectedKey,
+  openingProjectId,
   onSelect,
 }: {
   selectedKey: string | null;
+  openingProjectId: string | null;
   onSelect(key: string, preview: boolean): void;
 }) {
   const { t } = useTranslation();
@@ -383,6 +385,7 @@ export function LibraryPanel({
           groups={effectiveSelectedGroups}
           loaded={cards.phase === "ready" || cards.phase === "degraded"}
           selectedKey={selectedKey}
+          openingProjectId={openingProjectId}
           view={view}
           removingProjectId={cards.removingProjectId}
           onSelect={selectEntry}

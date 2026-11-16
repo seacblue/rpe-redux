@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- note and event marquee selection share one fast path. */
 /**
  * Timeline selection gestures: rectangle selection, event shifting and the
  * commit that follows a note drag.
@@ -25,6 +26,7 @@ import { eventKey, eventList, eventListAt } from "../events/eventTracks.ts";
 import { selectedEvents, transformEvents } from "../events/eventEdits.ts";
 import { checkedNotes, hasNonPositiveRange, isTimelineNoteRenderable } from "./model.ts";
 import type { NoteIndex, TimelineEventRect, TimelineNote } from "./types.ts";
+import type { IntervalEntry } from "../../utils/intervalIndex.ts";
 
 export interface SelectionRectangle {
   left: number;
@@ -37,6 +39,8 @@ export interface SelectionRectangle {
   baseNotes?: ReadonlyMap<number, ReadonlySet<number>>;
   /** Events selected before a Shift/Ctrl event marquee started. */
   baseEvents?: ReadonlyMap<number, ReadonlySet<string>>;
+  /** Visible multi-line panels; omitted callers retain the full target set. */
+  lineIndices?: readonly number[];
 }
 
 /** One screen-space segment used by the timeline's freehand selection gesture. */
@@ -219,6 +223,32 @@ function sameNoteSelection(
   return true;
 }
 
+/** Compare two note-index sets without allocating a sorted selection snapshot. */
+function sameIndexSet(left: ReadonlySet<number>, right: ReadonlySet<number>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Compare event identity keys without allocating a sorted selection snapshot. */
+function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Restore the event selection a marquee began with; returns whether it changed. */
 function restoreEventBaseline(
   session: EditorSession,
@@ -333,12 +363,91 @@ export function selectNotesInRectangle(
   rectangle: SelectionRectangle,
   indexForLine: (lineIndex: number) => NoteIndex | undefined,
   horizontal: (note: TimelineNote, lineIndex: number) => number,
+  queryForLine?: (
+    lineIndex: number,
+    bottom: number,
+    top: number,
+  ) => readonly IntervalEntry<TimelineNote>[],
 ): SelectionGestureResult {
+  // The common replace marquee used to clear and rebuild the live selection on
+  // every pointer sample. That made an unchanged rectangle look like a chart
+  // change to every session subscriber. Compute the candidate set first and
+  // publish only when its membership actually differs.
+  if (!rectangle.append && !rectangle.remove && !rectangle.baseNotes) {
+    const multi = session.multiLineActive && session.multiLineMode === "notes";
+    const lines =
+      multi && rectangle.lineIndices
+        ? rectangle.lineIndices
+        : multi
+          ? session.targetLineIndices
+          : [session.lineIndex];
+    const next = new Map<number, Set<number>>();
+    let matched = false;
+    for (const lineIndex of lines) {
+      const lineIndexData = indexForLine(lineIndex);
+      const selected = new Set<number>();
+      if (lineIndexData) {
+        const entries = queryForLine
+          ? queryForLine(lineIndex, rectangle.bottom, rectangle.top)
+          : lineIndexData.index.query(rectangle.bottom, rectangle.top);
+        for (const entry of entries) {
+          if (!isTimelineNoteRenderable(entry.item)) {
+            continue;
+          }
+          const x = horizontal(entry.item, lineIndex);
+          if (x >= rectangle.left && x <= rectangle.right) {
+            selected.add(entry.index);
+            matched = true;
+          }
+        }
+      }
+      next.set(lineIndex, selected);
+    }
+    let changed = false;
+    if (multi) {
+      if (session.multiLineSelection.size !== next.size) {
+        changed = true;
+      } else {
+        for (const [lineIndex, selected] of next) {
+          if (!sameIndexSet(session.multiLineSelection.get(lineIndex) ?? new Set(), selected)) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      if (changed) {
+        session.multiLineSelection.clear();
+        for (const [lineIndex, selected] of next) {
+          if (selected.size) {
+            session.multiLineSelection.set(lineIndex, selected);
+          }
+        }
+        session.selection = new Set(next.get(session.lineIndex) ?? []);
+        session.notifySelection();
+      }
+    } else {
+      const selected = next.get(session.lineIndex) ?? new Set<number>();
+      changed = !sameIndexSet(session.selection, selected);
+      if (changed) {
+        session.selection.clear();
+        for (const index of selected) {
+          session.selection.add(index);
+        }
+        session.notifySelection();
+      }
+    }
+    return { changed, matched };
+  }
   let dirty = restoreNoteBaseline(session, rectangle.baseNotes, rectangle.append ?? false);
   let matched = false;
   dirty = pruneNoteBaseline(session) || dirty;
   const multi = session.multiLineActive && session.multiLineMode === "notes";
-  const lines = multi ? session.targetLineIndices : [session.lineIndex];
+  const lines =
+    multi && rectangle.lineIndices
+      ? rectangle.lineIndices
+      : multi
+        ? session.targetLineIndices
+        : [session.lineIndex];
   for (const lineIndex of lines) {
     const lineIndexData = indexForLine(lineIndex);
     const index = lineIndexData?.index;
@@ -355,9 +464,13 @@ export function selectNotesInRectangle(
         dirty = true;
       }
     }
-    for (const entry of index
-      .query(rectangle.bottom, rectangle.top)
-      .filter((candidate) => isTimelineNoteRenderable(candidate.item))) {
+    const entries = queryForLine
+      ? queryForLine(lineIndex, rectangle.bottom, rectangle.top)
+      : index.query(rectangle.bottom, rectangle.top);
+    for (const entry of entries) {
+      if (!isTimelineNoteRenderable(entry.item)) {
+        continue;
+      }
       const x = horizontal(entry.item, lineIndex);
       if (x >= rectangle.left && x <= rectangle.right) {
         matched = true;
@@ -380,7 +493,7 @@ export function selectNotesInRectangle(
     session.selection = new Set(session.multiLineSelection?.get(session.lineIndex) ?? []);
   }
   if (dirty) {
-    session.notify();
+    session.notifySelection();
   }
   return { changed: dirty, matched };
 }
@@ -445,7 +558,7 @@ export function selectNotesAlongSegment(
     session.selection = new Set(session.multiLineSelection.get(session.lineIndex) ?? []);
   }
   if (dirty) {
-    session.notify();
+    session.notifySelection();
   }
   return { changed: dirty, matched };
 }
@@ -515,7 +628,7 @@ export function selectEventsAlongSegment(
     session.eventSelection = new Set(session.multiEventSelection.get(session.lineIndex) ?? []);
   }
   if (dirty) {
-    session.notify();
+    session.notifySelection();
   }
   return { changed: dirty, matched };
 }
@@ -541,6 +654,93 @@ export function selectEventsInRectangle(
   geometry: EventSelectionGeometry,
 ): SelectionGestureResult {
   const { left, right, bottom, top, remove } = rectangle;
+  // Keep a stationary replace marquee from publishing a new session state on
+  // every pointer sample. Event rectangles can be numerous in shader tracks,
+  // so the allocation and notification avoidance matters even when the paint
+  // itself is retained.
+  if (!rectangle.append && !remove && !rectangle.baseEvents) {
+    const multi = session.multiLineActive && session.multiLineMode === "events";
+    let matched = false;
+    if (multi) {
+      const next = new Map<number, Set<string>>();
+      for (const hit of geometry.rectangles) {
+        if (hit.x + geometry.scroll >= right || hit.x + hit.width + geometry.scroll <= left) {
+          continue;
+        }
+        const lineIndex = hit.lineIndex ?? session.lineIndex;
+        if (!session.targetLineIndices.includes(lineIndex)) {
+          continue;
+        }
+        const item = eventListAt(session, lineIndex, hit.type)[hit.index];
+        if (!item) {
+          continue;
+        }
+        const invalidRange = hasNonPositiveRange(item.startTime, item.endTime);
+        if (
+          invalidRange
+            ? beatValue(item.startTime) > top || beatValue(item.startTime) < bottom
+            : beatValue(item.startTime) > top || beatValue(item.endTime) < bottom
+        ) {
+          continue;
+        }
+        matched = true;
+        const selected = next.get(lineIndex) ?? new Set<string>();
+        selected.add(eventKey(hit.type, hit.index));
+        next.set(lineIndex, selected);
+      }
+      let changed = next.size !== session.multiEventSelection.size;
+      if (!changed) {
+        for (const [lineIndex, selected] of next) {
+          if (!sameStringSet(session.multiEventSelection.get(lineIndex) ?? new Set(), selected)) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      if (changed) {
+        session.multiEventSelection.clear();
+        for (const [lineIndex, selected] of next) {
+          session.multiEventSelection.set(lineIndex, selected);
+        }
+        session.eventSelection = new Set(next.get(session.lineIndex) ?? []);
+        session.notifySelection();
+      }
+      return { changed, matched };
+    }
+    const next = new Set<string>();
+    geometry.eventTypes.forEach((type, channel) => {
+      const bounds = geometry.columnBounds(channel);
+      if (bounds.x >= right || bounds.x + bounds.width <= left) {
+        return;
+      }
+      const items = eventList(session, type);
+      const lanes = type === "paintEvents" ? lanesFor(items) : null;
+      for (const entry of geometry.eventsInRange(type, bottom, top)) {
+        if (lanes) {
+          const lane = lanes.get(entry.index);
+          if (!lane) {
+            continue;
+          }
+          const width = bounds.width / lane.count;
+          const x = bounds.x + lane.lane * width;
+          if (x >= right || x + Math.max(2, width - (lane.count > 1 ? 2 : 0)) <= left) {
+            continue;
+          }
+        }
+        matched = true;
+        next.add(eventKey(type, entry.index));
+      }
+    });
+    const changed = !sameStringSet(session.eventSelection, next);
+    if (changed) {
+      session.eventSelection.clear();
+      for (const key of next) {
+        session.eventSelection.add(key);
+      }
+      session.notifySelection();
+    }
+    return { changed, matched };
+  }
   let dirty = restoreEventBaseline(session, rectangle.baseEvents, rectangle.append ?? false);
   let matched = false;
   dirty = pruneEventBaseline(session) || dirty;
@@ -614,7 +814,7 @@ export function selectEventsInRectangle(
     });
   }
   if (dirty) {
-    session.notify();
+    session.notifySelection();
   }
   return { changed: dirty, matched };
 }

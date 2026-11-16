@@ -1,8 +1,14 @@
 /** Timeline render caches project invalid durations without changing source indexes. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart, createEvent, createNote } from "../../../core/global/chart/chart.ts";
+import {
+  createChart,
+  createEvent,
+  createLine,
+  createNote,
+} from "../../../core/global/chart/chart.ts";
 import { fromNumber } from "../../../core/global/chart/timing/beat.ts";
+import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
 import { timelineRenderRange, timelineRenderRangeInto } from "../../../core/edit/timeline/model.ts";
 import { TimelineCache } from "../../../frontend/screens/editor/workspace/timeline/drawing/timelineCache.ts";
 
@@ -69,4 +75,61 @@ test("note render queries project reversed holds without renumbering valid notes
     cache.visibleNotes(0, 0, 10).map((entry) => entry.index),
     [1, 0],
   );
+});
+
+test("visual note array replacements reuse timing and non-overlap render caches", () => {
+  const chart = createChart();
+  const first = createNote(1, 0, 4);
+  chart.judgeLineList[0].notes = [first];
+  const cache = new TimelineCache();
+  const tempo = new TempoMap(chart.BPMList);
+
+  cache.refreshNotes(0, chart.judgeLineList[0].notes);
+  const beforeData = cache.noteRenderDataSet(cache.noteIndex(0).notes, tempo, 1, 4);
+  const beforeOverlap = cache.noteOverlapRanks(cache.noteIndex(0).notes, 0.01);
+
+  const changed = { ...first, color: [1, 2, 3, 4] };
+  cache.refreshNotes(0, [changed], {
+    lineIndex: 0,
+    noteIndexes: [0],
+    kind: "visual",
+    overlapChanged: false,
+  });
+  const afterData = cache.noteRenderDataSet(cache.noteIndex(0).notes, tempo, 1, 4);
+  const afterOverlap = cache.noteOverlapRanks(cache.noteIndex(0).notes, 0.01);
+
+  assert.strictEqual(afterData, beforeData);
+  assert.strictEqual(afterOverlap, beforeOverlap);
+  assert.equal(cache.noteIndex(0).index.rebuildCount, 1);
+  assert.equal(cache.noteIndex(0).index.incrementalUpdateCount, 0);
+});
+
+test("merged note range queries return only lines that overlap the window", () => {
+  const chart = createChart();
+  chart.judgeLineList = [createLine("early"), createLine("late"), createLine("hold")];
+  chart.judgeLineList[0].notes = [createNote(1, 0, 0)];
+  chart.judgeLineList[1].notes = [createNote(1, 10, 0)];
+  chart.judgeLineList[2].notes = [createNote(2, -1, 0, 1)];
+  const cache = new TimelineCache();
+
+  const query = cache.noteLinesInBeatRange(chart, -0.25, 0.25);
+
+  assert.deepEqual(query.indices, [0, 2]);
+  assert.equal(query.marks[0], query.generation);
+  assert.notEqual(query.marks[1], query.generation);
+  assert.equal(query.marks[2], query.generation);
+});
+
+test("merged note range queries reuse unchanged line sources after a chart replacement", () => {
+  const chart = createChart();
+  chart.judgeLineList = [createLine("early"), createLine("late")];
+  chart.judgeLineList[0].notes = [createNote(1, 0, 0)];
+  chart.judgeLineList[1].notes = [createNote(1, 10, 0)];
+  const cache = new TimelineCache();
+  cache.noteLinesInBeatRange(chart, -0.25, 0.25);
+
+  const moved = { ...chart.judgeLineList[0], notes: [createNote(1, 20, 0)] };
+  const replacement = { ...chart, judgeLineList: [moved, chart.judgeLineList[1]] };
+  assert.deepEqual(cache.noteLinesInBeatRange(replacement, -0.25, 0.25).indices, []);
+  assert.deepEqual(cache.noteLinesInBeatRange(replacement, 19.75, 20.25).indices, [0]);
 });

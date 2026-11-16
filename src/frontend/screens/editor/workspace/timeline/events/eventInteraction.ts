@@ -467,7 +467,9 @@ export class EventInteraction implements EventInteractionHandle {
       }
       session.selectionMode = "none";
     }
-    this.canvas.focus();
+    if (document.activeElement !== this.canvas) {
+      this.canvas.focus({ preventScroll: true });
+    }
     this.canvas.setPointerCapture(event.pointerId);
     if (multiMode && (event.shiftKey || event.button === 1)) {
       const worldX =
@@ -600,6 +602,12 @@ export class EventInteraction implements EventInteractionHandle {
       }
       if (drag.kind === "sweep") {
         this.timeline.updateSweep(event);
+        return;
+      }
+      // Rectangle geometry is painted by the selection overlay. Keeping the
+      // content layer clean avoids a full event-field redraw for every sample.
+      if (drag.kind === "rectangle") {
+        this.canvas.style.cursor = "move";
         return;
       }
     }

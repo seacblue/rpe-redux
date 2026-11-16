@@ -34,6 +34,7 @@ export function createEditorFeedback() {
   const failureMessage = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
   const dedupe = createFeedbackDedupe();
+  const feedbackSource = t("editor.feedback.source");
   /**
    * True when the loading card already shows this exact failure, so the same
    * message is not painted again as a toast and a notice.
@@ -88,7 +89,7 @@ export function createEditorFeedback() {
         level: presentation.level,
         duration: 8000,
         key: presentation.dedupeKey,
-        source: "editor.feedback",
+        source: feedbackSource,
         actions: [
           {
             label: exportLabel,
@@ -104,7 +105,7 @@ export function createEditorFeedback() {
                       message: t("system.backup.success", { path }),
                       level: "success",
                       key: backupKey,
-                      source: "editor.feedback",
+                      source: feedbackSource,
                     });
                   }
                 } catch (backupError) {
@@ -114,7 +115,7 @@ export function createEditorFeedback() {
                     }),
                     level: "error",
                     key: backupKey,
-                    source: "editor.feedback",
+                    source: feedbackSource,
                   });
                 }
               })(),
@@ -129,7 +130,7 @@ export function createEditorFeedback() {
         level: presentation.level,
         duration: presentation.level === "error" ? 5000 : 6500,
         key: presentation.dedupeKey,
-        source: "editor.feedback",
+        source: feedbackSource,
       });
     }
   };

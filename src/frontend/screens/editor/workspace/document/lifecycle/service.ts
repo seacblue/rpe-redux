@@ -143,7 +143,7 @@ function loadPickedCharts(bound: DocumentServiceBindings, files: readonly File[]
   return openChartFiles(files, {
     guardReplace: bound.guardReplace,
     loadCandidate: bound.loadCandidate,
-    chooseCandidates: async (candidates, assets) => {
+    chooseCandidates: async (candidates, assets, task) => {
       const chosen = await requestChoice({
         title: t("editor.app.dialog.chooseChart"),
         description: t("editor.app.dialog.multipleCharts"),
@@ -156,7 +156,7 @@ function loadPickedCharts(bound: DocumentServiceBindings, files: readonly File[]
             candidate.disposeDocument?.();
           }
         }
-        await bound.loadCandidate(chosen, assets).catch(bound.reportError);
+        await bound.loadCandidate(chosen, assets, task).catch(bound.reportError);
       } else {
         for (const candidate of candidates) {
           candidate.disposeDocument?.();

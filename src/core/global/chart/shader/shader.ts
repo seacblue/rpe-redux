@@ -315,6 +315,10 @@ export class ShaderRuntime {
   declare loading: Set<string>;
   /** Source keys the current effects still reference; older text is released. */
   declare sourcesWanted: Set<string>;
+  /** Source identities used to prove a note-only chart revision keeps effects unchanged. */
+  declare effectRootSources: readonly unknown[];
+  declare paintEventSources: readonly unknown[];
+  declare effectFactors: readonly number[];
   /** Bumped whenever loaded source text changes; callers use it as a cache key. */
   declare sourceRevision: number;
   /** Reusable interval candidates for the per-frame active-effect query. */
@@ -344,6 +348,9 @@ export class ShaderRuntime {
     this.sources = new Map();
     this.loading = new Set();
     this.sourcesWanted = new Set();
+    this.effectRootSources = [];
+    this.paintEventSources = [];
+    this.effectFactors = [];
     this.sourceRevision = 0;
     this.activeCandidates = [];
   }
@@ -368,6 +375,14 @@ export class ShaderRuntime {
     if (this.chart === chart && this.tempo === tempo) {
       return;
     }
+    if (this.canReuseEffects(chart, tempo)) {
+      // A note-only copy-on-write revision changes the preview chart identity,
+      // but not shader source arrays or effect timing. Keep the interval index
+      // and source set instead of rescanning every judge line on the paint path.
+      this.chart = chart;
+      this.tempo = tempo;
+      return;
+    }
     this.chart = chart;
     this.tempo = tempo;
     this.effects = chartEffects(chart);
@@ -385,6 +400,9 @@ export class ShaderRuntime {
       (entry) => entry.start,
       (entry) => entry.end,
     );
+    this.effectRootSources = [chart.effects, chart.shaderEvents, chart.META?.effects];
+    this.paintEventSources = (chart.judgeLineList ?? []).map((line) => line.extended?.paintEvents);
+    this.effectFactors = (chart.judgeLineList ?? []).map((line) => Number(line.bpmfactor ?? 1));
     this.sourcesWanted = new Set(
       this.effects.map((effect) => shaderSourceKey(effect.shader, effect.sourceName)),
     );
@@ -408,6 +426,29 @@ export class ShaderRuntime {
     for (const effect of this.effects) {
       this.load(effect.shader, effect.sourceName);
     }
+  }
+
+  /** Prove that a copy-on-write chart revision leaves all shader inputs intact. */
+  private canReuseEffects(chart: Chart, tempo: ShaderTempo | null): boolean {
+    if (!this.chart || this.tempo !== tempo) {
+      return false;
+    }
+    const roots = [chart.effects, chart.shaderEvents, chart.META?.effects];
+    if (roots.some((source, index) => source !== this.effectRootSources[index])) {
+      return false;
+    }
+    const lines = chart.judgeLineList ?? [];
+    if (
+      lines.length !== this.paintEventSources.length ||
+      lines.length !== this.effectFactors.length
+    ) {
+      return false;
+    }
+    return lines.every(
+      (line, index) =>
+        line.extended?.paintEvents === this.paintEventSources[index] &&
+        Number(line.bpmfactor ?? 1) === this.effectFactors[index],
+    );
   }
 
   /** Fetch a shader source once, preferring the preview variant when requested. */

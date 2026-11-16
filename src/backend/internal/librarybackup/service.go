@@ -43,6 +43,7 @@ type Service struct {
 	lastError     string
 	failures      int
 	nextAttempt   time.Time
+	snapshotIndex *snapshotIndex
 }
 
 // Open creates the backup store beside a library database. A malformed store

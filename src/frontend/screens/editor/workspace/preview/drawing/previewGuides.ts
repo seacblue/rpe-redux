@@ -17,6 +17,11 @@ import type { LineState } from "../../../../../../core/global/chart/runtime/scen
 import type { PreviewImage, PreviewTextureSurface } from "../scene/previewTypes.ts";
 import { canvasPixelRatio } from "../../../canvas/canvas2d.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
+import {
+  PreviewGuideTextAtlas,
+  type GuideAtlasGlyph,
+  type GuideLabelBounds,
+} from "./previewGuideAtlas.ts";
 
 /**
  * Draws guide overlays and judge lines.
@@ -34,13 +39,47 @@ export interface PreviewGuideSurface extends PreviewTextureSurface {
   mergeLineNumbers?: boolean;
 }
 
-/** Cached ink bounds for one line-number label. */
-interface GuideLabel {
-  text: string;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
+export type GuideLabel = GuideLabelBounds;
+
+/** One visible label retained for the current preview frame. */
+export interface GuideRenderGlyph {
+  x: number;
+  y: number;
+  rotation: number;
+  label: GuideLabel;
+  atlasGlyph: GuideAtlasGlyph | null;
+  color: string;
+}
+
+/** One selected arrow retained separately from the line-number glyphs. */
+export interface GuideRenderArrow {
+  x: number;
+  y: number;
+  rotation: number;
+  size: number;
+  source: CanvasImageSource | null;
+}
+
+/** Backend-neutral guide packet produced after viewport culling. */
+export interface GuideRenderPacket {
+  readonly atlas: PreviewGuideTextAtlas;
+  readonly glyphs: readonly GuideRenderGlyph[];
+  readonly arrows: readonly GuideRenderArrow[];
+  readonly groupCount: number;
+  readonly visibleGroupCount: number;
+  readonly textCacheHits: number;
+  readonly textCacheMisses: number;
+}
+
+/** Low-cost diagnostics returned by one guide overlay submission. */
+export interface GuideDrawStats {
+  readonly durationMs: number;
+  readonly groupCount: number;
+  readonly visibleGroupCount: number;
+  readonly textCacheHits: number;
+  readonly textCacheMisses: number;
+  readonly drawCalls: number;
+  readonly renderPath: "webgl_atlas" | "canvas_atlas" | "canvas_fallback";
 }
 
 /** Label bounds and the scale they were measured at, per chart. */
@@ -56,6 +95,12 @@ interface GuideSurfaceCache {
   enabled: boolean;
   revision: number;
   groups: LineGuideGroup[];
+  readonly atlas: PreviewGuideTextAtlas;
+  readonly glyphs: GuideRenderGlyph[];
+  readonly arrows: GuideRenderArrow[];
+  readonly labelKeys: Map<LineGuideGroup, string>;
+  readonly atlasGlyphs: Map<string, GuideAtlasGlyph | null>;
+  atlasGeneration: number;
 }
 
 const guideLabelCaches = new WeakMap<object, GuideLabelCache>();
@@ -115,54 +160,73 @@ function labelFor(
   return label;
 }
 
-/**
- * Paint one anchored guide marker: its merged line-number label when `label` is
- * set and, when `drawArrow` is true, the selected line's arrow (`arrow` null
- * draws the vector fallback).
- */
-function paintGuideMarker(
+/** Paint one retained label glyph on the Canvas2D fallback path. */
+function paintGuideGlyph(
   context: CanvasRenderingContext2D,
-  group: LineGuideGroup,
-  color: string,
+  glyph: GuideRenderGlyph,
   scale: number,
-  label: GuideLabel | null,
-  arrow: CanvasImageSource | null | undefined,
-  drawArrow: boolean,
+  atlas: HTMLCanvasElement | null,
 ): void {
   context.save();
-  context.translate(group.x, group.y);
-  context.rotate((group.rotation * Math.PI) / 180);
-  context.fillStyle = color;
-  if (label) {
-    context.fillText(label.text, 0, 4 * scale);
-  }
-  if (drawArrow) {
-    if (arrow) {
-      context.save();
-      context.rotate(Math.PI);
-      context.drawImage(arrow, -25 * scale, -25 * scale, 50 * scale, 50 * scale);
-      context.restore();
-    } else {
-      context.beginPath();
-      context.moveTo(0, -24 * scale);
-      context.lineTo(-12 * scale, -8 * scale);
-      context.lineTo(12 * scale, -8 * scale);
-      context.closePath();
-      context.fill();
-    }
+  context.translate(glyph.x, glyph.y);
+  context.rotate((glyph.rotation * Math.PI) / 180);
+  context.fillStyle = glyph.color;
+  if (glyph.atlasGlyph && atlas) {
+    const entry = glyph.atlasGlyph;
+    context.drawImage(
+      atlas,
+      entry.sourceX,
+      entry.sourceY,
+      entry.sourceWidth,
+      entry.sourceHeight,
+      glyph.label.left,
+      glyph.label.top,
+      entry.width,
+      entry.height,
+    );
+  } else {
+    context.fillText(glyph.label.text, 0, 4 * scale);
   }
   context.restore();
 }
 
-/** Draws line numbers and the selected arrow when either option is enabled. */
-export function drawGuides(
+/** Paint one retained selected arrow independently from line-number labels. */
+function paintGuideArrow(context: CanvasRenderingContext2D, arrow: GuideRenderArrow): void {
+  context.save();
+  context.translate(arrow.x, arrow.y);
+  context.rotate((arrow.rotation * Math.PI) / 180);
+  if (arrow.source) {
+    context.rotate(Math.PI);
+    context.drawImage(arrow.source, -arrow.size, -arrow.size, arrow.size * 2, arrow.size * 2);
+  } else {
+    context.beginPath();
+    context.moveTo(0, -arrow.size * 0.96);
+    context.lineTo(-arrow.size * 0.48, -arrow.size * 0.32);
+    context.lineTo(arrow.size * 0.48, -arrow.size * 0.32);
+    context.closePath();
+    context.fill();
+  }
+  context.restore();
+}
+
+/** Build a retained guide packet, culling before any atlas rasterization. */
+export function buildGuidePacket(
   surface: PreviewGuideSurface,
   context: CanvasRenderingContext2D,
   scale: number,
   selectedLine: number,
-): void {
+): GuideRenderPacket {
+  const empty = (): GuideRenderPacket => ({
+    atlas: new PreviewGuideTextAtlas(),
+    glyphs: [],
+    arrows: [],
+    groupCount: 0,
+    visibleGroupCount: 0,
+    textCacheHits: 0,
+    textCacheMisses: 0,
+  });
   if (!surface.lineNumbers && !surface.lineArrows) {
-    return;
+    return empty();
   }
   const palette = readCanvasPalette();
   const labels = guideLabels(surface.chart, scale);
@@ -185,7 +249,6 @@ export function drawGuides(
     context.textBaseline = "top";
   }
   const guides = surface.guides ?? EMPTY_GUIDES;
-  const mergeEnabled = surface.mergeLineNumbers ?? true;
   const revision = surface.guideRevision;
   let cache = guideSurfaceCaches.get(surface);
   if (!cache) {
@@ -195,20 +258,24 @@ export function drawGuides(
       enabled: false,
       revision: Number.NaN,
       groups: [],
+      atlas: new PreviewGuideTextAtlas(),
+      glyphs: [],
+      arrows: [],
+      labelKeys: new Map(),
+      atlasGlyphs: new Map(),
+      atlasGeneration: 0,
     };
     guideSurfaceCaches.set(surface, cache);
   }
+  const mergeEnabled = surface.mergeLineNumbers ?? true;
   let groups: LineGuideGroup[];
-  if (
-    revision !== undefined &&
-    cache.guides === guides &&
-    cache.scale === scale &&
-    cache.enabled === mergeEnabled &&
-    cache.revision === revision
-  ) {
+  const sameSurface =
+    cache.guides === guides && cache.scale === scale && cache.enabled === mergeEnabled;
+  if (revision !== undefined && sameSurface && cache.revision === revision) {
     groups = cache.groups;
   } else {
     mergeGuidesInto(guides, scale, mergeEnabled, cache.groups);
+    cache.labelKeys.clear();
     groups = cache.groups;
     if (revision !== undefined) {
       cache.guides = guides;
@@ -218,30 +285,46 @@ export function drawGuides(
     }
   }
   const arrowImage = surface.lineArrows ? surface.skin?.images?.get("Arrow2") : undefined;
+  const atlasGeneration = cache.atlas.getGeneration();
+  if (cache.atlasGeneration !== atlasGeneration) {
+    cache.atlasGlyphs.clear();
+    cache.atlasGeneration = atlasGeneration;
+  }
+  const glyphs = cache.glyphs;
+  const arrows = cache.arrows;
+  let glyphWrite = 0;
+  let arrowWrite = 0;
+  let visibleGroupCount = 0;
+  let textCacheHits = 0;
+  let textCacheMisses = 0;
   for (const group of groups) {
     const selected = group.indices.includes(selectedLine);
     if (!surface.lineNumbers && !(surface.lineArrows && selected)) {
       continue;
     }
     const angle = (group.rotation * Math.PI) / 180;
-    let label: GuideLabel | null = null;
-    if (surface.lineNumbers) {
-      label = labelFor(
-        context,
-        labels,
-        group.indices.join(","),
-        group.indices,
-        surface.chart?.judgeLineList ?? null,
-        scale,
-      );
-    }
     const color = selected ? palette.previewLineSelected : palette.previewLine;
+    const arrow = surface.lineArrows && selected ? 30 * scale : 0;
+    const labelKey =
+      cache.labelKeys.get(group) ??
+      (() => {
+        const key = group.indices.join(",");
+        cache.labelKeys.set(group, key);
+        return key;
+      })();
+    // A conservative bound lets off-screen groups skip text measurement and
+    // atlas lookup. If a label was measured already, use its exact bounds.
+    const measured = surface.lineNumbers ? labels.get(labelKey) : null;
+    const cullHalfWidth = measured
+      ? Math.max(Math.abs(measured.left), measured.right)
+      : 160 * scale;
+    const cullTop = measured ? measured.top : -64 * scale;
+    const cullBottom = measured ? measured.bottom : 72 * scale;
     if (bounded) {
-      const arrow = surface.lineArrows && selected ? 30 * scale : 0;
-      const left = Math.min(label?.left ?? 0, -arrow);
-      const right = Math.max(label?.right ?? 0, arrow);
-      const top = Math.min(label?.top ?? 0, -arrow);
-      const bottom = Math.max(label?.bottom ?? 0, arrow);
+      const left = Math.min(-cullHalfWidth, -arrow);
+      const right = Math.max(cullHalfWidth, arrow);
+      const top = Math.min(cullTop, -arrow);
+      const bottom = Math.max(cullBottom, arrow);
       const cosine = Math.cos(angle);
       const sine = Math.sin(angle);
       const a = matrix.a * cosine + matrix.c * sine;
@@ -261,10 +344,113 @@ export function drawGuides(
         continue;
       }
     }
-    const drawArrow = surface.lineArrows === true && selected;
-    paintGuideMarker(context, group, color, scale, label, arrowImage, drawArrow);
+    visibleGroupCount += 1;
+    const label = surface.lineNumbers
+      ? labelFor(
+          context,
+          labels,
+          labelKey,
+          group.indices,
+          surface.chart?.judgeLineList ?? null,
+          scale,
+        )
+      : null;
+    if (label) {
+      const atlasKey = `${context.font}|${color}|${scale}|${label.text}`;
+      const cachedAtlasGlyph = cache.atlasGlyphs.get(atlasKey);
+      let atlasGlyph: GuideAtlasGlyph | null;
+      let atlasHit = cachedAtlasGlyph !== undefined;
+      if (atlasHit) {
+        atlasGlyph = cachedAtlasGlyph ?? null;
+      } else {
+        const lookup = cache.atlas.lookup(context, label, color, scale);
+        atlasGlyph = lookup.glyph;
+        cache.atlasGlyphs.set(atlasKey, atlasGlyph);
+        atlasHit = lookup.hit;
+      }
+      if (atlasHit) {
+        textCacheHits += 1;
+      } else {
+        textCacheMisses += 1;
+      }
+      const glyph = glyphs[glyphWrite] ?? {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        label,
+        atlasGlyph: null,
+        color,
+      };
+      glyph.x = group.x;
+      glyph.y = group.y;
+      glyph.rotation = group.rotation;
+      glyph.label = label;
+      glyph.atlasGlyph = atlasGlyph;
+      glyph.color = color;
+      glyphs[glyphWrite++] = glyph;
+    }
+    if (surface.lineArrows === true && selected) {
+      const guideArrow = arrows[arrowWrite] ?? {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        size: 0,
+        source: null,
+      };
+      guideArrow.x = group.x;
+      guideArrow.y = group.y;
+      guideArrow.rotation = group.rotation;
+      guideArrow.size = 30 * scale;
+      guideArrow.source = arrowImage ?? null;
+      arrows[arrowWrite++] = guideArrow;
+    }
+  }
+  glyphs.length = glyphWrite;
+  arrows.length = arrowWrite;
+  context.restore();
+  return {
+    atlas: cache.atlas,
+    glyphs,
+    arrows,
+    groupCount: groups.length,
+    visibleGroupCount,
+    textCacheHits,
+    textCacheMisses,
+  };
+}
+
+/** Draw a retained guide packet through Canvas2D when WebGL is unavailable. */
+export function drawGuides(
+  surface: PreviewGuideSurface,
+  context: CanvasRenderingContext2D,
+  scale: number,
+  selectedLine: number,
+): GuideDrawStats {
+  const started = performance.now();
+  const packet = buildGuidePacket(surface, context, scale, selectedLine);
+  const atlas = packet.atlas.getCanvas();
+  context.save();
+  if (surface.lineNumbers) {
+    context.font = `${30 * scale}px Saira, 'Source Han Sans CN', sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "top";
+  }
+  for (const glyph of packet.glyphs) {
+    paintGuideGlyph(context, glyph, scale, atlas);
+  }
+  for (const arrow of packet.arrows) {
+    paintGuideArrow(context, arrow);
   }
   context.restore();
+  return {
+    durationMs: performance.now() - started,
+    groupCount: packet.groupCount,
+    visibleGroupCount: packet.visibleGroupCount,
+    textCacheHits: packet.textCacheHits,
+    textCacheMisses: packet.textCacheMisses,
+    drawCalls: packet.glyphs.length + packet.arrows.length,
+    renderPath: atlas ? "canvas_atlas" : "canvas_fallback",
+  };
 }
 
 const lineColorCss = new WeakMap<number[], { r: number; g: number; b: number; css: string }>();

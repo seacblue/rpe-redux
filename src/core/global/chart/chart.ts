@@ -713,6 +713,7 @@ function normalizeChartObjectIdsIncremental(
   chart: Chart,
   previous: Chart,
   factory: ReturnType<typeof createChartIdentityFactory>,
+  changedLineIndexes?: readonly number[],
 ): boolean {
   if (
     chart.effects !== previous.effects ||
@@ -724,7 +725,11 @@ function normalizeChartObjectIdsIncremental(
   const previousLines = previous.judgeLineList ?? [];
   const lines = chart.judgeLineList ?? [];
   let previousById: Map<string, JudgeLine> | null = null;
-  for (let index = 0; index < lines.length; index += 1) {
+  const indexes = changedLineIndexes ?? lines.keys();
+  for (const index of indexes) {
+    if (index < 0 || index >= lines.length) {
+      return false;
+    }
     const line = lines[index];
     const atSameSlot = previousLines[index];
     // The line object survived the copy-on-write clone unchanged and was
@@ -764,11 +769,15 @@ export function normalizeChartObjectIds(
   chart: Chart,
   factory: ReturnType<typeof createChartIdentityFactory> = createChartIdentityFactory(),
   previous?: Chart,
+  changedLineIndexes?: readonly number[],
 ): Chart {
   if (normalizedCharts.has(chart)) {
     return chart;
   }
-  if (previous && normalizeChartObjectIdsIncremental(chart, previous, factory)) {
+  if (
+    previous &&
+    normalizeChartObjectIdsIncremental(chart, previous, factory, changedLineIndexes)
+  ) {
     normalizedObjects.add(chart);
     normalizedCharts.add(chart);
     return chart;

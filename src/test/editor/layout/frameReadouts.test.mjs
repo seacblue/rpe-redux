@@ -8,6 +8,8 @@ import {
 } from "../../../frontend/chrome/transport/chartProgressState.ts";
 import { createFrameReadouts } from "../../../frontend/screens/editor/workspace/runtime/frame/frameReadouts.ts";
 import { EditorRenderScheduler } from "../../../frontend/screens/editor/workspace/runtime/frame/renderScheduler.ts";
+import { beatsPerPixelAtOrigin } from "../../../frontend/screens/editor/workspace/timeline/viewport/timelineViewport.ts";
+import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
 
 test("transport throttles high-refresh playback samples to 30 Hz", () => {
   const progress = createProgressState();
@@ -69,6 +71,48 @@ test("playhead is scheduled when its time advances and skipped when it does not"
   const next = scheduler.tick({ ...request, now: 2000 / 144, seconds: 0.1 }, { paint() {} });
   assert.equal(next.work.timeline, false);
   assert.equal(next.work.playhead, true);
+});
+
+test("pixel beat distance follows the local BPM segment", () => {
+  const tempo = new TempoMap([
+    { bpm: 60, startTime: [0, 0, 1] },
+    { bpm: 120, startTime: [4, 0, 1] },
+  ]);
+
+  assert.equal(beatsPerPixelAtOrigin(tempo, 0, 1), 1);
+  assert.equal(beatsPerPixelAtOrigin(tempo, 8, 1), 2);
+});
+
+test("sub-pixel timeline movement does not repaint timeline content", () => {
+  const scheduler = new EditorRenderScheduler();
+  const request = {
+    now: 0,
+    seconds: 0,
+    playing: true,
+    previewVisible: false,
+    previewHighDensity: false,
+    contentRefreshRate: 144,
+    timelineRevision: 1,
+    viewportOrigin: 0,
+    beatsPerPixel: 2,
+    previewChart: {},
+    previewRevision: 0,
+    previewSession: null,
+    previewSelection: null,
+    authoringRegionVisible: true,
+  };
+  const adapter = { paint() {} };
+  scheduler.tick(request, adapter);
+  const subPixel = scheduler.tick(
+    { ...request, now: 1, seconds: 0.1, viewportOrigin: 1.5 },
+    adapter,
+  );
+  assert.equal(subPixel.work.timeline, false);
+  const visiblePixel = scheduler.tick(
+    { ...request, now: 2, seconds: 0.2, viewportOrigin: 2.1 },
+    adapter,
+  );
+  assert.equal(visiblePixel.work.timeline, true);
 });
 
 test("a replaced chart or decoded image forces an immediate preview frame", () => {
