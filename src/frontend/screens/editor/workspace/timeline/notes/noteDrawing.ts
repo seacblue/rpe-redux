@@ -147,8 +147,8 @@ function drawOffscreenNoteCues(
   context.save();
   context.fillStyle = cueColor;
   context.shadowColor = cueColor;
-  context.shadowBlur = 7;
-  context.globalAlpha = 0.72;
+  context.shadowBlur = 12;
+  context.globalAlpha = 0.96;
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const lineIndex = lineIndices[panel] ?? session.lineIndex;
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
