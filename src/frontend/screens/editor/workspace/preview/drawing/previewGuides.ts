@@ -57,6 +57,7 @@ export interface GuideRenderArrow {
   y: number;
   rotation: number;
   size: number;
+  color: string;
   source: CanvasImageSource | null;
 }
 
@@ -195,6 +196,7 @@ function paintGuideArrow(context: CanvasRenderingContext2D, arrow: GuideRenderAr
   context.save();
   context.translate(arrow.x, arrow.y);
   context.rotate((arrow.rotation * Math.PI) / 180);
+  context.fillStyle = arrow.color;
   if (arrow.source) {
     context.rotate(Math.PI);
     context.drawImage(arrow.source, -arrow.size, -arrow.size, arrow.size * 2, arrow.size * 2);
@@ -395,12 +397,14 @@ export function buildGuidePacket(
         y: 0,
         rotation: 0,
         size: 0,
+        color: "",
         source: null,
       };
       guideArrow.x = group.x;
       guideArrow.y = group.y;
       guideArrow.rotation = group.rotation;
       guideArrow.size = 30 * scale;
+      guideArrow.color = color;
       guideArrow.source = arrowImage ?? null;
       arrows[arrowWrite++] = guideArrow;
     }

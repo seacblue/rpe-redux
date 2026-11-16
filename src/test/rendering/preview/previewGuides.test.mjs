@@ -83,7 +83,7 @@ test("visible guide labels paint directly and off-screen labels are culled", () 
   const previousDocument = globalThis.document;
   const previousGetComputedStyle = globalThis.getComputedStyle;
   const previousWindow = globalThis.window;
-  const calls = { fillText: 0 };
+  const calls = { fillText: 0, fillStyles: [] };
   const targetCanvas = { width: 100, height: 80 };
   const target = {
     canvas: targetCanvas,
@@ -112,7 +112,9 @@ test("visible guide labels paint directly and off-screen labels are culled", () 
     moveTo() {},
     lineTo() {},
     closePath() {},
-    fill() {},
+    fill() {
+      calls.fillStyles.push(target.fillStyle);
+    },
   };
   globalThis.document = { documentElement: {} };
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#FFFFFF" });
@@ -131,6 +133,19 @@ test("visible guide labels paint directly and off-screen labels are culled", () 
     assert.equal(calls.fillText, 1);
     drawGuides(surface, target, 1, 0);
     assert.equal(calls.fillText, 2);
+
+    target.fillStyle = "#000000";
+    drawGuides(
+      {
+        ...surface,
+        lineNumbers: false,
+        lineArrows: true,
+      },
+      target,
+      1,
+      0,
+    );
+    assert.equal(calls.fillStyles.at(-1), "#FFFFFF");
 
     surface.guides = [{ index: 0, x: 1000, y: 30, rotation: 0 }];
     surface.guideRevision = 2;
