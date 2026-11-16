@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- render-cache, paint-order, opacity, and context recovery share one regression harness. */
 /** Verifies render-cache, paint-order, opacity, and WebGL context-recovery contracts. */
 import assert from "node:assert/strict";
 import test from "node:test";
