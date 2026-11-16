@@ -199,8 +199,15 @@ function drawOffscreenNoteCues(
       }
       const vertical = projection.project(prepared.startSeconds);
       const endVertical = projection.project(prepared.endSeconds);
-      const top = Math.max(0, Math.min(height - 1, Math.min(vertical, endVertical) - 3));
-      const cueHeight = Math.max(6, Math.min(height - top, Math.abs(endVertical - vertical) || 6));
+      const cuePadding = Math.min(10, Math.max(6, height / 100));
+      const noteTop = Math.min(vertical, endVertical);
+      const noteBottom = Math.max(vertical, endVertical);
+      const top = Math.max(0, Math.min(height - 1, noteTop - cuePadding));
+      const cueBottom = Math.min(height, noteBottom + cuePadding);
+      const cueHeight = Math.min(
+        height - top,
+        Math.max(20, cueBottom - top, Math.abs(endVertical - vertical) + cuePadding * 2),
+      );
       for (const side of sides) {
         const x = offscreenCueX(side, panelLeft, panelRight, width, cueWidth);
         if (x === null) {
