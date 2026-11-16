@@ -12,7 +12,7 @@
   </defs>
   <rect width="1280" height="700" fill="url(#bg2)"/>
   <text x="54" y="48" class="ui heading">X 范围、背景和白光的独立状态</text>
-  <text x="54" y="75" class="ui small muted">按钮以 100 为小步缓动移动 cameraX；默认范围外仍按相同 spacing 延续竖线，当前拍 note 用主题自适应白光提示。</text>
+  <text x="54" y="75" class="ui small muted">按钮以 150 为小步缓动移动 cameraX；默认范围外仍按相同 spacing 延续竖线，当前拍 note 用主题自适应白光提示。</text>
 
   <g transform="translate(54 110)">
     <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>

@@ -95,5 +95,5 @@ test("note lanes extend outside the authored range at the same scale", () => {
   drawNoteLanes(receiver, context, 100, 100);
 
   assert.deepEqual(positions, [0, 25, 50, 75, 100]);
-  assert.equal(styles[2], "#222222");
+  assert.equal(styles[0], "#222222");
 });

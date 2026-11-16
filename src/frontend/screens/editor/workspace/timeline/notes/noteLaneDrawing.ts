@@ -144,7 +144,7 @@ function drawNoteLanesInto(
       panelPointer !== null ? nearestPixelGuidePosition(guidePositions, panelPointer.x) : null;
     for (let index = firstGrid; index <= lastGrid; index++) {
       const lane = (index + grid.first) * grid.spacing;
-      const center = Math.abs(lane - cameraX) < 1e-7;
+      const center = Math.abs(lane) < 1e-7;
       const baseColor = center
         ? receiver.appearance.verticalGridCenterColor
         : receiver.appearance.verticalGridColor;

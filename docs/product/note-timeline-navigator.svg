@@ -19,7 +19,7 @@
   <rect width="1280" height="760" fill="url(#bg)"/>
   <rect x="32" y="28" width="1216" height="704" rx="14" fill="#0d1118" stroke="#293342"/>
   <text x="68" y="72" class="ui title">Note timeline：X 坐标范围浮层</text>
-  <text x="68" y="101" class="ui small muted">三条 note timeline 共用 cameraX；按钮以 100 为小步缓动移动，不移动 panel、不移动歌曲时间。</text>
+  <text x="68" y="101" class="ui small muted">三条 note timeline 共用 cameraX；按钮以 150 为小步缓动移动，不移动 panel、不移动歌曲时间。</text>
   <rect x="68" y="135" width="1060" height="418" rx="8" fill="#0b0e13" stroke="#44515f"/>
   <g transform="translate(110 135)">
     <path d="M0 74H978 M0 148H978 M0 222H978 M0 296H978 M0 370H978" stroke="#243242" stroke-width="1"/>

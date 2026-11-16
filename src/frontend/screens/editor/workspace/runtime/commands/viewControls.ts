@@ -30,8 +30,8 @@ export type EditorRegionSnapshot = {
 /** The authoring timeline that a view command can reveal. */
 export type EditorTimelineMode = "notes" | "events";
 
-/** One small X-range step used by the note timeline camera buttons. */
-export const NOTE_TIMELINE_CAMERA_STEP = 100;
+/** One X-range step used by the note timeline camera buttons. */
+export const NOTE_TIMELINE_CAMERA_STEP = 150;
 
 /** The amount of camera movement applied on every animation frame. */
 const NOTE_TIMELINE_CAMERA_EASE = 0.2;

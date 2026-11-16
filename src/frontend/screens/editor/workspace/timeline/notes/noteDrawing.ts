@@ -584,9 +584,11 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   if (multiNotes) {
     this.drawMultiLineBeatLabels(context, width, height, "notes");
   }
-  drawOffscreenNoteCues(this, context, palette, playBeat, width, height);
   this.noteBatch.finish();
   this.noteSolidBatch.finish();
+  // Paint the edge cue after note batches so it remains visible above every
+  // note layer while staying clipped to the current note's vertical span.
+  drawOffscreenNoteCues(this, context, palette, playBeat, width, height);
   if (!(session.multiLineActive && session.multiLineMode === "notes")) {
     this.drawEvents(playBeat);
   }
