@@ -35,6 +35,7 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
+import { offscreenCueSides } from "./noteOffscreenCue.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -118,7 +119,7 @@ function cachedNoteVerticalProjection(
     );
 }
 
-/** Paint a full-width cue around every note's vertical position. */
+/** Paint a full-width cue when a scaled note crosses its panel's X viewport. */
 function drawNoteTimelineCues(
   receiver: TimelineNoteDrawingReceiver,
   context: CanvasRenderingContext2D,
@@ -131,7 +132,11 @@ function drawNoteTimelineCues(
   }
   const session = receiver.getSession();
   const multiplePanels = session.multiLineActive && receiver.viewport.panelCount("notes") > 1;
-  const lineIndices = multiplePanels ? session.targetLineIndices : [session.lineIndex];
+  const lineIndices = session.multiLineActive
+    ? session.targetLineIndices.length > 0
+      ? session.targetLineIndices
+      : [session.lineIndex]
+    : [session.lineIndex];
   const panelWidth = receiver.viewport.panelWidth(width, "notes");
   const panelStride = receiver.viewport.panelStride(width, "notes");
   const panelOffset = receiver.viewport.multiLineViewportOffset(width, "notes");
@@ -148,45 +153,56 @@ function drawNoteTimelineCues(
   context.shadowBlur = 12;
   context.globalAlpha = 0.58;
   for (let panel = startPanel; panel <= endPanel; panel++) {
-    const lineIndex = lineIndices[panel] ?? session.lineIndex;
     const panelLeft = multiplePanels ? panel * panelStride - panelOffset : 0;
     const panelRight = panelLeft + (multiplePanels ? panelWidth : width);
-    const [bottomBeat, topBeat] = receiver.viewport.noteBeatRangeForLine(
-      lineIndex,
-      height,
-      "notes",
-    );
-    const line = session.chart.judgeLineList?.[lineIndex];
-    receiver.cache.refreshNotes(lineIndex, line?.notes ?? []);
-    const noteIndex = receiver.cache.noteIndex(lineIndex);
-    if (!noteIndex) {
-      continue;
-    }
-    const projection = noteProjectionFor(receiver, lineIndex, height);
-    const cachedNoteData = receiver.cache.noteRenderDataSet(
-      noteIndex.notes,
-      receiver.viewport.tempo,
-      projection.factor,
-      receiver.viewport.gridCount,
-    );
-    for (let index = 0; index < noteIndex.notes.length; index++) {
-      const prepared = cachedNoteData[index];
-      if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
+    const panelLines = multiplePanels ? [lineIndices[panel] ?? session.lineIndex] : lineIndices;
+    for (const lineIndex of panelLines) {
+      const [bottomBeat, topBeat] = receiver.viewport.noteBeatRangeForLine(
+        lineIndex,
+        height,
+        "notes",
+      );
+      const line = session.chart.judgeLineList?.[lineIndex];
+      receiver.cache.refreshNotes(lineIndex, line?.notes ?? []);
+      const noteIndex = receiver.cache.noteIndex(lineIndex);
+      if (!noteIndex) {
         continue;
       }
-      if (Math.min(prepared.start, prepared.end) > topBeat) {
-        // The chart format normally keeps notes ordered, but the cue must not
-        // disappear when an imported or edited line has a later note before a
-        // current-beat note in its source array.
-        continue;
-      }
-      const vertical = projection.project(prepared.startSeconds);
-      const top = Math.max(0, Math.min(height - 1, vertical - cueHalfHeight));
-      const cueHeight = Math.min(height - top, cueHalfHeight * 2);
-      const visibleLeft = Math.max(0, panelLeft);
-      const visibleRight = Math.min(width, panelRight);
-      if (visibleRight > visibleLeft) {
-        context.fillRect(visibleLeft, top, visibleRight - visibleLeft, cueHeight);
+      const projection = noteProjectionFor(receiver, lineIndex, height);
+      const panelProjection = receiver.viewport.notePanelProjectionForLine(width, lineIndex);
+      const cachedNoteData = receiver.cache.noteRenderDataSet(
+        noteIndex.notes,
+        receiver.viewport.tempo,
+        projection.factor,
+        receiver.viewport.gridCount,
+      );
+      for (let index = 0; index < noteIndex.notes.length; index++) {
+        const note = noteIndex.notes[index];
+        const prepared = cachedNoteData[index];
+        if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
+          continue;
+        }
+        if (Math.min(prepared.start, prepared.end) > topBeat) {
+          continue;
+        }
+        const horizontal = panelProjection.horizontal(note.positionX);
+        const sides = offscreenCueSides(
+          horizontal,
+          receiver.viewport.noteWidth(note),
+          panelLeft,
+          panelRight,
+        );
+        if (!sides.length) {
+          continue;
+        }
+        const vertical = projection.project(prepared.startSeconds);
+        const top = Math.max(0, Math.min(height - 1, vertical - cueHalfHeight));
+        const cueHeight = Math.min(height - top, cueHalfHeight * 2);
+        const visibleLeft = Math.max(0, panelLeft);
+        const visibleRight = Math.min(width, panelRight);
+        if (visibleRight > visibleLeft) {
+          context.fillRect(visibleLeft, top, visibleRight - visibleLeft, cueHeight);
+        }
       }
     }
   }
