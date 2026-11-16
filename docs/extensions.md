@@ -27,6 +27,7 @@ Each directory is one package, and its directory name must equal the manifest `i
 | `entry` | Optional package-relative JavaScript file. Its absence makes the package data-only. |
 | `i18n` | Optional package-relative JSON catalog; `i18n.json` is read when present and undeclared. |
 | `capabilities` | Optional capability names; unknown names and duplicates are rejected. |
+| `pagedChartSafe` | Built-in-only compatibility declaration for dense paged chart facades; external packages cannot use it to bypass eager loading. |
 | `collaboration` | Optional scope: `local` (default), `chart` for changes carried by normal chart transactions, or `shared-service` when peers using the feature must install the same package. The room never transfers or executes Extension code. |
 | `scripts` | Data-only recipe array; each entry needs a unique local `id` and at least one step. |
 | `dependencies` | Optional package ids that must be enabled first. |

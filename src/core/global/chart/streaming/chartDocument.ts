@@ -13,11 +13,13 @@ import {
   combineContentFingerprint,
   headerContentFingerprint,
   lineContentFingerprint,
+  lineContentFingerprintParts,
   primeLineContentFingerprint,
 } from "../chartContentHash.ts";
 import { summarizeChartLine, summarizeChartLineIncremental } from "./chartLineSummary.ts";
 import { stringifyChartValue } from "./chartSerialize.ts";
 import { registerChartDocument } from "./chartDocumentRegistry.ts";
+import { yieldToHost } from "../../../utils/yieldToHost.ts";
 import type { ChartLineRevisionSeed } from "../chartRevisionSeed.ts";
 import type { ChartValueDigestGroup } from "../chartContentHash.ts";
 import {
@@ -59,6 +61,16 @@ export interface ChartDocumentOptions {
   readonly maxCachedLines?: number;
   /** Maximum raw line text bytes retained; 0 disables byte eviction. */
   readonly maxCachedBytes?: number;
+}
+
+/** Progress emitted while an eager chart snapshot materializes its line graph. */
+export interface ChartMaterializeProgress {
+  readonly completedLines: number;
+  readonly totalLines: number;
+  readonly completedNotes: number;
+  readonly totalNotes: number;
+  readonly completedEvents: number;
+  readonly totalEvents: number;
 }
 
 /** Thrown when a time window needs more lines than the caller allowed. */
@@ -352,7 +364,11 @@ export class ChartDocument {
   }
 
   /** Ensure a bounded set of lines, using a small worker pool. */
-  async ensureLines(indices: readonly number[], signal?: AbortSignal): Promise<void> {
+  async ensureLines(
+    indices: readonly number[],
+    signal?: AbortSignal,
+    onLine?: (index: number) => void | Promise<void>,
+  ): Promise<void> {
     const queue = [...new Set(indices)].filter((index) => !this.slots[index]?.line);
     let cursor = 0;
     const workers = Array.from({ length: Math.min(8, queue.length) }, async () => {
@@ -360,6 +376,7 @@ export class ChartDocument {
         const index = queue[cursor++];
         if (index !== undefined) {
           await this.ensureLine(index, signal);
+          await onLine?.(index);
         }
       }
     });
@@ -444,7 +461,11 @@ export class ChartDocument {
    * The array may contain placeholders for lines that were not materialized;
    * their summaries are kept so a later page-in still knows where they belong.
    */
-  applyLineSnapshot(lines: readonly JudgeLine[], header: ChartHeader): void {
+  applyLineSnapshot(
+    lines: readonly JudgeLine[],
+    header: ChartHeader,
+    options: { changedLineIndexes?: readonly number[]; normalized?: boolean } = {},
+  ): void {
     const tempoWasDirty = this.tempoDirty;
     this.setHeader(header);
     const recomputeAll = tempoWasDirty || this.tempoDirty;
@@ -460,6 +481,44 @@ export class ChartDocument {
       }
       this.slots.splice(lines.length);
       this.lines.splice(lines.length);
+    }
+    const changed = options.changedLineIndexes;
+    const canPatchChangedLines =
+      !recomputeAll &&
+      changed !== undefined &&
+      this.slots.length === lines.length &&
+      changed.every((index) => Number.isInteger(index) && index >= 0 && index < lines.length);
+    if (canPatchChangedLines && changed) {
+      for (const index of new Set(changed)) {
+        const line = lines[index];
+        const slot = this.slots[index];
+        if (!line || !slot || line === this.lines[index]) {
+          continue;
+        }
+        if (isPlaceholderLine(line)) {
+          this.cachedBytes = Math.max(0, this.cachedBytes - (slot.raw?.length ?? 0));
+          slot.line = undefined;
+          slot.state = "missing";
+          slot.raw = undefined;
+          slot.summary = { ...slot.summary, index };
+          this.lines[index] = line;
+          continue;
+        }
+        const normalized = options.normalized ? line : this.normalizeLine(line, true);
+        slot.summary =
+          slot.line && !isPlaceholderLine(this.lines[index])
+            ? summarizeChartLineIncremental(slot.summary, normalized, index, this.lines[index])
+            : summarizeChartLine(
+                normalized,
+                index,
+                this.tempo,
+                slot.summary.byteOffset,
+                slot.summary.byteLength,
+              );
+        this.installLine(index, normalized, "dirty");
+      }
+      this.changed();
+      return;
     }
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
@@ -479,10 +538,10 @@ export class ChartDocument {
         this.lines[index] = line;
         continue;
       }
-      const normalized = this.normalizeLine(line, true);
+      const normalized = options.normalized ? line : this.normalizeLine(line, true);
       slot.summary =
         !recomputeAll && slot.line && !isPlaceholderLine(this.lines[index])
-          ? summarizeChartLineIncremental(slot.summary, normalized, index)
+          ? summarizeChartLineIncremental(slot.summary, normalized, index, this.lines[index])
           : summarizeChartLine(
               normalized,
               index,
@@ -496,12 +555,15 @@ export class ChartDocument {
   }
 
   /** Replace the header and line slots from a committed chart. */
-  syncFromChart(next: Chart): void {
+  syncFromChart(
+    next: Chart,
+    options: { changedLineIndexes?: readonly number[]; normalized?: boolean } = {},
+  ): void {
     if (next === this.chart) {
       return;
     }
     const lines = next.judgeLineList ?? [];
-    this.applyLineSnapshot(lines, chartHeader(next, lines.length));
+    this.applyLineSnapshot(lines, chartHeader(next, lines.length), options);
   }
 
   /** Replace only the document header while keeping all line slots paged. */
@@ -545,15 +607,57 @@ export class ChartDocument {
   }
 
   /** Materialize every line and return a plain snapshot. */
-  async materializeAll(options: { signal?: AbortSignal } = {}): Promise<Chart> {
+  async materializeAll(
+    options: {
+      signal?: AbortSignal;
+      onProgress?: (progress: ChartMaterializeProgress) => void;
+    } = {},
+  ): Promise<Chart> {
     // The snapshot needs every line at once, so the paged working-set budget
     // must not evict lines while it is being assembled.
     this.materializing = true;
     try {
-      await this.ensureLines(
-        this.slots.map((slot) => slot.summary.index),
-        options.signal,
-      );
+      const indices = this.slots.map((slot) => slot.summary.index);
+      if (!options.onProgress) {
+        await this.ensureLines(indices, options.signal);
+      } else {
+        const totalLines = this.slots.length;
+        const totalNotes = this.slots.reduce((total, slot) => total + slot.summary.noteCount, 0);
+        const totalEvents = this.slots.reduce((total, slot) => total + slot.summary.eventCount, 0);
+        let completedLines = 0;
+        let completedNotes = 0;
+        let completedEvents = 0;
+        const report = () =>
+          options.onProgress?.({
+            completedLines,
+            totalLines,
+            completedNotes,
+            totalNotes,
+            completedEvents,
+            totalEvents,
+          });
+        report();
+        await this.ensureLines(indices, options.signal, async (index) => {
+          const summary = this.slots[index]?.summary;
+          completedLines += 1;
+          completedNotes += summary?.noteCount ?? 0;
+          completedEvents += summary?.eventCount ?? 0;
+          report();
+          // Parsing and normalizing a large chart is synchronous per line. A
+          // bounded host yield keeps the loading surface, input, and paint
+          // responsive without slowing the no-progress path used by saves.
+          if (completedLines % 32 === 0) {
+            await yieldToHost();
+          }
+        });
+        // Already-loaded lines were not part of ensureLines' queue. Report a
+        // complete state explicitly so retries and cached opens cannot stall
+        // at an old numerator.
+        completedLines = totalLines;
+        completedNotes = totalNotes;
+        completedEvents = totalEvents;
+        report();
+      }
     } finally {
       this.materializing = false;
     }
@@ -605,14 +709,30 @@ export class ChartDocument {
     }
     const changed = new Set(changedLineIndexes);
     const lines = chart.judgeLineList ?? [];
+    const timingProbe = (
+      globalThis as typeof globalThis & {
+        __reduxTransactionTimingProbe?: (value: { stage: string; durationMs: number }) => void;
+      }
+    ).__reduxTransactionTimingProbe;
+    let changedHashMs = 0;
     const digests = lines.map((line, index) => {
       if (changed.has(index)) {
-        return lineContentFingerprint(line);
+        const started = performance.now();
+        const digest = lineContentFingerprint(line);
+        changedHashMs += performance.now() - started;
+        return digest;
       }
       const summary = this.slots[index]?.summary;
       return summary?.digest || lineContentFingerprint(line);
     });
-    return combineContentFingerprint(headerContentFingerprint(chart), digests);
+    const aggregateStarted = performance.now();
+    const result = combineContentFingerprint(headerContentFingerprint(chart), digests);
+    timingProbe?.({ stage: "plan.afterFingerprint.changedLineHash", durationMs: changedHashMs });
+    timingProbe?.({
+      stage: "plan.afterFingerprint.aggregate",
+      durationMs: performance.now() - aggregateStarted,
+    });
+    return result;
   }
 
   /**
@@ -698,13 +818,18 @@ export class ChartDocument {
         }
       }
     }
-    this.installLine(
-      index,
-      line,
-      "loaded",
-      raw,
-      typeof source === "string" ? undefined : source.valueDigests,
-    );
+    // Stream workers publish the semantic line seed asynchronously. Do not
+    // hash the entire line a second time while materializing it: that would
+    // walk every note/event on the UI thread before the worker seed arrives.
+    // A local provider still computes value digests when no deferred seed is
+    // available, while a worker read keeps the materialization path parse-only.
+    const valueDigests =
+      typeof source === "string"
+        ? this.fingerprintReadyState
+          ? lineContentFingerprintParts(line, { includeValueDigests: true }).valueDigests
+          : undefined
+        : source.valueDigests;
+    this.installLine(index, line, "loaded", raw, valueDigests);
     this.evict();
     return line;
   }
@@ -759,13 +884,20 @@ export class ChartDocument {
 
   /** Assign stable ids to one line and its owned objects. */
   private normalizeLine(line: JudgeLine, reuseIds = false): JudgeLine {
-    for (const object of this.lineObjects(line)) {
+    // Visit in place instead of first allocating an array containing every
+    // note and event. Dense charts can have hundreds of thousands of owned
+    // objects; normalization only needs one pass and does not retain them.
+    visitLineObjects(line, (object) => {
       const existing = object.id;
-      if (!isChartObjectId(existing) || (!reuseIds && this.usedIds.has(existing))) {
+      // Most imported RPE charts omit ids entirely. Avoid running the UUID
+      // regular expression for that dominant case; mixed/legacy ids still use
+      // the full validation and duplicate check below.
+      const missing = typeof existing !== "string";
+      if (missing || !isChartObjectId(existing) || (!reuseIds && this.usedIds.has(existing))) {
         object.id = this.identityFactory.next();
       }
       this.usedIds.add(object.id as string);
-    }
+    });
     return line;
   }
 

@@ -7,6 +7,11 @@
  */
 import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import { verticalGrid } from "../../../../../../core/global/chart/editing/editGrid.ts";
+import {
+  NOTE_X_MAX,
+  NOTE_X_MIN,
+  NOTE_X_SPAN,
+} from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type { TimelineNoteDrawingReceiver } from "../drawing/timelineReceiver.ts";
 import { nearestPixelGuidePosition, strokeVerticalGuide } from "../drawing/timelineHoverGuides.ts";
 
@@ -113,17 +118,20 @@ function drawNoteLanesInto(
           return { lineIndex, pointer: receiver.gestures.cursor };
         })()
       : null;
-  const chartLeft = cameraX - 675;
-  const chartRight = cameraX + 675;
-  const firstGrid = Math.max(0, Math.ceil(chartLeft / grid.spacing - grid.first));
-  const lastGrid = Math.min(grid.lineCount - 1, Math.floor(chartRight / grid.spacing - grid.first));
+  const chartLeft = cameraX + NOTE_X_MIN;
+  const chartRight = cameraX + NOTE_X_MAX;
+  // Continue the authored grid periodically outside -675..675. The chart
+  // spacing and horizontal scale stay unchanged; only the visible index
+  // window moves with the camera.
+  const firstGrid = Math.ceil(chartLeft / grid.spacing - grid.first);
+  const lastGrid = Math.floor(chartRight / grid.spacing - grid.first);
   for (let panel = firstPanel; panel <= Math.min(lastPanel, panelCount - 1); panel++) {
     const lineIndex = targetLines[panel];
     if (lineIndex === undefined) {
       continue;
     }
     const horizontalForLane = (lane: number): number => {
-      const local = inset + ((lane - cameraX + 675) / 1350) * contentWidth;
+      const local = inset + ((lane - cameraX - NOTE_X_MIN) / NOTE_X_SPAN) * contentWidth;
       return panel * panelStride - panelOffset + Math.max(0, Math.min(panelWidth, local));
     };
     const guidePositions: number[] = [];
@@ -136,7 +144,7 @@ function drawNoteLanesInto(
       panelPointer !== null ? nearestPixelGuidePosition(guidePositions, panelPointer.x) : null;
     for (let index = firstGrid; index <= lastGrid; index++) {
       const lane = (index + grid.first) * grid.spacing;
-      const center = Math.abs(lane - cameraX) < 1e-7;
+      const center = Math.abs(lane) < 1e-7;
       const baseColor = center
         ? receiver.appearance.verticalGridCenterColor
         : receiver.appearance.verticalGridColor;

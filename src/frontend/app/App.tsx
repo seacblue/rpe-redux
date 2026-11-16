@@ -23,7 +23,7 @@ import { listExternalThemePackages } from "../../core/platform/desktop/themePack
 import { refreshExternalNoteSkins } from "../../core/platform/desktop/noteSkinPackages.ts";
 import { loadPackagedExtensions, refreshPackagedExtensions } from "../platform/extensionLoader.ts";
 import { syncNativeWindowTheme } from "../platform/desktop/windowTheme.ts";
-import { localService } from "../../core/global/library/service.ts";
+import { waitForLocalService } from "../../core/global/library/service.ts";
 import { createDesktopPreferenceClient } from "../platform/preferencesClient.ts";
 import {
   adoptRuntimePortSettings,
@@ -223,27 +223,28 @@ function AppContent() {
         if (cancelled) {
           return;
         }
-        const found = await localService({ refresh: true });
-        if (found) {
-          await preferences.attach(createDesktopPreferenceClient(found.library));
-          // A crash between saving a replacement image and committing its
-          // setting can leave an unreferenced file behind. Reconcile the
-          // dedicated folder once the stored value is readable; a failed read
-          // must never be mistaken for "no background is configured".
-          if (preferences.status().durable) {
-            const activeReference = values.byId.has("custom-background")
-              ? String(values.byId.get("custom-background") ?? "")
-              : "";
-            void cleanupCustomBackgrounds(activeReference).catch((error: unknown) => {
-              console.error("Could not clean unused settings images", error);
-            });
-          }
-          // Extension consent is kept in durable preferences, so package
-          // discovery runs only after the preference store attaches.
-          await loadPackagedExtensions();
-          if (!cancelled) {
-            window.dispatchEvent(new Event(NOTE_SKIN_EVENT));
-          }
+        const found = await waitForLocalService();
+        if (!found) {
+          throw new Error("The local library service did not become ready during startup.");
+        }
+        await preferences.attach(createDesktopPreferenceClient(found.library));
+        // A crash between saving a replacement image and committing its
+        // setting can leave an unreferenced file behind. Reconcile the
+        // dedicated folder once the stored value is readable; a failed read
+        // must never be mistaken for "no background is configured".
+        if (preferences.status().durable) {
+          const activeReference = values.byId.has("custom-background")
+            ? String(values.byId.get("custom-background") ?? "")
+            : "";
+          void cleanupCustomBackgrounds(activeReference).catch((error: unknown) => {
+            console.error("Could not clean unused settings images", error);
+          });
+        }
+        // Extension consent is kept in durable preferences, so package
+        // discovery runs only after the preference store attaches.
+        await loadPackagedExtensions();
+        if (!cancelled) {
+          window.dispatchEvent(new Event(NOTE_SKIN_EVENT));
         }
         if (cancelled) {
           return;

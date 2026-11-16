@@ -4,6 +4,8 @@
 export interface PerformanceFrameTimingSample {
   readonly timelineMs: number;
   readonly previewMs: number;
+  /** Time spent updating transient selection/gesture state before painting. */
+  readonly selectionMs?: number;
   readonly totalMs: number;
 }
 
@@ -14,6 +16,7 @@ export interface PerformanceFrameTimingSnapshot extends PerformanceFrameTimingSa
 interface FrameTimingState {
   timelineMs: number;
   previewMs: number;
+  selectionMs: number;
   totalMs: number;
 }
 
@@ -24,6 +27,7 @@ function emptyState(): FrameTimingState {
   return {
     timelineMs: 0,
     previewMs: 0,
+    selectionMs: 0,
     totalMs: 0,
   };
 }
@@ -37,6 +41,7 @@ function safeDuration(value: number): number {
 export function recordPerformanceFrameTiming(sample: PerformanceFrameTimingSample): void {
   state.timelineMs = safeDuration(sample.timelineMs);
   state.previewMs = safeDuration(sample.previewMs);
+  state.selectionMs = safeDuration(sample.selectionMs ?? 0);
   state.totalMs = safeDuration(sample.totalMs);
 }
 
@@ -45,6 +50,7 @@ export function performanceFrameTimingSnapshot(): PerformanceFrameTimingSnapshot
   return {
     timelineMs: state.timelineMs,
     previewMs: state.previewMs,
+    selectionMs: state.selectionMs,
     totalMs: state.totalMs,
   };
 }

@@ -50,3 +50,48 @@ test("conversion failure does not fall through to the native RPE importer", asyn
     home.dispose();
   }
 });
+
+test("classified paths match normalized native path spelling", async () => {
+  const home = createHome({
+    classifyPaths: async () => [
+      {
+        path: "E:\\\\GAMES\\\\CHART.PEZ",
+        kind: "chart",
+        format: "rpe",
+        entry: "E:\\\\GAMES\\\\CHART.PEZ",
+        valid: true,
+      },
+    ],
+    importRpePath: async () => ["rpe-project"],
+    importExternalPath: async () => {
+      throw new Error("must not fall through to external importer");
+    },
+  });
+  try {
+    assert.deepEqual(await home.importPaths(["e:/games/chart.pez"]), ["rpe-project"]);
+  } finally {
+    home.dispose();
+  }
+});
+
+test("duplicate native drop paths are imported once", async () => {
+  let imports = 0;
+  const home = createHome({
+    importFile: async () => {
+      imports += 1;
+      return "native-project";
+    },
+    classifyPaths: async () => [
+      { path: "C:/chart.json", kind: "chart", format: "rpe", entry: "C:/chart.json", valid: true },
+    ],
+    importRpePath: async () => null,
+  });
+  try {
+    assert.deepEqual(await home.importPaths(["C:/chart.json", "c:\\chart.json"]), [
+      "native-project",
+    ]);
+    assert.equal(imports, 1);
+  } finally {
+    home.dispose();
+  }
+});

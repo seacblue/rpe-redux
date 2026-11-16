@@ -34,6 +34,18 @@ struct LaunchOptions {
     remote_debugging_port: Option<u16>,
 }
 
+/// Chromium switches shared by normal and CDP WebView2 launches.
+const BROWSER_ARGUMENTS: &str =
+    "--autoplay-policy=no-user-gesture-required --force-high-performance-gpu";
+
+/// Build the WebView2 arguments while keeping the GPU policy on every launch.
+fn browser_arguments(remote_debugging_port: Option<u16>) -> String {
+    match remote_debugging_port {
+        Some(port) => format!("--remote-debugging-port={} {}", port, BROWSER_ARGUMENTS),
+        None => BROWSER_ARGUMENTS.to_owned(),
+    }
+}
+
 /// Read the two supported product-level launch options once.
 ///
 /// The command-line forms are intentionally narrow: smoke/debug tooling may
@@ -85,15 +97,7 @@ fn main() {
     // Keep normal and CDP launches on the same explicit WebView2 argument
     // path. Wry's implicit defaults have caused environment creation failures
     // on some Windows WebView2 runtime updates.
-    let additional_browser_args = options.remote_debugging_port.map_or_else(
-        || "--autoplay-policy=no-user-gesture-required".to_owned(),
-        |port| {
-            format!(
-                "--remote-debugging-port={} --autoplay-policy=no-user-gesture-required",
-                port
-            )
-        },
-    );
+    let additional_browser_args = browser_arguments(options.remote_debugging_port);
     // The setup hook creates windows so a WebView2 failure can be handled as a
     // startup error.
     for window in &mut context.config_mut().app.windows {
@@ -289,4 +293,19 @@ fn main() {
         }
         _ => {}
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::browser_arguments;
+
+    #[test]
+    fn browser_arguments_request_the_high_performance_gpu() {
+        let normal = browser_arguments(None);
+        let cdp = browser_arguments(Some(47123));
+
+        assert!(normal.contains("--force-high-performance-gpu"));
+        assert!(cdp.contains("--force-high-performance-gpu"));
+        assert!(cdp.contains("--remote-debugging-port=47123"));
+    }
 }

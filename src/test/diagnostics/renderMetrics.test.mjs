@@ -8,6 +8,7 @@ import {
   recordPreviewTiming,
   recordShaderState,
   recordShaderCompile,
+  recordShaderOverlayUpload,
   recordTextureUpload,
   renderDiagnosticsSnapshot,
   resetRenderDiagnostics,
@@ -25,6 +26,7 @@ test("records renderer availability, skin uploads, fallback, and grouped GPU wor
   recordShaderState("preview", { webglAvailable: true, webgl2: true, active: true });
   recordShaderCompile("preview", true);
   recordShaderCompile("preview", false);
+  recordShaderOverlayUpload("preview", 0.75);
   recordContextEvent("preview", "lost");
   recordContextEvent("preview", "restored");
   recordTextureUpload("preview", true);
@@ -72,6 +74,8 @@ test("records renderer availability, skin uploads, fallback, and grouped GPU wor
   assert.equal(snapshot.preview.shader.webgl2, true);
   assert.equal(snapshot.preview.shader.compileAttempts, 2);
   assert.equal(snapshot.preview.shader.compileFailures, 1);
+  assert.equal(snapshot.preview.shader.overlayUploads, 1);
+  assert.equal(snapshot.preview.shader.lastOverlayUploadMs, 0.75);
   assert.equal(snapshot.preview.batches.lastGroupCount, 12);
   assert.equal(snapshot.preview.batches.lastBufferSubDataCalls, 12);
   assert.equal(snapshot.preview.batches.lastTextureBinds, 12);

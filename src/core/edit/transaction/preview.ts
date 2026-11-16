@@ -11,7 +11,9 @@ import { containsCycle } from "../../global/chart/cycles.ts";
 import { extensionRegistry } from "../../extensions/runtime.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { fingerprintJsonText } from "../../utils/fingerprint.ts";
+import { chartFingerprintWithLineChanges } from "../document/chartRevision.ts";
 import type { EditorSession } from "../session/session.ts";
+import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
 import type {
   ChartTransactionPreviewResult,
   ChartTransactionRequest,
@@ -49,9 +51,53 @@ interface PlannedTransaction {
   readonly chart: Chart;
   readonly label: string;
   readonly affectedObjectIds: readonly ChartObjectId[];
+  readonly changedLineIndexes: readonly number[];
+  readonly noteChangeHints: readonly NoteChangeHint[];
   readonly estimatedBytes: number;
   readonly status: "previewed" | "unchanged";
   readonly dispose: () => void;
+}
+
+/** Validate one line's noise constraints without rescanning unrelated lines. */
+function validateNoiseLine(state: MutableTransactionState, index: number): void {
+  const line = state.chart.judgeLineList?.[index];
+  if (!line) {
+    return;
+  }
+  if (Object.hasOwn(line, NOISE_LINE_FIELD) && !validNoiseLineSettings(line)) {
+    state.issues.push(issue("noise.line.invalid", `judgeLineList[${index}]`, line.id));
+    return;
+  }
+  if (!noiseLineSettings(line)) {
+    return;
+  }
+  const conflicts = lineNoiseConflicts(line);
+  if (conflicts.notes || conflicts.alphaEvents || conflicts.speedEvents) {
+    state.issues.push(issue("noise.line.incompatible", `judgeLineList[${index}]`, line.id));
+  }
+}
+
+/** Validate touched lines after the source chart has passed one complete scan. */
+function validateTouchedNoiseLines(state: MutableTransactionState): void {
+  for (const index of state.clonedLines) {
+    validateNoiseLine(state, index);
+  }
+}
+
+/** Keep the first transaction safe while making later line-local plans cheap. */
+function validateTransactionNoise(session: EditorSession, state: MutableTransactionState): void {
+  if (!validatedNoiseCharts.has(session.chart)) {
+    for (const [index] of (state.chart.judgeLineList ?? []).entries()) {
+      validateNoiseLine(state, index);
+    }
+    if (!state.issues.some((entry) => entry.code.startsWith("noise.line."))) {
+      validatedNoiseCharts.add(session.chart);
+      validatedNoiseCharts.add(state.chart);
+    }
+    return;
+  }
+  validateTouchedNoiseLines(state);
+  validatedNoiseCharts.add(state.chart);
 }
 
 type PlannedTransactionDraft = Omit<PlannedTransaction, "dispose">;
@@ -60,7 +106,42 @@ type TransactionPlanOutcome =
   { readonly plan: PlannedTransactionDraft } | { readonly result: ChartTransactionResult };
 
 const previewPlans = new WeakMap<EditorSession, PlannedTransaction>();
+/** Charts whose complete noise-line state has already passed transaction validation. */
+const validatedNoiseCharts = new WeakSet<object>();
 let nextPreviewId = 1;
+
+/** Report optional browser-only transaction timings without coupling the kernel to the UI. */
+function reportTransactionTiming(sample: {
+  stage: string;
+  durationMs: number;
+  status?: ChartTransactionResult["status"];
+}): void {
+  const probe = (
+    globalThis as typeof globalThis & {
+      __reduxTransactionTimingProbe?: (value: typeof sample) => void;
+    }
+  ).__reduxTransactionTimingProbe;
+  probe?.(sample);
+}
+
+/** Freeze mutable planner note deltas before they cross the transaction boundary. */
+function freezeNoteChangeHints(
+  hints: MutableTransactionState["noteChangeHints"],
+): readonly NoteChangeHint[] {
+  if (!hints?.size) {
+    return Object.freeze([]);
+  }
+  return Object.freeze(
+    [...hints.entries()].map(([lineIndex, value]) =>
+      Object.freeze({
+        lineIndex,
+        noteIndexes: Object.freeze([...value.noteIndexes].sort((left, right) => left - right)),
+        kind: value.kind,
+        overlapChanged: value.overlapChanged,
+      }),
+    ),
+  );
+}
 
 /** Drops one cached preview and its history subscription. */
 function clearPlan(session: EditorSession, plan = previewPlans.get(session)): void {
@@ -161,7 +242,12 @@ function planChartTransaction(
       result: result("rejected", null, null, [], [issue("editor.fingerprintPending")], null),
     };
   }
+  const beforeFingerprintStarted = performance.now();
   const beforeFingerprint = fingerprint(session.chart);
+  reportTransactionTiming({
+    stage: "plan.beforeFingerprint",
+    durationMs: performance.now() - beforeFingerprintStarted,
+  });
   if (expectedFingerprint !== undefined && beforeFingerprint !== expectedFingerprint) {
     return {
       result: result("conflict", beforeFingerprint, beforeFingerprint, [], [], null, {
@@ -233,7 +319,9 @@ function planChartTransaction(
       ),
     };
   }
+  const cloneStarted = performance.now();
   const chart = transactionChart(session.chart);
+  reportTransactionTiming({ stage: "plan.clone", durationMs: performance.now() - cloneStarted });
   const state: MutableTransactionState = {
     chart,
     issues: [],
@@ -245,20 +333,12 @@ function planChartTransaction(
     fullLineValidation: new Set(),
     retainedBytes: 64,
   };
+  const applyStarted = performance.now();
   applyRequest(state, request);
-  for (const [index, line] of (chart.judgeLineList ?? []).entries()) {
-    if (Object.hasOwn(line, NOISE_LINE_FIELD) && !validNoiseLineSettings(line)) {
-      state.issues.push(issue("noise.line.invalid", `judgeLineList[${index}]`, line.id));
-      continue;
-    }
-    if (!noiseLineSettings(line)) {
-      continue;
-    }
-    const conflicts = lineNoiseConflicts(line);
-    if (conflicts.notes || conflicts.alphaEvents || conflicts.speedEvents) {
-      state.issues.push(issue("noise.line.incompatible", `judgeLineList[${index}]`, line.id));
-    }
-  }
+  reportTransactionTiming({ stage: "plan.apply", durationMs: performance.now() - applyStarted });
+  const noiseStarted = performance.now();
+  validateTransactionNoise(session, state);
+  reportTransactionTiming({ stage: "plan.noise", durationMs: performance.now() - noiseStarted });
   if (state.issues.length) {
     return {
       result: result(
@@ -272,14 +352,38 @@ function planChartTransaction(
     };
   }
   try {
-    normalizeChartObjectIds(chart, undefined, session.chart);
+    const validationStarted = performance.now();
+    const sameLineCount = chart.judgeLineList?.length === session.chart.judgeLineList?.length;
+    // Copy-on-write transactions already know exactly which line slots they
+    // replaced. Keep structural edits on the full safe path, but avoid walking
+    // all 741 untouched lines for an update to one note or event.
+    normalizeChartObjectIds(
+      chart,
+      undefined,
+      session.chart,
+      sameLineCount ? [...state.clonedLines] : undefined,
+    );
     validateTransactionChart(chart, state);
+    reportTransactionTiming({
+      stage: "plan.validate",
+      durationMs: performance.now() - validationStarted,
+    });
+    const afterFingerprintStarted = performance.now();
     const afterFingerprint =
       session.chartDocument && chart.judgeLineList?.length === session.chartDocument.lineCount
         ? session.chartDocument.previewFingerprint(chart, state.clonedLines)
-        : fingerprint(chart);
+        : chartFingerprintWithLineChanges(session.chart, chart, state.clonedLines);
+    reportTransactionTiming({
+      stage: "plan.afterFingerprint",
+      durationMs: performance.now() - afterFingerprintStarted,
+    });
     const changed = beforeFingerprint !== afterFingerprint;
+    const requestFingerprintStarted = performance.now();
     const requestKey = requestFingerprint(request);
+    reportTransactionTiming({
+      stage: "plan.requestFingerprint",
+      durationMs: performance.now() - requestFingerprintStarted,
+    });
     if (!requestKey) {
       return {
         result: result(
@@ -303,6 +407,8 @@ function planChartTransaction(
         chart,
         label: transactionLabel(request),
         affectedObjectIds: freezeIds(changed ? state.affected : []),
+        changedLineIndexes: Object.freeze([...state.clonedLines]),
+        noteChangeHints: freezeNoteChangeHints(state.noteChangeHints),
         estimatedBytes: state.retainedBytes ?? 64,
         status: changed ? "previewed" : "unchanged",
       },
@@ -459,6 +565,8 @@ function applyPreviewTransaction(
       validatedNoise: true,
       afterFingerprint: plan.afterFingerprint,
       estimatedBytes: plan.estimatedBytes,
+      changedLineIndexes: plan.changedLineIndexes,
+      noteChangeHints: plan.noteChangeHints,
     },
   );
 }
@@ -498,17 +606,29 @@ export function applyChartTransaction(
       return applyPreviewTransaction(session, active.previewId, options);
     }
   }
+  const planStarted = performance.now();
   const outcome = planChartTransaction(
     session,
     requestOrPreviewId,
     options.expectedFingerprint,
     options.currentGeneration,
   );
+  reportTransactionTiming({
+    stage: "plan",
+    durationMs: performance.now() - planStarted,
+    status:
+      "result" in outcome
+        ? outcome.result.status
+        : outcome.plan.status === "previewed"
+          ? "committed"
+          : "unchanged",
+  });
   if ("result" in outcome) {
     return outcome.result;
   }
   clearPlan(outcome.plan.session);
-  return commitTransaction(
+  const commitStarted = performance.now();
+  const committed = commitTransaction(
     outcome.plan.session,
     outcome.plan.chart,
     outcome.plan.label,
@@ -519,6 +639,14 @@ export function applyChartTransaction(
       validatedNoise: true,
       afterFingerprint: outcome.plan.afterFingerprint,
       estimatedBytes: outcome.plan.estimatedBytes,
+      changedLineIndexes: outcome.plan.changedLineIndexes,
+      noteChangeHints: outcome.plan.noteChangeHints,
     },
   );
+  reportTransactionTiming({
+    stage: "commit",
+    durationMs: performance.now() - commitStarted,
+    status: committed.status,
+  });
+  return committed;
 }

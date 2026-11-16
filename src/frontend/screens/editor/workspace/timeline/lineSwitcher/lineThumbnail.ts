@@ -6,6 +6,10 @@
  * line overview index.
  */
 import { noteColor, readCanvasPalette } from "../../../canvas/palette.ts";
+import {
+  NOTE_X_MIN,
+  NOTE_X_SPAN,
+} from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import type { LineThumbnailSnapshot } from "./lineSwitcherTypes.ts";
 
@@ -50,7 +54,7 @@ export function drawLineThumbnail(
       if ((note.type === 2) !== hold) {
         continue;
       }
-      const horizontal = 10 + (((note.positionX ?? 0) + 675) / 1350) * 144;
+      const horizontal = 10 + (((note.positionX ?? 0) - NOTE_X_MIN) / NOTE_X_SPAN) * 144;
       if (horizontal < 0 || horizontal > 160) {
         continue;
       }

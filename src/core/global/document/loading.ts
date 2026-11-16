@@ -12,12 +12,22 @@ import type { ChartDiagnostic } from "../chart/diagnostics.ts";
 
 /** Ordered phases reported while a document loads. */
 export type LoadStage =
-  "read" | "unpack" | "parse" | "notes" | "events" | "render" | "textures" | "audio" | "ready";
+  | "read"
+  | "unpack"
+  | "parse"
+  | "content"
+  | "notes"
+  | "events"
+  | "render"
+  | "textures"
+  | "audio"
+  | "ready";
 /** Percent span each stage occupies; published progress never moves backward. */
 const ranges: Record<LoadStage, [number, number]> = {
   read: [0, 10],
   unpack: [10, 15],
   parse: [15, 22],
+  content: [22, 68],
   notes: [22, 45],
   events: [45, 68],
   textures: [68, 82],

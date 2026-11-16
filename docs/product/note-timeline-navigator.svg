@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
+  <title>Note timeline X coordinate range controls</title>
+  <desc>Three note timelines share one X camera. The bottom floating overlay has left, reset, and right buttons. Vertical grid lines keep the same spacing outside the normal X range, while theme-adaptive white indicators mark current-beat notes outside a timeline edge.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#12161e"/><stop offset="1" stop-color="#090b10"/></linearGradient>
+    <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1d2935"/><stop offset="1" stop-color="#111820"/></linearGradient>
+    <linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity=".35"/></filter>
+    <style>
+      .ui { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; fill: #dbe5f0; }
+      .muted { fill: #8997a7; }
+      .tiny { font-size: 12px; }
+      .small { font-size: 15px; }
+      .label { font-size: 17px; font-weight: 600; }
+      .title { font-size: 26px; font-weight: 700; }
+      .call { stroke: #80b7ff; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+  <rect width="1280" height="760" fill="url(#bg)"/>
+  <rect x="32" y="28" width="1216" height="704" rx="14" fill="#0d1118" stroke="#293342"/>
+  <text x="68" y="72" class="ui title">Note timeline：X 坐标范围浮层</text>
+  <text x="68" y="101" class="ui small muted">三条 note timeline 共用 cameraX；按钮以 150 为小步缓动移动，不移动 panel、不移动歌曲时间。</text>
+  <rect x="68" y="135" width="1060" height="418" rx="8" fill="#0b0e13" stroke="#44515f"/>
+  <g transform="translate(110 135)">
+    <path d="M0 74H978 M0 148H978 M0 222H978 M0 296H978 M0 370H978" stroke="#243242" stroke-width="1"/>
+    <g>
+      <rect width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+      <rect x="316" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+      <rect x="632" width="300" height="418" fill="url(#panel)" stroke="#56687a"/>
+      <g class="ui small" text-anchor="middle"><text x="150" y="24">note timeline · 线 0</text><text x="466" y="24">note timeline · 线 1</text><text x="782" y="24">note timeline · 线 2</text></g>
+      <g fill="#6fc9ff" opacity=".9"><rect x="82" y="100" width="116" height="26" rx="8"/><rect x="385" y="160" width="128" height="26" rx="8"/><rect x="724" y="92" width="120" height="26" rx="8"/></g>
+      <g fill="#d8f3ff" stroke="#ffffff" stroke-width="2"><rect x="-24" y="255" width="72" height="26" rx="8"/><rect x="906" y="286" width="82" height="26" rx="8"/></g>
+      <rect x="0" y="255" width="5" height="26" fill="url(#edge)"/>
+      <rect x="927" y="286" width="5" height="26" fill="#fff" opacity=".88"/>
+    </g>
+  </g>
+  <g transform="translate(442 531)" filter="url(#shadow)">
+    <rect width="352" height="48" rx="10" fill="#192333" stroke="#536b84"/>
+    <rect x="8" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/><path d="M29 17L19 24L29 31" stroke="#dbeeff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="50" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/><path d="M59 25C59 20 63 17 67 17C72 17 75 20 75 25C75 29 72 32 67 32C63 32 60 30 59 27" stroke="#dbeeff" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="104" y="30" class="ui small">X：-675 ～ 675</text>
+    <rect x="310" y="7" width="34" height="34" rx="7" fill="#24374d" stroke="#6f91b6"/><path d="M321 17L331 24L321 31" stroke="#dbeeff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M1035 315C1156 315 1185 270 1185 219" class="call"/>
+  <rect x="1035" y="160" width="180" height="62" rx="8" fill="#162538" stroke="#80b7ff"/>
+  <text x="1051" y="185" class="ui small">白光 indicator = 当前拍 note</text><text x="1051" y="207" class="ui small">只覆盖 note 高度</text>
+  <path d="M515 579C515 633 444 647 398 677" class="call"/>
+  <rect x="68" y="654" width="480" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
+  <text x="86" y="684" class="ui small">三按钮只移动 cameraX；中间按钮回到 0，不切换判定线。</text>
+  <path d="M240 386C185 419 155 458 142 515" class="call"/>
+  <rect x="610" y="654" width="570" height="48" rx="8" fill="#162538" stroke="#80b7ff"/>
+  <text x="628" y="684" class="ui small">不绘制离屏背景；竖向网格线在默认范围外按相同 spacing 延续，当前拍 note 越界时只画 note 高度白光。</text>
+</svg>

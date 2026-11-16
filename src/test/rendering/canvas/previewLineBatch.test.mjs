@@ -62,6 +62,7 @@ test("default judge lines batch once and fall back to Canvas when disabled", () 
       passes: [{ kind: "line", index: 0, depth: 0 }],
       noteOpacity: 1,
       selectedLines: [],
+      selectedLineSet: new Set(),
       selectedLineColor: [],
       selectedNotes: new Map(),
       simultaneous: null,
@@ -151,9 +152,15 @@ test("line groups share reset and clear with the note layers", () => {
     useful: { x: 0, y: 0, width: 1, height: 1 },
   };
   const line = groups.lineGroup(descriptor);
+  const dynamicLine = groups.dynamicLineGroup(descriptor);
   const hold = groups.group(descriptor, 0, false);
   line.count = 3;
+  dynamicLine.count = 4;
   hold.count = 2;
+
+  groups.reset(true);
+  assert.equal(line.count, 3);
+  assert.equal(dynamicLine.count, 0);
 
   groups.reset();
   assert.equal(line.count, 0);

@@ -148,7 +148,7 @@ export class CdpClient {
     }
   }
 
-  async command(method, params = {}) {
+  async command(method, params = {}, timeoutMs = 10000) {
     await this.ready;
     const id = ++this.nextId;
     const result = new Promise((resolvePromise, reject) => {
@@ -160,7 +160,7 @@ export class CdpClient {
         this.pending.delete(id);
         pending.reject(new Error(`CDP command timed out: ${method}`));
       }
-    }, 10000);
+    }, timeoutMs);
     this.socket.send(JSON.stringify({ id, method, params }));
     try {
       return await result;
@@ -169,18 +169,70 @@ export class CdpClient {
     }
   }
 
-  async evaluate(expression, { noValueMessage = "Runtime.evaluate returned no value" } = {}) {
-    const response = await this.command("Runtime.evaluate", {
-      expression,
-      awaitPromise: true,
-      returnByValue: true,
-      userGesture: true,
-    });
+  async evaluate(
+    expression,
+    { noValueMessage = "Runtime.evaluate returned no value", timeoutMs = 10000 } = {},
+  ) {
+    const response = await this.command(
+      "Runtime.evaluate",
+      {
+        expression,
+        awaitPromise: true,
+        returnByValue: true,
+        userGesture: true,
+      },
+      timeoutMs,
+    );
     if (response.exceptionDetails) {
       const description =
         response.exceptionDetails.exception?.description ??
         response.exceptionDetails.text ??
         "Runtime.evaluate failed";
+      throw new Error(description);
+    }
+    if (!Object.hasOwn(response.result, "value")) {
+      throw new Error(noValueMessage);
+    }
+    return response.result.value;
+  }
+
+  /**
+   * Calls a fixed browser function with structured CDP arguments.
+   *
+   * The function declaration is kept separate from argument values so callers
+   * do not have to construct executable JavaScript from runtime data.
+   */
+  async callFunction(
+    functionDeclaration,
+    args = [],
+    { noValueMessage = "Runtime.callFunctionOn returned no value", timeoutMs = 10000 } = {},
+  ) {
+    const global = await this.command(
+      "Runtime.evaluate",
+      { expression: "globalThis", returnByValue: false },
+      timeoutMs,
+    );
+    const objectId = global.result?.objectId;
+    if (!objectId) {
+      throw new Error("Runtime.evaluate did not return a global object");
+    }
+    const response = await this.command(
+      "Runtime.callFunctionOn",
+      {
+        objectId,
+        functionDeclaration,
+        arguments: args.map((value) => ({ value })),
+        awaitPromise: true,
+        returnByValue: true,
+        userGesture: true,
+      },
+      timeoutMs,
+    );
+    if (response.exceptionDetails) {
+      const description =
+        response.exceptionDetails.exception?.description ??
+        response.exceptionDetails.text ??
+        "Runtime.callFunctionOn failed";
       throw new Error(description);
     }
     if (!Object.hasOwn(response.result, "value")) {

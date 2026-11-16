@@ -204,6 +204,9 @@ export class HitSounds {
       let bytes = assetBytes(this.assets, name, this.chartName);
       const assetUri = this.assets.uri;
       const path = assetPath(this.assets, name, this.chartName);
+      if (!bytes && path && this.assets.read) {
+        bytes = (await this.assets.read(path)) ?? null;
+      }
       if (!bytes && assetUri && path) {
         const response = await fetch(assetUri(path), { signal });
         if (response.ok) {
@@ -404,10 +407,15 @@ export class HitSounds {
       this.revision = this.transport.playRevision;
       this.next = upperBound(this.entries, time - 0.02, (entry) => entry.time);
     }
-    this.next = Math.max(
-      this.next,
-      upperBound(this.entries, time - 0.08, (entry) => entry.time),
-    );
+    // `next` already points past the previous look-ahead window. During normal
+    // monotonic playback the first unscheduled entry is therefore still newer
+    // than the moving lower bound; avoid a binary search on every RAF. A seek
+    // or a long main-thread stall can move the bound past that entry, so retain
+    // the upper-bound repair path for that case.
+    const lowerBound = time - 0.08;
+    if (this.entries[this.next]?.time <= lowerBound) {
+      this.next = upperBound(this.entries, lowerBound, (entry) => entry.time);
+    }
     const until = time + 0.1 * this.transport.rate;
     let burst = 0;
     while (

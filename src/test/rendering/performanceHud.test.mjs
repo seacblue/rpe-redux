@@ -15,6 +15,14 @@ import {
   recordPerformanceFrameTiming,
   resetPerformanceFrameTiming,
 } from "../../frontend/overlays/performance/performanceFrameTiming.ts";
+import { getPerformanceHudBlocks } from "../../frontend/overlays/performance/performanceHud.ts";
+
+test("performance HUD keeps only the focused playback signals visible", () => {
+  assert.deepEqual(
+    getPerformanceHudBlocks().map((block) => block.id),
+    ["fps", "hotspots", "cpu", "memory"],
+  );
+});
 
 test("render load is measured against the configured frame budget", () => {
   assert.ok(Math.abs(frameBudgetMs(144) - 1000 / 144) < 1e-12);
@@ -34,6 +42,7 @@ test("frame timing keeps the latest Timeline and Preview values", () => {
   assert.deepEqual(performanceFrameTimingSnapshot(), {
     timelineMs: 12,
     previewMs: 4,
+    selectionMs: 0,
     totalMs: 18,
   });
 });
@@ -44,11 +53,13 @@ test("frame timing drops invalid durations", () => {
   let snapshot = performanceFrameTimingSnapshot();
   assert.equal(snapshot.timelineMs, 0);
   assert.equal(snapshot.previewMs, 0);
+  assert.equal(snapshot.selectionMs, 0);
   assert.equal(snapshot.totalMs, 12);
 
   recordPerformanceFrameTiming({ timelineMs: 5, previewMs: 3, totalMs: Number.POSITIVE_INFINITY });
   snapshot = performanceFrameTimingSnapshot();
   assert.equal(snapshot.timelineMs, 5);
   assert.equal(snapshot.previewMs, 3);
+  assert.equal(snapshot.selectionMs, 0);
   assert.equal(snapshot.totalMs, 0);
 });

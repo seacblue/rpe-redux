@@ -261,13 +261,18 @@ export async function captureLibraryAssets(assets: AssetMap): Promise<LibraryAss
 /** Snapshot lazy desktop assets into a plain map for a first library import. */
 export async function materializeAssets(assets: AssetMap): Promise<AssetMap> {
   const names = new Set(assetNames(assets));
-  for (const name of names) {
-    if (!assets.has(name) && assets.read) {
-      const bytes = await assets.read(name);
-      if (bytes) {
-        assets.set(name, bytes);
-      }
-    }
+  if (assets.read) {
+    await Promise.all(
+      [...names].map(async (name) => {
+        if (assets.has(name)) {
+          return;
+        }
+        const bytes = await assets.read?.(name);
+        if (bytes) {
+          assets.set(name, bytes);
+        }
+      }),
+    );
   }
   const materialized = new Map(assets) as AssetMap;
   materialized.names = () => names;

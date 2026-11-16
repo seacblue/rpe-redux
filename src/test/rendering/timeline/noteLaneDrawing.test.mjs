@@ -48,3 +48,52 @@ test("merged note lanes reveal vertical guides around the pointer", () => {
 
   assert.ok(strokes > 0);
 });
+
+test("note lanes extend outside the authored range at the same scale", () => {
+  const positions = [];
+  const styles = [];
+  const context = {
+    beginPath() {},
+    moveTo(x) {
+      positions.push(x);
+      styles.push(this.strokeStyle);
+    },
+    lineTo() {},
+    stroke() {},
+    lineWidth: 1,
+    strokeStyle: "",
+  };
+  const receiver = {
+    notesBackdrop: {},
+    cache: { canvasLayer: () => null },
+    appearance: {
+      hoverGuidesEnabled: true,
+      nearbyGuidesOnly: false,
+      verticalGridColor: "#111111",
+      verticalGridCenterColor: "#222222",
+      gridHighlightColor: "#FFFFFF80",
+    },
+    gestures: { hoverArea: "", cursor: null },
+    getSession: () => ({
+      notesMode: "notes",
+      lineIndex: 1,
+      targetLineIndices: [1],
+    }),
+    viewport: {
+      gridCount: 5,
+      cameraX: 675,
+      panelWidth: () => 100,
+      noteInset: () => 0,
+      panelCount: () => 1,
+      panelStride: () => 100,
+      multiLineViewportOffset: () => 0,
+      visiblePanelRange: () => [0, 0],
+      lineIndexAt: () => 0,
+    },
+  };
+
+  drawNoteLanes(receiver, context, 100, 100);
+
+  assert.deepEqual(positions, [0, 25, 50, 75, 100]);
+  assert.equal(styles[0], "#222222");
+});

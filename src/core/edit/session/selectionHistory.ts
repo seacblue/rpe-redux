@@ -34,6 +34,17 @@ export interface SelectionState {
 
 /** Flattens the live selection into a comparable, detached snapshot. */
 export function selectionState(session: EditorSession): SelectionState {
+  const multiLineSelection = [...(session.multiLineSelection ?? new Map())]
+    .filter(([, values]) => values.size > 0)
+    .map(([line, values]): [number, number[]] => [
+      line,
+      [...values].sort((left, right) => left - right),
+    ])
+    .sort((left, right) => left[0] - right[0]);
+  const multiEventSelection = [...(session.multiEventSelection ?? new Map())]
+    .filter(([, values]) => values.size > 0)
+    .map(([line, values]): [number, string[]] => [line, [...values].sort()])
+    .sort((left, right) => left[0] - right[0]);
   return {
     lineIndex: session.lineIndex,
     eventLayer: session.eventLayer,
@@ -42,15 +53,8 @@ export function selectionState(session: EditorSession): SelectionState {
     selectionMode: session.selectionMode,
     selection: [...session.selection].sort((left, right) => left - right),
     eventSelection: [...session.eventSelection].sort(),
-    multiLineSelection: [...(session.multiLineSelection ?? new Map())]
-      .map(([line, values]): [number, number[]] => [
-        line,
-        [...values].sort((left, right) => left - right),
-      ])
-      .sort((left, right) => left[0] - right[0]),
-    multiEventSelection: [...(session.multiEventSelection ?? new Map())]
-      .map(([line, values]): [number, string[]] => [line, [...values].sort()])
-      .sort((left, right) => left[0] - right[0]),
+    multiLineSelection,
+    multiEventSelection,
     multiLineEnabled: session.multiLineEnabled,
     multiLineMode: session.multiLineMode,
     multiLineMerge: session.multiLineMerge,

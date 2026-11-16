@@ -13,6 +13,27 @@ import {
 import type { PlaybackMetrics } from "../../../../../../core/edit/perf/playbackMetrics.ts";
 import { FrameCadence } from "./frameCadence.ts";
 
+interface FrameTaskTimingProbe {
+  (sample: {
+    clockMs: number;
+    autosaveMs: number;
+    drawMs: number;
+    progressMs: number;
+    readoutsMs: number;
+    performanceMs: number;
+    scheduleMs: number;
+    totalMs: number;
+  }): void;
+}
+
+/** Reports the full RAF task so non-canvas work cannot hide behind paint timings. */
+function reportFrameTaskTiming(sample: Parameters<FrameTaskTimingProbe>[0]): void {
+  const probe = (
+    globalThis as typeof globalThis & { __reduxFrameTaskTimingProbe?: FrameTaskTimingProbe }
+  ).__reduxFrameTaskTimingProbe;
+  probe?.(sample);
+}
+
 /** Mutable counters and dirty flag carried across editor frames. */
 export interface EditorFrameState {
   lastInfoTick: number;
@@ -77,19 +98,30 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
   const autosave = createFrameAutosave(options.autosave);
   const overlayCadence = new FrameCadence();
   return (timestamp) => {
+    const taskStarted = performance.now();
     state.animationCallbacks++;
     const overlayDue = overlayCadence.allow(timestamp, 60);
+    let phaseStarted = performance.now();
     clock.advance(timestamp, state, overlayDue);
     readouts.updateClock(timestamp, state);
+    const clockMs = performance.now() - phaseStarted;
+    phaseStarted = performance.now();
     if (visibility.hasDocument() && !visibility.atHome() && !visibility.documentHidden()) {
       autosave.tick(timestamp);
     }
+    const autosaveMs = performance.now() - phaseStarted;
+    let painted = false;
+    let drawMs = 0;
+    let progressMs = 0;
+    let readoutsMs = 0;
+    let performanceMs = 0;
     const current = clock.sample();
     if (
       !visibility.atHome() &&
       !visibility.documentHidden() &&
       (clock.playing() || state.dirty || drawing.active() || drawing.interacting())
     ) {
+      painted = true;
       state.frameSampleCount++;
       state.paintedFrames++;
       const start = performance.now();
@@ -108,20 +140,40 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
         state.dirty,
         contentRefreshRate,
       );
+      drawMs = performance.now() - start;
+      phaseStarted = performance.now();
       readouts.publishProgress(timestamp, seconds, audioSeconds, current.tempo, beat);
+      progressMs = performance.now() - phaseStarted;
+      phaseStarted = performance.now();
       if (refreshHud) {
         readouts.publish(timestamp, state, current.session);
       }
+      readoutsMs = performance.now() - phaseStarted;
+      phaseStarted = performance.now();
       readouts.performance(timestamp, start, state, contentRefreshRate);
+      performanceMs = performance.now() - phaseStarted;
       state.dirty = false;
       if (clock.playing()) {
         options.metrics.record(timestamp, performance.now() - start, seconds);
       }
     }
+    const scheduleStarted = performance.now();
     options.schedule(
       !visibility.atHome() && (clock.playing() || drawing.interacting()),
       visibility.documentHidden(),
       clock.playing(),
     );
+    if (painted) {
+      reportFrameTaskTiming({
+        clockMs,
+        autosaveMs,
+        drawMs,
+        progressMs,
+        readoutsMs,
+        performanceMs,
+        scheduleMs: performance.now() - scheduleStarted,
+        totalMs: performance.now() - taskStarted,
+      });
+    }
   };
 }

@@ -21,6 +21,7 @@ interface ZipProgress {
 interface ZipResult {
   id: number;
   kind: "result";
+  names: string[];
   entries: Array<{ name: string; bytes: ArrayBuffer }>;
 }
 
@@ -33,15 +34,39 @@ const workerScope = globalThis as typeof globalThis & {
 /** Reads one archive and forwards progress and extracted entries. */
 workerScope.onmessage = async (event) => {
   const { id, buffer, limits } = event.data;
-  const files = await readZip(buffer, {
-    ...limits,
-    onProgress: (completed, total) => {
-      workerScope.postMessage({ id, kind: "progress", completed, total });
-    },
-  });
+  const names: string[] = [];
+  let files;
+  if (limits.only?.length) {
+    files = await readZip(buffer, {
+      ...limits,
+      onProgress: (completed, total) => {
+        workerScope.postMessage({ id, kind: "progress", completed, total });
+      },
+    });
+  } else {
+    // Read the directory once, retaining every name while inflating only chart
+    // JSON and metadata sidecars needed before the editor reaches its first
+    // frame. Skipped entries still pass ZIP bounds, method, and duplicate-name
+    // validation in readZip.
+    const initialEntryFilter = (name: string): boolean =>
+      /(^|\/)info\.txt$/i.test(name) || /(^|\/)extra\.json$/i.test(name);
+    files = await readZip(buffer, {
+      ...limits,
+      entryFilter: initialEntryFilter,
+      onEntryName: (name) => names.push(name),
+      onProgress: (completed, total) => {
+        workerScope.postMessage({ id, kind: "progress", completed, total });
+      },
+    });
+  }
   const entries = [...files].map(([name, bytes]) => ({ name, bytes: bytes.slice().buffer }));
   workerScope.postMessage(
-    { id, kind: "result", entries },
+    {
+      id,
+      kind: "result",
+      names: names.length ? names : entries.map((entry) => entry.name),
+      entries,
+    },
     entries.map(({ bytes }) => bytes),
   );
 };

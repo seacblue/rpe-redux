@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- workspace messages share one catalog contract and stay paired with the Chinese catalog. */
 /**
  * The workspace surface: the timeline header, the canvas stage, the welcome
  * page and the dialogs the shell renders around them.
@@ -15,6 +16,7 @@ export default {
   "workspace.loading.unpack": "Reading package",
   "workspace.loading.notes": "Parsing notes",
   "workspace.loading.events": "Parsing events",
+  "workspace.loading.content": "Parsing chart objects",
   "workspace.loading.render": "Rendering first frame",
   "workspace.loading.parse": "Validating chart",
   "workspace.loading.textures": "Loading textures",

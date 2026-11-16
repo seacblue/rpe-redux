@@ -14,6 +14,7 @@ import { useEditorRuntimeValue } from "../../runtime/composition/EditorRuntime.t
 import { useTimelineRuntime } from "../../runtime/providers/TimelineProvider.tsx";
 import { useTimelineDomSurface } from "./TimelineDomSurface.tsx";
 import type { TimelinePointerCanvasBindings, TimelineStripBindings } from "./timelineBindings.ts";
+import { NoteTimelineRangeOverlay } from "../notes/NoteTimelineRangeOverlay.tsx";
 
 /** One overview strip canvas with its pointer bindings. */
 function OverviewStrip({
@@ -157,6 +158,7 @@ export function TimelineCanvases() {
         className="timeline-note-solid-batch"
         surfaceRef={surface.attach.noteSolidBatch}
       />
+      <BatchCanvas className="timeline-notes-cue" surfaceRef={surface.attach.notesCue} />
       <BatchCanvas
         className="timeline-backdrop timeline-events-backdrop"
         surfaceRef={surface.attach.eventsBackdrop}
@@ -190,6 +192,7 @@ export function TimelineCanvases() {
         surfaceRef={surface.attach.history}
         hidden={!activeOverview || !densityBarsEnabled}
       />
+      <NoteTimelineRangeOverlay />
     </>
   );
 }

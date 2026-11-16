@@ -44,7 +44,8 @@
 .editor.multi-events .timeline-notes-playhead,
 .editor.multi-events .timeline-notes-playhead-batch,
 .editor.multi-events .timeline-note-batch,
-.editor.multi-events .timeline-note-solid-batch {
+.editor.multi-events .timeline-note-solid-batch,
+.editor.multi-events .timeline-notes-cue {
   display: none;
 }
 
@@ -171,6 +172,29 @@
   column-gap: var(--space-3);
 }
 
+// The note camera controls float over the bottom of the note field like the
+// event layer strip. They do not create a new grid row or change canvas height.
+.note-timeline-range-overlay {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  justify-self: center;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  pointer-events: auto;
+}
+
+.editor.notes-hidden .note-timeline-range-overlay {
+  display: none;
+}
+
 // Hiding the strips also drops their gaps: the note/event field keeps the exact
 // width its layout promises instead of shrinking by two gutters.
 .editor.density-bars-hidden .canvases {
@@ -274,6 +298,16 @@ canvas {
   background: transparent;
 }
 
+.timeline-notes-cue {
+  grid-column: 2;
+  grid-row: 1;
+  // Temporarily keep the cue above every timeline and developer overlay while
+  // validating that the indicator is not hidden by a sibling canvas layer.
+  z-index: var(--z-performance-hud);
+  pointer-events: none;
+  background: transparent;
+}
+
 .timeline-events {
   grid-column: 3;
   grid-row: 1;
@@ -366,6 +400,7 @@ canvas {
 .editor.notes-hidden .timeline-notes-grid-batch,
 .editor.notes-hidden .timeline-note-batch,
 .editor.notes-hidden .timeline-note-solid-batch,
+.editor.notes-hidden .timeline-notes-cue,
 .editor.notes-hidden .timeline-notes-playhead,
 .editor.notes-hidden .timeline-notes-playhead-batch {
   display: none;
@@ -405,6 +440,12 @@ canvas {
     var(--timeline-strip-width, 24px);
 }
 
+.editor:is(.notes-hidden, .events-hidden, .multi-notes, .multi-events)
+  .canvases
+  .note-timeline-range-overlay {
+  grid-column: 3;
+}
+
 // Without the strips the middle is the whole workspace, and the field keeps the
 // chosen share of it, centered.
 .editor:is(.notes-hidden, .events-hidden, .multi-notes, .multi-events).density-bars-hidden
@@ -423,6 +464,7 @@ canvas {
   & .timeline-playhead-batch,
   & .timeline-note-batch,
   & .timeline-note-solid-batch,
+  & .timeline-notes-cue,
   & .timeline-events,
   & .timeline-event-batch,
   & .timeline-event-overlay-batch {
@@ -447,6 +489,7 @@ canvas {
   & .timeline-playhead-batch,
   & .timeline-note-batch,
   & .timeline-note-solid-batch,
+  & .timeline-notes-cue,
   & .timeline-events,
   & .timeline-event-batch,
   & .timeline-event-overlay-batch {

@@ -7,12 +7,31 @@
  */
 import type { EditorFocus, EditorSession } from "../session/session.ts";
 import { eventKey, eventListAt, parseEventKey } from "../events/eventTracks.ts";
-import { EVENT_TYPES } from "../../global/chart/chart.ts";
+import { EVENT_TYPES, type JudgeLineNote } from "../../global/chart/chart.ts";
 import { beatValue } from "../../global/chart/timing/beat.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
 import type { SelectionClipboardMode } from "../clipboard/selectionClipboard.ts";
 import { extensionRegistry } from "../../extensions/runtime.ts";
 import { createLateBound } from "../../utils/lateBound.ts";
+
+/** Cached beat bounds for one immutable note-array revision. */
+const noteBeatBoundsCache = new WeakMap<readonly JudgeLineNote[], Float64Array>();
+
+/** Convert note beat tuples once per copy-on-write note-array revision. */
+function noteBeatBounds(notes: readonly JudgeLineNote[]): Float64Array {
+  const cached = noteBeatBoundsCache.get(notes);
+  if (cached) {
+    return cached;
+  }
+  const bounds = new Float64Array(notes.length * 2);
+  for (let index = 0; index < notes.length; index += 1) {
+    const note = notes[index];
+    bounds[index * 2] = beatValue(note.startTime);
+    bounds[index * 2 + 1] = beatValue(note.endTime);
+  }
+  noteBeatBoundsCache.set(notes, bounds);
+  return bounds;
+}
 
 export type SelectionMode = "replace" | "add" | "remove" | "toggle";
 
@@ -328,16 +347,23 @@ function selectNoteRange(session: EditorSession, request: NoteSelectionRangeRequ
   const top = Math.max(request.from.beat, request.to.beat);
   const left = Math.min(request.from.positionX, request.to.positionX);
   const right = Math.max(request.from.positionX, request.to.positionX);
-  selectNotes(session, {
-    lineIndex: request.lineIndex,
-    indices: notes.flatMap((note, index) =>
-      beatValue(note.startTime) <= top &&
-      beatValue(note.endTime) >= bottom &&
+  const bounds = noteBeatBounds(notes);
+  const indices: number[] = [];
+  for (let index = 0; index < notes.length; index += 1) {
+    const note = notes[index];
+    const offset = index * 2;
+    if (
+      bounds[offset] <= top &&
+      bounds[offset + 1] >= bottom &&
       Number(note.positionX ?? 0) >= left &&
       Number(note.positionX ?? 0) <= right
-        ? [index]
-        : [],
-    ),
+    ) {
+      indices.push(index);
+    }
+  }
+  selectNotes(session, {
+    lineIndex: request.lineIndex,
+    indices,
     mode: request.mode,
   });
 }
@@ -522,13 +548,15 @@ export function createSelectionApi(host: SelectionApiHost) {
     session: EditorSession,
     beforeSelection: ReturnType<EditorSession["selectionState"]>,
   ): SelectionApiSnapshot => {
-    session.recordSelection(undefined, beforeSelection, false);
+    if (!session.recordSelection(undefined, beforeSelection, false)) {
+      return snapshot(session);
+    }
     const current = snapshot(session);
     host.selectionChanged?.(current);
     for (const listener of [...listeners]) {
       listener(current);
     }
-    session.notify();
+    session.notifySelection();
     return current;
   };
   const session = host.session();

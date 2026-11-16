@@ -29,6 +29,12 @@ export type EditorRegionSnapshot = {
 
 /** The authoring timeline that a view command can reveal. */
 export type EditorTimelineMode = "notes" | "events";
+
+/** One X-range step used by the note timeline camera buttons. */
+export const NOTE_TIMELINE_CAMERA_STEP = 150;
+
+/** The amount of camera movement applied on every animation frame. */
+const NOTE_TIMELINE_CAMERA_EASE = 0.2;
 /**
  * Whether the stage currently shows a note or event surface beside the preview.
  *
@@ -168,6 +174,57 @@ export function createEditorViewControls(
   const modeHistory = createEditorModeHistory(readModeSnapshot(), PREVIEW_LAYOUT);
   const now = options.now ?? Date.now;
 
+  let noteTimelineCameraAnimation: { target: number } | null = null;
+
+  /** Schedule one frame without requiring a browser animation API in tests. */
+  function scheduleCameraFrame(callback: () => void): void {
+    if (typeof globalThis.requestAnimationFrame === "function") {
+      globalThis.requestAnimationFrame(callback);
+      return;
+    }
+    globalThis.setTimeout(callback, 16);
+  }
+
+  /** Apply an in-flight camera value without persisting every animation frame. */
+  function applyNoteTimelineCamera(value: number): void {
+    displayValues.cameraX.set(String(value));
+    runtime.applyDisplaySettings();
+  }
+
+  /** Ease the note timeline camera toward a target and persist at rest. */
+  function animateNoteTimelineCamera(target: number): void {
+    const nextTarget = Number.isFinite(target) ? target : 0;
+    if (noteTimelineCameraAnimation !== null) {
+      noteTimelineCameraAnimation.target = nextTarget;
+      return;
+    }
+    noteTimelineCameraAnimation = { target: nextTarget };
+    const tick = (): void => {
+      const animation = noteTimelineCameraAnimation;
+      if (animation === null) {
+        return;
+      }
+      const current = Number(displayValues.cameraX.get());
+      const delta = animation.target - (Number.isFinite(current) ? current : 0);
+      if (Math.abs(delta) < 0.25) {
+        applyNoteTimelineCamera(animation.target);
+        noteTimelineCameraAnimation = null;
+        runtime.persist();
+        return;
+      }
+      applyNoteTimelineCamera(
+        (Number.isFinite(current) ? current : 0) + delta * NOTE_TIMELINE_CAMERA_EASE,
+      );
+      scheduleCameraFrame(tick);
+    };
+    scheduleCameraFrame(tick);
+  }
+
+  /** Stop a note camera animation before an unrelated view command writes it. */
+  function stopNoteTimelineCameraAnimation(): void {
+    noteTimelineCameraAnimation = null;
+  }
+
   /** Records the final state of one user-visible region command. */
   function recordModeChange(): void {
     modeHistory.observe(readModeSnapshot(), now());
@@ -305,12 +362,25 @@ export function createEditorViewControls(
 
   /** Centers the chart camera, optionally restoring the default view divisor. */
   function resetCamera(resetPreview = false): void {
+    stopNoteTimelineCameraAnimation();
     displayValues.cameraX.set("0");
     if (resetPreview) {
       displayValues.viewDivisor.set("1");
     }
     runtime.applyDisplaySettings();
     runtime.persist();
+  }
+
+  /** Move the note timeline camera by one small eased X-range step. */
+  function moveCameraX(direction: -1 | 1): void {
+    const current = Number(displayValues.cameraX.get()) || 0;
+    const base = noteTimelineCameraAnimation?.target ?? current;
+    animateNoteTimelineCamera(base + direction * NOTE_TIMELINE_CAMERA_STEP);
+  }
+
+  /** Ease the note timeline camera back to its authored default range. */
+  function resetNoteTimelineCamera(): void {
+    animateNoteTimelineCamera(0);
   }
 
   /** Toggles the preview's game-UI overlay. */
@@ -397,6 +467,8 @@ export function createEditorViewControls(
     toggleRegion,
     toggleRegions,
     resetCamera,
+    moveCameraX,
+    resetNoteTimelineCamera,
     toggleGameUi,
     toggleStagePreview,
     togglePreviewOnly,
@@ -433,6 +505,8 @@ export const viewControls = Object.freeze({
   toggleRegions: (): void => viewControlsBinding.value()?.toggleRegions(),
   resetCamera: (resetPreview = false): void =>
     viewControlsBinding.value()?.resetCamera(resetPreview),
+  moveCameraX: (direction: -1 | 1): void => viewControlsBinding.value()?.moveCameraX(direction),
+  resetNoteTimelineCamera: (): void => viewControlsBinding.value()?.resetNoteTimelineCamera(),
   toggleGameUi: (): void => viewControlsBinding.value()?.toggleGameUi(),
   toggleStagePreview: (): void => viewControlsBinding.value()?.toggleStagePreview(),
   togglePreviewOnly: (): void => viewControlsBinding.value()?.togglePreviewOnly(),

@@ -25,6 +25,7 @@ import type {
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineSelectionReceiver } from "../drawing/timelineReceiver.ts";
 import { noteOverlapRotation } from "../notes/noteRotation.ts";
+import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
 
 /** Returns whether the requested timeline area still contains a selection. */
 function hasAreaSelection(
@@ -57,7 +58,11 @@ export function captureNoteBaseline(
   const multi = session.multiLineActive && session.multiLineMode === "notes";
   return {
     baselineNotes: multi
-      ? new Map([...session.multiLineSelection].map(([line, indices]) => [line, new Set(indices)]))
+      ? new Map(
+          [...session.multiLineSelection]
+            .filter(([, indices]) => indices.size > 0)
+            .map(([line, indices]) => [line, new Set(indices)]),
+        )
       : new Map([[session.lineIndex, new Set(session.selection)]]),
   };
 }
@@ -73,7 +78,11 @@ export function captureEventBaseline(
   const multi = session.multiLineActive && session.multiLineMode === "events";
   return {
     baselineEvents: multi
-      ? new Map([...session.multiEventSelection].map(([line, keys]) => [line, new Set(keys)]))
+      ? new Map(
+          [...session.multiEventSelection]
+            .filter(([, keys]) => keys.size > 0)
+            .map(([line, keys]) => [line, new Set(keys)]),
+        )
       : new Map([[session.lineIndex, new Set(session.eventSelection)]]),
   };
 }
@@ -156,6 +165,20 @@ export function rectangleTimes(
   );
 }
 
+/** Return only the judge lines represented by the visible multi-line panels. */
+function visibleSelectionLines(
+  receiver: TimelineSelectionReceiver,
+  area: TimelineArea,
+  width: number,
+): readonly number[] | undefined {
+  const session = receiver.getSession();
+  if (!session.multiLineActive) {
+    return undefined;
+  }
+  const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, area);
+  return session.targetLineIndices.slice(firstPanel, lastPanel + 1);
+}
+
 /** Advance the active marquee to the pointer and redraw. */
 export function updateRectangle(this: TimelineSelectionReceiver, event: PointerEvent): void {
   const selection = this.rectangleSelection();
@@ -172,7 +195,7 @@ export function updateRectangle(this: TimelineSelectionReceiver, event: PointerE
   if (selection.drag.startFactor !== undefined) {
     updateRectangleSeconds(this, selection.drag);
   }
-  this.changed();
+  this.changedSelectionOverlay();
 }
 
 /** Advance the active freehand gesture and apply only the newly swept segment. */
@@ -332,7 +355,12 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
     selection.drag.append = false;
     selection.drag.remove = false;
   }
-  const key = `${selection.area}|${left.toFixed(5)}|${right.toFixed(5)}|${bottom.toFixed(5)}|${top.toFixed(5)}|${this.viewport.origin.toFixed(5)}|${history}`;
+  // The drag stores world-space X and chart-time bounds. Playback changes the
+  // viewport origin every frame, but it does not change which chart objects
+  // belong to this rectangle. Excluding origin prevents a full multi-line
+  // selection query from running once per playback frame while the pointer is
+  // stationary.
+  const key = `${selection.area}|${left.toFixed(5)}|${right.toFixed(5)}|${bottom.toFixed(5)}|${top.toFixed(5)}|${history}`;
   if (selection.drag.lastSelectionKey === key) {
     return;
   }
@@ -344,6 +372,7 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
     session.selectionRevision += 1;
   }
   let result: SelectionGestureResult;
+  const queryStarted = pointerTimingStart();
   if (selection.area === "notes") {
     result = selectNotesInRectangle(
       this.getSession(),
@@ -352,6 +381,7 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
         right,
         bottom,
         top,
+        lineIndices: visibleSelectionLines(this, selection.area, width),
         append: selection.drag.append,
         remove: selection.drag.remove,
         baseNotes: selection.drag.baselineNotes,
@@ -364,6 +394,8 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
       (note, lineIndex) =>
         this.viewport.noteHorizontal(note.positionX, lineIndex) +
         this.viewport.multiLineViewportOffset(width, "notes"),
+      (lineIndex, rangeBottom, rangeTop) =>
+        this.cache.noteEntriesInRange(lineIndex, rangeBottom, rangeTop),
     );
   } else {
     result = selectEventsInRectangle(
@@ -373,6 +405,7 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
         right,
         bottom,
         top,
+        lineIndices: visibleSelectionLines(this, selection.area, width),
         append: selection.drag.append,
         remove: selection.drag.remove,
         baseNotes: selection.drag.baselineNotes,
@@ -396,6 +429,7 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
       },
     );
   }
+  pointerTimingEnd(queryStarted, "marqueeQuery");
   if (result.changed || result.matched) {
     session.selectionMode = hasAreaSelection(session, selection.area) ? "multi" : "none";
   }

@@ -14,6 +14,7 @@ import {
   noiseLinePreviewArea,
   sampleNoiseLinePreviewInto,
 } from "../../../../../../core/global/chart/noise/noiseLinePreview.ts";
+import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { noiseLineSizeAt } from "../../../../../../core/global/chart/noise/noiseLineSize.ts";
 import { noiseParentIndex } from "../../../../../../core/global/chart/noise/noiseParent.ts";
 import type { JudgeLine } from "../../../../../../core/global/chart/chart.ts";
@@ -36,7 +37,9 @@ function createMaskEntry(): MutableNoiseMaskEntry {
 /** Maintains reusable viewport-sized surfaces and the optional NoiseField pipeline. */
 export class NoiseAreaRenderer {
   private readonly scene = document.createElement("canvas");
+  private readonly sceneContext = this.scene.getContext("2d");
   private readonly surfaces = new Map<string, HTMLCanvasElement>();
+  private readonly surfaceContexts = new Map<string, CanvasRenderingContext2D>();
   private runtimes = new WeakMap<
     BlockArea,
     { tempo: TempoSource; aspect: number; runtime: NoiseAreaRuntime }
@@ -74,7 +77,13 @@ export class NoiseAreaRenderer {
       canvas.width = width;
       canvas.height = height;
     }
-    const context = canvas.getContext("2d");
+    let context: CanvasRenderingContext2D | null = this.surfaceContexts.get(name) ?? null;
+    if (!context) {
+      context = canvas.getContext("2d");
+      if (context) {
+        this.surfaceContexts.set(name, context);
+      }
+    }
     if (!context) {
       throw new Error("Noise area canvas unavailable");
     }
@@ -194,7 +203,7 @@ export class NoiseAreaRenderer {
       overlay.globalCompositeOperation = "source-over";
       overlay.drawImage(material.canvas, 0, 0);
     }
-    this.scene.getContext("2d")?.drawImage(overlay.canvas, 0, 0);
+    this.sceneContext?.drawImage(overlay.canvas, 0, 0);
   }
   /** Paints a merged scene into the primary canvas and returns whether notes were merged. */
   draw(
@@ -202,6 +211,7 @@ export class NoiseAreaRenderer {
     primary: HTMLCanvasElement,
     notes: HTMLCanvasElement | null,
     detailed: boolean,
+    prepareNotes?: () => HTMLCanvasElement | null,
   ): boolean {
     const areas = this.areaSources;
     areas.length = 0;
@@ -212,6 +222,12 @@ export class NoiseAreaRenderer {
       areas.push(source);
     }
     for (const [lineIndex, line] of (frame.chart.judgeLineList ?? []).entries()) {
+      // Most charts have hundreds of ordinary judge lines and no editor noise
+      // lines. Do not build a synthetic noise-area chart for those lines just
+      // to discover that the settings field is absent.
+      if (!noiseLineSettings(line)) {
+        continue;
+      }
       try {
         let cached = this.lineAreas.get(line);
         if (
@@ -298,7 +314,7 @@ export class NoiseAreaRenderer {
       this.scene.width = width;
       this.scene.height = height;
     }
-    const scene = this.scene.getContext("2d");
+    const scene = this.sceneContext;
     if (!scene) {
       return false;
     }
@@ -309,8 +325,9 @@ export class NoiseAreaRenderer {
       sw = frame.viewport.width * ratio,
       sh = frame.viewport.height * ratio;
     scene.drawImage(primary, sx, sy, sw, sh, 0, 0, width, height);
-    if (notes) {
-      scene.drawImage(notes, sx, sy, sw, sh, 0, 0, width, height);
+    const preparedNotes = notes ?? prepareNotes?.() ?? null;
+    if (preparedNotes) {
+      scene.drawImage(preparedNotes, sx, sy, sw, sh, 0, 0, width, height);
     }
     let rendered: HTMLCanvasElement | null = null;
     if (detailed) {
@@ -341,6 +358,7 @@ export class NoiseAreaRenderer {
     this.pipeline?.dispose();
     this.pipeline = null;
     this.surfaces.clear();
+    this.surfaceContexts.clear();
     this.clear();
   }
 }

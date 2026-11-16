@@ -17,6 +17,7 @@ import {
 } from "../../global/chart/chart.ts";
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import type { TransactionIssue } from "./contract.ts";
+import type { NoteChangeKind } from "../../global/chart/runtime/noteChangeHints.ts";
 import { setLineNotesRef, type LocatedEvent, type LocatedLine } from "./locations.ts";
 import {
   inheritLineContentFingerprint,
@@ -48,6 +49,11 @@ export interface MutableTransactionState {
   eventTracks?: Map<string, Record<string, unknown>[]>;
   /** Newly inserted or patched notes that require structural validation. */
   changedNotes?: Set<{ note: JudgeLineNote; lineIndex: number; noteIndex: number }>;
+  /** Line-local note deltas that can be forwarded to render-side caches. */
+  noteChangeHints?: Map<
+    number,
+    { noteIndexes: Set<number>; kind: NoteChangeKind; overlapChanged: boolean }
+  >;
   /** Newly inserted or patched events that require structural validation. */
   changedEvents?: Set<{
     event: JudgeLineEvent;
@@ -112,7 +118,6 @@ export function mutableNotes(
     cloned.add(lineIndex);
     setLineNotesRef(state.chart, lineIndex, line.notes);
     markChartObjectCollectionNormalized(line.notes);
-    markValueContentFingerprintDirty(line.notes);
   }
   line.notes ??= [];
   return line.notes;
@@ -122,6 +127,7 @@ export function mutableNotes(
 export function mutableNote(notes: JudgeLineNote[], index: number): JudgeLineNote {
   const clone: JudgeLineNote = { ...notes[index] };
   notes[index] = clone;
+  markValueContentFingerprintDirty(notes, index);
   return clone;
 }
 

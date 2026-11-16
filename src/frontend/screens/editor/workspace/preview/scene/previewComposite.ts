@@ -5,12 +5,16 @@
  */
 import { ShaderRuntime } from "../../../../../../core/global/chart/shader/shader.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
-import { prepareCanvas } from "../../../canvas/canvas2d.ts";
-import { drawGameUi } from "../render/gameUi.ts";
-import { drawGuides, type PreviewGuideSurface } from "../drawing/previewGuides.ts";
+import type { PreviewGuideSurface } from "../drawing/previewGuides.ts";
 import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
 import type { ShaderPipeline } from "../render/shaderPipeline.ts";
+import type { ShaderInputLayer } from "../render/shaderPipeline.ts";
+import type { ShaderCompositeRenderDevice } from "../render/shaderCompositeRenderDevice.ts";
 import type { PreviewFrame, PreviewShaderEffect } from "./previewTypes.ts";
+import { PreviewOverlayRenderDevice } from "./previewOverlayRenderDevice.ts";
+import type { GuideDrawStats } from "../drawing/previewGuides.ts";
+import type { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { PreviewGuideBatch } from "../render/previewGuideBatch.ts";
 
 import {
   getEditorRegionSnapshot,
@@ -21,6 +25,7 @@ import {
 export interface PreviewCompositeSurface extends PreviewGuideSurface {
   canvas: HTMLCanvasElement;
   shaderPipeline: ShaderPipeline;
+  shaderCompositeDevice: ShaderCompositeRenderDevice;
   shaderRuntime: ShaderRuntime;
   display: PreviewDisplayAdapter;
   shaderCanvas: HTMLCanvasElement | null;
@@ -33,53 +38,30 @@ export interface PreviewCompositeSurface extends PreviewGuideSurface {
   forceOpaque?: boolean;
   duration?: number | null;
   completionTimes: number[];
+  noteBatch: NoteBatch;
+  sharedNoteBatch: boolean;
+  guideBatch?: PreviewGuideBatch | null;
 }
 
 /** Draw the game UI and judge-line guides onto one preview layer. */
-function drawCompositeOverlay(
-  surface: PreviewCompositeSurface,
-  frame: PreviewFrame,
-  target: CanvasRenderingContext2D,
-): void {
-  const { chart, states, seconds, selectedLine, scale, centerX, centerY, viewport } = frame;
-  drawGameUi(
-    target,
-    chart,
-    states,
-    surface.completionTimes,
-    seconds,
-    selectedLine,
-    viewport,
-    { centerX, centerY, scale },
-    surface.skin ?? null,
-    surface.duration ?? 600,
-    surface.gameUiCornerCompression,
-  );
-  drawGuides(surface, target, scale, selectedLine);
-}
-
-/** Draw whichever non-shader overlay the current preview configuration needs. */
-function drawUnshadedOverlay(
-  surface: PreviewCompositeSurface,
-  frame: PreviewFrame,
-  target: CanvasRenderingContext2D,
-): void {
-  if (surface.showGameUI) {
-    drawCompositeOverlay(surface, frame, target);
-  } else {
-    drawGuides(surface, target, frame.scale, frame.selectedLine);
-  }
-}
+const overlayDevice = new PreviewOverlayRenderDevice();
 
 /**
  * Finishes a frame: runs shader passes, draws game UI and guides, and writes
  * layer opacity.
  *
  * The canvases clip themselves to the aspect frame, so this stage never paints
- * a mask over the surrounding stage.
+ * a mask over the surrounding stage. `shaderInput` is the shared-context note
+ * layer; legacy `shaderOverlay` remains only for non-shared fallback surfaces.
  */
-export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFrame): void {
+export function drawComposite(
+  surface: PreviewCompositeSurface,
+  frame: PreviewFrame,
+  shaderOverlay: HTMLCanvasElement | null = null,
+  shaderInput: ShaderInputLayer | null = null,
+): GuideDrawStats | null {
   const { context, seconds, viewport } = frame;
+  let guideStats: GuideDrawStats | null = null;
   // `Preview.draw` compiles the shader runtime before sampling `frame.shaderEffects`,
   // so composite consumes that compiled state instead of re-running the check.
   // Guides are cheap and identify the selected line; never put them behind the
@@ -88,26 +70,31 @@ export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFr
   const shaderEffects = surface.applyShaders ? frame.shaderEffects : [];
   const globalShader = shaderEffects.some((effect) => effect.global);
   if (!shaderEffects.length) {
-    drawUnshadedOverlay(surface, frame, context);
+    guideStats = overlayDevice.render({ surface, frame, target: context });
   }
   if (globalShader) {
-    drawUnshadedOverlay(surface, frame, context);
+    guideStats = overlayDevice.render({ surface, frame, target: context });
   }
   context.restore();
   let shaderRendered = false;
   if (shaderEffects.length) {
-    shaderRendered = surface.shaderPipeline.render(
-      surface.canvas,
-      surface.shaderCanvas,
-      shaderEffects,
+    shaderRendered = surface.shaderCompositeDevice.render({
+      sourceCanvas: surface.canvas,
+      targetCanvas: surface.shaderCanvas,
+      passes: shaderEffects,
       seconds,
-      (effect: PreviewShaderEffect) =>
+      sourceFor: (effect: PreviewShaderEffect) =>
         surface.shaderRuntime.source(effect.shader, effect.sourceName),
       viewport,
-      frame.shaderSourceRevision,
-    );
+      sourceRevision: frame.shaderSourceRevision,
+      overlayCanvas: shaderOverlay,
+      inputLayer: shaderInput,
+    });
     if (surface.shaderCanvas) {
       surface.display.setShaderVisible(shaderRendered);
+    }
+    if (!shaderRendered && shaderInput) {
+      surface.noteBatch.finish();
     }
   } else if (surface.shaderCanvas) {
     surface.display.setShaderVisible(false);
@@ -126,23 +113,27 @@ export function drawComposite(surface: PreviewCompositeSurface, frame: PreviewFr
   surface.display.setShaderOpacity(shaderRendered ? workspaceOpacity : 0);
   surface.display.setPrimaryOpacity(shaderRendered ? 0 : workspaceOpacity);
   surface.display.setNoteBatchOpacity(
-    shaderRendered || surface.noiseComposited ? 0 : workspaceOpacity,
+    surface.sharedNoteBatch || shaderRendered || surface.noiseComposited ? 0 : workspaceOpacity,
   );
+  if (surface.sharedNoteBatch) {
+    const noteLayerVisible = !shaderRendered && surface.noteBatch.isActive();
+    surface.display.setShaderVisible(shaderRendered || noteLayerVisible);
+    surface.display.setShaderOpacity(shaderRendered || noteLayerVisible ? workspaceOpacity : 0);
+  }
   surface.display.setOverlayOpacity(workspaceOpacity);
   if (!shaderRendered && shaderEffects.length && !globalShader) {
-    context.save();
-    context.beginPath();
-    context.rect(viewport.left, viewport.top, viewport.width, viewport.height);
-    context.clip();
-    drawUnshadedOverlay(surface, frame, context);
-    context.restore();
+    guideStats = overlayDevice.render({
+      surface,
+      frame,
+      target: context,
+      clip: viewport,
+    });
   }
   if (shaderRendered && !globalShader && surface.overlayCanvas) {
-    const overlay = prepareCanvas(surface.overlayCanvas);
-    const overlayContext = overlay.context;
-    drawUnshadedOverlay(surface, frame, overlayContext);
+    guideStats = overlayDevice.renderCanvas(surface, frame, surface.overlayCanvas);
     surface.display.setOverlayVisible(true);
   } else if (surface.overlayCanvas) {
     surface.display.setOverlayVisible(false);
   }
+  return guideStats;
 }

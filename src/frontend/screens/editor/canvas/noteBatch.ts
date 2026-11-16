@@ -4,9 +4,19 @@
  * buffers, and per-frame instance data.
  */
 /* eslint-disable max-lines -- the batch keeps texture, instance, and context-loss ownership together. */
-import { canvasPixelRatio, sizeCanvasBackingStore } from "./canvas2d.ts";
+import { canvasPixelRatio } from "./canvas2d.ts";
+import type { WebGlRenderBackend } from "./renderBackend.ts";
+import { tryCreateWebGl2Backend } from "./renderBackend.ts";
 import { createHoldLayoutScratch, holdLayoutInto, holdRenderRotation } from "./noteGeometry.ts";
-import { createNoteBatchUploadState, submitNoteBatchGroups } from "./noteBatchUpload.ts";
+import {
+  collectNoteBatchGroups,
+  createNoteBatchUploadState,
+  drawPackedNoteGroups,
+  mergeNoteBatchUploadMetrics,
+  submitNoteBatchGroups,
+  uploadPackedNoteGroups,
+  type PackedNoteGroups,
+} from "./noteBatchUpload.ts";
 import { NoteBatchDiagnostics } from "./noteBatchDiagnostics.ts";
 import type { RenderSurface } from "../../../../core/diagnostics/renderMetrics.ts";
 import {
@@ -20,14 +30,13 @@ import {
   type SpriteGroup,
   type TextureDescriptor,
 } from "./noteSpriteGroups.ts";
-import {
-  configureTextureSampling,
-  createCornerBuffer,
-  installContextLossHandlers,
-  linkProgram,
-} from "./webgl.ts";
+import { configureTextureSampling, createCornerBuffer, linkProgram } from "./webgl.ts";
 
 const ROTATION_CACHE_LIMIT = 512;
+/** Note type slots resolved without building a cache key on every note. */
+const NOTE_TYPE_SLOTS = 5;
+/** Slot order: type × 2 + (highlight ? 1 : 0). */
+const NOTE_SLOT_COUNT = NOTE_TYPE_SLOTS * 2;
 /** Resolved Hold textures and skin-specific cap ratios for the current skin. */
 interface HoldTextureSet {
   body: TextureDescriptor | null;
@@ -36,6 +45,14 @@ interface HoldTextureSet {
   endRatio: number;
   headRatio: number | undefined;
 }
+
+/**
+ * Note textures addressed by `type * 2 + (highlight ? 1 : 0)`.
+ *
+ * The table is a plain array so a paint pass can submit thousands of notes
+ * without a cache key, a closure, or a Map lookup per note.
+ */
+export type NoteTextureTable = readonly (TextureDescriptor | null | undefined)[];
 
 export interface NoteBatchSkin {
   /** Bumped whenever the skin swaps its decoded bitmaps. */
@@ -57,7 +74,11 @@ export interface NoteBatchSkin {
 export class NoteBatch {
   private readonly canvas: HTMLCanvasElement;
   private readonly diagnostics: NoteBatchDiagnostics;
-  private readonly gl: WebGL2RenderingContext | null;
+  private readonly backend: WebGlRenderBackend | null;
+  private readonly removeSharedLifecycle: (() => void) | null;
+  private get gl(): WebGL2RenderingContext | null {
+    return this.backend?.gl as WebGL2RenderingContext | null;
+  }
   private program: WebGLProgram | null = null;
   private cornerBuffer: WebGLBuffer | null = null;
   private instanceBuffer: WebGLBuffer | null = null;
@@ -87,6 +108,12 @@ export class NoteBatch {
   private descriptorSkin: NoteBatchSkin | null = null;
   private descriptorRevision: number | undefined;
   private readonly descriptorCache = new Map<string, TextureDescriptor | null>();
+  /** Note textures by `type * 2 + highlight`; empty until the skin resolves them. */
+  private readonly noteTextures: (TextureDescriptor | null | undefined)[] = new Array(
+    NOTE_SLOT_COUNT,
+  ).fill(undefined);
+  /** Set once any note slot is resolved, so a hot frame can skip the slot check. */
+  private noteTextureSlotsReady = false;
   private readonly holdDescriptorSets: [HoldTextureSet | null, HoldTextureSet | null] = [
     null,
     null,
@@ -96,26 +123,47 @@ export class NoteBatch {
   /** Reuse note rotation trigonometry across frames; add() keeps it bounded. */
   private readonly rotationCache = new Map<number, readonly [number, number]>();
   private readonly uploadState = createNoteBatchUploadState();
+  private readonly staticLineUploadState = createNoteBatchUploadState();
   private instanceBufferCapacity = 0;
+  private staticLineBufferCapacity = 0;
+  private staticLineBuffer: WebGLBuffer | null = null;
+  private staticLineGroups: PackedNoteGroups | null = null;
+  private staticLineBufferValid = false;
+  /** Whether the line groups contain a reusable static judge-line layer. */
+  private retainedLineBatchValid = false;
   private active = false;
   private prewarmQueue: HTMLImageElement[] = [];
   private prewarmTimer: number | ReturnType<typeof setTimeout> | null = null;
   private prewarmIdle = false;
   private contextLost = false;
-  private uninstallContextLoss: (() => void) | null = null;
   /** Create the batch for one canvas; without WebGL2 every submit is a no-op. */
-  constructor(canvas: HTMLCanvasElement, surface: RenderSurface = "preview") {
+  constructor(
+    canvas: HTMLCanvasElement,
+    surface: RenderSurface = "preview",
+    sharedBackend: WebGlRenderBackend | null = null,
+  ) {
     this.canvas = canvas;
     this.diagnostics = new NoteBatchDiagnostics(surface);
-    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false });
+    this.backend =
+      sharedBackend ??
+      tryCreateWebGl2Backend(
+        canvas,
+        { alpha: true, antialias: false, depth: false },
+        {
+          onLost: this.handleContextLost,
+          onRestored: this.handleContextRestored,
+        },
+      );
+    this.removeSharedLifecycle = sharedBackend
+      ? sharedBackend.addLifecycle({
+          onLost: this.handleContextLost,
+          onRestored: this.handleContextRestored,
+        })
+      : null;
     this.reportState();
-    if (!this.gl) {
+    if (!this.backend) {
       return;
     }
-    this.uninstallContextLoss = installContextLossHandlers(this.canvas, {
-      onLost: this.handleContextLost,
-      onRestored: this.handleContextRestored,
-    });
     this.initializeResources();
     this.reportState();
   }
@@ -137,8 +185,7 @@ export class NoteBatch {
   }
 
   /** Prevent the default loss handling and stop submitting GPU work. */
-  private readonly handleContextLost = (event: Event): void => {
-    event.preventDefault();
+  private readonly handleContextLost = (): void => {
     this.diagnostics.context("lost");
     this.contextLost = true;
     this.active = false;
@@ -151,6 +198,7 @@ export class NoteBatch {
     this.program = null;
     this.cornerBuffer = null;
     this.instanceBuffer = null;
+    this.staticLineBuffer = null;
     this.resolution = null;
     this.textureUniform = null;
     this.cornerLocation = -1;
@@ -163,9 +211,12 @@ export class NoteBatch {
     this.colorizeLocation = -1;
     this.textures.clear();
     this.groups.clear();
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.retainedLineBatchValid = false;
+    this.clearDescriptorCaches();
     this.instanceBufferCapacity = 0;
+    this.staticLineBufferCapacity = 0;
+    this.staticLineGroups = null;
+    this.staticLineBufferValid = false;
     this.reportState();
   };
 
@@ -175,11 +226,14 @@ export class NoteBatch {
     this.contextLost = false;
     this.descriptorSkin = null;
     this.descriptorRevision = undefined;
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.clearDescriptorCaches();
     this.groups.clear();
+    this.retainedLineBatchValid = false;
     this.textures.clear();
     this.instanceBufferCapacity = 0;
+    this.staticLineBufferCapacity = 0;
+    this.staticLineGroups = null;
+    this.staticLineBufferValid = false;
     this.initializeResources();
     this.reportState();
   };
@@ -244,6 +298,7 @@ export class NoteBatch {
     }
     this.cornerBuffer = createCornerBuffer(gl);
     this.instanceBuffer = gl.createBuffer();
+    this.staticLineBuffer = gl.createBuffer();
     this.resolution = this.program ? gl.getUniformLocation(this.program, "u_resolution") : null;
     this.textureUniform = this.program ? gl.getUniformLocation(this.program, "u_texture") : null;
     this.cornerLocation = this.program ? gl.getAttribLocation(this.program, "a_corner") : -1;
@@ -262,7 +317,10 @@ export class NoteBatch {
     this.instanceAttributes[5] = this.tintLocation;
     this.instanceAttributes[6] = this.colorizeLocation;
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // Keep the color source-over equation while accumulating straight alpha.
+    // Using the same factors for both channels squares semi-transparent sprite
+    // alpha, which makes Hold caps visibly darker than their Canvas fallback.
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
 
   /** Whether the current frame can submit notes through the GPU batch. */
@@ -364,50 +422,108 @@ export class NoteBatch {
     skin: NoteBatchSkin | null,
     clip?: { left: number; top: number; width: number; height: number },
     pixelRatioScale = 1,
-  ): void {
+    retainLineBatch = false,
+  ): boolean {
     this.width = width;
     this.height = height;
+    return this.markActive(skin, clip, pixelRatioScale, width, height, retainLineBatch);
+  }
+
+  /**
+   * Resolve every note texture once so a paint pass can submit without lookups.
+   *
+   * A dense frame submits thousands of notes through one skin; the returned
+   * table turns the per-note descriptor resolution into an array read.
+   */
+  prepareNoteTextures(skin: NoteBatchSkin | null): NoteTextureTable | null {
+    if (!skin) {
+      return null;
+    }
+    if (!this.noteTextureSlotsReady) {
+      for (let type = 0; type < NOTE_TYPE_SLOTS; type++) {
+        for (let highlight = 0; highlight < 2; highlight++) {
+          this.noteTextures[type * 2 + highlight] = skin.noteTexture(type, highlight === 1) ?? null;
+        }
+      }
+      this.noteTextureSlotsReady = true;
+    }
+    return this.noteTextures;
+  }
+
+  /** Set the skin, refresh its caches, and answer whether the batch can paint. */
+  private markActive(
+    skin: NoteBatchSkin | null,
+    clip: { left: number; top: number; width: number; height: number } | undefined,
+    pixelRatioScale: number,
+    width: number,
+    height: number,
+    retainLineBatch: boolean,
+  ): boolean {
+    let preserveLines = retainLineBatch && this.retainedLineBatchValid;
     if (this.descriptorSkin !== skin || this.descriptorRevision !== skin?.textureRevision) {
       this.descriptorSkin = skin;
       this.descriptorRevision = skin?.textureRevision;
       this.resetTextureCache();
+      preserveLines = false;
     }
-    this.groups.reset();
+    this.groups.reset(preserveLines);
+    this.retainedLineBatchValid = preserveLines;
+    if (!preserveLines) {
+      this.staticLineGroups = null;
+      this.staticLineBufferValid = false;
+    }
     if (this.isContextLost()) {
       this.contextLost = true;
       this.active = false;
       this.reportState();
-      return;
+      this.retainedLineBatchValid = false;
+      return false;
     }
-    this.active = Boolean(this.gl && this.program && this.instanceBuffer && skin);
-    if (!this.gl) {
+    this.active = Boolean(this.backend?.isUsable() && this.program && this.instanceBuffer && skin);
+    if (!this.backend) {
       this.reportState();
-      return;
+      this.retainedLineBatchValid = false;
+      return false;
     }
     const safeScale = Number.isFinite(pixelRatioScale)
       ? Math.max(0.5, Math.min(1, pixelRatioScale))
       : 1;
-    const backing = sizeCanvasBackingStore(
-      this.canvas,
+    const backing = this.backend.resize(
       { width, height },
       Math.max(1, canvasPixelRatio() * safeScale),
     );
-    this.gl.viewport(0, 0, backing.width, backing.height);
-    this.gl.disable(this.gl.SCISSOR_TEST);
-    this.gl.clearColor(0, 0, 0, 0);
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+    if (!this.backend.begin(true)) {
+      this.active = false;
+      this.reportState();
+      this.retainedLineBatchValid = false;
+      return false;
+    }
+    const gl = this.gl;
+    if (!gl) {
+      this.active = false;
+      this.reportState();
+      this.retainedLineBatchValid = false;
+      return false;
+    }
+    gl.disable(gl.SCISSOR_TEST);
     if (clip) {
-      this.gl.enable(this.gl.SCISSOR_TEST);
-      this.gl.scissor(
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(
         Math.max(0, Math.round(clip.left * backing.ratio)),
         Math.max(0, Math.round((height - clip.top - clip.height) * backing.ratio)),
         Math.max(0, Math.round(clip.width * backing.ratio)),
         Math.max(0, Math.round(clip.height * backing.ratio)),
       );
     } else {
-      this.gl.disable(this.gl.SCISSOR_TEST);
+      gl.disable(gl.SCISSOR_TEST);
     }
     this.reportState();
+    return preserveLines && this.groups.hasLineInstances();
+  }
+
+  /** Mark the current line instances as reusable for a later static frame. */
+  retainLineBatch(): void {
+    this.retainedLineBatchValid = this.active && this.groups.hasLineInstances();
   }
 
   /** Queue one note head; returns false when its texture is unavailable. */
@@ -426,11 +542,7 @@ export class NoteBatch {
     if (!this.active || this.isContextLost()) {
       return false;
     }
-    const descriptor = this.descriptor(
-      skin,
-      `note:${type}:${highlight ? 1 : 0}`,
-      () => skin?.noteTexture(type, highlight) ?? null,
-    );
+    const descriptor = this.noteTexture(skin, type, highlight);
     if (!descriptor) {
       return false;
     }
@@ -448,6 +560,77 @@ export class NoteBatch {
       color,
       notePaintLayer(type),
     );
+  }
+
+  /**
+   * Queue one note head from an already prepared texture table.
+   *
+   * This is the per-note entry point for a paint pass: the table replaces the
+   * type-slot lookup and the skin method call that `addHead` performs.
+   */
+  addHeadSlotted(
+    table: NoteTextureTable,
+    type: number,
+    highlight: boolean,
+    centerX: number,
+    centerY: number,
+    width: number,
+    rotation: number,
+    shear: number,
+    alpha: number,
+    color?: NoteColor | null,
+  ): boolean {
+    if (!this.active || this.isContextLost()) {
+      return false;
+    }
+    const slot = type * 2 + (highlight ? 1 : 0);
+    const descriptor = slot >= 0 && slot < NOTE_SLOT_COUNT ? (table[slot] ?? null) : null;
+    if (!descriptor) {
+      return false;
+    }
+    const height = (width * descriptor.useful.height) / descriptor.useful.width;
+    return this.add(
+      descriptor,
+      centerX,
+      centerY,
+      width,
+      height,
+      rotation,
+      shear,
+      alpha,
+      false,
+      color,
+      notePaintLayer(type),
+    );
+  }
+
+  /**
+   * Resolve one note texture from its type slot.
+   *
+   * The slot table replaces a template-literal cache key and a closure per note,
+   * which was the largest remaining per-note cost in a dense frame. Slots are
+   * filled on first use and cleared whenever the skin bitmap set changes.
+   */
+  private noteTexture(
+    skin: NoteBatchSkin | null,
+    type: number,
+    highlight: boolean,
+  ): TextureDescriptor | null {
+    if (!skin) {
+      return null;
+    }
+    const slot = type * 2 + (highlight ? 1 : 0);
+    if (slot < 0 || slot >= NOTE_SLOT_COUNT) {
+      return skin.noteTexture(type, highlight) ?? null;
+    }
+    const cached = this.noteTextures[slot];
+    if (cached !== undefined) {
+      return cached;
+    }
+    const descriptor = skin.noteTexture(type, highlight) ?? null;
+    this.noteTextures[slot] = descriptor;
+    this.noteTextureSlotsReady = true;
+    return descriptor;
   }
 
   /** Queue a Hold body, tail cap, and optional head cap as one sprite set. */
@@ -573,6 +756,36 @@ export class NoteBatch {
 
   /** Upload the queued instance data and draw every group in layer order. */
   finish(): void {
+    if (!this.groups.hasInstances()) {
+      return;
+    }
+    if (this.gl && !this.isContextLost()) {
+      this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    }
+    this.submit(null, this.width, this.height);
+  }
+
+  /** Draw queued notes into a framebuffer owned by the shared shader context. */
+  finishToFramebuffer(
+    gl: WebGL2RenderingContext,
+    framebuffer: WebGLFramebuffer,
+    width: number,
+    height: number,
+  ): boolean {
+    if (this.gl !== gl) {
+      return false;
+    }
+    if (!this.groups.hasInstances()) {
+      return true;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.viewport(0, 0, width, height);
+    return this.submit(framebuffer, width, height);
+  }
+
+  /** Submit the current instance groups to the selected framebuffer. */
+  private submit(_framebuffer: WebGLFramebuffer | null, width: number, height: number): boolean {
     if (!this.active || this.isContextLost() || !this.gl || !this.program || !this.instanceBuffer) {
       this.diagnostics.submit({
         groupCount: 0,
@@ -583,9 +796,13 @@ export class NoteBatch {
         textureBinds: 0,
         maxInstancesPerGroup: 0,
       });
-      return;
+      return false;
     }
     const gl = this.gl;
+    gl.enable(gl.BLEND);
+    // The alpha channel needs the source factor ONE; otherwise a translucent
+    // Hold cap writes `alpha * alpha` into the overlay texture.
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.program);
     gl.activeTexture(gl.TEXTURE0);
     if (this.resolution) {
@@ -596,32 +813,84 @@ export class NoteBatch {
       gl.enableVertexAttribArray(this.cornerLocation);
       gl.vertexAttribPointer(this.cornerLocation, 2, gl.FLOAT, false, 0, 0);
     }
+    const textureFor = (source: HTMLImageElement): WebGLTexture | null => this.textureFor(source);
+    const emptyMetrics = {
+      groupCount: 0,
+      instanceCount: 0,
+      bufferSubDataCalls: 0,
+      bufferSubDataBytes: 0,
+      drawCalls: 0,
+      textureBinds: 0,
+      maxInstancesPerGroup: 0,
+    };
+    let metrics = emptyMetrics;
+    let staticLinesDrawn = false;
+    if (this.groups.hasLineInstances() && this.staticLineBuffer) {
+      if (!this.staticLineBufferValid) {
+        const packed = collectNoteBatchGroups(
+          this.groups.line.values(),
+          textureFor,
+          this.staticLineUploadState,
+        );
+        const uploaded = uploadPackedNoteGroups(
+          gl,
+          this.staticLineBuffer,
+          this.staticLineUploadState,
+          packed,
+          this.textureUniform,
+          this.instanceAttributes,
+          this.staticLineBufferCapacity,
+        );
+        this.staticLineBufferCapacity = uploaded.instanceBufferCapacity;
+        this.staticLineGroups = packed;
+        this.staticLineBufferValid = packed.totalFloats > 0;
+        staticLinesDrawn = this.staticLineBufferValid;
+        metrics = mergeNoteBatchUploadMetrics(metrics, uploaded.metrics);
+      }
+      if (!staticLinesDrawn && this.staticLineBufferValid && this.staticLineGroups) {
+        metrics = mergeNoteBatchUploadMetrics(
+          metrics,
+          drawPackedNoteGroups(
+            gl,
+            this.staticLineBuffer,
+            this.staticLineGroups,
+            this.textureUniform,
+            this.instanceAttributes,
+          ),
+        );
+      }
+    }
     // Ascending layer order keeps Holds beneath Tap/Drag/Flick heads; the
-    // selection paints last so an overlap cannot hide the selection.
+    // selection paints last so an overlap cannot hide the selection. Static
+    // judge lines use a separate buffer and never enter this upload.
     const result = submitNoteBatchGroups(
       gl,
       this.instanceBuffer,
       this.uploadState,
-      this.groups.line.values(),
+      this.groups.dynamicLine.values(),
       this.groups.layers[HOLD_PAINT_LAYER].values(),
       this.groups.layers[HEAD_PAINT_LAYER].values(),
       this.groups.selected.values(),
-      (source) => this.textureFor(source),
+      textureFor,
       this.textureUniform,
       this.instanceAttributes,
       this.instanceBufferCapacity,
     );
     this.instanceBufferCapacity = result.instanceBufferCapacity;
-    this.diagnostics.submit(result.metrics);
+    metrics = mergeNoteBatchUploadMetrics(metrics, result.metrics);
+    this.diagnostics.submit(metrics);
     gl.disable(gl.SCISSOR_TEST);
     this.reportState();
+    return true;
   }
 
   /** Release every GL object and cached texture owned by the batch. */
   dispose(): void {
-    this.uninstallContextLoss?.();
-    this.uninstallContextLoss = null;
+    this.removeSharedLifecycle?.();
     if (!this.gl) {
+      if (!this.removeSharedLifecycle) {
+        this.backend?.dispose();
+      }
       return;
     }
     if (!this.isContextLost()) {
@@ -634,6 +903,9 @@ export class NoteBatch {
       if (this.instanceBuffer) {
         this.gl.deleteBuffer(this.instanceBuffer);
       }
+      if (this.staticLineBuffer) {
+        this.gl.deleteBuffer(this.staticLineBuffer);
+      }
       for (const texture of this.textures.values()) {
         this.gl.deleteTexture(texture);
       }
@@ -641,14 +913,21 @@ export class NoteBatch {
     this.textures.clear();
     this.clear();
     this.groups.clear();
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.retainedLineBatchValid = false;
+    this.clearDescriptorCaches();
     this.instanceBufferCapacity = 0;
+    this.staticLineBufferCapacity = 0;
+    this.staticLineBuffer = null;
+    this.staticLineGroups = null;
+    this.staticLineBufferValid = false;
     this.program = null;
     this.cornerBuffer = null;
     this.instanceBuffer = null;
     this.descriptorSkin = null;
     this.active = false;
+    if (!this.removeSharedLifecycle) {
+      this.backend?.dispose();
+    }
     this.reportState();
   }
 
@@ -656,6 +935,9 @@ export class NoteBatch {
   clear(): void {
     this.cancelPrewarm();
     this.groups.reset();
+    this.retainedLineBatchValid = false;
+    this.staticLineGroups = null;
+    this.staticLineBufferValid = false;
     if (this.gl && !this.isContextLost()) {
       this.gl.disable(this.gl.SCISSOR_TEST);
       this.gl.clearColor(0, 0, 0, 0);
@@ -666,9 +948,11 @@ export class NoteBatch {
   /** Drop descriptors and GPU textures after the skin replaces its bitmaps. */
   private resetTextureCache(): void {
     this.cancelPrewarm();
-    this.descriptorCache.clear();
-    this.clearHoldDescriptorCache();
+    this.clearDescriptorCaches();
     this.groups.clear();
+    this.retainedLineBatchValid = false;
+    this.staticLineGroups = null;
+    this.staticLineBufferValid = false;
     if (this.gl && !this.isContextLost()) {
       for (const texture of this.textures.values()) {
         this.gl.deleteTexture(texture);
@@ -728,6 +1012,14 @@ export class NoteBatch {
     this.holdDescriptorSets[1] = null;
   }
 
+  /** Drop every skin-derived descriptor, including the note type slots. */
+  private clearDescriptorCaches(): void {
+    this.descriptorCache.clear();
+    this.clearHoldDescriptorCache();
+    this.noteTextures.fill(undefined);
+    this.noteTextureSlotsReady = false;
+  }
+
   /**
    * Write one aligned, rotated quad into its texture group's instance buffer.
    *
@@ -773,12 +1065,13 @@ export class NoteBatch {
     rotation: number,
     alpha: number,
     color?: NoteColor | null,
+    retainStatic = true,
   ): boolean {
     if (!this.active || this.isContextLost() || width <= 0 || height <= 0) {
       return false;
     }
     return this.writeInstance(
-      this.groups.lineGroup(descriptor),
+      retainStatic ? this.groups.lineGroup(descriptor) : this.groups.dynamicLineGroup(descriptor),
       centerX,
       centerY,
       width,

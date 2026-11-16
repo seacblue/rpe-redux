@@ -1,8 +1,18 @@
 /** Shared Canvas 2D preparation for preview, timeline, and inspector surfaces. */
 import { t } from "../../../../i18n/index.ts";
+import { Canvas2DRenderBackend } from "./renderBackend.ts";
 
 /** Highest device-pixel ratio used for a canvas backing store. */
 export const MAX_CANVAS_PIXEL_RATIO = 2;
+
+/**
+ * Highest device-pixel ratio used by software-only surfaces.
+ *
+ * Canvas2D work scales with the number of backing-store pixels. Keeping the
+ * fallback below the normal display cap prevents an integrated GPU or a
+ * software rasterizer from paying for a 2x surface on every paint.
+ */
+export const MAX_FALLBACK_CANVAS_PIXEL_RATIO = 1.25;
 
 /**
  * Device-pixel ratio capped for canvas backing stores.
@@ -13,6 +23,11 @@ export const MAX_CANVAS_PIXEL_RATIO = 2;
 export function canvasPixelRatio(ratio = globalThis.devicePixelRatio || 1): number {
   const value = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
   return Math.min(MAX_CANVAS_PIXEL_RATIO, value);
+}
+
+/** Device-pixel ratio used for Canvas2D-only surfaces. */
+export function fallbackCanvasPixelRatio(ratio = globalThis.devicePixelRatio || 1): number {
+  return Math.min(MAX_FALLBACK_CANVAS_PIXEL_RATIO, canvasPixelRatio(ratio));
 }
 
 /**
@@ -40,6 +55,7 @@ interface CachedMeasurement extends CanvasMeasurement {
 }
 
 const measurements = new WeakMap<HTMLCanvasElement, CachedMeasurement>();
+const renderBackends = new WeakMap<HTMLCanvasElement, Canvas2DRenderBackend>();
 
 /** Minimal element shape whose layout rectangle can be cached. */
 export interface MeasurableElement {
@@ -204,17 +220,23 @@ export function prepareCanvas(
   canvas: HTMLCanvasElement,
   clear = true,
   measurement?: CanvasMeasurement,
+  ratio = canvasPixelRatio(),
 ): {
   context: CanvasRenderingContext2D;
   width: number;
   height: number;
 } {
   const rectangle = measurement ?? measureCanvas(canvas);
-  const size = sizeCanvasBackingStore(canvas, rectangle);
-  const context = context2d(canvas);
-  context.setTransform(size.ratio, 0, 0, size.ratio, 0, 0);
-  if (clear) {
-    context.clearRect(0, 0, rectangle.width, rectangle.height);
+  let backend = renderBackends.get(canvas);
+  if (!backend) {
+    backend = new Canvas2DRenderBackend(canvas, context2d(canvas));
+    renderBackends.set(canvas, backend);
   }
-  return { context, width: rectangle.width, height: rectangle.height };
+  const frame = backend.resize(rectangle, ratio);
+  backend.begin(clear);
+  return {
+    context: backend.context,
+    width: frame.logicalWidth,
+    height: frame.logicalHeight,
+  };
 }

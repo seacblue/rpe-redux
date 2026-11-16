@@ -26,6 +26,7 @@ import {
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { selectOverlappingNote } from "./noteSelectionDrawing.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
+import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
 
 /** The note with the active drag applied, for drawing and commit. */
 export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineNote): TimelineNote {
@@ -88,6 +89,15 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       if (deltaX !== 0) {
         this.viewport.panMultiLine(this.notesCanvas.clientWidth, deltaX, "notes");
         this.changed();
+      }
+      return;
+    }
+    // Rectangle geometry is painted by the selection overlay. Sweep selection
+    // already invalidates the timeline from updateSweep; neither gesture needs
+    // a second full content redraw from the canvas pointer handler.
+    if (this.gestures.drag.kind === "rectangle" || this.gestures.drag.kind === "sweep") {
+      if (this.notesCanvas.style) {
+        this.notesCanvas.style.cursor = "move";
       }
       return;
     }
@@ -164,7 +174,9 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   if (this.finishRectangle(event)) {
     return;
   }
-  this.notesCanvas.focus();
+  if (document.activeElement !== this.notesCanvas) {
+    this.notesCanvas.focus({ preventScroll: true });
+  }
   this.notesCanvas.setPointerCapture(event.pointerId);
   const position = this.viewport.point(event);
   this.gestures.cursor = position;
@@ -338,6 +350,9 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   if (multiMode && (event.shiftKey || event.button === 1)) {
     const worldX =
       position.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
+    const baselineStarted = pointerTimingStart();
+    const baseline = captureNoteBaseline(session, true);
+    pointerTimingEnd(baselineStarted, "noteBaselineCopy");
     this.gestures.drag = {
       kind: "rectangle",
       area: "notes",
@@ -359,7 +374,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       append: true,
       remove: event.altKey,
       historyKey: marqueeHistoryKey(session),
-      ...captureNoteBaseline(session, true),
+      ...baseline,
     };
   } else if (multiPanel && panBlank) {
     this.gestures.drag = {
@@ -370,6 +385,9 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       clearOnClick: !event.ctrlKey && !event.shiftKey,
     };
   } else if (!multiMode && (event.shiftKey || event.button === 1)) {
+    const baselineStarted = pointerTimingStart();
+    const baseline = captureNoteBaseline(session, true);
+    pointerTimingEnd(baselineStarted, "noteBaselineCopy");
     this.gestures.drag = {
       kind: "rectangle",
       area: "notes",
@@ -389,7 +407,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       append: true,
       remove: event.altKey,
       historyKey: marqueeHistoryKey(session),
-      ...captureNoteBaseline(session, true),
+      ...baseline,
     };
   } else if (hit && event.button === 0) {
     const lineSelection = session.multiLineActive
@@ -522,6 +540,16 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
         right,
         bottom,
         top,
+        lineIndices: (() => {
+          if (!session.multiLineActive) {
+            return undefined;
+          }
+          const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(
+            this.notesCanvas.clientWidth,
+            "notes",
+          );
+          return session.targetLineIndices.slice(firstPanel, lastPanel + 1);
+        })(),
         append: drag.append,
         remove: drag.remove,
         baseNotes: drag.baselineNotes,
@@ -534,6 +562,7 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
       (note, lineIndex) =>
         this.viewport.noteHorizontal(note.positionX, lineIndex) +
         this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes"),
+      (lineIndex, bottom, top) => this.cache.noteEntriesInRange(lineIndex, bottom, top),
     );
   } else if (
     ["move", "startTime", "endTime"].includes(drag.kind) &&

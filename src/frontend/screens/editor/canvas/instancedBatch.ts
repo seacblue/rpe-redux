@@ -7,11 +7,12 @@
  * their shader sources, attribute layouts, and per-frame data packing.
  */
 import { normalizedCssColor } from "../../../../core/utils/colors.ts";
-import { sizeCanvasBackingStore, type CanvasBackingStore } from "./canvas2d.ts";
+import type { RenderSurfaceFrame, WebGlRenderBackend } from "./renderBackend.ts";
+import { tryCreateWebGl2Backend } from "./renderBackend.ts";
+import { nextBufferCapacity } from "./noteBatchUpload.ts";
 import {
   bindInstanceAttributes,
   createCornerBuffer,
-  installContextLossHandlers,
   linkProgram,
   type InstanceAttribute,
 } from "./webgl.ts";
@@ -46,8 +47,12 @@ export interface InstanceBatchAttribute {
 export abstract class WebGlBatchSurface {
   /** Canvas this batch paints into. */
   protected readonly canvas: HTMLCanvasElement;
-  /** WebGL2 context, or null when the canvas cannot provide one. */
-  protected readonly gl: WebGL2RenderingContext | null;
+  /** Unified GPU surface, or null when the canvas cannot provide WebGL2. */
+  protected readonly backend: WebGlRenderBackend | null;
+  /** WebGL2 context exposed to subclasses after the backend has validated it. */
+  protected get gl(): WebGL2RenderingContext | null {
+    return this.backend?.gl as WebGL2RenderingContext | null;
+  }
   /** Logical CSS-pixel width of the current frame. */
   protected width = 0;
   /** Logical CSS-pixel height of the current frame. */
@@ -58,13 +63,19 @@ export abstract class WebGlBatchSurface {
   protected active = false;
   /** Whether the GL context is currently lost. */
   protected contextLost = false;
-  private uninstallContextLoss: (() => void) | null = null;
   private readonly colors = new Map<string, ColorChannels>();
 
   /** Create the layer for one canvas; nothing runs without WebGL2. */
   protected constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false });
+    this.backend = tryCreateWebGl2Backend(
+      canvas,
+      { alpha: true, antialias: false, depth: false },
+      {
+        onLost: this.handleContextLost,
+        onRestored: this.handleContextRestored,
+      },
+    );
   }
 
   /** Whether this batch can submit the current frame through WebGL2. */
@@ -74,12 +85,11 @@ export abstract class WebGlBatchSurface {
 
   /** Release GPU resources and the context-loss subscription. */
   dispose(): void {
-    this.uninstallContextLoss?.();
-    this.uninstallContextLoss = null;
     if (this.gl && !this.contextLost) {
       this.releaseResources(this.gl);
     }
     this.forgetResources();
+    this.backend?.dispose();
     this.active = false;
   }
 
@@ -90,13 +100,9 @@ export abstract class WebGlBatchSurface {
    * are initialized before `initializeResources` reads them.
    */
   protected initializeBatch(): void {
-    if (!this.gl) {
+    if (!this.backend) {
       return;
     }
-    this.uninstallContextLoss = installContextLossHandlers(this.canvas, {
-      onLost: this.handleContextLost,
-      onRestored: this.handleContextRestored,
-    });
     this.initializeResources();
   }
 
@@ -119,21 +125,22 @@ export abstract class WebGlBatchSurface {
    * cleared backing store, or null when the context is lost or `ready` is
    * false.
    */
-  protected beginFrame(width: number, height: number, ready: boolean): CanvasBackingStore | null {
+  protected beginFrame(width: number, height: number, ready: boolean): RenderSurfaceFrame | null {
     this.width = width;
     this.height = height;
-    const gl = this.gl;
-    if (!gl || !ready || this.contextLost) {
+    if (!this.backend || !ready || this.contextLost) {
+      this.active = false;
+      return null;
+    }
+    this.backend.resize({ width, height });
+    const frame = this.backend.begin(true);
+    if (!frame) {
       this.active = false;
       return null;
     }
     this.active = true;
-    const backing = sizeCanvasBackingStore(this.canvas, { width, height });
-    this.ratio = backing.ratio;
-    gl.viewport(0, 0, backing.width, backing.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    return backing;
+    this.ratio = frame.ratio;
+    return frame;
   }
 
   /** Build programs, buffers, and attribute locations. */
@@ -145,8 +152,7 @@ export abstract class WebGlBatchSurface {
   /** Drop every resource handle and staged count on loss or disposal. */
   protected abstract forgetResources(): void;
 
-  private readonly handleContextLost = (event: Event): void => {
-    event.preventDefault();
+  private readonly handleContextLost = (): void => {
     this.contextLost = true;
     this.active = false;
     this.forgetResources();
@@ -226,10 +232,12 @@ export abstract class InstancedQuadBatch extends WebGlBatchSurface {
     }
     const upload = this.instances.subarray(0, this.instanceCount * this.stride);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    const uploadBytes = upload.byteLength;
-    if (uploadBytes > this.instanceBufferCapacity) {
-      this.instanceBufferCapacity = uploadBytes;
-      gl.bufferData(gl.ARRAY_BUFFER, this.instanceBufferCapacity, gl.STREAM_DRAW);
+    // Follow this frame's size instead of the largest frame ever recorded, so a
+    // single dense frame cannot raise every later frame's allocation.
+    const capacity = nextBufferCapacity(upload.byteLength, this.instanceBufferCapacity);
+    if (capacity !== this.instanceBufferCapacity || capacity === 0) {
+      this.instanceBufferCapacity = capacity;
+      gl.bufferData(gl.ARRAY_BUFFER, capacity, gl.STREAM_DRAW);
     }
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, upload);
     bindInstanceAttributes(gl, this.attributes, this.stride);

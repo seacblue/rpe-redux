@@ -21,6 +21,7 @@ export interface TimelineSurface {
   readonly notes: HTMLCanvasElement;
   readonly noteBatch: HTMLCanvasElement;
   readonly noteSolidBatch: HTMLCanvasElement;
+  readonly notesCue: HTMLCanvasElement;
   readonly eventsBackdrop: HTMLCanvasElement;
   readonly eventsGridBatch: HTMLCanvasElement;
   readonly eventsPlayhead: HTMLCanvasElement;

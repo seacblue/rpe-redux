@@ -12,6 +12,7 @@ import { Preview } from "../scene/preview.ts";
 import { createPreviewDisplay } from "../surface/previewDisplay.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { canvasPixelRatio } from "../../../canvas/canvas2d.ts";
+import { PreviewCompositeRenderDevice } from "./previewCompositeRenderDevice.ts";
 import {
   previewFrameMimeType,
   type PreviewFrameFormat,
@@ -49,7 +50,7 @@ export type OffscreenPreviewAppearance = Pick<
 export class OffscreenPreviewRenderer {
   private readonly preview: Preview;
   private readonly surface: OffscreenPreviewSurface;
-  private readonly outputContext: CanvasRenderingContext2D;
+  private readonly compositeDevice: PreviewCompositeRenderDevice;
   private readonly chart: Chart;
   private readonly tempo: TempoMap;
   private noiseFailed = false;
@@ -123,11 +124,7 @@ export class OffscreenPreviewRenderer {
     }
     surface.output.width = width;
     surface.output.height = height;
-    const outputContext = surface.output.getContext("2d");
-    if (!outputContext) {
-      throw new Error("preview_frame_canvas_unavailable");
-    }
-    this.outputContext = outputContext;
+    this.compositeDevice = new PreviewCompositeRenderDevice(surface.output);
   }
 
   /** Load all effects before frame zero so asynchronous initialization cannot change the output. */
@@ -186,16 +183,14 @@ export class OffscreenPreviewRenderer {
     if (effects.length && shader.style.visibility !== "visible") {
       throw new Error(`preview_frame_shader_failed:${this.preview.shaderPipeline.lastError ?? ""}`);
     }
-    const context = this.outputContext;
-    context.clearRect(0, 0, output.width, output.height);
     const base = shader.style.visibility === "visible" ? shader : primary;
-    context.drawImage(base, 0, 0, output.width, output.height);
-    if (shader.style.visibility !== "visible" && notes.style.opacity !== "0") {
-      context.drawImage(notes, 0, 0, output.width, output.height);
-    }
-    if (overlay.style.visibility === "visible") {
-      context.drawImage(overlay, 0, 0, output.width, output.height);
-    }
+    this.compositeDevice.render({
+      base,
+      notes,
+      overlay,
+      includeNotes: shader.style.visibility !== "visible" && notes.style.opacity !== "0",
+      includeOverlay: overlay.style.visibility === "visible",
+    });
     return output;
   }
 
@@ -216,6 +211,7 @@ export class OffscreenPreviewRenderer {
 
   /** Releases the preview renderer and its WebGL resources. */
   dispose(): void {
+    this.compositeDevice.dispose();
     this.preview.dispose();
   }
 }

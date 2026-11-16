@@ -4,6 +4,7 @@
  * shaders, and hit geometry for one frame. Core chart modules own evaluation.
  */
 import { SceneRuntime } from "../../../../../../core/global/chart/runtime/scene.ts";
+import type { NoteChangeHint } from "../../../../../../core/global/chart/runtime/noteChangeHints.ts";
 import { ShaderRuntime } from "../../../../../../core/global/chart/shader/shader.ts";
 import { SimultaneousNotesCache } from "../../../../../../core/global/chart/line/simultaneousNotes.ts";
 import {
@@ -17,14 +18,23 @@ import { linePasses, type RenderPass } from "../drawing/previewLines.ts";
 import { PREVIEW_LOGICAL_SIZE } from "./constants.ts";
 import { lineGuides, type LineGuide } from "../drawing/guides.ts";
 import { readShaderSource } from "../../../../../platform/shaderSource.ts";
-import { canvasPixelRatio, measureCanvas, prepareCanvas } from "../../../canvas/canvas2d.ts";
+import {
+  canvasPixelRatio,
+  fallbackCanvasPixelRatio,
+  measureCanvas,
+  prepareCanvas,
+} from "../../../canvas/canvas2d.ts";
 import { drawComposite } from "./previewComposite.ts";
+import type { GuideDrawStats } from "../drawing/previewGuides.ts";
 import { drawHitEffects } from "../drawing/previewHitEffects.ts";
 
 import { drawLinePasses } from "../drawing/previewLines.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { ShaderPipeline, type ShaderProgramSource } from "../render/shaderPipeline.ts";
+import { ShaderCompositeRenderDevice } from "../render/shaderCompositeRenderDevice.ts";
+import { PreviewGuideBatch } from "../render/previewGuideBatch.ts";
 import { NoteBatch } from "../../../canvas/noteBatch.ts";
+import type { NoteTextureTable } from "../../../canvas/noteBatch.ts";
 import { PreviewBackground, type TextureImage } from "../render/background.ts";
 import { NoiseAreaRenderer } from "../render/noiseAreaRenderer.ts";
 import { detailedNoiseRendering } from "../../../../../../core/edit/state/noiseRendering.ts";
@@ -33,6 +43,11 @@ import type { Chart, JudgeLineNote } from "../../../../../../core/global/chart/c
 import type { NoteEntry } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { SampledLineState } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { TempoSource } from "../../../../../../core/global/chart/timing/events.ts";
+import {
+  eventTrackSamplingStats,
+  resetEventTrackSamplingStats,
+  setEventTrackSamplingStatsEnabled,
+} from "../../../../../../core/global/chart/timing/events.ts";
 import type {
   HitTestPreviewGeometry,
   HitTestPoint,
@@ -45,6 +60,7 @@ import {
 } from "./previewFrameRequest.ts";
 import { CompletionTimesCache } from "./completionTimes.ts";
 import { reportPreviewTiming } from "./previewTiming.ts";
+import { renderDetailedProfileEnabled } from "../../../../../../core/diagnostics/renderMetrics.ts";
 import type {
   PreviewCanvasLayers,
   PreviewColorSettings,
@@ -58,6 +74,64 @@ import type {
   PreviewShaderEffect,
 } from "./previewTypes.ts";
 
+/** A shared empty texture table, used when the batch cannot paint. */
+const EMPTY_TEXTURES: NoteTextureTable = Object.freeze([]);
+
+interface RetainedLineBatchKey {
+  readonly chart: Chart;
+  readonly scene: SceneRuntime;
+  readonly states: readonly SampledLineState[];
+  readonly order: readonly number[];
+  readonly width: number;
+  readonly height: number;
+  readonly viewport: PreviewViewport;
+  readonly centerX: number;
+  readonly centerY: number;
+  readonly scale: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly lineScale: number;
+  readonly selectedLineSet: ReadonlySet<number>;
+  readonly selectedLineColor: readonly number[];
+  readonly defaultLineColor: readonly number[];
+  readonly skin: PreviewSkin | null | undefined;
+  readonly skinRevision: number | undefined;
+}
+
+/** Compare the immutable inputs that affect a retained static judge-line layer. */
+function sameRetainedLineBatchKey(
+  previous: RetainedLineBatchKey | null,
+  next: RetainedLineBatchKey,
+): boolean {
+  return (
+    previous !== null &&
+    previous.chart === next.chart &&
+    previous.scene === next.scene &&
+    previous.states === next.states &&
+    previous.order === next.order &&
+    previous.width === next.width &&
+    previous.height === next.height &&
+    previous.viewport.left === next.viewport.left &&
+    previous.viewport.top === next.viewport.top &&
+    previous.viewport.width === next.viewport.width &&
+    previous.viewport.height === next.viewport.height &&
+    previous.viewport.scale === next.viewport.scale &&
+    previous.viewport.scaleX === next.viewport.scaleX &&
+    previous.viewport.scaleY === next.viewport.scaleY &&
+    previous.centerX === next.centerX &&
+    previous.centerY === next.centerY &&
+    previous.scale === next.scale &&
+    previous.scaleX === next.scaleX &&
+    previous.scaleY === next.scaleY &&
+    previous.lineScale === next.lineScale &&
+    previous.selectedLineSet === next.selectedLineSet &&
+    previous.selectedLineColor === next.selectedLineColor &&
+    previous.defaultLineColor === next.defaultLineColor &&
+    previous.skin === next.skin &&
+    previous.skinRevision === next.skinRevision
+  );
+}
+
 /** Per-call switches for one preview paint. */
 export interface PreviewDrawOptions {
   /** Build hit-test geometry only for an interaction or an explicit query. */
@@ -66,6 +140,10 @@ export interface PreviewDrawOptions {
   readonly deferHeavyFrame?: boolean;
   /** All judge lines in the current selection; falls back to selectedLine. */
   readonly selectedLines?: readonly number[];
+  /** Line slots changed by the last session commit; used for incremental rebuilds. */
+  readonly changedLineIndexes?: readonly number[];
+  /** Exact note deltas used to preserve line-local derived collections. */
+  readonly noteChangeHints?: readonly NoteChangeHint[];
 }
 
 /**
@@ -93,6 +171,12 @@ export class Preview {
   private lastVisibleNoteCount = 0;
   /** Bumps whenever a paint can change the primary canvas pixels. */
   private shaderSourceRevision = 0;
+  private lastCanvasClearRect: {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  } | null = null;
   private readonly geometryCache = new PreviewGeometryCache();
   private readonly completionTimesCache = new CompletionTimesCache();
   private readonly geometryObservers = new Set<(geometry: HitTestPreviewGeometry | null) => void>();
@@ -102,8 +186,13 @@ export class Preview {
   declare scene: SceneRuntime;
   declare shaderRuntime: ShaderRuntime;
   declare shaderPipeline: ShaderPipeline;
+  declare shaderCompositeDevice: ShaderCompositeRenderDevice;
   declare noteBatch: NoteBatch;
+  guideBatch: PreviewGuideBatch | null = null;
+  /** Note heads by `type * 2 + highlight`, refreshed at the start of each paint. */
+  noteTextures: NoteTextureTable = EMPTY_TEXTURES;
   private readonly noteBatchCanvas: HTMLCanvasElement;
+  readonly sharedNoteBatch: boolean;
   private readonly noiseAreas: NoiseAreaRenderer;
   /** Host notification for an unavailable detailed noise renderer. */
   noiseError?: () => void;
@@ -142,9 +231,14 @@ export class Preview {
   declare passes: RenderPass[];
   /** Whether every painted judge line shares the batched default line texture. */
   lineBatchable = false;
+  /** Surface flag consumed by drawLinePasses for a retained static line layer. */
+  skipStaticLinePass = false;
+  /** Surface flag that routes world-static lines into the retained GPU layer. */
+  retainStaticLineBatch = false;
   private lineBatchChart: Chart | null = null;
   private lineBatchSkin: PreviewSkin | null | undefined;
   private lineBatchRevision: number | undefined;
+  private retainedLineBatchKey: RetainedLineBatchKey | null = null;
   declare guides: LineGuide[] | null;
   declare viewport: PreviewViewport | null;
   /** Chart-content camera; only notes, lines, guides, and hit effects follow it. */
@@ -153,6 +247,8 @@ export class Preview {
   declare selectedLine: number;
   /** Every line in the current multi-line selection, if any. */
   declare selectedLines: readonly number[];
+  /** O(1) membership lookup for the current multi-line selection. */
+  selectedLineSet: ReadonlySet<number> = new Set();
   /** The colour used to tint selected judge lines. */
   declare selectedLineColor: readonly number[];
   declare invalidate?: (() => void) | null;
@@ -236,6 +332,9 @@ export class Preview {
     this.completionTimesCache.clear();
     this.passes = [];
     this.lineBatchable = false;
+    this.skipStaticLinePass = false;
+    this.retainStaticLineBatch = false;
+    this.retainedLineBatchKey = null;
     this.lineBatchChart = null;
     this.lineBatchSkin = undefined;
     this.lineBatchRevision = undefined;
@@ -255,7 +354,11 @@ export class Preview {
     this.cameraTracker.reset();
     this.invalidateFrame();
     this.geometryCache.clear();
-    this.shaderPipeline.dispose();
+    if (this.sharedNoteBatch) {
+      this.shaderPipeline.resetChartResources();
+    } else {
+      this.shaderCompositeDevice.dispose();
+    }
     this.shaderPrewarmChart = null;
     this.shaderPrewarmRevision = -1;
     this.noteBatch.clear();
@@ -539,6 +642,8 @@ export class Preview {
   /** Releases GPU, canvas, and noise resources owned by the preview. */
   dispose(): void {
     this.clearDocument();
+    this.guideBatch?.dispose();
+    this.shaderCompositeDevice.dispose();
     this.noiseAreas.dispose();
     this.noteBatch.dispose();
     this.display.dispose();
@@ -547,12 +652,32 @@ export class Preview {
   /** Creates the preview for `canvas`, optionally reusing caller-provided layers. */
   constructor(canvas: HTMLCanvasElement, layers: PreviewCanvasLayers | null = null) {
     this.canvas = canvas;
+    this.shaderCanvas = layers?.shader ?? null;
     this.scene = new SceneRuntime();
     this.simultaneousCache = new SimultaneousNotesCache();
     this.shaderRuntime = new ShaderRuntime(() => this.invalidate?.(), readShaderSource);
-    this.shaderPipeline = new ShaderPipeline(() => this.invalidate?.());
-    this.noteBatchCanvas = layers?.noteBatch ?? document.createElement("canvas");
-    this.noteBatch = new NoteBatch(this.noteBatchCanvas, "preview");
+    this.shaderPipeline = new ShaderPipeline(() => this.invalidate?.(), this.shaderCanvas);
+    this.shaderCompositeDevice = new ShaderCompositeRenderDevice(this.shaderPipeline);
+    const sharedBackend = this.shaderPipeline.sharedBackend();
+    this.sharedNoteBatch = Boolean(
+      this.shaderCanvas && sharedBackend && this.shaderPipeline.webgl2,
+    );
+    this.noteBatchCanvas =
+      this.sharedNoteBatch && this.shaderCanvas
+        ? this.shaderCanvas
+        : (layers?.noteBatch ?? document.createElement("canvas"));
+    this.noteBatch = new NoteBatch(
+      this.noteBatchCanvas,
+      "preview",
+      this.sharedNoteBatch ? sharedBackend : null,
+    );
+    if (this.sharedNoteBatch && this.shaderCanvas && sharedBackend) {
+      try {
+        this.guideBatch = new PreviewGuideBatch(this.shaderCanvas, sharedBackend);
+      } catch {
+        this.guideBatch = null;
+      }
+    }
     this.noiseAreas = new NoiseAreaRenderer(
       () => {
         this.invalidateFrame();
@@ -597,7 +722,6 @@ export class Preview {
     this.samplingFocus = null;
     this.samplingAlpha = null;
     this.overlayCanvas = layers?.overlay ?? null;
-    this.shaderCanvas = layers?.shader ?? null;
   }
 
   /** Queues one deferred paint for the next task turn. */
@@ -668,18 +792,64 @@ export class Preview {
   }
 
   /** Rebuilds note-derived caches only when notes, tempo, or z-order changed. */
-  private updateSceneCollections(chart: Chart, tempo: TempoSource, tempoChanged: boolean): void {
+  private updateSceneCollections(
+    chart: Chart,
+    tempo: TempoSource,
+    tempoChanged: boolean,
+    changedLineIndexes?: readonly number[],
+    noteChangeHints?: readonly NoteChangeHint[],
+  ): void {
     this.hitStateCache.clear();
     const sourceLines = chart.judgeLineList ?? [];
-    const noteSources = sourceLines.map((line) => line.notes);
+    const canPatch =
+      changedLineIndexes !== undefined &&
+      sourceLines.length === this.previewNoteSources.length &&
+      sourceLines.length === this.previewZOrder.length;
+    const noteSources = canPatch
+      ? [...this.previewNoteSources]
+      : sourceLines.map((line) => line.notes);
+    const zOrder = canPatch
+      ? [...this.previewZOrder]
+      : sourceLines.map((line) => Number(line.zOrder ?? 0));
+    if (canPatch) {
+      for (const index of changedLineIndexes) {
+        const line = sourceLines[index];
+        if (line) {
+          noteSources[index] = line.notes;
+          zOrder[index] = Number(line.zOrder ?? 0);
+        }
+      }
+    }
     const notesSame =
       !tempoChanged &&
       sourceLines.length === this.previewNoteSources.length &&
-      sourceLines.every((line, index) => line.notes === this.previewNoteSources[index]);
+      (canPatch
+        ? changedLineIndexes.every(
+            (index) => sourceLines[index]?.notes === this.previewNoteSources[index],
+          )
+        : sourceLines.every((line, index) => line.notes === this.previewNoteSources[index]));
     const orderSame =
       sourceLines.length === this.previewZOrder.length &&
-      sourceLines.every((line, index) => Number(line.zOrder ?? 0) === this.previewZOrder[index]);
-    if (!notesSame) {
+      (canPatch
+        ? changedLineIndexes.every(
+            (index) => Number(sourceLines[index]?.zOrder ?? 0) === this.previewZOrder[index],
+          )
+        : sourceLines.every(
+            (line, index) => Number(line.zOrder ?? 0) === this.previewZOrder[index],
+          ));
+    const hintsByLine = new Map(
+      (noteChangeHints ?? []).map((hint) => [hint.lineIndex, hint] as const),
+    );
+    const visualNoteArraysOnly =
+      canPatch &&
+      changedLineIndexes.length > 0 &&
+      changedLineIndexes.every((index) => {
+        const source = sourceLines[index]?.notes;
+        return (
+          source === this.previewNoteSources[index] || hintsByLine.get(index)?.kind === "visual"
+        );
+      });
+    if (!notesSame && !visualNoteArraysOnly) {
       this.simultaneous = this.simultaneousCache.update(chart, tempo);
       this.completionTimes = this.completionTimesCache.update(this.scene.lines, noteSources, tempo);
     }
@@ -687,7 +857,7 @@ export class Preview {
       this.passes = linePasses(sourceLines, this.scene.order);
     }
     this.previewNoteSources = noteSources;
-    this.previewZOrder = sourceLines.map((line) => Number(line.zOrder ?? 0));
+    this.previewZOrder = zOrder;
   }
 
   /**
@@ -736,10 +906,17 @@ export class Preview {
     height: number;
     viewport: PreviewViewport;
     divisor: number;
+    screenScale: number;
     contentFrame: ReturnType<typeof previewCameraView>;
     setupMs: number;
   } {
-    const { context, width, height } = prepareCanvas(this.canvas, true, measurement);
+    const canvasFallback = !this.shaderPipeline.webgl2;
+    const { context, width, height } = prepareCanvas(
+      this.canvas,
+      !canvasFallback,
+      measurement,
+      canvasFallback ? fallbackCanvasPixelRatio() : canvasPixelRatio(),
+    );
     const viewport = previewViewport(
       width,
       height,
@@ -747,8 +924,19 @@ export class Preview {
     );
     const divisor = Math.max(0.01, Number(this.viewDivisor) || 1);
     // The clip is screen-fixed; the camera moves only the chart content inside it.
+    const screenScale = viewport.scale / divisor;
     const contentFrame = previewCameraView(viewport, this.camera, divisor);
     this.display.setViewportClip(viewport, divisor, contentFrame);
+    if (canvasFallback) {
+      const previous = this.lastCanvasClearRect;
+      if (previous) {
+        context.clearRect(previous.left, previous.top, previous.width, previous.height);
+      }
+      context.clearRect(viewport.left, viewport.top, viewport.width, viewport.height);
+      this.lastCanvasClearRect = viewport;
+    } else {
+      this.lastCanvasClearRect = null;
+    }
     const { scale } = contentFrame;
     context.save();
     context.beginPath();
@@ -800,6 +988,7 @@ export class Preview {
       height,
       viewport,
       divisor,
+      screenScale,
       contentFrame,
       setupMs: performance.now() - drawStarted,
     };
@@ -811,9 +1000,6 @@ export class Preview {
     states: SampledLineState[],
     order: readonly number[],
     divisor: number,
-    drawStarted: number,
-    setupMs: number,
-    sampleMs: number,
   ): {
     visibleNoteCount: number;
     visibleHoldCount: number;
@@ -821,6 +1007,7 @@ export class Preview {
     visibilityIndexMs: number;
     visibilityCandidateCount: number;
   } {
+    const visibilityStarted = performance.now();
     const lines = this.scene.lines;
     const visibleNotes = this.visibleNoteBuckets;
     const visibleHolds = this.visibleHoldBuckets;
@@ -830,12 +1017,15 @@ export class Preview {
     let visibleHoldCount = 0;
     let visibilityIndexMs = 0;
     let visibilityCandidateCount = 0;
+    const measureVisibilityIndex = renderDetailedProfileEnabled();
     for (const index of order) {
       const state = states[index];
       const runtime = lines[index];
       const bucket = visibleNotes[index] ?? (visibleNotes[index] = []);
       const holdBucket = visibleHolds[index] ?? (visibleHolds[index] = []);
-      if (!runtime || !state) {
+      // Empty lines cannot contribute visible notes. Avoid entering the per-line
+      // directory and timer path for the many structural lines in large charts.
+      if (!runtime || runtime.notes.length === 0 || !state) {
         bucket.length = 0;
         holdBucket.length = 0;
         continue;
@@ -846,6 +1036,7 @@ export class Preview {
         1600 * divisor + Math.hypot(state.x, state.y),
         bucket,
         holdBucket,
+        measureVisibilityIndex,
       );
       visibilityIndexMs += runtime.lastVisibilityStats.indexMs;
       visibilityCandidateCount += runtime.lastVisibilityStats.candidateCount;
@@ -855,9 +1046,44 @@ export class Preview {
     return {
       visibleNoteCount,
       visibleHoldCount,
-      visibilityMs: performance.now() - drawStarted - setupMs - sampleMs,
+      visibilityMs: performance.now() - visibilityStarted,
       visibilityIndexMs,
       visibilityCandidateCount,
+    };
+  }
+
+  /** Build the retained-line key when the current frame can reuse static GPU lines. */
+  private retainedLineKey(frame: PreviewFrame): RetainedLineBatchKey | null {
+    if (
+      !this.lineBatchable ||
+      this.drawCollectGeometry ||
+      this.soloLine !== null ||
+      this.focusLine !== null ||
+      this.samplingFocus !== null ||
+      this.samplingAlpha !== null ||
+      this.overlapMenuOpen
+    ) {
+      return null;
+    }
+    return {
+      chart: frame.chart,
+      scene: frame.scene,
+      states: frame.states,
+      order: frame.order,
+      width: frame.width,
+      height: frame.height,
+      viewport: frame.viewport,
+      centerX: frame.centerX,
+      centerY: frame.centerY,
+      scale: frame.scale,
+      scaleX: frame.scaleX,
+      scaleY: frame.scaleY,
+      lineScale: this.lineScale,
+      selectedLineSet: this.selectedLineSet,
+      selectedLineColor: this.selectedLineColor,
+      defaultLineColor: this.defaultLineColor,
+      skin: this.skin,
+      skinRevision: this.lineBatchRevision,
     };
   }
 
@@ -870,13 +1096,40 @@ export class Preview {
     notesMs: number;
     effectsMs: number;
     compositeMs: number;
+    guide: GuideDrawStats | null;
+    shaderSourceUploadMs: number;
+    shaderOverlayUploadMs: number;
   } {
     this.noteHitAreas.length = 0;
     this.lineFrames.length = 0;
     const notesStarted = performance.now();
-    this.noteBatch.begin(frame.width, frame.height, this.skin ?? null, frame.viewport);
+    const nextRetainedLineKey = this.retainedLineKey(frame);
+    const retainStaticLines =
+      nextRetainedLineKey !== null &&
+      sameRetainedLineBatchKey(this.retainedLineBatchKey, nextRetainedLineKey);
+    const retainedLines = this.noteBatch.begin(
+      frame.width,
+      frame.height,
+      this.skin ?? null,
+      frame.viewport,
+      1,
+      retainStaticLines,
+    );
+    this.skipStaticLinePass = retainedLines;
+    this.retainStaticLineBatch = nextRetainedLineKey !== null;
+    // Resolve every note texture once for this pass; the per-note path then reads a slot
+    // instead of calling the skin. `null` means the batch is inactive, so no note is
+    // submitted and an empty table is never read.
+    this.noteTextures = this.noteBatch.prepareNoteTextures(this.skin ?? null) ?? EMPTY_TEXTURES;
     const drawStats = drawLinePasses(this, frame);
-    this.noteBatch.finish();
+    if (nextRetainedLineKey !== null && !retainedLines && this.noteBatch.isActive()) {
+      this.noteBatch.retainLineBatch();
+      this.retainedLineBatchKey = this.noteBatch.isActive() ? nextRetainedLineKey : null;
+    } else if (nextRetainedLineKey === null || !retainedLines) {
+      this.retainedLineBatchKey = null;
+    }
+    this.skipStaticLinePass = false;
+    this.retainStaticLineBatch = false;
     const drawnNotes = drawStats.notes + drawStats.holds;
     if (
       !this.batchWarningShown &&
@@ -894,36 +1147,50 @@ export class Preview {
     }
     const effectsMs = performance.now() - effectsStarted;
     const compositeStarted = performance.now();
+    const shaderInputEligible =
+      this.sharedNoteBatch && this.applyShaders && frame.shaderEffects.length > 0;
+    if (!shaderInputEligible) {
+      // The ordinary path owns the note canvas and needs one final submission.
+      // When shaders are active, defer this submission to finishToFramebuffer so
+      // notes enter the same WebGL texture as the shader source.
+      this.noteBatch.finish();
+    }
     this.noiseComposited =
       this.soloLine === null &&
       this.noiseAreas.draw(
         frame,
         this.canvas,
-        this.noteBatch.isActive() ? this.noteBatchCanvas : null,
+        shaderInputEligible ? null : this.noteBatch.isActive() ? this.noteBatchCanvas : null,
         this.detailedNoise ?? detailedNoiseRendering.get(),
+        shaderInputEligible
+          ? () => {
+              this.noteBatch.finish();
+              return this.noteBatchCanvas;
+            }
+          : undefined,
       );
-    // Shader passes consume the primary canvas. Include the GPU note layer
-    // before those passes when noise has not already composed it there.
-    if (
+    const shaderInput =
+      !this.noiseComposited && shaderInputEligible && this.noteBatch.isActive()
+        ? this.noteBatch
+        : null;
+    const shaderOverlay =
       !this.noiseComposited &&
+      !this.sharedNoteBatch &&
       this.applyShaders &&
       frame.shaderEffects.length > 0 &&
-      this.noteBatch.isActive() &&
-      this.noteBatchCanvas
-    ) {
-      frame.context.save();
-      frame.context.setTransform(1, 0, 0, 1, 0, 0);
-      frame.context.drawImage(this.noteBatchCanvas, 0, 0, this.canvas.width, this.canvas.height);
-      frame.context.restore();
-      this.noiseComposited = true;
-    }
-    drawComposite(this, frame);
+      this.noteBatch.isActive()
+        ? this.noteBatchCanvas
+        : null;
+    const guide = drawComposite(this, frame, shaderOverlay, shaderInput);
     this.images?.trim?.();
     return {
       drawStats,
       notesMs,
       effectsMs,
       compositeMs: performance.now() - compositeStarted,
+      guide,
+      shaderSourceUploadMs: this.shaderPipeline.lastFrameMetrics.sourceUploadMs,
+      shaderOverlayUploadMs: this.shaderPipeline.lastFrameMetrics.overlayUploadMs,
     };
   }
 
@@ -984,6 +1251,9 @@ export class Preview {
     ) {
       return;
     }
+    if (selectionChanged) {
+      this.selectedLineSet = new Set(selectedLines);
+    }
     this.selectedLines = selectedLines;
     const heavyFrame = chartChanged || this.lastVisibleNoteCount > 400;
     if (options.deferHeavyFrame && heavyFrame && !collectGeometry && this.lastFrame) {
@@ -1018,29 +1288,62 @@ export class Preview {
     this.lastDrawRequest = { chart, tempo, seconds, selectedLine, selectedNotes };
     this.chart = chart;
     this.updateLineBatch(chart);
+    let sceneCompileMs = 0;
+    let sceneCollectionsMs = 0;
+    let shaderCompileMs = 0;
     if (chartChanged || lineColorChanged) {
-      this.scene.compile(chart, tempo, this.defaultLineColor);
+      const started = performance.now();
+      this.scene.compile(
+        chart,
+        tempo,
+        this.defaultLineColor,
+        chartChanged ? options.changedLineIndexes : undefined,
+        chartChanged ? options.noteChangeHints : undefined,
+      );
+      sceneCompileMs = performance.now() - started;
     }
     if (chartChanged) {
-      this.updateSceneCollections(chart, tempo, tempoChanged);
+      const started = performance.now();
+      this.updateSceneCollections(
+        chart,
+        tempo,
+        tempoChanged,
+        options.changedLineIndexes,
+        options.noteChangeHints,
+      );
+      sceneCollectionsMs = performance.now() - started;
     }
     // Start source loading and idle compilation before the composite pass can
     // request a program. A pending source is skipped for this frame instead of
     // linking synchronously while the transport is playing.
     if (this.applyShaders) {
+      const started = performance.now();
       this.shaderRuntime.compile(chart, tempo);
+      shaderCompileMs = performance.now() - started;
     }
+    const prewarmStarted = performance.now();
     this.prewarmShaderPrograms();
+    const shaderPrewarmMs = performance.now() - prewarmStarted;
     const shaderEffects: readonly PreviewShaderEffect[] = this.applyShaders
       ? this.shaderRuntime.activeInto(seconds)
       : [];
+    const canvasPrepareStarted = performance.now();
     const prepared = this.prepareCanvasFrame(measurement, drawStarted);
-    const { context, width, height, viewport, divisor, contentFrame, setupMs } = prepared;
+    const canvasPrepareMs = performance.now() - canvasPrepareStarted;
+    const { context, width, height, viewport, divisor, screenScale, contentFrame, setupMs } =
+      prepared;
     const { scale, scaleX, scaleY, centerX, centerY } = contentFrame;
     // Each frame samples into a fresh state array.
-    const states = this.scene.sampleInto(seconds, this.sampledStates);
-    const sampleMs = performance.now() - drawStarted - setupMs;
+    // Preview only needs floor distance on lines that own notes; structural lines still
+    // need their transform and alpha, but integrating their speed layers is wasted work.
+    const sampleStarted = performance.now();
+    setEventTrackSamplingStatsEnabled(renderDetailedProfileEnabled());
+    resetEventTrackSamplingStats();
+    const states = this.scene.sampleInto(seconds, this.sampledStates, false);
+    const sampleMs = performance.now() - sampleStarted;
+    const eventCursorStats = eventTrackSamplingStats();
     const order = this.scene.order;
+    const noteOrder = this.scene.noteOrder;
     this.viewport = viewport;
     this.selectedLine = selectedLine;
     this.selectedNotes = selectedNotes;
@@ -1076,7 +1379,7 @@ export class Preview {
       visibilityMs,
       visibilityIndexMs,
       visibilityCandidateCount,
-    } = this.collectVisibleNotes(seconds, states, order, divisor, drawStarted, setupMs, sampleMs);
+    } = this.collectVisibleNotes(seconds, states, noteOrder, divisor);
     const lines = this.scene.lines;
     const visibleNotes = this.visibleNoteBuckets;
     const visibleHolds = this.visibleHoldBuckets;
@@ -1098,11 +1401,20 @@ export class Preview {
       scale,
       scaleX,
       scaleY,
+      screenScale,
       viewport,
       shaderEffects,
       shaderSourceRevision: this.shaderSourceRevision,
     };
-    const { drawStats, notesMs, effectsMs, compositeMs } = this.drawFrameLayers(frame, options);
+    const {
+      drawStats,
+      notesMs,
+      effectsMs,
+      compositeMs,
+      guide,
+      shaderSourceUploadMs,
+      shaderOverlayUploadMs,
+    } = this.drawFrameLayers(frame, options);
     this.lastFrame = {
       seconds,
       width,
@@ -1124,7 +1436,13 @@ export class Preview {
     }
     this.lastVisibleNoteCount = visibleNoteCount + visibleHoldCount;
     reportPreviewTiming({
+      seconds,
       totalMs: performance.now() - drawStarted,
+      sceneCompileMs,
+      sceneCollectionsMs,
+      shaderCompileMs,
+      shaderPrewarmMs,
+      canvasPrepareMs,
       setupMs,
       sampleMs,
       visibilityMs,
@@ -1133,6 +1451,15 @@ export class Preview {
       notesMs,
       effectsMs,
       compositeMs,
+      shaderSourceUploadMs,
+      shaderOverlayUploadMs,
+      guideDrawMs: guide?.durationMs ?? 0,
+      guideGroupCount: guide?.groupCount ?? 0,
+      guideVisibleGroupCount: guide?.visibleGroupCount ?? 0,
+      guideTextCacheHits: guide?.textCacheHits ?? 0,
+      guideTextCacheMisses: guide?.textCacheMisses ?? 0,
+      guideDrawCalls: guide?.drawCalls ?? 0,
+      guideRenderPath: guide?.renderPath ?? "canvas_fallback",
       visibleNoteCount,
       visibleHoldCount,
       lineCount: lines.length,
@@ -1145,6 +1472,13 @@ export class Preview {
       noteDrawMs: drawStats.noteMs,
       collectGeometry,
       noteBatchActive: this.noteBatch.isActive(),
+      sampledLineCount: this.scene.lastSampleStats.sampledLineCount,
+      staticLineCacheHits: this.scene.lastSampleStats.staticLineCacheHits,
+      continuousLineCount: this.scene.lastSampleStats.continuousLineCount,
+      parentComposeCount: this.scene.lastSampleStats.parentComposeCount,
+      stateCopyCount: this.scene.lastSampleStats.stateCopyCount,
+      eventCursorHits: eventCursorStats.cursorHits,
+      eventCursorMisses: eventCursorStats.cursorMisses,
       renderPath: this.noteBatch.isActive()
         ? drawStats.batchFallbacks > 0
           ? "mixed"

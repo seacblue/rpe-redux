@@ -19,6 +19,11 @@ import type { LibraryProjectRef, LibraryViewState } from "../library/types.ts";
 export interface AssetMap extends Map<string, Uint8Array> {
   uri?(name: string): string;
   read?(name: string): Promise<Uint8Array | undefined>;
+  /** Open a chart directly inside an archive worker without returning its JSON bytes. */
+  openChartDocument?(name: string): Promise<{
+    chartDocument: ChartDocument;
+    dispose(): void;
+  }>;
   /** Includes known paths whose bytes have not been loaded yet. */
   names?(): Iterable<string>;
 }

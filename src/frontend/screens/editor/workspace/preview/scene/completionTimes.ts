@@ -34,23 +34,77 @@ export function mergeCompletionTimes(parts: readonly (readonly number[])[]): num
     total += part.length;
   }
   const merged = new Array<number>(total);
-  const indices = new Uint32Array(parts.length);
-  for (let output = 0; output < total; output += 1) {
-    let best = -1;
-    let bestValue = Number.POSITIVE_INFINITY;
-    for (let part = 0; part < parts.length; part += 1) {
-      const index = indices[part];
-      if (index >= parts[part].length) {
-        continue;
+  const heapParts: number[] = [];
+  const heapIndices: number[] = [];
+  const heapValues: number[] = [];
+  const less = (left: number, right: number): boolean =>
+    heapValues[left] < heapValues[right] ||
+    (heapValues[left] === heapValues[right] && heapParts[left] < heapParts[right]);
+  const swap = (left: number, right: number): void => {
+    [heapParts[left], heapParts[right]] = [heapParts[right], heapParts[left]];
+    [heapIndices[left], heapIndices[right]] = [heapIndices[right], heapIndices[left]];
+    [heapValues[left], heapValues[right]] = [heapValues[right], heapValues[left]];
+  };
+  const push = (part: number, index: number): void => {
+    let slot = heapParts.length;
+    heapParts.push(part);
+    heapIndices.push(index);
+    heapValues.push(parts[part][index]);
+    while (slot > 0) {
+      const parent = (slot - 1) >>> 1;
+      if (less(parent, slot)) {
+        break;
       }
-      const value = parts[part][index];
-      if (value < bestValue) {
-        best = part;
-        bestValue = value;
+      swap(parent, slot);
+      slot = parent;
+    }
+  };
+  const replaceRoot = (part: number, index: number): void => {
+    heapParts[0] = part;
+    heapIndices[0] = index;
+    heapValues[0] = parts[part][index];
+    let slot = 0;
+    while (true) {
+      const left = slot * 2 + 1;
+      if (left >= heapParts.length) {
+        return;
+      }
+      const right = left + 1;
+      const child = right < heapParts.length && less(right, left) ? right : left;
+      if (less(slot, child)) {
+        return;
+      }
+      swap(slot, child);
+      slot = child;
+    }
+  };
+  for (let part = 0; part < parts.length; part += 1) {
+    if (parts[part].length) {
+      push(part, 0);
+    }
+  }
+  for (let output = 0; output < total; output += 1) {
+    const part = heapParts[0];
+    const index = heapIndices[0];
+    merged[output] = heapValues[0];
+    const next = index + 1;
+    if (next < parts[part].length) {
+      replaceRoot(part, next);
+    } else {
+      const last = heapParts.length - 1;
+      if (last === 0) {
+        heapParts.pop();
+        heapIndices.pop();
+        heapValues.pop();
+      } else {
+        const lastPart = heapParts[last];
+        const lastIndex = heapIndices[last];
+        heapParts.pop();
+        heapIndices.pop();
+        heapValues.pop();
+        replaceRoot(lastPart, lastIndex);
       }
     }
-    merged[output] = bestValue;
-    indices[best] += 1;
   }
   return merged;
 }

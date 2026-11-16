@@ -147,3 +147,33 @@ test("multi-line note drags convert time with the active area scale", () => {
 
   assert.deepEqual(controller.active.result.chart.judgeLineList[0].notes[0].startTime, [-5, 0, 1]);
 });
+
+test("batch preview rebuilds coalesce within one display frame", () => {
+  const previousRequest = globalThis.requestAnimationFrame;
+  const previousCancel = globalThis.cancelAnimationFrame;
+  let scheduled;
+  let updates = 0;
+  const controller = Object.create(BatchControls.prototype);
+  controller.updateFrame = null;
+  controller.active = {};
+  controller.update = () => {
+    updates += 1;
+  };
+  globalThis.requestAnimationFrame = (callback) => {
+    scheduled = callback;
+    return 17;
+  };
+  globalThis.cancelAnimationFrame = () => {};
+  try {
+    controller.scheduleUpdate();
+    controller.scheduleUpdate();
+    assert.equal(updates, 0);
+    assert.equal(controller.updateFrame, 17);
+    scheduled(0);
+    assert.equal(updates, 1);
+    assert.equal(controller.updateFrame, null);
+  } finally {
+    globalThis.requestAnimationFrame = previousRequest;
+    globalThis.cancelAnimationFrame = previousCancel;
+  }
+});

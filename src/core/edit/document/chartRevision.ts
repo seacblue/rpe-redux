@@ -24,7 +24,23 @@ import {
 const wholeChartCache = new WeakMap<object, string>();
 const headerCache = new WeakMap<object, string>();
 const lineCache = new WeakMap<object, string>();
+interface ChartFingerprintParts {
+  readonly header: string;
+  readonly lines: readonly string[];
+  readonly digest: string;
+}
+const chartPartsCache = new WeakMap<object, ChartFingerprintParts>();
 const warmPromises = new WeakMap<object, Promise<string>>();
+
+/** Report optional browser-only fingerprint timings without coupling callers to the probe. */
+function reportFingerprintTiming(stage: string, durationMs: number): void {
+  const probe = (
+    globalThis as typeof globalThis & {
+      __reduxTransactionTimingProbe?: (value: { stage: string; durationMs: number }) => void;
+    }
+  ).__reduxTransactionTimingProbe;
+  probe?.({ stage, durationMs });
+}
 
 /** Fingerprint of the chart fields outside `judgeLineList`. */
 function headerFingerprint(chart: Chart): string {
@@ -114,8 +130,15 @@ export function warmChartFingerprintAsync(chart: Chart): Promise<string> {
       parts.push(await lineFingerprintAsync(line, state));
     }
     const digest = combineContentFingerprint(headerFingerprint(chart), parts.slice(1));
-    wholeChartCache.set(chart, seeded ?? digest);
-    return seeded ?? digest;
+    const resolved = seeded ?? digest;
+    const lineDigests = Object.freeze(parts.slice(1));
+    wholeChartCache.set(chart, resolved);
+    chartPartsCache.set(chart, {
+      header: headerFingerprint(chart),
+      lines: lineDigests,
+      digest: resolved,
+    });
+    return resolved;
   })().finally(() => {
     warmPromises.delete(chart);
   });
@@ -139,10 +162,87 @@ export function chartFingerprint(chart: Chart | null | undefined): string | null
     return cached;
   }
   const lines = chart.judgeLineList ?? [];
-  const digest = combineContentFingerprint(
-    headerFingerprint(chart),
-    lines.map((line) => lineFingerprint(line)),
+  const lineHashStarted = performance.now();
+  const lineDigests = lines.map((line) => lineFingerprint(line));
+  reportFingerprintTiming(
+    "plan.afterFingerprint.fullLineHash",
+    performance.now() - lineHashStarted,
+  );
+  const aggregateStarted = performance.now();
+  const header = headerFingerprint(chart);
+  const digest = combineContentFingerprint(header, lineDigests);
+  reportFingerprintTiming(
+    "plan.afterFingerprint.fullAggregate",
+    performance.now() - aggregateStarted,
   );
   wholeChartCache.set(chart, digest);
+  chartPartsCache.set(chart, {
+    header,
+    lines: Object.freeze([...lineDigests]),
+    digest,
+  });
+  return digest;
+}
+
+/** Return a chart's canonical line digest vector, reusing the per-line cache. */
+function chartFingerprintParts(chart: Chart): ChartFingerprintParts {
+  const cached = chartPartsCache.get(chart);
+  if (cached) {
+    return cached;
+  }
+  const header = headerFingerprint(chart);
+  const lines = Object.freeze((chart.judgeLineList ?? []).map((line) => lineFingerprint(line)));
+  const digest = combineContentFingerprint(header, lines);
+  const parts = { header, lines, digest };
+  chartPartsCache.set(chart, parts);
+  wholeChartCache.set(chart, digest);
+  return parts;
+}
+
+/**
+ * Fold a copy-on-write chart fingerprint by rehashing only changed judge lines.
+ *
+ * The caller must provide every changed line index and must keep the line count
+ * unchanged. Structural line-list changes fall back to the canonical full walk
+ * so insertion, deletion, and reorder operations retain their exact contract.
+ */
+export function chartFingerprintWithLineChanges(
+  source: Chart,
+  target: Chart,
+  changedLineIndexes: Iterable<number>,
+): string {
+  const sourceLines = source.judgeLineList ?? [];
+  const targetLines = target.judgeLineList ?? [];
+  if (sourceLines.length !== targetLines.length) {
+    return chartFingerprint(target) as string;
+  }
+  const base = chartFingerprintParts(source);
+  const lineDigests = [...base.lines];
+  const changedHashStarted = performance.now();
+  for (const index of changedLineIndexes) {
+    if (!Number.isInteger(index) || index < 0 || index >= targetLines.length) {
+      return chartFingerprint(target) as string;
+    }
+    const line = targetLines[index];
+    lineDigests[index] = lineFingerprint(line);
+  }
+  reportFingerprintTiming(
+    "plan.afterFingerprint.changedLineHash",
+    performance.now() - changedHashStarted,
+  );
+  const aggregateStarted = performance.now();
+  const header = headerFingerprint(target);
+  const digest = combineContentFingerprint(header, lineDigests);
+  reportFingerprintTiming(
+    "plan.afterFingerprint.incrementalAggregate",
+    performance.now() - aggregateStarted,
+  );
+  const parts = {
+    header,
+    lines: Object.freeze(lineDigests),
+    digest,
+  };
+  chartPartsCache.set(target, parts);
+  wholeChartCache.set(target, digest);
   return digest;
 }

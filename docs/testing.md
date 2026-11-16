@@ -106,6 +106,8 @@ It reports whole-chart parse, scan/index, eager materialization, paged time-wind
 
 `npm run benchmark:crud` measures the edit path that pointer drags, keyboard edits, and inspector fields hit: note and event update, delete, and insert through the public transaction API, for a cold session and for an importer-seeded session. It reports median, p95, and max against the 3 ms per-edit ceiling (a 144 Hz frame is 6.94 ms, and an edit shares that frame with rendering) and never exits non-zero because a machine is slow. Pass `--chart-file path/to/chart.json` to measure a real chart, `--chart` to run one case, `--iters` for more samples, and `--json` for machine-readable output. The committed `chartEditBudget.test.mjs` guards the transaction work counters and the fingerprint round trip instead of wall-clock time, so it can run in the unit suite.
 
+`npm run benchmark:render` isolates the render seams with a mock WebGL surface: shader source/overlay uploads, shared note-input submission, GPU-side overlay composition, timeline batch begin/finish and command submission, and cross-canvas capture. The `withSharedInput` case is the target architecture: note geometry is submitted into the shader source target without a note Canvas upload. It is a CPU/API submission benchmark, not a GPU time measurement. Use the browser loop for a real profile: set `window.__reduxRenderProfile = true` in the devtools console, record a Performance trace while playing or dragging the timeline, then inspect User Timing marks beginning with `redux.preview.shader` and `redux.timeline.line`.
+
 ## Desktop smoke suite
 
 `npm run smoke` launches the debug executable and runs the journeys from `src/test/e2e/journeyGroups.mjs`:

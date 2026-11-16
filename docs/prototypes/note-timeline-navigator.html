@@ -1,0 +1,289 @@
+<!doctype html>
+<!-- Throwaway UI prototype: note timeline X-range controls and current-beat edge cues. -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RPE Redux · Note timeline X-range prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: #0b0f15;
+        color: #e7edf5;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 50% -20%, #1d2a3d, #0b0f15 52%);
+      }
+      main {
+        width: min(1100px, calc(100vw - 32px));
+        margin: 30px auto 100px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 26px;
+      }
+      .lead,
+      .hint {
+        color: #9daabd;
+      }
+      .lead {
+        margin: 0 0 22px;
+      }
+      .surface {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid #334255;
+        border-radius: 12px;
+        background: #0e141d;
+        box-shadow: 0 14px 38px #0008;
+      }
+      .surface-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #293646;
+        color: #9daabd;
+      }
+      .state {
+        color: #d7e5f4;
+        font-size: 13px;
+      }
+      .timeline-wrap {
+        padding: 16px 20px 0;
+        background: #080b10;
+      }
+      .timeline {
+        display: flex;
+        gap: 12px;
+        height: 440px;
+        overflow: hidden;
+        padding: 0 12px;
+        border: 1px solid #536579;
+        background: repeating-linear-gradient(to bottom, transparent 0 73px, #263443 74px), #0d1219;
+      }
+      .panel {
+        position: relative;
+        flex: 0 0 220px;
+        overflow: hidden;
+        background:
+          repeating-linear-gradient(to right, transparent 0 54px, #21342b 55px),
+          linear-gradient(#1b2734aa, #101820aa);
+        border-right: 1px solid #62768b;
+      }
+      .panel h2 {
+        margin: 10px 12px;
+        color: #a8bbd1;
+        font-size: 14px;
+      }
+      .note {
+        position: absolute;
+        height: 24px;
+        border-radius: 8px;
+        background: #68c8ff;
+        box-shadow: 0 0 0 1px #d7f2ff55;
+        transition: left 180ms ease;
+      }
+      .note.current {
+        background: #d8f3ff;
+        box-shadow: 0 0 0 2px #fff8;
+      }
+      .indicator {
+        position: absolute;
+        width: 6px;
+        height: 24px;
+        background: linear-gradient(to right, transparent, #fff);
+        box-shadow: 0 0 8px #fff;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease;
+      }
+      .indicator.left {
+        left: 0;
+      }
+      .indicator.right {
+        right: 0;
+        transform: scaleX(-1);
+      }
+      .cue-left .indicator.left,
+      .cue-right .indicator.right {
+        opacity: 0.8;
+      }
+      .navigator {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: max-content;
+        margin: -48px auto 12px;
+        padding: 8px;
+        border: 1px solid #536b84;
+        border-radius: 10px;
+        background: #192333ee;
+        box-shadow: 0 6px 18px #0008;
+      }
+      button {
+        width: 36px;
+        height: 32px;
+        color: #e7f1ff;
+        border: 1px solid #6481a2;
+        border-radius: 7px;
+        background: #24374d;
+        cursor: pointer;
+        font: inherit;
+      }
+      button:hover,
+      button:focus-visible {
+        background: #315272;
+        outline: 2px solid #80b7ff;
+        outline-offset: 2px;
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      .range {
+        min-width: 150px;
+        text-align: center;
+        color: #d7e5f4;
+        font-size: 13px;
+      }
+      .hint {
+        min-height: 28px;
+        padding: 12px 16px;
+        font-size: 13px;
+      }
+      .metrics {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .metric {
+        padding: 8px 12px;
+        border: 1px solid #334255;
+        border-radius: 8px;
+        color: #9daabd;
+        font-size: 13px;
+      }
+      .metric b {
+        color: #e7edf5;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Note timeline · X 坐标范围</h1>
+      <p class="lead">
+        按钮移动每条 note timeline 看到的 X 视口；不绘制离屏背景，竖向网格线在离开默认范围后仍按
+        相同间距延续，白光只提示当前拍 note 触及本条 timeline 边缘。
+      </p>
+      <section class="surface" id="app"></section>
+      <div class="metrics" id="metrics"></div>
+    </main>
+    <script>
+      const app = document.querySelector("#app");
+      const metrics = document.querySelector("#metrics");
+      const min = -675;
+      const max = 675;
+      const step = 150;
+      let cameraX = 0;
+      let targetCameraX = 0;
+      let cameraFrame = null;
+      const panels = [
+        {
+          label: "线 0",
+          notes: [
+            { x: -900, y: 92, w: 70, current: true },
+            { x: 140, y: 250, w: 80 },
+          ],
+        },
+        {
+          label: "线 1",
+          notes: [
+            { x: 900, y: 142, w: 78, current: true },
+            { x: -220, y: 322, w: 66 },
+          ],
+        },
+        {
+          label: "线 2",
+          notes: [
+            { x: 900, y: 90, w: 88, current: true },
+            { x: 310, y: 236, w: 58 },
+          ],
+        },
+        {
+          label: "线 3",
+          notes: [
+            { x: -900, y: 178, w: 82, current: true },
+            { x: -80, y: 330, w: 68 },
+          ],
+        },
+      ];
+
+      function positionFor(x, panelWidth) {
+        return ((x - cameraX - min) / (max - min)) * panelWidth;
+      }
+
+      function panelMarkup(panel) {
+        const cueLeft = panel.notes.some(
+          (note) => note.current && note.x + note.w / 2 < cameraX + min,
+        );
+        const cueRight = panel.notes.some(
+          (note) => note.current && note.x - note.w / 2 > cameraX + max,
+        );
+        const notes = panel.notes
+          .map(
+            (note) =>
+              `<span class="note${note.current ? " current" : ""}" style="left:${positionFor(note.x, 220) - note.w / 2}px;top:${note.y}px;width:${note.w}px"></span>`,
+          )
+          .join("");
+        const cueNote = panel.notes.find((note) => note.current);
+        const cueTop = cueNote?.y ?? 0;
+        const indicators = `<span class="indicator left" style="top:${cueTop}px"></span><span class="indicator right" style="top:${cueTop}px"></span>`;
+        return `<article class="panel ${cueLeft ? "cue-left" : ""} ${cueRight ? "cue-right" : ""}"><h2>${panel.label}</h2>${notes}${indicators}</article>`;
+      }
+
+      function animateCamera(next) {
+        targetCameraX = next;
+        if (cameraFrame !== null) return;
+        const tick = () => {
+          cameraX += (targetCameraX - cameraX) * 0.2;
+          if (Math.abs(targetCameraX - cameraX) < 0.25) {
+            cameraX = targetCameraX;
+            cameraFrame = null;
+          } else {
+            cameraFrame = requestAnimationFrame(tick);
+          }
+          render();
+        };
+        cameraFrame = requestAnimationFrame(tick);
+      }
+
+      function render() {
+        const visibleMin = cameraX + min;
+        const visibleMax = cameraX + max;
+        app.innerHTML = `<header class="surface-head"><span>音符时间线 · 多线示意</span><span class="state">当前 X 范围：${visibleMin} ～ ${visibleMax}</span></header><div class="timeline-wrap"><div class="timeline">${panels.map(panelMarkup).join("")}</div><div class="navigator" role="group" aria-label="音符时间轴 X 坐标范围控制"><button data-direction="-1" aria-label="向左移动音符可见范围">◀</button><button data-reset aria-label="回到默认 X 坐标范围" ${cameraX === 0 ? "disabled" : ""}>⌂</button><span class="range">X：${visibleMin} ～ ${visibleMax}</span><button data-direction="1" aria-label="向右移动音符可见范围">▶</button></div></div><p class="hint">不绘制离屏背景；竖向网格线在默认范围外按相同间距延续，当前拍 note 越界时只显示 note 高度范围内的白光 indicator。左右按钮单击移动 150，长按持续移动。</p>`;
+        metrics.innerHTML = `<div class="metric">cameraX: <b>${Math.round(cameraX)}</b></div><div class="metric">默认区间: <b>-675 ～ 675</b></div><div class="metric">移动步长: <b>${step}</b></div>`;
+        app.querySelectorAll("[data-direction]").forEach((button) =>
+          button.addEventListener("click", () => {
+            animateCamera(targetCameraX + Number(button.dataset.direction) * step);
+          }),
+        );
+        app.querySelector("[data-reset]").addEventListener("click", () => {
+          animateCamera(0);
+        });
+      }
+
+      render();
+    </script>
+  </body>
+</html>

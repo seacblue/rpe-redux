@@ -44,6 +44,7 @@ import {
   viewControls,
 } from "../commands/viewControls.ts";
 import { EditorEditClock } from "../../../../../../core/edit/state/editClock.ts";
+import type { TimerHandle } from "../../../../../../core/edit/session/autosave.ts";
 import { EditorChartInfoPresenter } from "../../../../../chrome/statusbar/chartInfoPresenter.ts";
 import {
   bindBrowserLifecycle,
@@ -208,6 +209,8 @@ export function createEditorAssembly(
     setEditorVisibility({ ...getEditorVisibility(), hasDocument: value });
   }
   const sessionRendererRef: { current?: ReturnType<typeof createEditorSessionRenderer> } = {};
+  let sessionRenderMode: "document" | "selection" | null = null;
+  let sessionRenderDeferred = false;
   /** Repaints the session-derived readouts and panel contents synchronously. */
   function renderSession() {
     sessionRendererRef.current?.render();
@@ -215,30 +218,95 @@ export function createEditorAssembly(
     // — a save marking its baseline, or an asset commit.
     publishDirty();
   }
-  let sessionRenderFrame = 0;
+  let sessionRenderFrame: TimerHandle | null = null;
+  let deferSessionRenderDuringPlayback = () => false;
+  /** Paint the latest session mode after a deferred playback publication is released. */
+  function runSessionRender(): void {
+    const mode = sessionRenderMode;
+    sessionRenderMode = null;
+    const timing =
+      mode === "selection"
+        ? sessionRendererRef.current?.renderSelection()
+        : sessionRendererRef.current?.render();
+    // Publish the dirty/read-only chrome state with the same coalesced session
+    // update. During playback this function is deferred, so the Shell does not
+    // perform a global React commit in the middle of a frame.
+    publishDirty();
+    const probe = (
+      globalThis as typeof globalThis & {
+        __reduxSessionRenderTimingProbe?: (sample: {
+          durationMs: number;
+          dataMs: number;
+          readoutsMs: number;
+          panelsMs: number;
+          selectionMs: number;
+          invalidateMs: number;
+        }) => void;
+      }
+    ).__reduxSessionRenderTimingProbe;
+    if (timing) {
+      probe?.(timing);
+    }
+  }
+  /** Schedule panel publication away from a playback frame when idle time exists. */
+  function scheduleSessionCallback(callback: () => void): void {
+    if (deferSessionRenderDuringPlayback()) {
+      // Canvas invalidation remains immediate, but inspector/readout React work
+      // waits for the transport to pause. One latest render is enough because
+      // every session publication is coalesced through sessionRenderMode.
+      sessionRenderDeferred = true;
+      return;
+    }
+    sessionRenderDeferred = false;
+    sessionRenderFrame = requestAnimationFrame(() => {
+      sessionRenderFrame = null;
+      callback();
+    });
+  }
+  /** Release a coalesced React publication after playback is no longer active. */
+  function flushDeferredSessionRender(): void {
+    if (
+      !sessionRenderDeferred ||
+      sessionRenderFrame !== null ||
+      sessionRenderMode === null ||
+      deferSessionRenderDuringPlayback()
+    ) {
+      return;
+    }
+    scheduleSessionCallback(runSessionRender);
+  }
   /**
    * Coalesces session repaints into one frame and schedules a draw.
    *
    * The document installer reattaches this callback to every replacement
-   * session, so publishing the dirty flag here keeps the title and status bars
-   * following the session that currently owns the chart.
+   * session, so the coalesced render keeps the title and status bars following
+   * the session that currently owns the chart.
    */
   function scheduleSessionRender(): void {
-    publishDirty();
     invalidate();
-    if (sessionRenderFrame) {
+    sessionRenderMode = "document";
+    if (sessionRenderFrame !== null) {
       return;
     }
-    sessionRenderFrame = requestAnimationFrame(() => {
-      sessionRenderFrame = 0;
-      sessionRendererRef.current?.render();
-    });
+    scheduleSessionCallback(runSessionRender);
+  }
+  /** Coalesces selection-only repaints without rerunning document preparation. */
+  function scheduleSelectionRender(): void {
+    invalidate();
+    if (sessionRenderMode !== "document") {
+      sessionRenderMode = "selection";
+    }
+    if (sessionRenderFrame !== null) {
+      return;
+    }
+    scheduleSessionCallback(runSessionRender);
   }
   scope.add(() => {
-    if (sessionRenderFrame) {
-      cancelAnimationFrame(sessionRenderFrame);
-      sessionRenderFrame = 0;
+    if (sessionRenderFrame !== null) {
+      cancelAnimationFrame(sessionRenderFrame as number);
+      sessionRenderFrame = null;
     }
+    sessionRenderDeferred = false;
   });
   /** Opens the named inspector pane, or closes the active one for an empty name. */
   function activatePane(name: string) {
@@ -407,6 +475,7 @@ export function createEditorAssembly(
     invalidate,
     offsetSeconds,
     tempo: tempo.get,
+    onPlaybackStateChange: flushDeferredSessionRender,
   });
   const {
     chartSeconds,
@@ -417,6 +486,7 @@ export function createEditorAssembly(
     seekBeat,
     togglePlayback,
   } = playbackRuntime;
+  deferSessionRenderDuringPlayback = () => playback.audio.playing || playback.pending;
   scope.add(playbackRuntime.dispose);
   createTimelineMarkers({
     root: surfaces.transport.timelineMarkers,
@@ -709,8 +779,16 @@ export function createEditorAssembly(
       configurable: true,
       value: (paths: string[]) => home.importPaths(paths),
     });
+    Object.defineProperty(globalThis, "__REDUX_EDITOR_TEST__", {
+      configurable: true,
+      value: {
+        /** Set the live multi-line note layout for headless rendering probes. */
+        setMultiLineMerge: (enabled: boolean) => session.current.setMultiLineMerge(enabled),
+      },
+    });
     scope.add(() => {
       delete (globalThis as { __REDUX_DROP_PATHS__?: unknown }).__REDUX_DROP_PATHS__;
+      delete (globalThis as { __REDUX_EDITOR_TEST__?: unknown }).__REDUX_EDITOR_TEST__;
     });
   }
   const workspaceNavigationBinding = bindWorkspaceNavigation({
@@ -822,7 +900,14 @@ export function createEditorAssembly(
     invalidate,
   });
 
-  session.current.addEventListener("change", scheduleSessionRender);
+  session.current.addEventListener("change", (event) => {
+    const kind = (event as CustomEvent<{ kind?: string }>).detail?.kind;
+    if (kind === "selection") {
+      scheduleSelectionRender();
+      return;
+    }
+    scheduleSessionRender();
+  });
   /**
    * Republish the unsaved flag whenever the document can have changed.
    *
@@ -847,6 +932,9 @@ export function createEditorAssembly(
     // A native archive open that holds no RPE chart is converted through the
     // external import pipeline instead of surfacing `pez_chart_missing`.
     openExternalChart: (path) => home.importExternalChartFile(path),
+    // File-open and the Welcome import action share the Library-backed path.
+    // The native fallback remains available for formats the importer declines.
+    openFileThroughLibrary: (path) => home.importAndOpenFile(path),
     session,
     applySessionSettings: () => sessionSettings.apply?.(),
     ui,

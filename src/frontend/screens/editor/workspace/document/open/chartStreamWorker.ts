@@ -9,17 +9,13 @@ import {
   chartHeaderFromScan,
 } from "../../../../../../core/global/chart/streaming/chartLineSummary.ts";
 import { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
-import {
-  lineContentFingerprintParts,
-  lineRevisionSeedFromJson,
-} from "../../../../../../core/global/chart/chartContentHash.ts";
+import { lineRevisionSeedFromJson } from "../../../../../../core/global/chart/chartContentHash.ts";
 import { yieldToHost } from "../../../../../../core/utils/yieldToHost.ts";
 import type {
   ChartWorkerRequest,
   ChartWorkerResponse,
 } from "../../../../../../core/global/chart/streaming/chartStreamWorkerProtocol.ts";
 import type { ChartLineRange } from "../../../../../../core/global/chart/streaming/chartStreamTypes.ts";
-import type { ChartValueDigestGroup } from "../../../../../../core/global/chart/chartContentHash.ts";
 
 interface StreamSession {
   readonly id: number;
@@ -37,6 +33,7 @@ const workerScope = globalThis as typeof globalThis & {
 let session: StreamSession | null = null;
 let pendingChunks: Uint8Array[] = [];
 let pendingBytes = 0;
+let fingerprintsStarted = false;
 /** Match the native document host's chart ceiling. */
 const MAX_STREAM_BYTES = 512 * 1024 * 1024;
 
@@ -49,6 +46,7 @@ function reply(message: ChartWorkerResponse): void {
 function openSource(request: Extract<ChartWorkerRequest, { kind: "open" }>): void {
   pendingChunks = [];
   pendingBytes = 0;
+  fingerprintsStarted = false;
   if (request.bytes) {
     pendingChunks.push(new Uint8Array(request.bytes));
     pendingBytes = request.bytes.byteLength;
@@ -101,7 +99,6 @@ async function finishSource(
       header: { ...header, lineCount: scan.lineRanges.length },
     });
     reply({ id: request.id, kind: "index", index });
-    await fingerprintSource(request.id, text, scan.lineRanges);
   } catch (error) {
     session = null;
     reply({
@@ -112,6 +109,15 @@ async function finishSource(
   }
 }
 
+/** Start semantic fingerprint hydration after initial line requests are queued. */
+function startFingerprintSource(id: number): void {
+  if (fingerprintsStarted || !session || session.id !== id) {
+    return;
+  }
+  fingerprintsStarted = true;
+  void fingerprintSource(id, session.text, session.ranges);
+}
+
 /** Serve one raw line slice. */
 function readLine(request: Extract<ChartWorkerRequest, { kind: "line" }>): void {
   if (!session || session.id !== request.id) {
@@ -120,21 +126,11 @@ function readLine(request: Extract<ChartWorkerRequest, { kind: "line" }>): void 
   }
   const range = session.ranges[request.index];
   const raw = range ? session.text.slice(range.start, range.end) : null;
-  let valueDigests: readonly ChartValueDigestGroup[] | undefined;
-  if (raw) {
-    try {
-      const line = JSON.parse(raw);
-      valueDigests = lineContentFingerprintParts(line, { includeValueDigests: true }).valueDigests;
-    } catch {
-      valueDigests = undefined;
-    }
-  }
   reply({
     id: request.id,
     kind: "line",
     index: request.index,
     raw,
-    valueDigests,
   });
 }
 
@@ -158,6 +154,10 @@ workerScope.onmessage = (event) => {
   }
   if (request.kind === "finish") {
     void finishSource(request);
+    return;
+  }
+  if (request.kind === "fingerprints") {
+    startFingerprintSource(request.id);
     return;
   }
   if (request.kind === "line") {

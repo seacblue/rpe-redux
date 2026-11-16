@@ -27,12 +27,20 @@ interface FrameTimingProbe {
     preview: boolean;
     playhead: boolean;
     timelineMs: number;
+    timelineDrawMs: number;
+    multiEditTimelineMs: number;
+    audioAnalysisMs: number;
     previewMs: number;
+    selectionMs: number;
     totalMs: number;
     previewChartChanged: boolean;
     previewSessionChanged: boolean;
     previewSelectionChanged: boolean;
     previewSecondsChanged: boolean;
+    timelineLineCount: number;
+    timelineTargetLineCount: number;
+    timelinePanelCount: number;
+    timelineVisiblePanelRange: readonly [number, number];
   }): void;
 }
 
@@ -45,20 +53,29 @@ function reportFrameTiming(sample: Parameters<FrameTimingProbe>[0]): void {
     recordPerformanceFrameTiming({
       timelineMs: sample.timelineMs,
       previewMs: sample.previewMs,
+      selectionMs: sample.selectionMs,
       totalMs: sample.totalMs,
     });
   }
 }
 
-type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession"> & {
+type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession" | "notesCanvas"> & {
   renderRevision: number;
+  selectionOverlayRevision: number;
   drawPlayhead(playBeat: number): void;
-  refreshRectangleSelection(): void;
   gestures: Pick<
     Timeline["gestures"],
     "drag" | "eventInteraction" | "previewMarquee" | "previewRefresh"
   >;
-  viewport: Pick<Timeline["viewport"], "origin" | "setOrigin" | "setPlaybackActive">;
+  viewport: Pick<
+    Timeline["viewport"],
+    | "origin"
+    | "setOrigin"
+    | "setPlaybackActive"
+    | "beatsPerPixel"
+    | "panelCount"
+    | "visiblePanelRange"
+  >;
 };
 
 /** Services one editor frame paints through. */
@@ -135,12 +152,16 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       if (runtime.audio.playing) {
         runtime.timeline.viewport.setOrigin(beat, "playback");
       }
-      runtime.timeline.refreshRectangleSelection();
+      const selectionStarted = performance.now();
       runtime.timeline.gestures.previewRefresh?.();
-      const marqueeActive =
+      const selectionMs = performance.now() - selectionStarted;
+      const selectionOverlayActive = Boolean(
         runtime.timeline.gestures.drag?.kind === "rectangle" ||
         runtime.timeline.gestures.eventInteraction.drag?.kind === "rectangle" ||
-        Boolean(runtime.timeline.gestures.previewMarquee);
+        runtime.timeline.gestures.drag?.kind === "sweep" ||
+        runtime.timeline.gestures.eventInteraction.drag?.kind === "sweep" ||
+        runtime.timeline.gestures.previewMarquee,
+      );
       runtime.realtimePreview.duration = runtime.audio.duration;
       const viewSession = runtime.timeline.getSession();
       const trajectoryView = runtime.trajectoryPanel.tick(
@@ -186,9 +207,12 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           // Resource-backed timeline layers (skins and overview density) can
           // change without changing the chart revision. The HUD cadence is a
           // bounded refresh path for those asynchronous visual changes.
-          force: force || refreshHud || marqueeActive,
+          force: force || refreshHud,
           timelineRevision: runtime.timeline.renderRevision,
+          selectionOverlayRevision: runtime.timeline.selectionOverlayRevision,
+          selectionOverlayActive,
           viewportOrigin: runtime.timeline.viewport.origin,
+          beatsPerPixel: runtime.timeline.viewport.beatsPerPixel(),
           previewSession,
           previewSelection,
           authoringRegionVisible: runtime.authoringRegionVisible(),
@@ -197,20 +221,32 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           paint: (request, work) => {
             const paintStarted = performance.now();
             let timelineMs: number | undefined;
+            let timelineDrawMs = 0;
+            let multiEditTimelineMs = 0;
+            let audioAnalysisMs = 0;
             let previewMs: number | undefined;
             if (work.timeline) {
               const started = performance.now();
               runtime.timeline.draw(beat);
+              timelineDrawMs = performance.now() - started;
               // A batch drag owns the timeline proposal, so the inspector's
               // independent ghost layer is omitted while that preview is live.
               if (!runtime.timeline.getPreviewSession()) {
+                const multiEditStarted = performance.now();
                 runtime.multiEdit.drawTimeline();
+                multiEditTimelineMs = performance.now() - multiEditStarted;
               }
+              const audioAnalysisStarted = performance.now();
               runtime.audioAnalysis.draw(runtime.offsetSeconds());
+              audioAnalysisMs = performance.now() - audioAnalysisStarted;
               timelineMs = performance.now() - started;
             }
-            // Keep the marquee canvas above the timeline content.
-            runtime.selectionOverlay.draw();
+            // Keep the retained marquee canvas above the timeline content. It
+            // is independent from Timeline content and must not be submitted
+            // on every playback frame.
+            if (work.selectionOverlay) {
+              runtime.selectionOverlay.draw();
+            }
             if (work.playhead) {
               runtime.timeline.drawPlayhead(beat);
               runtime.timelineOverview.draw(frameSeconds);
@@ -235,6 +271,12 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                   deferHeavyFrame:
                     !runtime.audio.playing && previewHighDensity && !work.previewInvalidated,
                   selectedLines: viewSession.targetLineIndices,
+                  changedLineIndexes:
+                    viewChart === viewSession.chart
+                      ? viewSession.lastChangedLineIndexes
+                      : undefined,
+                  noteChangeHints:
+                    viewChart === viewSession.chart ? viewSession.lastNoteChangeHints : undefined,
                 },
               );
               runtime.realtimePreview.visible = visible;
@@ -246,12 +288,23 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
               preview: work.preview,
               playhead: work.playhead,
               timelineMs: timelineMs ?? 0,
+              timelineDrawMs,
+              multiEditTimelineMs,
+              audioAnalysisMs,
               previewMs: previewMs ?? 0,
+              selectionMs,
               totalMs: performance.now() - paintStarted,
               previewChartChanged,
               previewSessionChanged,
               previewSelectionChanged,
               previewSecondsChanged,
+              timelineLineCount: session.chart.judgeLineList?.length ?? 0,
+              timelineTargetLineCount: session.targetLineIndices.length,
+              timelinePanelCount: runtime.timeline.viewport.panelCount("notes"),
+              timelineVisiblePanelRange: runtime.timeline.viewport.visiblePanelRange(
+                runtime.timeline.notesCanvas.clientWidth,
+                "notes",
+              ),
             });
             return { timelineMs, previewMs } satisfies RenderTiming;
           },

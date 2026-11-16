@@ -20,11 +20,16 @@ const crcTable = Uint32Array.from({ length: 256 }, (unused, index) => {
 
 /** CRC-32 (IEEE) of the complete byte range. */
 export function crc32(bytes: Uint8Array): number {
-  let crc = 0xffffffff;
+  return (crc32Update(0xffffffff, bytes) ^ 0xffffffff) >>> 0;
+}
+
+/** Advance a CRC-32 state without applying the final XOR. */
+function crc32Update(initial: number, bytes: Uint8Array): number {
+  let crc = initial;
   for (const byte of bytes) {
     crc = crcTable[(crc ^ byte) & 255] ^ (crc >>> 8);
   }
-  return (crc ^ 0xffffffff) >>> 0;
+  return crc >>> 0;
 }
 
 /** Reject absolute, parent-traversing, and otherwise ambiguous entry names. */
@@ -46,6 +51,12 @@ export interface ZipLimits {
   maxEntries?: number;
   maxTotalBytes?: number;
   maxEntryBytes?: number;
+  /** Only decompress these entries; all central-directory entries remain validated. */
+  only?: readonly string[];
+  /** Select entries during one local read without exposing a cross-thread callback. */
+  entryFilter?: (name: string) => boolean;
+  /** Observe validated entry names without forcing their contents to be read. */
+  onEntryName?: (name: string) => void;
   onProgress?: (completed: number, total: number) => void | Promise<void>;
 }
 
@@ -86,6 +97,8 @@ export async function readZip(
     throw new Error(t("system.zip.spannedUnsupported"));
   }
   const files = new Map<string, Uint8Array>();
+  const seen = new Set<string>();
+  const only = limits.only ? new Set(limits.only) : null;
   let offset = view.getUint32(trailer + 16, true);
   let totalSize = 0;
   await limits.onProgress?.(0, count);
@@ -123,9 +136,11 @@ export async function readZip(
     const nameBytes = bytes.subarray(offset + 46, offset + 46 + nameSize);
     const name = (flags & 0x800 ? decoder : new TextDecoder("gb18030")).decode(nameBytes);
     checkPath(name);
-    if (files.has(name)) {
+    limits.onEntryName?.(name);
+    if (seen.has(name)) {
       throw new Error(t("system.zip.duplicateName", { name }));
     }
+    seen.add(name);
     if (localOffset + 30 > bytes.length || view.getUint32(localOffset, true) !== 0x04034b50) {
       throw new Error(t("system.zip.headerDamaged"));
     }
@@ -137,36 +152,44 @@ export async function readZip(
     if (dataOffset + compressedSize > offset) {
       throw new Error(t("system.zip.contentOutOfBounds"));
     }
-    let contents: Uint8Array<ArrayBuffer> = bytes.slice(dataOffset, dataOffset + compressedSize);
+    if (method !== 0 && method !== 8) {
+      throw new Error(t("system.zip.unsupportedCompression", { method }));
+    }
+    if ((only && !only.has(name)) || (limits.entryFilter && !limits.entryFilter(name))) {
+      offset += 46 + nameSize + extraSize + commentSize;
+      await limits.onProgress?.(index + 1, count);
+      continue;
+    }
+    let contents: Uint8Array<ArrayBuffer>;
     if (method === 8) {
-      const reader = new Blob([contents])
+      const compressed = bytes.slice(dataOffset, dataOffset + compressedSize);
+      const reader = new Blob([compressed])
         .stream()
         .pipeThrough(new DecompressionStream("deflate-raw"))
         .getReader();
-      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      contents = new Uint8Array(size);
       let length = 0;
+      let crc = 0xffffffff;
       while (true) {
         const chunk = await reader.read();
         if (chunk.done) {
           break;
         }
-        length += chunk.value.length;
-        if (length > size) {
+        if (length + chunk.value.length > size) {
           await reader.cancel();
           throw new Error(t("system.zip.sizeMismatch"));
         }
-        chunks.push(chunk.value);
+        contents.set(chunk.value, length);
+        crc = crc32Update(crc, chunk.value);
+        length += chunk.value.length;
       }
-      contents = new Uint8Array(length);
-      let cursor = 0;
-      for (const chunk of chunks) {
-        contents.set(chunk, cursor);
-        cursor += chunk.length;
+      if (length !== size || (crc ^ 0xffffffff) >>> 0 !== checksum) {
+        throw new Error(t("system.zip.checksumFailed", { name }));
       }
-    } else if (method !== 0) {
-      throw new Error(t("system.zip.unsupportedCompression", { method }));
+    } else {
+      contents = bytes.slice(dataOffset, dataOffset + compressedSize);
     }
-    if (contents.length !== size || crc32(contents) !== checksum) {
+    if (contents.length !== size || (method === 0 && crc32(contents) !== checksum)) {
       throw new Error(t("system.zip.checksumFailed", { name }));
     }
     files.set(name, contents);

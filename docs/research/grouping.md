@@ -1,8 +1,6 @@
 # RPE-Redux Grouping Research
 
-> Research date: 2026-11-14  
-> Scope: the library project `group` field and its behavior across scanning, import, the library page, persistence, backup, and tests.  
-> Constraint: this research did not modify product code. Existing uncommitted import/open changes in the worktree are outside this research.
+> Research date: 2026-11-14 Scope: the library project `group` field and its behavior across scanning, import, the library page, persistence, backup, and tests. Constraint: this research did not modify product code. Existing uncommitted import/open changes in the worktree are outside this research.
 
 ## Executive summary
 

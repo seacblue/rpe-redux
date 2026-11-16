@@ -55,6 +55,22 @@ export function clampTimelineScale(value: number, fallback = TIMELINE_SCALE_DEFA
   return Math.max(TIMELINE_SCALE_MIN, Math.min(TIMELINE_SCALE_MAX, candidate));
 }
 
+/** Return the local beat delta represented by one pixel at a timeline origin. */
+export function beatsPerPixelAtOrigin(
+  tempo: Pick<TempoMap, "beat" | "seconds">,
+  origin: number,
+  scale: number,
+  factor = 1,
+): number {
+  if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(origin)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const originSeconds = tempo.seconds(origin, factor);
+  const nextBeat = tempo.beat(originSeconds + 1 / scale, factor);
+  const delta = nextBeat - origin;
+  return Number.isFinite(delta) && delta > 0 ? delta : Number.POSITIVE_INFINITY;
+}
+
 /** Return the origin that places beat zero at the top of a timeline viewport. */
 export function minimumTimelineBeatAtTop(
   tempo: Pick<TempoMap, "beat" | "seconds">,
@@ -103,6 +119,13 @@ export class TimelineViewport {
   readonly getSession: () => EditorSession;
   private readonly types: (lineIndex?: number) => string[];
   private readonly appearance: TimelineAppearance;
+  /** Factors visible in the current multi-line viewport, deduplicated for playback math. */
+  private beatsPerPixelFactors: {
+    chart: unknown;
+    targets: readonly number[];
+    mode: TimelineArea | "single";
+    values: readonly number[];
+  } | null = null;
   /** Bind the viewport to its canvases, session, tempo, and scroll state. */
   constructor(
     notesCanvas: HTMLCanvasElement,
@@ -254,6 +277,76 @@ export class TimelineViewport {
       scale: this.scale,
       judgementOffset: this.judgementOffset,
     };
+  }
+
+  /**
+   * Beats covered by one device pixel on the vertical axis.
+   *
+   * The note field is drawn from `origin`, so playback only changes its pixels
+   * once the origin moves by at least this much. Returns Infinity for a
+   * degenerate scale, which callers treat as "never sub-pixel".
+   */
+  beatsPerPixel(): number {
+    const session = this.getSession();
+    const area = session.multiLineActive ? session.multiLineMode : null;
+    const factors: readonly number[] = (() => {
+      if (!session.multiLineActive) {
+        return [session.line?.bpmfactor ?? 1];
+      }
+      const targets = session.targetLineIndices;
+      const mode = session.multiLineMode;
+      const canvas = mode === "notes" ? this.notesCanvas : this.eventsCanvas;
+      // Split multi-line mode paints only the panels inside the current viewport.
+      // Off-screen BPM factors cannot change the visible timeline's pixel cadence,
+      // so do not scan all 741 targets on every playback frame.
+      if (this.panelCount(mode) > 1 && canvas.clientWidth > 0) {
+        const [first, last] = this.visiblePanelRange(canvas.clientWidth, mode);
+        const visible: number[] = [];
+        for (let panel = first; panel <= last; panel += 1) {
+          const factor = this.factorForLine(targets[panel] ?? session.lineIndex);
+          if (!visible.includes(factor)) {
+            visible.push(factor);
+          }
+        }
+        return visible.length ? visible : [session.line?.bpmfactor ?? 1];
+      }
+      const cached = this.beatsPerPixelFactors;
+      if (
+        cached &&
+        cached.chart === session.chart &&
+        cached.targets === targets &&
+        cached.mode === mode
+      ) {
+        return cached.values;
+      }
+      const unique = new Set<number>();
+      for (const lineIndex of targets) {
+        unique.add(this.factorForLine(lineIndex));
+      }
+      const values = [...unique];
+      this.beatsPerPixelFactors = { chart: session.chart, targets, mode, values };
+      return values;
+    })();
+    let minimum = Number.POSITIVE_INFINITY;
+    const visit = (currentArea: "notes" | "events", factor: number): void => {
+      const canvas = currentArea === "notes" ? this.notesCanvas : this.eventsCanvas;
+      if (canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
+        return;
+      }
+      const scale = this.scaleForArea(currentArea);
+      minimum = Math.min(minimum, beatsPerPixelAtOrigin(this.tempo, this.origin, scale, factor));
+    };
+    if (area) {
+      for (const factor of factors) {
+        visit(area, factor);
+      }
+    } else {
+      visit("notes", factors[0] ?? 1);
+      visit("events", factors[0] ?? 1);
+    }
+    return Number.isFinite(minimum)
+      ? minimum
+      : beatsPerPixelAtOrigin(this.tempo, this.origin, this.scale, this.factor);
   }
 
   /** Beat multiplier of the active line. */

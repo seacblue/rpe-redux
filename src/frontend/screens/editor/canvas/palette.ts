@@ -164,18 +164,81 @@ export function rgbChannels(value: string): CanvasRgb | null {
   ];
 }
 
+/** Opaque fallback for a selected note when the theme colour is unparsable. */
+const DEFAULT_SELECTION_RGB: CanvasRgb = [0, 200, 0];
+/** Opaque fallback for another member's selection. */
+const DEFAULT_REMOTE_SELECTION_RGB: CanvasRgb = [255, 204, 102];
+
 /** Resolve the opaque RGB colour used to render a selected note. */
 export function selectionHighlightColor(
   palette: Pick<CanvasPalette, "selectionHighlightStroke">,
 ): CanvasRgb {
-  return rgbChannels(palette.selectionHighlightStroke) ?? [0, 200, 0];
+  return rgbChannels(palette.selectionHighlightStroke) ?? DEFAULT_SELECTION_RGB;
+}
+
+/**
+ * Cache the parsed selection colours per palette object.
+ *
+ * The palette instance is stable until the theme changes, so a paint pass can
+ * resolve each colour once instead of running a hex parse per selected note.
+ */
+interface ParsedColorCacheEntry {
+  source: string;
+  channels: CanvasRgb;
+}
+
+const parsedColorCaches = new WeakMap<object, Map<string, ParsedColorCacheEntry>>();
+
+/** Cached hex parse for one palette field; the palette object keys the cache. */
+export function cachedRgb(
+  palette: object,
+  key: string,
+  value: string,
+  fallback: CanvasRgb,
+): number[] {
+  let cache = parsedColorCaches.get(palette);
+  if (!cache) {
+    cache = new Map();
+    parsedColorCaches.set(palette, cache);
+  }
+  const cached = cache.get(key);
+  if (cached && cached.source === value) {
+    return cached.channels;
+  }
+  const channels = rgbChannels(value) ?? fallback;
+  cache.set(key, { source: value, channels });
+  return channels;
+}
+
+/** Cached colour used to render a selected note. */
+export function cachedSelectionHighlightColor(
+  palette: Pick<CanvasPalette, "selectionHighlightStroke">,
+): number[] {
+  return cachedRgb(
+    palette,
+    "selectionHighlightStroke",
+    palette.selectionHighlightStroke,
+    DEFAULT_SELECTION_RGB,
+  );
+}
+
+/** Cached colour used to render another member's selected note. */
+export function cachedRemoteSelectionHighlightColor(
+  palette: Pick<CanvasPalette, "remoteSelectionHighlight">,
+): number[] {
+  return cachedRgb(
+    palette,
+    "remoteSelectionHighlight",
+    palette.remoteSelectionHighlight,
+    DEFAULT_REMOTE_SELECTION_RGB,
+  );
 }
 
 /** Resolve the configured colour used to render another member's note selection. */
 export function remoteSelectionHighlightColor(
   palette: Pick<CanvasPalette, "remoteSelectionHighlight">,
 ): CanvasRgb {
-  return rgbChannels(palette.remoteSelectionHighlight) ?? [255, 204, 102];
+  return rgbChannels(palette.remoteSelectionHighlight) ?? DEFAULT_REMOTE_SELECTION_RGB;
 }
 
 /** The theme colour for a note type; unknown types use the fallback. */

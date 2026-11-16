@@ -37,15 +37,22 @@ export class EditorPlayback {
   audio: PlaybackAudio;
   sounds: PlaybackSounds;
   onSeek: () => void;
+  onStateChange: () => void;
   request: number;
   pending: boolean;
   private starting: Promise<void> | null;
 
   /** Wires the controller to its audio and hitsound owners. */
-  constructor(audio: PlaybackAudio, sounds: PlaybackSounds, onSeek: () => void) {
+  constructor(
+    audio: PlaybackAudio,
+    sounds: PlaybackSounds,
+    onSeek: () => void,
+    onStateChange: () => void = () => {},
+  ) {
     this.audio = audio;
     this.sounds = sounds;
     this.onSeek = onSeek;
+    this.onStateChange = onStateChange;
     this.request = 0;
     this.pending = false;
     this.starting = null;
@@ -56,6 +63,7 @@ export class EditorPlayback {
     this.pending = false;
     this.audio.pause();
     this.sounds.stop();
+    this.onStateChange();
   }
   /** Seeks the transport, stopping hitsounds and notifying the seek listener. */
   seek(seconds: number, pause = true): void {
@@ -108,6 +116,7 @@ export class EditorPlayback {
         if (this.request === request) {
           this.pending = false;
           this.starting = null;
+          this.onStateChange();
         }
       }
     })();

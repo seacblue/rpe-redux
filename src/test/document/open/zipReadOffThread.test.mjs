@@ -75,3 +75,33 @@ test("ZIP limits cross the worker boundary without the progress callback", async
   assert.deepEqual([...files.get("chart.json")], [7]);
   assert.equal(worker.terminated, true);
 });
+
+test("lazy ZIP assets inflate only when read", async () => {
+  globalThis.Worker = FakeWorker;
+  const pending = readZipOffThread(new Uint8Array([1, 2, 3]), {}, undefined);
+  const firstWorker = FakeWorker.instance;
+  firstWorker.onmessage({
+    data: {
+      id: firstWorker.posted.id,
+      kind: "result",
+      names: ["chart.json", "song.ogg"],
+      entries: [{ name: "chart.json", bytes: new Uint8Array([7]).buffer }],
+    },
+  });
+  const assets = await pending;
+  assert.deepEqual([...assets.names()], ["chart.json", "song.ogg"]);
+  assert.equal(assets.get("song.ogg"), undefined);
+
+  const songPending = assets.read("song.ogg");
+  const secondWorker = FakeWorker.instance;
+  assert.deepEqual(secondWorker.posted.limits.only, ["song.ogg"]);
+  secondWorker.onmessage({
+    data: {
+      id: secondWorker.posted.id,
+      kind: "result",
+      entries: [{ name: "song.ogg", bytes: new Uint8Array([9, 8]).buffer }],
+    },
+  });
+  assert.deepEqual([...((await songPending) ?? [])], [9, 8]);
+  assert.deepEqual([...(assets.get("song.ogg") ?? [])], [9, 8]);
+});

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700">
+  <title>Note timeline X range states</title>
+  <desc>Four states show the default X range, a right shift, a left shift, and multi-line shared controls.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#151a22"/><stop offset="1" stop-color="#0b0e13"/></linearGradient>
+    <style>
+      .ui { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; fill: #e1e9f2; }
+      .muted { fill: #93a2b4; }
+      .heading { font-size: 21px; font-weight: 700; }
+      .small { font-size: 14px; }
+    </style>
+  </defs>
+  <rect width="1280" height="700" fill="url(#bg2)"/>
+  <text x="54" y="48" class="ui heading">X 范围、背景和白光的独立状态</text>
+  <text x="54" y="75" class="ui small muted">按钮以 150 为小步缓动移动 cameraX；默认范围外仍按相同 spacing 延续竖线，当前拍 note 用主题自适应白光提示。</text>
+
+  <g transform="translate(54 110)">
+    <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
+    <text x="24" y="34" class="ui heading">A 默认范围</text><text x="24" y="58" class="ui small muted">cameraX = 0 · -675 ～ 675</text>
+    <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
+    <rect x="40" y="76" width="150" height="100" fill="#233244"/><rect x="202" y="76" width="150" height="100" fill="#233244"/><rect x="364" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="68" y="116" width="70" height="20" rx="6" fill="#68c8ff"/>
+    <text x="24" y="207" class="ui small">无离屏底色 · 当前拍 note 在范围内时无白光</text>
+  </g>
+
+  <g transform="translate(666 110)">
+    <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
+    <text x="24" y="34" class="ui heading">B 向右移动</text><text x="24" y="58" class="ui small muted">cameraX = 675 · 0 ～ 1350 · 竖线按相同 spacing 延续</text>
+    <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
+    <rect x="204" y="76" width="150" height="100" fill="#233244"/><rect x="366" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="514" y="136" width="5" height="20" fill="#fff" opacity=".9"/>
+    <text x="24" y="207" class="ui small">不绘制离屏背景 · 竖线延续与当前拍右侧 note 高度白光</text>
+  </g>
+
+  <g transform="translate(54 390)">
+    <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
+    <text x="24" y="34" class="ui heading">C 向左移动</text><text x="24" y="58" class="ui small muted">cameraX = -675 · -1350 ～ 0 · 竖线按相同 spacing 延续</text>
+    <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
+    <rect x="40" y="76" width="150" height="100" fill="#233244"/><rect x="202" y="76" width="150" height="100" fill="#233244"/><rect x="364" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="24" y="116" width="5" height="20" fill="#fff" opacity=".9"/>
+    <text x="24" y="207" class="ui small">不绘制离屏背景 · 竖线延续与当前拍左侧 note 高度白光</text>
+  </g>
+
+  <g transform="translate(666 390)">
+    <rect width="560" height="230" rx="12" fill="#0b1017" stroke="#394959"/>
+    <text x="24" y="34" class="ui heading">D Multi-line</text><text x="24" y="58" class="ui small muted">多条 note timeline 共用一组浮层和 cameraX</text>
+    <rect x="24" y="76" width="512" height="100" fill="#121b25" stroke="#506376"/>
+    <rect x="40" y="76" width="150" height="100" fill="#233244"/><rect x="202" y="76" width="150" height="100" fill="#233244"/><rect x="364" y="76" width="150" height="100" fill="#233244"/>
+    <rect x="86" y="112" width="70" height="20" rx="6" fill="#68c8ff"/><rect x="360" y="136" width="70" height="20" rx="6" fill="#68c8ff"/>
+    <rect x="208" y="185" width="144" height="32" rx="8" fill="#24374d" stroke="#6f91b6"/>
+    <text x="226" y="206" class="ui small">◀　⌂　X 范围　▶</text>
+    <text x="24" y="207" class="ui small">不是 panel 导航；不复制按钮、不改变 panel 顺序</text>
+  </g>
+</svg>

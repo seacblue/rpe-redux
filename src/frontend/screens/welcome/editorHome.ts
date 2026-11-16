@@ -144,9 +144,6 @@ export function createEditorHomeRuntime(deps: {
         opened.chartDocument.dispose?.();
         return;
       }
-      if (!opened.project) {
-        throw new Error(t("editor.app.error.projectMissing"));
-      }
       await installOpenedProject(id, opened, task);
       if (loadingProgress.getSnapshot()?.id === task.id) {
         loadingProgress.dismiss();

@@ -1,10 +1,5 @@
-/**
- * Event tracks and the speed integral used by the scene runtime.
- *
- * `EventTrack` compiles timed judge-line events into typed-array lookup tables and
- * samples them at a chart time; `SpeedIntegral` accumulates a distance prefix for
- * speed events. Beat-to-second conversion arrives through `TempoSource`.
- */
+/* eslint-disable max-lines -- event tracks and floor integration share one sampling contract. */
+/** Event tracks and speed integration used by the scene runtime. */
 import { channelInteger } from "../chart.ts";
 import { lowerBound, upperBound } from "../../../utils/search.ts";
 import {
@@ -12,11 +7,36 @@ import {
   easing,
   easingIntegral,
   easingParameters,
+  easingWithKnownRange,
   easingWithRange,
 } from "../../../utils/easing.ts";
 import { trajectoryEventValue } from "../trajectory/curveTrajectory.ts";
 import type { JudgeLineEvent, LineEventValue } from "../chart.ts";
 import { isOrderedBeatRange } from "./beat.ts";
+import { compactFlatNumericEvents } from "./eventCompaction.ts";
+
+let eventCursorHits = 0;
+let eventCursorMisses = 0;
+let eventCursorStatsEnabled = true;
+
+/** Enable cursor counters only for an active detailed renderer profile. */
+export function setEventTrackSamplingStatsEnabled(enabled: boolean): void {
+  eventCursorStatsEnabled = enabled;
+}
+
+/** Reset low-overhead event cursor counters before a profiled frame. */
+export function resetEventTrackSamplingStats(): void {
+  eventCursorHits = 0;
+  eventCursorMisses = 0;
+}
+
+/** Read event cursor counters without exposing track internals. */
+export function eventTrackSamplingStats(): {
+  readonly cursorHits: number;
+  readonly cursorMisses: number;
+} {
+  return { cursorHits: eventCursorHits, cursorMisses: eventCursorMisses };
+}
 
 /** The only `TempoMap` surface the tracks need: beats (or beat tuples) to seconds. */
 export interface TempoSource {
@@ -46,20 +66,23 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   declare inverseDurations: Float64Array;
   declare startValues: Float64Array;
   declare endValues: Float64Array;
+  declare normalizedStartValues: Float64Array;
+  declare normalizedEndValues: Float64Array;
   declare easingTypes: Int16Array;
   declare easingLefts: Float64Array;
   declare easingRights: Float64Array;
   declare easingBases: Float64Array;
   declare easingRanges: Float64Array;
+  declare easingRangeValid: Uint8Array;
   declare bezierFlags: Uint8Array;
   declare linearFlags: Uint8Array;
   declare numericOnly: boolean;
+  declare linearNumeric: boolean;
   declare tempo: TempoSource;
   declare factor: number;
   private cachedValueEntry: TimedEvent<T> | null = null;
   private cachedValueIndex = 0;
   private cachedValueSeconds = Number.NaN;
-
   /** Compile `events` into sorted lookup tables; `fallback` applies before the first event. */
   constructor(
     events: readonly T[] | undefined,
@@ -80,39 +103,54 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       }))
       .filter((entry) => isOrderedBeatRange(entry.event.startTime, entry.event.endTime))
       .sort((a, b) => a.start - b.start);
-    this.sources = ordered.map((entry) => entry.event);
-    this.starts = Float64Array.from(ordered, (entry) => entry.start);
-    this.ends = Float64Array.from(ordered, (entry) => entry.end);
-    this.inverseDurations = Float64Array.from(ordered, (entry) =>
+    const compacted = compactFlatNumericEvents(ordered);
+    // A flat event that repeats the prior state is only a serialized plateau marker;
+    // retain its head only when removing it cannot change an overlapping event.
+    this.sources = compacted.map((entry) => entry.event);
+    this.starts = Float64Array.from(compacted, (entry) => entry.start);
+    this.ends = Float64Array.from(compacted, (entry) => entry.end);
+    this.inverseDurations = Float64Array.from(compacted, (entry) =>
       entry.end > entry.start ? 1 / (entry.end - entry.start) : 0,
     );
-    this.startValues = Float64Array.from(ordered, (entry) => Number(entry.event.start));
-    this.endValues = Float64Array.from(ordered, (entry) => Number(entry.event.end));
-    this.easingTypes = Int16Array.from(ordered, (entry) => entry.event.easingType ?? 1);
-    this.easingLefts = Float64Array.from(ordered, (entry) => entry.event.easingLeft ?? 0);
-    this.easingRights = Float64Array.from(ordered, (entry) => entry.event.easingRight ?? 1);
-    this.bezierFlags = Uint8Array.from(ordered, (entry) => (entry.event.bezier ? 1 : 0));
-    this.numericOnly = ordered.every(
+    this.startValues = Float64Array.from(compacted, (entry) => Number(entry.event.start));
+    this.endValues = Float64Array.from(compacted, (entry) => Number(entry.event.end));
+    this.normalizedStartValues = Float64Array.from(this.startValues, (value) =>
+      integerEndpoints ? channelInteger(value) : value,
+    );
+    this.normalizedEndValues = Float64Array.from(this.endValues, (value) =>
+      integerEndpoints ? channelInteger(value) : value,
+    );
+    this.easingTypes = Int16Array.from(compacted, (entry) => entry.event.easingType ?? 1);
+    this.easingLefts = Float64Array.from(compacted, (entry) => entry.event.easingLeft ?? 0);
+    this.easingRights = Float64Array.from(compacted, (entry) => entry.event.easingRight ?? 1);
+    this.bezierFlags = Uint8Array.from(compacted, (entry) => (entry.event.bezier ? 1 : 0));
+    this.numericOnly = compacted.every(
       (entry) =>
         !entry.event.trajectory &&
         typeof entry.event.start === "number" &&
         typeof entry.event.end === "number",
     );
-    this.easingBases = Float64Array.from(ordered, (entry) => {
+    this.linearNumeric =
+      this.numericOnly &&
+      compacted.every((entry) => (entry.event.easingType ?? 1) === 1 && !entry.event.bezier);
+    this.easingBases = Float64Array.from(compacted, (entry) => {
       const event = entry.event;
       return easingParameters(event.easingType ?? 1, event.easingLeft ?? 0, event.easingRight ?? 1)
         .base;
     });
-    this.easingRanges = Float64Array.from(ordered, (entry, index) => {
+    this.easingRanges = Float64Array.from(compacted, (entry, index) => {
       const event = entry.event;
       return easingParameters(event.easingType ?? 1, event.easingLeft ?? 0, event.easingRight ?? 1)
         .range;
     });
-    this.linearFlags = Uint8Array.from(ordered, (entry) =>
-      (entry.event.easingType ?? 1) === 1 &&
-      (entry.event.easingLeft ?? 0) !== (entry.event.easingRight ?? 1)
-        ? 1
-        : 0,
+    this.easingRangeValid = Uint8Array.from(compacted, (entry, index) => {
+      const event = entry.event;
+      const width = (event.easingRight ?? 1) - (event.easingLeft ?? 0);
+      const range = this.easingRanges[index];
+      return Number.isFinite(range) && Math.abs(range) >= 1e-15 && Math.abs(width) >= 1e-15 ? 1 : 0;
+    });
+    this.linearFlags = Uint8Array.from(compacted, (entry) =>
+      (entry.event.easingType ?? 1) === 1 ? 1 : 0,
     );
   }
   /** Reuse typed lookup tables when an edit only removed existing events. */
@@ -159,13 +197,23 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
         next.inverseDurations = Float64Array.from(indices, (index) => this.inverseDurations[index]);
         next.startValues = Float64Array.from(indices, (index) => this.startValues[index]);
         next.endValues = Float64Array.from(indices, (index) => this.endValues[index]);
+        next.normalizedStartValues = Float64Array.from(
+          indices,
+          (index) => this.normalizedStartValues[index],
+        );
+        next.normalizedEndValues = Float64Array.from(
+          indices,
+          (index) => this.normalizedEndValues[index],
+        );
         next.easingTypes = Int16Array.from(indices, (index) => this.easingTypes[index]);
         next.easingLefts = Float64Array.from(indices, (index) => this.easingLefts[index]);
         next.easingRights = Float64Array.from(indices, (index) => this.easingRights[index]);
         next.easingBases = Float64Array.from(indices, (index) => this.easingBases[index]);
         next.easingRanges = Float64Array.from(indices, (index) => this.easingRanges[index]);
+        next.easingRangeValid = Uint8Array.from(indices, (index) => this.easingRangeValid[index]);
         next.bezierFlags = Uint8Array.from(indices, (index) => this.bezierFlags[index]);
         next.linearFlags = Uint8Array.from(indices, (index) => this.linearFlags[index]);
+        next.linearNumeric = this.linearNumeric;
         next.cachedValueEntry = null;
         next.cachedValueIndex = 0;
         next.cachedValueSeconds = Number.NaN;
@@ -197,18 +245,29 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       end: this.ends[index],
     }));
   }
-  /** Sample the active event at `seconds`, or the fallback before the first event. */
-  value(seconds: number): LineEventValue {
-    if (!this.sources.length) {
-      return this.fallback;
+  /** Return the value everywhere, or null when the track can vary. */
+  constantValue(): number | null {
+    if (this.sources.length === 0) {
+      const fallback = Number(this.fallback);
+      return Number.isFinite(fallback) ? fallback : null;
     }
-    // RPE only reads an event while it is active. A later-starting event does
-    // not contribute its start value before its first beat; the channel keeps
-    // its default until then.
-    if (seconds < this.starts[0]) {
-      return this.fallback;
+    if (!this.numericOnly) {
+      return null;
     }
-    const index = this.valueIndex(seconds);
+    const first = this.startValues[0];
+    const second = this.endValues[0];
+    if (!Number.isFinite(first) || first !== second || Number(this.fallback) !== first) {
+      return null;
+    }
+    for (let index = 1; index < this.sources.length; index += 1) {
+      if (this.startValues[index] !== first || this.endValues[index] !== first) {
+        return null;
+      }
+    }
+    return first;
+  }
+  /** Resolve one already-known event index without repeating the index lookup. */
+  private valueAtIndex(seconds: number, index: number): LineEventValue {
     const source = this.sources[index];
     if (this.numericOnly) {
       return this.sampleNumber(seconds, source, index);
@@ -225,14 +284,106 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
     return this.sample(entry, seconds);
   }
 
+  /** Sample numeric tracks without constructing the generic timed-event wrapper. */
+  sampleNumeric(seconds: number): number {
+    if (!this.numericOnly) {
+      return Number(this.value(seconds));
+    }
+    const starts = this.starts;
+    const sourceCount = starts.length;
+    if (!sourceCount) {
+      return Number(this.fallback);
+    }
+    if (seconds < this.starts[0]) {
+      return Number(this.fallback);
+    }
+    if (sourceCount === 1) {
+      return this.sampleNumber(seconds, this.sources[0], 0);
+    }
+    const ends = this.ends;
+    const lastIndex = sourceCount - 1;
+    if (seconds >= ends[lastIndex]) {
+      return this.normalizedEndValues[lastIndex];
+    }
+    const cachedIndex = this.cachedValueIndex;
+    // `NaN` naturally fails the comparison, so the hot path avoids a separate
+    // Number.isFinite call for every geometric channel on every line.
+    const cachedSeconds = this.cachedValueSeconds;
+    const nextIndex = cachedIndex + 1;
+    const cursorHit =
+      seconds >= cachedSeconds &&
+      cachedIndex < sourceCount &&
+      seconds >= starts[cachedIndex] &&
+      (nextIndex >= sourceCount || seconds < starts[nextIndex]);
+    if (cursorHit) {
+      if (eventCursorStatsEnabled) {
+        eventCursorHits += 1;
+      }
+    } else if (eventCursorStatsEnabled) {
+      eventCursorMisses += 1;
+    }
+    const index = cursorHit ? cachedIndex : this.valueIndex(seconds);
+    if (this.linearNumeric) {
+      const normalizedStart = this.normalizedStartValues[index];
+      const normalizedEnd = this.normalizedEndValues[index];
+      if (seconds > this.ends[index]) {
+        return normalizedEnd;
+      }
+      if (normalizedStart === normalizedEnd) {
+        return normalizedStart;
+      }
+      const startTime = this.starts[index];
+      const progress =
+        this.ends[index] <= startTime
+          ? 1
+          : Math.max(0, Math.min(1, (seconds - startTime) * this.inverseDurations[index]));
+      return normalizedStart + (normalizedEnd - normalizedStart) * progress;
+    }
+    return this.sampleNumber(seconds, this.sources[index], index);
+  }
+
+  /** Sample the active event at `seconds`, or the fallback before the first event. */
+  value(seconds: number): LineEventValue {
+    if (!this.sources.length) {
+      return this.fallback;
+    }
+    // A later-starting event does not contribute before its first beat.
+    if (seconds < this.starts[0]) {
+      return this.fallback;
+    }
+    // Once a numeric track has passed its final event, its value is fixed. Avoid
+    // walking the playback cursor and re-evaluating easing for tracks whose
+    // authored animation already ended before the current preview time.
+    if (this.numericOnly && seconds >= this.ends[this.ends.length - 1]) {
+      return this.normalizedEndValues[this.normalizedEndValues.length - 1];
+    }
+    // Reuse the active segment in either playback direction; a seek that crosses a
+    // segment boundary is resolved by valueIndex() and primes the cursor there.
+    const cachedIndex = this.cachedValueIndex;
+    if (
+      Number.isFinite(this.cachedValueSeconds) &&
+      cachedIndex < this.starts.length &&
+      seconds >= this.starts[cachedIndex] &&
+      (cachedIndex + 1 >= this.starts.length || seconds < this.starts[cachedIndex + 1])
+    ) {
+      if (eventCursorStatsEnabled) {
+        eventCursorHits += 1;
+      }
+      return this.valueAtIndex(seconds, cachedIndex);
+    }
+    if (eventCursorStatsEnabled) {
+      eventCursorMisses += 1;
+    }
+    const index = this.valueIndex(seconds);
+    return this.valueAtIndex(seconds, index);
+  }
+
   /** Numeric sampling path using the precomputed easing tables. */
   private sampleNumber(seconds: number, source: T, index: number): number {
-    const start = this.startValues[index];
-    const end = this.endValues[index];
     const startTime = this.starts[index];
     const endTime = this.ends[index];
-    const normalizedStart = this.integerEndpoints ? channelInteger(start) : start;
-    const normalizedEnd = this.integerEndpoints ? channelInteger(end) : end;
+    const normalizedStart = this.normalizedStartValues[index];
+    const normalizedEnd = this.normalizedEndValues[index];
     if (seconds > endTime) {
       return normalizedEnd;
     }
@@ -243,30 +394,64 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       endTime <= startTime
         ? 1
         : Math.max(0, Math.min(1, (seconds - startTime) * this.inverseDurations[index]));
+    if (this.linearNumeric) {
+      return normalizedStart + (normalizedEnd - normalizedStart) * progress;
+    }
     const easingType = this.easingTypes[index] || 1;
     const amount = this.bezierFlags[index]
       ? bezier(progress, source.bezierPoints ?? [])
       : this.linearFlags[index]
         ? progress
-        : easingWithRange(
-            progress,
-            easingType,
-            this.easingLefts[index],
-            this.easingRights[index],
-            this.easingBases[index],
-            this.easingRanges[index],
-          );
+        : this.easingRangeValid[index] && Number.isFinite(progress)
+          ? easingWithKnownRange(
+              progress,
+              easingType,
+              this.easingLefts[index],
+              this.easingRights[index],
+              this.easingBases[index],
+              this.easingRanges[index],
+            )
+          : easingWithRange(
+              progress,
+              easingType,
+              this.easingLefts[index],
+              this.easingRights[index],
+              this.easingBases[index],
+              this.easingRanges[index],
+            );
     return normalizedStart + (normalizedEnd - normalizedStart) * amount;
   }
 
-  /** Reuse the active event while playback advances; seeks and reverse playback re-search. */
+  /** Reuse the active event while playback advances in either direction. */
   private valueIndex(seconds: number): number {
     let index: number;
     if (seconds >= this.cachedValueSeconds) {
       index = this.cachedValueIndex;
-      // An event starting exactly at `seconds` owns the sample.
+      // A long main-thread task can make playback jump across thousands of events. Keep
+      // the cheap cursor for ordinary frames, but avoid replaying the whole interval with
+      // a linear scan after a stall.
+      let steps = 0;
       while (index + 1 < this.starts.length && this.starts[index + 1] <= seconds) {
         index += 1;
+        steps += 1;
+        if (steps >= 32) {
+          index = upperBound(this.starts, seconds) - 1;
+          break;
+        }
+      }
+    } else if (Number.isFinite(this.cachedValueSeconds)) {
+      // Reverse playback and a backward seek can reuse the same cursor. Only fall
+      // back to binary search after a large reverse jump; ordinary reverse frames
+      // now walk back through event starts instead of searching every track.
+      index = Math.min(this.cachedValueIndex, this.starts.length - 1);
+      let steps = 0;
+      while (index > 0 && this.starts[index] > seconds) {
+        index -= 1;
+        steps += 1;
+        if (steps >= 32) {
+          index = upperBound(this.starts, seconds) - 1;
+          break;
+        }
       }
     } else {
       index = Math.max(0, upperBound(this.starts, seconds) - 1);
@@ -362,12 +547,7 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   }
 }
 
-/**
- * Speed events integrate to a floor-position distance.
- *
- * The easing curve describes the speed value itself; integrating it over the
- * event duration gives the height travelled.
- */
+/** Integrate speed events into floor-position distance. */
 export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
   declare sources: T[];
   declare starts: Float64Array;
@@ -382,6 +562,10 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
   declare easingRights: Float64Array;
   declare overlapping: boolean;
   declare maxEnds: Float64Array;
+  /** Constant speed value, or null when the layer changes over time. */
+  declare constantSpeed: number | null;
+  /** True when every valid speed event is a constant step over its time span. */
+  declare stepSpeed: boolean;
   private readonly zero: number;
   private cachedValueIndex = 0;
   private cachedValueSeconds = Number.NaN;
@@ -390,6 +574,11 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
   private cachedActiveIndex = 0;
   private cachedActiveSeconds = Number.NaN;
   private cachedValueEntry: IntegralEntry<T> | null = null;
+  /** Cached linear segment for non-overlapping step-speed playback. */
+  private stepSeconds = Number.NaN;
+  private stepValue = 0;
+  private stepNext = Number.NEGATIVE_INFINITY;
+  private stepRate = 0;
 
   /** Compile speed events and their distance prefixes for repeated sampling. */
   constructor(events: readonly T[] | undefined, tempo: TempoSource, factor = 1) {
@@ -400,7 +589,8 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
         end: tempo.seconds(event.endTime, factor),
       }))
       .sort((left, right) => left.start - right.start);
-    this.sources = ordered.map((entry) => entry.event);
+    const compacted = compactFlatNumericEvents(ordered);
+    this.sources = compacted.map((entry) => entry.event);
     const length = this.sources.length;
     this.starts = new Float64Array(length);
     this.ends = new Float64Array(length);
@@ -412,12 +602,16 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
     this.easingTypes = new Int16Array(length);
     this.easingLefts = new Float64Array(length);
     this.easingRights = new Float64Array(length);
+    let constantSpeed: number | null = length === 0 ? 0 : Number(this.sources[0]?.start);
+    if (!Number.isFinite(constantSpeed)) {
+      constantSpeed = null;
+    }
     this.overlapping = false;
     let distance = 0;
     let previousTime = 0;
     let previousValue = Number(this.sources[0]?.start ?? 0);
     for (let index = 0; index < length; index++) {
-      const timed = ordered[index];
+      const timed = compacted[index];
       const event = timed.event;
       const start = timed.start;
       const end = timed.end;
@@ -429,6 +623,12 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
       this.easingTypes[index] = event.easingType ?? 1;
       this.easingLefts[index] = event.easingLeft ?? 0;
       this.easingRights[index] = event.easingRight ?? 1;
+      if (
+        constantSpeed !== null &&
+        (Number(event.start) !== constantSpeed || Number(event.end) !== constantSpeed)
+      ) {
+        constantSpeed = null;
+      }
       if (index && start < this.ends[index - 1]) {
         this.overlapping = true;
       }
@@ -439,6 +639,15 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
       previousTime = end;
       previousValue = Number(event.end);
     }
+    this.constantSpeed = constantSpeed;
+    this.stepSpeed =
+      length > 0 &&
+      compacted.every(
+        (entry) =>
+          entry.end >= entry.start &&
+          Number.isFinite(Number(entry.event.start)) &&
+          Number(entry.event.start) === Number(entry.event.end),
+      );
     this.maxEnds = new Float64Array(length);
     const build = (low: number, high: number): number => {
       if (low >= high) {
@@ -483,6 +692,9 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
     const endValue = this.endValues[index];
     const easingType = this.easingTypes[index];
     const amount = Math.max(0, Math.min(1, fraction));
+    if (startValue === endValue) {
+      return startValue * amount * duration;
+    }
     if (easingType <= 1) {
       return (startValue * amount + ((endValue - startValue) * amount * amount) / 2) * duration;
     }
@@ -512,10 +724,7 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
     }
     return this.firstActive(high, seconds, middle + 1);
   }
-  /**
-   * Reuse the left-most active event during forward playback; seeks and reverse
-   * playback fall back to the bounded search.
-   */
+  /** Reuse the left-most active event during forward playback. */
   private activeIndex(before: number, seconds: number): number {
     let index: number;
     if (Number.isFinite(this.cachedActiveSeconds) && seconds >= this.cachedActiveSeconds) {
@@ -560,8 +769,14 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
     let index: number;
     if (Number.isFinite(this.cachedValueSeconds) && seconds >= this.cachedValueSeconds) {
       index = this.cachedValueIndex;
+      let steps = 0;
       while (index + 1 < this.starts.length && this.starts[index + 1] < seconds) {
         index += 1;
+        steps += 1;
+        if (steps >= 32) {
+          index = Math.max(0, lowerBound(this.starts, seconds) - 1);
+          break;
+        }
       }
     } else {
       index = Math.max(0, lowerBound(this.starts, seconds) - 1);
@@ -576,8 +791,14 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
     let index: number;
     if (seconds >= this.cachedRawSeconds) {
       index = this.cachedRawIndex;
+      let steps = 0;
       while (index < this.starts.length && this.starts[index] < seconds) {
         index += 1;
+        steps += 1;
+        if (steps >= 32) {
+          index = lowerBound(this.starts, seconds);
+          break;
+        }
       }
     } else {
       index = lowerBound(this.starts, seconds);
@@ -590,6 +811,17 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
   private rawExact(seconds: number): number {
     if (!this.sources.length) {
       return 0;
+    }
+    if (this.stepSpeed && !this.overlapping) {
+      const index = this.rawIndex(seconds);
+      if (!index) {
+        return Math.max(0, Math.min(seconds, this.starts[0])) * this.startValues[0];
+      }
+      const previous = index - 1;
+      return (
+        this.prefixes[previous] +
+        Math.max(0, seconds - this.starts[previous]) * this.startValues[previous]
+      );
     }
     if (this.overlapping) {
       const before = this.rawIndex(seconds);
@@ -630,6 +862,22 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
   }
   /** Floor distance at `seconds` in chart units. */
   distance(seconds: number): number {
+    if (this.stepSpeed && !this.overlapping) {
+      if (seconds >= this.stepSeconds && seconds < this.stepNext) {
+        return this.stepValue + (seconds - this.stepSeconds) * this.stepRate;
+      }
+      const value = (this.rawExact(seconds) - this.zero) * 120;
+      const index = this.rawIndex(seconds);
+      const rate =
+        index < this.sources.length
+          ? this.startValues[index === 0 ? 0 : index - 1]
+          : (this.endValues.at(-1) ?? 0);
+      this.stepSeconds = seconds;
+      this.stepValue = value;
+      this.stepNext = index < this.starts.length ? this.starts[index] : Number.POSITIVE_INFINITY;
+      this.stepRate = rate * 120;
+      return value;
+    }
     return this.raw(seconds) * 120;
   }
 }

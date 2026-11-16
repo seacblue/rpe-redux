@@ -185,6 +185,8 @@ export default {
     "The temporary room chart and its unsaved changes will be deleted from this device. Export the chart first if you need a copy.",
   "editor.app.dialog.returnRoomDocumentConfirm": "Leave room and return",
 
+  "editor.feedback.source": "Editor feedback",
+
   "editor.app.error.libraryServiceDown":
     "The local service is not running, so the chart library project cannot be opened",
 

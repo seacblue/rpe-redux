@@ -198,6 +198,93 @@ func TestSnapshotRestoreAndCompact(t *testing.T) {
 	}
 }
 
+func TestSnapshotReusesUnchangedProjectObjects(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "redux.db")
+	live, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	firstProject, err := live.CreateProject(ctx, store.CreateProjectInput{Name: "A", Chart: testChart("A")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondProject, err := live.CreateProject(ctx, store.CreateProjectInput{Name: "B", Chart: testChart("B")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := Open(dbPath, filepath.Join(dir, "library-history"), "test", "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	first, err := service.Snapshot(ctx, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := service.Snapshot(ctx, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstHead, err := service.readCommit(first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchangedHead, err := service.readCommit(unchanged.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchangedHead.commit.Tree.Hash != firstHead.commit.Tree.Hash {
+		t.Fatalf("unchanged tree = %s, want %s", unchangedHead.commit.Tree.Hash, firstHead.commit.Tree.Hash)
+	}
+	if unchangedHead.commit.Preferences.Hash != firstHead.commit.Preferences.Hash {
+		t.Fatalf("unchanged preferences = %s, want %s", unchangedHead.commit.Preferences.Hash, firstHead.commit.Preferences.Hash)
+	}
+
+	name := "B changed"
+	if _, err := live.UpdateProject(ctx, secondProject.ID, store.UpdateProjectInput{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	third, err := service.Snapshot(ctx, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	thirdHead, err := service.readCommit(third.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if thirdHead.commit.Tree.Hash == unchangedHead.commit.Tree.Hash {
+		t.Fatal("changed project did not publish a new tree")
+	}
+
+	manifestRefs := func(commit *headResult) map[string]string {
+		raw, err := service.objects.read(kindTree, commit.commit.Tree)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tree Tree
+		if err := json.Unmarshal(raw, &tree); err != nil {
+			t.Fatal(err)
+		}
+		refs := make(map[string]string, len(tree.Projects))
+		for _, item := range tree.Projects {
+			refs[item.ID] = item.Manifest.Hash
+		}
+		return refs
+	}
+	oldRefs := manifestRefs(unchangedHead)
+	newRefs := manifestRefs(thirdHead)
+	if oldRefs[firstProject.ID] != newRefs[firstProject.ID] {
+		t.Fatalf("unchanged project manifest changed: %s -> %s", oldRefs[firstProject.ID], newRefs[firstProject.ID])
+	}
+	if oldRefs[secondProject.ID] == newRefs[secondProject.ID] {
+		t.Fatal("changed project manifest was reused")
+	}
+}
+
 func TestBackupSettingsControlPolicy(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

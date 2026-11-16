@@ -191,6 +191,8 @@ export class BatchControls {
   /** Clear another inspector proposal after this batch becomes the committed chart. */
   onCommit?: () => void;
   private cancelledPointerCapture: { button: HTMLButtonElement; pointerId: number } | null;
+  /** Coalesces expensive chart-preview rebuilds to one update per display frame. */
+  private updateFrame: number | null;
   anchorMode: number;
   private readonly state: BatchControlsState;
 
@@ -212,6 +214,7 @@ export class BatchControls {
     this.groups = new Map();
     this.active = null;
     this.cancelledPointerCapture = null;
+    this.updateFrame = null;
     this.anchorMode = 0;
     for (const area of Object.keys(batchControlConfigurations) as TimelineArea[]) {
       this.groups.set(area, { signature: "" });
@@ -529,7 +532,31 @@ export class BatchControls {
       this.active.bounds,
       this.active.canvas,
     );
-    this.update();
+    this.scheduleUpdate();
+  }
+
+  /** Schedule one selection preview rebuild for the next browser frame. */
+  private scheduleUpdate(): void {
+    if (this.updateFrame !== null) {
+      return;
+    }
+    this.updateFrame = requestAnimationFrame(() => {
+      this.updateFrame = null;
+      if (this.active) {
+        this.update();
+      }
+    });
+  }
+
+  /** Flush a pending pointer update before committing or cancelling the drag. */
+  private flushUpdate(): void {
+    if (this.updateFrame !== null) {
+      cancelAnimationFrame(this.updateFrame);
+      this.updateFrame = null;
+    }
+    if (this.active) {
+      this.update();
+    }
   }
 
   update(): void {
@@ -617,6 +644,7 @@ export class BatchControls {
       return;
     }
     this.move(event);
+    this.flushUpdate();
     this.timeline.gestures.clipboardPointer = null;
     this.timeline.setPreview(null);
     this.timeline.gestures.scaleAxis = null;
@@ -687,6 +715,10 @@ export class BatchControls {
     if (!active) {
       return;
     }
+    if (this.updateFrame !== null) {
+      cancelAnimationFrame(this.updateFrame);
+      this.updateFrame = null;
+    }
     this.active = null;
     this.cancelledPointerCapture = preservePointerCapture
       ? { button: active.button, pointerId: active.pointerId }
@@ -703,6 +735,10 @@ export class BatchControls {
   }
 
   dispose(): void {
+    if (this.updateFrame !== null) {
+      cancelAnimationFrame(this.updateFrame);
+      this.updateFrame = null;
+    }
     const active = this.active;
     if (active?.button.hasPointerCapture(active.pointerId)) {
       active.button.releasePointerCapture(active.pointerId);

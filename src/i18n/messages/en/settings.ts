@@ -65,7 +65,6 @@ export default {
   "settings.startup.copySuccess": "Report copied",
   "settings.startup.copyFailed": "Copy failed",
   "settings.startup.openLogs": "Open log folder",
-
   // ------------------------------------------------------------- categories
   "settings.category.general.label": "General",
   "settings.category.appearance.label": "Appearance",
@@ -76,7 +75,6 @@ export default {
   "settings.category.help.label": "Help",
   "settings.category.about.label": "About",
   "settings.category.developer.label": "Developer",
-
   // ------------------------------------------------------- row group headings
   "settings.group.files": "Files & data",
   "settings.group.webStorage": "Browser storage",
@@ -93,7 +91,6 @@ export default {
   "settings.group.editingNoteFeatures": "Note properties",
   "settings.group.editingEventFeatures": "Event properties",
   "settings.group.editingLineFeatures": "Judge-line properties",
-
   "settings.field.editing-note-speed-enabled.label": "Note speed",
   "settings.field.editing-note-y-offset-enabled.label": "Y offset",
   "settings.field.editing-note-visible-time-enabled.label": "Visible time",
