@@ -35,7 +35,7 @@ import { drawEventOverlapFilter } from "../events/eventSelectionDrawing.ts";
 import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
-import { noteContainsBeat, offscreenCueSides } from "./noteOffscreenCue.ts";
+import { noteContainsBeat, offscreenCueSides, offscreenCueX } from "./noteOffscreenCue.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -142,7 +142,7 @@ function drawOffscreenNoteCues(
     : [0, 0];
   const startPanel = multiplePanels ? firstPanel : 0;
   const endPanel = multiplePanels ? Math.min(lastPanel, lineIndices.length - 1) : 0;
-  const cueWidth = Math.min(6, Math.max(2, width / 80));
+  const cueWidth = Math.min(8, Math.max(4, width / 60));
   const cueColor = palette.foreground;
   context.save();
   context.fillStyle = cueColor;
@@ -199,10 +199,11 @@ function drawOffscreenNoteCues(
       const top = Math.max(0, Math.min(height - 1, Math.min(vertical, endVertical) - 3));
       const cueHeight = Math.max(6, Math.min(height - top, Math.abs(endVertical - vertical) || 6));
       for (const side of sides) {
-        const x = side === "left" ? Math.max(0, panelLeft) : Math.min(width, panelRight) - cueWidth;
-        if (x >= 0 && x + cueWidth <= width) {
-          context.fillRect(x, top, cueWidth, cueHeight);
+        const x = offscreenCueX(side, panelLeft, panelRight, width, cueWidth);
+        if (x === null) {
+          continue;
         }
+        context.fillRect(x, top, cueWidth, cueHeight);
       }
     }
   }
