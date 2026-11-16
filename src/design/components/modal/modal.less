@@ -171,23 +171,13 @@ dialog[data-redux-modal="true"] {
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-modal) + var(--modal-scrim-layer, 0));
-  background: transparent;
-  backdrop-filter: blur(0);
-  transition:
-    background-color var(--design-dur-exit) var(--design-ease-exit),
-    backdrop-filter var(--design-dur-exit) var(--design-ease-exit);
-  &[data-state="open"] {
-    background: var(--scrim);
-    backdrop-filter: blur(6px);
-    transition-duration: var(--design-dur-enter);
-    transition-timing-function: var(--design-ease-enter);
-    @starting-style {
-      background: transparent;
-      backdrop-filter: blur(0);
-    }
-  }
-  // Keep the visual blur fading out, but release input as soon as closing starts.
-  // Otherwise a just-closed modal still intercepts clicks for the transition.
+  // The scrim is a visual boundary, not part of the modal's entrance motion.
+  // Changing its opacity or blur while the dialog is moving makes the whole
+  // workspace change brightness between frames.
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  // Release input as soon as closing starts. Otherwise a just-closed modal
+  // still intercepts clicks before the scrim is removed with the dialog.
   &[data-state="closing"] {
     pointer-events: none;
   }
@@ -203,19 +193,17 @@ dialog[data-redux-modal="true"] {
   // Set by `openModal` from the trigger's centre when one is focused. When
   // there is no meaningful source, the surface breathes from its own heading.
   transform-origin: var(--modal-origin-x, 50%) var(--modal-origin-y, 38%);
-  transition:
-    opacity var(--design-dur-enter) var(--design-ease-enter),
-    transform var(--design-dur-enter) var(--design-ease-enter);
+  // Keep elevation out of the entrance animation. Opacity and scale also
+  // animate the dialog's shadow, which makes the covered background flicker.
+  transition: transform var(--design-dur-enter) var(--design-ease-enter);
   &[data-closing="true"] {
-    opacity: 0;
-    transform: translateY(2px) scale(0.975);
+    transform: translateY(2px);
     transition-duration: var(--design-dur-exit);
     transition-timing-function: var(--design-ease-exit);
   }
   &[open] {
     @starting-style {
-      opacity: 0;
-      transform: translateY(5px) scale(0.94);
+      transform: translateY(5px);
     }
   }
 }
@@ -224,7 +212,6 @@ dialog[data-redux-modal="true"] {
   dialog::backdrop {
     backdrop-filter: none;
   }
-  .redux-modal-scrim,
   .redux-app-root dialog[data-redux-modal] {
     transition: none;
   }
