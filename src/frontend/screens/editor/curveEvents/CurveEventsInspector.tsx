@@ -3,11 +3,11 @@
  *
  * Draw and equation are sibling authoring modes with independent cached paths.
  * The panel owns the generation range, sampling settings, the live equation
- * editor, and generation. The shared free-camera surface owns the view (zoom and
- * pan), the canvas overlay owns pointer selection, and the global transport owns
+ * editor, and generation. The pane session borrows the stage camera for the whole
+ * visit, the canvas overlay owns pointer selection, and the global transport owns
  * playback.
  */
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { EasingField } from "../../../../design/components/easing/EasingField.tsx";
 import { FieldRow } from "../../../../design/components/field/FieldRow.tsx";
@@ -27,13 +27,11 @@ import { beatValue, nudgeBeat } from "../../../../core/global/chart/timing/beat.
 import { EquationEditor } from "./EquationEditor.tsx";
 import { EquationEditorModal } from "./EquationEditorModal.tsx";
 import { generateCurveEvents } from "./generation.ts";
-import { curvePreviewMode } from "./mode.ts";
 import {
   curveActiveComponents,
   curveActiveTarget,
   curvePreviewState,
   cancelCurveGestures,
-  cancelCurveSession,
   flushCurveDraft,
   updateCurveEquation,
   updateCurvePreview,
@@ -70,20 +68,6 @@ export function CurveEventsInspector() {
         : "";
   const equationInvalid = state.editMode === "equation" && state.equationInvalid;
   const canGenerate = activeComponents.length === 1 && Boolean(session) && !equationInvalid;
-
-  useEffect(() => {
-    if (!active) {
-      return;
-    }
-    curvePreviewMode.set(true);
-    return () => {
-      // The overlay is hidden as soon as the pane deactivates, so an active
-      // stroke, drag, or pan must end here instead of resuming on reopen.
-      cancelCurveSession();
-      flushCurveDraft();
-      curvePreviewMode.set(false);
-    };
-  }, [active]);
 
   /** Switch authoring modes after cancelling any gesture owned by the old mode. */
   const setMode = (mode: CurveEditMode) => {

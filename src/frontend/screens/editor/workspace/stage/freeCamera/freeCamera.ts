@@ -1,4 +1,13 @@
-/** Free-camera state and the view operations shared by the overlay, preview, and commands. */
+/**
+ * Free-camera state and the view operations shared by the overlay, preview, and commands.
+ *
+ * The cell holds one saved view: pan, zoom, and whether the mode is on. The
+ * standalone toolbar mode owns that view, so leaving the mode keeps the frame the
+ * user set on the stage. A surface that only borrows the camera — the curve
+ * editor and sampling — captures the view on entry with `borrowFreeCamera` and
+ * returns it on exit with `releaseFreeCamera`, which restores the saved pose and
+ * activation instead of leaving the borrower's frame behind.
+ */
 import { createValue } from "../../../../../../core/state/values.ts";
 import { TOOLBAR_REFRESH_EVENT } from "../../../../../../core/shell/shellEventNames.ts";
 
@@ -10,8 +19,19 @@ export interface FreeCameraState {
   panY: number;
 }
 
+/** Compare two camera views by value; writing an unchanged view must not repaint. */
+function sameFreeCameraView(left: FreeCameraState, right: FreeCameraState): boolean {
+  return (
+    left.active === right.active &&
+    left.zoom === right.zoom &&
+    left.panX === right.panX &&
+    left.panY === right.panY
+  );
+}
+
 const state = createValue<FreeCameraState>({
   initial: { active: false, zoom: 1, panX: 0, panY: 0 },
+  equals: sameFreeCameraView,
 });
 
 export const freeCameraState = state;
@@ -59,8 +79,14 @@ export function setFreeCameraView(zoom: number, panX: number, panY: number): voi
   });
 }
 
-/** Enter a stage mode that needs the chart camera without losing its view. */
-export function activateFreeCamera(): FreeCameraState {
+/**
+ * Enter the camera for a surface that only borrows it.
+ *
+ * Returns the complete view the caller must hand back to `releaseFreeCamera`.
+ * The saved view stays available only through that return value while the
+ * borrower is open, so a borrower that can change pan or zoom has to release it.
+ */
+export function borrowFreeCamera(): FreeCameraState {
   const previous = state.get();
   if (!previous.active) {
     state.set({ ...previous, active: true });
@@ -70,19 +96,18 @@ export function activateFreeCamera(): FreeCameraState {
 }
 
 /**
- * Release an activation captured by `activateFreeCamera`.
+ * Return a view captured by `borrowFreeCamera`.
  *
- * Only the mode flag returns to its previous value. Zoom and pan are the camera
- * session's pose: leaving curve, sampling, or the standalone mode never rewrites
- * them, so the next entry resumes at the last visible frame.
+ * The saved pose and activation are restored in one write: the renderer repaints
+ * once, and the surface that borrowed the camera cannot leave its own frame
+ * behind for the standalone mode or the next borrower.
  */
-export function restoreFreeCamera(previous: FreeCameraState): void {
-  const current = state.get();
-  if (current.active === previous.active) {
-    return;
+export function releaseFreeCamera(view: FreeCameraState): void {
+  const activationChanged = state.get().active !== view.active;
+  state.set({ ...view });
+  if (activationChanged) {
+    window.dispatchEvent(new Event(TOOLBAR_REFRESH_EVENT));
   }
-  state.set({ ...current, active: previous.active });
-  window.dispatchEvent(new Event(TOOLBAR_REFRESH_EVENT));
 }
 
 /**

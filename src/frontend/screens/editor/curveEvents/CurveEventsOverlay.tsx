@@ -23,17 +23,16 @@ import {
 } from "./pathModel.ts";
 import { rotateComponent } from "./pathGeometry.ts";
 import { CurveToolDock } from "./CurveToolDock.tsx";
-import { curvePreviewMode, closeCurvePreviewMode } from "./mode.ts";
+import { curvePreviewMode } from "./mode.ts";
+import { closeCurvePane } from "./paneSession.ts";
 import { CURVE_CREATION_TOOLS, type CurveTool } from "./curveTools.ts";
 import {
   beginCurveEdit,
   bindCurveGestures,
   clearCurveHistory,
-  cancelCurveSession,
   curveActiveComponents,
   curveActiveTarget,
   curvePreviewState,
-  flushCurveDraft,
   updateCurvePreview,
 } from "./store.ts";
 import { CURVE_HIT_RADIUS, pickCurveTarget } from "./curveHitTest.ts";
@@ -50,9 +49,7 @@ import {
 } from "./drawOverlay.ts";
 import { deleteCurveSelection } from "./selection.ts";
 import {
-  activateFreeCamera,
   freeCameraState,
-  restoreFreeCamera,
   setFreeCameraView,
   zoomFreeCameraAt,
 } from "../workspace/stage/freeCamera/freeCamera.ts";
@@ -183,15 +180,19 @@ export function CurveEventsOverlay() {
     setHover(null);
   }, []);
 
-  /** Flush the draft, leave curve mode, and close the inspector pane. */
+  /**
+   * Close the inspection pane that owns this surface.
+   *
+   * The pane lifecycle flushes the draft and returns the borrowed camera; the
+   * direct close keeps the surface closed when the pane was already cleared by
+   * another surface.
+   */
   const close = useCallback(() => {
-    cancelCurveSession();
-    flushCurveDraft();
-    closeCurvePreviewMode();
     clearCurveHistory();
     if (runtime) {
       closeInspector(runtime.ui.activeInspector);
     }
+    closeCurvePane();
   }, [runtime]);
 
   /** Delete the selected segment or path, then clear gesture state. */
@@ -226,26 +227,8 @@ export function CurveEventsOverlay() {
     setHover(null);
   }, []);
 
-  // Curve mode reuses the existing free-camera view and releases only the
-  // activation on exit: the last zoom and pan stay with the camera session. The
-  // camera stays active while the surface is open so the path and the chart
-  // underlay share one transform.
-  useEffect(() => {
-    if (!active) {
-      return;
-    }
-    const previous = activateFreeCamera();
-    const unsubscribe = freeCameraState.subscribe(() => {
-      const state = freeCameraState.get();
-      if (!state.active) {
-        freeCameraState.set({ ...state, active: true });
-      }
-    });
-    return () => {
-      unsubscribe();
-      restoreFreeCamera(previous);
-    };
-  }, [active, stage]);
+  // The pane lifecycle owns the camera the surface draws through: it borrows the
+  // saved view on open and returns it on close. This overlay only reads the view.
 
   // A mode switch must not leave a half-finished draft or connector behind.
   useEffect(

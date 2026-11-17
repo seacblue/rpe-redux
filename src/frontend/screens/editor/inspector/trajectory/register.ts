@@ -7,10 +7,14 @@
  *
  * The pane is reachable from the sidebar and the tools list; both entries open
  * the same curve-preview surface.
+ *
+ * The lifecycle borrows the stage camera on open and returns the saved view on
+ * close, whichever surface left the pane.
  */
-import { registerInspectorPanel } from "../controller.ts";
+import { bindInspectorLifecycle, registerInspectorPanel } from "../controller.ts";
 import { registerInspectorSidebar, registerInspectorTool } from "../inspectorShell.ts";
 import { CurveEventsInspector } from "../../curveEvents/CurveEventsInspector.tsx";
+import { closeCurvePane, openCurvePane } from "../../curveEvents/paneSession.ts";
 import { INSPECTOR_TUTORIALS } from "../tutorials.ts";
 
 const disposePanel = registerInspectorPanel({
@@ -20,6 +24,10 @@ const disposePanel = registerInspectorPanel({
   icon: "route",
   tutorial: INSPECTOR_TUTORIALS["curve-preview"],
   editsChart: true,
+});
+const disposeLifecycle = bindInspectorLifecycle("curve-preview", {
+  onOpen: openCurvePane,
+  onClose: closeCurvePane,
 });
 const disposeEntry = [
   registerInspectorTool({
@@ -39,6 +47,9 @@ const disposeEntry = [
   }),
 ];
 const unregister = () => {
+  // A hot reload while the pane is open still has to give the camera back.
+  closeCurvePane();
+  disposeLifecycle();
   for (const dispose of disposeEntry.reverse()) {
     dispose();
   }

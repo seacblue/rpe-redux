@@ -2,12 +2,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  activateFreeCamera,
+  borrowFreeCamera,
   centerFreeCamera,
   freeCameraState,
   isFreeCameraDragButton,
+  releaseFreeCamera,
   resetFreeCamera,
-  restoreFreeCamera,
   setFreeCameraView,
   toggleFreeCamera,
   wheelZoomDelta,
@@ -55,52 +55,89 @@ function assertPose(pose) {
   assert.equal(current.panY, pose.panY);
 }
 
-test("leaving a camera surface keeps the last pose for the next entry", () => {
+test("the standalone mode owns the saved view across a close and reopen", () => {
   globalThis.window = new EventTarget();
   freeCameraState.set({ active: false, zoom: 1, panX: 0, panY: 0 });
-  const lease = activateFreeCamera();
-  assert.equal(freeCameraState.get().active, true);
-  // Wheel and drag move the same pose the curve surface edits.
+  toggleFreeCamera();
+  // Wheel and drag move the saved view; a close keeps it on the stage.
   zoomFreeCameraAt(120, -60, -240);
   setFreeCameraView(freeCameraState.get().zoom, 42, -18);
-  const pose = freeCameraState.get();
-  assert.ok(pose.zoom > 1);
-  assert.equal(pose.panX, 42);
-  assert.equal(pose.panY, -18);
+  const saved = freeCameraState.get();
+  assert.ok(saved.zoom > 1);
+  assert.equal(saved.panX, 42);
+  assert.equal(saved.panY, -18);
 
-  restoreFreeCamera(lease);
+  toggleFreeCamera();
   assert.equal(freeCameraState.get().active, false);
-  assertPose(pose);
+  assertPose(saved);
 
-  // Re-entering through the mode switch resumes the retained pose, repeatedly.
+  // Re-entering through the mode switch resumes the saved view, repeatedly.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     toggleFreeCamera();
     assert.equal(freeCameraState.get().active, true);
-    assertPose(pose);
+    assertPose(saved);
     toggleFreeCamera();
     assert.equal(freeCameraState.get().active, false);
-    assertPose(pose);
+    assertPose(saved);
   }
 
-  // The explicit reset button is still allowed to discard the pose.
+  // The explicit reset button is still allowed to discard the view.
   toggleFreeCamera();
   resetFreeCamera();
   assert.deepEqual(freeCameraState.get(), { active: true, zoom: 1, panX: 0, panY: 0 });
   toggleFreeCamera();
 });
 
-test("releasing a lease over an already active camera keeps pose and activation", () => {
+test("a borrower returns the saved view instead of leaving its own frame", () => {
+  globalThis.window = new EventTarget();
+  const saved = { active: false, zoom: 1.5, panX: 30, panY: -12 };
+  freeCameraState.set(saved);
+
+  const borrowed = borrowFreeCamera();
+  assert.deepEqual(borrowed, saved);
+  assert.equal(freeCameraState.get().active, true);
+  zoomFreeCameraAt(80, -40, -320);
+  setFreeCameraView(freeCameraState.get().zoom, 500, 300);
+  assert.notDeepEqual(freeCameraState.get(), saved);
+
+  releaseFreeCamera(borrowed);
+  assert.deepEqual(freeCameraState.get(), saved);
+
+  // The standalone mode resumes on the saved frame, not the borrowed one.
+  toggleFreeCamera();
+  assertPose(saved);
+  toggleFreeCamera();
+  assertPose(saved);
+});
+
+test("releasing over an already active camera keeps its activation and view", () => {
+  globalThis.window = new EventTarget();
+  const saved = { active: true, zoom: 2, panX: 10, panY: 20 };
+  freeCameraState.set(saved);
+  const borrowed = borrowFreeCamera();
+  assert.deepEqual(borrowed, saved);
+  zoomFreeCameraAt(-30, 45, 120);
+  setFreeCameraView(freeCameraState.get().zoom, 900, 900);
+
+  releaseFreeCamera(borrowed);
+  assert.equal(freeCameraState.get().active, true);
+  assertPose(saved);
+});
+
+test("a borrower that does not move the camera changes nothing", () => {
   globalThis.window = new EventTarget();
   freeCameraState.set({ active: true, zoom: 2, panX: 10, panY: 20 });
-  const lease = activateFreeCamera();
-  zoomFreeCameraAt(-30, 45, 120);
-  const pose = freeCameraState.get();
-  restoreFreeCamera(lease);
-  assert.equal(freeCameraState.get().active, true);
-  assertPose(pose);
-  toggleFreeCamera();
-  assert.equal(freeCameraState.get().active, false);
-  assertPose(pose);
+  let notifications = 0;
+  const unsubscribe = freeCameraState.subscribe(() => {
+    notifications += 1;
+  });
+  const borrowed = borrowFreeCamera();
+  const afterBorrow = notifications;
+  releaseFreeCamera(borrowed);
+  unsubscribe();
+  assert.equal(afterBorrow, 0, "borrowing an active camera must not notify");
+  assert.equal(notifications, 0, "releasing an unchanged view must not notify");
+  assert.deepEqual(freeCameraState.get(), { active: true, zoom: 2, panX: 10, panY: 20 });
 });
 
 test("manual camera zoom accepts values outside the former range", () => {

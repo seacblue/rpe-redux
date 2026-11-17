@@ -23,8 +23,8 @@ import type { EditorSession } from "../../../../core/edit/session/session.ts";
 import { clamp01 } from "../../../../core/utils/numbers.ts";
 import { openInspector } from "../inspector/controller.ts";
 import {
-  activateFreeCamera,
-  restoreFreeCamera,
+  borrowFreeCamera,
+  releaseFreeCamera,
   setFreeCameraView,
   type FreeCameraState,
 } from "../workspace/stage/freeCamera/freeCamera.ts";
@@ -151,10 +151,6 @@ export function startSamplingForEvent(
   if (!event) {
     return false;
   }
-  if (!samplingSession.get().target) {
-    previousCamera = activateFreeCamera();
-    setFreeCameraView(previousCamera.zoom, 0, 0);
-  }
   const target: SamplingTarget = {
     lineIndex: options.lineIndex,
     eventType: options.eventType,
@@ -181,6 +177,14 @@ export function startSamplingForEvent(
   if (!openInspector("sampling")) {
     stopSampling();
     return false;
+  }
+  // Borrow the camera after the pane switch: leaving another pane that borrows it
+  // returns that pane's saved view first, so sampling captures the frame the user
+  // actually left behind. The chart is centered at that magnification because a
+  // sampler reaches both axes from the middle.
+  if (!previousCamera) {
+    previousCamera = borrowFreeCamera();
+    setFreeCameraView(previousCamera.zoom, 0, 0);
   }
   return true;
 }
@@ -293,7 +297,7 @@ export function setSamplingEasing(easingType: number): void {
   setSamplingCurve({ easingType });
 }
 
-/** Clear the session and restore the camera without changing the active pane. */
+/** Clear the session and return the camera view the sampler borrowed. */
 export function stopSampling(): void {
   const camera = previousCamera;
   previousCamera = null;
@@ -302,8 +306,7 @@ export function stopSampling(): void {
   }
   samplingSession.set(EMPTY_SESSION);
   if (camera) {
-    setFreeCameraView(camera.zoom, camera.panX, camera.panY);
-    restoreFreeCamera(camera);
+    releaseFreeCamera(camera);
   }
 }
 
