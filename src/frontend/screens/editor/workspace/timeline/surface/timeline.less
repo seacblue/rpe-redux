@@ -172,6 +172,24 @@
   column-gap: var(--space-3);
 }
 
+// Floating timeline controls stay faint while the pointer is away so they do
+// not compete with the field content. `useProximityReveal` adds `is-revealed`
+// as the pointer approaches; reaching the control reveals it immediately as
+// well. Keyboard focus reveals it too, but a pointer click must not keep it
+// shown after the pointer leaves, so the focus reveal reads `:focus-visible`
+// rather than `:focus-within`. Touch layouts have no approach state, so the
+// control keeps its full alpha there.
+.proximity-reveal {
+  opacity: 1;
+  transition: opacity var(--design-dur-tint) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .proximity-reveal:not(.is-revealed):not(:hover):not(:has(:focus-visible)) {
+    opacity: 0.25;
+  }
+}
+
 // The note camera controls float over the bottom of the note field like the
 // event layer strip. They do not create a new grid row or change canvas height.
 .note-timeline-range-overlay {
