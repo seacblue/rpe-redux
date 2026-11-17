@@ -2,8 +2,9 @@
  * Free camera: isolate the preview and float the reset dock.
  *
  * The renderer's camera moves the chart content, background, and chart-frame
- * outline together. The outline lives inside a viewport-sized clip wrapper, so
- * zooming in does not spill it into the letterbox around the preview.
+ * outline together. The preview viewport stays the clip, so free camera keeps
+ * notes and judgment lines beyond the chart frame visible instead of cutting
+ * them at the white outline. The outline itself is clipped to that viewport.
  */
 .stage.free-camera-active
   > :not(.preview-underlay):not(.free-camera-layer):not(.sampling-overlay):not(
@@ -12,10 +13,22 @@
   display: none;
 }
 
+.stage.free-camera-active > .preview-underlay {
+  // Keep the preview stack above the editor surfaces, but leave the underlay
+  // transparent: the projected frame owns the visible backdrop.
+  z-index: var(--z-content-overlay);
+}
+
+.stage.free-camera-active > .free-camera-layer {
+  // Pointer capture stays above the preview without splitting its backdrop,
+  // frame, and HUD into different stacking contexts.
+  z-index: calc(var(--z-content-overlay) + 1);
+}
+
 .free-camera-frame-clip {
   display: none;
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   left: var(--preview-frame-left, 0);
   top: var(--preview-frame-top, 0);
   width: var(--preview-frame-width, 0);

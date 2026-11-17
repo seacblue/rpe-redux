@@ -9,6 +9,7 @@ import {
   HIT_DURATION,
   HIT_FRAME_COUNT,
   HIT_FRAME_SECONDS,
+  PREVIEW_LOGICAL_SIZE,
   hitFrame,
   previewNoteWidth,
 } from "../scene/constants.ts";
@@ -160,7 +161,10 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
         seconds - time,
         index * 65537 + hit.seed,
         previewNoteWidth(surface.noteSize) * surface.hitEffectScale * scaleX,
-        width * surface.hitEffectScale,
+        // The burst belongs to the chart content: drive its travel with the
+        // projected chart width so free-camera zoom and resize cannot detach
+        // the particles from the scaled hit point.
+        PREVIEW_LOGICAL_SIZE.width * surface.hitEffectScale * scaleX,
         particles,
       );
       for (let particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {

@@ -267,7 +267,6 @@ export function CurveEventsOverlay() {
         view: viewFor(element),
         showHandles: showSelection,
         selectionFrame: showSelection && tool === "select",
-        frame: true,
       });
     };
     drawRef.current = draw;

@@ -11,11 +11,12 @@ import type { PreviewSurfaceKind } from "../scene/previewTypes.ts";
 export interface PreviewDisplayAdapter {
   readonly kind: PreviewSurfaceKind;
   /**
-   * Clip the preview layers to `viewport` and position the free-camera frame.
+   * Clip the preview layers to `viewport` and position the camera-projected
+   * frame inside it.
    *
-   * `contentFrame` is the chart frame projected through the free camera; it is
-   * relative to the cookie-cutter `viewport` clip so the outline moves and
-   * scales with the background.
+   * The viewport stays screen-fixed, so free camera keeps notes and judgment
+   * lines beyond the chart frame visible; the white outline follows the
+   * projection. Without a projection, the outline matches the viewport.
    */
   setViewportClip(
     viewport: PreviewViewportBounds,
@@ -130,10 +131,9 @@ export function createPreviewDisplay(
         style.setProperty("--preview-frame-top", `${frameTop}px`);
         style.setProperty("--preview-frame-width", `${frameWidth}px`);
         style.setProperty("--preview-frame-height", `${frameHeight}px`);
-        // The outline is positioned inside the viewport-sized clip wrapper, so
-        // the camera offset is relative to the fitted frame rather than the
-        // stage. `overflow: hidden` on that wrapper keeps an enlarged chart
-        // frame from spilling into the letterbox around the preview.
+        // The white outline follows the camera projection, and the preview
+        // layers are clipped to it, so the canvas backdrop never spills into
+        // the editor base around the frame.
         style.setProperty("--free-camera-frame-left", `${content.left - frameLeft}px`);
         style.setProperty("--free-camera-frame-top", `${content.top - frameTop}px`);
         style.setProperty("--free-camera-frame-width", `${content.width}px`);

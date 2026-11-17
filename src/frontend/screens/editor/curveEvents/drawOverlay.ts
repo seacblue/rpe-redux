@@ -4,7 +4,6 @@
  * The chart preview remains the background; this module only paints editable
  * paths and their Bezier nodes/handles on a separate canvas above it.
  */
-/* eslint-disable max-lines -- grids, paths, handles, frames, and preview markers share one canvas painter. */
 import {
   componentEndpoints,
   type CurvePathComponent,
@@ -550,37 +549,6 @@ export function curveEditPoint(
   return gridEnabled ? snapToCurveGrid(point, distance) : point;
 }
 
-/**
- * The white boundary of the 1350×900 chart area.
- *
- * It is drawn above the grid and the paths so the canvas always says where the
- * chart ends, including after zooming or panning a path against the edge.
- */
-export function drawCurveFrame(
-  context: CanvasRenderingContext2D,
-  view: OverlayView,
-  colors?: Pick<CurveColors, "foreground" | "outline">,
-): void {
-  const scaleX = view.scaleX ?? view.scale;
-  const scaleY = view.scaleY ?? view.scale;
-  const left = view.centerX - (CURVE_STAGE_WIDTH / 2) * scaleX;
-  const top = view.centerY - (CURVE_STAGE_HEIGHT / 2) * scaleY;
-  const width = CURVE_STAGE_WIDTH * scaleX;
-  const height = CURVE_STAGE_HEIGHT * scaleY;
-  context.save();
-  context.strokeStyle = colors?.outline ?? "rgba(12, 18, 26, 0.55)";
-  context.globalAlpha = 0.7;
-  context.lineWidth = 3;
-  context.strokeRect(left, top, width, height);
-  context.globalAlpha = 1;
-  context.strokeStyle = colors?.foreground ?? "rgba(248, 250, 253, 0.96)";
-  context.lineWidth = 1.5;
-  context.shadowColor = colors?.foreground ?? "rgba(255, 255, 255, 0.24)";
-  context.shadowBlur = 8;
-  context.strokeRect(left, top, width, height);
-  context.restore();
-}
-
 /** The playhead marker a previewed trajectory drives along the path. */
 export function drawPreviewMarker(
   context: CanvasRenderingContext2D,
@@ -725,8 +693,6 @@ export function drawCurveOverlay(
     showHandles?: boolean;
     /** Draw the selected path's bounding rectangle (select mode). */
     selectionFrame?: boolean;
-    /** Draw the white 1350×900 chart boundary. */
-    frame?: boolean;
     /** The renderer's viewport; edit and preview share this mapping. */
     view: OverlayView;
   },
@@ -776,9 +742,6 @@ export function drawCurveOverlay(
   }
   if (options.previewPoint) {
     drawPreviewMarker(context, view, options.previewPoint, colors);
-  }
-  if (options.frame) {
-    drawCurveFrame(context, view, colors);
   }
 }
 

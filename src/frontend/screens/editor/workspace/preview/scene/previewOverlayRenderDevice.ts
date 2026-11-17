@@ -26,6 +26,8 @@ export interface PreviewOverlayRenderPacket {
   readonly surface: PreviewOverlaySurface;
   readonly frame: PreviewFrame;
   readonly target: CanvasRenderingContext2D;
+  /** Whether this submission owns the game UI layer as well as guides. */
+  readonly drawGameUI?: boolean;
   readonly clip?: {
     readonly left: number;
     readonly top: number;
@@ -76,8 +78,8 @@ export class PreviewOverlayRenderDevice {
       target.clip();
     }
     let guideStats: GuideDrawStats;
-    if (surface.showGameUI) {
-      const { chart, states, seconds, selectedLine, scale, screenScale, viewport } = frame;
+    if (surface.showGameUI && packet.drawGameUI !== false) {
+      const { chart, states, seconds, selectedLine, centerX, centerY, scale, viewport } = frame;
       drawGameUi(
         target,
         chart,
@@ -86,12 +88,23 @@ export class PreviewOverlayRenderDevice {
         seconds,
         selectedLine,
         viewport,
-        { centerX: frame.centerX, centerY: frame.centerY, scale: screenScale },
+        {
+          centerX,
+          centerY,
+          scale,
+        },
         surface.skin ?? null,
         surface.duration ?? 600,
         surface.gameUiCornerCompression,
       );
-      guideStats = this.drawGuideLayer(surface, target, frame, scale, selectedLine, packet.clip);
+      guideStats = this.drawGuideLayer(
+        surface,
+        target,
+        frame,
+        frame.scale,
+        selectedLine,
+        packet.clip,
+      );
     } else {
       guideStats = this.drawGuideLayer(
         surface,

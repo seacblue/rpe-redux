@@ -26,6 +26,9 @@ import {
 import { previewViewport } from "../../../frontend/screens/editor/workspace/preview/scene/viewport.ts";
 import { drawGameUi } from "../../../frontend/screens/editor/workspace/preview/render/gameUi.ts";
 import { gameUiLayout } from "../../../frontend/screens/editor/workspace/preview/drawing/gameUi.ts";
+import { PreviewOverlayRenderDevice } from "../../../frontend/screens/editor/workspace/preview/scene/previewOverlayRenderDevice.ts";
+import { drawComposite } from "../../../frontend/screens/editor/workspace/preview/scene/previewComposite.ts";
+import { createPreviewDisplay } from "../../../frontend/screens/editor/workspace/preview/surface/previewDisplay.ts";
 
 test("free-camera surfaces accept left and right drag buttons", () => {
   assert.equal(isFreeCameraDragButton(0), true);
@@ -203,7 +206,7 @@ test("free camera moves chart content inside a fixed viewport", () => {
   assert.equal(closed.scaleX, viewport.scaleX * 2);
 });
 
-test("free camera scales and moves the chart frame with its background", () => {
+test("free camera scales and moves the chart content bounds", () => {
   const viewport = previewViewport(1200, 900, 4 / 3);
   const camera = { active: true, zoom: 2, panX: 120, panY: -40 };
   assert.deepEqual(previewCameraBounds(viewport, DEFAULT_PREVIEW_CAMERA), {
@@ -228,15 +231,13 @@ test("free camera scales and moves the chart frame with its background", () => {
   });
 });
 
-test("free camera carries game UI with the projected chart frame", () => {
+test("free camera keeps game UI anchored to the preview viewport", () => {
   const viewport = previewViewport(1200, 900, 4 / 3);
-  const fitted = previewCameraFrame(viewport, DEFAULT_PREVIEW_CAMERA);
-  const moved = previewCameraFrame(viewport, {
-    active: true,
-    zoom: 2,
-    panX: 120,
-    panY: -40,
-  });
+  const screenView = {
+    centerX: viewport.left + viewport.width / 2,
+    centerY: viewport.top + viewport.height / 2,
+    scale: viewport.scale,
+  };
   const translationsFor = (view) => {
     const translations = [];
     const context = {
@@ -271,17 +272,160 @@ test("free camera carries game UI with the projected chart frame", () => {
     );
     return translations;
   };
-  const fittedTranslations = translationsFor(fitted);
-  const movedTranslations = translationsFor(moved);
+  const translations = translationsFor(screenView);
   const pause = gameUiLayout(
     viewport.width / viewport.scale,
     viewport.height / viewport.scale,
   ).find((item) => item.key === "pause");
 
   assert.ok(pause);
-  assert.deepEqual(movedTranslations[0], {
-    x: moved.centerX + pause.x * moved.scale,
-    y: moved.centerY - pause.y * moved.scale,
+  assert.deepEqual(translations[0], {
+    x: screenView.centerX + pause.x * screenView.scale,
+    y: screenView.centerY - pause.y * screenView.scale,
   });
-  assert.notDeepEqual(movedTranslations[0], fittedTranslations[0]);
+});
+
+test("preview overlay passes the camera scale to game UI", () => {
+  const fonts = [];
+  const context = {
+    canvas: {},
+    save() {},
+    restore() {},
+    beginPath() {},
+    rect() {},
+    clip() {},
+    translate() {},
+    rotate() {},
+    scale() {},
+    fillRect() {},
+    fillText(text) {
+      if (text === "0000000") {
+        fonts.push(this.font);
+      }
+    },
+    measureText() {
+      return { width: 10 };
+    },
+    drawImage() {},
+    set font(value) {
+      this._font = value;
+    },
+    get font() {
+      return this._font;
+    },
+    set fillStyle(value) {},
+    set globalAlpha(value) {},
+    set textAlign(value) {},
+    set textBaseline(value) {},
+  };
+  const device = new PreviewOverlayRenderDevice();
+  device.drawGuideLayer = () => ({ durationMs: 0 });
+  device.render({
+    surface: {
+      showGameUI: true,
+      completionTimes: [],
+      skin: null,
+    },
+    frame: {
+      chart: { META: { name: "chart", level: "1" }, judgeLineList: [] },
+      states: [],
+      seconds: 0,
+      selectedLine: -1,
+      scale: 2,
+      centerX: 600,
+      centerY: 450,
+      viewport: previewViewport(1200, 900, 4 / 3),
+      shaderEffects: [],
+    },
+    target: context,
+  });
+
+  assert.deepEqual(fonts, ["98px Saira, 'Source Han Sans CN', sans-serif"]);
+});
+
+test("preview compositor sends game UI to the top overlay canvas", () => {
+  const overlayCanvas = {};
+  const originalRenderCanvas = PreviewOverlayRenderDevice.prototype.renderCanvas;
+  const submitted = [];
+  PreviewOverlayRenderDevice.prototype.renderCanvas = function (_surface, _frame, canvas) {
+    submitted.push(canvas);
+    return { durationMs: 0 };
+  };
+  try {
+    drawComposite(
+      {
+        showGameUI: true,
+        overlayCanvas,
+        applyShaders: false,
+        forceOpaque: true,
+        opacity: 1,
+        sharedNoteBatch: false,
+        noteBatch: {},
+        display: {
+          kind: "workspace-underlay",
+          setShaderOpacity() {},
+          setPrimaryOpacity() {},
+          setNoteBatchOpacity() {},
+          setOverlayOpacity() {},
+          setOverlayVisible() {},
+        },
+      },
+      {
+        context: { restore() {} },
+        shaderEffects: [],
+        viewport: previewViewport(1200, 900, 4 / 3),
+      },
+    );
+  } finally {
+    PreviewOverlayRenderDevice.prototype.renderCanvas = originalRenderCanvas;
+  }
+  assert.deepEqual(submitted, [overlayCanvas]);
+});
+
+test("free camera keeps the viewport clip while the white frame follows the camera", () => {
+  const styleValues = new Map();
+  const primary = {
+    clientWidth: 800,
+    clientHeight: 600,
+    style: {},
+    parentElement: {
+      style: {
+        setProperty(name, value) {
+          styleValues.set(name, value);
+        },
+      },
+    },
+    getBoundingClientRect() {
+      return { width: 800, height: 600 };
+    },
+  };
+  const display = createPreviewDisplay(
+    {
+      primary: () => primary,
+      shader: () => null,
+      overlay: () => null,
+    },
+    "workspace-underlay",
+  );
+  const viewport = previewViewport(800, 600, 16 / 9);
+  display.setViewportClip(
+    viewport,
+    1,
+    previewCameraBounds(viewport, {
+      active: true,
+      zoom: 0.5,
+      panX: 0,
+      panY: 0,
+    }),
+  );
+
+  assert.equal(primary.style.clipPath, "inset(75px 0px 75px 0px)");
+  assert.equal(styleValues.get("--preview-frame-left"), "0px");
+  assert.equal(styleValues.get("--preview-frame-top"), "75px");
+  assert.equal(styleValues.get("--preview-frame-width"), "800px");
+  assert.equal(styleValues.get("--preview-frame-height"), "450px");
+  assert.equal(styleValues.get("--free-camera-frame-left"), "200px");
+  assert.equal(styleValues.get("--free-camera-frame-top"), "112.5px");
+  assert.equal(styleValues.get("--free-camera-frame-width"), "400px");
+  assert.equal(styleValues.get("--free-camera-frame-height"), "225px");
 });

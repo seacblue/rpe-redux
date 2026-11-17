@@ -963,7 +963,6 @@ export class Preview {
     height: number;
     viewport: PreviewViewport;
     divisor: number;
-    screenScale: number;
     contentFrame: ReturnType<typeof previewCameraView>;
     setupMs: number;
   } {
@@ -980,9 +979,9 @@ export class Preview {
       this.aspectRatio ?? DEFAULT_PREVIEW_ASPECT_RATIO,
     );
     const divisor = Math.max(0.01, Number(this.viewDivisor) || 1);
-    // The clip is screen-fixed; the camera moves only the chart content inside it.
-    const screenScale = viewport.scale / divisor;
     const contentFrame = previewCameraView(viewport, this.camera, divisor);
+    // The clip is screen-fixed; the camera moves the content and the white frame
+    // together inside it, so objects beyond the chart frame stay visible.
     this.display.setViewportClip(viewport, divisor, contentFrame);
     if (canvasFallback) {
       const previous = this.lastCanvasClearRect;
@@ -1045,7 +1044,6 @@ export class Preview {
       height,
       viewport,
       divisor,
-      screenScale,
       contentFrame,
       setupMs: performance.now() - drawStarted,
     };
@@ -1402,8 +1400,7 @@ export class Preview {
     const canvasPrepareStarted = performance.now();
     const prepared = this.prepareCanvasFrame(measurement, drawStarted);
     const canvasPrepareMs = performance.now() - canvasPrepareStarted;
-    const { context, width, height, viewport, divisor, screenScale, contentFrame, setupMs } =
-      prepared;
+    const { context, width, height, viewport, divisor, contentFrame, setupMs } = prepared;
     const { scale, scaleX, scaleY, centerX, centerY } = contentFrame;
     // Each frame samples into a fresh state array.
     // Preview only needs floor distance on lines that own notes; structural lines still
@@ -1473,7 +1470,6 @@ export class Preview {
       scale,
       scaleX,
       scaleY,
-      screenScale,
       viewport,
       shaderEffects,
       shaderSourceRevision: this.shaderSourceRevision,

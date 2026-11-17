@@ -62,6 +62,9 @@ export function drawComposite(
 ): GuideDrawStats | null {
   const { context, seconds, viewport } = frame;
   let guideStats: GuideDrawStats | null = null;
+  // The workspace overlay canvas sits above the note and shader layers. Keep
+  // the HUD there whenever it exists so later preview layers cannot cover it.
+  const gameUiOverlay = Boolean(surface.showGameUI && surface.overlayCanvas);
   // `Preview.draw` compiles the shader runtime before sampling `frame.shaderEffects`,
   // so composite consumes that compiled state instead of re-running the check.
   // Guides are cheap and identify the selected line; never put them behind the
@@ -69,10 +72,10 @@ export function drawComposite(
   // a slightly slower frame is invisible. Background blur follows the same rule.
   const shaderEffects = surface.applyShaders ? frame.shaderEffects : [];
   const globalShader = shaderEffects.some((effect) => effect.global);
-  if (!shaderEffects.length) {
+  if (!shaderEffects.length && !gameUiOverlay) {
     guideStats = overlayDevice.render({ surface, frame, target: context });
   }
-  if (globalShader) {
+  if (globalShader && !gameUiOverlay) {
     guideStats = overlayDevice.render({ surface, frame, target: context });
   }
   context.restore();
@@ -121,7 +124,7 @@ export function drawComposite(
     surface.display.setShaderOpacity(shaderRendered || noteLayerVisible ? workspaceOpacity : 0);
   }
   surface.display.setOverlayOpacity(workspaceOpacity);
-  if (!shaderRendered && shaderEffects.length && !globalShader) {
+  if (!shaderRendered && shaderEffects.length && !globalShader && !gameUiOverlay) {
     guideStats = overlayDevice.render({
       surface,
       frame,
@@ -129,7 +132,10 @@ export function drawComposite(
       clip: viewport,
     });
   }
-  if (shaderRendered && !globalShader && surface.overlayCanvas) {
+  if (gameUiOverlay && surface.overlayCanvas) {
+    guideStats = overlayDevice.renderCanvas(surface, frame, surface.overlayCanvas);
+    surface.display.setOverlayVisible(true);
+  } else if (shaderRendered && !globalShader && surface.overlayCanvas) {
     guideStats = overlayDevice.renderCanvas(surface, frame, surface.overlayCanvas);
     surface.display.setOverlayVisible(true);
   } else if (surface.overlayCanvas) {

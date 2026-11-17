@@ -39,8 +39,8 @@ export interface HitParticle {
  * Fill a caller-owned four-particle buffer without allocating a new array.
  *
  * `noteWidth` is the on-screen note width in pixels and drives square size;
- * `burstWidth` is the width the burst expands across, normally the canvas width
- * times the skin's hit-effect scale. Both are pixels, so the result is
+ * `burstWidth` is the width the burst expands across: the projected chart-frame
+ * width times the skin's hit-effect scale. Both are pixels, so the result is
  * resolution-independent.
  *
  * @returns the number of particles written, or zero outside the lifetime.

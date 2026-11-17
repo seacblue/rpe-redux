@@ -151,6 +151,51 @@ test("timeline-visible previews do not draw hit effects", () => {
   assert.equal(bursts.length, 0);
 });
 
+test("hit particle travel scales with the projected chart frame", () => {
+  const hit = { start: 2, end: 2, note: { type: 1 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  const scene = {
+    lines: [line],
+    sampler: () => () => ({ x: 0, y: 0, rotation: 0 }),
+  };
+  const surface = {
+    skin: null,
+    noteSize: 175,
+    hitEffectScale: 1,
+    effectsSince: 0,
+    defaultParticleColor: [255, 255, 255],
+    hitStateCache: new Map(),
+  };
+  const run = (scale) => {
+    const bursts = [];
+    drawHitEffects(surface, {
+      context: { drawImage() {}, fillRect: (...args) => bursts.push(args) },
+      scene,
+      order: [0],
+      seconds: 2.1,
+      width: 800,
+      height: 600,
+      scale,
+      scaleX: scale,
+      scaleY: scale,
+      centerX: 400,
+      centerY: 300,
+    });
+    return bursts;
+  };
+  const base = run(800 / 1350);
+  const half = run(400 / 1350);
+  const center = (rect) => rect[0] + rect[2] / 2;
+  const offsetSum = (bursts) => bursts.reduce((sum, rect) => sum + Math.abs(center(rect) - 400), 0);
+
+  assert.ok(Math.abs(offsetSum(half) / offsetSum(base) - 0.5) < 1e-9);
+  assert.ok(Math.abs(base[0][2] / half[0][2] - 2) < 1e-9);
+});
+
 test("a hit samples both the line and its parent after simultaneous teleports", () => {
   const chart = createChart();
   const parent = chart.judgeLineList[0];

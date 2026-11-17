@@ -17,20 +17,18 @@
   visibility: visible;
 }
 
-// Free camera supplies the shared camera transform, but its floating dock and
-// frame chrome belong to the free-camera mode itself.
+// Free camera supplies the shared camera transform and white frame; only its
+// floating dock belongs to the free-camera mode itself.
 .stage.curve-preview-active > .free-camera-layer {
-  display: none;
-}
-
-.stage.curve-preview-active .free-camera-frame-clip {
   display: none;
 }
 
 .curve-preview-layer {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  // The free-camera underlay is raised to --z-content-overlay (200); the curve
+  // canvas must stay above it so paths and handles remain visible.
+  z-index: calc(var(--z-content-overlay) + 1);
   pointer-events: none;
 }
 
