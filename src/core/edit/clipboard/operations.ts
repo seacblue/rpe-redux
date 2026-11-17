@@ -8,6 +8,7 @@
 import { t } from "../../../i18n/index.ts";
 import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
 import { countScoringNotes } from "../../global/chart/chart.ts";
+import { createChartObjectId } from "../../global/chart/identity.ts";
 import {
   beatValue,
   compareBeats,
@@ -433,8 +434,13 @@ export function projectClipboard(
     }
     return ((mapped % lineCount) + lineCount) % lineCount;
   };
+  // A paste is an insert, so every projected object takes a new identity. The
+  // clipboard keeps the source ids, and a paged document trusts committed ids
+  // instead of repairing duplicates, so reusing them would make id-addressed
+  // edits (an Extension transform, a transaction update) hit the source object.
   const notes = session.clipboard.map((note) => ({
     ...shiftedTime(note, delta),
+    id: createChartObjectId(),
     positionX: Number(note.positionX) * (mirror ? -1 : 1),
   }));
   const events = eventEntries.map(({ type, event }) => {
@@ -442,6 +448,7 @@ export function projectClipboard(
     if (type === "paintEvents" && shifted && session.shaderAutoAlign !== false) {
       next = alignShaderParameters(next);
     }
+    next = { ...next, id: createChartObjectId() };
     if (
       mirror &&
       MIRROR_EVENT_TYPES.has(type) &&

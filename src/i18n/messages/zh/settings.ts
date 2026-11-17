@@ -362,8 +362,6 @@ export default {
   "settings.field.event-curves-enabled.description": "事件条达到宽度阈值后绘制缓动曲线。",
   "settings.field.event-opacity.label": "事件条不透明度",
   "settings.field.event-bar-width.label": "事件条宽度比例",
-  "settings.field.note-source-hover.label": "悬停音符显示来源线",
-
   "settings.field.scroll-speed.label": "滚轮跳转速度",
   "settings.field.timeline-exclusive-width.label": "独占时的时间轴宽度",
   "settings.field.multi-edit-history-limit.label": "批量编辑历史条数",

@@ -102,7 +102,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
   // exit transition: the dialog keeps painting while `recordingOpen` is false.
   const [recording, setRecording] = useState<string | null>(null);
   const [recordingOpen, setRecordingOpen] = useState(false);
-  const [recordingBindings, setRecordingBindings] = useState<readonly Shortcut[]>([]);
+  const [recordingBinding, setRecordingBinding] = useState<Shortcut | null>(null);
   const [bindingIndex, setBindingIndex] = useState<number | null>(null);
   const [modifierPreview, setModifierPreview] = useState("");
   const [candidatePreview, setCandidatePreview] = useState<Shortcut | null>(null);
@@ -141,7 +141,9 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
     setCandidatePreview(null);
     setPendingShortcut(null);
     pendingShortcutRef.current = null;
-    setRecordingBindings(shortcuts.bindingsOf(shortcutId));
+    // Only the slot being replaced is the current binding. Adding a binding
+    // replaces nothing, so it shows no current value.
+    setRecordingBinding(index === null ? null : (shortcuts.bindingsOf(shortcutId)[index] ?? null));
     setBindingIndex(index);
     setRecording(shortcutId);
     setRecordingOpen(true);
@@ -497,16 +499,14 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
           </>
         }
       >
-        <div className="redux-shortcut-recording-current">
-          <span>{t("shortcuts.currentBindingsLabel")}</span>
-          <div className="redux-shortcut-recording-bindings">
-            {recordingBindings.length > 0 ? (
-              <ShortcutBindings bindings={recordingBindings} />
-            ) : (
-              <kbd>—</kbd>
-            )}
+        {bindingIndex !== null && (
+          <div className="redux-shortcut-recording-current">
+            <span>{t("shortcuts.currentBindingsLabel")}</span>
+            <div className="redux-shortcut-recording-bindings">
+              {recordingBinding ? <ShortcutBindings bindings={[recordingBinding]} /> : <kbd>—</kbd>}
+            </div>
           </div>
-        </div>
+        )}
         {candidatePreview && (
           <div className="redux-shortcut-recording-preview">
             <ShortcutBindings bindings={[candidatePreview]} />

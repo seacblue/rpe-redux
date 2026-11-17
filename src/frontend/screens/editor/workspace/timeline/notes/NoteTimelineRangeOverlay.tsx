@@ -8,6 +8,7 @@ import { IconButton } from "../../../../../../design/components/button/IconButto
 import { t } from "../../../../../../i18n/index.ts";
 import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
 import { viewControls } from "../../runtime/commands/viewControls.ts";
+import { useProximityReveal } from "../interaction/useProximityReveal.ts";
 
 const DEFAULT_CAMERA_X = 0;
 const LONG_PRESS_DELAY_MS = 280;
@@ -16,6 +17,7 @@ type CameraDirection = -1 | 1;
 
 /** Show the three-button X-range control over the bottom of the note field. */
 export function NoteTimelineRangeOverlay() {
+  const { ref: overlayRef, revealed } = useProximityReveal<HTMLDivElement>();
   const [pressedDirection, setPressedDirection] = useState<CameraDirection | null>(null);
   const holdDelay = useRef<number | null>(null);
   const holdRepeat = useRef<number | null>(null);
@@ -80,7 +82,8 @@ export function NoteTimelineRangeOverlay() {
 
   return (
     <div
-      className="note-timeline-range-overlay"
+      ref={overlayRef}
+      className={`note-timeline-range-overlay proximity-reveal${revealed ? " is-revealed" : ""}`}
       role="group"
       aria-label={t("editorPanels.timeline.noteRange.group")}
     >

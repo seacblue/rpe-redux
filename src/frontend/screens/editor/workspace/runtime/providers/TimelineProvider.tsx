@@ -4,7 +4,6 @@ import { ClipboardHistory } from "../../../../../../core/edit/clipboard/clipboar
 import { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import { BatchControls } from "../../stage/batchControls/batchControls.ts";
 import { LayerButtons } from "../../timeline/layers/layerButtons.ts";
-import { NoteSourceToastController } from "../../stage/noteSource/noteSourceToastController.ts";
 import { ScrubberSpectrum } from "../../../../../chrome/transport/scrubberSpectrum.ts";
 import { SelectionOverlay } from "../../timeline/selection/selectionOverlay.ts";
 import { Timeline } from "../../timeline/surface/timeline.ts";
@@ -37,7 +36,6 @@ export interface TimelineRuntime {
   readonly scrubberSpectrum: ScrubberSpectrum;
   readonly scrubberSpectrumLoader: ReturnType<typeof createScrubberSpectrumLoader>;
   readonly eventInteraction: () => Timeline["gestures"]["eventInteraction"];
-  readonly noteSourceToast: NoteSourceToastController;
   readonly batchControls: BatchControls;
   readonly selectionOverlay: SelectionOverlay;
   readonly lineSwitcher: ReturnType<typeof createLineSwitcher>;
@@ -255,17 +253,6 @@ export function createTimelineRuntime(options: {
   options.scope.add(() => audioAnalysis.cancel());
 
   const eventInteraction = () => timeline.gestures.eventInteraction;
-  const noteSourceHover = values.getHandle<boolean>("note-source-hover");
-  const noteSourceToast = new NoteSourceToastController({
-    enabled: () => noteSourceHover.get(),
-    atHome: options.atHome,
-    multiLineActive: () => getSession().multiLineActive,
-    lineExists: (lineIndex) => Boolean(getSession().chart.judgeLineList?.[lineIndex]),
-    textForLine: (lineIndex) => t("editor.app.notice.noteSource", { line: lineIndex }),
-    invalidate: options.invalidate,
-  });
-  options.scope.add(() => noteSourceToast.dispose());
-  timeline.gestures.onNoteHover = (entry) => noteSourceToast.hover(entry);
   options.scope.add(
     bindMultiLineScroll(
       options.ui.multiLineScroll,
@@ -346,7 +333,6 @@ export function createTimelineRuntime(options: {
     scrubberSpectrum,
     scrubberSpectrumLoader,
     eventInteraction,
-    noteSourceToast,
     batchControls,
     selectionOverlay,
     lineSwitcher,

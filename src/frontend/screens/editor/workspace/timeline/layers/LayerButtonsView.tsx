@@ -9,6 +9,7 @@
 import { useEditingFeature } from "../../../../settings/editingCapabilities.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { Segmented } from "../../../../../../design/components/segmented/Segmented.tsx";
+import { useProximityReveal } from "../interaction/useProximityReveal.ts";
 
 export interface LayerButtonItem {
   index: number;
@@ -29,6 +30,7 @@ export interface LayerButtonsViewProps {
 
 /** Render the visible layer buttons and forward the chosen index. */
 export function LayerButtonsView({ items, onSelect }: LayerButtonsViewProps) {
+  const { ref: stripRef, revealed } = useProximityReveal<HTMLDivElement>();
   const extendedEnabled = useEditingFeature("extendedEvents");
   const eventLayersEnabled = useEditingFeature("eventLayers");
   const visibleItems = items.filter((item) =>
@@ -44,7 +46,8 @@ export function LayerButtonsView({ items, onSelect }: LayerButtonsViewProps) {
   }
   return (
     <Segmented<string>
-      className="layer-buttons"
+      className={`layer-buttons proximity-reveal${revealed ? " is-revealed" : ""}`}
+      containerRef={stripRef}
       ariaLabel={t("editorPanels.timeline.layers")}
       value={String(visibleItems.find((item) => item.active)?.index ?? visibleItems[0]?.index ?? 0)}
       options={visibleItems.map((item) => ({

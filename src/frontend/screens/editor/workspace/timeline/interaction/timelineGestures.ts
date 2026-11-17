@@ -15,7 +15,6 @@ import type {
   TimelineArea,
   TimelineDrag,
   TimelineNote,
-  TimelineNoteEntry,
   TimelineEventRect,
   PendingHold,
 } from "../../../../../../core/edit/timeline/types.ts";
@@ -89,7 +88,6 @@ export class TimelineGestures {
   previewCancel?: () => void;
   onDragScroll?: (seconds: number) => void;
   onWheel: (event: WheelEvent) => boolean = () => false;
-  onNoteHover?: (entry: TimelineNoteEntry | null | undefined) => void;
   onEvent: (type: string, index: number, beat?: number) => void = () => {};
   onContextMenu: (event: MouseEvent, canvas: HTMLCanvasElement) => void = () => {};
   notify?: (message: string, level?: string) => void;

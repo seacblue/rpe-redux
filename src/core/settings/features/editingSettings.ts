@@ -253,14 +253,6 @@ const EditingSettingsSchema: SettingDefinition[] = [
     max: 1,
     step: 0.01,
   },
-  {
-    key: "note-source-hover",
-    navigation: "appearance.notes",
-    group: "settings.group.notes",
-    label: "settings.field.note-source-hover.label",
-    control: "toggle",
-    default: true,
-  },
 ];
 settingsRegistry.registerSettings(EditingSettingsSchema);
 

@@ -13,6 +13,7 @@ import {
 } from "../../../core/global/chart/chart.ts";
 import { beatValue } from "../../../core/global/chart/timing/beat.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
+import { ChartDocument } from "../../../core/global/chart/streaming/chartDocument.ts";
 import {
   copyObjects,
   copyObjectsAllLayers,
@@ -190,6 +191,26 @@ test("mirror paste negates note X and X/Y/Rotate event values without changing t
   assert.equal(session.chart.judgeLineList[0].eventLayers[0].rotateEvents.at(-1).end, -60);
   assert.equal(session.chart.judgeLineList[0].eventLayers[0].alphaEvents.at(-1).start, 70);
   assert.equal(session.chart.judgeLineList[0].eventLayers[0].speedEvents.at(-1).start, 90);
+});
+
+test("pasting onto a paged document gives the copies their own identities", () => {
+  const chart = createChart();
+  chart.judgeLineList.push(createLine("Line 2"));
+  chart.judgeLineList[0].notes = [createNote(1, 0, 0.5)];
+  chart.judgeLineList[0].numOfNotes = 1;
+  const session = EditorSession.fromDocument(ChartDocument.fromChart(chart));
+  session.lineIndex = 0;
+  session.selection = new Set([0]);
+  session.multiLineSelection = new Map([[0, new Set([0])]]);
+
+  copyObjects(session);
+  assert.equal(pasteObjects(session, 4, { targetLineIndex: 0 }), true);
+  assert.equal(pasteObjects(session, 8, { targetLineIndex: 0 }), true);
+
+  // A commit through a paged document trusts existing ids instead of repairing
+  // duplicates, so paste must mint an identity per copy.
+  const ids = session.chart.judgeLineList[0].notes.map((note) => note.id);
+  assert.equal(new Set(ids).size, 3);
 });
 
 test("layer shortcuts resolve in the event area and leave notes to the note-skin action", () => {

@@ -113,7 +113,7 @@ export default {
   "shortcuts.recording": "Press a key, mouse button, or wheel direction…",
   "shortcuts.recordingOverlayAdd": "Add a key or mouse input for {action}",
   "shortcuts.recordingOverlayRebind": "Rebind a key or mouse input for {action}",
-  "shortcuts.currentBindingsLabel": "Current bindings",
+  "shortcuts.currentBindingsLabel": "Current binding",
   "shortcuts.currentBindings": "Current bindings: {bindings}",
   "shortcuts.error.mustBeText": "A shortcut has to be text.",
   "shortcuts.error.invalidSyntax": "Use CTRL+SHIFT+S style shortcut tokens.",

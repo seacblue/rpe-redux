@@ -106,3 +106,64 @@ test("library stream opens only after every line is materialized", async () => {
   assert.equal(installed.judgeLineList.some(isPlaceholderLine), false);
   assert.equal(installed.judgeLineList[10_000].notes.length, 1);
 });
+
+test("document load waits for the music track before the first render", async () => {
+  const chart = createChart();
+  chart.META.song = "song.mp3";
+  const assets = new Map([["song.mp3", new Uint8Array([1, 2, 3])]]);
+  const audio = deferred();
+  let audioLoaded = false;
+  let firstRenderSawAudio = false;
+  const noop = () => undefined;
+  let installed = chart;
+  const task = {
+    id: 2,
+    update: noop,
+    complete: noop,
+    fail: noop,
+  };
+  const loadCandidate = createCandidateLoader({
+    images: { load: async () => undefined },
+    hitSounds: { chart: null, prepare: async () => undefined },
+    replaceChart(next) {
+      installed = next;
+    },
+    setLibraryProject: noop,
+    currentChart: () => installed,
+    currentAssets: () => assets,
+    currentChartName: () => "chart.json",
+    resolveDesktopSong: () => undefined,
+    loadMusic: async () => {
+      await audio.promise;
+      audioLoaded = true;
+      return true;
+    },
+    missingMusic: noop,
+    selectLine: noop,
+    invalidate: noop,
+    waitForFirstRender: async () => {
+      firstRenderSawAudio = audioLoaded;
+    },
+  });
+
+  const loading = loadCandidate({ chart, name: "chart.json" }, assets, task);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(audioLoaded, false);
+  assert.equal(firstRenderSawAudio, false);
+
+  audio.resolve();
+  await loading;
+
+  assert.equal(audioLoaded, true);
+  assert.equal(firstRenderSawAudio, true);
+});
+
+/** A promise plus its resolver, for holding the loader at one step. */
+function deferred() {
+  let resolve = () => {};
+  const promise = new Promise((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
