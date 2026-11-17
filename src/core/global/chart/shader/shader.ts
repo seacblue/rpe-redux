@@ -309,6 +309,8 @@ export class ShaderRuntime {
   declare chart: Chart | null;
   declare chartName: string;
   declare tempo: ShaderTempo | null;
+  /** Document content revision the current effect set was built from. */
+  declare compiledRevision: number | undefined;
   declare effects: ShaderEffectDefinition[];
   declare activeIndex: IntervalIndex<TimedShaderEffect>;
   declare sources: Map<string, string>;
@@ -339,6 +341,7 @@ export class ShaderRuntime {
     this.chart = null;
     this.chartName = "";
     this.tempo = null;
+    this.compiledRevision = undefined;
     this.effects = [];
     this.activeIndex = new IntervalIndex<TimedShaderEffect>(
       [],
@@ -363,6 +366,7 @@ export class ShaderRuntime {
     }
     this.chartName = next;
     this.chart = null;
+    this.compiledRevision = undefined;
     this.sources.clear();
     this.loading.clear();
     this.sourcesWanted.clear();
@@ -370,9 +374,14 @@ export class ShaderRuntime {
     this.invalidate();
   }
 
-  /** Rebuild active intervals when the chart or tempo source changes. */
-  compile(chart: Chart, tempo: ShaderTempo | null): void {
-    if (this.chart === chart && this.tempo === tempo) {
+  /**
+   * Rebuild active intervals when the chart, tempo, or document revision changes.
+   *
+   * A paged document keeps one chart object while events are edited, so the
+   * revision is what makes a shader or paint event change visible.
+   */
+  compile(chart: Chart, tempo: ShaderTempo | null, revision?: number): void {
+    if (this.chart === chart && this.tempo === tempo && this.compiledRevision === revision) {
       return;
     }
     if (this.canReuseEffects(chart, tempo)) {
@@ -381,10 +390,12 @@ export class ShaderRuntime {
       // and source set instead of rescanning every judge line on the paint path.
       this.chart = chart;
       this.tempo = tempo;
+      this.compiledRevision = revision;
       return;
     }
     this.chart = chart;
     this.tempo = tempo;
+    this.compiledRevision = revision;
     this.effects = chartEffects(chart);
     const timed = this.effects.map((effect, index) => {
       const factor = chart.judgeLineList?.[effect.line]?.bpmfactor ?? 1;

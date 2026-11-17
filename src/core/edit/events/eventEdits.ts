@@ -125,9 +125,13 @@ export function commitEventLists(
   session.eventSelection = new Set(selection);
   session.focus = "events";
   session.selection.clear();
-  // Event-list edits preserve every chart object id, so normalization is
-  // skipped and a dense drag commit stays bounded by the changed line.
-  session.commitChart(label, chart, beforeSelection, {}, { normalized: true });
+  // Event-list edits preserve every chart object id, so normalization and the
+  // whole-chart placement walk are skipped and a dense drag commit stays
+  // bounded by the changed line.
+  session.commitChart(label, chart, beforeSelection, {}, {
+    normalized: true,
+    placement: { notes: 0, events: 0 },
+  });
 }
 
 /**

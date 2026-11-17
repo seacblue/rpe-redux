@@ -30,6 +30,13 @@ export interface RenderRequest {
   readonly previewChart: unknown;
   /** Revision of external preview resources and explicit frame invalidations. */
   readonly previewRevision: number;
+  /**
+   * Content revision of the previewed document.
+   *
+   * A paged document keeps one facade chart object while editing, so chart
+   * identity alone cannot make a content edit pending.
+   */
+  readonly previewContentRevision?: number;
   readonly previewSession: unknown;
   readonly previewSelection: unknown;
   /**
@@ -82,6 +89,7 @@ interface CommittedState {
   timelinePreviewSession: unknown;
   previewChart: unknown;
   previewRevision: number;
+  previewContentRevision: number | undefined;
   previewSession: unknown;
   previewSelection: unknown;
   authoringRegionVisible: boolean;
@@ -107,6 +115,7 @@ export class EditorRenderScheduler {
     timelinePreviewSession: undefined,
     previewChart: undefined,
     previewRevision: -1,
+    previewContentRevision: undefined,
     previewSession: undefined,
     previewSelection: undefined,
     authoringRegionVisible: false,
@@ -132,6 +141,7 @@ export class EditorRenderScheduler {
         request.timelineRevision !== this.committed.timelineRevision &&
         request.previewChart === this.committed.previewChart &&
         request.previewRevision === this.committed.previewRevision &&
+        request.previewContentRevision === this.committed.previewContentRevision &&
         request.previewSession === this.committed.previewSession &&
         request.previewSelection === this.committed.previewSelection &&
         request.authoringRegionVisible === this.committed.authoringRegionVisible &&
@@ -183,6 +193,7 @@ export class EditorRenderScheduler {
     if (work.preview) {
       this.committed.previewChart = request.previewChart;
       this.committed.previewRevision = request.previewRevision;
+      this.committed.previewContentRevision = request.previewContentRevision;
       this.committed.previewSession = request.previewSession;
       this.committed.previewSelection = request.previewSelection;
       this.committed.authoringRegionVisible = request.authoringRegionVisible;
@@ -210,6 +221,7 @@ export class EditorRenderScheduler {
       timelinePreviewSession: undefined,
       previewChart: undefined,
       previewRevision: -1,
+      previewContentRevision: undefined,
       previewSession: undefined,
       previewSelection: undefined,
       authoringRegionVisible: false,
@@ -254,6 +266,7 @@ export class EditorRenderScheduler {
         !this.committed.preview ||
         request.seconds !== this.committed.seconds ||
         request.previewChart !== this.committed.previewChart ||
+        request.previewContentRevision !== this.committed.previewContentRevision ||
         previewInvalidated ||
         request.previewSession !== this.committed.previewSession ||
         request.previewSelection !== this.committed.previewSelection ||

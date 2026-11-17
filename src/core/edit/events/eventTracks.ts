@@ -18,6 +18,10 @@ import type {
   MutableEventLayer,
 } from "../../global/chart/chart.ts";
 import { beatValue } from "../../global/chart/timing/beat.ts";
+import {
+  inheritValueContentFingerprint,
+  markValueContentFingerprintDirty,
+} from "../../global/chart/chartContentHash.ts";
 import { replaceShaderEvents, shaderEvents } from "../../global/chart/shader/shaderEvents.ts";
 import { noiseLineSettings } from "../../global/chart/noise/noiseLine.ts";
 import type { BlockAreaInterval } from "../../global/chart/noise/blockArea.ts";
@@ -246,6 +250,31 @@ export function chartWithEventLists(
   let chart: Chart = { ...source, judgeLineList: lines };
   if (updates.has("paintEvents")) {
     chart = replaceShaderEvents(chart, lineIndex, updates.get("paintEvents") ?? []);
+  }
+  // The line and each replaced track keep every unchanged child. Carry their
+  // digest seeds so an event placement rehashes only the changed track instead
+  // of walking a dense line again.
+  const updatedLine = chart.judgeLineList?.[lineIndex];
+  if (updatedLine) {
+    inheritValueContentFingerprint(target, updatedLine);
+    const previousLayer = target.eventLayers?.[eventLayer] as Record<string, unknown> | undefined;
+    const nextLayer = updatedLine.eventLayers?.[eventLayer] as Record<string, unknown> | undefined;
+    const previousExtended = target.extended as Record<string, unknown> | undefined;
+    const nextExtended = updatedLine.extended as Record<string, unknown> | undefined;
+    for (const type of updates.keys()) {
+      const previousBase = previousLayer?.[type];
+      const nextBase = nextLayer?.[type];
+      if (Array.isArray(previousBase) && Array.isArray(nextBase)) {
+        inheritValueContentFingerprint(previousBase, nextBase);
+        markValueContentFingerprintDirty(nextBase);
+      }
+      const previousExtra = previousExtended?.[type];
+      const nextExtra = nextExtended?.[type];
+      if (Array.isArray(previousExtra) && Array.isArray(nextExtra)) {
+        inheritValueContentFingerprint(previousExtra, nextExtra);
+        markValueContentFingerprintDirty(nextExtra);
+      }
+    }
   }
   return chart;
 }

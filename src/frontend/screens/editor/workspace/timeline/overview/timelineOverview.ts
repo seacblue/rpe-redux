@@ -29,6 +29,8 @@ export interface TimelineOverviewSnapshot {
   offsetSeconds: number;
   /** Changes only when the history stacks or document change. */
   historyRevision: number;
+  /** Changes only when the committed document content changes. */
+  contentRevision: number;
   /** The active line's tempo factor, used to place clipboard beat spans. */
   bpmFactor: number;
   /** The clipboard's current beat span, when it holds objects. */
@@ -313,6 +315,7 @@ export class TimelineOverview {
         tempo: snapshot.tempo,
         seconds,
         lineIndex: snapshot.lineIndex,
+        documentRevision: snapshot.contentRevision,
       },
       anchor: {
         y: clientY,

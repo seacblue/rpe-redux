@@ -164,6 +164,14 @@ export class History {
   retainedBytes: number;
   /** Bumped whenever the document or either stack changes. */
   revision: number;
+  /**
+   * Bumped whenever the committed document content changes.
+   *
+   * A paged document mutates its facade chart in place, so consumers that key
+   * on chart identity cannot observe these edits. This revision changes on
+   * commits, undo, and redo, but not on selection-only history entries.
+   */
+  contentRevision: number;
 
   private nextId: number;
   private discardedCount: number;
@@ -204,6 +212,7 @@ export class History {
     this.byteLimit = 64 * 1024 ** 2;
     this.retainedBytes = 0;
     this.revision = 0;
+    this.contentRevision = 0;
     this.nextId = 1;
     this.discardedCount = 0;
     this.discardedEntries = [];
@@ -376,6 +385,7 @@ export class History {
       }
     }
     this.document = liveDocument;
+    this.contentRevision += 1;
     this.notify();
   }
 
@@ -436,6 +446,9 @@ export class History {
     } else {
       this.document = command.before;
     }
+    if (command.before !== command.after) {
+      this.contentRevision += 1;
+    }
     invalidateChartLocations(this.document);
     this.notify();
     return true;
@@ -453,6 +466,9 @@ export class History {
       this.document = this.chartDocument.chart;
     } else {
       this.document = command.after;
+    }
+    if (command.before !== command.after) {
+      this.contentRevision += 1;
     }
     invalidateChartLocations(this.document);
     this.notify();

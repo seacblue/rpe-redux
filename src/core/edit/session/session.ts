@@ -1,6 +1,10 @@
 /* eslint-disable max-lines -- history, selection, and document lifecycle share one session owner. */
 /** Owns mutable editing state for one open chart, including history and selections. */
 import { t } from "../../../i18n/index.ts";
+import {
+  inheritValueContentFingerprint,
+  markValueContentFingerprintDirty,
+} from "../../global/chart/chartContentHash.ts";
 import { warmChartFingerprintAsync } from "../document/chartRevision.ts";
 import type { ChartDocument } from "../../global/chart/streaming/chartDocument.ts";
 import {
@@ -48,27 +52,48 @@ export interface PlacementStats {
   events: number;
 }
 
-/** Collects stable note and event ids from one chart. */
+/** Collect stable note and event ids from one line into the supplied sets. */
+function collectLineObjectIds(line: JudgeLine, notes: Set<string>, events: Set<string>): void {
+  for (const note of line.notes ?? []) {
+    if (typeof note.id === "string") {
+      notes.add(note.id);
+    }
+  }
+  for (const layer of [...(line.eventLayers ?? []), line.extended]) {
+    if (!layer) {
+      continue;
+    }
+    for (const type of EVENT_TRACKS) {
+      for (const event of layer[type] ?? []) {
+        if (typeof event.id === "string") {
+          events.add(event.id);
+        }
+      }
+    }
+  }
+}
+
+/** Collect stable note and event ids from one chart. */
 function chartObjectIds(chart: Chart): { notes: Set<string>; events: Set<string> } {
   const notes = new Set<string>();
   const events = new Set<string>();
   for (const line of chart.judgeLineList ?? []) {
-    for (const note of line.notes ?? []) {
-      if (typeof note.id === "string") {
-        notes.add(note.id);
-      }
-    }
-    for (const layer of [...(line.eventLayers ?? []), line.extended]) {
-      if (!layer) {
-        continue;
-      }
-      for (const type of EVENT_TRACKS) {
-        for (const event of layer[type] ?? []) {
-          if (typeof event.id === "string") {
-            events.add(event.id);
-          }
-        }
-      }
+    collectLineObjectIds(line, notes, events);
+  }
+  return { notes, events };
+}
+
+/** Collect ids from only the judge lines a commit reports as changed. */
+function changedLineObjectIds(
+  chart: Chart,
+  changedLineIndexes: readonly number[],
+): { notes: Set<string>; events: Set<string> } {
+  const notes = new Set<string>();
+  const events = new Set<string>();
+  for (const index of changedLineIndexes) {
+    const line = chart.judgeLineList?.[index];
+    if (line) {
+      collectLineObjectIds(line, notes, events);
     }
   }
   return { notes, events };
@@ -159,6 +184,13 @@ export type SessionCommitOptions = HistoryRecordOptions & {
   validatedNoise?: boolean;
   /** Internal note deltas supplied by the transaction planner for render caches. */
   noteChangeHints?: readonly NoteChangeHint[];
+  /**
+   * Internal placement delta the caller already knows.
+   *
+   * Supplying it skips the whole-chart object-id walk that derives placement
+   * statistics, which matters when keys are placed rapidly on a large chart.
+   */
+  placement?: PlacementStats;
 };
 
 /** One note addressed by the line it lives on. */
@@ -341,7 +373,18 @@ export class EditorSession extends EventTarget {
   /** The committed chart held by history. */
   get chart(): Chart {
     return this.history.document;
-  } /** Expose the immutable history read model to editor-owned surfaces. */
+  }
+  /**
+   * Monotonic content revision for renderers.
+   *
+   * Both counters only grow, so their sum changes for every history commit and
+   * for every paged line materialization, even though a paged chart keeps one
+   * facade object.
+   */
+  get contentRevision(): number {
+    return this.history.contentRevision + (this.chartDocument?.contentRevision ?? 0);
+  }
+  /** Expose the immutable history read model to editor-owned surfaces. */
   historyEntries(): HistoryEntries {
     return this.history.entries();
   }
@@ -767,8 +810,6 @@ export class EditorSession extends EventTarget {
                 },
           }
         : metadata;
-    // Capture ids before a paged document mutates its live facade during record.
-    const previousObjectIds = chartObjectIds(this.chart);
     const beforeHook = extensionRegistry.hasHook("session:before-commit");
     const before = beforeHook
       ? {
@@ -822,6 +863,19 @@ export class EditorSession extends EventTarget {
     const historyOptions = beforeHook
       ? { ...options, beforeFingerprint: undefined, afterFingerprint: undefined }
       : options;
+    // A known placement delta skips capturing every object id on both sides of
+    // the commit. A before-commit hook may add objects of its own, so it falls
+    // back to the walk; remote commits never add local placement stats.
+    const placementHint = remote
+      ? { notes: 0, events: 0 }
+      : beforeHook
+        ? undefined
+        : options.placement;
+    const previousObjectIds = placementHint
+      ? null
+      : beforeHook
+        ? chartObjectIds(this.chart)
+        : changedLineObjectIds(this.chart, changedLineIndexes);
     const beatRange =
       options.beatRange ??
       selectionBeatRange(before.chart, afterSelection) ??
@@ -836,6 +890,7 @@ export class EditorSession extends EventTarget {
       before.metadata,
       {
         ...historyOptions,
+        ...(beforeHook ? {} : { changedLineIndexes }),
         normalized: options.normalized && !beforeHook,
         skipValidation: options.skipValidation,
         estimatedBytes: options.estimatedBytes,
@@ -846,9 +901,16 @@ export class EditorSession extends EventTarget {
       this.lastChangedLineIndexes = changedLineIndexes;
       this.lastNoteChangeHints = options.noteChangeHints ?? [];
       this.lastEditBeatRange = beatRange ?? null;
-      const placement = remote
-        ? { notes: 0, events: 0 }
-        : placedObjectsBetween(previousObjectIds, chartObjectIds(this.chart));
+      const placement =
+        placementHint ??
+        (previousObjectIds
+          ? placedObjectsBetween(
+              previousObjectIds,
+              beforeHook
+                ? chartObjectIds(this.chart)
+                : changedLineObjectIds(this.chart, changedLineIndexes),
+            )
+          : { notes: 0, events: 0 });
       if (options.afterSelection) {
         restoreSelection(this, options.afterSelection);
       }
@@ -907,11 +969,20 @@ export class EditorSession extends EventTarget {
       typeof lines[lineIndex].numOfNotes === "number"
         ? lines[lineIndex].numOfNotes
         : countScoringNotes(existing);
-    lines[lineIndex] = {
-      ...lines[lineIndex],
-      notes: [...existing, ...inserted],
+    const previousLine = lines[lineIndex];
+    const nextNotes = [...existing, ...inserted];
+    const nextLine = {
+      ...previousLine,
+      notes: nextNotes,
       numOfNotes: existingScoring + countScoringNotes(inserted),
     };
+    // Placement appends to the same line. Carry the previous digest seeds onto
+    // the new objects so the fingerprint reuses unchanged note and event hashes
+    // instead of walking a dense line again.
+    inheritValueContentFingerprint(previousLine, nextLine);
+    inheritValueContentFingerprint(existing, nextNotes);
+    markValueContentFingerprintDirty(nextNotes);
+    lines[lineIndex] = nextLine;
     const selected = inserted.map((note, offset) => first + offset);
     if (this.multiLineActive && this.multiLineMode === "notes") {
       this.multiLineSelection.clear();
@@ -929,6 +1000,7 @@ export class EditorSession extends EventTarget {
       {},
       {
         normalized: true,
+        placement: { notes: inserted.length, events: 0 },
       },
     );
     return true;
@@ -1111,12 +1183,18 @@ export class EditorSession extends EventTarget {
     }
     const current = this.selectionState();
     const source = this.chart;
+    // A paged document mutates its facade in place, so keep the line references
+    // from before the move; comparing the facade itself would report no changes.
+    const sourceLines = [...(source.judgeLineList ?? [])];
     const from = direction === "undo" ? command.afterSelection : command.beforeSelection;
     const to = direction === "undo" ? command.beforeSelection : command.afterSelection;
     if (!this.history[direction]()) {
       return false;
     }
-    this.lastChangedLineIndexes = this.changedLineIndexes(source, this.chart);
+    this.lastChangedLineIndexes = this.changedLineIndexes(
+      { ...source, judgeLineList: sourceLines },
+      this.chart,
+    );
     this.lastNoteChangeHints = [];
     const placement = this.placementStatsByHistoryId.get(command.id) ?? { notes: 0, events: 0 };
     this.localPlacementStats = addPlacementStats(

@@ -598,10 +598,14 @@ export class LineRuntime {
     const next = line.notes ?? [];
     this.line = line;
     this.factor = line.bpmfactor ?? 1;
+    let appendedHold = false;
     for (let index = previous.length; index < next.length; index++) {
       const note = next[index];
       if (!isOrderedBeatRange(note.startTime, note.endTime)) {
         continue;
+      }
+      if (note.type === 2) {
+        appendedHold = true;
       }
       const start = this.tempo.seconds(note.startTime, this.factor);
       const end = this.tempo.seconds(note.endTime, this.factor);
@@ -632,7 +636,11 @@ export class LineRuntime {
       }
       this.hitTimes.splice(low, 0, entry);
     }
-    this.holdIndex.replaceItems(this.notes.filter((entry) => entry.note.type === 2));
+    if (appendedHold) {
+      // The existing hold directory is already correct unless a new hold
+      // arrived; taps and flicks must not force a full-line filter on every key.
+      this.holdIndex.replaceItems(this.notes.filter((entry) => entry.note.type === 2));
+    }
     this.visibility.replaceItems(this.notes);
     this.visibilityCandidateCache = undefined;
     this.visibilityOrderCache = undefined;
@@ -1563,7 +1571,45 @@ export class SceneRuntime {
   ): void {
     const nextColor = normalizedColor(defaultLineColor);
     const colorChanged = !colorsEqual(this.defaultLineColor, nextColor);
-    if (this.chart === chart && this.tempo === tempo && !colorChanged) {
+    const sourceLines = chart.judgeLineList ?? [];
+    // `orderLines` is the line snapshot the previous compile consumed. A paged
+    // document mutates its facade chart in place, so comparing its own line
+    // list cannot reveal an edit; the snapshot can.
+    const previousLines = this.orderLines;
+    const sameLineCount = sourceLines.length === previousLines.length;
+    const patchIndexes: number[] = [];
+    if (sameLineCount) {
+      for (let index = 0; index < sourceLines.length; index += 1) {
+        if (sourceLines[index] !== previousLines[index]) {
+          patchIndexes.push(index);
+        }
+      }
+    }
+    const hinted = new Set(patchIndexes);
+    for (const index of changedLineIndexes ?? []) {
+      if (index >= 0 && index < sourceLines.length && !hinted.has(index)) {
+        hinted.add(index);
+        patchIndexes.push(index);
+      }
+    }
+    for (const hint of noteChangeHints ?? []) {
+      if (
+        hint.lineIndex >= 0 &&
+        hint.lineIndex < sourceLines.length &&
+        !hinted.has(hint.lineIndex)
+      ) {
+        hinted.add(hint.lineIndex);
+        patchIndexes.push(hint.lineIndex);
+      }
+    }
+    patchIndexes.sort((left, right) => left - right);
+    if (
+      this.chart === chart &&
+      this.tempo === tempo &&
+      !colorChanged &&
+      sameLineCount &&
+      patchIndexes.length === 0
+    ) {
       return;
     }
     const tempoChanged = this.tempo !== tempo;
@@ -1575,26 +1621,16 @@ export class SceneRuntime {
     }
     this.defaultLineColor = nextColor;
     this.chart = chart;
-    this.sampledSeconds = Number.NaN;
-    this.sampledStates = null;
-    const sourceLines = chart.judgeLineList ?? [];
-    this.parentIndexes = Int32Array.from(sourceLines, (line) => {
-      const parent = lineParentIndex(line.father);
-      return Number.isInteger(parent) ? parent : -1;
-    });
-    this.hasParentLines = this.parentIndexes.some((parent) => parent >= 0);
+    const canPatch =
+      !tempoChanged &&
+      !colorChanged &&
+      previousChart !== null &&
+      sameLineCount &&
+      this.lines.length === sourceLines.length;
     const previousById = this.runtimeById;
     const noteHintsByLine = new Map(
       (noteChangeHints ?? []).map((hint) => [hint.lineIndex, hint] as const),
     );
-    const canPatch =
-      !tempoChanged &&
-      !colorChanged &&
-      changedLineIndexes !== undefined &&
-      previousChart !== null &&
-      sourceLines.length === (previousChart.judgeLineList ?? []).length &&
-      this.lines.length === sourceLines.length &&
-      changedLineIndexes.every((index) => index >= 0 && index < sourceLines.length);
     const compileLine = (
       line: (typeof sourceLines)[number],
       noteHint?: NoteChangeHint,
@@ -1627,10 +1663,96 @@ export class SceneRuntime {
       }
       return runtime;
     };
+    const refreshParents = (): void => {
+      this.parentIndexes = Int32Array.from(sourceLines, (line) => {
+        const parent = lineParentIndex(line.father);
+        return Number.isInteger(parent) ? parent : -1;
+      });
+      this.hasParentLines = this.parentIndexes.some((parent) => parent >= 0);
+    };
     if (canPatch) {
+      // A new line object with the same id, parent, rotation inheritance, and
+      // z-order leaves the line graph alone. A note-only edit also leaves the
+      // sampled transform untouched; any other line-local source edit (an event
+      // or control placement) rebuilds just that runtime and invalidates its
+      // samples. Neither path rebuilds the parent topology or line order.
+      let lineLocal = patchIndexes.length > 0;
+      let noteOnly = true;
+      for (const index of patchIndexes) {
+        const previousLine = previousLines[index];
+        const nextLine = sourceLines[index];
+        if (!previousLine || !nextLine || previousLine === nextLine) {
+          continue;
+        }
+        if (
+          typeof previousLine.id !== "string" ||
+          previousLine.id !== nextLine.id ||
+          previousLine.father !== nextLine.father ||
+          previousLine.rotateWithFather !== nextLine.rotateWithFather ||
+          Number(previousLine.zOrder ?? 0) !== Number(nextLine.zOrder ?? 0)
+        ) {
+          lineLocal = false;
+          break;
+        }
+        if (!sameLineSources(previousLine, nextLine)) {
+          noteOnly = false;
+        }
+      }
+      if (lineLocal) {
+        let noteOrderChanged = false;
+        let staticnessChanged = false;
+        for (const index of patchIndexes) {
+          const previousLine = previousLines[index];
+          const nextLine = sourceLines[index];
+          if (!nextLine || previousLine === nextLine) {
+            continue;
+          }
+          const previousRuntime = this.lines[index];
+          const hadNotes = (previousRuntime?.notes.length ?? 0) > 0;
+          if (previousLine) {
+            this.cache.delete(previousLine);
+          }
+          const runtime = compileLine(nextLine, noteHintsByLine.get(index));
+          this.lines[index] = runtime as unknown as LineRuntime;
+          this.orderLines[index] = nextLine;
+          if ((runtime?.notes.length ?? 0) > 0 !== hadNotes) {
+            noteOrderChanged = true;
+          }
+          if (
+            !noteOnly &&
+            (runtime?.staticState ?? true) !== (previousRuntime?.staticState ?? true)
+          ) {
+            staticnessChanged = true;
+          }
+        }
+        if (noteOrderChanged) {
+          this.noteOrder = this.order.filter((index) => (this.lines[index]?.notes.length ?? 0) > 0);
+        }
+        if (noteOnly) {
+          return;
+        }
+        // Sampled transform inputs changed. A fresh order identity invalidates
+        // the retained line and guide caches; clearing the changed local states
+        // makes the version checks resample them and their descendants.
+        this.sortedOrder = [...this.sortedOrder];
+        this.order = this.sortedOrder;
+        if (staticnessChanged) {
+          this.refreshWorldStaticStates(sourceLines);
+        }
+        this.sampledSeconds = Number.NaN;
+        this.sampledStates = null;
+        for (const index of patchIndexes) {
+          this.localStates[index] = undefined;
+          this.localStateVersions[index] = (this.localStateVersions[index] + 1) >>> 0;
+          this.worldStateCache[index] = undefined;
+        }
+        return;
+      }
+      this.sampledSeconds = Number.NaN;
+      this.sampledStates = null;
+      refreshParents();
       this.runtimeById = new Map(previousById);
-      const previousLines = previousChart.judgeLineList ?? [];
-      for (const index of changedLineIndexes) {
+      for (const index of patchIndexes) {
         const previousLine = previousLines[index];
         const nextLine = sourceLines[index];
         if (previousLine && previousLine !== nextLine) {
@@ -1645,18 +1767,20 @@ export class SceneRuntime {
         ) as unknown as LineRuntime;
       }
     } else {
+      this.sampledSeconds = Number.NaN;
+      this.sampledStates = null;
+      refreshParents();
       this.runtimeById = new Map();
       this.lines = sourceLines.map(
         (line, index) => compileLine(line, noteHintsByLine.get(index)) as unknown as LineRuntime,
       );
     }
-    this.allStatesStatic = this.lines.every((runtime) => !runtime || runtime.staticState);
     if (canPatch && this.localStates.length === this.lines.length) {
       // A copy-on-write edit replaces only the listed line runtimes. Keep the
       // reusable local state objects for every untouched line; dropping the
       // whole array makes the next frame allocate one state per dynamic line
       // and turns a one-note CRUD edit into a GC-sized playback hitch.
-      for (const index of changedLineIndexes) {
+      for (const index of patchIndexes) {
         this.localStates[index] = undefined;
       }
     } else {
@@ -1668,6 +1792,33 @@ export class SceneRuntime {
     this.worldStateCache = new Array(this.lines.length);
     this.localStateVersions = new Uint32Array(this.lines.length);
     this.worldStateVersions = new Uint32Array(this.lines.length);
+    this.refreshWorldStaticStates(sourceLines);
+    const sameOrder =
+      sourceLines.length === this.orderLines.length &&
+      sourceLines.every(
+        (line, index) =>
+          line === this.orderLines[index] && Number(line.zOrder ?? 0) === this.orderValues[index],
+      );
+    if (!sameOrder) {
+      this.orderLines = [...sourceLines];
+      this.orderValues = Float64Array.from(sourceLines, (line) => Number(line.zOrder ?? 0));
+      this.sortedOrder = sourceLines
+        .map((unused, index) => index)
+        .sort((left, right) => this.orderValues[left] - this.orderValues[right] || left - right);
+    }
+    this.order = this.sortedOrder;
+    this.noteOrder = this.order.filter((index) => (this.lines[index]?.notes.length ?? 0) > 0);
+  }
+
+  /**
+   * Recompute parent order and world-state staticness from the current runtimes.
+   *
+   * `parentIndexes` must already describe the current line list. This is the
+   * shared tail of a full compile and the staticness refresh after a line-local
+   * edit; it does not touch sample caches.
+   */
+  private refreshWorldStaticStates(sourceLines: readonly JudgeLine[]): void {
+    this.allStatesStatic = this.lines.every((runtime) => !runtime || runtime.staticState);
     const parentOrder = parentSampleOrder(sourceLines);
     this.parentOrder = parentOrder;
     this.worldStateStatic = new Uint8Array(this.lines.length);
@@ -1694,21 +1845,6 @@ export class SceneRuntime {
         : sourceLines
             .map((unused, index) => index)
             .filter((index) => this.worldStateStatic[index] !== 1);
-    const sameOrder =
-      sourceLines.length === this.orderLines.length &&
-      sourceLines.every(
-        (line, index) =>
-          line === this.orderLines[index] && Number(line.zOrder ?? 0) === this.orderValues[index],
-      );
-    if (!sameOrder) {
-      this.orderLines = [...sourceLines];
-      this.orderValues = Float64Array.from(sourceLines, (line) => Number(line.zOrder ?? 0));
-      this.sortedOrder = sourceLines
-        .map((unused, index) => index)
-        .sort((left, right) => this.orderValues[left] - this.orderValues[right] || left - right);
-    }
-    this.order = this.sortedOrder;
-    this.noteOrder = this.order.filter((index) => (this.lines[index]?.notes.length ?? 0) > 0);
   }
 
   /**

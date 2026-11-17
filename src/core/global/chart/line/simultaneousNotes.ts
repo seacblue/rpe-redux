@@ -45,10 +45,27 @@ interface CachedLineTimes<T extends JudgeLineNote> {
   entries: Array<[T, number]>;
 }
 
+/** True when `next` keeps every previous note by identity as its prefix. */
+function appendsTo<T extends JudgeLineNote>(
+  previous: readonly T[] | undefined,
+  next: readonly T[] | undefined,
+): boolean {
+  if (!previous || !next || next.length < previous.length) {
+    return false;
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index] !== next[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Incremental per-line cache for simultaneous-note detection. */
 export class SimultaneousNotesCache<T extends JudgeLineNote = JudgeLineNote> {
   private tempo: TempoSource | null = null;
-  private readonly lines = new Map<object, CachedLineTimes<T>>();
+  /** Stable line id when present, because an edit replaces the line object. */
+  private readonly lines = new Map<object | string, CachedLineTimes<T>>();
   private readonly groups = new Map<number, Map<T, number>>();
   private readonly counts = new Map<number, number>();
   private readonly simultaneous = new Set<T>();
@@ -69,22 +86,43 @@ export class SimultaneousNotesCache<T extends JudgeLineNote = JudgeLineNote> {
    * the tempo source clears the cache.
    */
   update(
-    chart: { judgeLineList?: readonly { notes?: readonly T[]; bpmfactor?: number }[] },
+    chart: {
+      judgeLineList?: readonly {
+        id?: string;
+        notes?: readonly T[];
+        bpmfactor?: number;
+      }[];
+    },
     tempo: TempoSource,
   ): Set<T> {
     if (this.tempo !== tempo) {
       this.clear();
       this.tempo = tempo;
     }
-    const seen = new Set<object>();
+    const seen = new Set<object | string>();
     for (const line of chart.judgeLineList ?? []) {
       if (typeof line !== "object" || line === null) {
         continue;
       }
-      seen.add(line);
+      const key = typeof line.id === "string" ? line.id : line;
+      seen.add(key);
       const factor = line.bpmfactor ?? 1;
-      const cached = this.lines.get(line);
+      const cached = this.lines.get(key);
       if (cached && cached.notes === line.notes && cached.factor === factor) {
+        continue;
+      }
+      if (cached && cached.factor === factor && appendsTo(cached.notes, line.notes)) {
+        // Placement appends to the same line. The cached note times are still
+        // valid and only the new notes need a tempo lookup and a group update.
+        const notes = line.notes ?? [];
+        const entries = cached.entries;
+        for (let index = cached.notes?.length ?? 0; index < notes.length; index += 1) {
+          const note = notes[index];
+          const time = Math.round(tempo.seconds(note.startTime, factor) * 1000000);
+          entries.push([note, time]);
+          this.add(note, time);
+        }
+        this.lines.set(key, { notes: line.notes, factor, entries });
         continue;
       }
       if (cached) {
@@ -96,12 +134,12 @@ export class SimultaneousNotesCache<T extends JudgeLineNote = JudgeLineNote> {
         entries.push([note, time]);
         this.add(note, time);
       }
-      this.lines.set(line, { notes: line.notes, factor, entries });
+      this.lines.set(key, { notes: line.notes, factor, entries });
     }
-    for (const [line, cached] of this.lines) {
-      if (!seen.has(line)) {
+    for (const [key, cached] of this.lines) {
+      if (!seen.has(key)) {
         this.remove(cached.entries);
-        this.lines.delete(line);
+        this.lines.delete(key);
       }
     }
     return this.simultaneous;

@@ -105,8 +105,8 @@ export function TimelineThumbnailView() {
     preview.backgroundEnabled = readEditorDisplaySettings().preview.backgroundEnabled;
     const colors = snapshot.resources.colors();
     preview.setDefaultColors(colors);
-    const { chart, tempo, seconds, lineIndex } = snapshot.scene;
-    preview.draw(chart, tempo, seconds, lineIndex);
+    const { chart, tempo, seconds, lineIndex, documentRevision } = snapshot.scene;
+    preview.draw(chart, tempo, seconds, lineIndex, undefined, { documentRevision });
   }, [snapshot]);
 
   const position = previewPosition(anchor);

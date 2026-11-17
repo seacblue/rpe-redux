@@ -56,10 +56,36 @@ export interface IntegralEntry<T> extends TimedEvent<T> {
   prefixEnd: number;
 }
 
+/** Grow a compiled table by appending the new tail values. */
+function appendFloat64(source: Float64Array, values: readonly number[]): Float64Array {
+  const next = new Float64Array(source.length + values.length);
+  next.set(source);
+  next.set(values, source.length);
+  return next;
+}
+
+/** Grow a compiled integer table by appending the new tail values. */
+function appendInt16(source: Int16Array, values: readonly number[]): Int16Array {
+  const next = new Int16Array(source.length + values.length);
+  next.set(source);
+  next.set(values, source.length);
+  return next;
+}
+
+/** Grow a compiled flag table by appending the new tail values. */
+function appendUint8(source: Uint8Array, values: readonly number[]): Uint8Array {
+  const next = new Uint8Array(source.length + values.length);
+  next.set(source);
+  next.set(values, source.length);
+  return next;
+}
+
 /** A compiled event track sampled at chart time in seconds. */
 export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   declare fallback: LineEventValue;
   declare integerEndpoints: boolean;
+  /** Raw event list this track was compiled from; compacted events stay here. */
+  declare rawSources: readonly T[];
   declare sources: T[];
   declare starts: Float64Array;
   declare ends: Float64Array;
@@ -93,6 +119,7 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   ) {
     this.fallback = fallback;
     this.integerEndpoints = integerEndpoints;
+    this.rawSources = events ?? [];
     this.tempo = tempo;
     this.factor = factor;
     const ordered = (events ?? [])
@@ -170,6 +197,21 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
         return this;
       }
     }
+    if (sources.length > this.rawSources.length) {
+      let prefix = true;
+      for (let index = 0; index < this.rawSources.length; index += 1) {
+        if (sources[index] !== this.rawSources[index]) {
+          prefix = false;
+          break;
+        }
+      }
+      if (prefix) {
+        const appended = this.appendRawSources(sources);
+        if (appended) {
+          return appended;
+        }
+      }
+    }
     if (sources.length <= this.sources.length) {
       const indices: number[] = [];
       let previous = 0;
@@ -191,6 +233,7 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       if (indices.length === sources.length || sources.length === 0) {
         const next = Object.create(EventTrack.prototype) as EventTrack<T>;
         Object.assign(next, this);
+        next.rawSources = sources;
         next.sources = [...sources];
         next.starts = Float64Array.from(indices, (index) => this.starts[index]);
         next.ends = Float64Array.from(indices, (index) => this.ends[index]);
@@ -227,6 +270,132 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       this.fallback,
       this.integerEndpoints,
     );
+  }
+
+  /**
+   * Compile new tail events onto the existing tables.
+   *
+   * Returns null when the append would change compaction or sort order, so the
+   * caller can fall back to a full rebuild. An append that stays ordered after
+   * the compiled tail only needs new typed-array slots, which is what event
+   * placement does on a dense line.
+   */
+  private appendRawSources(sources: readonly T[]): EventTrack<T> | null {
+    const lastCount = this.sources.length;
+    let previous = lastCount ? this.sources[lastCount - 1] : undefined;
+    let previousEnd = lastCount ? this.ends[lastCount - 1] : Number.NEGATIVE_INFINITY;
+    let lastStart = lastCount ? this.starts[lastCount - 1] : Number.NEGATIVE_INFINITY;
+    const accepted: T[] = [];
+    const starts: number[] = [];
+    const ends: number[] = [];
+    const inverseDurations: number[] = [];
+    const startValues: number[] = [];
+    const endValues: number[] = [];
+    const normalizedStartValues: number[] = [];
+    const normalizedEndValues: number[] = [];
+    const easingTypes: number[] = [];
+    const easingLefts: number[] = [];
+    const easingRights: number[] = [];
+    const easingBases: number[] = [];
+    const easingRanges: number[] = [];
+    const easingRangeValid: number[] = [];
+    const bezierFlags: number[] = [];
+    const linearFlags: number[] = [];
+    let numericOnly = this.numericOnly;
+    let linearNumeric = this.linearNumeric;
+    for (let index = this.rawSources.length; index < sources.length; index += 1) {
+      const event = sources[index];
+      if (!isOrderedBeatRange(event.startTime, event.endTime)) {
+        return null;
+      }
+      const start = this.tempo.seconds(event.startTime, this.factor);
+      const end = this.tempo.seconds(event.endTime, this.factor);
+      if (start < lastStart) {
+        return null;
+      }
+      const flat =
+        !event.trajectory && typeof event.start === "number" && event.start === event.end;
+      const previousNumeric =
+        previous !== undefined && !previous.trajectory && typeof previous.end === "number";
+      const repeated =
+        flat &&
+        previous !== undefined &&
+        !previous.trajectory &&
+        typeof previous.start === "number" &&
+        previous.start === previous.end &&
+        previous.start === event.start;
+      const trailingPlateau =
+        flat &&
+        previousNumeric &&
+        previous !== undefined &&
+        previous.end === event.start &&
+        (previous.start === previous.end || previousEnd <= start);
+      if (repeated || trailingPlateau) {
+        return null;
+      }
+      const easingType = event.easingType ?? 1;
+      const easing = easingParameters(easingType, event.easingLeft ?? 0, event.easingRight ?? 1);
+      const width = (event.easingRight ?? 1) - (event.easingLeft ?? 0);
+      numericOnly =
+        numericOnly &&
+        !event.trajectory &&
+        typeof event.start === "number" &&
+        typeof event.end === "number";
+      linearNumeric = linearNumeric && easingType === 1 && !event.bezier;
+      accepted.push(event);
+      starts.push(start);
+      ends.push(end);
+      inverseDurations.push(end > start ? 1 / (end - start) : 0);
+      const startValue = Number(event.start);
+      const endValue = Number(event.end);
+      startValues.push(startValue);
+      endValues.push(endValue);
+      normalizedStartValues.push(this.integerEndpoints ? channelInteger(startValue) : startValue);
+      normalizedEndValues.push(this.integerEndpoints ? channelInteger(endValue) : endValue);
+      easingTypes.push(easingType);
+      easingLefts.push(event.easingLeft ?? 0);
+      easingRights.push(event.easingRight ?? 1);
+      easingBases.push(easing.base);
+      easingRanges.push(easing.range);
+      easingRangeValid.push(
+        Number.isFinite(easing.range) && Math.abs(easing.range) >= 1e-15 && Math.abs(width) >= 1e-15
+          ? 1
+          : 0,
+      );
+      bezierFlags.push(event.bezier ? 1 : 0);
+      linearFlags.push(easingType === 1 ? 1 : 0);
+      previous = event;
+      previousEnd = end;
+      lastStart = start;
+    }
+    if (!accepted.length) {
+      return null;
+    }
+    const next = Object.create(EventTrack.prototype) as EventTrack<T>;
+    Object.assign(next, this);
+    next.rawSources = sources;
+    next.sources = [...this.sources, ...accepted];
+    next.starts = appendFloat64(this.starts, starts);
+    next.ends = appendFloat64(this.ends, ends);
+    next.inverseDurations = appendFloat64(this.inverseDurations, inverseDurations);
+    next.startValues = appendFloat64(this.startValues, startValues);
+    next.endValues = appendFloat64(this.endValues, endValues);
+    next.normalizedStartValues = appendFloat64(this.normalizedStartValues, normalizedStartValues);
+    next.normalizedEndValues = appendFloat64(this.normalizedEndValues, normalizedEndValues);
+    next.easingTypes = appendInt16(this.easingTypes, easingTypes);
+    next.easingLefts = appendFloat64(this.easingLefts, easingLefts);
+    next.easingRights = appendFloat64(this.easingRights, easingRights);
+    next.easingBases = appendFloat64(this.easingBases, easingBases);
+    next.easingRanges = appendFloat64(this.easingRanges, easingRanges);
+    next.easingRangeValid = appendUint8(this.easingRangeValid, easingRangeValid);
+    next.bezierFlags = appendUint8(this.bezierFlags, bezierFlags);
+    next.linearFlags = appendUint8(this.linearFlags, linearFlags);
+    next.numericOnly = numericOnly;
+    next.linearNumeric = linearNumeric;
+    next.cachedValueEntry = null;
+    next.cachedValueIndex = 0;
+    next.cachedValueSeconds = Number.NaN;
+    return next;
   }
 
   /** Iterate the events active at `seconds`, in start order. */

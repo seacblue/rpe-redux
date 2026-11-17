@@ -275,6 +275,16 @@ export class ChartDocument {
     return this.slots[index]?.summary ?? emptySummary(index);
   }
 
+  /**
+   * Monotonic revision of the facade's header and line content.
+   *
+   * Paging a placeholder into a materialized line changes what a renderer can
+   * sample without changing the facade chart's identity, so it bumps too.
+   */
+  get contentRevision(): number {
+    return this.revision;
+  }
+
   /** True once every clean line has its semantic content digest. */
   get fingerprintReady(): boolean {
     return this.fingerprintReadyState;
@@ -851,6 +861,7 @@ export class ChartDocument {
     slot.raw = raw ?? slot.raw;
     slot.lastUsed = ++this.clock;
     this.lines[index] = line;
+    this.revision += 1;
     primeLineContentFingerprint(line, slot.summary.digest, slot.summary.childDigests, valueDigests);
     this.cachedBytes += raw?.length ?? 0;
   }

@@ -69,6 +69,29 @@ test("reuses shader effect indexes for a note-only chart revision", () => {
   assert.equal(runtime.active(0.5)[0]?.shader, "rain");
 });
 
+test("a document revision recompiles effects on the same chart object", () => {
+  const runtime = new ShaderRuntime(
+    () => {},
+    async () => null,
+  );
+  const layer = { bpmfactor: 1 };
+  const chart = {
+    META: {},
+    BPMList: [],
+    judgeLineList: [layer],
+    effects: [{ shader: "rain", line: 0, order: 1, start: [0, 0, 1], end: [1, 0, 1] }],
+  };
+  runtime.compile(chart, null, 1);
+  assert.equal(runtime.active(0.5)[0]?.shader, "rain");
+
+  chart.effects = [{ shader: "glitch", line: 0, order: 1, start: [0, 0, 1], end: [1, 0, 1] }];
+  runtime.compile(chart, null, 1);
+  assert.equal(runtime.active(0.5)[0]?.shader, "rain", "an unchanged revision is reused");
+
+  runtime.compile(chart, null, 2);
+  assert.equal(runtime.active(0.5)[0]?.shader, "glitch");
+});
+
 test("keeps Phira built-in preview references on the built-in path", () => {
   assert.equal(builtinShaderReference("/rain_pr.glsl"), true);
   assert.equal(shaderIdentity({ shader: "/rain_pr.glsl" }), "rain");

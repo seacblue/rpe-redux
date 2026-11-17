@@ -84,7 +84,10 @@ export function bindEditorPlayback(bindings: EditorPlaybackBindings): () => void
           seconds,
           session.lineIndex,
           selectionMapForSession(session),
-          { selectedLines: session.targetLineIndices },
+          {
+            selectedLines: session.targetLineIndices,
+            documentRevision: session.contentRevision,
+          },
         );
       } finally {
         preview.visible = visible;

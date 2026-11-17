@@ -206,6 +206,8 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           previewMarqueeActive: Boolean(runtime.timeline.gestures.previewMarquee),
           previewChart: viewChart,
           previewRevision: runtime.realtimePreview.invalidationRevision,
+          previewContentRevision:
+            viewChart === viewSession.chart ? viewSession.contentRevision : undefined,
           // Resource-backed timeline layers (skins and overview density) can
           // change without changing the chart revision. The HUD cadence is a
           // bounded refresh path for those asynchronous visual changes.
@@ -279,6 +281,10 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                       : undefined,
                   noteChangeHints:
                     viewChart === viewSession.chart ? viewSession.lastNoteChangeHints : undefined,
+                  // A paged document keeps the same facade chart object across
+                  // edits, so the preview needs the content revision to repaint.
+                  documentRevision:
+                    viewChart === viewSession.chart ? viewSession.contentRevision : undefined,
                 },
               );
               runtime.realtimePreview.visible = visible;

@@ -147,6 +147,7 @@ export function createTimelineOverview(options: {
         currentSeconds: options.chartSeconds(),
         offsetSeconds: options.offsetSeconds(),
         historyRevision: session.history.revision,
+        contentRevision: session.contentRevision,
         bpmFactor: session.line?.bpmfactor ?? 1,
         clipboardRange: clipboardBeatRange(session),
         pasteRange: session.lastPasteBeatRange,

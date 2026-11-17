@@ -39,7 +39,7 @@ import { PreviewBackground, type TextureImage } from "../render/background.ts";
 import { NoiseAreaRenderer } from "../render/noiseAreaRenderer.ts";
 import { detailedNoiseRendering } from "../../../../../../core/edit/state/noiseRendering.ts";
 import { createPreviewDisplay, type PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
-import type { Chart, JudgeLineNote } from "../../../../../../core/global/chart/chart.ts";
+import type { Chart, JudgeLine, JudgeLineNote } from "../../../../../../core/global/chart/chart.ts";
 import type { NoteEntry } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { SampledLineState } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { TempoSource } from "../../../../../../core/global/chart/timing/events.ts";
@@ -132,6 +132,13 @@ function sameRetainedLineBatchKey(
   );
 }
 
+/** One deferred paint with the chart-affecting options it was requested with. */
+interface PendingPreviewFrame extends PreviewFrameRequest {
+  readonly documentRevision?: number;
+  readonly changedLineIndexes?: readonly number[];
+  readonly noteChangeHints?: readonly NoteChangeHint[];
+}
+
 /** Per-call switches for one preview paint. */
 export interface PreviewDrawOptions {
   /** Build hit-test geometry only for an interaction or an explicit query. */
@@ -144,6 +151,11 @@ export interface PreviewDrawOptions {
   readonly changedLineIndexes?: readonly number[];
   /** Exact note deltas used to preserve line-local derived collections. */
   readonly noteChangeHints?: readonly NoteChangeHint[];
+  /**
+   * Content revision for a chart whose object identity stays stable across
+   * edits, such as a paged document facade. A change forces a scene recompile.
+   */
+  readonly documentRevision?: number;
 }
 
 /**
@@ -164,9 +176,13 @@ export class Preview {
   private drawRevision = 0;
   private invalidationVersion = 0;
   private lastDrawRequest: PreviewFrameRequest | null = null;
+  /** Document content revision the current scene was compiled from. */
+  private lastDocumentRevision: number | null = null;
+  /** Line snapshot the derived note collections were built from. */
+  private previewLineSources: readonly JudgeLine[] = [];
   private previewNoteSources: readonly (readonly JudgeLineNote[] | undefined)[] = [];
   private previewZOrder: number[] = [];
-  private pendingFrame: PreviewFrameRequest | null = null;
+  private pendingFrame: PendingPreviewFrame | null = null;
   private pendingFrameScheduled = false;
   private lastVisibleNoteCount = 0;
   /** Bumps whenever a paint can change the primary canvas pixels. */
@@ -238,6 +254,7 @@ export class Preview {
   private lineBatchChart: Chart | null = null;
   private lineBatchSkin: PreviewSkin | null | undefined;
   private lineBatchRevision: number | undefined;
+  private lineBatchContentRevision: number | null = null;
   private retainedLineBatchKey: RetainedLineBatchKey | null = null;
   declare guides: LineGuide[] | null;
   declare viewport: PreviewViewport | null;
@@ -298,6 +315,7 @@ export class Preview {
   /** Chart and source revision already handed to the shader precompiler. */
   private shaderPrewarmChart: Chart | null = null;
   private shaderPrewarmRevision = -1;
+  private shaderPrewarmContentRevision: number | undefined;
   private readonly guideBuffer: NonNullable<Preview["guides"]> = [];
   /**
    * Monotonic identity for guide geometry changes consumed by the overlay cache.
@@ -322,6 +340,7 @@ export class Preview {
     this.lineFrames.length = 0;
     this.lastFrame = null;
     this.staticGuideProjection = null;
+    this.lastDocumentRevision = null;
     this.scene.clear();
     this.chart = null;
     this.samplingFocus = null;
@@ -338,6 +357,7 @@ export class Preview {
     this.lineBatchChart = null;
     this.lineBatchSkin = undefined;
     this.lineBatchRevision = undefined;
+    this.lineBatchContentRevision = null;
     this.noteHitAreas.length = 0;
     this.selectedNotes = new Map();
     this.overlapHighlight = null;
@@ -346,6 +366,7 @@ export class Preview {
     this.visibleHoldBuckets.length = 0;
     this.sampledStates.length = 0;
     this.guideBuffer.length = 0;
+    this.previewLineSources = [];
     this.previewNoteSources = [];
     this.previewZOrder = [];
     this.pendingFrame = null;
@@ -361,6 +382,7 @@ export class Preview {
     }
     this.shaderPrewarmChart = null;
     this.shaderPrewarmRevision = -1;
+    this.shaderPrewarmContentRevision = undefined;
     this.noteBatch.clear();
     this.shaderRuntime.chart = null;
     this.shaderRuntime.effects = [];
@@ -456,14 +478,20 @@ export class Preview {
         this.shaderPipeline.retainSources([]);
         this.shaderPrewarmChart = null;
         this.shaderPrewarmRevision = -1;
+        this.shaderPrewarmContentRevision = undefined;
       }
       return;
     }
-    if (this.shaderPrewarmChart === chart && this.shaderPrewarmRevision === revision) {
+    if (
+      this.shaderPrewarmChart === chart &&
+      this.shaderPrewarmRevision === revision &&
+      this.shaderPrewarmContentRevision === (this.lastDocumentRevision ?? undefined)
+    ) {
       return;
     }
     this.shaderPrewarmChart = chart;
     this.shaderPrewarmRevision = revision;
+    this.shaderPrewarmContentRevision = this.lastDocumentRevision ?? undefined;
     const entries: ShaderProgramSource[] = [];
     const seen = new Set<string>();
     for (const effect of this.shaderRuntime.effects) {
@@ -744,7 +772,12 @@ export class Preview {
         pending.seconds,
         pending.selectedLine,
         pending.selectedNotes,
-        { selectedLines: this.selectedLines },
+        {
+          selectedLines: this.selectedLines,
+          changedLineIndexes: pending.changedLineIndexes,
+          noteChangeHints: pending.noteChangeHints,
+          documentRevision: pending.documentRevision,
+        },
       );
     };
     // Run the deferred paint in the task queue after the edit frame.
@@ -801,37 +834,57 @@ export class Preview {
   ): void {
     this.hitStateCache.clear();
     const sourceLines = chart.judgeLineList ?? [];
-    const canPatch =
-      changedLineIndexes !== undefined &&
+    // A paged document mutates its facade in place, and a materialized line or
+    // an undo arrives without a reliable change hint. Compare the line snapshot
+    // the derived collections were built from instead of trusting the hint.
+    const sameShape =
+      sourceLines.length === this.previewLineSources.length &&
       sourceLines.length === this.previewNoteSources.length &&
       sourceLines.length === this.previewZOrder.length;
-    const noteSources = canPatch
+    const changed = new Set<number>();
+    if (sameShape) {
+      for (let index = 0; index < sourceLines.length; index += 1) {
+        if (sourceLines[index] !== this.previewLineSources[index]) {
+          changed.add(index);
+        }
+      }
+    }
+    for (const index of changedLineIndexes ?? []) {
+      if (index >= 0 && index < sourceLines.length) {
+        changed.add(index);
+      }
+    }
+    for (const hint of noteChangeHints ?? []) {
+      if (hint.lineIndex >= 0 && hint.lineIndex < sourceLines.length) {
+        changed.add(hint.lineIndex);
+      }
+    }
+    const patchIndexes = sameShape ? [...changed].sort((left, right) => left - right) : [];
+    const noteSources = sameShape
       ? [...this.previewNoteSources]
       : sourceLines.map((line) => line.notes);
-    const zOrder = canPatch
+    const zOrder = sameShape
       ? [...this.previewZOrder]
       : sourceLines.map((line) => Number(line.zOrder ?? 0));
-    if (canPatch) {
-      for (const index of changedLineIndexes) {
-        const line = sourceLines[index];
-        if (line) {
-          noteSources[index] = line.notes;
-          zOrder[index] = Number(line.zOrder ?? 0);
-        }
+    for (const index of patchIndexes) {
+      const line = sourceLines[index];
+      if (line) {
+        noteSources[index] = line.notes;
+        zOrder[index] = Number(line.zOrder ?? 0);
       }
     }
     const notesSame =
       !tempoChanged &&
       sourceLines.length === this.previewNoteSources.length &&
-      (canPatch
-        ? changedLineIndexes.every(
+      (sameShape
+        ? patchIndexes.every(
             (index) => sourceLines[index]?.notes === this.previewNoteSources[index],
           )
         : sourceLines.every((line, index) => line.notes === this.previewNoteSources[index]));
     const orderSame =
       sourceLines.length === this.previewZOrder.length &&
-      (canPatch
-        ? changedLineIndexes.every(
+      (sameShape
+        ? patchIndexes.every(
             (index) => Number(sourceLines[index]?.zOrder ?? 0) === this.previewZOrder[index],
           )
         : sourceLines.every(
@@ -841,9 +894,9 @@ export class Preview {
       (noteChangeHints ?? []).map((hint) => [hint.lineIndex, hint] as const),
     );
     const visualNoteArraysOnly =
-      canPatch &&
-      changedLineIndexes.length > 0 &&
-      changedLineIndexes.every((index) => {
+      sameShape &&
+      patchIndexes.length > 0 &&
+      patchIndexes.every((index) => {
         const source = sourceLines[index]?.notes;
         return (
           source === this.previewNoteSources[index] || hintsByLine.get(index)?.kind === "visual"
@@ -856,6 +909,7 @@ export class Preview {
     if (!orderSame) {
       this.passes = linePasses(sourceLines, this.scene.order);
     }
+    this.previewLineSources = [...sourceLines];
     this.previewNoteSources = noteSources;
     this.previewZOrder = zOrder;
   }
@@ -866,13 +920,14 @@ export class Preview {
    * Custom textures and text lines keep the Canvas path so their relative paint
    * order is unchanged. The answer only changes with the chart or skin bitmap.
    */
-  private updateLineBatch(chart: Chart): void {
+  private updateLineBatch(chart: Chart, contentRevision: number | null): void {
     const skin = this.skin ?? null;
     const revision = skin?.textureRevision;
     if (
       this.lineBatchChart === chart &&
       this.lineBatchSkin === skin &&
-      this.lineBatchRevision === revision
+      this.lineBatchRevision === revision &&
+      this.lineBatchContentRevision === contentRevision
     ) {
       return;
     }
@@ -884,11 +939,13 @@ export class Preview {
       this.lineBatchChart = null;
       this.lineBatchSkin = undefined;
       this.lineBatchRevision = undefined;
+      this.lineBatchContentRevision = null;
       return;
     }
     this.lineBatchChart = chart;
     this.lineBatchSkin = skin;
     this.lineBatchRevision = revision;
+    this.lineBatchContentRevision = contentRevision;
     const lines = chart.judgeLineList ?? [];
     this.lineBatchable = lines.every(
       (line) =>
@@ -1212,7 +1269,10 @@ export class Preview {
     }
     const drawStarted = performance.now();
     const previousTempo = this.scene.tempo;
-    const chartChanged = this.scene.chart !== chart || previousTempo !== tempo;
+    const revisionChanged =
+      options.documentRevision !== undefined &&
+      this.lastDocumentRevision !== options.documentRevision;
+    const chartChanged = this.scene.chart !== chart || previousTempo !== tempo || revisionChanged;
     const tempoChanged = previousTempo !== tempo;
     const lineColorChanged =
       this.scene.defaultLineColor.length !== this.defaultLineColor.length ||
@@ -1258,7 +1318,16 @@ export class Preview {
     const heavyFrame = chartChanged || this.lastVisibleNoteCount > 400;
     if (options.deferHeavyFrame && heavyFrame && !collectGeometry && this.lastFrame) {
       // Leave `lastDrawRequest` untouched so the scheduled paint is not skipped as reusable.
-      this.pendingFrame = { chart, tempo, seconds, selectedLine, selectedNotes };
+      this.pendingFrame = {
+        chart,
+        tempo,
+        seconds,
+        selectedLine,
+        selectedNotes,
+        documentRevision: options.documentRevision,
+        changedLineIndexes: options.changedLineIndexes,
+        noteChangeHints: options.noteChangeHints,
+      };
       this.schedulePendingFrame();
       return;
     }
@@ -1286,8 +1355,11 @@ export class Preview {
     this.pendingFrame = null;
     this.drawCollectGeometry = collectGeometry;
     this.lastDrawRequest = { chart, tempo, seconds, selectedLine, selectedNotes };
+    if (options.documentRevision !== undefined) {
+      this.lastDocumentRevision = options.documentRevision;
+    }
     this.chart = chart;
-    this.updateLineBatch(chart);
+    this.updateLineBatch(chart, options.documentRevision ?? null);
     let sceneCompileMs = 0;
     let sceneCollectionsMs = 0;
     let shaderCompileMs = 0;
@@ -1318,7 +1390,7 @@ export class Preview {
     // linking synchronously while the transport is playing.
     if (this.applyShaders) {
       const started = performance.now();
-      this.shaderRuntime.compile(chart, tempo);
+      this.shaderRuntime.compile(chart, tempo, options.documentRevision);
       shaderCompileMs = performance.now() - started;
     }
     const prewarmStarted = performance.now();

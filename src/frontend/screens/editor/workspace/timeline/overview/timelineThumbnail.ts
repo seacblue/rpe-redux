@@ -24,7 +24,14 @@ export interface TimelineThumbnailAnchor {
 }
 
 export interface TimelineThumbnailRequest {
-  scene: { chart: Chart; tempo: TempoSource; seconds: number; lineIndex: number };
+  scene: {
+    chart: Chart;
+    tempo: TempoSource;
+    seconds: number;
+    lineIndex: number;
+    /** Document content revision, so paged facade edits repaint the preview. */
+    documentRevision: number;
+  };
   anchor: TimelineThumbnailAnchor;
 }
 

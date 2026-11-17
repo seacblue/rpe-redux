@@ -47,6 +47,7 @@ export function insertEventAt(
   const events = eventListAt(session, lineIndex, type, eventLayer);
   const insertedEvent = { ...event, id: createChartObjectId() } as JudgeLineEvent;
   const updates = new Map<string, JudgeLineEvent[]>([[type, [...events, insertedEvent]]]);
+  let placedEvents = 1;
   const counterpartType = xyCounterpartType(type);
   if (counterpartType && globalXYBindingEnabled()) {
     const counterpart = createXYCounterpart(
@@ -59,6 +60,7 @@ export function insertEventAt(
     if (counterpart) {
       const counterpartEvents = eventListAt(session, lineIndex, counterpartType, eventLayer);
       updates.set(counterpartType, [...counterpartEvents, counterpart]);
+      placedEvents += 1;
     }
   }
   const chart = chartWithEventLists(session.chart, lineIndex, eventLayer, updates);
@@ -73,7 +75,16 @@ export function insertEventAt(
   } else {
     session.eventSelection = new Set([key]);
   }
-  session.commitChart(t("editor.commands.eventCommands.commitAddEvent"), chart, beforeSelection);
+  session.commitChart(
+    t("editor.commands.eventCommands.commitAddEvent"),
+    chart,
+    beforeSelection,
+    {},
+    {
+      normalized: true,
+      placement: { notes: 0, events: placedEvents },
+    },
+  );
 }
 
 /** Create a missing XY counterpart without changing an existing mismatched event. */
@@ -355,6 +366,11 @@ export function deleteEventsAtTarget(
     t("editor.commands.eventCommands.commitDeleteEvents"),
     chart,
     beforeSelection,
+    {},
+    {
+      normalized: true,
+      placement: { notes: 0, events: 0 },
+    },
   );
   return { status: "committed", value: indices.length };
 }
@@ -414,7 +430,16 @@ export function updateEventsAtTarget(
   session.focus = "events";
   session.selection.clear();
   session.eventSelection = new Set(indices.map((index) => eventKey(type, index)));
-  session.commitChart(t("editor.commands.eventCommands.commitAddEvent"), chart, beforeSelection);
+  session.commitChart(
+    t("editor.commands.eventCommands.commitAddEvent"),
+    chart,
+    beforeSelection,
+    {},
+    {
+      normalized: true,
+      placement: { notes: 0, events: 0 },
+    },
+  );
   return { status: "committed", value: indices.length };
 }
 
