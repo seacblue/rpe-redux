@@ -1,24 +1,5 @@
 // Export is one confirmation, so it uses a compact modal instead of the wide
-// default document surface. The format row owns its compact horizontal rhythm.
+// default document surface. Its format field uses the shared FieldRow geometry.
 dialog.redux-export-dialog {
   width: min(560px, calc(100vw - 32px));
-}
-
-.redux-export-format {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-
-  > span:first-child {
-    flex: none;
-    color: var(--foreground);
-    font-size: var(--type-label);
-    white-space: nowrap;
-  }
-
-  > .redux-select {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
 }

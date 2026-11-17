@@ -5,6 +5,7 @@
  * keeps the last question visible through its exit animation.
  */
 import { useState } from "react";
+import { FieldRow } from "../../../../../../design/components/field/FieldRow.tsx";
 import { Select } from "../../../../../../design/components/select/Select.tsx";
 import type { ChartExportFormat } from "../../../../../../core/global/document/export.ts";
 import { useTranslation } from "../../../../../../i18n/react.ts";
@@ -55,17 +56,22 @@ function ExportBody({ request, open }: { request: ExportPrompt; open: boolean })
       cancelLabel={t("workspace.dialogs.dismiss")}
       onSubmit={() => action.run(() => request.submit({ name: request.initial.name, format }))}
     >
-      <label className="redux-export-format">
-        <span>{t("editor.dialogs.exportDialog.format")}</span>
-        <Select
-          value={format}
-          onChange={(event) => setFormat(event.target.value as ChartExportFormat)}
-        >
-          <option value="pez">{t("editor.dialogs.exportDialog.formatPez")}</option>
-          <option value="pec">{t("editor.dialogs.exportDialog.formatPec")}</option>
-          <option value="official">{t("editor.dialogs.exportDialog.formatOfficial")}</option>
-        </Select>
-      </label>
+      <FieldRow
+        layout="inline"
+        className="modal-field"
+        label={t("editor.dialogs.exportDialog.format")}
+        control={(id) => (
+          <Select
+            id={id}
+            value={format}
+            onChange={(event) => setFormat(event.target.value as ChartExportFormat)}
+          >
+            <option value="pez">{t("editor.dialogs.exportDialog.formatPez")}</option>
+            <option value="pec">{t("editor.dialogs.exportDialog.formatPec")}</option>
+            <option value="official">{t("editor.dialogs.exportDialog.formatOfficial")}</option>
+          </Select>
+        )}
+      />
     </PromptDialog>
   );
 }
