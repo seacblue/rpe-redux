@@ -226,6 +226,9 @@
 }
 
 .redux-shortcut-recording-bindings kbd {
+  // A one-letter cap still fills the minimum width; centering keeps the letter
+  // from sitting against the left edge with trailing space after it.
+  justify-content: center;
   min-width: 36px;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--control-on-border);
