@@ -396,12 +396,9 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     backdrop.context.strokeStyle = this.appearance.verticalGridColor;
     strokeVerticalGrid(backdrop.context, x, height);
   }
-  const firstColumn = eventColumnBoundary(0, width, eventTypeCount, eventInset);
-  const lastColumn = eventColumnBoundary(eventTypeCount, width, eventTypeCount, eventInset);
-  backdrop.context.strokeStyle = this.appearance.verticalGridColor;
-  strokeVerticalGrid(backdrop.context, Math.max(0.5, firstColumn), height);
-  backdrop.context.strokeStyle = this.appearance.verticalGridColor;
-  strokeVerticalGrid(backdrop.context, Math.min(width - 0.5, lastColumn), height);
+  // The DOM edge overlay owns the event field's outer boundaries. The canvas
+  // only paints internal column separators, so an outer edge cannot appear in
+  // both the grid colour and the structural divider colour.
   // Reuse per-channel work lists. Their contents are consumed before the next
   // channel starts, so only growth beyond the largest channel remains allocative.
   eventTypes.forEach((type, channel) => {
@@ -617,10 +614,10 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   // field's right boundary, stays visible through the header band.
   context.globalAlpha = 1;
   context.lineWidth = 1;
-  for (let boundary = 0; boundary <= eventTypeCount; boundary += 1) {
+  for (let boundary = 1; boundary < eventTypeCount; boundary += 1) {
     const x = eventColumnBoundary(boundary, width, eventTypeCount, eventInset);
     context.strokeStyle = palette.gridMinor;
-    strokeVerticalGrid(context, Math.max(0.5, Math.min(width - 0.5, x)), 23);
+    strokeVerticalGrid(context, x, 23);
   }
   context.globalAlpha = 1;
   this.gestures.eventInteraction.draw(context, width);

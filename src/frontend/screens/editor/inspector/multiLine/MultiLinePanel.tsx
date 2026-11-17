@@ -646,6 +646,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
                 max={MULTI_LINE_WINDOW_WIDTH_MAX}
                 step={0.01}
                 value={windowWidthValue}
+                disabled={session.multiLineMode === "notes" && multiLineMergeNotes}
                 aria-label={t("settings.field.multi-line-window-width.label")}
                 onChange={(event) => setWindowWidthDraft(Number(event.currentTarget.value))}
                 onCommit={commitWindowWidth}
