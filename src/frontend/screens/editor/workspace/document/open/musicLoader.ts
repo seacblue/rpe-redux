@@ -1,7 +1,8 @@
 /**
  * Replaces the document's track and applies the media side effects in their
- * established order: pause, asset update, analysis, markers, and duration.
- * Audio and analysis owners are injected; this module owns only the order.
+ * established order: pause, asset update, duration, markers, transport restore,
+ * then waveform and spectrum analysis. Audio and analysis owners are injected;
+ * this module owns only the order and keeps analysis off the playhead.
  */
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 
@@ -25,11 +26,11 @@ export interface MusicLoaderDependencies {
   queueSpectrum(source: Uint8Array | string): void;
   renderTimelineMarkers(): void;
   commitLabel(): string;
-  /** Announce a fully installed track after metadata, analysis, and seek. */
+  /** Announce a fully installed track after metadata and the transport restore. */
   onLoaded?(name: string): void;
 }
 
-/** Loads a track while keeping all editor side effects in their original order. */
+/** Loads a track, restores the playhead, then starts background analysis. */
 export function createMusicLoader(deps: MusicLoaderDependencies) {
   return async (bytes: Uint8Array | string, name: string, updateMetadata = true) => {
     const chartPosition = deps.chartSeconds();
@@ -39,16 +40,11 @@ export function createMusicLoader(deps: MusicLoaderDependencies) {
     if (!loaded || deps.getSession() !== loadingSession) {
       return;
     }
-    deps.setAnalysisSource(bytes);
-    if (deps.analysisEnabled()) {
-      deps.ensureAnalysis().catch(deps.reportError);
-    }
     if (typeof bytes !== "string") {
       deps.setAsset(name, bytes);
     }
     const duration = deps.duration();
     deps.setProgressDuration(duration);
-    deps.queueSpectrum(bytes);
     deps.renderTimelineMarkers();
     if (updateMetadata) {
       const session = deps.getSession();
@@ -63,7 +59,15 @@ export function createMusicLoader(deps: MusicLoaderDependencies) {
         { normalized: true },
       );
     }
+    // Restore the transport before the waveform owns any work. The analysis is
+    // deliberately not awaited: playback is ready as soon as the decoded buffer
+    // is installed, and a later waveform completion must only repaint.
     deps.seek(chartPosition + deps.offsetSeconds());
     deps.onLoaded?.(name);
+    deps.setAnalysisSource(bytes);
+    if (deps.analysisEnabled()) {
+      deps.ensureAnalysis().catch(deps.reportError);
+    }
+    deps.queueSpectrum(bytes);
   };
 }
