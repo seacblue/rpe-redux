@@ -167,6 +167,11 @@ const isMouse = (token: string): boolean =>
   (MOUSE_KEYS as readonly string[]).includes(token) ||
   (WHEEL_KEYS as readonly string[]).includes(token);
 
+/** Whether a token names a mouse button or a wheel direction rather than a key. */
+export function isPointerKey(key: string): boolean {
+  return isMouse(normalizeShortcutKey(key));
+}
+
 /** Whether the canonical token names a key this build can bind. */
 export function isSupportedKey(key: string): boolean {
   return (

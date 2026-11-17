@@ -27,6 +27,7 @@ import { disposeProperties } from "../../../inspector/notes/noteInspector.ts";
 import { requestActionChoice, requestExitChoice } from "../../../../../overlays/modals/prompts.ts";
 import { MODAL_PRIORITY } from "../../../../../overlays/modals/modalQueue.ts";
 import { registerEditorShortcuts } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
+import { shortcutRegistry } from "../../../../../../core/shortcuts/registry.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { bindClipboardHistoryPersistence } from "../../../../../../core/edit/clipboard/clipboardHistoryPersistence.ts";
 import { openInspector, closeInspector } from "../../../inspector/controller.ts";
@@ -140,6 +141,10 @@ export function createEditorAssembly(
   session: EditorSessionRuntime,
 ): { runtime: EditorRuntime } {
   resetBootSettled();
+  // Profiles written by an older RPE hotkey import kept only the keyboard half
+  // of a migrated command. Durable preferences are attached before the editor
+  // mounts, so this is the first point that can read and repair such a profile.
+  shortcutRegistry.repairPointerGestures();
   const documents = isDesktop() ? new TauriDocumentStore(serializeChartOffThread) : null;
   const scope = new ResourceScope();
   scope.add(bindCurrentDocumentStore(documents));

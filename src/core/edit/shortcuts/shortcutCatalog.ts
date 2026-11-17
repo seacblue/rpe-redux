@@ -177,6 +177,11 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.nextJudgeLine",
     scope: "editor",
     defaults: [{ key: "WHEELUP", modifiers: ["CTRL"] }],
+    // Before the forward-first wheel order, this command answered to Wheel Down.
+    legacyDefaults: [
+      { key: "WHEELDOWN", modifiers: ["CTRL"] },
+      { key: "WHEELDOWN", modifiers: ["CTRL", "SHIFT"] },
+    ],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious,
@@ -184,6 +189,10 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     title: "shortcuts.editor.previousJudgeLine",
     scope: "editor",
     defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL"] }],
+    legacyDefaults: [
+      { key: "WHEELUP", modifiers: ["CTRL"] },
+      { key: "WHEELUP", modifiers: ["CTRL", "SHIFT"] },
+    ],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.fastNext,
@@ -347,6 +356,9 @@ function registryDefinition(
   }
   if (shortcut.when) {
     definition.when = shortcut.when;
+  }
+  if (shortcut.legacyDefaults) {
+    definition.legacyDefaults = shortcut.legacyDefaults;
   }
   return definition;
 }
