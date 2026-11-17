@@ -222,7 +222,7 @@ export function LibraryDetail({
     <aside className="redux-library-detail" onPointerMove={tilt} onPointerLeave={settleTilt}>
       <article ref={tiltCard} className="redux-library-card">
         <div className="redux-library-card-media">
-          <DetailCover url={entry.cover} />
+          <DetailCover url={entry.detailCover} />
           <span className="redux-library-detail-scrim" aria-hidden="true" />
           {entry.level && (
             <span

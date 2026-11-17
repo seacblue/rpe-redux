@@ -26,8 +26,10 @@ export interface LibraryEntry {
   composer: string;
   charter: string;
   level: string;
-  /** Cover image URL, or an empty string while none is available. */
+  /** Card image URL; the generated thumbnail when one is available. */
   cover: string;
+  /** Detail-pane image URL; the stored full-size cover when one is available. */
+  detailCover: string;
   /** Audio track for the song-select preview, or null when there is none. */
   audio: LibraryEntryAudio | null;
   source: LibraryEntrySource;
@@ -50,6 +52,7 @@ export function buildLibraryEntries(snapshot: HomeProjectCardsSnapshot | null): 
       charter: project.charter,
       level: project.level,
       cover: project.thumbnailUrl ?? project.coverUrl ?? "",
+      detailCover: project.coverUrl ?? project.thumbnailUrl ?? "",
       audio:
         project.song && project.audioUrl ? { name: project.song, url: project.audioUrl } : null,
       source: { kind: "project", project: normalizedProject },
