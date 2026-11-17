@@ -721,9 +721,12 @@ pub(crate) fn resolve_path(root: &Path, candidate: &Path) -> Result<ResolvedRefe
 
 /// Resolve each referenced resource against the chart's folder.
 ///
-/// In-folder relative paths are always allowed. Absolute paths are allowed only
-/// when their canonical target is in `authorized`; relative paths that escape the
-/// folder, including symlink escapes, stay rejected.
+/// In-folder relative paths that name an existing file are allowed. Absolute
+/// paths are allowed only when their canonical target is in `authorized`;
+/// relative paths that escape the folder, including symlink escapes, stay
+/// rejected. A reference whose in-folder target does not exist is dropped from
+/// both lists: it is a dangling chart reference, not a permission request, and
+/// the host must never advertise bytes it cannot read.
 pub(crate) fn resolve_references(
     path: &Path,
     chart: &Value,
@@ -772,9 +775,12 @@ pub(crate) fn resolve_named_references(
             continue;
         }
         match resolve_reference_in(&root, &name) {
-            Ok(reference) if reference.internal => {
+            Ok(reference) if reference.internal && reference.path.is_file() => {
                 resolved.allowed.insert(name, reference.path);
             }
+            // A name whose in-folder target is missing stays out of both lists:
+            // it is not readable, and it is not a request for outside access.
+            Ok(reference) if reference.internal => {}
             Ok(_) | Err(_) => resolved.rejected.push(name),
         }
     }
@@ -1047,7 +1053,8 @@ impl AssetSource<'_> {
 mod tests {
     use super::{
         read_entry_limited, read_file_limited, read_grant_store, rejected_reference_names,
-        resolve_references, write_grant_store, ExternalGrantStore, ExternalResources, Opened,
+        resolve_named_references, resolve_references, write_grant_store, ExternalGrantStore,
+        ExternalResources, Opened,
     };
     use serde_json::json;
     use std::{fs, io::Cursor, path::Path};
@@ -1135,6 +1142,39 @@ mod tests {
         );
         assert!(references.external.is_empty());
         assert!(references.rejected.is_empty());
+    }
+
+    #[test]
+    fn a_missing_in_folder_reference_is_neither_readable_nor_rejected() {
+        let root = tempdir().unwrap();
+        let chart = root.path().join("chart.json");
+        let song = root.path().join("song.ogg");
+        fs::write(&chart, b"{}").unwrap();
+        fs::write(&song, b"audio").unwrap();
+
+        // RPE stores UI binding names such as `score` in `attachUI`; they are
+        // not files, so a chart must open and import without them.
+        let references = resolve_named_references(
+            &chart,
+            [
+                "combo".to_owned(),
+                "pause".to_owned(),
+                "song.ogg".to_owned(),
+            ],
+            &ExternalResources::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            references.allowed.get("song.ogg"),
+            Some(&fs::canonicalize(&song).unwrap())
+        );
+        assert_eq!(references.allowed.len(), 1);
+        assert!(references.external.is_empty());
+        assert!(
+            references.rejected.is_empty(),
+            "a dangling in-folder reference is not an access request"
+        );
     }
 
     #[test]

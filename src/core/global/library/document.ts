@@ -258,7 +258,14 @@ export async function captureLibraryAssets(assets: AssetMap): Promise<LibraryAss
   return { names, manifest, uploads };
 }
 
-/** Snapshot lazy desktop assets into a plain map for a first library import. */
+/**
+ * Snapshot lazy desktop assets into a plain map for a first library import.
+ *
+ * A name whose bytes cannot be read is left out of the snapshot instead of
+ * failing the import. A chart may name an optional file that is not present
+ * beside it, and the project is still worth importing without that resource;
+ * the editor reports the missing asset the same way it does after an open.
+ */
 export async function materializeAssets(assets: AssetMap): Promise<AssetMap> {
   const names = new Set(assetNames(assets));
   if (assets.read) {
@@ -267,9 +274,16 @@ export async function materializeAssets(assets: AssetMap): Promise<AssetMap> {
         if (assets.has(name)) {
           return;
         }
-        const bytes = await assets.read?.(name);
+        let bytes: Uint8Array | undefined;
+        try {
+          bytes = await assets.read?.(name);
+        } catch {
+          bytes = undefined;
+        }
         if (bytes) {
           assets.set(name, bytes);
+        } else {
+          names.delete(name);
         }
       }),
     );
