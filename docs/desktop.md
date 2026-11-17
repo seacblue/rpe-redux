@@ -63,14 +63,14 @@ Disk snapshots stream files through SHA-256 instead of reading them whole, and p
 
 `npm run build:web` produces the static web edition in `dist/`. GitHub Pages deploys that directory through `.github/workflows/pages.yml`; the web edition keeps its library in browser OPFS, not `user-data/redux.db`. The workflow passes the `configure-pages` base path to `REDUX_WEB_BASE` (empty for a user site or custom domain, `/repo` for a project site). Hash routes such as `#/chart/<id>` load directly without a `404.html` fallback. The desktop bundle uses base `/` and Tauri's own `index.html` fallback for its static assets.
 
-Every desktop build stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cloudflare Tunnel client through `scripts/prepareCloudflared.mjs`. For offline builds, set `REDUX_FFMPEG_ARCHIVE` to the pinned archive before running the preparation script; the archive must match the selected platform and architecture plan, and its checksum is verified.
+Every desktop build stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cloudflare Tunnel client through `scripts/prepareCloudflared.mjs`. Both resolve the newest upstream release at build time instead of pinning a version: gyan.dev's release feed for Windows x64, the `checksums.sha256` feed on the `latest` release of `BtbN/FFmpeg-Builds` for Linux x64 and of `defisym/FFmpeg-Builds-Win32` for Windows x86, and the GitHub release asset digest for the Cloudflare Tunnel client. Each download is verified against that published digest before it is staged, and `VERSION.txt` beside the staged files records what shipped. `npm run deps:check` resolves the newest release and prints the latest and staged versions without downloading the archives. A build that cannot reach a feed reuses the previously staged copy with a warning, so an offline build needs one online stage first; `REDUX_FFMPEG_ARCHIVE` supplies a local archive instead of the download and must match the upstream checksum.
 
 ### Architectures
 
 - **Windows x64** is the default NSIS target.
 - **Windows ARM64** is built natively on GitHub's `windows-11-arm` runner. The app and Go sidecar target ARM64; the bundled FFmpeg and Cloudflared helpers are x64 and run under Windows ARM64 emulation.
-- **32-bit x86** ships a full NSIS target. The app, Go sidecar, Cloudflared, and FFmpeg target 32-bit Windows; FFmpeg uses the pinned `defisym/FFmpeg-Builds-Win32` n8.1 GPL build.
-- **Linux x64** ships deb, rpm, and AppImage packages from GitHub's `ubuntu-22.04` runner. The app, Go sidecar, Cloudflared, and FFmpeg target `x86_64-unknown-linux-gnu`; FFmpeg uses the pinned `BtbN/FFmpeg-Builds` n8.1 GPL build. Linux ARM64 is not built yet.
+- **32-bit x86** ships a full NSIS target. The app, Go sidecar, Cloudflared, and FFmpeg target 32-bit Windows; FFmpeg uses the newest release-branch GPL build from `defisym/FFmpeg-Builds-Win32`.
+- **Linux x64** ships deb, rpm, and AppImage packages from GitHub's `ubuntu-22.04` runner. The app, Go sidecar, Cloudflared, and FFmpeg target `x86_64-unknown-linux-gnu`; FFmpeg uses the newest release-branch GPL build from `BtbN/FFmpeg-Builds`. Linux ARM64 is not built yet.
 
 Release CI uses `src-tauri/updater.conf.json` to enable updater artifacts and requires the signing secret. For a local Authenticode signature, run `src-tauri/signWindowsArtifact.ps1 -Path <installer or executable>`; the helper creates a development certificate when none exists and can reuse a thumbprint or `SignCode.exe` from the parameters.
 

@@ -20,6 +20,7 @@
     "build:server": "node src/backend/build.ts",
     "build:docs": "node scripts/buildDocsSite.mjs",
     "build:icons": "node scripts/buildThemeIcons.mjs",
+    "deps:check": "node scripts/prepareFfmpeg.mjs --check && node scripts/prepareCloudflared.mjs --check",
     "test:unit": "node --test \"src/test/**/*.test.mjs\"",
     "benchmark:streaming": "node --expose-gc scripts/benchmarkChartStreaming.mjs",
     "benchmark:crud": "node --expose-gc scripts/benchmarkChartCrud.mjs",

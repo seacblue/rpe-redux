@@ -205,7 +205,7 @@ jobs:
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             bundles: nsis
-          # Full 32-bit build with a pinned win32 FFmpeg and the 386
+          # Full 32-bit build with the newest win32 FFmpeg release and the 386
           # cloudflared/Go sidecar. The host MSVC environment is switched to
           # x86 before Cargo runs.
           - name: Windows x86

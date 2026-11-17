@@ -1,12 +1,69 @@
 /**
- * Downloads pinned release artifacts for desktop builds: verifies the SHA-256
- * of every byte and retries transient HTTP failures, because packaging mirrors
- * rate-limit concurrent CI jobs with 5xx responses.
+ * Downloads release artifacts for desktop builds: verifies the SHA-256 of every
+ * byte, reports progress while a large archive arrives, and retries transient
+ * HTTP failures, because packaging mirrors rate-limit concurrent CI jobs with
+ * 5xx responses.
  */
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, renameSync, rmSync } from "node:fs";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+
+/** Format a byte count for a progress line. */
+function formatBytes(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+/**
+ * Report download progress for transfers large enough that a slow link would
+ * otherwise look like a hang.
+ *
+ * A transfer only reports while it is still arriving: one line every five
+ * seconds once five percent more of the file has been received, plus one line
+ * when it finishes. Small artifacts stay silent so build logs and tests remain
+ * readable.
+ *
+ * @param {string} label Human-readable artifact name used in messages.
+ * @param {number | null} total Expected size from `content-length`, if the server sent one.
+ * @returns {Transform} Pass-through stream that counts bytes.
+ */
+function progressReporter(label, total) {
+  const started = Date.now();
+  let received = 0;
+  let lastReport = started;
+  let lastPercent = -5;
+  const report = (final) => {
+    const elapsed = Math.max(1, (Date.now() - started) / 1_000);
+    const rate = received / elapsed;
+    const percent = total ? Math.floor((received / total) * 100) : null;
+    const size = total ? `${formatBytes(received)} / ${formatBytes(total)}` : formatBytes(received);
+    const suffix = percent === null ? "" : ` (${percent}%)`;
+    console.log(
+      `${final ? "Downloaded" : "Downloading"} ${label}: ${size}${suffix}, ${formatBytes(rate)}/s`,
+    );
+  };
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      received += chunk.length;
+      const now = Date.now();
+      const percent = total ? Math.floor((received / total) * 100) : null;
+      const advanced = percent === null || percent >= lastPercent + 5;
+      const large = Math.max(total ?? 0, received) > 1_000_000;
+      if (now - lastReport >= 5_000 && advanced && large) {
+        lastReport = now;
+        lastPercent = percent ?? lastPercent;
+        report(false);
+      }
+      callback(null, chunk);
+    },
+    flush(callback) {
+      if (received > 1_000_000) {
+        report(true);
+      }
+      callback();
+    },
+  });
+}
 
 /** Stream a file through SHA-256 and return the lowercase hex digest. */
 export async function hashFile(path) {
@@ -27,7 +84,7 @@ export async function hashFile(path) {
  * replaced after verification.
  *
  * @param {object} options
- * @param {string} options.url Pinned download URL.
+ * @param {string} options.url Absolute download URL of the published artifact.
  * @param {string} options.destination Final file path.
  * @param {string} options.expectedHash Lowercase SHA-256 hex digest to enforce.
  * @param {string} options.label Human-readable artifact name used in messages.
@@ -50,7 +107,12 @@ export async function downloadVerifiedFile({
       if (!response.ok || !response.body) {
         throw new Error(`${label} download failed: ${response.status}`);
       }
-      await pipeline(Readable.fromWeb(response.body), createWriteStream(partial));
+      const total = Number(response.headers.get("content-length")) || null;
+      await pipeline(
+        Readable.fromWeb(response.body),
+        progressReporter(label, total),
+        createWriteStream(partial),
+      );
       if ((await hashFile(partial)) !== expectedHash) {
         throw new Error(`${label} download checksum mismatch.`);
       }

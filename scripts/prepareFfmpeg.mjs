@@ -1,4 +1,4 @@
-/** Stages a verified Windows or Linux FFmpeg distribution for desktop builds. */
+/** Stages the newest verified upstream FFmpeg release for the target desktop platform. */
 import {
   chmodSync,
   copyFileSync,
@@ -13,182 +13,320 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
+import {
+  fetchContentLength,
+  fetchText,
+  findArchiveRoot,
+  formatBytes,
+  parseChecksums,
+  parseDigest,
+  parseVersion,
+  selectNewestBranch,
+} from "./dependencyArtifacts.mjs";
 
-const root = resolve(import.meta.dirname, "..");
-const targetTriple = process.env.CARGO_BUILD_TARGET ?? process.platform;
-const platform = targetTriple.includes("linux")
-  ? "linux"
-  : targetTriple.includes("windows") || targetTriple === "win32"
-    ? "windows"
-    : null;
-if (!platform) {
-  console.log("The bundled FFmpeg build supports Windows and Linux targets only; skipping.");
-  process.exit(0);
-}
-// Windows ARM64 runs the pinned x64 encoder through its x64 emulation layer; a
-// native ARM64 build would need a separate distribution.
-const arch =
-  targetTriple.startsWith("i686") || targetTriple === "ia32"
-    ? "x86"
-    : platform === "linux" && targetTriple.includes("aarch64")
-      ? "arm64"
-      : "x64";
+const GYAN_BUILDS = "https://www.gyan.dev/ffmpeg/builds";
+const BTBN_RELEASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/";
+const DEFISYM_RELEASE = "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/latest/";
+// `--check` resolves the newest release and compares it with the staged build
+// without downloading the archive, so a slow link can still be inspected.
+const checkOnly = process.argv.includes("--check");
 
-const plans = {
-  "windows-x64": {
-    label: "8.1.2 x64",
-    binary: "ffmpeg.exe",
-    directory: "ffmpeg-8.1.2-essentials_build",
-    url: "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
-    archiveHash: "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
-    binaryHash: "1326dde4c84ff1f96fe6b8916c5bed29e163e9b5dccf995f6f3db069d143ec5e",
+/**
+ * Resolve the newest Windows x64 essentials build gyan.dev publishes.
+ *
+ * gyan.dev serves one "release essentials" archive whose version and digest
+ * change together; the `release-version` and `.sha256` endpoints name exactly
+ * the bytes the archive URL returns right now.
+ */
+async function resolveWindowsX64() {
+  const version = parseVersion(
+    await fetchText(`${GYAN_BUILDS}/release-version`, { label: "The FFmpeg release version" }),
+    "The gyan.dev release-version endpoint",
+  );
+  const archiveHash = parseDigest(
+    await fetchText(`${GYAN_BUILDS}/ffmpeg-release-essentials.zip.sha256`, {
+      label: "The FFmpeg release checksum",
+    }),
+    "The gyan.dev FFmpeg checksum",
+  );
+  return {
+    label: `${version} x64 essentials`,
+    archiveUrl: `${GYAN_BUILDS}/ffmpeg-release-essentials.zip`,
+    archiveName: `ffmpeg-${version}-essentials.zip`,
+    archiveHash,
     licenseFile: "LICENSE",
     readmeFile: "README.txt",
-    cache: join(root, ".local-tools", "ffmpeg", "ffmpeg-8.1.2-essentials_build.zip"),
-  },
-  "windows-x86": {
-    label: "n8.1.3 x86",
-    binary: "ffmpeg.exe",
-    directory: "ffmpeg-n8.1.3-35-gf1acb0a266-win32-gpl-8.1",
-    url:
-      "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/" +
-      "autobuild-2026-11-15-18-40/ffmpeg-n8.1.3-35-gf1acb0a266-win32-gpl-8.1.zip",
-    archiveHash: "c020e1fb07f11bde0b0b5b2807b2aae84ec7531ce3e3d23a265da8061b352fc3",
-    binaryHash: "941a1476846dce9d9e286b6d0b5df87e83f6e9f49241334fcc59cf3a86cd3dae",
-    licenseFile: "LICENSE.txt",
-    readmeFile: null,
-    cache: join(
-      root,
-      ".local-tools",
-      "ffmpeg",
-      "x86",
-      "ffmpeg-n8.1.3-35-gf1acb0a266-win32-gpl-8.1.zip",
-    ),
-  },
-  "linux-x64": {
-    label: "n8.1.3 x64 (BtbN GPL)",
-    binary: "ffmpeg",
-    directory: "ffmpeg-n8.1.3-32-g760d10603e-linux64-gpl-8.1",
-    url:
-      "https://github.com/BtbN/FFmpeg-Builds/releases/download/" +
-      "autobuild-2026-11-02-12-51/ffmpeg-n8.1.3-32-g760d10603e-linux64-gpl-8.1.tar.xz",
-    archiveHash: "75cd1928804590b22209952f6f4eca3a68a36bc671cffa0d81426df1f6623881",
-    binaryHash: "00afa954d2d3437e8e550afbe580bb57c404817fb9d895ee134a0f148ee1ae05",
-    licenseFile: "LICENSE.txt",
-    readmeFile: null,
-    cache: join(
-      root,
-      ".local-tools",
-      "ffmpeg",
-      "linux",
-      "ffmpeg-n8.1.3-32-g760d10603e-linux64-gpl-8.1.tar.xz",
-    ),
-  },
-};
-const plan = plans[`${platform}-${arch}`];
-if (!plan) {
-  throw new Error(`No pinned FFmpeg build for ${platform}/${arch}.`);
+  };
 }
-const target = join(root, "src-tauri", "resources", "ffmpeg");
-const targetBinary = join(target, plan.binary);
-// Keep exactly one platform binary in the staged folder; a stale copy from an
-// earlier target would otherwise be bundled next to the new one.
-rmSync(join(target, platform === "windows" ? "ffmpeg" : "ffmpeg.exe"), { force: true });
-// An offline archive is accepted only if it matches the same pinned distribution.
-const suppliedArchive = process.env.REDUX_FFMPEG_ARCHIVE?.trim();
-const cache = suppliedArchive ? resolve(suppliedArchive) : plan.cache;
 
-if (suppliedArchive && (!existsSync(cache) || (await hashFile(cache)) !== plan.archiveHash)) {
-  throw new Error("The supplied FFmpeg archive is missing or its checksum does not match.");
+/** Resolve the newest release-branch GPL build BtbN publishes for Linux x64. */
+async function resolveLinuxX64() {
+  const checksums = parseChecksums(
+    await fetchText(`${BTBN_RELEASE}checksums.sha256`, { label: "The BtbN FFmpeg checksums" }),
+  );
+  const asset = selectNewestBranch(
+    checksums.keys(),
+    /^ffmpeg-n(\d+\.\d+)-latest-linux64-gpl-(\d+\.\d+)\.tar\.xz$/u,
+    "BtbN linux64 GPL",
+  );
+  return {
+    label: `n${asset.branch} x64 (BtbN GPL)`,
+    archiveUrl: `${BTBN_RELEASE}${asset.name}`,
+    archiveName: asset.name,
+    archiveHash: checksums.get(asset.name),
+    licenseFile: "LICENSE.txt",
+    readmeFile: null,
+  };
 }
-const versionMarker = join(target, "VERSION.txt");
-const stagedVersion = existsSync(versionMarker) ? readFileSync(versionMarker, "utf8").trim() : "";
-if (
-  stagedVersion === plan.label &&
-  existsSync(targetBinary) &&
-  existsSync(join(target, "LICENSE")) &&
-  existsSync(join(target, "README.txt")) &&
-  (await hashFile(targetBinary)) === plan.binaryHash
-) {
-  process.exit(0);
+
+/** Resolve the newest win32 release-branch GPL build defisym publishes. */
+async function resolveWindowsX86() {
+  const checksums = parseChecksums(
+    await fetchText(`${DEFISYM_RELEASE}checksums.sha256`, {
+      label: "The win32 FFmpeg checksums",
+    }),
+  );
+  const asset = selectNewestBranch(
+    checksums.keys(),
+    /^ffmpeg-n(\d+\.\d+)-latest-win32-gpl-(\d+\.\d+)\.zip$/u,
+    "defisym win32 GPL",
+  );
+  return {
+    label: `n${asset.branch} x86 (defisym GPL)`,
+    archiveUrl: `${DEFISYM_RELEASE}${asset.name}`,
+    archiveName: asset.name,
+    archiveHash: checksums.get(asset.name),
+    licenseFile: "LICENSE.txt",
+    readmeFile: null,
+  };
 }
-mkdirSync(dirname(cache), { recursive: true });
-if (!existsSync(cache) || (await hashFile(cache)) !== plan.archiveHash) {
-  await downloadVerifiedFile({
-    url: plan.url,
-    destination: cache,
-    expectedHash: plan.archiveHash,
-    label: "FFmpeg",
-  });
-}
-const tempRoot = resolve(tmpdir());
-const staging = mkdtempSync(join(tempRoot, "redux-ffmpeg-"));
-if (dirname(resolve(staging)) !== tempRoot || !basename(staging).startsWith("redux-ffmpeg-")) {
-  throw new Error("Invalid FFmpeg staging directory");
-}
-try {
-  const listing = spawnSync("tar", ["-tf", cache], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  if (listing.status !== 0) {
-    throw new Error("FFmpeg archive listing failed.");
+
+const resolvers = {
+  "windows-x64": resolveWindowsX64,
+  "windows-x86": resolveWindowsX86,
+  "linux-x64": resolveLinuxX64,
+};
+
+/** Stage the release that matches the current target. */
+async function main() {
+  const root = resolve(import.meta.dirname, "..");
+  const targetTriple = process.env.CARGO_BUILD_TARGET ?? process.platform;
+  const platform = targetTriple.includes("linux")
+    ? "linux"
+    : targetTriple.includes("windows") || targetTriple === "win32"
+      ? "windows"
+      : null;
+  if (!platform) {
+    console.log("The bundled FFmpeg build supports Windows and Linux targets only; skipping.");
+    return;
   }
-  const entries = new Set(listing.stdout.split(/\r?\n/));
-  const binaryEntry = `${plan.directory}/bin/${plan.binary}`;
-  const licenseEntry = plan.licenseFile ? `${plan.directory}/${plan.licenseFile}` : null;
-  const readmeEntry = plan.readmeFile ? `${plan.directory}/${plan.readmeFile}` : null;
-  const paths = [
-    binaryEntry,
-    ...[licenseEntry, readmeEntry].filter((entry) => entry && entries.has(entry)),
-  ];
-  const extract = spawnSync("tar", ["-xf", cache, "-C", staging, ...paths], {
-    stdio: "inherit",
-    windowsHide: true,
-  });
-  if (extract.status !== 0) {
-    throw new Error("FFmpeg archive extraction failed.");
+  // Windows ARM64 runs the x64 encoder through its x64 emulation layer; a
+  // native ARM64 build would need a separate distribution.
+  const arch =
+    targetTriple.startsWith("i686") || targetTriple === "ia32"
+      ? "x86"
+      : platform === "linux" && targetTriple.includes("aarch64")
+        ? "arm64"
+        : "x64";
+  const resolver = resolvers[`${platform}-${arch}`];
+  if (!resolver) {
+    throw new Error(`No FFmpeg build source for ${platform}/${arch}.`);
   }
-  const source = join(staging, plan.directory);
-  if ((await hashFile(join(source, "bin", plan.binary))) !== plan.binaryHash) {
-    throw new Error("FFmpeg binary checksum mismatch.");
+
+  const targetDirectory = join(root, "src-tauri", "resources", "ffmpeg");
+  const binaryName = platform === "windows" ? "ffmpeg.exe" : "ffmpeg";
+  const binaryPath = join(targetDirectory, binaryName);
+  // Keep exactly one platform binary in the staged folder; a stale copy from an
+  // earlier target would otherwise be bundled next to the new one.
+  rmSync(join(targetDirectory, platform === "windows" ? "ffmpeg" : "ffmpeg.exe"), { force: true });
+
+  const cacheDirectory = join(root, ".local-tools", "ffmpeg", `${platform}-${arch}`);
+  const stampPath = join(cacheDirectory, "staged.json");
+
+  /** Read the stage record that describes the currently staged binary. */
+  function readStamp() {
+    try {
+      return JSON.parse(readFileSync(stampPath, "utf8"));
+    } catch {
+      return null;
+    }
   }
-  mkdirSync(target, { recursive: true });
-  copyFileSync(join(source, "bin", plan.binary), targetBinary);
-  if (platform !== "windows") {
-    chmodSync(targetBinary, 0o755);
+
+  /** Read the version marker the staging step wrote, when one is present. */
+  function readVersionMarker() {
+    try {
+      return readFileSync(join(targetDirectory, "VERSION.txt"), "utf8").trim() || null;
+    } catch {
+      return null;
+    }
   }
-  if (licenseEntry && entries.has(licenseEntry)) {
-    copyFileSync(join(source, plan.licenseFile), join(target, "LICENSE"));
-  } else {
-    writeFileSync(
-      join(target, "LICENSE"),
+
+  /**
+   * Return the stage record only while the staged files still match it.
+   *
+   * The stamp carries the archive digest that produced the binary and the digest
+   * of the binary itself, so a hand-edited or partially replaced staging folder
+   * fails the check instead of being reported as current.
+   */
+  async function verifiedStamp() {
+    const stamp = readStamp();
+    if (!stamp || typeof stamp.archiveHash !== "string" || typeof stamp.binaryHash !== "string") {
+      return null;
+    }
+    const required = [
+      binaryPath,
+      join(targetDirectory, "LICENSE"),
+      join(targetDirectory, "README.txt"),
+    ];
+    if (required.some((file) => !existsSync(file))) {
+      return null;
+    }
+    return (await hashFile(binaryPath)) === stamp.binaryHash ? stamp : null;
+  }
+
+  let distribution;
+  try {
+    distribution = await resolver();
+  } catch (error) {
+    const stamp = await verifiedStamp();
+    if (!stamp || checkOnly) {
+      throw error;
+    }
+    console.log(
+      `Could not resolve the newest FFmpeg release (${error.message}); ` +
+        `keeping the staged ${stamp.label}.`,
+    );
+    return;
+  }
+
+  const stamp = await verifiedStamp();
+  const upToDate = stamp?.archiveHash === distribution.archiveHash;
+  if (checkOnly) {
+    const size = await fetchContentLength(distribution.archiveUrl, {
+      label: "The FFmpeg archive",
+    });
+    const staged = stamp?.label ?? readVersionMarker() ?? "none";
+    console.log(
       [
-        "FFmpeg is licensed under the GNU General Public License.",
-        "",
-        `Distribution: ${plan.label}`,
-        `Source: ${plan.url}`,
-        "",
+        `FFmpeg ${platform}/${arch}`,
+        `  latest  ${distribution.label}${size === null ? "" : ` (${formatBytes(size)})`}`,
+        `  staged  ${staged}${upToDate ? " (up to date)" : " (update available)"}`,
+        `  sha256  ${distribution.archiveHash}`,
+        `  source  ${distribution.archiveUrl}`,
       ].join("\n"),
     );
+    return;
   }
-  if (readmeEntry && entries.has(readmeEntry)) {
-    copyFileSync(join(source, plan.readmeFile), join(target, "README.txt"));
-  } else {
-    writeFileSync(
-      join(target, "README.txt"),
-      [
-        `FFmpeg ${plan.label} static build for ${platform}/${arch}.`,
-        "",
-        `Version: ${plan.label}`,
-        "License: GPL v3",
-        `Source: ${plan.url}`,
-        "",
-      ].join("\n"),
+  if (upToDate) {
+    return;
+  }
+
+  mkdirSync(cacheDirectory, { recursive: true });
+  // An offline archive is accepted only if it matches the digest the publisher
+  // ships for the distribution the build would download.
+  const suppliedArchive = process.env.REDUX_FFMPEG_ARCHIVE?.trim();
+  const archivePath = suppliedArchive
+    ? resolve(suppliedArchive)
+    : join(cacheDirectory, distribution.archiveName);
+  if (suppliedArchive) {
+    if (!existsSync(archivePath) || (await hashFile(archivePath)) !== distribution.archiveHash) {
+      throw new Error(
+        "The supplied FFmpeg archive is missing or does not match the newest upstream checksum.",
+      );
+    }
+  } else if (
+    !existsSync(archivePath) ||
+    (await hashFile(archivePath)) !== distribution.archiveHash
+  ) {
+    await downloadVerifiedFile({
+      url: distribution.archiveUrl,
+      destination: archivePath,
+      expectedHash: distribution.archiveHash,
+      label: "FFmpeg",
+    });
+  }
+
+  const tempRoot = resolve(tmpdir());
+  const staging = mkdtempSync(join(tempRoot, "redux-ffmpeg-"));
+  if (dirname(resolve(staging)) !== tempRoot || !basename(staging).startsWith("redux-ffmpeg-")) {
+    throw new Error("Invalid FFmpeg staging directory");
+  }
+  try {
+    const listing = spawnSync("tar", ["-tf", archivePath], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (listing.status !== 0) {
+      throw new Error("FFmpeg archive listing failed.");
+    }
+    const entries = listing.stdout.split(/\r?\n/u).filter(Boolean);
+    const { root: archiveRoot, binaryEntry } = findArchiveRoot(entries, binaryName);
+    const licenseEntry = entries.find(
+      (entry) => entry === `${archiveRoot}/${distribution.licenseFile}`,
     );
+    const readmeEntry = distribution.readmeFile
+      ? entries.find((entry) => entry === `${archiveRoot}/${distribution.readmeFile}`)
+      : null;
+    const paths = [binaryEntry, licenseEntry, readmeEntry].filter(Boolean);
+    const extract = spawnSync("tar", ["-xf", archivePath, "-C", staging, ...paths], {
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    if (extract.status !== 0) {
+      throw new Error("FFmpeg archive extraction failed.");
+    }
+    mkdirSync(targetDirectory, { recursive: true });
+    copyFileSync(join(staging, binaryEntry), binaryPath);
+    if (platform !== "windows") {
+      chmodSync(binaryPath, 0o755);
+    }
+    if (licenseEntry) {
+      copyFileSync(join(staging, licenseEntry), join(targetDirectory, "LICENSE"));
+    } else {
+      writeFileSync(
+        join(targetDirectory, "LICENSE"),
+        [
+          "FFmpeg is licensed under the GNU General Public License.",
+          "",
+          `Distribution: ${distribution.label}`,
+          `Source: ${distribution.archiveUrl}`,
+          "",
+        ].join("\n"),
+      );
+    }
+    if (readmeEntry) {
+      copyFileSync(join(staging, readmeEntry), join(targetDirectory, "README.txt"));
+    } else {
+      writeFileSync(
+        join(targetDirectory, "README.txt"),
+        [
+          `FFmpeg ${distribution.label} static build for ${platform}/${arch}.`,
+          "",
+          `Version: ${distribution.label}`,
+          "License: GPL v3",
+          `Source: ${distribution.archiveUrl}`,
+          "",
+        ].join("\n"),
+      );
+    }
+    writeFileSync(join(targetDirectory, "VERSION.txt"), `${distribution.label}\n`);
+    writeFileSync(
+      stampPath,
+      `${JSON.stringify(
+        {
+          label: distribution.label,
+          archiveUrl: distribution.archiveUrl,
+          archiveHash: distribution.archiveHash,
+          binaryHash: await hashFile(binaryPath),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.log(`Staged FFmpeg ${distribution.label} in ${targetDirectory}`);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
   }
-  writeFileSync(versionMarker, `${plan.label}\n`);
-  console.log(`Staged FFmpeg ${plan.label} in ${target}`);
-} finally {
-  rmSync(staging, { recursive: true, force: true });
 }
+
+await main();
