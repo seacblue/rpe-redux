@@ -118,6 +118,7 @@ export default {
   "shortcuts.error.emptyPart": "快捷键不能有空项，例如 CTRL+S。",
   "shortcuts.error.duplicateKey": "同一个按键不能重复出现。",
   "shortcuts.error.needsOneKey": "需要一个按键，可搭配 Ctrl / Alt / Shift。",
+  "shortcuts.error.tooManyKeys": "一个快捷键最多包含四个非装饰键。",
   "shortcuts.error.unsupportedKey": "不支持这个按键。",
   "shortcuts.error.invalidShortcut": "不是有效的快捷键。",
   "shortcuts.error.emptyBinding": "请先按下一个键、鼠标按键或滚轮方向。",

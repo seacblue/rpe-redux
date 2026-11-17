@@ -20,7 +20,9 @@ import { useTranslation } from "../../../../i18n/react.ts";
 import { CATALOGS } from "../../../../i18n/messages/index.ts";
 import { tRaw as translateRaw } from "../../../../i18n/index.ts";
 import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
-import { canonicalText, displayText } from "../../../../core/shortcuts/keys.ts";
+import { canonicalText, shortcutConflictKey } from "../../../../core/shortcuts/keys.ts";
+import { KbdParts, ShortcutBindings } from "../../../../design/components/keyboardHint/Kbd.tsx";
+import { shortcutStroke } from "../../../../design/components/keyboardHint/shortcutChips.ts";
 import { compareShortcutCategories } from "../../../../core/shortcuts/categories.ts";
 import { shortcutMatchesSearch, shortcutPageSearchTerms } from "./shortcutSearch.ts";
 import { shortcutRegistry as shortcuts } from "../../../../core/shortcuts/registry.ts";
@@ -47,28 +49,16 @@ function heldModifiers(event: ShortcutEventLike): string {
     .join(" + ");
 }
 
-/** Resolve the localized names of commands that share one shortcut. */
+/** Resolve the localized names of commands that share one binding. */
 function conflictLabels(
-  view: ShortcutView,
+  ids: readonly string[],
   views: readonly ShortcutView[],
   tRaw: (key: string) => string,
-  binding?: Shortcut,
 ): string[] {
-  const conflicts = binding
-    ? views.filter(
-        (candidate) =>
-          candidate.id !== view.id &&
-          !view.shared &&
-          !candidate.shared &&
-          shortcuts.definition(candidate.id)?.enabled?.() !== false &&
-          candidate.bindings.some(
-            (candidateBinding) => canonicalText(candidateBinding) === canonicalText(binding),
-          ),
-      )
-    : view.conflicts
-        .map((id) => views.find((candidate) => candidate.id === id))
-        .filter((candidate): candidate is ShortcutView => candidate !== undefined);
-  return conflicts.map((conflict) => tRaw(conflict.title));
+  return ids
+    .map((id) => views.find((candidate) => candidate.id === id))
+    .filter((candidate): candidate is ShortcutView => candidate !== undefined)
+    .map((conflict) => tRaw(conflict.title));
 }
 
 /** The developer section is open when the host enables it or the About page revealed it. */
@@ -112,9 +102,10 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
   // exit transition: the dialog keeps painting while `recordingOpen` is false.
   const [recording, setRecording] = useState<string | null>(null);
   const [recordingOpen, setRecordingOpen] = useState(false);
-  const [recordingBindings, setRecordingBindings] = useState<readonly string[]>([]);
+  const [recordingBindings, setRecordingBindings] = useState<readonly Shortcut[]>([]);
   const [bindingIndex, setBindingIndex] = useState<number | null>(null);
   const [modifierPreview, setModifierPreview] = useState("");
+  const [candidatePreview, setCandidatePreview] = useState<Shortcut | null>(null);
   const [pendingShortcut, setPendingShortcut] = useState<Shortcut | null>(null);
   const captureState = useRef(createShortcutCaptureState());
   const pendingShortcutRef = useRef<Shortcut | null>(null);
@@ -147,9 +138,10 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
     setShortcutRecording(true);
     setMessage("");
     setModifierPreview("");
+    setCandidatePreview(null);
     setPendingShortcut(null);
     pendingShortcutRef.current = null;
-    setRecordingBindings(shortcuts.bindingsOf(shortcutId).map(displayText));
+    setRecordingBindings(shortcuts.bindingsOf(shortcutId));
     setBindingIndex(index);
     setRecording(shortcutId);
     setRecordingOpen(true);
@@ -176,10 +168,17 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         ? shortcuts.addBinding(recording, shortcut)
         : shortcuts.replaceBinding(recording, bindingIndex, shortcut);
     if (result.ok) {
-      const updatedView = shortcuts.shortcuts().find((view) => view.id === recording);
+      // Read the fresh views: the registry has just written the binding, while
+      // this component has not rendered again yet.
+      const updatedViews = shortcuts.shortcuts();
+      const updatedView = updatedViews.find((view) => view.id === recording);
       const conflicts =
         updatedView && pendingShortcut
-          ? conflictLabels(updatedView, allViews, tRaw, pendingShortcut)
+          ? conflictLabels(
+              updatedView.bindingConflicts[shortcutConflictKey(pendingShortcut)] ?? [],
+              updatedViews,
+              tRaw,
+            )
           : [];
       if (conflicts.length > 0) {
         setMessage(
@@ -192,7 +191,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       return;
     }
     setMessage(tRaw(result.error ?? "shortcuts.error.invalidShortcut"));
-  }, [allViews, bindingIndex, pendingShortcut, recording, recordingOpen, stopRecording, t, tRaw]);
+  }, [bindingIndex, pendingShortcut, recording, recordingOpen, stopRecording, t, tRaw]);
 
   // Capture keyboard, pointer, and wheel input while a row is recording.
   useEffect(() => {
@@ -206,7 +205,8 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
     const commit = (shortcut: Shortcut) => {
       pendingShortcutRef.current = shortcut;
       setPendingShortcut(shortcut);
-      setModifierPreview(displayText(shortcut));
+      setCandidatePreview(shortcut);
+      setModifierPreview("");
       captureState.current = createShortcutCaptureState();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -231,8 +231,10 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         return;
       }
       if (transition.state.candidate) {
-        setModifierPreview(displayText(transition.state.candidate));
+        setCandidatePreview(transition.state.candidate);
+        setModifierPreview("");
       } else {
+        setCandidatePreview(null);
         setModifierPreview(heldModifiers(event));
       }
     };
@@ -253,10 +255,12 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       if (transition.commit) {
         commit(transition.commit);
       } else if (transition.state.candidate) {
-        setModifierPreview(displayText(transition.state.candidate));
+        setCandidatePreview(transition.state.candidate);
+        setModifierPreview("");
       } else if (pendingShortcutRef.current === null) {
         // Releasing the modifiers after a pointer or wheel capture must not
         // blank the shortcut that is already waiting for Save.
+        setCandidatePreview(null);
         setModifierPreview(heldModifiers(event));
       }
     };
@@ -275,8 +279,10 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       });
       captureState.current = transition.state;
       if (transition.state.candidate) {
-        setModifierPreview(displayText(transition.state.candidate));
+        setCandidatePreview(transition.state.candidate);
+        setModifierPreview("");
       } else {
+        setCandidatePreview(null);
         setModifierPreview(heldModifiers(event));
       }
     };
@@ -299,7 +305,8 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       if (transition.commit) {
         commit(transition.commit);
       } else if (transition.state.candidate) {
-        setModifierPreview(displayText(transition.state.candidate));
+        setCandidatePreview(transition.state.candidate);
+        setModifierPreview("");
       }
     };
     const onWheel = (event: WheelEvent) => {
@@ -390,9 +397,6 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         ? t("shortcuts.recordingOverlayAdd", { action: recordingLabel })
         : t("shortcuts.recordingOverlayRebind", { action: recordingLabel });
 
-  /** The text a binding chip shows; recording feedback lives in the modal. */
-  const bindingLabel = (binding: Shortcut): string => displayText(binding);
-
   return (
     <div className="redux-setting-group redux-shortcuts">
       {message && (
@@ -429,7 +433,11 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
                     />
                   )}
                   {view.bindings.map((binding, index) => {
-                    const conflicts = conflictLabels(view, allViews, tRaw, binding);
+                    const conflicts = conflictLabels(
+                      view.bindingConflicts[shortcutConflictKey(binding)] ?? [],
+                      allViews,
+                      tRaw,
+                    );
                     const conflictDescription =
                       conflicts.length > 0
                         ? t("shortcuts.conflictDescription", {
@@ -453,7 +461,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
                           className="redux-shortcut-capture"
                           onClick={() => startRecording(view.id, index)}
                         >
-                          {bindingLabel(binding)}
+                          <KbdParts stroke={shortcutStroke(binding)} />
                         </Button>
                       </span>
                     );
@@ -493,12 +501,17 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
           <span>{t("shortcuts.currentBindingsLabel")}</span>
           <div className="redux-shortcut-recording-bindings">
             {recordingBindings.length > 0 ? (
-              recordingBindings.map((binding) => <kbd key={binding}>{binding}</kbd>)
+              <ShortcutBindings bindings={recordingBindings} />
             ) : (
               <kbd>—</kbd>
             )}
           </div>
         </div>
+        {candidatePreview && (
+          <div className="redux-shortcut-recording-preview">
+            <ShortcutBindings bindings={[candidatePreview]} />
+          </div>
+        )}
         {modifierPreview && <p className="redux-shortcut-recording-modifiers">{modifierPreview}</p>}
         {message && <p className="redux-shortcut-recording-message">{message}</p>}
       </KeyboardCaptureModal>

@@ -12,6 +12,8 @@ test("shortcut bindings use the ARIA keyshortcuts grammar", () => {
   assert.equal(ariaShortcutText({ key: "F3" }), "F3");
   assert.equal(ariaShortcutText({ key: "MOUSE0" }), "");
   assert.equal(ariaShortcutText({ key: "WHEELDOWN" }), "");
+  // A held-key chord has no `aria-keyshortcuts` spelling.
+  assert.equal(ariaShortcutText({ key: "MOUSE2", keys: ["E"] }), "");
 });
 
 test("listbox navigation wraps and honours Home/End", () => {

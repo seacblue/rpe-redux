@@ -36,15 +36,20 @@ export interface ShortcutContext {
 /**
  * One key plus the modifiers it is pressed with — what a shortcut answers to.
  *
- * The order of `modifiers` carries no meaning: two bindings naming the same
- * modifiers are the same binding, and `canonicalText` is what fixes the order
+ * `key` is the key that completes the binding. `keys` names any additional
+ * non-modifier keys that must be held at the same time, so `E` plus
+ * `{ keys: ["E"], key: "MOUSE2" }` reads as "hold E, then right-click". The
+ * order of `keys` and `modifiers` carries no meaning: two bindings naming the
+ * same keys are the same binding, and `canonicalText` is what fixes the order
  * they are written in.
  */
 export interface Shortcut {
-  /** The key itself: `"S"`, `"SPACE"`, `"MOUSE0"`, `"WHEELUP"`. */
+  /** The primary key: `"S"`, `"SPACE"`, `"MOUSE0"`, `"WHEELUP"`. */
   key: string;
   /** Omitted when the key is pressed on its own. */
   modifiers?: readonly Modifier[];
+  /** Additional non-modifier keys held together with `key`; omitted when none. */
+  keys?: readonly string[];
 }
 
 /** A keyboard event, a mouse button event or a wheel event. */
@@ -136,8 +141,16 @@ export interface ShortcutView extends Omit<
 > {
   bindings: Shortcut[];
   overridden: boolean;
-  /** Ids this shortcut collides with, when the collision is not allowed. */
+  /** Ids this shortcut collides with on any binding, when the collision is not allowed. */
   conflicts: string[];
+  /**
+   * Ids this shortcut collides with on one specific binding.
+   *
+   * The key is `shortcutConflictKey(binding)`, which resolves `MOD` and key
+   * order for this platform. The editor paints only the chip a collision
+   * belongs to, rather than every binding of the shortcut.
+   */
+  bindingConflicts: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Outcome of rebinding one shortcut, with a message key on failure. */

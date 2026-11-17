@@ -14,7 +14,12 @@ import {
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import type { EditorShortcutArea } from "../../../core/edit/shortcuts/declarations.ts";
 import type { Shortcut } from "../../../core/shortcuts/types.ts";
-import { matches, released } from "../../../core/shortcuts/keyMatching.ts";
+import { matches, released, shortcutKey } from "../../../core/shortcuts/keyMatching.ts";
+import {
+  clearShortcutKeys,
+  pressShortcutKey,
+  releaseShortcutKey,
+} from "../../../core/shortcuts/inputKeys.ts";
 import {
   advancePrefixDigitSequence,
   createPrefixDigitSequenceState,
@@ -75,6 +80,24 @@ export interface EditorKeyboardBindingDependencies extends Omit<
 export interface PrefixDigitShortcutBinding {
   readonly id: string;
   readonly submit: (submission: PrefixDigitSequenceSubmission) => void;
+}
+
+/** Stable identity for one physical input across its down and up events. */
+function inputIdentity(event: KeyboardEvent | PointerEvent): string {
+  return ("code" in event ? event.code : "") || shortcutKey(event);
+}
+
+/** Track a key or mouse button as held before shortcut matching reads it. */
+function trackInputDown(event: KeyboardEvent | PointerEvent): void {
+  const token = shortcutKey(event);
+  if (token.startsWith("MOUSE") || !["CTRL", "ALT", "SHIFT", "META"].includes(token)) {
+    pressShortcutKey(inputIdentity(event), token);
+  }
+}
+
+/** Release one physical input after its key-up or pointer-up. */
+function trackInputUp(event: KeyboardEvent | PointerEvent): void {
+  releaseShortcutKey(inputIdentity(event));
 }
 
 /** Resolve the configured bare modifier for one prefix-digit shortcut. */
@@ -158,9 +181,13 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
     (event) => {
       const context = readShortcutContext(event.target);
       if (context.capturing || context.modal === "urgent") {
+        // The recorder and urgent dialogs own their input; a key they capture
+        // must not leak into the next chord the editor sees.
+        clearShortcutKeys();
         prefixDigitState = createPrefixDigitSequenceState();
         return;
       }
+      trackInputDown(event);
       const target = event.target as HTMLElement | null;
       if (context.modal === "none" && deps.claimDraftShortcut?.(event)) {
         prefixDigitState = createPrefixDigitSequenceState();
@@ -304,6 +331,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
     window,
     "keyup",
     (event) => {
+      trackInputUp(event);
       releaseHeldShortcuts(event);
       if (
         deps.timeline.gestures.clipboardMode?.keepTime ||
@@ -349,11 +377,40 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       if (!isWindowBlur(event.target, window)) {
         return;
       }
+      clearShortcutKeys();
       releaseHeldShortcuts();
       prefixDigitState = createPrefixDigitSequenceState();
     },
     true,
   );
+  deps.scope.listen(
+    document,
+    "visibilitychange",
+    () => {
+      if (document.visibilityState === "hidden") {
+        clearShortcutKeys();
+      }
+    },
+    true,
+  );
+  // Held pointer buttons are tracked before the canvas matcher runs, so a
+  // right-click can complete `E+MOUSE2` and a keyboard trigger can see a held
+  // button. Pointer-up and pointer-cancel release the same physical identity.
+  deps.scope.listen(
+    window,
+    "pointerdown",
+    (event) => {
+      const context = readShortcutContext(event.target);
+      if (context.capturing || context.modal === "urgent") {
+        clearShortcutKeys();
+        return;
+      }
+      trackInputDown(event);
+    },
+    true,
+  );
+  deps.scope.listen(window, "pointerup", (event) => trackInputUp(event), true);
+  deps.scope.listen(window, "pointercancel", (event) => trackInputUp(event), true);
   registerCanvasShortcutBindings({
     scope: deps.scope,
     batchControlsActive: deps.batchControlsActive,

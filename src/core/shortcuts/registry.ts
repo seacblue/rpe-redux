@@ -11,8 +11,17 @@
 import { PREFERENCE_SECTIONS } from "../state/preferences.ts";
 import { defineValue, values } from "../state/values.ts";
 import { Contributions } from "../state/contributions.ts";
-import { assertShortcut, canonicalText, parseShortcut, shortcutIssue } from "./keys.ts";
-import { matches } from "./keyMatching.ts";
+import {
+  assertShortcut,
+  canonicalText,
+  parseShortcut,
+  shortcutConflictKey,
+  shortcutIssue,
+  shortcutKeys,
+} from "./keys.ts";
+import { matches, shortcutKey } from "./keyMatching.ts";
+import { heldShortcutKeys } from "./inputKeys.ts";
+import { shortcutScopesOverlap } from "./scope.ts";
 import type {
   BindingChange,
   Shortcut,
@@ -55,6 +64,8 @@ export class ShortcutRegistry {
   private nextDefinitionOrder = 0;
   /** Written bindings, parsed once per change: a keystroke asks this table. */
   private readonly parsed = new Map<string, Shortcut[]>();
+  /** Views whose bindings can answer one trigger key; rebuilt with the view cache. */
+  private candidateIndex: ReadonlyMap<string, readonly ShortcutView[]> | null = null;
 
   // ------------------------------------------------------------ registration
 
@@ -179,6 +190,7 @@ export class ShortcutRegistry {
         bindings: this.bindingsOf(id),
         overridden: this.overridden(id),
         conflicts: [],
+        bindingConflicts: {},
       };
       if (shared) {
         view.shared = shared;
@@ -188,10 +200,13 @@ export class ShortcutRegistry {
       }
       return view;
     });
+    // Conflicts are per written binding, not per command: one command may carry
+    // a conflicting alternate while its primary key stays unique.
+    const buckets = new Map<string, Record<string, string[]>>(views.map((view) => [view.id, {}]));
     const byBinding = new Map<string, ShortcutView[]>();
     for (const view of views) {
       for (const binding of view.bindings) {
-        const text = canonicalText(binding);
+        const text = shortcutConflictKey(binding);
         const list = byBinding.get(text);
         if (list) {
           list.push(view);
@@ -200,20 +215,63 @@ export class ShortcutRegistry {
         }
       }
     }
-    for (const list of byBinding.values()) {
+    for (const [text, list] of byBinding) {
       const contenders = list.filter((view) => !view.shared && enabledIds.has(view.id));
-      if (contenders.length < 2) {
-        continue;
-      }
-      for (const view of contenders) {
-        view.conflicts.push(
-          ...contenders.filter((other) => other !== view).map((other) => other.id),
-        );
+      // Two commands can share a key as long as their scopes never coexist.
+      // Parent/child scopes do overlap and therefore still report a collision.
+      for (let left = 0; left < contenders.length; left += 1) {
+        for (let right = left + 1; right < contenders.length; right += 1) {
+          const first = contenders[left];
+          const second = contenders[right];
+          if (!shortcutScopesOverlap(first.scope, second.scope)) {
+            continue;
+          }
+          (buckets.get(first.id)![text] ??= []).push(second.id);
+          (buckets.get(second.id)![text] ??= []).push(first.id);
+        }
       }
     }
+    for (const view of views) {
+      const bucket = buckets.get(view.id)!;
+      view.bindingConflicts = bucket;
+      view.conflicts = [...new Set(Object.values(bucket).flat())];
+    }
+    // A keystroke only asks the bindings that name its trigger key.
+    const candidateIndex = new Map<string, ShortcutView[]>();
+    for (const view of views) {
+      const seen = new Set<string>();
+      for (const binding of view.bindings) {
+        for (const key of shortcutKeys(binding)) {
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          const list = candidateIndex.get(key);
+          if (list) {
+            list.push(view);
+          } else {
+            candidateIndex.set(key, [view]);
+          }
+        }
+      }
+    }
+    this.candidateIndex = candidateIndex;
     this.cachedEnabled = Object.freeze(enabled);
     this.cached = Object.freeze(views);
     return this.cached;
+  }
+
+  /**
+   * Views whose bindings name `eventKey` as one of their keys.
+   *
+   * Dispatch uses this instead of scanning every registered shortcut; the list
+   * keeps registration order, which is the tie-breaker inside one scope.
+   */
+  viewsForEventKey(eventKey: string): readonly ShortcutView[] {
+    if (!this.candidateIndex) {
+      this.shortcuts();
+    }
+    return this.candidateIndex?.get(eventKey) ?? [];
   }
 
   /** The bindings a shortcut currently answers to. */
@@ -350,23 +408,32 @@ export class ShortcutRegistry {
   // ---------------------------------------------------------------- dispatch
 
   /**
-   * The first registered shortcut whose binding matches `event`.
+   * The shortcut whose binding matches `event`.
    *
-   * Registration order is precedence, which is deliberate: a pane that wants a
-   * key while it is open registers later than the global shortcut and wins.
+   * A binding with more held keys wins over a shorter one, so `E+MOUSE2` beats
+   * a plain `MOUSE2` when both can run. Registration order breaks a tie inside
+   * the same chord length, which is deliberate: a pane that wants a key while
+   * it is open registers later than the global shortcut and wins.
    */
   match(event: ShortcutEventLike): ShortcutDefinition | undefined {
-    for (const definition of this.definitions.getSnapshot()) {
-      if (definition.enabled?.() === false) {
+    const held = heldShortcutKeys();
+    let winner: { definition: ShortcutDefinition; keyCount: number } | undefined;
+    for (const view of this.viewsForEventKey(shortcutKey(event))) {
+      const definition = this.definitions.node(view.id);
+      if (!definition || definition.enabled?.() === false) {
         continue;
       }
-      for (const binding of this.bindingsOf(definition.id)) {
-        if (matches(event, binding)) {
-          return definition;
+      for (const binding of view.bindings) {
+        if (!matches(event, binding, held)) {
+          continue;
+        }
+        const keyCount = shortcutKeys(binding).length;
+        if (!winner || keyCount > winner.keyCount) {
+          winner = { definition, keyCount };
         }
       }
     }
-    return undefined;
+    return winner?.definition;
   }
 
   // -------------------------------------------------------------- observers
@@ -494,6 +561,7 @@ export class ShortcutRegistry {
   private invalidate(): void {
     this.cached = null;
     this.cachedEnabled = null;
+    this.candidateIndex = null;
     this.parsed.clear();
     this.version++;
     for (const listener of [...this.listeners]) {

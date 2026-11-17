@@ -89,8 +89,14 @@
   background: var(--input-surface);
 }
 
+// A conflicting binding wears the urgent ink on its edge and a red inset ring
+// inside the chip. The inset belongs to the chip, not the capture button, so
+// the whole binding reads as wrong even while the pointer is elsewhere.
 .redux-shortcut-chip[data-conflict="true"] {
-  box-shadow: inset 0 0 0 1px var(--danger);
+  border-color: var(--danger);
+  box-shadow:
+    inset 0 0 0 1px var(--danger),
+    inset 0 0 10px color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .redux-app-root .redux-shortcut-capture {
@@ -229,6 +235,11 @@
   font: inherit;
   font-size: var(--type-label);
   font-weight: 600;
+}
+
+.redux-shortcut-recording-preview {
+  display: flex;
+  justify-content: center;
 }
 
 .redux-shortcut-recording-modifiers,

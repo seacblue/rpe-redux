@@ -31,6 +31,9 @@ export const WHEEL_KEYS = ["WHEELUP", "WHEELDOWN", "WHEELLEFT", "WHEELRIGHT"] as
 /** The modifier tokens, in the order a written shortcut lists them. */
 const MODIFIER_ORDER: readonly Modifier[] = ["CTRL", "ALT", "SHIFT", "META", "MOD"];
 
+/** How many non-modifier keys one binding may hold at the same time. */
+export const MAX_SHORTCUT_KEYS = 4;
+
 const MOUSE_ALIASES: Record<string, string> = {
   MOUSE: "MOUSE0",
   MOUSELEFT: "MOUSE0",
@@ -140,6 +143,21 @@ export function normalizeShortcutKey(key: string): string {
   return KEY_ALIASES[upper] ?? upper;
 }
 
+/**
+ * Every non-modifier key in a binding, normalized, de-duplicated, and sorted.
+ *
+ * Sorting is what makes `E+MOUSE2` and `MOUSE2+E` one binding rather than two.
+ * The result is also the order the interface draws the caps in, and the order
+ * `canonicalText` writes them.
+ */
+export function shortcutKeys(shortcut: Shortcut): string[] {
+  const keys = new Set<string>();
+  for (const key of [shortcut.key, ...(shortcut.keys ?? [])]) {
+    keys.add(normalizeShortcutKey(key));
+  }
+  return [...keys].sort();
+}
+
 const isModifier = (token: string): boolean =>
   (MODIFIER_ORDER as readonly string[]).includes(token);
 const isBareModifier = (token: string): boolean =>
@@ -194,14 +212,20 @@ export function parseShortcut(text: unknown): ParsedShortcut {
   }
   const modifiers = MODIFIER_ORDER.filter((token) => parts.includes(token));
   const keys = parts.filter((part) => !isModifier(part));
-  if (keys.length !== 1) {
+  if (keys.length === 0) {
     return { ok: false, error: "shortcuts.error.needsOneKey" };
   }
-  const key = keys[0];
-  if (!isSupportedKey(key)) {
+  if (keys.length > MAX_SHORTCUT_KEYS) {
+    return { ok: false, error: "shortcuts.error.tooManyKeys" };
+  }
+  if (keys.some((key) => !isSupportedKey(key))) {
     return { ok: false, error: "shortcuts.error.unsupportedKey" };
   }
-  return { ok: true, shortcut: { key, modifiers } };
+  const shortcut: Shortcut = { key: keys[keys.length - 1], modifiers };
+  if (keys.length > 1) {
+    shortcut.keys = keys.slice(0, -1);
+  }
+  return { ok: true, shortcut };
 }
 
 /**
@@ -212,7 +236,23 @@ export function parseShortcut(text: unknown): ParsedShortcut {
  */
 export function canonicalText(shortcut: Shortcut): string {
   const modifiers = MODIFIER_ORDER.filter((token) => shortcut.modifiers?.includes(token));
-  return [...modifiers, normalizeShortcutKey(shortcut.key)].join("+");
+  return [...modifiers, ...shortcutKeys(shortcut)].join("+");
+}
+
+/**
+ * The identity two bindings collide on, resolved for this platform.
+ *
+ * Unlike `canonicalText`, `MOD` becomes the modifier this platform actually
+ * uses, so `MOD+S` and `CTRL+S` are recognized as one binding on Windows. Key
+ * order is already normalized by `shortcutKeys`.
+ */
+export function shortcutConflictKey(shortcut: Shortcut): string {
+  const modifiers = new Set<Modifier>();
+  for (const modifier of shortcut.modifiers ?? []) {
+    modifiers.add(modifier === "MOD" ? (isApplePlatform() ? "META" : "CTRL") : modifier);
+  }
+  const ordered = MODIFIER_ORDER.filter((token) => modifiers.has(token));
+  return [...ordered, ...shortcutKeys(shortcut)].join("+");
 }
 
 /** The display names of the keys whose token is not already readable. */
@@ -283,7 +323,7 @@ export function formatKeyToken(token: string): string {
  */
 export function displayText(shortcut: Shortcut): string {
   const modifiers = MODIFIER_ORDER.filter((token) => shortcut.modifiers?.includes(token));
-  return [...modifiers, shortcut.key].map(formatKeyToken).join(" + ");
+  return [...modifiers, ...shortcutKeys(shortcut)].map(formatKeyToken).join(" + ");
 }
 
 /** ARIA key names for the tokens whose spelling differs from the DOM value. */
@@ -335,7 +375,13 @@ const ARIA_KEYS: Record<string, string> = {
  * place instead of letting every caller approximate it.
  */
 export function ariaShortcutText(shortcut: Shortcut): string {
-  const key = normalizeShortcutKey(shortcut.key);
+  const keys = shortcutKeys(shortcut);
+  // `aria-keyshortcuts` names one key per chord; a held-key chord has no
+  // equivalent spelling there, so the visible chips keep the whole meaning.
+  if (keys.length !== 1) {
+    return "";
+  }
+  const key = keys[0];
   if (isMouse(key)) {
     return "";
   }
@@ -373,14 +419,19 @@ export function ariaShortcutText(shortcut: Shortcut): string {
  * turns it into a thrown error when a feature declares a default.
  */
 export function shortcutIssue(shortcut: Shortcut): string | null {
-  const key = normalizeShortcutKey(String(shortcut.key ?? ""));
+  const rawKeys = [shortcut.key, ...(shortcut.keys ?? [])].map((key) =>
+    normalizeShortcutKey(String(key ?? "")),
+  );
+  if (rawKeys.some((key) => !key)) {
+    return "shortcuts.error.unsupportedKey";
+  }
+  if (new Set(rawKeys).size !== rawKeys.length) {
+    return "shortcuts.error.duplicateKey";
+  }
+  if (rawKeys.length > MAX_SHORTCUT_KEYS) {
+    return "shortcuts.error.tooManyKeys";
+  }
   const modifiers = shortcut.modifiers ?? [];
-  if (!key || (isModifier(key) ? !isBareModifier(key) : !isSupportedKey(key))) {
-    return "shortcuts.error.unsupportedKey";
-  }
-  if (isModifier(key) && modifiers.length > 0) {
-    return "shortcuts.error.unsupportedKey";
-  }
   if (new Set(modifiers).size !== modifiers.length) {
     return "shortcuts.error.duplicateKey";
   }
@@ -388,6 +439,12 @@ export function shortcutIssue(shortcut: Shortcut): string | null {
     if (!isModifier(modifier)) {
       return "shortcuts.error.unsupportedKey";
     }
+  }
+  if (rawKeys.length === 1 && isBareModifier(rawKeys[0])) {
+    return modifiers.length > 0 ? "shortcuts.error.unsupportedKey" : null;
+  }
+  if (rawKeys.some((key) => isModifier(key) || !isSupportedKey(key))) {
+    return "shortcuts.error.unsupportedKey";
   }
   return null;
 }

@@ -415,10 +415,26 @@
   gap: var(--space-1);
 }
 
+.redux-kbd-parts {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .redux-kbd-part {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+}
+
+// Mouse buttons and wheel directions are fixed inline PNGs, not theme icon
+// masks: the red button is part of the key's identity in every theme.
+.redux-kbd-key-icon {
+  display: block;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
 }
 
 .redux-kbd-plus {

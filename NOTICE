@@ -22,6 +22,13 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+Mouse key glyphs are adapted from Kenney Input Prompts 1.1 (CC0 1.0,
+https://kenney.nl/assets/input-prompts); the adapted SVGs and PNGs live in
+`src/design/components/keyboardHint/mouse/`.
+鼠标按键图标改编自 Kenney Input Prompts 1.1（CC0 1.0，
+https://kenney.nl/assets/input-prompts）；改编后的 SVG 与 PNG 位于
+`src/design/components/keyboardHint/mouse/`。
+
 Window caption glyphs come from Microsoft Fluent UI System Icons (MIT License,
 Copyright (c) 2020 Microsoft Corporation); the source SVGs live in
 `scripts/icon-sources/fluent/`.

@@ -9,6 +9,7 @@
  * accumulation stay intact.
  */
 import { matches } from "../../shortcuts/keyMatching.ts";
+import { heldShortcutKeys } from "../../shortcuts/inputKeys.ts";
 import { shortcutRegistry } from "../../shortcuts/registry.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
 
@@ -77,5 +78,6 @@ export function matchTimelineWheel(event: ShortcutEventLike): TimelineWheelActio
 
 /** Whether the live bindings of one action answer to this event. */
 function bound(event: ShortcutEventLike, id: string): boolean {
-  return shortcutRegistry.bindingsOf(id).some((binding) => matches(event, binding));
+  const held = heldShortcutKeys();
+  return shortcutRegistry.bindingsOf(id).some((binding) => matches(event, binding, held));
 }

@@ -1,7 +1,10 @@
 /** Reads a browser event as a key, a recorded binding, or a match against one. */
 import { isApplePlatform } from "../platform/environment.ts";
-import { normalizeShortcutKey } from "./keys.ts";
+import { normalizeShortcutKey, shortcutKeys } from "./keys.ts";
 import type { Modifier, Shortcut, ShortcutEventLike } from "./types.ts";
+
+/** Modifier tokens never join a held-key chord as ordinary keys. */
+const BARE_MODIFIERS = new Set(["CTRL", "ALT", "SHIFT", "META"]);
 
 /** Map a wheel event to a directional key, or null when it has no wheel delta. */
 function wheelKey(event: ShortcutEventLike): string | null {
@@ -85,13 +88,22 @@ export function shortcutKey(event: ShortcutEventLike): string {
 }
 
 /**
- * Whether `event` is exactly `shortcut`.
+ * Whether `event` is `shortcut`.
  *
  * `MOD` matches the platform's primary modifier and nothing else, so a profile
  * moved between a Mac and a PC keeps the same intent without both modifiers
  * firing at once.
+ *
+ * A binding with several non-modifier keys matches when the event's key is one
+ * of them and `heldKeys` covers the rest. Extra held keys are ignored: a plain
+ * `E` binding keeps working while a mouse button is down, and a more specific
+ * `E+MOUSE2` binding wins the dispatch tie when both can run.
  */
-export function matches(event: ShortcutEventLike, shortcut: Shortcut): boolean {
+export function matches(
+  event: ShortcutEventLike,
+  shortcut: Shortcut,
+  heldKeys: Iterable<string> = [],
+): boolean {
   if (event.isComposing || ["Process", "Dead", "Unidentified"].includes(event.key ?? "")) {
     return false;
   }
@@ -101,19 +113,30 @@ export function matches(event: ShortcutEventLike, shortcut: Shortcut): boolean {
   // resolved into an actual Ctrl/Meta requirement before comparing.
   const needsCtrl = modifiers.includes("CTRL") || (wantsMod && !isApplePlatform());
   const needsMeta = modifiers.includes("META") || (wantsMod && isApplePlatform());
-  const key = normalizeShortcutKey(shortcut.key);
-  if (["CTRL", "ALT", "SHIFT", "META"].includes(key) && modifiers.length === 0) {
-    const eventKey = shortcutKey(event) === "CONTROL" ? "CTRL" : shortcutKey(event);
+  const keys = shortcutKeys(shortcut);
+  const eventKey = shortcutKey(event);
+  if (keys.length === 1 && BARE_MODIFIERS.has(keys[0]) && modifiers.length === 0) {
+    const modifierKey = eventKey === "CONTROL" ? "CTRL" : eventKey;
     return (
-      key === eventKey &&
-      !(event.ctrlKey && key !== "CTRL") &&
-      !(event.metaKey && key !== "META") &&
-      !(event.altKey && key !== "ALT") &&
-      !(event.shiftKey && key !== "SHIFT")
+      keys[0] === modifierKey &&
+      !(event.ctrlKey && modifierKey !== "CTRL") &&
+      !(event.metaKey && modifierKey !== "META") &&
+      !(event.altKey && modifierKey !== "ALT") &&
+      !(event.shiftKey && modifierKey !== "SHIFT")
     );
   }
+  if (!keys.includes(eventKey)) {
+    return false;
+  }
+  const active = new Set<string>();
+  for (const held of heldKeys) {
+    active.add(normalizeShortcutKey(held));
+  }
+  active.add(eventKey);
+  if (!keys.every((key) => active.has(key))) {
+    return false;
+  }
   return (
-    key === shortcutKey(event) &&
     Boolean(event.ctrlKey) === needsCtrl &&
     Boolean(event.metaKey) === needsMeta &&
     Boolean(event.altKey) === modifiers.includes("ALT") &&
@@ -140,36 +163,64 @@ export function isSystemCancelKey(event: ShortcutEventLike): boolean {
  * event cannot become a binding — a bare modifier, an IME composition, or a key
  * this app does not name.
  */
-export function recordShortcut(event: ShortcutEventLike): Shortcut | null {
+export function recordShortcut(
+  event: ShortcutEventLike,
+  heldKeys: readonly string[] = [],
+): Shortcut | null {
   const wheel = wheelKey(event);
   if (wheel !== null) {
-    return wheel ? { key: wheel, modifiers: modifiersOf(event) } : null;
+    return wheel ? withHeldKeys(wheel, event, heldKeys) : null;
   }
   if (typeof event.button === "number" && !event.key) {
-    return {
-      key: `MOUSE${Math.max(0, Math.min(4, event.button))}`,
-      modifiers: modifiersOf(event),
-    };
+    return withHeldKeys(`MOUSE${Math.max(0, Math.min(4, event.button))}`, event, heldKeys);
   }
   if (["Control", "Shift", "Alt", "Meta"].includes(event.key ?? "")) {
     return null;
   }
   const key = shortcutKey(event);
-  if (!key || ["PROCESS", "DEAD", "UNIDENTIFIED"].includes(key)) {
+  if (!key || ["PROCESS", "DEAD", "UNIDENTIFIED"].includes(key) || BARE_MODIFIERS.has(key)) {
     return null;
   }
-  return { key, modifiers: modifiersOf(event) };
+  return withHeldKeys(key, event, heldKeys);
+}
+
+/**
+ * Build a binding from the triggering key and every other key held with it.
+ *
+ * Modifiers stay in their own list, and the triggering key is never repeated in
+ * `keys`. The result omits `keys` when the chord has only one key so a plain
+ * binding still compares and serializes exactly as before.
+ */
+function withHeldKeys(
+  key: string,
+  event: ShortcutEventLike,
+  heldKeys: readonly string[],
+): Shortcut {
+  const others = new Set<string>();
+  for (const held of heldKeys) {
+    const token = normalizeShortcutKey(held);
+    if (token !== key && !BARE_MODIFIERS.has(token)) {
+      others.add(token);
+    }
+  }
+  const shortcut: Shortcut = { key, modifiers: modifiersOf(event) };
+  if (others.size > 0) {
+    shortcut.keys = [...others];
+  }
+  return shortcut;
 }
 
 /** Whether a key-up event released a key that `shortcut` uses. */
 export function released(event: ShortcutEventLike, shortcut: Shortcut): boolean {
   const key = shortcutKey(event);
+  if (shortcutKeys(shortcut).includes(key)) {
+    return true;
+  }
   const alias = (["CTRL", "META", "SHIFT", "ALT"] as readonly Modifier[]).includes(key as Modifier)
     ? (key as Modifier)
     : undefined;
   const modifiers = shortcut.modifiers ?? [];
   return (
-    normalizeShortcutKey(shortcut.key) === key ||
     (alias !== undefined && modifiers.includes(alias)) ||
     ((alias === "CTRL" || alias === "META") && modifiers.includes("MOD"))
   );

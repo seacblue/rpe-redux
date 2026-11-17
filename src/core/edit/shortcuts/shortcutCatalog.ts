@@ -20,7 +20,9 @@ import {
   type ShortcutDisposer,
   type ShortcutEventLike,
 } from "../../shortcuts/types.ts";
-import { matches } from "../../shortcuts/keyMatching.ts";
+import { matches, shortcutKey } from "../../shortcuts/keyMatching.ts";
+import { heldShortcutKeys } from "../../shortcuts/inputKeys.ts";
+import { shortcutKeys } from "../../shortcuts/keys.ts";
 import { shortcutScopeAvailable, shortcutScopePriority } from "../../shortcuts/scope.ts";
 import { historyShortcuts } from "../session/history.ts";
 import { selectionShortcuts } from "../selection/control.ts";
@@ -349,19 +351,67 @@ function registryDefinition(
   return definition;
 }
 
+/** One editor binding that names a particular trigger key. */
+interface EditorCandidate {
+  readonly shortcut: EditorShortcutDefinition;
+  readonly binding: Shortcut;
+  readonly keyCount: number;
+}
+
+let editorIndexVersion = -1;
+let editorIndex: ReadonlyMap<string, readonly EditorCandidate[]> = new Map();
+
+/**
+ * Editor bindings that can answer one trigger key.
+ *
+ * The editor table is static, but the profile is not: the index is rebuilt only
+ * when the registry version changes, so a key press examines the handful of
+ * bindings that name its key instead of every declaration.
+ */
+function editorCandidates(eventKey: string): readonly EditorCandidate[] {
+  const version = shortcuts.getVersion();
+  if (version !== editorIndexVersion) {
+    const next = new Map<string, EditorCandidate[]>();
+    for (const shortcut of EDITOR_SHORTCUTS) {
+      for (const binding of shortcuts.bindingsOf(shortcut.id)) {
+        const keys = shortcutKeys(binding);
+        for (const key of keys) {
+          const list = next.get(key);
+          const candidate: EditorCandidate = {
+            shortcut,
+            binding,
+            keyCount: keys.length,
+          };
+          if (list) {
+            list.push(candidate);
+          } else {
+            next.set(key, [candidate]);
+          }
+        }
+      }
+    }
+    editorIndex = next;
+    editorIndexVersion = version;
+  }
+  return editorIndex.get(eventKey) ?? [];
+}
+
 /**
  * The editor action `event` triggers, or `undefined`.
  *
  * The declaration's scope and `when` rule are evaluated first, then the editor's
- * own surface/selection predicate. The first match in declaration order wins, and
- * every binding the user gave the command counts — not just the default one.
+ * own surface/selection predicate. A longer held-key chord wins over a shorter
+ * binding; declaration order breaks a tie. Every binding the user gave the
+ * command counts — not just the default one.
  */
 export function matchEditorShortcut(
   event: ShortcutEventLike,
   context: EditorShortcutContext,
   shortcutContext: ShortcutContext,
 ): string | undefined {
-  for (const shortcut of EDITOR_SHORTCUTS) {
+  const held = heldShortcutKeys();
+  let winner: { id: string; keyCount: number } | undefined;
+  for (const { shortcut, binding, keyCount } of editorCandidates(shortcutKey(event))) {
     if (shortcut.passive) {
       continue;
     }
@@ -377,11 +427,14 @@ export function matchEditorShortcut(
     if (!(shortcut.enabledFor?.(context) ?? true)) {
       continue;
     }
-    if (shortcuts.bindingsOf(shortcut.id).some((binding) => matches(event, binding))) {
-      return shortcut.id;
+    if (!matches(event, binding, held)) {
+      continue;
+    }
+    if (!winner || keyCount > winner.keyCount) {
+      winner = { id: shortcut.id, keyCount };
     }
   }
-  return undefined;
+  return winner?.id;
 }
 
 /** Whether an editor action stays active until its key is released. */
@@ -409,7 +462,8 @@ export function matchesEditorShortcut(
   if (!(shortcut.enabledFor?.(context) ?? true)) {
     return false;
   }
-  return shortcuts.bindingsOf(id).some((binding) => matches(event, binding));
+  const held = heldShortcutKeys();
+  return shortcuts.bindingsOf(id).some((binding) => matches(event, binding, held));
 }
 
 /**
@@ -417,14 +471,15 @@ export function matchesEditorShortcut(
  * has had first refusal. The returned definition carries its own direct runner.
  *
  * Candidate scopes are filtered by the live context and the most specific scope
- * wins; registration order only breaks ties inside one scope.
+ * wins; inside one scope a longer held-key chord wins, then registration order.
  */
 export function matchRegisteredShortcut(
   event: ShortcutEventLike,
   context: ShortcutContext,
 ): ShortcutDefinition | undefined {
-  let winner: { definition: ShortcutDefinition; priority: number } | undefined;
-  for (const view of shortcuts.shortcuts()) {
+  const held = heldShortcutKeys();
+  let winner: { definition: ShortcutDefinition; priority: number; keyCount: number } | undefined;
+  for (const view of shortcuts.viewsForEventKey(shortcutKey(event))) {
     if (EDITOR_SHORTCUT_IDS.has(view.id)) {
       continue;
     }
@@ -439,12 +494,19 @@ export function matchRegisteredShortcut(
     if (!(definition.when?.(context) ?? true)) {
       continue;
     }
-    if (!view.bindings.some((binding) => matches(event, binding))) {
-      continue;
-    }
-    const priority = shortcutScopePriority(scope);
-    if (!winner || priority > winner.priority) {
-      winner = { definition, priority };
+    for (const binding of view.bindings) {
+      if (!matches(event, binding, held)) {
+        continue;
+      }
+      const priority = shortcutScopePriority(scope);
+      const keyCount = shortcutKeys(binding).length;
+      if (
+        !winner ||
+        priority > winner.priority ||
+        (priority === winner.priority && keyCount > winner.keyCount)
+      ) {
+        winner = { definition, priority, keyCount };
+      }
     }
   }
   return winner?.definition;

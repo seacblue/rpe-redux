@@ -120,6 +120,7 @@ export default {
   "shortcuts.error.emptyPart": "A shortcut cannot contain an empty part, as in CTRL+S.",
   "shortcuts.error.duplicateKey": "The same key cannot appear twice.",
   "shortcuts.error.needsOneKey": "One key is required, optionally with Ctrl / Alt / Shift.",
+  "shortcuts.error.tooManyKeys": "A shortcut can hold at most four non-modifier keys.",
   "shortcuts.error.unsupportedKey": "That key is not supported.",
   "shortcuts.error.invalidShortcut": "Not a valid shortcut.",
   "shortcuts.error.emptyBinding": "Press a key, mouse button, or wheel direction first.",

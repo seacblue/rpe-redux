@@ -129,8 +129,22 @@ When the desktop host enables developer mode, or after the About logo is activat
 
 The performance monitor's `F3` binding is available in ordinary builds. DevTools and the developer settings page follow the host's developer policy or the About gesture.
 
+## Mouse keys and held-key chords
+
+Mouse buttons and wheel directions are ordinary key tokens: `MOUSE0` left, `MOUSE1` middle, `MOUSE2` right, `MOUSE3` back, `MOUSE4` forward, and `WHEELUP` / `WHEELDOWN` / `WHEELLEFT` / `WHEELRIGHT`. The shortcut chips draw them as fixed inline PNGs; a theme cannot replace or recolour them.
+
+A binding can hold several non-modifier keys together. Write them with `+`, in any order: `E+MOUSE2` means "hold `E` and right-click", and `CTRL+E+MOUSE2` adds Ctrl. While recording, hold the first key and then press the completing key, or release the mouse button while the keyboard key is still held. A binding matches when its trigger key is pressed and every other listed key is held; the longer chord wins when both it and a shorter binding could run. Extra held keys never disable an ordinary binding, so a plain `MOUSE2` action keeps working while a modifier-like letter is held. One binding may name at most four non-modifier keys.
+
+## Conflict reporting
+
+Two bindings are a conflict when they resolve to the same modifiers and held keys and their scopes can be available at the same moment. `MOD` resolves to the platform's primary modifier before comparison, so `MOD+S` and `Ctrl+S` collide on Windows. A key that is shared by commands in disjoint scopes — editor versus modal, or editor versus a drawn surface — is not reported. Parent and child scopes (`app` and `editor`) do overlap and remain a conflict.
+
+A conflicting chip in **Settings → Shortcuts** takes the urgent border colour and a red inset ring, and its tooltip names the other commands. Conflict detection is per binding: a command with two alternate keys marks only the one that collides.
+
 ## Scope rules
 
 Bindings are registered in one of these scopes: `emergency`, `modal`, `surface`, `editor`, `workspace`, `app`, or `instrument`. Capture and urgent dialogs own the keyboard; editor shortcuts take first refusal while the edit workspace is active, and the most specific available scope wins when two commands share a binding. Text entry and open menus keep their native keys.
+
+Scope availability decides whether two commands can collide. `emergency` is always available; `instrument` survives ordinary dialogs; `app`, `workspace`, `editor`, and `surface` require no modal; `workspace` and `editor` also require an open document away from the home screen and text entry, while `surface` requires a drawing surface. `editor` and `surface` are disjoint because a drawn surface excludes the editor's own key table, and `modal` is disjoint from all four modal-free scopes.
 
 `Esc` is a fixed system cancel key rather than a registered shortcut: the surface that owns the current gesture consumes it, and it never appears in the shortcut editor. When no surface owns it, the library and editor open Settings.

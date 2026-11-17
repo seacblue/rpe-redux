@@ -170,7 +170,11 @@ export function useTooltipHost() {
           description: next.dataset.tipDesc ?? "",
           video: next.dataset.tipVideo ?? "",
           strokes:
-            keys.length > 0 ? keys : next.dataset.tipKey ? [{ keyLabel: next.dataset.tipKey }] : [],
+            keys.length > 0
+              ? keys
+              : next.dataset.tipKey
+                ? [{ keys: [{ label: next.dataset.tipKey }] }]
+                : [],
         });
       };
       if (immediate) {
