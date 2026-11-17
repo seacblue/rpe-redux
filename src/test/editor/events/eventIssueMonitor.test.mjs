@@ -167,6 +167,22 @@ test("monitor reports non-positive events and holds as chart issues", () => {
   );
 });
 
+test("monitor reports negative beats for events and notes", () => {
+  const snapshot = new EventIssueMonitor().update(
+    chart([
+      line("line-1", "First", [{ moveXEvents: [event(-1, 1, "negative-event")] }]),
+      { ...line("line-2", "Second", []), notes: [createHold(-2, -1, "negative-note")] },
+    ]),
+  );
+  assert.deepEqual(
+    snapshot.issues.map((issue) => [issue.kind, issue.target]),
+    [
+      ["negative-beat", "note"],
+      ["negative-beat", "event"],
+    ],
+  );
+});
+
 function createHold(start, end, id) {
   return {
     id,

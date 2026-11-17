@@ -160,6 +160,7 @@ export default {
   "editorPanels.issues.extendedLayer": "扩展层",
   "editorPanels.issues.notesLayer": "音符",
   "editorPanels.issues.holdTrack": "Hold",
+  "editorPanels.issues.negativeBeat": "拍数不能小于 0",
   "editorPanels.issues.beat": "拍 {value}",
   "editorPanels.issues.eventPair": "事件 {first} ↔ {second}",
   "editorPanels.issues.invalidRange": "对象 {index} 没有正向时长",

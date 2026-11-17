@@ -38,6 +38,7 @@ import {
 } from "../../global/chart/noise/noiseLine.ts";
 import { lineNoiseConflicts } from "../../global/chart/noise/lineNoiseConflicts.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
+import { assertNoNewNegativeBeatRanges } from "../../global/chart/chartValidation.ts";
 import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
 import { formatLineSelection, parseLineSelectionInput } from "../state/lineSelectionInput.ts";
 
@@ -780,6 +781,12 @@ export class EditorSession extends EventTarget {
       : { label, chart, beforeSelection, metadata: historyMetadata, cancel: false };
     extensionRegistry.emitHook("session:before-commit", before);
     if (before.cancel) {
+      this.notify();
+      return false;
+    }
+    try {
+      assertNoNewNegativeBeatRanges(this.chart, before.chart);
+    } catch {
       this.notify();
       return false;
     }

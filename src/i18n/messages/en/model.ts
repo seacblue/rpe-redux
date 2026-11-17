@@ -29,6 +29,7 @@ export default {
   "model.beat.outOfRange": "The beat is outside the safe integer range.",
   "model.beat.invalid": "Invalid beat",
   "model.beat.empty": "The beat cannot be empty.",
+  "model.beat.negative": "A note or event beat cannot be negative.",
 
   "model.chart.untitled": "Untitled chart",
   "model.chart.invalidDocument": "Not a valid RPE JSON document",

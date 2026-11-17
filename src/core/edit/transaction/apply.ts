@@ -48,6 +48,7 @@ import type {
 import type { HistoryEntryMetadata, HistoryEntryOrigin } from "../session/history.ts";
 import type { NoteChangeKind } from "../../global/chart/runtime/noteChangeHints.ts";
 import { t } from "../../../i18n/index.ts";
+import { compareBeats, isBeat } from "../../global/chart/timing/beat.ts";
 import {
   adoptChartLocations,
   appendObjectIdView,
@@ -378,6 +379,44 @@ function validateObjectId(
     return null;
   }
   return value;
+}
+
+/** Rejects a changed note or event whose stored time begins before beat zero. */
+function appendNegativeBeatIssue(
+  state: MutableTransactionState,
+  item: { readonly startTime?: unknown; readonly endTime?: unknown; readonly id?: unknown },
+  path: string,
+): void {
+  const endpoint =
+    isBeat(item.startTime) && compareBeats(item.startTime, [0, 0, 1]) < 0
+      ? "startTime"
+      : isBeat(item.endTime) && compareBeats(item.endTime, [0, 0, 1]) < 0
+        ? "endTime"
+        : null;
+  if (!endpoint) {
+    return;
+  }
+  state.issues.push(
+    issue("beat.negative", `${path}.${endpoint}`, isChartObjectId(item.id) ? item.id : undefined),
+  );
+}
+
+/** Validate all note and event objects changed by this transaction. */
+function validateChangedBeatBounds(state: MutableTransactionState): void {
+  for (const changed of state.changedNotes ?? []) {
+    appendNegativeBeatIssue(
+      state,
+      changed.note,
+      `judgeLineList[${changed.lineIndex}].notes[${changed.noteIndex}]`,
+    );
+  }
+  for (const changed of state.changedEvents ?? []) {
+    appendNegativeBeatIssue(
+      state,
+      changed.event,
+      `judgeLineList[${changed.lineIndex}].${changed.track}[${changed.eventIndex}]`,
+    );
+  }
 }
 
 /** Reserves the id for a newly inserted object. */
@@ -956,6 +995,7 @@ export function applyRequest(
     }
   }
   validateTouchedLineRelations(state.chart, state.relationTouched, state.issues);
+  validateChangedBeatBounds(state);
 }
 
 /** Return the caller label or the localized default transaction label. */
