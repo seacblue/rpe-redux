@@ -130,7 +130,9 @@ export default {
   "settings.group.overview": "Timeline overview",
   "settings.group.noteOverlap": "Note overlap",
   "settings.field.render-fps.label": "Frame-rate cap",
-  "settings.field.multi-line-event-window-count.label": "Same-screen event-window count",
+  "settings.field.multi-line-window-width.label": "Multi-line window width",
+  "settings.field.multi-line-window-width.description":
+    "Relative width of each multi-line window (notes or events). At 0.5 the timeline holds three and a half windows; smaller values make windows narrower and fit more of them.",
   "settings.option.render-fps.30": "30 fps",
   "settings.option.render-fps.60": "60 fps",
   "settings.option.render-fps.90": "90 fps",

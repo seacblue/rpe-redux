@@ -12,6 +12,9 @@ import type {
   TimelineScale,
 } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import {
+  clampMultiLineWindowWidth,
+  MULTI_LINE_WINDOW_WIDTH_DEFAULT,
+  multiLineWidthRatio,
   noteScaleForTimelineRatio,
   TIMELINE_NOTE_REFERENCE_RATIO,
 } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
@@ -36,7 +39,7 @@ type ViewportSettings = Pick<
   | "scale"
   | "division"
   | "snapX"
-  | "multiLineEventWindowCount"
+  | "multiLineWindowWidth"
   | "scrollSpeed"
   | "judgementOffset"
 >;
@@ -104,7 +107,7 @@ export class TimelineViewport {
   gridCount = 11;
   originalPanelWidth = 0;
   exclusiveRatio = 0.75;
-  multiLineEventWindowCount = 3;
+  multiLineWindowWidth = MULTI_LINE_WINDOW_WIDTH_DEFAULT;
   multiLineZoom: MultiLineZoom = { notes: 1, events: 1 };
   multiLineScroll: number | MultiLineScroll = { notes: 0, events: 0 };
   scrollSpeed = 1;
@@ -226,7 +229,7 @@ export class TimelineViewport {
       scale,
       division,
       snapX,
-      multiLineEventWindowCount,
+      multiLineWindowWidth,
       scrollSpeed,
       judgementOffset,
     } = config;
@@ -237,7 +240,7 @@ export class TimelineViewport {
       scale: clampTimelineScale(scale),
       division,
       snapX,
-      multiLineEventWindowCount,
+      multiLineWindowWidth: clampMultiLineWindowWidth(multiLineWindowWidth),
       scrollSpeed,
       judgementOffset,
     });
@@ -246,26 +249,28 @@ export class TimelineViewport {
    * The single horizontal layout for one multi-line area.
    *
    * Window width, gap, stride, visible range, viewport offset, hit testing, and
-   * panning all read this object so they stay in lockstep. Note mode without
-   * merging shares the persisted window count with the event field; merged note
-   * mode reports a single panel.
+   * panning all read this object so they stay in lockstep. One configured scale
+   * sizes every panel through `multiLineWidthRatio`, so the default shows three
+   * and a half windows and the count on screen follows from that width instead
+   * of a separate cap; merged note mode reports a single panel.
    */
   panelLayout(area: TimelineArea): TimelinePanelLayout {
     const session = this.getSession();
     const count = this.panelCount(area);
-    const configuredWindowCount = Math.max(
-      1,
-      Math.floor(Number(this.multiLineEventWindowCount) || 1),
-    );
+    // Event windows separate at one eighth of a window; note panels keep their
+    // narrower surface gap. Both values still come from this layout.
+    const gapRatio = area === "events" ? 1 / 8 : 0.04;
     return {
       active: session.multiLineActive,
       count,
-      configuredWidth: 0,
-      visibleCount: Math.max(1, Math.min(count, configuredWindowCount)),
-      // Event windows separate at one eighth of a window; note panels keep
-      // their narrower surface gap. Both values still come from this layout.
-      gapRatio: area === "events" ? 1 / 8 : 0.04,
-      gapMinimum: area === "events" ? 0 : 12,
+      widthRatio: multiLineWidthRatio(
+        clampMultiLineWindowWidth(this.multiLineWindowWidth),
+        gapRatio,
+      ),
+      gapRatio,
+      // The configured scale keeps gaps proportional; a floor would break the
+      // window count the scale promises at narrow widths.
+      gapMinimum: 0,
     };
   }
 

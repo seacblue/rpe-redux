@@ -42,7 +42,7 @@ export interface TimelineViewportReceiver extends TimelineViewportMethodSurface 
   snapX: boolean;
   gridCount: number;
   originalPanelWidth: number;
-  multiLineEventWindowCount: number;
+  multiLineWindowWidth: number;
   multiLineZoom: MultiLineZoom;
   multiLineScroll: number | MultiLineScroll;
   cameraX?: number;

@@ -109,7 +109,9 @@ export default {
   "settings.group.overview": "时间轴概览",
   "settings.group.noteOverlap": "音符重叠",
   "settings.field.render-fps.label": "帧率上限",
-  "settings.field.multi-line-event-window-count.label": "同屏事件窗数量",
+  "settings.field.multi-line-window-width.label": "多线窗口宽度",
+  "settings.field.multi-line-window-width.description":
+    "多线编辑中每个窗口（音符或事件）的相对宽度；0.5 时同屏正好显示 3.5 个窗口，数值越小窗口越窄、同屏越多。",
   "settings.option.render-fps.30": "30 帧/秒",
   "settings.option.render-fps.60": "60 帧/秒",
   "settings.option.render-fps.90": "90 帧/秒",

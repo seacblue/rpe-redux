@@ -80,15 +80,61 @@ export function createNotePanelProjection(
   };
 }
 
+/** Smallest multi-line window scale: a few pixels per window. */
+export const MULTI_LINE_WINDOW_WIDTH_MIN = 0.01;
+/** Largest multi-line window scale: one window covering most of the timeline. */
+export const MULTI_LINE_WINDOW_WIDTH_MAX = 1;
+/**
+ * Default multi-line window scale.
+ *
+ * The scale is calibrated in windows instead of raw pixels, so this default
+ * lands on a readable split: {@link MULTI_LINE_WINDOWS_AT_DEFAULT} windows
+ * across the timeline, with the trailing one cut in half at the edge.
+ */
+export const MULTI_LINE_WINDOW_WIDTH_DEFAULT = 0.5;
+
+/** Windows the timeline holds across its width at the default window scale. */
+export const MULTI_LINE_WINDOWS_AT_DEFAULT = 3.5;
+
+/** Clamp a multi-line window scale into the supported range, in hundredths. */
+export function clampMultiLineWindowWidth(value: number): number {
+  const candidate = Number.isFinite(value) ? value : MULTI_LINE_WINDOW_WIDTH_DEFAULT;
+  const bounded = Math.max(
+    MULTI_LINE_WINDOW_WIDTH_MIN,
+    Math.min(MULTI_LINE_WINDOW_WIDTH_MAX, candidate),
+  );
+  return Math.round(bounded * 100) / 100;
+}
+
+/**
+ * Panel width, as a fraction of the viewport, for one multi-line window scale.
+ *
+ * `scale` is relative to {@link MULTI_LINE_WINDOW_WIDTH_DEFAULT} windows, so
+ * the viewport holds that many windows across: `0.5` shows three and a half,
+ * `1` shows one and three quarters. A fractional count cuts the trailing
+ * window at that fraction instead of rounding it away, which keeps every scale
+ * aligned to the edge. Gaps are included in the span, so a scale that lands on
+ * a whole number fits exactly that many windows.
+ */
+export function multiLineWidthRatio(scale: number, gapRatio = 0.04): number {
+  const safeScale = clampMultiLineWindowWidth(scale);
+  const gap = Math.max(0, Number.isFinite(gapRatio) ? gapRatio : 0);
+  const windows = (MULTI_LINE_WINDOWS_AT_DEFAULT * MULTI_LINE_WINDOW_WIDTH_DEFAULT) / safeScale;
+  const whole = Math.floor(windows);
+  const fraction = windows - whole;
+  const span =
+    fraction > 0 ? whole * (1 + gap) + fraction : Math.max(1, whole + Math.max(0, whole - 1) * gap);
+  return Math.min(1, 1 / span);
+}
+
 export interface TimelinePanelLayout {
   active: boolean;
   count: number;
-  configuredWidth: number;
-  /** Number of panels that should fit in the visible horizontal viewport. */
-  visibleCount?: number;
+  /** Width of one panel as a fraction of the viewport width; fitted across all panels when absent. */
+  widthRatio?: number;
   /** Gap expressed as a ratio of one panel's width. */
   gapRatio?: number;
-  /** Minimum gap for note-panel presentation; event windows use zero. */
+  /** Minimum gap for a fitted note-panel layout; width-scaled layouts keep the gap proportional. */
   gapMinimum?: number;
 }
 
@@ -102,23 +148,18 @@ export function noteScaleForTimelineRatio(noteScale: number, timelineRatio: numb
   return (safeScale * safeRatio) / TIMELINE_NOTE_REFERENCE_RATIO;
 }
 
-/** Width of one panel, configured or fitted to the visible viewport. */
+/** Width of one panel: the configured fraction of the viewport, or a fit across every panel. */
 export function panelWidth(width: number, layout: TimelinePanelLayout): number {
   const safeWidth = Math.max(0, Number(width) || 0);
   const safeCount = Math.max(1, Math.floor(Number(layout.count) || 1));
   if (!layout.active || safeCount === 1) {
     return safeWidth;
   }
-  const configuredWidth = Number(layout.configuredWidth) || 0;
-  if (configuredWidth > 0) {
-    return Math.max(0, configuredWidth);
+  const ratio = Number(layout.widthRatio);
+  if (Number.isFinite(ratio) && ratio > 0) {
+    return Math.max(0, Math.min(safeWidth, safeWidth * ratio));
   }
-  return fittedPanelWidth(
-    safeWidth,
-    Math.max(1, Math.floor(Number(layout.visibleCount) || safeCount)),
-    layout.gapRatio,
-    layout.gapMinimum,
-  );
+  return fittedPanelWidth(safeWidth, safeCount, layout.gapRatio, layout.gapMinimum);
 }
 
 /** Fits `count` panels and their gaps into the available width. */
@@ -139,8 +180,7 @@ function fittedPanelWidth(width: number, count: number, gapRatio = 0.04, gapMini
 /** Gap between panels, never below the layout's minimum. */
 export function panelGap(width: number, layout: TimelinePanelLayout): number {
   const safeCount = Math.max(1, Math.floor(Number(layout.count) || 1));
-  const visibleCount = Math.max(1, Math.floor(Number(layout.visibleCount) || safeCount));
-  if (!layout.active || safeCount <= 1 || visibleCount <= 1) {
+  if (!layout.active || safeCount <= 1) {
     return 0;
   }
   const minimum = Math.min(

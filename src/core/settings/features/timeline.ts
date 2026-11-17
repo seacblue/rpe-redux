@@ -18,9 +18,11 @@ import {
   timelineVerticalGridColorKey,
 } from "../timelineGridColors.ts";
 import { DEFAULT_NOTE_OVERLAP_THRESHOLD } from "../../edit/timeline/noteOverlap.ts";
-
-/** Maximum number of event windows shown side by side in multi-line editing. */
-export const MULTI_LINE_EVENT_WINDOW_MAX = 20;
+import {
+  MULTI_LINE_WINDOW_WIDTH_DEFAULT,
+  MULTI_LINE_WINDOW_WIDTH_MAX,
+  MULTI_LINE_WINDOW_WIDTH_MIN,
+} from "../../edit/timeline/timelineCoordinates.ts";
 
 const EditorSettingsNavigation: SettingsNavigation = {
   key: "editor",
@@ -272,16 +274,16 @@ const TimelineSettingsSchema: SettingDefinition[] = [
     step: 1,
   },
   {
-    key: "multi-line-event-window-count",
+    key: "multi-line-window-width",
     navigation: "editor.events",
     group: "settings.group.timelineEvents",
-    label: "settings.field.multi-line-event-window-count.label",
-    control: "number",
-    default: 3,
-    min: 1,
-    max: MULTI_LINE_EVENT_WINDOW_MAX,
-    step: 1,
-    integer: true,
+    label: "settings.field.multi-line-window-width.label",
+    description: "settings.field.multi-line-window-width.description",
+    control: "range",
+    default: MULTI_LINE_WINDOW_WIDTH_DEFAULT,
+    min: MULTI_LINE_WINDOW_WIDTH_MIN,
+    max: MULTI_LINE_WINDOW_WIDTH_MAX,
+    step: 0.01,
   },
   ...TIMELINE_SUBDIVISION_COLORS,
   ...TIMELINE_VERTICAL_COLORS,

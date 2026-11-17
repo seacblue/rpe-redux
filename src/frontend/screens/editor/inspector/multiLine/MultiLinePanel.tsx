@@ -1,6 +1,6 @@
 /**
- * The multi-line pane: a line-selection expression, the line list, and the event
- * window count, with the class owning the render cycle and its revision.
+ * The multi-line pane: a line-selection expression, the line list, and the
+ * multi-line window width, with the class owning the render cycle and its revision.
  *
  * Parsing and applying the expression belong to core multi-line edits; the view
  * only keeps drafts and writes the resulting indices onto the session. The list
@@ -29,7 +29,11 @@ import { SliderField } from "../../../../../design/components/slider/SliderField
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
 import { t } from "../../../../../i18n/index.ts";
-import { MULTI_LINE_EVENT_WINDOW_MAX } from "../../../../../core/settings/features/timeline.ts";
+import {
+  clampMultiLineWindowWidth,
+  MULTI_LINE_WINDOW_WIDTH_MAX,
+  MULTI_LINE_WINDOW_WIDTH_MIN,
+} from "../../../../../core/edit/timeline/timelineCoordinates.ts";
 import { displayValues } from "../../../settings/editorDisplaySettings.ts";
 import { MultiLineEventTracks } from "./MultiLineEventTracks.tsx";
 import {
@@ -87,10 +91,10 @@ export interface MultiLinePanelProps {
  * stable multi-line panel structure and sends user actions back to that engine.
  */
 export function MultiLinePanelView({ session, timeline, renderSession }: MultiLinePanelProps) {
-  const eventWindowCount = useSyncExternalStore(
-    useCallback((listener) => displayValues.multiLineEventWindowCount.subscribe(listener), []),
-    useCallback(() => displayValues.multiLineEventWindowCount.get(), []),
-    useCallback(() => displayValues.multiLineEventWindowCount.get(), []),
+  const multiLineWindowWidth = useSyncExternalStore(
+    displayValues.multiLineWindowWidth.subscribe,
+    displayValues.multiLineWindowWidth.get,
+    displayValues.multiLineWindowWidth.get,
   );
   const multiLineMergeNotes = useSyncExternalStore(
     displayValues.multiLineMergeNotes.subscribe,
@@ -102,10 +106,9 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     displayValues.multiLineNoteLineNumbers.get,
     displayValues.multiLineNoteLineNumbers.get,
   );
-  const [eventWindowCountDraft, setEventWindowCountDraft] = useState<number | null>(null);
-  const eventWindowCountValue =
-    eventWindowCountDraft ??
-    Math.max(1, Math.min(MULTI_LINE_EVENT_WINDOW_MAX, Math.floor(Number(eventWindowCount) || 3)));
+  const [windowWidthDraft, setWindowWidthDraft] = useState<number | null>(null);
+  const windowWidthValue =
+    windowWidthDraft ?? clampMultiLineWindowWidth(Number(multiLineWindowWidth));
   const lineOptions = useSyncExternalStore(
     editorLineOptions.subscribe,
     editorLineOptions.get,
@@ -453,18 +456,15 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     commitLineClick(index, event.shiftKey);
   };
 
-  /** Stores a valid event-window count and requests a timeline repaint. */
-  const commitEventWindowCount = (raw: number) => {
-    const count = Math.max(1, Math.min(MULTI_LINE_EVENT_WINDOW_MAX, Math.round(raw)));
-    if (!Number.isSafeInteger(count)) {
-      return;
-    }
-    if (String(count) !== eventWindowCount) {
-      displayValues.multiLineEventWindowCount.set(String(count));
+  /** Stores a valid multi-line window width and requests a timeline repaint. */
+  const commitWindowWidth = (raw: number) => {
+    const next = clampMultiLineWindowWidth(raw);
+    if (String(next) !== multiLineWindowWidth) {
+      displayValues.multiLineWindowWidth.set(String(next));
       timeline?.changed();
       renderSession();
     }
-    setEventWindowCountDraft(null);
+    setWindowWidthDraft(null);
   };
 
   return (
@@ -638,17 +638,17 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
           <FieldRow
             layout="inline"
             density="compact"
-            label={t("settings.field.multi-line-event-window-count.label")}
+            label={t("settings.field.multi-line-window-width.label")}
             control={(id) => (
               <SliderField
                 id={id}
-                min={1}
-                max={MULTI_LINE_EVENT_WINDOW_MAX}
-                step={1}
-                value={eventWindowCountValue}
-                aria-label={t("settings.field.multi-line-event-window-count.label")}
-                onChange={(event) => setEventWindowCountDraft(Number(event.currentTarget.value))}
-                onCommit={commitEventWindowCount}
+                min={MULTI_LINE_WINDOW_WIDTH_MIN}
+                max={MULTI_LINE_WINDOW_WIDTH_MAX}
+                step={0.01}
+                value={windowWidthValue}
+                aria-label={t("settings.field.multi-line-window-width.label")}
+                onChange={(event) => setWindowWidthDraft(Number(event.currentTarget.value))}
+                onCommit={commitWindowWidth}
               />
             )}
           />

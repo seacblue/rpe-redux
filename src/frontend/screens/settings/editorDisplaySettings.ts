@@ -31,7 +31,7 @@ import {
 } from "../../../core/settings/timelineGridColors.ts";
 import { PREFERENCE_SECTIONS } from "../../../core/state/preferences.ts";
 import { COVER_BACKGROUND_KEYS } from "../../../core/settings/features/coverBackground.ts";
-import { MULTI_LINE_EVENT_WINDOW_MAX } from "../../../core/settings/features/timeline.ts";
+import { clampMultiLineWindowWidth } from "../../../core/edit/timeline/timelineCoordinates.ts";
 import { cssColor, parseHexColor } from "../../../core/utils/colors.ts";
 // A contributed setting declares its own value when its feature registers it, and the
 // reads below go straight to those values; importing the built-in catalog is what puts
@@ -113,8 +113,8 @@ export const displayValues = {
   noteSize: settingDisplay("note-size"),
   /** Note texture size in the timeline's note area; 175 is the authored size. */
   timelineNoteSize: settingDisplay("timeline-note-size"),
-  /** Number of event windows visible across the multi-line timeline. */
-  multiLineEventWindowCount: settingDisplay("multi-line-event-window-count"),
+  /** Relative width of one multi-line window; 0.5 shows three and a half windows. */
+  multiLineWindowWidth: settingDisplay("multi-line-window-width"),
   /** Whether multi-line note editing uses one shared note field. */
   multiLineMergeNotes: settingFlag("multi-line-merge-notes"),
   /** Whether merged multi-line notes show their owning judge-line number below. */
@@ -226,12 +226,8 @@ function readEditorViewSettings() {
 export function readEditorDisplaySettings() {
   const noteSize = numberOf(displayValues.noteSize);
   const timelineNoteSize = numberOf(displayValues.timelineNoteSize);
-  const multiLineEventWindowCount = Math.max(
-    1,
-    Math.min(
-      MULTI_LINE_EVENT_WINDOW_MAX,
-      Math.floor(numberOf(displayValues.multiLineEventWindowCount) || 3),
-    ),
+  const multiLineWindowWidth = clampMultiLineWindowWidth(
+    numberOf(displayValues.multiLineWindowWidth),
   );
   const highlight = contributedFlag("highlight-notes");
   const view = readEditorViewSettings();
@@ -289,7 +285,7 @@ export function readEditorDisplaySettings() {
       scale: numberOf(displayValues.scale),
       division: numberOf(displayValues.division),
       snapX: flagOf(displayValues.snapX),
-      multiLineEventWindowCount,
+      multiLineWindowWidth,
       multiLineMergeNotes: displayValues.multiLineMergeNotes.get(),
       multiLineNoteLineNumbers: displayValues.multiLineNoteLineNumbers.get(),
       scrollSpeed: contributedNumber("scroll-speed") / 5,
