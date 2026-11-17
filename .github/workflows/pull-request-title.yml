@@ -1,0 +1,31 @@
+name: Pull request title
+
+# The repository merges with squash only, so a pull request title becomes the
+# commit subject on main. This gate keeps that subject in the conventional
+# commit form; docs/development.md explains the format and the shared script.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: Semantic title
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Validate the pull request title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/checkPullRequestTitle.mjs

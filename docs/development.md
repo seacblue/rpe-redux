@@ -81,6 +81,7 @@ npm run build:icons          # regenerate both theme icon packages
 npm run check                # types, lint, style, docs, icons, SDK, extensions, unit, and Go tests
 npm run check:native         # Rust formatting and compile check
 npm run verify               # check + formatting
+npm run release:prepare      # bump the shared version, rebuild CHANGELOG.md, consume changesets
 npm run test:unit            # TypeScript unit tests only
 npm run test:server          # embedded Go service and room tests
 npm run smoke                # P0 desktop journeys (needs build -- --debug)
@@ -94,9 +95,15 @@ npm run dev:collab           # standalone collaboration room server
 
 Every product pull request adds a `.changeset/*.md` file. The file declares the `rpe-redux` bump and contains both Chinese and English sections with the same category-and-list shape used by the root changelog. The PR workflow rejects a non-release pull request without a valid bilingual Changeset; the generated release-preparation PR is the only exception because it consumes the pending files.
 
-Use `npm run changeset` to create a file, `npm run check:changeset` to validate active files, and `npm run check:changelog` to validate the current release notes. Before versioning a release, run `npm run release:changelog -- --version <version>`; it merges all active Changesets into the bilingual `CHANGELOG.md`. Then run `npx changeset version` to apply the package bump and remove the consumed Changesets, and align `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` to the same version. The release workflow validates the matching changelog section again before it creates a GitHub Release.
+`npm run changeset` creates a file and `npm run check:changeset` validates the active ones. `npm run release:prepare` is the release path: it derives the next version from the pending bumps, writes it to `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`, rebuilds the single bilingual section of `CHANGELOG.md`, deletes the Changesets it consumed, and re-validates the result with the same checks the release workflow runs. `--version <version>` overrides the derived bump, `--dry-run` prints the plan without touching the tree, and `--allow-empty` releases a hand-written section when no Changeset is pending.
+
+The same preparation runs from the Actions tab. **Release preparation** takes the version (empty derives it), opens the `chore(release): prepare <version>` pull request with the version bump, the rebuilt changelog, and the consumed Changesets, and enables squash auto-merge. It never tags, publishes, or builds. A pull request opened with the default `GITHUB_TOKEN` cannot start the source checks; add a `RELEASE_PAT` secret so the workflow triggers them by itself.
+
+`npm run release:changelog -- --version <version>` still regenerates only the changelog, for previewing the notes without touching the version.
 
 ### Publishing a desktop release
+
+Preparation and publishing stay separate. `npm run release:prepare` or the **Release preparation** workflow makes the tree release-ready and merges the version bump; nothing below runs on its own from that merge.
 
 Every path below produces the same GitHub Release with the same signed assets. The prepare job creates the Release when it does not exist yet and reuses it when it does, so re-running a release is safe: existing assets are replaced with `--clobber`.
 
@@ -195,7 +202,7 @@ An external cell runs with the `write` profile by default: it reads the open doc
 
 ### Updates
 
-`npm run build` produces the platform packages (NSIS on Windows; deb, rpm, and AppImage on Linux) and the portable folder. Release CI uses `src-tauri/updater.conf.json` to enable signed updater artifacts. Stable and beta releases share the workflow; GitHub's prerelease flag is the channel marker. Bump `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` together before publishing a tag; the release workflow checks that all three match the tag.
+`npm run build` produces the platform packages (NSIS on Windows; deb, rpm, and AppImage on Linux) and the portable folder. Release CI uses `src-tauri/updater.conf.json` to enable signed updater artifacts. Stable and beta releases share the workflow; GitHub's prerelease flag is the channel marker. Run `npm run release:prepare` before publishing a tag: it keeps `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` on one version, and the release workflow checks that they match the tag.
 
 The checked-in build has no update source: `UPDATE_REPOSITORY` and `UPDATE_PUBLIC_KEY` in `src/core/platform/desktop/updateConfig.ts` are empty, so the in-app update page reports that updates are not configured. See [Desktop runtime](desktop.md#updates) for the signing and endpoint inputs.
 

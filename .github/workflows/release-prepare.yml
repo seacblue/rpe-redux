@@ -1,0 +1,140 @@
+name: Release preparation
+
+# One-click release preparation: it bumps the shared product version, rebuilds
+# the bilingual changelog from the pending Changesets, consumes them, and opens
+# the `chore(release):` pull request. It never tags, publishes, or builds;
+# merging the pull request only makes the tree release-ready, and "Release
+# desktop builds" still has to be started with the same version.
+#
+# The pull request is opened with the RELEASE_PAT secret when it exists. A pull
+# request opened with the default GITHUB_TOKEN cannot start the source checks,
+# so without that secret reopen the pull request once to run them.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the leading v; leave empty to derive it from the pending Changesets
+        required: false
+        type: string
+      dry_run:
+        description: Print the release plan without creating a branch or a pull request
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Prepare the release metadata
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=()
+          if [[ -n "$INPUT_VERSION" ]]; then
+            args+=("--version" "${INPUT_VERSION#v}")
+          fi
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          node scripts/prepareRelease.mjs "${args[@]}"
+
+      - name: Report the dry run
+        if: inputs.dry_run
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Dry run only; no branch, commit, or pull request was created."
+          git status --short
+
+      - name: Publish the preparation pull request
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          WROTE_WITH_PAT: ${{ secrets.RELEASE_PAT && 'true' || 'false' }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(jq -r .version package.json)"
+          branch="chore/release-${version}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add --all
+          git commit -m "chore(release): prepare ${version}" \
+            -m "Release metadata and bilingual changelog validated."
+          git push --force \
+            "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" \
+            "$branch"
+
+          body_file="$(mktemp)"
+          {
+            echo "Automated release preparation for ${version}."
+            echo
+            echo "Merging this pull request publishes nothing. Start **Release desktop builds** with \`${version}\` to tag and package it."
+            echo
+            echo "### Release inputs"
+            echo
+            echo "| File | Version |"
+            echo "| --- | --- |"
+            echo "| \`package.json\` | ${version} |"
+            echo "| \`package-lock.json\` | ${version} |"
+            echo "| \`src-tauri/tauri.conf.json\` | ${version} |"
+            echo "| \`src-tauri/Cargo.toml\` | ${version} |"
+            echo "| \`src-tauri/Cargo.lock\` | ${version} |"
+            echo
+            echo "### Consumed Changesets"
+            echo
+            git show --diff-filter=D --name-only --format= HEAD -- .changeset |
+              sed 's/^/- `/; s/$/`/'
+          } > "$body_file"
+
+          pull_request="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          if [[ -z "$pull_request" ]]; then
+            gh pr create --base main --head "$branch" \
+              --title "chore(release): prepare ${version}" \
+              --body-file "$body_file" > /dev/null
+            pull_request="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          fi
+          if [[ -z "$pull_request" ]]; then
+            echo "::error::Could not create or find the preparation pull request."
+            exit 1
+          fi
+          echo "Preparation pull request: #${pull_request}"
+
+          if gh pr merge "$pull_request" --auto --squash; then
+            echo "Auto-merge is waiting for the required checks."
+          else
+            echo "::warning::Auto-merge was not enabled; merge the pull request once the checks pass."
+          fi
+
+          if [[ "$WROTE_WITH_PAT" != "true" ]]; then
+            echo "::warning::The pull request was opened with GITHUB_TOKEN, so source checks will not start on their own. Reopen the pull request once, or add a RELEASE_PAT secret."
+          fi

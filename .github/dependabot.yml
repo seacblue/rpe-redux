@@ -1,8 +1,10 @@
 # Dependency update automation. Dependabot alerts and security updates are
 # enabled on the repository, so vulnerable dependencies get a fix pull request
-# immediately; routine upgrades arrive as one grouped weekly pull request per
-# ecosystem. Update pull requests pass the same source checks as any other
-# change before they can merge into the protected main branch.
+# immediately. Routine upgrades arrive as one grouped weekly pull request per
+# ecosystem: patch and minor updates share a group, while a major update keeps
+# its own pull request because it needs a migration review. Update pull requests
+# pass the same source checks as any other change before they can merge into the
+# protected main branch.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -13,6 +15,17 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      npm-development:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      npm-production:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
@@ -22,6 +35,13 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      cargo-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "gomod"
     directory: "/src/backend"
@@ -31,6 +51,13 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      gomod-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -40,3 +67,10 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      actions-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

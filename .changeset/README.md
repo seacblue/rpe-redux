@@ -28,4 +28,4 @@ Each changeset must include the package bump in its frontmatter and both release
 - English description.
 ```
 
-The PR gate checks the file and requires at least one changeset on every non-release pull request. Release preparation uses the active changesets to generate the bilingual root `CHANGELOG.md` before versioning.
+The PR gate checks the file and requires at least one changeset on every non-release pull request. `npm run release:prepare` consumes the active files: it generates the bilingual root `CHANGELOG.md`, bumps every product version input, and deletes the files it consumed.

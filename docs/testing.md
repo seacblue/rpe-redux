@@ -33,6 +33,8 @@ For everyday behavior checks, use the browser loop (`npm run dev`) and let hot r
 
 CI runs `npm run verify` on Windows and `npm run check` on Linux (`.github/workflows/check.yml`). When a change touches `src-tauri/**`, the same workflow also runs a conditional Linux Rust job with `cargo fmt --check` and `cargo check`. The desktop smoke suite stays local because it needs a built desktop executable. There is no tracked Git hook; run the gates yourself before reporting.
 
+Three workflows cover the repository contracts around that gate: **Pull request title** runs `scripts/checkPullRequestTitle.mjs` because a squash merge turns the title into the commit subject on `main`; **Release preparation** runs `scripts/prepareRelease.mjs` from the Actions tab; and **Dependency audit** scans the shipped npm dependencies weekly, with the Go scan advisory because govulncheck resolves the standard library through its own toolchain. See [Development](development.md) for the release path.
+
 ## Source gate
 
 `npm run check` is the gate every change must pass:

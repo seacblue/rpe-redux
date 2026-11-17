@@ -100,7 +100,7 @@ Run `npm run check:native` when a change touches Rust. Run `npm run test:server`
 
 ## Pull requests
 
-Every pull request is squash-merged: one pull request becomes exactly one commit on `main`, and the pull request title becomes that commit's subject. Merge commits and rebase merges are disabled at the repository level, so write the title as an imperative conventional-commit subject such as `feat(editor): add curve handles`, and put the contract and verification details in the body.
+Every pull request is squash-merged: one pull request becomes exactly one commit on `main`, and the pull request title becomes that commit's subject. Merge commits and rebase merges are disabled at the repository level, so write the title as an imperative conventional-commit subject such as `feat(editor): add curve handles`, and put the contract and verification details in the body. The **Pull request title** workflow rejects a title that does not read as `type(scope): subject` with one of the documented types, because that string is the permanent commit subject.
 
 A pull request should answer:
 
