@@ -3,7 +3,7 @@
  * attaches them to the preview surface handle. React owns the nodes; the preview
  * runtime owns their drawing.
  */
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { t } from "../../../../../../i18n/index.ts";
 import { editorRealtimePreviewEnabled } from "../../../../../../core/edit/state/publishedValues.ts";
 import { developerMode } from "../../../../../../core/platform/desktop/developer.ts";
@@ -81,11 +81,19 @@ export function PreviewCanvases() {
   // The preview is the workspace's fallback surface when neither authoring
   // region is shown, even if its own switch is off.
   const fallback = !regions.showNotes && !regions.showEvents;
+  const visible = Boolean(runtime) && (enabled || fallback || cameraActive || curveActive);
+  // The imperative preview can run a frame while this wrapper is still
+  // display:none, which leaves its canvas at 1x1. Once React has shown the
+  // underlay, drop the cached frame and paint again with the real layout size.
+  useEffect(() => {
+    if (!runtime || !visible) {
+      return;
+    }
+    runtime.realtimePreview.invalidateFrame();
+    runtime.realtimePreview.invalidate?.();
+  }, [runtime, visible]);
   return (
-    <div
-      className="preview-underlay"
-      hidden={!runtime || !(enabled || fallback || cameraActive || curveActive)}
-    >
+    <div className="preview-underlay" hidden={!visible}>
       <canvas
         id="realtime-preview"
         className="preview-main-canvas"
