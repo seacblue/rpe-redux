@@ -50,9 +50,13 @@ jobs:
 
   changeset:
     name: Changeset
-    # The generated release-preparation PR consumes the active changesets, so
-    # it is the only pull request exempt from adding another one.
-    if: github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'chore(release):')
+    # The generated release-preparation PR consumes the active changesets, and a
+    # dependency update carries no release note of its own, so neither one has to
+    # add another changeset.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !startsWith(github.event.pull_request.title, 'chore(release):')
     runs-on: ubuntu-24.04
     steps:
       - name: Check out the revision

@@ -93,7 +93,7 @@ npm run dev:collab           # standalone collaboration room server
 
 ### Changesets and release notes
 
-Every product pull request adds a `.changeset/*.md` file. The file declares the `rpe-redux` bump and contains both Chinese and English sections with the same category-and-list shape used by the root changelog. The PR workflow rejects a non-release pull request without a valid bilingual Changeset; the generated release-preparation PR is the only exception because it consumes the pending files.
+Every product pull request adds a `.changeset/*.md` file. The file declares the `rpe-redux` bump and contains both Chinese and English sections with the same category-and-list shape used by the root changelog. The PR workflow rejects a non-release pull request without a valid bilingual Changeset; the generated release-preparation pull request and a Dependabot pull request are the only exceptions, because the first consumes the pending files and the second changes nothing a reader would find in the notes.
 
 `npm run changeset` creates a file and `npm run check:changeset` validates the active ones. `npm run release:prepare` is the release path: it derives the next version from the pending bumps, writes it to `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`, rebuilds the single bilingual section of `CHANGELOG.md`, deletes the Changesets it consumed, and re-validates the result with the same checks the release workflow runs. `--version <version>` overrides the derived bump, `--dry-run` prints the plan without touching the tree, and `--allow-empty` releases a hand-written section when no Changeset is pending.
 
