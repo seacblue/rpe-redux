@@ -128,10 +128,16 @@ export function commitEventLists(
   // Event-list edits preserve every chart object id, so normalization and the
   // whole-chart placement walk are skipped and a dense drag commit stays
   // bounded by the changed line.
-  session.commitChart(label, chart, beforeSelection, {}, {
-    normalized: true,
-    placement: { notes: 0, events: 0 },
-  });
+  session.commitChart(
+    label,
+    chart,
+    beforeSelection,
+    {},
+    {
+      normalized: true,
+      placement: { notes: 0, events: 0 },
+    },
+  );
 }
 
 /**
