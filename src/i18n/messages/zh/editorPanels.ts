@@ -442,6 +442,7 @@ export default {
   "editorPanels.multiEdit.applicationMode": "多线应用",
   "editorPanels.multiEdit.applicationMode.perLine": "每条线分别应用",
   "editorPanels.multiEdit.applicationMode.global": "总体按时间顺序应用",
+  "editorPanels.multiEdit.eventType": "事件类型",
   "editorPanels.multiEdit.field": "数值种类",
   "editorPanels.multiEdit.operation": "修改方式",
   "editorPanels.multiEdit.previewToggle": "显示结果虚影",

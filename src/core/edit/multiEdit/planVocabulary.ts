@@ -65,6 +65,8 @@ export interface BatchItem {
 /** A batch parameter set plus the one option the panel keeps outside it. */
 export type BatchEditOptions = Partial<BatchParameters> & {
   eventApplicationMode?: string;
+  /** Restrict an event batch edit to one selected event track. */
+  eventType?: string;
 };
 
 /** One planned edit: the object before and after, and where it lands. */

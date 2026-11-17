@@ -56,3 +56,46 @@ test("startTime bounds accept beat notation and write beat values", () => {
   assert.equal(beatValue(result.changes[0].after.startTime), 2.5);
   assert.equal(beatValue(result.changes[1].after.startTime), 3.5);
 });
+
+test("event type filter edits only the selected track", () => {
+  const moveX = {
+    startTime: [0, 0, 1],
+    endTime: [1, 0, 1],
+    start: 0,
+    end: 1,
+    easingType: 1,
+  };
+  const moveY = {
+    startTime: [0, 0, 1],
+    endTime: [1, 0, 1],
+    start: 10,
+    end: 11,
+    easingType: 1,
+  };
+  const snapshot = {
+    chart: {
+      judgeLineList: [{ eventLayers: [{ moveXEvents: [moveX], moveYEvents: [moveY] }] }],
+    },
+    lineIndex: 0,
+    eventLayer: 0,
+    focus: "events",
+    notes: [],
+    events: [
+      { type: "moveXEvents", index: 0, lineIndex: 0, event: moveX },
+      { type: "moveYEvents", index: 0, lineIndex: 0, event: moveY },
+    ],
+  };
+
+  const result = previewMultiEdit(snapshot, "events", {
+    eventType: "moveXEvents",
+    field: "both",
+    operation: "By",
+    lower: "5",
+    upper: "5",
+  });
+
+  assert.equal(result.changes.length, 1);
+  assert.equal(result.changes[0].type, "moveXEvents");
+  assert.equal(result.changes[0].after.start, 5);
+  assert.equal(result.changes[0].after.end, 6);
+});

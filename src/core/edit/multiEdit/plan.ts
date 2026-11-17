@@ -397,6 +397,7 @@ export function previewMultiEdit(
   options: BatchEditOptions = {},
 ): MultiEditResult {
   const field = options.field ?? (kind === "notes" ? "x" : "both");
+  const eventType = options.eventType;
   const operation = options.operation ?? "By";
   const random = randomSource(options.seed ?? 1);
   const modifier =
@@ -416,12 +417,14 @@ export function previewMultiEdit(
           lineIndex: entry.lineIndex,
           before: entry.note,
         }))
-      : snapshot.events.map((entry) => ({
-          type: entry.type,
-          index: entry.index,
-          lineIndex: entry.lineIndex,
-          before: entry.event,
-        }));
+      : snapshot.events
+          .filter((entry) => !eventType || entry.type === eventType)
+          .map((entry) => ({
+            type: entry.type,
+            index: entry.index,
+            lineIndex: entry.lineIndex,
+            before: entry.event,
+          }));
   // Events are grouped per channel, and — unless the author asked for one global
   // pass — per source line, because a distribution walks each group in time.
   for (const entry of sourceEntries) {

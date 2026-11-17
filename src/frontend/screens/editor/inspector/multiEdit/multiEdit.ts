@@ -65,6 +65,11 @@ function sameBatchItem(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+/** Returns the distinct event tracks represented by the current selection. */
+function selectedEventTypes(session: EditorSession): string[] {
+  return [...new Set(captureSelection(session).events.map((entry) => entry.type))];
+}
+
 /** Paint layer of one planned note edit; the item may omit its type. */
 function batchPaintLayer(change: BatchChange): number {
   return notePaintLayer(typeof change.after.type === "number" ? change.after.type : 1);
@@ -203,13 +208,18 @@ export class MultiEditPanel {
     this.signature = null;
     this.updateHistory = () => this.renderForm(kind);
     this.read = () =>
-      this.form?.read() ?? { ...this.parameters.read(kind), eventApplicationMode: "per-line" };
+      this.form?.read() ?? {
+        ...this.parameters.read(kind),
+        eventApplicationMode: "per-line",
+        eventType: selectedEventTypes(this.getSession())[0] ?? "",
+      };
     this.load = (value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }) => {
       // Load over what the form shows now: a history entry carries only the batch
       // parameters, so the multi-line application mode must survive the load.
       const current = this.read?.() ?? {
         ...this.parameters.read(kind),
         eventApplicationMode: "per-line",
+        eventType: selectedEventTypes(this.getSession())[0] ?? "",
       };
       const next = { ...current, ...value };
       if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === next.field)) {
@@ -238,11 +248,13 @@ export class MultiEditPanel {
       const noiseActivation =
         kind === "events" &&
         captureSelection(session).events.some((entry) => entry.type === NOISE_ACTIVE_EVENTS);
+      const eventTypes = kind === "events" ? selectedEventTypes(session) : [];
       this.noiseActivationSelected = noiseActivation;
       const view = createElement(MultiEditForm, {
         key: `${kind}:${noiseActivation}`,
         kind,
         noiseActivation,
+        eventTypes,
         multiEventEdit:
           kind === "events" && session.multiLineActive && session.multiLineMode === "events",
         history: this.parameters.history[kind],
@@ -396,6 +408,9 @@ export class MultiEditPanel {
     const signature = this.selectionSignature();
     if (session.chart === this.chart && signature === this.signature) {
       return;
+    }
+    if (this.kind === "events") {
+      this.form?.setEventTypes(selectedEventTypes(session));
     }
     this.chart = session.chart;
     this.signature = signature;

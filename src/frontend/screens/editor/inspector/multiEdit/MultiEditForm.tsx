@@ -15,8 +15,10 @@ import { SchemaControl } from "../../../../../design/components/field/SchemaCont
 import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { EasingField } from "../../../../../design/components/easing/EasingField.tsx";
-import { t } from "../../../../../i18n/index.ts";
+import { t, type MessageKey } from "../../../../../i18n/index.ts";
 import { formatBeat, parseBeat, type Beat } from "../../../../../core/global/chart/timing/beat.ts";
+import { EVENT_TRACKS } from "../../../../../core/global/chart/chartVocabulary.ts";
+import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import {
   BATCH_OPERATIONS,
   NOTE_BATCH_FIELDS,
@@ -32,11 +34,18 @@ import { BeatField } from "../beat/BeatField.tsx";
 
 type Option = readonly [string | number, string];
 
-export type MultiEditFormValues = BatchParameters & { eventApplicationMode: string };
+/** Stable event-track order used by the multi-edit type selector. */
+const MULTI_EDIT_EVENT_TYPES: readonly string[] = [...EVENT_TRACKS, NOISE_ACTIVE_EVENTS];
+
+export type MultiEditFormValues = BatchParameters & {
+  eventApplicationMode: string;
+  eventType: string;
+};
 
 export interface MultiEditFormHandle {
   read(): MultiEditFormValues;
   load(value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }): void;
+  setEventTypes(eventTypes: readonly string[]): void;
   selectHistory(value: string): void;
   setResult(message: string, error: boolean): void;
   isPreviewEnabled(): boolean;
@@ -46,6 +55,7 @@ interface MultiEditFormProps {
   kind: MultiEditKind;
   multiEventEdit: boolean;
   noiseActivation: boolean;
+  eventTypes: readonly string[];
   history: BatchParameters[];
   onReady(handle: MultiEditFormHandle): void;
   onChange(value: MultiEditFormValues): void;
@@ -59,6 +69,34 @@ interface MultiEditFormProps {
  */
 function shortLabel(label: string): string {
   return label.split(/[·,，、]/u)[0]?.trim() || label;
+}
+
+const EVENT_TYPE_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
+  rotateEvents: "editorPanels.timeline.track.rotation",
+  alphaEvents: "editorPanels.timeline.track.opacity",
+  speedEvents: "editorPanels.timeline.track.speed",
+  scaleXEvents: "editor.display.editorDisplay.trackScaleX",
+  scaleYEvents: "editor.display.editorDisplay.trackScaleY",
+  colorEvents: "editor.display.editorDisplay.trackColor",
+  paintEvents: "editor.display.editorDisplay.trackShader",
+  textEvents: "editor.display.editorDisplay.trackText",
+  inclineEvents: "editorPanels.issues.trackIncline",
+  gifEvents: "editorPanels.issues.trackGif",
+};
+
+/** Resolves a chart event track to the compact label used by the inspector. */
+function eventTypeLabel(type: string): string {
+  if (type === "moveXEvents") {
+    return "X";
+  }
+  if (type === "moveYEvents") {
+    return "Y";
+  }
+  if (type === NOISE_ACTIVE_EVENTS) {
+    return t("editorPanels.linePanel.noiseActive");
+  }
+  const key = EVENT_TYPE_LABEL_KEYS[type];
+  return key ? t(key) : type;
 }
 
 /** Converts a persisted batch bound to a BeatField value, falling back to zero. */
@@ -128,6 +166,7 @@ export function MultiEditForm({
   kind,
   multiEventEdit,
   noiseActivation,
+  eventTypes,
   history,
   onReady,
   onChange,
@@ -146,6 +185,7 @@ export function MultiEditForm({
     ...defaultBatchParameters(kind),
     ...(noiseActivation ? { field: "t1" } : {}),
     eventApplicationMode: "per-line",
+    eventType: eventTypes[0] ?? "",
   }));
   const [historySelection, setHistorySelection] = useState("");
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -167,6 +207,7 @@ export function MultiEditForm({
         const value = {
           ...defaultBatchParameters(kind),
           eventApplicationMode: "per-line",
+          eventType: eventTypes[0] ?? "",
           ...next,
         } as MultiEditFormValues;
         if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === value.field)) {
@@ -180,6 +221,18 @@ export function MultiEditForm({
           currentValues.current = value;
         }
       },
+      setEventTypes: (nextTypes) => {
+        const uniqueTypes = [...new Set(nextTypes)];
+        const eventType = uniqueTypes[0] ?? "";
+        if (values.eventType === eventType) {
+          return;
+        }
+        const value = { ...values, eventType } as MultiEditFormValues;
+        setValues(value);
+        currentValues.current = value;
+        setHistorySelection("");
+        onChange(value);
+      },
       selectHistory: setHistorySelection,
       setResult: (message, error) => {
         setResultMessage(message);
@@ -187,7 +240,7 @@ export function MultiEditForm({
       },
       isPreviewEnabled: () => previewEnabled,
     }),
-    [values, previewEnabled, kind, noiseActivation],
+    [values, previewEnabled, kind, noiseActivation, eventTypes, onChange],
   );
   useLayoutEffect(() => onReady(handle), [handle, onReady]);
 
@@ -209,6 +262,10 @@ export function MultiEditForm({
           noiseActivation ? ["t1", "t2"].includes(key) : key !== "linkgroup" || linkgroupEnabled,
         )
   ).map(([key, label]) => [key, shortLabel(label)] as const);
+  const eventTypeOptions: readonly Option[] = MULTI_EDIT_EVENT_TYPES.map((type) => [
+    type,
+    eventTypeLabel(type),
+  ]);
   const operations = BATCH_OPERATIONS.map(([key, label]) => [key, shortLabel(label)] as const);
   const beatBounds = kind === "events" && (values.field === "t1" || values.field === "t2");
   const historyIndex = Number(historySelection);
@@ -239,6 +296,14 @@ export function MultiEditForm({
     <div className="multi-edit-form">
       {noiseActivation && <p className="hint">{t("editorPanels.linePanel.noiseActiveHint")}</p>}
       <FieldRows>
+        {kind === "events" && (
+          <Field
+            title={t("editorPanels.multiEdit.eventType")}
+            value={values.eventType}
+            options={eventTypeOptions}
+            onChange={(eventType) => update({ eventType })}
+          />
+        )}
         <Field
           title={t("editorPanels.multiEdit.field")}
           value={values.field}
