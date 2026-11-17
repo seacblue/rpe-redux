@@ -24,7 +24,6 @@ import { planLeaveEditor } from "./leaveEditor.ts";
 export interface WorkspaceNavigationOptions {
   atHome(): boolean;
   hasDocument(): boolean;
-  clearNoteSourceToast(): void;
   resetLineSwitcher(): void;
   setMuteCurrentLine(muted: boolean): void;
   setLineInfoVisible(visible: boolean): void;
@@ -50,7 +49,6 @@ export function createWorkspaceNavigation(options: WorkspaceNavigationOptions) {
       dirty: visible ? false : getEditorVisibility().dirty,
     });
     if (visible) {
-      options.clearNoteSourceToast();
       options.resetLineSwitcher();
       options.setMuteCurrentLine(false);
       options.setLineInfoVisible(false);

@@ -396,7 +396,6 @@ export function createEditorAssembly(
     audioAnalysis,
     scrubberSpectrum,
     eventInteraction,
-    noteSourceToast,
     batchControls,
     selectionOverlay,
     lineSwitcher,
@@ -799,7 +798,6 @@ export function createEditorAssembly(
   const workspaceNavigationBinding = bindWorkspaceNavigation({
     atHome,
     hasDocument,
-    clearNoteSourceToast: () => noteSourceToast.clear(),
     resetLineSwitcher: () => lineSwitcher.reset(),
     setMuteCurrentLine: (muted) => {
       hitSounds.onlyCurrentLine = muted;

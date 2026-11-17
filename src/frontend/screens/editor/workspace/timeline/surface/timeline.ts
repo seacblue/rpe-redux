@@ -270,7 +270,6 @@ export class Timeline {
           if (this.gestures.hoverArea === "notes") {
             this.gestures.hoverArea = undefined;
           }
-          this.gestures.onNoteHover?.(null);
           this.changed();
         },
         pointerDown: (event) => {
