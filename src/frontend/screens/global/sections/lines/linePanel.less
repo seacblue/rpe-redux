@@ -302,26 +302,6 @@
   padding: var(--space-2);
 }
 
-.line-panel-batch {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: var(--space-1-5) var(--space-2);
-  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--edge-divider));
-  border-radius: var(--radius-control);
-  background: color-mix(in oklab, var(--accent) 7%, transparent);
-}
-
-.line-panel-batch strong {
-  font-size: var(--type-label);
-  font-weight: 600;
-}
-
-.line-panel-batch small {
-  .meta-text();
-  line-height: 1.35;
-}
-
 .line-texture-popover {
   position: fixed;
   z-index: var(--z-floating);
@@ -512,7 +492,7 @@
 .line-tree .line-folder .redux-tree-folder-rows {
   gap: var(--space-1);
   margin-left: var(--space-3);
-  padding: 0 0 0 var(--space-2);
+  padding: var(--space-1) 0 var(--space-1) var(--space-2);
 }
 
 .line-tree[data-marquee="true"] {

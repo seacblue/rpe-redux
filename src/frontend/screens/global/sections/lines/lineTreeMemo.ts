@@ -8,6 +8,8 @@ import type { GlobalView } from "../../globalView.ts";
 export interface LineTreeMemoProps {
   session: Pick<EditorSession, "lineIndex">;
   chart: Chart;
+  /** Snapshot revision; unlike the chart facade, this changes on paged commits. */
+  contentRevision: number;
   showGroups: boolean;
   selectedLineIds: ReadonlySet<string>;
   folderGroup: number | null;
@@ -51,6 +53,7 @@ export function lineTreePropsEqual(previous: LineTreeMemoProps, next: LineTreeMe
   return (
     previous.session === next.session &&
     previous.session.lineIndex === next.session.lineIndex &&
+    previous.contentRevision === next.contentRevision &&
     previous.showGroups === next.showGroups &&
     sameTreeChart(previous.chart, next.chart) &&
     sameSet(previous.selectedLineIds, next.selectedLineIds) &&

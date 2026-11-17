@@ -12,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -26,6 +27,7 @@ import { values } from "../../../../core/state/values.ts";
 import type { EditorLineOption } from "../../../../core/edit/state/publishedValues.ts";
 import { setSelectedLineIndices } from "../../global/sections/lines/lineSelectionMode.ts";
 import { LineSelectionGroupHeader } from "../lineSelection/LineSelectionGroupHeader.tsx";
+import { groupLineEntries, type LineGroupEntries } from "../lineSelection/lineGroupEntries.ts";
 import {
   setLineSelectionCollapsedFolders,
   useLineSelectionPreferences,
@@ -42,29 +44,15 @@ import {
   type MarqueePoint,
 } from "./lineSelectionMarquee.ts";
 
-interface LineGroup {
-  name: string;
-  entries: EditorLineOption[];
-}
-
 type RowKeys = Pick<MouseEvent<HTMLButtonElement>, "shiftKey">;
 
+type LineGroup = LineGroupEntries<EditorLineOption>;
+
 const EMPTY_OPTIONS: readonly EditorLineOption[] = Object.freeze([]);
+const EMPTY_GROUP_NAMES: readonly string[] = Object.freeze([]);
 const EMPTY_SELECTION: readonly number[] = Object.freeze([]);
 const MARQUEE_EDGE = 28;
 const MARQUEE_SCROLL_STEP = 14;
-
-/** Group the flat toolbar options by their folder. */
-function groupOptions(options: readonly EditorLineOption[]) {
-  const groups = new Map<string, LineGroup>();
-  for (const option of options) {
-    const name = option.group || "";
-    const group = groups.get(name) ?? { name, entries: [] };
-    group.entries.push(option);
-    groups.set(name, group);
-  }
-  return [...groups.values()];
-}
 
 /** Toolbar judge-line selector with folders, shift-toggle, and marquee selection. */
 export function LineSelectionPicker({
@@ -95,10 +83,28 @@ export function LineSelectionPicker({
   const [marqueeRect, setMarqueeRect] = useState<MarqueeBox | null>(null);
   const [marqueePreview, setMarqueePreview] = useState<ReadonlySet<number> | null>(null);
   const [marqueeTouched, setMarqueeTouched] = useState<ReadonlySet<number> | null>(null);
-  const options =
-    values.byId.get<readonly EditorLineOption[]>("editor.lineOptions") ?? EMPTY_OPTIONS;
-  const selected = values.byId.get<readonly number[]>("editor.lineSelection") ?? EMPTY_SELECTION;
-  const current = Number(values.byId.get<string>("editor.line") ?? 0);
+  const options = useSyncExternalStore(
+    (listener) => values.byId.subscribe("editor.lineOptions", listener),
+    () => values.byId.get<readonly EditorLineOption[]>("editor.lineOptions") ?? EMPTY_OPTIONS,
+    () => values.byId.get<readonly EditorLineOption[]>("editor.lineOptions") ?? EMPTY_OPTIONS,
+  );
+  const groupNames = useSyncExternalStore(
+    (listener) => values.byId.subscribe("editor.lineGroups", listener),
+    () => values.byId.get<readonly string[]>("editor.lineGroups") ?? EMPTY_GROUP_NAMES,
+    () => values.byId.get<readonly string[]>("editor.lineGroups") ?? EMPTY_GROUP_NAMES,
+  );
+  const selected = useSyncExternalStore(
+    (listener) => values.byId.subscribe("editor.lineSelection", listener),
+    () => values.byId.get<readonly number[]>("editor.lineSelection") ?? EMPTY_SELECTION,
+    () => values.byId.get<readonly number[]>("editor.lineSelection") ?? EMPTY_SELECTION,
+  );
+  const current = Number(
+    useSyncExternalStore(
+      (listener) => values.byId.subscribe("editor.line", listener),
+      () => values.byId.get<string>("editor.line") ?? "0",
+      () => values.byId.get<string>("editor.line") ?? "0",
+    ),
+  );
   const selectedSet = useMemo(() => {
     const next = new Set(selected);
     if (!next.size && Number.isInteger(current)) {
@@ -129,7 +135,7 @@ export function LineSelectionPicker({
 
   useEffect(() => stopMarquee, [stopMarquee]);
 
-  const groups = useMemo(() => groupOptions(options), [options]);
+  const groups = useMemo(() => groupLineEntries(options, groupNames), [groupNames, options]);
   // One column width for every line number, sized by the widest index, so names
   // start on the same tab stop regardless of each row's label.
   const indexColumn = useMemo(() => {
@@ -507,7 +513,7 @@ export function LineSelectionPicker({
                       onToggle={() => toggleGroup(group.name)}
                       onSelect={() => selectGroup(group)}
                     />
-                    {!folded && (
+                    {!folded && group.entries.length > 0 && (
                       <div className="line-selection-children">
                         {group.entries.map((entry) => {
                           const previewing = marqueePreview !== null;

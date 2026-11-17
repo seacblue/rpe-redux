@@ -45,6 +45,16 @@ export const editorLineOptions = defineValue({
 });
 
 /**
+ * Every folder label in chart order, including folders that currently hold no
+ * lines. The toolbar picker and the multi-line list draw a folder row from this
+ * list, so an added empty folder is visible before its first line exists.
+ */
+export const editorLineGroups = defineValue({
+  id: "editor.lineGroups",
+  initial: [] as readonly string[],
+});
+
+/**
  * The shared line selection owned by the toolbar.
  *
  * Multi-line editing is a separate flag. Keeping the set independent is what

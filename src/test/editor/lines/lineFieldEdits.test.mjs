@@ -2,7 +2,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart, createLine } from "../../../core/global/chart/chart.ts";
-import { editLineField } from "../../../frontend/screens/global/sections/lines/lineFieldEdits.ts";
+import {
+  editLineField,
+  shouldCommitTextFieldOnEnter,
+} from "../../../frontend/screens/global/sections/lines/lineFieldEdits.ts";
 
 function chartWithLines() {
   const chart = createChart();
@@ -59,4 +62,10 @@ test("blank mixed parent input keeps each relation and -1 clears the batch", () 
     cleared.judgeLineList?.slice(1).map((line) => line.father),
     [-1, -1],
   );
+});
+
+test("line text fields commit on Enter after composition ends", () => {
+  assert.equal(shouldCommitTextFieldOnEnter("Enter", false), true);
+  assert.equal(shouldCommitTextFieldOnEnter("Enter", true), false);
+  assert.equal(shouldCommitTextFieldOnEnter("Escape", false), false);
 });

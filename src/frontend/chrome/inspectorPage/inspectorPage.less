@@ -76,6 +76,10 @@
 // The faces meet the rule with a shorter block inset than a page edge so the
 // two content layers read as one stacked page.
 .inspector-page-split-top > .inspector-page-content {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding-bottom: var(--space-2);
 }
 

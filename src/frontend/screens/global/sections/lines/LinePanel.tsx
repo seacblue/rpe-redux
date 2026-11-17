@@ -33,7 +33,7 @@ import {
 } from "../../../../../core/global/chart/optionalFeatures.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import type { LinePanelTexture } from "./linePanelController.ts";
-import type { LineField } from "./lineFieldEdits.ts";
+import { shouldCommitTextFieldOnEnter, type LineField } from "./lineFieldEdits.ts";
 import type { LinePurposeTarget } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
 import { InspectorEmpty } from "../../../editor/inspector/InspectorEmpty.tsx";
 import { LineFolderPanel } from "./LineFolderPanel.tsx";
@@ -338,12 +338,6 @@ export function LinePanelView({
     }
     return (
       <div className="line-panel-fields" key={selectionKey}>
-        {multi && (
-          <div className="line-panel-batch">
-            <strong>{t("editorPanels.linePanel.batchEdit")}</strong>
-            <small>{t("editorPanels.linePanel.batchHint")}</small>
-          </div>
-        )}
         <FieldRow
           layout="inline"
           density="compact"
@@ -361,6 +355,12 @@ export function LinePanelView({
               defaultValue={sharedName ?? ""}
               placeholder={sharedName === null ? t("editorPanels.linePanel.mixed") : undefined}
               onBlur={() => commitField("name")}
+              onKeyDown={(event) => {
+                if (shouldCommitTextFieldOnEnter(event.key, event.nativeEvent.isComposing)) {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
             />
           }
         />
@@ -640,6 +640,7 @@ export function LinePanelView({
     <LineTree
       session={session}
       chart={chart}
+      contentRevision={session.contentRevision}
       showGroups={showGroups}
       selectedLineIds={selectedLineIds}
       folderGroup={folderGroup}

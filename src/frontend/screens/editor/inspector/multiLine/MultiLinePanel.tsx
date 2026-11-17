@@ -38,6 +38,7 @@ import { displayValues } from "../../../settings/editorDisplaySettings.ts";
 import { MultiLineEventTracks } from "./MultiLineEventTracks.tsx";
 import {
   editorLine,
+  editorLineGroups,
   editorLineOptions,
   editorLineSelection,
 } from "../../../../../core/edit/state/publishedValues.ts";
@@ -53,6 +54,7 @@ import {
   setLineSelectionCollapsedFolders,
   useLineSelectionPreferences,
 } from "../../lineSelection/preferences.ts";
+import { groupLineEntries } from "../../lineSelection/lineGroupEntries.ts";
 import { toggleGroupSelection } from "../../toolbar/lineSelectionGroupSelection.ts";
 import { LineSelectionGroupHeader } from "../../lineSelection/LineSelectionGroupHeader.tsx";
 import {
@@ -114,6 +116,11 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     editorLineOptions.get,
     editorLineOptions.get,
   );
+  const lineGroupNames = useSyncExternalStore(
+    editorLineGroups.subscribe,
+    editorLineGroups.get,
+    editorLineGroups.get,
+  );
   const lineSelection = useSyncExternalStore(
     editorLineSelection.subscribe,
     editorLineSelection.get,
@@ -152,15 +159,10 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     () => new Set(selectionPreferences.collapsedFolders),
     [selectionPreferences.collapsedFolders],
   );
-  const lineGroups = useMemo(() => {
-    const groups = new Map<string, { name: string; items: typeof lineItems }>();
-    for (const item of lineItems) {
-      const group = groups.get(item.group) ?? { name: item.group, items: [] };
-      group.items.push(item);
-      groups.set(item.group, group);
-    }
-    return [...groups.values()];
-  }, [lineItems]);
+  const lineGroups = useMemo(
+    () => groupLineEntries(lineItems, lineGroupNames),
+    [lineGroupNames, lineItems],
+  );
   // One tab stop for every number, sized by the widest line index.
   const indexColumn = useMemo(() => {
     const highest = lineOptions.reduce((maximum, option) => Math.max(maximum, option.index), 0);
@@ -522,8 +524,8 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
             const name = group.name || t("chrome.toolbar.lineSelectionDefaultGroup");
             const folded = collapsedGroups.has(group.name);
             const activeSelection = marqueePreview ?? selectedSet;
-            const picked = group.items.filter((item) => activeSelection.has(item.index)).length;
-            const all = group.items.length > 0 && picked === group.items.length;
+            const picked = group.entries.filter((item) => activeSelection.has(item.index)).length;
+            const all = group.entries.length > 0 && picked === group.entries.length;
             const groupAction = t(
               all
                 ? "chrome.toolbar.lineSelectionGroupClearAll"
@@ -539,11 +541,11 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
                   picked={picked}
                   groupAction={groupAction}
                   onToggle={() => toggleGroupFold(group.name)}
-                  onSelect={() => commitGroupClick(group.items.map((item) => item.index))}
+                  onSelect={() => commitGroupClick(group.entries.map((item) => item.index))}
                 />
-                {!folded && (
+                {!folded && group.entries.length > 0 && (
                   <div className="line-selection-children">
-                    {group.items.map((item) => {
+                    {group.entries.map((item) => {
                       const previewing = marqueePreview !== null;
                       const previewed = marqueePreview?.has(item.index) ?? false;
                       const committed = selectedSet.has(item.index);

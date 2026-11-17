@@ -7,6 +7,7 @@ import { lineDisplayLabel, lineDisplayName, lineGroupLabels } from "../../lineLa
 import { lineGroupIndex } from "../../../../../../core/global/chart/line/lineGroups.ts";
 import {
   editorLine,
+  editorLineGroups,
   editorLineLabels,
   editorLineNavigationDisabled,
   editorLineOptions,
@@ -20,7 +21,8 @@ import { setEditorHistorySnapshot } from "../../../../../../core/edit/session/hi
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 
 /** Publishes the session-derived toolbar and statusbar values. */
-let labelsChart: EditorSession["chart"] | null = null;
+let labelsSession: EditorSession | null = null;
+let labelsRevision = -1;
 let labels: string[] = [];
 let lineOptions: readonly EditorLineOption[] = [];
 let selectionKey = "";
@@ -34,8 +36,13 @@ export function publishEditorSessionSnapshots(session: EditorSession, totalLines
     canUndo: session.history.undoStack.length > 0,
     canRedo: session.history.redoStack.length > 0,
   });
-  if (session.chart !== labelsChart) {
-    labelsChart = session.chart;
+  // A paged ChartDocument keeps one chart facade and mutates its line slots in
+  // place. The session content revision is therefore the source of truth for
+  // labels, not chart object identity; otherwise toolbar menus retain removed,
+  // added, or renamed lines until the next selection change.
+  if (session !== labelsSession || session.contentRevision !== labelsRevision) {
+    labelsSession = session;
+    labelsRevision = session.contentRevision;
     const lines = session.chart.judgeLineList ?? [];
     const groupNames = lineGroupLabels(session.chart);
     labels = lines.map((_, index) => lineDisplayLabel(session.chart, index));
@@ -46,6 +53,9 @@ export function publishEditorSessionSnapshots(session: EditorSession, totalLines
       group: groupNames[lineGroupIndex(line)] ?? "",
     }));
     editorLineOptions.set(lineOptions);
+    // Empty folders have no line option to carry their name, so the selector
+    // reads the folder list separately and still shows a newly added group.
+    editorLineGroups.set(groupNames);
   }
   editorLineLabels.set(labels);
   editorLine.set(String(session.lineIndex));

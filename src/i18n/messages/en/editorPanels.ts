@@ -365,9 +365,6 @@ export default {
     "{count} line(s) were left unchanged because their noise area cannot be exported; the remaining lines were updated.",
   "editorPanels.linePanel.emptyState.title": "No judge lines yet",
   "editorPanels.linePanel.emptyState.description": "Add a judge line below to start placing notes.",
-  "editorPanels.linePanel.batchEdit": "Batch edit selected lines",
-  "editorPanels.linePanel.batchHint":
-    "Every property can be applied to all selected lines. Mixed values show as Mixed; leave a mixed number blank to keep it unchanged.",
   "editorPanels.linePanel.mixed": "Mixed",
   "editorPanels.linePanel.batchUnsupported":
     "This property cannot be edited across multiple lines.",

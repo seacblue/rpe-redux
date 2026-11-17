@@ -33,6 +33,11 @@ export interface LineFieldEdit {
   checked?: boolean;
 }
 
+/** Reports whether a text-field Enter should blur and commit its draft value. */
+export function shouldCommitTextFieldOnEnter(key: string, isComposing: boolean): boolean {
+  return key === "Enter" && !isComposing;
+}
+
 /** Deduplicated, in-range indices for an edit. */
 function validTargets(chart: Chart, indices: readonly number[]): number[] {
   const lines = chart.judgeLineList ?? [];

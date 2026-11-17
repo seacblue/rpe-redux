@@ -44,3 +44,35 @@ export function lineTreeChanged(before: Chart, after: Chart): boolean {
       line.Group !== beforeLines[index]?.Group,
   );
 }
+
+/**
+ * The selected line that should receive focus after one row leaves the tree.
+ *
+ * The current line keeps focus while it is still selected and the removed row
+ * was a different line; otherwise the nearest remaining selected line wins.
+ */
+export function lineFocusAfterRemoval(
+  removed: number,
+  selected: ReadonlySet<string>,
+  lines: readonly JudgeLine[],
+  lineIndices: ReadonlyMap<string, number>,
+  currentIndex: number,
+): number {
+  if (removed !== currentIndex && selected.has(lineTreeKey(lines, currentIndex))) {
+    return currentIndex;
+  }
+  let best = currentIndex;
+  let bestDistance = Infinity;
+  for (const id of selected) {
+    const index = lineIndices.get(id);
+    if (index === undefined) {
+      continue;
+    }
+    const distance = Math.abs(index - removed);
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}

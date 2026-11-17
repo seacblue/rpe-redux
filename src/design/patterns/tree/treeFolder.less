@@ -54,11 +54,17 @@
   border-radius: var(--design-radius-chip);
   background: transparent;
   color: var(--foreground-muted);
+  --icon-color: var(--foreground-muted);
   cursor: var(--app-cursor-pointer);
 
   &:hover {
-    background: var(--surface-hover);
-    color: var(--foreground);
+    background: transparent;
+    color: inherit;
+  }
+
+  &:active:not(:disabled) {
+    background: transparent;
+    color: inherit;
   }
 
   .redux-icon {
@@ -68,6 +74,11 @@
   &[aria-expanded="false"] .redux-icon {
     transform: rotate(-90deg);
   }
+}
+
+.redux-tree-folder.is-selected .redux-tree-folder-disclosure {
+  color: var(--accent);
+  --icon-color: var(--accent);
 }
 
 .redux-tree-folder-drag {

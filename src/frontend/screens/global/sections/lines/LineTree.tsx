@@ -35,7 +35,7 @@ import {
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { t } from "../../../../../i18n/index.ts";
 import { lineGroupLabels } from "../../../editor/workspace/lineLabels.ts";
-import { lineTreeKey } from "./lineTreeModel.ts";
+import { lineFocusAfterRemoval, lineTreeKey } from "./lineTreeModel.ts";
 import { lineTreePropsEqual } from "./lineTreeMemo.ts";
 import {
   LineTreeCreatePrompt,
@@ -44,6 +44,7 @@ import {
 } from "./LineTreeCreatePrompt.tsx";
 import { LineTreeFooter, LineTreeMarqueeBox } from "./LineTreeChrome.tsx";
 import { useLineTreeMarquee } from "./useLineTreeMarquee.ts";
+import { useLineTreeReveal, type LineTreeReveal } from "./useLineTreeReveal.ts";
 import { FolderDropSection, LineCard, LineFolderSection, LineRow } from "./LineTreeRows.tsx";
 import type { GlobalView } from "../../globalView.ts";
 
@@ -51,6 +52,8 @@ import type { GlobalView } from "../../globalView.ts";
 interface LineTreeProps {
   session: EditorSession;
   chart: Chart;
+  /** Session revision that invalidates the tree when a paged chart mutates in place. */
+  contentRevision: number;
   showGroups: boolean;
   selectedLineIds: ReadonlySet<string>;
   /** The folder selected in folder mode, or null while a line is selected. */
@@ -82,6 +85,7 @@ function sameGroupName(a: string, b: string): boolean {
 export const LineTree = memo(function LineTree({
   session,
   chart,
+  contentRevision,
   showGroups,
   selectedLineIds,
   folderGroup,
@@ -97,6 +101,7 @@ export const LineTree = memo(function LineTree({
 }: LineTreeProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<number, HTMLElement>());
+  const pendingReveal = useRef<LineTreeReveal | null>(null);
   const [createPrompt, setCreatePrompt] = useState<CreatePrompt | null>(null);
   const [renameGroup, setRenameGroup] = useState<GroupRenameDraft | null>(null);
   const longPressTimer = useRef<number | null>(null);
@@ -105,9 +110,18 @@ export const LineTree = memo(function LineTree({
   const suppressTimer = useRef<number | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
 
-  const lines = useMemo(() => chart.judgeLineList ?? [], [chart]);
-  const rawNames = useMemo(() => groupNames(chart), [chart]);
-  const labels = useMemo(() => lineGroupLabels(chart), [chart]);
+  // A paged chart reuses its facade and may mutate line arrays in place, so the
+  // revision must create a fresh dependency object for every tree collection.
+  const treeData = useMemo(
+    () => ({
+      lines: chart.judgeLineList ?? [],
+      rawNames: groupNames(chart),
+      labels: lineGroupLabels(chart),
+      revision: contentRevision,
+    }),
+    [chart, contentRevision],
+  );
+  const { lines, rawNames, labels } = treeData;
   const folderSelected = folderGroup !== null;
   // Folder mode highlights the chosen folder. Line mode still derives the
   // footer's target folder from the active line, but folder rows stay unselected
@@ -117,18 +131,18 @@ export const LineTree = memo(function LineTree({
     Math.max(0, labels.length - 1),
   );
   const buckets = useMemo(() => {
-    const next: number[][] = labels.map(() => []);
+    const next: number[][] = treeData.labels.map(() => []);
     // Flat order is the line number, so pushing in order keeps every folder
     // ascending even after lines move between folders.
-    lines.forEach((line, index) => {
-      const group = Math.min(Math.max(lineGroupIndex(line), 0), labels.length - 1);
+    treeData.lines.forEach((line, index) => {
+      const group = Math.min(Math.max(lineGroupIndex(line), 0), treeData.labels.length - 1);
       next[group]?.push(index);
     });
     return next;
-  }, [labels, lines]);
+  }, [treeData]);
   const lineIndices = useMemo(
-    () => new Map(lines.map((line, index) => [lineTreeKey(lines, index), index])),
-    [lines],
+    () => new Map(treeData.lines.map((line, index) => [lineTreeKey(treeData.lines, index), index])),
+    [treeData],
   );
   // A paged chart can hold far more rows than a DOM list can mount. Show a
   // window around the active line and leave navigation to line jump.
@@ -150,10 +164,10 @@ export const LineTree = memo(function LineTree({
   const selected = useMemo(() => {
     const next = new Set<string>(folderSelected ? [] : selectedLineIds);
     if (!folderSelected && !next.size) {
-      next.add(lineTreeKey(lines, session.lineIndex));
+      next.add(lineTreeKey(treeData.lines, session.lineIndex));
     }
     return next;
-  }, [folderSelected, selectedLineIds, lines, session.lineIndex]);
+  }, [treeData, folderSelected, selectedLineIds, session.lineIndex]);
   const selectedIndices = new Set(
     [...selected].flatMap((key) => {
       const index = lineIndices.get(key);
@@ -184,12 +198,13 @@ export const LineTree = memo(function LineTree({
       onSelectionChange,
       onSelectLine,
     };
-  }, [lines, selected, lineIndices, session.lineIndex, onSelectionChange, onSelectLine]);
+  }, [treeData, lines, selected, lineIndices, session.lineIndex, onSelectionChange, onSelectLine]);
   useLayoutEffect(() => {
     if (listRef.current && scrollTopRef.current !== null) {
       listRef.current.scrollTop = Math.max(0, scrollTopRef.current);
     }
   }, [scrollTopRef]);
+  useLineTreeReveal(listRef, rowRefs, pendingReveal, contentRevision, folderGroup);
 
   useEffect(() => {
     return () => {
@@ -218,29 +233,6 @@ export const LineTree = memo(function LineTree({
   }, [createPromptOpen]);
 
   const currentScroll = () => listRef.current?.scrollTop ?? 0;
-
-  /** The selected line nearest the row that left the set, unless the current
-   * line is still selected and the removed row was not that line. */
-  const focusAfterRemoval = (removed: number, next: ReadonlySet<string>): number => {
-    const currentKey = lineTreeKey(lines, session.lineIndex);
-    if (removed !== session.lineIndex && next.has(currentKey)) {
-      return session.lineIndex;
-    }
-    let best = session.lineIndex;
-    let bestDistance = Infinity;
-    for (const id of next) {
-      const index = lineIndices.get(id);
-      if (index === undefined) {
-        continue;
-      }
-      const distance = Math.abs(index - removed);
-      if (distance < bestDistance) {
-        best = index;
-        bestDistance = distance;
-      }
-    }
-    return best;
-  };
 
   /** Toggles Shift multi-selection for a row and focuses the remaining selection. */
   const selectRow = useCallback((index: number, event?: ReactMouseEvent<HTMLElement>) => {
@@ -292,7 +284,8 @@ export const LineTree = memo(function LineTree({
     lines,
     selectedIds: selected,
     lineIndices,
-    focusAfterRemoval,
+    focusAfterRemoval: (removed, next) =>
+      lineFocusAfterRemoval(removed, next, lines, lineIndices, session.lineIndex),
     currentScroll,
     onSelectionChange,
     onSelectLine,
@@ -315,6 +308,13 @@ export const LineTree = memo(function LineTree({
           judgeLineGroup: ["Default"],
           judgeLineList: [...lines, ...additions],
         };
+    // The new row is only directly visible when its folder is open; expand it
+    // before the commit so the reveal effect can measure the row.
+    const destination = labels[groupIndex];
+    if (destination && collapsedGroups.has(destination)) {
+      onToggleGroup(destination);
+    }
+    pendingReveal.current = { kind: "line", index: start + count - 1 };
     onCommit(
       count === 1
         ? t("editorPanels.linePanel.addLabel")
@@ -360,7 +360,9 @@ export const LineTree = memo(function LineTree({
       return;
     }
     onCommit(t("editorPanels.linePanel.addGroupLabel"), next, session.lineIndex);
-    // A newly created folder has no line to focus, so select the folder itself.
+    // A newly created folder has no line to focus, so select the folder itself
+    // and bring its row into view.
+    pendingReveal.current = { kind: "group", group: insertAt - 1 };
     onSelectFolder(insertAt - 1);
   };
 

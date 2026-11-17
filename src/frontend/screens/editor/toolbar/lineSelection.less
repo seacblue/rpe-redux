@@ -190,10 +190,6 @@
   background: var(--line-selection-tint-hover);
 }
 
-.line-selection-group-head[data-state="all"] .line-selection-group-disclosure {
-  color: var(--accent);
-}
-
 .line-selection-group-disclosure {
   display: inline-grid;
   flex: none;
@@ -207,6 +203,7 @@
   border-radius: var(--design-radius-chip);
   background: transparent;
   color: var(--foreground-muted);
+  --icon-color: var(--foreground-muted);
   cursor: var(--app-cursor-pointer);
 }
 
@@ -224,14 +221,29 @@
   padding: 0;
 }
 
-.line-selection-group-disclosure:hover {
-  background: var(--surface-hover);
-  color: var(--foreground);
+// The header already paints the hover and selection wash. The disclosure is a
+// nested affordance, not a second box: pointer states never add a fill, and the
+// mask ink follows the folder's selection state so a selected folder keeps its
+// accent glyph while the pointer is over it.
+.line-selection-group-disclosure:is(:hover, :active):not(:disabled) {
+  background: transparent;
 }
 
-.line-selection-group-head[data-state="some"] .line-selection-group-disclosure:hover,
-.line-selection-group-head[data-state="all"] .line-selection-group-disclosure:hover {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+.line-selection-group-disclosure:hover {
+  color: var(--foreground);
+  --icon-color: var(--foreground);
+}
+
+.line-selection-group-head:not([data-state="none"]) .line-selection-group-disclosure {
+  color: var(--foreground);
+  --icon-color: var(--foreground);
+}
+
+.line-selection-group-head[data-state="all"] .line-selection-group-disclosure,
+.line-selection-group-head[data-state="all"]
+  .line-selection-group-disclosure:is(:hover, :active):not(:disabled) {
+  color: var(--accent);
+  --icon-color: var(--accent);
 }
 
 .line-selection-group-disclosure .redux-icon {

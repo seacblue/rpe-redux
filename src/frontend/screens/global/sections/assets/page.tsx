@@ -5,7 +5,7 @@
  * are the page in every frame. The expanded task is a geometry the same split
  * grows into, not a second page.
  */
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   registerWorkspaceMode,
   type WorkspaceModeDefinition,
@@ -13,6 +13,7 @@ import {
 import { registerInspectorPanel } from "../../../editor/inspector/controller.ts";
 import { registerInspectorSidebar } from "../../../editor/inspector/inspectorShell.ts";
 import { useInspectorRuntime } from "../../../editor/workspace/runtime/providers/InspectorProvider.tsx";
+import { useEditorSession } from "../../../editor/workspace/runtime/providers/SessionProvider.tsx";
 import {
   getEditorVisibility,
   subscribeToEditorVisibility,
@@ -25,15 +26,30 @@ const hasDocument = {
   subscribe: subscribeToEditorVisibility,
 };
 
-/** Builds the library once per installed document and page instance. */
+/** Keeps the library tree synchronized with the installed document session. */
 function useAssetLibraryBinding() {
   const inspector = useInspectorRuntime();
+  const sessionRuntime = useEditorSession();
+  const session = useSyncExternalStore(
+    sessionRuntime.subscribe,
+    () => sessionRuntime.current,
+    () => sessionRuntime.current,
+  );
   useEffect(() => {
     if (!inspector) {
       return;
     }
-    void inspector.assetLibrary.render();
-  }, [inspector]);
+    const refresh = (event?: Event): void => {
+      const kind = (event as CustomEvent<{ kind?: string }> | undefined)?.detail?.kind;
+      if (kind === "selection") {
+        return;
+      }
+      void inspector.assetLibrary.render();
+    };
+    refresh();
+    session.addEventListener("change", refresh);
+    return () => session.removeEventListener("change", refresh);
+  }, [inspector, session]);
 }
 
 /** The compact page: the folder tree above the selected asset's details. */
