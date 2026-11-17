@@ -35,6 +35,7 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import type { LibraryProjectRef } from "../../../../../../core/global/library/types.ts";
 import type { LocalLibrary } from "../../../../../../core/global/library/client.ts";
 import type { SaveResult } from "../../../../../../core/global/document/desktopTypes.ts";
+import { createSaveFlight } from "./saveFlight.ts";
 
 /** Live document state and persistence side effects used by the saver. */
 export interface DocumentSaverDependencies {
@@ -79,25 +80,16 @@ const backgroundProgressOwner: ToastHandle = {
 
 /** Save a stable snapshot into the library, or export it when a path is given. */
 export function createDocumentSaver(deps: DocumentSaverDependencies) {
-  let saving: Promise<SaveResult | null> | null = null;
+  const saveFlight = createSaveFlight<SaveResult | null>();
   /** Resolves the shared library connection. */
   const library = deps.openLibrary ?? (async () => (await localService())?.library ?? null);
 
-  /** Saves one snapshot; concurrent callers share the in-flight promise. */
-  const save = async (
+  /** Saves one snapshot after the caller has joined the save flight. */
+  const performSave = async (
     saveAs = false,
     path?: string,
     options: SaveOptions = {},
   ): Promise<SaveResult | null> => {
-    if (saving) {
-      return saving;
-    }
-    // A room chart is a temporary working copy. Only an explicit export path
-    // may write it; the normal save path must never create a library entry.
-    if (!path && collaborationRoomDocument.get()) {
-      return null;
-    }
-
     const current = deps.currentSession();
     const generation = deps.currentGeneration?.() ?? 0;
     const snapshot = current.chart;
@@ -120,7 +112,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
     };
     reportProgress(0.05);
 
-    saving = (async () => {
+    return (async () => {
       const chartDocument = registeredChartDocument(snapshot as object);
       // A file export projects and serializes the complete chart. A paged
       // document must materialize its placeholders first; library saves keep
@@ -337,17 +329,28 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
           markFailurePresented(error, "progress");
         }
         throw error;
-      })
-      .finally(() => {
-        saving = null;
       });
-    return saving;
+  };
+
+  /** Saves a document, preserving explicit-save intent over quiet backups. */
+  const save = (
+    saveAs = false,
+    path?: string,
+    options: SaveOptions = {},
+  ): Promise<SaveResult | null> => {
+    // A room chart is a temporary working copy. Only an explicit export path
+    // may write it; the normal save path must never create a library entry.
+    if (!path && collaborationRoomDocument.get()) {
+      return Promise.resolve(null);
+    }
+    const key = options.quiet ? "quiet" : path ? `export:${path}` : saveAs ? "save-as" : "save";
+    return saveFlight.run({ key }, () => performSave(saveAs, path, options));
   };
 
   return {
     save,
     get pending() {
-      return saving;
+      return saveFlight.pending;
     },
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Incremental chart issue monitor for event overlaps and invalid holds/ranges.
+ * Incremental chart issue monitor for event overlaps, invalid ranges, and negative beats.
  *
  * A session notifies on selection and history changes as well as chart commits.
  * The monitor returns immediately while the chart object is unchanged, reuses
@@ -28,9 +28,9 @@ import { eventOverlapPairs, type EventOverlapPair } from "./eventOverlap.ts";
 /** One overlapping pair with the chart context needed to locate it. */
 export interface ChartIssue {
   /** The issue kind controls how the inspector locates and describes it. */
-  kind: "overlap" | "invalid-range";
+  kind: "overlap" | "invalid-range" | "negative-beat";
   /** The chart object represented by this issue. */
-  target: "event" | "hold";
+  target: "event" | "hold" | "note";
   /** Stable key for React and list diffs. */
   id: string;
   lineIndex: number;
@@ -142,6 +142,16 @@ export class EventIssueMonitor {
     readonly JudgeLineNote[],
     readonly InvalidRangeCacheEntry[]
   >();
+  /** Reuses negative-event scans when an event track array is unchanged. */
+  private readonly negativeEventCache = new WeakMap<
+    readonly JudgeLineEvent[],
+    readonly InvalidRangeCacheEntry[]
+  >();
+  /** Reuses negative-note scans when a line's note array is unchanged. */
+  private readonly negativeNoteCache = new WeakMap<
+    readonly JudgeLineNote[],
+    readonly InvalidRangeCacheEntry[]
+  >();
 
   /** Scan one chart, publishing only when the visible issue list changes. */
   update(chart: Chart): ChartIssueSnapshot {
@@ -233,6 +243,7 @@ export class EventIssueMonitor {
     if (!events?.length) {
       return;
     }
+    this.appendNegativeEventIssues(issues, line, lineIndex, layer, extended, track, events);
     this.appendInvalidEventIssues(issues, line, lineIndex, layer, extended, track, events);
     if (events.length < 2) {
       return;
@@ -270,6 +281,65 @@ export class EventIssueMonitor {
         endTime: pair.endTime,
         beat: beatValue(pair.startTime),
         endBeat: beatValue(pair.endTime),
+      });
+    }
+  }
+
+  /** Append one issue for every event whose start or end beat is negative. */
+  private appendNegativeEventIssues(
+    issues: ChartIssue[],
+    line: JudgeLine,
+    lineIndex: number,
+    layer: number,
+    extended: boolean,
+    track: EventTrackName,
+    events: readonly JudgeLineEvent[],
+  ): void {
+    const lineId = String(line.id ?? `line-${lineIndex}`);
+    const lineName = line.Name?.trim() ?? "";
+    let negative = this.negativeEventCache.get(events);
+    if (!negative) {
+      const next: InvalidRangeCacheEntry[] = [];
+      for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+        const event = events[eventIndex];
+        if (
+          !event ||
+          (compareBeats(event.startTime, [0, 0, 1]) >= 0 &&
+            compareBeats(event.endTime, [0, 0, 1]) >= 0)
+        ) {
+          continue;
+        }
+        next.push({
+          index: eventIndex,
+          id: String(event.id ?? eventIndex),
+          startTime: event.startTime,
+          endTime: event.endTime,
+          beat: beatValue(event.startTime),
+          endBeat: beatValue(event.endTime),
+        });
+      }
+      negative = Object.freeze(next);
+      this.negativeEventCache.set(events, negative);
+    }
+    for (const entry of negative) {
+      issues.push({
+        id: `${lineId}:${layer}:${track}:negative:${entry.id}:${entry.index}`,
+        kind: "negative-beat",
+        target: "event",
+        lineIndex,
+        lineId,
+        lineName,
+        layer,
+        extended,
+        track,
+        firstEventIndex: entry.index,
+        secondEventIndex: entry.index,
+        firstEventId: entry.id,
+        secondEventId: entry.id,
+        startTime: [...entry.startTime] as Beat,
+        endTime: [...entry.endTime] as Beat,
+        beat: entry.beat,
+        endBeat: entry.endBeat,
       });
     }
   }
@@ -334,6 +404,7 @@ export class EventIssueMonitor {
     const notes = line.notes ?? [];
     const lineId = String(line.id ?? `line-${lineIndex}`);
     const lineName = line.Name?.trim() ?? "";
+    this.appendNegativeNoteIssues(issues, line, lineIndex, notes);
     let invalid = this.invalidHoldCache.get(notes);
     if (!invalid) {
       const next: InvalidRangeCacheEntry[] = [];
@@ -359,6 +430,62 @@ export class EventIssueMonitor {
         id: `${lineId}:notes:invalid:${entry.id}:${entry.index}`,
         kind: "invalid-range",
         target: "hold",
+        lineIndex,
+        lineId,
+        lineName,
+        layer: -1,
+        extended: false,
+        track: "notes",
+        firstEventIndex: entry.index,
+        secondEventIndex: entry.index,
+        firstEventId: entry.id,
+        secondEventId: entry.id,
+        startTime: [...entry.startTime] as Beat,
+        endTime: [...entry.endTime] as Beat,
+        beat: entry.beat,
+        endBeat: entry.endBeat,
+      });
+    }
+  }
+
+  /** Append one issue for every note whose start or end beat is negative. */
+  private appendNegativeNoteIssues(
+    issues: ChartIssue[],
+    line: JudgeLine,
+    lineIndex: number,
+    notes: readonly JudgeLineNote[],
+  ): void {
+    const lineId = String(line.id ?? `line-${lineIndex}`);
+    const lineName = line.Name?.trim() ?? "";
+    let negative = this.negativeNoteCache.get(notes);
+    if (!negative) {
+      const next: InvalidRangeCacheEntry[] = [];
+      for (let noteIndex = 0; noteIndex < notes.length; noteIndex += 1) {
+        const note = notes[noteIndex];
+        if (
+          !note ||
+          (compareBeats(note.startTime, [0, 0, 1]) >= 0 &&
+            compareBeats(note.endTime, [0, 0, 1]) >= 0)
+        ) {
+          continue;
+        }
+        next.push({
+          index: noteIndex,
+          id: String(note.id ?? noteIndex),
+          startTime: note.startTime,
+          endTime: note.endTime,
+          beat: beatValue(note.startTime),
+          endBeat: beatValue(note.endTime),
+        });
+      }
+      negative = Object.freeze(next);
+      this.negativeNoteCache.set(notes, negative);
+    }
+    for (const entry of negative) {
+      issues.push({
+        id: `${lineId}:notes:negative:${entry.id}:${entry.index}`,
+        kind: "negative-beat",
+        target: "note",
         lineIndex,
         lineId,
         lineName,

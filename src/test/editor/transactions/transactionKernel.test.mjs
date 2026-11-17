@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { createChart, createLine } from "../../../core/global/chart/chart.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
+import { transformEvents } from "../../../core/edit/events/eventEdits.ts";
+import { eventKey } from "../../../core/edit/events/eventTracks.ts";
 import { applyRequest, transactionChart } from "../../../core/edit/transaction/apply.ts";
 import {
   collectChartObjectIds,
@@ -318,4 +320,50 @@ test("commit, undo and redo keep note lookups current", () => {
 
   assert.equal(session.travel("redo"), true);
   assert.equal(findNote(session.chart, noteId)?.note.positionX, 777);
+});
+
+test("transactions reject negative note and event beats", () => {
+  const session = new EditorSession(makeChart(1, 3));
+  const line = session.chart.judgeLineList[0];
+  const note = line.notes[0];
+  const event = line.eventLayers[0].moveXEvents[0];
+  const before = JSON.stringify(session.chart);
+
+  const noteResult = applyChartTransaction(session, {
+    notes: { update: [{ id: note.id, patch: { startTime: [-1, 0, 1], endTime: [-1, 0, 1] } }] },
+  });
+  assert.equal(noteResult.status, "rejected");
+  assert.equal(noteResult.issues[0].code, "beat.negative");
+  assert.equal(JSON.stringify(session.chart), before);
+
+  const eventResult = applyChartTransaction(session, {
+    events: { update: [{ id: event.id, patch: { startTime: [-1, 0, 1] } }] },
+  });
+  assert.equal(eventResult.status, "rejected");
+  assert.equal(eventResult.issues[0].code, "beat.negative");
+  assert.equal(JSON.stringify(session.chart), before);
+});
+
+test("direct selection commits reject newly negative beats", () => {
+  const session = new EditorSession(makeChart(1, 3));
+  const line = session.chart.judgeLineList[0];
+  const note = line.notes[0];
+  const event = line.eventLayers[0].moveXEvents[0];
+  const before = JSON.stringify(session.chart);
+
+  session.selection = new Set([0]);
+  session.transformSelection("negative note", (current) => ({
+    ...current,
+    startTime: [-1, 0, 1],
+    endTime: [-1, 0, 1],
+  }));
+  assert.deepEqual(session.chart.judgeLineList[0].notes[0], note);
+
+  session.eventSelection = new Set([eventKey("moveXEvents", 0)]);
+  transformEvents(session, "negative event", (current) => ({
+    ...current,
+    startTime: [-1, 0, 1],
+  }));
+  assert.deepEqual(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0], event);
+  assert.equal(JSON.stringify(session.chart), before);
 });

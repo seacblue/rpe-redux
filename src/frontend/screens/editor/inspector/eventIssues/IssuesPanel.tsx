@@ -78,17 +78,17 @@ function IssuesContent() {
     }
     const session = runtime.getSession();
     const before = session.selectionState();
-    session.focus = issue.target === "hold" ? "notes" : "events";
+    session.focus = issue.target === "hold" || issue.target === "note" ? "notes" : "events";
     session.marqueeSelection = null;
     session.lineIndex = issue.lineIndex;
     session.selection.clear();
     session.eventSelection.clear();
-    if (issue.target === "hold") {
+    if (issue.target === "hold" || issue.target === "note") {
       session.selection = new Set([issue.firstEventIndex]);
     } else {
       session.eventLayer = issue.layer;
       session.eventSelection = new Set(
-        issue.kind === "invalid-range"
+        issue.kind !== "overlap"
           ? [eventKey(issue.track, issue.firstEventIndex)]
           : [
               eventKey(issue.track, issue.firstEventIndex),
@@ -103,7 +103,9 @@ function IssuesContent() {
     session.normalizeMultiLine();
     session.selectionRevision += 1;
     session.recordSelection(undefined, before, true);
-    runtime.providers.inspector.showSingleTimeline(issue.target === "hold" ? "notes" : "events");
+    runtime.providers.inspector.showSingleTimeline(
+      issue.target === "hold" || issue.target === "note" ? "notes" : "events",
+    );
     runtime.providers.playback.seekBeat(beatValue(issue.startTime), true);
     runtime.timeline.changed();
     // Selecting the pair routes the inspector to the event or multi-edit pane.
@@ -127,7 +129,7 @@ function IssuesContent() {
         {issues.map((issue, index) => {
           const line = issue.lineName || t("editorPanels.issues.line", { index: issue.lineIndex });
           const layer =
-            issue.target === "hold"
+            issue.target === "hold" || issue.target === "note"
               ? t("editorPanels.issues.notesLayer")
               : issue.extended
                 ? t("editorPanels.issues.extendedLayer")
@@ -141,9 +143,11 @@ function IssuesContent() {
               <ListRow as="div" className="event-issue-row" data-issue-id={issue.id}>
                 <div className="event-issue-main">
                   <strong className="event-issue-title">
-                    {issue.target === "hold"
-                      ? t("editorPanels.issues.holdTrack")
-                      : trackLabel(issue.track, t)}
+                    {issue.kind === "negative-beat"
+                      ? t("editorPanels.issues.negativeBeat")
+                      : issue.target === "hold"
+                        ? t("editorPanels.issues.holdTrack")
+                        : trackLabel(issue.track, t)}
                     {", "}
                     {line}
                   </strong>

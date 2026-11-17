@@ -8,13 +8,72 @@
  * while load, save, export, and transaction preview keep the full gate.
  */
 import { t } from "../../../i18n/index.ts";
-import { isBeat } from "./timing/beat.ts";
+import { compareBeats, isBeat } from "./timing/beat.ts";
 import { TempoMap } from "./timing/tempo.ts";
 import { sampleCurveTrajectory } from "./trajectory/curveTrajectory.ts";
 import { trajectorySplitSettings } from "./trajectory/trajectorySimplify.ts";
 import { EVENT_TRACKS, isNoteType } from "./chartVocabulary.ts";
 import { CONTROL_TRACKS } from "./chartTracks.ts";
 import type { Chart, JudgeLine, JudgeLineEvent, JudgeLineNote, LineEventValue } from "./chart.ts";
+
+/** Return a stable signature for an object's beat range when either endpoint is negative. */
+function negativeBeatSignature(item: { startTime?: unknown; endTime?: unknown }): string | null {
+  if (!isBeat(item.startTime) || !isBeat(item.endTime)) {
+    return null;
+  }
+  if (compareBeats(item.startTime, [0, 0, 1]) >= 0 && compareBeats(item.endTime, [0, 0, 1]) >= 0) {
+    return null;
+  }
+  return `${item.startTime.join(",")}|${item.endTime.join(",")}`;
+}
+
+/** Find negative beat ranges by stable object id, with a positional fallback. */
+function negativeBeatRanges(chart: Chart): Map<string, string> {
+  const ranges = new Map<string, string>();
+  for (const [lineIndex, line] of (chart.judgeLineList ?? []).entries()) {
+    for (const [noteIndex, note] of (line.notes ?? []).entries()) {
+      const signature = negativeBeatSignature(note);
+      if (signature) {
+        ranges.set(
+          typeof note.id === "string" ? `note:${note.id}` : `note:${lineIndex}:${noteIndex}`,
+          signature,
+        );
+      }
+    }
+    for (const [layerIndex, layer] of [...(line.eventLayers ?? []), line.extended].entries()) {
+      if (!layer) {
+        continue;
+      }
+      for (const [track, events] of Object.entries(layer)) {
+        if (!Array.isArray(events)) {
+          continue;
+        }
+        for (const [eventIndex, event] of events.entries()) {
+          const signature = negativeBeatSignature(event);
+          if (signature) {
+            ranges.set(
+              typeof event.id === "string"
+                ? `event:${event.id}`
+                : `event:${lineIndex}:${layerIndex}:${track}:${eventIndex}`,
+              signature,
+            );
+          }
+        }
+      }
+    }
+  }
+  return ranges;
+}
+
+/** Reject newly-created negative note or event beats while preserving load-time diagnostics. */
+export function assertNoNewNegativeBeatRanges(previous: Chart, next: Chart): void {
+  const previousRanges = negativeBeatRanges(previous);
+  for (const [key, signature] of negativeBeatRanges(next)) {
+    if (previousRanges.get(key) !== signature) {
+      throw new Error(t("model.beat.negative"));
+    }
+  }
+}
 
 /** Whether one event endpoint follows the track's value type. */
 function validEventValue(entry: LineEventValue, type: string): boolean {

@@ -170,6 +170,7 @@ export default {
   "editorPanels.issues.extendedLayer": "Extended layer",
   "editorPanels.issues.notesLayer": "Notes",
   "editorPanels.issues.holdTrack": "Hold",
+  "editorPanels.issues.negativeBeat": "Beat cannot be negative",
   "editorPanels.issues.beat": "Beat {value}",
   "editorPanels.issues.eventPair": "Event {first} ↔ {second}",
   "editorPanels.issues.invalidRange": "Item {index} has no forward duration",

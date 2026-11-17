@@ -20,6 +20,7 @@ export default {
   "model.beat.outOfRange": "拍数超出安全精度范围",
   "model.beat.invalid": "非法拍数",
   "model.beat.empty": "拍数不能为空",
+  "model.beat.negative": "音符或事件的拍数不能小于 0",
 
   "model.chart.untitled": "未命名谱面",
   "model.chart.invalidDocument": "无效的 RPE JSON 文档",
