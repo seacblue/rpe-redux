@@ -181,7 +181,13 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
       }
       const session = runtime.session();
       const tempo = runtime.tempo();
-      runtime.hitSounds.tick(session.chart, tempo, session.lineIndex);
+      runtime.hitSounds.tick(
+        session.chart,
+        tempo,
+        session.lineIndex,
+        session.contentRevision,
+        session.history.contentRevision,
+      );
 
       return { session, tempo };
     },
