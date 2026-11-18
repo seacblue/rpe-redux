@@ -110,6 +110,13 @@ export class HitSounds {
   compiledRevision: number | null;
   /** History content revision the list was built from, which separates edits from paging. */
   compiledEditRevision: number | null;
+  /**
+   * Chart offset in seconds the trigger list was built with.
+   *
+   * A committed offset moves every trigger against the audio clock, so the
+   * cursor cannot survive it; every other edit keeps the cursor's meaning.
+   */
+  compiledOffset: number | null;
   compiledLine: number | null;
   entries: HitTimelineEntry[];
   revision: number;
@@ -145,6 +152,7 @@ export class HitSounds {
     this.compiled = null;
     this.compiledRevision = null;
     this.compiledEditRevision = null;
+    this.compiledOffset = null;
     this.compiledLine = null;
     this.entries = [];
     this.revision = -1;
@@ -354,6 +362,7 @@ export class HitSounds {
     this.compiled = null;
     this.compiledRevision = null;
     this.compiledEditRevision = null;
+    this.compiledOffset = null;
     this.compiledLine = null;
     this.entries = [];
     this.tempo = null;
@@ -426,7 +435,15 @@ export class HitSounds {
     const edit = editRevision ?? revision;
     const structural =
       this.compiled !== chart || this.tempo !== tempo || this.compiledLine !== line;
-    if (structural || this.compiledRevision !== revision || this.compiledEditRevision !== edit) {
+    const rebuilt =
+      structural || this.compiledRevision !== revision || this.compiledEditRevision !== edit;
+    const chartOffset = (chart.META.offset ?? 0) / 1000;
+    // A committed offset moves every trigger against the audio clock, so the
+    // cursor index no longer names the same instant and the notes at or behind
+    // the playhead were already heard. Every other edit keeps the cursor's
+    // meaning, which is what lets a replay land on its own note.
+    const offsetChanged = this.compiledOffset !== null && this.compiledOffset !== chartOffset;
+    if (rebuilt) {
       // An edited chart invalidates scheduled voices; a paged line that merely
       // became materialized does not, so a loading burst never stops and
       // re-schedules the notes it just queued.
@@ -439,8 +456,11 @@ export class HitSounds {
       this.compiledLine = line;
       this.compiledRevision = revision;
       this.compiledEditRevision = edit;
+      this.compiledOffset = chartOffset;
       this.entries = hitTimeline(chart, tempo, this.offsets, line);
-      if (!edited) {
+      if (offsetChanged) {
+        this.next = upperBound(this.entries, this.transport.audioTime, (entry) => entry.time);
+      } else if (!edited) {
         this.next = upperBound(
           this.entries,
           Math.max(this.transport.audioTime - 0.02, this.scheduledUntil),
@@ -452,7 +472,16 @@ export class HitSounds {
     if (this.revision !== this.transport.playRevision) {
       this.stop();
       this.revision = this.transport.playRevision;
-      this.next = upperBound(this.entries, time - 0.02, (entry) => entry.time);
+      // A rebuild in this tick already anchored the cursor from the new list. The
+      // seek tolerance below exists for a transport seek that lands a hair past a
+      // trigger; applying it after an offset edit would rewind the cursor onto
+      // the note the playhead sits on and sound it a second time.
+      if (!rebuilt) {
+        this.next = upperBound(this.entries, time - 0.02, (entry) => entry.time);
+      }
+    } else if (offsetChanged) {
+      // The offset commit is not always followed by a seek in the same tick.
+      this.next = upperBound(this.entries, time, (entry) => entry.time);
     }
     // `next` already points past the previous look-ahead window. During normal
     // monotonic playback the first unscheduled entry is therefore still newer
