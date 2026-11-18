@@ -465,10 +465,10 @@ function BpmOffset({ session, chart }: Pick<BpmForm, "session" | "chart">) {
         undefined,
         { normalized: true },
       );
-      // Seek through the transport controller, which also refreshes the viewport
-      // origin, the frame, and the preload window; a raw audio seek leaves the
-      // paused playhead where it was. `pause: false` keeps a running transport
-      // running.
+      // Seek through the transport controller rather than the audio transport:
+      // it also stops hit sounds, publishes the playhead to the viewport,
+      // invalidates the frame, and refreshes the preload window. `pause: false`
+      // keeps a running transport running.
       if (playback && chartSeconds !== null) {
         const anchor = offsetAnchorSeconds(chartSeconds, Number(next.META.offset ?? 0) / 1000);
         if (anchor !== null) {
