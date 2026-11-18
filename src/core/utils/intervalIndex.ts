@@ -316,9 +316,7 @@ export class IntervalIndex<T> {
         block.starts[lastPosition] - expansion <= end
           ? block.indices.length
           : upperBound(block.starts, end + expansion);
-      const first = this.prefixPrune
-        ? firstExpandedRow(block, start, safeRadius, limit)
-        : 0;
+      const first = this.prefixPrune ? firstExpandedRow(block, start, safeRadius, limit) : 0;
       for (let position = first; position < limit; position++) {
         const itemExpansion = safeRadius * block.expansions[position];
         if (
@@ -377,9 +375,7 @@ export class IntervalIndex<T> {
         block.starts[lastPosition] - expansion <= end
           ? block.indices.length
           : upperBound(block.starts, end + expansion);
-      const first = this.prefixPrune
-        ? firstExpandedRow(block, start, safeRadius, limit)
-        : 0;
+      const first = this.prefixPrune ? firstExpandedRow(block, start, safeRadius, limit) : 0;
       for (let position = first; position < limit; position++) {
         const itemExpansion = safeRadius * block.expansions[position];
         if (
