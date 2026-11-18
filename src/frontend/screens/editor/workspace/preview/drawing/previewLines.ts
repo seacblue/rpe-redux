@@ -322,6 +322,17 @@ function previewNoteTintInto(
   return target;
 }
 
+/**
+ * Whether a Hold paints no body because its painted length is negative.
+ *
+ * A Hold keeps its authored head-before-tail order; the painted span turns
+ * negative when the note speed or the line speed under it reverses direction.
+ * Phira skips the body in that case and still paints both caps.
+ */
+function holdPaintsNoBody(entry: NoteEntry): boolean {
+  return (entry.tail - entry.floor) * Number(entry.note.speed ?? 1) < 0;
+}
+
 /** Submit one visible note to the batch, falling back to Canvas when needed. */
 function drawPreviewNoteEntry(
   surface: PreviewLineSurface,
@@ -346,6 +357,7 @@ function drawPreviewNoteEntry(
   selectionTint: readonly number[] | null,
 ): boolean {
   const isHold = entry.note.type === 2;
+  const invertedHold = isHold && holdPaintsNoBody(entry);
   const holdRotation = rotation + (noteIsAbove(entry.note) ? Math.PI : 0);
   if (surface.collectGeometry) {
     appendPreviewNoteHitArea(
@@ -378,6 +390,7 @@ function drawPreviewNoteEntry(
         noteColorStyle,
         holdRotation,
         holdCapScale,
+        !invertedHold,
       )
     : surface.noteBatch.addHeadSlotted(
         surface.noteTextures,
@@ -418,6 +431,7 @@ function drawPreviewNoteEntry(
     skewShear,
     holdRotation,
     holdCapScale,
+    invertedHold,
   );
   if (restoreBatchTransform) {
     context.restore();
@@ -447,6 +461,7 @@ function paintPreviewNoteFallback(
   skewShear: number,
   holdRotation: number,
   holdCapScale: number,
+  invertedHold: boolean,
 ): void {
   context.globalAlpha = alpha;
   const tint = noteColorStyle?.color;
@@ -458,7 +473,13 @@ function paintPreviewNoteFallback(
   let drawnHold = false;
   if (noteType === 2) {
     const axis = position.tail - position.y;
-    const holdAxisRotation = Math.abs(axis) < 1e-6 ? holdRotation : Math.atan2(0, -axis);
+    // A negative painted length keeps the caps in the line's upright frame;
+    // deriving the angle from the reversed span would turn their UVs over.
+    const holdAxisRotation = invertedHold
+      ? holdRotation
+      : Math.abs(axis) < 1e-6
+        ? holdRotation
+        : Math.atan2(0, -axis);
     drawnHold =
       surface.skin?.hold(
         context,
@@ -471,15 +492,22 @@ function paintPreviewNoteFallback(
         noteColorStyle,
         holdAxisRotation,
         holdCapScale,
+        !invertedHold,
       ) ?? false;
   }
   if (noteType === 2 && !drawnHold) {
-    context.fillRect(
-      horizontal - noteWidth / 2,
-      -position.tail * scaleY,
-      noteWidth,
-      (position.tail - position.y) * scaleY,
-    );
+    if (invertedHold) {
+      // Phira skips a Hold body whose longitudinal size is negative, so an
+      // inverted Hold keeps only its head and tail caps.
+      context.fillRect(horizontal - noteWidth / 2, -position.tail * scaleY - 2, noteWidth, 4);
+    } else {
+      context.fillRect(
+        horizontal - noteWidth / 2,
+        -position.tail * scaleY,
+        noteWidth,
+        (position.tail - position.y) * scaleY,
+      );
+    }
   }
   if (position.showHead && !drawnHold) {
     // Hold skins already isolate their own rotation. Only note heads need a

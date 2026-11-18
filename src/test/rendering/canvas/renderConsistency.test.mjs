@@ -648,6 +648,84 @@ test("note batch paints Holds beneath note heads even after a head texture was u
   assert.deepEqual(paintedSources(calls), ["hold-body", "hold-end", "hold-head", "tap"]);
 });
 
+test("a negative-length Hold queues both caps without a body", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const sources = {
+    tap: labeledDescriptor("tap"),
+    holdBody: labeledDescriptor("hold-body"),
+    holdEnd: labeledDescriptor("hold-end"),
+    holdHead: labeledDescriptor("hold-head"),
+  };
+  const skin = {
+    noteTexture: () => sources.tap,
+    holdBodyTexture: () => sources.holdBody,
+    holdEndTexture: () => sources.holdEnd,
+    holdHeadTexture: () => sources.holdHead,
+  };
+  const batch = new NoteBatch(canvas);
+
+  batch.begin(100, 100, skin);
+  assert.equal(batch.addHold(skin, false, 50, 50, 50, 20, 8, true, 1, null, 0, 1, false), true);
+  batch.finish();
+
+  assert.deepEqual(paintedSources(calls), ["hold-end", "hold-head"]);
+});
+
+test("negative-length Hold caps keep the line frame and upright UVs", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+  };
+  /** Rotation and V coordinates of every queued instance, in draw order. */
+  const instances = () => {
+    const data = calls.uploads.at(-1) ?? [];
+    const result = [];
+    for (let offset = 0; offset + 15 <= data.length; offset += 15) {
+      result.push({ rotation: data[offset + 4], v0: data[offset + 7], v1: data[offset + 9] });
+    }
+    return result;
+  };
+  const lineAngle = Math.PI / 3;
+
+  // A positive speed paints body, tail, and head from the head-to-tail vector.
+  const ordinary = new NoteBatch(canvas);
+  ordinary.begin(100, 100, skin);
+  assert.equal(
+    ordinary.addHold(skin, false, 50, 50, 50, 20, 8, true, 1, null, lineAngle, 1, true),
+    true,
+  );
+  ordinary.finish();
+  const ordinaryInstances = instances();
+  assert.equal(ordinaryInstances.length, 3, "body plus both caps");
+  assert.ok(
+    ordinaryInstances.every((instance) => instance.v0 === 1 && instance.v1 === 0),
+    "the ordinary Hold keeps its authored V axis",
+  );
+
+  // The same Hold with a negative painted length drops the body and keeps both
+  // caps in the line's frame, with the UVs the ordinary Hold uses.
+  const reversed = new NoteBatch(canvas);
+  reversed.begin(100, 100, skin);
+  assert.equal(
+    reversed.addHold(skin, false, 50, 50, 50, 20, 8, true, 1, null, lineAngle, 1, false),
+    true,
+  );
+  reversed.finish();
+  const caps = instances();
+  assert.equal(caps.length, 2, "tail and head caps only");
+  for (const cap of caps) {
+    assert.ok(
+      Math.abs(cap.rotation - lineAngle) < 1e-6,
+      `the caps keep the line's own frame, got ${cap.rotation}`,
+    );
+    assert.equal(cap.v0, 1, "the cap V axis is not inverted");
+    assert.equal(cap.v1, 0);
+  }
+});
+
 test("Holds keep the low paint layer for every Tap, Drag, and Flick head", () => {
   assert.equal(notePaintLayer(2), 0);
   for (const headType of [1, 3, 4]) {

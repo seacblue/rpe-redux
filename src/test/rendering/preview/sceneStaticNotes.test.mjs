@@ -477,6 +477,32 @@ test("an active Hold with a body still hides its head cap", () => {
   assert.equal(sampled.showHead, false);
 });
 
+test("a negative-speed Hold keeps its head before the tail in time but paints backwards", () => {
+  const chart = createChart();
+  const line = chart.judgeLineList[0];
+  const hold = createNote(2, 5, 0, 6);
+  hold.speed = -1;
+  line.notes = [hold];
+
+  const tempo = new TempoMap(chart.BPMList);
+  const scene = new SceneRuntime();
+  scene.compile(chart, tempo);
+  const start = tempo.seconds(5);
+  const end = tempo.seconds(6);
+  const state = scene.sample(start - 0.01)[0];
+  const runtime = scene.lines[0];
+  const entry = runtime.notes[0];
+
+  assert.equal(entry.start, start, "the head stays earlier than the tail");
+  assert.equal(entry.end, end);
+  assert.ok(
+    (entry.tail - entry.floor) * Number(hold.speed) < 0,
+    "the painted span runs backwards, so no body is drawn",
+  );
+  const sampled = runtime.noteState(entry, state, start - 0.01);
+  assert.ok(sampled.tail < sampled.y, "a negative speed flips the tail above the head");
+});
+
 test("a reversed hold is omitted from the scene runtime", () => {
   const chart = createChart();
   const line = chart.judgeLineList[0];

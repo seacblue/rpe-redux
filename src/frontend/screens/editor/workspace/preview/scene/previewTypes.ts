@@ -92,6 +92,7 @@ export interface PreviewSkin extends NoteBatchSkin {
     color?: NoteColor | null,
     rotation?: number,
     capScale?: number,
+    drawBody?: boolean,
   ): boolean;
   noteTexture(
     type: number,
