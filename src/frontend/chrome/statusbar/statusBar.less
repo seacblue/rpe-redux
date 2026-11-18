@@ -1,5 +1,5 @@
 // Status bar styles: the bar itself, its leading chart-info readouts, and its
-// trailing feedback action.
+// trailing version marker and feedback action.
 
 .chart-info {
   display: flex;
@@ -48,6 +48,12 @@
   min-height: var(--control-height-compact);
   padding: 2px var(--space-2);
   font-size: var(--type-caption);
+}
+
+.shell-body > footer .status-bar-version {
+  flex: none;
+  color: var(--foreground-muted);
+  white-space: nowrap;
 }
 
 .shell-body > footer .status-bar-bug-report {

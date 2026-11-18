@@ -2,13 +2,14 @@
  * The bottom status bar.
  *
  * It shows the always-open chart-info readouts at the leading edge and the
- * feedback link at the trailing edge. Chart readouts are published by
- * `chartInfoPresenter.ts`, so the bar only lays them out.
+ * build version plus feedback link at the trailing edge. Chart readouts are
+ * published by `chartInfoPresenter.ts`, so the bar only lays them out.
  */
 import { useSyncExternalStore } from "react";
 import { Button } from "../../../design/components/button/Button.tsx";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
+import { BUILD_APP_VERSION } from "../../../core/platform/buildInfo.ts";
 import { HELP_SURVEY_URL } from "../../../core/platform/desktop/helpLinks.ts";
 import { openExternalUrl } from "../../../core/platform/desktop/openExternal.ts";
 import { ChartInfoView } from "./ChartInfoView.tsx";
@@ -29,6 +30,7 @@ export function StatusBar({ hidden = false }: { hidden?: boolean }) {
       <div id="chart-info" className="chart-info">
         <ChartInfoView rows={chartInfoRows} />
       </div>
+      <span className="status-bar-version">{BUILD_APP_VERSION}</span>
       <Button
         className="status-bar-bug-report"
         variant="ghost"
