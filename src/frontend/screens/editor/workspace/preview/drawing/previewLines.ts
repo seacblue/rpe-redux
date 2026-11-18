@@ -327,10 +327,14 @@ function previewNoteTintInto(
  *
  * A Hold keeps its authored head-before-tail order; the painted span turns
  * negative when the note speed or the line speed under it reverses direction.
- * Phira skips the body in that case and still paints both caps.
+ * The span is measured on the sampled note state, not on the authored floors:
+ * an active Hold pins its head to the line, so only the remaining tail decides.
+ * The line's above/below mirroring is divided out, because Phira tests the
+ * local sign before it rotates the note. Phira skips the body in that case and
+ * still paints both caps.
  */
-function holdPaintsNoBody(entry: NoteEntry): boolean {
-  return (entry.tail - entry.floor) * Number(entry.note.speed ?? 1) < 0;
+function holdPaintsNoBody(position: NoteState, above: boolean): boolean {
+  return (position.tail - position.y) * (above ? 1 : -1) < 0;
 }
 
 /** Submit one visible note to the batch, falling back to Canvas when needed. */
@@ -357,12 +361,13 @@ function drawPreviewNoteEntry(
   selectionTint: readonly number[] | null,
 ): boolean {
   const isHold = entry.note.type === 2;
-  const invertedHold = isHold && holdPaintsNoBody(entry);
+  const above = noteIsAbove(entry.note);
+  const invertedHold = isHold && holdPaintsNoBody(position, above);
   // A negative span keeps the caps on the line's own axis, which is the same
   // local angle an ordinary Hold on this line uses. Passing the absolute line
   // angle here would rotate them twice inside the already-rotated context.
-  const invertedCapRotation = invertedHold ? (noteIsAbove(entry.note) ? Math.PI : 0) : null;
-  const holdRotation = rotation + (noteIsAbove(entry.note) ? Math.PI : 0);
+  const invertedCapRotation = invertedHold ? (above ? Math.PI : 0) : null;
+  const holdRotation = rotation + (above ? Math.PI : 0);
   if (surface.collectGeometry) {
     appendPreviewNoteHitArea(
       surface,

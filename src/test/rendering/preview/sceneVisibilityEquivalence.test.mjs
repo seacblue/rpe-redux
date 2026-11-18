@@ -12,11 +12,16 @@ function finalVisible(runtime, entries, seconds, state) {
     if (entry.end < seconds || entry.start - seconds > (entry.note.visibleTime ?? 999999)) {
       return false;
     }
-    return !(
-      runtime.line.isCover === 1 &&
-      (entry.note.speed ?? 1) !== 0 &&
-      (entry.note.type === 2 ? entry.tail : entry.floor) < state.floor
-    );
+    const speed = entry.note.speed ?? 1;
+    if (runtime.line.isCover === 1 && speed !== 0) {
+      if (entry.note.type === 2) {
+        const headBehind = (entry.floor - state.floor) * speed < 0;
+        const tailBehind = (entry.tail - state.floor) * speed < 0;
+        return !(headBehind && tailBehind);
+      }
+      return entry.floor >= state.floor;
+    }
+    return true;
   });
 }
 
