@@ -508,26 +508,14 @@ canvas {
 // stays on the exclusive width.
 .editor.multi-fill .canvases {
   --timeline-exclusive-ratio: 1;
-  // The overview strips are edge controls, not part of the drawable window.
-  // Keeping them as grid tracks would leave a strip-plus-gutter inset around
-  // every split window even though the field itself is full width.
-  grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
+  // The overview strips frame the drawable field instead of floating over it.
+  // As grid tracks they keep the canvas width — and with it the panel width,
+  // stride, and horizontal scroll clamp — inside the two strips, so a window can
+  // never be scrolled underneath the strip at either end of the range.
+  grid-template-columns:
+    var(--timeline-strip-width, 24px) 0 minmax(0, 1fr) 0
+    var(--timeline-strip-width, 24px);
   column-gap: 0;
-}
-
-.editor.multi-fill .timeline-strip {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 4;
-}
-
-.editor.multi-fill .timeline-note-density {
-  left: 0;
-}
-
-.editor.multi-fill .timeline-history-strip {
-  right: 0;
 }
 
 // Every field canvas shares the middle cell in a single-region layout; the

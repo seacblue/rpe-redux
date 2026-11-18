@@ -108,9 +108,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     displayValues.multiLineNoteLineNumbers.get,
     displayValues.multiLineNoteLineNumbers.get,
   );
-  const [windowWidthDraft, setWindowWidthDraft] = useState<number | null>(null);
-  const windowWidthValue =
-    windowWidthDraft ?? clampMultiLineWindowWidth(Number(multiLineWindowWidth));
+  const windowWidthValue = clampMultiLineWindowWidth(Number(multiLineWindowWidth));
   const lineOptions = useSyncExternalStore(
     editorLineOptions.subscribe,
     editorLineOptions.get,
@@ -458,15 +456,18 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     commitLineClick(index, event.shiftKey);
   };
 
-  /** Stores a valid multi-line window width and requests a timeline repaint. */
-  const commitWindowWidth = (raw: number) => {
+  /**
+   * Writes one multi-line window width as the slider moves.
+   *
+   * The settings binding applies the new width to the timeline viewport and
+   * invalidates the frame, so the panels resize during the drag instead of
+   * waiting for the pointer to be released.
+   */
+  const applyWindowWidth = (raw: number) => {
     const next = clampMultiLineWindowWidth(raw);
     if (String(next) !== multiLineWindowWidth) {
       displayValues.multiLineWindowWidth.set(String(next));
-      timeline?.changed();
-      renderSession();
     }
-    setWindowWidthDraft(null);
   };
 
   return (
@@ -650,8 +651,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
                 value={windowWidthValue}
                 disabled={session.multiLineMode === "notes" && multiLineMergeNotes}
                 aria-label={t("settings.field.multi-line-window-width.label")}
-                onChange={(event) => setWindowWidthDraft(Number(event.currentTarget.value))}
-                onCommit={commitWindowWidth}
+                onChange={(event) => applyWindowWidth(Number(event.currentTarget.value))}
               />
             )}
           />
