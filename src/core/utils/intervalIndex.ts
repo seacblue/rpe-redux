@@ -59,12 +59,15 @@ export class IntervalIndex<T> {
   private prefixMaxEnds = new Float64Array(0);
   /** Largest expansion factor in the directory, used to widen a range once. */
   private maxExpansionFactor = 0;
+  /** Whether blocks carry row-prefix envelopes for pruning an expanded scan. */
+  private readonly prefixPrune: boolean;
 
   /**
    * Build the directory for an initial item array.
    *
    * `start` and `end` must return finite values for every item and are retained
-   * for later incremental updates.
+   * for later incremental updates. `prefixPrune` builds row-prefix envelopes so
+   * an expanded query can skip a leading run that cannot reach its lower bound.
    */
   constructor(
     items: readonly T[],
@@ -73,12 +76,14 @@ export class IntervalIndex<T> {
     expansionFactor: (item: T) => number = () => 0,
     secondaryStart?: (item: T) => number,
     secondaryEnd?: (item: T) => number,
+    prefixPrune = false,
   ) {
     this.startOf = start;
     this.endOf = end;
     this.expansionFactorOf = expansionFactor;
     this.secondaryStartOf = secondaryStart;
     this.secondaryEndOf = secondaryEnd;
+    this.prefixPrune = prefixPrune;
     this.items = items;
     this.assignBlocks(this.sortedEntries(items));
   }
@@ -302,10 +307,16 @@ export class IntervalIndex<T> {
       if (block.maxEnd + expansion < start || block.starts[0] - expansion > end) {
         continue;
       }
-      // Every position is tested; see the note in the secondary query above for
-      // why a leading-position skip cannot be sound without the per-query
-      // expansion already folded into the suffix bound.
-      for (let position = 0; position < block.indices.length; position++) {
+      // Starts are sorted, so no row at or after `limit` can reach `end` even
+      // with the block's widest expansion. A block whose last start fits needs
+      // no search at all.
+      const lastPosition = block.indices.length - 1;
+      const limit =
+        block.starts[lastPosition] - expansion <= end
+          ? block.indices.length
+          : upperBound(block.starts, end + expansion);
+      const first = this.expandedStart(block, start, safeRadius, limit);
+      for (let position = first; position < limit; position++) {
         const itemExpansion = safeRadius * block.expansions[position];
         if (
           block.ends[position] + itemExpansion >= start &&
@@ -354,14 +365,17 @@ export class IntervalIndex<T> {
       ) {
         continue;
       }
-      // Every position is tested. A leading-position skip needs a suffix bound
-      // that already accounts for each item's own expansion factor, and the
-      // expansion is only known per query. Widening by the block maximum is
-      // unsound (it forgets items with a smaller factor) and not widening at all
-      // is unsound too (an item whose `end` is short can still reach the query
-      // through its expansion). The differential suite pins this: see
-      // `intervalIndexDifferential.test.mjs`.
-      for (let position = 0; position < block.indices.length; position++) {
+      // The same start/end bounds as the primary query: `limit` bounds the
+      // sorted starts, and a prefix envelope can skip the leading rows that
+      // cannot reach `start` through their own expansion. The secondary range is
+      // tested per surviving row because it is independent of the primary span.
+      const lastPosition = block.indices.length - 1;
+      const limit =
+        block.starts[lastPosition] - expansion <= end
+          ? block.indices.length
+          : upperBound(block.starts, end + expansion);
+      const first = this.expandedStart(block, start, safeRadius, limit);
+      for (let position = first; position < limit; position++) {
         const itemExpansion = safeRadius * block.expansions[position];
         if (
           block.ends[position] + itemExpansion >= start &&
@@ -422,6 +436,44 @@ export class IntervalIndex<T> {
       this.blocks.length - 1,
     );
     return [0, lastBlock];
+  }
+
+  /**
+   * First row in `[0, limit)` whose prefix envelope can still reach `start`.
+   *
+   * The prefix arrays are monotone, so `prefixMaxEnds[i] + radius *
+   * prefixMaxExpansions[i]` is monotone in `i`. A row whose own
+   * `end + radius * factor` reaches `start` forces that bound to reach `start`
+   * at its position, so every qualifying row is at or after the first such
+   * index. The two endpoint checks skip the binary search when the whole range
+   * already reaches `start` or when no row in range can.
+   */
+  private expandedStart(
+    block: IntervalBlock,
+    start: number,
+    radius: number,
+    limit: number,
+  ): number {
+    if (!this.prefixPrune || limit <= 0) {
+      return 0;
+    }
+    if (block.prefixMaxEnds[0] + radius * block.prefixMaxExpansions[0] >= start) {
+      return 0;
+    }
+    if (block.prefixMaxEnds[limit - 1] + radius * block.prefixMaxExpansions[limit - 1] < start) {
+      return limit;
+    }
+    let low = 0;
+    let high = limit;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (block.prefixMaxEnds[middle] + radius * block.prefixMaxExpansions[middle] < start) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
   }
 
   /** Project items to index/start/end records sorted by start. */
@@ -743,6 +795,7 @@ export class IntervalIndex<T> {
       expansionFactor: this.expansionFactorOf,
       secondaryStart: this.secondaryStartOf,
       secondaryEnd: this.secondaryEndOf,
+      prefixPrune: this.prefixPrune,
     };
   }
 }

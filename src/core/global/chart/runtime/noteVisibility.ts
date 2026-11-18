@@ -197,6 +197,9 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
     this.hasHoldFallbackItems = partition.holdFallback.length > 0;
     this.spatialOnly =
       !this.hasTemporalItems && !this.hasHoldActiveItems && !this.hasHoldFallbackItems;
+    // The spatial query is the per-frame hot path. Prefix envelopes let its
+    // expanded scan start at the first row that can still reach the sampled
+    // floor instead of testing every row in the line.
     this.spatialIndex = new IntervalIndex(
       this.spatialItems,
       (entry) => Math.min(entry.floor, entry.tail),
@@ -204,6 +207,7 @@ export class NoteVisibilityDirectory<T extends NoteVisibilityEntry> {
       (entry) => this.factor(entry),
       (entry) => visibilityStart(entry),
       (entry) => entry.end,
+      true,
     );
     this.temporalIndex = new IntervalIndex(
       this.temporalItems,

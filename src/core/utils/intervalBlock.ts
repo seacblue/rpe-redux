@@ -21,6 +21,8 @@ export interface IntervalBlockSource<T> {
   readonly secondaryStart?: (item: T) => number;
   /** End of the optional secondary span a query may also filter on. */
   readonly secondaryEnd?: (item: T) => number;
+  /** Build the row-prefix envelopes an expanded query prunes a leading run with. */
+  readonly prefixPrune?: boolean;
 }
 
 /** A group of intervals with the bounds a range query rejects it by. */
@@ -37,6 +39,18 @@ export interface IntervalBlock {
   readonly secondaryStarts: Float64Array;
   /** Per-row secondary end, parallel to `indices`; empty without a secondary accessor. */
   readonly secondaryEnds: Float64Array;
+  /**
+   * Largest end among rows `0..position`, inclusive.
+   *
+   * With `prefixMaxExpansions`, this is the conservative reach of every row up
+   * to `position`: `end + radius * factor` cannot exceed the pair's combined
+   * bound. An expanded query can therefore binary-search the first row that
+   * could still reach its lower bound. Empty when the index did not request
+   * prefix pruning.
+   */
+  readonly prefixMaxEnds: Float64Array;
+  /** Largest expansion factor among rows `0..position`; empty without pruning. */
+  readonly prefixMaxExpansions: Float64Array;
   /** Largest end in the block. */
   readonly maxEnd: number;
   /** Largest expansion factor in the block. */
@@ -62,10 +76,15 @@ export function createIntervalBlock<T>(
 ): IntervalBlock {
   const length = indices.length;
   const expansions = new Float64Array(length);
+  const prefixPrune = source.prefixPrune === true;
+  const prefixMaxEnds = new Float64Array(prefixPrune ? length : 0);
+  const prefixMaxExpansions = new Float64Array(prefixPrune ? length : 0);
   let maxEnd = -Infinity;
   let maxExpansionFactor = 0;
   let minSecondaryStart = Infinity;
   let maxSecondaryEnd = -Infinity;
+  let prefixEnd = -Infinity;
+  let prefixExpansion = 0;
   const hasSecondary = source.secondaryStart !== undefined && source.secondaryEnd !== undefined;
   const secondaryStarts = new Float64Array(hasSecondary ? length : 0);
   const secondaryEnds = new Float64Array(hasSecondary ? length : 0);
@@ -78,6 +97,16 @@ export function createIntervalBlock<T>(
     }
     if (ends[position] > maxEnd) {
       maxEnd = ends[position];
+    }
+    if (prefixPrune) {
+      if (ends[position] > prefixEnd) {
+        prefixEnd = ends[position];
+      }
+      if (expansion > prefixExpansion) {
+        prefixExpansion = expansion;
+      }
+      prefixMaxEnds[position] = prefixEnd;
+      prefixMaxExpansions[position] = prefixExpansion;
     }
     if (hasSecondary) {
       const secondaryStart = source.secondaryStart?.(item) ?? 0;
@@ -99,6 +128,8 @@ export function createIntervalBlock<T>(
     expansions,
     secondaryStarts,
     secondaryEnds,
+    prefixMaxEnds,
+    prefixMaxExpansions,
     maxEnd,
     maxExpansionFactor,
     minSecondaryStart,
