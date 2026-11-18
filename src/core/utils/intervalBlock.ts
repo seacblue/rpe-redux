@@ -136,3 +136,41 @@ export function createIntervalBlock<T>(
     maxSecondaryEnd,
   };
 }
+
+/**
+ * First row in `[0, limit)` whose prefix envelope can still reach `start`.
+ *
+ * The prefix arrays are monotone, so `prefixMaxEnds[i] + radius *
+ * prefixMaxExpansions[i]` is monotone in `i`. A row whose own
+ * `end + radius * factor` reaches `start` forces that bound to reach `start`
+ * at its position, so every qualifying row is at or after the first such
+ * index. The two endpoint checks skip the binary search when the whole range
+ * already reaches `start` or when no row in range can.
+ */
+export function firstExpandedRow(
+  block: IntervalBlock,
+  start: number,
+  radius: number,
+  limit: number,
+): number {
+  if (block.prefixMaxEnds.length === 0 || limit <= 0) {
+    return 0;
+  }
+  if (block.prefixMaxEnds[0] + radius * block.prefixMaxExpansions[0] >= start) {
+    return 0;
+  }
+  if (block.prefixMaxEnds[limit - 1] + radius * block.prefixMaxExpansions[limit - 1] < start) {
+    return limit;
+  }
+  let low = 0;
+  let high = limit;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (block.prefixMaxEnds[middle] + radius * block.prefixMaxExpansions[middle] < start) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}

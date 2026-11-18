@@ -9,6 +9,7 @@
 import { lowerBound, upperBound } from "./search.ts";
 import {
   createIntervalBlock,
+  firstExpandedRow,
   type IntervalBlock,
   type IntervalBlockSource,
 } from "./intervalBlock.ts";
@@ -315,7 +316,9 @@ export class IntervalIndex<T> {
         block.starts[lastPosition] - expansion <= end
           ? block.indices.length
           : upperBound(block.starts, end + expansion);
-      const first = this.expandedStart(block, start, safeRadius, limit);
+      const first = this.prefixPrune
+        ? firstExpandedRow(block, start, safeRadius, limit)
+        : 0;
       for (let position = first; position < limit; position++) {
         const itemExpansion = safeRadius * block.expansions[position];
         if (
@@ -374,7 +377,9 @@ export class IntervalIndex<T> {
         block.starts[lastPosition] - expansion <= end
           ? block.indices.length
           : upperBound(block.starts, end + expansion);
-      const first = this.expandedStart(block, start, safeRadius, limit);
+      const first = this.prefixPrune
+        ? firstExpandedRow(block, start, safeRadius, limit)
+        : 0;
       for (let position = first; position < limit; position++) {
         const itemExpansion = safeRadius * block.expansions[position];
         if (
@@ -436,44 +441,6 @@ export class IntervalIndex<T> {
       this.blocks.length - 1,
     );
     return [0, lastBlock];
-  }
-
-  /**
-   * First row in `[0, limit)` whose prefix envelope can still reach `start`.
-   *
-   * The prefix arrays are monotone, so `prefixMaxEnds[i] + radius *
-   * prefixMaxExpansions[i]` is monotone in `i`. A row whose own
-   * `end + radius * factor` reaches `start` forces that bound to reach `start`
-   * at its position, so every qualifying row is at or after the first such
-   * index. The two endpoint checks skip the binary search when the whole range
-   * already reaches `start` or when no row in range can.
-   */
-  private expandedStart(
-    block: IntervalBlock,
-    start: number,
-    radius: number,
-    limit: number,
-  ): number {
-    if (!this.prefixPrune || limit <= 0) {
-      return 0;
-    }
-    if (block.prefixMaxEnds[0] + radius * block.prefixMaxExpansions[0] >= start) {
-      return 0;
-    }
-    if (block.prefixMaxEnds[limit - 1] + radius * block.prefixMaxExpansions[limit - 1] < start) {
-      return limit;
-    }
-    let low = 0;
-    let high = limit;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      if (block.prefixMaxEnds[middle] + radius * block.prefixMaxExpansions[middle] < start) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-    return low;
   }
 
   /** Project items to index/start/end records sorted by start. */
