@@ -2,11 +2,14 @@
  * Click-versus-drag decisions for the shared input's select-all affordance.
  *
  * A numeric entry field holds one value the user almost always wants to retype,
- * so an in-place press replaces the whole value with a selection. The browser
- * also dispatches a `click` at the end of a range drag, after it has applied the
- * drag's own selection, and a `Shift`-click asks to extend rather than replace.
- * This module is the pure decision layer: whether a press became a range, and
- * whether the click that ends it may still select the whole value. The DOM
+ * so a press that ends where it started replaces the whole value with a
+ * selection. The browser also dispatches that `click` at the end of a range
+ * drag, after it has applied the drag's own selection, and a `Shift`-click asks
+ * to extend rather than replace.
+ *
+ * Nothing is decided while the button is held: the press only records where it
+ * landed, and the click that ends it — dispatched at the release point — is
+ * compared against that origin. This module is the pure decision layer; the DOM
  * wiring in `useSelectAllOnClick.ts` only reports events and performs the
  * selection.
  */
@@ -27,26 +30,18 @@ export function selectsValueOnClick(type: string | undefined): boolean {
   return type === "number";
 }
 
-/** One input's select-all gesture: whether it is armed and what the press did. */
+/** The press that has not ended yet, remembered by where it landed. */
 export interface SelectGesture {
   /** A click on this focus may replace the whole value. */
   readonly armed: boolean;
-  /** A press is being followed; false between presses. */
-  readonly pressed: boolean;
-  /** Where the followed press landed. */
-  readonly originX: number;
-  readonly originY: number;
-  /** The followed press travelled far enough to be a range selection. */
-  readonly dragged: boolean;
+  /** Where the current press landed, or null when no press is in flight. */
+  readonly origin: { readonly x: number; readonly y: number } | null;
 }
 
-/** The idle gesture: nothing armed, no press being followed. */
+/** The idle gesture: nothing armed and no press in flight. */
 export const IDLE_SELECT_GESTURE: SelectGesture = Object.freeze({
   armed: false,
-  pressed: false,
-  originX: 0,
-  originY: 0,
-  dragged: false,
+  origin: null,
 });
 
 /** One fact that can change the gesture. */
@@ -54,9 +49,7 @@ export type SelectGestureEvent =
   | { readonly type: "focus"; readonly selectsValue: boolean }
   | { readonly type: "blur" }
   | { readonly type: "press"; readonly x: number; readonly y: number }
-  | { readonly type: "move"; readonly x: number; readonly y: number }
-  | { readonly type: "release"; readonly x: number; readonly y: number }
-  | { readonly type: "click"; readonly shiftKey: boolean };
+  | { readonly type: "click"; readonly x: number; readonly y: number; readonly shiftKey: boolean };
 
 /** The gesture after one event, plus the host work the event asks for. */
 export interface SelectGestureOutcome {
@@ -64,22 +57,21 @@ export interface SelectGestureOutcome {
   readonly gesture: SelectGesture;
   /** This click must select the whole value. */
   readonly selectAll: boolean;
-  /** Stop following the press on the window; it ended or became a range. */
-  readonly release: boolean;
 }
 
 /** An outcome that keeps the gesture and asks for no host work. */
 function quiet(gesture: SelectGesture): SelectGestureOutcome {
-  return { gesture, selectAll: false, release: false };
+  return { gesture, selectAll: false };
 }
 
 /**
  * Applies one event to the input's select-all gesture.
  *
- * A press is followed until it releases. Travel beyond `SELECT_CLICK_SLOP_PX`
- * makes it a range selection, which disarms the gesture immediately: a release
- * outside the field dispatches no click, so the click handler cannot be the only
- * place that ends it.
+ * A press only records its origin. The click that ends it decides: staying
+ * within `SELECT_CLICK_SLOP_PX` of that origin selects the whole value, while a
+ * longer travel leaves the selection the browser drew during the drag alone.
+ * Because the deciding event is the click, a drag released outside the field
+ * never asks for anything — the handler does not run at all.
  */
 export function reduceSelectGesture(
   gesture: SelectGesture,
@@ -87,52 +79,31 @@ export function reduceSelectGesture(
 ): SelectGestureOutcome {
   switch (event.type) {
     case "focus":
-      return quiet({ ...IDLE_SELECT_GESTURE, armed: event.selectsValue });
+      // The browser focuses the field as the mousedown default action, which
+      // lands after the pointerdown that already recorded this press. Keeping
+      // the origin is what lets the click compare against the real press.
+      return quiet({ ...gesture, armed: event.selectsValue });
     case "blur":
       return quiet(IDLE_SELECT_GESTURE);
     case "press":
-      return quiet({
-        ...gesture,
-        pressed: true,
-        originX: event.x,
-        originY: event.y,
-        dragged: false,
-      });
-    case "move": {
-      if (!gesture.pressed || gesture.dragged || !travelled(gesture, event)) {
-        return quiet(gesture);
-      }
-      return {
-        gesture: { ...gesture, armed: false, dragged: true },
-        selectAll: false,
-        release: true,
-      };
-    }
-    case "release": {
-      if (!gesture.pressed) {
-        return quiet(gesture);
-      }
-      const dragged = gesture.dragged || travelled(gesture, event);
-      return {
-        gesture: { ...gesture, armed: gesture.armed && !dragged, pressed: false, dragged },
-        selectAll: false,
-        release: true,
-      };
-    }
+      return quiet({ ...gesture, origin: { x: event.x, y: event.y } });
     case "click": {
-      const selectAll = gesture.armed && !gesture.dragged && !event.shiftKey;
-      return {
-        gesture: { ...gesture, armed: false, dragged: false },
-        selectAll,
-        release: false,
-      };
+      const selectAll = gesture.armed && !event.shiftKey && !travelled(gesture.origin, event);
+      return { gesture: IDLE_SELECT_GESTURE, selectAll };
     }
   }
 }
 
-/** Whether a point lies beyond the click slop from the press that opened the gesture. */
-function travelled(gesture: SelectGesture, point: { x: number; y: number }): boolean {
-  const dx = point.x - gesture.originX;
-  const dy = point.y - gesture.originY;
+/** Whether the click released beyond the slop from the press that opened it. */
+function travelled(
+  origin: SelectGesture["origin"],
+  point: { readonly x: number; readonly y: number },
+): boolean {
+  // A click with no press behind it — a keyboard activation — landed in place.
+  if (!origin) {
+    return false;
+  }
+  const dx = point.x - origin.x;
+  const dy = point.y - origin.y;
   return dx * dx + dy * dy >= SELECT_CLICK_SLOP_PX * SELECT_CLICK_SLOP_PX;
 }

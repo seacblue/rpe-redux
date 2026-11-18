@@ -675,11 +675,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       }}
       onPointerDown={(event) => {
         onPointerDown?.(event);
-        selectAllOnClick.press({
-          pointerId: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
-        });
+        selectAllOnClick.press({ x: event.clientX, y: event.clientY });
         beginRangeDrag(event);
       }}
       onPointerMove={(event) => {
@@ -700,7 +696,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       }}
       onClick={(event) => {
         onClick?.(event);
-        if (selectAllOnClick.click(event.shiftKey) && !event.currentTarget.disabled) {
+        const selectAll = selectAllOnClick.click({
+          x: event.clientX,
+          y: event.clientY,
+          shiftKey: event.shiftKey,
+        });
+        if (selectAll && !event.currentTarget.disabled) {
           // Keep this in the click phase so the browser has finished its native
           // caret placement before the shared field applies its select-all UX.
           event.currentTarget.select();

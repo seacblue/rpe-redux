@@ -1,9 +1,9 @@
 /**
  * DOM wiring for the shared input's select-all gesture.
  *
- * The decisions live in `selectGesture.ts`; this hook keeps one gesture per
- * input, follows a press on the window so a drag that leaves the short field is
- * still measured, and hands the click handler its verdict.
+ * The decisions live in `selectGesture.ts`. This hook keeps one gesture per
+ * input and reports the two facts that matter: where a press landed, and where
+ * the click that ended it fired. Nothing is measured while the button is held.
  */
 import { useCallback, useEffect, useRef } from "react";
 import {
@@ -19,25 +19,20 @@ export interface SelectAllOnClick {
   focus(type: string | undefined): void;
   /** Focus left: nothing is armed any more. */
   blur(): void;
-  /** A press landed: follow it until it ends to see whether it draws a range. */
-  press(point: { pointerId: number; x: number; y: number }): void;
-  /** Whether this click replaces the value; a range or a Shift-click does not. */
-  click(shiftKey: boolean): boolean;
+  /** A press landed; remember where, without deciding anything yet. */
+  press(point: { x: number; y: number }): void;
+  /** Whether this click, fired at `point`, replaces the value. */
+  click(point: { x: number; y: number; shiftKey: boolean }): boolean;
 }
 
-/** Tracks the arming, the press, and the click of one input's select-all gesture. */
+/** Tracks the arming, the press origin, and the click of one input. */
 export function useSelectAllOnClick(): SelectAllOnClick {
   const gesture = useRef<SelectGesture>(IDLE_SELECT_GESTURE);
-  const cleanup = useRef<(() => void) | null>(null);
 
-  /** Apply one event and run the host work it asks for. */
+  /** Apply one event and report whether the click selects the whole value. */
   const dispatch = useCallback((event: Parameters<typeof reduceSelectGesture>[1]): boolean => {
     const outcome = reduceSelectGesture(gesture.current, event);
     gesture.current = outcome.gesture;
-    if (outcome.release) {
-      cleanup.current?.();
-      cleanup.current = null;
-    }
     return outcome.selectAll;
   }, []);
 
@@ -50,42 +45,20 @@ export function useSelectAllOnClick(): SelectAllOnClick {
   const blur = useCallback(() => {
     dispatch({ type: "blur" });
   }, [dispatch]);
-
   const press = useCallback(
-    (point: { pointerId: number; x: number; y: number }) => {
-      cleanup.current?.();
-      cleanup.current = null;
+    (point: { x: number; y: number }) => {
       dispatch({ type: "press", x: point.x, y: point.y });
-      const follow = (pointer: PointerEvent) => {
-        if (pointer.pointerId === point.pointerId) {
-          dispatch({
-            type: pointer.type === "pointermove" ? "move" : "release",
-            x: pointer.clientX,
-            y: pointer.clientY,
-          });
-        }
-      };
-      window.addEventListener("pointermove", follow, true);
-      window.addEventListener("pointerup", follow, true);
-      window.addEventListener("pointercancel", follow, true);
-      cleanup.current = () => {
-        window.removeEventListener("pointermove", follow, true);
-        window.removeEventListener("pointerup", follow, true);
-        window.removeEventListener("pointercancel", follow, true);
-      };
     },
     [dispatch],
   );
-
   const click = useCallback(
-    (shiftKey: boolean) => dispatch({ type: "click", shiftKey }),
+    (point: { x: number; y: number; shiftKey: boolean }) =>
+      dispatch({ type: "click", x: point.x, y: point.y, shiftKey: point.shiftKey }),
     [dispatch],
   );
 
   useEffect(
     () => () => {
-      cleanup.current?.();
-      cleanup.current = null;
       gesture.current = IDLE_SELECT_GESTURE;
     },
     [],
