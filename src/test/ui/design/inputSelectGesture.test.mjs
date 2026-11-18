@@ -155,3 +155,36 @@ test("a press that ends outside the field asks for nothing", () => {
   assert.equal(gesture.origin?.x, origin.x);
   assert.equal(gesture.armed, true);
 });
+
+test("only a number field loses its remembered selection on blur", async () => {
+  const { forgetRememberedSelection } =
+    await import("../../../design/components/input/useSelectAllOnClick.ts");
+
+  /** A stand-in recording what the helper writes to one field. */
+  const makeField = (type) => {
+    const calls = [];
+    let kind = type;
+    return {
+      calls,
+      value: "1234",
+      get type() {
+        return kind;
+      },
+      set type(next) {
+        calls.push(`type:${next}`);
+        kind = next;
+      },
+      setSelectionRange(start, end) {
+        calls.push(`range:${start}:${end}`);
+      },
+    };
+  };
+
+  const number = makeField("number");
+  forgetRememberedSelection(number);
+  assert.deepEqual(number.calls, ["type:text", "range:4:4", "type:number"]);
+
+  const text = makeField("text");
+  forgetRememberedSelection(text);
+  assert.deepEqual(text.calls, []);
+});

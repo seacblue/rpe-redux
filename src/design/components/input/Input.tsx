@@ -664,7 +664,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       }}
       onBlur={(event) => {
         onBlur?.(event);
-        selectAllOnClick.blur();
+        selectAllOnClick.blur(event.currentTarget);
       }}
       onContextMenu={(event) => {
         onContextMenu?.(event);
