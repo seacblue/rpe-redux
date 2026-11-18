@@ -42,6 +42,7 @@ import { SHORTCUT_DISPATCHED_EVENT } from "../../../core/shell/shellEventNames.t
 import { registerCanvasShortcutBindings } from "./canvasShortcuts.ts";
 import { registerTransportShortcuts } from "./playbackKeys.ts";
 import { readShortcutContext } from "./shortcutContext.ts";
+import { claimKey } from "./keyClaims.ts";
 import type { CanvasShortcutTarget } from "./canvasShortcuts.ts";
 import type { Timeline } from "../../screens/editor/workspace/timeline/surface/timeline.ts";
 
@@ -189,7 +190,10 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       }
       trackInputDown(event);
       const target = event.target as HTMLElement | null;
-      if (context.modal === "none" && deps.claimDraftShortcut?.(event)) {
+      if (
+        context.modal === "none" &&
+        (claimKey(event, context) || deps.claimDraftShortcut?.(event))
+      ) {
         prefixDigitState = createPrefixDigitSequenceState();
         event.preventDefault();
         return;

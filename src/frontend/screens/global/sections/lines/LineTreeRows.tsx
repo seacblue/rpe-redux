@@ -206,18 +206,7 @@ export function LineFolderSection({
       expandLabel={expandLabel}
       collapseLabel={collapseLabel}
       data-group-index={group}
-      onClick={(event) => {
-        const target = event.target;
-        if (!(target instanceof Element) || !target.closest(".redux-tree-folder-header")) {
-          return;
-        }
-        // The header's own buttons keep their action; empty header space selects
-        // the folder instead of the first line.
-        if (target.closest("button")) {
-          return;
-        }
-        onHeaderClick?.();
-      }}
+      onHeaderClick={onHeaderClick}
     >
       {children}
     </TreeFolder>

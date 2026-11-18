@@ -35,6 +35,7 @@ import { initializeLocationRoute } from "./frontend/app/routing/routeLocation.ts
 import { PerformanceHudWindow } from "./frontend/overlays/performance/PerformanceHudWindow.tsx";
 import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.ts";
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
+import { PortalHostProvider } from "./design/patterns/portalHost.tsx";
 import { setLongTaskBootState } from "./core/state/longTasks.ts";
 import { registerFloatingHost } from "./frontend/overlays/floatingHost.ts";
 import { installFrontendDiagnosticCapture } from "./frontend/platform/diagnosticCapture.ts";
@@ -98,7 +99,12 @@ if (isPerformanceHudWindow()) {
   installLoadingPaint();
   installInteractionPolicy();
   void initializeDeveloperMode();
-  const renderApp = () => createRoot(container).render(<App />);
+  const renderApp = () =>
+    createRoot(container).render(
+      <PortalHostProvider host={container}>
+        <App />
+      </PortalHostProvider>,
+    );
   // A desktop chart link has to become the boot route before the editor
   // assembly decides whether to restore the last session.
   void initializeBootRoute()

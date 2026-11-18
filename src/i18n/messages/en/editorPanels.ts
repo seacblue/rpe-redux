@@ -422,6 +422,8 @@ export default {
   "editorPanels.assetLibrary.openExternal": "Open externally",
   "editorPanels.assetLibrary.openExternalDesktopOnly":
     "External editing is available in the desktop app",
+  "editorPanels.assetLibrary.openExternalUnavailable":
+    "This asset's bytes could not be read from the project library",
   "editorPanels.assetLibrary.deleted": "The asset was deleted",
   "editorPanels.assetLibrary.moved": "The asset was moved",
   "editorPanels.assetLibrary.movedFolder": "The asset folder was moved",
@@ -446,8 +448,6 @@ export default {
     "This group still holds {count} assets; move or delete them first",
   "editorPanels.assetLibrary.deleteFolder.done": "The asset group was deleted",
   "editorPanels.assetLibrary.rename.title": "Rename asset",
-  "editorPanels.assetLibrary.rename.description":
-    "Judgement line textures that reference an image are updated too.",
   "editorPanels.assetLibrary.rename.label": "New asset name",
   "editorPanels.assetLibrary.rename.invalid":
     "Enter a valid name with the same image or audio extension",

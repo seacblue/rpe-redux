@@ -7,8 +7,10 @@
  * choose a clip range; the player owns playing, seeking, and looping.
  */
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -18,7 +20,6 @@ import { useTranslation } from "../../../i18n/react.ts";
 import { Icon } from "../icon/Icon.tsx";
 import { formatMediaTime, mediaSeconds } from "../media/mediaTime.ts";
 import { useSeekableMediaSource } from "../media/useSeekableMediaSource.ts";
-import { AudioSpectrum } from "./AudioSpectrum.tsx";
 
 export interface AudioPlayerProps {
   /** Audio URL. Bundled assets can be resolved with `assetUrl()`. */
@@ -38,20 +39,28 @@ export interface AudioPlayerProps {
   className?: string;
 }
 
+/** Imperative operations a surrounding surface may use without taking focus. */
+export interface AudioPlayerHandle {
+  /** Toggle playback from outside the player's own key or pointer handling. */
+  toggle(): void;
+}
+
 /** A player with an always-visible transport and an explicit clip range. */
-export function AudioPlayer({
-  src,
-  label,
-  startAt,
-  endAt,
-  autoPlay = false,
-  loop = false,
-  muted = false,
-  className = "",
-}: AudioPlayerProps) {
+export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function AudioPlayer(
+  {
+    src,
+    label,
+    startAt,
+    endAt,
+    autoPlay = false,
+    loop = false,
+    muted = false,
+    className = "",
+  }: AudioPlayerProps,
+  ref,
+) {
   const { t } = useTranslation();
   const media = useRef<HTMLAudioElement>(null);
-  const [mediaElement, setMediaElement] = useState<HTMLAudioElement | null>(null);
   const track = useRef<HTMLDivElement>(null);
   const pendingSeek = useRef(0);
   const autoplayKey = useRef("");
@@ -62,10 +71,6 @@ export function AudioPlayer({
   const [playing, setPlaying] = useState(false);
   const [draggingState, setDraggingState] = useState(false);
   const [failed, setFailed] = useState(false);
-  const setMedia = useCallback((element: HTMLAudioElement | null) => {
-    media.current = element;
-    setMediaElement(element);
-  }, []);
 
   const begin = mediaSeconds(startAt) ?? 0;
   const finish = mediaSeconds(endAt);
@@ -132,7 +137,7 @@ export function AudioPlayer({
   };
 
   /** Start playback inside the clip range, restarting when the playhead sits at its end. */
-  const play = () => {
+  const play = useCallback(() => {
     const element = media.current;
     if (!element) {
       return;
@@ -144,10 +149,10 @@ export function AudioPlayer({
       element.currentTime = begin;
     }
     void element.play().catch(() => setPlaying(false));
-  };
+  }, [begin, finish]);
 
   /** Play or pause depending on the element's current state. */
-  const toggle = () => {
+  const toggle = useCallback(() => {
     const element = media.current;
     if (!element) {
       return;
@@ -157,7 +162,9 @@ export function AudioPlayer({
     } else {
       element.pause();
     }
-  };
+  }, [play]);
+
+  useImperativeHandle(ref, () => ({ toggle }), [toggle]);
 
   /** Move the playhead to an offset from the clip start, clamped to the clip. */
   const seek = (value: number) => {
@@ -229,7 +236,7 @@ export function AudioPlayer({
 
   /** Keep Space scoped to this player instead of the editor transport. */
   const onPlayerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== " ") {
+    if (event.key !== " " || event.defaultPrevented) {
       return;
     }
     event.preventDefault();
@@ -250,7 +257,7 @@ export function AudioPlayer({
     >
       <div className="redux-audio-frame">
         <audio
-          ref={setMedia}
+          ref={media}
           src={playbackSrc}
           crossOrigin="anonymous"
           data-source={src}
@@ -292,7 +299,6 @@ export function AudioPlayer({
           }}
           onError={() => setFailed(true)}
         />
-        <AudioSpectrum media={mediaElement} active={playing} />
         <div
           className="redux-media-controls redux-audio-row"
           data-dragging={draggingState || undefined}
@@ -341,4 +347,4 @@ export function AudioPlayer({
       </div>
     </div>
   );
-}
+});

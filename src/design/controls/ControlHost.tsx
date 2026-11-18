@@ -16,6 +16,7 @@ import {
 } from "./controlActions.ts";
 import { trackFloatingAnchor } from "../patterns/floatingAnchor.ts";
 import { useHoldFloatingSurface } from "../patterns/floatingSurface.ts";
+import { useAppRootHost } from "../patterns/portalHost.tsx";
 import { SelectPopup } from "./SelectPopup.tsx";
 import { ColorPopup } from "./ColorPopup.tsx";
 import { StepperPopup } from "./StepperPopup.tsx";
@@ -33,6 +34,7 @@ import { installControls } from "./enhance.ts";
  */
 export function ControlHost() {
   useEffect(() => installControls(), []);
+  const appRoot = useAppRootHost();
   const popup = useSyncExternalStore(subscribePopup, getPopup);
   const attached = Boolean(popup && popupAnchorVisible(popup.element));
   useHoldFloatingSurface(attached);
@@ -69,7 +71,6 @@ export function ControlHost() {
   // overflow by design, while the fixed popup must be able to use the viewport
   // below or above a control. Modal policy explicitly exempts this overlay so
   // it remains interactive while the rest of the page is inert.
-  const appRoot = popup.element.closest(".redux-app-root");
   const host = appRoot ?? popup.element.ownerDocument.body;
   return createPortal(panel, host);
 }

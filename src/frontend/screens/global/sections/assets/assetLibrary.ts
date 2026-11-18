@@ -417,7 +417,6 @@ export class AssetLibraryPanel {
     openAssetPrompt({
       kind: "name",
       title: t("editorPanels.assetLibrary.rename.title"),
-      description: t("editorPanels.assetLibrary.rename.description"),
       label: t("editorPanels.assetLibrary.rename.label"),
       value: name,
       submit: (next) => this.submitRename(name, next),

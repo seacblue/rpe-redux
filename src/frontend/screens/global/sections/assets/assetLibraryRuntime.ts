@@ -39,18 +39,35 @@ function chartDirectoryName(): string | undefined {
   return parts.at(-1) || undefined;
 }
 
-/** Open a loose-document asset in the user's associated external editor. */
+/**
+ * Open one asset in the user's associated external editor.
+ *
+ * A native document owns the bytes on disk, so the host opens that file in
+ * place. A library project keeps its bytes in the service database and has no
+ * file to hand to the editor; those assets are staged as a content-addressed
+ * copy under the host temp directory before opening.
+ */
 async function openExternalAsset(
   name: string,
+  assets: AssetMap,
   notify: (message: string, severity?: string) => void,
 ) {
-  const store = currentDocumentStore();
-  if (!isDesktop() || !store?.current) {
+  if (!isDesktop()) {
     notify(t("editorPanels.assetLibrary.openExternalDesktopOnly"), "warning");
     return;
   }
   try {
-    await invoke("open_asset_external", { id: store.current.id, name });
+    const document = currentDocumentStore()?.current;
+    if (document) {
+      await invoke("open_asset_external", { id: document.id, name });
+      return;
+    }
+    const bytes = assets.get(name) ?? (await assets.read?.(name));
+    if (!bytes) {
+      notify(t("editorPanels.assetLibrary.openExternalUnavailable"), "error");
+      return;
+    }
+    await invoke("open_asset_external_bytes", { name, bytes });
   } catch (error) {
     notify(error instanceof Error ? error.message : String(error), "error");
   }
@@ -93,7 +110,7 @@ export function createAssetLibraryRuntime(deps: {
       state: deps.state,
       notify: deps.notify,
       readDroppedFiles: readDroppedAssetFiles,
-      onOpenExternal: (name) => openExternalAsset(name, deps.notify),
+      onOpenExternal: (name) => openExternalAsset(name, deps.getAssets(), deps.notify),
       onConfigureShader: (name: string, overrides: ShaderParameterOverrides) => {
         const session = deps.getSession();
         session.commitChart(

@@ -16,6 +16,7 @@ export interface CurveToolDockProps {
   position: { x: number; y: number };
   onToolChange(tool: CurveTool): void;
   onDragPointerDown(event: ReactPointerEvent<HTMLDivElement>): void;
+  onHoverChange(hovered: boolean): void;
   onReverse(): void;
 }
 
@@ -47,6 +48,7 @@ export function CurveToolDock({
   position,
   onToolChange,
   onDragPointerDown,
+  onHoverChange,
   onReverse,
 }: CurveToolDockProps) {
   return (
@@ -55,12 +57,15 @@ export function CurveToolDock({
       style={{ left: position.x, top: position.y }}
       data-tool={tool}
       onPointerDown={onDragPointerDown}
+      onPointerEnter={() => onHoverChange(true)}
+      onPointerLeave={() => onHoverChange(false)}
     >
       <span className="curve-tool-grip" aria-hidden="true" />
       <div
         className="curve-tool-list"
         role="toolbar"
         aria-label={t("editorPanels.curvePreview.authoring.tools")}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         {CURVE_CREATION_TOOLS.map((entry) => (
           <ToolRow

@@ -16,16 +16,19 @@
  * point because the design sheets scope native controls to that subtree.
  */
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   type HTMLAttributes,
   type ReactNode,
   type RefObject,
   type SyntheticEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { PortalHostProvider } from "../../patterns/portalHost.tsx";
 import { createValue } from "../../../core/state/values.ts";
 import { MODAL_STACK_EVENT } from "../../../core/shell/shellEventNames.ts";
 import { closeControlPopup, getPopup } from "../../controls/controlActions.ts";
@@ -577,6 +580,13 @@ export function Modal({
 }: ModalProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDialogElement>(null);
+  const [dialogElement, setDialogElement] = useState<HTMLDialogElement | null>(null);
+  const bindDialog = useCallback((node: HTMLDialogElement | null) => {
+    ref.current = node;
+    if (node) {
+      setDialogElement(node);
+    }
+  }, []);
   useModalCleanup(ref);
   const titleId = useId();
   const descriptionId = useId();
@@ -617,7 +627,7 @@ export function Modal({
   }, [open, instanceKey, priority]);
   const content = (
     <dialog
-      ref={ref}
+      ref={bindDialog}
       className={className}
       role={role}
       data-no-scrim-dismiss={dismissOnScrim ? undefined : "true"}
@@ -639,32 +649,34 @@ export function Modal({
         }
       }}
     >
-      {label && (
-        <div className="modal-heading">
-          <h2 id={titleId}>
-            {label}
-            {titleMeta}
-          </h2>
-          {closeButton && (
-            <IconButton
-              icon="close"
-              label={t("common.action.close")}
-              onClick={requestSurfaceClose}
-            />
-          )}
-        </div>
-      )}
-      {description && (
-        <p className="modal-description" id={descriptionId}>
-          {description}
-        </p>
-      )}
-      {children != null && <div className="modal-content">{children}</div>}
-      {actions && (
-        <div className={`modal-actions ${actionsClassName ?? ""}`.trim()} {...actionsProps}>
-          {actions}
-        </div>
-      )}
+      <PortalHostProvider modalHost={dialogElement}>
+        {label && (
+          <div className="modal-heading">
+            <h2 id={titleId}>
+              {label}
+              {titleMeta}
+            </h2>
+            {closeButton && (
+              <IconButton
+                icon="close"
+                label={t("common.action.close")}
+                onClick={requestSurfaceClose}
+              />
+            )}
+          </div>
+        )}
+        {description && (
+          <p className="modal-description" id={descriptionId}>
+            {description}
+          </p>
+        )}
+        {children != null && <div className="modal-content">{children}</div>}
+        {actions && (
+          <div className={`modal-actions ${actionsClassName ?? ""}`.trim()} {...actionsProps}>
+            {actions}
+          </div>
+        )}
+      </PortalHostProvider>
     </dialog>
   );
   return modalHost ? createPortal(content, modalHost) : content;

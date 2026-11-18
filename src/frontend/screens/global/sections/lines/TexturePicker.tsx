@@ -5,7 +5,7 @@
  * the shared dropdowns instead of the text-only select. Selecting a tile writes
  * through immediately; adding images stays in the same popover.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type Ref, type RefObject } from "react";
+import { useEffect, useRef, type Ref, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { EmptyState } from "../../../../../design/components/empty-state/EmptyState.tsx";
@@ -14,6 +14,7 @@ import { AsyncImage } from "../../../../../design/components/image/AsyncImage.ts
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
 import { useListbox } from "../../../../../design/patterns/list/useListbox.ts";
 import { useAnchoredPopover } from "../../../../../design/patterns/useAnchoredPopover.ts";
+import { useAppRootHost } from "../../../../../design/patterns/portalHost.tsx";
 import { t } from "../../../../../i18n/index.ts";
 import type { LinePanelTexture } from "./linePanelController.ts";
 
@@ -122,7 +123,7 @@ export function TextureBrowser({
     },
     idPrefix: `${id}-option`,
   });
-  const [portalTarget, setPortalTarget] = useState<HTMLElement>(() => document.body);
+  const portalTarget = useAppRootHost() ?? document.body;
   const popover = useAnchoredPopover({
     open: true,
     anchor: triggerRef,
@@ -133,13 +134,6 @@ export function TextureBrowser({
     maxHeight: POPOVER_MAX_HEIGHT,
     focusTarget: triggerRef,
   });
-
-  useLayoutEffect(() => {
-    const root = triggerRef.current?.closest(".redux-app-root");
-    if (root instanceof HTMLElement) {
-      setPortalTarget(root);
-    }
-  }, [triggerRef]);
 
   useEffect(() => {
     const selected = selectedIndex >= 0 ? optionRefs.current.get(selectedIndex) : undefined;

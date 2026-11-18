@@ -32,6 +32,7 @@ import { t } from "../../../../../../i18n/index.ts";
 import { requestConfirm } from "../../../../../overlays/modals/prompts.ts";
 import { Field, BeatControl, SelectField } from "./ShaderPanelFields.tsx";
 import type { SelectOption } from "./ShaderPanelFields.tsx";
+import { ShaderInspectorFocusProvider } from "./shaderFocus.tsx";
 
 /** One parameter declared by a shader source. */
 export interface ShaderDefinition {
@@ -273,7 +274,7 @@ export function ShaderInspectorView({
   );
 
   return (
-    <div className="shader-inspector">
+    <ShaderInspectorFocusProvider>
       <FieldRows>
         {beatInput(
           t("editorPanels.inspector.field.startTime"),
@@ -597,6 +598,6 @@ export function ShaderInspectorView({
           </Button>
         </div>
       )}
-    </div>
+    </ShaderInspectorFocusProvider>
   );
 }

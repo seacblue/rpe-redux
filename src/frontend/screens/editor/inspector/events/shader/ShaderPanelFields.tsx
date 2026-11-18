@@ -1,5 +1,6 @@
 /** Owns the form controls the shader panel composes: value fields, a beat field, and a chooser. */
 import { useRef, useState } from "react";
+import { useShaderInspectorFocus } from "./shaderFocus.tsx";
 import { FieldRow } from "../../../../../../design/components/field/FieldRow.tsx";
 import { Input } from "../../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../../design/components/select/Select.tsx";
@@ -32,6 +33,7 @@ export function Field({
   apply(text: string, quiet: boolean, input: HTMLInputElement): void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const { focused, mounted } = useShaderInspectorFocus();
   const [draft, setDraft] = useState(String(value));
 
   /** Stores the text and hands it to the owner. */
@@ -71,16 +73,10 @@ export function Field({
           onFocus={() => {
             setLiveEventEdit(true);
           }}
-          onBlur={(event) => {
+          onBlur={() => {
             setLiveEventEdit(false);
-            const input = event.currentTarget;
             queueMicrotask(() => {
-              const container = input.closest(".shader-inspector");
-              if (
-                container?.isConnected &&
-                !session.liveEventEdit &&
-                !container.contains(document.activeElement)
-              ) {
+              if (mounted.current && !focused.current && !session.liveEventEdit) {
                 refresh();
               }
             });

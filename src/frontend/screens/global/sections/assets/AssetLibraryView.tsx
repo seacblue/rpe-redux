@@ -5,15 +5,21 @@
  * Thumbnails track decode per URL, so an edited image returns to the skeleton
  * and a failed one stops loading.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
-import { AudioPlayer } from "../../../../../design/components/audio/AudioPlayer.tsx";
+import {
+  AudioPlayer,
+  type AudioPlayerHandle,
+} from "../../../../../design/components/audio/AudioPlayer.tsx";
 import { EmptyState } from "../../../../../design/components/empty-state/EmptyState.tsx";
 import { AsyncImage } from "../../../../../design/components/image/AsyncImage.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { TreeFolder } from "../../../../../design/patterns/tree/TreeFolder.tsx";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
+import { registerKeyClaim } from "../../../../platform/shortcuts/keyClaims.ts";
+import { useEditorRuntimeValue } from "../../../editor/workspace/runtime/composition/EditorRuntime.tsx";
+import { useActiveWorkspaceModeId } from "../../../editor/workspace/container/workspaceModes.ts";
 import { InspectorPage } from "../../../../chrome/inspectorPage/InspectorPage.tsx";
 import { InspectorPageSplit } from "../../../../chrome/inspectorPage/InspectorPageSplit.tsx";
 import type { ShaderParameterOverrides } from "../../../../../core/global/chart/shader/shaderEvents.ts";
@@ -210,6 +216,7 @@ function AssetFileRow({
       variant="plain"
       className={`asset-row${file.selected ? " is-selected" : ""}`}
       data-asset-name={file.name}
+      data-asset-kind={file.kind}
       onClick={() => onSelect(file.name)}
     >
       <AssetThumb url={file.url} alt={file.file} kind={file.kind} />
@@ -344,6 +351,10 @@ export function AssetLibraryView({
   const view: GlobalView = "list";
   const [importDragging, setImportDragging] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
+  const audioPlayer = useRef<AudioPlayerHandle>(null);
+  const activeInspector = useEditorRuntimeValue((runtime) => runtime.ui.activeInspector, "");
+  const activeWorkspaceMode = useActiveWorkspaceModeId();
+  const assetsActive = activeInspector === "assets" || activeWorkspaceMode === "assets";
   const toggleFolder = (path: string) => {
     setCollapsedFolders((current) => {
       const next = new Set(current);
@@ -366,6 +377,35 @@ export function AssetLibraryView({
     window.addEventListener(FILE_DRAG_EVENT, onDragState);
     return () => window.removeEventListener(FILE_DRAG_EVENT, onDragState);
   }, []);
+
+  useEffect(() => {
+    if (selected?.kind !== "audio" || !assetsActive) {
+      return undefined;
+    }
+    // While the audio details are the active surface, Space belongs to the
+    // preview. The editor dispatcher supplies the shortcut context, so the
+    // claim does no DOM lookup of its own.
+    return registerKeyClaim((event, context) => {
+      if (
+        event.key !== " " ||
+        event.repeat ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        context.textEntry ||
+        context.surface !== null
+      ) {
+        return false;
+      }
+      const player = audioPlayer.current;
+      if (!player) {
+        return false;
+      }
+      player.toggle();
+      return true;
+    });
+  }, [assetsActive, selected?.kind]);
 
   const folderName = selectedFolder || t("editorPanels.assetLibrary.defaultFolder");
   const deleteLabel = selected
@@ -464,7 +504,7 @@ export function AssetLibraryView({
     <div className="asset-details">
       <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
       {selected.kind === "audio" ? (
-        <AudioPlayer src={selected.url} label={assetLabel(selected.name)} />
+        <AudioPlayer ref={audioPlayer} src={selected.url} label={assetLabel(selected.name)} />
       ) : selected.kind === "shader" ? (
         <>
           <div className="asset-shader-preview">

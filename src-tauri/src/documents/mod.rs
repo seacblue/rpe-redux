@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, File},
@@ -57,6 +58,62 @@ pub fn open_asset_external(
     let path = readable_resource_path(&document, &name)?;
     app.opener()
         .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(error)
+}
+
+/// The staged temp copy for one library asset.
+///
+/// The content hash keeps repeated opens of unchanged bytes on one path and
+/// makes two different versions distinct files, so an editor holding the old
+/// copy does not block the next open. Resource-name normalization keeps every
+/// segment below `root`.
+fn external_asset_copy_path(root: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf> {
+    let normalized = normalize_resource_name(name)?;
+    let digest = Sha256::digest(bytes);
+    let mut target = root.join(hex::encode(&digest[..8]));
+    for segment in normalized.split('/') {
+        target.push(segment);
+    }
+    Ok(target)
+}
+
+/**
+ * Open one library asset in the operating system's associated editor.
+ *
+ * Library projects keep asset bytes in the service database instead of on
+ * disk, so the host stages a content-addressed copy under its temp directory
+ * and opens that copy. The main-frame capability token gates the write; the
+ * resource name is normalized before it becomes a path.
+ */
+#[tauri::command]
+pub fn open_asset_external_bytes(
+    app: AppHandle,
+    token: State<'_, crate::app::ipc_guard::HostToken>,
+    request: Request<'_>,
+    name: String,
+    bytes: Vec<u8>,
+) -> Result<()> {
+    crate::app::ipc_guard::HostToken::require(token.inner(), request.headers())?;
+    if bytes.is_empty() {
+        return Err("empty_asset".into());
+    }
+    if bytes.len() as u64 > MAX_RESOURCE_BYTES {
+        return Err("asset_too_large".into());
+    }
+    let root = std::env::temp_dir()
+        .join("rpe-redux")
+        .join("external-editor");
+    let target = external_asset_copy_path(&root, &name, &bytes)?;
+    // The same bytes may already be staged; rewriting a file an editor has
+    // open would fail on Windows without changing anything the editor reads.
+    if !target.is_file() {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(error)?;
+        }
+        fs::write(&target, &bytes).map_err(error)?;
+    }
+    app.opener()
+        .open_path(target.to_string_lossy().into_owned(), None::<&str>)
         .map_err(error)
 }
 
@@ -1052,9 +1109,9 @@ impl AssetSource<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        read_entry_limited, read_file_limited, read_grant_store, rejected_reference_names,
-        resolve_named_references, resolve_references, write_grant_store, ExternalGrantStore,
-        ExternalResources, Opened,
+        external_asset_copy_path, read_entry_limited, read_file_limited, read_grant_store,
+        rejected_reference_names, resolve_named_references, resolve_references, write_grant_store,
+        ExternalGrantStore, ExternalResources, Opened,
     };
     use serde_json::json;
     use std::{fs, io::Cursor, path::Path};
@@ -1068,6 +1125,37 @@ mod tests {
     #[cfg(windows)]
     fn symlink_file(source: &Path, link: &Path) -> std::io::Result<()> {
         std::os::windows::fs::symlink_file(source, link)
+    }
+
+    #[test]
+    fn external_asset_copies_are_content_addressed_below_the_root() {
+        let root = tempdir().unwrap();
+        let path = external_asset_copy_path(root.path(), "media/song.ogg", b"audio").unwrap();
+
+        assert!(path.starts_with(root.path()));
+        assert!(path.ends_with(Path::new("media/song.ogg")));
+        assert_eq!(
+            path,
+            external_asset_copy_path(root.path(), "media/song.ogg", b"audio").unwrap()
+        );
+        assert_ne!(
+            path,
+            external_asset_copy_path(root.path(), "media/song.ogg", b"other").unwrap()
+        );
+    }
+
+    #[test]
+    fn external_asset_copies_reject_unsafe_names() {
+        let root = tempdir().unwrap();
+
+        assert_eq!(
+            external_asset_copy_path(root.path(), "../secret.ogg", b"audio").unwrap_err(),
+            "unsafe_resource_path"
+        );
+        assert_eq!(
+            external_asset_copy_path(root.path(), r"C:\charts\song.ogg", b"audio").unwrap_err(),
+            "unsafe_resource_path"
+        );
     }
 
     #[test]

@@ -46,6 +46,8 @@ export interface TreeFolderProps extends Omit<
   onToggle?(): void;
   onSelectName?(): void;
   onNameDoubleClick?(): void;
+  /** Selects the folder when its header surface, rather than a control, is pressed. */
+  onHeaderClick?(): void;
   /** Accessible disclosure label while folded. */
   expandLabel?: string;
   /** Accessible disclosure label while expanded. */
@@ -76,6 +78,7 @@ export function TreeFolder({
   onToggle,
   onSelectName,
   onNameDoubleClick,
+  onHeaderClick,
   expandLabel,
   collapseLabel,
   children,
@@ -95,7 +98,15 @@ export function TreeFolder({
   const iconClass = ["redux-tree-folder-icon", iconClassName].filter(Boolean).join(" ");
   return (
     <section {...rest} ref={rootRef} className={rootClass} role="group" aria-label={label}>
-      <div ref={headerRef} className={`redux-tree-folder-header ${headerClassName}`.trim()}>
+      <div
+        ref={headerRef}
+        className={`redux-tree-folder-header ${headerClassName}`.trim()}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onHeaderClick?.();
+          }
+        }}
+      >
         {dragHandle ??
           (reserveDragSpace ? (
             <span className="redux-tree-folder-grip-spacer" aria-hidden="true" />
@@ -112,13 +123,16 @@ export function TreeFolder({
           <Icon name="chevronDown" size={14} />
         </Button>
         <Icon name={icon} size={16} className={iconClass} />
-        <span className="redux-tree-folder-heading">
+        <span className="redux-tree-folder-heading" onClick={onHeaderClick}>
           {name ?? (
             <Button
               type="button"
               variant="plain"
               className="redux-tree-folder-name"
-              onClick={onSelectName}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectName?.();
+              }}
               onDoubleClick={onNameDoubleClick}
             >
               {label}

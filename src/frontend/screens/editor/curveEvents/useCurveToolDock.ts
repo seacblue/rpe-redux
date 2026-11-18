@@ -20,9 +20,9 @@ export function useCurveToolDock(layer: RefObject<HTMLDivElement | null>): {
   const [position, setPosition] = useState<WindowPosition>({ x: 16, y: 16 });
   const dragWindow = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
 
-  /** Start a drag unless the press landed on a tool button. */
+  /** Start a drag from the dock's grip or background. */
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) {
+    if (event.button !== 0) {
       return;
     }
     const dock = event.currentTarget;

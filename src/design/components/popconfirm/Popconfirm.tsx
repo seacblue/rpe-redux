@@ -20,6 +20,7 @@ import {
 import { createPortal } from "react-dom";
 import { Button } from "../button/Button.tsx";
 import { useAnchoredPopover } from "../../patterns/useAnchoredPopover.ts";
+import { useOverlayHost } from "../../patterns/portalHost.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 
 export interface PopconfirmProps {
@@ -54,6 +55,7 @@ export function Popconfirm({
   className,
 }: PopconfirmProps) {
   const { t } = useTranslation();
+  const overlayHost = useOverlayHost();
   const titleId = useId();
   const descriptionId = useId();
   const ref = useRef<HTMLDivElement>(null);
@@ -123,10 +125,7 @@ export function Popconfirm({
   // Keep the popover inside the app root (or the dialog that owns the anchor):
   // design inputs are qualified with `.redux-app-root`, and a body portal inside a modal
   // dialog would also be inert.
-  const host =
-    anchor.closest("dialog[open]") ??
-    anchor.closest(".redux-app-root") ??
-    anchor.ownerDocument.body;
+  const host = overlayHost ?? anchor.ownerDocument.body;
   return createPortal(
     <div
       ref={ref}

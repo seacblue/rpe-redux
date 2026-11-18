@@ -30,8 +30,14 @@
   min-height: 0;
 }
 
+// The split page owns the content gutter. Only the asset title keeps an extra
+// text margin; the transport and actions stay at the detail surface's width.
 .inspector-page-split .asset-details {
   margin: 0;
+}
+
+.inspector-page-split .asset-details-name {
+  margin: 0 var(--space-2);
 }
 
 .asset-drop-overlay {
@@ -173,6 +179,12 @@
   background: var(--active-accent-fill);
 }
 
+// An audio row is the preview target, not a filled selection block: the accent
+// edge is enough, so the row keeps the library's dark surface behind it.
+.asset-row[data-asset-kind="audio"].is-selected {
+  background: transparent;
+}
+
 // Thumbnail box: the positioned ancestor for the loading spinner and the icon
 // cell the row reserves for the asset.
 .asset-image {
@@ -232,6 +244,12 @@
 
 .asset-details > .redux-audio {
   margin: var(--space-2) 0;
+}
+
+// The audio preview is a transport row, not a raised card; keep the shared edge
+// and drop the filled plate so the preview does not sit on a bright surface.
+.asset-details > .redux-audio > .redux-audio-frame {
+  background: transparent;
 }
 
 .asset-shader-preview {

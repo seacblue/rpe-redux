@@ -128,11 +128,7 @@ export function FreeCameraOverlay({ allowDragging = true }: FreeCameraOverlayPro
         event.stopPropagation();
       }}
       onPointerDown={(event) => {
-        if (
-          !allowDragging ||
-          !isFreeCameraDragButton(event.button) ||
-          (event.target instanceof Element && event.target.closest(".free-camera-dock"))
-        ) {
+        if (!allowDragging || !isFreeCameraDragButton(event.button)) {
           return;
         }
         event.preventDefault();
@@ -183,7 +179,11 @@ export function FreeCameraOverlay({ allowDragging = true }: FreeCameraOverlayPro
         }
       }}
     >
-      <div className="free-camera-dock" role="group">
+      <div
+        className="free-camera-dock"
+        role="group"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
         <label className="free-camera-field">
           <span>{t("chrome.toolbar.freeCameraZoom")}</span>
           <Input

@@ -122,6 +122,7 @@ export function CurveEventsOverlay() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const markerCanvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
+  const toolDockHovered = useRef(false);
   const dragCanvas = useRef<CanvasDrag | null>(null);
   const panDrag = useRef<PanDrag | null>(null);
   const draftRef = useRef<Draft | null>(null);
@@ -379,7 +380,7 @@ export function CurveEventsOverlay() {
           deltaY: event.deltaY,
           deltaMode: event.deltaMode,
           bounds: element.getBoundingClientRect(),
-          overToolDock: Boolean(target.closest(".curve-tool-dock")),
+          overToolDock: toolDockHovered.current,
         },
         zoomFreeCameraAt,
       );
@@ -1018,6 +1019,9 @@ export function CurveEventsOverlay() {
           position={position}
           onToolChange={changeTool}
           onDragPointerDown={beginToolDockDrag}
+          onHoverChange={(hovered) => {
+            toolDockHovered.current = hovered;
+          }}
           onReverse={reverseSelected}
         />
       )}

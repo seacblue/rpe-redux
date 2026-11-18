@@ -42,6 +42,7 @@ import {
   type LibraryNavigationState,
 } from "./libraryNavigation.ts";
 import { useAnchoredPopover } from "../../../../design/patterns/useAnchoredPopover.ts";
+import { useAppRootHost } from "../../../../design/patterns/portalHost.tsx";
 import { getLibraryGroupFilter, setLibraryGroupFilter } from "../libraryGroupFilter.ts";
 
 /**
@@ -117,10 +118,9 @@ export function LibraryPanel({
   const effectiveSelectedGroups = selectedGroups ?? allGroups;
   const groupFilterActive = groupOptions.some((group) => !effectiveSelectedGroups.has(group));
   const groupFilterAnchor = useRef<HTMLButtonElement>(null);
-  const [groupFilterHost, setGroupFilterHost] = useState<HTMLElement | null>(null);
+  const groupFilterHost = useAppRootHost();
   const attachGroupFilterAnchor = useCallback((node: HTMLButtonElement | null) => {
     groupFilterAnchor.current = node;
-    setGroupFilterHost(node?.closest(".redux-app-root") ?? null);
     if (!node) {
       setGroupFilterOpen((open) => (open ? false : open));
     }
