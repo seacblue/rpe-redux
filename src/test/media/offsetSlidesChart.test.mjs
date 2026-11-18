@@ -5,7 +5,11 @@ import { createChart, createNote } from "../../core/global/chart/chart.ts";
 import { chartWithOffsetDraft } from "../../core/global/chart/editing/drafts.ts";
 import { EditorSession } from "../../core/edit/session/session.ts";
 import { TempoMap } from "../../core/global/chart/timing/tempo.ts";
-import { alignedOffsetMs } from "../../frontend/screens/editor/inspector/bpm/offsetAlignMath.ts";
+import {
+  alignedOffsetMs,
+  offsetAlignBeatAt,
+  offsetAlignLineAt,
+} from "../../frontend/screens/editor/inspector/bpm/offsetAlignMath.ts";
 
 /** A one-line 120 BPM chart with one note at chart second 1. */
 function chartWith() {
@@ -84,4 +88,30 @@ test("the tempo map is unaffected by offset, so beat times stay chart-based", ()
   commitOffset(session, -1500);
   const after = new TempoMap(session.chart.BPMList).seconds(2, 1);
   assert.equal(before, after, "offset never enters the tempo map");
+});
+
+test("the pick only accepts a press that lands on a grid line", () => {
+  // Lines sit 40 px apart; the press must be within the radius of one of them.
+  const lines = [100, 140, 180];
+  assert.equal(offsetAlignLineAt(142, lines)?.vertical, 140, "2 px away is a hit");
+  assert.equal(offsetAlignLineAt(120, lines), null, "20 px away is open canvas");
+  assert.equal(offsetAlignLineAt(0, lines), null, "far from every line is a miss");
+  assert.equal(offsetAlignLineAt(Number.NaN, lines), null);
+});
+
+test("the pressed line is resolved to its own beat, not the nearest beat under the pointer", () => {
+  // Four lines per beat, 10 px each: y 0 is beat 0 and y grows towards the past.
+  const height = 200;
+  const verticalAtBeat = (beat) => height - beat * 40;
+  const beat = offsetAlignBeatAt(161, 0, 5, 4, verticalAtBeat);
+  // y 161 is 1 px off the line for beat 1 (y 160), so it must resolve to beat 1.
+  assert.ok(beat !== null && Math.abs(beat - 1) < 1e-9, `expected beat 1, got ${beat}`);
+});
+
+test("a press in open canvas reports no line", () => {
+  const height = 200;
+  const verticalAtBeat = (beat) => height - beat * 40;
+  // One line per beat, 40 px apart: y 150 is 10 px from beat 1 and 30 px from
+  // beat 2, so it misses the 6 px radius and must not snap.
+  assert.equal(offsetAlignBeatAt(150, 0, 5, 1, verticalAtBeat), null);
 });

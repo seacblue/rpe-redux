@@ -271,7 +271,7 @@ function renderGridPacket(
 type TimelineHoverGuideReceiver = {
   appearance: Pick<
     TimelineAppearance,
-    "hoverGuidesEnabled" | "nearbyGuidesOnly" | "gridHighlightColor"
+    "hoverGuidesEnabled" | "nearbyGuidesOnly" | "gridHighlightColor" | "alignHighlight"
   >;
   cache: TempoSecondsCache;
   gestures: Pick<TimelineGestures, "cursor" | "eventCursor" | "hoverArea">;
@@ -281,9 +281,10 @@ type TimelineHoverGuideReceiver = {
 /**
  * Resolve one grid line's highlight colour and opacity.
  *
- * An armed offset pick paints every line in the emphasized colour at full
- * strength so the author can aim; otherwise only the nearest snapped line under
- * the pointer is highlighted, gated by the guide setting.
+ * An armed offset pick emphasizes only the line nearest the pointer, exactly
+ * like the ordinary hover highlight, so the author can aim at one line; the
+ * difference is that the pick keeps working with guides switched off and paints
+ * the emphasized colour at full strength.
  */
 function gridLineHighlight(
   appearance: TimelineAppearance,
@@ -293,7 +294,7 @@ function gridLineHighlight(
   nearestHover: boolean,
   hoverOpacity: number,
 ): { color: string; alpha: number } {
-  if (appearance.alignHighlight) {
+  if (appearance.alignHighlight && nearestHover) {
     return { color: palette.alignHighlight, alpha: 1 };
   }
   const highlighted = appearance.hoverGuidesEnabled !== false && nearestHover;
@@ -312,7 +313,10 @@ function hoveredGridLine(
 ): { lineIndex: number; beat: number; pointerY: number } | null {
   if (
     receiver.appearance.hoverGuidesEnabled === false &&
-    receiver.appearance.nearbyGuidesOnly !== true
+    receiver.appearance.nearbyGuidesOnly !== true &&
+    // An armed offset pick has to show the line it would snap to even when the
+    // author turned guide highlighting off.
+    !receiver.appearance.alignHighlight
   ) {
     return null;
   }

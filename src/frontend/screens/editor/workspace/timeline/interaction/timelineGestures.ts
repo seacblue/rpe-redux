@@ -85,13 +85,14 @@ export class TimelineGestures {
   curveQuickPick: ((note: TimelineNote, index: number, lineIndex: number) => boolean) | null = null;
   curveGhost?: () => TimelineNote[];
   /**
-   * Consume one click as a chart-offset alignment target.
+   * Consume one press as a chart-offset alignment target.
    *
-   * Returns true when the click was taken, in which case selection, placement,
-   * and drag handling are skipped. `lineIndex` is null for a click outside any
-   * judge-line panel, where only the beat is meaningful.
+   * Receives the pointer's vertical position in notes-canvas pixels so the
+   * handler can require a press on a grid line. Returning true means the press
+   * was taken: selection, placement, note hit testing, and drag are all skipped.
+   * `lineIndex` is null outside any judge-line panel.
    */
-  offsetPick: ((beat: number, lineIndex: number | null) => boolean) | null = null;
+  offsetPick: ((vertical: number, lineIndex: number | null) => boolean) | null = null;
   /** Drop an armed offset pick; wired by the editor that owns the pick state. */
   offsetPickCancel?: () => void;
   previewPick?: (event: PointerEvent) => unknown;

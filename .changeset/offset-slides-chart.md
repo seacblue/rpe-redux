@@ -6,7 +6,7 @@
 
 **新增**
 
-- 时间偏移面板新增「对齐到横线」：点击后暂停播放、强制显示时间轴并把横线换成醒目的蓝色，随后在时间轴上点击横线或音符即可完成对齐，并以提示说明操作方式。
+- 时间偏移面板新增「对齐到横线」：点击后暂停播放、强制显示时间轴并提示操作方式；随后在时间轴上点击某条横线即可完成对齐。装填期间只高亮鼠标最近的那条横线（改用更醒目的蓝色），点击必须落在横线上才会生效，并且不会触发音符的选中、拖动或放置。
 
 **修复**
 
@@ -16,7 +16,7 @@
 
 **Added**
 
-- The offset panel gains **Align to a timeline line**: it pauses the transport, reveals the timeline, and highlights every line in an emphasized blue; the next click on a line or note completes the alignment, and a notice explains the gesture.
+- The offset panel gains **Align to a timeline line**: it pauses the transport, reveals the timeline, and explains the gesture; the next click on a grid line completes the alignment. While armed, only the line nearest the pointer is emphasized in a brighter blue, the click must land on that line, and no note selection, drag, or placement runs.
 
 **Fixes**
 

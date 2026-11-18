@@ -187,6 +187,15 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   );
   this.gestures.clipboardPointer = position;
   this.gestures.hoverArea = "notes";
+  // An armed offset pick owns the next left press before any note hit test runs:
+  // it targets a grid line, so a note under the pointer must not be selected,
+  // dragged, or treated as the pick target.
+  if (
+    event.button === 0 &&
+    this.gestures.offsetPick?.(position.y, this.gestures.cursorLineIndex ?? null)
+  ) {
+    return;
+  }
   const hit = this.hit(position);
   const session = this.getSession();
   const dragPrekey = dragPrekeyHeld();

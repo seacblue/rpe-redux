@@ -126,7 +126,7 @@ import { bindPreviewSelection } from "../../preview/interaction/previewSelection
 import { createPreviewFrameCapture } from "../../preview/frame/frameCapture.ts";
 import { createEditorRuntime, type EditorRuntime } from "./EditorRuntime.tsx";
 import { disarmOffsetAlign, offsetAlignArmed } from "../../../inspector/bpm/offsetAlign.ts";
-import { alignedOffsetMs } from "../../../inspector/bpm/offsetAlignMath.ts";
+import { alignedOffsetMs, offsetAlignBeatAt } from "../../../inspector/bpm/offsetAlignMath.ts";
 import { chartWithOffsetDraft } from "../../../../../../core/global/chart/editing/drafts.ts";
 import { createEditorUiState } from "./editorUiState.ts";
 import type { EditorSessionRuntime } from "../providers/SessionProvider.tsx";
@@ -502,18 +502,33 @@ export function createEditorAssembly(
   } = playbackRuntime;
   deferSessionRenderDuringPlayback = () => playback.audio.playing || playback.pending;
   scope.add(playbackRuntime.dispose);
-  // Aligning the offset to a timeline line captures one click. The picked beat
-  // becomes the chart time the unchanged audio clock should sit on, so the new
-  // offset is `audio − chart`; the transport is never seeked.
-  timeline.gestures.offsetPick = (beat, lineIndex) => {
+  // Aligning the offset to a timeline line captures one press on a grid line.
+  // The picked line's chart time becomes the time the unchanged audio clock
+  // should sit on, so the new offset is `audio − chart`; the transport is never
+  // seeked, and a press that misses every line leaves the pick armed.
+  timeline.gestures.offsetPick = (vertical, lineIndex) => {
     if (!offsetAlignArmed.get()) {
+      return false;
+    }
+    const viewport = timeline.viewport;
+    const height = surfaces.timeline.notes.clientHeight;
+    // The visible lines are the snapped grid rows between the canvas bottom and
+    // top; the press has to land on one of them, not merely near in beat space.
+    const beat = offsetAlignBeatAt(
+      vertical,
+      viewport.snappedBeat(height),
+      viewport.snappedBeat(0),
+      viewport.division,
+      (candidate) => viewport.vertical(candidate, height),
+    );
+    if (beat === null) {
       return false;
     }
     const current = session.current;
     const factor =
       lineIndex === null ? 1 : (current.chart.judgeLineList?.[lineIndex]?.bpmfactor ?? 1);
     const nextOffsetMs = alignedOffsetMs(audio.time, tempo.get().seconds(beat, factor));
-    // Disarm first: a refused commit must not leave the pick swallowing clicks.
+    // Disarm first: a refused commit must not leave the pick swallowing presses.
     disarmOffsetAlign(runtimeRef.current);
     if (nextOffsetMs === null) {
       return false;
