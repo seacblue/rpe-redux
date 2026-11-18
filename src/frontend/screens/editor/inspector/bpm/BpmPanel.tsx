@@ -42,6 +42,7 @@ import {
   timingPointSelection,
 } from "../../../global/sections/timing/timingSelection.ts";
 import { shouldRunMetronome } from "./metronomeVisibility.ts";
+import { offsetAnchorSeconds } from "./offsetAnchor.ts";
 
 /** Renders the selected timing point, or the chart offset when `mode` says so. */
 export function BpmPanel({
@@ -450,9 +451,12 @@ function BpmOffset({ session, chart }: Pick<BpmForm, "session" | "chart">) {
       return;
     }
     try {
-      const runtime = editorRuntime;
-      const previousOffset = Number(source.offset ?? 0) / 1000;
-      const chartSeconds = runtime ? runtime.audio.time - previousOffset : null;
+      const playback = editorRuntime?.providers.playback;
+      // Offset maps chart time onto the audio clock, so the transport keeps the
+      // same chart position only after its audio position moves with the new
+      // value. Read the chart position from the live session before the commit:
+      // the form snapshot may still hold the previous offset.
+      const chartSeconds = playback ? playback.chartSeconds() : null;
       const next = chartWithOffsetDraft(session.chart, nextValue);
       session.commitChart(
         t("editorPanels.inspector.form.bpm.offsetCommit"),
@@ -461,12 +465,15 @@ function BpmOffset({ session, chart }: Pick<BpmForm, "session" | "chart">) {
         undefined,
         { normalized: true },
       );
-      // Offset aligns the audio track with the chart. Keep the chart position
-      // fixed while moving the audio clock, so the playhead line does not jump
-      // when the author tunes the offset.
-      if (runtime && chartSeconds !== null) {
-        const nextOffset = Number(next.META.offset ?? 0) / 1000;
-        runtime.audio.seek(chartSeconds + nextOffset);
+      // Seek through the transport controller, which also refreshes the viewport
+      // origin, the frame, and the preload window; a raw audio seek leaves the
+      // paused playhead where it was. `pause: false` keeps a running transport
+      // running.
+      if (playback && chartSeconds !== null) {
+        const anchor = offsetAnchorSeconds(chartSeconds, Number(next.META.offset ?? 0) / 1000);
+        if (anchor !== null) {
+          playback.playback.seek(anchor, false);
+        }
       }
       setError("");
     } catch (failure) {
