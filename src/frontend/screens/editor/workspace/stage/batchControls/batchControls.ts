@@ -9,7 +9,12 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import type { SelectionSnapshot } from "../../../../../../core/edit/selection/snapshot.ts";
 import type { SelectionEditResult } from "../../../../../../core/edit/selection/edits.ts";
 
-import type { Timeline } from "../../timeline/surface/timeline.ts";
+import {
+  batchPlacementPending,
+  forwardBallPointer,
+  routePendingPlacement,
+  type BatchTimeline,
+} from "./batchControlTimeline.ts";
 import { previewSession } from "./previewSession.ts";
 import {
   batchDragDeltas,
@@ -95,35 +100,6 @@ export function hasVisibleBatchSelection(area: TimelineArea, session: EditorSess
     session.eventSelection.size === 0
   );
 }
-
-type BatchTimeline = Pick<
-  Timeline,
-  "notesCanvas" | "eventsCanvas" | "cancelPlacement" | "changed" | "setPreview"
-> & {
-  viewport: Pick<
-    Timeline["viewport"],
-    | "panelWidth"
-    | "panelIndex"
-    | "panelStride"
-    | "multiLineViewportOffset"
-    | "point"
-    | "tempo"
-    | "origin"
-    | "judgementOffset"
-    | "scale"
-    | "scaleForArea"
-    | "notePositionAt"
-    | "division"
-    | "factorForLine"
-    | "noteInset"
-    | "snapX"
-    | "gridCount"
-  >;
-  gestures: Pick<
-    Timeline["gestures"],
-    "cursor" | "eventCursor" | "clipboardPointer" | "scaleAxis" | "scaleAxisLine" | "preview"
-  >;
-};
 
 /** A canvas-space point with the minimum surface required by callers. */
 interface Point {
@@ -286,6 +262,19 @@ export class BatchControls {
       },
       true,
     );
+    // The control group floats above its field, so pointer movement over it
+    // never reaches the canvas. Keep the timeline cursor that keyboard
+    // placement reads in step with the live pointer.
+    scope.listen(
+      document,
+      "pointermove",
+      (event: Event) => {
+        if (!this.active) {
+          forwardBallPointer(this.timeline, event as PointerEvent);
+        }
+      },
+      true,
+    );
     // Escape and the 1/2 scale anchors belong to the live drag, not the
     // shortcut table: they only exist while a pointer gesture owns the stage.
     scope.listen(
@@ -364,6 +353,10 @@ export class BatchControls {
       this.cancel();
     }
     const stage = this.stage.getBoundingClientRect();
+    // A half-placed Hold or event is finished by the next click. The control
+    // balls float over the field, so leaving them visible would let that click
+    // land on a handle instead of the canvas and drop the placement.
+    const placementPending = batchPlacementPending(this.timeline);
     for (const [area, group] of this.groups) {
       const multiSelection =
         area === "notes"
@@ -392,7 +385,8 @@ export class BatchControls {
           : multiMode
             ? multiSelection > 0 && multiIntent
             : selection >= 2 || (selection > 0 && multiIntent);
-      const visible = this.enabled() && canShow && hasVisibleBatchSelection(area, session);
+      const visible =
+        this.enabled() && !placementPending && canShow && hasVisibleBatchSelection(area, session);
       this.state.presentations.update({
         ...this.state.presentations.get(),
         [area]: {
@@ -449,6 +443,12 @@ export class BatchControls {
 
   down(event: PointerEvent, area: TimelineArea, kind: string, button: HTMLButtonElement): void {
     if (event.button !== 0 || this.active || !this.enabled()) {
+      return;
+    }
+    // A pending Hold or event placement owns the next click. Route that click
+    // to the field even when the pointer sits on a ball, so the gesture is
+    // completed instead of starting a batch drag.
+    if (routePendingPlacement(this.timeline, area, event)) {
       return;
     }
     event.preventDefault();

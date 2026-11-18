@@ -37,6 +37,19 @@ export function installInteractionPolicy(): () => void {
       event.preventDefault();
     }
   };
+  // Dragging selected text is a native edit that would take the pointer away
+  // from a chart gesture. Selection itself stays available inside text fields.
+  const preventNativeDrag = (event: Event) => {
+    event.preventDefault();
+  };
+  // Middle-click autoscroll is a browser gesture the app never uses. The middle
+  // button is an additive selection drag on the timeline, so the browser must
+  // not enter its scroll mode first.
+  const preventMiddleButtonScroll = (event: MouseEvent) => {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
+  };
   const preventDocumentSelectAll = (event: KeyboardEvent) => {
     if (
       !canEditText(event.target) &&
@@ -109,7 +122,8 @@ export function installInteractionPolicy(): () => void {
     }
   };
   document.addEventListener("selectstart", preventSelection, true);
-  document.addEventListener("dragstart", preventSelection, true);
+  document.addEventListener("dragstart", preventNativeDrag, true);
+  document.addEventListener("mousedown", preventMiddleButtonScroll, true);
   document.addEventListener("keydown", onKeyDown, true);
   document.addEventListener("keyup", onKeyUp, true);
   document.addEventListener("pointerdown", onPointerDown, true);
@@ -120,7 +134,8 @@ export function installInteractionPolicy(): () => void {
     }
     installed = false;
     document.removeEventListener("selectstart", preventSelection, true);
-    document.removeEventListener("dragstart", preventSelection, true);
+    document.removeEventListener("dragstart", preventNativeDrag, true);
+    document.removeEventListener("mousedown", preventMiddleButtonScroll, true);
     document.removeEventListener("keydown", onKeyDown, true);
     document.removeEventListener("keyup", onKeyUp, true);
     document.removeEventListener("pointerdown", onPointerDown, true);
