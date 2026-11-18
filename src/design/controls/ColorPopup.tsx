@@ -17,7 +17,7 @@ import {
   displayHexColor,
   formatHexColor,
   normalizeHexColor,
-  parseHexColor,
+  readColorDraft,
 } from "../components/input/colorModel.ts";
 import type { CSSProperties } from "react";
 
@@ -67,23 +67,6 @@ function rgbToHsv(r: number, g: number, b: number): Hsv {
   return { h, s: max <= 0 ? 0 : delta / max, v: max };
 }
 
-/** Parse hexadecimal text into normalized RGB, or `null` when it is malformed. */
-function parseHex(
-  text: string,
-): { r: number; g: number; b: number; alpha: number; hasAlpha: boolean } | null {
-  const parsed = parseHexColor(text);
-  if (!parsed) {
-    return null;
-  }
-  return {
-    r: parsed.red / 255,
-    g: parsed.green / 255,
-    b: parsed.blue / 255,
-    alpha: parsed.alpha,
-    hasAlpha: parsed.hasAlpha,
-  };
-}
-
 /** Format normalized RGB as a lowercase `#rrggbb` string. */
 function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
   const byte = (channel: number) =>
@@ -116,13 +99,16 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
   const { element, anchor } = state;
   const allowAlpha = element.dataset.colorAlphaEnabled === "true";
   const original = element.value;
-  const initial = parseHex(original) ?? { r: 0, g: 0, b: 0, alpha: 1, hasAlpha: false };
+  const initial = readColorDraft(original) ?? { red: 0, green: 0, blue: 0 };
   const [hsv, setHsv] = useState<Hsv>(() => {
-    return rgbToHsv(initial.r, initial.g, initial.b);
+    return rgbToHsv(initial.red, initial.green, initial.blue);
   });
   const [alpha, setAlpha] = useState(() => {
+    if (!allowAlpha) {
+      return 1;
+    }
     const stored = Number(element.dataset.colorAlpha);
-    return allowAlpha && Number.isFinite(stored) ? clamp01(stored) : allowAlpha ? initial.alpha : 1;
+    return Number.isFinite(stored) ? clamp01(stored) : (initial.alpha ?? 1);
   });
   const [hexDraft, setHexDraft] = useState<string | null>(null);
   const square = useRef<HTMLDivElement>(null);
@@ -151,6 +137,26 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
     setHexDraft(null);
     setHsv(updater);
   }, []);
+
+  /**
+   * Apply the typed hex only once the field is left.
+   *
+   * Parsing every keystroke would read the four-digit prefix of a six-digit
+   * entry as RGBA and overwrite the alpha channel with an RGB digit.
+   */
+  const commitHexDraft = useCallback(() => {
+    if (hexDraft === null) {
+      return;
+    }
+    const committed = readColorDraft(hexDraft);
+    if (committed) {
+      setHsv(rgbToHsv(committed.red, committed.green, committed.blue));
+      if (allowAlpha && committed.alpha !== undefined) {
+        setAlpha(committed.alpha);
+      }
+    }
+    setHexDraft(null);
+  }, [allowAlpha, hexDraft]);
 
   const apply = useCallback(
     (value: string) => {
@@ -309,20 +315,14 @@ export function ColorPopup({ state }: { state: ColorPopupState }) {
             className="redux-input"
             spellCheck={false}
             value={shownHex}
-            onChange={(event) => {
-              const text = event.currentTarget.value;
-              setHexDraft(text);
-              const parsed = parseHex(text);
-              if (parsed) {
-                // Keep the typed text visible while the parsed colour paints the
-                // square; clearing the draft here would rewrite the caret.
-                setHsv(rgbToHsv(parsed.r, parsed.g, parsed.b));
-                if (allowAlpha && parsed.hasAlpha) {
-                  setAlpha(parsed.alpha);
-                }
+            onChange={(event) => setHexDraft(event.currentTarget.value)}
+            onBlur={commitHexDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
               }
             }}
-            onBlur={() => setHexDraft(null)}
           />
         </label>
         {(["r", "g", "b"] as const).map((channel) => (

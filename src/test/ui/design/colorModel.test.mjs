@@ -6,6 +6,7 @@ import {
   displayHexColor,
   formatHexColor,
   normalizeColor,
+  readColorDraft,
 } from "../../../design/components/input/colorModel.ts";
 import { sourceOverColor } from "../../../core/utils/colors.ts";
 
@@ -28,6 +29,14 @@ test("alpha colours keep RGB compatibility and format their readout", () => {
   assert.equal(formatHexColor("#123456", 1), "#123456");
   assert.equal(displayHexColor("#12345680"), "#123456 50%");
   assert.equal(displayHexColor("#123456"), "#123456");
+});
+
+test("a committed hex draft only carries the alpha it states", () => {
+  assert.deepEqual(readColorDraft("#ff0000"), { red: 1, green: 0, blue: 0, alpha: undefined });
+  assert.deepEqual(readColorDraft("#f00"), { red: 1, green: 0, blue: 0, alpha: undefined });
+  assert.equal(readColorDraft("#ff000080")?.alpha, 128 / 255);
+  assert.equal(readColorDraft("#f008")?.alpha, 136 / 255);
+  assert.equal(readColorDraft("#12345"), null);
 });
 
 test("source-over colour mixing keeps the base line in the highlight result", () => {
