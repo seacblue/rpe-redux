@@ -112,6 +112,12 @@ export function renderEventInspector(
   });
   const entry = entries[0];
   state.selectedCount.set(entries.length);
+  if (!entry) {
+    // No selected event means the empty state, which the panel frame renders
+    // itself. Clearing here keeps the view module out of headless publications.
+    state.clear();
+    return;
+  }
   const refresh = () =>
     renderEventInspector(
       session,

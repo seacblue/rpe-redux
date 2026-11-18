@@ -28,7 +28,7 @@ import {
   EasingCurveEditor,
   type EasingCurvePatch,
 } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
-import { displayValue, applyEventTransform, EventField } from "./EventField.tsx";
+import { applyEventTransform, EventField } from "./EventField.tsx";
 import type { FieldKey, ValueKind } from "./eventFieldModel.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { eventHasLinkGroup } from "../../../../../core/global/chart/optionalFeatures.ts";
@@ -218,7 +218,7 @@ export function EventInspectorView({
         <FieldRows>
           {(["startTime", "endTime"] as const).map((field) => (
             <EventField
-              key={`${entry.index}:${field}:${displayValue(event, field)}`}
+              key={`${entry.index}:${field}`}
               session={session}
               eventType={eventType}
               event={event}
@@ -370,7 +370,7 @@ export function EventInspectorView({
       <FieldRows>
         {fields.map(([field, title, kind]) => (
           <EventField
-            key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}:${displayValue(event, field)}`}
+            key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}`}
             session={session}
             eventType={eventType}
             event={event}
@@ -440,7 +440,7 @@ export function EventInspectorView({
         easingLabel={t("editorPanels.inspector.event.easing")}
         rangeIds={{ left: "event-field-easingLeft", right: "event-field-easingRight" }}
         modeClassName="is-block"
-        bezierKey={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:bezier:${curveValues.bezierPoints.join(",")}`}
+        bezierKey={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:bezier`}
         showRange={rangeVisible}
         bezierEnabled={() => bezierEnabled}
         easingRangeEnabled={() => easingRangeEnabled}

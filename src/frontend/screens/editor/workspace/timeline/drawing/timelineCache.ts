@@ -89,6 +89,9 @@ const INVALID_NOTE_RENDER_DATA: TimelineNoteRenderData = Object.freeze({
   invalid: true,
 });
 
+/** Stable source for a missing event track, so its cache identity never churns. */
+const NO_EVENTS: readonly JudgeLineEvent[] = [];
+
 interface CachedEventQuery {
   readonly start: number;
   readonly end: number;
@@ -200,6 +203,8 @@ export class TimelineCache {
   private eventData?: {
     chart: Chart;
     key: string;
+    /** Event arrays the derived indexes were built from. */
+    sources: readonly (readonly JudgeLineEvent[])[];
     indexes: IntervalIndex<JudgeLineEvent>[];
     ranges: Map<number, EventChain<JudgeLineEvent>>[];
     overlaps: Set<number>[];
@@ -772,18 +777,30 @@ export class TimelineCache {
 
   /** Per-layer indexes, chains, overlaps, and shader lanes for the current chart and key. */
   events(chart: Chart, key: string, types: string[], layer: TimelineEventLayer) {
-    if (this.eventData?.chart !== chart || this.eventData.key !== key) {
-      const displays = types.map((type) => this.eventDisplay(chart, layer[type] ?? []));
-      this.eventData = {
-        chart,
-        key,
-        indexes: displays.map((display) => display.index),
-        ranges: displays.map((display) => display.ranges),
-        overlaps: displays.map((display) => display.overlaps),
-        lanes: shaderEventLanes(layer.paintEvents ?? []),
-      };
+    const sources = types.map((type) => layer[type] ?? NO_EVENTS);
+    const cached = this.eventData;
+    // A paged document keeps one facade chart object across edits, so the chart
+    // identity alone cannot tell a replaced track from the compiled one. The
+    // source arrays are the authoritative input of the derived ranges.
+    const sameSources =
+      cached !== undefined &&
+      cached.sources.length === sources.length &&
+      sources.every((source, index) => cached.sources[index] === source);
+    if (cached && cached.chart === chart && cached.key === key && sameSources) {
+      return cached;
     }
-    return this.eventData;
+    const displays = sources.map((source) => this.eventDisplay(chart, source));
+    const next = {
+      chart,
+      key,
+      sources,
+      indexes: displays.map((display) => display.index),
+      ranges: displays.map((display) => display.ranges),
+      overlaps: displays.map((display) => display.overlaps),
+      lanes: shaderEventLanes(layer.paintEvents ?? []),
+    };
+    this.eventData = next;
+    return next;
   }
 
   /** Shader lane placement for one paint-event index, when cached. */

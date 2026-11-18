@@ -119,15 +119,21 @@ interface SelectedEventValue {
   readonly end: unknown;
   readonly top: number;
   readonly bottom: number;
+  /** The chain whose ordinary label already covers this anchor, when any. */
+  readonly group?: EventChain<JudgeLineEvent>;
 }
 
 interface EventDrawingScratch {
   readonly selectedRectangles: EventBarRectangle[];
   readonly remoteSelectedRectangles: EventBarRectangle[];
   readonly selectedValues: SelectedEventValue[];
+  /** Selected anchors that have no ordinary group label to inherit. */
+  readonly selectedChips: SelectedEventValue[];
   readonly curveEntriesBySelection: [EventCurveEntry[], EventCurveEntry[]];
   readonly selectedIndexesBySelection: Map<ReadonlySet<string>, Map<string, ReadonlySet<number>>>;
   readonly labelScratch: EventLabelScratch;
+  /** Groups whose ordinary value label is painted in this channel. */
+  readonly labeledGroups: Set<EventChain<JudgeLineEvent>>;
 }
 
 const eventDrawingScratch = new WeakMap<object, EventDrawingScratch>();
@@ -142,9 +148,11 @@ function scratchFor(receiver: object): EventDrawingScratch {
     selectedRectangles: [],
     remoteSelectedRectangles: [],
     selectedValues: [],
+    selectedChips: [],
     curveEntriesBySelection: [[], []],
     selectedIndexesBySelection: new Map(),
     labelScratch: createEventLabelScratch(),
+    labeledGroups: new Set(),
   };
   eventDrawingScratch.set(receiver, created);
   return created;
@@ -175,8 +183,10 @@ function resetChannelScratch(scratch: EventDrawingScratch): void {
   scratch.selectedRectangles.length = 0;
   scratch.remoteSelectedRectangles.length = 0;
   scratch.selectedValues.length = 0;
+  scratch.selectedChips.length = 0;
   scratch.curveEntriesBySelection[0].length = 0;
   scratch.curveEntriesBySelection[1].length = 0;
+  scratch.labeledGroups.clear();
 }
 
 /**
@@ -493,6 +503,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
           end: entry.item.end,
           top: vertical,
           bottom,
+          group: ranges.get(entry.index),
         });
       }
       if (
@@ -569,6 +580,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         if (!lastEntry) {
           continue;
         }
+        scratch.labeledGroups.add(group);
         const last = lastEntry.event;
         const top = verticalAt(beatValue(last.endTime));
         const bottom = verticalAt(beatValue(first.startTime));
@@ -599,10 +611,21 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       }
     }
     if (type !== NOISE_ACTIVE_EVENTS) {
+      // The selected chip exists to keep the edited event visible when the
+      // ordinary label budget hides its group. When that group is already
+      // labelled, a second chip would print another set of numbers over the
+      // same anchors, so only the uncovered selections get one.
+      const chips = scratch.selectedChips;
+      chips.length = 0;
+      for (const value of scratch.selectedValues) {
+        if (!value.group || !scratch.labeledGroups.has(value.group)) {
+          chips.push(value);
+        }
+      }
       drawSelectedEventValues(
         context,
         overlayBatch,
-        scratch.selectedValues,
+        chips,
         horizontal + channelWidth / 2,
         channelWidth,
         height,
@@ -774,7 +797,13 @@ export function drawMultiLineEvents(
           scratch.selectedRectangles.push(projected);
         }
         if (selected && type !== "paintEvents") {
-          scratch.selectedValues.push({ start: event.start, end: event.end, top, bottom });
+          scratch.selectedValues.push({
+            start: event.start,
+            end: event.end,
+            top,
+            bottom,
+            group: ranges.get(index),
+          });
         }
         if (
           !highlightSelection &&
@@ -865,6 +894,7 @@ export function drawMultiLineEvents(
           if (!lastEntry) {
             continue;
           }
+          scratch.labeledGroups.add(group);
           const last = lastEntry.event;
           const top = verticalAt(beatValue(last.endTime));
           const bottom = verticalAt(beatValue(first.startTime));
@@ -897,10 +927,17 @@ export function drawMultiLineEvents(
         }
       }
       if (type !== "paintEvents" && type !== NOISE_ACTIVE_EVENTS) {
+        const chips = scratch.selectedChips;
+        chips.length = 0;
+        for (const value of scratch.selectedValues) {
+          if (!value.group || !scratch.labeledGroups.has(value.group)) {
+            chips.push(value);
+          }
+        }
         drawSelectedEventValues(
           context,
           overlayBatch,
-          scratch.selectedValues,
+          chips,
           offset + channel * channelWidth + channelWidth / 2,
           channelWidth,
           height,

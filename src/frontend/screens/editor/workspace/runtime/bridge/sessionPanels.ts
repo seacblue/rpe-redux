@@ -49,18 +49,16 @@ export function createSessionPanels(runtime: SessionPanelOptions) {
       runtime.reportError,
       runtime.nudgeBeatInput,
     );
-    if (!session.liveEventEdit) {
-      renderEventInspector(
-        session,
-        currentTempo,
-        runtime.currentBeat,
-        runtime.reportError,
-        runtime.notify,
-        runtime.nudgeBeatInput,
-        runtime.timeline,
-        runtime.ui.events,
-      );
-    }
+    renderEventInspector(
+      session,
+      currentTempo,
+      runtime.currentBeat,
+      runtime.reportError,
+      runtime.notify,
+      runtime.nudgeBeatInput,
+      runtime.timeline,
+      runtime.ui.events,
+    );
     if (session.eventSelection.size) {
       const firstEventKey = session.eventSelection.values().next().value ?? "";
       runtime.timeline.gestures.eventPlacementType = firstEventKey.split(":")[0];
@@ -83,18 +81,16 @@ export function createSessionPanels(runtime: SessionPanelOptions) {
         runtime.reportError,
         runtime.nudgeBeatInput,
       );
-      if (!session.liveEventEdit) {
-        renderEventInspector(
-          session,
-          currentTempo,
-          runtime.currentBeat,
-          runtime.reportError,
-          runtime.notify,
-          runtime.nudgeBeatInput,
-          runtime.timeline,
-          runtime.ui.events,
-        );
-      }
+      renderEventInspector(
+        session,
+        currentTempo,
+        runtime.currentBeat,
+        runtime.reportError,
+        runtime.notify,
+        runtime.nudgeBeatInput,
+        runtime.timeline,
+        runtime.ui.events,
+      );
       if (session.eventSelection.size) {
         const firstEventKey = session.eventSelection.values().next().value ?? "";
         runtime.timeline.gestures.eventPlacementType = firstEventKey.split(":")[0];
