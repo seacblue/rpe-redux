@@ -275,6 +275,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   const scratch = scratchFor(this);
   scratch.selectedIndexesBySelection.clear();
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
+  const hasRemoteSelection = this.remoteSelectedEventIds.size > 0;
   const multiEvents = session.eventsMode === "multi";
   const repaintBatch = this.eventBatch.begin(
     width,
@@ -479,8 +480,10 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         entry.index,
         type,
       );
-      const hovered = this.gestures.isEventOverlapHovered(session.lineIndex, type, entry.index);
-      const highlightSelection = hovered || (!overlapSelectionSuppressed && selected);
+      // The hover check only decides the highlight while the overlap picker is open.
+      const highlightSelection = overlapSelectionSuppressed
+        ? this.gestures.isEventOverlapHovered(session.lineIndex, type, entry.index)
+        : selected;
       if (highlightSelection) {
         scratch.selectedRectangles.push(projected);
       }
@@ -495,6 +498,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       if (
         !highlightSelection &&
         !overlapSelectionSuppressed &&
+        hasRemoteSelection &&
         entry.item.id !== undefined &&
         this.remoteSelectedEventIds.has(entry.item.id)
       ) {
@@ -654,6 +658,7 @@ export function drawMultiLineEvents(
   const palette = this.cache.palette() ?? readCanvasPalette();
   const session = this.getSession();
   const overlapSelectionSuppressed = this.gestures.overlapMenuOpen;
+  const hasRemoteSelection = this.remoteSelectedEventIds.size > 0;
   const context = context2d(this.eventsCanvas);
   const width = this.eventsCanvas.clientWidth;
   const height = this.eventsCanvas.clientHeight;
@@ -761,8 +766,10 @@ export function drawMultiLineEvents(
           lineIndex,
         );
         const selected = selectedIndexes.has(index);
-        const hovered = this.gestures.isEventOverlapHovered(lineIndex, type, index);
-        const highlightSelection = hovered || (!overlapSelectionSuppressed && selected);
+        // The hover check only decides the highlight while the overlap picker is open.
+        const highlightSelection = overlapSelectionSuppressed
+          ? this.gestures.isEventOverlapHovered(lineIndex, type, index)
+          : selected;
         if (highlightSelection) {
           scratch.selectedRectangles.push(projected);
         }
@@ -772,6 +779,7 @@ export function drawMultiLineEvents(
         if (
           !highlightSelection &&
           !overlapSelectionSuppressed &&
+          hasRemoteSelection &&
           event.id !== undefined &&
           this.remoteSelectedEventIds.has(event.id)
         ) {

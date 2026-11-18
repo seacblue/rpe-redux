@@ -390,18 +390,27 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
           (left, right) => notePaintLayer(left.item.type) - notePaintLayer(right.item.type),
         )
       : this.cache.paintOrderedNotes(session.lineIndex, bottomBeat, topBeat);
+    const hasRemoteSelection = this.remoteSelectedNoteIds.size > 0;
+    // One options object per pass: `drawNote` reads every field synchronously,
+    // so reusing it keeps a dense line from allocating one object per note.
+    let paintOptions: NotePaintOptions | undefined;
     // Holds paint before the note heads so a Hold body never covers one.
     for (const entry of paintEntries) {
       const selected = session.selection.has(entry.index);
-      const hovered = this.gestures.isNoteOverlapHovered(session.lineIndex, entry.index);
-      const highlightSelected = overlapSelectionSuppressed ? hovered : selected;
+      // The hover check only decides the highlight while the overlap picker is open.
+      const highlightSelected = overlapSelectionSuppressed
+        ? this.gestures.isNoteOverlapHovered(session.lineIndex, entry.index)
+        : selected;
       const remoteSelected =
         !highlightSelected &&
         !overlapSelectionSuppressed &&
+        hasRemoteSelection &&
         entry.item.id !== undefined &&
         this.remoteSelectedNoteIds.has(entry.item.id);
       const note = selected ? this.movedNote(entry.item) : entry.item;
-      if (!isTimelineNoteRenderable(note)) {
+      // The cache already dropped unrenderable notes; only a selection
+      // transform can change the fields this check guards.
+      if (selected && !isTimelineNoteRenderable(note)) {
         continue;
       }
       if (selected) {
@@ -424,19 +433,27 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
       if (renderedHorizontal == null) {
         continue;
       }
-      drawNote.call(this, context, {
+      paintOptions ??= {
         palette,
         note,
-        horizontal: renderedHorizontal,
-        vertical,
-        endVertical,
-        noteWidth,
+        horizontal: 0,
+        vertical: 0,
+        endVertical: 0,
+        noteWidth: 0,
         height,
-        selected: highlightSelected,
-        remoteSelected,
-        shear: skewCurve ? noteSkewShear(noteSkewAtHit(skewCurve, note)) : 0,
-        rotation: noteOverlapRotation(overlapRanks.get(entry.index)),
-      });
+      };
+      paintOptions.palette = palette;
+      paintOptions.note = note;
+      paintOptions.horizontal = renderedHorizontal;
+      paintOptions.vertical = vertical;
+      paintOptions.endVertical = endVertical;
+      paintOptions.noteWidth = noteWidth;
+      paintOptions.height = height;
+      paintOptions.selected = highlightSelected;
+      paintOptions.remoteSelected = remoteSelected;
+      paintOptions.shear = skewCurve ? noteSkewShear(noteSkewAtHit(skewCurve, note)) : 0;
+      paintOptions.rotation = noteOverlapRotation(overlapRanks.get(entry.index));
+      drawNote.call(this, context, paintOptions);
       if (note.type === 2 && (prepared?.invalid ?? range.invalid)) {
         drawEventOverlapFilter(
           context,
@@ -598,6 +615,10 @@ export function drawMultiLineNotes(
     ? Math.min(lastPanel, lineIndices.length - 1)
     : mergedLineIndices.length - 1;
   const beatRangesByFactor = new Map<number, [number, number]>();
+  const hasRemoteSelection = this.remoteSelectedNoteIds.size > 0;
+  // `drawNote` consumes every field synchronously, so one options object can
+  // serve every panel and note in this pass.
+  let paintOptions: NotePaintOptions | undefined;
   context.save();
   for (let panel = startPanel; panel <= endPanel; panel++) {
     const lineIndex = multiplePanels ? lineIndices[panel] : mergedLineIndices[panel];
@@ -681,27 +702,38 @@ export function drawMultiLineNotes(
         prepared?.endSeconds ?? this.cache.tempoSeconds(this.viewport.tempo, endBeat, noteFactor);
       const vertical = verticalProjection(startSeconds);
       const endVertical = verticalProjection(endSeconds);
-      const hovered = this.gestures.isNoteOverlapHovered(lineIndex, index);
-      const highlightSelected = overlapSelectionSuppressed ? hovered : selected;
+      // The hover check only decides the highlight while the overlap picker is open.
+      const highlightSelected = overlapSelectionSuppressed
+        ? this.gestures.isNoteOverlapHovered(lineIndex, index)
+        : selected;
       const remoteSelected =
         !highlightSelected &&
         !overlapSelectionSuppressed &&
+        hasRemoteSelection &&
         note.id !== undefined &&
         this.remoteSelectedNoteIds.has(note.id);
-      drawNote.call(this, context, {
+      paintOptions ??= {
         palette,
         note,
-        horizontal: rendered,
-        vertical,
-        endVertical,
-        noteWidth,
+        horizontal: 0,
+        vertical: 0,
+        endVertical: 0,
+        noteWidth: 0,
         height,
-        selected: highlightSelected,
-        remoteSelected,
-        opacityMultiplier: lineOpacity,
-        shear: skewCurve ? noteSkewShear(noteSkewAtHit(skewCurve, note)) : 0,
-        rotation: noteOverlapRotation(overlapRanks.get(index)),
-      });
+      };
+      paintOptions.palette = palette;
+      paintOptions.note = note;
+      paintOptions.horizontal = rendered;
+      paintOptions.vertical = vertical;
+      paintOptions.endVertical = endVertical;
+      paintOptions.noteWidth = noteWidth;
+      paintOptions.height = height;
+      paintOptions.selected = highlightSelected;
+      paintOptions.remoteSelected = remoteSelected;
+      paintOptions.opacityMultiplier = lineOpacity;
+      paintOptions.shear = skewCurve ? noteSkewShear(noteSkewAtHit(skewCurve, note)) : 0;
+      paintOptions.rotation = noteOverlapRotation(overlapRanks.get(index));
+      drawNote.call(this, context, paintOptions);
       if (note.type === 2 && (prepared?.invalid ?? range.invalid)) {
         drawEventOverlapFilter(
           context,

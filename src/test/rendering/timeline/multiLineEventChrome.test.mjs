@@ -116,6 +116,7 @@ function fakeReceiver({ overlayActive }) {
   const receiver = {
     eventsCanvas: fakeCanvas(200, 100, live),
     eventsBackdrop: fakeCanvas(200, 100, backdrop),
+    remoteSelectedEventIds: new Set(),
     appearance: {
       skin: null,
       eventOpacity: 1,
