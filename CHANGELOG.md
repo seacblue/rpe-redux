@@ -4,154 +4,116 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use two inline annotations: `@name` credits a GitHub user (rendered bold and underlined), and `<red>text</red>` colours a run of text. The tag name is the colour: `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown tag, so the release page still reads as plain words.
 
-## 1.0.12
+## 1.0.13
 
 ### 中文
 
 **修复**
 
-- 将设置项中的自定义背景图片选择按钮内容居中显示。
-- 修复带 `attachUI`（`pause`、`combo`、`score` 等）或缺失可选资源的谱面无法导入的问题：宿主不再把谱面目录内不存在的文件当作可读资源，导入时读不到的资源会跳过，而不是让整次导入以 `os error 2` 失败。
-- 统一 modal 中标签字段的控件宽度，避免导出谱面字段例外拉伸。
-- 审计并统一中文界面文案，修正保存提示、素材库、着色器、扩展、检查器、时间线、预览、撤销和历史回退等术语。
-- 修复多选编辑历史通知显示原始 i18n key 的问题。
-- 调整缓动字段的控件顺序，将 In/Out 放到缓动主体选择框之前，并保持主体选择框的宽度。
-- 修复 I 键第二次按下无法退出播放预览、O 键在编辑页播放时无法只隐藏编辑页的问题。
-- RPE 迁移重新导入时保留并补回判定线切换的滚轮手势，避免 Ctrl+滚轮上失效。
-- 修复事件时间线两侧边界线的颜色与层级，使其使用统一的灰色边框并覆盖顶部参数标题。
-- 修复按下 Esc 时意外打开设置界面的问题。
-- 修复框选或划线选中物件后多选编辑面板没有立即打开的问题。
-- 修复事件时间线右侧重复绘制黄色边界的问题。
-- 合并音符时禁用多线窗口宽度设置，并让非合并多线窗口铺满时间线区域。
-- 修复多线编辑切换事件层级后批量编辑失效，以及合法跨面板选择时拖拽控制器误消失的问题。
-- 调整播放倍速选项顺序，使 1x 位于顶部、0.25x 位于底部。
-- 修复后台自动保存进行中点击“保存并退出”后，保存完成却仍提示存在未保存修改的问题。
-- 隔离普通保存、另存为、导出和后台备份的并发请求，避免不同保存意图复用错误结果。
-- 修复更新包下载完成后更新按钮消失，以及重启确认弹窗可通过点击外部关闭的问题。
-- 修复自由视角下预览白框不跟随缩放/偏移且溢出编辑器的问题；白框现在跟随相机投影并裁剪在预览视口内，白框外的物件和判定线仍可显示。
-- 移除自由视角下铺满舞台的静态灰底，框外直接显示编辑器底色。
-- 修复自由视角缩放或调整预览大小时打击粒子、命中特效脱离音符位置的问题；粒子扩散距离和尺寸现在随相机缩放。
-- 修复曲线轨迹生成的白框在预览内被遮挡、只在预览外显示的问题；曲线编辑层恢复到预览之上，并移除曲线自己绘制的更亮白框，改用统一的预览白框。
-- 修复曲线轨迹编辑与采样借用自由视角后，把普通自由视角保存的视角覆盖掉的问题：普通自由视角的缩放与平移会保留在舞台上，借用自由视角的编辑界面在关闭时恢复进入前的视角。
-- 多线编辑时只在屏幕最左侧可见面板显示拍号数字，避免其他面板重复显示。
-- 拖动事件区的一个控制点时，只移动当前控制点，另外两个控制点保持独立。
-- 修复 Inspector 展开和收缩按钮的圆角与其他控件不一致的问题。
-- 修复新建判定线的 Alpha 默认值为 0。
-- 修复判定线删除后会残留引用的问题，并统一新建判定线的默认名称为 `Untitled`。
-- 分页谱面新增、删除或重命名判定线和分组后，判定线树、工具栏判定线选择器和多行列表会立即同步；空分组也会显示。
-- 导入或编辑资产后，资源树立即刷新，不再停留在旧内容。
-- 新增判定线时自动展开所属分组并将新行滚入视野；新增分组后滚动到该分组。
-- 分组左侧的折叠箭头不再绘制独立的悬停/按下底色，选中分组时跟随强调色。
-- 判定线名称输入框按 Enter 立即提交。
-- 修复多选编辑的 StartTime 和 EndTime 使用三段式 Beat 输入，并移除 Duration 与 Order 数值类型。
-- 禁止音符和事件使用小于 0 的拍数，并在谱面错误面板中报告已有的负拍数。
-- 持久化多线编辑的线号选择，移除线号显示中的活动线标记，将同屏事件窗数量改为最多 20 个的滑块，并统一事件轨道标题样式。
-- 修复从谱面库或流式导入打开的谱面在编辑器中放键或放事件后预览区不刷新的问题，并让高频放置走增量更新。
-- 修复预览区与时间线同时显示时，预览从隐藏切换到可见后画布停留在 1×1、不绘制谱面的问题。
-- 修复旧版 RPE 快捷键导入后，`Ctrl+滚轮向上` 无法递增判定线、只有 `Ctrl+滚轮向下` 仍能递减的问题。
-- 编辑器现在会在首次启动时补回迁移命令丢失的滚轮手势，并把旧版本“重置快捷键”写入的旧滚轮方向更新为当前默认值。
-- 修复预览中选中判定线顶部三角形指示器颜色错误的问题，使其与选中判定线颜色保持一致。
-- 修复设置 modal 在设置标题和“搜索设置项”之间切换焦点时背景亮度变化的问题。
-- 修复负拍播放启动时拍数可能跳变的问题，并让播放中的时间轴红线保持在固定锚点。
-- 修复启用 XY 绑定时修改事件起止时间不会同步到另一轴的问题。
-
-**代码质量**
-
-- 依赖更新不再被要求附带 changeset：Dependabot 提交的 PR 不涉及用户可见的改动，之前每个依赖 PR 都会因此出现一个红色的检查项。
-- 新增 `npm run release:prepare`：一条命令同步五个版本文件、从待发布的 changeset 重建双语更新说明、删除已消费的 changeset 并自检，同时提供可在 Actions 里一键运行的「Release preparation」工作流。
-- 新增「Pull request title」检查，确保 squash 合入后 main 上的提交标题符合约定式提交格式。
-- 依赖升级按 patch/minor 分组为每周一个 PR；新增每周发布的依赖审计工作流。
+- 素材库音频预览不再绘制频谱柱状图，选中行与播放器不再使用亮色背景；音频详情标题恢复紧凑的内边距。
+- 素材库面板激活且选中音频时，空格键切换该音频的播放与暂停，不再触发谱面播放。
+- 桌面端可直接用外部编辑器打开项目素材库中的图片、音频和着色器，不再误报“外部编辑仅在桌面应用中可用”。
+- 移除重命名素材时与当前素材类型无关的说明文字。
+- 音符/事件的批量调节手柄不再占据整组区域：只有三个控制球接收指针，球之间的间隙可以直接落到时间线上。
+- 正在放置 Hold 或事件时批量调节手柄自动隐藏，完成放置的点击不会再被手柄拦截；鼠标经过手柄时，时间线光标仍跟随指针。
+- 全局禁用浏览器默认的文本拖拽与中键自动滚动，输入框内的文本选择保持可用。
+- 颜色选择器直接输入十六进制颜色时，输入过程中不再实时改写颜色；只有离开输入框或按回车后才提交。
+- 不含 alpha 通道的三位或六位十六进制颜色不再改变已有透明度，只有四位或八位颜色才更新 alpha。
+- 从谱面库打开的分页谱面在增删改音符后，预览音效会按文档内容修订重建触发时间表：删除或移动的音符不再按旧位置发声，新增音符立即生效；分页加载只更新列表，不会打断已排队的音效。`chart.snapshot()` 也会在编辑后返回最新内容，不再返回首次读取的旧快照。
+- 数字输入框的全选改为在松开鼠标时判定：原地点击仍然全选整个数值，按住拖选一部分文本时保留拖出的选区。
+- 离开数字输入框时会清除浏览器记住的全选状态，再次进入时不会在按下的瞬间就全选。
+- `Shift` + 点击不再被全选覆盖，扩展选区按原生行为生效。
+- 预览按 Phira 的方式绘制负数长度的长条：头尾顺序正常、但音符或判定线速度为负时，只画头部和尾部两个端点，不绘制反向的本体。两个端点固定锚在自己的位置、沿判定线自身的轴向向外摆放，既不跟随反向跨度翻转 UV，也不被镜像到另一侧。
+- 负速度的长条不再整条消失。遮罩线（`isCover`）过去只比较尾端是否落到线后，判定线转负速度把尾端推到线下方就会裁掉整条。现在只有头尾两个端点都落到判定线后才隐藏，尾部穿过判定线后仍会显示，并随负速度从下方升回线上。本体是否绘制也按实时采样跨度判断，长条中途转为负速度时同样只画两个端点。
+- 拖动“多线窗口宽度”时，时间轴窗口在拖动过程中实时改变宽度，不再等到松开鼠标。
+- 多线分栏下，窗口宽度与横向滚动范围按左右两侧概览条之间的绘图区计算，位于两端的窗口不再被概览条遮挡。
+- 移除悬停音符时弹出的“该音符来自 X 号线，点击切换”提示，并移除已无作用的“悬停音符显示来源线”设置项。
+- 调整时间偏移不再移动播放头：音频位置保持不变，谱面相对音频整体滑动，立即生效，也不再需要重新载入音频。偏移设为负值时谱面从音频起点之前开始，前导区按既有的静音预卷播放。
+- 调整时间偏移后打击音效不再错位。偏移会移动整条触发列表相对音频时钟的位置，因此调度游标随之重新对齐；此前播放中调整会让播放头附近的音符重复发声，往返调整后打击音效与画面不同步。
+- 修复时值列表在修改时间偏移、新增或删除时值点后不刷新的问题。分页谱面在编辑后复用同一个门面对象，列表因此收不到变化；现在它跟随会话的内容修订号重建。
+- 复制粘贴音符或事件后，粘贴出的副本拥有独立标识；对副本执行镜像等按标识寻址的编辑不再作用到原件。
+- 快捷键录制弹窗只显示当前正在重绑的那个按键，不再列出该命令的全部绑定；使用加号新增绑定时不再显示「当前绑定」。
+- 修复单字符按键键帽内容未居中、右侧留出多余空白的问题。
+- 时间轴的图层切换条和音符区域的横向导航按钮静止时保持 25% 透明度，鼠标靠近或键盘聚焦时才完全显示，不再始终遮挡编辑区域。
+- 打开谱面时，音乐在加载阶段完成解码，进入编辑器后即可播放；波形仍在后台生成，生成完成只重绘，不再改变播放头位置。
+- 首页选中谱面后，左侧详情卡改用原图封面，不再放大显示低分辨率缩略图；谱面库列表仍使用缩略图。
+- 事件时间线在分页谱面编辑后不再沿用旧的事件范围：曲线上下限和灰色数值标签会跟随新的开始/结束值刷新。
+- 选中事件不再额外叠一层黑色数值标签；普通标签已经显示时只保留一套数值，避免和曲线范围不一致。
+- 事件检查器在数值输入框聚焦时继续发布；缓动预览、同组字段和其他检查器内容不再停住，只保留当前输入框的草稿。
+- Bezier 控制点用滚轮改值会立即写入谱面。
 
 **新增**
 
-- 事件区按 Q 键使用与 R 键相同的放置流程，并放置钩定事件；钩定事件的首尾值保持相等且允许有长度。
-- 时间轴按住 Z 键左键拖动事件或 Hold 的头部、右键拖动事件或 Hold 的尾部进行边缘编辑；普通边缘拖动与 Ctrl+左键拖事件头、Ctrl+右键拖 Hold 尾同样可用。边缘按鼠标所在行定位，右键拖动结束不会弹出菜单或打开编辑页。
-- 为多选编辑增加事件类型下拉选择，可在混合事件选择中只编辑指定类型，并保持完整事件类型列表的固定顺序。
-- 快捷键现在支持多个非装饰键同时按住，例如长按 `E` 再右键，或 `Ctrl+E+右键`。
-- 鼠标左右中键、侧键与滚轮方向在快捷键提示中改用固定内联图标，不再受主题影响。
+- 判定线输入框支持 `X:Y/Z` 步长范围（省略 `/Z` 时为 1，尾端包含），并可直接输入分组名；点击分组也会整组加入或移除。
+- 新建或重命名分组时会静默剔除逗号与括号（`,`、`，`、`()`、`（）`），不再报错，分组名始终可以写进线号列表。
+- 线号列表保持手写顺序：单条加入追加到末尾，大段加入先去掉列表内的重叠再追加，删除在原文位置切分，不再自动合并或排序。
+- 多线编辑、工具栏线号框和分组点击共享同一份保序表达式；保存时仍写回 RPE 可读的数字范围。
+- 时间偏移面板新增「对齐到横线」：点击后暂停播放、收起展开的检查器让时间轴显示出来，并提示操作方式；随后在时间轴上点击某条横线即可完成对齐。装填期间只高亮鼠标最近的那条横线（换成更醒目的蓝色），点击必须落在横线上才生效，并且不会触发音符的选中、拖动或放置。
+- 底部状态栏在「Bug 反馈」左侧显示当前版本号。
+
+**变更**
+
+- 「添加 BPM」改名为「添加时值点」，与列表里编辑的单位一致。
+- 事件数值输入改为按 Enter 或失焦提交，打字过程中不逐字改写谱面和预览；滚轮、方向键与加减按钮仍然立即提交。
+- 缓动预览在曲线下方显示当前值域的上下限，数值改变后可直接看到边界变化。
 
 **改进**
 
-- 桌面构建在打包时解析并校验 FFmpeg 与 Cloudflare Tunnel 的最新上游发布版本，不再固定旧版本：视频导出随附最新版 FFmpeg，联机大厅随附最新版 Cloudflare Tunnel 客户端，下载仍对照上游公布的 SHA-256 校验；新增 `npm run deps:check` 可在不下载大文件的情况下查看最新版本与当前已内置版本。
-- 统一判定线树与资源树的子项行距，移除多选编辑中的冗余批量提示。
-- 多线编辑的「同屏事件窗数量」改为「多线窗口宽度」：改用 0.01 到 1、0.01 分度的滑块，按比例缩放每个窗口的宽度；同屏显示的窗口数量由窗口宽度决定，不再受数量上限限制。默认值 0.5，此时同屏正好对齐 3.5 个窗口。音符与事件两种多线区域共用同一宽度，窗口间距也按宽度等比缩放。
-- 快捷键冲突只在作用域可能同时生效时报告；编辑器和模态框、绘制表面等不重合的作用域不再误报。
-- 冲突的快捷键键帽使用 urgent 边框与红色 inset 提示，并按具体按键而不是整条命令标记。
+- 减少时间线绘制每个音符和事件时的重复检查与分配：仅在重叠选择器打开时查询悬停项，协作选择为空时跳过查找，并复用绘制参数对象。
+- 优化预览区每帧的可见音符查询：判定线音符的空间索引增加前缀包络剪枝，典型谱面下查询耗时降低约 31%，完整可见性计算降低约 26%；密集谱面下分别降低约 30% 和 24%。查询结果与原有实现逐项一致。
 
 ### English
 
 **Fixes**
 
-- Center the custom background image picker content in settings.
-- Fix charts that name `attachUI` UI bindings (`pause`, `combo`, `score`, and the like) or missing optional resources failing to import: the host no longer advertises non-existent in-folder files as readable resources, and an unreadable resource is skipped instead of failing the whole import with `os error 2`.
-- Keep modal labelled-field controls at the shared width instead of stretching the export field.
-- Audit and unify Chinese UI copy for save notices, the asset library, shaders, extensions, the inspector, timeline, preview, undo, and history navigation.
-- Fix multi-edit history notices displaying the raw i18n key instead of the localized operation label.
-- Reorder the easing field so In/Out appears before the easing family selector while keeping the family selector wider.
-- Make the I key leave playback preview and pause on its second press, and make O hide the editor without stopping an in-editor playback.
-- Preserve and restore wheel gestures for judge-line navigation when re-importing RPE settings, so Ctrl+wheel up keeps stepping lines.
-- Fix event timeline edge lines so both layouts use the shared gray border styling and keep the edges above the parameter headers.
-- Prevent Escape from opening the settings screen.
-- Open the multi-edit Inspector immediately after selecting objects with a marquee or sweep.
-- Remove the duplicate yellow boundary drawn at the right edge of the event timeline.
-- Disable the multi-line window width control for merged notes and let split multi-line windows fill the timeline area.
-- Keep multi-line batch edits usable after switching event layers, and keep drag controls visible for valid selections on other panels.
-- Order playback-rate options with 1x at the top and 0.25x at the bottom.
-- Fix “Save and Exit” reporting unsaved changes when a background backup was already in progress.
-- Keep regular saves, Save As, exports, and background backups from sharing results across different persistence intents.
-- Keep the update button visible until the downloaded package's restart choice is made, and prevent the restart prompt from closing when its scrim is clicked.
-- Fix the free-camera chart frame not following zoom/pan and spilling outside the editor; the frame now follows the camera projection and is clipped to the preview viewport while objects and judge lines beyond the frame remain visible.
-- Remove the stage-wide static grey backdrop in free camera so the editor base shows outside the projected frame.
-- Fix hit particles and hit effects drifting away from notes when the free-camera zoom or preview size changes; burst travel and size now scale with the camera.
-- Fix the curve trajectory frame being hidden inside the preview and only visible outside it; the curve editing layer now sits above the preview, and the curve's brighter duplicate frame is removed in favor of the shared preview frame.
-- Fix the curve trajectory editor and sampling overwriting the free camera view saved by the standalone mode: the standalone zoom and pan stay on the stage, and a surface that borrows the camera restores the view it found when it closes.
-- Show beat labels only in the leftmost visible panel during multi-line editing instead of repeating them across every panel.
-- Keep the other event control points stationary when dragging one control point.
-- Match the Inspector expand and collapse button radius to the other controls.
-- Set the default alpha of newly created judge lines to 0.
-- Remove stale judge-line selections after deletion and use `Untitled` for every newly created judge line by default.
-- Sync the judge-line tree, toolbar picker, and multi-line list immediately after adding, deleting, or renaming lines and groups in a paged chart; empty folders are listed too.
-- Refresh the asset tree immediately after importing or editing assets instead of leaving stale rows.
-- Expand a newly created line's folder and reveal the new row; reveal a newly added folder.
-- Stop the folder disclosure chevron from painting its own hover/press fill and tint it with the folder selection instead.
-- Commit the line name field on Enter.
-- Use three-part Beat inputs for StartTime and EndTime in multi-edit, and remove the Duration and Order field types.
-- Reject negative beats for notes and events, and report existing negative beats in the chart issues panel.
-- Persist multi-line editor line selections, remove the active-line marker from line labels, replace the event-window count with a slider capped at 20, and align the event-track heading with the shared section style.
-- Refresh the preview after notes or events are placed or undone in a chart opened from the library or a streamed import, with incremental updates for rapid placement.
-- Repaint the preview underlay after it becomes visible alongside the timeline instead of leaving a 1x1 canvas.
-- Fix the selected judge-line triangle indicator using the wrong colour so it matches the selected judge line.
-- Keep the settings modal background brightness stable when focus moves between the dialog and its search field.
-- Fix negative-beat playback handoff jumps and keep the timeline playhead anchored during playback.
-- Synchronize the other axis' event start and end times when XY binding is enabled.
-
-**Code quality**
-
-- Dependency updates no longer need to carry a changeset: a Dependabot pull request changes no user-visible behavior, and every one of them used to show a failing check.
-- Add `npm run release:prepare`: one command syncs the five version files, rebuilds the bilingual release notes from the pending changesets, deletes the consumed files, and validates the result, together with a **Release preparation** workflow that runs it from the Actions tab.
-- Add the **Pull request title** gate so the squashed commit subject on `main` follows the conventional commit format.
-- Group dependency upgrades into one weekly pull request per ecosystem, and add a weekly dependency audit workflow.
+- Stop drawing spectrum bars in the library audio preview, remove the bright selected-row and player backgrounds, and restore a compact inset for the audio detail title.
+- Space toggles the selected library audio preview while the assets inspector is active instead of starting chart playback.
+- Desktop builds can open images, audio, and shaders from project libraries in the external editor; the incorrect “external editing is available in the desktop app” notice is gone.
+- Remove the asset-kind-specific rename hint from the rename dialog.
+- Batch adjustment handles for notes and events no longer capture the whole group: only the three control balls accept pointer input, so clicks in the gaps reach the timeline.
+- The handles hide while a Hold or event placement is pending, so the completing click is no longer intercepted; pointer movement over a handle keeps the timeline cursor current.
+- The browser's native text drag and middle-click autoscroll are disabled globally while text selection inside inputs stays available.
+- The colour picker no longer rewrites the colour on every hex keystroke; the typed value commits when the field loses focus or Enter is pressed.
+- A three- or six-digit hex colour without an alpha channel keeps the existing transparency; only four- and eight-digit values update alpha.
+- Hit sounds in paged library charts now rebuild their trigger list from the document content revision after note edits: deleted or moved notes no longer sound at their old times and new notes apply immediately, while line materialization only refreshes the list without cutting queued voices. `chart.snapshot()` also returns the current chart after an edit instead of the first cached snapshot.
+- A numeric field now decides select-all when the button is released: an in-place click still selects the whole value, while dragging over part of it keeps the range the drag drew.
+- Leaving a numeric field clears the full selection the browser remembers, so returning to it no longer selects everything on the press.
+- A `Shift`-click extends the selection natively instead of being replaced by select-all.
+- Preview renders negative-length Holds the way Phira does: when the head still precedes the tail in time but the note or line speed is negative, only the head and tail caps are painted. Each cap stays anchored at its own Hold anchor and grows outward along the line's own axis, so the reversed span neither turns its UVs over nor mirrors it to the other side.
+- A negative-speed Hold no longer disappears entirely. On a covering line (`isCover`) the old test compared only the tail against the line, so a tail pushed behind the line by a negative speed culled the whole Hold. A Hold is now hidden only once both of its anchors are behind the line, so a tail that has crossed the line stays visible while it climbs back toward it. Body painting also follows the sampled span, so a Hold that turns negative partway through paints only its two caps.
+- Dragging the multi-line window width resizes the timeline windows during the drag instead of waiting for the pointer to be released.
+- In split multi-line layouts, the window width and horizontal scroll range are measured between the two overview strips, so windows at either end are no longer hidden underneath a strip.
+- Remove the “From judge line X, click to switch” notice shown when hovering a note, along with its now-inert “Mark the source line when hovering a note” setting.
+- Editing the chart offset no longer moves the playhead: the audio position stays put while the chart slides against it, applied immediately and without reloading the audio. A negative offset starts the chart before the audio, played as the existing silent lead-in.
+- Hit sounds no longer drift after an offset edit. The offset moves every trigger against the audio clock, so the scheduler re-anchors its cursor; previously an edit in mid-playback replayed notes at the playhead, and a round trip left hit sounds out of sync with the picture.
+- The timing list now refreshes after an offset edit and after adding or deleting a timing point. A paged chart reuses one facade object across edits, so the list never saw a change; it now rebuilds from the session's content revision.
+- A pasted note or event now receives its own identity, so identity-addressed edits such as a mirror transform apply to the copy instead of the source object.
+- The shortcut recording dialog now shows only the binding being rebound instead of every binding of the command; adding a binding no longer shows a current binding.
+- Single-character key caps now center their content instead of leaving trailing space on the right.
+- The timeline layer strip and the note-range navigation buttons now rest at 25% opacity and become fully visible when the pointer approaches or keyboard focus enters them, so they no longer cover the editing field at all times.
+- Opening a chart decodes the music during the loading stage, so playback is available as soon as the editor opens; the waveform still builds in the background and only repaints when it finishes, without moving the playhead.
+- The selected chart's detail card on the home page now uses the full-size cover instead of an upscaled low-resolution thumbnail; library cards still use the thumbnail.
+- The event timeline no longer reuses the old lane range after a paged-document edit: curve bounds and the regular value labels now follow the new start and end values.
+- A selected event no longer adds a second black value label over the regular one; the lane keeps one set of numbers that matches the curve range.
+- The event inspector keeps publishing while a numeric field has focus, so the easing preview, sibling fields, and other inspector content no longer freeze; only the focused input keeps its draft.
+- Wheel edits to Bézier control points now commit immediately.
 
 **Added**
 
-- Use the same placement flow for Q as for R in the event area, with Q creating a hook event whose values stay locked while its span may have length.
-- Hold Z and drag an event or Hold head with the primary button, or an event or Hold tail with the secondary button, to edit timeline edges; plain edge drags and Ctrl+left on an event head or Ctrl+right on a Hold tail also work. Edges follow the pointer row, and a right-drag release opens no menu or editor page.
-- Add an event type selector to multi-edit so mixed event selections can edit one chosen type while keeping the complete event list in a stable order.
-- Shortcuts can now hold several non-modifier keys together, such as holding `E` and right-clicking, or `Ctrl+E+right-click`.
-- Mouse left/middle/right, side buttons, and wheel directions draw as fixed inline icons in shortcut chips instead of theme-dependent glyphs.
+- The judge-line field accepts `X:Y/Z` step ranges (`Z` defaults to 1 and the end is inclusive) and folder names; clicking a folder adds or removes the whole folder.
+- Creating or renaming a folder silently strips commas and parentheses, so every folder name can be written in the line list without an error.
+- The line list keeps the authored order: a single line appends, a block strips its overlap from the list and appends, and a removal splices the affected range in place. Tokens are never merged or sorted.
+- Multi-line editing, the toolbar line field, and folder clicks share one ordered expression; saving still writes the numeric range syntax native RPE reads.
+- The offset panel gains **Align to a timeline line**: it pauses the transport, collapses an expanded inspector so the timeline is visible, and explains the gesture; the next click on a grid line completes the alignment. While armed, only the line nearest the pointer is emphasized in a brighter blue, the click must land on that line, and no note selection, drag, or placement runs.
+- The bottom status bar shows the current version to the left of the Bug feedback link.
+
+**Changed**
+
+- "Add BPM" is now "Add timing point", matching the rows it creates.
+- Numeric event values commit on Enter or blur instead of rewriting the chart and preview on every keystroke; the wheel, arrow keys, and step buttons still commit immediately.
+- The easing preview prints the current value bounds under the curve, so a start or end change is visible at a glance.
 
 **Improvements**
 
-- Desktop builds now resolve and verify the newest upstream FFmpeg and Cloudflare Tunnel releases while packaging instead of pinning an old version: video export bundles the latest FFmpeg and the collaboration tunnel the latest Cloudflare Tunnel client, every download is still checked against the checksum the publisher ships, and the new `npm run deps:check` reports the latest and staged versions without downloading the archives.
-- Align row spacing in the judge-line and asset trees, and remove the redundant multi-select batch banner.
-- Replace the multi-line "same-screen event-window count" with "Multi-line window width": a 0.01 to 1 slider in 0.01 steps that scales each window's width, so the number of windows on screen follows from their size instead of a count cap. The default 0.5 aligns three and a half windows across the timeline. The note and event multi-line areas share the same width, and their gaps scale with it.
-
-**Fixed**
-
-- Fix `Ctrl+Wheel Up` no longer increasing the judge line after an older RPE hotkey import, which left only `Ctrl+Wheel Down` decreasing it.
-- The editor now restores the wheel gesture a migrated command lost on the first launch, and updates the old wheel directions a previous Reset wrote to the current defaults.
-
-**Improved**
-
-- Shortcut conflicts are reported only when their scopes can be active at the same time; disjoint scopes such as editor and modal, or editor and a drawn surface, no longer raise false conflicts.
-- A conflicting key cap uses the urgent border and a red inset ring, and the editor marks the specific binding rather than every binding of the command.
+- Reduce the per-note and per-event bookkeeping in the timeline paint loop: the overlap hover state is queried only while the overlap picker is open, remote collaboration selections are skipped when empty, and the paint options object is reused instead of allocated per item.
+- Optimize the preview's per-frame visible-note query: the judge-line spatial index now prunes with prefix envelopes, reducing the query itself by about 31% and the full visibility pass by about 26% on a typical chart, and by about 30% and 24% on a dense chart. Results are identical to the previous implementation.
