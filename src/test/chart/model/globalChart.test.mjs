@@ -9,6 +9,7 @@ class FakeSession extends EventTarget {
   constructor(chart) {
     super();
     this.chart = chart;
+    this.contentRevision = 0;
     this.changeListeners = 0;
   }
 
@@ -130,8 +131,36 @@ test("shares one binding across subscribers and unbinds after the last", () => {
 test("a missing host reports a null snapshot", () => {
   const source = createSessionChartSource(null);
   assert.equal(source.getSnapshot(), null);
+  assert.equal(source.getRevision(), 0);
   const unsubscribe = source.subscribe(() => {
     assert.fail("a null host must not notify");
   });
   unsubscribe();
+});
+
+test("the revision changes when a paged facade is edited in place", () => {
+  // A paged document keeps one facade object across edits, so consumers that
+  // render chart-derived fields (the timing list) must watch the revision.
+  const chart = { name: "facade" };
+  const session = new FakeSession(chart);
+  const source = createSessionChartSource(fakeSessionHost(session));
+  assert.equal(source.getRevision(), 0);
+
+  session.contentRevision = 1;
+  session.change();
+  assert.equal(source.getSnapshot(), chart, "the facade identity is unchanged");
+  assert.equal(source.getRevision(), 1, "the revision still reports the edit");
+});
+
+test("a replaced session reports the new session revision", () => {
+  const first = new FakeSession({ name: "first" });
+  first.contentRevision = 7;
+  const host = fakeSessionHost(first);
+  const source = createSessionChartSource(host);
+  assert.equal(source.getRevision(), 7);
+
+  const second = new FakeSession({ name: "second" });
+  second.contentRevision = 2;
+  host.replace(second);
+  assert.equal(source.getRevision(), 2);
 });

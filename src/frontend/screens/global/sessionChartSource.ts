@@ -6,11 +6,20 @@
  * to the session captured at mount would keep showing the placeholder chart.
  * This module follows `current` and migrates its change listener after every
  * replacement, without depending on React.
+ *
+ * A paged chart document keeps one facade chart object across edits, so the
+ * chart reference cannot signal a change on its own. `getRevision` exposes the
+ * session's monotonic content revision for consumers that must re-render when
+ * the same facade gained new timing, lines, or metadata.
  */
 import type { Chart } from "../../../core/global/chart/chart.ts";
 
 /** A chart-bearing session that publishes `"change"` events. */
-export type ChartSession = EventTarget & { readonly chart: Chart };
+export type ChartSession = EventTarget & {
+  readonly chart: Chart;
+  /** Monotonic content revision; absent on hosts that replace the chart object. */
+  readonly contentRevision?: number;
+};
 
 /**
  * The replaceable session holder observed by a source.
@@ -27,6 +36,13 @@ export interface SessionChartHost {
 export interface SessionChartSource {
   /** The active session's chart, or null when no host is mounted. */
   getSnapshot(): Chart | null;
+  /**
+   * The active session's content revision.
+   *
+   * Consumers subscribe to this when the chart object itself can stay identical
+   * across edits, as a paged document does.
+   */
+  getRevision(): number;
   /** Attaches one external-store listener and returns its teardown. */
   subscribe(listener: () => void): () => void;
 }
@@ -80,6 +96,7 @@ export function createSessionChartSource(host: SessionChartHost | null): Session
   };
   return {
     getSnapshot: () => host?.current.chart ?? null,
+    getRevision: () => host?.current.contentRevision ?? 0,
     subscribe(listener) {
       listeners.add(listener);
       if (listeners.size === 1) {

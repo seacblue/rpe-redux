@@ -15,7 +15,7 @@ import { Icon } from "../../../../../design/components/icon/Icon.tsx";
 import { beatValue, formatBeat, fromNumber } from "../../../../../core/global/chart/timing/beat.ts";
 import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import { useEditorRuntime } from "../../../editor/workspace/runtime/composition/EditorRuntime.tsx";
-import { useGlobalChart } from "../../useGlobalChart.ts";
+import { useGlobalChartRevision } from "../../useGlobalChart.ts";
 import {
   clampTimingSelection,
   timingInspectorTarget,
@@ -23,10 +23,13 @@ import {
 } from "./timingSelection.ts";
 import { selectTimingPoint } from "./timingActions.ts";
 
+/** The list a chart without timing points renders; shared to keep the memo stable. */
+const EMPTY_TIMING_POINTS: Chart["BPMList"] = [];
+
 /** Renders the timing-point list and the add/delete controls. */
 export function GlobalTimingWorkspace() {
   const { t } = useTranslation();
-  const chart = useGlobalChart();
+  const { chart, revision } = useGlobalChartRevision();
   const runtime = useEditorRuntime();
   const [error, setError] = useState("");
   const selected = useSyncExternalStore(
@@ -39,7 +42,16 @@ export function GlobalTimingWorkspace() {
     timingInspectorTarget.get,
     timingInspectorTarget.get,
   );
-  const entries = useMemo(() => chart?.BPMList ?? [], [chart]);
+  // A paged chart keeps one facade object across edits, so subscribing to the
+  // chart alone would keep serving the rows from before the edit. The revision
+  // is the session's commit counter; keying the memo on it rebuilds the rows
+  // whenever a point is added, deleted, or retimed.
+  const entries = useMemo(
+    () => chart?.BPMList ?? EMPTY_TIMING_POINTS,
+    // `revision` is the invalidation key; `chart` alone is stable across edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chart, revision],
+  );
   const listRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<number, HTMLElement>());
   const [playing, setPlaying] = useState(false);
