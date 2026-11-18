@@ -1,247 +1,173 @@
 /**
- * Resolves the newest upstream release of a bundled desktop dependency and
- * verifies it against the checksum its publisher ships.
+ * Reads the pinned manifest for the bundled desktop dependencies and holds the
+ * helpers their staging scripts share.
  *
- * The desktop build stages FFmpeg and the Cloudflare Tunnel client; both come
- * from release feeds that rotate, so the version, the asset name, and the
- * expected digest are read from the vendor at build time instead of being
- * pinned in this checkout. The staging scripts own their platform layout; this
- * module owns the feed parsing, the asset selection, and the verification rules
- * they share.
+ * FFmpeg and the Cloudflare Tunnel client are pinned in `dependencyPins.json`
+ * by exact version, immutable download URL, size, and SHA-256 digest. A build
+ * reads that manifest instead of resolving a vendor's latest release, so a
+ * verified pair is reused until a maintainer changes the pin.
  */
-import { downloadVerifiedFile } from "./fetchVerified.mjs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-/** Identify this build in vendor request logs. */
-const USER_AGENT = "rpe-redux-build";
+/** Manifest location below the repository root. */
+const MANIFEST_PATH = join("scripts", "dependencyPins.json");
 
-/** Share the verified download between the staging scripts and their callers. */
-export { downloadVerifiedFile };
+/** Platforms the manifest must describe for the supported desktop targets. */
+const FFMPEG_TARGETS = ["windows-x64", "windows-x86", "linux-x64"];
 
-/**
- * Fetch a small text document, retrying transient HTTP failures.
- *
- * The release feeds answer from a CDN and occasionally return 5xx or drop a
- * connection, so a failed attempt is retried with exponential backoff plus
- * jitter before the caller decides that the feed is unreachable.
- *
- * @param {string} url Absolute HTTP(S) URL.
- * @param {object} options
- * @param {string} options.label Human-readable artifact name used in messages.
- * @param {number} [options.attempts] Total attempts, including the first one.
- * @param {number} [options.baseDelayMs] First backoff step; later attempts double it.
- * @param {Record<string, string>} [options.headers] Extra request headers.
- * @returns {Promise<string>} Response body decoded as UTF-8.
- */
-export async function fetchText(
-  url,
-  { label, attempts = 3, baseDelayMs = 2_000, headers = {} } = {},
-) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT, ...headers },
-        redirect: "follow",
-        signal: AbortSignal.timeout(120_000),
-      });
-      if (!response.ok) {
-        throw new Error(`${label} request returned HTTP ${response.status}.`);
-      }
-      return await response.text();
-    } catch (error) {
-      lastError = error;
-      if (attempt === attempts) {
-        break;
-      }
-      const delayMs =
-        baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * (baseDelayMs / 2));
-      console.log(
-        `${label}: attempt ${attempt} of ${attempts} failed (${error.message}); ` +
-          `retrying in ${Math.round(delayMs / 1_000)}s.`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-  throw lastError;
-}
-
-/**
- * Fetch one GitHub API document.
- *
- * An unauthenticated request is enough for one release lookup per build; when
- * the environment carries a token the request uses it so a rate-limited
- * unauthenticated pool cannot fail the packaging job.
- *
- * @param {string} url Absolute GitHub API URL.
- * @param {string} label Human-readable feed name used in messages.
- * @returns {Promise<Record<string, unknown>>} Parsed response body.
- */
-export async function fetchGitHubJson(url, label) {
-  const token = process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim();
-  const body = await fetchText(url, {
-    label,
-    headers: {
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  try {
-    return JSON.parse(body);
-  } catch {
-    throw new Error(`${label} returned a response that is not JSON.`);
-  }
-}
-
-/**
- * Read the size a server advertises for one artifact.
- *
- * Check mode uses this to say how large the download would be without
- * transferring the file. A server that rejects the HEAD request, or omits the
- * length, reports `null` rather than failing the check.
- *
- * @param {string} url Absolute HTTP(S) URL.
- * @param {object} [options]
- * @param {string} [options.label] Human-readable artifact name used in messages.
- * @returns {Promise<number | null>} Content length in bytes, or null.
- */
-export async function fetchContentLength(url, { label = "artifact" } = {}) {
-  try {
-    const response = await fetch(url, {
-      method: "HEAD",
-      headers: { "User-Agent": USER_AGENT },
-      redirect: "follow",
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-      console.log(`${label}: HEAD request returned HTTP ${response.status}.`);
-      return null;
-    }
-    const length = Number(response.headers.get("content-length"));
-    return Number.isFinite(length) && length > 0 ? length : null;
-  } catch (error) {
-    console.log(`${label}: HEAD request failed (${error.message}).`);
-    return null;
-  }
-}
+/** Cloudflare Tunnel assets the supported desktop targets download. */
+const CLOUDFLARED_TARGETS = ["windows-amd64", "windows-386", "linux-amd64"];
 
 /** Format a byte count for a build message. */
 export function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-/**
- * Read the release version a vendor endpoint publishes.
- *
- * @param {string} text Response body, for example `9.0.2`.
- * @param {string} label Human-readable feed name used in messages.
- * @returns {string} Version in `major.minor` or `major.minor.patch` form.
- */
-export function parseVersion(text, label) {
-  const version = text.trim();
-  if (!/^\d+\.\d+(?:\.\d+)?$/u.test(version)) {
-    throw new Error(`${label} returned an unexpected version: ${JSON.stringify(version)}.`);
+/** Read one required non-empty string from a pin entry. */
+function requireText(entry, field, label) {
+  const value = entry?.[field];
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${label} needs a non-empty ${field}.`);
   }
-  return version;
+  return value;
 }
 
-/**
- * Read one bare SHA-256 digest, such as the `.sha256` file gyan.dev publishes.
- *
- * @param {string} text Response body holding one hexadecimal digest.
- * @param {string} label Human-readable feed name used in messages.
- * @returns {string} Lowercase 64-character digest.
- */
-export function parseDigest(text, label) {
-  const digest = text.trim().split(/\s+/u)[0]?.toLowerCase() ?? "";
+/** Read one positive integer byte count from a pin entry. */
+function requireSize(entry, label) {
+  const size = entry?.size;
+  if (!Number.isSafeInteger(size) || size <= 0) {
+    throw new Error(`${label} needs a positive size.`);
+  }
+  return size;
+}
+
+/** Read one lowercase SHA-256 digest from a pin entry. */
+function requireDigest(entry, label) {
+  const digest = requireText(entry, "sha256", label);
   if (!/^[0-9a-f]{64}$/u.test(digest)) {
-    throw new Error(
-      `${label} returned an unexpected checksum: ${JSON.stringify(text.trim().slice(0, 80))}.`,
-    );
+    throw new Error(`${label} needs a lowercase SHA-256 digest.`);
   }
   return digest;
 }
 
-/**
- * Parse a `sha256sum`-style checksum file into asset name to digest.
- *
- * Both FFmpeg publishers ship one line per artifact as `<digest>  <name>`; the
- * optional `*` that marks binary mode is accepted, and comment or malformed
- * lines are ignored rather than guessed at.
- *
- * @param {string} text Checksum file contents.
- * @returns {Map<string, string>} Asset name to lowercase SHA-256 digest.
- */
-export function parseChecksums(text) {
-  const checksums = new Map();
-  for (const line of text.split(/\r?\n/u)) {
-    const match = /^\s*([0-9a-fA-F]{64})\s+\*?(\S.*?)\s*$/u.exec(line);
-    if (match?.[1] && match[2]) {
-      checksums.set(match[2], match[1].toLowerCase());
-    }
+/** Read one HTTPS URL whose file name matches the pinned artifact. */
+function requireArtifactUrl(entry, urlField, nameField, label) {
+  const url = requireText(entry, urlField, label);
+  const name = requireText(entry, nameField, label);
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${label} has an invalid ${urlField}.`);
   }
-  return checksums;
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${label} must download over HTTPS.`);
+  }
+  if (parsed.pathname.split("/").pop() !== name) {
+    throw new Error(`${label} URL does not name ${name}.`);
+  }
+  return { url, name };
 }
 
 /**
- * Pick the newest release-branch artifact from one publisher's asset names.
+ * Validate one dependency pin manifest.
  *
- * `pattern` captures the numeric branch twice, for example
- * `ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz`, so a name that pairs two
- * different branches is rejected instead of being guessed at.
+ * Validation keeps a hand-edited manifest from silently pointing a build at a
+ * different artifact: every target must carry a version, an HTTPS URL naming
+ * the pinned file, a positive size, and a SHA-256 digest.
  *
- * @param {Iterable<string>} names Asset names published by the feed.
- * @param {RegExp} pattern Non-global pattern whose two captures are the branch.
- * @param {string} label Human-readable build name used in messages.
- * @returns {{name: string, branch: string}} Newest matching asset.
+ * @param {unknown} manifest Parsed `dependencyPins.json` document.
+ * @param {string} [label] Manifest name used in error messages.
+ * @returns {Record<string, any>} The same manifest, after validation.
  */
-export function selectNewestBranch(names, pattern, label) {
-  let best = null;
-  for (const name of names) {
-    const match = pattern.exec(name);
-    if (!match) {
-      continue;
+export function validateDependencyPins(manifest, label = MANIFEST_PATH) {
+  if (manifest?.schemaVersion !== 1) {
+    throw new Error(`${label} must declare schemaVersion 1.`);
+  }
+  for (const target of FFMPEG_TARGETS) {
+    const entry = manifest.ffmpeg?.[target];
+    const entryLabel = `${label} FFmpeg ${target}`;
+    if (!entry) {
+      throw new Error(`${label} has no FFmpeg pin for ${target}.`);
     }
-    const [branch, alias = branch] = match.slice(1);
-    if (branch !== alias) {
-      continue;
-    }
-    const [major, minor] = branch.split(".").map(Number);
-    if (!best || major > best.major || (major === best.major && minor > best.minor)) {
-      best = { name, branch, major, minor };
+    requireText(entry, "version", entryLabel);
+    requireText(entry, "label", entryLabel);
+    requireText(entry, "provider", entryLabel);
+    requireArtifactUrl(entry, "archiveUrl", "archiveName", entryLabel);
+    requireDigest(entry, entryLabel);
+    requireSize(entry, entryLabel);
+    requireText(entry, "licenseFile", entryLabel);
+    if (entry.readmeFile !== null && typeof entry.readmeFile !== "string") {
+      throw new Error(`${entryLabel} needs readmeFile as a string or null.`);
     }
   }
-  if (best === null) {
-    throw new Error(`No ${label} asset matches the expected name pattern.`);
+
+  const cloudflaredLabel = `${label} cloudflared`;
+  requireText(manifest.cloudflared, "version", cloudflaredLabel);
+  requireText(manifest.cloudflared, "provider", cloudflaredLabel);
+  for (const target of CLOUDFLARED_TARGETS) {
+    const entry = manifest.cloudflared?.assets?.[target];
+    const entryLabel = `${cloudflaredLabel} ${target}`;
+    if (!entry) {
+      throw new Error(`${cloudflaredLabel} has no asset for ${target}.`);
+    }
+    requireArtifactUrl(entry, "url", "name", entryLabel);
+    requireDigest(entry, entryLabel);
+    requireSize(entry, entryLabel);
   }
-  return { name: best.name, branch: best.branch };
+  return manifest;
 }
 
 /**
- * Return the download URL and published digest of one GitHub release asset.
+ * Read and validate the checked-in dependency pins.
  *
- * GitHub publishes a SHA-256 digest for every asset it hosts; requiring it
- * keeps a dependency download verified even when the publisher ships no
- * checksum file of its own.
- *
- * @param {Record<string, unknown>} release GitHub release document.
- * @param {string} name Exact asset file name.
- * @returns {{url: string, digest: string, size: number}} Download target.
+ * @param {string} root Repository root.
+ * @returns {Record<string, any>} Validated manifest.
  */
-export function selectReleaseAsset(release, name) {
-  const assets = Array.isArray(release?.assets) ? release.assets : [];
-  const asset = assets.find((entry) => entry?.name === name);
-  if (!asset) {
-    throw new Error(`Release ${release?.tag_name ?? "unknown"} does not publish ${name}.`);
+export function loadDependencyPins(root) {
+  const path = join(root, MANIFEST_PATH);
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`Could not read ${path}: ${error.message}`, { cause: error });
   }
-  const digest = /^sha256:([0-9a-f]{64})$/u.exec(asset.digest ?? "")?.[1];
-  if (!digest) {
-    throw new Error(`Release ${release.tag_name} publishes no SHA-256 digest for ${name}.`);
+  return validateDependencyPins(parsed, path);
+}
+
+/**
+ * Select the pinned FFmpeg distribution for one desktop target.
+ *
+ * @param {Record<string, any>} pins Validated manifest.
+ * @param {string} platform `windows` or `linux`.
+ * @param {string} arch `x64`, `x86`, or `arm64`.
+ * @returns {Record<string, any>} Pinned distribution entry.
+ */
+export function selectFfmpegPin(pins, platform, arch) {
+  const entry = pins?.ffmpeg?.[`${platform}-${arch}`];
+  if (!entry) {
+    throw new Error(`The dependency pins have no FFmpeg build for ${platform}/${arch}.`);
   }
-  if (typeof asset.browser_download_url !== "string") {
-    throw new Error(`Release ${release.tag_name} publishes no download URL for ${name}.`);
+  return entry;
+}
+
+/**
+ * Select the pinned Cloudflare Tunnel client for one desktop target.
+ *
+ * @param {Record<string, any>} pins Validated manifest.
+ * @param {string} platform `windows` or `linux`.
+ * @param {string} architecture `amd64`, `386`, or `arm64`.
+ * @returns {Record<string, any>} Pinned asset entry.
+ */
+export function selectCloudflaredPin(pins, platform, architecture) {
+  const entry = pins?.cloudflared?.assets?.[`${platform}-${architecture}`];
+  if (!entry) {
+    throw new Error(
+      `The dependency pins have no Cloudflare Tunnel client for ${platform}/${architecture}.`,
+    );
   }
-  return { url: asset.browser_download_url, digest, size: Number(asset.size ?? 0) };
+  return entry;
 }
 
 /**

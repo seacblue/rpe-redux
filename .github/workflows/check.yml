@@ -164,6 +164,14 @@ jobs:
       - name: Build the Go sidecar
         run: npm run build:server
 
+      # The pin manifest keys the cache, so a pin bump starts a fresh entry.
+      # Cached archives are still verified against the pinned SHA-256.
+      - name: Cache bundled desktop dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .local-tools
+          key: desktop-deps-linux-x64-${{ hashFiles('scripts/dependencyPins.json') }}
+
       - name: Stage bundled FFmpeg
         run: node scripts/prepareFfmpeg.mjs
 
