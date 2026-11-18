@@ -7,8 +7,8 @@ const line = (index, group) => ({ index, group });
 
 test("declared empty folders stay in chart order", () => {
   assert.deepEqual(groupLineEntries([], ["First", "Second"]), [
-    { name: "First", entries: [] },
-    { name: "Second", entries: [] },
+    { index: 0, name: "First", entries: [] },
+    { index: 1, name: "Second", entries: [] },
   ]);
 });
 
@@ -16,15 +16,15 @@ test("lines fill their declared folder and keep the folder list order", () => {
   assert.deepEqual(
     groupLineEntries([line(0, "Second"), line(1, "First"), line(2, "Second")], ["First", "Second"]),
     [
-      { name: "First", entries: [line(1, "First")] },
-      { name: "Second", entries: [line(0, "Second"), line(2, "Second")] },
+      { index: 0, name: "First", entries: [line(1, "First")] },
+      { index: 1, name: "Second", entries: [line(0, "Second"), line(2, "Second")] },
     ],
   );
 });
 
 test("an undeclared folder is appended instead of dropping its lines", () => {
   assert.deepEqual(groupLineEntries([line(0, "Orphan")], ["First"]), [
-    { name: "First", entries: [] },
-    { name: "Orphan", entries: [line(0, "Orphan")] },
+    { index: 0, name: "First", entries: [] },
+    { index: 1, name: "Orphan", entries: [line(0, "Orphan")] },
   ]);
 });

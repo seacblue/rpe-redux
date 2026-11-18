@@ -36,7 +36,7 @@ export default {
   "chrome.toolbar.noiseRenderingSimple": "简化渲染",
   "chrome.toolbar.lineField": "判定线编号",
   "chrome.toolbar.lineSelection": "选择判定线",
-  "chrome.toolbar.lineSelectionHint": "单条或范围",
+  "chrome.toolbar.lineSelectionHint": "单条、范围或分组",
   "chrome.toolbar.lineSelectionDefaultGroup": "默认分组",
   "chrome.toolbar.lineSelectionExpand": "展开 {name}",
   "chrome.toolbar.lineSelectionCollapse": "收起 {name}",

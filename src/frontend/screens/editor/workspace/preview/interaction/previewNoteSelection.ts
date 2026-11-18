@@ -7,6 +7,7 @@
  * DOM imports so the selection rules can be verified on their own.
  */
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
+import { tokensFromLines } from "../../../../../../core/edit/state/lineSelectionTokens.ts";
 
 /** Copies the session's current note selection into a private map. */
 export function cloneSelection(session: EditorSession): Map<number, Set<number>> {
@@ -31,12 +32,13 @@ export function sameSelection(session: EditorSession, next: Map<number, Set<numb
       return false;
     }
     // The selected lines must be exactly the lines that own the selected
-    // notes; a stale extra line means this is not the same selection.
-    const lines = [...next.keys()].sort((left, right) => left - right);
+    // notes; a stale extra line means this is not the same selection. Compare
+    // membership, not order: the map is built from a selection set.
+    const lines = [...next.keys()];
     if (
       !next.has(session.lineIndex) ||
       session.multiLineIndices.length !== lines.length ||
-      session.multiLineIndices.some((lineIndex, position) => lineIndex !== lines[position])
+      !lines.every((lineIndex) => session.multiLineIndices.includes(lineIndex))
     ) {
       return false;
     }
@@ -87,7 +89,14 @@ export function applySelection(
   if (intentChanged) {
     session.selectionRevision += 1;
   }
-  const lines = [...next.keys()].sort((left, right) => left - right);
+  // Keep the authored order for lines that survive, then append the newly
+  // selected owners. Preview clicks never reorder a manual expression.
+  const lines = session.multiLineIndices.filter((lineIndex) => next.has(lineIndex));
+  for (const lineIndex of next.keys()) {
+    if (!lines.includes(lineIndex)) {
+      lines.push(lineIndex);
+    }
+  }
   session.focus = "notes";
   session.eventSelection.clear();
   session.multiEventSelection.clear();
@@ -98,6 +107,7 @@ export function applySelection(
     session.multiLineEnabled = true;
     session.multiLineMode = "notes";
     session.multiLineIndices = lines;
+    session.multiLineTokens = tokensFromLines(lines);
     session.multiLineSelection = next;
     session.selection = new Set(next.get(session.lineIndex) ?? []);
   } else {
@@ -107,6 +117,7 @@ export function applySelection(
     }
     session.multiLineSelection.clear();
     session.multiLineIndices = [];
+    session.multiLineTokens = [];
     session.multiLineEnabled = false;
     session.selection = new Set(lineIndex === undefined ? [] : (next.get(lineIndex) ?? []));
   }

@@ -12,6 +12,7 @@ import { beatValue } from "../../global/chart/timing/beat.ts";
 import type { Chart } from "../../global/chart/chart.ts";
 import type { HistoryBeatRange } from "./history.ts";
 import type { EditorSession, EditorFocus, MultiLineMode, SelectionMode } from "./session.ts";
+import { tokensFromLines, type LineSelectionToken } from "../state/lineSelectionTokens.ts";
 
 /** Everything a commit captures around a change so undo can restore it. */
 export interface SelectionState {
@@ -30,6 +31,8 @@ export interface SelectionState {
   multiLineMode: MultiLineMode;
   multiLineMerge: boolean;
   multiLineIndices: number[];
+  /** The authored expression behind the line list, in written order. */
+  multiLineTokens?: LineSelectionToken[];
 }
 
 /** Flattens the live selection into a comparable, detached snapshot. */
@@ -59,6 +62,7 @@ export function selectionState(session: EditorSession): SelectionState {
     multiLineMode: session.multiLineMode,
     multiLineMerge: session.multiLineMerge,
     multiLineIndices: [...(session.multiLineIndices ?? [])],
+    multiLineTokens: (session.multiLineTokens ?? []).map((token) => ({ ...token })),
   };
 }
 
@@ -142,6 +146,7 @@ export function sameSelection(left: SelectionState, right: SelectionState | unde
     left.multiLineMode === right.multiLineMode &&
     left.multiLineMerge === right.multiLineMerge &&
     JSON.stringify(left.multiLineIndices ?? []) === JSON.stringify(right.multiLineIndices ?? []) &&
+    JSON.stringify(left.multiLineTokens ?? []) === JSON.stringify(right.multiLineTokens ?? []) &&
     JSON.stringify(left.multiLineSelection ?? []) ===
       JSON.stringify(right.multiLineSelection ?? []) &&
     JSON.stringify(left.multiEventSelection ?? []) ===
@@ -299,6 +304,31 @@ export function remapSelection(
     const targetLineIndex = remapLineIndex(source, target, sourceLineIndex);
     return targetLineIndex === null ? [] : [targetLineIndex];
   });
+  // Folder tokens survive a line edit because their members resolve against the
+  // new chart. Numeric tokens are remapped line by line so no token can point at
+  // a line the edit moved or removed.
+  const multiLineTokens = (
+    state.multiLineTokens ?? tokensFromLines(state.multiLineIndices ?? [])
+  ).flatMap((token): LineSelectionToken[] => {
+    if (token.kind === "group") {
+      return [{ ...token }];
+    }
+    if (token.kind === "line") {
+      const targetLineIndex = remapLineIndex(source, target, token.line);
+      return targetLineIndex === null ? [] : [{ kind: "line", line: targetLineIndex }];
+    }
+    const start = Math.min(token.start, token.end);
+    const end = Math.max(token.start, token.end);
+    const step = Math.max(1, Math.floor(token.step));
+    const mapped: number[] = [];
+    for (let sourceLineIndex = start; sourceLineIndex <= end; sourceLineIndex += step) {
+      const targetLineIndex = remapLineIndex(source, target, sourceLineIndex);
+      if (targetLineIndex !== null) {
+        mapped.push(targetLineIndex);
+      }
+    }
+    return tokensFromLines(mapped);
+  });
   return {
     ...state,
     lineIndex,
@@ -307,6 +337,7 @@ export function remapSelection(
     multiLineSelection,
     multiEventSelection,
     multiLineIndices,
+    multiLineTokens,
   };
 }
 
@@ -364,6 +395,9 @@ export function restoreSelection(session: EditorSession, state: SelectionState):
   session.multiLineEnabled = state.multiLineEnabled ?? false;
   session.multiLineMode = state.multiLineMode === "events" ? "events" : "notes";
   session.multiLineMerge = state.multiLineMerge ?? true;
+  session.multiLineTokens = [
+    ...(state.multiLineTokens ?? tokensFromLines(state.multiLineIndices ?? [])),
+  ];
   session.multiLineIndices = [...(state.multiLineIndices ?? [])];
   session.normalizeMultiLine();
   session.multiLineEnabled = session.multiLineIndices.length > 1;

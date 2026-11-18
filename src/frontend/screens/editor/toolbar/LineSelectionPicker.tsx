@@ -35,6 +35,16 @@ import {
 import { toggleGroupSelection } from "./lineSelectionGroupSelection.ts";
 import { lineBarSelectionAfterClick } from "../multiLine/multiLineLineBar.ts";
 import {
+  addGroupSelection,
+  addLineSelection,
+  resolveLineSelection,
+  subtractLineSelection,
+  tokensForSelection,
+  tokensFromLines,
+  type LineSelectionGroup,
+  type LineSelectionToken,
+} from "../../../../core/edit/state/lineSelectionTokens.ts";
+import {
   createMarqueeDrag,
   listContentX,
   listContentY,
@@ -51,6 +61,7 @@ type LineGroup = LineGroupEntries<EditorLineOption>;
 const EMPTY_OPTIONS: readonly EditorLineOption[] = Object.freeze([]);
 const EMPTY_GROUP_NAMES: readonly string[] = Object.freeze([]);
 const EMPTY_SELECTION: readonly number[] = Object.freeze([]);
+const EMPTY_TOKENS: readonly LineSelectionToken[] = Object.freeze([]);
 const MARQUEE_EDGE = 28;
 const MARQUEE_SCROLL_STEP = 14;
 
@@ -98,6 +109,11 @@ export function LineSelectionPicker({
     () => values.byId.get<readonly number[]>("editor.lineSelection") ?? EMPTY_SELECTION,
     () => values.byId.get<readonly number[]>("editor.lineSelection") ?? EMPTY_SELECTION,
   );
+  const tokens = useSyncExternalStore(
+    (listener) => values.byId.subscribe("editor.lineTokens", listener),
+    () => values.byId.get<readonly LineSelectionToken[]>("editor.lineTokens") ?? EMPTY_TOKENS,
+    () => values.byId.get<readonly LineSelectionToken[]>("editor.lineTokens") ?? EMPTY_TOKENS,
+  );
   const current = Number(
     useSyncExternalStore(
       (listener) => values.byId.subscribe("editor.line", listener),
@@ -136,6 +152,18 @@ export function LineSelectionPicker({
   useEffect(() => stopMarquee, [stopMarquee]);
 
   const groups = useMemo(() => groupLineEntries(options, groupNames), [groupNames, options]);
+  const available = useMemo(() => options.map((option) => option.index), [options]);
+  // Folder rows and the typed grammar share one membership view.
+  const selectionGroups = useMemo<readonly LineSelectionGroup[]>(
+    () =>
+      groups.map((group) => ({
+        index: group.index,
+        name: group.name,
+        label: group.name || t("chrome.toolbar.lineSelectionDefaultGroup"),
+        indices: group.entries.map((entry) => entry.index),
+      })),
+    [groups, t],
+  );
   // One column width for every line number, sized by the widest index, so names
   // start on the same tab stop regardless of each row's label.
   const indexColumn = useMemo(() => {
@@ -199,13 +227,24 @@ export function LineSelectionPicker({
   }, [open]);
 
   /** Commit a selection and make sure the current line is one of its members. */
-  const applySelection = (next: ReadonlySet<number>, focus: number) => {
-    const indices = [...next].filter((value) => Number.isInteger(value)).sort((a, b) => a - b);
+  const applySelection = (
+    next: ReadonlySet<number>,
+    focus: number,
+    nextTokens?: readonly LineSelectionToken[],
+  ) => {
+    const resolved = nextTokens
+      ? resolveLineSelection(nextTokens, available, selectionGroups)
+      : [...next].filter((value) => Number.isInteger(value));
     const currentNow = Number(values.byId.get<string>("editor.line") ?? focus);
     const requested = Number.isInteger(focus) ? focus : currentNow;
-    const safe = indices.length ? indices : [requested];
+    const safe = resolved.length ? resolved : [requested];
+    const safeTokens = resolved.length
+      ? (nextTokens ?? tokensFromLines(safe))
+      : tokensFromLines(safe);
     const focused = safe.includes(requested) ? requested : (safe[0] ?? currentNow);
     selectionRef.current = new Set(safe);
+    // Tokens first so the selection subscriber reads the authored expression.
+    values.byId.set<readonly LineSelectionToken[]>("editor.lineTokens", safeTokens);
     setSelectedLineIndices(safe);
     values.byId.set<string>("editor.line", String(focused));
   };
@@ -215,8 +254,20 @@ export function LineSelectionPicker({
    * behaves as an add instead, so the selector can never become empty.
    */
   const toggleLine = (index: number) => {
-    const next = lineBarSelectionAfterClick(current, [...selectionRef.current], index, true);
-    applySelection(new Set(next.selection), next.current);
+    const baseSelection = [...selectionRef.current];
+    const latestTokens =
+      values.byId.get<readonly LineSelectionToken[]>("editor.lineTokens") ?? tokens;
+    const baseTokens = tokensForSelection(latestTokens, baseSelection, available, selectionGroups);
+    const next = lineBarSelectionAfterClick(
+      current,
+      baseSelection,
+      index,
+      true,
+      baseTokens,
+      available,
+      selectionGroups,
+    );
+    applySelection(new Set(next.selection), next.current, next.tokens);
   };
 
   /** Plain click: this line is the whole selection. Shift: toggle it. */
@@ -225,7 +276,7 @@ export function LineSelectionPicker({
       toggleLine(index);
       return;
     }
-    applySelection(new Set([index]), index);
+    applySelection(new Set([index]), index, [{ kind: "line", line: index }]);
   };
 
   /** Toggle one folder's disclosure and persist the collapsed set. */
@@ -240,18 +291,33 @@ export function LineSelectionPicker({
   };
 
   /**
-   * Toggle every line in one group on the currently painted selection. A
-   * marquee preview is the source when a drag is active, so the click commits
-   * exactly what the user sees.
+   * Toggle every line in one folder. Adding strips those lines from the
+   * authored tokens and appends the folder name; removing splices its members
+   * out where they stand.
    */
   const selectGroup = (group: LineGroup) => {
-    const activeSet = marqueePreview ?? selectedSet;
-    const result = toggleGroupSelection(
-      activeSet,
-      group.entries.map((entry) => entry.index),
-      current,
-    );
-    applySelection(new Set(result.selection), result.focus);
+    const latestSelection = values.byId.get<readonly number[]>("editor.lineSelection") ?? selected;
+    const latestTokens =
+      values.byId.get<readonly LineSelectionToken[]>("editor.lineTokens") ?? tokens;
+    const baseSelection = latestSelection.length ? [...latestSelection] : [...selectedSet];
+    const currentSelection = new Set(baseSelection);
+    const indices = group.entries.map((entry) => entry.index);
+    const all = indices.length > 0 && indices.every((index) => currentSelection.has(index));
+    const result = toggleGroupSelection(currentSelection, indices, current);
+    const baseTokens = tokensForSelection(latestTokens, baseSelection, available, selectionGroups);
+    const descriptor = selectionGroups.find((candidate) => candidate.index === group.index) ?? {
+      index: group.index,
+      name: group.name,
+      label: group.name || t("chrome.toolbar.lineSelectionDefaultGroup"),
+      indices,
+    };
+    const nextTokens = all
+      ? subtractLineSelection(baseTokens, indices, available, selectionGroups)
+      : addGroupSelection(baseTokens, descriptor, available, selectionGroups);
+    const resolved = resolveLineSelection(nextTokens, available, selectionGroups);
+    const safe = resolved.length ? resolved : [result.focus];
+    const safeTokens = resolved.length ? nextTokens : tokensFromLines(safe);
+    applySelection(new Set(safe), result.focus, safeTokens);
   };
 
   /** Rows intersecting the content-space rectangle, in document order. */
@@ -370,7 +436,20 @@ export function LineSelectionPicker({
     }
     const rect = container.getBoundingClientRect();
     const drag = createMarqueeDrag(selectionRef.current, index, (preview) => {
-      applySelection(preview.selection, preview.focus);
+      const baseTokens = tokensForSelection(
+        tokens,
+        [...selectionRef.current],
+        available,
+        selectionGroups,
+      );
+      const nextTokens =
+        preview.mode === "add"
+          ? addLineSelection(baseTokens, preview.lines, available, selectionGroups)
+          : subtractLineSelection(baseTokens, preview.lines, available, selectionGroups);
+      const resolved = resolveLineSelection(nextTokens, available, selectionGroups);
+      const safe = resolved.length ? resolved : [preview.focus];
+      const safeTokens = resolved.length ? nextTokens : tokensFromLines(safe);
+      applySelection(new Set(safe), preview.focus, safeTokens);
     });
     marqueeActive.current = true;
     marqueeDrag.current = drag;

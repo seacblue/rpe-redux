@@ -8,6 +8,15 @@
  * surfaces from drifting apart.
  */
 import type { EditorLineOption } from "../../../../core/edit/state/publishedValues.ts";
+import {
+  addLineSelection,
+  resolveLineSelection,
+  subtractLineSelection,
+  tokensForSelection,
+  tokensFromLines,
+  type LineSelectionGroup,
+  type LineSelectionToken,
+} from "../../../../core/edit/state/lineSelectionTokens.ts";
 
 /** One compact line row rendered by a multi-line judge-line surface. */
 export interface MultiLineLineBarItem {
@@ -23,17 +32,11 @@ export interface MultiLineLineBarItem {
   selected: boolean;
 }
 
-/** A click result ready to be written to `editor.line` and `editor.lineSelection`. */
+/** A click result ready to be written to the line, selection, and token cells. */
 export interface MultiLineLineBarState {
   current: number;
   selection: number[];
-}
-
-/** Remove duplicates and order line indices ascending. */
-function sortedUnique(indices: readonly number[]): number[] {
-  return [...new Set(indices.filter((index) => Number.isInteger(index) && index >= 0))].sort(
-    (left, right) => left - right,
-  );
+  tokens: LineSelectionToken[];
 }
 
 /** Pick the remaining line nearest a removed one, keeping the current line when possible. */
@@ -88,31 +91,54 @@ export function buildMultiLineLineBarItems(
  * Resolve one click on a line row using the toolbar contract.
  *
  * A plain click replaces the selection with the clicked line. Shift-click
- * toggles only the clicked line. The selection never becomes empty, and a
- * removal keeps the current line inside the remaining selection when it can.
+ * toggles only the clicked line: adding appends it to the authored expression,
+ * and removing splits the token that owns it in place. The selection never
+ * becomes empty, and a removal keeps the current line inside the remaining
+ * selection when it can.
  */
 export function lineBarSelectionAfterClick(
   current: number,
   selection: readonly number[],
   clicked: number,
   toggle: boolean,
+  tokens: readonly LineSelectionToken[] = tokensFromLines(selection),
+  available: readonly number[] = [...new Set([...selection, clicked])],
+  groups: readonly LineSelectionGroup[] = [],
 ): MultiLineLineBarState {
-  const base = sortedUnique(selection);
   const focus = Number.isInteger(current) && current >= 0 ? current : clicked;
+  const known = available.length ? available : [...new Set([...selection, clicked])];
+  const base = tokensForSelection(tokens, selection, known, groups);
   if (!Number.isInteger(clicked) || clicked < 0) {
-    return { current: focus, selection: base };
+    return { current: focus, selection: [...selection], tokens: base };
   }
   if (!toggle) {
-    return { current: clicked, selection: [clicked] };
+    return {
+      current: clicked,
+      selection: [clicked],
+      tokens: [{ kind: "line", line: clicked }],
+    };
   }
-  if (base.includes(clicked)) {
-    if (base.length <= 1) {
-      return { current: clicked, selection: base };
+  if (selection.includes(clicked)) {
+    if (selection.length <= 1) {
+      return { current: clicked, selection: [...selection], tokens: base };
     }
-    const next = base.filter((index) => index !== clicked);
-    return { current: focusAfterRemoval(next, clicked, focus), selection: next };
+    const nextTokens = subtractLineSelection(base, [clicked], known, groups);
+    const next = resolveLineSelection(nextTokens, known, groups);
+    if (!next.length) {
+      return { current: clicked, selection: [...selection], tokens: base };
+    }
+    return {
+      current: focusAfterRemoval(next, clicked, focus),
+      selection: next,
+      tokens: nextTokens,
+    };
   }
-  return { current: clicked, selection: sortedUnique([...base, clicked]) };
+  const nextTokens = addLineSelection(base, [clicked], known, groups);
+  return {
+    current: clicked,
+    selection: resolveLineSelection(nextTokens, known, groups),
+    tokens: nextTokens,
+  };
 }
 
 /**

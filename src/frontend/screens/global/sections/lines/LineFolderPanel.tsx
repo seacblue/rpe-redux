@@ -13,6 +13,7 @@ import { Segmented } from "../../../../../design/components/segmented/Segmented.
 import type { Chart, JudgeLine } from "../../../../../core/global/chart/chart.ts";
 import { noiseLineSettings } from "../../../../../core/global/chart/noise/noiseLine.ts";
 import type { LinePurposeTarget } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
+import { sanitizeLineGroupName } from "../../../../../core/global/chart/line/lineTreeEdits.ts";
 import { t } from "../../../../../i18n/index.ts";
 import { InspectorEmpty } from "../../../editor/inspector/InspectorEmpty.tsx";
 import { lineFolderIndices } from "./lineTreeModel.ts";
@@ -78,8 +79,16 @@ export function LineFolderPanel({
           <Input
             id="line-folder-name"
             defaultValue={label}
+            onChange={(event) => {
+              const next = sanitizeLineGroupName(event.currentTarget.value);
+              if (next !== event.currentTarget.value) {
+                event.currentTarget.value = next;
+              }
+            }}
             onBlur={(event) => {
-              if (!onRename(event.currentTarget.value)) {
+              const next = sanitizeLineGroupName(event.currentTarget.value);
+              event.currentTarget.value = next;
+              if (!onRename(next)) {
                 event.currentTarget.value = label;
               }
             }}

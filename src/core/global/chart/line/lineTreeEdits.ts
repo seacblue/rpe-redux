@@ -28,6 +28,21 @@ function requireGroup(chart: Chart, index: number): string[] {
   return names;
 }
 
+/** Characters the line field cannot read inside a folder name. */
+const GROUP_NAME_FORBIDDEN = /[，,()（）]/gu;
+
+/**
+ * Remove characters a folder expression cannot carry.
+ *
+ * A folder name is written in the line field, where commas separate tokens and
+ * parentheses mark the active line. Creating or renaming a folder silently
+ * drops those characters instead of rejecting the name; the caller still owns
+ * the empty-name and duplicate-name rules.
+ */
+export function sanitizeLineGroupName(name: string): string {
+  return name.replace(GROUP_NAME_FORBIDDEN, "").trim();
+}
+
 /**
  * Assign lines to a folder without changing their order.
  *
@@ -86,14 +101,14 @@ export function reorderLineGroup(chart: Chart, from: number, to: number): Chart 
 export function addLineGroup(chart: Chart, name: string): Chart {
   return {
     ...chart,
-    judgeLineGroup: [...rawGroupNames(chart), name.trim()],
+    judgeLineGroup: [...rawGroupNames(chart), sanitizeLineGroupName(name)],
   };
 }
 
 /** Rename one flat folder without touching the lines it contains. */
 export function renameLineGroup(chart: Chart, index: number, name: string): Chart {
   const names = requireGroup(chart, index);
-  names[index] = name.trim();
+  names[index] = sanitizeLineGroupName(name);
   return { ...chart, judgeLineGroup: names };
 }
 

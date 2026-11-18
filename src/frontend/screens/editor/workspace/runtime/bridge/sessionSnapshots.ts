@@ -12,6 +12,7 @@ import {
   editorLineNavigationDisabled,
   editorLineOptions,
   editorLineSelection,
+  editorLineTokens,
   editorParentLine,
   editorMultiLineEnabled,
   editorOffset,
@@ -62,9 +63,12 @@ export function publishEditorSessionSnapshots(session: EditorSession, totalLines
   const parent = session.multiLineActive ? -1 : Number(session.line?.father ?? -1);
   editorParentLine.set(Number.isInteger(parent) && parent >= 0 ? String(parent) : "");
   editorLineNavigationDisabled.set(totalLines < 1);
-  const nextSelectionKey = session.multiLineIndices.join(",");
+  const nextSelectionKey = `${session.multiLineIndices.join(",")}|${JSON.stringify(session.multiLineTokens)}`;
   if (nextSelectionKey !== selectionKey) {
     selectionKey = nextSelectionKey;
+    // Tokens first: the selection subscriber reads them as the authored form of
+    // the line list it is about to install.
+    editorLineTokens.set(session.multiLineTokens.map((token) => ({ ...token })));
     editorLineSelection.set([...session.multiLineIndices]);
   }
   editorMultiLineEnabled.set(session.multiLineEnabled);

@@ -153,8 +153,7 @@ export function LinesPanel({
     );
     const indices = [...ids]
       .map((id) => indexById.get(id))
-      .filter((index): index is number => index !== undefined)
-      .sort((left, right) => left - right);
+      .filter((index): index is number => index !== undefined);
     setSelectedLineIndices(indices);
   };
 

@@ -16,9 +16,11 @@ import {
   editorDivision,
   editorGridCount,
   editorLine,
+  editorLineGroups,
   editorLineNavigationDisabled,
   editorLineOptions,
   editorLineSelection,
+  editorLineTokens,
   editorMultiLineActive,
   editorPreviewRatio,
   editorRate,
@@ -66,15 +68,38 @@ export function toolbarControlNode(entry: ToolbarControl): ReactNode {
 }
 
 /**
- * Parse a typed line value against the document's available line indices.
+ * Build the folder descriptors the line field matches by name.
  *
- * The toolbar picker and the multi-line selector share `editor.lineOptions`, so
- * both accept exactly the lines the document can show.
+ * The picker and the multi-line list draw these same labels, so a name typed in
+ * the field adds exactly the rows the user sees under that folder.
+ */
+function readLineGroups() {
+  const buckets = new Map<string, number[]>();
+  for (const option of editorLineOptions.get()) {
+    const bucket = buckets.get(option.group);
+    if (bucket) {
+      bucket.push(option.index);
+    } else {
+      buckets.set(option.group, [option.index]);
+    }
+  }
+  return editorLineGroups.get().map((name, index) => ({
+    index,
+    name,
+    label: name,
+    indices: buckets.get(name) ?? [],
+  }));
+}
+
+/**
+ * Parse a typed line value against the document's available line indices and
+ * folders.
  */
 function readLineInput(raw: string) {
   return parseLineSelectionInput(
     raw,
     editorLineOptions.get().map((option) => option.index),
+    readLineGroups(),
   );
 }
 
@@ -127,9 +152,13 @@ const ROW_ONE: readonly ToolbarEntry[] = [
         return;
       }
       // The finished field is the selection, not a hint added to the old one:
-      // typing `2` after `2-3` leaves only line 2 selected.
-      editorLine.set(String(parsed.line));
+      // typing `2` after `2-3` leaves only line 2 selected. Tokens go first so
+      // the selection subscriber reads the authored expression, and the active
+      // line follows the selection so a normalization cannot republish stale
+      // tokens in between.
+      editorLineTokens.set(parsed.tokens);
       editorLineSelection.set(parsed.lines);
+      editorLine.set(String(parsed.line));
     },
   },
   { kind: "divider", id: "toolbar.rule.subdivision", order: 50, row: 1 },

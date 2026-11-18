@@ -7,8 +7,10 @@
  * show every folder in chart order.
  */
 
-/** One folder row and the line entries it owns. */
+/** One folder row, its declared index, and the line entries it owns. */
 export interface LineGroupEntries<T> {
+  /** Position in the folder list; the token field stores this as the folder key. */
+  index: number;
   name: string;
   entries: T[];
 }
@@ -38,5 +40,9 @@ export function groupLineEntries<T extends { group: string }>(
       buckets.set(entry.group, [entry]);
     }
   }
-  return [...buckets].map(([name, groupEntries]) => ({ name, entries: groupEntries }));
+  return [...buckets].map(([name, groupEntries], index) => ({
+    index,
+    name,
+    entries: groupEntries,
+  }));
 }

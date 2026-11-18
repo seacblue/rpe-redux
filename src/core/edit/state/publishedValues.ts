@@ -12,6 +12,7 @@
  * carried it would fight the chart the user opens next.
  */
 import { defineValue } from "../../state/values.ts";
+import type { LineSelectionToken } from "./lineSelectionTokens.ts";
 
 /** The judgeline the editor is on, as the line field's text. */
 export const editorLine = defineValue({ id: "editor.line", initial: "0" });
@@ -64,6 +65,18 @@ export const editorLineGroups = defineValue({
 export const editorLineSelection = defineValue({
   id: "editor.lineSelection",
   initial: [] as readonly number[],
+});
+
+/**
+ * The authored expression behind `editor.lineSelection`.
+ *
+ * The resolved line list stays the editing truth; this value preserves how the
+ * user wrote it, including step ranges and folder names. Surface writers set
+ * the tokens before the selection so the binding always reads a matching pair.
+ */
+export const editorLineTokens = defineValue({
+  id: "editor.lineTokens",
+  initial: [] as readonly LineSelectionToken[],
 });
 
 /**

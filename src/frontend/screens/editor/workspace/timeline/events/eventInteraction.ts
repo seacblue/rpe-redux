@@ -221,6 +221,7 @@ export class EventInteraction implements EventInteractionHandle {
           session.multiEventSelection.clear();
           session.multiLineEnabled = false;
           session.multiLineIndices = [];
+          session.multiLineTokens = [];
           session.normalizeMultiLine();
           session.selectionRevision += 1;
           session.recordSelection(undefined, before, true);

@@ -330,8 +330,11 @@ export async function runEditorKeyboardAction(
         );
         const mode = session.focus === "events" ? "events" : "notes";
         if (remembered.length >= 2) {
-          // Reopening restores the list chosen before the last close.
-          session.setMultiLineSelection(remembered);
+          // Reopening restores the list and authored expression chosen before
+          // the last close.
+          session.setMultiLineSelection(remembered, {
+            tokens: session.multiLineRestoreTokens,
+          });
           session.setMultiLineMode(mode);
         } else if (session.multiLineIndices.length >= 2) {
           session.setMultiLineEnabled(true, mode);

@@ -1,88 +1,93 @@
 /**
- * Parses the toolbar line field's text into a current line and a shared line
- * selection.
+ * Parses the toolbar and multi-line line fields into an ordered selection.
  *
- * The field accepts one index (`3`), an inclusive colon or hyphen range
- * (`2:5`, `2-5`, `2：5`), and any union of those. A union separates its parts with
- * the ASCII comma, the CJK comma, or whitespace, so `0,15`, `0，15`, and `0 15`
- * name the same pair, and repeated separators (`0,,15`, `0  15`) are ignored.
- * Ranges tolerate spaces around their operator (`0 - 15`).
+ * The grammar is a union of one or more parts separated by the ASCII comma,
+ * the CJK comma, or whitespace. A part is:
+ *
+ * - one index (`3`), clamped to the document's nearest existing line;
+ * - an inclusive range (`2:5`, `2-5`, `2：5`) with an optional `/step`
+ *   (`80:119/5`). A missing step means 1, the end is always included, and a
+ *   reversed range is read in ascending order;
+ * - a folder name, matched before numbers so a folder named `3` stays a
+ *   folder. Matching ignores case and surrounding spaces. A name containing
+ *   spaces must be a whole comma-separated part; an unspaced name may sit
+ *   beside numeric tokens. Creating or renaming a folder strips commas and
+ *   parentheses, so a declared name is always one writable token.
  *
  * Multi-line mode appends the active line as an annotation: `0-15 (3)` is the
- * selection `0-15` on active line `3`, so Ctrl+wheel still changes the main line
- * while the union stays put. A trailing parenthesized number is therefore an
- * annotation, not a member: it is stripped before the union is read, and a
- * single parenthesized index (`(3)`) is accepted as that one line. This also
- * keeps RPE-style line labels such as `1(0)` readable.
+ * selection `0-15` on active line `3`. A trailing parenthesized number is
+ * therefore an annotation, not a member; a single parenthesized index (`(3)`)
+ * is accepted as that one line. This also keeps RPE-style labels such as
+ * `1(0)` readable.
  *
- * Values outside the document clamp to the nearest existing line, so typing
- * `72` in a 24-line chart selects line 23 and `-3:100` selects the whole
- * document. A reversed range is read in ascending order.
+ * The returned lines keep the written token order and are duplicate-free. The
+ * parser never merges adjacent tokens or sorts the union: `5,3,1` stays
+ * `5,3,1`, and the formatter writes each token back as it was written.
  */
+import type { Chart } from "../../global/chart/chart.ts";
+import { groupNames, lineGroupIndex } from "../../global/chart/line/lineGroups.ts";
+import {
+  formatLineSelectionTokens,
+  lineSelectionGroupName,
+  resolveLineSelection,
+  tokensFromLines,
+  type LineSelectionGroup,
+  type LineSelectionToken,
+} from "./lineSelectionTokens.ts";
+
+/** One parsed line selection, ordered as the user wrote it. */
 export interface LineSelectionInput {
   /** The line the timeline switches to: the annotation when present, else the union's first line. */
   line: number;
-  /** Every named line, ascending and without duplicates. */
+  /** Every named line, in written order and without duplicates. */
   lines: readonly number[];
   /** The annotation's line when the text carried one, so a caller can prefer its own focus. */
   current?: number;
+  /** The authored tokens behind `lines`, in written order. */
+  tokens: readonly LineSelectionToken[];
 }
 
 const SINGLE = /^-?\d+$/;
-const RANGE = /^(-?\d+)\s*[:：-]\s*(-?\d+)$/;
+const RANGE = /^(-?\d+)\s*[:：-]\s*(-?\d+)(?:\s*\/\s*(\d+))?$/;
 const PARENTHESIZED_ONLY = /^[（(]\s*(-?\d+)\s*[)）]$/u;
 const PARENTHESIZED_TAIL = /\s*[（(]\s*(-?\d+)\s*[)）]\s*$/u;
 const COMMA = /[,，]/u;
 const WHITESPACE = /\s+/u;
+const OPERATOR_SPACES = /(\d)\s*([:：/-])\s*(\d)/gu;
 
-/** Keep valid unique line indices in ascending order. */
-function normalizedLines(lines: readonly number[]): number[] {
-  return [...new Set(lines.filter((line) => Number.isInteger(line) && line >= 0))].sort(
-    (left, right) => left - right,
-  );
+/** Build the folder descriptors the expression parser matches against. */
+export function lineSelectionGroups(chart: Chart | null | undefined): LineSelectionGroup[] {
+  const names = groupNames(chart ?? undefined);
+  const buckets = names.map((): number[] => []);
+  for (const [index, line] of (chart?.judgeLineList ?? []).entries()) {
+    const group = lineGroupIndex(line);
+    buckets[group]?.push(index);
+  }
+  return names.map((name, index) => ({ index, name, indices: buckets[index] }));
 }
 
 /**
- * Write sorted line indices as the compact form the field shows: consecutive
- * runs become `start-end`, and separate runs are comma-separated. The result is
- * always accepted by `parseLineSelectionInput`.
+ * Write programmatic line indices as the compact form a field shows.
+ *
+ * The input order is preserved; only adjacent values in that order become one
+ * range. This helper is for index lists, not for text the user typed — the
+ * expression formatter writes each authored token separately.
  */
 export function formatLineSelection(lines: readonly number[]): string {
-  const sorted = normalizedLines(lines);
-  if (!sorted.length) {
-    return "";
-  }
-  const parts: string[] = [];
-  let start = sorted[0];
-  let end = start;
-  for (let index = 1; index < sorted.length; index += 1) {
-    const line = sorted[index];
-    if (line === end + 1) {
-      end = line;
-      continue;
-    }
-    parts.push(start === end ? String(start) : `${start}-${end}`);
-    start = line;
-    end = line;
-  }
-  parts.push(start === end ? String(start) : `${start}-${end}`);
-  return parts.join(",");
+  return formatLineSelectionTokens(tokensFromLines(lines));
 }
 
 /**
- * The multi-line field's text: the compact union plus its active line in
- * parentheses, or the single line by itself.
+ * The multi-line field's text for a programmatic line list: the compact union
+ * plus its active line in parentheses, or the single line by itself.
  */
 export function formatLineSelectionDisplay(lines: readonly number[], activeLine: number): string {
-  const sorted = normalizedLines(lines);
-  if (!sorted.length) {
-    return "";
-  }
-  const text = formatLineSelection(sorted);
-  if (sorted.length <= 1) {
+  const tokens = tokensFromLines(lines);
+  const text = formatLineSelectionTokens(tokens);
+  if (!text || resolveLineSelection(tokens, lines).length <= 1) {
     return text;
   }
-  const active = Number.isInteger(activeLine) && activeLine >= 0 ? activeLine : sorted[0];
+  const active = Number.isInteger(activeLine) && activeLine >= 0 ? activeLine : lines[0];
   return `${text} (${active})`;
 }
 
@@ -102,33 +107,37 @@ function splitAnnotations(text: string): { selection: string; current: number | 
   };
 }
 
-/** Split one selection text into tokens, accepting comma and whitespace separators. */
-function selectionTokens(text: string): string[] {
-  const tokens: string[] = [];
-  for (const part of text.split(COMMA)) {
-    const trimmed = part.trim();
-    if (!trimmed) {
-      continue;
-    }
-    // A range may carry spaces around its operator; normalize them before the
-    // remaining whitespace is treated as a separator.
-    const normalized = trimmed.replace(/(\d)\s*([:：-])\s*(\d)/gu, "$1$2$3");
-    tokens.push(...normalized.split(WHITESPACE));
+/** Match one written part against the declared folder names and labels. */
+function matchGroup(
+  text: string,
+  groups: readonly LineSelectionGroup[],
+): LineSelectionGroup | null {
+  const wanted = text.trim().toLocaleLowerCase();
+  if (!wanted) {
+    return null;
   }
-  return tokens;
+  return (
+    groups.find(
+      (group) =>
+        group.name.trim().toLocaleLowerCase() === wanted ||
+        (group.label ?? "").trim().toLocaleLowerCase() === wanted,
+    ) ?? null
+  );
 }
 
 /**
  * Read one typed line selection.
  *
  * Returns `null` for text that names no existing line, including an empty
- * field, a token that is neither an index nor a range, and a union whose parts
- * are all outside the document. The caller decides whether a refusal is an
- * error or simply leaves the current selection alone.
+ * field, a token that is neither an index, a range, nor a declared folder, a
+ * non-positive step, and a union whose parts are all outside the document.
+ * The caller decides whether a refusal is an error or simply leaves the
+ * current selection alone.
  */
 export function parseLineSelectionInput(
   raw: string,
   available: readonly number[],
+  groups: readonly LineSelectionGroup[] = [],
 ): LineSelectionInput | null {
   const text = raw.trim();
   if (!text || !available.length) {
@@ -142,45 +151,69 @@ export function parseLineSelectionInput(
   const minimum = Math.min(...available);
   const maximum = Math.max(...available);
   const clampIndex = (value: number): number => Math.min(maximum, Math.max(minimum, value));
-  const lines = new Set<number>();
-  for (const token of selectionTokens(selection)) {
-    if (!token) {
+  const tokens: LineSelectionToken[] = [];
+  for (const part of selection.split(COMMA)) {
+    const trimmed = part.trim();
+    if (!trimmed) {
       continue;
     }
-    const range = RANGE.exec(token);
-    if (range) {
-      let start = clampIndex(Number(range[1]));
-      let end = clampIndex(Number(range[2]));
-      if (start > end) {
-        [start, end] = [end, start];
+    // A folder name may contain spaces, so test the whole comma-separated part
+    // before whitespace is treated as a separator.
+    const wholeGroup = matchGroup(trimmed, groups);
+    if (wholeGroup) {
+      tokens.push({
+        kind: "group",
+        group: wholeGroup.index,
+        name: lineSelectionGroupName(wholeGroup),
+      });
+      continue;
+    }
+    const normalized = trimmed.replace(OPERATOR_SPACES, "$1$2$3");
+    for (const tokenText of normalized.split(WHITESPACE)) {
+      if (!tokenText) {
+        continue;
       }
-      for (let index = start; index <= end; index += 1) {
-        if (known.has(index)) {
-          lines.add(index);
+      const group = matchGroup(tokenText, groups);
+      if (group) {
+        tokens.push({ kind: "group", group: group.index, name: lineSelectionGroupName(group) });
+        continue;
+      }
+      const range = RANGE.exec(tokenText);
+      if (range) {
+        const step = range[3] === undefined ? 1 : Number(range[3]);
+        if (!Number.isInteger(step) || step <= 0) {
+          return null;
         }
+        let start = clampIndex(Number(range[1]));
+        let end = clampIndex(Number(range[2]));
+        if (start > end) {
+          [start, end] = [end, start];
+        }
+        tokens.push({ kind: "range", start, end, step });
+        continue;
       }
-      continue;
-    }
-    if (!SINGLE.test(token)) {
-      return null;
-    }
-    const index = clampIndex(Number(token));
-    if (known.has(index)) {
-      lines.add(index);
+      if (!SINGLE.test(tokenText)) {
+        return null;
+      }
+      tokens.push({ kind: "line", line: clampIndex(Number(tokenText)) });
     }
   }
-  if (!lines.size) {
+  if (!tokens.length) {
     return null;
   }
-  const sorted = [...lines].sort((left, right) => left - right);
+  const lines = resolveLineSelection(tokens, known, groups);
+  if (!lines.length) {
+    return null;
+  }
   // A union's annotation names the active line; on a single line it is only a
   // readable label (RPE writes a parent's index as `1(0)`), so the line itself
   // stays the selection.
   const annotation = current === null ? null : clampIndex(current);
-  const carriesActive = sorted.length > 1 && annotation !== null;
+  const carriesActive = lines.length > 1 && annotation !== null;
   return {
-    line: carriesActive ? annotation : sorted[0],
-    lines: sorted,
+    line: carriesActive ? annotation : lines[0],
+    lines,
+    tokens,
     ...(carriesActive ? { current: annotation } : {}),
   };
 }

@@ -43,6 +43,7 @@ export function previewSession(live: EditorSession, result: SelectionEditResult)
   // drawn, and focus/eventLayer decide which area is being edited.
   preview.multiLineEnabled = live.multiLineEnabled;
   preview.multiLineIndices = live.multiLineIndices;
+  preview.multiLineTokens = [...live.multiLineTokens];
   preview.multiLineMode = live.multiLineMode;
   preview.multiLineMerge = live.multiLineMerge;
   preview.focus = live.focus;

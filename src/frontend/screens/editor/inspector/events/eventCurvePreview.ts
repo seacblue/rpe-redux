@@ -40,6 +40,7 @@ export function eventCurvePreviewSession(
   preview.multiLineMode = live.multiLineMode;
   preview.multiLineMerge = live.multiLineMerge;
   preview.multiLineIndices = [...live.multiLineIndices];
+  preview.multiLineTokens = [...live.multiLineTokens];
   preview.multiLineSelection = result.multiLineSelection
     ? copySelectionMap(result.multiLineSelection)
     : copySelectionMap(live.multiLineSelection);

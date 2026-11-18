@@ -86,7 +86,7 @@ export default {
   "editorPanels.preview.debug.no": "No",
 
   "editorPanels.multiLine.lines": "Judge lines",
-  "editorPanels.multiLine.linesPlaceholder": "For example 0-3,5",
+  "editorPanels.multiLine.linesPlaceholder": "For example 0-3, 80:119/5, Drums",
   "editorPanels.multiLine.mode": "Multi-line editing mode",
   "editorPanels.multiLine.notes": "Notes",
   "editorPanels.multiLine.events": "Events",

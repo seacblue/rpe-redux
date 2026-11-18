@@ -42,10 +42,16 @@ import {
   editorLineOptions,
   editorLineSelection,
 } from "../../../../../core/edit/state/publishedValues.ts";
+import { parseLineSelectionInput } from "../../../../../core/edit/state/lineSelectionInput.ts";
 import {
-  formatLineSelection,
-  parseLineSelectionInput,
-} from "../../../../../core/edit/state/lineSelectionInput.ts";
+  addGroupSelection,
+  addLineSelection,
+  formatLineSelectionTokens,
+  resolveLineSelection,
+  subtractLineSelection,
+  tokensForSelection,
+  tokensFromLines,
+} from "../../../../../core/edit/state/lineSelectionTokens.ts";
 import {
   buildMultiLineLineBarItems,
   lineBarSelectionAfterClick,
@@ -65,6 +71,7 @@ import {
   type MarqueeBox,
   type MarqueeDrag,
   type MarqueePoint,
+  type MarqueePreview,
 } from "../../toolbar/lineSelectionMarquee.ts";
 
 import type { MultiLinePanelState } from "./model.ts";
@@ -161,20 +168,40 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     () => groupLineEntries(lineItems, lineGroupNames),
     [lineGroupNames, lineItems],
   );
+  // The parser and the folder rows share one membership view: the lines shown
+  // under a folder are exactly the lines its name adds.
+  const selectionGroups = useMemo(
+    () =>
+      lineGroups.map((group) => ({
+        index: group.index,
+        name: group.name,
+        label: group.name || t("chrome.toolbar.lineSelectionDefaultGroup"),
+        indices: group.entries.map((entry) => entry.index),
+      })),
+    [lineGroups],
+  );
   // One tab stop for every number, sized by the widest line index.
   const indexColumn = useMemo(() => {
     const highest = lineOptions.reduce((maximum, option) => Math.max(maximum, option.index), 0);
     return `${Math.max(1, String(highest).length)}ch`;
   }, [lineOptions]);
-  const lines = session.chart.judgeLineList ?? [];
-  const lineText = formatLineSelection(session.multiLineIndices) || String(session.lineIndex);
+  const lines = session.chart.judgeLineList;
+  const available = useMemo(
+    () => Array.from({ length: lines?.length ?? 0 }, (unused, index) => index),
+    [lines],
+  );
+  const authoredTokens = tokensForSelection(
+    session.multiLineTokens,
+    session.multiLineIndices,
+    available,
+    selectionGroups,
+  );
+  const lineText =
+    formatLineSelectionTokens(authoredTokens, selectionGroups) || String(session.lineIndex);
 
   /** Applies a parsed line-selection expression to the session. */
   const commitLines = (raw: string, input: HTMLInputElement) => {
-    const parsed = parseLineSelectionInput(
-      raw,
-      lines.map((unused, index) => index),
-    );
+    const parsed = parseLineSelectionInput(raw, available, selectionGroups);
     if (!parsed) {
       input.value = lineText;
       return;
@@ -186,35 +213,65 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       (parsed.lines.includes(session.lineIndex)
         ? session.lineIndex
         : (parsed.lines.at(-1) ?? session.lineIndex));
-    editorLineSelection.set(parsed.lines);
+    session.setMultiLineSelection(parsed.lines, { tokens: parsed.tokens });
     editorLine.set(String(focus));
     renderSession();
   };
 
-  /** Applies one line-list click to the shared selection cells and repaints. */
+  /** Applies one line-list click to the session and repaints. */
   const commitLineClick = (index: number, shiftToggle: boolean) => {
     const current = Number(editorLine.get());
+    const baseTokens = tokensForSelection(
+      session.multiLineTokens,
+      session.multiLineIndices,
+      available,
+      selectionGroups,
+    );
     const next = lineBarSelectionAfterClick(
       Number.isInteger(current) ? current : 0,
-      editorLineSelection.get(),
+      session.multiLineIndices,
       index,
       shiftToggle,
+      baseTokens,
+      available,
+      selectionGroups,
     );
-    editorLineSelection.set(next.selection);
+    session.setMultiLineSelection(next.selection, { tokens: next.tokens });
     editorLine.set(String(next.current));
     renderSession();
   };
 
-  /** Applies one folder-row click to the whole group, mirroring the toolbar picker. */
-  const commitGroupClick = (indices: readonly number[]) => {
+  /** Applies one folder-row click: add the folder, or remove its members in place. */
+  const commitGroupClick = (groupIndex: number, groupName: string, indices: readonly number[]) => {
     const current = Number(editorLine.get());
-    const next = toggleGroupSelection(
-      new Set(editorLineSelection.get()),
-      indices,
-      Number.isInteger(current) ? current : 0,
+    const currentSelection = new Set(session.multiLineIndices);
+    const active = Number.isInteger(current) ? current : 0;
+    const all = indices.length > 0 && indices.every((index) => currentSelection.has(index));
+    const result = toggleGroupSelection(currentSelection, indices, active);
+    const baseTokens = tokensForSelection(
+      session.multiLineTokens,
+      session.multiLineIndices,
+      available,
+      selectionGroups,
     );
-    editorLineSelection.set(next.selection);
-    editorLine.set(String(next.focus));
+    const tokens = all
+      ? subtractLineSelection(baseTokens, indices, available, selectionGroups)
+      : addGroupSelection(
+          baseTokens,
+          selectionGroups.find((group) => group.index === groupIndex) ?? {
+            index: groupIndex,
+            name: groupName,
+            label: groupName || t("chrome.toolbar.lineSelectionDefaultGroup"),
+            indices,
+          },
+          available,
+          selectionGroups,
+        );
+    const next = resolveLineSelection(tokens, available, selectionGroups);
+    const safe = next.length ? next : [result.focus];
+    const safeTokens = next.length ? tokens : tokensFromLines(safe);
+    session.setMultiLineSelection(safe, { tokens: safeTokens });
+    editorLine.set(String(result.focus));
     renderSession();
   };
 
@@ -236,17 +293,26 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
 
   useEffect(() => stopMarquee, [stopMarquee]);
 
-  /** Commit one marquee candidate while keeping the current line in the set. */
-  const applyMarqueeSelection = (next: ReadonlySet<number>, focus: number) => {
-    const indices = [...next]
-      .filter((value) => Number.isInteger(value) && value >= 0)
-      .sort((left, right) => left - right);
+  /** Commit one marquee block: append additions, splice removals in place. */
+  const applyMarqueeSelection = (preview: MarqueePreview) => {
+    const baseTokens = tokensForSelection(
+      session.multiLineTokens,
+      session.multiLineIndices,
+      available,
+      selectionGroups,
+    );
+    const tokens =
+      preview.mode === "add"
+        ? addLineSelection(baseTokens, preview.lines, available, selectionGroups)
+        : subtractLineSelection(baseTokens, preview.lines, available, selectionGroups);
+    const next = resolveLineSelection(tokens, available, selectionGroups);
     const currentNow = Number(editorLine.get());
-    const requested = Number.isInteger(focus) ? focus : currentNow;
-    const safe = indices.length ? indices : [requested];
+    const requested = Number.isInteger(preview.focus) ? preview.focus : currentNow;
+    const safe = next.length ? next : [requested];
+    const safeTokens = next.length ? tokens : tokensFromLines(safe);
     const focused = safe.includes(requested) ? requested : (safe[0] ?? currentNow);
     selectionRef.current = new Set(safe);
-    editorLineSelection.set(safe);
+    session.setMultiLineSelection(safe, { tokens: safeTokens });
     editorLine.set(String(focused));
     renderSession();
   };
@@ -353,7 +419,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     }
     const rect = container.getBoundingClientRect();
     const drag = createMarqueeDrag(selectionRef.current, index, (preview) => {
-      applyMarqueeSelection(preview.selection, preview.focus);
+      applyMarqueeSelection(preview);
     });
     marqueeActive.current = true;
     marqueeDrag.current = drag;
@@ -542,7 +608,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
                   picked={picked}
                   groupAction={groupAction}
                   onToggle={() => toggleGroupFold(group.name)}
-                  onSelect={() => commitGroupClick(group.entries.map((item) => item.index))}
+                  onSelect={() =>
+                    commitGroupClick(
+                      group.index,
+                      group.name,
+                      group.entries.map((item) => item.index),
+                    )
+                  }
                 />
                 {!folded && group.entries.length > 0 && (
                   <div className="line-selection-children">

@@ -32,6 +32,10 @@ export interface MarqueePreview {
   selection: ReadonlySet<number>;
   /** Candidate current line; a member of `selection`. */
   focus: number;
+  /** Whether the drag paints rows in or out. */
+  mode: MarqueeMode;
+  /** Rows the drag touches, in commit order; the pressed row leads. */
+  lines: readonly number[];
 }
 
 /** Receives the final preview exactly once, on release. */
@@ -140,6 +144,9 @@ function previewSelection(
   forward: boolean,
 ): MarqueePreview {
   const touched = uniqueRows(rows);
+  // The pressed row is always affected, even after the pointer leaves it, and
+  // leads the block so the caller can append exactly what the drag painted.
+  const affected = uniqueRows([anchor, ...touched]);
   const next = new Set(committed);
   if (mode === "add") {
     next.add(anchor);
@@ -165,7 +172,7 @@ function previewSelection(
     (next.has(anchor) ? anchor : undefined) ??
     preferredFirst(next) ??
     anchor;
-  return { selection: next, focus };
+  return { selection: next, focus, mode, lines: affected };
 }
 
 /** Non-integer and duplicate row indices never enter a selection. */

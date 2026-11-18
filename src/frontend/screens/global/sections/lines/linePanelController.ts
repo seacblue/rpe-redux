@@ -9,7 +9,10 @@ import {
   applyLinePurpose as editLinePurpose,
   type LinePurposeTarget,
 } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
-import { renameLineGroup } from "../../../../../core/global/chart/line/lineTreeEdits.ts";
+import {
+  renameLineGroup,
+  sanitizeLineGroupName,
+} from "../../../../../core/global/chart/line/lineTreeEdits.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { t } from "../../../../../i18n/index.ts";
 import { requestConfirm } from "../../../../overlays/modals/prompts.ts";
@@ -271,7 +274,8 @@ export class LinePanel {
   }
 
   /**
-   * Rename one folder, rejecting empty and duplicate names.
+   * Rename one folder after stripping characters a folder expression cannot
+   * carry, rejecting only empty and duplicate names.
    *
    * The folder panel keeps an uncontrolled name field, so a rejected name needs
    * a synchronous answer to roll the visible value back.
@@ -282,7 +286,7 @@ export class LinePanel {
     if (!Number.isInteger(group) || group < 0 || group >= names.length) {
       return false;
     }
-    const next = name.trim();
+    const next = sanitizeLineGroupName(name);
     if (!next) {
       this.notify(t("editorPanels.linePanel.groupNameRequired"), "warning");
       return false;

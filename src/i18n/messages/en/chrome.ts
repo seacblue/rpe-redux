@@ -48,7 +48,7 @@ export default {
   "chrome.toolbar.noiseRenderingSimple": "Simplified rendering",
   "chrome.toolbar.lineField": "Judge line number",
   "chrome.toolbar.lineSelection": "Select judge lines",
-  "chrome.toolbar.lineSelectionHint": "One line or a range",
+  "chrome.toolbar.lineSelectionHint": "One line, a range, or a folder",
   "chrome.toolbar.lineSelectionDefaultGroup": "Default folder",
   "chrome.toolbar.lineSelectionExpand": "Expand {name}",
   "chrome.toolbar.lineSelectionCollapse": "Collapse {name}",
