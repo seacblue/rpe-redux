@@ -21,6 +21,35 @@ export function normalizeColor(value: string): string {
   return normalizeHexColor(value);
 }
 
+/** Picker-ready channels from a committed hex draft, each normalized to 0..1. */
+export interface ColorDraft {
+  red: number;
+  green: number;
+  blue: number;
+  /** Present only when the draft states an explicit alpha channel. */
+  alpha?: number;
+}
+
+/**
+ * Read a completed hex draft as picker state.
+ *
+ * The draft has to be a full three-, four-, six-, or eight-digit value. Three-
+ * and six-digit text carries no alpha, so the caller keeps the alpha it already
+ * had instead of letting a typed RGB value clear a transparency.
+ */
+export function readColorDraft(value: string): ColorDraft | null {
+  const parsed = parseHexColor(value);
+  if (!parsed) {
+    return null;
+  }
+  return {
+    red: parsed.red / 255,
+    green: parsed.green / 255,
+    blue: parsed.blue / 255,
+    alpha: parsed.hasAlpha ? parsed.alpha : undefined,
+  };
+}
+
 /** Pick the readout ink with the stronger WCAG contrast against a colour. */
 export function colorInk(value: string): "dark" | "light" {
   const color = normalizeColor(value);
