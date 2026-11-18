@@ -11,6 +11,7 @@ import "./coverBackground.ts";
 import "./skin.ts";
 import "./language.ts";
 import "./generalInterface.ts";
+import "./layout.ts";
 import "./runtimePorts.ts";
 import "./editingSettings.ts";
 import "./timeline.ts";

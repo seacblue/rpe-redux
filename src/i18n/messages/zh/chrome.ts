@@ -18,6 +18,11 @@ export default {
 
   "chrome.document.untitled": "未命名谱面",
 
+  "chrome.splitter.toolbar": "调整工具栏高度",
+  "chrome.splitter.statusbar": "调整状态栏高度",
+  "chrome.splitter.inspector": "调整检查器宽度",
+  "chrome.splitter.sidebar": "调整侧栏宽度",
+
   "chrome.toolbar.region.notes": "显示音符区域",
   "chrome.toolbar.region.events": "显示事件区域",
   "chrome.toolbar.region.preview": "显示预览区",

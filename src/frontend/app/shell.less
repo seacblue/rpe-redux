@@ -47,11 +47,29 @@
 }
 
 .shell-body {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
   min-width: 0;
   flex-direction: column;
+}
+
+// The toolbar and status bar seams sit on the region's own edge. The 4px
+// offset centres the 9px hit area on the boundary, so the visible line lands
+// exactly where the panel ends.
+.shell-body > .layout-splitter--toolbar {
+  top: calc(var(--layout-toolbar-height) - 4.5px);
+}
+
+.shell-body > .layout-splitter--statusbar {
+  bottom: calc(var(--layout-statusbar-height) - 4.5px);
+}
+
+// Both rows leave the editor for the start page; a missing panel must not leave
+// a floating seam behind.
+.redux-app-root .redux-app-shell[data-at-home="true"] .shell-body > .layout-splitter {
+  display: none;
 }
 
 .shell-content {
@@ -86,7 +104,23 @@
   gap: 0;
   --workbench-side-track: var(--chrome-sidebar-track);
   --inspector-compact-width: clamp(260px, var(--inspector-width), 57vw);
-  --cover-backdrop-workbench-top: calc(var(--titlebar-height) + 106px);
+  --cover-backdrop-workbench-top: calc(var(--titlebar-height) + var(--layout-toolbar-height));
+}
+
+// The inspector seam follows the compact panel's left edge; the rail seam
+// follows the trailing column. Both hide while the inspector owns the workspace
+// as an expanded task, because that surface has no compact edge to drag.
+.workbench-body > .layout-splitter--inspector {
+  right: calc(var(--chrome-sidebar-track) + var(--inspector-compact-width) - 4.5px);
+}
+
+.workbench-body > .layout-splitter--sidebar {
+  right: calc(var(--chrome-sidebar-track) - 4.5px);
+}
+
+.workbench-body:has(> .workbench-inspector > .inspector[data-mode-surface="true"])
+  > .layout-splitter--inspector {
+  display: none;
 }
 
 .workbench-workspace,

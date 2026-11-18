@@ -29,6 +29,11 @@ export default {
 
   "chrome.document.untitled": "Untitled chart",
 
+  "chrome.splitter.toolbar": "Resize toolbar",
+  "chrome.splitter.statusbar": "Resize status bar",
+  "chrome.splitter.inspector": "Resize inspector",
+  "chrome.splitter.sidebar": "Resize sidebar",
+
   "chrome.toolbar.region.notes": "Show note region",
   "chrome.toolbar.region.events": "Show event region",
   "chrome.toolbar.region.preview": "Show preview region",

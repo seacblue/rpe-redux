@@ -22,6 +22,13 @@ import {
 import { PerformanceHud } from "../overlays/performance/PerformanceHud.tsx";
 import { InputOverlays } from "../screens/editor/workspace/stage/inputOverlays/InputOverlays.tsx";
 import { CoverBackdrop } from "./CoverBackdrop.tsx";
+import { Splitter } from "../../design/components/splitter/Splitter.tsx";
+import { useTranslation } from "../../i18n/react.ts";
+import {
+  useLayoutProportions,
+  useLayoutRegion,
+  useViewportSize,
+} from "./layout/useLayoutProportions.ts";
 
 // Bind the editor's chrome commands before the actions that call them are
 // registered. The rail's own buttons come with the panes: each one registers
@@ -41,7 +48,12 @@ if (import.meta.hot) {
  * workspace, start page, and status bar. The workspace itself draws the chart.
  */
 export const Shell = memo(function Shell() {
+  const { t } = useTranslation();
   const [welcomeCoverUrl, setWelcomeCoverUrl] = useState("");
+  useLayoutProportions();
+  const viewport = useViewportSize();
+  const toolbarSeam = useLayoutRegion("toolbar", viewport);
+  const statusbarSeam = useLayoutRegion("statusbar", viewport);
   const editorVisibility = useSyncExternalStore(
     subscribeToEditorVisibility,
     getEditorVisibility,
@@ -63,12 +75,33 @@ export const Shell = memo(function Shell() {
       <TitleBar />
       <div className="shell-body">
         <Toolbar rows={activeSurface.toolbarRows} />
+        <Splitter
+          orientation="horizontal"
+          className="layout-splitter--toolbar"
+          label={t("chrome.splitter.toolbar")}
+          value={toolbarSeam.value}
+          min={toolbarSeam.min}
+          max={toolbarSeam.max}
+          defaultValue={toolbarSeam.defaultValue}
+          onChange={toolbarSeam.setPixels}
+        />
         <div className="shell-content">
           <div className="theme-ambient" aria-hidden="true" />
           <Workbench atHome={editorVisibility.atHome} />
           <WelcomePage onCoverUrlChange={setWelcomeCoverUrl} />
         </div>
         <StatusBar hidden={editorVisibility.atHome} />
+        <Splitter
+          orientation="horizontal"
+          className="layout-splitter--statusbar"
+          label={t("chrome.splitter.statusbar")}
+          value={statusbarSeam.value}
+          min={statusbarSeam.min}
+          max={statusbarSeam.max}
+          defaultValue={statusbarSeam.defaultValue}
+          onChange={statusbarSeam.setPixels}
+          invert
+        />
       </div>
       <TimelineMenu />
       <InputOverlays />

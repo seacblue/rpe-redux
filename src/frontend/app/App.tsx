@@ -82,7 +82,10 @@ import { useSetting } from "../screens/settings/useSetting.ts";
 import { RouteRuntime } from "./routing/RouteRuntime.tsx";
 import {
   applyWindowDisplaySettings,
+  dominantMonitorSignature,
+  fitWindowToCurrentMonitor,
   showDesktopWindow,
+  watchWindowMonitor,
   type WindowDisplayMode,
 } from "../platform/desktop/windowDisplay.ts";
 import { readShortcutContext } from "../platform/shortcuts/shortcutContext.ts";
@@ -337,6 +340,44 @@ function AppContent() {
       cancelled = true;
     };
   }, [backendReady, error, windowDisplayMode, windowResolution]);
+
+  // A window that moves to another display keeps its share of the screen. The
+  // watcher waits for the move to settle, because resizing mid-drag fights the
+  // pointer; while the window straddles two displays, the one holding most of
+  // it decides the size. CSS pixels already follow the system DPI, so the
+  // interface itself is never scaled a second time.
+  useEffect(() => {
+    if (!isDesktop() || windowDisplayMode !== "windowed" || windowResolution !== "auto") {
+      return undefined;
+    }
+    let cancelled = false;
+    let applied = "";
+    const update = () => {
+      void dominantMonitorSignature()
+        .then(async (signature) => {
+          if (cancelled || !signature || signature === applied) {
+            return;
+          }
+          applied = signature;
+          await fitWindowToCurrentMonitor();
+        })
+        .catch((failure: unknown) => {
+          console.error("Could not fit the window to its display", failure);
+        });
+    };
+    // Prime the identity so the first settled move on the same display is a
+    // no-op instead of resizing a window the user already placed.
+    void dominantMonitorSignature().then((signature) => {
+      if (!cancelled) {
+        applied = signature;
+      }
+    });
+    const stop = watchWindowMonitor(update);
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [windowDisplayMode, windowResolution]);
 
   return (
     <TimelineDomSurfaceProvider surface={timelineSurface}>

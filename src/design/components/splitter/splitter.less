@@ -1,0 +1,57 @@
+// Splitter primitive: an invisible grab area with a hairline that appears on
+// hover, focus, and drag. The shell that places a seam owns its position; this
+// sheet owns the gesture surface and the line.
+
+.layout-splitter {
+  position: absolute;
+  z-index: var(--z-content-overlay);
+  touch-action: none;
+  background: transparent;
+
+  &::before {
+    content: "";
+    position: absolute;
+    background: var(--edge-emphasis);
+    opacity: 0;
+    transition: opacity var(--design-dur-tint) ease;
+  }
+}
+
+.layout-splitter:hover::before,
+.layout-splitter:focus-visible::before,
+.layout-splitter[data-dragging="true"]::before {
+  opacity: 1;
+}
+
+.layout-splitter[data-dragging="true"]::before {
+  background: var(--accent);
+}
+
+.layout-splitter:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.layout-splitter--horizontal {
+  inset-inline: 0;
+  height: 9px;
+  cursor: row-resize;
+
+  &::before {
+    inset-inline: 0;
+    top: 4px;
+    height: 1px;
+  }
+}
+
+.layout-splitter--vertical {
+  inset-block: 0;
+  width: 9px;
+  cursor: col-resize;
+
+  &::before {
+    inset-block: 0;
+    left: 4px;
+    width: 1px;
+  }
+}

@@ -9,7 +9,7 @@
 // The icon slot cannot move because nothing reflows.
 
 .sidebar {
-  --sidebar-peek-width: var(--theme-sidebar-width, 56px);
+  --sidebar-peek-width: var(--theme-sidebar-width, var(--layout-sidebar-width, 56px));
   // The collapsed rail clips the content column to its padded inner width: what
   // the peek state actually shows, and therefore the width the icon slot must
   // fill to sit on the rail's centre line.
