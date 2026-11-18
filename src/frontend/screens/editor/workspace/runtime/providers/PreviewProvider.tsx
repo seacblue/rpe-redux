@@ -111,7 +111,13 @@ export function createPreviewRuntime(options: {
       return;
     }
     const session = options.session.current;
-    hitSounds.tick(session.chart, options.tempo(), session.lineIndex);
+    hitSounds.tick(
+      session.chart,
+      options.tempo(),
+      session.lineIndex,
+      session.contentRevision,
+      session.history.contentRevision,
+    );
   };
   document.addEventListener("visibilitychange", syncBackgroundClock);
   window.addEventListener("focus", syncBackgroundClock);

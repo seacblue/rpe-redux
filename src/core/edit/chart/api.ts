@@ -137,9 +137,14 @@ function freezeDeep<T>(value: T, seen = new WeakSet<object>()): ReadonlyChart<T>
   return Object.freeze(value) as ReadonlyChart<T>;
 }
 
-// EditorSession replaces the chart object at every committed edit, so the
-// detached read model is reused while that identity is current.
-const detachedSnapshots = new WeakMap<Chart, ChartReadSnapshot>();
+// A plain session replaces the chart object at every committed edit, but a
+// paged document keeps one facade and mutates its slots in place. The whole
+// chart snapshot is therefore reused only while both the chart identity and its
+// content fingerprint are current.
+const detachedSnapshots = new WeakMap<
+  Chart,
+  { readonly fingerprint: string | null; readonly snapshot: ChartReadSnapshot }
+>();
 const detachedLineSnapshots = new WeakMap<object, ChartReadLine>();
 const detachedMetaSnapshots = new WeakMap<object, ChartReadMeta>();
 const detachedNoteSnapshots = new WeakMap<object, ChartReadNote>();
@@ -177,19 +182,19 @@ function detachedEvent(event: JudgeLineEvent): ChartReadEvent {
 }
 
 /** Returns a frozen, detached copy of the chart for read-only consumers. */
-function detachedChart(chart: Chart | null): ChartReadSnapshot | null {
+function detachedChart(chart: Chart | null, fingerprint: string | null): ChartReadSnapshot | null {
   if (!chart) {
     return null;
   }
   const cached = detachedSnapshots.get(chart);
-  if (cached) {
-    return cached;
+  if (cached && cached.fingerprint === fingerprint) {
+    return cached.snapshot;
   }
   // A structured clone preserves the detached-read contract without first
   // building a second whole-chart JSON string. The old serialize/parse path
   // could exceed the browser string limit on million-event charts.
   const snapshot = freezeDeep(structuredClone(chart));
-  detachedSnapshots.set(chart, snapshot);
+  detachedSnapshots.set(chart, { fingerprint, snapshot });
   return snapshot;
 }
 
@@ -441,7 +446,10 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     };
   };
 
-  const current = (): ChartReadSnapshot | null => detachedChart(capture().source);
+  const current = (): ChartReadSnapshot | null => {
+    const captured = capture();
+    return detachedChart(captured.source, captured.revision.chartFingerprint);
+  };
   const read = <Collection extends ChartReadCollection>(
     collection: Collection,
     options: ChartReadPageOptions = {},

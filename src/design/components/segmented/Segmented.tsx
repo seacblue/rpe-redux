@@ -10,7 +10,7 @@
  * selected option and moved with a spring. The option itself stays transparent,
  * so switching slides the fill instead of fading two separate backgrounds.
  */
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -31,6 +31,8 @@ export interface SegmentedProps<T extends string> {
   onChange(value: T): void;
   disabled?: boolean;
   className?: string;
+  /** Handle to the control root, for callers that measure or mark the whole row. */
+  containerRef?: Ref<HTMLDivElement>;
 }
 
 /** A labelled radio group laid out as one connected control. */
@@ -42,6 +44,7 @@ export function Segmented<T extends string>({
   onChange,
   disabled = false,
   className = "",
+  containerRef,
 }: SegmentedProps<T>) {
   const optionsRef = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState<{ x: number; width: number } | null>(null);
@@ -92,7 +95,7 @@ export function Segmented<T extends string>({
   }, [optionLayoutKey, value]);
 
   return (
-    <div className={`redux-segmented ${className}`}>
+    <div ref={containerRef} className={`redux-segmented ${className}`}>
       {label !== undefined && <span className="redux-segmented-label">{label}</span>}
       <div
         className="redux-segmented-options"

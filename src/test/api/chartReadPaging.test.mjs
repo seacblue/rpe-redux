@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart, createEvent, createLine, createNote } from "../../core/global/chart/chart.ts";
+import { ChartDocument } from "../../core/global/chart/streaming/chartDocument.ts";
 import { createChartApi } from "../../core/edit/chart/api.ts";
 
 function fixture() {
@@ -54,4 +55,21 @@ test("full snapshots remain detached without building a JSON string", () => {
   assert.notEqual(snapshot, chart);
   assert.ok(Object.isFrozen(snapshot));
   assert.equal(snapshot.judgeLineList.length, chart.judgeLineList.length);
+});
+
+test("a paged facade republishes its snapshot after an in-place edit", () => {
+  const document = ChartDocument.fromChart(fixture());
+  const api = createChartApi({ chart: () => document.chart });
+  const before = api.snapshot();
+  assert.equal(before.judgeLineList[0].notes.length, 2);
+
+  const line = document.line(0);
+  const lines = document.chart.judgeLineList.map((entry, index) =>
+    index === 0 ? { ...entry, notes: [line.notes[0]] } : entry,
+  );
+  document.syncFromChart({ ...document.chart, judgeLineList: lines }, { changedLineIndexes: [0] });
+
+  const after = api.snapshot();
+  assert.notEqual(after, before, "a content revision must invalidate the cached snapshot");
+  assert.equal(after.judgeLineList[0].notes.length, 1);
 });

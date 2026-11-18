@@ -423,8 +423,6 @@ export default {
     "Draws easing curves once the event bar reaches the width threshold.",
   "settings.field.event-opacity.label": "Event bar opacity",
   "settings.field.event-bar-width.label": "Event bar width ratio",
-  "settings.field.note-source-hover.label": "Mark the source line when hovering a note",
-
   // -------------------------------------------------------- timeline (5 rows)
   "settings.field.scroll-speed.label": "Wheel seek speed",
   "settings.field.timeline-exclusive-width.label": "Exclusive timeline width",

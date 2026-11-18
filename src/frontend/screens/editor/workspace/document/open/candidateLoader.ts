@@ -272,10 +272,11 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
     const songUri = songPath ? assets.uri?.(songPath) : undefined;
     task.update("audio", 0, 2);
     await loadingPaint();
-    // Audio decoding is independent of chart and texture installation. Start it
-    // now, but do not hold the first usable editor frame behind a large decode.
-    // Playback itself remains gated by the transport until this promise installs
-    // its decoded buffer.
+    // The open is not usable without its track: a user who enters while the
+    // decode is still running cannot hear the music and would have the playhead
+    // restored underneath them when the background load finishes. Wait for the
+    // decoded buffer here; waveform analysis remains asynchronous so playback
+    // does not wait for it.
     const audioPromise = (async () => {
       const bytes =
         assetBytes(assets, references.song, deps.currentChartName()) ??
@@ -296,6 +297,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
     })().catch((error) => {
       deps.reportError?.(error);
     });
+    await audioPromise;
     task.update("audio", 1, 2);
     deps.hitSounds.chart = chart;
     task.update("audio", 2, 2);

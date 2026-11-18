@@ -74,7 +74,7 @@ test("the home card adapter publishes every loaded project", () => {
   }
 });
 
-test("welcome entries prefer the generated thumbnail over the full-size cover", () => {
+test("welcome cards use the generated thumbnail while the detail pane uses the full-size cover", () => {
   const [entry] = buildLibraryEntries({
     libraryProjects: [
       {
@@ -86,6 +86,21 @@ test("welcome entries prefer the generated thumbnail over the full-size cover", 
     ...actions(),
   });
   assert.equal(entry.cover, "http://redux.localhost/thumbnail.png");
+  assert.equal(entry.detailCover, "http://redux.localhost/original.png");
+});
+
+test("welcome detail falls back to the generated thumbnail without a full-size cover", () => {
+  const [entry] = buildLibraryEntries({
+    libraryProjects: [
+      {
+        ...project("thumb", "Thumbnail chart"),
+        thumbnailUrl: "http://redux.localhost/thumbnail.png",
+      },
+    ],
+    ...actions(),
+  });
+  assert.equal(entry.cover, "http://redux.localhost/thumbnail.png");
+  assert.equal(entry.detailCover, "http://redux.localhost/thumbnail.png");
 });
 
 test("group filtering keeps all groups by default and matches stored values", () => {

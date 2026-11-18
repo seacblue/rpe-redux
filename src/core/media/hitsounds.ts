@@ -3,7 +3,8 @@
  *
  * `HitSounds` resolves the active note skin's audio, applies per-kind volumes and
  * offsets, and `SoundTriggerPolicy` caps simultaneous voices per resource and
- * timestamp; the trigger list itself comes from `hitTimeline`.
+ * timestamp; the trigger list itself comes from `hitTimeline` and is rebuilt
+ * whenever the chart document's content revision changes.
  */
 import { clamp01 } from "../utils/numbers.ts";
 import { TempoMap } from "../global/chart/timing/tempo.ts";
@@ -105,10 +106,16 @@ export class HitSounds {
   chart: Chart | null;
   tempo: TempoMap | null;
   compiled: Chart | null;
+  /** Document content revision the compiled trigger list was built from. */
+  compiledRevision: number | null;
+  /** History content revision the list was built from, which separates edits from paging. */
+  compiledEditRevision: number | null;
   compiledLine: number | null;
   entries: HitTimelineEntry[];
   revision: number;
   next: number;
+  /** Latest trigger time consumed in the current transport run. */
+  scheduledUntil: number;
   skinAudio: Promise<Map<string, Uint8Array>> | null;
 
   /** Create an idle hit-sound player for one transport. */
@@ -136,10 +143,13 @@ export class HitSounds {
     this.chart = null;
     this.tempo = null;
     this.compiled = null;
+    this.compiledRevision = null;
+    this.compiledEditRevision = null;
     this.compiledLine = null;
     this.entries = [];
     this.revision = -1;
     this.next = 0;
+    this.scheduledUntil = Number.NEGATIVE_INFINITY;
     this.skinAudio = null;
   }
 
@@ -342,6 +352,8 @@ export class HitSounds {
     this.assets = assets;
     this.chartName = chartName;
     this.compiled = null;
+    this.compiledRevision = null;
+    this.compiledEditRevision = null;
     this.compiledLine = null;
     this.entries = [];
     this.tempo = null;
@@ -382,24 +394,59 @@ export class HitSounds {
     }
     this.sources.clear();
     this.revision = -1;
+    this.scheduledUntil = Number.NEGATIVE_INFINITY;
     // A replay restarts on the same timestamps, so the per-timestamp voice
     // budget belongs to one transport run and must not accumulate across runs.
     this.soundPolicy.reset();
   }
 
-  /** Advance the trigger cursor and schedule sounds within the look-ahead window. */
-  tick(chart: Chart, tempo: TempoMap, currentLine: number | null = null): void {
+  /**
+   * Advance the trigger cursor and schedule sounds within the look-ahead window.
+   *
+   * `contentRevision` is the owner's monotonic document revision. A paged chart
+   * document mutates one facade chart in place across edits and line
+   * materializations, so chart identity alone cannot tell this scheduler that
+   * its trigger list is stale. `editRevision` is the history content revision:
+   * a paged line materialization only adds future notes, while an edit can move
+   * or delete a note whose voice is already scheduled.
+   */
+  tick(
+    chart: Chart,
+    tempo: TempoMap,
+    currentLine: number | null = null,
+    contentRevision: number | null = null,
+    editRevision: number | null = null,
+  ): void {
     if (!this.transport.playing || this.transport.clockReady === false) {
       this.stop();
       return;
     }
     const line = this.onlyCurrentLine ? currentLine : null;
-    if (this.compiled !== chart || this.tempo !== tempo || this.compiledLine !== line) {
-      this.stop();
+    const revision = contentRevision ?? null;
+    const edit = editRevision ?? revision;
+    const structural =
+      this.compiled !== chart || this.tempo !== tempo || this.compiledLine !== line;
+    if (structural || this.compiledRevision !== revision || this.compiledEditRevision !== edit) {
+      // An edited chart invalidates scheduled voices; a paged line that merely
+      // became materialized does not, so a loading burst never stops and
+      // re-schedules the notes it just queued.
+      const edited = structural || this.compiled === null || this.compiledEditRevision !== edit;
+      if (edited) {
+        this.stop();
+      }
       this.compiled = chart;
       this.tempo = tempo;
       this.compiledLine = line;
+      this.compiledRevision = revision;
+      this.compiledEditRevision = edit;
       this.entries = hitTimeline(chart, tempo, this.offsets, line);
+      if (!edited) {
+        this.next = upperBound(
+          this.entries,
+          Math.max(this.transport.audioTime - 0.02, this.scheduledUntil),
+          (entry) => entry.time,
+        );
+      }
     }
     const time = this.transport.audioTime;
     if (this.revision !== this.transport.playRevision) {
@@ -424,6 +471,7 @@ export class HitSounds {
       this.entries[this.next].time < (this.transport.scheduleHorizon ?? Infinity)
     ) {
       const entry = this.entries[this.next++];
+      this.scheduledUntil = entry.time;
       if (burst++ >= this.maxBurst) {
         continue;
       }

@@ -104,7 +104,6 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     }
   }
   const hover = !this.gestures.drag ? this.hit(this.gestures.cursor) : null;
-  this.gestures.onNoteHover?.(hover);
   this.changed();
   if (this.notesCanvas.style) {
     // Notes are dragged rather than clicked; placement tools keep the
