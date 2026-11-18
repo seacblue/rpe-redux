@@ -693,7 +693,11 @@ export class RpeSkin {
       return picture;
     };
     const bodyRect = body ? this.bounds(bodyName, body) : null;
-    const span = Math.abs(tail - head);
+    // Caps extend along the line's own axis from their own anchors. The canvas
+    // Y axis runs opposite that frame, so project the anchor delta through the
+    // rotation: Phira keeps this direction fixed even when the painted length
+    // is negative and the two caps face each other.
+    const span = (tail - head) * Math.cos(axisRotation);
     const endRect = end ? this.bounds(endName, end) : null;
     const headRect = headPicture ? this.bounds(headName, headPicture) : null;
     const headLength =
@@ -703,8 +707,8 @@ export class RpeSkin {
     context.save();
     context.translate(horizontal, head);
     context.rotate(axisRotation);
-    if (drawBody && body && bodyRect && layout.bodyLength > 0) {
-      const bodyCenter = (layout.bodyHead.y + layout.bodyTail.y) / 2;
+    if (drawBody && body && bodyRect && span > 0) {
+      const bodyCenter = span / 2;
       const bodyBox = alignedTextureBox(
         bodyRect,
         body.naturalWidth || body.width || bodyRect.width,
@@ -712,7 +716,7 @@ export class RpeSkin {
         0,
         bodyCenter,
         width,
-        layout.bodyLength,
+        span,
       );
       this.drawHoldTexture(context, texture(bodyName, highlight), bodyBox, 0, bodyCenter);
     }

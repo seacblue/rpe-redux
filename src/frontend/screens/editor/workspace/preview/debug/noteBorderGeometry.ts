@@ -50,17 +50,13 @@ function holdSegment(
 }
 
 /**
- * Direction from the Hold head to its tail in surface axes.
+ * Direction from the Hold head to its tail along the line's own axis.
  *
- * A zero-length Hold has no painted axis, so its caps follow the line's fall
- * direction: local +Y rotated by the line angle and flipped for a note below
- * the judge line.
+ * Phira lays each cap out from its own anchor along that fixed axis, so a
+ * negative painted span must not mirror them; the measured head-to-tail vector
+ * is only an approximation that fails once the span reverses.
  */
-function holdAxisDirection(object: PreviewObject, dx: number, dy: number): PreviewPoint {
-  const length = Math.hypot(dx, dy);
-  if (length > 0.5) {
-    return { x: dx / length, y: dy / length };
-  }
+function holdAxisDirection(object: PreviewObject): PreviewPoint {
   const above = Number(object.debug?.above ?? 1) === 1;
   const radians = ((object.rotation + (above ? 180 : 0)) * Math.PI) / 180;
   return { x: -Math.sin(radians), y: Math.cos(radians) };
@@ -80,20 +76,20 @@ export function noteBorderPolygons(object: PreviewObject): readonly NoteBorderPo
     return [];
   }
   const { head, tail } = object.surface;
-  const dx = tail.x - head.x;
-  const dy = tail.y - head.y;
-  const length = Math.hypot(dx, dy);
-  const direction = holdAxisDirection(object, dx, dy);
+  const direction = holdAxisDirection(object);
+  // The line axis fixes where each cap grows; the body exists only when the
+  // anchors still advance along that axis.
+  const span = (tail.x - head.x) * direction.x + (tail.y - head.y) * direction.y;
   const width = Math.max(1, object.width);
   const headLength = object.showHead === false ? 0 : holdCapLength(object.headLength, width);
   const tailLength = holdCapLength(object.tailLength, width);
   const polygons: NoteBorderPolygon[] = [];
   // The body spans the anchors; each cap is centred half a cap outside them,
   // matching the sprite layout in the preview renderer.
-  if (length > 0.5) {
+  if (span > 0.5) {
     polygons.push({
       part: "hold-body",
-      points: holdSegment(head, direction.x, direction.y, width, 0, length),
+      points: holdSegment(head, direction.x, direction.y, width, 0, span),
     });
   }
   if (headLength > 0) {

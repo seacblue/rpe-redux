@@ -133,7 +133,14 @@ export function createHoldLayoutScratch(): HoldLayoutScratch {
   };
 }
 
-/** Fill a reusable Hold layout target without allocating geometry objects. */
+/**
+ * Fill a reusable Hold layout target without allocating geometry objects.
+ *
+ * `capDirection` is the line's own fall axis. When supplied, both caps extend
+ * along it from their own anchors instead of along the measured head-to-tail
+ * vector. Phira anchors each cap at its Hold anchor and grows it outward on
+ * the line's axis, so a negative painted span must not mirror them.
+ */
 export function holdLayoutInto(
   target: HoldLayoutScratch,
   headX: number,
@@ -142,15 +149,15 @@ export function holdLayoutInto(
   tailY: number,
   headCapLength: number,
   tailCapLength = headCapLength,
-  fallbackDirection?: { readonly x: number; readonly y: number },
+  capDirection?: { readonly x: number; readonly y: number },
 ): HoldLayout {
   const deltaX = tailX - headX;
   const deltaY = tailY - headY;
   const length = Math.hypot(deltaX, deltaY);
   const head = Math.max(0, headCapLength);
   const tail = Math.max(0, tailCapLength);
-  const unitX = length > 0 ? deltaX / length : (fallbackDirection?.x ?? 0);
-  const unitY = length > 0 ? deltaY / length : (fallbackDirection?.y ?? 0);
+  const unitX = capDirection?.x ?? (length > 0 ? deltaX / length : 0);
+  const unitY = capDirection?.y ?? (length > 0 ? deltaY / length : 0);
   target.headCap.x = headX - unitX * (head / 2);
   target.headCap.y = headY - unitY * (head / 2);
   target.tailCap.x = tailX + unitX * (tail / 2);
@@ -171,8 +178,9 @@ export function holdLayoutInto(
  * Each cap is centred half a cap length beyond its anchor, matching the
  * recorder and the upstream Phira layout. The body covers the whole
  * head-to-tail span, so overlapping or nested Holds cannot expose a short
- * Hold's cap through the middle of a longer body. A zero-length Hold has no
- * head-to-tail axis, so its caller supplies the fall direction for the caps.
+ * Hold's cap through the middle of a longer body. `capDirection` is the line's
+ * own fall axis; it fixes which way each cap grows when the anchors do not
+ * define it, such as a zero-length Hold or a negative painted span.
  */
 export function holdLayout(
   headX: number,
@@ -181,7 +189,7 @@ export function holdLayout(
   tailY: number,
   headCapLength: number,
   tailCapLength = headCapLength,
-  fallbackDirection?: { readonly x: number; readonly y: number },
+  capDirection?: { readonly x: number; readonly y: number },
 ): HoldLayout {
   return holdLayoutInto(
     {
@@ -199,7 +207,7 @@ export function holdLayout(
     tailY,
     headCapLength,
     tailCapLength,
-    fallbackDirection,
+    capDirection,
   );
 }
 

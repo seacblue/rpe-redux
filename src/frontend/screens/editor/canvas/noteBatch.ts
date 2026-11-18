@@ -672,10 +672,9 @@ export class NoteBatch {
       return false;
     }
     // A Hold with no visible body (speed zero, or a tail already at the line)
-    // carries cap textures. It has no head-to-tail vector, so its rotation
-    // comes from the line's angle. A negative painted length is the same case
-    // with an upside-down span: the caps must keep the upright frame their UVs
-    // are authored for instead of following the reversed vector.
+    // carries cap textures. Its caps extend along the line's own axis, which is
+    // also why a negative painted span keeps them upright instead of mirroring
+    // them with the reversed head-to-tail vector.
     const rotation = drawBody
       ? holdRenderRotation(headX, headY, tailX, tailY, fallbackRotation)
       : fallbackRotation;

@@ -38,3 +38,12 @@ test("a zero-length hold puts the tail cap half a cap along the fall direction",
   assert.deepEqual(layout.tailCap, { x: 7, y: 19 });
   assert.equal(layout.bodyLength, 0);
 });
+
+test("a cap direction anchors each cap at its own anchor over a negative span", () => {
+  // The tail sits behind the head along the line axis: Phira still grows each
+  // cap outward from its own anchor instead of mirroring the pair.
+  const layout = holdLayout(0, 0, 0, 50, 10, 20, { x: 0, y: -1 });
+  assert.deepEqual(layout.headCap, { x: 0, y: 5 });
+  assert.deepEqual(layout.tailCap, { x: 0, y: 40 });
+  assert.equal(layout.bodyLength, 50);
+});

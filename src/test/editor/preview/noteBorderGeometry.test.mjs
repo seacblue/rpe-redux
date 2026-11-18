@@ -79,7 +79,7 @@ test("a note is one polygon copied from its painted corners", () => {
 });
 
 test("a Hold uses the painted cap heights outside its anchors", () => {
-  const polygons = noteBorderPolygons(hold(100));
+  const polygons = noteBorderPolygons(hold(100, 20, { debug: { above: 0 } }));
   assert.deepEqual(
     polygons.map((polygon) => polygon.part),
     ["hold-body", "hold-head", "hold-tail"],
@@ -87,6 +87,19 @@ test("a Hold uses the painted cap heights outside its anchors", () => {
   assert.deepEqual(yRange(polygons[0].points), { min: 0, max: 100 });
   assert.deepEqual(yRange(polygons[1].points), { min: -4, max: 0 });
   assert.deepEqual(yRange(polygons[2].points), { min: 100, max: 104 });
+});
+
+test("a negative painted span keeps both caps on the line axis", () => {
+  // The default fixture is an above-line Hold: its axis points up, so a tail
+  // drawn below the head reverses the span. Phira then paints no body, and
+  // each cap still grows outward along that axis from its own anchor.
+  const polygons = noteBorderPolygons(hold(40));
+  assert.deepEqual(
+    polygons.map((polygon) => polygon.part),
+    ["hold-head", "hold-tail"],
+  );
+  assert.deepEqual(yRange(polygons[0].points), { min: 0, max: 4 });
+  assert.deepEqual(yRange(polygons[1].points), { min: 36, max: 40 });
 });
 
 test("a zero-length Hold uses its painted tail cap instead of a full square", () => {
@@ -113,7 +126,7 @@ test("a future zero-length Hold keeps both painted cap borders", () => {
 });
 
 test("a hidden Hold head keeps only the body and tail borders", () => {
-  const polygons = noteBorderPolygons(hold(100, 20, { showHead: false }));
+  const polygons = noteBorderPolygons(hold(100, 20, { showHead: false, debug: { above: 0 } }));
   assert.deepEqual(
     polygons.map((polygon) => polygon.part),
     ["hold-body", "hold-tail"],
@@ -127,7 +140,7 @@ test("a hidden Hold head keeps only the body and tail borders", () => {
 
 test("a rotated Hold extends its caps along the painted axis", () => {
   const value = {
-    ...hold(100, 20, { headLength: 8, tailLength: 12 }),
+    ...hold(100, 20, { rotation: 90, headLength: 8, tailLength: 12 }),
     id: "horizontal",
     surface: {
       center: { x: 50, y: 0 },
@@ -138,7 +151,7 @@ test("a rotated Hold extends its caps along the painted axis", () => {
   };
   const polygons = noteBorderPolygons(value);
   const ranges = polygons.map((polygon) => {
-    const xs = polygon.points.map((point) => point.x);
+    const xs = polygon.points.map((point) => round(point.x));
     return { min: Math.min(...xs), max: Math.max(...xs) };
   });
   assert.deepEqual(ranges[0], { min: 0, max: 100 });
@@ -181,7 +194,7 @@ test("border hits select the topmost note and ignore empty space", () => {
 });
 
 test("a Hold hit covers its head, body, and tail segments", () => {
-  const value = hold(100);
+  const value = hold(100, 20, { debug: { above: 0 } });
   for (const y of [-2, 10, 50, 90, 102]) {
     assert.equal(noteBorderHit([value], { x: 0, y })?.id, value.id);
   }

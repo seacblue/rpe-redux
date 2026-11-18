@@ -358,6 +358,10 @@ function drawPreviewNoteEntry(
 ): boolean {
   const isHold = entry.note.type === 2;
   const invertedHold = isHold && holdPaintsNoBody(entry);
+  // A negative span keeps the caps on the line's own axis, which is the same
+  // local angle an ordinary Hold on this line uses. Passing the absolute line
+  // angle here would rotate them twice inside the already-rotated context.
+  const invertedCapRotation = invertedHold ? (noteIsAbove(entry.note) ? Math.PI : 0) : null;
   const holdRotation = rotation + (noteIsAbove(entry.note) ? Math.PI : 0);
   if (surface.collectGeometry) {
     appendPreviewNoteHitArea(
@@ -432,6 +436,7 @@ function drawPreviewNoteEntry(
     holdRotation,
     holdCapScale,
     invertedHold,
+    invertedCapRotation,
   );
   if (restoreBatchTransform) {
     context.restore();
@@ -462,6 +467,7 @@ function paintPreviewNoteFallback(
   holdRotation: number,
   holdCapScale: number,
   invertedHold: boolean,
+  invertedCapRotation: number | null,
 ): void {
   context.globalAlpha = alpha;
   const tint = noteColorStyle?.color;
@@ -473,13 +479,10 @@ function paintPreviewNoteFallback(
   let drawnHold = false;
   if (noteType === 2) {
     const axis = position.tail - position.y;
-    // A negative painted length keeps the caps in the line's upright frame;
-    // deriving the angle from the reversed span would turn their UVs over.
-    const holdAxisRotation = invertedHold
-      ? holdRotation
-      : Math.abs(axis) < 1e-6
-        ? holdRotation
-        : Math.atan2(0, -axis);
+    // A negative painted length keeps the caps on the line's own axis; deriving
+    // the angle from the reversed span would turn their UVs over.
+    const holdAxisRotation =
+      invertedCapRotation ?? (Math.abs(axis) < 1e-6 ? holdRotation : Math.atan2(0, -axis));
     drawnHold =
       surface.skin?.hold(
         context,
