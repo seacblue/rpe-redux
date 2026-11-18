@@ -330,6 +330,17 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   if (event.button === 0 && hit && this.gestures.curvePick?.(hit.item, hit.index, hit.lineIndex)) {
     return;
   }
+  // An armed offset pick owns the next left click: a note supplies its own start
+  // beat, empty canvas supplies the snapped grid line under the pointer.
+  if (
+    event.button === 0 &&
+    this.gestures.offsetPick?.(
+      hit ? hit.start : this.viewport.snappedBeat(position.y),
+      hit?.lineIndex ?? null,
+    )
+  ) {
+    return;
+  }
   if (
     event.button === 0 &&
     !hit &&

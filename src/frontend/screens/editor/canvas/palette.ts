@@ -51,6 +51,13 @@ export interface CanvasPalette {
   previewSelectionFill: string;
   inspectorPath: string;
   inspectorMarker: string;
+  /**
+   * Emphasised line colour while the offset pick is armed.
+   *
+   * It reuses the focus-ring token, which every theme already defines, so the
+   * highlight is unmistakable without adding a required theme token.
+   */
+  alignHighlight: string;
 }
 
 let cachedPalette: CanvasPalette | null = null;
@@ -140,6 +147,7 @@ export function readCanvasPalette(): CanvasPalette {
     previewSelectionFill: read("--canvas-preview-selection-fill"),
     inspectorPath: read("--canvas-inspector-path"),
     inspectorMarker: read("--canvas-inspector-marker"),
+    alignHighlight: read("--focus-ring"),
   };
   cachedPalette = palette;
   cachedSelectionColors = selectionColors;

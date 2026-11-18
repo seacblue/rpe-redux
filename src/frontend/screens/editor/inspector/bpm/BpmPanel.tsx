@@ -42,7 +42,7 @@ import {
   timingPointSelection,
 } from "../../../global/sections/timing/timingSelection.ts";
 import { shouldRunMetronome } from "./metronomeVisibility.ts";
-import { offsetAnchorSeconds } from "./offsetAnchor.ts";
+import { armOffsetAlign } from "./offsetAlign.ts";
 
 /** Renders the selected timing point, or the chart offset when `mode` says so. */
 export function BpmPanel({
@@ -451,12 +451,6 @@ function BpmOffset({ session, chart }: Pick<BpmForm, "session" | "chart">) {
       return;
     }
     try {
-      const playback = editorRuntime?.providers.playback;
-      // Offset maps chart time onto the audio clock, so the transport keeps the
-      // same chart position only after its audio position moves with the new
-      // value. Read the chart position from the live session before the commit:
-      // the form snapshot may still hold the previous offset.
-      const chartSeconds = playback ? playback.chartSeconds() : null;
       const next = chartWithOffsetDraft(session.chart, nextValue);
       session.commitChart(
         t("editorPanels.inspector.form.bpm.offsetCommit"),
@@ -465,16 +459,11 @@ function BpmOffset({ session, chart }: Pick<BpmForm, "session" | "chart">) {
         undefined,
         { normalized: true },
       );
-      // Seek through the transport controller rather than the audio transport:
-      // it also stops hit sounds, publishes the playhead to the viewport,
-      // invalidates the frame, and refreshes the preload window. `pause: false`
-      // keeps a running transport running.
-      if (playback && chartSeconds !== null) {
-        const anchor = offsetAnchorSeconds(chartSeconds, Number(next.META.offset ?? 0) / 1000);
-        if (anchor !== null) {
-          playback.playback.seek(anchor, false);
-        }
-      }
+      // The offset only remaps chart time onto the audio clock, so committing it
+      // slides the chart under an unchanged audio position. Republish the derived
+      // clocks instead of seeking: the playhead must stay where it is, and a
+      // running transport keeps running.
+      editorRuntime?.providers.playback.resync();
       setError("");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -506,6 +495,18 @@ function BpmOffset({ session, chart }: Pick<BpmForm, "session" | "chart">) {
         }
       />
       {error && <InlineAlert className="bpm-offset-error">{error}</InlineAlert>}
+      <div className="bpm-offset-actions">
+        <Button
+          type="button"
+          variant="outlined"
+          block
+          disabled={!editorRuntime}
+          onClick={() => armOffsetAlign(editorRuntime)}
+        >
+          <Icon name="magnet" size={16} />
+          <span className="redux-button-label">{t("editorPanels.inspector.form.bpm.align")}</span>
+        </Button>
+      </div>
     </div>
   );
 }

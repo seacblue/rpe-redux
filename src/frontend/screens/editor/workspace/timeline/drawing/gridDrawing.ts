@@ -108,6 +108,7 @@ export function gridBatchKey(
     receiver.appearance.barAlpha,
     receiver.appearance.hoverGuidesEnabled,
     receiver.appearance.gridHighlightColor,
+    receiver.appearance.alignHighlight,
     receiver.appearance.subdivisionColors.join(","),
     palette.gridMajor,
     palette.gridMinor,
@@ -277,6 +278,31 @@ type TimelineHoverGuideReceiver = {
   viewport: TimelineViewport;
 };
 
+/**
+ * Resolve one grid line's highlight colour and opacity.
+ *
+ * An armed offset pick paints every line in the emphasized colour at full
+ * strength so the author can aim; otherwise only the nearest snapped line under
+ * the pointer is highlighted, gated by the guide setting.
+ */
+function gridLineHighlight(
+  appearance: TimelineAppearance,
+  palette: ReturnType<typeof readCanvasPalette>,
+  baseColor: string,
+  baseAlpha: number,
+  nearestHover: boolean,
+  hoverOpacity: number,
+): { color: string; alpha: number } {
+  if (appearance.alignHighlight) {
+    return { color: palette.alignHighlight, alpha: 1 };
+  }
+  const highlighted = appearance.hoverGuidesEnabled !== false && nearestHover;
+  return {
+    color: highlighted ? sourceOverColor(baseColor, appearance.gridHighlightColor) : baseColor,
+    alpha: appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity),
+  };
+}
+
 /** Resolve the snapped beat under the pointer for the requested timeline area. */
 function hoveredGridLine(
   receiver: TimelineHoverGuideReceiver,
@@ -405,15 +431,14 @@ export function grid(
         : nearestHover
           ? 1
           : 0;
-    // Only the nearest snapped beat line receives the highlight colour. The
-    // surrounding lines keep their own colours and use hoverOpacity solely as
-    // the sampling-style fade.
-    const highlighted = this.appearance.hoverGuidesEnabled !== false && nearestHover;
-    const color = highlighted
-      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
-      : baseColor;
-    const alpha =
-      this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
+    const { color, alpha } = gridLineHighlight(
+      this.appearance,
+      palette,
+      baseColor,
+      baseAlpha,
+      nearestHover,
+      hoverOpacity,
+    );
     if (draws(parts, "lines")) {
       commands.push({
         kind: "fillRect",
@@ -521,14 +546,14 @@ export function gridForLine(
         : nearestHover
           ? 1
           : 0;
-    // Match note-lane guides: colour only the nearest snapped line, while the
-    // neighbouring lines retain their base colours and fade by pixel distance.
-    const highlighted = this.appearance.hoverGuidesEnabled !== false && nearestHover;
-    const color = highlighted
-      ? sourceOverColor(baseColor, this.appearance.gridHighlightColor)
-      : baseColor;
-    const alpha =
-      this.appearance.nearbyGuidesOnly === true ? hoverOpacity : Math.max(baseAlpha, hoverOpacity);
+    const { color, alpha } = gridLineHighlight(
+      this.appearance,
+      palette,
+      baseColor,
+      baseAlpha,
+      nearestHover,
+      hoverOpacity,
+    );
     if (draws(parts, "lines")) {
       commands.push({
         kind: "fillRect",

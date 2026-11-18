@@ -124,6 +124,8 @@ export default {
   "editorPanels.inspector.form.bpm.add": "Add BPM",
   "editorPanels.inspector.form.bpm.offset": "Offset",
   "editorPanels.inspector.form.bpm.offsetCommit": "Adjust chart offset",
+  "editorPanels.inspector.form.bpm.align": "Align to a timeline line",
+  "editorPanels.inspector.form.bpm.alignToast": "Click a line in the timeline to align the offset",
   "editorPanels.inspector.form.bpm.time": "Time",
   "editorPanels.inspector.form.bpm.value": "BPM",
   "editorPanels.inspector.form.bpm.delete": "Delete timing point",

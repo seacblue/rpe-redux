@@ -30,6 +30,15 @@ export interface PlaybackRuntime {
    * glides toward the accumulated target so the playhead does not jump.
    */
   seekByBeats(deltaBeats: number, minimumSeconds: number): void;
+  /**
+   * Republish the chart clock after a change to the chart's offset.
+   *
+   * An offset edit slides the chart against an unchanged audio clock, so the
+   * chart position, viewport origin, hit-sound cursor, and preload window all
+   * have to be re-derived. It never seeks: the audio stays where it is, and a
+   * running transport keeps running.
+   */
+  resync(): void;
   togglePlayback(): Promise<void>;
   dispose(): void;
 }
@@ -118,21 +127,24 @@ export function createPlaybackRuntime(options: {
   };
   const currentBeat = () =>
     options.tempo().beat(chartSeconds(), options.session.current.line?.bpmfactor ?? 1);
-  const playback = new EditorPlayback(
-    audio,
-    hitSounds,
-    () => {
-      options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
-      options.timeline.viewport.setOrigin(currentBeat(), "seek");
-      // Seeking changes the time-dependent grid even when the viewport origin
-      // rounds to the same beat as the previous frame.
-      options.timeline.changed();
-      realtimePreview.effectsSince = chartSeconds();
-      preloadAround(chartSeconds());
-      options.invalidate();
-    },
-    options.onPlaybackStateChange,
-  );
+  /**
+   * Republish everything derived from the chart clock.
+   *
+   * A transport seek and an offset edit both move the chart position under the
+   * playhead, so both need the same viewport, preview, preload, and repaint work.
+   * The transport position itself is the caller's business.
+   */
+  const publishSeek = () => {
+    options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
+    options.timeline.viewport.setOrigin(currentBeat(), "seek");
+    // Seeking changes the time-dependent grid even when the viewport origin
+    // rounds to the same beat as the previous frame.
+    options.timeline.changed();
+    realtimePreview.effectsSince = chartSeconds();
+    preloadAround(chartSeconds());
+    options.invalidate();
+  };
+  const playback = new EditorPlayback(audio, hitSounds, publishSeek, options.onPlaybackStateChange);
   const playbackMetrics = new PlaybackMetrics();
   let wheelSeek: WheelSeekState | null = null;
 
@@ -332,6 +344,7 @@ export function createPlaybackRuntime(options: {
     autoSave,
     seekBeat,
     seekByBeats,
+    resync: publishSeek,
     togglePlayback,
     /** Stops the chase, cancels autosave, and pauses the transport. */
     dispose() {

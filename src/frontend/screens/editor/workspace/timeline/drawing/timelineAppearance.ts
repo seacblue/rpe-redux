@@ -58,6 +58,14 @@ export class TimelineAppearance {
   verticalGridColor = "#61640E";
   verticalGridCenterColor = "#9DA00B";
   gridHighlightColor = "#FFFFFF80";
+  /**
+   * Highlight every grid line while an offset pick is armed.
+   *
+   * Runtime-only state like `skin`: it is armed by the offset panel and cleared
+   * when the pick ends, so `apply()` deliberately leaves it alone and a settings
+   * change cannot cancel the pick.
+   */
+  alignHighlight = false;
 
   /** Copy the current timeline display settings into this instance. */
   apply(config: AppearanceSettings): void {

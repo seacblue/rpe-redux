@@ -125,6 +125,9 @@ import { createLayoutApiHost } from "../bindings/layoutBindings.ts";
 import { bindPreviewSelection } from "../../preview/interaction/previewSelection.ts";
 import { createPreviewFrameCapture } from "../../preview/frame/frameCapture.ts";
 import { createEditorRuntime, type EditorRuntime } from "./EditorRuntime.tsx";
+import { disarmOffsetAlign, offsetAlignArmed } from "../../../inspector/bpm/offsetAlign.ts";
+import { alignedOffsetMs } from "../../../inspector/bpm/offsetAlignMath.ts";
+import { chartWithOffsetDraft } from "../../../../../../core/global/chart/editing/drafts.ts";
 import { createEditorUiState } from "./editorUiState.ts";
 import type { EditorSessionRuntime } from "../providers/SessionProvider.tsx";
 import {
@@ -214,6 +217,13 @@ export function createEditorAssembly(
     setEditorVisibility({ ...getEditorVisibility(), hasDocument: value });
   }
   const sessionRendererRef: { current?: ReturnType<typeof createEditorSessionRenderer> } = {};
+  /**
+   * The runtime is created last, but pick handlers registered earlier need it.
+   *
+   * They only read it while handling a click or a teardown, both of which happen
+   * after assembly has finished.
+   */
+  const runtimeRef: { current: EditorRuntime | null } = { current: null };
   let sessionRenderMode: "document" | "selection" | null = null;
   let sessionRenderDeferred = false;
   /** Repaints the session-derived readouts and panel contents synchronously. */
@@ -492,6 +502,43 @@ export function createEditorAssembly(
   } = playbackRuntime;
   deferSessionRenderDuringPlayback = () => playback.audio.playing || playback.pending;
   scope.add(playbackRuntime.dispose);
+  // Aligning the offset to a timeline line captures one click. The picked beat
+  // becomes the chart time the unchanged audio clock should sit on, so the new
+  // offset is `audio − chart`; the transport is never seeked.
+  timeline.gestures.offsetPick = (beat, lineIndex) => {
+    if (!offsetAlignArmed.get()) {
+      return false;
+    }
+    const current = session.current;
+    const factor =
+      lineIndex === null ? 1 : (current.chart.judgeLineList?.[lineIndex]?.bpmfactor ?? 1);
+    const nextOffsetMs = alignedOffsetMs(audio.time, tempo.get().seconds(beat, factor));
+    // Disarm first: a refused commit must not leave the pick swallowing clicks.
+    disarmOffsetAlign(runtimeRef.current);
+    if (nextOffsetMs === null) {
+      return false;
+    }
+    try {
+      current.commitChart(
+        t("editorPanels.inspector.form.bpm.offsetCommit"),
+        chartWithOffsetDraft(current.chart, String(nextOffsetMs)),
+        current.selectionState(),
+        undefined,
+        { normalized: true },
+      );
+      playbackRuntime.resync();
+      return true;
+    } catch (error) {
+      reportError(error);
+      return false;
+    }
+  };
+  timeline.gestures.offsetPickCancel = () => disarmOffsetAlign(runtimeRef.current);
+  scope.add(() => {
+    timeline.gestures.offsetPick = null;
+    timeline.gestures.offsetPickCancel = undefined;
+    disarmOffsetAlign(runtimeRef.current);
+  });
   createTimelineMarkers({
     root: surfaces.transport.timelineMarkers,
     scrubber: surfaces.transport.scrubber,
@@ -1394,5 +1441,6 @@ export function createEditorAssembly(
     },
     dispose,
   });
+  runtimeRef.current = runtime;
   return { runtime };
 }

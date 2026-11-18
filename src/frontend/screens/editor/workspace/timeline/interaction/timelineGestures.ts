@@ -84,6 +84,16 @@ export class TimelineGestures {
   curvePickPoint?: ((beat: number, positionX: number) => unknown) | null;
   curveQuickPick: ((note: TimelineNote, index: number, lineIndex: number) => boolean) | null = null;
   curveGhost?: () => TimelineNote[];
+  /**
+   * Consume one click as a chart-offset alignment target.
+   *
+   * Returns true when the click was taken, in which case selection, placement,
+   * and drag handling are skipped. `lineIndex` is null for a click outside any
+   * judge-line panel, where only the beat is meaningful.
+   */
+  offsetPick: ((beat: number, lineIndex: number | null) => boolean) | null = null;
+  /** Drop an armed offset pick; wired by the editor that owns the pick state. */
+  offsetPickCancel?: () => void;
   previewPick?: (event: PointerEvent) => unknown;
   previewCancel?: () => void;
   onDragScroll?: (seconds: number) => void;
@@ -289,6 +299,9 @@ export class TimelineGestures {
     this.selectionHistoryChart = null;
     trackedSession?.endSelectionNotificationBatch();
     this.suppressContextMenu = false;
+    // An armed offset pick is a pointer mode of its own, so every cancel path
+    // that ends placement or a drag must end it too.
+    this.offsetPickCancel?.();
   }
 
   /** Clear pointer routing state without resetting the selected document. */
