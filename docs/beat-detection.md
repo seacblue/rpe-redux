@@ -73,6 +73,18 @@ Synthetic click tracks with every onset placed at a known sample index, 24–30 
 
 The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 frames) would hide the quantisation instead of testing it. A sweep of 25 rhythm patterns passes 24; the one that does not is tresillo (3+3+2), a cross-rhythm whose "beat" is a matter of interpretation.
 
+### Tolerance
+
+`beatTolerance.test.mjs` holds the reported values to **0.01 BPM** and **3 ms** of offset. How close the fit lands depends on how many beats it has to work with, because the line is fitted through every matched attack:
+
+| Track length | Raw tempo error (before rounding) |
+| ------------ | --------------------------------- |
+| 10 s         | up to 0.005 BPM                   |
+| 30 s         | 0.0000 BPM                        |
+| 60 s         | 0.0000 BPM                        |
+
+The reported value keeps three decimals, so a full-length track reports the exact tempo. A ten-second clip is the case that uses the tolerance rather than beating it: too few attacks for the fit to average the frame quantisation away.
+
 Limits worth stating plainly:
 
 - **Some material has no single right answer.** A swing feel, a pattern with hits only every second beat, and a cross-rhythm are all cases where two tempi describe the same audio. The detector reports the pulse it can defend from the onsets; it does not guess a metrical intent that is not audible.
