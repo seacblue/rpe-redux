@@ -188,6 +188,8 @@ export default {
   "chrome.transport.scrubber": "Playback position",
   "chrome.transport.beat": "Beat {value}",
   "chrome.transport.bpm": "{value} BPM",
+  "chrome.transport.stretch": "Vertical stretch",
+  "chrome.transport.stretchHint": "Drag to change how much vertical space each beat takes.",
 
   "chrome.transport.menu.label": "Playback position menu",
   "chrome.transport.menu.jump": "Jump to time…",

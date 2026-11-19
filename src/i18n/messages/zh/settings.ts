@@ -364,6 +364,9 @@ export default {
   "settings.field.event-bar-width.label": "事件条宽度比例",
   "settings.field.scroll-speed.label": "滚轮跳转速度",
   "settings.field.timeline-exclusive-width.label": "独占时的时间轴宽度",
+  "settings.field.timeline-stretch-bar-enabled.label": "显示纵向拉伸条",
+  "settings.field.timeline-stretch-bar-enabled.description":
+    "在进度条下方显示纵向拉伸条，拖动可调整每拍占用的纵向长度。",
   "settings.field.multi-edit-history-limit.label": "批量编辑历史条数",
   "settings.field.multi-edit-history-limit.description": "保留的可复用参数组数量；最新的排在末尾。",
   "settings.field.multi-line-merge-notes.label": "合并音符",

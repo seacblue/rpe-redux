@@ -161,6 +161,7 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
       updateCurvePanel: deps.curveEditor.updatePanel,
       persistEditor: deps.persistEditor,
       invalidate: deps.invalidate,
+      cancelTimelineZoom: deps.cancelTimelineZoom,
     }),
   );
   deps.scope.add(

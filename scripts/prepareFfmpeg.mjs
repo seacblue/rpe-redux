@@ -1,4 +1,4 @@
-/** Stages the newest verified upstream FFmpeg release for the target desktop platform. */
+/** Stages the pinned FFmpeg build for the target desktop platform. */
 import {
   chmodSync,
   copyFileSync,
@@ -14,98 +14,15 @@ import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
 import {
-  fetchContentLength,
-  fetchText,
   findArchiveRoot,
   formatBytes,
-  parseChecksums,
-  parseDigest,
-  parseVersion,
-  selectNewestBranch,
+  loadDependencyPins,
+  selectFfmpegPin,
 } from "./dependencyArtifacts.mjs";
 
-const GYAN_BUILDS = "https://www.gyan.dev/ffmpeg/builds";
-const BTBN_RELEASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/";
-const DEFISYM_RELEASE = "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/latest/";
-// `--check` resolves the newest release and compares it with the staged build
-// without downloading the archive, so a slow link can still be inspected.
+// `--check` compares the pinned release with the staged build without
+// contacting the network, so a slow link can still be inspected.
 const checkOnly = process.argv.includes("--check");
-
-/**
- * Resolve the newest Windows x64 essentials build gyan.dev publishes.
- *
- * gyan.dev serves one "release essentials" archive whose version and digest
- * change together; the `release-version` and `.sha256` endpoints name exactly
- * the bytes the archive URL returns right now.
- */
-async function resolveWindowsX64() {
-  const version = parseVersion(
-    await fetchText(`${GYAN_BUILDS}/release-version`, { label: "The FFmpeg release version" }),
-    "The gyan.dev release-version endpoint",
-  );
-  const archiveHash = parseDigest(
-    await fetchText(`${GYAN_BUILDS}/ffmpeg-release-essentials.zip.sha256`, {
-      label: "The FFmpeg release checksum",
-    }),
-    "The gyan.dev FFmpeg checksum",
-  );
-  return {
-    label: `${version} x64 essentials`,
-    archiveUrl: `${GYAN_BUILDS}/ffmpeg-release-essentials.zip`,
-    archiveName: `ffmpeg-${version}-essentials.zip`,
-    archiveHash,
-    licenseFile: "LICENSE",
-    readmeFile: "README.txt",
-  };
-}
-
-/** Resolve the newest release-branch GPL build BtbN publishes for Linux x64. */
-async function resolveLinuxX64() {
-  const checksums = parseChecksums(
-    await fetchText(`${BTBN_RELEASE}checksums.sha256`, { label: "The BtbN FFmpeg checksums" }),
-  );
-  const asset = selectNewestBranch(
-    checksums.keys(),
-    /^ffmpeg-n(\d+\.\d+)-latest-linux64-gpl-(\d+\.\d+)\.tar\.xz$/u,
-    "BtbN linux64 GPL",
-  );
-  return {
-    label: `n${asset.branch} x64 (BtbN GPL)`,
-    archiveUrl: `${BTBN_RELEASE}${asset.name}`,
-    archiveName: asset.name,
-    archiveHash: checksums.get(asset.name),
-    licenseFile: "LICENSE.txt",
-    readmeFile: null,
-  };
-}
-
-/** Resolve the newest win32 release-branch GPL build defisym publishes. */
-async function resolveWindowsX86() {
-  const checksums = parseChecksums(
-    await fetchText(`${DEFISYM_RELEASE}checksums.sha256`, {
-      label: "The win32 FFmpeg checksums",
-    }),
-  );
-  const asset = selectNewestBranch(
-    checksums.keys(),
-    /^ffmpeg-n(\d+\.\d+)-latest-win32-gpl-(\d+\.\d+)\.zip$/u,
-    "defisym win32 GPL",
-  );
-  return {
-    label: `n${asset.branch} x86 (defisym GPL)`,
-    archiveUrl: `${DEFISYM_RELEASE}${asset.name}`,
-    archiveName: asset.name,
-    archiveHash: checksums.get(asset.name),
-    licenseFile: "LICENSE.txt",
-    readmeFile: null,
-  };
-}
-
-const resolvers = {
-  "windows-x64": resolveWindowsX64,
-  "windows-x86": resolveWindowsX86,
-  "linux-x64": resolveLinuxX64,
-};
 
 /** Stage the release that matches the current target. */
 async function main() {
@@ -128,10 +45,7 @@ async function main() {
       : platform === "linux" && targetTriple.includes("aarch64")
         ? "arm64"
         : "x64";
-  const resolver = resolvers[`${platform}-${arch}`];
-  if (!resolver) {
-    throw new Error(`No FFmpeg build source for ${platform}/${arch}.`);
-  }
+  const distribution = selectFfmpegPin(loadDependencyPins(root), platform, arch);
 
   const targetDirectory = join(root, "src-tauri", "resources", "ffmpeg");
   const binaryName = platform === "windows" ? "ffmpeg.exe" : "ffmpeg";
@@ -184,34 +98,16 @@ async function main() {
     return (await hashFile(binaryPath)) === stamp.binaryHash ? stamp : null;
   }
 
-  let distribution;
-  try {
-    distribution = await resolver();
-  } catch (error) {
-    const stamp = await verifiedStamp();
-    if (!stamp || checkOnly) {
-      throw error;
-    }
-    console.log(
-      `Could not resolve the newest FFmpeg release (${error.message}); ` +
-        `keeping the staged ${stamp.label}.`,
-    );
-    return;
-  }
-
   const stamp = await verifiedStamp();
-  const upToDate = stamp?.archiveHash === distribution.archiveHash;
+  const upToDate = stamp?.archiveHash === distribution.sha256;
   if (checkOnly) {
-    const size = await fetchContentLength(distribution.archiveUrl, {
-      label: "The FFmpeg archive",
-    });
     const staged = stamp?.label ?? readVersionMarker() ?? "none";
     console.log(
       [
         `FFmpeg ${platform}/${arch}`,
-        `  latest  ${distribution.label}${size === null ? "" : ` (${formatBytes(size)})`}`,
+        `  pinned  ${distribution.label} (${distribution.provider}, ${formatBytes(distribution.size)})`,
         `  staged  ${staged}${upToDate ? " (up to date)" : " (update available)"}`,
-        `  sha256  ${distribution.archiveHash}`,
+        `  sha256  ${distribution.sha256}`,
         `  source  ${distribution.archiveUrl}`,
       ].join("\n"),
     );
@@ -222,28 +118,35 @@ async function main() {
   }
 
   mkdirSync(cacheDirectory, { recursive: true });
-  // An offline archive is accepted only if it matches the digest the publisher
-  // ships for the distribution the build would download.
+  // An offline archive is accepted only if it matches the pinned checksum.
   const suppliedArchive = process.env.REDUX_FFMPEG_ARCHIVE?.trim();
   const archivePath = suppliedArchive
     ? resolve(suppliedArchive)
     : join(cacheDirectory, distribution.archiveName);
   if (suppliedArchive) {
-    if (!existsSync(archivePath) || (await hashFile(archivePath)) !== distribution.archiveHash) {
+    if (!existsSync(archivePath) || (await hashFile(archivePath)) !== distribution.sha256) {
       throw new Error(
-        "The supplied FFmpeg archive is missing or does not match the newest upstream checksum.",
+        "The supplied FFmpeg archive is missing or does not match the pinned checksum.",
       );
     }
-  } else if (
-    !existsSync(archivePath) ||
-    (await hashFile(archivePath)) !== distribution.archiveHash
-  ) {
-    await downloadVerifiedFile({
-      url: distribution.archiveUrl,
-      destination: archivePath,
-      expectedHash: distribution.archiveHash,
-      label: "FFmpeg",
-    });
+  } else if (!existsSync(archivePath) || (await hashFile(archivePath)) !== distribution.sha256) {
+    try {
+      await downloadVerifiedFile({
+        url: distribution.archiveUrl,
+        destination: archivePath,
+        expectedHash: distribution.sha256,
+        label: "FFmpeg",
+      });
+    } catch (error) {
+      if (stamp) {
+        console.log(
+          `Could not download the pinned FFmpeg build (${error.message}); ` +
+            `keeping the staged ${stamp.label}.`,
+        );
+        return;
+      }
+      throw error;
+    }
   }
 
   const tempRoot = resolve(tmpdir());
@@ -316,7 +219,7 @@ async function main() {
         {
           label: distribution.label,
           archiveUrl: distribution.archiveUrl,
-          archiveHash: distribution.archiveHash,
+          archiveHash: distribution.sha256,
           binaryHash: await hashFile(binaryPath),
         },
         null,

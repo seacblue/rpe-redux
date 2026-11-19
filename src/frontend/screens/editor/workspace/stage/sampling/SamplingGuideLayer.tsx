@@ -115,11 +115,11 @@ export function SamplingGuideLayer({
     ? Math.max(1, Math.min(viewport.width, viewport.height) * GUIDE_FADE_RATIO)
     : 0;
   const hoveredVerticalKey =
-    cursor && showGuides && !dragging
+    cursor && showGuides
       ? samplingHoveredGuideKey(geometry.vertical, cursor.x, hoverGuidesEnabled)
       : null;
   const hoveredHorizontalKey =
-    cursor && showGuides && !dragging
+    cursor && showGuides
       ? samplingHoveredGuideKey(geometry.horizontal, cursor.y, hoverGuidesEnabled)
       : null;
   const readoutVisible = Boolean(cursor && dragging && start && end);

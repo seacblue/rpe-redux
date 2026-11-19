@@ -590,7 +590,12 @@ export function drawMultiLineNotes(
       ? this.viewport.noteBeatRangeForLine(session.lineIndex, height, "notes")
       : null;
   const mergedLineCandidates = mergedBeatRange
-    ? this.cache.noteLinesInBeatRange(session.chart, mergedBeatRange[0], mergedBeatRange[1])
+    ? this.cache.noteLinesInBeatRange(
+        session.chart,
+        mergedBeatRange[0],
+        mergedBeatRange[1],
+        session.contentRevision,
+      )
     : null;
   let mergedLineIndices = lineIndices;
   let mergedCandidatesFiltered = false;

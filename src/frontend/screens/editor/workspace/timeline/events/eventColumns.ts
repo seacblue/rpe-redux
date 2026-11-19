@@ -33,19 +33,6 @@ export function readEventTypeVisibility(): EventTypeVisibility {
   };
 }
 
-/** Return the display-switch bitmask used by multi-line event columns. */
-export function eventColumnVisibilityKey(): number {
-  const visibility = readEventTypeVisibility();
-  return (
-    (visibility.x ? 1 : 0) |
-    (visibility.y ? 2 : 0) |
-    (visibility.rotate ? 4 : 0) |
-    (visibility.alpha ? 8 : 0) |
-    (visibility.speed ? 16 : 0) |
-    (globalXYBindingEnabled() ? 32 : 0)
-  );
-}
-
 /**
  * Apply global XY binding to the raw checkbox state.
  *
@@ -141,16 +128,6 @@ export function eventColumnsForLine(
 /** Display column that paints one real storage track, or -1 when hidden. */
 export function eventColumnForTrack(columns: readonly string[], type: string): number {
   return columns.indexOf(type);
-}
-
-/** Localized header for one display column. */
-export function eventColumnLabel(
-  column: string,
-  rawTypes: readonly string[],
-  labels: readonly string[],
-): string {
-  const index = rawTypes.indexOf(column);
-  return index >= 0 ? (labels[index] ?? column) : column;
 }
 
 /** Visibility for one ordinary track; unknown tracks always stay visible. */

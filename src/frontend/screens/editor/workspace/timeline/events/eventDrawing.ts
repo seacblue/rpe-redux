@@ -315,7 +315,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     multiEvents && !overlayActive
       ? this.cache.canvasLayer(
           this.eventsCanvas,
-          multiLineChromeKey(this, session, width, height, palette),
+          multiLineChromeKey(this, session, width, palette),
           width,
           23,
         )
@@ -365,7 +365,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     }
     this.gestures.eventInteraction.draw(context, width);
     this.drawMultiLineBeatLabels(context, width, height, "events");
-    this.drawMultiLinePanelLabels(context, width, height, "events");
     if (repaintBatch) {
       this.eventBatch.finish();
     }

@@ -9,7 +9,7 @@
  * frame update.
  */
 import type { TimelineViewport } from "../viewport/timelineViewport.ts";
-import { clampTimelineScale } from "../viewport/timelineViewport.ts";
+import { clampTimelineScale } from "../../../../../../core/edit/timeline/timelineScale.ts";
 const ZOOM_DURATION_MS = 140;
 const ZOOM_FACTOR_LIMIT = 300;
 const ZOOM_SENSITIVITY = 0.0015;

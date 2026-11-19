@@ -92,6 +92,9 @@ const INVALID_NOTE_RENDER_DATA: TimelineNoteRenderData = Object.freeze({
 /** Stable source for a missing event track, so its cache identity never churns. */
 const NO_EVENTS: readonly JudgeLineEvent[] = [];
 
+/** Stable source for a line with no note array, so its cache identity never churns. */
+const NO_NOTES: JudgeLineNote[] = [];
+
 interface CachedEventQuery {
   readonly start: number;
   readonly end: number;
@@ -124,6 +127,8 @@ interface NoteLineRangeIndex {
   readonly sources: readonly (readonly JudgeLineNote[])[];
   readonly entries: readonly (NoteLineRangeEntry | undefined)[];
   readonly index: IntervalIndex<NoteLineRangeEntry>;
+  /** Document content revision the bounds were derived from, when the caller supplied one. */
+  readonly contentRevision?: number;
 }
 
 interface NoteLineRangeQuery {
@@ -411,22 +416,40 @@ export class TimelineCache {
     return bounds.end >= bottom && bounds.start <= top;
   }
 
-  /** Mark chart lines whose note bounds overlap one merged timeline window. */
-  noteLinesInBeatRange(chart: Chart, bottom: number, top: number): NoteLineRangeQuery {
+  /**
+   * Mark chart lines whose note bounds overlap one merged timeline window.
+   *
+   * A paged document mutates its facade in place, so the chart object and its
+   * line array keep their identity across an edit. `contentRevision` is the
+   * cheap signal that the derived bounds may be stale; only a changed revision
+   * pays for the per-line note-array comparison that proves it either way.
+   */
+  noteLinesInBeatRange(
+    chart: Chart,
+    bottom: number,
+    top: number,
+    contentRevision?: number,
+  ): NoteLineRangeQuery {
     const sourceLines = chart.judgeLineList ?? [];
     const cached = this.noteLineRangeIndex;
-    if (cached?.chart !== chart || cached.lines !== sourceLines) {
+    const revisionChanged =
+      contentRevision === undefined || cached?.contentRevision !== contentRevision;
+    const cachedSources = cached?.sources;
+    const sourcesChanged =
+      cachedSources === undefined ||
+      cachedSources.length !== sourceLines.length ||
+      (revisionChanged &&
+        sourceLines.some((line, index) => cachedSources[index] !== (line?.notes ?? NO_NOTES)));
+    if (cached?.chart !== chart || cached.lines !== sourceLines || sourcesChanged) {
       const sources = new Array<readonly JudgeLineNote[]>(sourceLines.length);
       const entries = new Array<NoteLineRangeEntry | undefined>(sourceLines.length);
-      let indexChanged = !cached || cached.sources.length !== sourceLines.length;
       for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex += 1) {
-        const source = sourceLines[lineIndex]?.notes ?? [];
+        const source = sourceLines[lineIndex]?.notes ?? NO_NOTES;
         sources[lineIndex] = source;
-        if (cached?.sources[lineIndex] === source) {
-          entries[lineIndex] = cached.entries[lineIndex];
+        if (cachedSources?.[lineIndex] === source) {
+          entries[lineIndex] = cached?.entries[lineIndex];
           continue;
         }
-        indexChanged = true;
         const noteIndex = this.refreshNotes(lineIndex, source);
         const notes = noteIndex?.notes;
         if (notes?.length) {
@@ -435,7 +458,7 @@ export class TimelineCache {
         }
       }
       const rangeIndex =
-        cached && !indexChanged
+        cached && !sourcesChanged
           ? cached.index
           : new IntervalIndex(
               entries.filter((entry): entry is NoteLineRangeEntry => entry !== undefined),
@@ -448,6 +471,7 @@ export class TimelineCache {
         sources,
         entries,
         index: rangeIndex,
+        contentRevision,
       };
       this.noteLineRangeMarks = new Uint32Array(sourceLines.length);
       this.noteLineRangeGeneration = 0;

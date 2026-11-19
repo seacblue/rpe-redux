@@ -1,35 +1,38 @@
 /**
  * Projects event bars and multi-line chrome. The backdrop grid and separators
  * are painted by `eventDrawing` on the live canvas; this module owns only the
- * reusable calculations and the cached header strip.
+ * reusable calculations and the cached panel header strip.
  *
- * Label budgeting and drag painting are owned by their feature modules; viewport
- * math comes from core.
+ * Each multi-line event panel captions itself with its judge line instead of the
+ * event column names, because every panel repeats the same five columns. Label
+ * budgeting and drag painting are owned by their feature modules; viewport math
+ * comes from core.
  */
 import type { TimelineEventRect } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.ts";
-import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
-import { eventTypesForLine } from "../drawing/tracks.ts";
-import { eventColumnVisibilityKey } from "./eventColumns.ts";
-import { eventColumnLabel } from "./eventColumns.ts";
-import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { canvasFont } from "../../../canvas/text.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
-import { strokeVerticalGrid } from "../drawing/gridDrawing.ts";
+import { LINE_LABEL_BASELINE, strokeVerticalGrid } from "../drawing/gridDrawing.ts";
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 import { drawEventText } from "./eventTextDrawing.ts";
+import { multiLineLineLabel } from "../multiLine/multiLineLineLabel.ts";
 
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
+
+/** One visible event panel's header band geometry and its judge-line caption. */
+interface MultiLineEventHeader {
+  readonly left: number;
+  readonly width: number;
+  readonly text: string;
+}
 
 interface MultiLineChromeKeyCache {
   readonly chart: object;
   readonly targetLineIndices: readonly number[];
   readonly palette: object;
-  readonly extended: boolean;
-  readonly visibility: number;
+  readonly verticalGridColor: string;
   readonly width: number;
-  readonly height: number;
   readonly panelWidth: number;
   readonly offset: number;
   readonly key: string;
@@ -108,57 +111,74 @@ export function drawEventBar(
   );
 }
 
+/** One visible event panel's header band and judge-line caption at this width. */
+function visibleEventHeaders(
+  receiver: TimelineEventDrawingReceiver,
+  width: number,
+): MultiLineEventHeader[] {
+  const session = receiver.getSession();
+  const panelWidth = receiver.viewport.panelWidth(width, "events");
+  const eventInset = receiver.viewport.eventInset(panelWidth);
+  const contentWidth = Math.max(1, panelWidth - eventInset * 2);
+  const offset = receiver.viewport.multiLineViewportOffset(width, "events");
+  const stride = receiver.viewport.panelStride(width, "events");
+  const targets = session.targetLineIndices;
+  const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, "events");
+  const headers: MultiLineEventHeader[] = [];
+  for (let panel = firstPanel; panel <= lastPanel; panel += 1) {
+    const lineIndex = targets[panel];
+    if (lineIndex === undefined) {
+      continue;
+    }
+    headers.push({
+      left: panel * stride - offset + eventInset,
+      width: contentWidth,
+      text: multiLineLineLabel(lineIndex, session.chart.judgeLineList?.[lineIndex]),
+    });
+  }
+  return headers;
+}
+
 /** Key covering every input that changes the cached multi-line header strip. */
 export function multiLineChromeKey(
   receiver: TimelineEventDrawingReceiver,
   session: ReturnType<TimelineEventDrawingReceiver["getSession"]>,
   width: number,
-  height: number,
   palette: ReturnType<typeof readCanvasPalette>,
 ): string {
   const targetLineIndices = session.targetLineIndices;
-  const extended = receiver.gestures.extended;
-  const visibility = eventColumnVisibilityKey();
   const panelWidth = receiver.viewport.panelWidth(width, "events");
   const offset = receiver.viewport.multiLineViewportOffset(width, "events");
+  const verticalGridColor = receiver.appearance.verticalGridColor;
   const cached = multiLineChromeKeyCache.get(receiver);
   if (
     cached &&
     cached.chart === session.chart &&
     cached.targetLineIndices === targetLineIndices &&
     cached.palette === palette &&
-    cached.extended === extended &&
-    cached.visibility === visibility &&
+    cached.verticalGridColor === verticalGridColor &&
     cached.width === width &&
-    cached.height === height &&
     cached.panelWidth === panelWidth &&
     cached.offset === offset
   ) {
     return cached.key;
   }
   const key = [
-    targetLineIndices.join(","),
-    extended,
-    targetLineIndices
-      .map((index) => receiver.viewport.eventTypesForLine(index).join(","))
-      .join(";"),
+    JSON.stringify(visibleEventHeaders(receiver, width)),
     width,
-    height,
     panelWidth,
     offset,
     palette.headerSurface,
-    palette.foreground,
-    receiver.appearance.verticalGridColor,
+    palette.bottomValue,
+    verticalGridColor,
     palette.outline,
   ].join("|");
   multiLineChromeKeyCache.set(receiver, {
     chart: session.chart,
     targetLineIndices,
     palette,
-    extended,
-    visibility,
+    verticalGridColor,
     width,
-    height,
     panelWidth,
     offset,
     key,
@@ -166,7 +186,7 @@ export function multiLineChromeKey(
   return key;
 }
 
-/** Paint the column headers for every visible multi-line event panel. */
+/** Paint the judge-line header band for every visible multi-line event panel. */
 export function drawMultiLineEventChrome(
   receiver: TimelineEventDrawingReceiver,
   context: CanvasRenderingContext2D,
@@ -174,84 +194,52 @@ export function drawMultiLineEventChrome(
   labelBatch?: TimelineOverlayBatch,
 ): void {
   const palette = receiver.cache.palette() ?? readCanvasPalette();
-  const session = receiver.getSession();
-  const panelWidth = receiver.viewport.panelWidth(width, "events");
-  const eventInset = receiver.viewport.eventInset(panelWidth);
-  const contentWidth = Math.max(1, panelWidth - eventInset * 2);
-  const offset = receiver.viewport.multiLineViewportOffset(width, "events");
-  const stride = receiver.viewport.panelStride(width, "events");
-  const targetLines = session.targetLineIndices;
   const multiPanel = receiver.viewport.panelCount("events") > 1;
-  const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, "events");
+  const headers = visibleEventHeaders(receiver, width);
+  const font = canvasFont("caption");
   context.fillStyle = palette.headerSurface;
-  for (let panel = firstPanel; panel <= lastPanel; panel++) {
-    const panelOffset = panel * stride - offset + eventInset;
-    const lineIndex = targetLines[panel];
-    if (lineIndex === undefined) {
-      continue;
-    }
-    const eventTypes = receiver.viewport.eventTypesForLine(lineIndex);
-    if (!eventTypes.length) {
-      continue;
-    }
-    const channelWidth = contentWidth / eventTypes.length;
-    const rawTypes = eventTypesForLine(
-      session.chart.judgeLineList?.[lineIndex],
-      receiver.gestures.extended,
+  for (const header of headers) {
+    // The five event columns keep a fixed order, so the band names the judge
+    // line instead of repeating the track names in every panel.
+    context.fillRect(header.left, 0, header.width, 23);
+    // The overlay's GPU curves paint above the canvas; queue the band fill and
+    // its label on that layer too, after the curves were submitted.
+    labelBatch?.addRect(header.left, 0, header.width, 23, palette.headerSurface);
+    drawEventText(
+      context,
+      labelBatch ?? null,
+      header.text,
+      header.left + header.width / 2,
+      LINE_LABEL_BASELINE,
+      Math.max(8, header.width - 12),
+      font,
+      palette.bottomValue,
+      "center",
     );
-    const labels = receiver.gestures.extended
-      ? extendedLabels()
-      : noiseLineSettings(session.chart.judgeLineList?.[lineIndex])
-        ? noiseTrackLabels()
-        : trackLabels();
-    for (let channel = 0; channel < eventTypes.length; channel++) {
-      context.fillRect(panelOffset + channel * channelWidth, 0, channelWidth, 23);
-      // The overlay's GPU curves paint above the canvas; queue the header fill
-      // on that layer too, after the curves were submitted.
-      labelBatch?.addRect(
-        panelOffset + channel * channelWidth,
-        0,
-        channelWidth,
-        23,
-        palette.headerSurface,
-      );
-      if (channelWidth >= 48) {
-        const label = eventColumnLabel(eventTypes[channel], rawTypes, labels);
-        drawEventText(
-          context,
-          labelBatch ?? null,
-          label,
-          panelOffset + channel * channelWidth + channelWidth / 2,
-          16,
-          Math.max(8, channelWidth - 8),
-          canvasFont("caption"),
-          palette.foreground,
-          "center",
-        );
-        context.fillStyle = palette.headerSurface;
+  }
+  // Header fills sit above the backdrop separators. Paint the panel edges back
+  // into the band so adjacent windows keep their boundaries.
+  context.lineWidth = 1;
+  context.strokeStyle = receiver.appearance.verticalGridColor;
+  for (const header of headers) {
+    if (header.left >= 0 && header.left <= width) {
+      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, header.left)), 23);
+    }
+    const right = header.left + header.width;
+    if (right >= 0 && right <= width) {
+      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, right)), 23);
+    }
+  }
+  if (multiPanel) {
+    context.lineWidth = 2;
+    context.strokeStyle = palette.outline;
+    for (const header of headers) {
+      const raw = header.left + header.width;
+      if (raw >= 0 && raw <= width) {
+        strokeVerticalGrid(context, Math.min(width - 1, Math.max(1, raw)), 23);
       }
     }
-    // Header fills sit above the backdrop separators. Paint the column edges
-    // back into the header band so the last column keeps the panel's right
-    // border instead of covering it with a solid block.
     context.lineWidth = 1;
     context.strokeStyle = receiver.appearance.verticalGridColor;
-    for (let boundary = 0; boundary <= eventTypes.length; boundary += 1) {
-      const raw = panelOffset + boundary * channelWidth;
-      if (raw < 0 || raw > width) {
-        continue;
-      }
-      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, raw)), 23);
-    }
-    if (multiPanel) {
-      const raw = panelOffset + contentWidth;
-      if (raw >= 0 && raw <= width) {
-        context.lineWidth = 2;
-        context.strokeStyle = palette.outline;
-        strokeVerticalGrid(context, Math.min(width - 1, Math.max(1, raw)), 23);
-        context.lineWidth = 1;
-        context.strokeStyle = receiver.appearance.verticalGridColor;
-      }
-    }
   }
 }

@@ -4,10 +4,10 @@ import test from "node:test";
 import { verticalAtBeat } from "../../../core/edit/timeline/timelineCoordinates.ts";
 import {
   clampTimelineScale,
-  minimumTimelineBeatAtTop,
   TIMELINE_SCALE_MAX,
   TIMELINE_SCALE_MIN,
-} from "../../../frontend/screens/editor/workspace/timeline/viewport/timelineViewport.ts";
+} from "../../../core/edit/timeline/timelineScale.ts";
+import { minimumTimelineBeatAtTop } from "../../../frontend/screens/editor/workspace/timeline/viewport/timelineViewport.ts";
 import { TimelineZoomAnimator } from "../../../frontend/screens/editor/workspace/timeline/interaction/timelineZoom.ts";
 
 test("timeline scale is bounded to the supported 25% through 400% range", () => {

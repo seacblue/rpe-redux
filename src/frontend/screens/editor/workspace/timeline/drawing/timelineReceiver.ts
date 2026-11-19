@@ -191,7 +191,6 @@ export type TimelineEventDrawingReceiver = Pick<
   | "appearance"
   | "cache"
   | "drawMultiLineBeatLabels"
-  | "drawMultiLinePanelLabels"
   | "drawMultiLineEvents"
   | "drawMultiLineGrid"
   | "drawShaderEvents"

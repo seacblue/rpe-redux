@@ -98,6 +98,15 @@ const TimelineSettingsSchema: SettingDefinition[] = [
     step: 1,
   },
   {
+    key: "timeline-stretch-bar-enabled",
+    navigation: "editor.timeline",
+    group: "settings.group.timelineLayout",
+    label: "settings.field.timeline-stretch-bar-enabled.label",
+    description: "settings.field.timeline-stretch-bar-enabled.description",
+    control: "toggle",
+    default: true,
+  },
+  {
     key: "multi-edit-history-limit",
     navigation: "editor.timeline",
     group: "settings.group.timelineLayout",

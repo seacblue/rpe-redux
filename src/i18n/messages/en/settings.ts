@@ -426,6 +426,9 @@ export default {
   // -------------------------------------------------------- timeline (5 rows)
   "settings.field.scroll-speed.label": "Wheel seek speed",
   "settings.field.timeline-exclusive-width.label": "Exclusive timeline width",
+  "settings.field.timeline-stretch-bar-enabled.label": "Show vertical stretch bar",
+  "settings.field.timeline-stretch-bar-enabled.description":
+    "Shows a vertical stretch bar below the progress bar; drag it to change how much vertical space each beat takes.",
   "settings.field.multi-edit-history-limit.label": "Batch edit history entries",
   "settings.field.multi-edit-history-limit.description":
     "Applied parameter sets kept for reuse; newest last.",

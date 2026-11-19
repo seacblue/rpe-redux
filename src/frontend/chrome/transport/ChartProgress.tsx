@@ -2,7 +2,8 @@
  * The shared transport card under the toolbar.
  *
  * It appears whenever a document is open. The scrubber, spectrum, timeline markers,
- * and their menu are attached to the transport surface this component renders.
+ * their menu, and the vertical stretch rail are attached to the transport surface
+ * this component renders.
  */
 import { memo, useSyncExternalStore, type CSSProperties } from "react";
 import { useEditorHostRuntime, useEditorHostValue } from "../../contracts/editorHostReact.tsx";
@@ -15,6 +16,7 @@ import {
   subscribeToEditorVisibility,
 } from "../../../core/edit/state/visibility.ts";
 import { TimelineMarkersView } from "./TimelineMarkers.tsx";
+import { TimelineStretchBar } from "./TimelineStretchBar.tsx";
 import { seekProgress } from "./chartProgressState.ts";
 import { JumpToTimeDialog } from "./JumpToTimeDialog.tsx";
 import { ProgressContextMenu, useProgressContextMenu } from "./ProgressContextMenu.tsx";
@@ -122,6 +124,7 @@ export function ChartProgress() {
         <span className="transport-bpm">{progress.bpm}</span>
         <span className="transport-clock">{progress.chartTime}</span>
       </div>
+      <TimelineStretchBar />
     </div>
   );
 }

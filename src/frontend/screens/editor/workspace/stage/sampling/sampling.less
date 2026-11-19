@@ -11,7 +11,10 @@
 .sampling-overlay {
   position: absolute;
   inset: 0;
-  z-index: 8;
+  // Sampling borrows the free camera, whose pointer layer paints on the
+  // content-overlay rung while it is active. The sampler, its guides, and its
+  // floating editor must stay above that layer to keep pointer input.
+  z-index: calc(var(--z-content-overlay) + 2);
   cursor: crosshair;
   touch-action: none;
 }

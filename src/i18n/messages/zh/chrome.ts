@@ -171,6 +171,8 @@ export default {
   "chrome.transport.scrubber": "播放位置",
   "chrome.transport.beat": "Beat {value}",
   "chrome.transport.bpm": "{value} BPM",
+  "chrome.transport.stretch": "纵向拉伸",
+  "chrome.transport.stretchHint": "拖动可调整每拍占用的纵向长度。",
 
   "chrome.transport.menu.label": "播放位置菜单",
   "chrome.transport.menu.jump": "跳转到时间点…",

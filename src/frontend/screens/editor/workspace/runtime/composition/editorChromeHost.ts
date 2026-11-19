@@ -11,6 +11,7 @@ import { bindAudioAnalysisWorker } from "../../../../../contracts/audioAnalysisW
 import { bindEditorChromeCommands } from "../../../../../contracts/editorCommands.ts";
 import { openPane } from "../../../inspector/controller.ts";
 import * as documentService from "../../document/lifecycle/service.ts";
+import { commitTimelineScale, setTimelineScale } from "../../../toolbar/timelineControls.ts";
 import { transport } from "../commands/transport.ts";
 import { getEditorRegionSnapshot, viewControls } from "../commands/viewControls.ts";
 import { navigation } from "../commands/workspaceNavigation.ts";
@@ -22,7 +23,6 @@ export function connectEditorChromeHost(): () => void {
       newDocument: () => documentService.newDocument(),
       openDocument: () => documentService.openDocument(),
       saveDocument: () => documentService.saveDocument(),
-      closeDocument: () => documentService.closeDocument(),
     },
     transport: {
       togglePlayback: () => transport.togglePlayback(),
@@ -41,9 +41,12 @@ export function connectEditorChromeHost(): () => void {
       toggleRegion: (region) => viewControls.toggleRegion(region),
       toggleStagePreview: () => viewControls.toggleStagePreview(),
       toggleRegions: () => viewControls.toggleRegions(),
+      setTimelineScale,
+      commitTimelineScale,
     },
     navigation: {
       openLibrary: () => navigation.openLibrary(),
+      closeLibrary: () => navigation.closeLibrary(),
     },
     inspector: {
       openPane: (id) => openPane(id),

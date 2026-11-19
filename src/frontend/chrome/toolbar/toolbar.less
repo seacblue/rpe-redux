@@ -61,15 +61,34 @@
   grid-row: 1;
   margin: var(--space-1) var(--chrome-progress-inset);
   padding: var(--space-1) var(--space-2);
-  grid-template-rows: minmax(48px, 1fr) auto;
+  // Three rows: scrubber, readouts, and the optional stretch rail. The card keeps
+  // its current outer size, so the scrubber gives the rail the vertical space.
+  grid-template-rows: minmax(38px, 1fr) auto auto;
   gap: 1px;
   border-radius: var(--radius-panel);
   min-width: var(--chrome-progress-width);
 }
 
 .redux-app-root .redux-toolbar .redux-status-card .scrubber-wrap {
-  min-height: 48px;
+  min-height: 38px;
   padding-top: 0;
+}
+
+// The stretch row adds a label line and a tick line, so the card tightens its
+// inset and lets the scrubber give those 20px back. The card still ends inside
+// the toolbar's content box.
+.redux-app-root .redux-toolbar .transport-host .redux-status-card:has(.transport-stretch) {
+  margin: var(--space-1) var(--chrome-progress-inset) 0;
+  padding: 2px var(--space-2);
+  grid-template-rows: minmax(30px, 1fr) auto 23px;
+}
+
+.redux-app-root .redux-toolbar .redux-status-card:has(.transport-stretch) .scrubber-wrap {
+  min-height: 30px;
+}
+
+.redux-app-root .redux-toolbar .redux-status-card:has(.transport-stretch) .redux-status-line {
+  line-height: 1.25;
 }
 
 .redux-app-root .redux-toolbar .redux-status-card .scrubber-wrap,

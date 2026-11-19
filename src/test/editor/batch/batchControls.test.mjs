@@ -196,3 +196,100 @@ test("batch preview rebuilds coalesce within one display frame", () => {
     globalThis.cancelAnimationFrame = previousCancel;
   }
 });
+
+/** A controller docked on two selected notes, with a mutable viewport. */
+function dockedController() {
+  const chart = createChart();
+  chart.judgeLineList[0].notes = [createNote(1, 0, 0), createNote(1, 4, 0)];
+  const session = new EditorSession(chart);
+  session.selection = new Set([0, 1]);
+  const canvas = {
+    clientWidth: 200,
+    clientHeight: 200,
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 200, height: 200 }),
+  };
+  const viewport = {
+    tempo: {
+      beat: (seconds) => seconds,
+      seconds: (beat) => (Array.isArray(beat) ? beat[0] + beat[1] / beat[2] : beat),
+    },
+    origin: 0,
+    scale: 1,
+    scaleForArea: () => 1,
+    judgementOffset: 42,
+    division: 4,
+    panelWidth: () => 200,
+    panelIndex: () => 0,
+    panelStride: () => 200,
+    multiLineViewportOffset: () => 0,
+    factorForLine: () => 1,
+    snapX: false,
+    gridCount: 11,
+  };
+  const controller = Object.create(BatchControls.prototype);
+  controller.anchorMode = 0;
+  controller.getSession = () => session;
+  controller.enabled = () => true;
+  controller.active = null;
+  controller.groups = new Map([["notes", { signature: "" }]]);
+  controller.state = {
+    hints: { set() {} },
+    presentations: { get: () => ({}), update: () => {} },
+  };
+  controller.timeline = {
+    notesCanvas: canvas,
+    eventsCanvas: canvas,
+    gestures: { cursor: { x: 100, y: 100 }, eventCursor: null },
+    viewport,
+    setPreview() {},
+    changed() {},
+    cancelPlacement() {},
+  };
+  controller.stage = { getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  return { controller, viewport, group: controller.groups.get("notes") };
+}
+
+test("a docked control ball follows the timeline scroll", () => {
+  const { controller, viewport, group } = dockedController();
+
+  controller.sync();
+  assert.equal(group.left, "160px");
+  assert.equal(group.top, "90px");
+
+  // Scrolling forward moves the selection down the canvas by the scrolled time.
+  viewport.origin = 10;
+  controller.sync();
+
+  assert.equal(group.top, "100px", "the ball follows the scrolled selection");
+  assert.equal(group.left, "160px", "scrolling time does not move the dock sideways");
+});
+
+test("a docked control ball follows a multi-line horizontal pan", () => {
+  const { controller, viewport, group } = dockedController();
+
+  controller.sync();
+  assert.equal(group.left, "160px");
+
+  // Panning the panels left moves their content left by the same distance.
+  viewport.multiLineViewportOffset = () => 30;
+  controller.sync();
+
+  assert.equal(group.left, "130px", "the ball follows the panned panel");
+  assert.equal(group.top, "90px", "panning does not move the dock vertically");
+});
+
+test("a docked control ball follows a vertical zoom", () => {
+  const { controller, viewport, group } = dockedController();
+  // Dock closer to the judgement line so the anchored time stays on screen when
+  // the field doubles its scale.
+  controller.timeline.gestures.cursor = { x: 100, y: 128 };
+
+  controller.sync();
+  assert.equal(group.top, "118px");
+
+  // Zooming in doubles the distance from the judgement line to the dock.
+  viewport.scaleForArea = () => 2;
+  controller.sync();
+
+  assert.equal(group.top, "58px", "the ball keeps the same time under it when zooming");
+});

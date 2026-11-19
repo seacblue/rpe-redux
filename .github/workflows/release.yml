@@ -199,19 +199,22 @@ jobs:
             runner: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis
+            deps: windows-x64
           # Native ARM64 app and Go sidecar. The bundled FFmpeg and cloudflared
           # helpers remain x64 and run under Windows ARM64 emulation.
           - name: Windows ARM64
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             bundles: nsis
-          # Full 32-bit build with the newest win32 FFmpeg release and the 386
+            deps: windows-x64
+          # Full 32-bit build with the pinned win32 FFmpeg build and the 386
           # cloudflared/Go sidecar. The host MSVC environment is switched to
           # x86 before Cargo runs.
           - name: Windows x86
             runner: windows-latest
             target: i686-pc-windows-msvc
             bundles: nsis
+            deps: windows-x86
           # AppImage is the only Linux format the in-app updater can replace;
           # deb and rpm users upgrade through the distribution or a fresh
           # download. All three share the same signed build inputs.
@@ -219,6 +222,7 @@ jobs:
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,rpm,appimage
+            deps: linux-x64
 
     permissions:
       contents: write
@@ -278,6 +282,14 @@ jobs:
 
       - name: Install JavaScript dependencies
         run: npm ci
+
+      # The pin manifest keys the cache, so a pin bump starts a fresh entry.
+      # Cached archives are still verified against the pinned SHA-256.
+      - name: Cache bundled desktop dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .local-tools
+          key: desktop-deps-${{ matrix.deps }}-${{ hashFiles('scripts/dependencyPins.json') }}
 
       - name: Build Go sidecar
         run: npm run build:server

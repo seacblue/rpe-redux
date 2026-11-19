@@ -18,6 +18,10 @@ import {
   noteScaleForTimelineRatio,
   TIMELINE_NOTE_REFERENCE_RATIO,
 } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
+import {
+  clampTimelineScale,
+  TIMELINE_SCALE_DEFAULT,
+} from "../../../../../../core/edit/timeline/timelineScale.ts";
 import type {
   MultiLineScroll,
   MultiLineZoom,
@@ -43,20 +47,6 @@ type ViewportSettings = Pick<
   | "scrollSpeed"
   | "judgementOffset"
 >;
-
-/** The authored 100% vertical timeline scale. */
-export const TIMELINE_SCALE_DEFAULT = 500;
-/** The smallest supported vertical timeline scale: 25% of the default. */
-export const TIMELINE_SCALE_MIN = 125;
-/** The largest supported vertical timeline scale: 400% of the default. */
-export const TIMELINE_SCALE_MAX = 2000;
-
-/** Clamp a timeline scale while preserving a safe value for invalid settings. */
-export function clampTimelineScale(value: number, fallback = TIMELINE_SCALE_DEFAULT): number {
-  const safeFallback = Number.isFinite(fallback) ? fallback : TIMELINE_SCALE_DEFAULT;
-  const candidate = Number.isFinite(value) ? value : safeFallback;
-  return Math.max(TIMELINE_SCALE_MIN, Math.min(TIMELINE_SCALE_MAX, candidate));
-}
 
 /** Return the local beat delta represented by one pixel at a timeline origin. */
 export function beatsPerPixelAtOrigin(

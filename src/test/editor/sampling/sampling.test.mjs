@@ -15,7 +15,6 @@ import {
   samplingAxisForEventType,
   samplingGuideValues,
   samplingRangeOf,
-  snapSamplingScalar,
   updateSamplingSettings,
 } from "../../../core/edit/sampling/sampling.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
@@ -23,6 +22,7 @@ import {
   anchorStagePoint,
   buildSamplingGeometry,
   nearestGuideKey,
+  nearestGuideLine,
   samplingHoveredGuideKey,
   sampleSamplingPointer,
   samplingGuideOpacity,
@@ -83,6 +83,19 @@ function anchorsFor(axis, start, end, startPoint, endPoint) {
     start: { axis, scalar: start, ...(startPoint ? { point: startPoint } : {}) },
     end: { axis, scalar: end, ...(endPoint ? { point: endPoint } : {}) },
   };
+}
+
+/** Sample one stage pointer against the guides painted for the same axis. */
+function sampleAt(projection, axis, settings, clientX, clientY) {
+  return sampleSamplingPointer(
+    clientX,
+    clientY,
+    { left: 0, top: 0 },
+    projection,
+    axis,
+    settings,
+    buildSamplingGeometry(projection, axis, settings),
+  );
 }
 
 /** The first event on one track of the session's first line. */
@@ -247,22 +260,19 @@ test("scalar sampling uses vertical guides across the bounded horizontal range",
     geometry.vertical.find((line) => line.value === 255).position,
     projection.viewportLeft + projection.viewportWidth,
   );
-  const bounds = { left: 0, top: 0 };
-  const leftSample = sampleSamplingPointer(
+  const leftSample = sampleAt(
+    projection,
+    "alpha",
+    DEFAULT_SAMPLING_SETTINGS,
     projection.viewportLeft,
     projection.viewportTop + projection.viewportHeight / 2,
-    bounds,
+  );
+  const rightSample = sampleAt(
     projection,
     "alpha",
     DEFAULT_SAMPLING_SETTINGS,
-  );
-  const rightSample = sampleSamplingPointer(
     projection.viewportLeft + projection.viewportWidth,
     projection.viewportTop + projection.viewportHeight / 2,
-    bounds,
-    projection,
-    "alpha",
-    DEFAULT_SAMPLING_SETTINGS,
   );
   assert.equal(leftSample.value.scalar, 0);
   assert.equal(rightSample.value.scalar, 255);
@@ -273,21 +283,19 @@ test("scalar sampling uses vertical guides across the bounded horizontal range",
   );
   assert.ok(geometry.vertical.some((line) => line.position < viewport.left));
   assert.ok(geometry.vertical.some((line) => line.position > viewport.right));
-  const outsideLeft = sampleSamplingPointer(
+  const outsideLeft = sampleAt(
+    projection,
+    "alpha",
+    DEFAULT_SAMPLING_SETTINGS,
     0,
     projection.viewportTop + projection.viewportHeight / 2,
-    bounds,
+  );
+  const outsideRight = sampleAt(
     projection,
     "alpha",
     DEFAULT_SAMPLING_SETTINGS,
-  );
-  const outsideRight = sampleSamplingPointer(
     projection.stageWidth,
     projection.viewportTop + projection.viewportHeight / 2,
-    bounds,
-    projection,
-    "alpha",
-    DEFAULT_SAMPLING_SETTINGS,
   );
   assert.equal(outsideLeft.value.scalar, -32);
   assert.equal(outsideRight.value.scalar, 287);
@@ -307,29 +315,47 @@ test("the nearest guide is the only cursor-highlight candidate", () => {
   assert.equal(samplingHoveredGuideKey(lines, 207, false), null);
 });
 
-test("XY snapping requires a guide intersection instead of one guide line", () => {
+test("an XY coordinate takes the value of the guide it highlights", () => {
   const projection = projectionWith();
-  const bounds = { left: 0, top: 0 };
-  const nearXOnly = sampleSamplingPointer(552, 383, bounds, projection, "x", plainSettings);
-  assert.equal(nearXOnly.value.scalar, 52);
-  assert.equal(nearXOnly.snapped, false);
+  const nearXOnly = sampleAt(projection, "x", plainSettings, 552, 383);
+  assert.equal(nearXOnly.value.scalar, 50);
+  assert.deepEqual(nearXOnly.value.point, { x: 50, y: 17 });
+  assert.deepEqual(nearXOnly.stage, { x: 550, y: 383 });
+  assert.equal(nearXOnly.snapped, true);
 
-  const nearIntersection = sampleSamplingPointer(552, 352, bounds, projection, "x", plainSettings);
+  const nearIntersection = sampleAt(projection, "x", plainSettings, 552, 352);
   assert.equal(nearIntersection.value.scalar, 50);
   assert.deepEqual(nearIntersection.value.point, { x: 50, y: 50 });
+  assert.deepEqual(nearIntersection.stage, { x: 550, y: 350 });
   assert.equal(nearIntersection.snapped, true);
+});
+
+test("a highlighted guide supplies the sampled value on every axis", () => {
+  const projection = projectionWith();
+  const xSettings = plainSettings;
+  const xGeometry = buildSamplingGeometry(projection, "x", xSettings);
+  const xPointer = 556;
+  const xLine = nearestGuideLine(xGeometry.vertical, xPointer);
+  assert.equal(xLine?.value, 50);
+  assert.equal(samplingHoveredGuideKey(xGeometry.vertical, xPointer, true), xLine?.key);
+  assert.equal(sampleAt(projection, "x", xSettings, xPointer, 383).value.scalar, xLine.value);
+
+  const yGeometry = buildSamplingGeometry(projection, "y", xSettings);
+  const yPointer = 356;
+  const yLine = nearestGuideLine(yGeometry.horizontal, yPointer);
+  assert.equal(yLine?.value, 50);
+  assert.equal(sampleAt(projection, "y", xSettings, 500, yPointer).value.scalar, yLine.value);
+
+  const alphaGeometry = buildSamplingGeometry(projection, "alpha", xSettings);
+  const alphaPointer = 490;
+  const alphaLine = nearestGuideLine(alphaGeometry.vertical, alphaPointer);
+  assert.equal(alphaLine?.value, 120);
+  assert.equal(sampleAt(projection, "alpha", xSettings, alphaPointer, 245).value.scalar, 120);
 });
 
 test("scalar anchors preserve the pointer Y while sampling only the horizontal value", () => {
   const projection = projectionWith({ lineY: 275 });
-  const sample = sampleSamplingPointer(
-    500,
-    245,
-    { left: 0, top: 0 },
-    projection,
-    "alpha",
-    plainSettings,
-  );
+  const sample = sampleAt(projection, "alpha", plainSettings, 500, 245);
   const point = anchorStagePoint(sample.value, projection);
   assert.equal(sample.stage.y, 245);
   assert.equal(point.y, 245);
@@ -351,49 +377,6 @@ test("normalization keeps scalar values linear without circular wrapping or clam
   assert.equal(normalizeSamplingScalar("x", 12.345), 12.35);
   assert.equal(normalizeSamplingScalar("y", -14.567), -14.57);
   assert.equal(normalizeSamplingScalar("x", Number.NaN), 0);
-});
-
-test("snapping only applies within the tolerance of a guide", () => {
-  const settings = { ...DEFAULT_SAMPLING_SETTINGS, guidesEnabled: true };
-
-  assert.deepEqual(snapSamplingScalar("rotation", 31, settings, 1.5), { value: 30, snapped: true });
-  assert.deepEqual(snapSamplingScalar("rotation", 37, settings, 1.5), {
-    value: 37,
-    snapped: false,
-  });
-  assert.deepEqual(snapSamplingScalar("rotation", 359, settings, 2), { value: 360, snapped: true });
-  assert.deepEqual(snapSamplingScalar("rotation", 360, settings, 0), {
-    value: 360,
-    snapped: true,
-  });
-  assert.deepEqual(snapSamplingScalar("rotation", -179, settings, 2), {
-    value: -180,
-    snapped: true,
-  });
-
-  assert.deepEqual(snapSamplingScalar("alpha", 60, settings, 5), { value: 60, snapped: true });
-  assert.deepEqual(snapSamplingScalar("alpha", 30, settings, 5), { value: 30, snapped: false });
-  assert.deepEqual(snapSamplingScalar("alpha", 255, settings, 0), { value: 255, snapped: true });
-
-  assert.deepEqual(snapSamplingScalar("speed", 1.9, settings, 0.2), { value: 2, snapped: true });
-  assert.deepEqual(snapSamplingScalar("speed", 1.5, settings, 0.2), { value: 1.5, snapped: false });
-  assert.deepEqual(snapSamplingScalar("speed", 19.9, settings, 0.2), { value: 20, snapped: true });
-  assert.deepEqual(snapSamplingScalar("speed", 20, settings, 0), { value: 20, snapped: true });
-  assert.deepEqual(snapSamplingScalar("alpha", -15, settings, 5), {
-    value: -20,
-    snapped: true,
-  });
-
-  assert.deepEqual(snapSamplingScalar("x", 47, settings, 5), { value: 47, snapped: false });
-  assert.deepEqual(snapSamplingScalar("y", 37, settings, 5), { value: 37, snapped: false });
-  assert.deepEqual(snapSamplingScalar("rotation", 31, { ...settings, guidesEnabled: false }, 100), {
-    value: 31,
-    snapped: false,
-  });
-  assert.deepEqual(snapSamplingScalar("alpha", 64, { ...settings, guidesEnabled: false }, 100), {
-    value: 64,
-    snapped: false,
-  });
 });
 
 test("sampling writes both anchors and the easing type in one commit", () => {

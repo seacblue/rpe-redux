@@ -125,7 +125,6 @@ export default {
   "editor.app.curve.startX": "起点 X",
   "editor.app.curve.type": "类型",
   "editor.app.dialog.chooseChart": "选择谱面",
-  "editor.app.dialog.closeChart": "返回谱面库",
   "editor.app.dialog.discardAndReturn": "放弃并返回",
   "editor.app.dialog.openWithoutSaving": "不保存并打开",
   "editor.app.notice.droppedManyImported":

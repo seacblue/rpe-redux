@@ -136,53 +136,65 @@ export function SamplingEasingPanel({
     return () => observer.disconnect();
   }, []);
 
-  /** Drag the card by its title row, bounded by the stage overlay. */
+  /**
+   * Start dragging the card from its title row.
+   *
+   * The header owns the pointer for the whole gesture. The sampler beneath
+   * stops pointer propagation, so a window-level listener would never see the
+   * moves; capture keeps the drag responsive even when the pointer leaves the
+   * card or moves fast.
+   */
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
       return;
     }
     const element = panel.current;
-    const parent = element?.parentElement;
-    if (!element || !parent) {
+    if (!element) {
       return;
     }
     const card = element.getBoundingClientRect();
     event.preventDefault();
-    const pointerId = event.pointerId;
+    event.stopPropagation();
     drag.current = {
-      pointerId,
+      pointerId: event.pointerId,
       offsetX: event.clientX - card.left,
       offsetY: event.clientY - card.top,
     };
-    const move = (moveEvent: PointerEvent) => {
-      const current = drag.current;
-      if (!current || moveEvent.pointerId !== current.pointerId) {
-        return;
-      }
-      const currentCard = panel.current;
-      const bounds = currentCard?.parentElement?.getBoundingClientRect();
-      if (!currentCard || !bounds) {
-        return;
-      }
-      const maxLeft = Math.max(0, bounds.width - currentCard.offsetWidth);
-      const maxTop = Math.max(0, bounds.height - currentCard.offsetHeight);
-      setManualPosition({
-        left: Math.min(Math.max(0, moveEvent.clientX - bounds.left - current.offsetX), maxLeft),
-        top: Math.min(Math.max(0, moveEvent.clientY - bounds.top - current.offsetY), maxTop),
-      });
-    };
-    const finish = (finishEvent: PointerEvent) => {
-      if (finishEvent.pointerId !== pointerId) {
-        return;
-      }
-      drag.current = null;
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  /** Move the captured card, bounded by the sampling overlay. */
+  const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || event.pointerId !== current.pointerId) {
+      return;
+    }
+    const card = panel.current;
+    const bounds = card?.parentElement?.getBoundingClientRect();
+    if (!card || !bounds) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const maxLeft = Math.max(0, bounds.width - card.offsetWidth);
+    const maxTop = Math.max(0, bounds.height - card.offsetHeight);
+    setManualPosition({
+      left: Math.min(Math.max(0, event.clientX - bounds.left - current.offsetX), maxLeft),
+      top: Math.min(Math.max(0, event.clientY - bounds.top - current.offsetY), maxTop),
+    });
+  };
+
+  /** End the gesture and release the header's pointer capture. */
+  const finishDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || event.pointerId !== current.pointerId) {
+      return;
+    }
+    drag.current = null;
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   /** Apply one draft curve change and clear the stale commit error. */
@@ -220,7 +232,18 @@ export function SamplingEasingPanel({
       aria-label={t("editorPanels.sampling.title")}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <div className="sampling-float-header" onPointerDown={beginDrag}>
+      <div
+        className="sampling-float-header"
+        onPointerDown={beginDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+        onLostPointerCapture={(event) => {
+          if (drag.current?.pointerId === event.pointerId) {
+            drag.current = null;
+          }
+        }}
+      >
         <span className="sampling-float-title">{t("editorPanels.sampling.title")}</span>
         <span className="sampling-float-grip" aria-hidden="true">
           ⠿

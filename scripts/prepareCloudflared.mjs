@@ -1,4 +1,4 @@
-/** Stages the newest verified upstream Cloudflare Tunnel client for the target build. */
+/** Stages the pinned Cloudflare Tunnel client for the target build. */
 import {
   chmodSync,
   copyFileSync,
@@ -10,23 +10,11 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
-import { fetchGitHubJson, formatBytes, selectReleaseAsset } from "./dependencyArtifacts.mjs";
+import { formatBytes, loadDependencyPins, selectCloudflaredPin } from "./dependencyArtifacts.mjs";
 
-const RELEASE_FEED = "https://api.github.com/repos/cloudflare/cloudflared/releases/latest";
-// `--check` resolves the newest release and compares it with the staged build
-// without downloading the client, so a slow link can still be inspected.
+// `--check` compares the pinned release with the staged build without
+// contacting the network, so a slow link can still be inspected.
 const checkOnly = process.argv.includes("--check");
-
-/** Release asset file names per target, matching the names Cloudflare publishes. */
-const ASSETS = {
-  windows: {
-    amd64: "cloudflared-windows-amd64.exe",
-    386: "cloudflared-windows-386.exe",
-  },
-  linux: {
-    amd64: "cloudflared-linux-amd64",
-  },
-};
 
 /** Stage the client that matches the current target. */
 async function main() {
@@ -47,12 +35,11 @@ async function main() {
       : platform === "linux" && (targetTriple.includes("aarch64") || targetTriple === "arm64")
         ? "arm64"
         : "amd64";
-  const assetName = ASSETS[platform]?.[architecture];
-  if (!assetName) {
-    throw new Error(`No Cloudflare Tunnel client for ${platform}/${architecture}.`);
-  }
 
   const root = resolve(import.meta.dirname, "..");
+  const pins = loadDependencyPins(root);
+  const version = pins.cloudflared.version;
+  const asset = selectCloudflaredPin(pins, platform, architecture);
   const executable = platform === "windows" ? "cloudflared.exe" : "cloudflared";
   const targetDirectory = join(root, "src-tauri", "resources", "cloudflared");
   const target = join(targetDirectory, executable);
@@ -85,7 +72,7 @@ async function main() {
   /**
    * Return the stage record only while the staged client still matches it.
    *
-   * The client is published as a bare executable, so its released digest is the
+   * The client is published as a bare executable, so its pinned digest is the
    * digest of the staged file itself; a stamp that no longer matches the bytes on
    * disk restages instead of reporting a stale version.
    */
@@ -97,38 +84,16 @@ async function main() {
     return (await hashFile(target)) === stamp.digest ? stamp : null;
   }
 
-  let release;
-  try {
-    release = await fetchGitHubJson(RELEASE_FEED, "The Cloudflare Tunnel release feed");
-  } catch (error) {
-    const stamp = await verifiedStamp();
-    if (!stamp || checkOnly) {
-      throw error;
-    }
-    console.log(
-      `Could not resolve the newest Cloudflare Tunnel client (${error.message}); ` +
-        `keeping the staged ${stamp.label}.`,
-    );
-    return;
-  }
-  const version = String(release?.tag_name ?? "").trim();
-  if (!/^\d{4}\.\d+\.\d+$/u.test(version)) {
-    throw new Error(
-      `The Cloudflare Tunnel release feed returned an unexpected version: ${version}.`,
-    );
-  }
-  const asset = selectReleaseAsset(release, assetName);
-
   const stamp = await verifiedStamp();
-  const upToDate = stamp?.digest === asset.digest;
+  const upToDate = stamp?.digest === asset.sha256;
   if (checkOnly) {
     const staged = stamp?.label ?? readVersionMarker() ?? "none";
     console.log(
       [
         `Cloudflare Tunnel ${platform}/${architecture}`,
-        `  latest  ${version} (${formatBytes(asset.size)})`,
+        `  pinned  ${version} (${formatBytes(asset.size)})`,
         `  staged  ${staged}${upToDate ? " (up to date)" : " (update available)"}`,
-        `  sha256  ${asset.digest}`,
+        `  sha256  ${asset.sha256}`,
         `  source  ${asset.url}`,
       ].join("\n"),
     );
@@ -139,15 +104,26 @@ async function main() {
   }
 
   mkdirSync(cacheDirectory, { recursive: true });
-  const cache = join(cacheDirectory, assetName);
-  if (!existsSync(cache) || (await hashFile(cache)) !== asset.digest) {
+  const cache = join(cacheDirectory, asset.name);
+  if (!existsSync(cache) || (await hashFile(cache)) !== asset.sha256) {
     console.log(`Downloading cloudflared ${version} for ${platform}/${architecture}...`);
-    await downloadVerifiedFile({
-      url: asset.url,
-      destination: cache,
-      expectedHash: asset.digest,
-      label: "cloudflared",
-    });
+    try {
+      await downloadVerifiedFile({
+        url: asset.url,
+        destination: cache,
+        expectedHash: asset.sha256,
+        label: "cloudflared",
+      });
+    } catch (error) {
+      if (stamp) {
+        console.log(
+          `Could not download the pinned Cloudflare Tunnel client (${error.message}); ` +
+            `keeping the staged ${stamp.label}.`,
+        );
+        return;
+      }
+      throw error;
+    }
   }
   mkdirSync(targetDirectory, { recursive: true });
   copyFileSync(cache, target);
@@ -157,7 +133,7 @@ async function main() {
   writeFileSync(join(targetDirectory, "VERSION.txt"), `${version}\n`);
   writeFileSync(
     stampPath,
-    `${JSON.stringify({ label: version, url: asset.url, digest: asset.digest }, null, 2)}\n`,
+    `${JSON.stringify({ label: version, url: asset.url, digest: asset.sha256 }, null, 2)}\n`,
   );
   console.log(`Staged cloudflared ${version} (${platform}/${architecture})`);
 }

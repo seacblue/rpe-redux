@@ -100,7 +100,7 @@ export function registerFileActions() {
       label: "chrome.menu.file.closeDocument",
       tooltip: "chrome.menu.file.closeDocumentHint",
       enabled: () => !getEditorVisibility().atHome,
-      run: () => editorChromeCommands()?.documents.closeDocument(),
+      run: () => editorChromeCommands()?.navigation.closeLibrary(),
     }),
   ];
 }

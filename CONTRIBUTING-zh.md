@@ -94,6 +94,9 @@ npm run build
 ## 资源、许可与兼容性
 
 - 保留 `LICENSE`、`NOTICE`、资源 manifest 和兼容性敏感的谱面序列化。
+- 第三方依赖使用已提交的锁文件：`package-lock.json`、`src-tauri/Cargo.lock` 和 `src/backend/go.sum`。升级时在同一次修改中更新清单和锁文件；日常升级由分组的 Dependabot PR 处理。
+- 桌面端内置工具在 `scripts/dependencyPins.json` 中按精确版本、URL、大小和 SHA-256 锁定。构建读取该清单，不再解析上游 `latest` 发布；已验证的缓存或暂存副本会一直复用，直到修改锁定项。升级锁定项时需要有意更新并重新暂存，步骤见[桌面运行时](docs/desktop.md#bundled-third-party-binaries)。
+- 内置 FFmpeg 的许可证文本与 `NOTICE` 条目必须与锁定的构建保持一致。
 - 新增第三方资源需要兼容的许可，并补充 NOTICE。
 - 谱面与 PEZ 往返必须保留未知字段、数组顺序、未改动的 beat 字符串和资源引用。
 - 不要提交 `dist/`、`src-tauri/target/` 或 `release/` 下的构建产物。

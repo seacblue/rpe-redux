@@ -8,7 +8,7 @@
  */
 import { clamp01 } from "../utils/numbers.ts";
 import { TempoMap } from "../global/chart/timing/tempo.ts";
-import { upperBound } from "../utils/search.ts";
+import { lowerBound, upperBound } from "../utils/search.ts";
 import { assetBytes, assetPath } from "../global/document/resources.ts";
 import { type AssetMap } from "../global/document/types.ts";
 import { assetUrl } from "../platform/assetUrl.ts";
@@ -123,6 +123,13 @@ export class HitSounds {
   next: number;
   /** Latest trigger time consumed in the current transport run. */
   scheduledUntil: number;
+  /**
+   * Transport position recorded while playback is stopped, or null while it runs.
+   *
+   * A paused edit resumes from this exact position; the first playing frame's
+   * clock has already advanced past it.
+   */
+  pausedAt: number | null;
   skinAudio: Promise<Map<string, Uint8Array>> | null;
 
   /** Create an idle hit-sound player for one transport. */
@@ -158,6 +165,7 @@ export class HitSounds {
     this.revision = -1;
     this.next = 0;
     this.scheduledUntil = Number.NEGATIVE_INFINITY;
+    this.pausedAt = null;
     this.skinAudio = null;
   }
 
@@ -367,6 +375,7 @@ export class HitSounds {
     this.entries = [];
     this.tempo = null;
     this.onlyCurrentLine = false;
+    this.pausedAt = null;
     this.invalidateSkinAudio();
   }
 
@@ -427,9 +436,12 @@ export class HitSounds {
     editRevision: number | null = null,
   ): void {
     if (!this.transport.playing || this.transport.clockReady === false) {
+      this.pausedAt = this.transport.audioTime;
       this.stop();
       return;
     }
+    const resumedAt = this.pausedAt;
+    this.pausedAt = null;
     const line = this.onlyCurrentLine ? currentLine : null;
     const revision = contentRevision ?? null;
     const edit = editRevision ?? revision;
@@ -439,9 +451,7 @@ export class HitSounds {
       structural || this.compiledRevision !== revision || this.compiledEditRevision !== edit;
     const chartOffset = (chart.META.offset ?? 0) / 1000;
     // A committed offset moves every trigger against the audio clock, so the
-    // cursor index no longer names the same instant and the notes at or behind
-    // the playhead were already heard. Every other edit keeps the cursor's
-    // meaning, which is what lets a replay land on its own note.
+    // cursor index no longer names the same instant.
     const offsetChanged = this.compiledOffset !== null && this.compiledOffset !== chartOffset;
     if (rebuilt) {
       // An edited chart invalidates scheduled voices; a paged line that merely
@@ -459,8 +469,18 @@ export class HitSounds {
       this.compiledOffset = chartOffset;
       this.entries = hitTimeline(chart, tempo, this.offsets, line);
       if (offsetChanged) {
+        // The offset re-times the whole list, and the playhead itself has
+        // already sounded, so only strictly later triggers are scheduled.
         this.next = upperBound(this.entries, this.transport.audioTime, (entry) => entry.time);
-      } else if (!edited) {
+      } else if (edited && resumedAt !== null) {
+        // A paused edit resumes from the exact position playback stopped at;
+        // the first playing frame has already moved the clock past it. Include
+        // a trigger sitting exactly on that position.
+        this.next = lowerBound(this.entries, resumedAt, (entry) => entry.time);
+      } else {
+        // Paging keeps `scheduledUntil`, so voices already queued are not
+        // scheduled twice. A live edit stopped those voices and cleared it, so
+        // the cut look-ahead is scheduled again from the seek tolerance.
         this.next = upperBound(
           this.entries,
           Math.max(this.transport.audioTime - 0.02, this.scheduledUntil),
@@ -488,9 +508,9 @@ export class HitSounds {
     // than the moving lower bound; avoid a binary search on every RAF. A seek
     // or a long main-thread stall can move the bound past that entry, so retain
     // the upper-bound repair path for that case.
-    const lowerBound = time - 0.08;
-    if (this.entries[this.next]?.time <= lowerBound) {
-      this.next = upperBound(this.entries, lowerBound, (entry) => entry.time);
+    const repairBound = time - 0.08;
+    if (this.entries[this.next]?.time <= repairBound) {
+      this.next = upperBound(this.entries, repairBound, (entry) => entry.time);
     }
     const until = time + 0.1 * this.transport.rate;
     let burst = 0;
