@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- settings labels and descriptions share one catalog contract and stay paired with the Chinese catalog. */
 /**
  * The settings window: categories, every field label and description, its own
  * pages, plus the start-up view.
