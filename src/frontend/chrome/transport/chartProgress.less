@@ -44,7 +44,9 @@
 
 .redux-app-root .transport-scrubber {
   height: 100%;
-  min-height: 40px;
+  // The scrubber fills the track the card gives it. A floor here would push the
+  // readouts and the stretch rail out of the card once the toolbar shrinks.
+  min-height: 0;
   background: transparent;
   border-color: transparent;
 }
@@ -112,19 +114,23 @@
   grid-column: 2;
   grid-row: 1;
   display: grid;
-  grid-template-rows: minmax(40px, 1fr) auto;
+  // Both tracks follow the card, so the card never asks for more height than the
+  // toolbar has. A floor on either track is what used to clip the card once the
+  // toolbar was scaled down.
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 1px;
   padding: var(--space-1-5);
   border: 0;
   border-radius: var(--radius-panel);
   background: transparent;
   min-width: 0;
+  min-height: 0;
 }
 
 .redux-status-card .scrubber-wrap {
   margin: 0;
   height: 100%;
-  min-height: 40px;
+  min-height: 0;
 }
 
 .redux-status-line {
@@ -242,7 +248,7 @@
 
 .redux-app-root .redux-status-card {
   .scrubber-wrap {
-    min-height: 48px;
+    min-height: 0;
     padding-top: 0;
   }
 }
