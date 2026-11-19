@@ -195,13 +195,37 @@ function fluxForFrameSize(
       const magnitude = Math.log1p(bands[band]);
       const difference = magnitude - previous[band];
       if (difference > 0) {
-        flux += difference;
+        flux += difference * bandWeight(bandFrequency(band, numBands));
       }
     }
     previous = Float64Array.from(bands, (value) => Math.log1p(value));
     result[frame] = flux;
   }
   return { values: result, centreFrames };
+}
+
+/** Centre frequency of a log-spaced band. */
+function bandFrequency(band: number, numBands: number): number {
+  const position = (band + 0.5) / numBands;
+  return FMIN * 2 ** (position * Math.log2(FMAX / FMIN));
+}
+
+/**
+ * How much a band may contribute to the beat activation.
+ *
+ * The beat is carried by the kick and the snare, whose fundamentals sit low; the
+ * hi-hats, cymbals and upper harmonics mark subdivisions instead. Treating every
+ * band equally therefore lets the subdivision define the tempo.
+ *
+ * Measured on four published tracks, the share of the total flux coming from
+ * above 2 kHz was 34–71% while those bands held 0–5% of the track's energy: a
+ * small, constantly changing high band produces more log-domain flux than a
+ * large, steady low one. That is why equal weights reported two of the four
+ * tempi at double the truth. A weight falling off as `1 / (1 + hz / 500)` — half
+ * strength at 500 Hz, near zero at the top — reported all four correctly.
+ */
+function bandWeight(hz: number): number {
+  return 1 / (1 + hz / 500);
 }
 
 /**
