@@ -63,16 +63,6 @@ export interface BeatDetectionResult {
   tempoSegments?: TempoSegment[];
   /** Whether the track needed more than one tempo stretch. */
   variableTempo?: boolean;
-  /**
-   * Tempo candidates, strongest first.
-   *
-   * A single number cannot describe both a 70 BPM track and a 350 BPM one: the
-   * activation often supports a tempo and its octave relatives at once, and
-   * picking one of them is a musical decision, not a measurement. `bpm` is the
-   * strongest peak; this list is the evidence behind it, so an author who sees
-   * 176 for a track they know is 100 can read the 88 BPM entry beside it.
-   */
-  tempoCandidates?: { bpm: number; share: number }[];
 }
 
 /** Limits and display sizes for one detection run. */
@@ -402,11 +392,34 @@ export function detectBeatGridWithDbnFromSamples(
   if (!fitted) {
     return null;
   }
+  // Report the tempo the decoded path actually spent its time at, then refine it
+  // against the raw attacks.
+  //
+  // The two estimators answer different questions. The median beat interval is
+  // accurate to a fraction of a sample because the attacks are fitted, but it
+  // describes the middle of the track, so a path that changes interval gives the
+  // wrong answer: on Heavy Interlude it says 193.5 while 52% of the path sat at
+  // 100.4. The histogram peak says *which* tempo the track spends its time at,
+  // but it can only resolve whole analysis frames, so on clean material it lands
+  // 0.03 BPM off where the fit is exact.
+  //
+  // Taking the histogram's choice and then refining that choice keeps both
+  // properties: the right octave, measured precisely. The refinement searches near
+  // the chosen tempo rather than re-fitting from scratch.
+  const histogram = decodeTempoCandidates(activation.values, activation.fps, {
+    minBpm,
+    maxBpm,
+  });
+  const peakBpm = histogram?.[0]?.bpm;
+  const refined =
+    peakBpm !== undefined && Number.isFinite(peakBpm) && peakBpm > 0
+      ? (fitBeatSequenceToAttacks(samples, sampleRate, beats, peakBpm) ?? fitted)
+      : fitted;
   // The decoder can lock onto half the actual pulse rate; a strong attack
   // halfway between its beats means the real beat is there. This is the same
   // metrical-level test the autocorrelation detector applies, and it is the
   // difference between reporting 128 and reporting 64 on the same track.
-  const level = resolveMetricalLevel(samples, sampleRate, fitted.bpm, fitted.offsetSeconds, {
+  const level = resolveMetricalLevel(samples, sampleRate, refined.bpm, refined.offsetSeconds, {
     minBpm,
     maxBpm,
   });
@@ -423,12 +436,6 @@ export function detectBeatGridWithDbnFromSamples(
     measuredBpm,
     measuredOffset,
   );
-  // The candidates come from the same decode, so they cost one histogram and no
-  // extra analysis. They are what lets a wide tempo range stay honest.
-  const candidates = decodeTempoCandidates(activation.values, activation.fps, {
-    minBpm,
-    maxBpm,
-  });
   return {
     bpm: measuredBpm,
     offsetMs: measuredOffset,
@@ -442,12 +449,6 @@ export function detectBeatGridWithDbnFromSamples(
     beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
     tempoSegments: segments.length ? segments : undefined,
     variableTempo: segments.length > 1,
-    tempoCandidates: candidates?.length
-      ? candidates.slice(0, 4).map((candidate) => ({
-          bpm: roundMeasuredTiming(candidate.bpm),
-          share: Math.round(candidate.share * 1000) / 1000,
-        }))
-      : undefined,
   };
 }
 
@@ -654,6 +655,15 @@ function fitBeatSequenceToAttacks(
   samples: Float32Array,
   sampleRate: number,
   beats: Float32Array,
+  /**
+   * Tempo to measure around, when the caller already knows which octave is meant.
+   *
+   * Left out, the fit takes whatever period the decoded beat indices imply. Given,
+   * it matches each beat to the attack nearest the grid this tempo predicts, so a
+   * beat sequence that drifted to a different interval is measured at the tempo
+   * the caller chose rather than the one it drifted to.
+   */
+  targetBpm?: number,
 ): { bpm: number; offsetSeconds: number } | null {
   if (beats.length < 4) {
     return null;
@@ -662,15 +672,27 @@ function fitBeatSequenceToAttacks(
   // Search a fraction of the decoded period, so a slow tempo gets the wider
   // window its frame quantisation needs; see ATTACK_WINDOW_BEAT_FRACTION.
   const decodedPeriod = (beats[beats.length - 1] - beats[0]) / (beats.length - 1);
+  const targetPeriod = targetBpm && targetBpm > 0 ? 60 / targetBpm : decodedPeriod;
   const search = Math.max(
     ATTACK_WINDOW,
-    Math.min(decodedPeriod * ATTACK_WINDOW_BEAT_FRACTION, decodedPeriod * 0.5),
+    Math.min(targetPeriod * ATTACK_WINDOW_BEAT_FRACTION, targetPeriod * 0.5),
   );
+  // With a target tempo, lay a grid of that period over the decoded span and match
+  // each grid position to its attack. This is what makes the choice of octave and
+  // the precision independent: the histogram says 100.4 BPM for a track whose
+  // interiors wandered, and this measures that grid to a fraction of a sample
+  // instead of re-deriving a period from the wander.
+  const span = beats[beats.length - 1] - beats[0];
+  const count =
+    targetBpm && targetBpm > 0
+      ? Math.max(4, Math.min(beats.length, Math.floor(span / targetPeriod) + 1))
+      : beats.length;
   const points: AttackPoint[] = [];
-  for (let index = 0; index < beats.length; index += 1) {
-    const delta = attackDelta(samples, sampleRate, beats[index], floor, search);
+  for (let index = 0; index < count; index += 1) {
+    const expected = targetBpm && targetBpm > 0 ? beats[0] + index * targetPeriod : beats[index];
+    const delta = attackDelta(samples, sampleRate, expected, floor, search);
     if (delta !== null) {
-      points.push({ beat: index, time: beats[index] + delta });
+      points.push({ beat: index, time: expected + delta });
     }
   }
   if (points.length < 4) {
