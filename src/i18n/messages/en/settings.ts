@@ -494,7 +494,7 @@ export default {
   "settings.field.preserve-pitch.label": "Keep pitch when changing speed",
   "settings.field.audio-visual-lead.label": "Picture lead",
   "settings.field.audio-visual-lead.description":
-    "Milliseconds the picture is drawn ahead of the sound. Positive moves notes earlier; negative moves them later. Adjust by ear if notes pass the judgement line slightly off the beat.",
+    "Milliseconds the picture is drawn ahead of the sound. Raise it if drum hits sound early.",
   "settings.unit.milliseconds": "ms",
 
   // ----------------------------------------------------------- audio (3 rows)
