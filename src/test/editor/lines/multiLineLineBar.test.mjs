@@ -46,47 +46,79 @@ test("line-bar rows strip the group prefix and mark current and selected lines",
   ]);
 });
 
+/** The user-visible part of a click result; token shape is asserted separately. */
+function clicked(result) {
+  return { current: result.current, selection: result.selection };
+}
+
 test("a plain click replaces the selection and makes the line current", () => {
-  assert.deepEqual(lineBarSelectionAfterClick(0, [0, 1], 3, false), {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(0, [0, 1], 3, false)), {
     current: 3,
     selection: [3],
   });
 });
 
 test("shift-click toggles one line like the toolbar", () => {
-  assert.deepEqual(lineBarSelectionAfterClick(2, [1, 2, 3], 2, true), {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [1, 2, 3], 2, true)), {
     current: 1,
     selection: [1, 3],
   });
 });
 
 test("clicking a selected line removes it and keeps a remaining member current", () => {
-  assert.deepEqual(lineBarSelectionAfterClick(2, [1, 2, 3], 2, true), {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [1, 2, 3], 2, true)), {
     current: 1,
     selection: [1, 3],
   });
-  assert.deepEqual(lineBarSelectionAfterClick(2, [1, 2, 3], 1, true), {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [1, 2, 3], 1, true)), {
     current: 2,
     selection: [2, 3],
   });
 });
 
 test("the last selected line is protected", () => {
-  assert.deepEqual(lineBarSelectionAfterClick(1, [1], 1, true), {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(1, [1], 1, true)), {
     current: 1,
     selection: [1],
   });
 });
 
-test("shift-click adds or removes only the clicked line", () => {
-  assert.deepEqual(lineBarSelectionAfterClick(2, [0, 5], 4, true), {
+test("shift-click appends a new line at the end", () => {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [0, 5], 4, true)), {
     current: 4,
-    selection: [0, 4, 5],
+    selection: [0, 5, 4],
   });
-  assert.deepEqual(lineBarSelectionAfterClick(4, [1], 2, true), {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(4, [1], 2, true)), {
     current: 2,
     selection: [1, 2],
   });
+});
+
+test("removing a line inside a range splits it in place", () => {
+  const result = lineBarSelectionAfterClick(1, [0, 1, 2], 1, true, [
+    { kind: "range", start: 0, end: 2, step: 1 },
+  ]);
+  assert.deepEqual(result.selection, [0, 2]);
+  assert.deepEqual(result.tokens, [
+    { kind: "line", line: 0 },
+    { kind: "line", line: 2 },
+  ]);
+});
+
+test("adding a line keeps a step range and appends the new line", () => {
+  const result = lineBarSelectionAfterClick(
+    85,
+    [80, 85],
+    90,
+    true,
+    [{ kind: "range", start: 80, end: 85, step: 5 }],
+    [80, 85, 90],
+  );
+  assert.deepEqual(result.selection, [80, 85, 90]);
+  assert.deepEqual(result.tokens, [
+    { kind: "range", start: 80, end: 85, step: 5 },
+    { kind: "line", line: 90 },
+  ]);
 });
 
 test("the scroll helper leaves a visible row alone and reveals an off-screen one", () => {

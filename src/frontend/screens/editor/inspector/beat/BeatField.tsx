@@ -158,7 +158,10 @@ export function BeatField({
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
+      // Enter commits the tuple in place; the field keeps focus so a value can
+      // be corrected without clicking back into it.
       event.preventDefault();
+      commit(draftRef.current);
     } else if (event.key === "Escape") {
       event.preventDefault();
       setDraftParts(partsOf(value));

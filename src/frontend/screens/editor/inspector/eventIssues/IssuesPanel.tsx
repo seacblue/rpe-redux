@@ -100,6 +100,7 @@ function IssuesContent() {
     session.multiLineSelection.clear();
     session.multiLineEnabled = false;
     session.multiLineIndices = [];
+    session.multiLineTokens = [];
     session.normalizeMultiLine();
     session.selectionRevision += 1;
     session.recordSelection(undefined, before, true);

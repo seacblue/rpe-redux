@@ -160,7 +160,7 @@ export interface DocumentRuntime {
   readonly coverUrl: () => string;
   /** Install a verified room asset and refresh the surfaces that use it. */
   readonly adoptAsset: (name: string, bytes: Uint8Array) => void;
-  readonly guardReplace: (action: () => unknown, title?: string) => Promise<boolean>;
+  readonly guardReplace: (action: () => unknown) => Promise<boolean>;
   readonly installBlankChart: () => void;
   readonly closeDocument: () => boolean;
   /** Close the open document without a close hook; used to discard a room copy. */
@@ -888,10 +888,7 @@ export function createDocumentRuntime(options: {
     options.scope.add(diskObserver.dispose);
   }
   /** Runs a document action once the unsaved-changes prompt is accepted. */
-  function guardReplace(
-    action: () => unknown,
-    title = t("editor.app.dialog.switchChart"),
-  ): Promise<boolean> {
+  function guardReplace(action: () => unknown): Promise<boolean> {
     const run = async (): Promise<boolean> => {
       try {
         await action();
@@ -905,7 +902,7 @@ export function createDocumentRuntime(options: {
       return run();
     }
     return requestConfirm({
-      title,
+      title: t("editor.app.dialog.switchChart"),
       description: t("editor.dialogs.dialog.unsavedChanges"),
       destructive: true,
     }).then((confirmed) => (confirmed ? run() : false));
@@ -1257,7 +1254,6 @@ export function createDocumentRuntime(options: {
       loadCandidate,
       save,
       saveAs,
-      closeDocument,
       pickMedia: (kind) => media.pick(kind),
       getAssets,
       getSession,

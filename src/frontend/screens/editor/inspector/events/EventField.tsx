@@ -174,9 +174,23 @@ export function EventField({
       return;
     }
     if (kind === "number") {
-      numericWheel(input, step, undefined, () => updateRef.current(input.value, false));
+      return numericWheel(input, step, undefined, () => updateRef.current(input.value, false));
     }
   }, [kind, step]);
+
+  // The field stays mounted while the inspector republishes, so an external
+  // change (another field, undo, or a curve edit) has to reach the DOM here.
+  // A focused box keeps its draft: the author is still typing into it.
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input || document.activeElement === input) {
+      return;
+    }
+    const next = displayValue(event, field);
+    if (input.value !== next) {
+      writeInputValue(input, next);
+    }
+  }, [event, field]);
 
   // `EventInspectorView` only asks for a beat field on the two anchors, so the
   // stored triple can be read off the field itself.
@@ -220,30 +234,53 @@ export function EventField({
   // step mismatch for a value the author typed. The arrow keys below keep the
   // same stepping the native control would have provided.
   const nativeStep = kind === "number" ? eventFieldNativeStep(field, step) : "any";
-  const freeNumeric = kind === "number" && nativeStep === "any";
 
-  /** Steps a free-form event value with the arrow keys without native validation. */
-  const onArrowStep = (keyEvent: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (!freeNumeric || (keyEvent.key !== "ArrowUp" && keyEvent.key !== "ArrowDown")) {
+  /**
+   * Key handling for a numeric field.
+   *
+   * Typed text is a draft until Enter or blur; arrow keys and the step buttons
+   * are deliberate gestures, so they commit on the same tick as the wheel.
+   */
+  const onNumericKeyDown = (keyEvent: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (kind !== "number") {
+      return;
+    }
+    const input = keyEvent.currentTarget;
+    if (keyEvent.key === "Enter") {
+      keyEvent.preventDefault();
+      update(input.value, false);
+      focusValue.current = input.value;
+      return;
+    }
+    if (keyEvent.key === "Escape") {
+      keyEvent.preventDefault();
+      writeInputValue(input, displayValue(event, field));
+      focusValue.current = input.value;
+      return;
+    }
+    if (keyEvent.key !== "ArrowUp" && keyEvent.key !== "ArrowDown") {
       return;
     }
     keyEvent.preventDefault();
-    const input = keyEvent.currentTarget;
     const value = Number(input.value);
     if (!Number.isFinite(value)) {
       return;
     }
     const multiplier = keyEvent.shiftKey ? 10 : keyEvent.ctrlKey ? 5 : 1;
     const direction = keyEvent.key === "ArrowUp" ? 1 : -1;
-    writeInputValue(input, String(steppedEventValue(value, step, direction, multiplier)));
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    const minimum = bounds.min ?? -Infinity;
+    const maximum = bounds.max ?? Infinity;
+    const next = Math.max(
+      minimum,
+      Math.min(maximum, steppedEventValue(value, step, direction, multiplier)),
+    );
+    writeInputValue(input, String(next));
+    update(input.value, false);
   };
 
   const input = (
     <Input
       ref={inputRef}
-      key={`${field}:${displayValue(event, field)}`}
       id={`event-field-${field}`}
       type={kind === "number" ? "number" : "text"}
       data-redux-wheel={kind === "number" ? "custom" : undefined}
@@ -271,20 +308,20 @@ export function EventField({
       data-inspector-field={field}
       disabled={disabled}
       defaultValue={displayValue(event, field)}
-      onKeyDown={onArrowStep}
+      onKeyDown={onNumericKeyDown}
       onFocus={(focusEvent) => {
         focusValue.current = focusEvent.currentTarget.value;
         setLiveEventEdit(true);
       }}
       onInput={(inputEvent) => {
-        // One live commit channel: `onInput` is the per-keystroke draft and
-        // `onBlur` is the loud final commit. The shared Input dispatches both
-        // `input` and `change` for its stepper/wheel gestures, so handling
-        // both would commit every gesture twice.
-        if (kind !== "number" || inputEvent.currentTarget.value.trim()) {
+        // A numeric field keeps the typed text as a draft until Enter or blur.
+        // Text and colour fields keep their live draft because they render as
+        // they are typed and have no step gesture of their own.
+        if (kind !== "number") {
           update(inputEvent.currentTarget.value, true);
         }
       }}
+      onNumericWheel={kind === "number" ? (next) => update(next, false) : undefined}
       onBlur={() => {
         const value = inputRef.current?.value ?? "";
         if (value !== focusValue.current) {

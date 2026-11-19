@@ -32,6 +32,7 @@ export function selectOverlappingNote(
     selection: Set<number>;
     multiLineSelection: Map<number, Set<number>>;
     multiLineIndices: number[];
+    multiLineTokens: unknown[];
     multiLineEnabled: boolean;
     selectionRevision: number;
     selectionState(): unknown;
@@ -49,6 +50,7 @@ export function selectOverlappingNote(
   session.selection = new Set([entry.index]);
   session.multiLineSelection.clear();
   session.multiLineIndices = [];
+  session.multiLineTokens = [];
   session.multiLineEnabled = false;
   session.normalizeMultiLine();
   session.selectionRevision += 1;

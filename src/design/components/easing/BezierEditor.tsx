@@ -5,12 +5,19 @@
  * coordinate as its own field so every value follows the normal label/control
  * alignment. The canvas remains a direct-manipulation preview of those fields.
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { FieldRow } from "../field/FieldRow.tsx";
 import { Input } from "../input/Input.tsx";
 import { bezier } from "../../../core/utils/easing.ts";
 import { clamp01 } from "../../../core/utils/numbers.ts";
 import { t, type MessageKey } from "../../../i18n/index.ts";
+import { numericWheel } from "../../controls/numericWheel.ts";
 import { EASING_CANVAS_HEIGHT, EASING_CANVAS_WIDTH, resizeEasingCanvas } from "./easingCanvas.ts";
 
 interface BezierEditorProps {
@@ -59,6 +66,66 @@ function parsePoint(text: string): number | null {
 /** Format all four coordinates for the editable drafts. */
 function formatPoints(points: readonly number[]): string[] {
   return normalizePoints(points).map(formatPoint);
+}
+
+/**
+ * One labelled coordinate box.
+ *
+ * Its wheel belongs to the draft: a notch steps the coordinate and hands the
+ * result to the owner so the chart, timeline, and preview receive it at once.
+ */
+function PointInput({
+  id,
+  index,
+  label,
+  value,
+  invalid,
+  onText,
+  onWheel,
+  onBlur,
+  onKeyDown,
+}: {
+  id?: string;
+  index: number;
+  label: string;
+  value: string;
+  invalid: boolean;
+  onText(index: number, text: string): void;
+  onWheel(index: number, input: HTMLInputElement): void;
+  onBlur(): void;
+  onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wheelHandler = useRef(onWheel);
+  useEffect(() => {
+    wheelHandler.current = onWheel;
+  });
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) {
+      return;
+    }
+    return numericWheel(input, 0.001, undefined, () => wheelHandler.current(index, input));
+  }, [index]);
+  return (
+    <Input
+      id={id}
+      ref={inputRef}
+      className="bezier-point-input"
+      type="number"
+      textAlign="center"
+      min={0}
+      max={1}
+      step={0.001}
+      data-redux-wheel="custom"
+      value={value}
+      aria-label={label}
+      aria-invalid={invalid}
+      onChange={(event) => onText(index, event.currentTarget.value)}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
+    />
+  );
 }
 
 /** A labelled Bézier field with four validated coordinates and a responsive curve. */
@@ -239,18 +306,17 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
             density="compact"
             label={t(key)}
             control={(id) => (
-              <Input
+              <PointInput
                 id={id}
-                className="bezier-point-input"
-                type="number"
-                textAlign="center"
-                min={0}
-                max={1}
-                step={0.001}
+                index={index}
+                label={t(key)}
                 value={draftText[index] ?? formatPoint(normalizedPoints[index] ?? 0)}
-                aria-label={t(key)}
-                aria-invalid={parsePoint(draftText[index] ?? "") === null}
-                onChange={(event) => updatePointText(index, event.currentTarget.value)}
+                invalid={parsePoint(draftText[index] ?? "") === null}
+                onText={updatePointText}
+                onWheel={(coordinate, input) => {
+                  updatePointText(coordinate, input.value);
+                  commitPoint(coordinate);
+                }}
                 onBlur={() => commitPoint(index)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {

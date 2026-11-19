@@ -20,6 +20,7 @@ import { Icon } from "../icon/Icon.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import { ratioOf, readoutText, writeRangeValueAtPointer } from "../../controls/sliderMode.ts";
 import { writeInputValue } from "../../controls/nativeValue.ts";
+import { useSelectAllOnClick } from "./useSelectAllOnClick.ts";
 import {
   openControlStepper,
   type StepperDirection,
@@ -162,19 +163,6 @@ function rangeMode(props: InputProps): "level" | "range" {
   return "level";
 }
 
-/**
- * Input types where a click replaces the whole value.
- *
- * Only a numeric entry field holds one value the user almost always wants to
- * retype, so selecting it on click is an affordance. Every other text field —
- * prose, a name, a path, a search query or a multi-token expression — places the
- * caret where the click landed so one token can be edited without selecting the
- * rest.
- */
-function selectsValueOnClick(type: string | undefined): boolean {
-  return type === "number";
-}
-
 /** The native input plus optional stepper buttons, slider readout, and manual entry overlay. */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   {
@@ -210,8 +198,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const cancelled = useRef(new WeakSet<Event>());
   const onWheelRef = useRef(onWheel);
   const customWheel = Boolean(onWheel);
-  /** The next click may replace the whole value; later clicks keep the caret. */
-  const selectOnClick = useRef(false);
+  const selectAllOnClick = useSelectAllOnClick();
   const [rangeReadout, setRangeReadout] = useState({ text: "", ratio: 0 });
   const [manualEntry, setManualEntry] = useState(false);
   const [manualText, setManualText] = useState("");
@@ -673,11 +660,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         onFocus?.(event);
         // Each focus starts one select-all gesture; clicking again while the
         // field still has focus must leave the caret where the pointer landed.
-        selectOnClick.current = selectsValueOnClick(event.currentTarget.type);
+        selectAllOnClick.focus(event.currentTarget.type);
       }}
       onBlur={(event) => {
         onBlur?.(event);
-        selectOnClick.current = false;
+        selectAllOnClick.blur(event.currentTarget);
       }}
       onContextMenu={(event) => {
         onContextMenu?.(event);
@@ -688,6 +675,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       }}
       onPointerDown={(event) => {
         onPointerDown?.(event);
+        selectAllOnClick.press({ x: event.clientX, y: event.clientY });
         beginRangeDrag(event);
       }}
       onPointerMove={(event) => {
@@ -708,8 +696,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       }}
       onClick={(event) => {
         onClick?.(event);
-        if (selectOnClick.current && !event.currentTarget.disabled) {
-          selectOnClick.current = false;
+        const selectAll = selectAllOnClick.click({
+          x: event.clientX,
+          y: event.clientY,
+          shiftKey: event.shiftKey,
+        });
+        if (selectAll && !event.currentTarget.disabled) {
           // Keep this in the click phase so the browser has finished its native
           // caret placement before the shared field applies its select-all UX.
           event.currentTarget.select();

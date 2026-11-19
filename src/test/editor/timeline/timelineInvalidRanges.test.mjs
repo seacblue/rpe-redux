@@ -63,6 +63,27 @@ test("cached event entries match direct range projection", () => {
   }
 });
 
+test("event lane ranges follow a replaced track under one chart identity", () => {
+  const chart = createChart();
+  const cache = new TimelineCache();
+  const types = ["moveXEvents"];
+  const event = createEvent(0, 100, 0, 4);
+  const layer = { moveXEvents: [event] };
+
+  const first = cache.events(chart, "0:false:0", types, layer);
+  assert.equal(first.ranges[0].get(0).max, 100);
+
+  // A paged document keeps the facade chart object; the replaced array is the
+  // only signal that the derived lane range is stale.
+  const edited = { ...event, end: 200 };
+  const replaced = { moveXEvents: [edited] };
+  const second = cache.events(chart, "0:false:0", types, replaced);
+  assert.equal(second.ranges[0].get(0).max, 200);
+
+  const reused = cache.events(chart, "0:false:0", types, replaced);
+  assert.equal(reused, second, "an unchanged source array reuses the compiled lane");
+});
+
 test("note render queries project reversed holds without renumbering valid notes", () => {
   const reversed = createNote(2, 8, 0, 10);
   reversed.endTime = fromNumber(4);

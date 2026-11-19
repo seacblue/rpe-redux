@@ -46,7 +46,7 @@ npm run dev:desktop   # 原生 Tauri 窗口
 npm run build         # Windows 生成 NSIS 安装包；Linux 生成 deb、rpm 和 AppImage
 ```
 
-`npm run dev` 会同时启动 Go 服务和 Vite，然后在默认浏览器中打开编辑器。它只需要 Node.js 和 Go，不需要 Rust 或平台 WebView，开发数据保存在 `.scratch/dev/`。需要原生文件对话框、窗口行为或打包运行时时使用 `npm run dev:desktop`。`npm run build -- --portable` 只生成便携版。首次桌面构建会准备 FFmpeg、Cloudflared 和 Go sidecar，在缓存不存在时需要联网。
+`npm run dev` 会同时启动 Go 服务和 Vite，然后在默认浏览器中打开编辑器。它只需要 Node.js 和 Go，不需要 Rust 或平台 WebView，开发数据保存在 `.scratch/dev/`。需要原生文件对话框、窗口行为或打包运行时时使用 `npm run dev:desktop`。`npm run build -- --portable` 只生成便携版。首次桌面构建会下载锁定的 FFmpeg 和 Cloudflared 构建并准备 Go sidecar；之后会复用已验证的缓存，无需再次联网。
 
 > Windows 提供 x64、x86 和 ARM64 的 NSIS 安装包。Linux 提供 x64 的 deb、rpm 和 AppImage 包。只有 AppImage 能通过应用内更新替换自身；deb 和 rpm 用户通过包管理器升级。
 

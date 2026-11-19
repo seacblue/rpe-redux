@@ -1,106 +1,98 @@
 /**
- * Verifies the dependency release resolver: it reads vendor checksum files,
- * selects the newest release branch, and refuses an artifact whose publisher
- * publishes no digest, so the staging scripts only download verified bytes.
+ * Verifies the pinned dependency manifest: every supported desktop target names
+ * an exact artifact with an HTTPS URL, a size, and a SHA-256 digest, so the
+ * staging scripts never resolve a floating latest release.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolve } from "node:path";
 import {
   findArchiveRoot,
-  parseChecksums,
-  parseDigest,
-  parseVersion,
-  selectNewestBranch,
-  selectReleaseAsset,
+  loadDependencyPins,
+  selectCloudflaredPin,
+  selectFfmpegPin,
+  validateDependencyPins,
 } from "../../../../scripts/dependencyArtifacts.mjs";
 
-const LINUX_PATTERN = /^ffmpeg-n(\d+\.\d+)-latest-linux64-gpl-(\d+\.\d+)\.tar\.xz$/u;
+const ROOT = resolve(import.meta.dirname, "../../../..");
+const pins = loadDependencyPins(ROOT);
 
-test("checksum files are parsed for every sha256sum spelling", () => {
-  const text = [
-    "51e5f4592db783f9d140d138eee5bd327502e43951e4f70880a16571a9a1fe73  ffmpeg-n7.1-latest-win32-gpl-7.1.zip",
-    "406EDDB53777BAF077F3FA4276C34B5AABD51C1AC9169F37602A230ADF42BA7E *ffmpeg-n8.1-latest-win32-gpl-8.1.zip",
-    "  # a comment line",
-    "not-a-digest  ffmpeg-ignored.zip",
-    "",
-  ].join("\r\n");
+test("the pin manifest covers every supported desktop target", () => {
+  assert.equal(pins.schemaVersion, 1);
 
-  const checksums = parseChecksums(text);
+  for (const [target, entry] of Object.entries(pins.ffmpeg)) {
+    assert.equal(typeof entry.version, "string", target);
+    assert.ok(entry.version.length > 0, target);
+    assert.equal(typeof entry.label, "string", target);
+    assert.equal(typeof entry.provider, "string", target);
+    assert.ok(entry.archiveUrl.startsWith("https://"), target);
+    assert.match(entry.sha256, /^[0-9a-f]{64}$/u, target);
+    assert.ok(entry.size > 0, target);
+  }
 
+  assert.equal(typeof pins.cloudflared.version, "string");
+  for (const [target, entry] of Object.entries(pins.cloudflared.assets)) {
+    assert.equal(typeof entry.name, "string", target);
+    assert.ok(entry.url.startsWith("https://"), target);
+    assert.match(entry.sha256, /^[0-9a-f]{64}$/u, target);
+    assert.ok(entry.size > 0, target);
+  }
+});
+
+test("pins select the exact artifact for each supported target", () => {
+  assert.equal(selectFfmpegPin(pins, "windows", "x64").version, "8.1.2");
+  assert.equal(selectFfmpegPin(pins, "windows", "x86").version, "8.1.3");
+  assert.equal(selectFfmpegPin(pins, "linux", "x64").version, "8.1.3");
   assert.equal(
-    checksums.get("ffmpeg-n7.1-latest-win32-gpl-7.1.zip"),
-    "51e5f4592db783f9d140d138eee5bd327502e43951e4f70880a16571a9a1fe73",
+    selectCloudflaredPin(pins, "windows", "amd64").name,
+    "cloudflared-windows-amd64.exe",
   );
-  assert.equal(
-    checksums.get("ffmpeg-n8.1-latest-win32-gpl-8.1.zip"),
-    "406eddb53777baf077f3fa4276c34b5aabd51c1ac9169f37602a230adf42ba7e",
-  );
-  assert.equal(checksums.has("ffmpeg-ignored.zip"), false);
-  assert.equal(checksums.size, 2);
-});
+  assert.equal(selectCloudflaredPin(pins, "windows", "386").name, "cloudflared-windows-386.exe");
+  assert.equal(selectCloudflaredPin(pins, "linux", "amd64").name, "cloudflared-linux-amd64");
 
-test("the newest release branch wins over an older one", () => {
-  const names = [
-    "ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz",
-    "ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz",
-    "ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz",
-  ];
-
-  assert.deepEqual(selectNewestBranch(names, LINUX_PATTERN, "BtbN linux64 GPL"), {
-    name: "ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz",
-    branch: "9.0",
-  });
-});
-
-test("non-GPL, shared, and branch-mismatched assets are not release candidates", () => {
-  const names = [
-    "ffmpeg-n9.0-latest-linux64-lgpl-9.0.tar.xz",
-    "ffmpeg-n9.0-latest-linux64-gpl-shared-9.0.tar.xz",
-    "ffmpeg-n9.0-latest-linux64-gpl-8.1.tar.xz",
-    "ffmpeg-master-latest-linux64-gpl.tar.xz",
-  ];
-
+  assert.throws(() => selectFfmpegPin(pins, "linux", "arm64"), /no FFmpeg build for linux\/arm64/u);
   assert.throws(
-    () => selectNewestBranch(names, LINUX_PATTERN, "BtbN linux64 GPL"),
-    /No BtbN linux64 GPL asset matches/u,
+    () => selectCloudflaredPin(pins, "linux", "arm64"),
+    /no Cloudflare Tunnel client for linux\/arm64/u,
   );
 });
 
-test("release versions and bare digests reject malformed feed bodies", () => {
-  assert.equal(parseVersion("9.0.2\n", "version"), "9.0.2");
-  assert.equal(parseVersion("8.1", "version"), "8.1");
-  assert.throws(() => parseVersion("latest", "version"), /unexpected version/u);
-
-  const digest = "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba";
-  assert.equal(parseDigest(`${digest}\n`, "checksum"), digest);
-  assert.equal(parseDigest(digest.toUpperCase(), "checksum"), digest);
-  assert.throws(() => parseDigest("abc123", "checksum"), /unexpected checksum/u);
+test("pinned URLs name the exact versioned artifact instead of a latest alias", () => {
+  for (const entry of Object.values(pins.ffmpeg)) {
+    assert.doesNotMatch(entry.archiveUrl, /\/releases\/download\/latest\//u);
+    assert.ok(entry.archiveUrl.endsWith(`/${entry.archiveName}`));
+    assert.ok(entry.archiveUrl.includes(entry.version));
+  }
+  for (const entry of Object.values(pins.cloudflared.assets)) {
+    assert.ok(entry.url.endsWith(`/${entry.name}`));
+    assert.ok(entry.url.includes(pins.cloudflared.version));
+    assert.doesNotMatch(entry.url, /\/latest\//u);
+  }
 });
 
-test("a GitHub asset must publish a digest and a download URL", () => {
-  const release = {
-    tag_name: "2026.11.0",
-    assets: [
-      {
-        name: "cloudflared-windows-amd64.exe",
-        size: 55_397_592,
-        digest: `sha256:${"a".repeat(64)}`,
-        browser_download_url: "https://example.test/cloudflared.exe",
-      },
-      { name: "cloudflared-windows-386.exe", size: 1, digest: null },
-    ],
-  };
-
-  assert.deepEqual(selectReleaseAsset(release, "cloudflared-windows-amd64.exe"), {
-    url: "https://example.test/cloudflared.exe",
-    digest: "a".repeat(64),
-    size: 55_397_592,
-  });
+test("validation rejects a missing target and a malformed pin", () => {
+  const missingTarget = structuredClone(pins);
+  delete missingTarget.ffmpeg["linux-x64"];
   assert.throws(
-    () => selectReleaseAsset(release, "cloudflared-windows-386.exe"),
-    / publishes no SHA-256 digest /u,
+    () => validateDependencyPins(missingTarget, "test pins"),
+    /no FFmpeg pin for linux-x64/u,
   );
-  assert.throws(() => selectReleaseAsset(release, "missing.exe"), /does not publish missing\.exe/u);
+
+  const badDigest = structuredClone(pins);
+  badDigest.cloudflared.assets["windows-amd64"].sha256 = "not-a-digest";
+  assert.throws(() => validateDependencyPins(badDigest, "test pins"), /SHA-256 digest/u);
+
+  const wrongName = structuredClone(pins);
+  wrongName.ffmpeg["windows-x64"].archiveName = "other.zip";
+  assert.throws(
+    () => validateDependencyPins(wrongName, "test pins"),
+    /URL does not name other\.zip/u,
+  );
+
+  const insecure = structuredClone(pins);
+  insecure.ffmpeg["windows-x64"].archiveUrl =
+    "http://example.test/ffmpeg-9.0.2-essentials_build.zip";
+  assert.throws(() => validateDependencyPins(insecure, "test pins"), /HTTPS/u);
 });
 
 test("the archive root is read from the listing instead of the version string", () => {

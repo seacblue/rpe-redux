@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "ffmpeg": {
+    "windows-x64": {
+      "version": "8.1.2",
+      "label": "8.1.2 x64 essentials",
+      "provider": "gyan.dev",
+      "archiveName": "ffmpeg-8.1.2-essentials_build.zip",
+      "archiveUrl": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+      "sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+      "size": 109728040,
+      "licenseFile": "LICENSE",
+      "readmeFile": "README.txt"
+    },
+    "windows-x86": {
+      "version": "8.1.3",
+      "label": "n8.1.3 win32 GPL snapshot",
+      "provider": "defisym/FFmpeg-Builds-Win32",
+      "archiveName": "ffmpeg-n8.1.3-34-ga35157abb9-win32-gpl-8.1.zip",
+      "archiveUrl": "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/autobuild-2026-11-08-17-49/ffmpeg-n8.1.3-34-ga35157abb9-win32-gpl-8.1.zip",
+      "sha256": "b8fd465e351af25d57d85f943a1b7ec283e26a9c77d665be91d6fa4872787f16",
+      "size": 148429919,
+      "licenseFile": "LICENSE.txt",
+      "readmeFile": null
+    },
+    "linux-x64": {
+      "version": "8.1.3",
+      "label": "n8.1.3 linux64 GPL snapshot",
+      "provider": "BtbN/FFmpeg-Builds",
+      "archiveName": "ffmpeg-n8.1.3-34-ga35157abb9-linux64-gpl-8.1.tar.xz",
+      "archiveUrl": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-09-12-42/ffmpeg-n8.1.3-34-ga35157abb9-linux64-gpl-8.1.tar.xz",
+      "sha256": "23c6279d9f10afbcc273082256ae2073495595ab53fbcd729a5a93913b3fdd75",
+      "size": 151623608,
+      "licenseFile": "LICENSE.txt",
+      "readmeFile": null
+    }
+  },
+  "cloudflared": {
+    "version": "2026.10.7",
+    "provider": "cloudflare/cloudflared",
+    "assets": {
+      "windows-amd64": {
+        "name": "cloudflared-windows-amd64.exe",
+        "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-windows-amd64.exe",
+        "sha256": "2493dbc168923bb3e59e5e7716f71deced92992eea9acd6e9d74f84ac7751343",
+        "size": 55390512
+      },
+      "windows-386": {
+        "name": "cloudflared-windows-386.exe",
+        "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-windows-386.exe",
+        "sha256": "88c6b972b410db0e26745f593510d772c825a13c5a2374819e3f13a05b333082",
+        "size": 38097032
+      },
+      "linux-amd64": {
+        "name": "cloudflared-linux-amd64",
+        "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64",
+        "sha256": "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872",
+        "size": 40274445
+      }
+    }
+  }
+}

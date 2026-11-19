@@ -127,7 +127,6 @@ export default {
   "editor.app.curve.startX": "Start X",
   "editor.app.curve.type": "Type",
   "editor.app.dialog.chooseChart": "Choose a chart",
-  "editor.app.dialog.closeChart": "Return to chart library",
   "editor.app.dialog.discardAndReturn": "Discard and return",
   "editor.app.dialog.openWithoutSaving": "Don't save, open",
   "editor.app.notice.droppedManyImported":

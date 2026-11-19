@@ -14,7 +14,6 @@ export interface EditorDocumentCommands {
   newDocument(): void;
   openDocument(): void;
   saveDocument(): void;
-  closeDocument(): void;
 }
 
 /** Temporary transport options for one held audition. */
@@ -46,7 +45,10 @@ export interface EditorViewCommands {
 
 /** Workspace navigation shared by the application menu and shortcuts. */
 export interface EditorNavigationCommands {
+  /** Show the library and leave the chart open behind it. */
   openLibrary(): void;
+  /** Return to the library and release the open document after one confirmation. */
+  closeLibrary(): void;
 }
 
 /** Inspector entry point used by the workspace host API. */

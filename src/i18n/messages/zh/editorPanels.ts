@@ -77,7 +77,7 @@ export default {
   "editorPanels.preview.debug.no": "否",
 
   "editorPanels.multiLine.lines": "判定线",
-  "editorPanels.multiLine.linesPlaceholder": "例如 0-3,5",
+  "editorPanels.multiLine.linesPlaceholder": "例如 0-3, 80:119/5, Drums",
   "editorPanels.multiLine.mode": "多线编辑模式",
   "editorPanels.multiLine.notes": "音符",
   "editorPanels.multiLine.events": "事件",

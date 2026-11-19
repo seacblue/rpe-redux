@@ -57,6 +57,7 @@ test("J restores the line list chosen before closing", async () => {
   await runEditorKeyboardAction(keyEvent(), "workspace.multiLine.toggle", "notes", deps);
   assert.equal(session.multiLineActive, true);
   assert.deepEqual(session.multiLineIndices, [0, 1, 2]);
+  assert.deepEqual(session.multiLineTokens, [{ kind: "range", start: 0, end: 2, step: 1 }]);
   assert.equal(opened.length, 1);
 });
 
@@ -87,4 +88,5 @@ test("leaving multi-line editing remembers the list and collapses to the active 
   assert.equal(session.multiLineActive, false);
   assert.deepEqual(session.multiLineIndices, [session.lineIndex]);
   assert.deepEqual(session.multiLineRestore, [0, 1, 2]);
+  assert.deepEqual(session.multiLineRestoreTokens, [{ kind: "range", start: 0, end: 2, step: 1 }]);
 });

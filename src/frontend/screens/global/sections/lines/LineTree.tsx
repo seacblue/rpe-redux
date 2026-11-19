@@ -31,6 +31,7 @@ import {
   removeLineGroup,
   renameLineGroup,
   reorderLineGroup,
+  sanitizeLineGroupName,
 } from "../../../../../core/global/chart/line/lineTreeEdits.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { t } from "../../../../../i18n/index.ts";
@@ -327,14 +328,15 @@ export const LineTree = memo(function LineTree({
   /** Inserts groups after the active folder, resolving duplicate names. */
   const addGroups = (amount: number, name?: string) => {
     const count = Math.max(1, Math.min(MAX_BATCH_LINES, Math.trunc(amount)));
+    const safeName = name === undefined ? undefined : sanitizeLineGroupName(name);
     let next = chart;
     let insertAt = Math.min(labels.length, activeGroup + 1);
     let created = 0;
     for (let offset = 0; offset < count; offset += 1) {
       const existing = groupNames(next);
       let groupName =
-        name && count === 1 ? name.trim() : t("model.line.group", { index: existing.length + 1 });
-      if (name && count === 1 && !groupName) {
+        safeName && count === 1 ? safeName : t("model.line.group", { index: existing.length + 1 });
+      if (safeName !== undefined && count === 1 && !safeName) {
         onNotify(t("editorPanels.linePanel.groupNameRequired"), "warning");
         return;
       }
@@ -384,7 +386,8 @@ export const LineTree = memo(function LineTree({
         addGroups(amount);
       }
     } else {
-      const name = prompt.value.trim();
+      const name =
+        prompt.kind === "group" ? sanitizeLineGroupName(prompt.value) : prompt.value.trim();
       if (!name) {
         onNotify(
           t(
@@ -508,7 +511,7 @@ export const LineTree = memo(function LineTree({
 
   /** Opens inline rename for a folder. */
   const startGroupRename = (index: number) => {
-    setRenameGroup({ index, value: rawNames[index] ?? "" });
+    setRenameGroup({ index, value: sanitizeLineGroupName(rawNames[index] ?? "") });
   };
 
   /** Validates the inline rename and commits it, or reports the conflict. */
@@ -516,7 +519,7 @@ export const LineTree = memo(function LineTree({
     if (!renameGroup) {
       return;
     }
-    const name = renameGroup.value.trim();
+    const name = sanitizeLineGroupName(renameGroup.value);
     if (!name) {
       onNotify(t("editorPanels.linePanel.groupNameRequired"), "warning");
       return;
@@ -674,7 +677,7 @@ export const LineTree = memo(function LineTree({
                       aria-label={t("editorPanels.linePanel.groupNamePlaceholder")}
                       autoFocus
                       onChange={(event) => {
-                        const value = event.currentTarget.value;
+                        const value = sanitizeLineGroupName(event.currentTarget.value);
                         setRenameGroup((current) => (current ? { ...current, value } : current));
                       }}
                       onKeyDown={(event) => {

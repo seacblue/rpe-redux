@@ -1056,8 +1056,8 @@ export function createEditorAssembly(
   const { documentSaver } = documentRuntime;
   libraryBackup = documentRuntime.backup;
   /** Runs a document action after the unsaved-changes confirmation. */
-  function guardReplace(action: () => unknown, title?: string): Promise<boolean> {
-    return documentRuntime.guardReplace(action, title);
+  function guardReplace(action: () => unknown): Promise<boolean> {
+    return documentRuntime.guardReplace(action);
   }
   /** Loads a parsed candidate through the document runtime. */
   async function loadCandidate(

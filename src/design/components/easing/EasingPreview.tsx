@@ -51,8 +51,16 @@ const HEIGHT = EASING_CANVAS_HEIGHT;
 const TOP = 12;
 const BOTTOM = 88;
 const PLOT_WIDTH = EASING_PLOT_RIGHT - EASING_PLOT_LEFT;
+/** Baseline of the value-bound labels below the plot. */
+const AXIS_LABEL_BASELINE = 98;
+const AXIS_LABEL_FONT = 9;
 
 const yOfProgress = (progress: number): number => BOTTOM - progress * (BOTTOM - TOP);
+
+/** Compact numeric bound; two decimals are enough to read the axis at a glance. */
+function formatBound(value: number): string {
+  return String(Number(value.toFixed(2)));
+}
 
 /** Stroke one sampled segment of a curve into the canvas. */
 function drawCurve(
@@ -185,6 +193,19 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
         draw.stroke();
       }
       draw.setLineDash([]);
+    }
+
+    // The plot's x axis is the event's numeric value range, which the
+    // normalized curve shape cannot show on its own. Printing both bounds
+    // keeps a value edit visible here even when the easing is unchanged.
+    if (Number.isFinite(startValue) && Number.isFinite(endValue)) {
+      draw.fillStyle = quiet;
+      draw.font = `${AXIS_LABEL_FONT}px ${style.fontFamily || "sans-serif"}`;
+      draw.textBaseline = "alphabetic";
+      draw.textAlign = "left";
+      draw.fillText(formatBound(valueDomain.minimum), EASING_PLOT_LEFT, AXIS_LABEL_BASELINE);
+      draw.textAlign = "right";
+      draw.fillText(formatBound(valueDomain.maximum), EASING_PLOT_RIGHT, AXIS_LABEL_BASELINE);
     }
   }, [
     drawVersion,

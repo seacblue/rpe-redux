@@ -25,11 +25,18 @@ import {
   editorLine,
   editorLineInput,
   editorLineSelection,
+  editorLineTokens,
   editorPreviewRatio,
   editorRealtimePreviewEnabled,
   editorSnapX,
 } from "../../../../../../core/edit/state/publishedValues.ts";
-import { formatLineSelectionDisplay } from "../../../../../../core/edit/state/lineSelectionInput.ts";
+import { lineSelectionGroups } from "../../../../../../core/edit/state/lineSelectionInput.ts";
+import {
+  formatLineSelectionExpression,
+  resolveLineSelection,
+  sameLineOrder,
+  tokensForSelection,
+} from "../../../../../../core/edit/state/lineSelectionTokens.ts";
 import { multiLineEntryMode } from "../../../../../../core/edit/multiLine/multiLineEdit.ts";
 import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
 import { values } from "../../../../../../core/state/values.ts";
@@ -166,12 +173,29 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
   // The field is the one place the toolbar shows the line set; multi-line
   // selections are written in their compact form with the active line
   // (`0-2,5 (3)`).
+  const lineGroups = () => {
+    const chart = deps.getSession().chart;
+    return lineSelectionGroups(chart);
+  };
+  const lineAvailability = () => {
+    const length = deps.getSession().chart.judgeLineList?.length ?? 0;
+    return Array.from({ length }, (unused, index) => index);
+  };
   const syncLineInput = () => {
     const selection = editorLineSelection.get();
+    if (selection.length <= 1) {
+      editorLineInput.set(editorLine.get());
+      return;
+    }
+    const groups = lineGroups();
+    const tokens = tokensForSelection(
+      editorLineTokens.get(),
+      selection,
+      lineAvailability(),
+      groups,
+    );
     editorLineInput.set(
-      selection.length > 1
-        ? formatLineSelectionDisplay(selection, Number(editorLine.get()))
-        : editorLine.get(),
+      formatLineSelectionExpression(tokens, selection, Number(editorLine.get()), groups),
     );
   };
   deps.scope.add(
@@ -193,17 +217,24 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
       syncLineInput();
       const session = deps.getSession();
       const next = editorLineSelection.get();
-      if (
+      const groups = lineGroups();
+      const available = lineAvailability();
+      const tokens = editorLineTokens.get();
+      const tokenLines = resolveLineSelection(tokens, available, groups);
+      const sameIndices =
         next.length === session.multiLineIndices.length &&
-        next.every((index, position) => index === session.multiLineIndices[position])
-      ) {
+        next.every((index, position) => index === session.multiLineIndices[position]);
+      const sameTokens =
+        sameLineOrder(tokenLines, next) &&
+        JSON.stringify(tokens) === JSON.stringify(session.multiLineTokens);
+      if (sameIndices && sameTokens) {
         return;
       }
       const wasActive = session.multiLineActive;
       // A list of two or more lines is the multi-line mode. The first time the
       // set grows, choose the field the workspace is actually showing so the
       // selected lines appear where the user is working.
-      session.setMultiLineSelection(next);
+      session.setMultiLineSelection(next, sameLineOrder(tokenLines, next) ? { tokens } : {});
       if (!wasActive && session.multiLineActive) {
         // Open on the field being edited; only an exclusive region switch picks
         // the field for the user. The call also moves the session focus onto the

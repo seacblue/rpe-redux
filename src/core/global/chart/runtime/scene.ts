@@ -1078,12 +1078,22 @@ export class LineRuntime {
       if (entry.end < seconds || entry.start - seconds > (note.visibleTime ?? 999999)) {
         continue;
       }
-      if (
-        this.line.isCover === 1 &&
-        (note.speed ?? 1) !== 0 &&
-        (note.type === 2 ? entry.tail : entry.floor) < state.floor
-      ) {
-        continue;
+      // A covering line hides what has fallen behind it. A negative speed —
+      // from the note or from the line under it — mirrors a note across the
+      // line, so a Hold is only hidden once both of its anchors are behind.
+      // Judging it by the tail alone dropped the whole Hold as soon as that
+      // tail dipped below the line, which is exactly the negative-speed case.
+      const speed = Number(note.speed ?? 1);
+      if (this.line.isCover === 1 && speed !== 0) {
+        if (note.type === 2) {
+          const headBehind = (entry.floor - state.floor) * speed < 0;
+          const tailBehind = (entry.tail - state.floor) * speed < 0;
+          if (headBehind && tailBehind) {
+            continue;
+          }
+        } else if (entry.floor < state.floor) {
+          continue;
+        }
       }
       if (holdResult && note.type === 2) {
         holdResult[holdWrite++] = entry;
