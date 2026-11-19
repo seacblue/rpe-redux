@@ -16,6 +16,26 @@ export interface HitTimelineEntry {
 /** Timing offset per sound kind, in seconds. */
 export type HitSoundOffsetMap = Partial<Record<"tap" | "drag" | "flick" | "custom", number>>;
 
+/** The built-in hit sound a note type plays when the note has no custom sound. */
+export function defaultHitSound(type: number): "tap" | "drag" | "flick" {
+  return type === 3 ? "flick" : type === 4 ? "drag" : "tap";
+}
+
+/** The note's authored custom hit sound, or undefined when it uses the type default. */
+export function noteHitSound(note: {
+  hitsound?: unknown;
+  hitSound?: unknown;
+  [extra: string]: unknown;
+}): string | undefined {
+  const value = note.hitsound || note.hitSound;
+  return typeof value === "string" && value ? value : undefined;
+}
+
+/** True when a sound name already names a built-in note sound of the format. */
+export function isBuiltInHitSound(value: unknown): boolean {
+  return value === "tap" || value === "drag" || value === "flick" || value === "hold";
+}
+
 /** Resolve the offset for a note from either an offset pair or the kind map. */
 function offsetFor(offsets: number[] | HitSoundOffsetMap, noteType: number, sound: string): number {
   if (Array.isArray(offsets)) {
@@ -47,19 +67,8 @@ export function hitTimeline(
       if (note.isFake) {
         continue;
       }
-      const custom = note.hitsound || note.hitSound;
-      const sound =
-        typeof custom === "string"
-          ? custom === "hold"
-            ? "tap"
-            : custom
-          : note.type === 2
-            ? "tap"
-            : note.type === 3
-              ? "flick"
-              : note.type === 4
-                ? "drag"
-                : "tap";
+      const custom = noteHitSound(note);
+      const sound = custom ? (custom === "hold" ? "tap" : custom) : defaultHitSound(note.type);
       entries.push({
         time:
           tempo.seconds(note.startTime, line.bpmfactor ?? 1) +

@@ -218,9 +218,9 @@ function CurveQuickPanelView({
             onChange={(event) => curveActions.setCurveQuickType(Number(event.currentTarget.value))}
           >
             <option value="1">{t("editorPanels.inspector.noteType.tap")}</option>
-            <option value="2">{t("editorPanels.inspector.noteType.hold")}</option>
-            <option value="3">{t("editorPanels.inspector.noteType.flick")}</option>
             <option value="4">{t("editorPanels.inspector.noteType.drag")}</option>
+            <option value="3">{t("editorPanels.inspector.noteType.flick")}</option>
+            <option value="2">{t("editorPanels.inspector.noteType.hold")}</option>
           </Select>
         )}
       />
