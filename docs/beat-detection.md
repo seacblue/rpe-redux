@@ -42,6 +42,7 @@ The beat activation function. madmom derives it from an ensemble of trained bidi
 - **Frame centres.** A window's spectrum describes the signal at its centre, so each window's flux is shifted by half its length before the windows are summed. Without that shift a long window reports a transient later than a short one, and the two disagree by tens of milliseconds.
 - **Short smoothing.** One percussive attack spans several analysis frames and can produce more than one flux rise inside a single hit. A 40 ms triangular window leaves one bump per attack; without it the decoder reads double tempo.
 - **Half-wave rectification.** Only rising flux counts, so a sustaining tone is not an event.
+- **A floor and a percentile scale, not a peak.** The activation of a noisy track is mostly floor with a few hits above it. Subtracting the median removes that floor, and scaling by the 95th percentile stops one noise spike from setting the scale. Both were needed: with a plain global-peak normalisation, noise 0.1 took the visible peak count from 132 to 1, because the beats were still there but divided down out of reach.
 
 ## 4. Where the precision comes from
 
@@ -49,11 +50,12 @@ The decoder alone is not precise enough to report: it locates each beat on an an
 
 The decode rate is another trap. Resampling the activation before decoding flattens its peaks, because a beat peak is only a frame or two wide. At 50 fps, 190 BPM came out as 95 and 205 BPM as 68; at the activation's own rate both are exact. The decoder therefore runs at the rate the activation was built at, and a long track is kept within the memory budget by coarsening the tempo grid rather than the timebase.
 
-Three steps then sit between the decoded path and the number the author sees:
+Four steps then sit between the decoded path and the number the author sees:
 
-1. **Attack refit.** Every decoded beat is matched to the strongest raw attack within 35 ms, and one least-squares line is fitted through those attack times. The refit resolves the period and beat zero below a sample, and the frame quantisation — being zero mean — cancels in the fit. A second pass drops attacks that disagree by more than two frames, which handles a beat whose attack was found on a syncopated hit.
-2. **Metrical level.** An accent pattern can pull the decoder onto every second beat, which is how a 128 BPM track gets reported as 64. Amplitude cannot decide this: a pattern of `1.0 / 0.3 / 0.5 / 0.3` has quiet but real hits between the loud ones, and its midway level is close to that of a pattern with nothing there at all. The test asks whether the waveform _rises_ at the midway points — the same onset detection the refit uses — and doubles the tempo when most of them do.
-3. **Refined offset.** The fitted intercept is beat zero, so the reported offset is exact rather than the frame time of the first decoded beat.
+1. **Attack refit.** Every decoded beat is matched to the strongest raw attack near it, and one least-squares line is fitted through those attack times. The refit resolves the period and beat zero below a sample, and the frame quantisation — being zero mean — cancels in the fit. A second pass drops attacks that disagree by more than two frames, which handles a beat whose attack was found on a syncopated hit. A fit whose residuals stay wider than a tenth of a beat is rejected: on sparse material under noise the slope then describes the scatter rather than the pulse, and measured 107 BPM for a 50 BPM track.
+2. **A search window that scales with the period.** The window is a fraction of a beat, not a fixed number of milliseconds, because a fixed 35 ms window is far too small at a slow tempo: at 70 BPM only 2 of 28 beats found an attack at 35 ms, while 80 ms found all 28 and took the phase error from 43 ms to 0.8 ms. The fraction stops short of half a beat so the metrical test below cannot find an onset where there is none.
+3. **Metrical level.** An accent pattern can pull the decoder onto every second beat, which is how a 128 BPM track gets reported as 64. Amplitude cannot decide this: a pattern of `1.0 / 0.3 / 0.5 / 0.3` has quiet but real hits between the loud ones, and its midway level is close to that of a pattern with nothing there at all. The test asks whether the waveform _rises_ at the midway points — the same onset detection the refit uses — and doubles the tempo when most of them do.
+4. **Refined offset.** The fitted intercept is beat zero, so the reported offset is exact rather than the frame time of the first decoded beat. When the refit cannot run — a sparse pattern with only a handful of onsets — the decode is used directly, with its period taken from the median interval rather than an end-to-end average, which a single misplaced beat would otherwise skew.
 
 `decodeBeats` itself deliberately does not round its output to a grid: it returns the positions it decoded, and the caller decides what to measure.
 
@@ -61,15 +63,16 @@ Three steps then sit between the decoded path and the number the author sees:
 
 Synthetic click tracks with every onset placed at a known sample index, 24–30 s each, deterministic noise. The expected tempo in each case is the pulse the pattern actually carries, not the nominal BPM.
 
-| Material                                  | BPM                | Phase  |
-| ----------------------------------------- | ------------------ | ------ |
-| Clean quarters, 70–205 BPM                | exact              | 0–1 ms |
-| 112, 133, 145, 163 BPM + noise            | exact              | 1 ms   |
-| Accented backbeat (1.0 / 0.3 / 0.5 / 0.3) | exact              | 1 ms   |
-| Backbeat only, beats 1&3, beats 2&4       | exact              | 1 ms   |
-| 3/4, 5/4, 7/4 with first-beat accent      | exact              | 1 ms   |
-| Beat one only per bar                     | exact (doubled up) | 1 ms   |
-| Five start phases at 133 BPM              | exact              | < 2 ms |
+| Material                                    | BPM                | Phase  |
+| ------------------------------------------- | ------------------ | ------ |
+| Clean quarters, 70–205 BPM                  | exact              | 0–1 ms |
+| 112, 133, 145, 163 BPM + noise              | exact              | 1 ms   |
+| Quarters at 100, 128, 190 BPM, noise to 0.1 | exact              | < 1 ms |
+| Accented backbeat (1.0 / 0.3 / 0.5 / 0.3)   | exact              | 1 ms   |
+| Backbeat only, beats 1&3, beats 2&4         | exact              | 1 ms   |
+| 3/4, 5/4, 7/4 with first-beat accent        | exact              | 1 ms   |
+| Beat one only per bar                       | exact (doubled up) | 1 ms   |
+| Five start phases at 133 BPM                | exact              | < 2 ms |
 
 The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 frames) would hide the quantisation instead of testing it. A sweep of 25 rhythm patterns passes 24; the one that does not is tresillo (3+3+2), a cross-rhythm whose "beat" is a matter of interpretation.
 

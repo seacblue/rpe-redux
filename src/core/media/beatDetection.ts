@@ -64,6 +64,22 @@ const TIMING_DIGITS = 3;
 const SNAP_THRESHOLD = 0.001;
 /** Attack timing search radius around one predicted beat, in seconds. */
 const ATTACK_WINDOW = 0.035;
+/**
+ * Largest fraction of a beat the attack search may span, to each side.
+ *
+ * The decoded grid places each beat only to its analysis frame, so a beat can
+ * sit tens of milliseconds from the attack it belongs to. A fixed 35 ms window
+ * is enough at 190 BPM (one beat is 316 ms) and far too small at 70 BPM (857 ms):
+ * measured there, only 2 of 28 beats found an attack at 35 ms, while 80 ms found
+ * all 28 and reduced the phase error from 43 ms to 0.8 ms.
+ *
+ * The fraction stays well under a quarter of the beat, because the metrical
+ * level test searches for an onset *half* a beat from the grid: a window that
+ * reaches the midpoint finds one there even when the pattern has nothing
+ * between its beats, which doubles the tempo. At 0.15 the window covers a
+ * slow tempo's slack and still stops short of the midpoint.
+ */
+const ATTACK_WINDOW_BEAT_FRACTION = 0.15;
 
 interface OnsetEnvelope {
   /** Low + mid flux, used for tempo and beat presence. */
@@ -308,7 +324,12 @@ export function detectBeatGridWithDbnFromSamples(
   // through those attack times: the fit resolves both the period and beat zero
   // below a sample, while the index spacing carries the metrical level the
   // decoder decided on.
-  const fitted = fitBeatSequenceToAttacks(samples, sampleRate, beats);
+  //
+  // When too few attacks match — a sparse pattern under noise has only a handful
+  // of onsets in the whole track — the decode is all there is. Reporting its
+  // frame-quantised tempo beats reporting nothing, so fall back to it rather
+  // than failing.
+  const fitted = fitBeatSequenceToAttacks(samples, sampleRate, beats) ?? decodedFallback(beats);
   if (!fitted) {
     return null;
   }
@@ -371,6 +392,13 @@ function resolveMetricalLevel(
     return { bpm, offsetSeconds };
   }
   const duration = samples.length / sampleRate;
+  const floor = onsetFloor(samples, sampleRate);
+  // The same wider window the refit uses: at a slow tempo a beat can sit far
+  // enough from its attack that a fixed 35 ms search finds nothing at all.
+  const search = Math.max(
+    ATTACK_WINDOW,
+    Math.min(period * ATTACK_WINDOW_BEAT_FRACTION, period * 0.5),
+  );
   let onCount = 0;
   let offCount = 0;
   // Sample a bounded number of beats: enough to be sure, few enough to keep the
@@ -378,11 +406,14 @@ function resolveMetricalLevel(
   const stride = Math.max(1, Math.ceil((duration - offsetSeconds) / period / 64));
   for (let beat = 0; offsetSeconds + beat * period < duration; beat += stride) {
     const expected = offsetSeconds + beat * period;
-    if (attackDelta(samples, sampleRate, expected) !== null) {
+    if (attackDelta(samples, sampleRate, expected, floor, search) !== null) {
       onCount += 1;
     }
     const midway = expected + period / 2;
-    if (midway + ATTACK_WINDOW < duration && attackDelta(samples, sampleRate, midway) !== null) {
+    if (
+      midway + search < duration &&
+      attackDelta(samples, sampleRate, midway, floor, search) !== null
+    ) {
       offCount += 1;
     }
   }
@@ -419,9 +450,17 @@ function fitBeatSequenceToAttacks(
   if (beats.length < 4) {
     return null;
   }
+  const floor = onsetFloor(samples, sampleRate);
+  // Search a fraction of the decoded period, so a slow tempo gets the wider
+  // window its frame quantisation needs; see ATTACK_WINDOW_BEAT_FRACTION.
+  const decodedPeriod = (beats[beats.length - 1] - beats[0]) / (beats.length - 1);
+  const search = Math.max(
+    ATTACK_WINDOW,
+    Math.min(decodedPeriod * ATTACK_WINDOW_BEAT_FRACTION, decodedPeriod * 0.5),
+  );
   const points: AttackPoint[] = [];
   for (let index = 0; index < beats.length; index += 1) {
-    const delta = attackDelta(samples, sampleRate, beats[index]);
+    const delta = attackDelta(samples, sampleRate, beats[index], floor, search);
     if (delta !== null) {
       points.push({ beat: index, time: beats[index] + delta });
     }
@@ -442,6 +481,18 @@ function fitBeatSequenceToAttacks(
   });
   const fit = (keep.length >= 4 ? leastSquaresBeatLine(keep) : null) ?? initial;
   if (!(fit.slope > 0)) {
+    return null;
+  }
+  // A fit through scattered attacks has a slope that describes the scatter, not
+  // the pulse: measured on a sparse pattern under noise, the reported tempo came
+  // out at 107 BPM for a 50 BPM pulse. Reject a fit whose residuals are wider
+  // than a tenth of a beat, and let the caller fall back to the decode, which
+  // cannot be wrong by more than one analysis frame.
+  const residuals = points.map(
+    (point) => point.time - (fit.offsetSeconds + fit.slope * point.beat),
+  );
+  const deviation = median(residuals.map((residual) => Math.abs(residual)));
+  if (!(deviation < fit.slope * 0.1)) {
     return null;
   }
   return { bpm: 60 / fit.slope, offsetSeconds: fit.offsetSeconds };
@@ -1131,6 +1182,76 @@ function leastSquaresBeatLine(
 }
 
 /**
+ * Tempo and phase straight from the decoded beats, with no attack refit.
+ *
+ * This is the frame-quantised answer: it is accurate to one analysis frame,
+ * which is a few milliseconds at a fast tempo and well under a beat at any
+ * tempo. It exists so a track with too few matched attacks still produces a
+ * grid rather than nothing.
+ */
+function decodedFallback(beats: Float32Array): { bpm: number; offsetSeconds: number } | null {
+  if (beats.length < 4) {
+    return null;
+  }
+  // Take the median interval, not an end-to-end average: a single beat placed
+  // one frame off at either end skews the average, which measured 52.6 BPM for a
+  // 50 BPM pulse whose interior intervals were all correct. The median ignores
+  // that, and the phase comes from the line through every beat.
+  const points: AttackPoint[] = [];
+  const intervals: number[] = [];
+  for (let index = 0; index < beats.length; index += 1) {
+    points.push({ beat: index, time: beats[index] });
+    if (index > 0) {
+      intervals.push(beats[index] - beats[index - 1]);
+    }
+  }
+  intervals.sort((left, right) => left - right);
+  const period = intervals[Math.floor(intervals.length / 2)];
+  if (!(period > 0)) {
+    return null;
+  }
+  const fit = leastSquaresBeatLine(points);
+  if (!fit) {
+    return null;
+  }
+  return { bpm: 60 / period, offsetSeconds: Math.max(0, fit.offsetSeconds) };
+}
+
+/** Loudness a real onset must exceed to count as one, derived from the track. */
+function onsetFloor(samples: Float32Array, sampleRate: number): number {
+  // Local energy sampled across the whole track, so the floor reflects what this
+  // material actually does rather than a fixed number.
+  const window = Math.max(2, Math.round(sampleRate * 0.0015));
+  const step = Math.max(window, Math.round(sampleRate * 0.01));
+  const energies: number[] = [];
+  for (let index = window; index < samples.length; index += step) {
+    let sum = 0;
+    for (let offset = index - window; offset < index; offset += 1) {
+      const sample = samples[offset] ?? 0;
+      sum += sample * sample;
+    }
+    energies.push(sum / window);
+  }
+  if (energies.length < 8) {
+    return 0;
+  }
+  energies.sort((left, right) => left - right);
+  const high = Math.sqrt(energies[Math.floor(energies.length * 0.9)]);
+  const median = Math.sqrt(energies[Math.floor(energies.length * 0.5)]);
+  // The floor has to sit above the noise, and the noise is exactly what raises
+  // the median: a guard that skipped low-dynamic-range material also skipped
+  // every noisy track, which is where the floor is needed most. Only a track
+  // with no measurable contrast at all disables it.
+  if (!(high > 0) || high <= median) {
+    return 0;
+  }
+  // A hit has to reach a quarter of the loud level this track does reach. That
+  // is well below a real onset and well above a noise rise, which measured two
+  // orders of magnitude under the hits.
+  return high * 0.25;
+}
+
+/**
  * Time shift from the strongest attack near one expected beat.
  *
  * The spectral-flux peak reacts to the FFT window and can sit a few
@@ -1138,12 +1259,26 @@ function leastSquaresBeatLine(
  * raw attack directly: find the energy maximum, walk back to where the attack
  * crosses 20% of the peak, and interpolate that crossing between samples. The
  * window smooths sample noise so repeated hits report the same attack time.
- * Returns `null` when no clear transient exists or it falls outside the search
- * window.
+ *
+ * `minimumPeak` is an absolute floor on that maximum. Without it the search
+ * always finds a rise: broadband noise rises somewhere inside a +/-35 ms window,
+ * so a beat that is itself misplaced still returns a confident shift. Measured
+ * on a noisy click track, that made every grid position — including one offset
+ * by half a beat — report 100% support. Pass the level a real onset reaches on
+ * this material to reject those.
+ *
+ * Returns `null` when no clear transient exists, when it is below `minimumPeak`,
+ * or when it falls outside the search window.
  */
-function attackDelta(samples: Float32Array, sampleRate: number, time: number): number | null {
-  const from = Math.max(1, Math.floor((time - ATTACK_WINDOW) * sampleRate));
-  const to = Math.min(samples.length - 1, Math.ceil((time + ATTACK_WINDOW) * sampleRate));
+function attackDelta(
+  samples: Float32Array,
+  sampleRate: number,
+  time: number,
+  minimumPeak = 0,
+  search = ATTACK_WINDOW,
+): number | null {
+  const from = Math.max(1, Math.floor((time - search) * sampleRate));
+  const to = Math.min(samples.length - 1, Math.ceil((time + search) * sampleRate));
   if (to - from < 8) {
     return null;
   }
@@ -1168,7 +1303,7 @@ function attackDelta(samples: Float32Array, sampleRate: number, time: number): n
       peakIndex = index;
     }
   }
-  if (!(peak > 1e-10)) {
+  if (!(peak > 1e-10) || peak < minimumPeak) {
     return null;
   }
   const threshold = peak * 0.2;
@@ -1189,7 +1324,7 @@ function attackDelta(samples: Float32Array, sampleRate: number, time: number): n
   // The trailing window reports the point where it has collected enough of the
   // rise; its centre is the closest raw estimate of the attack start.
   const delta = (crossing - window / 2) / sampleRate - time;
-  return delta >= -ATTACK_WINDOW && delta <= ATTACK_WINDOW ? delta : null;
+  return delta >= -search && delta <= search ? delta : null;
 }
 
 /**
