@@ -37,13 +37,34 @@ The algorithm is kept intact, including the parts that look like implementation 
 
 The beat activation function. madmom derives it from an ensemble of trained bidirectional LSTMs; the weights are the part that cannot be shipped and are not needed to port the decoder.
 
-`src/core/media/beatActivation.ts` supplies the same interface instead — one activation value per frame at a known frame rate — from a spectral-flux analysis with multi-resolution windows and log-spaced bands. Five details make it usable as a decoder input:
+`src/core/media/beatActivation.ts` reproduces madmom's `RNNBeatProcessor` preprocessing instead — the whole chain up to the network's input layer — and replaces the network with a sum over bands. The chain, at madmom's own defaults:
 
-- **Frame centres.** A window's spectrum describes the signal at its centre, so each window's flux is shifted by half its length before the windows are summed. Without that shift a long window reports a transient later than a short one, and the two disagree by tens of milliseconds.
-- **Short smoothing.** One percussive attack spans several analysis frames and can produce more than one flux rise inside a single hit. A 40 ms triangular window leaves one bump per attack; without it the decoder reads double tempo.
-- **Half-wave rectification.** Only rising flux counts, so a sustaining tone is not an event.
-- **A floor and a percentile scale, not a peak.** The activation of a noisy track is mostly floor with a few hits above it. Subtracting the median removes that floor, and scaling by the 95th percentile stops one noise spike from setting the scale. Both were needed: with a plain global-peak normalisation, noise 0.1 took the visible peak count from 132 to 1, because the beats were still there but divided down out of reach.
-- **Bands weighted toward the low end.** The beat is carried by the kick and the snare, whose fundamentals sit low; hi-hats and cymbals mark subdivisions instead. Each band's flux is weighted by `1 / (1 + hz / 500)`, half strength at 500 Hz. Equal weights let the subdivision define the tempo: on the reference tracks, bands above 2 kHz produced 34–71% of the total flux while holding 0–5% of the energy, because a small, constantly changing band generates more log-domain flux than a large, steady one. The weighted sum took the two worst tracks from 58.7 and 191.4 BPM to 117.5 and 101.3 against true 117 and 100.
+| Stage | madmom | Implementation |
+| --- | --- | --- |
+| Signal | `SignalProcessor(num_channels=1, sample_rate=44100)` | mono average, no resampling at 44.1 kHz |
+| Framing | `FramedSignalProcessor`, window centred on the reference sample | same, at 100 fps |
+| Frame sizes | `[1024, 2048, 4096]` | same |
+| STFT | Hann window, `frame_size` FFT | same |
+| Filterbank | `LogarithmicFilterbank(num_bands=6, fmin=30, fmax=17000, norm_filters=True)` | triangular filters, 6 per octave, area-normalised |
+| Log | `LogarithmicSpectrogram(mul=1, add=1)`, base 10 | `log10(x + 1)` |
+| Difference | `SpectrogramDifference(diff_ratio=0.5, positive_diffs=True)` | same, with the ratio-derived step |
+| Combination | `np.hstack` of the three matrices | summed per frame |
+
+Two of those deserve a note because an earlier version here got them wrong:
+
+- **Area-normalised triangular filters, not hard band edges.** At six bands per octave the top band spans hundreds of FFT bins and the bottom spans one, so each filter is divided by its own sum. Without that, the high bands carry more flux than the low ones purely because they contain more bins.
+- **The difference step follows `diff_ratio`, not a fixed frame.** The step is the distance, in frames, from the window centre to the first sample whose window value exceeds half its maximum. A 4096-sample window therefore looks back further than a 1024-sample one, which is what makes the three resolutions describe the same onset consistently.
+
+Measured against the reference tracks, this fixed one case and lost another compared with the ad-hoc version it replaced:
+
+| Track           | True | Ad-hoc (weighted bands) | madmom chain |
+| --------------- | ---- | ----------------------- | ------------ |
+| Electro Cabello | 117  | 117.45                  | **117.004**  |
+| Funk Game Loop  | 104  | 53.83                   | **105.138**  |
+| Heavy Interlude | 100  | 101.33                  | 176.471      |
+| Groove Grove    | 70   | 72.79                   | 92.308       |
+
+Funk Game Loop now decodes at the right level instead of half of it. Heavy Interlude moved from right to 1.76×, which is the honest limit of this approach: **the network is what makes madmom's feature distribution usable.** Area normalisation equalises every band's total, and with 45 bands spaced six per octave the thirty above 2 kHz then carry more than half the summed flux. A network learns which of those bands predict a beat; a plain sum cannot, and neither can the hand-tuned weight it replaced — that one simply failed on different tracks.
 
 ## 4. Where the precision comes from
 
@@ -81,24 +102,16 @@ The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 fr
 
 Synthetic clicks are a controlled measurement, not evidence that the detector works on music. Checked against four published tracks whose tempo is documented, it gets two exactly right and struggles with the other two:
 
-| Track (Kevin MacLeod, CC BY) | Published | Decoded | Result                        |
-| ---------------------------- | --------- | ------- | ----------------------------- |
-| Electro Cabello              | 117       | 117.45  | exact                         |
-| Heavy Interlude              | 100       | 101.33  | within 1.4                    |
-| Funk Game Loop               | 104       | 53.83   | reported at 0.52× — under the |
-|                              |           |         | slow-tempo guard, so it is    |
-|                              |           |         | doubled on output to 107.7    |
-| Groove Grove                 | 70        | 72.79   | 4% high; the material is a    |
-|                              |           |         | jazz piece with uneven hits   |
+| Track (Kevin MacLeod, CC BY) | Published | Reported | Result                       |
+| ---------------------------- | --------- | -------- | ---------------------------- |
+| Electro Cabello              | 117       | 117.004  | exact                        |
+| Funk Game Loop               | 104       | 105.138  | 1.1 high                     |
+| Heavy Interlude              | 100       | 176.471  | 1.76×                        |
+| Groove Grove                 | 70        | 92.308   | 1.32×; jazz with uneven hits |
 
-The band weighting is what fixed the first two: before it, Electro Cabello decoded as 58.7 and Heavy Interlude as 191.4. The remaining two are not the same problem:
+Two of four land on the tempo. The other two are the metrical-level problem described above, and its unresolved status stands: whether to report the pulse the decoder found or a multiple of it cannot be decided from the audio at this level of analysis. Measured on these tracks, the ratio of halfway-point energy to on-beat energy was 1.44 for one that needs doubling and 1.59 for one that does not, and circular phase concentration cannot help — shifting a grid by half a period rotates every phase by π and leaves the magnitude of the vector sum unchanged, so both readings score identically by construction.
 
-- **Funk Game Loop decodes at 53.8, not 104.** The decoder settled on every second beat. Doubling recovers 107.7, which is 3.6 off; without doubling it would report 53.8. Neither is right, and the guard that enables doubling is a fixed tempo ceiling rather than a decision derived from the audio.
-- **Groove Grove's decoded intervals range from 0.615 s to 1.080 s.** No single number describes that material, and its tempo map is not reliable either.
-
-**The metrical level is the remaining weakness.** Whether to report the pulse the decoder found or twice it cannot be decided from the audio alone at this level of analysis: measured on the four tracks, the ratio of halfway-point energy to on-beat energy was 1.44 for the track that needs doubling and 1.59 for one that does not. Circular phase concentration cannot help either — shifting a grid by half a period rotates every phase by π, and the magnitude of the vector sum is unchanged, so both readings always score identically. A reliable decision needs a prior this module does not have, such as a genre-specific tempo range or a metrical model trained on music.
-
-The lesson about the tests stands: a synthetic suite built from regular clicks will pass while the detector still fails on real mixes, because a mix has onsets almost everywhere and therefore satisfies "there is an attack here" at almost any grid position.
+The documentation keeps this record next to the synthetic results instead of presenting only the cases that pass, because a synthetic suite built from regular clicks will pass while the detector still fails on real mixes: a mix has onsets almost everywhere and therefore satisfies "there is an attack here" at almost any grid position.
 
 ### Tolerance
 
