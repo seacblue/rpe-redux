@@ -39,6 +39,11 @@ import {
   commitSelectionEdit,
   editCapturedSelection,
 } from "../../../../../core/edit/selection/edits.ts";
+import {
+  defaultHitSound,
+  isBuiltInHitSound,
+  noteHitSound,
+} from "../../../../../core/media/hitTimeline.ts";
 import { getLanguage, t } from "../../../../../i18n/index.ts";
 import { type NotesInspectorState, type NotePropertyField, type PropertyControl } from "./model.ts";
 
@@ -204,12 +209,13 @@ export function renderProperties(
   if (note) {
     const above = t("editorPanels.inspector.direction.above");
     const below = t("editorPanels.inspector.direction.below");
-    const noteTypeOptions = {
-      1: t("editorPanels.inspector.noteType.tap"),
-      2: t("editorPanels.inspector.noteType.hold"),
-      3: t("editorPanels.inspector.noteType.flick"),
-      4: t("editorPanels.inspector.noteType.drag"),
-    };
+    // Ordered for the dropdown: Tap, Drag, Flick, Hold.
+    const noteTypeOptions: [string, string][] = [
+      ["1", t("editorPanels.inspector.noteType.tap")],
+      ["4", t("editorPanels.inspector.noteType.drag")],
+      ["3", t("editorPanels.inspector.noteType.flick")],
+      ["2", t("editorPanels.inspector.noteType.hold")],
+    ];
     const directionOptions = note.type === 2 ? { 0: below, 1: above } : { 1: above, 2: below };
     const selectedLine = session.chart.judgeLineList?.[selectedLineIndex] ?? session.line;
     const selectedFactor = selectedLine?.bpmfactor ?? 1;
@@ -313,6 +319,10 @@ export function renderProperties(
       if (key === "color" || key === "hitSound") {
         const tinted = note as JudgeLineNote & { color?: unknown; tint?: unknown };
         const present = key === "color" ? noteHasColor(note) : noteHasHitSound(note);
+        // The field shows the effective sound: an authored custom sound, or the
+        // one the note type selects. A type change therefore updates it at once.
+        const hitSound =
+          key === "hitSound" ? (noteHitSound(note) ?? defaultHitSound(note.type)) : "";
         const apply = (control: PropertyControl) => {
           try {
             if (key === "color") {
@@ -333,22 +343,19 @@ export function renderProperties(
               );
               return;
             }
-            const hitSound = control.value.trim();
+            const customSound = control.value.trim();
             applyNoteTransform(
               session,
               t("editorPanels.inspector.modify", { field: label }),
               (current) => {
-                const next = { ...current, hitSound: hitSound || undefined };
+                const next = { ...current, hitSound: customSound || undefined };
                 delete (next as Record<string, unknown>).hitsound;
                 return next;
               },
             );
           } catch (error) {
             reportError(error);
-            control.value =
-              key === "color"
-                ? colorHex(tinted.color ?? tinted.tint)
-                : String(note.hitSound ?? note.hitsound ?? "");
+            control.value = key === "color" ? colorHex(tinted.color ?? tinted.tint) : hitSound;
           }
         };
         fields.push({
@@ -356,10 +363,7 @@ export function renderProperties(
           label,
           kind: key === "color" ? "color" : "text",
           preservesDraft: key === "hitSound",
-          value:
-            key === "color"
-              ? colorHex(tinted.color ?? tinted.tint)
-              : String(note.hitSound ?? note.hitsound ?? ""),
+          value: key === "color" ? colorHex(tinted.color ?? tinted.tint) : hitSound,
           present,
           placeholder:
             key === "color" ? "#RRGGBB" : t("editorPanels.inspector.hitSoundPlaceholder"),
@@ -405,6 +409,13 @@ export function renderProperties(
                     ? maxBeat(current.endTime, addBeatFraction(current.startTime, 1, 1))
                     : beatCopy(current.startTime);
                 next.above = noteIsAbove(current) ? 1 : numberValue === 2 ? 0 : 2;
+                // A built-in sound already follows the type; drop a stale
+                // keyword so the new type selects its own sound. Custom sound
+                // files stay attached to the note.
+                if (isBuiltInHitSound(noteHitSound(current))) {
+                  delete (next as Record<string, unknown>).hitSound;
+                  delete (next as Record<string, unknown>).hitsound;
+                }
               }
               return next;
             },
@@ -475,7 +486,11 @@ export function renderProperties(
         preservesDraft,
         value,
         options:
-          kind === "select" ? Object.entries((options ?? {}) as Record<string, string>) : undefined,
+          kind === "select"
+            ? Array.isArray(options)
+              ? (options as [string, string][])
+              : Object.entries((options ?? {}) as Record<string, string>)
+            : undefined,
         step: kind === "number" || kind === "slider" ? step : undefined,
         min: key === "size" ? String(0.01) : key === "alpha" || duration ? String(0) : undefined,
         max: key === "alpha" ? String(255) : undefined,

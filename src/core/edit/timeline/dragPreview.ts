@@ -70,8 +70,13 @@ export function moveTimelineNote(
   const key = drag.kind === "endTime" ? "endTime" : "startTime";
   const scroll =
     tempo.seconds(origin, factor) - (drag.originSeconds ?? tempo.seconds(origin, factor));
+  // The Z prekey can start a Hold edge drag anywhere inside the bar. For an
+  // edge drag the pointer row, not the pointer's travel distance, is the time
+  // the moved edge must land on.
   const seconds =
-    tempo.seconds(anchor[key], factor) + (drag.start.y - drag.current.y) / scale + scroll;
+    drag.kind !== "move" && drag.currentSeconds !== undefined
+      ? drag.currentSeconds
+      : tempo.seconds(anchor[key], factor) + (drag.start.y - drag.current.y) / scale + scroll;
   // Snap once, then move the triple exactly: the delta is a rational difference
   // of two beats, not a float that gets re-rounded on the way into the chart.
   const deltaBeat = subtractBeats(snapTime(seconds, division, tempo, factor), anchor[key]);

@@ -124,10 +124,13 @@
 // The workspace never resizes behind it. The width follows the frame's
 // arrangement number: at 0 it is the compact track, at 1 the full task width,
 // and the two faces of the page read the same number for their columns.
+// The task frame is a floating panel, not workspace content: keep it on the
+// floating rung so workspace overlays such as the free-camera pointer layer
+// stay below it, while menus and shell notices remain above.
 .workbench-inspector:has(> .inspector[data-mode-surface="true"]) {
   position: relative;
   overflow: visible;
-  z-index: var(--z-content-overlay);
+  z-index: var(--z-floating);
 }
 
 .workbench-inspector > .inspector[data-mode-surface="true"] {

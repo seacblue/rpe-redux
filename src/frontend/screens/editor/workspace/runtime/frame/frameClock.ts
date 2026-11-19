@@ -15,7 +15,10 @@ import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { EditorFrameState, FrameVisibility } from "./frame.ts";
 /** Clocks and callbacks advanced on every display callback. */
 export interface FrameClockOptions {
-  audio: Pick<AudioTransport, "update" | "playing" | "time" | "rate" | "duration" | "pause">;
+  audio: Pick<
+    AudioTransport,
+    "update" | "playing" | "time" | "rate" | "duration" | "pause" | "awaitingOutput"
+  >;
   timeline: Pick<Timeline, "autoScroll">;
   lineSwitcher: { draw(timestamp: number): void };
   editClock: Pick<EditorEditClock, "advance">;
@@ -74,7 +77,7 @@ export function updateMeasuredFrameRates(state: FrameRateSampleState, timestamp:
 
 /** Build a visual-only clock over the authoritative audio and chart clocks. */
 export function createVisualPlaybackClock(options: {
-  audio: Pick<AudioTransport, "playing" | "time" | "rate">;
+  audio: Pick<AudioTransport, "playing" | "time" | "rate" | "awaitingOutput">;
   chartSeconds(): number;
 }): VisualPlaybackClock {
   let anchorAudio = Number.NaN;
@@ -138,8 +141,20 @@ export function createVisualPlaybackClock(options: {
 
       previousAudio = audio;
       previousTimestamp = timestamp;
+      // A start holds `AudioTransport.time` at the start position until the first
+      // samples reach the speaker, so the sample is standing still on purpose.
+      // Extrapolating through that window predicts a position the audio is not
+      // at, and the frame after the window falls back to the sample, which drew
+      // as a backwards step at every playback start. Report the sample as it is
+      // until the transport is producing time.
+      if (options.audio.awaitingOutput) {
+        return audio - offset;
+      }
       const predictedAudio = anchorAudio + (Math.max(0, timestamp - anchorTimestamp) / 1000) * rate;
-      return predictedAudio - offset;
+      // Correct with the offset captured at the anchor, not this frame's: the
+      // prediction describes the anchor's instant, so it belongs with the offset
+      // measured at that same instant.
+      return predictedAudio - anchorOffset;
     },
   };
 }

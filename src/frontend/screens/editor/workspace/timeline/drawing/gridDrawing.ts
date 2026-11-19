@@ -14,6 +14,7 @@ import { canvasFont } from "../../../canvas/text.ts";
 import type { TimelineAppearance } from "./timelineAppearance.ts";
 import type { TimelineGestures } from "../interaction/timelineGestures.ts";
 import type { TimelineViewport } from "../viewport/timelineViewport.ts";
+import { multiLineLineLabel } from "../multiLine/multiLineLineLabel.ts";
 import {
   beatLineColorKeyAt,
   beatLineColorKeys,
@@ -741,14 +742,48 @@ export function drawMultiLineBeatLabels(
 }
 
 /**
- * Baseline for the line label in both fields.
+ * Baseline for the judge-line header in both fields.
  *
- * Both areas share one baseline so the left edge stays aligned when only one
- * field is visible.
+ * Both areas share one baseline so the caption sits at the same height whether
+ * the note or the event field is visible.
  */
-const LINE_LABEL_BASELINE = 16;
+export const LINE_LABEL_BASELINE = 16;
 
-/** Draw each visible panel's line index in its top-left corner. */
+/** One visible note panel's judge-line header text and its horizontal extent. */
+interface MultiLinePanelLabel {
+  readonly left: number;
+  readonly width: number;
+  readonly text: string;
+}
+
+/** Resolve the number and display name of every visible note panel. */
+function visiblePanelLabels(
+  receiver: TimelineGridReceiver,
+  width: number,
+  area: TimelineArea,
+): MultiLinePanelLabel[] {
+  const session = receiver.getSession();
+  const panelWidth = receiver.viewport.panelWidth(width, area);
+  const stride = receiver.viewport.panelStride(width, area);
+  const offset = receiver.viewport.multiLineViewportOffset(width, area);
+  const targets = session.targetLineIndices;
+  const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, area);
+  const labels: MultiLinePanelLabel[] = [];
+  for (let panel = firstPanel; panel <= lastPanel; panel += 1) {
+    const lineIndex = targets[panel];
+    if (lineIndex === undefined) {
+      continue;
+    }
+    labels.push({
+      left: panel * stride - offset,
+      width: panelWidth,
+      text: multiLineLineLabel(lineIndex, session.chart.judgeLineList?.[lineIndex]),
+    });
+  }
+  return labels;
+}
+
+/** Draw each visible note panel's line number and name centered in its header. */
 export function drawMultiLinePanelLabels(
   this: TimelineGridReceiver,
   context: CanvasRenderingContext2D,
@@ -756,7 +791,9 @@ export function drawMultiLinePanelLabels(
   height: number,
   area: TimelineArea,
 ): void {
-  if (this.viewport.panelCount(area) < 2) {
+  // Merged note mode paints one shared field, so there is no single line to name;
+  // the event field paints its own judge-line header with the event chrome.
+  if (this.getSession().notesMode !== "multi") {
     return;
   }
   const key = multiLinePanelLabelLayerKey(this, width, height, area);
@@ -772,28 +809,24 @@ export function drawMultiLinePanelLabels(
   drawMultiLinePanelLabelsInto.call(this, context, width, height, area);
 }
 
-/** Return every geometry and appearance input used by the cached panel labels. */
+/** Return every geometry, label, and appearance input used by the cached panel labels. */
 function multiLinePanelLabelLayerKey(
   receiver: TimelineGridReceiver,
   width: number,
   height: number,
   area: TimelineArea,
 ): string {
-  const panelCount = receiver.viewport.panelCount(area);
-  const stride = receiver.viewport.panelStride(width, area);
-  const offset = receiver.viewport.multiLineViewportOffset(width, area);
-  const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, area);
   const palette = receiver.cache.palette() ?? readCanvasPalette();
+  const panelWidth = receiver.viewport.panelWidth(width, area);
   return [
     width,
     height,
     area,
-    panelCount,
-    stride,
-    offset,
-    firstPanel,
-    lastPanel,
-    receiver.getSession().targetLineIndices.join(","),
+    panelWidth,
+    receiver.viewport.panelStride(width, area),
+    receiver.viewport.multiLineViewportOffset(width, area),
+    receiver.viewport.visiblePanelRange(width, area).join(","),
+    JSON.stringify(visiblePanelLabels(receiver, width, area)),
     palette.bottomValue,
   ].join("|");
 }
@@ -806,29 +839,18 @@ function drawMultiLinePanelLabelsInto(
   height: number,
   area: TimelineArea,
 ): void {
-  if (this.viewport.panelCount(area) < 2) {
-    return;
-  }
-  const stride = this.viewport.panelStride(width, area);
-  const offset = this.viewport.multiLineViewportOffset(width, area);
   const palette = this.cache.palette() ?? readCanvasPalette();
   const commands: RenderCommand[] = [];
-  const targetLines = this.getSession().targetLineIndices;
-  const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, area);
-  for (let panel = firstPanel; panel <= lastPanel; panel++) {
-    const lineIndex = targetLines[panel];
-    if (lineIndex === undefined) {
-      continue;
-    }
-    const left = panel * stride - offset;
+  for (const label of visiblePanelLabels(this, width, area)) {
     commands.push({
       kind: "text",
-      text: String(lineIndex),
-      x: left + 6,
+      text: label.text,
+      x: label.left + label.width / 2,
       y: LINE_LABEL_BASELINE,
+      maxWidth: Math.max(8, label.width - 12),
       font: canvasFont("caption"),
       color: palette.bottomValue,
-      align: "left",
+      align: "center",
       alpha: 1,
     });
   }

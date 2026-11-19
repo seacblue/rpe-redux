@@ -5,6 +5,7 @@ import { matches } from "../../../core/shortcuts/keyMatching.ts";
 import { parseShortcut } from "../../../core/shortcuts/keys.ts";
 import { DEFAULT_SAMPLING_SETTINGS } from "../../../core/edit/sampling/sampling.ts";
 import {
+  buildSamplingGeometry,
   sampleSamplingPointer,
   samplingSettingsForPointer,
 } from "../../../frontend/screens/editor/workspace/stage/sampling/samplingGuides.ts";
@@ -33,7 +34,15 @@ const projection = {
 
 test("holding the sampling guide shortcut disables pointer snapping", () => {
   const settings = samplingSettingsForPointer(DEFAULT_SAMPLING_SETTINGS, true);
-  const sample = sampleSamplingPointer(550, 350, { left: 0, top: 0 }, projection, "x", settings);
+  const sample = sampleSamplingPointer(
+    550,
+    350,
+    { left: 0, top: 0 },
+    projection,
+    "x",
+    settings,
+    buildSamplingGeometry(projection, "x", settings),
+  );
   assert.equal(settings.guidesEnabled, false);
   assert.equal(sample.snapped, false);
   assert.equal(sample.value.point?.x, 50);

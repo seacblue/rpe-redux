@@ -226,9 +226,24 @@ export function createEditorAssembly(
   const runtimeRef: { current: EditorRuntime | null } = { current: null };
   let sessionRenderMode: "document" | "selection" | null = null;
   let sessionRenderDeferred = false;
+  /**
+   * Authoring layout the last full publication put on screen.
+   *
+   * Multi-line toggles and line switches change the editor's field layout, not
+   * just panel contents, so they must not wait for a running transport to pause.
+   */
+  let publishedLayoutKey = "";
+  /** The session state that changes the authoring layout itself. */
+  function sessionLayoutKey(): string {
+    const current = session.current;
+    return `${current.multiLineActive}:${current.multiLineMode}:${current.multiLineMerge}:${current.lineIndex}`;
+  }
   /** Repaints the session-derived readouts and panel contents synchronously. */
   function renderSession() {
-    sessionRendererRef.current?.render();
+    const timing = sessionRendererRef.current?.render();
+    if (timing) {
+      publishedLayoutKey = sessionLayoutKey();
+    }
     // Republishing here covers the effects that settle outside a history entry
     // — a save marking its baseline, or an asset commit.
     publishDirty();
@@ -237,12 +252,20 @@ export function createEditorAssembly(
   let deferSessionRenderDuringPlayback = () => false;
   /** Paint the latest session mode after a deferred playback publication is released. */
   function runSessionRender(): void {
-    const mode = sessionRenderMode;
+    let mode = sessionRenderMode;
     sessionRenderMode = null;
+    // A layout change that coalesced into a selection publication still has to
+    // republish the field layout, or the editor keeps the previous arrangement.
+    if (mode === "selection" && sessionLayoutKey() !== publishedLayoutKey) {
+      mode = "document";
+    }
     const timing =
       mode === "selection"
         ? sessionRendererRef.current?.renderSelection()
         : sessionRendererRef.current?.render();
+    if (mode !== "selection" && timing) {
+      publishedLayoutKey = sessionLayoutKey();
+    }
     // Publish the dirty/read-only chrome state with the same coalesced session
     // update. During playback this function is deferred, so the Shell does not
     // perform a global React commit in the middle of a frame.
@@ -264,8 +287,8 @@ export function createEditorAssembly(
     }
   }
   /** Schedule panel publication away from a playback frame when idle time exists. */
-  function scheduleSessionCallback(callback: () => void): void {
-    if (deferSessionRenderDuringPlayback()) {
+  function scheduleSessionCallback(callback: () => void, force = false): void {
+    if (!force && deferSessionRenderDuringPlayback()) {
       // Canvas invalidation remains immediate, but inspector/readout React work
       // waits for the transport to pause. One latest render is enough because
       // every session publication is coalesced through sessionRenderMode.
@@ -303,7 +326,11 @@ export function createEditorAssembly(
     if (sessionRenderFrame !== null) {
       return;
     }
-    scheduleSessionCallback(runSessionRender);
+    // A layout change (J/K, a line switch, a new multi-line selection) is a
+    // user-visible rearrangement. Deferring it until playback pauses leaves the
+    // timeline and Inspector on the previous layout, so paint it next frame even
+    // while the transport runs; ordinary panel/readout publications stay deferred.
+    scheduleSessionCallback(runSessionRender, sessionLayoutKey() !== publishedLayoutKey);
   }
   /** Coalesces selection-only repaints without rerunning document preparation. */
   function scheduleSelectionRender(): void {

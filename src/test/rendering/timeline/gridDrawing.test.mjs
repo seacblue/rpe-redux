@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   drawMultiLineBeatLabels,
+  drawMultiLinePanelLabels,
   grid,
   gridForLine,
   visibleGridTicks,
@@ -13,6 +14,7 @@ import {
   strokeVerticalGuide,
   verticalGuidePixelOpacity,
 } from "../../../frontend/screens/editor/workspace/timeline/drawing/timelineHoverGuides.ts";
+import { t } from "../../../i18n/index.ts";
 
 test("horizontal guide hover fades smoothly while staying uniform across the line", () => {
   assert.equal(horizontalGuideHoverOpacity(100, 100), 1);
@@ -532,4 +534,80 @@ test("a multi-line event grid keeps the hovered line inside its panel", () => {
 
   assert.ok(segments.length > 0);
   assert.ok(segments.every(([kind, x]) => (kind === "move" ? x === 50 : x === 80)));
+});
+
+/** A note-grid receiver whose label layer is never cached, forcing the live pass. */
+function panelLabelReceiver(notesMode) {
+  const labels = [];
+  const context = {
+    globalAlpha: 1,
+    font: "",
+    fillStyle: "",
+    textAlign: "left",
+    textBaseline: "alphabetic",
+    save() {},
+    restore() {},
+    beginPath() {},
+    rect() {},
+    clip() {},
+    fillText(text, x, _y, maxWidth) {
+      labels.push({ text, x, maxWidth, align: this.textAlign });
+    },
+  };
+  const receiver = {
+    appearance: { verticalGridColor: "#404040", verticalGridCenterColor: "#909020" },
+    cache: {
+      palette: () => ({ bottomValue: "#3366FF", foreground: "#FFFFFF" }),
+      canvasLayer: () => undefined,
+    },
+    getSession: () => ({
+      notesMode,
+      targetLineIndices: [1, 3],
+      chart: { judgeLineList: [{ Name: "First" }, { Name: "Lead" }, {}, { Name: "" }] },
+    }),
+    viewport: {
+      panelCount: () => 2,
+      panelWidth: () => 100,
+      panelStride: () => 120,
+      multiLineViewportOffset: () => 0,
+      visiblePanelRange: () => [0, 1],
+    },
+  };
+  return { receiver, context, labels };
+}
+
+test("multi-line note panels caption the judge line by number and name", () => {
+  const { receiver, context, labels } = panelLabelReceiver("multi");
+
+  drawMultiLinePanelLabels.call(receiver, context, 240, 300, "notes");
+
+  assert.deepEqual(
+    labels.map(({ text }) => text),
+    [
+      t("editorPanels.timeline.lineHeader", { index: 1, name: "Lead" }),
+      t("editorPanels.timeline.lineHeader", { index: 3, name: t("model.line.untitled") }),
+    ],
+    "each visible panel names its own judge line",
+  );
+  assert.deepEqual(
+    labels.map(({ x }) => x),
+    [50, 170],
+    "the caption is centered over its panel",
+  );
+  assert.ok(
+    labels.every(({ maxWidth }) => maxWidth === 88),
+    "the caption cannot cross a panel",
+  );
+  assert.ok(
+    labels.every(({ align }) => align === "center"),
+    "the caption uses centered text alignment",
+  );
+});
+
+test("merged multi-line notes do not caption a single judge line", () => {
+  const { receiver, context, labels } = panelLabelReceiver("multi_merged");
+
+  drawMultiLinePanelLabels.call(receiver, context, 240, 300, "notes");
+
+  assert.deepEqual(labels, [], "a merged note field has no single line to name");
 });

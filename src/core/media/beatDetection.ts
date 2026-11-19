@@ -11,6 +11,8 @@
  * the result is a plain value that a caller can preview, edit, or commit.
  */
 import type { AudioBufferLike } from "./audioAnalysis.ts";
+import { buildBeatActivation } from "./beatActivation.ts";
+import { decodeBeats, decodeTempoCandidates } from "./beatDbn.ts";
 
 /** The decoded buffer fields the detector reads, including the optional rate. */
 export interface BeatDetectionBuffer extends AudioBufferLike {
@@ -21,6 +23,20 @@ export interface BeatDetectionBuffer extends AudioBufferLike {
 export interface BeatDetectionWaveform {
   peaks: Float32Array;
   duration: number;
+}
+
+/**
+ * One stretch of steady tempo, as a `BPMList` entry.
+ *
+ * A fixed-tempo track yields one of these. A track that speeds up, slows down,
+ * or changes tempo outright yields several in time order, which is exactly the
+ * shape a chart's tempo map takes.
+ */
+export interface TempoSegment {
+  /** Audio time where this stretch starts, in milliseconds. */
+  startMs: number;
+  /** Tempo of this stretch, in BPM. */
+  bpm: number;
 }
 
 /** The timing proposal plus the preview data the dialog draws. */
@@ -36,6 +52,17 @@ export interface BeatDetectionResult {
   duration: number;
   /** Beat-zero-relative render times for the primary grid. */
   beatTimes: Float32Array;
+  /**
+   * Tempo map covering the whole track.
+   *
+   * `bpm` and `offsetMs` describe a single steady grid; this describes what the
+   * music actually does. They agree when the track holds one tempo, and this is
+   * the field to read when it does not. Present only from the decoder that can
+   * follow a tempo change.
+   */
+  tempoSegments?: TempoSegment[];
+  /** Whether the track needed more than one tempo stretch. */
+  variableTempo?: boolean;
 }
 
 /** Limits and display sizes for one detection run. */
@@ -47,8 +74,25 @@ export interface BeatDetectionOptions {
   targetSampleRate?: number;
 }
 
+/**
+ * Tempo range for the envelope/autocorrelation detector.
+ *
+ * Kept deliberately narrow. That detector picks the strongest harmonic of the
+ * pulse without the decoder's transition model, so a wide range lets it lock
+ * onto a subharmonic: measured on a 145 BPM click track, lowering the floor to
+ * 40 made it report 48.3 — a third of the truth — while a 50 floor reports 145.
+ */
 const DEFAULT_MIN_BPM = 50;
 const DEFAULT_MAX_BPM = 220;
+/**
+ * Tempo range for the DBN decoder.
+ *
+ * Charts reach 350 BPM, so the range has to cover it, and the decoder can be
+ * trusted with it: its transition model makes a subharmonic path expensive, and
+ * measured on clicks from 70 to 350 it reports every one of them exactly.
+ */
+const DBN_MIN_BPM = 40;
+const DBN_MAX_BPM = 360;
 const DEFAULT_MAX_CANDIDATES = 4;
 const DEFAULT_TARGET_RATE = 22050;
 const WAVEFORM_POINTS = 1600;
@@ -62,6 +106,32 @@ const TIMING_DIGITS = 3;
 const SNAP_THRESHOLD = 0.001;
 /** Attack timing search radius around one predicted beat, in seconds. */
 const ATTACK_WINDOW = 0.035;
+/**
+ * Largest fraction of a beat the attack search may span, to each side.
+ *
+ * The decoded grid places each beat only to its analysis frame, so a beat can
+ * sit tens of milliseconds from the attack it belongs to. A fixed 35 ms window
+ * is enough at 190 BPM (one beat is 316 ms) and far too small at 70 BPM (857 ms):
+ * measured there, only 2 of 28 beats found an attack at 35 ms, while 80 ms found
+ * all 28 and reduced the phase error from 43 ms to 0.8 ms.
+ *
+ * The fraction stays well under a quarter of the beat, because the metrical
+ * level test searches for an onset *half* a beat from the grid: a window that
+ * reaches the midpoint finds one there even when the pattern has nothing
+ * between its beats, which doubles the tempo. At 0.15 the window covers a
+ * slow tempo's slack and still stops short of the midpoint.
+ */
+const ATTACK_WINDOW_BEAT_FRACTION = 0.15;
+/**
+ * Below this tempo, a doubled reading is worth considering.
+ *
+ * Most music is counted between this and 200 BPM. A decoder that lands under it
+ * has plausibly locked onto every second beat; one that lands above it has
+ * usually found the real pulse, and doubling would report a subdivision as the
+ * tempo. The value sits under the slowest common dance tempo (about 70) so a
+ * genuinely slow track still gets corrected when its midway hits are real.
+ */
+const SLOW_TEMPO_CEILING = 76;
 
 interface OnsetEnvelope {
   /** Low + mid flux, used for tempo and beat presence. */
@@ -183,14 +253,18 @@ interface AnalysisContext {
 }
 
 /** Resolve and clamp the BPM range, candidate count, and analysis rate. */
-function resolveTimingLimits(options: BeatDetectionOptions): {
+function resolveTimingLimits(
+  options: BeatDetectionOptions,
+  fallbackMinBpm = DEFAULT_MIN_BPM,
+  fallbackMaxBpm = DEFAULT_MAX_BPM,
+): {
   minBpm: number;
   maxBpm: number;
   maxCandidates: number;
   targetRate: number;
 } {
-  const minBpm = clampNumber(options.minBpm, DEFAULT_MIN_BPM, 20, 400);
-  const maxBpm = clampNumber(options.maxBpm, DEFAULT_MAX_BPM, minBpm + 1, 400);
+  const minBpm = clampNumber(options.minBpm, fallbackMinBpm, 20, 400);
+  const maxBpm = clampNumber(options.maxBpm, fallbackMaxBpm, minBpm + 1, 400);
   const maxCandidates = Math.max(
     1,
     Math.min(8, Math.trunc(options.maxCandidates ?? DEFAULT_MAX_CANDIDATES)),
@@ -257,6 +331,398 @@ export function detectBeatGridFromSamples(
   }
   const context = buildAnalysis(samples, sampleRate, duration, options);
   return context ? fixedFromEnvelope(samples, context) : null;
+}
+
+/**
+ * Detect fixed timing with the ported madmom decoder.
+ *
+ * The autocorrelation detector fits one grid to onset energy; the dynamic
+ * Bayesian decoder keeps tempo hypotheses alive across the whole track and
+ * picks the most probable path, which is what makes it steadier on material
+ * with syncopation or a near-miss tempo. Both entry points return the same
+ * result shape, so a caller can choose the decoder or fall back without
+ * changing how it reads the answer.
+ *
+ * The DBN proposes the grid; the same low-peak and raw-attack refits then run
+ * on top of it, so the reported offset keeps the sub-frame accuracy the
+ * envelope alone cannot reach.
+ */
+export function detectBeatGridWithDbnFromSamples(
+  samples: Float32Array,
+  sampleRate: number,
+  duration?: number,
+  options: BeatDetectionOptions = {},
+): BeatDetectionResult | null {
+  if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    return null;
+  }
+  const { minBpm, maxBpm } = resolveTimingLimits(options, DBN_MIN_BPM, DBN_MAX_BPM);
+  const totalDuration =
+    Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
+  const activation = buildBeatActivation(
+    {
+      length: samples.length,
+      numberOfChannels: 1,
+      duration: totalDuration,
+      getChannelData: () => samples,
+    },
+    sampleRate,
+  );
+  if (!activation) {
+    return null;
+  }
+  const beats = decodeBeats(activation.values, activation.fps, { minBpm, maxBpm });
+  if (!beats || beats.length < 4) {
+    return null;
+  }
+  // The decoded beats locate each pulse but only to the analysis frame they were
+  // decoded on. Snap every beat onto the raw attack near it and fit one line
+  // through those attack times: the fit resolves both the period and beat zero
+  // below a sample, while the index spacing carries the metrical level the
+  // decoder decided on.
+  //
+  // When too few attacks match — a sparse pattern under noise has only a handful
+  // of onsets in the whole track — the decode is all there is. Reporting its
+  // frame-quantised tempo beats reporting nothing, so fall back to it rather
+  // than failing.
+  const fitted = fitBeatSequenceToAttacks(samples, sampleRate, beats) ?? decodedFallback(beats);
+  if (!fitted) {
+    return null;
+  }
+  // Report the tempo the decoded path actually spent its time at, then refine it
+  // against the raw attacks.
+  //
+  // The two estimators answer different questions. The median beat interval is
+  // accurate to a fraction of a sample because the attacks are fitted, but it
+  // describes the middle of the track, so a path that changes interval gives the
+  // wrong answer: on Heavy Interlude it says 193.5 while 52% of the path sat at
+  // 100.4. The histogram peak says *which* tempo the track spends its time at,
+  // but it can only resolve whole analysis frames, so on clean material it lands
+  // 0.03 BPM off where the fit is exact.
+  //
+  // Taking the histogram's choice and then refining that choice keeps both
+  // properties: the right octave, measured precisely. The refinement searches near
+  // the chosen tempo rather than re-fitting from scratch.
+  const histogram = decodeTempoCandidates(activation.values, activation.fps, {
+    minBpm,
+    maxBpm,
+  });
+  const peakBpm = histogram?.[0]?.bpm;
+  const refined =
+    peakBpm !== undefined && Number.isFinite(peakBpm) && peakBpm > 0
+      ? (fitBeatSequenceToAttacks(samples, sampleRate, beats, peakBpm) ?? fitted)
+      : fitted;
+  // The decoder can lock onto half the actual pulse rate; a strong attack
+  // halfway between its beats means the real beat is there. This is the same
+  // metrical-level test the autocorrelation detector applies, and it is the
+  // difference between reporting 128 and reporting 64 on the same track.
+  const level = resolveMetricalLevel(samples, sampleRate, refined.bpm, refined.offsetSeconds, {
+    minBpm,
+    maxBpm,
+  });
+  const measuredBpm = roundMeasuredTiming(clampBpm(level.bpm, minBpm, maxBpm));
+  const measuredOffset = roundMeasuredTiming(Math.max(0, level.offsetSeconds) * 1000);
+  if (!(measuredBpm > 0) || !Number.isFinite(measuredOffset)) {
+    return null;
+  }
+  // The decoded path already follows tempo changes — its state space pays a cost
+  // to leave one tempo — so the stretch boundaries come from the beats it
+  // produced, not from a second pass over the audio.
+  const segments = alignSingleSegment(
+    extractTempoSegments(beats, minBpm, maxBpm),
+    measuredBpm,
+    measuredOffset,
+  );
+  return {
+    bpm: measuredBpm,
+    offsetMs: measuredOffset,
+    waveform: {
+      peaks: waveformPeaks(samples, WAVEFORM_POINTS),
+      duration: totalDuration,
+    },
+    onset: decimate(activation.values, ONSET_POINTS),
+    onsetRate: activation.fps,
+    duration: totalDuration,
+    beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
+    tempoSegments: segments.length ? segments : undefined,
+    variableTempo: segments.length > 1,
+  };
+}
+
+/**
+ * Split a decoded beat sequence into stretches of steady tempo.
+ *
+ * Each beat contributes its local interval; the intervals are smoothed over a
+ * short window so a single misplaced beat does not start a stretch. A new
+ * stretch begins only where the tempo has moved far enough that it cannot be
+ * measurement noise — five percent, which is well beyond the frame quantisation
+ * of a steady track and well inside a musically meaningful tempo change.
+ *
+ * A tempo change is also required to persist: a stretch shorter than a few
+ * seconds is a wobble at a track boundary, not a section, and reporting it would
+ * fill the tempo map with entries the author has to delete.
+ */
+function extractTempoSegments(beats: Float32Array, minBpm: number, maxBpm: number): TempoSegment[] {
+  if (beats.length < 8) {
+    return [];
+  }
+  const local: { time: number; bpm: number }[] = [];
+  for (let index = 1; index < beats.length; index += 1) {
+    const interval = beats[index] - beats[index - 1];
+    if (!(interval > 0)) {
+      continue;
+    }
+    local.push({ time: beats[index], bpm: 60 / interval });
+  }
+  if (local.length < 4) {
+    return [];
+  }
+  // Median of a window wide enough to span a bar or two: a steady track's
+  // frame quantisation averages out, while a real tempo change still shows.
+  const radius = Math.max(2, Math.round(local.length * 0.05));
+  const smoothed = local.map((point, index) => {
+    const window: number[] = [];
+    for (
+      let cursor = Math.max(0, index - radius);
+      cursor <= Math.min(local.length - 1, index + radius);
+      cursor += 1
+    ) {
+      window.push(local[cursor].bpm);
+    }
+    window.sort((left, right) => left - right);
+    return { time: point.time, bpm: window[Math.floor(window.length / 2)] };
+  });
+
+  const raw: TempoSegment[] = [];
+  let segmentStart = beats[0];
+  let sum = 0;
+  let count = 0;
+  for (let index = 0; index < smoothed.length; index += 1) {
+    const point = smoothed[index];
+    sum += point.bpm;
+    count += 1;
+    const average = sum / count;
+    if (Math.abs(point.bpm - average) / average > 0.05) {
+      raw.push({
+        startMs: Math.round(segmentStart * 1000),
+        bpm: roundMeasuredTiming(clampBpm(average, minBpm, maxBpm)),
+      });
+      segmentStart = point.time;
+      sum = point.bpm;
+      count = 1;
+    }
+  }
+  raw.push({
+    startMs: Math.round(segmentStart * 1000),
+    bpm: roundMeasuredTiming(clampBpm(count ? sum / count : smoothed[0].bpm, minBpm, maxBpm)),
+  });
+
+  // Merge stretches too short to be a section into the one before them. At the
+  // ends of a track the smoothed tempo is built from few intervals and drifts,
+  // so a short leading or trailing stretch is an artefact of the analysis
+  // boundary, not a tempo change the author would enter.
+  const merged: TempoSegment[] = [];
+  for (const segment of raw) {
+    if (merged.length && segment.startMs - merged[merged.length - 1].startMs < 3000) {
+      continue;
+    }
+    merged.push(segment);
+  }
+  const endMs = Math.round((beats[beats.length - 1] ?? 0) * 1000);
+  while (merged.length > 1 && endMs - merged[merged.length - 1].startMs < 3000) {
+    merged.pop();
+  }
+  return merged;
+}
+
+/**
+ * Replace a single-stretch map's tempo with the refined one.
+ *
+ * The stretch tempo comes from decoded beat intervals, which carry the
+ * analysis-frame quantisation; the main answer comes from the attack refit,
+ * which resolves it below a sample. When the track turned out to hold one
+ * tempo, both describe the same thing and the refined value is the accurate
+ * one — measured 143.6 against a refined 145 on a steady click track.
+ */
+function alignSingleSegment(
+  segments: TempoSegment[],
+  bpm: number,
+  offsetMs: number,
+): TempoSegment[] {
+  if (segments.length !== 1) {
+    return segments;
+  }
+  return [{ startMs: Math.round(offsetMs), bpm }];
+}
+
+/**
+ * Choose between a detected pulse rate and its double.
+ *
+ * A decoder can settle on every second beat: each decoded beat is genuine, but
+ * the beats between them were never modelled. Telling the two readings apart by
+ * amplitude does not work. A pattern of 1.0 / 0.3 / 0.5 / 0.3 has a quiet but
+ * real hit between the loud ones, and its midway level ends up close to that of
+ * a pattern that genuinely has no beat there, so no amplitude threshold
+ * separates the two cases.
+ *
+ * The test therefore asks whether the waveform *rises* at the midway points: an
+ * onset is a steep energy increase, while bleed from a neighbouring hit is a
+ * decay. That is the same detection the attack refit uses, so both agree about
+ * what counts as a hit.
+ *
+ * Only doubling is considered, and only within the caller's tempo bounds: a
+ * halving would be guessing that strong beats are actually off-beats, which
+ * attack presence alone cannot decide.
+ */
+function resolveMetricalLevel(
+  samples: Float32Array,
+  sampleRate: number,
+  bpm: number,
+  offsetSeconds: number,
+  limits: { minBpm: number; maxBpm: number },
+): { bpm: number; offsetSeconds: number } {
+  const period = 60 / bpm;
+  const doubled = bpm * 2;
+  if (doubled > limits.maxBpm) {
+    return { bpm, offsetSeconds };
+  }
+  // Only a tempo that is slow for the material is a candidate for doubling.
+  // On real mixes there are onsets almost everywhere, so "the halfway points
+  // have attacks" is true of a correct grid too: measured against four
+  // reference tracks, that test doubled three whose decoded tempo was already
+  // right (99.4, 105.5 and 73.8 BPM against true 100, 104 and 70). What
+  // actually distinguishes a half-tempo reading is that the decoder landed
+  // below the range music is usually counted in, which is why this guard comes
+  // first.
+  if (bpm >= SLOW_TEMPO_CEILING) {
+    return { bpm, offsetSeconds };
+  }
+  const duration = samples.length / sampleRate;
+  const floor = onsetFloor(samples, sampleRate);
+  // The same wider window the refit uses: at a slow tempo a beat can sit far
+  // enough from its attack that a fixed 35 ms search finds nothing at all.
+  const search = Math.max(
+    ATTACK_WINDOW,
+    Math.min(period * ATTACK_WINDOW_BEAT_FRACTION, period * 0.5),
+  );
+  let onCount = 0;
+  let offCount = 0;
+  // Sample a bounded number of beats: enough to be sure, few enough to keep the
+  // extra onset searches cheap.
+  const stride = Math.max(1, Math.ceil((duration - offsetSeconds) / period / 64));
+  for (let beat = 0; offsetSeconds + beat * period < duration; beat += stride) {
+    const expected = offsetSeconds + beat * period;
+    if (attackDelta(samples, sampleRate, expected, floor, search) !== null) {
+      onCount += 1;
+    }
+    const midway = expected + period / 2;
+    if (
+      midway + search < duration &&
+      attackDelta(samples, sampleRate, midway, floor, search) !== null
+    ) {
+      offCount += 1;
+    }
+  }
+  if (onCount < 4) {
+    return { bpm, offsetSeconds };
+  }
+  // If most halfway points hold their own attack, the decoded grid is every
+  // second beat and the real tempo is twice as fast.
+  if (offCount < onCount * 0.5) {
+    return { bpm, offsetSeconds };
+  }
+  return { bpm: doubled, offsetSeconds };
+}
+
+/**
+ * Fit one beat line through the raw attacks nearest a decoded beat sequence.
+ *
+ * The decoder reports beats on analysis frames, so its spacing is quantised: a
+ * tempo that is not a whole number of frames alternates between the two
+ * neighbouring intervals. That quantisation is zero-mean, so an ordinary least
+ * squares fit through every matched attack cancels it, while one robust-refit
+ * pass drops the beats whose attack was found somewhere else entirely (a
+ * syncopated hit, a missing transient).
+ *
+ * The frame quantisation is why this does not use the strict deviation gate the
+ * envelope detector relies on: residuals of half an analysis frame are normal
+ * here, not evidence of a bad fit.
+ */
+function fitBeatSequenceToAttacks(
+  samples: Float32Array,
+  sampleRate: number,
+  beats: Float32Array,
+  /**
+   * Tempo to measure around, when the caller already knows which octave is meant.
+   *
+   * Left out, the fit takes whatever period the decoded beat indices imply. Given,
+   * it matches each beat to the attack nearest the grid this tempo predicts, so a
+   * beat sequence that drifted to a different interval is measured at the tempo
+   * the caller chose rather than the one it drifted to.
+   */
+  targetBpm?: number,
+): { bpm: number; offsetSeconds: number } | null {
+  if (beats.length < 4) {
+    return null;
+  }
+  const floor = onsetFloor(samples, sampleRate);
+  // Search a fraction of the decoded period, so a slow tempo gets the wider
+  // window its frame quantisation needs; see ATTACK_WINDOW_BEAT_FRACTION.
+  const decodedPeriod = (beats[beats.length - 1] - beats[0]) / (beats.length - 1);
+  const targetPeriod = targetBpm && targetBpm > 0 ? 60 / targetBpm : decodedPeriod;
+  const search = Math.max(
+    ATTACK_WINDOW,
+    Math.min(targetPeriod * ATTACK_WINDOW_BEAT_FRACTION, targetPeriod * 0.5),
+  );
+  // With a target tempo, lay a grid of that period over the decoded span and match
+  // each grid position to its attack. This is what makes the choice of octave and
+  // the precision independent: the histogram says 100.4 BPM for a track whose
+  // interiors wandered, and this measures that grid to a fraction of a sample
+  // instead of re-deriving a period from the wander.
+  const span = beats[beats.length - 1] - beats[0];
+  const count =
+    targetBpm && targetBpm > 0
+      ? Math.max(4, Math.min(beats.length, Math.floor(span / targetPeriod) + 1))
+      : beats.length;
+  const points: AttackPoint[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const expected = targetBpm && targetBpm > 0 ? beats[0] + index * targetPeriod : beats[index];
+    const delta = attackDelta(samples, sampleRate, expected, floor, search);
+    if (delta !== null) {
+      points.push({ beat: index, time: expected + delta });
+    }
+  }
+  if (points.length < 4) {
+    return null;
+  }
+  const initial = leastSquaresBeatLine(points);
+  if (!initial) {
+    return null;
+  }
+  // Drop the attacks that clearly do not belong to the decoded grid, then fit
+  // again. The tolerance is a couple of analysis frames, not a fraction of one.
+  const tolerance = 0.05;
+  const keep = points.filter((point) => {
+    const residual = point.time - (initial.offsetSeconds + initial.slope * point.beat);
+    return Math.abs(residual) <= tolerance;
+  });
+  const fit = (keep.length >= 4 ? leastSquaresBeatLine(keep) : null) ?? initial;
+  if (!(fit.slope > 0)) {
+    return null;
+  }
+  // A fit through scattered attacks has a slope that describes the scatter, not
+  // the pulse: measured on a sparse pattern under noise, the reported tempo came
+  // out at 107 BPM for a 50 BPM pulse. Reject a fit whose residuals are wider
+  // than a tenth of a beat, and let the caller fall back to the decode, which
+  // cannot be wrong by more than one analysis frame.
+  const residuals = points.map(
+    (point) => point.time - (fit.offsetSeconds + fit.slope * point.beat),
+  );
+  const deviation = median(residuals.map((residual) => Math.abs(residual)));
+  if (!(deviation < fit.slope * 0.1)) {
+    return null;
+  }
+  return { bpm: 60 / fit.slope, offsetSeconds: fit.offsetSeconds };
 }
 
 /** Detect a fixed grid from the shared analysis envelope, or `null` when unclear. */
@@ -943,6 +1409,76 @@ function leastSquaresBeatLine(
 }
 
 /**
+ * Tempo and phase straight from the decoded beats, with no attack refit.
+ *
+ * This is the frame-quantised answer: it is accurate to one analysis frame,
+ * which is a few milliseconds at a fast tempo and well under a beat at any
+ * tempo. It exists so a track with too few matched attacks still produces a
+ * grid rather than nothing.
+ */
+function decodedFallback(beats: Float32Array): { bpm: number; offsetSeconds: number } | null {
+  if (beats.length < 4) {
+    return null;
+  }
+  // Take the median interval, not an end-to-end average: a single beat placed
+  // one frame off at either end skews the average, which measured 52.6 BPM for a
+  // 50 BPM pulse whose interior intervals were all correct. The median ignores
+  // that, and the phase comes from the line through every beat.
+  const points: AttackPoint[] = [];
+  const intervals: number[] = [];
+  for (let index = 0; index < beats.length; index += 1) {
+    points.push({ beat: index, time: beats[index] });
+    if (index > 0) {
+      intervals.push(beats[index] - beats[index - 1]);
+    }
+  }
+  intervals.sort((left, right) => left - right);
+  const period = intervals[Math.floor(intervals.length / 2)];
+  if (!(period > 0)) {
+    return null;
+  }
+  const fit = leastSquaresBeatLine(points);
+  if (!fit) {
+    return null;
+  }
+  return { bpm: 60 / period, offsetSeconds: Math.max(0, fit.offsetSeconds) };
+}
+
+/** Loudness a real onset must exceed to count as one, derived from the track. */
+function onsetFloor(samples: Float32Array, sampleRate: number): number {
+  // Local energy sampled across the whole track, so the floor reflects what this
+  // material actually does rather than a fixed number.
+  const window = Math.max(2, Math.round(sampleRate * 0.0015));
+  const step = Math.max(window, Math.round(sampleRate * 0.01));
+  const energies: number[] = [];
+  for (let index = window; index < samples.length; index += step) {
+    let sum = 0;
+    for (let offset = index - window; offset < index; offset += 1) {
+      const sample = samples[offset] ?? 0;
+      sum += sample * sample;
+    }
+    energies.push(sum / window);
+  }
+  if (energies.length < 8) {
+    return 0;
+  }
+  energies.sort((left, right) => left - right);
+  const high = Math.sqrt(energies[Math.floor(energies.length * 0.9)]);
+  const median = Math.sqrt(energies[Math.floor(energies.length * 0.5)]);
+  // The floor has to sit above the noise, and the noise is exactly what raises
+  // the median: a guard that skipped low-dynamic-range material also skipped
+  // every noisy track, which is where the floor is needed most. Only a track
+  // with no measurable contrast at all disables it.
+  if (!(high > 0) || high <= median) {
+    return 0;
+  }
+  // A hit has to reach a quarter of the loud level this track does reach. That
+  // is well below a real onset and well above a noise rise, which measured two
+  // orders of magnitude under the hits.
+  return high * 0.25;
+}
+
+/**
  * Time shift from the strongest attack near one expected beat.
  *
  * The spectral-flux peak reacts to the FFT window and can sit a few
@@ -950,12 +1486,26 @@ function leastSquaresBeatLine(
  * raw attack directly: find the energy maximum, walk back to where the attack
  * crosses 20% of the peak, and interpolate that crossing between samples. The
  * window smooths sample noise so repeated hits report the same attack time.
- * Returns `null` when no clear transient exists or it falls outside the search
- * window.
+ *
+ * `minimumPeak` is an absolute floor on that maximum. Without it the search
+ * always finds a rise: broadband noise rises somewhere inside a +/-35 ms window,
+ * so a beat that is itself misplaced still returns a confident shift. Measured
+ * on a noisy click track, that made every grid position — including one offset
+ * by half a beat — report 100% support. Pass the level a real onset reaches on
+ * this material to reject those.
+ *
+ * Returns `null` when no clear transient exists, when it is below `minimumPeak`,
+ * or when it falls outside the search window.
  */
-function attackDelta(samples: Float32Array, sampleRate: number, time: number): number | null {
-  const from = Math.max(1, Math.floor((time - ATTACK_WINDOW) * sampleRate));
-  const to = Math.min(samples.length - 1, Math.ceil((time + ATTACK_WINDOW) * sampleRate));
+function attackDelta(
+  samples: Float32Array,
+  sampleRate: number,
+  time: number,
+  minimumPeak = 0,
+  search = ATTACK_WINDOW,
+): number | null {
+  const from = Math.max(1, Math.floor((time - search) * sampleRate));
+  const to = Math.min(samples.length - 1, Math.ceil((time + search) * sampleRate));
   if (to - from < 8) {
     return null;
   }
@@ -980,7 +1530,7 @@ function attackDelta(samples: Float32Array, sampleRate: number, time: number): n
       peakIndex = index;
     }
   }
-  if (!(peak > 1e-10)) {
+  if (!(peak > 1e-10) || peak < minimumPeak) {
     return null;
   }
   const threshold = peak * 0.2;
@@ -1001,7 +1551,7 @@ function attackDelta(samples: Float32Array, sampleRate: number, time: number): n
   // The trailing window reports the point where it has collected enough of the
   // rise; its centre is the closest raw estimate of the attack start.
   const delta = (crossing - window / 2) / sampleRate - time;
-  return delta >= -ATTACK_WINDOW && delta <= ATTACK_WINDOW ? delta : null;
+  return delta >= -search && delta <= search ? delta : null;
 }
 
 /**

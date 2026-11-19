@@ -57,18 +57,36 @@ export class EditorPlayback {
     this.pending = false;
     this.starting = null;
   }
-  /** Stops audio and hitsounds and invalidates any pending start. */
+  /**
+   * Stop audio and hitsounds and invalidate any pending start.
+   *
+   * The pause reports a seek as well as a state change. The transport freezes
+   * `position` at the authoritative audio time, while the timeline's viewport
+   * origin was last published from the *interpolated* visual time of the frame
+   * before. Nothing republishes the origin once `playing` is false, so the grid
+   * would keep the interpolated position while the playhead snapped to the
+   * authoritative one — up to one display frame of difference, drawn as a jump
+   * at the moment playback stops. Publishing a seek re-anchors both to the same
+   * value.
+   */
   pause(): void {
     this.request++;
     this.pending = false;
     this.audio.pause();
     this.sounds.stop();
     this.onStateChange();
+    this.onSeek();
   }
   /** Seeks the transport, stopping hitsounds and notifying the seek listener. */
   seek(seconds: number, pause = true): void {
     if (pause) {
-      this.pause();
+      // `pause()` already publishes the seek for the frozen position; the explicit
+      // seek below publishes the new one, so the intermediate report is skipped.
+      this.request++;
+      this.pending = false;
+      this.audio.pause();
+      this.sounds.stop();
+      this.onStateChange();
     }
     this.audio.seek(seconds);
     this.sounds.stop();

@@ -9,12 +9,7 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import type { SelectionSnapshot } from "../../../../../../core/edit/selection/snapshot.ts";
 import type { SelectionEditResult } from "../../../../../../core/edit/selection/edits.ts";
 
-import {
-  batchPlacementPending,
-  forwardBallPointer,
-  routePendingPlacement,
-  type BatchTimeline,
-} from "./batchControlTimeline.ts";
+import type { Timeline } from "../../timeline/surface/timeline.ts";
 import { previewSession } from "./previewSession.ts";
 import {
   batchDragDeltas,
@@ -37,6 +32,15 @@ import {
 import { commitSelectionEdit } from "../../../../../../core/edit/selection/edits.ts";
 import { isSystemCancelKey } from "../../../../../../core/shortcuts/keyMatching.ts";
 import { t } from "../../../../../../i18n/index.ts";
+import {
+  dockBoundsForLines,
+  dockPlacement,
+  dockPosition,
+  dockScroll,
+  dockScrollChanged,
+  type DockGroup as Group,
+  type DockInput,
+} from "./batchControlDock.ts";
 
 export interface BatchControlPresentation {
   visible: boolean;
@@ -101,6 +105,35 @@ export function hasVisibleBatchSelection(area: TimelineArea, session: EditorSess
   );
 }
 
+type BatchTimeline = Pick<
+  Timeline,
+  "notesCanvas" | "eventsCanvas" | "cancelPlacement" | "changed" | "setPreview"
+> & {
+  viewport: Pick<
+    Timeline["viewport"],
+    | "panelWidth"
+    | "panelIndex"
+    | "panelStride"
+    | "multiLineViewportOffset"
+    | "point"
+    | "tempo"
+    | "origin"
+    | "judgementOffset"
+    | "scale"
+    | "scaleForArea"
+    | "notePositionAt"
+    | "division"
+    | "factorForLine"
+    | "noteInset"
+    | "snapX"
+    | "gridCount"
+  >;
+  gestures: Pick<
+    Timeline["gestures"],
+    "cursor" | "eventCursor" | "clipboardPointer" | "scaleAxis" | "scaleAxisLine" | "preview"
+  >;
+};
+
 /** A canvas-space point with the minimum surface required by callers. */
 interface Point {
   x: number;
@@ -112,12 +145,6 @@ interface Bounds {
   left: number;
   right: number;
   width: number;
-}
-
-interface Group {
-  signature: string;
-  left?: string;
-  top?: string;
 }
 
 /**
@@ -262,19 +289,6 @@ export class BatchControls {
       },
       true,
     );
-    // The control group floats above its field, so pointer movement over it
-    // never reaches the canvas. Keep the timeline cursor that keyboard
-    // placement reads in step with the live pointer.
-    scope.listen(
-      document,
-      "pointermove",
-      (event: Event) => {
-        if (!this.active) {
-          forwardBallPointer(this.timeline, event as PointerEvent);
-        }
-      },
-      true,
-    );
     // Escape and the 1/2 scale anchors belong to the live drag, not the
     // shortcut table: they only exist while a pointer gesture owns the stage.
     scope.listen(
@@ -324,16 +338,6 @@ export class BatchControls {
     return { left, right: left + panelWidth, width: panelWidth };
   }
 
-  selectionBounds(
-    area: TimelineArea,
-    snapshot: SelectionSnapshot,
-    canvas: HTMLCanvasElement,
-  ): Bounds {
-    return selectionPanelBounds(area, snapshot, (lineIndex) =>
-      this.panelBounds(area, lineIndex, canvas),
-    );
-  }
-
   clampPoint(point: Point, bounds: Bounds, canvas: HTMLCanvasElement): Point {
     return {
       x: Math.max(-canvas.clientWidth, Math.min(canvas.clientWidth * 2, point.x)),
@@ -353,10 +357,6 @@ export class BatchControls {
       this.cancel();
     }
     const stage = this.stage.getBoundingClientRect();
-    // A half-placed Hold or event is finished by the next click. The control
-    // balls float over the field, so leaving them visible would let that click
-    // land on a handle instead of the canvas and drop the placement.
-    const placementPending = batchPlacementPending(this.timeline);
     for (const [area, group] of this.groups) {
       const multiSelection =
         area === "notes"
@@ -385,8 +385,7 @@ export class BatchControls {
           : multiMode
             ? multiSelection > 0 && multiIntent
             : selection >= 2 || (selection > 0 && multiIntent);
-      const visible =
-        this.enabled() && !placementPending && canShow && hasVisibleBatchSelection(area, session);
+      const visible = this.enabled() && canShow && hasVisibleBatchSelection(area, session);
       this.state.presentations.update({
         ...this.state.presentations.get(),
         [area]: {
@@ -412,43 +411,69 @@ export class BatchControls {
         continue;
       }
       const signature = `${this.signature(area, session)}:${rectangle.width}:${rectangle.height}`;
-      if (signature === group.signature) {
+      const input: DockInput = {
+        viewport: this.timeline.viewport,
+        area,
+        width: canvas.clientWidth,
+        height: canvas.clientHeight,
+      };
+      const boundsOf = (lineIndex: number) => this.panelBounds(area, lineIndex, canvas);
+      const scroll = dockScroll(
+        this.timeline.viewport,
+        area,
+        this.timeline.viewport.multiLineViewportOffset(canvas.clientWidth, area),
+      );
+      const signatureChanged = signature !== group.signature;
+      if (!signatureChanged && !dockScrollChanged(group.scroll, scroll)) {
         continue;
       }
-      group.signature = signature;
-      const point =
-        area === "notes" ? this.timeline.gestures.cursor : this.timeline.gestures.eventCursor;
-      const bounds = this.selectionBounds(area, captureSelection(session), canvas);
-      const requested = Math.max(
-        bounds.left + 20,
-        Math.min(bounds.right - 26, (point?.x ?? bounds.left + bounds.width / 2) + 50),
-      );
-      const horizontal = Math.max(8, Math.min(rectangle.width - 26, requested));
-      const vertical = Math.max(
-        25,
-        Math.min(rectangle.height - 97, (point?.y ?? rectangle.height / 2) - 30),
-      );
-      group.left = `${rectangle.left - stage.left + horizontal}px`;
-      group.top = `${rectangle.top - stage.top + vertical}px`;
+      let docked: { x: number; y: number } | null = null;
+      if (signatureChanged) {
+        group.signature = signature;
+        const point =
+          area === "notes" ? this.timeline.gestures.cursor : this.timeline.gestures.eventCursor;
+        const snapshot = captureSelection(session);
+        const entries = area === "notes" ? snapshot.notes : snapshot.events;
+        group.lines = [
+          ...new Set(
+            entries.map((entry) =>
+              Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex,
+            ),
+          ),
+        ];
+        const placed = dockPlacement(input, {
+          bounds: selectionPanelBounds(area, snapshot, boundsOf),
+          point: point ?? null,
+          factor: this.timeline.viewport.factorForLine?.(session.lineIndex) ?? 1,
+        });
+        group.anchor = placed.anchor;
+        docked = placed;
+      } else if (group.anchor) {
+        // A scroll, pan, or zoom moved the selection under the ball, so the dock
+        // follows the content instead of keeping its first screen position.
+        docked = dockPosition(
+          input,
+          group.anchor,
+          dockBoundsForLines(group.lines ?? [], session.lineIndex, boundsOf),
+        );
+      }
+      group.scroll = scroll;
+      if (!docked) {
+        continue;
+      }
+      const left = `${rectangle.left - stage.left + docked.x}px`;
+      const top = `${rectangle.top - stage.top + docked.y}px`;
+      group.left = left;
+      group.top = top;
       this.state.presentations.update({
         ...this.state.presentations.get(),
-        [area]: {
-          visible: true,
-          left: group.left,
-          top: group.top,
-        },
+        [area]: { visible: true, left, top },
       });
     }
   }
 
   down(event: PointerEvent, area: TimelineArea, kind: string, button: HTMLButtonElement): void {
     if (event.button !== 0 || this.active || !this.enabled()) {
-      return;
-    }
-    // A pending Hold or event placement owns the next click. Route that click
-    // to the field even when the pointer sits on a ball, so the gesture is
-    // completed instead of starting a batch drag.
-    if (routePendingPlacement(this.timeline, area, event)) {
       return;
     }
     event.preventDefault();
@@ -491,7 +516,9 @@ export class BatchControls {
     }
     const canvas = area === "notes" ? this.timeline.notesCanvas : this.timeline.eventsCanvas;
     const rawPoint = this.timeline.viewport.point(event, canvas);
-    const bounds = this.selectionBounds(area, snapshot, canvas);
+    const bounds = selectionPanelBounds(area, snapshot, (lineIndex) =>
+      this.panelBounds(area, lineIndex, canvas),
+    );
     const firstEntry = (area === "notes" ? snapshot.notes : snapshot.events)[0];
     const activeLineIndex = Number.isInteger(firstEntry?.lineIndex)
       ? firstEntry.lineIndex

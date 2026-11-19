@@ -138,6 +138,7 @@ export default {
   "editorPanels.timeline.canvasContext": "Cannot get a 2D canvas context",
   "editorPanels.timeline.notesCanvas": "Note timeline",
   "editorPanels.timeline.eventsCanvas": "Event timeline",
+  "editorPanels.timeline.lineHeader": "{index} · {name}",
   "editorPanels.timeline.noteRange.group": "Note timeline X-range controls",
   "editorPanels.timeline.noteRange.left": "Move the note view left",
   "editorPanels.timeline.noteRange.reset": "Return to the default X range",

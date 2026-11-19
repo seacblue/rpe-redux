@@ -1,16 +1,19 @@
 /**
- * Multi-line event chrome must batch its column labels on every WebGL overlay
- * frame, because the overlay clears its label batch and texture on `begin`.
- * The Canvas2D fallback keeps the cached header strip and repaints it only when
- * its key or size changes.
+ * Multi-line event chrome captions each panel with its judge line instead of
+ * repeating the event-type column names. The overlay path must queue the band
+ * fill and the caption on every WebGL frame, because the overlay clears its
+ * label batch and texture on `begin`; the Canvas2D path keeps the cached strip
+ * and repaints it only when its key or size changes.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { drawEvents } from "../../../frontend/screens/editor/workspace/timeline/events/eventDrawing.ts";
+import { t } from "../../../i18n/index.ts";
 
 const palette = {
   headerSurface: "#202020",
   foreground: "#FFFFFF",
+  bottomValue: "#3366FF",
   outline: "#555555",
   gridMinor: "#333333",
 };
@@ -39,8 +42,8 @@ function fakeContext() {
     fillRect(x, y, width, height) {
       calls.fillRect.push({ x, y, width, height });
     },
-    fillText(text, x, y) {
-      calls.fillText.push({ text, x, y });
+    fillText(text, x, y, maxWidth) {
+      calls.fillText.push({ text, x, y, maxWidth });
     },
     drawImage(...args) {
       calls.drawImage.push(args);
@@ -67,12 +70,15 @@ function fakeCanvas(width, height, context) {
   };
 }
 
+/** The judge-line caption the chrome should paint for the fake panel. */
+const headerText = t("editorPanels.timeline.lineHeader", { index: 0, name: "Lead" });
+
 /** A session shaped for the multi-line event field. */
 function fakeSession() {
   return {
     eventsMode: "multi",
     targetLineIndices: [0],
-    chart: { judgeLineList: [] },
+    chart: { judgeLineList: [{ Name: "Lead" }] },
     lineIndex: 0,
     eventSelection: new Set(),
     multiEventSelection: new Map(),
@@ -116,7 +122,6 @@ function fakeReceiver({ overlayActive }) {
   const receiver = {
     eventsCanvas: fakeCanvas(200, 100, live),
     eventsBackdrop: fakeCanvas(200, 100, backdrop),
-    remoteSelectedEventIds: new Set(),
     appearance: {
       skin: null,
       eventOpacity: 1,
@@ -158,11 +163,11 @@ function fakeReceiver({ overlayActive }) {
       eventTypesForLine: () => ["moveXEvents"],
     },
     getSession: () => session,
+    remoteSelectedEventIds: new Set(),
     eventOverlayBatch,
     drawMultiLineGrid() {},
     drawMultiLineEvents() {},
     drawMultiLineBeatLabels() {},
-    drawMultiLinePanelLabels() {},
     eventBatch: { begin: () => true, finish() {}, add: () => true },
     eventsGridBatch: { begin() {}, finish() {} },
   };
@@ -177,27 +182,30 @@ function fakeReceiver({ overlayActive }) {
   };
 }
 
-test("an overlay frame hit still queues every multi-line event channel label", () => {
+test("an overlay frame queues the judge-line caption above the band fill", () => {
   const fixture = fakeReceiver({ overlayActive: true });
 
   drawEvents.call(fixture.receiver, 0);
   assert.deepEqual(
     fixture.batchTexts.map((entry) => entry.text),
-    ["X"],
-    "the first overlay frame queues the channel header",
+    [headerText],
+    "the panel header names the judge line instead of the event track",
   );
+  assert.equal(fixture.batchTexts[0].align, "center");
+  assert.equal(fixture.batchTexts[0].x, 100, "the caption is centered over its panel");
+  assert.equal(fixture.batchTexts[0].maxWidth, 184);
   assert.deepEqual(fixture.batchRects, [
     { x: 2, y: 0, width: 196, height: 23, color: palette.headerSurface },
   ]);
   const fillsAfterFirstFrame = fixture.live.calls.fillRect.length;
 
   // The overlay clears its label batch on begin, so a cache-hit frame has to
-  // queue the label again instead of replaying a stale cached strip.
+  // queue the caption again instead of replaying a stale cached strip.
   drawEvents.call(fixture.receiver, 0);
   assert.deepEqual(
     fixture.batchTexts.map((entry) => entry.text),
-    ["X"],
-    "the second overlay frame still queues the channel header",
+    [headerText],
+    "the second overlay frame still queues the judge-line caption",
   );
   assert.ok(fillsAfterFirstFrame > 0, "the header fill reaches the live context");
   assert.equal(
@@ -229,10 +237,10 @@ test("the Canvas2D path keeps compositing the cached header strip", () => {
   drawEvents.call(fixture.receiver, 0);
 
   assert.equal(fixture.cacheLayerCalls.length, 2, "the strip is consulted on both frames");
-  assert.equal(
-    fixture.layerContext.calls.fillText.length,
-    1,
-    "the label is painted into the strip only when it repaints",
+  assert.deepEqual(
+    fixture.layerContext.calls.fillText.map((entry) => entry.text),
+    [headerText],
+    "the caption is painted into the strip only when it repaints",
   );
   assert.equal(
     fixture.live.calls.drawImage.length,
