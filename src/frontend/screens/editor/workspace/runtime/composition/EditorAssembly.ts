@@ -81,6 +81,7 @@ import {
 } from "../../../../../../core/edit/state/visibility.ts";
 import { leaveMultiLineEditing } from "../../../../../../core/edit/multiLine/multiLineEdit.ts";
 import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
+import { visualLeadSeconds } from "../../../../../../core/media/outputLatency.ts";
 import { values } from "../../../../../../core/state/values.ts";
 import {
   editorLine,
@@ -364,6 +365,18 @@ export function createEditorAssembly(
   }
   const editClock = new EditorEditClock();
   const offsetSeconds = () => Number(session.current.chart.META.offset ?? 0) / 1000;
+  /**
+   * How far ahead of the audible position the picture is drawn.
+   *
+   * One value for every consumer: the frame clock adds it, and a seek publishes
+   * the viewport origin from it. Two bases would move the playhead by the lead at
+   * every pause.
+   */
+  const visualLead = () => {
+    const stored = values.byId.get<unknown>("audio-visual-lead");
+    const value = typeof stored === "number" ? stored : Number(stored);
+    return visualLeadSeconds(Number.isFinite(value) ? value / 1000 : 0);
+  };
   const previewRuntime = createPreviewRuntime({
     preview: surfaces.preview,
     session,
@@ -516,6 +529,7 @@ export function createEditorAssembly(
     invalidate,
     offsetSeconds,
     tempo: tempo.get,
+    visualLeadSeconds: visualLead,
     onPlaybackStateChange: flushDeferredSessionRender,
   });
   const {
@@ -1224,6 +1238,7 @@ export function createEditorAssembly(
       session: () => session.current,
       tempo: tempo.get,
       chartSeconds,
+      visualLeadSeconds: visualLead,
       invalidate,
     },
     drawing: {

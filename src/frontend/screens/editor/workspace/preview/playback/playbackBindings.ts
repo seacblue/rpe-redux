@@ -57,6 +57,7 @@ export function bindEditorPlayback(bindings: EditorPlaybackBindings): () => void
         rate: audio.rate,
         offsetSeconds: offset,
         lineIndex: getSession().lineIndex,
+        latency: audio.latencyReport,
       };
     },
     play: async () => {

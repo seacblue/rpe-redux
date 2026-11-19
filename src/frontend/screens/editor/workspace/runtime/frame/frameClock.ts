@@ -26,6 +26,8 @@ export interface FrameClockOptions {
   session(): EditorSession;
   tempo(): TempoMap;
   chartSeconds(): number;
+  /** How far ahead of the audible position the picture must be drawn. */
+  visualLeadSeconds(): number;
   invalidate(): void;
 }
 
@@ -207,6 +209,14 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
       return { session, tempo };
     },
     playing: () => options.audio.playing,
-    seconds: (timestamp: number) => visualClock.read(timestamp),
+    /**
+     * Chart time to draw for this frame.
+     *
+     * The clock reports the audible position, which is what the speakers have
+     * already emitted. A frame painted now is not visible until the compositor
+     * presents it, and by then the sound has moved on, so the picture has to lead
+     * by that display delay — otherwise it trails the sound by exactly that much.
+     */
+    seconds: (timestamp: number) => visualClock.read(timestamp) + options.visualLeadSeconds(),
   };
 }

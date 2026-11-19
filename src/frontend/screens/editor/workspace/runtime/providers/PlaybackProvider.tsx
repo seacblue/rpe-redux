@@ -95,11 +95,22 @@ export function createPlaybackRuntime(options: {
   invalidate(): void;
   offsetSeconds(): number;
   tempo(): TempoMap;
+  /** How far ahead of the audible position the picture is drawn. */
+  visualLeadSeconds(): number;
   /** Notify the shell when playback leaves its pending/playing state. */
   onPlaybackStateChange?: () => void;
 }): PlaybackRuntime {
   const { audio, hitSounds, realtimePreview } = options.preview;
   const chartSeconds = () => audio.time - options.offsetSeconds();
+  /**
+   * Chart time as the picture draws it.
+   *
+   * The visual clock leads the audible position by the display delay, and every
+   * playback frame publishes the viewport origin from that lead position. A seek
+   * has to publish the same basis, or the origin snaps back by the lead while the
+   * picture keeps it — one displaced frame at the moment playback stops.
+   */
+  const drawnChartSeconds = () => chartSeconds() + options.visualLeadSeconds();
   let preloadAt = Number.NEGATIVE_INFINITY;
   let preloadPending = false;
   /** Keep the paged line window ahead of a seek or playback start. */
@@ -136,7 +147,10 @@ export function createPlaybackRuntime(options: {
    */
   const publishSeek = () => {
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
-    options.timeline.viewport.setOrigin(currentBeat(), "seek");
+    options.timeline.viewport.setOrigin(
+      options.tempo().beat(drawnChartSeconds(), options.session.current.line?.bpmfactor ?? 1),
+      "seek",
+    );
     // Seeking changes the time-dependent grid even when the viewport origin
     // rounds to the same beat as the previous frame.
     options.timeline.changed();

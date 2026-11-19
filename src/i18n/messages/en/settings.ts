@@ -492,6 +492,10 @@ export default {
   "settings.field.preview-non-current-opacity.label": "Non-current line opacity",
 
   "settings.field.preserve-pitch.label": "Keep pitch when changing speed",
+  "settings.field.audio-visual-lead.label": "Picture lead",
+  "settings.field.audio-visual-lead.description":
+    "Milliseconds the picture is drawn ahead of the sound. Positive moves notes earlier; negative moves them later. Adjust by ear if notes pass the judgement line slightly off the beat.",
+  "settings.unit.milliseconds": "ms",
 
   // ----------------------------------------------------------- audio (3 rows)
   "settings.field.volume.label": "Music volume",
