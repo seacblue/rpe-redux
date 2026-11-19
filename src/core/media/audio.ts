@@ -394,6 +394,24 @@ export class AudioTransport {
     }
     return !media.seeking && media.paused !== true && media.readyState >= 2;
   }
+  /**
+   * Whether a start is still waiting for its first samples to reach the speaker.
+   *
+   * `time` holds the start position for this window, so a caller that
+   * interpolates between samples must not extrapolate through it: the sound has
+   * not begun, and predicting that it has puts the picture ahead until the
+   * sample catches up.
+   */
+  get awaitingOutput(): boolean {
+    if (!this.playing) {
+      return false;
+    }
+    if (this.usesMedia) {
+      return false;
+    }
+    const context = this.context;
+    return Boolean(context && context.currentTime - this.anchor < this.outputLatency);
+  }
   /** How far ahead callers may schedule when the media clock is not ready. */
   get scheduleHorizon(): number {
     return this.usesMedia && this.position < 0 ? 0 : Infinity;
@@ -405,6 +423,11 @@ export class AudioTransport {
    * speakers by `outputLatency`. Reporting the audible time keeps the preview
    * and the timeline from leading the music; `audioTime` remains the clock for
    * scheduling additional audio.
+   *
+   * Elapsed time is clamped at zero, so a start reports the start position until
+   * the first samples reach the speaker. That window is real: the source begins
+   * at `currentTime` and the speaker hears it `outputLatency` later, so the
+   * audible position genuinely does not move yet.
    */
   get time(): number {
     if (!this.playing) {
