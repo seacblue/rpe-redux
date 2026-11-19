@@ -45,7 +45,7 @@ const PROJECT_IMAGE_PATTERN = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
 export interface DocumentServiceBindings {
   documents: TauriDocumentStore | null;
   openNativeDocument(): Promise<void>;
-  guardReplace(action: () => unknown, title?: string): Promise<boolean>;
+  guardReplace(action: () => unknown): Promise<boolean>;
   /** Create a blank chart; timing detection waits for its first audio file. */
   createBlankChart(trigger?: NewChartDetectionTrigger): Promise<void>;
   hasUnsavedChanges(): boolean;
@@ -57,7 +57,6 @@ export interface DocumentServiceBindings {
   ): Promise<void>;
   save(): unknown;
   saveAs(): unknown;
-  closeDocument(): unknown;
   pickMedia(kind: MediaKind): Promise<void>;
   /** Getter: opening a chart installs a fresh asset map. */
   getAssets(): AssetMap;
@@ -196,15 +195,6 @@ export function saveAsDocument(): void {
   }
 }
 
-/** Closes the open document after the unsaved-changes decision. */
-export function closeDocument(): void {
-  const bound = service.value();
-  if (!bound) {
-    return;
-  }
-  bound.guardReplace(bound.closeDocument, t("editor.app.dialog.closeChart"));
-}
-
 /** Picks the cover image: the file input behind it is the editor's. */
 export function pickBackground(): void {
   const bound = service.value();
@@ -262,7 +252,6 @@ export const documents = Object.freeze({
   openDocument,
   saveDocument,
   saveAsDocument,
-  closeDocument,
   pickBackground,
   pickMusic,
   openAssets,

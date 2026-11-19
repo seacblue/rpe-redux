@@ -14,7 +14,6 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
       newDocument: () => calls.push("new"),
       openDocument: () => calls.push("open"),
       saveDocument: () => calls.push("save"),
-      closeDocument: () => calls.push("close"),
     },
     transport: {
       togglePlayback: () => calls.push("play"),
@@ -31,7 +30,10 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
       toggleStagePreview: () => calls.push("stage-preview"),
       toggleRegions: () => calls.push("regions"),
     },
-    navigation: { openLibrary: () => calls.push("library") },
+    navigation: {
+      openLibrary: () => calls.push("library"),
+      closeLibrary: () => calls.push("close-library"),
+    },
     inspector: { openPane: (id) => id === "notes" },
   });
 
@@ -43,6 +45,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
   commands.transport.seekToBeat("4");
   commands.view.toggleRegion("showNotes");
   commands.navigation.openLibrary();
+  commands.navigation.closeLibrary();
   assert.equal(commands.view.isPreviewLayout(), true);
   assert.equal(commands.inspector.openPane("notes"), true);
   assert.equal(commands.inspector.openPane("missing"), false);
@@ -53,6 +56,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
     "seek:4",
     "showNotes",
     "library",
+    "close-library",
   ]);
 
   dispose();
