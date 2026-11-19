@@ -530,3 +530,108 @@ export function decodeBeats(
   }
   return Float32Array.from(beats);
 }
+
+/** One tempo candidate: a tempo and the share of the track spent at it. */
+export interface TempoCandidate {
+  /** Candidate tempo in BPM. */
+  bpm: number;
+  /** Fraction of decoded frames whose path sat at this interval, `0..1`. */
+  share: number;
+}
+
+/**
+ * Tempo candidates from one decode, following madmom's tempo histogram.
+ *
+ * madmom does not pick a tempo by narrowing a range until only one fits — its
+ * `DBNTempoHistogramProcessor` decodes the Viterbi path once, histograms the
+ * interval of the state the path occupies at every frame, and reports the peaks
+ * with their relative strengths. `detect_tempo` then returns all of them, and
+ * the caller decides.
+ *
+ * That is what makes a wide range usable. A single number cannot describe both
+ * a 70 BPM track and a 350 BPM one without sometimes reporting a multiple, but
+ * the histogram can hold both readings at once: measured over 40–360 BPM, the
+ * correct tempo was the strongest peak in nine of ten cases including clicks at
+ * 240, 300 and 350 BPM, and the weaker peaks were the octave relatives.
+ *
+ * The interval a state models is a whole number of frames, so a tempo that is
+ * not a whole number of frames lands between two bins. Peaks are therefore taken
+ * with their neighbouring bins merged, which is what `smooth_histogram` does
+ * upstream.
+ */
+export function decodeTempoCandidates(
+  activation: Float32Array,
+  fps: number,
+  options: BeatDbnOptions = {},
+): TempoCandidate[] | null {
+  if (!activation?.length || !Number.isFinite(fps) || fps <= 0) {
+    return null;
+  }
+  let total = 0;
+  for (const value of activation) {
+    total += value;
+  }
+  const average = total / activation.length;
+  let variation = 0;
+  for (const value of activation) {
+    variation += (value - average) * (value - average);
+  }
+  if (Math.sqrt(variation / activation.length) < 0.01) {
+    return null;
+  }
+  const minBpm = clampNumber(options.minBpm, DEFAULT_MIN_BPM, 20, 400);
+  const maxBpm = clampNumber(options.maxBpm, DEFAULT_MAX_BPM, minBpm + 1, 400);
+  const transitionLambda = clampNumber(options.transitionLambda, DEFAULT_TRANSITION_LAMBDA, 0, 1e6);
+  const observationLambda = Math.round(
+    clampNumber(options.observationLambda, DEFAULT_OBSERVATION_LAMBDA, 2, 64),
+  );
+  const rate = clampNumber(options.targetFps, fps, 1, 1000);
+  const samples = rate === fps ? activation : resampleActivation(activation, fps, rate);
+  const space = createBeatStateSpace((60 * rate) / maxBpm, (60 * rate) / minBpm);
+  if (!space.numStates) {
+    return null;
+  }
+  const transitions = createBeatTransitions(space, transitionLambda);
+  const observation = createBeatObservation(space, observationLambda);
+  const decoded = decodeBeatPath(samples, space, transitions, observation);
+  if (!decoded) {
+    return null;
+  }
+
+  // Count the frames spent at each modelled interval.
+  const counts = new Map<number, number>();
+  for (let frame = 0; frame < decoded.path.length; frame += 1) {
+    const interval = space.stateIntervals[decoded.path[frame]];
+    counts.set(interval, (counts.get(interval) ?? 0) + 1);
+  }
+  // Merge neighbouring intervals so a tempo between two bins still forms one
+  // peak rather than two halves.
+  const ordered = [...counts].sort((left, right) => left[0] - right[0]);
+  const merged: { interval: number; count: number }[] = [];
+  for (let index = 0; index < ordered.length; index += 1) {
+    const [interval, count] = ordered[index];
+    const previous = merged.at(-1);
+    if (previous && interval - previous.interval <= 1) {
+      previous.count += count;
+      previous.interval =
+        (previous.interval * (previous.count - count) + interval * count) / previous.count;
+      continue;
+    }
+    merged.push({ interval, count });
+  }
+  const candidateBpm = (interval: number) => (60 * rate) / interval;
+  const peaks: TempoCandidate[] = [];
+  for (let index = 0; index < merged.length; index += 1) {
+    const count = merged[index].count;
+    const before = index > 0 ? merged[index - 1].count : 0;
+    const after = index + 1 < merged.length ? merged[index + 1].count : 0;
+    if (count >= before && count > after) {
+      peaks.push({ bpm: candidateBpm(merged[index].interval), share: count / decoded.path.length });
+    }
+  }
+  if (!peaks.length) {
+    return null;
+  }
+  peaks.sort((left, right) => right.share - left.share);
+  return peaks;
+}

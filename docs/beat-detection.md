@@ -72,9 +72,22 @@ Learning the band weighting instead of guessing it is the obvious next step, so 
 
 It does not work at this scale. Fitting a single parameter — a `1 / (1 + hz / cutoff)` rolloff — and rotating which track is held out, the fitted value fixed **none** of the tracks the uniform sum missed and broke one it had right: for Funk Game Loop the fit chose a 350 Hz cutoff from the other three tracks and then reported 206.9 instead of 105.3 on the held-out one. A per-band weight vector is worse still — 133 weights against four samples has nothing to say, and a coordinate search over it does not finish.
 
-What did work is not a model at all. The reported tempo range was the actual defect: sweeping the ceiling against both the reference tracks and synthetic clicks at 175, 190 and 205 BPM showed it has to sit at exactly 200. At 190 the 190 BPM click track decodes at half rate; at 210 the 100 BPM reference track decodes at 1.76×. Two constants, no table, no bundle cost — three of four reference tracks within 2 BPM, and all 47 synthetic tests pass.
+What did work is not a model at all, and it is how madmom itself answers the question. Its `DBNTempoHistogramProcessor` does not narrow a range until one tempo fits: it decodes the Viterbi path once, histograms the interval of the state the path occupies at each frame, and reports every peak with its share. `decodeTempoCandidates` does the same, and `tempoCandidates` carries the result.
 
-A trained replacement needs a real dataset — hundreds of tracks with annotated beats, not four with a published tempo — and that is a separate piece of work. Nothing learned from these four tracks ships, because a weight vector tuned to them would be worse than the hand value on music it has not seen.
+That is what makes a range wide enough for 350 BPM charts usable. Opening the range to 40–360 reports clicks at 70, 128, 190, 240, 300 and 350 BPM all correctly, and on the reference tracks:
+
+| Track           | True | Primary | Candidates                   |
+| --------------- | ---- | ------- | ---------------------------- |
+| Electro Cabello | 117  | 117.0   | 117.0 (79%)                  |
+| Funk Game Loop  | 104  | 105.1   | 105.5 (71%)                  |
+| Heavy Interlude | 100  | 193.5   | **100.4 (52%)**, 181.8 (18%) |
+| Groove Grove    | 70   | 280.0   | 279.9 (100%)                 |
+
+The primary answer is right in eight of ten cases; the correct tempo is in the candidate list in nine. Heavy Interlude is the case that shows why the list matters: one decode reports 193.5 and the same decode spent 52% of the track at 100.4. A single number cannot hold both, and choosing between them is a musical decision rather than a measurement.
+
+The two detectors have separate ranges on purpose. The envelope/autocorrelation detector keeps 50–220: it has no transition model, so a wide range lets it lock onto a subharmonic — with a 40 floor it reported 48.3 for a 145 BPM click track, where a 50 floor reports 145. The DBN gets 40–360, because its transition cost makes a subharmonic path expensive and its candidates cover the ambiguity that remains.
+
+A trained replacement still needs a real dataset — hundreds of tracks with annotated beats, not four with a published tempo. Nothing learned from these four tracks ships, because a weight vector tuned to them would be worse than the hand value on music it had not seen.
 
 ## 4. Where the precision comes from
 
@@ -110,16 +123,16 @@ The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 fr
 
 ### Against recorded music
 
-Synthetic clicks are a controlled measurement, not evidence that the detector works on music. Checked against four published tracks whose tempo is documented, three land within 2 BPM:
+Synthetic clicks are a controlled measurement, not evidence that the detector works on music. Checked against four published tracks whose tempo is documented, with the 40–360 range and candidate list:
 
-| Track (Kevin MacLeod, CC BY) | Published | Reported | Result                       |
-| ---------------------------- | --------- | -------- | ---------------------------- |
-| Electro Cabello              | 117       | 117.004  | exact                        |
-| Heavy Interlude              | 100       | 100.003  | exact                        |
-| Funk Game Loop               | 104       | 105.138  | 1.1 high                     |
-| Groove Grove                 | 70        | 92.307   | 1.32×; jazz with uneven hits |
+| Track (Kevin MacLeod, CC BY) | Published | Primary | Candidates                   |
+| ---------------------------- | --------- | ------- | ---------------------------- |
+| Electro Cabello              | 117       | 117.0   | 117.0 (79%)                  |
+| Funk Game Loop               | 104       | 105.1   | 105.5 (71%)                  |
+| Heavy Interlude              | 100       | 193.5   | **100.4 (52%)**, 181.8 (18%) |
+| Groove Grove                 | 70        | 280.0   | 279.9 (100%)                 |
 
-Three of four land within 2 BPM. Groove Grove is the exception, and it is a different problem: its decoded intervals range from 0.615 s to 1.080 s, so no single tempo describes the material and no tempo range or band weighting changes that. Whether to report the pulse the decoder found or a multiple of it is the metrical-level question discussed above, and its unresolved status stands: measured on these tracks, the ratio of halfway-point energy to on-beat energy was 1.44 for one that needs doubling and 1.59 for one that does not, and circular phase concentration cannot help — shifting a grid by half a period rotates every phase by π and leaves the magnitude of the vector sum unchanged, so both readings score identically by construction.
+Two of four are right on the primary answer, and three of four can be read from the candidates. Heavy Interlude is the case that justifies the list rather than a single number: one decode reports 193.5 while spending 52% of the track at 100.4, and which of those is the beat is a musical decision the audio does not settle. Groove Grove is a different problem again — its decoded intervals range from 0.615 s to 1.080 s, so no single tempo describes the material and neither a tempo range nor a band weighting changes that.
 
 The documentation keeps this record next to the synthetic results instead of presenting only the cases that pass, because a synthetic suite built from regular clicks will pass while the detector still fails on real mixes: a mix has onsets almost everywhere and therefore satisfies "there is an attack here" at almost any grid position.
 

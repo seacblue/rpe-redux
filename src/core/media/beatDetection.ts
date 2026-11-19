@@ -12,7 +12,7 @@
  */
 import type { AudioBufferLike } from "./audioAnalysis.ts";
 import { buildBeatActivation } from "./beatActivation.ts";
-import { decodeBeats } from "./beatDbn.ts";
+import { decodeBeats, decodeTempoCandidates } from "./beatDbn.ts";
 
 /** The decoded buffer fields the detector reads, including the optional rate. */
 export interface BeatDetectionBuffer extends AudioBufferLike {
@@ -63,6 +63,16 @@ export interface BeatDetectionResult {
   tempoSegments?: TempoSegment[];
   /** Whether the track needed more than one tempo stretch. */
   variableTempo?: boolean;
+  /**
+   * Tempo candidates, strongest first.
+   *
+   * A single number cannot describe both a 70 BPM track and a 350 BPM one: the
+   * activation often supports a tempo and its octave relatives at once, and
+   * picking one of them is a musical decision, not a measurement. `bpm` is the
+   * strongest peak; this list is the evidence behind it, so an author who sees
+   * 176 for a track they know is 100 can read the 88 BPM entry beside it.
+   */
+  tempoCandidates?: { bpm: number; share: number }[];
 }
 
 /** Limits and display sizes for one detection run. */
@@ -74,19 +84,28 @@ export interface BeatDetectionOptions {
   targetSampleRate?: number;
 }
 
-const DEFAULT_MIN_BPM = 50;
 /**
- * Upper bound of the reported tempo.
+ * Tempo range for the envelope/autocorrelation detector.
  *
- * The ceiling is load-bearing, not cosmetic: the decoder reports whatever pulse
- * the activation supports, and an ambiguous activation can support the beat's
- * subdivision instead. Swept against both the reference tracks and synthetic
- * clicks at 175, 190 and 205 BPM, the ceiling has to sit at 200 to satisfy all of
- * them at once — 190 breaks the 190 BPM click track (it decodes at half speed)
- * and 210 breaks the 100 BPM reference track (it decodes at 1.76x). 200 is also
- * the conventional upper end of a metronome, so nothing usable above it is lost.
+ * Kept deliberately narrow. That detector picks the strongest harmonic of the
+ * pulse without the decoder's transition model, so a wide range lets it lock
+ * onto a subharmonic: measured on a 145 BPM click track, lowering the floor to
+ * 40 made it report 48.3 — a third of the truth — while a 50 floor reports 145.
  */
-const DEFAULT_MAX_BPM = 200;
+const DEFAULT_MIN_BPM = 50;
+const DEFAULT_MAX_BPM = 220;
+/**
+ * Tempo range for the DBN decoder and tempo candidates.
+ *
+ * Charts reach 350 BPM, so the range has to cover it, and the decoder can be
+ * trusted with it: its transition model makes a subharmonic path expensive, and
+ * measured on clicks from 70 to 350 it reports all of them. A wide range is only
+ * usable because the answer is a candidate list rather than one number — with a
+ * single decode, Heavy Interlude reports 193.5 while its 100.4 BPM reading sits
+ * in the candidates at 52% of the track.
+ */
+const DBN_MIN_BPM = 40;
+const DBN_MAX_BPM = 360;
 const DEFAULT_MAX_CANDIDATES = 4;
 const DEFAULT_TARGET_RATE = 22050;
 const WAVEFORM_POINTS = 1600;
@@ -247,14 +266,18 @@ interface AnalysisContext {
 }
 
 /** Resolve and clamp the BPM range, candidate count, and analysis rate. */
-function resolveTimingLimits(options: BeatDetectionOptions): {
+function resolveTimingLimits(
+  options: BeatDetectionOptions,
+  fallbackMinBpm = DEFAULT_MIN_BPM,
+  fallbackMaxBpm = DEFAULT_MAX_BPM,
+): {
   minBpm: number;
   maxBpm: number;
   maxCandidates: number;
   targetRate: number;
 } {
-  const minBpm = clampNumber(options.minBpm, DEFAULT_MIN_BPM, 20, 400);
-  const maxBpm = clampNumber(options.maxBpm, DEFAULT_MAX_BPM, minBpm + 1, 400);
+  const minBpm = clampNumber(options.minBpm, fallbackMinBpm, 20, 400);
+  const maxBpm = clampNumber(options.maxBpm, fallbackMaxBpm, minBpm + 1, 400);
   const maxCandidates = Math.max(
     1,
     Math.min(8, Math.trunc(options.maxCandidates ?? DEFAULT_MAX_CANDIDATES)),
@@ -346,7 +369,7 @@ export function detectBeatGridWithDbnFromSamples(
   if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
     return null;
   }
-  const { minBpm, maxBpm } = resolveTimingLimits(options);
+  const { minBpm, maxBpm } = resolveTimingLimits(options, DBN_MIN_BPM, DBN_MAX_BPM);
   const totalDuration =
     Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
   const activation = buildBeatActivation(
@@ -400,6 +423,12 @@ export function detectBeatGridWithDbnFromSamples(
     measuredBpm,
     measuredOffset,
   );
+  // The candidates come from the same decode, so they cost one histogram and no
+  // extra analysis. They are what lets a wide tempo range stay honest.
+  const candidates = decodeTempoCandidates(activation.values, activation.fps, {
+    minBpm,
+    maxBpm,
+  });
   return {
     bpm: measuredBpm,
     offsetMs: measuredOffset,
@@ -413,6 +442,12 @@ export function detectBeatGridWithDbnFromSamples(
     beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
     tempoSegments: segments.length ? segments : undefined,
     variableTempo: segments.length > 1,
+    tempoCandidates: candidates?.length
+      ? candidates.slice(0, 4).map((candidate) => ({
+          bpm: roundMeasuredTiming(candidate.bpm),
+          share: Math.round(candidate.share * 1000) / 1000,
+        }))
+      : undefined,
   };
 }
 

@@ -143,20 +143,19 @@ test("the tempo range is honoured at both ends", () => {
   }
 });
 
-test("a tempo above the reported ceiling comes back at half rate", () => {
-  // The default ceiling is 200 BPM, which is what keeps a 100 BPM reference
-  // track from being reported at 1.76x. The trade is explicit: a 205 BPM track
-  // is reported at 102.5 rather than 205, because a chart is counted at the
-  // lower rate anyway. Widening the ceiling to cover this case moves the error
-  // to the other end instead, so the test records the boundary rather than
-  // hiding it.
-  const hits = barPattern(205, [1]);
-  const result = detectBeatGridWithDbnFromSamples(render(205, 0.07, hits), SAMPLE_RATE, SECONDS);
-  assert.ok(result, "a grid was found at 205 BPM");
-  assert.ok(
-    Math.abs(result.bpm - 102.5) < 1,
-    `expected half rate near 102.5, measured ${result.bpm}`,
-  );
+test("a fast chart is reported at its own tempo", () => {
+  // Charts reach 350 BPM, so the range covers it. Measured on clicks from 70 to
+  // 350, the primary answer is correct across the whole span; the candidate list
+  // is what makes a wide range honest when the activation supports a multiple.
+  for (const bpm of [205, 240, 300, 350]) {
+    const hits = barPattern(bpm, [1]);
+    const result = detectBeatGridWithDbnFromSamples(render(bpm, 0.05, hits), SAMPLE_RATE, SECONDS);
+    assert.ok(result, `a grid was found at ${bpm} BPM`);
+    assert.ok(
+      Math.abs(result.bpm - bpm) < bpm * 0.05,
+      `expected about ${bpm}, measured ${result.bpm}`,
+    );
+  }
 });
 
 test("the reported offset stays on the first beat for every pattern", () => {
