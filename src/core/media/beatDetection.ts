@@ -11,6 +11,8 @@
  * the result is a plain value that a caller can preview, edit, or commit.
  */
 import type { AudioBufferLike } from "./audioAnalysis.ts";
+import { buildBeatActivation } from "./beatActivation.ts";
+import { decodeBeats } from "./beatDbn.ts";
 
 /** The decoded buffer fields the detector reads, including the optional rate. */
 export interface BeatDetectionBuffer extends AudioBufferLike {
@@ -257,6 +259,83 @@ export function detectBeatGridFromSamples(
   }
   const context = buildAnalysis(samples, sampleRate, duration, options);
   return context ? fixedFromEnvelope(samples, context) : null;
+}
+
+/**
+ * Detect fixed timing with the ported madmom decoder.
+ *
+ * The autocorrelation detector fits one grid to onset energy; the dynamic
+ * Bayesian decoder keeps tempo hypotheses alive across the whole track and
+ * picks the most probable path, which is what makes it steadier on material
+ * with syncopation or a near-miss tempo. Both entry points return the same
+ * result shape, so a caller can choose the decoder or fall back without
+ * changing how it reads the answer.
+ *
+ * The DBN proposes the grid; the same low-peak and raw-attack refits then run
+ * on top of it, so the reported offset keeps the sub-frame accuracy the
+ * envelope alone cannot reach.
+ */
+export function detectBeatGridWithDbnFromSamples(
+  samples: Float32Array,
+  sampleRate: number,
+  duration?: number,
+  options: BeatDetectionOptions = {},
+): BeatDetectionResult | null {
+  if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    return null;
+  }
+  const { minBpm, maxBpm } = resolveTimingLimits(options);
+  const totalDuration =
+    Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
+  const activation = buildBeatActivation(
+    {
+      length: samples.length,
+      numberOfChannels: 1,
+      duration: totalDuration,
+      getChannelData: () => samples,
+    },
+    sampleRate,
+  );
+  if (!activation) {
+    return null;
+  }
+  const beats = decodeBeats(activation.values, activation.fps, { minBpm, maxBpm });
+  if (!beats || beats.length < 4) {
+    return null;
+  }
+  // The decoded beats are already a grid; take its median interval as the
+  // period so a couple of misplaced beats cannot set the tempo.
+  const intervals: number[] = [];
+  for (let index = 1; index < beats.length; index += 1) {
+    intervals.push(beats[index] - beats[index - 1]);
+  }
+  intervals.sort((left, right) => left - right);
+  const median = intervals[Math.floor(intervals.length / 2)];
+  if (!(median > 0)) {
+    return null;
+  }
+  const bpm = clampBpm(60 / median, minBpm, maxBpm);
+  const anchor = beats[0];
+  const refined = refineTimingFromAttacks(samples, sampleRate, anchor, bpm, totalDuration);
+  const finalBpm = clampBpm(refined?.bpm ?? bpm, minBpm, maxBpm);
+  const offsetSeconds = Math.max(0, refined?.offsetSeconds ?? anchor);
+  const measuredBpm = roundMeasuredTiming(finalBpm);
+  const measuredOffset = roundMeasuredTiming(offsetSeconds * 1000);
+  if (!(measuredBpm > 0) || !Number.isFinite(measuredOffset)) {
+    return null;
+  }
+  return {
+    bpm: measuredBpm,
+    offsetMs: measuredOffset,
+    waveform: {
+      peaks: waveformPeaks(samples, WAVEFORM_POINTS),
+      duration: totalDuration,
+    },
+    onset: decimate(activation.values, ONSET_POINTS),
+    onsetRate: activation.fps,
+    duration: totalDuration,
+    beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
+  };
 }
 
 /** Detect a fixed grid from the shared analysis envelope, or `null` when unclear. */
