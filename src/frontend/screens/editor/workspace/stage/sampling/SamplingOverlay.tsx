@@ -371,10 +371,10 @@ export function SamplingOverlay() {
         ? { x: viewport.left + viewport.width / 2, y: viewport.top + viewport.height / 2 }
         : { x: 0, y: 0 };
 
-  /** Recompute one pointer sample from the current projection. */
+  /** Recompute one pointer sample from the current projection and painted guides. */
   const sampleAt = (clientX: number, clientY: number): SamplingPointerSample | null => {
     const layer = root.current;
-    if (!layer || !projection) {
+    if (!layer || !projection || !geometry) {
       return null;
     }
     return sampleSamplingPointer(
@@ -384,6 +384,7 @@ export function SamplingOverlay() {
       projection,
       target.axis,
       samplingSettingsForPointer(settings, shiftHiddenRef.current),
+      geometry,
     );
   };
 
@@ -459,7 +460,7 @@ export function SamplingOverlay() {
           setInteraction("camera");
           return;
         }
-        if (event.button !== 0 || session.locked || gesture.current) {
+        if (event.button !== 0 || gesture.current) {
           return;
         }
         const sample = sampleAt(event.clientX, event.clientY);

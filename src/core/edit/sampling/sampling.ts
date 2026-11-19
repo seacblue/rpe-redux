@@ -4,7 +4,7 @@
  * A sampling session reads both anchors of one event at once, supports the five
  * geometric values the workspace can paint, and writes the start value, the end
  * value, and the easing curve in one history entry. This module owns the durable
- * guide preferences, the snapping rule, and the commit, so the inspector and the
+ * guide preferences, the guide values, and the commit, so the inspector and the
  * workspace overlay cannot disagree about what a sample means.
  */
 import { t } from "../../../i18n/index.ts";
@@ -284,68 +284,6 @@ export function normalizeSamplingScalar(axis: SamplingAxis, raw: number): number
     case "speed":
       return roundTo(value, 2);
   }
-}
-
-/** Linear distance between two degree values; 0° and 360° are distinct. */
-function angleDistance(left: number, right: number): number {
-  return Math.abs(left - right);
-}
-
-/** The guide nearest one scalar value, or null for an axis the overlay guides itself. */
-function nearestSamplingGuide(
-  axis: SamplingAxis,
-  value: number,
-  settings: SamplingSettings,
-): number | null {
-  if (axis === "x" || axis === "y") {
-    return null;
-  }
-  const guides = samplingGuideValues(axis, settings);
-  if (!guides.length) {
-    return null;
-  }
-  const { min, max } = samplingRangeOf(axis);
-  const nextGuide = guides.find((guide) => guide > min);
-  const step = Math.max(Number.EPSILON, (nextGuide ?? max) - min);
-  const extendedGuide = min + Math.round((value - min) / step) * step;
-  let nearest = extendedGuide;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  for (const guide of [...guides, extendedGuide]) {
-    const distance = axis === "rotation" ? angleDistance(value, guide) : Math.abs(value - guide);
-    if (distance < nearestDistance) {
-      nearest = guide;
-      nearestDistance = distance;
-    }
-  }
-  return nearest;
-}
-
-/**
- * Snap a raw value to the nearest guide only when it is within `tolerance`.
- *
- * A value farther from every guide keeps its normalized arbitrary value. XY
- * axes return their normalized value: the overlay derives their viewport guide
- * from `guideStep` and only passes an already-snapped coordinate to this rule.
- */
-export function snapSamplingScalar(
-  axis: SamplingAxis,
-  raw: number,
-  settings: SamplingSettings,
-  tolerance: number,
-): { value: number; snapped: boolean } {
-  const value = normalizeSamplingScalar(axis, raw);
-  if (!settings.guidesEnabled || Number.isNaN(tolerance) || tolerance < 0) {
-    return { value, snapped: false };
-  }
-  const nearest = nearestSamplingGuide(axis, value, settings);
-  if (nearest === null) {
-    return { value, snapped: false };
-  }
-  const distance = axis === "rotation" ? angleDistance(value, nearest) : Math.abs(value - nearest);
-  if (distance <= tolerance) {
-    return { value: nearest, snapped: true };
-  }
-  return { value, snapped: false };
 }
 
 /** Read the stored sampler preferences, migrating the old grid field names. */

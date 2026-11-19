@@ -13,14 +13,10 @@ import {
   normalizeSamplingScalar,
   samplingGuideValues,
   samplingRangeOf,
-  snapSamplingScalar,
   type SamplingAxis,
   type SamplingSettings,
   type SamplingValue,
 } from "../../../../../../core/edit/sampling/sampling.ts";
-
-/** Distance in CSS pixels under which a pointer snaps to a guide. */
-export const SAMPLING_SNAP_PX = 6;
 
 /** Guard against a pathologically dense guide list at extreme zoom-out. */
 const MAX_GUIDE_LINES = 1200;
@@ -154,15 +150,15 @@ export function samplingGuideOpacity(
   return unit(boundaryOpacity + cursorOpacity);
 }
 
-/** Pixel distance at which a sampling guide starts responding to the pointer. */
+/** Pixel distance at which a guide highlights and supplies the sampled value. */
 export const SAMPLING_GUIDE_HOVER_DISTANCE = 15;
 
-/** Return the nearest guide key when the pointer is close enough to one line. */
-export function nearestGuideKey(
+/** Return the nearest guide line when the pointer is close enough to one. */
+export function nearestGuideLine(
   lines: readonly SamplingGuideLine[],
   pointerPosition: number,
   maxDistance = SAMPLING_GUIDE_HOVER_DISTANCE,
-): string | null {
+): SamplingGuideLine | null {
   let nearest: SamplingGuideLine | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const line of lines) {
@@ -172,7 +168,16 @@ export function nearestGuideKey(
       nearestDistance = distance;
     }
   }
-  return nearest && nearestDistance <= maxDistance ? nearest.key : null;
+  return nearest && nearestDistance <= maxDistance ? nearest : null;
+}
+
+/** Return the nearest guide key when the pointer is close enough to one line. */
+export function nearestGuideKey(
+  lines: readonly SamplingGuideLine[],
+  pointerPosition: number,
+  maxDistance = SAMPLING_GUIDE_HOVER_DISTANCE,
+): string | null {
+  return nearestGuideLine(lines, pointerPosition, maxDistance)?.key ?? null;
 }
 
 /** Resolve the hovered sampling guide while honoring the editor preference. */
@@ -295,27 +300,12 @@ export function stageXToScalar(
   return min + progress * (max - min);
 }
 
-/** Scalar distance equivalent to the snap radius, in the active axis' units. */
-export function scalarTolerance(axis: SamplingAxis, viewport: SamplingViewport): number {
-  if (viewport.width <= 0) {
-    return 0;
-  }
-  const { min, max } = scalarBounds(axis);
-  return (SAMPLING_SNAP_PX / viewport.width) * Math.abs(max - min);
-}
-
 /** Return pointer settings with guide snapping disabled for a hidden-grid modifier. */
 export function samplingSettingsForPointer(
   settings: SamplingSettings,
   guidesHidden: boolean,
 ): SamplingSettings {
   return guidesHidden ? { ...settings, guidesEnabled: false } : settings;
-}
-
-/** Chart-space distance equivalent to the snap radius on one XY axis. */
-export function xyTolerance(axis: "x" | "y", projection: SamplingProjection): number {
-  const scale = Math.abs(axis === "x" ? projection.scaleX : projection.scaleY);
-  return SAMPLING_SNAP_PX / Math.max(1e-6, scale);
 }
 
 /** Compact, unit-aware text for one scalar value. */
@@ -466,43 +456,13 @@ function buildScalarScale(axis: SamplingAxis): SamplingScalarScale {
   };
 }
 
-/** Snap one XY coordinate to the viewport guide grid when it is close enough. */
-function snapXY(
-  axis: "x" | "y",
-  raw: number,
-  settings: SamplingSettings,
-  tolerance: number,
-): { value: number; snapped: boolean } {
-  const step = Math.max(0.01, settings.guideStep);
-  const nearest = Math.round(raw / step) * step;
-  const close = settings.guidesEnabled && Math.abs(raw - nearest) <= tolerance;
-  // The core sampler owns normalization; the overlay supplies the viewport
-  // guide because the chart grid is camera-dependent.
-  const result = snapSamplingScalar(axis, close ? nearest : raw, settings, tolerance);
-  return { value: result.value, snapped: close };
-}
-
-/** Snap an XY pointer only when it is close to a full guide intersection. */
-function snapXYPoint(
-  raw: { x: number; y: number },
-  settings: SamplingSettings,
-  projection: SamplingProjection,
-): { point: { x: number; y: number }; snapped: boolean } {
-  const x = snapXY("x", raw.x, settings, xyTolerance("x", projection));
-  const y = snapXY("y", raw.y, settings, xyTolerance("y", projection));
-  if (x.snapped && y.snapped) {
-    return { point: { x: x.value, y: y.value }, snapped: true };
-  }
-  return {
-    point: {
-      x: normalizeSamplingScalar("x", raw.x),
-      y: normalizeSamplingScalar("y", raw.y),
-    },
-    snapped: false,
-  };
-}
-
-/** Convert a client pointer to the sample for the active axis. */
+/**
+ * Convert a client pointer to the sample for the active axis.
+ *
+ * The painted guide lines are the single source of snapping: a line the guide
+ * layer highlights is exactly the line whose value the sample takes. Without a
+ * guide in range the pointer keeps its normalized chart value.
+ */
 export function sampleSamplingPointer(
   clientX: number,
   clientY: number,
@@ -510,32 +470,34 @@ export function sampleSamplingPointer(
   projection: SamplingProjection,
   axis: SamplingAxis,
   settings: SamplingSettings,
+  geometry: SamplingGeometry,
 ): SamplingPointerSample {
   const viewport = viewportOf(projection);
   const stageX = clientX - bounds.left;
   const stageY = clientY - bounds.top;
+  const guideX = settings.guidesEnabled ? nearestGuideLine(geometry.vertical, stageX) : null;
+  const guideY = settings.guidesEnabled ? nearestGuideLine(geometry.horizontal, stageY) : null;
+
   if (isScalarAxis(axis)) {
     const raw = stageXToScalar(axis, stageX, viewport);
-    const result = snapSamplingScalar(axis, raw, settings, scalarTolerance(axis, viewport));
-    const x = scalarToStageX(axis, result.value, viewport);
-    const point = chartPointOf(stageX, stageY, projection);
+    const scalar = guideX ? guideX.value : normalizeSamplingScalar(axis, raw);
+    const x = guideX ? guideX.position : scalarToStageX(axis, scalar, viewport);
     return {
-      value: { axis, scalar: result.value, point },
+      value: { axis, scalar, point: chartPointOf(x, stageY, projection) },
       stage: { x, y: stageY },
-      snapped: result.snapped,
+      snapped: guideX !== null,
     };
   }
 
   const raw = chartPointOf(stageX, stageY, projection);
-  const snapped = snapXYPoint(raw, settings, projection);
+  const x = guideX ? guideX.value : normalizeSamplingScalar("x", raw.x);
+  const y = guideY ? guideY.value : normalizeSamplingScalar("y", raw.y);
+  const anchorX = guideX ? guideX.position : stageX;
+  const anchorY = guideY ? guideY.position : stageY;
   return {
-    value: {
-      axis,
-      scalar: axis === "x" ? snapped.point.x : snapped.point.y,
-      point: snapped.point,
-    },
-    stage: stagePointOf(snapped.point.x, snapped.point.y, projection),
-    snapped: snapped.snapped,
+    value: { axis, scalar: axis === "x" ? x : y, point: { x, y } },
+    stage: { x: anchorX, y: anchorY },
+    snapped: axis === "x" ? guideX !== null : guideY !== null,
   };
 }
 
