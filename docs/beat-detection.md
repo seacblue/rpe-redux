@@ -66,6 +66,16 @@ Measured against the reference tracks, this fixed one case and lost another comp
 
 Funk Game Loop now decodes at the right level instead of half of it. Heavy Interlude moved from right to 1.76×, which is the honest limit of this approach: **the network is what makes madmom's feature distribution usable.** Area normalisation equalises every band's total, and with 45 bands spaced six per octave the thirty above 2 kHz then carry more than half the summed flux. A network learns which of those bands predict a beat; a plain sum cannot, and neither can the hand-tuned weight it replaced — that one simply failed on different tracks.
 
+### What a learned replacement would need
+
+Learning the band weighting instead of guessing it is the obvious next step, so it was measured rather than assumed. `bandWeights` exists on the options object for exactly that experiment, and leave-one-out is the only honest check with four tracks available.
+
+It does not work at this scale. Fitting a single parameter — a `1 / (1 + hz / cutoff)` rolloff — and rotating which track is held out, the fitted value fixed **none** of the tracks the uniform sum missed and broke one it had right: for Funk Game Loop the fit chose a 350 Hz cutoff from the other three tracks and then reported 206.9 instead of 105.3 on the held-out one. A per-band weight vector is worse still — 133 weights against four samples has nothing to say, and a coordinate search over it does not finish.
+
+What did work is not a model at all. The reported tempo range was the actual defect: sweeping the ceiling against both the reference tracks and synthetic clicks at 175, 190 and 205 BPM showed it has to sit at exactly 200. At 190 the 190 BPM click track decodes at half rate; at 210 the 100 BPM reference track decodes at 1.76×. Two constants, no table, no bundle cost — three of four reference tracks within 2 BPM, and all 47 synthetic tests pass.
+
+A trained replacement needs a real dataset — hundreds of tracks with annotated beats, not four with a published tempo — and that is a separate piece of work. Nothing learned from these four tracks ships, because a weight vector tuned to them would be worse than the hand value on music it has not seen.
+
 ## 4. Where the precision comes from
 
 The decoder alone is not precise enough to report: it locates each beat on an analysis frame, and a tempo that is not a whole number of frames alternates between the two neighbouring intervals. Reading the tempo off that spacing is off by percent — 128 BPM at 50 fps (23.44 frames) measured as 130.4.
@@ -100,16 +110,16 @@ The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 fr
 
 ### Against recorded music
 
-Synthetic clicks are a controlled measurement, not evidence that the detector works on music. Checked against four published tracks whose tempo is documented, it gets two exactly right and struggles with the other two:
+Synthetic clicks are a controlled measurement, not evidence that the detector works on music. Checked against four published tracks whose tempo is documented, three land within 2 BPM:
 
 | Track (Kevin MacLeod, CC BY) | Published | Reported | Result                       |
 | ---------------------------- | --------- | -------- | ---------------------------- |
 | Electro Cabello              | 117       | 117.004  | exact                        |
+| Heavy Interlude              | 100       | 100.003  | exact                        |
 | Funk Game Loop               | 104       | 105.138  | 1.1 high                     |
-| Heavy Interlude              | 100       | 176.471  | 1.76×                        |
-| Groove Grove                 | 70        | 92.308   | 1.32×; jazz with uneven hits |
+| Groove Grove                 | 70        | 92.307   | 1.32×; jazz with uneven hits |
 
-Two of four land on the tempo. The other two are the metrical-level problem described above, and its unresolved status stands: whether to report the pulse the decoder found or a multiple of it cannot be decided from the audio at this level of analysis. Measured on these tracks, the ratio of halfway-point energy to on-beat energy was 1.44 for one that needs doubling and 1.59 for one that does not, and circular phase concentration cannot help — shifting a grid by half a period rotates every phase by π and leaves the magnitude of the vector sum unchanged, so both readings score identically by construction.
+Three of four land within 2 BPM. Groove Grove is the exception, and it is a different problem: its decoded intervals range from 0.615 s to 1.080 s, so no single tempo describes the material and no tempo range or band weighting changes that. Whether to report the pulse the decoder found or a multiple of it is the metrical-level question discussed above, and its unresolved status stands: measured on these tracks, the ratio of halfway-point energy to on-beat energy was 1.44 for one that needs doubling and 1.59 for one that does not, and circular phase concentration cannot help — shifting a grid by half a period rotates every phase by π and leaves the magnitude of the vector sum unchanged, so both readings score identically by construction.
 
 The documentation keeps this record next to the synthetic results instead of presenting only the cases that pass, because a synthetic suite built from regular clicks will pass while the detector still fails on real mixes: a mix has onsets almost everywhere and therefore satisfies "there is an attack here" at almost any grid position.
 

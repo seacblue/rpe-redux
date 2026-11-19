@@ -54,6 +54,16 @@ export interface BeatActivationOptions {
   numBands?: number;
   /** Frames per second; madmom's front end runs at 100. */
   fps?: number;
+  /**
+   * Weight applied to each filterbank band, in band order.
+   *
+   * This is the stand-in for the input layer of madmom's network, which learns
+   * how much each band may say about a beat. Without it every band contributes
+   * equally after the filterbank's area normalisation, which gives the thirty
+   * bands above 2 kHz — the cymbals and upper harmonics — more than half the
+   * summed flux. Bands beyond the end of this array keep weight 1.
+   */
+  bandWeights?: readonly number[];
 }
 
 /** madmom `FilteredSpectrogramProcessor` defaults. */
@@ -367,17 +377,22 @@ export function buildBeatActivation(
     return null;
   }
 
-  // Sum every resolution and every band into one value per frame.
+  // Sum every resolution and every band into one value per frame, applying the
+  // band weight where one is given.
+  const bandWeights = options.bandWeights;
   const activation = new Float32Array(frames);
+  let bandColumn = 0;
   for (const { values, bands } of differences) {
     for (let frame = 0; frame < frames; frame += 1) {
       const row = frame * bands;
       let sum = 0;
       for (let band = 0; band < bands; band += 1) {
-        sum += values[row + band] ?? 0;
+        const weight = bandWeights?.[bandColumn + band] ?? 1;
+        sum += (values[row + band] ?? 0) * weight;
       }
       activation[frame] += sum;
     }
+    bandColumn += bands;
   }
 
   // Scale to 0..1 by a high percentile rather than the peak: a single frame of

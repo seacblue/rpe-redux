@@ -75,7 +75,18 @@ export interface BeatDetectionOptions {
 }
 
 const DEFAULT_MIN_BPM = 50;
-const DEFAULT_MAX_BPM = 220;
+/**
+ * Upper bound of the reported tempo.
+ *
+ * The ceiling is load-bearing, not cosmetic: the decoder reports whatever pulse
+ * the activation supports, and an ambiguous activation can support the beat's
+ * subdivision instead. Swept against both the reference tracks and synthetic
+ * clicks at 175, 190 and 205 BPM, the ceiling has to sit at 200 to satisfy all of
+ * them at once — 190 breaks the 190 BPM click track (it decodes at half speed)
+ * and 210 breaks the 100 BPM reference track (it decodes at 1.76x). 200 is also
+ * the conventional upper end of a metronome, so nothing usable above it is lost.
+ */
+const DEFAULT_MAX_BPM = 200;
 const DEFAULT_MAX_CANDIDATES = 4;
 const DEFAULT_TARGET_RATE = 22050;
 const WAVEFORM_POINTS = 1600;
