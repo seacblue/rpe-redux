@@ -78,7 +78,14 @@ export interface BeatDbnOptions {
   observationLambda?: number;
   /** Move each decoded beat to the strongest activation inside its beat range. */
   correct?: boolean;
-  /** Activation rate to decode at when the caller's rate is higher. */
+  /**
+   * Decode rate, when it should differ from the activation's own rate.
+   *
+   * Resampling a beat activation flattens its peaks, and a flattened peak at a
+   * non-integer frame period reads as a fraction of the real tempo, so this is
+   * only worth setting when a caller explicitly trades beat resolution for a
+   * cheaper decode.
+   */
   targetFps?: number;
 }
 
@@ -86,7 +93,6 @@ const DEFAULT_MIN_BPM = 55;
 const DEFAULT_MAX_BPM = 215;
 const DEFAULT_TRANSITION_LAMBDA = 100;
 const DEFAULT_OBSERVATION_LAMBDA = 16;
-const DEFAULT_TARGET_FPS = 50;
 /**
  * Upper bound on back-pointer cells. The table costs one index per frame per
  * state, so a long track at a fine tempo grid can otherwise reach hundreds of
@@ -448,18 +454,28 @@ export function decodeBeats(
     clampNumber(options.observationLambda, DEFAULT_OBSERVATION_LAMBDA, 2, 64),
   );
   const correct = options.correct ?? true;
-  const targetFps = clampNumber(options.targetFps, Math.min(fps, DEFAULT_TARGET_FPS), 1, 1000);
-
-  let rate = Math.min(fps, targetFps);
-  let samples = resampleActivation(activation, fps, rate);
+  // The activation's own rate is the right decode rate: a beat peak is only a
+  // frame or two wide, so any resampling flattens it, and a flattened peak at a
+  // non-integer frame period reads as a half or a third of the real tempo. The
+  // memory budget is met by coarsening the tempo grid instead, which costs
+  // tempo resolution rather than beat resolution.
+  const rate = clampNumber(options.targetFps, fps, 1, 1000);
+  const samples = rate === fps ? activation : resampleActivation(activation, fps, rate);
   let space = createBeatStateSpace((60 * rate) / maxBpm, (60 * rate) / minBpm, options.numTempi);
-  // A fine tempo grid over a long track can exceed the back-pointer budget; a
-  // coarser activation keeps the decode inside a predictable memory footprint
-  // without changing the algorithm.
-  while (samples.length * space.numStates > MAX_BACKPOINTER_CELLS && rate > 8) {
-    rate = Math.max(8, rate / 2);
-    samples = resampleActivation(activation, fps, rate);
-    space = createBeatStateSpace((60 * rate) / maxBpm, (60 * rate) / minBpm, options.numTempi);
+  if (samples.length * space.numStates > MAX_BACKPOINTER_CELLS) {
+    // Keep the number of modelled tempi small enough that the back-pointer table
+    // fits. Interval count grows faster than tempo count, so this is the term
+    // that matters for memory.
+    const budget = Math.max(8, Math.floor(MAX_BACKPOINTER_CELLS / samples.length));
+    let numTempi = Math.max(4, Math.floor(Math.sqrt(budget) / 2));
+    for (;;) {
+      const limited = createBeatStateSpace((60 * rate) / maxBpm, (60 * rate) / minBpm, numTempi);
+      if (limited.numStates <= budget || numTempi <= 4) {
+        space = limited;
+        break;
+      }
+      numTempi = Math.max(4, Math.floor(numTempi / 2));
+    }
   }
   if (!space.numStates) {
     return null;

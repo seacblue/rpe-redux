@@ -319,7 +319,6 @@ export function detectBeatGridWithDbnFromSamples(
   const level = resolveMetricalLevel(samples, sampleRate, fitted.bpm, fitted.offsetSeconds, {
     minBpm,
     maxBpm,
-    fps: activation.fps,
   });
   const measuredBpm = roundMeasuredTiming(clampBpm(level.bpm, minBpm, maxBpm));
   const measuredOffset = roundMeasuredTiming(Math.max(0, level.offsetSeconds) * 1000);
@@ -343,22 +342,28 @@ export function detectBeatGridWithDbnFromSamples(
 /**
  * Choose between a detected pulse rate and its double.
  *
- * A decoder can settle on half the real pulse rate: every decoded beat is a
- * genuine beat, but the beats between them were never modelled. Comparing the
- * strength of the hits at the decoded beats with the hits halfway between them
- * decides which is the musical beat — if the midway hits are comparably strong,
- * the fast reading is right and the grid is rebuilt on it.
+ * A decoder can settle on every second beat: each decoded beat is genuine, but
+ * the beats between them were never modelled. Telling the two readings apart by
+ * amplitude does not work. A pattern of 1.0 / 0.3 / 0.5 / 0.3 has a quiet but
+ * real hit between the loud ones, and its midway level ends up close to that of
+ * a pattern that genuinely has no beat there, so no amplitude threshold
+ * separates the two cases.
+ *
+ * The test therefore asks whether the waveform *rises* at the midway points: an
+ * onset is a steep energy increase, while bleed from a neighbouring hit is a
+ * decay. That is the same detection the attack refit uses, so both agree about
+ * what counts as a hit.
  *
  * Only doubling is considered, and only within the caller's tempo bounds: a
  * halving would be guessing that strong beats are actually off-beats, which
- * cannot be decided from attack strength alone.
+ * attack presence alone cannot decide.
  */
 function resolveMetricalLevel(
   samples: Float32Array,
   sampleRate: number,
   bpm: number,
   offsetSeconds: number,
-  limits: { minBpm: number; maxBpm: number; fps: number },
+  limits: { minBpm: number; maxBpm: number },
 ): { bpm: number; offsetSeconds: number } {
   const period = 60 / bpm;
   const doubled = bpm * 2;
@@ -366,45 +371,30 @@ function resolveMetricalLevel(
     return { bpm, offsetSeconds };
   }
   const duration = samples.length / sampleRate;
-  const onBeat: number[] = [];
-  const offBeat: number[] = [];
-  // Sample a bounded number of beats: enough for a stable ratio, few enough to
-  // keep the extra attack searches cheap.
+  let onCount = 0;
+  let offCount = 0;
+  // Sample a bounded number of beats: enough to be sure, few enough to keep the
+  // extra onset searches cheap.
   const stride = Math.max(1, Math.ceil((duration - offsetSeconds) / period / 64));
   for (let beat = 0; offsetSeconds + beat * period < duration; beat += stride) {
     const expected = offsetSeconds + beat * period;
-    onBeat.push(attackStrength(samples, sampleRate, expected));
+    if (attackDelta(samples, sampleRate, expected) !== null) {
+      onCount += 1;
+    }
     const midway = expected + period / 2;
-    if (midway < duration) {
-      offBeat.push(attackStrength(samples, sampleRate, midway));
+    if (midway + ATTACK_WINDOW < duration && attackDelta(samples, sampleRate, midway) !== null) {
+      offCount += 1;
     }
   }
-  if (onBeat.length < 4 || offBeat.length < 4) {
+  if (onCount < 4) {
     return { bpm, offsetSeconds };
   }
-  const strong = Math.max(1e-12, mean(onBeat));
-  const between = mean(offBeat);
-  // Most of the energy sits midway, so the decoded grid is every second beat.
-  if (between < strong * 0.55) {
+  // If most halfway points hold their own attack, the decoded grid is every
+  // second beat and the real tempo is twice as fast.
+  if (offCount < onCount * 0.5) {
     return { bpm, offsetSeconds };
   }
-  // The grid already holds beats at the fast rate; keep its phase, which is the
-  // first decoded beat, so the answer still starts on a real attack.
   return { bpm: doubled, offsetSeconds };
-}
-
-/** Peak attack energy near a time, used to compare metrical levels. */
-function attackStrength(samples: Float32Array, sampleRate: number, time: number): number {
-  const from = Math.max(1, Math.floor((time - ATTACK_WINDOW) * sampleRate));
-  const to = Math.min(samples.length - 1, Math.ceil((time + ATTACK_WINDOW) * sampleRate));
-  let peak = 0;
-  for (let index = from; index <= to; index += 1) {
-    const sample = samples[index] ?? 0;
-    if (sample * sample > peak) {
-      peak = sample * sample;
-    }
-  }
-  return Math.sqrt(peak);
 }
 
 /**

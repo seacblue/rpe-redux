@@ -45,34 +45,37 @@ The beat activation function. madmom derives it from an ensemble of trained bidi
 
 ## 4. Where the precision comes from
 
-The decoder alone is not precise enough to report: it locates each beat on an analysis frame, and at 50 fps a frame is 20 ms. A tempo that is not a whole number of frames therefore alternates between the two neighbouring intervals, and reading the tempo off that spacing is off by percent — 128 BPM measured as 130.4 at a half-frame error.
+The decoder alone is not precise enough to report: it locates each beat on an analysis frame, and a tempo that is not a whole number of frames alternates between the two neighbouring intervals. Reading the tempo off that spacing is off by percent — 128 BPM at 50 fps (23.44 frames) measured as 130.4.
 
-Three steps sit between the decoded path and the number the author sees:
+The decode rate is another trap. Resampling the activation before decoding flattens its peaks, because a beat peak is only a frame or two wide. At 50 fps, 190 BPM came out as 95 and 205 BPM as 68; at the activation's own rate both are exact. The decoder therefore runs at the rate the activation was built at, and a long track is kept within the memory budget by coarsening the tempo grid rather than the timebase.
+
+Three steps then sit between the decoded path and the number the author sees:
 
 1. **Attack refit.** Every decoded beat is matched to the strongest raw attack within 35 ms, and one least-squares line is fitted through those attack times. The refit resolves the period and beat zero below a sample, and the frame quantisation — being zero mean — cancels in the fit. A second pass drops attacks that disagree by more than two frames, which handles a beat whose attack was found on a syncopated hit.
-2. **Metrical level.** An accent pattern can pull the decoder onto half the pulse rate, which is how a 128 BPM track gets reported as 64. The strength of the attacks halfway between decoded beats is compared with the strength on them: when the midway hits are comparably strong, the tempo doubles. This is the same test the autocorrelation detector applies, and on material where every second beat is quiet it is the difference between the right answer and half of it.
+2. **Metrical level.** An accent pattern can pull the decoder onto every second beat, which is how a 128 BPM track gets reported as 64. Amplitude cannot decide this: a pattern of `1.0 / 0.3 / 0.5 / 0.3` has quiet but real hits between the loud ones, and its midway level is close to that of a pattern with nothing there at all. The test asks whether the waveform _rises_ at the midway points — the same onset detection the refit uses — and doubles the tempo when most of them do.
 3. **Refined offset.** The fitted intercept is beat zero, so the reported offset is exact rather than the frame time of the first decoded beat.
 
 `decodeBeats` itself deliberately does not round its output to a grid: it returns the positions it decoded, and the caller decides what to measure.
 
 ## 5. Measured accuracy
 
-Synthetic click tracks with the attack placed at known sample indices (`src/test/media/audio/beatPrecision.test.mjs`), 30 s each, deterministic noise:
+Synthetic click tracks with every onset placed at a known sample index, 24–30 s each, deterministic noise. The expected tempo in each case is the pulse the pattern actually carries, not the nominal BPM.
 
-| Material                       | Measured BPM error | Phase error |
-| ------------------------------ | ------------------ | ----------- |
-| Clean, 128 BPM                 | 0.000              | 0.8 ms      |
-| Noise 0.02 / 0.06              | 0.000              | 0.8 ms      |
-| 112, 133, 145, 178 BPM + noise | 0.000              | 0.7–0.8 ms  |
-| Every second beat quiet        | 0.000              | 0.7 ms      |
-| Every third beat quiet         | 0.000              | 0.7 ms      |
-| Five start phases at 133 BPM   | 0.000              | < 2 ms      |
+| Material                                  | BPM                | Phase  |
+| ----------------------------------------- | ------------------ | ------ |
+| Clean quarters, 70–205 BPM                | exact              | 0–1 ms |
+| 112, 133, 145, 163 BPM + noise            | exact              | 1 ms   |
+| Accented backbeat (1.0 / 0.3 / 0.5 / 0.3) | exact              | 1 ms   |
+| Backbeat only, beats 1&3, beats 2&4       | exact              | 1 ms   |
+| 3/4, 5/4, 7/4 with first-beat accent      | exact              | 1 ms   |
+| Beat one only per bar                     | exact (doubled up) | 1 ms   |
+| Five start phases at 133 BPM              | exact              | < 2 ms |
 
-The tempi in that table are chosen because they are _not_ whole frames at 50 fps; 120 BPM (exactly 25 frames) would hide the quantisation instead of testing it.
+The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 frames) would hide the quantisation instead of testing it. A sweep of 25 rhythm patterns passes 24; the one that does not is tresillo (3+3+2), a cross-rhythm whose "beat" is a matter of interpretation.
 
-Two limits are worth stating plainly:
+Limits worth stating plainly:
 
-- **Swung material is ambiguous, not imprecise.** A 128 BPM track with queued off-beats is indistinguishable from a 64 BPM shuffle by attack strength, and both decoders report the slower reading. No amount of precision fixes this; it is a musical decision the author makes.
+- **Some material has no single right answer.** A swing feel, a pattern with hits only every second beat, and a cross-rhythm are all cases where two tempi describe the same audio. The detector reports the pulse it can defend from the onsets; it does not guess a metrical intent that is not audible.
 - **Very short buffers degrade.** The refit needs roughly eight matched attacks to be exact, so a few seconds of audio reports a frame-accurate tempo.
 
 ## 6. Why not bundle madmom
