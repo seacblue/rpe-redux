@@ -76,6 +76,24 @@ Synthetic click tracks with every onset placed at a known sample index, 24–30 
 
 The tempi are chosen because they are _not_ whole frames; 120 BPM (exactly 25 frames) would hide the quantisation instead of testing it. A sweep of 25 rhythm patterns passes 24; the one that does not is tresillo (3+3+2), a cross-rhythm whose "beat" is a matter of interpretation.
 
+### Against recorded music
+
+Synthetic clicks are a controlled measurement, not evidence that the detector works on music. Checked against four published tracks whose tempo is documented, it gets two exactly right and struggles with the other two:
+
+| Track (Kevin MacLeod, CC BY) | Published | Reported | Result                       |
+| ---------------------------- | --------- | -------- | ---------------------------- |
+| Electro Cabello              | 117       | 117.004  | exact                        |
+| Heavy Interlude              | 100       | 99.999   | exact                        |
+| Funk Game Loop               | 104       | 105.112  | 1.1 BPM high                 |
+| Groove Grove                 | 70        | 147.656  | wrong, and not a clean ratio |
+
+Two findings came out of this and are worth keeping separate from the numbers:
+
+- **A published tempo is not always the recorded tempo.** For Funk Game Loop the decoded interval is a steady 0.5689 s throughout the track, and a ±2 BPM sweep showed 105.11 to be the local optimum — the grid fits worse at 104. The recording plays about a percent faster than the figure in its listing.
+- **Groove Grove is not a fixed-tempo problem.** It is a jazz piece with decorated, uneven hits: decoded intervals range from 0.615 s to 1.080 s, so no single number describes it. A fixed-tempo detector cannot do better on that material without a tempo map, and the map this module produces is not reliable enough there either.
+
+The lesson is about the tests, not the code: a synthetic suite built from regular clicks will pass while the detector still fails on real mixes, because a mix has onsets almost everywhere and therefore satisfies "there is an attack here" at almost any grid position.
+
 ### Tolerance
 
 `beatTolerance.test.mjs` holds the reported values to **0.01 BPM** and **3 ms** of offset. How close the fit lands depends on how many beats it has to work with, because the line is fitted through every matched attack:
@@ -93,7 +111,26 @@ Limits worth stating plainly:
 - **Some material has no single right answer.** A swing feel, a pattern with hits only every second beat, and a cross-rhythm are all cases where two tempi describe the same audio. The detector reports the pulse it can defend from the onsets; it does not guess a metrical intent that is not audible.
 - **Very short buffers degrade.** The refit needs roughly eight matched attacks to be exact, so a few seconds of audio reports a frame-accurate tempo.
 
-## 6. Why not bundle madmom
+## 6. Variable tempo
+
+A track that changes tempo is reported as a tempo map, not a single number. `tempoSegments` holds one entry per stretch of steady tempo in time order, which is the shape a chart's `BPMList` takes; `variableTempo` says whether there was more than one. The single `bpm` and `offsetMs` stay present and describe the overall best fit, so a caller that ignores the map still gets a usable starting point.
+
+The decoder tracks the change without extra work: its state space is joint tempo and phase, and leaving one tempo costs a transition probability, so the Viterbi path follows a tempo change on its own. Only the reporting was fixed-tempo. Measured on click tracks that change tempo:
+
+| Case            | Single answer | Stretches reported                |
+| --------------- | ------------- | --------------------------------- |
+| Steady 100–145  | exact         | one, matching the refined tempo   |
+| Step 100 → 130  | 129.2         | 101.6, then 129.2 from 15.5 s     |
+| Step 120 → 90   | 120.2         | 119.2, then 89.5 from 15.7 s      |
+| Drift 100 → 120 | 110.0         | several, rising across the track  |
+| Drift 140 → 110 | 126.0         | several, falling across the track |
+
+Two limits belong with that table:
+
+- **A drift is described in steps.** The map approximates a continuous tempo change with discrete stretches, which is what a chart can hold. A gradual accelerando therefore lands as several plateaus rather than a curve.
+- **Stretches shorter than three seconds are merged away.** At the start and end of a track the local tempo is built from few intervals and drifts, so short stretches there are analysis artefacts. A genuine change inside the first or last three seconds of a track is not reported separately.
+
+## 7. Why not bundle madmom
 
 | Constraint         | Effect                                                         |
 | ------------------ | -------------------------------------------------------------- |
