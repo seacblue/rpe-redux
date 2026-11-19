@@ -303,24 +303,26 @@ export function detectBeatGridWithDbnFromSamples(
   if (!beats || beats.length < 4) {
     return null;
   }
-  // The decoded beats are already a grid; take its median interval as the
-  // period so a couple of misplaced beats cannot set the tempo.
-  const intervals: number[] = [];
-  for (let index = 1; index < beats.length; index += 1) {
-    intervals.push(beats[index] - beats[index - 1]);
-  }
-  intervals.sort((left, right) => left - right);
-  const median = intervals[Math.floor(intervals.length / 2)];
-  if (!(median > 0)) {
+  // The decoded beats locate each pulse but only to the analysis frame they were
+  // decoded on. Snap every beat onto the raw attack near it and fit one line
+  // through those attack times: the fit resolves both the period and beat zero
+  // below a sample, while the index spacing carries the metrical level the
+  // decoder decided on.
+  const fitted = fitBeatSequenceToAttacks(samples, sampleRate, beats);
+  if (!fitted) {
     return null;
   }
-  const bpm = clampBpm(60 / median, minBpm, maxBpm);
-  const anchor = beats[0];
-  const refined = refineTimingFromAttacks(samples, sampleRate, anchor, bpm, totalDuration);
-  const finalBpm = clampBpm(refined?.bpm ?? bpm, minBpm, maxBpm);
-  const offsetSeconds = Math.max(0, refined?.offsetSeconds ?? anchor);
-  const measuredBpm = roundMeasuredTiming(finalBpm);
-  const measuredOffset = roundMeasuredTiming(offsetSeconds * 1000);
+  // The decoder can lock onto half the actual pulse rate; a strong attack
+  // halfway between its beats means the real beat is there. This is the same
+  // metrical-level test the autocorrelation detector applies, and it is the
+  // difference between reporting 128 and reporting 64 on the same track.
+  const level = resolveMetricalLevel(samples, sampleRate, fitted.bpm, fitted.offsetSeconds, {
+    minBpm,
+    maxBpm,
+    fps: activation.fps,
+  });
+  const measuredBpm = roundMeasuredTiming(clampBpm(level.bpm, minBpm, maxBpm));
+  const measuredOffset = roundMeasuredTiming(Math.max(0, level.offsetSeconds) * 1000);
   if (!(measuredBpm > 0) || !Number.isFinite(measuredOffset)) {
     return null;
   }
@@ -336,6 +338,123 @@ export function detectBeatGridWithDbnFromSamples(
     duration: totalDuration,
     beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
   };
+}
+
+/**
+ * Choose between a detected pulse rate and its double.
+ *
+ * A decoder can settle on half the real pulse rate: every decoded beat is a
+ * genuine beat, but the beats between them were never modelled. Comparing the
+ * strength of the hits at the decoded beats with the hits halfway between them
+ * decides which is the musical beat — if the midway hits are comparably strong,
+ * the fast reading is right and the grid is rebuilt on it.
+ *
+ * Only doubling is considered, and only within the caller's tempo bounds: a
+ * halving would be guessing that strong beats are actually off-beats, which
+ * cannot be decided from attack strength alone.
+ */
+function resolveMetricalLevel(
+  samples: Float32Array,
+  sampleRate: number,
+  bpm: number,
+  offsetSeconds: number,
+  limits: { minBpm: number; maxBpm: number; fps: number },
+): { bpm: number; offsetSeconds: number } {
+  const period = 60 / bpm;
+  const doubled = bpm * 2;
+  if (doubled > limits.maxBpm) {
+    return { bpm, offsetSeconds };
+  }
+  const duration = samples.length / sampleRate;
+  const onBeat: number[] = [];
+  const offBeat: number[] = [];
+  // Sample a bounded number of beats: enough for a stable ratio, few enough to
+  // keep the extra attack searches cheap.
+  const stride = Math.max(1, Math.ceil((duration - offsetSeconds) / period / 64));
+  for (let beat = 0; offsetSeconds + beat * period < duration; beat += stride) {
+    const expected = offsetSeconds + beat * period;
+    onBeat.push(attackStrength(samples, sampleRate, expected));
+    const midway = expected + period / 2;
+    if (midway < duration) {
+      offBeat.push(attackStrength(samples, sampleRate, midway));
+    }
+  }
+  if (onBeat.length < 4 || offBeat.length < 4) {
+    return { bpm, offsetSeconds };
+  }
+  const strong = Math.max(1e-12, mean(onBeat));
+  const between = mean(offBeat);
+  // Most of the energy sits midway, so the decoded grid is every second beat.
+  if (between < strong * 0.55) {
+    return { bpm, offsetSeconds };
+  }
+  // The grid already holds beats at the fast rate; keep its phase, which is the
+  // first decoded beat, so the answer still starts on a real attack.
+  return { bpm: doubled, offsetSeconds };
+}
+
+/** Peak attack energy near a time, used to compare metrical levels. */
+function attackStrength(samples: Float32Array, sampleRate: number, time: number): number {
+  const from = Math.max(1, Math.floor((time - ATTACK_WINDOW) * sampleRate));
+  const to = Math.min(samples.length - 1, Math.ceil((time + ATTACK_WINDOW) * sampleRate));
+  let peak = 0;
+  for (let index = from; index <= to; index += 1) {
+    const sample = samples[index] ?? 0;
+    if (sample * sample > peak) {
+      peak = sample * sample;
+    }
+  }
+  return Math.sqrt(peak);
+}
+
+/**
+ * Fit one beat line through the raw attacks nearest a decoded beat sequence.
+ *
+ * The decoder reports beats on analysis frames, so its spacing is quantised: a
+ * tempo that is not a whole number of frames alternates between the two
+ * neighbouring intervals. That quantisation is zero-mean, so an ordinary least
+ * squares fit through every matched attack cancels it, while one robust-refit
+ * pass drops the beats whose attack was found somewhere else entirely (a
+ * syncopated hit, a missing transient).
+ *
+ * The frame quantisation is why this does not use the strict deviation gate the
+ * envelope detector relies on: residuals of half an analysis frame are normal
+ * here, not evidence of a bad fit.
+ */
+function fitBeatSequenceToAttacks(
+  samples: Float32Array,
+  sampleRate: number,
+  beats: Float32Array,
+): { bpm: number; offsetSeconds: number } | null {
+  if (beats.length < 4) {
+    return null;
+  }
+  const points: AttackPoint[] = [];
+  for (let index = 0; index < beats.length; index += 1) {
+    const delta = attackDelta(samples, sampleRate, beats[index]);
+    if (delta !== null) {
+      points.push({ beat: index, time: beats[index] + delta });
+    }
+  }
+  if (points.length < 4) {
+    return null;
+  }
+  const initial = leastSquaresBeatLine(points);
+  if (!initial) {
+    return null;
+  }
+  // Drop the attacks that clearly do not belong to the decoded grid, then fit
+  // again. The tolerance is a couple of analysis frames, not a fraction of one.
+  const tolerance = 0.05;
+  const keep = points.filter((point) => {
+    const residual = point.time - (initial.offsetSeconds + initial.slope * point.beat);
+    return Math.abs(residual) <= tolerance;
+  });
+  const fit = (keep.length >= 4 ? leastSquaresBeatLine(keep) : null) ?? initial;
+  if (!(fit.slope > 0)) {
+    return null;
+  }
+  return { bpm: 60 / fit.slope, offsetSeconds: fit.offsetSeconds };
 }
 
 /** Detect a fixed grid from the shared analysis envelope, or `null` when unclear. */
