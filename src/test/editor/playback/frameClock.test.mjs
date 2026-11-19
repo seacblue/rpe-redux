@@ -2,10 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createVisualPlaybackClock } from "../../../frontend/screens/editor/workspace/runtime/frame/frameClock.ts";
-import {
-  DISPLAY_LEAD_SECONDS,
-  visualLeadSeconds,
-} from "../../../core/media/outputLatency.ts";
+import { DISPLAY_LEAD_SECONDS, visualLeadSeconds } from "../../../core/media/outputLatency.ts";
 
 /** A transport stub whose `awaitingOutput` the test controls. */
 function createAudio(initial) {
