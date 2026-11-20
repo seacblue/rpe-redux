@@ -29,17 +29,21 @@ export interface SharedScrollRowMeasurement {
   contentWidth: number;
 }
 
-/** Calculates the invisible trailing space needed to give every row one scroll range. */
+/**
+ * Calculates the invisible trailing space needed to give every row one scroll range.
+ *
+ * A row that is shorter than the viewport has a negative range, and it needs more
+ * padding than a row that merely scrolls less: the padding has to close its own
+ * deficit *and* match the longest row's range. Clamping that deficit to zero first
+ * would leave such a row unable to scroll at all, which is what made a short second
+ * row sit still while the first one moved.
+ */
 export function calculateSharedScrollCompensation(
   rows: readonly SharedScrollRowMeasurement[],
 ): number[] {
-  const sharedMaxScroll = Math.max(
-    0,
-    ...rows.map((row) => Math.max(0, row.contentWidth - row.clientWidth)),
-  );
-  return rows.map((row) =>
-    Math.max(0, sharedMaxScroll - Math.max(0, row.contentWidth - row.clientWidth)),
-  );
+  const ranges = rows.map((row) => row.contentWidth - row.clientWidth);
+  const sharedMaxScroll = Math.max(0, ...ranges);
+  return ranges.map((range) => Math.max(0, sharedMaxScroll - range));
 }
 
 /** Calculates narrow mode and scroll affordances from measured layout dimensions. */

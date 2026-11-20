@@ -23,6 +23,8 @@ import type { MessageKey } from "../../../i18n/index.ts";
 import { useEditorHostValue } from "../../contracts/editorHostReact.tsx";
 import { onboardingAnchorRef } from "../../onboarding/anchors.ts";
 import { AudioVolumeConsole } from "./AudioVolumeConsole.tsx";
+import { layoutEditorOpen, layoutEditorSurface } from "../../../core/shell/layoutEditorState.ts";
+import { useLayoutEditSurface } from "../../app/layout/useLayoutEditSurface.ts";
 import {
   useSidebarNavigation,
   type SidebarNavigationDivider,
@@ -100,7 +102,7 @@ function SidebarEntry({
             ? activePanel === item.panelId
             : activeWorkspaceMode === item.panelId)));
   return (
-    <div className="sidebar-item">
+    <div className="sidebar-item" data-layout-item={item.id}>
       <ThemeRailItem
         id={item.domId}
         elementRef={trigger}
@@ -142,11 +144,42 @@ function SidebarRule({ item }: { item: SidebarNavigationDivider }) {
 /**
  * Renders the merged inspector and drawer navigation in the window's trailing
  * column.
+ *
+ * While the layout editor arranges the rail, the column publishes the box of each
+ * entry it painted and takes the pointer itself. Nothing is wrapped: `.sidebar-item`
+ * is what sizes and centres a rail entry, so an extra element between the column
+ * and the item would move the whole rail.
  */
 export function Sidebar({ sidebar }: { sidebar: SidebarDescriptor }) {
   const { t } = useTranslation();
   const { entries, drawer } = useSidebarNavigation();
   const anchor = onboardingAnchorRef("sidebar");
+  const contentRef = useRef<HTMLDivElement>(null);
+  const editing = useSyncExternalStore(
+    layoutEditorOpen.subscribe,
+    layoutEditorOpen.get,
+    layoutEditorOpen.get,
+  );
+  const editingSurface = useSyncExternalStore(
+    layoutEditorSurface.subscribe,
+    layoutEditorSurface.get,
+    layoutEditorSurface.get,
+  );
+  const isEdited = editing && editingSurface === "sidebar";
+  const itemIds = entries.flatMap((entry) => (entry.kind === "item" ? [entry.id] : []));
+
+  useLayoutEditSurface({
+    surface: "sidebar",
+    slot: 1,
+    axis: "y",
+    ids: itemIds,
+    // A rule between two routes is not a route, so the id list is matched against
+    // the item elements rather than every child of the column.
+    selector: ".sidebar-item",
+    active: isEdited,
+    container: contentRef,
+  });
+
   return (
     <aside
       ref={anchor}
@@ -156,7 +189,11 @@ export function Sidebar({ sidebar }: { sidebar: SidebarDescriptor }) {
       role={sidebar.role}
       aria-orientation={sidebar.role === "toolbar" ? "vertical" : undefined}
     >
-      <div className="sidebar-content">
+      <div
+        className="sidebar-content"
+        ref={contentRef}
+        data-layout-surface={isEdited ? "sidebar" : undefined}
+      >
         {entries.map((entry) =>
           entry.kind === "divider" ? (
             <SidebarRule item={entry} key={entry.id} />

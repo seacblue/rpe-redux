@@ -1,76 +1,119 @@
-/** Panel shares resolve to stable pixel sizes, and the launch size follows a display. */
+/** Panel scales paint authored sizes, and the launch size follows a display. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   LAYOUT_REGIONS,
-  formatShare,
+  formatScale,
   regionBounds,
   regionPixels,
-  shareForPixels,
+  regionScale,
+  scaleForPixels,
 } from "../../../core/shell/layoutProportions.ts";
 import { automaticWindowSize } from "../../../frontend/platform/desktop/windowDisplay.ts";
 import { settingsRegistry } from "../../../core/settings/settings.ts";
 import "../../../core/settings/features/layout.ts";
 
-const desktop = { width: 1440, height: 810 };
+const desktop = { width: 1440, height: 900 };
 
-test("the default shares reproduce the resting window layout", () => {
-  assert.equal(regionPixels(LAYOUT_REGIONS.toolbar, 0.131, desktop), 106.11);
-  assert.equal(regionPixels(LAYOUT_REGIONS.statusbar, 0.0445, desktop), 36.05);
-  assert.equal(regionPixels(LAYOUT_REGIONS.inspector, 0.278, desktop), 400.32);
-  assert.equal(regionPixels(LAYOUT_REGIONS.sidebar, 0.039, desktop), 56.16);
-});
-
-test("a share grows with the window between a floor and a ceiling", () => {
-  const small = { width: 1000, height: 680 };
+test("a fresh profile paints the authored density at any window size", () => {
+  for (const region of Object.values(LAYOUT_REGIONS)) {
+    assert.equal(region.defaultScale, 1, region.key);
+    assert.equal(regionPixels(region, 1, desktop), region.basePixels, region.key);
+    assert.equal(regionScale(region, 1, desktop), 1, region.key);
+  }
+  // The same profile on a large display keeps the same panel size, so the extra
+  // pixels go to the workspace instead of inflating the chrome.
   const large = { width: 2560, height: 1440 };
-  assert.equal(regionPixels(LAYOUT_REGIONS.toolbar, 0.131, small), 94);
-  assert.equal(regionPixels(LAYOUT_REGIONS.toolbar, 0.131, large), 188.64);
-  assert.equal(regionPixels(LAYOUT_REGIONS.inspector, 0.45, large), 720);
-  assert.deepEqual(regionBounds(LAYOUT_REGIONS.inspector, { width: 2000, height: 1000 }), {
-    min: 260,
-    max: 720,
-  });
+  for (const region of Object.values(LAYOUT_REGIONS)) {
+    assert.equal(regionPixels(region, 1, large), region.basePixels, region.key);
+  }
 });
 
-test("the inspector never takes more than 57% of a narrow window", () => {
-  const narrow = { width: 400, height: 700 };
-  assert.equal(regionBounds(LAYOUT_REGIONS.inspector, narrow).max, 228);
-  assert.equal(regionPixels(LAYOUT_REGIONS.inspector, 0.278, narrow), 228);
+test("the authored sizes are the compact desktop density", () => {
+  assert.equal(LAYOUT_REGIONS.toolbar.basePixels, 90);
+  assert.equal(LAYOUT_REGIONS.statusbar.basePixels, 36);
+  assert.equal(LAYOUT_REGIONS.inspector.basePixels, 400);
+  assert.equal(LAYOUT_REGIONS.sidebar.basePixels, 56);
 });
 
-test("a dragged pixel size round-trips into its share", () => {
-  const share = shareForPixels(LAYOUT_REGIONS.inspector, 500, { width: 1600, height: 900 });
-  assert.equal(formatShare(share), "0.3125");
-  assert.equal(regionPixels(LAYOUT_REGIONS.inspector, share, { width: 1600, height: 900 }), 500);
+test("a scale grows the box and its contents together", () => {
+  const half = regionPixels(LAYOUT_REGIONS.inspector, 1.5, desktop);
+  assert.equal(half, 600);
+  // The contents factor is what the stylesheet multiplies authored tokens by, so
+  // the panel never gains empty space around fixed-size contents.
+  assert.equal(regionScale(LAYOUT_REGIONS.inspector, 1.5, desktop), 1.5);
+  assert.equal(regionPixels(LAYOUT_REGIONS.toolbar, 0.62, desktop), 55.8);
+  assert.equal(regionScale(LAYOUT_REGIONS.toolbar, 0.62, desktop), 0.62);
+});
+
+test("the adjustable range is wide enough to matter", () => {
+  for (const region of Object.values(LAYOUT_REGIONS)) {
+    assert.ok(region.minScale <= 0.9, `${region.key} should shrink`);
+    assert.ok(region.maxScale >= 1.6, `${region.key} should grow`);
+  }
+});
+
+test("a scale outside the range lands on the nearest accepted value", () => {
+  assert.equal(
+    regionPixels(LAYOUT_REGIONS.toolbar, 10, desktop),
+    regionPixels(LAYOUT_REGIONS.toolbar, LAYOUT_REGIONS.toolbar.maxScale, desktop),
+  );
+  assert.equal(
+    regionPixels(LAYOUT_REGIONS.toolbar, 0.01, desktop),
+    regionPixels(LAYOUT_REGIONS.toolbar, LAYOUT_REGIONS.toolbar.minScale, desktop),
+  );
+});
+
+test("an unreadable scale falls back to the authored size", () => {
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, 0, -2]) {
+    assert.equal(
+      regionPixels(LAYOUT_REGIONS.toolbar, value, desktop),
+      LAYOUT_REGIONS.toolbar.basePixels,
+      String(value),
+    );
+  }
+});
+
+test("a wide inspector never takes more than 57% of a narrow window", () => {
+  const narrow = { width: 600, height: 700 };
+  assert.equal(regionBounds(LAYOUT_REGIONS.inspector, narrow).max, 342);
+  // The box stops at the ceiling and the contents scale down with it, so nothing
+  // spills out of the panel.
+  assert.equal(regionPixels(LAYOUT_REGIONS.inspector, 1.9, narrow), 342);
+  assert.equal(regionScale(LAYOUT_REGIONS.inspector, 1.9, narrow), 0.855);
+});
+
+test("a dragged pixel size round-trips into its scale", () => {
+  const scale = scaleForPixels(LAYOUT_REGIONS.inspector, 500, desktop);
+  assert.equal(formatScale(scale), "1.25");
+  assert.equal(regionPixels(LAYOUT_REGIONS.inspector, scale, desktop), 500);
 });
 
 test("a dragged size stays inside the range the settings control accepts", () => {
   assert.equal(
-    shareForPixels(LAYOUT_REGIONS.inspector, 100, { width: 1600, height: 900 }),
-    LAYOUT_REGIONS.inspector.minShare,
+    scaleForPixels(LAYOUT_REGIONS.inspector, 100, desktop),
+    LAYOUT_REGIONS.inspector.minScale,
   );
   assert.equal(
-    shareForPixels(LAYOUT_REGIONS.inspector, 4000, { width: 1600, height: 900 }),
-    LAYOUT_REGIONS.inspector.maxShare,
+    scaleForPixels(LAYOUT_REGIONS.inspector, 4000, desktop),
+    LAYOUT_REGIONS.inspector.maxScale,
   );
 });
 
-test("stored shares keep a short decimal form", () => {
-  assert.equal(formatShare(0.278), "0.278");
-  assert.equal(formatShare(0.27800000001), "0.278");
-  assert.equal(formatShare(0.0445), "0.0445");
+test("stored scales keep a short decimal form", () => {
+  assert.equal(formatScale(1), "1");
+  assert.equal(formatScale(1.25), "1.25");
+  assert.equal(formatScale(1.234567), "1.2346");
 });
 
-test("each region is a registered range row", () => {
+test("each region is a registered range row spanning its own range", () => {
   for (const region of Object.values(LAYOUT_REGIONS)) {
     const definition = settingsRegistry.definition(region.key);
     assert.ok(definition, region.key);
     assert.equal(definition.control, "range");
-    assert.equal(definition.default, region.defaultShare);
-    assert.equal(definition.min, region.minShare);
-    assert.equal(definition.max, region.maxShare);
-    assert.equal(definition.percentage, true);
+    assert.equal(definition.default, region.defaultScale);
+    assert.equal(definition.min, region.minScale);
+    assert.equal(definition.max, region.maxScale);
   }
 });
 

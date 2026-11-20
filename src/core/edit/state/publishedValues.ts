@@ -171,6 +171,16 @@ export const editorAuditioning = defineValue({
 /** How many milliseconds one beat occupies on screen. */
 export const editorScale = defineValue({ id: "editor.scale", initial: "500" });
 
+/**
+ * The live timeline scale while a zoom gesture is animating.
+ *
+ * `editorScale` is a registry value: every toolbar row subscribes to the registry,
+ * so writing it per frame repaints the whole bar and the animation drops frames. A
+ * zoom publishes its intermediate values here instead, which only the stretch rail
+ * watches, and writes `editorScale` once when the gesture settles.
+ */
+export const editorScaleLive = defineValue({ id: "editor.scaleLive", initial: "500" });
+
 /** Whether dragging and placing snap to the beat. */
 export const editorSnapX = defineValue({ id: "editor.snapX", initial: true });
 

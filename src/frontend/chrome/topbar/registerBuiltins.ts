@@ -16,6 +16,7 @@ import { registerTransportControls } from "../transport/register.ts";
 import { registerDeveloperActions } from "./actions/developerActions.ts";
 import { registerHelpActions } from "./actions/helpActions.ts";
 import { registerFileSettingsActions } from "../../screens/settings/files/fileSettingsActions.ts";
+import { registerLayoutEditorActions } from "./actions/layoutEditorActions.ts";
 import { connectSettingsOpen } from "../../../core/api/settings.ts";
 import { connectHelpApi } from "../../../core/api/help.ts";
 import { openSettings } from "../../screens/settings/settingsWindowController.ts";
@@ -37,6 +38,7 @@ export function registerBuiltins(): () => void {
     ...registerToolsActions(),
     ...registerHelpActions(),
     ...registerFileSettingsActions(),
+    ...registerLayoutEditorActions(),
     registerDeveloperActions(),
     registerTransportControls(),
     // Each action's own `run` becomes its rebindable shortcut.

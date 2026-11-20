@@ -6,9 +6,9 @@
  * pointer, keyboard, and accessibility, so the circular thumb shares the rail's
  * exact edges.
  */
-import { useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { SliderField } from "../../../design/components/slider/SliderField.tsx";
-import { editorScale } from "../../../core/edit/state/publishedValues.ts";
+import { editorScale, editorScaleLive } from "../../../core/edit/state/publishedValues.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import { editorChromeCommands } from "../../contracts/editorCommands.ts";
 import { useSetting } from "../../screens/settings/useSetting.ts";
@@ -34,7 +34,24 @@ function useStretchBarEnabled(): boolean {
 export function TimelineStretchBar() {
   const { t } = useTranslation();
   const enabled = useStretchBarEnabled();
-  const stored = useSyncExternalStore(editorScale.subscribe, editorScale.get, editorScale.get);
+  const settled = useSyncExternalStore(editorScale.subscribe, editorScale.get, editorScale.get);
+  // A zoom publishes every animated frame here instead of to the registry value, so
+  // the rail follows the gesture without repainting the rest of the toolbar. The
+  // two cells are written together when a zoom settles, so they only disagree while
+  // one is mid-flight; the live cell is the one the viewport holds right now.
+  const live = useSyncExternalStore(
+    editorScaleLive.subscribe,
+    editorScaleLive.get,
+    editorScaleLive.get,
+  );
+  // A settings edit, a preset, or a document open writes only the registry cell. The
+  // rail mirrors that write into the live cell so a later zoom starts from the value
+  // actually on screen instead of from wherever the last gesture ended.
+  useEffect(() => {
+    if (editorScaleLive.get() !== settled) {
+      editorScaleLive.set(settled);
+    }
+  }, [settled]);
   // While a gesture is running the rail keeps its own value: the editor applies
   // the scale immediately, but publishing every pointer step would repaint the
   // whole toolbar and fight the smooth draft.
@@ -42,7 +59,7 @@ export function TimelineStretchBar() {
   if (!enabled) {
     return null;
   }
-  const scale = Number(stored);
+  const scale = Number(live);
   const ratio = draft ?? stretchBarRatio(scale);
   const shownScale = draft === null ? scale : stretchBarScale(draft);
   const percent = stretchBarPercent(shownScale);
@@ -50,7 +67,9 @@ export function TimelineStretchBar() {
   const apply = (value: number) => {
     const next = Number(value);
     setDraft(next);
-    editorChromeCommands()?.view.setTimelineScale(stretchBarScale(next));
+    const scale = stretchBarScale(next);
+    editorScaleLive.set(String(scale));
+    editorChromeCommands()?.view.setTimelineScale(scale);
   };
   const commit = () => {
     editorChromeCommands()?.view.commitTimelineScale();
@@ -74,16 +93,13 @@ export function TimelineStretchBar() {
           value={ratio}
           aria-label={label}
           aria-valuetext={`${percent}%`}
-          data-tip-title={label}
-          data-tip-desc={t("chrome.transport.stretchHint")}
-          // The native input emits `input` for every pointer step and one final
-          // `change`; the draft follows `input` alone so the trailing change
-          // cannot resurrect it after the commit.
+          // The rail keeps its caption from the label below; a tooltip here would
+          // repeat that caption over the control it describes.
           onInput={(event) => apply(Number(event.currentTarget.value))}
           onChange={(event) => {
-            editorChromeCommands()?.view.setTimelineScale(
-              stretchBarScale(Number(event.currentTarget.value)),
-            );
+            const scale = stretchBarScale(Number(event.currentTarget.value));
+            editorScaleLive.set(String(scale));
+            editorChromeCommands()?.view.setTimelineScale(scale);
             // A pointer released outside the captured control still ends the
             // drag through the shared pointer-up fallback, which dispatches the
             // final `change` without a React pointer-up event.

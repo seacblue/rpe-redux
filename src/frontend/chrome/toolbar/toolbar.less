@@ -11,7 +11,14 @@
 // The toolbar frame keeps one height in every mode. Global and design only fill
 // one row, but the frame stays put so switching modes never resizes the shell.
 .redux-toolbar {
-  --chrome-progress-width: clamp(312px, 36vw, 480px);
+  // The card's width is its authored 480px times the progress scale, floored so a
+  // row of readouts still fits and capped by the window so the card never crowds
+  // the commands out of their own row.
+  --chrome-progress-width: clamp(
+    calc(312px * var(--ui-scale)),
+    calc(480px * var(--layout-progress-scale, 1)),
+    50vw
+  );
   // The docked progress card owns an inline margin on both sides. The trailing
   // column therefore reserves the card plus both margins; sizing the column from
   // the same inset is what keeps the card's trailing edge inside the frame at
@@ -34,6 +41,18 @@
   border-bottom: 1px solid var(--edge-divider);
 }
 
+// The seam that resizes the transport card. The primitive is absolutely positioned,
+// so this places it relative to the card's leading edge: its centre sits on the
+// boundary the drag moves, and its hairline is the line a reader sees.
+.redux-toolbar > .layout-splitter--progress {
+  inset-block: var(--space-1-5);
+  inset-inline-start: auto;
+  inset-inline-end: var(--chrome-progress-column);
+  width: 9px;
+  margin-inline-end: calc(var(--space-1-5) * -1);
+  z-index: var(--z-content-overlay);
+}
+
 .redux-toolbar > .redux-toolrows {
   grid-column: 1;
   grid-row: 1;
@@ -43,7 +62,9 @@
   align-content: stretch;
   height: 100%;
   min-width: 0;
-  padding: 2px 0;
+  // The two rows share the frame's inner height, so this is the only gap between
+  // them. It scales with the region like every other inset in the row.
+  padding: calc(2px * var(--ui-scale)) 0;
 }
 
 // The transport host is a stable mount point: it contributes its child to the
@@ -120,6 +141,9 @@
   min-width: 0;
   height: 100%;
   min-height: 0;
+  // A row still scrolls, but it never owns the bar: the frame paints one shared
+  // bar, and two native bars would drift apart from the one position the rows
+  // keep in lockstep.
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -127,6 +151,11 @@
   // A row is a fixed rail: hover fills, tooltips and value changes must never
   // grow it, or the bar twitches under the pointer.
   contain: layout style;
+}
+
+.redux-toolbar-line::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 // Shorter rows get an invisible trailing flex item so both rows keep the same
@@ -173,96 +202,6 @@
 }
 .redux-toolbar-line > :is(.redux-button, .redux-icon-button, .redux-group, .redux-field) {
   align-self: center;
-}
-
-// The row remains horizontally scrollable instead of shrinking or clipping an
-// action. These affordances span both toolbar rows at their seams, and fade in
-// only while a row has content beyond the visible edge.
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance {
-  --toolbar-hover-translucent: color-mix(in srgb, var(--on-window-close) 50%, transparent);
-  --toolbar-hover-ink: var(--on-window-close);
-  position: absolute;
-  z-index: var(--z-content-overlay);
-  inset-block: 0;
-  width: calc(var(--tool-cell) + var(--space-2));
-  min-width: calc(var(--tool-cell) + var(--space-2));
-  height: auto;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background-color: transparent;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity var(--design-dur-tint) var(--design-ease-move),
-    color var(--design-dur-tint) var(--design-ease-move);
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--design-dur-tint) var(--design-ease-move);
-}
-
-// IconButton's size preset is a 32px square. The seam affordance is a full
-// toolbar-height hit area instead, so it must outrank that preset while keeping
-// the shared icon and keyboard semantics.
-.redux-app-root .redux-toolbar .redux-icon-button.redux-toolbar-scroll-affordance {
-  width: calc(var(--tool-cell) + var(--space-2));
-  min-width: calc(var(--tool-cell) + var(--space-2));
-  height: auto;
-  min-height: 0;
-  padding: 0;
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-start {
-  left: 0;
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-start::before {
-  background: linear-gradient(to right, var(--toolbar-hover-translucent) 0%, transparent 100%);
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-end {
-  right: var(--chrome-progress-column);
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-end::before {
-  background: linear-gradient(to right, transparent 0%, var(--toolbar-hover-translucent) 100%);
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:hover:not(:disabled) {
-  color: var(--toolbar-hover-ink);
-  --icon-color: var(--toolbar-hover-ink);
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:hover:not(:disabled)::before {
-  opacity: 1;
-}
-
-// White is subtle against a dark chrome surface but needs more opacity against
-// a light one. The icon switches to the active foreground there so the full
-// white hover wash remains readable in both appearances.
-:root[data-theme="light"] .redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance {
-  --toolbar-hover-translucent: color-mix(in srgb, var(--on-window-close) 50%, transparent);
-  --toolbar-hover-ink: var(--foreground);
-}
-
-.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
 }
 
 // The fade belongs to the row content, not to a coloured overlay. The toolbar
@@ -331,6 +270,14 @@
   height: var(--tool-cell);
   min-height: var(--tool-cell);
   padding: 0;
+}
+
+// A text action keeps its words beside its glyph, so the cell span it measured
+// is the only thing that should grow. The padding is the row's own gap, not the
+// cell's, which keeps a labelled button from looking padded out.
+.redux-app-root .redux-toolbar-line > .redux-button .redux-button-text {
+  gap: calc(var(--space-1) * var(--ui-scale));
+  padding-inline: calc(var(--space-2) * var(--ui-scale));
 }
 
 // IconButton's shared size presets are overridden here so every toolbar action

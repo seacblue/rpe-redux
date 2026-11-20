@@ -14,6 +14,9 @@
   // the peek state actually shows, and therefore the width the icon slot must
   // fill to sit on the rail's centre line.
   --sidebar-peek-content-width: calc(var(--sidebar-peek-width) - 2 * var(--space-1-5));
+  // The icon slot and the square pill behind it. One token because the two must
+  // stay the same size: a pill wider than the slot reads as an off-centre box.
+  --sidebar-rail-slot: calc(41px * var(--ui-scale));
 
   position: relative;
   z-index: var(--z-nav);
@@ -46,15 +49,55 @@
 
 .sidebar-content {
   flex: 1;
-  width: 100%;
   min-height: 0;
+  // The scrollbox reaches the rail's right edge, and its own padding keeps the
+  // entries where they were. A scrollbar is painted between the padding box and
+  // the border box, so leaving the padding on the rail would park the bar one
+  // inset away from the edge it belongs on. The width is left to the flex line's
+  // stretch: a fixed `100%` would cancel the negative margin that buys the reach.
+  margin-right: calc(-1 * var(--space-1-5));
+  padding-right: var(--space-1-5);
+  // The rail scrolls its entries rather than clipping them, and it owns a real
+  // vertical bar so a rail with more routes than fit stays reachable. The bar is
+  // stated with `::-webkit-scrollbar` alone: declaring `scrollbar-width` as well
+  // makes Chromium paint its native bar, which adds a stepper at each end and
+  // ignores the custom track below.
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: none;
+  overscroll-behavior-y: contain;
+  // No `scrollbar-gutter`: reserving the column would narrow every route and turn
+  // the square hover pill into a rectangle. The bar overlays the padding instead,
+  // and the leading padding keeps the icons where they were, so the rail looks the
+  // same with and without a scrollbar.
 
   &::-webkit-scrollbar {
+    width: 6px;
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-button {
+    // The rail steps by drag and by wheel, so the platform's arrows are not part
+    // of the affordance and would only eat the track.
+    display: none;
     width: 0;
     height: 0;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    min-height: 40px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-panel);
+    background: color-mix(in srgb, var(--foreground-muted) 46%, transparent);
+    background-clip: padding-box;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--foreground-muted) 72%, transparent);
+    background-clip: padding-box;
   }
 }
 
@@ -65,6 +108,12 @@
   align-items: center;
   justify-content: stretch;
   min-width: 0;
+  // The item is exactly as wide as the icon slot. A wider frame would push the
+  // trailing-aligned slot off the row's centre line, which is what made the glyph
+  // look off-centre against the pill behind it.
+  width: var(--sidebar-rail-slot);
+  max-width: 100%;
+  margin-inline: auto;
 }
 
 .redux-sidebar-badge {
@@ -101,27 +150,30 @@
   z-index: 0;
   inset-block: 0;
   right: 0;
-  width: 41px;
+  width: calc(41px * var(--ui-scale));
   border-radius: var(--radius-control);
   background: transparent;
   transition: background-color var(--design-dur-tint) ease;
 }
 
-// Vertically the padded inner column is the whole peek surface, so the pill and
-// its icon slot fill that column. A 41px slot right-aligned inside the 44px
-// column would leave a 9px gap on the leading side and 6px on the trailing one,
-// which reads as a pill that is off-centre against the rail. The slot keeps its
-// 41px hit size and centres itself inside the column instead.
+// The rail row keeps its authored anatomy: a flexible label column and the 41px
+// icon slot on the trailing side, so the glyph sits on the rail's centre line.
+// Only the pill behind it is restated here, as a square that never depends on how
+// wide the column happens to be.
 .redux-app-root .sidebar .redux-rail-item {
-  grid-template-columns: minmax(0, 1fr) var(--sidebar-peek-content-width);
+  grid-template-columns: minmax(0, 1fr) var(--sidebar-rail-slot);
 }
 
 .redux-app-root .sidebar .redux-rail-item::before {
-  width: var(--sidebar-peek-content-width);
+  left: 50%;
+  right: auto;
+  width: var(--sidebar-rail-slot);
+  transform: translateX(-50%);
 }
 
 .redux-app-root .sidebar .redux-rail-item-icon {
-  justify-self: center;
+  width: var(--sidebar-rail-slot);
+  height: var(--sidebar-rail-slot);
 }
 
 .redux-app-root

@@ -57,6 +57,8 @@ export const APPLICATION_MENUS: readonly MenuSpec[] = [
       "view.toggleNotes",
       "view.toggleEvents",
       "view.togglePreview",
+      "view.customizeToolbar",
+      "view.customizeSidebar",
     ],
   },
   {

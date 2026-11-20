@@ -85,6 +85,53 @@
   outline-offset: @offset;
 }
 
+// Re-derive every size token from a local `--ui-scale`.
+//
+// A custom property is substituted where it is declared, so a token declared on
+// `:root` as `calc(13px * var(--ui-scale))` freezes at the root's scale and a
+// child that changes `--ui-scale` inherits the finished pixels. A shell region
+// that scales its contents therefore re-declares the token block inside its own
+// box: the `calc()` runs again against that region's `--ui-scale`, and every
+// control, glyph, label, and gap inside it grows together instead of leaving the
+// panel's contents at their authored pixel size.
+.content-scale() {
+  --type-micro: calc(11px * var(--ui-scale));
+  --type-caption: calc(13px * var(--ui-scale));
+  --type-label: calc(13px * var(--ui-scale));
+  --type-body: calc(14px * var(--ui-scale));
+  --type-heading: calc(16px * var(--ui-scale));
+  --type-title: calc(20px * var(--ui-scale));
+  --type-hero: calc(28px * var(--ui-scale));
+  --type-display: calc(34px * var(--ui-scale));
+  --glyph-size-sm: calc(20px * var(--ui-scale));
+  --glyph-size-lg: calc(40px * var(--ui-scale));
+  --space-1: calc(4px * var(--ui-scale));
+  --space-1-5: calc(6px * var(--ui-scale));
+  --space-2: calc(8px * var(--ui-scale));
+  --space-2-5: calc(10px * var(--ui-scale));
+  --space-3: calc(12px * var(--ui-scale));
+  --space-4: calc(16px * var(--ui-scale));
+  --space-5: calc(20px * var(--ui-scale));
+  --space-6: calc(24px * var(--ui-scale));
+  --space-7: calc(32px * var(--ui-scale));
+  --control-height: calc(34px * var(--ui-scale));
+  --control-height-compact: calc(28px * var(--ui-scale));
+  --control-height-icon: calc(34px * var(--ui-scale));
+  --control-height-lg: calc(40px * var(--ui-scale));
+  --design-control-height: var(--control-height);
+  --design-control-height-compact: var(--control-height-compact);
+  --design-control-height-icon: var(--control-height-icon);
+  --design-space-1: var(--space-1);
+  --design-space-1-5: var(--space-1-5);
+  --design-space-2: var(--space-2);
+  --design-space-2-5: var(--space-2-5);
+  --design-space-3: var(--space-3);
+  --design-space-4: var(--space-4);
+  --design-space-5: var(--space-5);
+  --design-space-6: var(--space-6);
+  --design-space-7: var(--space-7);
+}
+
 // One selected answer for rows, segments, and toggles. A solid accent surface
 // stays reserved for the single primary action on a screen.
 .selected-surface() {

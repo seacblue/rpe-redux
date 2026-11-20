@@ -67,6 +67,11 @@ export function resolveIconSource(name: IconReference, override?: string): strin
  * The mask keeps the source alpha and the element's background paints it with a
  * theme token, so the same artwork works on every palette and action state. The
  * source image is still the shape catalog; the renderer owns the ink.
+ *
+ * `size` is the glyph's authored size. It is published as `--icon-size` rather
+ * than as a final width so the stylesheet can multiply it by the enclosing
+ * region's `--ui-scale`: a taller toolbar or a wider inspector scales its glyphs
+ * with its buttons instead of leaving them at the authored pixels.
  */
 export function Icon({
   name,
@@ -78,10 +83,9 @@ export function Icon({
 }: IconProps) {
   useSyncExternalStore(subscribeIconOverrides, iconOverridesRevision, iconOverridesRevision);
   const source = resolveIconSource(name, override ?? iconSourceFor(name));
-  const paint: CSSProperties & { "--redux-icon": string } = {
+  const paint: CSSProperties & { "--redux-icon": string; "--icon-size": string } = {
     ...style,
-    width: size,
-    height: size,
+    "--icon-size": `${size}px`,
     "--redux-icon": source ? 'url("' + source + '")' : "none",
   };
   return (

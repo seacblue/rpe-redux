@@ -3,16 +3,20 @@
 // it displays.
 .redux-app-root .redux-toolbar {
   // Cells follow the icon-control token so compact/comfortable density keeps
-  // dividers and field clusters on the same vertical rails.
-  --tool-cell: var(--theme-toolbar-cell, 41px);
+  // dividers and field clusters on the same vertical rails. The cell is the
+  // toolbar's own unit: it grows with the region's `--ui-scale`, so a taller
+  // toolbar holds taller buttons instead of the same buttons with more air.
+  // 36px with a 20px glyph is the authored desktop density; a wider cell leaves
+  // the ink sitting in a third of its box, which reads as a loose toolbar.
+  --tool-cell: calc(var(--theme-toolbar-cell, 36px) * var(--ui-scale));
   // The glyph a field is named by. It has a cell of its own, so the sheet has to
   // know its size to centre it in that cell; `ToolbarFields.tsx` draws it at 16px.
-  --tool-icon: 16px;
+  --tool-icon: calc(16px * var(--ui-scale));
   // A rule paints its line a few pixels inside its own box, and the row gap adds
   // more, so the field's first cell starts well right of the visible rule. The
   // glyph is nudged back toward the rule by that half-difference, otherwise it
   // reads as glued to the box it names even though it is centred in its cell.
-  --tool-icon-shift: 5px;
+  --tool-icon-shift: calc(5px * var(--ui-scale));
 
   label {
     white-space: nowrap;

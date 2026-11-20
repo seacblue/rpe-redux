@@ -22,6 +22,7 @@ export default {
   "chrome.splitter.statusbar": "调整状态栏高度",
   "chrome.splitter.inspector": "调整检查器宽度",
   "chrome.splitter.sidebar": "调整侧栏宽度",
+  "chrome.splitter.progress": "调整进度卡宽度",
 
   "chrome.toolbar.region.notes": "显示音符区域",
   "chrome.toolbar.region.events": "显示事件区域",
@@ -209,8 +210,7 @@ export default {
   "chrome.toolbar.gridCountHint": "音符 X 坐标的可选网格线数量",
 
   "chrome.toolbar.ratio": "预览比例",
-  "chrome.toolbar.scrollStart": "向右查看隐藏的工具",
-  "chrome.toolbar.scrollEnd": "向左查看隐藏的工具",
+  "chrome.toolbar.scrollbar": "工具栏滚动位置",
 
   "chrome.time.beat": "拍数",
   "chrome.time.beatHint": "定位到输入的拍数",

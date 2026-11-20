@@ -29,6 +29,8 @@ import {
   useLayoutRegion,
   useViewportSize,
 } from "./layout/useLayoutProportions.ts";
+import { LayoutEditor } from "../overlays/layoutEditor/LayoutEditor.tsx";
+import { followSavedArrangement, syncPaintedLayout } from "../../core/shell/layoutEditorState.ts";
 
 // Bind the editor's chrome commands before the actions that call them are
 // registered. The rail's own buttons come with the panes: each one registers
@@ -65,6 +67,13 @@ export const Shell = memo(function Shell() {
     return () => {
       window.removeEventListener(TOOLBAR_REFRESH_EVENT, refreshToolbar);
     };
+  }, []);
+  // The chrome paints the saved arrangement from the first frame, and follows it
+  // afterwards: the durable preferences arrive from SQLite after this mount, so a
+  // one-shot read would keep showing the authored layout for the whole session.
+  useEffect(() => {
+    syncPaintedLayout();
+    return followSavedArrangement();
   }, []);
   // Focus rings stay hidden for pointer and Space/Enter activation; the global
   // focus policy still shows them for Tab navigation.
@@ -106,6 +115,7 @@ export const Shell = memo(function Shell() {
       <TimelineMenu />
       <InputOverlays />
       <PerformanceHud />
+      <LayoutEditor />
     </>
   );
 });

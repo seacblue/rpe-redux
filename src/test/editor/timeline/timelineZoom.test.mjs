@@ -114,7 +114,7 @@ test("zoom keeps the current playhead beat on the bottom red line", () => {
     );
 
     assert.equal(animator.request(0.8), true);
-    frames.get(1)(performance.now() + 200);
+    frames.get(1)(performance.now() + 500);
 
     assert.equal(viewport.scale, 400);
     assert.equal(viewport.origin, 10);
@@ -159,7 +159,7 @@ test("zooming in from a negative playhead does not clamp the red line away", () 
     );
 
     assert.equal(animator.request(4), true);
-    frames.get(1)(performance.now() + 200);
+    frames.get(1)(performance.now() + 500);
 
     assert.equal(viewport.scale, 500);
     assert.equal(viewport.origin, -10);
@@ -209,7 +209,7 @@ test("playback keeps ownership of the viewport origin during zoom", () => {
 
     assert.equal(animator.request(0.8), true);
     viewport.origin = -8;
-    frames.get(1)(performance.now() + 200);
+    frames.get(1)(performance.now() + 500);
 
     assert.equal(viewport.origin, -8);
     assert.equal(viewport.scale, 400);

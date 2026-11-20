@@ -10,9 +10,11 @@
  */
 import type { TimelineViewport } from "../viewport/timelineViewport.ts";
 import { clampTimelineScale } from "../../../../../../core/edit/timeline/timelineScale.ts";
-const ZOOM_DURATION_MS = 140;
+const ZOOM_DURATION_MS = 260;
 const ZOOM_FACTOR_LIMIT = 300;
-const ZOOM_SENSITIVITY = 0.0015;
+// One notch is a small fraction of the rail, so a gesture reads as travel rather
+// than as a jump between two positions.
+const ZOOM_SENSITIVITY = 0.0007;
 
 /** A wheel delta as a multiplicative scale, bounded for coalesced events. */
 export function timelineZoomFactor(deltaY: number): number {
@@ -87,9 +89,10 @@ export class TimelineZoomAnimator {
   private readonly tick = (now: number): void => {
     this.frame = 0;
     const progress = Math.min(1, (now - this.startedAt) / ZOOM_DURATION_MS);
-    // A cubic ease-out settles quickly but never snaps on the first frame.
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const scale = this.fromScale + (this.toScale - this.fromScale) * eased;
+    // Linear travel, so the rail's thumb covers the same distance on every frame.
+    // An ease-out curve spends half the distance in the first couple of frames,
+    // which reads as a jump rather than as motion.
+    const scale = this.fromScale + (this.toScale - this.fromScale) * progress;
     this.viewport.scale = scale;
     if (!this.isPlaying()) {
       const origin = this.viewport.tempo.beat(this.anchorSeconds, this.anchorFactor);

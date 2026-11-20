@@ -1,5 +1,31 @@
 /* Shell framing: workbench panel edges, shared panel headers, pane action rows,
    and the fixed inspector column that hosts the workspace and sidebar. */
+
+// Every adjustable region carries its own scale and re-derives the size tokens
+// inside its box, so a taller toolbar holds taller buttons and a wider inspector
+// holds larger fields instead of the same contents with more empty space. The
+// mixin is called on the region itself because a custom property resolves where
+// it is declared.
+.shell-body > .redux-toolbar {
+  --ui-scale: var(--layout-toolbar-scale, 1);
+  .content-scale();
+}
+
+.shell-body > footer {
+  --ui-scale: var(--layout-statusbar-scale, 1);
+  .content-scale();
+}
+
+.workbench-inspector > .inspector {
+  --ui-scale: var(--layout-inspector-scale, 1);
+  .content-scale();
+}
+
+.workbench-body > .sidebar {
+  --ui-scale: var(--layout-sidebar-scale, 1);
+  .content-scale();
+}
+
 .redux-app-root .workbench {
   padding: 0;
 }
@@ -103,7 +129,7 @@
   grid-template-areas: "workspace inspector sidebar";
   gap: 0;
   --workbench-side-track: var(--chrome-sidebar-track);
-  --inspector-compact-width: clamp(260px, var(--inspector-width), 57vw);
+  --inspector-compact-width: min(var(--inspector-width), 57vw);
   --cover-backdrop-workbench-top: calc(var(--titlebar-height) + var(--layout-toolbar-height));
 }
 
@@ -143,7 +169,9 @@
 .workbench-inspector > .inspector {
   flex: 1;
   width: 100%;
-  min-width: 260px;
+  // The panel may not narrow past its own contents, which is the authored
+  // minimum times the scale the user chose.
+  min-width: calc(260px * var(--layout-inspector-scale, 1));
   min-height: 0;
 }
 

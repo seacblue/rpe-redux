@@ -12,28 +12,40 @@ const workbenchSource = read("frontend/app/Workbench.tsx");
 const shellSource = read("frontend/app/Shell.tsx");
 const tokens = read("design/styles/tokens.less");
 
-test("every adjustable region derives its size from a share token", () => {
+test("every adjustable region derives its size from a scale token", () => {
   for (const name of [
-    "--layout-toolbar-share",
+    "--layout-toolbar-scale",
     "--layout-toolbar-height",
-    "--layout-statusbar-share",
+    "--layout-statusbar-scale",
     "--layout-statusbar-height",
-    "--layout-inspector-share",
+    "--layout-inspector-scale",
     "--layout-inspector-width",
-    "--layout-sidebar-share",
+    "--layout-sidebar-scale",
     "--layout-sidebar-width",
   ]) {
     assert.match(tokens, new RegExp(`${name}:`, "u"), name);
   }
-  // The share multiplies the viewport and clamps to a usable pixel range.
+  // The authored size times the user's scale times the display's density, with no
+  // window-relative term: a bigger display must not inflate the chrome, but a
+  // denser panel must keep the authored visual size.
   assert.match(
     tokens,
-    /--layout-toolbar-height: clamp\(94px, calc\(var\(--layout-toolbar-share\) \* 100vh\), 200px\);/u,
+    /--layout-toolbar-height: calc\(90px \* var\(--layout-toolbar-scale\) \* var\(--layout-density\)\);/u,
   );
   assert.match(
     tokens,
-    /--layout-inspector-width: clamp\(\s*260px,\s*calc\(var\(--layout-inspector-share\) \* 100vw\),\s*min\(720px, 57vw\)\s*\);/u,
+    /--layout-statusbar-height: calc\(36px \* var\(--layout-statusbar-scale\) \* var\(--layout-density\)\);/u,
   );
+  assert.match(
+    tokens,
+    /--layout-inspector-width: min\(\s*calc\(400px \* var\(--layout-inspector-scale\) \* var\(--layout-density\)\),\s*57vw\s*\);/u,
+  );
+  assert.match(
+    tokens,
+    /--layout-sidebar-width: calc\(56px \* var\(--layout-sidebar-scale\) \* var\(--layout-density\)\);/u,
+  );
+  assert.match(tokens, /--layout-density: 1;/u);
+  assert.doesNotMatch(tokens, /--layout-toolbar-share|--layout-inspector-share/u);
   // The existing aliases still resolve, so no reader had to learn a new name.
   assert.match(tokens, /--inspector-width: var\(--layout-inspector-width\);/u);
   assert.match(tokens, /--chrome-sidebar-track: var\(--layout-sidebar-width\);/u);
@@ -44,7 +56,7 @@ test("the title bar keeps a fixed caption row", () => {
   assert.doesNotMatch(tokens, /--layout-titlebar/u);
 });
 
-test("the toolbar and status bar read the share instead of a literal height", () => {
+test("the toolbar and status bar read the scale instead of a literal height", () => {
   const toolbar = read("frontend/chrome/toolbar/toolbar.less");
   const statusbar = read("frontend/chrome/statusbar/statusBar.less");
   assert.match(toolbar, /height: var\(--layout-toolbar-height\);/u);
@@ -143,4 +155,68 @@ test("a seam resizes by drag, by key, and by double click", () => {
   assert.match(splitterSource, /event\.shiftKey/u);
   // The drag stays inside the range the caller published.
   assert.match(splitterSource, /onChange\(clamp\(current\.value \+ travel \* \(invert \? -1 : 1\)\)\)/u);
+});
+
+test("a region that grows scales its contents, not just its track", () => {
+  const designStyles = read("design/design.less");
+  const iconStyles = read("design/components/icon/icon.less");
+  const iconSource = read("design/components/icon/Icon.tsx");
+  const railStyles = read("design/patterns/railItem.less");
+  const toolbarGrid = read("frontend/screens/editor/toolbar/toolbarGrid.less");
+  const tokens = read("design/styles/tokens.less");
+
+  // The authored numeric tokens stay in one place; a region re-derives them.
+  assert.match(tokens, /--ui-scale: 1;/u);
+  assert.match(tokens, /--type-body: 14px;/u);
+  assert.match(designStyles, /\.content-scale\(\) \{/u);
+  for (const token of ["--type-body", "--space-2", "--control-height", "--glyph-size-sm"]) {
+    assert.match(
+      designStyles,
+      new RegExp(`${token}: calc\\([^)]*var\\(--ui-scale\\)`, "u"),
+      token,
+    );
+  }
+
+  // Every adjustable region carries its own scale and re-derives the block.
+  for (const [selector, variable] of [
+    [".shell-body > .redux-toolbar", "--layout-toolbar-scale"],
+    [".shell-body > footer", "--layout-statusbar-scale"],
+    [".workbench-inspector > .inspector", "--layout-inspector-scale"],
+    [".workbench-body > .sidebar", "--layout-sidebar-scale"],
+  ]) {
+    assert.match(
+      shellStyles,
+      new RegExp(
+        `${selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} \\{\\s*--ui-scale: var\\(${variable}, 1\\);\\s*\\.content-scale\\(\\);`,
+        "u",
+      ),
+      selector,
+    );
+  }
+
+  // A glyph keeps its authored size as data and scales in the stylesheet, so the
+  // region decides the painted size instead of a hard-coded inline width.
+  assert.match(iconSource, /"--icon-size": `\$\{size\}px`/u);
+  assert.doesNotMatch(iconSource, /width: size,/u);
+  assert.match(
+    iconStyles,
+    /width: calc\(var\(--icon-size, 18px\) \* var\(--ui-scale, 1\)\);/u,
+  );
+  assert.match(
+    iconStyles,
+    /height: calc\(var\(--icon-size, 18px\) \* var\(--ui-scale, 1\)\);/u,
+  );
+
+  // The toolbar's own cell unit is what sizes its buttons, so it scales too.
+  // 36px is the authored desktop density; the glyph fills more than half the
+  // cell, which is what keeps the row from reading as loose.
+  assert.match(
+    toolbarGrid,
+    /--tool-cell: calc\(var\(--theme-toolbar-cell, 36px\) \* var\(--ui-scale\)\);/u,
+  );
+  assert.match(toolbarGrid, /--tool-icon: calc\(16px \* var\(--ui-scale\)\);/u);
+
+  // The rail row grows with its larger glyph instead of clipping it.
+  assert.match(railStyles, /height: calc\(41px \* var\(--ui-scale, 1\)\);/u);
+  assert.match(railStyles, /min-height: calc\(41px \* var\(--ui-scale, 1\)\);/u);
 });

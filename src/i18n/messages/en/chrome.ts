@@ -33,6 +33,7 @@ export default {
   "chrome.splitter.statusbar": "Resize status bar",
   "chrome.splitter.inspector": "Resize inspector",
   "chrome.splitter.sidebar": "Resize sidebar",
+  "chrome.splitter.progress": "Resize progress card",
 
   "chrome.toolbar.region.notes": "Show note region",
   "chrome.toolbar.region.events": "Show event region",
@@ -227,8 +228,7 @@ export default {
   "chrome.toolbar.gridCountHint": "Selectable note X lines",
 
   "chrome.toolbar.ratio": "Preview ratio",
-  "chrome.toolbar.scrollStart": "Show hidden toolbar actions to the right",
-  "chrome.toolbar.scrollEnd": "Show hidden toolbar actions to the left",
+  "chrome.toolbar.scrollbar": "Toolbar scroll position",
 
   "chrome.time.beat": "Beat",
   "chrome.time.beatHint": "Seek to the beat you entered",

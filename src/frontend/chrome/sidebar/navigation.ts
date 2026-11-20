@@ -16,6 +16,12 @@ import {
   type SidebarEntry,
 } from "../../../core/shell/registries/sidebar.ts";
 import type { ValueCell } from "../../../core/state/values.ts";
+import { paintedLayout } from "../../../core/shell/layoutEditorState.ts";
+import {
+  hasSurfaceLayout,
+  resolveSurfaceLayout,
+  type LayoutArrangement,
+} from "../../../core/shell/layoutArrangement.ts";
 import {
   drawerPaneDomId,
   toggleDrawerPane,
@@ -121,6 +127,42 @@ export function mergeSidebarNavigation(
   return merged.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
 }
 
+/**
+ * Applies the user's rail arrangement to the merged navigation.
+ *
+ * The arrangement decides order and where the user put a rule; an item it does
+ * not name keeps the authored position, so a newly contributed route still
+ * appears. Drawer pages are ordinary items here, which is what lets the rail be
+ * reordered as one list.
+ */
+export function arrangedSidebarNavigation(
+  entries: readonly SidebarNavigationEntry[],
+  arrangement: LayoutArrangement,
+): SidebarNavigationEntry[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const registeredIds = entries.map((entry) => entry.id);
+  const slots = resolveSurfaceLayout(arrangement, "sidebar", registeredIds, authoredRailSlot);
+  const ordered: SidebarNavigationEntry[] = [];
+  for (const slot of slots) {
+    for (const placement of slot.items) {
+      if (placement.divider === true) {
+        ordered.push({ kind: "divider", id: placement.id, order: 0 });
+        continue;
+      }
+      const entry = byId.get(placement.id);
+      if (entry) {
+        ordered.push(entry);
+      }
+    }
+  }
+  return ordered;
+}
+
+/** The rail is one column, so every authored entry sits in slot one. */
+function authoredRailSlot(): 1 {
+  return 1;
+}
+
 /** Reads the live merged rail; drawer pages hidden without a document are omitted. */
 export function useSidebarNavigation(): SidebarNavigation {
   const entries = useSyncExternalStore(
@@ -143,5 +185,17 @@ export function useSidebarNavigation(): SidebarNavigation {
       ),
     [entries, panes, visibility.hasDocument],
   );
-  return { entries: merged, drawer };
+  const arrangement = useSyncExternalStore(
+    paintedLayout.subscribe,
+    paintedLayout.get,
+    paintedLayout.get,
+  );
+  const arranged = useMemo(
+    () =>
+      hasSurfaceLayout(arrangement, "sidebar")
+        ? arrangedSidebarNavigation(merged, arrangement)
+        : merged,
+    [merged, arrangement],
+  );
+  return { entries: arranged, drawer };
 }

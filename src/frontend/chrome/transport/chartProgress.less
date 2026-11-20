@@ -166,9 +166,11 @@
 
 // The vertical stretch rail sits under the readouts, with its caption directly
 // below the track. The rail spans the card so it aligns with the scrubber above.
+// Every measurement is a design token times the region's scale, so the rail grows
+// and shrinks with the rest of the chrome instead of staying one fixed size.
 .transport-stretch {
   display: grid;
-  grid-template-rows: 12px auto;
+  grid-template-rows: calc(20px * var(--ui-scale)) auto;
   justify-items: center;
   min-width: 0;
   color: var(--foreground-muted);
@@ -185,7 +187,7 @@
   position: relative;
   width: 100%;
   min-width: 0;
-  height: 12px;
+  height: calc(20px * var(--ui-scale));
 }
 
 .transport-stretch-track {
@@ -193,10 +195,14 @@
   left: 0;
   right: 0;
   top: 50%;
-  height: 4px;
+  // The track is tall enough to hold the thumb inside it, so the ball reads as
+  // part of the rail instead of overhanging a hairline.
+  height: calc(14px * var(--ui-scale));
   transform: translateY(-50%);
   border: 1px solid var(--edge-control);
-  border-radius: 999px;
+  // The same radius the scrubber track above uses, so the two rails read as one
+  // family instead of one of them being a one-off value.
+  border-radius: var(--radius-control);
   background: var(--input-surface-disabled);
   pointer-events: none;
 }
@@ -206,8 +212,9 @@
   top: 50%;
   left: var(--stretch-ratio, 50%);
   box-sizing: border-box;
-  width: 12px;
-  height: 12px;
+  // Smaller than the track it sits in, and scaled with the region like the rail.
+  width: calc(12px * var(--ui-scale));
+  height: calc(12px * var(--ui-scale));
   transform: translate(-50%, -50%);
   border: 1px solid var(--input-border-focus);
   border-radius: 50%;

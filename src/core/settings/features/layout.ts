@@ -1,9 +1,10 @@
 /**
- * General → Interface rows for the shell's panel proportions.
+ * General → Interface rows for the shell's panel sizes.
  *
- * A row stores a share of the window rather than a pixel size, so the panels
- * keep their weight when the window changes. The same definition drives the
- * drag seam beside the workspace: both write this one value.
+ * A row stores one scale factor rather than a pixel size or a window share, so a
+ * profile keeps the same density at every resolution: the panel and everything
+ * drawn inside it grow together, and a bigger window gives its extra room to the
+ * canvas. The same definition drives the drag seam beside the workspace.
  */
 import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition } from "../types.ts";
@@ -14,53 +15,66 @@ const LayoutSettings: SettingDefinition[] = [
     key: LAYOUT_REGIONS.toolbar.key,
     navigation: "general.interface",
     group: "settings.group.layout",
-    label: "settings.field.layout-toolbar-share.label",
-    description: "settings.field.layout-toolbar-share.description",
+    label: "settings.field.layout-toolbar-scale.label",
+    description: "settings.field.layout-toolbar-scale.description",
     control: "range",
-    default: LAYOUT_REGIONS.toolbar.defaultShare,
-    min: LAYOUT_REGIONS.toolbar.minShare,
-    max: LAYOUT_REGIONS.toolbar.maxShare,
-    step: 0.0005,
-    percentage: true,
+    default: LAYOUT_REGIONS.toolbar.defaultScale,
+    min: LAYOUT_REGIONS.toolbar.minScale,
+    max: LAYOUT_REGIONS.toolbar.maxScale,
+    step: 0.02,
+    unit: "settings.unit.layout-scale",
   },
   {
     key: LAYOUT_REGIONS.statusbar.key,
     navigation: "general.interface",
     group: "settings.group.layout",
-    label: "settings.field.layout-statusbar-share.label",
-    description: "settings.field.layout-statusbar-share.description",
+    label: "settings.field.layout-statusbar-scale.label",
+    description: "settings.field.layout-statusbar-scale.description",
     control: "range",
-    default: LAYOUT_REGIONS.statusbar.defaultShare,
-    min: LAYOUT_REGIONS.statusbar.minShare,
-    max: LAYOUT_REGIONS.statusbar.maxShare,
-    step: 0.0005,
-    percentage: true,
+    default: LAYOUT_REGIONS.statusbar.defaultScale,
+    min: LAYOUT_REGIONS.statusbar.minScale,
+    max: LAYOUT_REGIONS.statusbar.maxScale,
+    step: 0.02,
+    unit: "settings.unit.layout-scale",
   },
   {
     key: LAYOUT_REGIONS.inspector.key,
     navigation: "general.interface",
     group: "settings.group.layout",
-    label: "settings.field.layout-inspector-share.label",
-    description: "settings.field.layout-inspector-share.description",
+    label: "settings.field.layout-inspector-scale.label",
+    description: "settings.field.layout-inspector-scale.description",
     control: "range",
-    default: LAYOUT_REGIONS.inspector.defaultShare,
-    min: LAYOUT_REGIONS.inspector.minShare,
-    max: LAYOUT_REGIONS.inspector.maxShare,
-    step: 0.0005,
-    percentage: true,
+    default: LAYOUT_REGIONS.inspector.defaultScale,
+    min: LAYOUT_REGIONS.inspector.minScale,
+    max: LAYOUT_REGIONS.inspector.maxScale,
+    step: 0.02,
+    unit: "settings.unit.layout-scale",
   },
   {
     key: LAYOUT_REGIONS.sidebar.key,
     navigation: "general.interface",
     group: "settings.group.layout",
-    label: "settings.field.layout-sidebar-share.label",
-    description: "settings.field.layout-sidebar-share.description",
+    label: "settings.field.layout-sidebar-scale.label",
+    description: "settings.field.layout-sidebar-scale.description",
     control: "range",
-    default: LAYOUT_REGIONS.sidebar.defaultShare,
-    min: LAYOUT_REGIONS.sidebar.minShare,
-    max: LAYOUT_REGIONS.sidebar.maxShare,
-    step: 0.0005,
-    percentage: true,
+    default: LAYOUT_REGIONS.sidebar.defaultScale,
+    min: LAYOUT_REGIONS.sidebar.minScale,
+    max: LAYOUT_REGIONS.sidebar.maxScale,
+    step: 0.02,
+    unit: "settings.unit.layout-scale",
+  },
+  {
+    key: LAYOUT_REGIONS.progress.key,
+    navigation: "general.interface",
+    group: "settings.group.layout",
+    label: "settings.field.layout-progress-scale.label",
+    description: "settings.field.layout-progress-scale.description",
+    control: "range",
+    default: LAYOUT_REGIONS.progress.defaultScale,
+    min: LAYOUT_REGIONS.progress.minScale,
+    max: LAYOUT_REGIONS.progress.maxScale,
+    step: 0.02,
+    unit: "settings.unit.layout-scale",
   },
 ];
 

@@ -8,6 +8,10 @@
   display: block;
   flex: none;
   pointer-events: none;
+  // The authored size arrives as `--icon-size`; the enclosing region's scale
+  // multiplies it, so a glyph keeps its proportion to the panel around it.
+  width: calc(var(--icon-size, 18px) * var(--ui-scale, 1));
+  height: calc(var(--icon-size, 18px) * var(--ui-scale, 1));
   background-color: var(--icon-color, var(--foreground));
   transition: background-color var(--design-dur-tint) var(--design-ease-move);
   mask-image: var(--redux-icon);

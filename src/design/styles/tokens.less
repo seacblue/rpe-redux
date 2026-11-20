@@ -33,32 +33,43 @@
 // document head, so there is no hand-maintained bootstrap palette here.
 
 :root {
-  // ------------------------------------------------------- panel proportions
-  // The workspace keeps whatever these regions leave. Each share is written by
-  // a settings row and by the drag seam on the panel edge; the pixel clamps
-  // keep a panel usable at any window size and mirror the ranges the seam
-  // itself proposes (`core/shell/layoutProportions.ts`). The title bar stays a
-  // fixed caption row because it also hosts the window controls and the drag
-  // surface.
-  --layout-toolbar-share: 0.131;
-  --layout-toolbar-height: clamp(94px, calc(var(--layout-toolbar-share) * 100vh), 200px);
-  --layout-statusbar-share: 0.0445;
-  --layout-statusbar-height: clamp(36px, calc(var(--layout-statusbar-share) * 100vh), 72px);
-  --layout-inspector-share: 0.278;
-  --layout-inspector-width: clamp(
-    260px,
-    calc(var(--layout-inspector-share) * 100vw),
-    min(720px, 57vw)
+  // -------------------------------------------------------- panel sizes
+  // A region's box is its authored size times one scale, and that same scale is
+  // the factor its contents grow by, so a panel never gains empty space around
+  // fixed-size contents. A fresh profile reads 1 everywhere, which paints the
+  // authored density at any window size: a larger display gives its extra pixels
+  // to the workspace instead of inflating every button around it. The title bar
+  // stays a fixed caption row because it also hosts the window controls.
+  // The user's own factor times the display's density, so a profile keeps its
+  // authored visual size when the window moves to a denser panel or a larger
+  // desktop. `--layout-density` is 1 on an ordinary display.
+  --layout-density: 1;
+  --layout-toolbar-scale: 1;
+  --layout-toolbar-height: calc(90px * var(--layout-toolbar-scale) * var(--layout-density));
+  --layout-statusbar-scale: 1;
+  --layout-statusbar-height: calc(36px * var(--layout-statusbar-scale) * var(--layout-density));
+  --layout-inspector-scale: 1;
+  --layout-inspector-width: min(
+    calc(400px * var(--layout-inspector-scale) * var(--layout-density)),
+    57vw
   );
-  --layout-sidebar-share: 0.039;
-  --layout-sidebar-width: clamp(53px, calc(var(--layout-sidebar-share) * 100vw), 96px);
+  --layout-sidebar-scale: 1;
+  --layout-sidebar-width: calc(56px * var(--layout-sidebar-scale) * var(--layout-density));
 
   --inspector-width: var(--layout-inspector-width);
   // The document drawer adds this list column beyond the resting inspector
   // width. The property column keeps `--inspector-width`.
-  --drawer-list-width: 240px;
+  --drawer-list-width: calc(240px * var(--layout-inspector-scale));
   // The trailing rail column beside the inspector.
   --chrome-sidebar-track: var(--layout-sidebar-width);
+  // ------------------------------------------------------------ content scale
+  // A shell region that grows keeps its contents in proportion. The region sets
+  // `--ui-scale` to the factor its painted size has relative to the size its
+  // contents were authored at (`core/shell/layoutProportions.ts`) and re-derives
+  // the token block with the `.content-scale()` mixin, because a custom property
+  // resolves where it is declared. Panels that do not set a scale read 1 here,
+  // so a dialog, a menu, and the welcome page keep the authored metrics.
+  --ui-scale: 1;
   // Dense desktop-editor type roles. Pick the role the text plays, never a px
   // value: this block is the only place a CSS font size is written, and
   // `scripts/checkStyleRules.mjs` rejects raw sizes elsewhere. Canvas text

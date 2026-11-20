@@ -86,6 +86,7 @@ import {
   editorLine,
   editorLineSelection,
   editorScale,
+  editorScaleLive,
 } from "../../../../../../core/edit/state/publishedValues.ts";
 import { connectHitTestApi } from "../../../../../../core/edit/hitTest/api.ts";
 import { connectPreviewApi } from "../../../../../../core/edit/preview/api.ts";
@@ -645,15 +646,23 @@ export function createEditorAssembly(
   });
   const zoomAnimator = new TimelineZoomAnimator(
     timeline.viewport,
-    invalidate,
+    // A frame repaints the canvases and moves the rail's thumb. The registry value
+    // is not written here: every toolbar row subscribes to it, and republishing per
+    // frame is what made the thumb arrive in a couple of jumps. The rail watches a
+    // live cell instead, and the settled callback publishes the durable one.
     () => {
+      invalidate();
+      editorScaleLive.set(String(timeline.viewport.scale));
+    },
+    () => {
+      editorScaleLive.set(String(timeline.viewport.scale));
       editorScale.set(String(timeline.viewport.scale));
       scheduleScalePersist();
     },
     () => audio.playing || playback.pending,
   );
   scope.add(() => zoomAnimator.cancel());
-  const zoomTimelineVertically = (event: WheelEvent, direction: -1 | 1): boolean => {
+  const zoomTimelineVertically = (event: WheelEvent, _direction: -1 | 1): boolean => {
     const target = event.target;
     if (!(target instanceof Node) || !surfaces.timeline.stage.contains(target)) {
       return false;
@@ -672,8 +681,11 @@ export function createEditorAssembly(
       return false;
     }
     const delta = event.deltaMode === 0 ? event.deltaY : event.deltaY * 100;
-    const directedDelta = direction === 1 ? -Math.abs(delta) : Math.abs(delta);
-    return zoomAnimator.request(timelineZoomFactor(directedDelta));
+    // The wheel's own magnitude is the zoom amount. Rebuilding it from the bound
+    // action's direction would make every notch the same size, so a slow trackpad
+    // gesture and a full detent would move the scale by one identical step and the
+    // value would jump instead of following the hand.
+    return zoomAnimator.request(timelineZoomFactor(delta));
   };
   const timelineNavigation = bindTimelineNavigation({
     timeline,

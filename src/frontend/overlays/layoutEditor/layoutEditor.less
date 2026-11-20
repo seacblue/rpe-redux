@@ -1,0 +1,267 @@
+// Layout editor overlay: the dim around the live chrome and the list of commands
+// that are not placed yet. The dim leaves the toolbar and the rail bright, because
+// those are the surfaces being arranged; the list is the only thing this overlay
+// draws on its own.
+
+.redux-layout-editor {
+  position: fixed;
+  inset: 0;
+  // Above the chrome but below a popup menu, which is its own top-layer element:
+  // the row menu has to paint over the dim, not under it.
+  z-index: var(--z-content-overlay);
+  // The overlay is a sibling of the chrome and only its own children take the
+  // pointer, so the toolbar and the rail underneath stay live for a drag.
+  pointer-events: none;
+}
+
+// The dim covers everything except the surface being arranged, which stays bright
+// because that is what the user is dragging on. The regions are stated in terms of
+// the shell's own boxes rather than a mask that would have to track them.
+.redux-layout-editor-dim {
+  position: fixed;
+  background: var(--scrim);
+  pointer-events: auto;
+}
+
+// Below the toolbar, and clear of the rail while the rail is the surface being
+// arranged: dimming the rail would put a sheet over the thing being dragged on.
+.redux-layout-editor-dim.is-workspace {
+  inset: calc(var(--titlebar-height) + var(--layout-toolbar-height))
+    var(--chrome-sidebar-track) 0 0;
+}
+
+// The rail's own column, dimmed only while the toolbar is the surface being
+// arranged; it is the drop area when the rail is being arranged.
+.redux-layout-editor-dim.is-gutter {
+  inset: calc(var(--titlebar-height) + var(--layout-toolbar-height)) 0 0 auto;
+  width: var(--chrome-sidebar-track);
+}
+
+// The surface being arranged is never dimmed: it is what the user drags on. So the
+// workspace sheet stops short of the rail while the rail is being arranged, and
+// stops short of the rail's column in both modes — in toolbar mode the rail column
+// has its own sheet, and in sidebar mode the rail is the target.
+.redux-layout-editor[data-editor-surface="sidebar"] .redux-layout-editor-dim.is-gutter {
+  display: none;
+}
+
+// The list of available commands. It is the only surface the overlay owns, so it
+// sits on the side the chrome leaves free and scrolls its own content when the
+// profile has more commands than fit.
+.redux-layout-editor-palette {
+  position: fixed;
+  z-index: var(--z-floating);
+  top: calc(var(--titlebar-height) + var(--layout-toolbar-height) + var(--space-4));
+  right: calc(var(--chrome-sidebar-track) + var(--space-4));
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(
+    100vh - var(--titlebar-height) - var(--layout-toolbar-height) - 2 * var(--space-4)
+  );
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  overflow: hidden;
+  transition: border-color var(--design-dur-tint) ease;
+
+  // The whole list takes an item back, so the column reads as the destination
+  // while a drag is over it.
+  &.is-over {
+    border-color: var(--danger);
+  }
+}
+
+.redux-layout-editor-header {
+  flex: none;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--edge-divider);
+
+  h2 {
+    margin: 0;
+    font-size: var(--type-heading);
+    font-weight: 500;
+  }
+}
+
+.redux-layout-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3) var(--space-4);
+}
+
+// One command per row, like a menu: a glyph, then its name. The group heading is
+// the only thing that separates one contributor from another.
+.redux-layout-editor-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+
+  h3 {
+    margin: 0;
+    padding-inline: var(--space-2);
+    color: var(--foreground-muted);
+    font-size: var(--type-caption);
+    font-weight: 500;
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+}
+
+// One command per row, like a menu: a glyph, then its name, both at the leading
+// edge. The shared button centres any row that carries a glyph, and it states that
+// through a `:has()` clause — which counts its argument — so this rule names the
+// button class as well to rank beside it.
+.redux-app-root .redux-layout-editor-row.redux-button {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control);
+  font-size: var(--type-body);
+  text-align: start;
+  cursor: grab;
+  touch-action: none;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  // The command the pointer is carrying stays listed, dimmed: its place on the
+  // surface is a preview, and dropping it back here removes it.
+  &[data-carried="true"] {
+    opacity: 0.55;
+  }
+}
+
+.redux-layout-editor-row-label {
+  overflow: hidden;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.redux-layout-editor-empty {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-layout-editor-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--edge-divider);
+  background: var(--panel-header);
+}
+
+// The drag ghost follows the pointer and names what is being carried. It sits above
+// the chrome, the dim, and the list, because the pointer that is resolving the drop
+// may be over any of them; it stays below a menu, which is a real control. The
+// label is offset from the pointer so it never covers the thing being measured.
+.redux-layout-editor-ghost {
+  position: fixed;
+  z-index: var(--z-search);
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-panel);
+  font-size: var(--type-caption);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(var(--space-3), var(--space-3));
+}
+
+// While the editor is open the strip is a drop participant. Its items keep their
+// pointer events, because hover, the shared tooltip, and the wheel all ride on
+// them; what the editor removes is the effect of a press, which the strip's
+// capture listener cancels. The items therefore need a surface of their own: an
+// arranged cell reads as something to pick up, not as the chrome it came from.
+[data-layout-surface] {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+[data-layout-surface] > * {
+  border-radius: var(--radius-control);
+  cursor: grab;
+  transition: background-color var(--design-dur-tint) ease;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+// A rule is a one-pixel line inside a quarter-cell box, so a background change on
+// the box is nearly invisible: the box is mostly empty and the line keeps its own
+// ink. The hover and press states therefore tint the line itself and show the box
+// that is actually being grabbed.
+[data-layout-surface] > .redux-divider-y {
+  cursor: grab;
+
+  &:hover,
+  &:active {
+    background: var(--accent-soft-fill);
+  }
+
+  &:hover::before,
+  &:active::before {
+    background: var(--accent);
+    width: 2px;
+  }
+}
+
+// The rail draws a frame around its button, so the frame is what a drop measures
+// and what a hover paints; the button inside stays transparent.
+[data-layout-surface] .sidebar-item {
+  border-radius: var(--radius-control);
+  cursor: grab;
+
+  & > * {
+    cursor: grab;
+  }
+
+  &:hover > * {
+    background: var(--surface-hover);
+  }
+}
+
+// The overlay declines the pointer so the chrome underneath stays live; a menu is a
+// real control and must take it back. `pointer-events` is inherited, and a popover
+// promoted to the top layer still inherits from its DOM parent, so the row menu
+// would otherwise paint correctly and still refuse every click.
+.redux-layout-editor .redux-menu-popup {
+  pointer-events: auto;
+}
