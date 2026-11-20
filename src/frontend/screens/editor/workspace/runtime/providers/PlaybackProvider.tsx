@@ -116,12 +116,18 @@ export function createPlaybackRuntime(options: {
   /**
    * Chart time as the picture draws it.
    *
-   * The visual clock leads the audible position by the display delay, and every
-   * playback frame publishes the viewport origin from that lead position. A seek
-   * has to publish the same basis, or the origin snaps back by the lead while the
-   * picture keeps it — one displaced frame at the moment playback stops.
+   * The visual clock leads the audible position by the display delay while the
+   * transport moves, and every playback frame publishes the viewport origin from
+   * that lead position. A seek has to publish the same basis, or the origin snaps
+   * back by the lead while the picture keeps it — one displaced frame at the
+   * moment playback stops.
+   *
+   * A paused transport draws at the position it holds: nothing advances while the
+   * frame is presented, so the lead would invent a position. The origin follows
+   * the same rule, which is what lets a seek to the start report exactly zero.
    */
-  const drawnChartSeconds = () => chartSeconds() + options.visualLeadSeconds();
+  const drawnChartSeconds = () =>
+    chartSeconds() + (audio.playing ? options.visualLeadSeconds() : 0);
   let preloadAt = Number.NEGATIVE_INFINITY;
   let preloadPending = false;
   /** Keep the paged line window ahead of a seek or playback start. */

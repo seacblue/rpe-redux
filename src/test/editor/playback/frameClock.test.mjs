@@ -1,7 +1,10 @@
 /** Verify visual playback interpolation without changing the authoritative audio clock. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createVisualPlaybackClock } from "../../../frontend/screens/editor/workspace/runtime/frame/frameClock.ts";
+import {
+  createFrameClock,
+  createVisualPlaybackClock,
+} from "../../../frontend/screens/editor/workspace/runtime/frame/frameClock.ts";
 import { DISPLAY_LEAD_SECONDS, visualLeadSeconds } from "../../../core/media/outputLatency.ts";
 
 /** A transport stub whose `awaitingOutput` the test controls. */
@@ -93,4 +96,32 @@ test("the visual lead stays inside a correction-sized range", () => {
   // A missing or unusable setting falls back to the calibrated default.
   assert.ok(Math.abs(visualLeadSeconds(Number.NaN) - DISPLAY_LEAD_SECONDS) < 1e-12);
   assert.ok(Math.abs(visualLeadSeconds(undefined) - DISPLAY_LEAD_SECONDS) < 1e-12);
+});
+
+test("the frame clock draws at the held position while paused", () => {
+  // A paused transport does not advance while the frame is presented, so a lead
+  // there would report a position nobody asked for. At the start that showed as a
+  // nonzero readout and playhead after seeking to zero.
+  const audio = createAudio({ playing: false, time: 0 });
+  const paused = createFrameClock(
+    {
+      audio,
+      timeline: { autoScroll() {} },
+      lineSwitcher: { draw() {} },
+      editClock: { advance() {} },
+      hitSounds: { tick() {} },
+      session: () => ({}),
+      tempo: () => ({ points: [{ beat: 0, secondsPerBeat: 0.5 }] }),
+      chartSeconds: () => audio.time,
+      visualLeadSeconds: () => DISPLAY_LEAD_SECONDS,
+      invalidate() {},
+    },
+    { atHome: () => false, hasDocument: () => true, documentHidden: () => false },
+  );
+
+  assert.equal(paused.seconds(0), 0);
+
+  audio.playing = true;
+  audio.time = 3;
+  assert.ok(Math.abs(paused.seconds(0) - (3 + DISPLAY_LEAD_SECONDS)) < 1e-12);
 });

@@ -10,9 +10,10 @@
  *   data-slider="range"  a thin rail with a thumb
  *
  * Without the attribute the filled readout bar is used. Bounds affect value
- * formatting, never the visual design. The pointer mapping below treats the
- * input's whole border box as the track, so a drag can reach either end even
- * when the pointer leaves the control.
+ * formatting, never the visual design. The pointer mapping below measures
+ * against the painted track — the padding box, because a range's border is not
+ * part of its rail — and clamps points outside it to an end, so a drag can reach
+ * either end even when the pointer leaves the control.
  */
 
 import { clamp01 } from "../../core/utils/numbers.ts";
@@ -45,13 +46,58 @@ function roundToStep(value: number, step: number): number {
   return Number(value.toFixed(Math.min(decimals + 6, 12)));
 }
 
+/** The edges a range input's painted track is inset by, in CSS pixels. */
+export interface TrackInsets {
+  readonly borderLeft: number;
+  readonly borderRight: number;
+  readonly paddingLeft: number;
+  readonly paddingRight: number;
+}
+
+/**
+ * The painted track inside a range input's border box.
+ *
+ * A range's rail spans its content box: the border and the padding are painted
+ * around it rather than as part of it. Measuring the pointer against the whole
+ * border box would make the rail's first pixel worth `(max - min) / width`, so
+ * the leftmost point anyone can see would report a value above the start, and
+ * that error would grow with the range. A non-positive width reports zero so the
+ * caller's endpoint rule takes over.
+ */
+export function trackBounds(
+  box: { left: number; width: number },
+  insets: TrackInsets,
+): { left: number; width: number } {
+  const width =
+    box.width - insets.borderLeft - insets.borderRight - insets.paddingLeft - insets.paddingRight;
+  return {
+    left: box.left + insets.borderLeft + insets.paddingLeft,
+    width: Number.isFinite(width) && width > 0 ? width : 0,
+  };
+}
+
+/** Read a range input's track insets from its computed style. */
+function trackInsets(element: HTMLInputElement): TrackInsets {
+  const style = getComputedStyle(element);
+  const pixels = (value: string): number => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+  return {
+    borderLeft: pixels(style.borderLeftWidth),
+    borderRight: pixels(style.borderRightWidth),
+    paddingLeft: pixels(style.paddingLeft),
+    paddingRight: pixels(style.paddingRight),
+  };
+}
+
 /**
  * The value a range input takes for a pointer at `clientX`.
  *
- * `bounds` is the input's border box: the whole control is the track, so the
- * outermost pixel maps to an end even though the painted rail is inset by the
- * border. Points outside the box clamp to the matching end, which is what lets
- * a drag finish after the pointer has left the control.
+ * `bounds` is the input's painted track: the outermost track pixel maps to an
+ * end, so the position a user can see is the position they get. Points outside
+ * the track clamp to the matching end, which is what lets a drag finish after
+ * the pointer has left the control.
  *
  * The result snaps to the nearest step counted from `min`; a missing step or
  * `step="any"` uses hundredths. A non-positive width or NaN coordinate falls
@@ -98,7 +144,11 @@ export function valueAtPointer(
 export function writeRangeValueAtPointer(input: HTMLInputElement, clientX: number): boolean {
   const { min, max } = rangeBounds(input);
   const box = input.getBoundingClientRect();
-  const next = valueAtPointer({ left: box.left, width: box.width }, min, max, input.step, clientX);
+  // The rail is painted inside the border and padding, so the pointer is mapped
+  // against that track. The box itself would make the track's first pixel worth
+  // a full step of the range, and on a timeline that is seconds.
+  const bounds = trackBounds({ left: box.left, width: box.width }, trackInsets(input));
+  const next = valueAtPointer(bounds, min, max, input.step, clientX);
   const current = input.value === "" ? Number.NaN : Number(input.value);
   if (Number.isFinite(current) && current === next) {
     return false;

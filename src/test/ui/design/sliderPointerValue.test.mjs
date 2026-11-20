@@ -1,7 +1,7 @@
 /** Pointer-to-value mapping for range sliders: endpoints, step snapping, and guards. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { valueAtPointer } from "../../../design/controls/sliderMode.ts";
+import { trackBounds, valueAtPointer } from "../../../design/controls/sliderMode.ts";
 
 const box = { left: 100, width: 200 };
 
@@ -62,4 +62,23 @@ test("non-finite input does not produce NaN", () => {
   assert.equal(valueAtPointer({ left: Number.NaN, width: 200 }, 3, 7, "1", 150), 3);
   assert.equal(valueAtPointer(box, Number.NaN, 7, "1", 100), 0);
   assert.equal(valueAtPointer(box, 3, Number.NaN, "1", 200), 3);
+});
+
+test("the painted track's edges map to the ends, not the input's border box", () => {
+  // A 1px border and 2px padding on both sides. The rail is what the user sees
+  // and drags, so its first pixel is the start and its last pixel is the end.
+  const insets = { borderLeft: 1, borderRight: 1, paddingLeft: 2, paddingRight: 2 };
+  const rail = trackBounds({ left: 100, width: 206 }, insets);
+  assert.equal(rail.left, 103);
+  assert.equal(rail.width, 200);
+  assert.equal(valueAtPointer(rail, 0, 600, "0.001", 103), 0);
+  assert.equal(valueAtPointer(rail, 0, 600, "0.001", 303), 600);
+  // The border itself is outside the track and still clamps to the start.
+  assert.equal(valueAtPointer(rail, 0, 600, "0.001", 100), 0);
+});
+
+test("a track that collapses reports no width so the caller uses the endpoint rule", () => {
+  const insets = { borderLeft: 20, borderRight: 20, paddingLeft: 0, paddingRight: 0 };
+  assert.equal(trackBounds({ left: 100, width: 40 }, insets).width, 0);
+  assert.equal(trackBounds({ left: 100, width: 30 }, insets).width, 0);
 });

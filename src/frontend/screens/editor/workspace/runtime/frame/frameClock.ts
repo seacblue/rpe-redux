@@ -216,7 +216,14 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
      * already emitted. A frame painted now is not visible until the compositor
      * presents it, and by then the sound has moved on, so the picture has to lead
      * by that display delay — otherwise it trails the sound by exactly that much.
+     *
+     * The lead belongs to a moving transport. A paused transport does not advance
+     * while the frame is being presented, so a lead there would show a position
+     * nobody asked for: the transport would sit at the start while the readouts
+     * and the playhead reported a lead's worth of time, and the same lead would
+     * follow every pause wherever it happened.
      */
-    seconds: (timestamp: number) => visualClock.read(timestamp) + options.visualLeadSeconds(),
+    seconds: (timestamp: number) =>
+      visualClock.read(timestamp) + (options.audio.playing ? options.visualLeadSeconds() : 0),
   };
 }
