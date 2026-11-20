@@ -23,11 +23,11 @@ test("default wheel bindings step lines with Ctrl and seek time otherwise", () =
   try {
     assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true }), {
       kind: "line",
-      direction: 1,
+      direction: -1,
     });
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true }), {
       kind: "line",
-      direction: -1,
+      direction: 1,
     });
     assert.deepEqual(matchTimelineWheel({ deltaY: -100 }), {
       kind: "seek",

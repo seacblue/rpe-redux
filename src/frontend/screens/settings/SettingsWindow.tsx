@@ -412,13 +412,14 @@ export function SettingsWindow({
     (entry) => (!searching || matchingNavigationKeys.has(entry.key)) && !pageBodyReady(entry.key),
   );
 
-  /** Commit one setting value to the shared value store. */
-  const commit = (field: Field, value: SettingValue) => {
-    const previous =
-      field.control === "file" && field.storage === "application-data" && values.byId.has(field.key)
-        ? values.byId.get<unknown>(field.key)
-        : undefined;
-    values.byId.set(field.key, value);
+  /** Read the application-data reference a new file value would replace. */
+  const replacedReference = (field: Field) =>
+    field.control === "file" && field.storage === "application-data" && values.byId.has(field.key)
+      ? values.byId.get<unknown>(field.key)
+      : undefined;
+  /** Run the side effects shared by a user edit and a reset. */
+  const finishSetting = (field: Field, previous: unknown) => {
+    const value = values.byId.get<SettingValue>(field.key);
     syncRuntimePortSetting(field.key, value);
     const replaced = replacedApplicationDataReference(previous, value);
     if (replaced && isDesktop()) {
@@ -426,6 +427,26 @@ export function SettingsWindow({
         console.error("Could not remove the replaced settings image", error);
       });
     }
+  };
+  /** Commit one setting value the user chose, including a same-as-default answer. */
+  const commit = (field: Field, value: SettingValue) => {
+    const previous = replacedReference(field);
+    values.byId.setUser(field.key, value);
+    finishSetting(field, previous);
+  };
+  /** Restore one setting to its default and clear its modified provenance. */
+  const resetSetting = (field: Field) => {
+    if (field.default === undefined) {
+      return;
+    }
+    const previous = replacedReference(field);
+    // Match the value declaration's canonical form: toggles stay boolean and
+    // every other control stores the textual default.
+    values.byId.reset(
+      field.key,
+      field.control === "toggle" ? field.default : String(field.default),
+    );
+    finishSetting(field, previous);
   };
   const closeSettings = () => setOpen(false);
   const activeCategory = categories.find((entry) => entry.key === category);
@@ -723,6 +744,7 @@ export function SettingsWindow({
                             fields={panelFields}
                             shown={shown}
                             onCommitValue={commit}
+                            onResetValue={resetSetting}
                             onOpenCategory={openCategory}
                             searching={searching}
                             pageTitle={showPageTitle ? pageLabel : undefined}

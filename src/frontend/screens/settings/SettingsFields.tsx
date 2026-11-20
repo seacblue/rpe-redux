@@ -31,11 +31,13 @@ function SettingRow({
   shown,
   controlFor,
   onCommitValue,
+  onResetValue,
 }: {
   field: SettingDefinition;
   shown(field: SettingDefinition): boolean;
   controlFor: ControlFor;
   onCommitValue(field: SettingDefinition, value: SettingValue): void;
+  onResetValue(field: SettingDefinition): void;
 }) {
   const { t } = useTranslation();
   // Visibility and usability are independent declarations. Built-in rows stay
@@ -74,7 +76,7 @@ function SettingRow({
       description={field.description ? settingText(field.description) : undefined}
       reset={
         fullWidth ? undefined : (
-          <SettingReset field={field} onReset={onCommitValue} disabled={!enabled} />
+          <SettingReset field={field} onReset={onResetValue} disabled={!enabled} />
         )
       }
       control={(_, describedBy) => controlFor(field, describedBy, enabled)}
@@ -110,6 +112,7 @@ export function SettingsFields({
   fields,
   shown,
   onCommitValue,
+  onResetValue,
   onOpenCategory,
   searching = false,
   pageTitle,
@@ -117,6 +120,7 @@ export function SettingsFields({
   fields: SettingDefinition[];
   shown(field: SettingDefinition): boolean;
   onCommitValue(field: SettingDefinition, value: SettingValue): void;
+  onResetValue(field: SettingDefinition): void;
   onOpenCategory(category: string): void;
   searching?: boolean;
   /** The page title shown above these rows; a matching group heading is omitted. */
@@ -181,6 +185,7 @@ export function SettingsFields({
                   shown={shown}
                   controlFor={controlFor}
                   onCommitValue={onCommitValue}
+                  onResetValue={onResetValue}
                 />
               ))}
             </FieldRows>

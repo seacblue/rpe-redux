@@ -46,9 +46,8 @@ export const POINTER_GESTURE_REPAIR_ID = "shortcut.pointerGestureRepair";
  * Level of the pointer-gesture repair already applied to this profile.
  *
  * Profiles written before the RPE importer kept pointer gestures hold migrated
- * commands with only their keyboard keys, so Ctrl+Wheel Up matches nothing while
- * Ctrl+Wheel Down still steps back. The repair runs once: a gesture removed after
- * it stays removed.
+ * commands with only their keyboard keys. The repair runs once: a gesture
+ * removed after it stays removed.
  *
  * The declaration tolerates an already registered id because the development
  * server replaces this module on hot reload.
@@ -73,16 +72,6 @@ function pointerGestureRepairLevel(): number {
 /** Two written binding lists are the same answer, whatever their wording was. */
 const sameBindings = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((text, index) => text === b[index]);
-
-/** Whether two binding lists name the same set, regardless of their order. */
-function sameBindingSet(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  const left = [...a].sort();
-  const right = [...b].sort();
-  return left.every((text, index) => text === right[index]);
-}
 
 interface RegisteredShortcut extends ShortcutDefinition {
   order: number;
@@ -234,6 +223,7 @@ export class ShortcutRegistry {
         scope,
         bindings: this.bindingsOf(id),
         overridden: this.overridden(id),
+        modified: values.byId.isModified(this.valueId(id)),
         conflicts: [],
         bindingConflicts: {},
       };
@@ -359,6 +349,7 @@ export class ShortcutRegistry {
       return { ok: false, error: "shortcuts.error.alreadyBound" };
     }
     this.set(id, [...current, text]);
+    values.byId.markModified(this.valueId(id));
     return { ok: true };
   }
 
@@ -379,6 +370,7 @@ export class ShortcutRegistry {
     const next = [...current];
     next[index] = text;
     this.set(id, next);
+    values.byId.markModified(this.valueId(id));
     return { ok: true };
   }
 
@@ -392,6 +384,7 @@ export class ShortcutRegistry {
       id,
       current.filter((_, position) => position !== index),
     );
+    values.byId.markModified(this.valueId(id));
     return { ok: true };
   }
 
@@ -430,31 +423,28 @@ export class ShortcutRegistry {
     if (!definition) {
       return;
     }
-    this.set(id, definition.defaults.map(canonicalText));
+    values.byId.reset(this.valueId(id), definition.defaults.map(canonicalText));
   }
 
   /** Forgets every answer this registry knows about. */
   resetAll(): void {
     for (const definition of this.definitions.getSnapshot()) {
-      this.set(definition.id, definition.defaults.map(canonicalText));
+      values.byId.reset(this.valueId(definition.id), definition.defaults.map(canonicalText));
     }
   }
 
   /**
-   * Repair stored bindings that no user chose, for the wheel-gesture changes.
+   * Repair stored bindings that no user chose, for the pointer-gesture changes.
    *
    * An RPE hotkey import used to replace every binding of the commands it
    * mapped, so a migrated `navigation.line.next` kept only its keyboard key and
-   * Ctrl+Wheel Up stopped increasing the judge line. The importer now preserves
-   * pointer bindings, but profiles written before that fix still lack them.
+   * matched no wheel gesture. The importer now preserves pointer bindings, but
+   * profiles written before that fix still lack them.
    *
-   * Two stored shapes are repaired. A list equal to a definition's
-   * `legacyDefaults` came from Reset on an older build, so it moves to the
-   * current defaults. A list that owns no pointer binding at all receives the
-   * definition's pointer defaults that no other shortcut claims, up to the
-   * binding cap. A list that already owns a pointer gesture is left alone, so a
-   * deliberate rebind is never merged with old defaults. The repair runs once
-   * per profile.
+   * A list that owns no pointer binding at all receives the definition's
+   * pointer defaults that no other shortcut claims, up to the binding cap. A
+   * list that already owns a pointer gesture is left alone, so a deliberate
+   * rebind is never merged with old defaults. The repair runs once per profile.
    *
    * @returns How many shortcuts received a restored gesture.
    */
@@ -463,23 +453,6 @@ export class ShortcutRegistry {
       return 0;
     }
     const definitions = this.definitions.getSnapshot();
-    // A list equal to the defaults an older build shipped was written by that
-    // build's Reset, not by the user; move it to the current defaults.
-    const migrations = new Map<string, { from: string[]; to: string[] }>();
-    for (const definition of definitions) {
-      const written = this.written(definition.id);
-      if (!written.length) {
-        continue;
-      }
-      const legacy = (definition.legacyDefaults ?? []).map(canonicalText);
-      if (!legacy.length || !sameBindingSet(written, legacy)) {
-        continue;
-      }
-      migrations.set(definition.id, {
-        from: written,
-        to: [...new Set(definition.defaults.map(canonicalText))],
-      });
-    }
     const holders = new Map<string, Set<string>>();
     const claim = (identity: string, id: string): void => {
       const ids = holders.get(identity);
@@ -491,45 +464,13 @@ export class ShortcutRegistry {
     };
     const claimedByOther = (identity: string, id: string): boolean =>
       [...(holders.get(identity) ?? [])].some((holder) => holder !== id);
-    // A migrating command keeps its old bindings out of the claim table until
-    // its new defaults are checked, so a pair that swaps directions does not
-    // block itself. A migration that is refused puts its old bindings back.
     for (const view of this.shortcuts()) {
-      if (migrations.has(view.id)) {
-        continue;
-      }
       for (const binding of view.bindings) {
         claim(shortcutConflictKey(binding), view.id);
       }
     }
     let repaired = 0;
-    for (const [id, migration] of migrations) {
-      const blocked = migration.to.some((text) => {
-        const parsed = parseShortcut(text);
-        return parsed.ok && claimedByOther(shortcutConflictKey(parsed.shortcut), id);
-      });
-      if (blocked) {
-        for (const text of migration.from) {
-          const parsed = parseShortcut(text);
-          if (parsed.ok) {
-            claim(shortcutConflictKey(parsed.shortcut), id);
-          }
-        }
-        continue;
-      }
-      this.set(id, migration.to);
-      for (const text of migration.to) {
-        const parsed = parseShortcut(text);
-        if (parsed.ok) {
-          claim(shortcutConflictKey(parsed.shortcut), id);
-        }
-      }
-      repaired += 1;
-    }
     for (const definition of definitions) {
-      if (migrations.has(definition.id)) {
-        continue;
-      }
       const pointerDefaults = definition.defaults.filter((binding) =>
         shortcutKeys(binding).some(isPointerKey),
       );
@@ -671,10 +612,12 @@ export class ShortcutRegistry {
     // A write from anywhere -the settings page, the API, adopting SQLite -comes
     // back through here, so the views and the matcher never hold a stale list.
     this.bindingDisposers.get(valueId)?.();
-    this.bindingDisposers.set(
-      valueId,
-      values.byId.subscribe(valueId, () => this.invalidate()),
-    );
+    const disposeBinding = values.byId.subscribe(valueId, () => this.invalidate());
+    const disposeModified = values.byId.subscribeModified(valueId, () => this.invalidate());
+    this.bindingDisposers.set(valueId, () => {
+      disposeBinding();
+      disposeModified();
+    });
     this.registeredDefaults.set(valueId, definition.defaults.map(canonicalText));
   }
 

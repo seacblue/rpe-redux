@@ -94,7 +94,7 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 | Hold preview playback, stay    | `U`                                   |
 | Timeline backward / forward    | `Wheel Down` / `Wheel Up`             |
 | Fast seek backward / forward   | `Shift+Wheel Down` / `Shift+Wheel Up` |
-| Next / previous judge line     | `Ctrl+Wheel Up` / `Ctrl+Wheel Down`   |
+| Next / previous judge line     | `Ctrl+Wheel Down` / `Ctrl+Wheel Up`   |
 | Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`     |
 | Settings                       | `Ctrl+K`                              |
 

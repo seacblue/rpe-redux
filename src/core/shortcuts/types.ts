@@ -122,16 +122,10 @@ export interface ShortcutDefinition {
   /** The direct operation this key runs when matched. */
   run?: (input?: unknown) => unknown;
   enabled?: () => boolean;
-  /** Former storage key adopted once when the current id has no stored bindings. */
-  legacyStorageKey?: string;
   /**
-   * Defaults this command shipped before a product change.
-   *
-   * A profile that still stores exactly these bindings never expressed a choice:
-   * it was written by Reset on the older build. Registration moves it to the
-   * current defaults the same way a current Reset would.
+   * Former storage key adopted once when the current id has no stored bindings.
    */
-  legacyDefaults?: readonly Shortcut[];
+  legacyStorageKey?: string;
 }
 
 /**
@@ -145,10 +139,12 @@ export interface ShortcutDefinition {
  */
 export interface ShortcutView extends Omit<
   ShortcutDefinition,
-  "run" | "enabled" | "legacyStorageKey" | "legacyDefaults"
+  "run" | "enabled" | "legacyStorageKey"
 > {
   bindings: Shortcut[];
   overridden: boolean;
+  /** Whether the user explicitly edited this command's bindings. */
+  modified: boolean;
   /** Ids this shortcut collides with on any binding, when the collision is not allowed. */
   conflicts: string[];
   /**

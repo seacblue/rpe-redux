@@ -421,7 +421,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
                     label={t("shortcuts.addBinding")}
                     onClick={() => startRecording(view.id, null)}
                   />
-                  {view.overridden && (
+                  {(view.modified || view.overridden) && (
                     <IconButton
                       icon="undo"
                       size={16}

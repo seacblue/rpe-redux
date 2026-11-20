@@ -33,7 +33,7 @@ export function openAudioAnalysis(): void {
   // The toggle is the same settings row the audio page renders; the timeline
   // runtime subscribes to it and redraws the strip.
   if (values.byId.has("audio-analysis-enabled")) {
-    values.byId.set("audio-analysis-enabled", true);
+    values.byId.setUser("audio-analysis-enabled", true);
   }
   openSettings("playback");
   bound.audioAnalysis

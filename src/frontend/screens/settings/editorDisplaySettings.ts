@@ -369,7 +369,7 @@ export function persistEditorSettings({
   };
   for (const [key, value] of Object.entries(next)) {
     if (values.byId.get<unknown>(key) !== value) {
-      values.byId.set(key, value);
+      values.byId.setUser(key, value);
     }
   }
 }

@@ -253,6 +253,9 @@ function AppContent() {
         if (cancelled) {
           return;
         }
+        // Older profiles can only be classified by their stored entries; run
+        // once, after durable preferences and packaged settings are declared.
+        values.reconcileModifiedMetadata();
         setBackendReady(true);
       })
       .catch((failure) => {

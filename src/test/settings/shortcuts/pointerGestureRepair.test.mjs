@@ -1,9 +1,9 @@
 /**
- * One-time repair for pointer gestures an older RPE hotkey import dropped.
+ * Repair for pointer gestures an older RPE hotkey import dropped.
  *
  * The importer used to replace every binding of a mapped command, so a migrated
- * `navigation.line.next` kept only its keyboard key. Ctrl+Wheel Down still
- * stepped back through the sibling command while Ctrl+Wheel Up matched nothing.
+ * `navigation.line.next` kept only its keyboard key. A profile that already
+ * stored a wheel direction is left alone; only a missing gesture is added.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -25,16 +25,16 @@ test("a migrated command without a wheel gesture regains its default once", () =
   const next = TIMELINE_WHEEL_SHORTCUT_IDS.lineNext;
   const previous = TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious;
   try {
-    // The pre-fix importer wrote only the RPE key, losing Ctrl+Wheel Up.
+    // The pre-fix importer wrote only the RPE key, losing the wheel gesture.
     assert.equal(shortcutRegistry.replaceAllBindings(next, ["TAB"]).ok, true);
     resetRepairLevel();
 
     assert.equal(shortcutRegistry.repairPointerGestures(), 1);
     assert.deepEqual(shortcutRegistry.bindingsOf(next), [
       { key: "TAB", modifiers: [] },
-      { key: "WHEELUP", modifiers: ["CTRL"] },
+      { key: "WHEELDOWN", modifiers: ["CTRL"] },
     ]);
-    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true }), {
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true }), {
       kind: "line",
       direction: 1,
     });
@@ -51,35 +51,20 @@ test("a migrated command without a wheel gesture regains its default once", () =
   }
 });
 
-test("a profile reset on the old wheel order moves to the current defaults", () => {
+test("the repair leaves a stored wheel direction alone", () => {
   const dispose = registerEditorShortcuts();
   const next = TIMELINE_WHEEL_SHORTCUT_IDS.lineNext;
   const previous = TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious;
   try {
-    // Reset on the pre-forward-first build persisted both old wheel directions.
-    assert.equal(
-      shortcutRegistry.replaceAllBindings(next, ["CTRL+WHEELDOWN", "CTRL+SHIFT+WHEELDOWN"]).ok,
-      true,
-    );
-    assert.equal(
-      shortcutRegistry.replaceAllBindings(previous, ["CTRL+WHEELUP", "CTRL+SHIFT+WHEELUP"]).ok,
-      true,
-    );
+    assert.equal(shortcutRegistry.replaceAllBindings(next, ["CTRL+WHEELUP"]).ok, true);
+    assert.equal(shortcutRegistry.replaceAllBindings(previous, ["CTRL+WHEELDOWN"]).ok, true);
     resetRepairLevel();
 
-    assert.equal(shortcutRegistry.repairPointerGestures(), 2);
+    assert.equal(shortcutRegistry.repairPointerGestures(), 0);
     assert.deepEqual(shortcutRegistry.bindingsOf(next), [{ key: "WHEELUP", modifiers: ["CTRL"] }]);
     assert.deepEqual(shortcutRegistry.bindingsOf(previous), [
       { key: "WHEELDOWN", modifiers: ["CTRL"] },
     ]);
-    assert.deepEqual(matchTimelineWheel({ deltaY: -120, ctrlKey: true }), {
-      kind: "line",
-      direction: 1,
-    });
-    assert.deepEqual(matchTimelineWheel({ deltaY: 120, ctrlKey: true }), {
-      kind: "line",
-      direction: -1,
-    });
   } finally {
     shortcutRegistry.resetShortcut(next);
     shortcutRegistry.resetShortcut(previous);
@@ -112,7 +97,7 @@ test("the repair does not take a pointer gesture another command already owns", 
     category: "test",
     title: "test",
     scope: "editor",
-    defaults: [{ key: "WHEELUP", modifiers: ["CTRL"] }],
+    defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL"] }],
   });
   try {
     assert.equal(shortcutRegistry.replaceAllBindings(next, ["TAB"]).ok, true);

@@ -27,6 +27,17 @@ import {
 import { isRecord } from "../utils/guards.ts";
 import { assertSafeIdentifier } from "../utils/safeIdentifier.ts";
 
+/** Preference section that records which values the user committed. */
+const VALUE_META_SECTION: PreferenceSection = PREFERENCE_SECTIONS.valueMeta;
+/** One-time backfill level for modification provenance. */
+const VALUE_META_VERSION = 1;
+
+/** Persisted provenance for named values. */
+interface ValueMeta {
+  version?: number;
+  modified?: Record<string, true>;
+}
+
 /** Construction options for one observable cell. */
 export interface ValueOptions<T> {
   initial: T;
@@ -182,6 +193,13 @@ export interface ValueDefinition<T> extends ValueOptions<T> {
    * The next write lands under `storageKey` and drops the legacy entry.
    */
   legacyStorageKey?: string;
+  /**
+   * Whether to record an explicit user commit for this value.
+   *
+   * Defaults to true for the settings and shortcuts sections, whose values are
+   * user-facing settings; a runtime or layout value stays untracked.
+   */
+  trackModified?: boolean;
 }
 
 /** The cell returned by `defineValue`, carrying its registry id. */
@@ -195,7 +213,18 @@ export interface ValueHandle<T> extends ValueCell<T> {
 export interface ValueById {
   has(id: string): boolean;
   get<T>(id: string): T;
+  /** Programmatic write: does not change the user-modified flag. */
   set<T>(id: string, value: T): void;
+  /** Write a value the user committed and mark it modified, even when unchanged. */
+  setUser<T>(id: string, value: T): void;
+  /** Mark a value the caller wrote through another domain method. */
+  markModified(id: string): void;
+  /** Restore the initial value (or a supplied default) and clear the modified flag. */
+  reset(id: string, value?: unknown): void;
+  /** Whether the user explicitly committed this value. */
+  isModified(id: string): boolean;
+  /** Observe one value's user-modified flag. */
+  subscribeModified(id: string, listener: () => void): () => void;
   update(id: string, partial: unknown): void;
   subscribe(id: string, listener: () => void): () => void;
   subscribeAll(listener: () => void): () => void;
@@ -213,6 +242,8 @@ interface ValueEntry {
   validate: ((value: unknown) => void) | null;
   equals: (a: unknown, b: unknown) => boolean;
   adopting: boolean;
+  /** Whether this value records explicit user commits. */
+  trackModified: boolean;
   /** Who contributed this value; absent for host-owned values. */
   owner?: string;
 }
@@ -223,7 +254,22 @@ class ValueStore {
   private readonly attached = new Set<PreferenceSection>();
   private readonly listeners = new Set<() => void>();
   private readonly ownerRevisions = new Map<string, number>();
+  private readonly modified = new Map<string, true>();
+  private readonly modifiedListeners = new Map<string, Set<() => void>>();
+  private metaVersion = 0;
   private revision = 0;
+  /**
+   * Restore the provenance document and follow later adoption of it.
+   *
+   * Durable preferences attach after this store is constructed, so the section
+   * listener is what makes a database row reach the live flags.
+   */
+  constructor() {
+    this.adoptModified(readPreference<unknown>(VALUE_META_SECTION, {}));
+    preferences.subscribe(VALUE_META_SECTION, () => {
+      this.adoptModified(readPreference<unknown>(VALUE_META_SECTION, {}));
+    });
+  }
   /** Monotonic registry version, incremented on every value change. */
   getVersion = (): number => this.revision;
   /** Subscribe to any named value change; returns an unsubscribe callback. */
@@ -255,6 +301,11 @@ class ValueStore {
     has: (id: string) => this.has(id),
     get: <T>(id: string) => this.get<T>(id),
     set: <T>(id: string, value: T) => this.set(id, value),
+    setUser: <T>(id: string, value: T) => this.setUser(id, value),
+    markModified: (id: string) => this.markModified(id),
+    reset: (id: string, value?: unknown) => this.reset(id, value),
+    isModified: (id: string) => this.isModified(id),
+    subscribeModified: (id: string, listener: () => void) => this.subscribeModified(id, listener),
     update: (id: string, partial: unknown) => this.update(id, partial),
     subscribe: (id: string, listener: () => void) => this.subscribeKey(id, listener),
     subscribeAll: (listener: () => void) => this.subscribe(listener),
@@ -308,6 +359,9 @@ class ValueStore {
       validate: validate ? (value) => validate(value as T) : null,
       equals: equals ? (a, b) => equals(a as T, b as T) : Object.is,
       adopting: false,
+      trackModified:
+        definition.trackModified ??
+        (section === PREFERENCE_SECTIONS.settings || section === PREFERENCE_SECTIONS.shortcuts),
       ...(owner === undefined ? {} : { owner }),
     };
     this.entries.set(id, entry);
@@ -417,6 +471,88 @@ class ValueStore {
   set<T>(id: string, value: T): void {
     this.require(id).cell.set(value);
   }
+  /**
+   * Write a value the user committed and mark it modified.
+   *
+   * The flag is recorded even when the value equals the initial one: equality
+   * is not evidence that the user never touched it.
+   */
+  setUser<T>(id: string, value: T): void {
+    const entry = this.require(id);
+    entry.cell.set(value);
+    this.setModified(entry, true);
+  }
+  /** Mark a value whose write already went through a domain-specific method. */
+  markModified(id: string): void {
+    this.setModified(this.require(id), true);
+  }
+  /**
+   * Restore the initial value and clear the modified flag.
+   *
+   * A caller passes the default it is showing when the registered initial may
+   * have moved since the value was declared, as a hot reload can do.
+   */
+  reset(id: string, value?: unknown): void {
+    const entry = this.require(id);
+    entry.cell.set(value === undefined ? entry.initial : value);
+    this.setModified(entry, false);
+  }
+  /** Whether the user explicitly committed this value. */
+  isModified(id: string): boolean {
+    const entry = this.entries.get(id);
+    return entry?.trackModified === true && this.modified.has(entry.id);
+  }
+  /** Observe one value's user-modified flag. */
+  subscribeModified(id: string, listener: () => void): () => void {
+    const entry = this.entries.get(id);
+    if (!entry?.trackModified) {
+      return () => {};
+    }
+    let listeners = this.modifiedListeners.get(entry.id);
+    if (!listeners) {
+      listeners = new Set();
+      this.modifiedListeners.set(entry.id, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) {
+        this.modifiedListeners.delete(entry.id);
+      }
+    };
+  }
+  /**
+   * Mark tracked values that already had a stored entry before provenance
+   * existed, then stamp the one-time backfill level.
+   *
+   * A profile written before this feature cannot distinguish a manual choice
+   * from a Reset or import. Marking every stored value is the conservative
+   * direction: a later default change must not overwrite a possible choice.
+   */
+  reconcileModifiedMetadata(): number {
+    if (this.metaVersion >= VALUE_META_VERSION) {
+      return 0;
+    }
+    let repaired = 0;
+    for (const entry of this.entries.values()) {
+      if (!entry.trackModified || !entry.section || this.modified.has(entry.id)) {
+        continue;
+      }
+      const section = this.section(entry.section);
+      const stored =
+        Object.hasOwn(section, entry.storageKey) ||
+        (entry.legacyStorageKey !== undefined && Object.hasOwn(section, entry.legacyStorageKey));
+      if (!stored) {
+        continue;
+      }
+      this.modified.set(entry.id, true);
+      this.notifyModified(entry.id);
+      repaired += 1;
+    }
+    this.metaVersion = VALUE_META_VERSION;
+    this.writeModified();
+    return repaired;
+  }
   /** Merge into a registered value by id; throws when the id is unknown. */
   update(id: string, partial: unknown): void {
     this.require(id).cell.update(partial as Partial<unknown>);
@@ -469,6 +605,57 @@ class ValueStore {
       return false;
     }
   }
+  /** Replace the in-memory provenance map from the stored document. */
+  private adoptModified(raw: unknown): void {
+    const meta: ValueMeta = isRecord(raw) ? raw : {};
+    const stored = isRecord(meta.modified) ? meta.modified : {};
+    const next = new Map<string, true>();
+    for (const [id, flag] of Object.entries(stored)) {
+      if (flag === true) {
+        next.set(id, true);
+      }
+    }
+    const changed: string[] = [];
+    for (const id of new Set([...this.modified.keys(), ...next.keys()])) {
+      if (this.modified.has(id) !== next.has(id)) {
+        changed.push(id);
+      }
+    }
+    this.modified.clear();
+    for (const id of next.keys()) {
+      this.modified.set(id, true);
+    }
+    this.metaVersion = typeof meta.version === "number" ? meta.version : 0;
+    for (const id of changed) {
+      this.notifyModified(id);
+    }
+  }
+  /** Apply one modification flag and persist the change. */
+  private setModified(entry: ValueEntry, modified: boolean): void {
+    if (!entry.trackModified || this.modified.has(entry.id) === modified) {
+      return;
+    }
+    if (modified) {
+      this.modified.set(entry.id, true);
+    } else {
+      this.modified.delete(entry.id);
+    }
+    this.writeModified();
+    this.notifyModified(entry.id);
+  }
+  /** Write the provenance document from the in-memory map. */
+  private writeModified(): void {
+    writePreference(VALUE_META_SECTION, {
+      version: this.metaVersion,
+      modified: Object.fromEntries([...this.modified].map(([id]) => [id, true])),
+    });
+  }
+  /** Notify the listeners of one value's modification flag. */
+  private notifyModified(id: string): void {
+    for (const listener of [...(this.modifiedListeners.get(id) ?? [])]) {
+      listener();
+    }
+  }
   /** Remove one owner's stored keys, grouping writes by preference section. */
   private purgeStored(entries: readonly ValueEntry[]): void {
     const bySection = new Map<PreferenceSection, Set<string>>();
@@ -498,6 +685,20 @@ class ValueStore {
       if (changed) {
         writePreference(section, current);
       }
+    }
+    this.purgeModified(entries);
+  }
+  /** Drop provenance for values removed from the profile entirely. */
+  private purgeModified(entries: readonly ValueEntry[]): void {
+    let changed = false;
+    for (const entry of entries) {
+      if (this.modified.delete(entry.id)) {
+        changed = true;
+        this.notifyModified(entry.id);
+      }
+    }
+    if (changed) {
+      this.writeModified();
     }
   }
   /** Mirror one value into its preference section, removing it when back at initial. */

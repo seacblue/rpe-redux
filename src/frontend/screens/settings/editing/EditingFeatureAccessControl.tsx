@@ -80,7 +80,7 @@ export function EditingFeatureAccessControl({ field }: { field: SettingDefinitio
             aria-label={t("settings.editingAccess.aiUseCheckbox", { field: rowLabel })}
             aria-describedby={describedBy}
             onChange={(event) =>
-              values.byId.set(EDITING_FEATURE_AI_KEYS[feature], event.currentTarget.checked)
+              values.byId.setUser(EDITING_FEATURE_AI_KEYS[feature], event.currentTarget.checked)
             }
           />
         </label>
@@ -93,7 +93,7 @@ export function EditingFeatureAccessControl({ field }: { field: SettingDefinitio
           aria-label={t("settings.editingAccess.visibleCheckbox", { field: rowLabel })}
           aria-describedby={describedBy}
           onChange={(event) =>
-            values.byId.set(EDITING_FEATURE_KEYS[feature], event.currentTarget.checked)
+            values.byId.setUser(EDITING_FEATURE_KEYS[feature], event.currentTarget.checked)
           }
         />
       </label>

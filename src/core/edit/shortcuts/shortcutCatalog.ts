@@ -176,23 +176,15 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.nextJudgeLine",
     scope: "editor",
-    defaults: [{ key: "WHEELUP", modifiers: ["CTRL"] }],
-    // Before the forward-first wheel order, this command answered to Wheel Down.
-    legacyDefaults: [
-      { key: "WHEELDOWN", modifiers: ["CTRL"] },
-      { key: "WHEELDOWN", modifiers: ["CTRL", "SHIFT"] },
-    ],
+    // RPE increases the line number on Wheel Down; this direction must match it.
+    defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.previousJudgeLine",
     scope: "editor",
-    defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL"] }],
-    legacyDefaults: [
-      { key: "WHEELUP", modifiers: ["CTRL"] },
-      { key: "WHEELUP", modifiers: ["CTRL", "SHIFT"] },
-    ],
+    defaults: [{ key: "WHEELUP", modifiers: ["CTRL"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.fastNext,
@@ -356,9 +348,6 @@ function registryDefinition(
   }
   if (shortcut.when) {
     definition.when = shortcut.when;
-  }
-  if (shortcut.legacyDefaults) {
-    definition.legacyDefaults = shortcut.legacyDefaults;
   }
   return definition;
 }

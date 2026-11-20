@@ -35,6 +35,8 @@ export const PREFERENCE_SECTIONS = Object.freeze({
    * preference the editor owns. Settings and shortcuts keep their own sections.
    */
   values: "values",
+  /** Which settings and shortcut values the user explicitly committed. */
+  valueMeta: "valueMeta",
   /** Panel sizes and visibility, so the workspace reopens the way it was left. */
   layout: "layout",
   /** Document path -> SQLite project id; a re-save updates the existing project. */

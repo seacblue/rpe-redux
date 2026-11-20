@@ -34,6 +34,22 @@ export function useSetting<T>(key: string, fallback: T): T {
 }
 
 /**
+ * Whether the user explicitly committed one setting.
+ *
+ * This is provenance, not a value comparison: a user who edited a value and
+ * returned it to its default stays modified until the row's reset runs.
+ */
+export function useSettingModified(key: string): boolean {
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      values.byId.has(key) ? values.byId.subscribeModified(key, listener) : () => {},
+    [key],
+  );
+  const snapshot = useCallback(() => values.byId.has(key) && values.byId.isModified(key), [key]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/**
  * Whether an optional dependency condition currently matches.
  *
  * `undefined` means the row has no condition; an undeclared dependency key is
