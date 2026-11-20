@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { measureCanvas } from "../../../frontend/screens/editor/canvas/canvas2d.ts";
+import { WebGlRenderBackend } from "../../../frontend/screens/editor/canvas/renderBackend.ts";
+import { PreviewGuideBatch } from "../../../frontend/screens/editor/workspace/preview/render/previewGuideBatch.ts";
 import { NoteBatch } from "../../../frontend/screens/editor/canvas/noteBatch.ts";
 import { notePaintLayer } from "../../../frontend/screens/editor/canvas/noteSpriteGroups.ts";
 import { TimelineLineBatch } from "../../../frontend/screens/editor/canvas/timelineLineBatch.ts";
@@ -866,4 +868,60 @@ test("a paused viewport seek repaints the timeline after wheel movement settles"
 
   assert.equal(settled.work.timeline, true);
   assert.equal(settled.work.playhead, true);
+});
+
+/** A guide packet carrying one selected-line pointer and no labels. */
+function pointerPacket(source, { rotation = 0, offset = 0 } = {}) {
+  return {
+    atlas: { getCanvas: () => null, getRevision: () => 0 },
+    glyphs: [],
+    arrows: [{ x: 40, y: 50, rotation, offset, size: 22.5, color: "#00c800", source }],
+    groupCount: 1,
+    visibleGroupCount: 1,
+    textCacheHits: 0,
+    textCacheMisses: 0,
+  };
+}
+
+test("the GPU guide batch draws the selected-line pointer", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const backend = new WebGlRenderBackend(canvas);
+  const batch = new PreviewGuideBatch(canvas, backend);
+  const source = { naturalWidth: 256, naturalHeight: 256, width: 256, height: 256 };
+
+  const stats = batch.render(pointerPacket(source), 100, 100);
+
+  // The pointer used to disappear on this path because the sprite was missing
+  // and `ensureArrowTexture(null)` bailed out without submitting a draw.
+  assert.ok(stats, "the batch reports a submission");
+  assert.equal(calls.draws, 1, "one instanced draw carries the pointer");
+  assert.equal(calls.drawSources[0], source, "the pointer sprite is the drawn texture");
+  batch.dispose();
+});
+
+test("the GPU pointer keeps the Canvas2D anchor, extent, rotation, and stand-off", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const backend = new WebGlRenderBackend(canvas);
+  const batch = new PreviewGuideBatch(canvas, backend);
+  const source = { naturalWidth: 256, naturalHeight: 256, width: 256, height: 256 };
+
+  batch.render(pointerPacket(source), 100, 100);
+  batch.render(pointerPacket(source, { rotation: 90, offset: 5.625 }), 100, 100);
+
+  const first = calls.uploads[0];
+  // Instance layout: centre, size, rotation, then the UV rectangle. The sprite
+  // is anchored at its centre and spans twice the marker height, matching the
+  // `drawImage` box the Canvas2D path uses.
+  assert.deepEqual(first.slice(0, 5), [40, 50, 45, 45, 0]);
+  const second = calls.uploads[1];
+  // Instances are packed as float32, so the angle compares within its precision.
+  assert.ok(Math.abs(second[4] - Math.PI / 2) < 1e-6, "the GPU pointer rotates with its line");
+  // A 90° line's normal is +X, so the stand-off moves the quad along X while the
+  // Canvas2D `translate(0, -offset)` does the same in its local frame.
+  assert.ok(Math.abs(second[0] - 45.625) < 1e-4, "the stand-off moves along the normal");
+  assert.ok(Math.abs(second[1] - 50) < 1e-4, "the stand-off does not slide across the line");
+  // Sampling runs top-left to bottom-right: the sprite is already top-down, so
+  // flipping V here would mirror the marker.
+  assert.deepEqual(second.slice(5, 9), [0, 0, 1, 1]);
+  batch.dispose();
 });

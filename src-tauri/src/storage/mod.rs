@@ -12,7 +12,7 @@ pub(crate) mod path_safety;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::AppHandle;
+use tauri::{ipc::Response, AppHandle};
 #[cfg(not(target_os = "windows"))]
 use tauri_plugin_opener::OpenerExt;
 
@@ -216,10 +216,19 @@ pub fn save_custom_background(
 }
 
 /// Read a settings background by its validated app-data reference.
+///
+/// The bytes cross IPC as a raw response instead of a JSON number array, and a
+/// multi-megabyte background is read on the blocking pool.
 #[tauri::command]
-pub fn read_custom_background(app: AppHandle, reference: String) -> Result<Vec<u8>, String> {
+pub async fn read_custom_background(app: AppHandle, reference: String) -> Result<Response, String> {
     let path = custom_background_path(&app, &reference)?;
-    std::fs::read(path).map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::read(path)
+            .map(Response::new)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// Remove one settings background after its preference stops referring to it.

@@ -116,6 +116,7 @@ export function SettingsFields({
   onOpenCategory,
   searching = false,
   pageTitle,
+  active = false,
 }: {
   fields: SettingDefinition[];
   shown(field: SettingDefinition): boolean;
@@ -125,6 +126,8 @@ export function SettingsFields({
   searching?: boolean;
   /** The page title shown above these rows; a matching group heading is omitted. */
   pageTitle?: string;
+  /** Whether this page section is currently on screen. */
+  active?: boolean;
 }) {
   // Descriptions are intentionally ordinary flow content rather than tooltips:
   // users can read them without hovering, and controls can reference them from
@@ -138,7 +141,7 @@ export function SettingsFields({
   const controlFor: ControlFor = (field, describedBy, enabled) => {
     const Custom = settingControlFor(field.key);
     if (Custom) {
-      return <Custom field={field} />;
+      return <Custom field={field} active={active} />;
     }
     return (
       <SettingControl

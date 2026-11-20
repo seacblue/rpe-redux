@@ -8,8 +8,18 @@ use super::{
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+    time::UNIX_EPOCH,
+};
 use tauri::{AppHandle, Emitter, State};
+
+/// Largest number of per-file digests retained by the snapshot cache.
+const MAX_CACHED_FILES: usize = 4096;
 
 /// Event emitted when a watched document or resource changes on disk.
 pub const DOCUMENT_DISK_CHANGE_EVENT: &str = "redux-document-disk-change";
@@ -36,27 +46,99 @@ fn file_roots(document: &Document) -> BTreeSet<PathBuf> {
     roots
 }
 
-/// Feed one file's name, length, and bytes into the snapshot hash.
+/// One file's content digest and the metadata it was computed from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FileDigest {
+    length: u64,
+    digest: [u8; 32],
+}
+
+/// Cached digest retained only while the file's size and modification time
+/// still match.
+struct CachedDigest {
+    length: u64,
+    modified: Option<(u64, u32)>,
+    digest: [u8; 32],
+}
+
+/// Per-file digests for document snapshots.
 ///
-/// The file is streamed in fixed-size chunks so a large chart or resource does
-/// not have to fit in memory.
-fn append_file(hasher: &mut Sha256, name: &str, path: &std::path::Path) -> Result<()> {
-    hasher.update((name.len() as u64).to_le_bytes());
-    hasher.update(name.as_bytes());
-    let mut file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            hasher.update([0]);
-            return Ok(());
+/// A snapshot probe runs after every save and on every watcher event. Media
+/// files can be hundreds of megabytes, so re-reading them each time would turn
+/// a cheap change check into seconds of disk I/O. A file is re-read only when
+/// its size or modification time changed; the snapshot itself still changes
+/// with content because it folds in the cached content digest.
+#[derive(Default)]
+struct SnapshotCache {
+    entries: HashMap<PathBuf, CachedDigest>,
+    #[cfg(test)]
+    computed: usize,
+}
+
+/// Modification stamp with the platform's available precision.
+fn modified_stamp(metadata: &fs::Metadata) -> Option<(u64, u32)> {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| (duration.as_secs(), duration.subsec_nanos()))
+}
+
+impl SnapshotCache {
+    /// Digest one existing file, reusing the cache when its metadata is unchanged.
+    fn file_digest(&mut self, path: &Path, cacheable: bool) -> Result<Option<FileDigest>> {
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.entries.remove(path);
+                return Ok(None);
+            }
+            Err(error) => return Err(super::error(error)),
+        };
+        if !metadata.is_file() {
+            return Err("document_snapshot_not_a_file".into());
         }
-        Err(error) => return Err(super::error(error)),
-    };
-    let length = file.metadata().map_err(super::error)?.len();
-    if length > MAX_SNAPSHOT_FILE_BYTES {
-        return Err("document_snapshot_too_large".into());
+        let length = metadata.len();
+        if length > MAX_SNAPSHOT_FILE_BYTES {
+            return Err("document_snapshot_too_large".into());
+        }
+        let modified = modified_stamp(&metadata);
+        if cacheable {
+            if let Some(cached) = self.entries.get(path) {
+                if cached.length == length && cached.modified == modified {
+                    return Ok(Some(FileDigest {
+                        length,
+                        digest: cached.digest,
+                    }));
+                }
+            }
+        }
+        let digest = hash_file(path)?;
+        if cacheable {
+            if self.entries.len() >= MAX_CACHED_FILES {
+                self.entries.clear();
+            }
+            self.entries.insert(
+                path.to_path_buf(),
+                CachedDigest {
+                    length,
+                    modified,
+                    digest,
+                },
+            );
+            #[cfg(test)]
+            {
+                self.computed += 1;
+            }
+        }
+        Ok(Some(FileDigest { length, digest }))
     }
-    hasher.update([1]);
-    hasher.update(length.to_le_bytes());
+}
+
+/// Stream one file through SHA-256 without retaining its bytes.
+fn hash_file(path: &Path) -> Result<[u8; 32]> {
+    let mut file = File::open(path).map_err(super::error)?;
+    let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
     let mut read_total = 0u64;
     loop {
@@ -72,17 +154,47 @@ fn append_file(hasher: &mut Sha256, name: &str, path: &std::path::Path) -> Resul
         }
         hasher.update(&buffer[..read]);
     }
+    Ok(hasher.finalize().into())
+}
+
+/// Feed one file's name, length, and content digest into the snapshot hash.
+fn append_file(
+    hasher: &mut Sha256,
+    cache: &mut SnapshotCache,
+    name: &str,
+    path: &Path,
+    cacheable: bool,
+) -> Result<()> {
+    hasher.update((name.len() as u64).to_le_bytes());
+    hasher.update(name.as_bytes());
+    match cache.file_digest(path, cacheable)? {
+        Some(file) => {
+            hasher.update([1]);
+            hasher.update(file.length.to_le_bytes());
+            hasher.update(file.digest);
+        }
+        None => hasher.update([0]),
+    }
     Ok(())
 }
 
 /// Hash the chart and its resources, or the complete package when packed.
+///
+/// The chart is always read because it is the conflict baseline; resources use
+/// the metadata-keyed digest cache so an unchanged song or video costs one stat
+/// instead of a full re-read.
 pub(crate) fn disk_snapshot(document: &Document) -> Result<String> {
+    static CACHE: OnceLock<Mutex<SnapshotCache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(SnapshotCache::default()));
+    let mut cache = cache
+        .lock()
+        .map_err(|_| "document_snapshot_cache_poisoned".to_owned())?;
     let mut hasher = Sha256::new();
-    hasher.update(b"rpe-redux-disk-v1\0");
+    hasher.update(b"rpe-redux-disk-v2\0");
     if document.packed {
-        append_file(&mut hasher, "package", &document.path)?;
+        append_file(&mut hasher, &mut cache, "package", &document.path, true)?;
     } else {
-        append_file(&mut hasher, "chart", &document.path)?;
+        append_file(&mut hasher, &mut cache, "chart", &document.path, false)?;
         let resources = document
             .resources
             .iter()
@@ -94,7 +206,7 @@ pub(crate) fn disk_snapshot(document: &Document) -> Result<String> {
             if !reference_is_absolute(name) {
                 normalize_resource_name(name)?;
             }
-            append_file(&mut hasher, name, path)?;
+            append_file(&mut hasher, &mut cache, name, path, true)?;
         }
     }
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
@@ -145,14 +257,20 @@ pub(crate) fn watch_document(
 }
 
 /// Current content snapshot of one open document.
+///
+/// Hashing can read media files, so it runs on the blocking pool instead of the
+/// IPC main thread.
 #[tauri::command]
-pub fn document_disk_snapshot(state: State<'_, DocumentHost>, id: String) -> Result<String> {
-    disk_snapshot(&document(&state, &id)?)
+pub async fn document_disk_snapshot(state: State<'_, DocumentHost>, id: String) -> Result<String> {
+    let document = document(&state, &id)?;
+    tauri::async_runtime::spawn_blocking(move || disk_snapshot(&document))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]
 mod tests {
-    use super::disk_snapshot;
+    use super::{disk_snapshot, SnapshotCache};
     use crate::documents::Document;
     use std::{collections::HashMap, fs, path::PathBuf};
     use tempfile::tempdir;
@@ -183,7 +301,7 @@ mod tests {
         assert_eq!(first, disk_snapshot(&document).unwrap());
         fs::write(&unrelated, b"unrelated-v2").unwrap();
         assert_eq!(first, disk_snapshot(&document).unwrap());
-        fs::write(&song, b"song-v2").unwrap();
+        fs::write(&song, b"song-v2-with-more-bytes").unwrap();
         assert_ne!(first, disk_snapshot(&document).unwrap());
         fs::write(&chart, b"chart-v2").unwrap();
         assert_ne!(first, disk_snapshot(&document).unwrap());
@@ -196,7 +314,25 @@ mod tests {
         fs::write(&package, b"package-v1").unwrap();
         let document = document(package.clone(), true, HashMap::new());
         let first = disk_snapshot(&document).unwrap();
-        fs::write(&package, b"package-v2").unwrap();
+        fs::write(&package, b"package-v2-with-more-bytes").unwrap();
         assert_ne!(first, disk_snapshot(&document).unwrap());
+    }
+
+    #[test]
+    fn snapshot_cache_reuses_unchanged_file_digests() {
+        let root = tempdir().unwrap();
+        let video = root.path().join("video.mp4");
+        fs::write(&video, vec![7u8; 128 * 1024]).unwrap();
+        let mut cache = SnapshotCache::default();
+
+        let first = cache.file_digest(&video, true).unwrap().unwrap();
+        let second = cache.file_digest(&video, true).unwrap().unwrap();
+        assert_eq!(cache.computed, 1);
+        assert_eq!(first.digest, second.digest);
+
+        fs::write(&video, vec![8u8; 64 * 1024]).unwrap();
+        let third = cache.file_digest(&video, true).unwrap().unwrap();
+        assert_eq!(cache.computed, 2);
+        assert_ne!(first.digest, third.digest);
     }
 }

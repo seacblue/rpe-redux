@@ -6,15 +6,13 @@
  * one place instead of once per form.
  */
 import { useState, type ReactNode } from "react";
-import { BeatInput } from "../input/BeatInput.tsx";
 import { ColorField } from "../input/ColorField.tsx";
 import { Input } from "../input/Input.tsx";
 import { Textarea } from "../input/Textarea.tsx";
 import { Select } from "../select/Select.tsx";
 import { SliderField } from "../slider/SliderField.tsx";
 
-export type SchemaControlKind =
-  "text" | "number" | "range" | "toggle" | "select" | "color" | "beat";
+export type SchemaControlKind = "text" | "number" | "range" | "toggle" | "select" | "color";
 
 export interface SchemaControlOption {
   value: string;
@@ -186,18 +184,6 @@ export function SchemaControl({
           disabled={disabled}
           describedBy={describedBy}
           onChange={onChange}
-        />
-      );
-      break;
-    case "beat":
-      control = (
-        <BeatInput
-          id={id}
-          value={textValue}
-          disabled={disabled}
-          autoFocus={autoFocus}
-          onChange={commit}
-          {...described}
         />
       );
       break;

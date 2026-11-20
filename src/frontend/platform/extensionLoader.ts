@@ -507,9 +507,14 @@ async function loadPortableExtensions(
       const entryBytes =
         packaged.entry === undefined
           ? undefined
-          : await invoke<number[]>("read_extension_entry", { id: packaged.id });
-      const entryText =
-        entryBytes === undefined ? undefined : new TextDecoder().decode(new Uint8Array(entryBytes));
+          : await invoke<ArrayBuffer | number[]>("read_extension_entry", { id: packaged.id });
+      const entryData =
+        entryBytes === undefined
+          ? undefined
+          : entryBytes instanceof ArrayBuffer
+            ? new Uint8Array(entryBytes)
+            : new Uint8Array(entryBytes);
+      const entryText = entryData === undefined ? undefined : new TextDecoder().decode(entryData);
       const expected = trust.get(manifest.id);
       const verifiedBuiltin =
         (source === "bundled" || source === "resource" || source === "source") &&
@@ -529,7 +534,7 @@ async function loadPortableExtensions(
         // The user removed this package while its entry was being read.
         continue;
       }
-      const fingerprint = await extensionFingerprint(manifestRaw, translationRaw, entryBytes);
+      const fingerprint = await extensionFingerprint(manifestRaw, translationRaw, entryData);
       await registerReview(manifest, source, packaged.id, fingerprint, [
         { path: "manifest.json", text: manifestRaw },
         ...(translationRaw === undefined

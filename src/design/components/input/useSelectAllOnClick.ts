@@ -15,8 +15,8 @@ import {
 
 /** The gesture's entry points, called from the input's own event handlers. */
 export interface SelectAllOnClick {
-  /** Focus arrived: a numeric field arms the select-all click. */
-  focus(type: string | undefined): void;
+  /** Focus arrived: a value field arms the select-all click. */
+  focus(type: string | undefined, holdsValue?: boolean): void;
   /** Focus left: drop the gesture and forget the browser's remembered selection. */
   blur(field: HTMLInputElement): void;
   /** A press landed; remember where, without deciding anything yet. */
@@ -60,8 +60,8 @@ export function useSelectAllOnClick(): SelectAllOnClick {
   }, []);
 
   const focus = useCallback(
-    (type: string | undefined) => {
-      dispatch({ type: "focus", selectsValue: selectsValueOnClick(type) });
+    (type: string | undefined, holdsValue = false) => {
+      dispatch({ type: "focus", selectsValue: selectsValueOnClick(type, holdsValue) });
     },
     [dispatch],
   );

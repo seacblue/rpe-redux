@@ -9,14 +9,20 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { InlineAlert } from "../../../design/components/alert/InlineAlert.tsx";
 import { Button } from "../../../design/components/button/Button.tsx";
 import { FieldRow } from "../../../design/components/field/FieldRow.tsx";
-import { BeatInput } from "../../../design/components/input/BeatInput.tsx";
 import { Input } from "../../../design/components/input/Input.tsx";
 import { Modal } from "../../../design/components/modal/Modal.tsx";
 import { Segmented } from "../../../design/components/segmented/Segmented.tsx";
-import { beatValue, parseBeat } from "../../../core/global/chart/timing/beat.ts";
+import {
+  formatBeat,
+  normalizeBeat,
+  parseBeat,
+  beatValue,
+  type Beat,
+} from "../../../core/global/chart/timing/beat.ts";
 import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import { useEditorHostRuntime } from "../../contracts/editorHostReact.tsx";
+import { BeatField } from "../../screens/editor/inspector/beat/BeatField.tsx";
 import type { EditorHostRuntime } from "../../contracts/editorHost.ts";
 import { seekProgress } from "./chartProgressState.ts";
 import { closeMarkerDialog, getMarkerDialog, subscribeMarkerDialog } from "./markerDialogs.ts";
@@ -27,6 +33,25 @@ type JumpMode = "time" | "beat";
 /** Audio-clock seconds that separate chart time zero from the media start. */
 function chartOffset(runtime: EditorHostRuntime): number {
   return Number(runtime.getSession().chart.META.offset ?? 0) / 1000;
+}
+
+/**
+ * A beat for the field's three boxes.
+ *
+ * The dialog reads and writes its own text state: a beat typed as `3:1/2` in the
+ * time mode's single box, or the decimal the playhead prefills, becomes the three
+ * stored parts as soon as the boxes commit.
+ */
+function beatOfText(text: string): Beat {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return [0, 0, 1];
+  }
+  try {
+    return normalizeBeat(parseBeat(trimmed));
+  } catch {
+    return [0, 0, 1];
+  }
 }
 
 /** The active judge line's tempo factor, defaulting to normal speed. */
@@ -145,21 +170,15 @@ function JumpDialog({ onClose }: { onClose(): void }) {
         label={mode === "time" ? t("chrome.transport.jump.time") : t("chrome.transport.jump.beat")}
         control={
           mode === "beat" ? (
-            <BeatInput
+            <BeatField
               id={fieldId}
-              ref={field}
+              value={beatOfText(value)}
               autoFocus
-              value={value}
-              onChange={(event) => {
-                setValue(event.currentTarget.value);
+              onCommit={(beat) => {
+                setValue(formatBeat(beat));
                 setError("");
               }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
+              onEnter={() => submit()}
             />
           ) : (
             <Input
