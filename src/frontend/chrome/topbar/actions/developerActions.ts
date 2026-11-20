@@ -5,8 +5,8 @@
  * desktop host enables developer mode or the settings page's logo gesture has
  * revealed the developer section. The application menu has no Developer
  * section; the shortcut registry and the Developer settings page are the entry
- * points. The performance monitor is the exception: its F3 shortcut remains
- * available in release hosts.
+ * points, and a shortcut is only dispatched while the host or the gesture has
+ * opened that section.
  */
 import { toolbar } from "../../../../core/shell/registries/toolbar.ts";
 import {
@@ -35,14 +35,15 @@ const DEVELOPER_ACTIONS = [
 ] as const;
 
 /**
- * The performance monitor is a frontend surface, so its F3 shortcut stays
- * available even in a release host. The menu still hides the developer section;
- * only the monitor can be toggled by a key that the user already knows.
+ * Whether the developer section is open for the current host policy.
+ *
+ * The shortcut bridge turns this same rule into the action's `enabled` state, so
+ * `F3` reaches the performance monitor only while the host has enabled developer
+ * mode or the About-page gesture has revealed the section. A release host is
+ * therefore silent until one of those opens it, and the key stops answering
+ * again when the gesture closes the section.
  */
-const ALWAYS_AVAILABLE_ACTIONS: ReadonlySet<string> = new Set(["developer.performanceHud"]);
-/** Whether the action is listed in the developer menu for the current host policy. */
-const developerVisible = (id: string): boolean =>
-  ALWAYS_AVAILABLE_ACTIONS.has(id) || developerMode.get() || isDeveloperRevealed();
+const developerVisible = (): boolean => developerMode.get() || isDeveloperRevealed();
 
 /** Registers the developer actions; returns a disposer for all of them. */
 export function registerDeveloperActions(): () => void {
@@ -59,10 +60,12 @@ export function registerDeveloperActions(): () => void {
       shortcutCategory: SHORTCUT_CATEGORIES.developer,
       shortcutScope: "instrument",
       toolbar: false,
-      visible: () => developerVisible(definition.id),
+      visible: developerVisible,
       // Visibility hides this surface until the host or the logo gesture opens
-      // it. The action carries the real behavior, so a context-menu click and a
-      // shortcut take the same path.
+      // it, and it is also what makes the key answer: the shortcut bridge reads
+      // `actionAvailable`, which is this predicate plus the runner. The action
+      // carries the real behavior, so a context-menu click and a shortcut take
+      // the same path.
       enabled: () => true,
       run: definition.run,
     }),

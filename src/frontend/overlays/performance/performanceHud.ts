@@ -76,6 +76,16 @@ export const isPerformanceHudDetached = detachedHud.get;
 export const subscribePerformanceHudDetached = detachedHud.subscribe;
 export const setPerformanceHudDetached = detachedHud.set;
 
+/**
+ * Whether the developer section is open, through the host flag or the About gesture.
+ *
+ * The monitor's switch and the monitor's visibility both ask this one rule, so a
+ * release host cannot be talked into showing the HUD by a stored preference.
+ */
+export function isDeveloperSurfaceOpen(): boolean {
+  return developerMode.get() || isDeveloperRevealed();
+}
+
 /** Whether the monitor is switched on, independent of developer mode. */
 export function isPerformanceHudEnabled(): boolean {
   return performanceHudEnabled.get();
@@ -84,13 +94,24 @@ export function isPerformanceHudEnabled(): boolean {
 /** Whether the monitor is on and developer mode or its reveal makes it available. */
 export function isPerformanceHudVisible(): boolean {
   // The monitor remains a developer surface: either the host build exposes the
-  // developer tools, or the About-page reveal has opened that section. F3 itself
-  // stays globally registered so the same key works on every surface.
-  return (developerMode.get() || isDeveloperRevealed()) && isPerformanceHudEnabled();
+  // developer tools, or the About-page reveal has opened that section. The F3
+  // shortcut follows the same gate, so a release host stays quiet until the
+  // gesture opens the section.
+  return isDeveloperSurfaceOpen() && isPerformanceHudEnabled();
 }
 
-/** Flips the monitor preference and returns the new value. */
+/**
+ * Flips the monitor preference and returns the new value.
+ *
+ * The switch belongs to the developer section, so it refuses to move while that
+ * section is closed: F3 and the settings checkbox both reach this one owner, and
+ * neither may leave a stored "on" behind that a release host would later honor
+ * the moment the gesture appears.
+ */
 export function togglePerformanceHud(): boolean {
+  if (!isDeveloperSurfaceOpen()) {
+    return isPerformanceHudEnabled();
+  }
   const next = !isPerformanceHudEnabled();
   performanceHudEnabled.set(next);
   return next;

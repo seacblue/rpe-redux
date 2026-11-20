@@ -122,14 +122,14 @@ New chart, open, and settings work on the chart library page before a chart is o
 
 ## Developer mode
 
-When the desktop host enables developer mode, or after the About logo is activated ten times, the developer settings page and its actions become available. Developer commands stay out of the application menu:
+When the desktop host enables developer mode, or after the About logo is activated ten times, the developer settings page and its actions become available. No host opens the section on its own — a debug build and the browser development loop start closed too — so the gesture is the only way in outside a host that reports developer mode. Developer commands stay out of the application menu:
 
 | Action              | Default |
 | ------------------- | ------- |
 | Toggle DevTools     | `F12`   |
 | Performance monitor | `F3`    |
 
-The performance monitor's `F3` binding is available in ordinary builds. DevTools and the developer settings page follow the host's developer policy or the About gesture.
+Both keys follow the same gate: in a release host they answer nothing until the About gesture opens the developer section, and they stop answering again when the gesture closes it. The monitor is a developer surface end to end — its switch refuses to move and the panel stays hidden while the section is closed, so neither the key nor the settings checkbox can store an "on" preference behind a closed section.
 
 ## Mouse keys and held-key chords
 
