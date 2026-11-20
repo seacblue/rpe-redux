@@ -93,6 +93,7 @@ interface RetainedLineBatchKey {
   readonly lineScale: number;
   readonly selectedLineSet: ReadonlySet<number>;
   readonly selectedLineColor: readonly number[];
+  readonly multiSelectLineColor: readonly number[];
   readonly defaultLineColor: readonly number[];
   readonly skin: PreviewSkin | null | undefined;
   readonly skinRevision: number | undefined;
@@ -126,6 +127,7 @@ function sameRetainedLineBatchKey(
     previous.lineScale === next.lineScale &&
     previous.selectedLineSet === next.selectedLineSet &&
     previous.selectedLineColor === next.selectedLineColor &&
+    previous.multiSelectLineColor === next.multiSelectLineColor &&
     previous.defaultLineColor === next.defaultLineColor &&
     previous.skin === next.skin &&
     previous.skinRevision === next.skinRevision
@@ -268,6 +270,8 @@ export class Preview {
   selectedLineSet: ReadonlySet<number> = new Set();
   /** The colour used to tint selected judge lines. */
   declare selectedLineColor: readonly number[];
+  /** The colour used when more than one judge line is selected. */
+  declare multiSelectLineColor: readonly number[];
   declare invalidate?: (() => void) | null;
   declare images?: PreviewImages | null;
   declare skin?: PreviewSkin | null;
@@ -528,6 +532,7 @@ export class Preview {
     this.defaultLineColor = [...colors.defaultLineColor];
     this.defaultParticleColor = [...colors.defaultParticleColor];
     this.selectedLineColor = [...colors.selectedLineColor];
+    this.multiSelectLineColor = [...colors.multiSelectLineColor];
     this.invalidate?.();
   }
 
@@ -732,6 +737,7 @@ export class Preview {
     this.defaultLineColor = [237, 236, 176];
     this.defaultParticleColor = [237, 236, 176];
     this.selectedLineColor = [];
+    this.multiSelectLineColor = [];
     this.selectedLines = [];
     this.backgroundEnabled = true;
     this.backgroundAlpha = 0.35;
@@ -1136,6 +1142,7 @@ export class Preview {
       lineScale: this.lineScale,
       selectedLineSet: this.selectedLineSet,
       selectedLineColor: this.selectedLineColor,
+      multiSelectLineColor: this.multiSelectLineColor,
       defaultLineColor: this.defaultLineColor,
       skin: this.skin,
       skinRevision: this.lineBatchRevision,

@@ -148,6 +148,8 @@ export interface PreviewLineSurface extends PreviewTextureSurface {
   /** Membership index for the current multi-line selection. */
   selectedLineSet: ReadonlySet<number>;
   selectedLineColor: readonly number[];
+  /** Colour used for selected lines other than the current line. */
+  multiSelectLineColor: readonly number[];
   selectedNotes: PreviewNoteSelection;
   /** Transient highlight driven by the overlap picker's hovered row. */
   overlapHighlight: PreviewOverlapHighlight | null;
@@ -808,7 +810,11 @@ export function drawLinePasses(
           : samplingFocus
             ? samplingFocus.color
             : selected
-              ? surface.selectedLineColor
+              ? index === frame.selectedLine
+                ? surface.selectedLineColor
+                : surface.multiSelectLineColor.length >= 3
+                  ? surface.multiSelectLineColor
+                  : surface.selectedLineColor
               : state.color;
         if (lineBatch && state.scaleX > 0 && state.scaleY > 0) {
           lineColorStyle.color[0] = effectiveLineColor[0] ?? 255;

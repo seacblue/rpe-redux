@@ -530,6 +530,7 @@ test("active note batches skip line transforms while fallback notes restore them
       selectedLines: [],
       selectedLineSet: new Set(),
       selectedLineColor: [],
+      multiSelectLineColor: [],
       selectedNotes: new Map(),
       simultaneous: null,
       noteSize: 175,

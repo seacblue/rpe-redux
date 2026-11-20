@@ -303,6 +303,7 @@ export function createPreviewRuntime(options: {
           defaultLineColor: preview.defaultLineColor,
           defaultParticleColor: preview.defaultParticleColor,
           selectedLineColor: preview.selectedLineColor,
+          multiSelectLineColor: preview.multiSelectLineColor,
         };
       },
     },

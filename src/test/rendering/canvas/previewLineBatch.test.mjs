@@ -64,6 +64,7 @@ test("default judge lines batch once and fall back to Canvas when disabled", () 
       selectedLines: [],
       selectedLineSet: new Set(),
       selectedLineColor: [],
+      multiSelectLineColor: [],
       selectedNotes: new Map(),
       simultaneous: null,
       noteSize: 175,
@@ -126,6 +127,29 @@ test("default judge lines batch once and fall back to Canvas when disabled", () 
       "restore",
       "restore",
     ]);
+
+    addLineCalls.length = 0;
+    surface.noteBatch.addLine = (...args) => {
+      addLineCalls.push(args);
+      return true;
+    };
+    surface.selectedLineSet = new Set([0, 1]);
+    surface.selectedLineColor = [0, 200, 0];
+    surface.multiSelectLineColor = [125, 200, 125];
+    frame.selectedLine = 0;
+    drawLinePasses(surface, frame);
+    assert.deepEqual(addLineCalls[0][7].color, [0, 200, 0]);
+
+    addLineCalls.length = 0;
+    frame.selectedLine = 1;
+    drawLinePasses(surface, frame);
+    assert.deepEqual(addLineCalls[0][7].color, [125, 200, 125]);
+
+    addLineCalls.length = 0;
+    surface.selectedLineSet = new Set([0]);
+    frame.selectedLine = 0;
+    drawLinePasses(surface, frame);
+    assert.deepEqual(addLineCalls[0][7].color, [0, 200, 0]);
   } finally {
     if (previousDocument === undefined) {
       delete globalThis.document;

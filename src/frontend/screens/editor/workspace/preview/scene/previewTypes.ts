@@ -204,4 +204,5 @@ export interface PreviewColorSettings {
   defaultLineColor: readonly number[];
   defaultParticleColor: readonly number[];
   selectedLineColor: readonly number[];
+  multiSelectLineColor: readonly number[];
 }

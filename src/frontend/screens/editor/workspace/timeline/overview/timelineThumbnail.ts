@@ -42,6 +42,7 @@ export interface TimelineThumbnailResources {
     defaultLineColor: readonly number[];
     defaultParticleColor: readonly number[];
     selectedLineColor: readonly number[];
+    multiSelectLineColor: readonly number[];
   };
 }
 

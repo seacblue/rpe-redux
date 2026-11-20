@@ -486,6 +486,9 @@ export default {
   "settings.field.line-numbers.label": "Show judgement-line numbers",
   "settings.field.line-arrows.label": "Show direction arrows",
   "settings.field.current-line-color.label": "Current judgement-line colour",
+  "settings.field.multi-select-line-color.label": "Multi-select judgement-line colour",
+  "settings.field.multi-select-line-color.description":
+    "Colour used for the other selected judgement lines; the current line keeps its own colour.",
   "settings.field.merge-line-numbers.label": "Merge nearby numbers pointing the same way",
   "settings.field.merge-line-numbers.description":
     "Draws overlapping same-direction line numbers once to reduce dense-preview clutter.",

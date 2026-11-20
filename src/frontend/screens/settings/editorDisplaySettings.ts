@@ -264,6 +264,7 @@ export function readEditorDisplaySettings() {
       defaultLineColor: contributedColor("default-line-color"),
       defaultParticleColor: contributedColor("default-particle-color"),
       selectedLineColor: contributedColor("current-line-color"),
+      multiSelectLineColor: contributedColor("multi-select-line-color"),
       showHitEffects: contributedFlag("particle-effects-enabled"),
       lineScale: contributedNumber("default-line-thickness"),
       backgroundAlpha: numberOf(displayValues.backgroundAlpha),

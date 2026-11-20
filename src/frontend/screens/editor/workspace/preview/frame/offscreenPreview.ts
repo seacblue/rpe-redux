@@ -106,6 +106,7 @@ export class OffscreenPreviewRenderer {
     preview.defaultLineColor = [...reference.defaultLineColor];
     preview.defaultParticleColor = [...reference.defaultParticleColor];
     preview.selectedLineColor = [];
+    preview.multiSelectLineColor = [];
     preview.highlight = reference.highlight;
     preview.showHitEffects = reference.showHitEffects;
     preview.showGameUI = reference.showGameUI;

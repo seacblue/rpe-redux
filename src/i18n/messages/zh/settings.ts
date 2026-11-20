@@ -417,6 +417,9 @@ export default {
   "settings.field.line-numbers.label": "显示判定线编号",
   "settings.field.line-arrows.label": "显示方向箭头",
   "settings.field.current-line-color.label": "当前判定线颜色",
+  "settings.field.multi-select-line-color.label": "多选判定线颜色",
+  "settings.field.multi-select-line-color.description":
+    "同时选中多条判定线时，除当前判定线外其他选中线使用的颜色。",
   "settings.field.merge-line-numbers.label": "合并相近且同向的编号",
   "settings.field.merge-line-numbers.description":
     "同向且重叠的判定线编号只绘制一次，减少密集预览中的文字。",

@@ -88,15 +88,25 @@ export function applyEditorSettings({
     hitSounds.setSoundVolume?.(kind, value);
   }
   Object.assign(audioAnalysis, config.analysis);
-  const { defaultLineColor, defaultParticleColor, selectedLineColor, ...previewSettings } =
-    config.preview;
+  const {
+    defaultLineColor,
+    defaultParticleColor,
+    selectedLineColor,
+    multiSelectLineColor,
+    ...previewSettings
+  } = config.preview;
   Object.assign(realtimePreview, previewSettings);
   realtimePreview.aspectRatio = previewAspectRatio(config.view.ratio);
   // Preview.draw caches an identical frame request for performance. Settings
   // such as line numbers and opacity change the frame without changing that
   // request, so drop the identity before invalidating the renderer.
   realtimePreview.invalidateFrame();
-  realtimePreview.setDefaultColors({ defaultLineColor, defaultParticleColor, selectedLineColor });
+  realtimePreview.setDefaultColors({
+    defaultLineColor,
+    defaultParticleColor,
+    selectedLineColor,
+    multiSelectLineColor,
+  });
   editorRealtimePreviewEnabled.set(config.preview.visible);
   if (session.multiLineMerge !== config.timeline.multiLineMergeNotes) {
     session.setMultiLineMerge(config.timeline.multiLineMergeNotes);

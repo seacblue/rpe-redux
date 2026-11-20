@@ -197,6 +197,17 @@ const AppearanceSettingsSchema: SettingDefinition[] = [
     default: "#00C800",
   },
   {
+    key: "multi-select-line-color",
+    navigation: "appearance.lines",
+    group: "settings.group.judgeLines",
+    label: "settings.field.multi-select-line-color.label",
+    description: "settings.field.multi-select-line-color.description",
+    control: "color",
+    default: "#7DC87D",
+    // The current line keeps the current-line colour; this paints the other
+    // selected lines when the selection contains more than one line.
+  },
+  {
     key: "default-particle-color",
     navigation: "appearance.notes",
     group: "settings.group.notes",
