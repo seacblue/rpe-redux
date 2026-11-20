@@ -196,35 +196,35 @@ test("event selection replaces or appends like a left click", () => {
   );
 });
 
-test("marker targets keep the surface and use the persistent marker id", () => {
-  assert.deepEqual(markerTargetFromMarker({ id: "marker-a", time: 12.5, name: "Drop" }, 8), {
+test("marker targets keep the surface, the marker beat, and the persistent marker id", () => {
+  assert.deepEqual(markerTargetFromMarker({ id: "marker-a", beat: 12.5, name: "Drop" }), {
     surface: "marker",
     markerId: "marker-a",
-    beat: 8,
+    beat: 12.5,
   });
-  assert.deepEqual(markerTargetFromMarker({ time: 12.5, name: "Drop" }, 8), {
+  assert.deepEqual(markerTargetFromMarker({ beat: 12.5, name: "Drop" }), {
     surface: "marker",
-    beat: 8,
+    beat: 12.5,
   });
-  assert.deepEqual(markerTargetFromMarker(undefined, 0), { surface: "marker", beat: 0 });
+  assert.deepEqual(markerTargetFromMarker(undefined), { surface: "marker", beat: 0 });
 });
 
 test("renaming a marker keeps its id and the same context target", () => {
   const [marker] = readTimelineMarkers({
     markers: [
-      { time: 2, name: "Drop" },
-      { time: 2, name: "Drop" },
+      { beat: 2, name: "Drop" },
+      { beat: 2, name: "Drop" },
     ],
   });
-  const before = markerTargetFromMarker(marker, 4);
+  const before = markerTargetFromMarker(marker);
   const [renamed] = updateTimelineMarker([marker], marker.id, { name: "Renamed" });
-  const after = markerTargetFromMarker(renamed, 4);
+  const after = markerTargetFromMarker(renamed);
   assert.equal(renamed.id, marker.id);
   assert.deepEqual(after, before);
 });
 
 test("an action receives the menu target", () => {
-  const target = markerTargetFromMarker({ time: 1, name: "A" }, 2);
+  const target = markerTargetFromMarker({ beat: 1, name: "A" });
   let received;
   runContextMenuTarget((value) => {
     received = value;

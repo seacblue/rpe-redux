@@ -157,6 +157,76 @@
   color: var(--marker-color, var(--warning));
 }
 
+// A marker also appears as a bookmark ribbon attached to the editing field's
+// left edge. It extends left of the timeline, carries a notch cut into its free
+// end, and unfolds leftward on hover or keyboard focus to show its name.
+.timeline-marker-rail {
+  position: absolute;
+  width: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.redux-app-root .timeline-marker-bookmark {
+  position: absolute;
+  right: 0;
+  width: 26px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--marker-color, var(--warning)) 18%, var(--surface-raised));
+  color: var(--marker-color, var(--warning));
+  clip-path: polygon(100% 0, 100% 100%, 0 100%, 9px 50%, 0 0);
+  transform: translateY(-50%);
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: auto;
+  transition: width var(--design-dur-tint) ease;
+}
+
+.redux-app-root .timeline-marker-bookmark::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--marker-color, var(--warning));
+}
+
+.redux-app-root .timeline-marker-bookmark:active:not(:disabled) {
+  background: color-mix(in srgb, var(--marker-color, var(--warning)) 18%, var(--surface-raised));
+  color: var(--marker-color, var(--warning));
+}
+
+.timeline-marker-bookmark-label {
+  position: relative;
+  z-index: 1;
+  display: block;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  overflow: hidden;
+  font-size: var(--type-caption);
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity var(--design-dur-tint) ease;
+}
+
+.timeline-marker-bookmark:hover,
+.timeline-marker-bookmark:focus-visible {
+  width: max-content;
+  max-width: 200px;
+  z-index: 2;
+}
+
+.timeline-marker-bookmark:hover .timeline-marker-bookmark-label,
+.timeline-marker-bookmark:focus-visible .timeline-marker-bookmark-label {
+  opacity: 1;
+}
+
 .canvases {
   position: relative;
   flex: 1 1 auto;

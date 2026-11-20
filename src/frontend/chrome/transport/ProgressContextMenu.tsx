@@ -14,8 +14,6 @@ import { getEditorVisibility } from "../../../core/edit/state/visibility.ts";
 import type { ContextMenuTarget } from "../../../core/shell/registries/toolbar.ts";
 import { hasOpenModal } from "../../../design/components/modal/Modal.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
-import { useEditorHostRuntime } from "../../contracts/editorHostReact.tsx";
-import type { EditorHostRuntime } from "../../contracts/editorHost.ts";
 import {
   ContextMenuPopup,
   createContextMenuState,
@@ -32,24 +30,18 @@ export interface ProgressMenuSnapshot extends ContextMenuSnapshot {
 }
 
 /** Resolve a marker under the press from the button's published data attributes. */
-function markerTargetAt(
-  event: MouseEvent<HTMLElement>,
-  runtime: EditorHostRuntime | null,
-): ContextMenuTarget | undefined {
+function markerTargetAt(event: MouseEvent<HTMLElement>): ContextMenuTarget | undefined {
   const origin = event.target;
-  const node = origin instanceof Element ? origin.closest<HTMLElement>("[data-marker-time]") : null;
+  const node = origin instanceof Element ? origin.closest<HTMLElement>("[data-marker-beat]") : null;
   if (!node) {
     return undefined;
   }
-  const time = Number(node.dataset.markerTime);
+  const beat = Number(node.dataset.markerBeat);
   const name = node.dataset.markerName ?? "";
-  if (!Number.isFinite(time) || !name) {
+  if (!Number.isFinite(beat) || beat < 0 || !name) {
     return undefined;
   }
-  const beat = runtime
-    ? runtime.timeline.viewport.tempo.beat(time, runtime.session.line?.bpmfactor ?? 1)
-    : 0;
-  return markerTargetFromMarker({ id: node.dataset.markerId, time, name }, beat);
+  return markerTargetFromMarker({ id: node.dataset.markerId, beat, name });
 }
 
 /** The menu store and pointer handler the progress card attaches to its region. */
@@ -68,7 +60,6 @@ export interface ProgressContextMenuHandle {
  */
 export function useProgressContextMenu(): ProgressContextMenuHandle {
   const { t } = useTranslation();
-  const runtime = useEditorHostRuntime();
   const [store] = useState(() => createContextMenuState<ProgressMenuSnapshot>());
   const open = (event: MouseEvent<HTMLElement>) => {
     if (hasOpenModal()) {
@@ -80,7 +71,7 @@ export function useProgressContextMenu(): ProgressContextMenuHandle {
       owner: event.currentTarget,
       x: event.clientX,
       y: event.clientY,
-      target: markerTargetAt(event, runtime),
+      target: markerTargetAt(event),
       actions: [
         {
           id: "transport.jump",

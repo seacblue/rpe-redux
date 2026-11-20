@@ -193,11 +193,11 @@ export default {
   "chrome.transport.markerManager.empty": "当前谱面还没有时间标记。",
   "chrome.transport.markerManager.add": "添加标记",
   "chrome.transport.markerManager.name": "名称",
-  "chrome.transport.markerManager.time": "时间（秒）",
+  "chrome.transport.markerManager.beat": "拍数",
   "chrome.transport.markerManager.color": "颜色",
   "chrome.transport.markerManager.defaultName": "标记 {index}",
   "chrome.transport.markerManager.invalidName": "名称不能为空。",
-  "chrome.transport.markerManager.invalidTime": "时间必须是不小于 0 的秒数。",
+  "chrome.transport.markerManager.markerLabel": "{name}，第 {beat} 拍",
   "chrome.transport.markerManager.selectFirst": "先选择一条时间标记。",
 
   "chrome.menu.playback.seek": "跳转到拍数",

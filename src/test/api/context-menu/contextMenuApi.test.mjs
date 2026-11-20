@@ -105,7 +105,7 @@ test("a marker-targeted progress menu draws marker rows beside progress rows", (
   });
   try {
     const markerSurfaces = progressMenuSurfaces(
-      markerTargetFromMarker({ id: "marker-drop", time: 2, name: "Drop" }, 4),
+      markerTargetFromMarker({ id: "marker-drop", beat: 4, name: "Drop" }),
     );
     assert.deepEqual(markerSurfaces, ["marker", "progress"]);
     const markerRows = contextMenu

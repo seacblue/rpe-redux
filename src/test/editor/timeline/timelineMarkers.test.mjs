@@ -37,63 +37,77 @@ test("marker colours keep one lowercase #rrggbb form", () => {
   }
 });
 
-test("normalization drops unusable markers, trims names, and sorts by time", () => {
+test("normalization drops unusable markers, trims names, and sorts by beat", () => {
   const markers = normalizeTimelineMarkers([
-    { time: 4, name: "  Second  ", note: "keep", color: "#AABBCC" },
+    { beat: 4, name: "  Second  ", note: "keep", color: "#AABBCC" },
     null,
     "marker",
     7,
-    { time: Number.NaN, name: "NaN" },
-    { time: Infinity, name: "infinite" },
-    { time: -1, name: "negative" },
-    { time: 1, name: "" },
-    { time: 1, name: "   " },
-    { time: 2, name: "First", color: "red", extra: 7 },
-    { time: 4, name: "Same time" },
+    { beat: Number.NaN, name: "NaN" },
+    { beat: Infinity, name: "infinite" },
+    { beat: -1, name: "negative" },
+    { beat: 1, name: "" },
+    { beat: 1, name: "   " },
+    { beat: 2, name: "First", color: "red", extra: 7 },
+    { beat: 4, name: "Same time" },
   ]);
   assert.deepEqual(withoutIds(markers), [
-    { time: 2, name: "First", extra: 7 },
-    { time: 4, name: "Second", note: "keep", color: "#aabbcc" },
-    { time: 4, name: "Same time" },
+    { beat: 2, name: "First", extra: 7 },
+    { beat: 4, name: "Second", note: "keep", color: "#aabbcc" },
+    { beat: 4, name: "Same time" },
   ]);
   assertUniqueIds(markers);
 });
 
-test("normalization keeps same-time duplicates and gives each its own id", () => {
+test("normalization keeps same-beat duplicates and gives each its own id", () => {
   const markers = normalizeTimelineMarkers([
-    { time: 2, name: "Drop" },
-    { time: 2, name: "Drop" },
+    { beat: 2, name: "Drop" },
+    { beat: 2, name: "Drop" },
   ]);
   assert.deepEqual(withoutIds(markers), [
-    { time: 2, name: "Drop" },
-    { time: 2, name: "Drop" },
+    { beat: 2, name: "Drop" },
+    { beat: 2, name: "Drop" },
   ]);
   assertUniqueIds(markers);
 });
 
 test("reading markers tolerates a missing or non-array root and keeps valid entries", () => {
   assert.deepEqual(readTimelineMarkers({}), []);
-  assert.deepEqual(readTimelineMarkers({ markers: { time: 1, name: "A" } }), []);
+  assert.deepEqual(readTimelineMarkers({ markers: { beat: 1, name: "A" } }), []);
   assert.deepEqual(readTimelineMarkers({ markers: "A" }), []);
   const chart = {
     markers: [
-      { time: 2, name: "B" },
-      { time: -1, name: "bad" },
-      { time: 1, name: "A" },
+      { beat: 2, name: "B" },
+      { beat: -1, name: "bad" },
+      { beat: 1, name: "A" },
     ],
   };
   const markers = readTimelineMarkers(chart);
   assert.deepEqual(withoutIds(markers), [
-    { time: 1, name: "A" },
-    { time: 2, name: "B" },
+    { beat: 1, name: "A" },
+    { beat: 2, name: "B" },
   ]);
   assertUniqueIds(markers);
   assert.deepEqual(readTimelineMarkers(chart), markers);
   assert.deepEqual(chart.markers, [
-    { time: 2, name: "B" },
-    { time: -1, name: "bad" },
-    { time: 1, name: "A" },
+    { beat: 2, name: "B" },
+    { beat: -1, name: "bad" },
+    { beat: 1, name: "A" },
   ]);
+});
+
+test("legacy second markers upgrade through the supplied tempo", () => {
+  const chart = { markers: [{ time: 2, name: "A" }] };
+  // Without a tempo the stored seconds have no musical position and are dropped.
+  assert.deepEqual(readTimelineMarkers(chart), []);
+  const markers = readTimelineMarkers(chart, { beat: (seconds) => seconds * 2 });
+  assert.deepEqual(withoutIds(markers), [{ beat: 4, name: "A" }]);
+  // A stored beat wins over the legacy field, which is removed on read.
+  const upgraded = readTimelineMarkers(
+    { markers: [{ beat: 3, time: 99, name: "B" }] },
+    { beat: () => 99 },
+  );
+  assert.deepEqual(withoutIds(upgraded), [{ beat: 3, name: "B" }]);
 });
 
 test("marker audio conversion applies the chart offset", () => {
@@ -133,16 +147,16 @@ test("writing markers returns a new chart and leaves every other field alone", (
     BPMList: [{ bpm: 120 }],
     judgeLineList: [{ notes: [] }],
     extraRoot: 1,
-    markers: [{ time: 5, name: "old" }],
+    markers: [{ beat: 5, name: "old" }],
   };
   const next = writeTimelineMarkers(chart, [
-    { time: 2, name: "  New  ", note: "x", color: "#ABCDEF" },
-    { time: -1, name: "bad" },
+    { beat: 2, name: "  New  ", note: "x", color: "#ABCDEF" },
+    { beat: -1, name: "bad" },
   ]);
   assert.notEqual(next, chart);
-  assert.deepEqual(chart.markers, [{ time: 5, name: "old" }]);
+  assert.deepEqual(chart.markers, [{ beat: 5, name: "old" }]);
   assert.deepEqual(withoutIds(next.markers), [
-    { time: 2, name: "New", note: "x", color: "#abcdef" },
+    { beat: 2, name: "New", note: "x", color: "#abcdef" },
   ]);
   assertUniqueIds(next.markers);
   for (const key of ["META", "BPMList", "judgeLineList", "extraRoot"]) {
@@ -152,36 +166,36 @@ test("writing markers returns a new chart and leaves every other field alone", (
 
 test("adding a marker sorts it into place, drops an unnamed one, and keeps its id", () => {
   const base = normalizeTimelineMarkers([
-    { time: 1, name: "A" },
-    { time: 5, name: "C" },
+    { beat: 1, name: "A" },
+    { beat: 5, name: "C" },
   ]);
-  const added = addTimelineMarker(base, { time: 3, name: " B " });
+  const added = addTimelineMarker(base, { beat: 3, name: " B " });
   assert.deepEqual(withoutIds(added), [
-    { time: 1, name: "A" },
-    { time: 3, name: "B" },
-    { time: 5, name: "C" },
+    { beat: 1, name: "A" },
+    { beat: 3, name: "B" },
+    { beat: 5, name: "C" },
   ]);
   assertUniqueIds(added);
 
   const explicitId = createTimelineMarkerId();
-  const explicit = addTimelineMarker(base, { id: explicitId, time: 2, name: "New" });
+  const explicit = addTimelineMarker(base, { id: explicitId, beat: 2, name: "New" });
   assert.equal(explicit.find((marker) => marker.id === explicitId)?.name, "New");
 
-  assert.deepEqual(withoutIds(addTimelineMarker(base, { time: 2, name: "   " })), [
-    { time: 1, name: "A" },
-    { time: 5, name: "C" },
+  assert.deepEqual(withoutIds(addTimelineMarker(base, { beat: 2, name: "   " })), [
+    { beat: 1, name: "A" },
+    { beat: 5, name: "C" },
   ]);
   assert.deepEqual(withoutIds(base), [
-    { time: 1, name: "A" },
-    { time: 5, name: "C" },
+    { beat: 1, name: "A" },
+    { beat: 5, name: "C" },
   ]);
 });
 
 test("updating a marker can rename, recolour, move, and clear its colour by id", () => {
   const base = normalizeTimelineMarkers([
-    { time: 1, name: "A", color: "#112233" },
-    { time: 2, name: "B" },
-    { time: 3, name: "C" },
+    { beat: 1, name: "A", color: "#112233" },
+    { beat: 2, name: "B" },
+    { beat: 3, name: "C" },
   ]);
   const firstId = base[0].id;
   const secondId = base[1].id;
@@ -189,37 +203,37 @@ test("updating a marker can rename, recolour, move, and clear its colour by id",
 
   const renamed = updateTimelineMarker(base, secondId, { name: " Beta " });
   assert.deepEqual(withoutIds(renamed), [
-    { time: 1, name: "A", color: "#112233" },
-    { time: 2, name: "Beta" },
-    { time: 3, name: "C" },
+    { beat: 1, name: "A", color: "#112233" },
+    { beat: 2, name: "Beta" },
+    { beat: 3, name: "C" },
   ]);
   assert.equal(renamed[1].id, secondId);
 
   const recoloured = updateTimelineMarker(base, firstId, { color: "#AABBCC" });
   assert.deepEqual(recoloured[0], {
     id: firstId,
-    time: 1,
+    beat: 1,
     name: "A",
     color: "#aabbcc",
   });
 
-  assert.deepEqual(withoutIds(updateTimelineMarker(base, thirdId, { time: 0 })), [
-    { time: 0, name: "C" },
-    { time: 1, name: "A", color: "#112233" },
-    { time: 2, name: "B" },
+  assert.deepEqual(withoutIds(updateTimelineMarker(base, thirdId, { beat: 0 })), [
+    { beat: 0, name: "C" },
+    { beat: 1, name: "A", color: "#112233" },
+    { beat: 2, name: "B" },
   ]);
 
   assert.deepEqual(withoutIds(updateTimelineMarker(base, firstId, { color: undefined })), [
-    { time: 1, name: "A" },
-    { time: 2, name: "B" },
-    { time: 3, name: "C" },
+    { beat: 1, name: "A" },
+    { beat: 2, name: "B" },
+    { beat: 3, name: "C" },
   ]);
 });
 
 test("an unknown marker id returns the normalized list unchanged", () => {
   const raw = [
-    { time: 3, name: " C " },
-    { time: 1, name: "A" },
+    { beat: 3, name: " C " },
+    { beat: 1, name: "A" },
   ];
   const normalized = normalizeTimelineMarkers(raw);
   assert.deepEqual(updateTimelineMarker(raw, "missing", { name: "nope" }), normalized);
@@ -228,22 +242,22 @@ test("an unknown marker id returns the normalized list unchanged", () => {
 
 test("removing a marker uses the id and leaves an unknown id alone", () => {
   const base = normalizeTimelineMarkers([
-    { time: 3, name: "C" },
-    { time: 1, name: "A" },
-    { time: 2, name: "B" },
+    { beat: 3, name: "C" },
+    { beat: 1, name: "A" },
+    { beat: 2, name: "B" },
   ]);
   assert.deepEqual(withoutIds(removeTimelineMarker(base, base[1].id)), [
-    { time: 1, name: "A" },
-    { time: 3, name: "C" },
+    { beat: 1, name: "A" },
+    { beat: 3, name: "C" },
   ]);
   assert.deepEqual(removeTimelineMarker(base, "missing"), base);
 });
 
-test("same-time same-name markers keep independent ids for edit and delete", () => {
+test("same-beat same-name markers keep independent ids for edit and delete", () => {
   const chart = {
     markers: [
-      { time: 2, name: "Drop", color: "#111111" },
-      { time: 2, name: "Drop", color: "#222222" },
+      { beat: 2, name: "Drop", color: "#111111" },
+      { beat: 2, name: "Drop", color: "#222222" },
     ],
   };
   const markers = readTimelineMarkers(chart);
@@ -270,8 +284,8 @@ test("same-time same-name markers keep independent ids for edit and delete", () 
 test("stored marker ids survive a round trip and duplicate ids are repaired", () => {
   const chart = {
     markers: [
-      { id: "marker-a", time: 1, name: "A" },
-      { id: "marker-a", time: 2, name: "B" },
+      { id: "marker-a", beat: 1, name: "A" },
+      { id: "marker-a", beat: 2, name: "B" },
     ],
   };
   const markers = readTimelineMarkers(chart);
@@ -287,9 +301,9 @@ test("a legacy chart without ids reads, edits, and writes back with stable ids",
   const chart = {
     META: { name: "Legacy" },
     markers: [
-      { time: 1, name: "A", color: "#AABBCC" },
-      { time: 1, name: "A" },
-      { time: 2, name: "B" },
+      { beat: 1, name: "A", color: "#AABBCC" },
+      { beat: 1, name: "A" },
+      { beat: 2, name: "B" },
     ],
   };
   const first = readTimelineMarkers(chart);
@@ -319,8 +333,8 @@ test("every marker operation accepts an empty collection", () => {
   assert.deepEqual(normalizeTimelineMarkers([]), []);
   assert.deepEqual(readTimelineMarkers({ markers: [] }), []);
   assert.deepEqual(writeTimelineMarkers({}, []), { markers: [] });
-  assert.deepEqual(withoutIds(addTimelineMarker([], { time: 0, name: "Zero" })), [
-    { time: 0, name: "Zero" },
+  assert.deepEqual(withoutIds(addTimelineMarker([], { beat: 0, name: "Zero" })), [
+    { beat: 0, name: "Zero" },
   ]);
   assert.deepEqual(updateTimelineMarker([], "missing", { name: "nope" }), []);
   assert.deepEqual(removeTimelineMarker([], "missing"), []);

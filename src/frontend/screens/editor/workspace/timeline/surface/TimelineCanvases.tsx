@@ -15,6 +15,7 @@ import { useTimelineRuntime } from "../../runtime/providers/TimelineProvider.tsx
 import { useTimelineDomSurface } from "./TimelineDomSurface.tsx";
 import type { TimelinePointerCanvasBindings, TimelineStripBindings } from "./timelineBindings.ts";
 import { NoteTimelineRangeOverlay } from "../notes/NoteTimelineRangeOverlay.tsx";
+import { TimelineMarkerRail } from "./TimelineMarkerRail.tsx";
 
 /** One overview strip canvas with its pointer bindings. */
 function OverviewStrip({
@@ -195,6 +196,7 @@ export function TimelineCanvases() {
         hidden={!activeOverview || !densityBarsEnabled}
       />
       <NoteTimelineRangeOverlay />
+      <TimelineMarkerRail />
     </>
   );
 }

@@ -1268,6 +1268,7 @@ export function createEditorAssembly(
       multiEdit,
       selectionOverlay,
       timelineOverview,
+      renderTimelineMarkers,
       trajectoryPanel,
       audioAnalysis,
       realtimePreview,

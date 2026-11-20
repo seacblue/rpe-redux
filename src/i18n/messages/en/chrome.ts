@@ -210,12 +210,11 @@ export default {
   "chrome.transport.markerManager.empty": "This chart has no time markers yet.",
   "chrome.transport.markerManager.add": "Add marker",
   "chrome.transport.markerManager.name": "Name",
-  "chrome.transport.markerManager.time": "Time (seconds)",
+  "chrome.transport.markerManager.beat": "Beat",
   "chrome.transport.markerManager.color": "Colour",
   "chrome.transport.markerManager.defaultName": "Marker {index}",
   "chrome.transport.markerManager.invalidName": "The name cannot be empty.",
-  "chrome.transport.markerManager.invalidTime":
-    "The time must be a number of seconds that is zero or greater.",
+  "chrome.transport.markerManager.markerLabel": "{name}, beat {beat}",
   "chrome.transport.markerManager.selectFirst": "Select a time marker first.",
 
   "chrome.menu.playback.seek": "Jump to beat",

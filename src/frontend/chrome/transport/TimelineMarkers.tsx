@@ -8,10 +8,13 @@
 import type { CSSProperties } from "react";
 import type { JudgeLineEvent } from "../../../core/global/chart/chart.ts";
 import {
+  addTimelineMarker,
+  createTimelineMarkerId,
   markerAudioRatio,
   markerAudioSeconds,
   normalizeMarkerColor,
   readTimelineMarkers,
+  writeTimelineMarkers,
 } from "../../../core/global/chart/timelineMarkers.ts";
 import { Button } from "../../../design/components/button/Button.tsx";
 import { t } from "../../../i18n/index.ts";
@@ -28,6 +31,7 @@ import {
 import type { ContextMenuTarget } from "../../../core/shell/registries/toolbar.ts";
 import type {
   EditorHostTimelineInteraction,
+  EditorHostTimelineMarkerRail,
   EditorHostTimelineMenuSnapshot,
 } from "../../contracts/editorHost.ts";
 import type { ContextMenuAction } from "../../overlays/contextMenu/ContextMenuPopup.tsx";
@@ -35,20 +39,26 @@ import { MarkerManagerDialog } from "./MarkerManagerDialog.tsx";
 import type { TimelineMarkersState } from "./timelineMarkersState.ts";
 import type { TimelineMarker, TimelineMarkersViewProps } from "./timelineMarkersContract.ts";
 
+/** Chart seconds for one marker beat; invalid tempo data falls back to zero. */
+function chartSecondsAtBeat(
+  tempo: EditorHostTimelineInteraction["viewport"]["tempo"],
+  beat: number,
+): number {
+  try {
+    const seconds = tempo.seconds(beat, 1);
+    return Number.isFinite(seconds) ? seconds : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Renders one button per marker at its position along the scrubber. */
-export function TimelineMarkersView({
-  markers,
-  width,
-  duration,
-  offsetSeconds,
-  onSeek,
-}: TimelineMarkersViewProps) {
+export function TimelineMarkersView({ markers, width, onSeek }: TimelineMarkersViewProps) {
   return (
     <>
       {markers.map((marker) => {
         const name = String(marker.name).trim();
-        const audioSeconds = markerAudioSeconds(Number(marker.time), offsetSeconds, duration);
-        const ratio = markerAudioRatio(Number(marker.time), offsetSeconds, duration);
+        const ratio = Number(marker.ratio);
         if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
           return null;
         }
@@ -59,18 +69,22 @@ export function TimelineMarkersView({
         if (color) {
           style["--marker-color"] = color;
         }
+        const label = t("chrome.transport.markerManager.markerLabel", {
+          name,
+          beat: Number(marker.beat).toFixed(3),
+        });
         return (
           <Button
-            key={marker.id ?? `${name}:${marker.time}`}
+            key={marker.id ?? `${name}:${marker.beat}`}
             variant="plain"
             className="timeline-marker"
             data-marker-id={marker.id}
-            data-marker-time={String(marker.time)}
+            data-marker-beat={String(marker.beat)}
             data-marker-name={name}
-            data-tip-title={`${marker.name}, ${Number(marker.time).toFixed(3)} s`}
-            aria-label={`${marker.name}, ${Number(marker.time).toFixed(3)} s`}
+            data-tip-title={label}
+            aria-label={label}
             style={style}
-            onClick={() => onSeek(audioSeconds)}
+            onClick={() => onSeek(marker.audioSeconds)}
           >
             <span className="timeline-marker-bar" aria-hidden="true" />
             <span className="timeline-marker-label">{name}</span>
@@ -166,30 +180,50 @@ function applyEventSelection(
 export class TimelineMarkers {
   private options: TimelineMarkersOptions;
   private markersSource: unknown;
+  private markersTempo: unknown;
   private markerCache: TimelineMarker[] = [];
-  private publishedMarkers: TimelineMarker[] | null = null;
+  private publishedMarkers: readonly TimelineMarker[] | null = null;
+  private publishedTempo: unknown;
   private publishedWidth = -1;
   private publishedDuration = -1;
   private publishedOffsetSeconds = Number.NaN;
+  private publishedRailTempo: unknown;
+  private publishedRailKey = "";
+  private readonly seekTo: (audioSeconds: number) => void;
 
   /** Binds the controller to its hosts and session accessors. */
   constructor(options: TimelineMarkersOptions) {
     this.options = options;
+    this.seekTo = (audioSeconds) => options.seek(audioSeconds);
   }
 
-  /** Publishes marker geometry when the markers, host width, duration, or offset changed. */
+  /** Publishes transport positions and timeline bookmarks when their inputs changed. */
   render(): void {
-    const { root, scrubber, duration, seek, offsetSeconds } = this.options;
+    const { timeline } = this.options;
     const markers = this.markers();
-    const totalDuration = Math.max(0.001, duration());
-    const rawOffset = offsetSeconds();
+    const tempo = timeline.viewport.tempo;
+    const totalDuration = Math.max(0.001, this.options.duration());
+    const rawOffset = this.options.offsetSeconds();
     const offset = Number.isFinite(rawOffset) ? rawOffset : 0;
+    this.renderTransport(markers, tempo, totalDuration, offset);
+    this.renderRail(markers, tempo, totalDuration, offset);
+  }
+
+  /** Publishes one marker button per beat along the scrubber. */
+  private renderTransport(
+    markers: readonly TimelineMarker[],
+    tempo: EditorHostTimelineInteraction["viewport"]["tempo"],
+    totalDuration: number,
+    offset: number,
+  ): void {
+    const { root, scrubber, state } = this.options;
     const width = root.clientWidth || scrubber.clientWidth || 1;
     // Selection and event clicks leave the markers unchanged, so an identical
-    // snapshot is not republished. A changed offset moves every marker, so it
-    // is part of the identity too.
+    // snapshot is not republished. A changed offset or tempo moves every marker,
+    // so both are part of the identity too.
     if (
       markers === this.publishedMarkers &&
+      tempo === this.publishedTempo &&
       width === this.publishedWidth &&
       totalDuration === this.publishedDuration &&
       offset === this.publishedOffsetSeconds
@@ -197,16 +231,94 @@ export class TimelineMarkers {
       return;
     }
     this.publishedMarkers = markers;
+    this.publishedTempo = tempo;
     this.publishedWidth = width;
     this.publishedDuration = totalDuration;
     this.publishedOffsetSeconds = offset;
-    this.options.state.snapshot.set({
-      markers,
+    const positions = markers.map((marker) => {
+      const chartSeconds = chartSecondsAtBeat(tempo, marker.beat);
+      return {
+        ...marker,
+        audioSeconds: markerAudioSeconds(chartSeconds, offset, totalDuration),
+        ratio: markerAudioRatio(chartSeconds, offset, totalDuration),
+      };
+    });
+    state.snapshot.set({
+      markers: positions,
       width,
       duration: totalDuration,
       offsetSeconds: offset,
-      onSeek: (audioSeconds) => seek(audioSeconds),
+      onSeek: this.seekTo,
     });
+  }
+
+  /** Publishes bookmark tabs at the markers' rows on the timeline's left edge. */
+  private renderRail(
+    markers: readonly TimelineMarker[],
+    tempo: EditorHostTimelineInteraction["viewport"]["tempo"],
+    totalDuration: number,
+    offset: number,
+  ): void {
+    const { timeline, getSession, state } = this.options;
+    const session = getSession();
+    const notes = timeline.notesCanvas;
+    const events = timeline.eventsCanvas;
+    const notesVisible = notes.clientHeight > 0;
+    const canvas = notesVisible ? notes : events;
+    const area = notesVisible ? "notes" : "events";
+    const height = canvas.clientHeight;
+    const left = canvas.offsetLeft;
+    const top = canvas.offsetTop;
+    const lineIndex = session.lineIndex;
+    const factor = session.line?.bpmfactor ?? 1;
+    const signature = [
+      markers
+        .map((marker) => `${marker.id ?? ""}:${marker.beat}:${marker.name}:${marker.color ?? ""}`)
+        .join("|"),
+      left,
+      top,
+      height,
+      lineIndex,
+      factor,
+      area,
+      timeline.viewport.origin,
+      timeline.viewport.scale,
+      offset,
+      totalDuration,
+    ].join(";");
+    // Viewport changes repaint the canvas without changing the chart, so the
+    // rail follows its own geometry key and leaves the transport snapshot alone.
+    if (tempo === this.publishedRailTempo && signature === this.publishedRailKey) {
+      return;
+    }
+    this.publishedRailTempo = tempo;
+    this.publishedRailKey = signature;
+    const items: EditorHostTimelineMarkerRail["markers"] = [];
+    if (height > 0) {
+      for (const marker of markers) {
+        let markerTop: number;
+        try {
+          markerTop = timeline.viewport.verticalForLine(marker.beat, lineIndex, height, area);
+        } catch {
+          continue;
+        }
+        if (!Number.isFinite(markerTop) || markerTop < -8 || markerTop > height + 8) {
+          continue;
+        }
+        const chartSeconds = chartSecondsAtBeat(tempo, marker.beat);
+        items.push({
+          id: marker.id,
+          name: marker.name,
+          color: marker.color,
+          beat: marker.beat,
+          top: markerTop,
+          audioSeconds: markerAudioSeconds(chartSeconds, offset, totalDuration),
+        });
+      }
+    }
+    state.rail.set(
+      items.length > 0 ? { left, top, height, markers: items, onSeek: this.seekTo } : null,
+    );
   }
 
   /** Opens the timeline menu for the events or notes canvas. */
@@ -217,6 +329,7 @@ export class TimelineMarkers {
     const surface = canvas === timeline.eventsCanvas ? "events" : "notes";
     const modifiers = { ctrl: event.ctrlKey, shift: event.shiftKey };
     const beat = point ? timeline.viewport.beatAt(point.y) : 0;
+    const markerBeat = point ? timeline.viewport.snappedBeat(point.y) : 0;
     const chartSeconds = point ? timeline.viewport.timeAt(point.y) : 0;
     let target: ContextMenuTarget | undefined;
 
@@ -285,7 +398,15 @@ export class TimelineMarkers {
             timeline.gestures.layer
           ]?.moveXEvents?.[Number(index)] ?? null)
         : null;
-    const actions: ContextMenuAction[] = [];
+    const actions: ContextMenuAction[] = [
+      {
+        id: "timeline-add-marker",
+        label: t("workspace.dialogs.addMarkerHere"),
+        icon: "clock",
+        enabled: () => session.editable && Boolean(point),
+        run: () => this.addMarkerAt(markerBeat),
+      },
+    ];
     if (surface === "events" && selection && selected?.trajectory) {
       actions.push({
         id: "trajectory-context-split",
@@ -305,26 +426,52 @@ export class TimelineMarkers {
     });
   }
 
+  /** Adds a marker at one chart beat through the session's normal history. */
+  private addMarkerAt(beat: number): void {
+    const session = this.options.getSession();
+    if (!session.editable) {
+      return;
+    }
+    const current = readTimelineMarkers(session.chart, this.options.timeline.viewport.tempo);
+    const position = Math.max(0, Number.isFinite(beat) ? Number(beat.toFixed(3)) : 0);
+    const marker: TimelineMarker = {
+      id: createTimelineMarkerId(),
+      beat: position,
+      name: t("chrome.transport.markerManager.defaultName", { index: current.length + 1 }),
+    };
+    const next = addTimelineMarker(current, marker);
+    session.commitChart(
+      t("workspace.dialogs.addMarker"),
+      writeTimelineMarkers(session.chart, next),
+      session.selectionState(),
+      undefined,
+      { normalized: true },
+    );
+  }
+
   /** Takes the timeline menu down. */
   closeContextMenu(): void {
     this.options.setTimelineMenu(null);
   }
 
-  /** Closes the menu and withdraws the published markers. */
+  /** Closes the menu and withdraws the published markers and bookmarks. */
   dispose(): void {
     this.closeContextMenu();
     this.options.state.snapshot.set(null);
+    this.options.state.rail.set(null);
   }
 
-  /** Returns the session's canonical markers, cached until the raw array changes. */
+  /** Returns the session's canonical markers, cached until the raw array or tempo changes. */
   private markers(): TimelineMarker[] {
     const chart = this.options.getSession().chart;
     const markers = chart.markers;
-    if (markers === this.markersSource) {
+    const tempo = this.options.timeline.viewport.tempo;
+    if (markers === this.markersSource && tempo === this.markersTempo) {
       return this.markerCache;
     }
     this.markersSource = markers;
-    this.markerCache = readTimelineMarkers(chart);
+    this.markersTempo = tempo;
+    this.markerCache = readTimelineMarkers(chart, tempo);
     return this.markerCache;
   }
 }

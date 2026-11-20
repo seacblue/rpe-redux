@@ -39,9 +39,37 @@ export interface EditorHostProgressState {
   readonly seekHandler: LateBound<(seconds: number) => void>;
 }
 
+/** One marker with its transport position derived from the chart tempo. */
+export type EditorHostTimelineMarkerPosition = TimelineMarker & {
+  /** Audio time the marker seeks to, including the chart offset and clamping. */
+  audioSeconds: number;
+  /** Position along the scrubber, in the closed range `[0, 1]`. */
+  ratio: number;
+};
+
+/** One bookmark tab on the left edge of the timeline. */
+export interface EditorHostTimelineMarkerBookmark {
+  id?: string;
+  name: string;
+  color?: string;
+  beat: number;
+  /** Vertical position inside the timeline field, in CSS pixels. */
+  top: number;
+  audioSeconds: number;
+}
+
+/** The timeline field geometry and the marker tabs drawn against its left edge. */
+export interface EditorHostTimelineMarkerRail {
+  left: number;
+  top: number;
+  height: number;
+  markers: EditorHostTimelineMarkerBookmark[];
+  onSeek(audioSeconds: number): void;
+}
+
 /** The marker geometry the transport view draws over the scrubber. */
 export interface EditorHostTimelineMarkersSnapshot {
-  markers: TimelineMarker[];
+  markers: EditorHostTimelineMarkerPosition[];
   width: number;
   /** Audio length the scrubber spans, in seconds. */
   duration: number;
@@ -54,11 +82,13 @@ export interface EditorHostTimelineMarkersSnapshot {
 /** The marker snapshot cell the editor controller fills. */
 export interface EditorHostTimelineMarkersState {
   readonly snapshot: ValueCell<EditorHostTimelineMarkersSnapshot | null>;
+  readonly rail: ValueCell<EditorHostTimelineMarkerRail | null>;
 }
 
-/** Tempo projection used by the progress menu to place a marker on the beat grid. */
+/** Tempo projection used by the transport and marker surfaces. */
 export interface EditorHostTimelineTempo {
   beat(seconds: number, factor?: number): number;
+  seconds(beat: number, factor?: number): number;
 }
 
 /** Timeline geometry the progress menu reads. */
@@ -70,11 +100,17 @@ export interface EditorHostTimeline {
 
 /** Timeline interaction the transport marker controller drives. */
 export interface EditorHostTimelineInteraction {
+  readonly notesCanvas: HTMLCanvasElement;
   readonly eventsCanvas: HTMLCanvasElement;
   readonly viewport: {
+    readonly origin: number;
+    readonly scale: number;
+    readonly tempo: EditorHostTimelineTempo;
     point(event: PointerEvent, canvas?: HTMLCanvasElement): TimelinePoint;
     beatAt(vertical: number): number;
     timeAt(vertical: number): number;
+    snappedBeat(vertical: number): number;
+    verticalForLine(beat: number, lineIndex: number, height?: number, area?: TimelineArea): number;
     lineIndexAt(horizontal: number, width: number, area?: TimelineArea): number;
   };
   hit(position: TimelinePoint): TimelineNoteEntry | undefined;

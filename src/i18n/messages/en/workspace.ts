@@ -102,6 +102,7 @@ export default {
     "The local version was kept. Save it explicitly or use Save As when ready.",
   "workspace.dialogs.timelineMenu": "Timeline menu",
   "workspace.dialogs.addMarker": "Add a time marker",
+  "workspace.dialogs.addMarkerHere": "Add a time marker here",
   "workspace.dialogs.splitTrajectory": "Split the curve trajectory",
   "workspace.dialogs.deleteMarker": "Delete this marker",
   "workspace.dialogs.editMarker": "Edit a time marker",

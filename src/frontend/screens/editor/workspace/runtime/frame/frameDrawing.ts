@@ -90,6 +90,8 @@ export interface FrameDrawingOptions {
   multiEdit: Pick<MultiEditPanel, "drawTimeline" | "previewChart">;
   selectionOverlay: Pick<SelectionOverlay, "draw">;
   timelineOverview: Pick<TimelineOverview, "draw">;
+  /** Repositions transport markers and the timeline's bookmark rail after drawing. */
+  renderTimelineMarkers(): void;
   trajectoryPanel: Pick<TrajectoryPanel, "active" | "tick">;
   audioAnalysis: Pick<AudioAnalysis, "draw">;
   realtimePreview: Pick<
@@ -232,6 +234,9 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
             if (work.timeline) {
               const started = performance.now();
               runtime.timeline.draw(beat);
+              // The viewport may have scrolled or zoomed for this frame; keep
+              // the bookmark rail aligned with the field that was just painted.
+              runtime.renderTimelineMarkers();
               timelineDrawMs = performance.now() - started;
               // A batch drag owns the timeline proposal, so the inspector's
               // independent ghost layer is omitted while that preview is live.

@@ -11,6 +11,8 @@ import { ColorField } from "../../../design/components/input/ColorField.tsx";
 import { Input } from "../../../design/components/input/Input.tsx";
 import { ListRow } from "../../../design/components/list/ListRow.tsx";
 import { Modal } from "../../../design/components/modal/Modal.tsx";
+import { BeatField } from "../../screens/editor/inspector/beat/BeatField.tsx";
+import { beatValue, fromNumber } from "../../../core/global/chart/timing/beat.ts";
 import {
   addTimelineMarker,
   createTimelineMarkerId,
@@ -36,13 +38,12 @@ function defaultMarkerColor(): string {
   return normalizeMarkerColor(value) ?? FALLBACK_MARKER_COLOR;
 }
 
-type MarkerRowError = "invalidName" | "invalidTime" | null;
+type MarkerRowError = "invalidName" | null;
 
 /** One row's local drafts, tied to the marker values they were read from. */
 interface MarkerDraft {
   source: string;
   name: string;
-  time: string;
   error: MarkerRowError;
 }
 
@@ -61,21 +62,19 @@ function MarkerRow({ marker, selected, fallbackColor, onSelect, onEdit }: Marker
   const fieldId = useId();
   const colorId = `${fieldId}-color`;
   const nameId = `${fieldId}-name`;
-  const timeId = `${fieldId}-time`;
-  const source = `${marker.time}\u0000${marker.name}`;
+  const beatId = `${fieldId}-beat`;
+  const source = marker.name;
   const [draft, setDraft] = useState<MarkerDraft>(() => ({
     source,
     name: marker.name,
-    time: String(marker.time),
     error: null,
   }));
   // An external edit, undo, or reorder replaces the marker under this row. The
-  // current draft is derived from the new values before state catches up, so
-  // the inputs never paint one render of the previous marker.
+  // current draft is derived from the new values before state catches up, so the
+  // input never paints one render of the previous marker. Beat drafts belong to
+  // BeatField, which follows its committed value on its own.
   const current: MarkerDraft =
-    draft.source === source
-      ? draft
-      : { source, name: marker.name, time: String(marker.time), error: null };
+    draft.source === source ? draft : { source, name: marker.name, error: null };
   if (draft.source !== source) {
     setDraft(current);
   }
@@ -98,31 +97,8 @@ function MarkerRow({ marker, selected, fallbackColor, onSelect, onEdit }: Marker
     }
   };
 
-  /** Commit a finite, non-negative second value, or restore the stored one. */
-  const commitTime = () => {
-    const raw = current.time.trim();
-    const parsed = Number(raw);
-    if (raw === "" || !Number.isFinite(parsed) || parsed < 0) {
-      setDraft({ ...current, time: String(marker.time), error: "invalidTime" });
-      return;
-    }
-    if (parsed === marker.time) {
-      setDraft({ ...current, error: null });
-      return;
-    }
-    if (!onEdit({ time: parsed })) {
-      setDraft({ ...current, time: String(marker.time), error: null });
-    } else {
-      setDraft({ ...current, error: null });
-    }
-  };
-
   const errorText =
-    current.error === "invalidName"
-      ? t("chrome.transport.markerManager.invalidName")
-      : current.error === "invalidTime"
-        ? t("chrome.transport.markerManager.invalidTime")
-        : "";
+    current.error === "invalidName" ? t("chrome.transport.markerManager.invalidName") : "";
 
   return (
     <ListRow
@@ -131,16 +107,6 @@ function MarkerRow({ marker, selected, fallbackColor, onSelect, onEdit }: Marker
       onClick={onSelect}
       onFocus={onSelect}
     >
-      <span className="marker-manager-color">
-        <label className="redux-visually-hidden" htmlFor={colorId}>
-          {t("chrome.transport.markerManager.color")}
-        </label>
-        <ColorField
-          id={colorId}
-          value={marker.color ?? fallbackColor}
-          onChange={(color) => onEdit({ color })}
-        />
-      </span>
       <label className="redux-visually-hidden" htmlFor={nameId}>
         {t("chrome.transport.markerManager.name")}
       </label>
@@ -164,29 +130,24 @@ function MarkerRow({ marker, selected, fallbackColor, onSelect, onEdit }: Marker
           }
         }}
       />
-      <label className="redux-visually-hidden" htmlFor={timeId}>
-        {t("chrome.transport.markerManager.time")}
+      <span className="marker-manager-color">
+        <label className="redux-visually-hidden" htmlFor={colorId}>
+          {t("chrome.transport.markerManager.color")}
+        </label>
+        <ColorField
+          id={colorId}
+          value={marker.color ?? fallbackColor}
+          onChange={(color) => onEdit({ color })}
+        />
+      </span>
+      <label className="redux-visually-hidden" htmlFor={beatId}>
+        {t("chrome.transport.markerManager.beat")}
       </label>
-      <Input
-        id={timeId}
-        type="number"
-        min="0"
-        step="any"
-        value={current.time}
-        onChange={(event) => {
-          const time = event.currentTarget.value;
-          setDraft({ ...current, time });
-        }}
-        onBlur={commitTime}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            event.currentTarget.blur();
-          } else if (event.key === "Escape") {
-            event.currentTarget.value = String(marker.time);
-            setDraft({ ...current, time: String(marker.time), error: null });
-          }
-        }}
+      <BeatField
+        id={beatId}
+        value={fromNumber(marker.beat)}
+        onCommit={(beat) => onEdit({ beat: beatValue(beat) })}
+        accepts={(beat) => beatValue(beat) >= 0}
       />
       {errorText && (
         <span className="marker-manager-row-error" role="alert">
@@ -207,7 +168,9 @@ export function MarkerManagerDialog() {
   // The controller republishes this snapshot after a chart commit, so an undo
   // or a peer's edit reaches the open dialog without a second session store.
   useEditorHostValue((editor) => editor.ui.timelineMarkers.snapshot, null);
-  const markers = session ? readTimelineMarkers(session.chart) : [];
+  const markers = session
+    ? readTimelineMarkers(session.chart, runtime?.timeline.viewport.tempo)
+    : [];
   const markerCount = markers.length;
   const [selection, setSelection] = useState<number | null>(null);
   // A peer edit or an undo can shrink the list under the stored index; the
@@ -236,7 +199,7 @@ export function MarkerManagerDialog() {
       return false;
     }
     const targetId = target.id;
-    const current = readTimelineMarkers(session.chart);
+    const current = readTimelineMarkers(session.chart, runtime?.timeline.viewport.tempo);
     if (!current.some((entry) => entry.id === targetId)) {
       return false;
     }
@@ -244,7 +207,7 @@ export function MarkerManagerDialog() {
     if (!commit(t("workspace.dialogs.editMarker"), next)) {
       return false;
     }
-    if (patch.time !== undefined) {
+    if (patch.beat !== undefined) {
       const moved = next.findIndex((entry) => entry.id === targetId);
       if (moved >= 0) {
         setSelection(moved);
@@ -258,13 +221,21 @@ export function MarkerManagerDialog() {
     if (!runtime || !session) {
       return;
     }
-    const current = readTimelineMarkers(session.chart);
+    const current = readTimelineMarkers(session.chart, runtime.timeline.viewport.tempo);
     const offsetSeconds = Number(session.chart.META.offset ?? 0) / 1000;
     const playhead = Number(runtime.audio.time);
-    const time = Number.isFinite(playhead) ? Math.max(0, playhead - offsetSeconds) : 0;
+    const chartSeconds = Number.isFinite(playhead) ? Math.max(0, playhead - offsetSeconds) : 0;
+    const playheadBeat = (() => {
+      try {
+        return runtime.timeline.viewport.tempo.beat(chartSeconds, 1);
+      } catch {
+        return 0;
+      }
+    })();
+    const beat = Number.isFinite(playheadBeat) ? Math.max(0, Number(playheadBeat.toFixed(3))) : 0;
     const marker: TimelineMarker = {
       id: createTimelineMarkerId(),
-      time,
+      beat,
       name: t("chrome.transport.markerManager.defaultName", { index: current.length + 1 }),
     };
     const next = addTimelineMarker(current, marker);
@@ -284,7 +255,7 @@ export function MarkerManagerDialog() {
     if (!target?.id) {
       return;
     }
-    const current = readTimelineMarkers(session.chart);
+    const current = readTimelineMarkers(session.chart, runtime?.timeline.viewport.tempo);
     const live = current.findIndex((entry) => entry.id === target.id);
     if (live < 0) {
       setSelection(current.length ? Math.min(selectedIndex, current.length - 1) : null);
@@ -315,6 +286,9 @@ export function MarkerManagerDialog() {
           >
             {t("common.action.delete")}
           </Button>
+          <Button type="button" variant="outlined" disabled={!session} onClick={add}>
+            {t("chrome.transport.markerManager.add")}
+          </Button>
           <Button type="button" variant="solid" onClick={closeMarkerDialog}>
             {t("common.action.close")}
           </Button>
@@ -322,19 +296,14 @@ export function MarkerManagerDialog() {
       }
     >
       <div className="marker-manager">
-        <div className="marker-manager-toolbar">
-          <Button type="button" variant="outlined" size="sm" disabled={!session} onClick={add}>
-            {t("chrome.transport.markerManager.add")}
-          </Button>
-        </div>
         {markerCount === 0 ? (
           <p className="marker-manager-empty">{t("chrome.transport.markerManager.empty")}</p>
         ) : (
           <>
             <div className="marker-manager-head" aria-hidden="true">
-              <span>{t("chrome.transport.markerManager.color")}</span>
               <span>{t("chrome.transport.markerManager.name")}</span>
-              <span>{t("chrome.transport.markerManager.time")}</span>
+              <span>{t("chrome.transport.markerManager.color")}</span>
+              <span>{t("chrome.transport.markerManager.beat")}</span>
             </div>
             <div className="marker-manager-list">
               {/* The id keeps a row mounted while a commit reorders the list,

@@ -172,17 +172,17 @@ export function eventTargetFromRefs(
  *
  * The marker surface is always reported; `markerId` is the marker's persistent
  * id and is absent only when the pointer did not resolve to a marker row or the
- * marker carries no id. A rename does not change this target.
+ * marker carries no id. The target's beat is the marker's own chart position.
  */
 export function markerTargetFromMarker(
-  marker: { id?: string; time: number; name: string } | undefined,
-  beat: number,
+  marker: { id?: string; beat: number; name: string } | undefined,
 ): ContextMenuTarget {
   const markerId = typeof marker?.id === "string" ? marker.id.trim() : "";
+  const beat = Number(marker?.beat);
   return {
     surface: "marker",
     ...(markerId ? { markerId } : {}),
-    beat,
+    beat: Number.isFinite(beat) && beat >= 0 ? beat : 0,
   };
 }
 

@@ -89,6 +89,7 @@ export default {
   "workspace.document.diskChange.retained": "已保留本地版本。准备好后请显式保存或使用“另存为”。",
   "workspace.dialogs.timelineMenu": "时间轴菜单",
   "workspace.dialogs.addMarker": "添加时间标记",
+  "workspace.dialogs.addMarkerHere": "在此处新增时间标记",
   "workspace.dialogs.splitTrajectory": "拆分曲线轨迹",
   "workspace.dialogs.deleteMarker": "删除此标记",
   "workspace.dialogs.editMarker": "编辑时间标记",
