@@ -6,6 +6,7 @@
  * keyboard event unhandled so an outer surface can still act on it.
  */
 import { eventKey, eventList } from "../events/eventTracks.ts";
+import { stickSelectedEvents, type EventStickDirection } from "../events/eventTools.ts";
 import {
   clearSelection,
   scaleSelection,
@@ -90,6 +91,12 @@ const PAGE_KEYS: Record<string, string> = {
   "selection.nudge.right": "ArrowRight",
   "selection.nudge.up": "ArrowUp",
   "selection.nudge.down": "ArrowDown",
+};
+
+/** Stick actions and the neighbour each one joins. */
+const STICK_ACTIONS: Record<string, EventStickDirection> = {
+  "selection.event.stick.next": "next",
+  "selection.event.stick.previous": "previous",
 };
 
 /** Resolve placement to the timeline currently under the pointer when known. */
@@ -209,6 +216,8 @@ export async function runEditorKeyboardAction(
       }
     } else if (PAGE_KEYS[action]) {
       nudgeSelection(session, PAGE_KEYS[action], timeline.division, timeline.gridCount);
+    } else if (Object.hasOwn(STICK_ACTIONS, action)) {
+      stickSelectedEvents(session, STICK_ACTIONS[action]);
     } else if (action === "selection.scale.narrower") {
       scaleSelection(session, 0.95);
     } else if (action === "selection.scale.wider") {

@@ -120,8 +120,8 @@
   }
 }
 
-// Event actions share one compact two-by-two block: sampling, stick, cut, and
-// swap each keep a full cell instead of one wide command plus a three-up row.
+// Event actions share one compact grid: sampling, both stick directions, cut,
+// and swap each keep a full cell instead of one wide command plus a three-up row.
 .redux-app-root .inspector .action-grid.event-tool-actions {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-2);

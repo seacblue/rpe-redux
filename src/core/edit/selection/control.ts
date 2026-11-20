@@ -242,10 +242,11 @@ export function clearSelection(session: EditorSession): boolean {
 }
 
 /**
- * Select-all and the page keys move the selection this module edits.
+ * Select-all and the movement/stick keys act on the selection this module edits.
  *
- * `nudgeSelection` is the implementation, and the arrow keys it uses are absent
- * whenever nothing is selected — that is where the two contexts come from.
+ * `nudgeSelection` is the implementation of the arrow keys, and `stickSelectedEvents`
+ * is what the G/B pair runs; both are absent whenever nothing is selected — that
+ * is where the contexts come from.
  */
 export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
   {
@@ -279,8 +280,7 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.pageLeft",
     scope: "editor",
-    // Z/X/G/B form a left-hand movement cluster: horizontal on the bottom row,
-    // time on the home/bottom pair. The arrows stay as the familiar binding.
+    // Z/X nudge a selection horizontally; the arrows stay as the familiar binding.
     defaults: [{ key: "Z" }, { key: "LEFTARROW" }],
     enabledFor: (context) => context.hasSelection,
   },
@@ -299,7 +299,9 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.pageUp",
     scope: "editor",
-    defaults: [{ key: "G" }, { key: "UPARROW" }],
+    // The arrow pair moves a selection in time. G and B belong to the event
+    // stick commands instead of duplicating the arrows.
+    defaults: [{ key: "UPARROW" }],
     enabledFor: (context) => context.hasSelection,
   },
   {
@@ -308,8 +310,27 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     category: "editor.selection",
     title: "shortcuts.editor.pageDown",
     scope: "editor",
-    defaults: [{ key: "B" }, { key: "DOWNARROW" }],
+    defaults: [{ key: "DOWNARROW" }],
     enabledFor: (context) => context.hasSelection,
+  },
+  {
+    id: "selection.event.stick.next",
+    category: "editor.selection",
+    title: "shortcuts.editor.stickNext",
+    scope: "editor",
+    // G joins the selected events' end values to the next event's start, the
+    // stick direction RPE puts on G.
+    defaults: [{ key: "G" }],
+    enabledFor: (context) => context.hasEventSelection === true,
+  },
+  {
+    id: "selection.event.stick.previous",
+    category: "editor.selection",
+    title: "shortcuts.editor.stickPrevious",
+    scope: "editor",
+    // B joins the selected events' start values to the previous event's end.
+    defaults: [{ key: "B" }],
+    enabledFor: (context) => context.hasEventSelection === true,
   },
   {
     id: "selection.scale.narrower",
