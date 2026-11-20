@@ -1,5 +1,5 @@
 ---
-"rpe-redux": minor
+"rpe-redux": patch
 ---
 
 ### 中文
