@@ -424,6 +424,9 @@ export default {
     "Draws easing curves once the event bar reaches the width threshold.",
   "settings.field.event-opacity.label": "Event bar opacity",
   "settings.field.event-bar-width.label": "Event bar width ratio",
+  "settings.field.event-hooked-color.label": "Hooked event colour",
+  "settings.field.event-hooked-color.description":
+    "Paints the bar of a hooked event whose start and end values are locked together.",
   // -------------------------------------------------------- timeline (5 rows)
   "settings.field.scroll-speed.label": "Wheel seek speed",
   "settings.field.timeline-exclusive-width.label": "Exclusive timeline width",

@@ -147,12 +147,15 @@ test("monitor isolates tracks and reports the extended layer's synthetic index",
   assert.equal(snapshot.issues[0].track, "scaleXEvents");
 });
 
-test("monitor treats a zero-length hooked event as authored intent", () => {
+test("monitor reports a zero-length hooked event as an invalid range", () => {
   const hooked = { ...event(4, 4, "hooked"), inst: 1 };
   const snapshot = new EventIssueMonitor().update(
     chart([line("line-1", "First", [{ moveXEvents: [hooked] }])]),
   );
-  assert.equal(snapshot.issues.length, 0);
+  assert.deepEqual(
+    snapshot.issues.map((issue) => [issue.kind, issue.target]),
+    [["invalid-range", "event"]],
+  );
 });
 
 test("monitor still reports a reversed hooked event", () => {

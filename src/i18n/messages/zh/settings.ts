@@ -362,6 +362,8 @@ export default {
   "settings.field.event-curves-enabled.description": "事件条达到宽度阈值后绘制缓动曲线。",
   "settings.field.event-opacity.label": "事件条不透明度",
   "settings.field.event-bar-width.label": "事件条宽度比例",
+  "settings.field.event-hooked-color.label": "钩定事件颜色",
+  "settings.field.event-hooked-color.description": "绘制首尾数值锁定的钩定事件条时使用的颜色。",
   "settings.field.scroll-speed.label": "滚轮跳转速度",
   "settings.field.timeline-exclusive-width.label": "独占时的时间轴宽度",
   "settings.field.timeline-stretch-bar-enabled.label": "显示纵向拉伸条",

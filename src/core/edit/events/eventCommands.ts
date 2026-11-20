@@ -173,10 +173,8 @@ export function placedEvent(
 ): JudgeLineEvent | PlacedShaderEvent | null {
   const start = Math.min(first, second);
   const end = Math.max(first, second);
-  // The instant flag is the only path that may keep a zero-length span;
-  // ordinary spans still need a visible duration, while hook events may have any
-  // length because their value pair, not their time span, is locked.
-  if (end - start < 0.001 && !inst) {
+  // No event may start and end on the same beat, hooked or not.
+  if (end - start < 0.001) {
     return null;
   }
   const events = eventListAt(session, lineIndex, type, options.eventLayer ?? session.eventLayer);
@@ -405,9 +403,13 @@ export function updateEventsAtTarget(
     return { status: "unchanged", reason: "no_change", value: 0 };
   }
   const selected = new Set(indices);
-  const nextEvents = events.map((event, index) =>
+  const updated = events.map((event, index) =>
     selected.has(index) ? updateEvent(event, input.payload ?? {}) : event,
   );
+  if (updated.some((event) => event === null)) {
+    return rejected("event.endBeforeStart");
+  }
+  const nextEvents = updated as JudgeLineEvent[];
   if (nextEvents.every((event, index) => event === events[index])) {
     return { status: "unchanged", reason: "no_change", value: 0 };
   }
@@ -446,16 +448,15 @@ export function updateEventsAtTarget(
   return { status: "committed", value: indices.length };
 }
 
-/** Applies beat, value, easing, and instant-event fields to one event. */
-function updateEvent(event: JudgeLineEvent, payload: EventActionPayload): JudgeLineEvent {
+/** Applies a patch, refusing an empty span; `instant` locks the values only. */
+function updateEvent(event: JudgeLineEvent, payload: EventActionPayload): JudgeLineEvent | null {
   const startBeat = payload.nextStartBeat ?? beatValue(event.startTime);
-  const endBeat = payload.instant ? startBeat : (payload.nextEndBeat ?? beatValue(event.endTime));
+  const endBeat = payload.nextEndBeat ?? beatValue(event.endTime);
+  if (endBeat <= startBeat) {
+    return null;
+  }
   const start = payload.start === undefined ? event.start : structuredClone(payload.start);
-  const end = payload.instant
-    ? structuredClone(start)
-    : payload.end === undefined
-      ? event.end
-      : structuredClone(payload.end);
+  const end = payload.instant ? structuredClone(start) : structuredClone(payload.end ?? event.end);
   return {
     ...event,
     startTime: fromNumber(startBeat),

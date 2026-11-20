@@ -316,17 +316,20 @@ export function drawPendingEvent(
   // the preview and the committed event share one span.
   const startBeat = Math.min(pending.beat, cursorBeat);
   const endBeat = Math.max(pending.beat, cursorBeat);
-  let valid = true;
+  let valid: boolean;
   try {
-    placedEvent(
-      session,
-      pending.type,
-      startBeat,
-      endBeat,
-      undefined,
-      pending.lineIndex,
-      pending.inst ?? false,
-    );
+    // A null result means the span was refused, which includes the identical
+    // anchors of an empty span; only a throw used to carry the overlap case.
+    valid =
+      placedEvent(
+        session,
+        pending.type,
+        startBeat,
+        endBeat,
+        undefined,
+        pending.lineIndex,
+        pending.inst ?? false,
+      ) !== null;
   } catch {
     valid = false;
   }

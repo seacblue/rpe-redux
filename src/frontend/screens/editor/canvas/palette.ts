@@ -8,6 +8,7 @@
  * exist before the first frame.
  */
 import { values } from "../../../../core/state/values.ts";
+import { settingsRegistry } from "../../../../core/settings/settings.ts";
 
 export interface CanvasPalette {
   background: string;
@@ -70,6 +71,26 @@ export function selectionColor(key: string, fallback: string): string {
   return typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
 }
 
+/** The setting that overrides the theme's hooked-event colour. */
+export const EVENT_HOOKED_COLOR_KEY = "event-hooked-color";
+
+/**
+ * A colour setting the user moved away from its schema default, or "" when the
+ * row is untouched.
+ *
+ * A row's default is what its swatch starts at; a visual surface that has a
+ * theme token of its own keeps the token while the row sits at that default, so
+ * a light and a dark theme can each supply their own contrast.
+ */
+export function colorSettingOverride(key: string): string {
+  const value = values.byId.has(key) ? values.byId.get<unknown>(key) : undefined;
+  const fallback = settingsRegistry.definition(key)?.default;
+  if (typeof value !== "string" || !/^#[\da-f]{6}$/i.test(value) || fallback === undefined) {
+    return "";
+  }
+  return value.toLowerCase() === String(fallback).toLowerCase() ? "" : value;
+}
+
 /** Drop the cached palette after a theme or token change. */
 export function invalidateCanvasPalette(): void {
   cachedPalette = null;
@@ -90,7 +111,10 @@ export function readCanvasPalette(): CanvasPalette {
   const selectedColor = selectionColor("selected-note-color", "#00C800");
   const remoteNoteColor = selectionColor("collaboration-selected-note-color", "#FFCC66");
   const remoteEventColor = selectionColor("collaboration-selected-event-color", "#FFCC66");
-  const selectionColors = `${selectedColor}|${remoteNoteColor}|${remoteEventColor}`;
+  // An untouched hooked-colour row leaves the theme in charge, so a light theme
+  // keeps its own darker cyan; a changed row wins over the token.
+  const hookedOverride = colorSettingOverride(EVENT_HOOKED_COLOR_KEY);
+  const selectionColors = `${selectedColor}|${remoteNoteColor}|${remoteEventColor}|${hookedOverride}`;
   if (cachedPalette && cachedSelectionColors === selectionColors) {
     return cachedPalette;
   }
@@ -102,6 +126,7 @@ export function readCanvasPalette(): CanvasPalette {
     }
     return value;
   };
+  const hookedFill = hookedOverride || read("--canvas-event-hooked-fill");
   const subdivisionDenominators = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
   const palette: CanvasPalette = {
     background: read("--canvas-background"),
@@ -134,7 +159,7 @@ export function readCanvasPalette(): CanvasPalette {
     eventStroke: read("--canvas-event-stroke"),
     eventSelectedFill: read("--canvas-event-selected-fill"),
     eventSelectedStroke: read("--canvas-event-selected-stroke"),
-    eventHookedFill: read("--canvas-event-hooked-fill"),
+    eventHookedFill: hookedFill,
     eventHookedStroke: read("--canvas-event-hooked-stroke"),
     eventShaderFill: read("--canvas-event-shader-fill"),
     eventShaderText: read("--canvas-event-shader-text"),

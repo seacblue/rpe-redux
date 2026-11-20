@@ -24,23 +24,19 @@ export interface TimelineRenderRange {
  * Projects an event or hold into a drawable positive range.
  *
  * Positive ranges keep their exact endpoints. A zero-length or reversed range
- * starts at the stored start beat and receives one horizontal-grid division.
- * `invalid` marks a reversed range, and a zero-length range unless the caller
- * opts out: a hooked event locks its values, so an empty span is legitimate.
+ * starts at the stored start beat and receives one horizontal-grid division;
+ * `invalid` marks it, so the chart-error filter draws it as rejected.
  */
 export function timelineRenderRange(
   startTime: readonly number[],
   endTime: readonly number[],
   gridCount: number,
-  invalidWhenEmpty = true,
 ): TimelineRenderRange {
-  return timelineRenderRangeInto(
-    startTime,
-    endTime,
-    gridCount,
-    { start: 0, end: 0, invalid: false },
-    invalidWhenEmpty,
-  );
+  return timelineRenderRangeInto(startTime, endTime, gridCount, {
+    start: 0,
+    end: 0,
+    invalid: false,
+  });
 }
 
 /** Fill a reusable render range to keep dense timeline drawing allocation-free. */
@@ -49,7 +45,6 @@ export function timelineRenderRangeInto(
   endTime: readonly number[],
   gridCount: number,
   target: TimelineRenderRange,
-  invalidWhenEmpty = true,
 ): TimelineRenderRange {
   const start = beatValue(startTime);
   const end = beatValue(endTime);
@@ -61,7 +56,7 @@ export function timelineRenderRangeInto(
   }
   const divisions = Number.isFinite(gridCount) ? Math.max(1, Math.round(gridCount)) : 1;
   target.end = start + 1 / divisions;
-  target.invalid = end < start || invalidWhenEmpty;
+  target.invalid = true;
   return target;
 }
 

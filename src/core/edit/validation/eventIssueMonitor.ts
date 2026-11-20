@@ -23,7 +23,6 @@ import {
   type EventTrackName,
 } from "../../global/chart/chartVocabulary.ts";
 import { beatValue, compareBeats, type Beat } from "../../global/chart/timing/beat.ts";
-import { isHookedEvent } from "../timeline/model.ts";
 import { eventOverlapPairs, type EventOverlapPair } from "./eventOverlap.ts";
 
 /** One overlapping pair with the chart context needed to locate it. */
@@ -362,14 +361,7 @@ export class EventIssueMonitor {
       const next: InvalidRangeCacheEntry[] = [];
       for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
         const event = events[eventIndex];
-        if (!event) {
-          continue;
-        }
-        const forward = compareBeats(event.endTime, event.startTime);
-        // A hooked event locks its value pair, so an empty span is authored
-        // intent; only a reversed range (or an unhooked empty span) is a chart
-        // error.
-        if (forward > 0 || (forward === 0 && isHookedEvent(event))) {
+        if (!event || compareBeats(event.endTime, event.startTime) > 0) {
           continue;
         }
         next.push({

@@ -30,7 +30,6 @@ import {
 } from "../../../../../../core/edit/timeline/noteOverlap.ts";
 import {
   checkedNotes,
-  isHookedEvent,
   isTimelineNoteRenderable,
   timelineRenderRange,
 } from "../../../../../../core/edit/timeline/model.ts";
@@ -43,7 +42,12 @@ import type {
   TimelineEventLayer,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelinePalette } from "./canvas.ts";
-import { readCanvasPalette, selectionColor } from "../../../canvas/palette.ts";
+import {
+  colorSettingOverride,
+  EVENT_HOOKED_COLOR_KEY,
+  readCanvasPalette,
+  selectionColor,
+} from "../../../canvas/palette.ts";
 import { sizeCanvasBackingStore } from "../../../canvas/canvas2d.ts";
 import { notePaintLayer } from "../../../canvas/noteSpriteGroups.ts";
 
@@ -772,7 +776,6 @@ export class TimelineCache {
           rawEntry.item.startTime,
           rawEntry.item.endTime,
           gridCount,
-          !isHookedEvent(rawEntry.item),
         ));
       if (rawEntry.index < previousIndex) {
         alreadyOrdered = false;
@@ -879,6 +882,9 @@ export class TimelineCache {
       selectionColor("selected-event-color", "#00C800"),
       selectionColor("collaboration-selected-note-color", "#FFCC66"),
       selectionColor("collaboration-selected-event-color", "#FFCC66"),
+      // The hooked-event colour is a settings row, so a changed value has to
+      // invalidate the cached palette the same way a theme switch does.
+      colorSettingOverride(EVENT_HOOKED_COLOR_KEY),
     ].join("|");
     if (this.theme !== theme) {
       this.colors = readCanvasPalette();

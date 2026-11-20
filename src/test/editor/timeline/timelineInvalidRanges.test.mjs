@@ -37,7 +37,7 @@ test("event render queries keep source indexes and project reversed events", () 
   assert.equal(cache.eventEntries(chart, [reversed, valid], 0, 10, 11)[0].end, 4 + 1 / 11);
 });
 
-test("a zero-length hooked event keeps a drawable span without the invalid filter", () => {
+test("a zero-length hooked event still reports an invalid range", () => {
   const chart = createChart();
   const hooked = { ...createEvent(0, 0, 4, 4), inst: 1 };
   const cache = new TimelineCache();
@@ -45,8 +45,7 @@ test("a zero-length hooked event keeps a drawable span without the invalid filte
 
   assert.equal(entry.start, 4);
   assert.equal(entry.end, 4 + 1 / 11);
-  assert.equal(entry.invalid, false);
-  assert.equal(timelineRenderRange(hooked.startTime, hooked.endTime, 11, false).invalid, false);
+  assert.equal(entry.invalid, true);
   assert.equal(timelineRenderRange(hooked.startTime, hooked.endTime, 11).invalid, true);
 });
 
