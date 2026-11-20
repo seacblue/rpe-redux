@@ -36,36 +36,18 @@ const EPSILON = 1e-6;
 /**
  * The line a new note belongs to in merged multi-line mode.
  *
- * Looks forward from the new note's start (the start itself counts) for the
- * nearest existing note on one of the selected lines, keeping a run on the line
- * the author is already writing. With nothing ahead, the first selected line is
- * the anchor.
+ * A merged field draws every selected line in one lane, so the requested line
+ * — the author's active line — is the line to keep writing. A request outside
+ * the merged selection moves to the first selected line so the note stays
+ * visible in the field.
  */
-export function resolveMergedNoteLine(
-  session: EditorSession,
-  startBeat: number,
-  fallback: number,
-): number {
+export function resolveMergedNoteLine(session: EditorSession, fallback: number): number {
   if (session.notesMode !== "multi_merged") {
     return fallback;
   }
-  const lines = session.multiLineIndices.length ? session.multiLineIndices : [fallback];
-  let nearest = Number.POSITIVE_INFINITY;
-  let target = lines[0] ?? fallback;
-  for (const lineIndex of lines) {
-    const notes = session.chart.judgeLineList?.[lineIndex]?.notes ?? [];
-    for (const note of notes) {
-      const noteStart = beatValue(note.startTime);
-      if (noteStart + EPSILON < startBeat) {
-        continue;
-      }
-      if (noteStart < nearest) {
-        nearest = noteStart;
-        target = lineIndex;
-      }
-    }
-  }
-  return target;
+  return session.multiLineIndices.includes(fallback)
+    ? fallback
+    : (session.multiLineIndices[0] ?? fallback);
 }
 
 /** True when `input` is an object carrying a note-action target. */
@@ -103,7 +85,7 @@ export function placeNoteAtTarget(
   if (type === 2 && endBeat - startBeat <= EPSILON) {
     return rejected("hold.range.nonZero");
   }
-  const targetLineIndex = resolveMergedNoteLine(session, startBeat, target.lineIndex);
+  const targetLineIndex = resolveMergedNoteLine(session, target.lineIndex);
   if (!lineAllowsNotes(session.chart.judgeLineList?.[targetLineIndex])) {
     return rejected("target.lineIndex.uneditable");
   }
