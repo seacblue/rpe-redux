@@ -560,7 +560,7 @@ test("selecting bezier writes valid control points", () => {
   assert.deepEqual(next.bezierPoints, [0.1, 0, 0.9, 1]);
 });
 
-test("missing or degenerate bezier points repair while repeated-x curves survive", () => {
+test("missing or degenerate bezier points repair while repeated and reversed x survive", () => {
   const missing = createEvent(0, 0, 0, 2);
   delete missing.bezierPoints;
   const missingSession = sessionWithEvent("moveXEvents", missing);
@@ -597,13 +597,27 @@ test("missing or degenerate bezier points repair while repeated-x curves survive
     { bezier: 1, bezierPoints: [0.5, 0, 0.5, 1] },
   );
   assert.deepEqual(firstEvent(repeatedSession, "moveXEvents").bezierPoints, [0.5, 0, 0.5, 1]);
+
+  const reversed = createEvent(0, 0, 0, 2);
+  const reversedSession = sessionWithEvent("moveXEvents", reversed);
+  applySamplingAnchors(
+    reversedSession,
+    targetFor("moveXEvents", reversed, "x"),
+    anchorsFor("x", 0, 100),
+    1,
+    plainSettings,
+    { bezier: 1, bezierPoints: [0.71, 0.56, 0.221, 1.49] },
+  );
+  assert.deepEqual(
+    firstEvent(reversedSession, "moveXEvents").bezierPoints,
+    [0.71, 0.56, 0.221, 1.49],
+  );
 });
 
 test("structurally invalid curves are rejected without a commit", () => {
   for (const points of [
     [0, 0, 1],
     [0, 0, 1.5, 1],
-    [1, 0, 0, 1],
     [0, 0, Number.NaN, 1],
   ]) {
     const event = createEvent(0, 0, 0, 2);

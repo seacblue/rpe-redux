@@ -29,11 +29,11 @@ test("easing and Bezier previews preserve the logical canvas aspect ratio", asyn
   }
 });
 
-test("both previews draw a closed outer frame", async () => {
+test("both previews draw a closed reference frame", async () => {
   const [easingSource, bezierSource] = await Promise.all([
     readFile(easingPreview, "utf8"),
     readFile(bezierEditor, "utf8"),
   ]);
   assert.match(easingSource, /draw\.strokeRect\(\s*EASING_PLOT_LEFT[\s\S]*?BOTTOM - TOP\s*\)/);
-  assert.match(bezierSource, /draw\.strokeRect\(LEFT, TOP, PLOT_WIDTH, PLOT_HEIGHT\)/);
+  assert.match(bezierSource, /draw\.strokeRect\(LEFT, yOf\(1\), PLOT_WIDTH, yOf\(0\) - yOf\(1\)\)/);
 });

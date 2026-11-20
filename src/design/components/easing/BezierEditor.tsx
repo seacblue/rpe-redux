@@ -1,9 +1,12 @@
 /**
- * Bézier control-point editor: four labelled numbers and a draggable curve.
+ * Bézier control-point editor: one paste-friendly number field and a draggable curve.
  *
- * The chart stores `x1, y1, x2, y2` as one array, but the editor presents each
- * coordinate as its own field so every value follows the normal label/control
- * alignment. The canvas remains a direct-manipulation preview of those fields.
+ * The chart stores `x1, y1, x2, y2` as one array, so the editor edits that array
+ * through a single draft: a pasted control-point line can be corrected as a
+ * whole, and its first four numbers become the curve. The canvas remains a
+ * direct-manipulation preview of the same draft. Both x coordinates stay inside
+ * `[0, 1]`; y may overshoot either end, so the vertical axis grows to keep every
+ * handle visible. Without overshoot the axis is exactly the unit square.
  */
 import {
   useEffect,
@@ -16,8 +19,8 @@ import { FieldRow } from "../field/FieldRow.tsx";
 import { Input } from "../input/Input.tsx";
 import { bezier } from "../../../core/utils/easing.ts";
 import { clamp01 } from "../../../core/utils/numbers.ts";
-import { t, type MessageKey } from "../../../i18n/index.ts";
-import { numericWheel } from "../../controls/numericWheel.ts";
+import { t } from "../../../i18n/index.ts";
+import { formatBezierPoints, parseBezierPointText } from "./bezierPointText.ts";
 import { EASING_CANVAS_HEIGHT, EASING_CANVAS_WIDTH, resizeEasingCanvas } from "./easingCanvas.ts";
 
 interface BezierEditorProps {
@@ -25,125 +28,143 @@ interface BezierEditorProps {
   commit: (points: number[]) => void;
   /** Publish a transient curve while dragging; null clears the preview. */
   preview?: (points: readonly number[] | null) => void;
-  /** Accessible label for the group of coordinate fields. */
+  /** Accessible label for the control-point field. */
   label: string;
 }
 
 const WIDTH = EASING_CANVAS_WIDTH;
 const HEIGHT = EASING_CANVAS_HEIGHT;
 const LEFT = 10;
+/** Plot edges; the 20px bands above and below hold an overshooting handle. */
 const TOP = 20;
 const BOTTOM = 80;
 const PLOT_WIDTH = WIDTH - LEFT * 2;
 const PLOT_HEIGHT = BOTTOM - TOP;
 const DEFAULT_POINTS = [0, 0, 1, 1];
-const POINT_KEYS: readonly MessageKey[] = [
-  "design.easing.control.x1",
-  "design.easing.control.y1",
-  "design.easing.control.x2",
-  "design.easing.control.y2",
-];
+/** Control-point indices, in the order their two handle styles are stored. */
+const HANDLE_POINTS = [0, 2] as const;
+/** Pointer distance, in logical canvas pixels, that still grabs a handle. */
+const HIT_RADIUS = 18;
+/** Idle handle size; hovered and dragged handles grow to a second size. */
+const HANDLE_RADIUS = 4;
+const HANDLE_ACTIVE_RADIUS = 5.2;
+/** Handle colour and size transitions. */
+const HANDLE_TRANSITION_MS = 140;
+
+/** The value range the vertical axis shows; the unit square is always part of it. */
+interface ValueWindow {
+  minimum: number;
+  maximum: number;
+}
+
+/** One animated handle look. */
+interface HandleStyle {
+  radius: number;
+  color: readonly [number, number, number];
+}
 
 /** Keep malformed chart data out of the editor while preserving the format shape. */
 function normalizePoints(points: readonly number[]): number[] {
   return DEFAULT_POINTS.map((fallback, index) => {
     const value = points[index];
-    return typeof value === "number" && Number.isFinite(value) ? clamp01(value) : fallback;
-  });
-}
-
-/** Format one coordinate without adding a second representation to the chart model. */
-function formatPoint(value: number): string {
-  return String(Number(value.toFixed(3)));
-}
-
-/** Parse one coordinate, returning null for drafts outside the chart's range. */
-function parsePoint(text: string): number | null {
-  const value = Number(text.trim());
-  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
-}
-
-/** Format all four coordinates for the editable drafts. */
-function formatPoints(points: readonly number[]): string[] {
-  return normalizePoints(points).map(formatPoint);
-}
-
-/**
- * One labelled coordinate box.
- *
- * Its wheel belongs to the draft: a notch steps the coordinate and hands the
- * result to the owner so the chart, timeline, and preview receive it at once.
- */
-function PointInput({
-  id,
-  index,
-  label,
-  value,
-  invalid,
-  onText,
-  onWheel,
-  onBlur,
-  onKeyDown,
-}: {
-  id?: string;
-  index: number;
-  label: string;
-  value: string;
-  invalid: boolean;
-  onText(index: number, text: string): void;
-  onWheel(index: number, input: HTMLInputElement): void;
-  onBlur(): void;
-  onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const wheelHandler = useRef(onWheel);
-  useEffect(() => {
-    wheelHandler.current = onWheel;
-  });
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) {
-      return;
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return fallback;
     }
-    return numericWheel(input, 0.001, undefined, () => wheelHandler.current(index, input));
-  }, [index]);
-  return (
-    <Input
-      id={id}
-      ref={inputRef}
-      className="bezier-point-input"
-      type="number"
-      textAlign="center"
-      min={0}
-      max={1}
-      step={0.001}
-      data-redux-wheel="custom"
-      value={value}
-      aria-label={label}
-      aria-invalid={invalid}
-      onChange={(event) => onText(index, event.currentTarget.value)}
-      onBlur={onBlur}
-      onKeyDown={onKeyDown}
-    />
-  );
+    return index % 2 === 0 ? clamp01(value) : value;
+  });
 }
 
-/** A labelled Bézier field with four validated coordinates and a responsive curve. */
+/** Fit the vertical axis to the unit square plus every stored y value. */
+function valueWindow(points: readonly number[]): ValueWindow {
+  const ys = [points[1] ?? 0, points[3] ?? 1];
+  return { minimum: Math.min(0, ...ys), maximum: Math.max(1, ...ys) };
+}
+
+/** Read a resolved theme colour as RGB; theme tokens are hex or rgb strings. */
+function colorRgb(value: string): readonly [number, number, number] {
+  const hex = /^#([0-9a-f]{3,8})$/iu.exec(value.trim())?.[1];
+  if (hex) {
+    const expanded =
+      hex.length === 3 || hex.length === 4
+        ? hex
+            .slice(0, 3)
+            .split("")
+            .map((part) => part + part)
+            .join("")
+        : hex.slice(0, 6);
+    if (expanded.length === 6) {
+      const channel = (offset: number) => Number.parseInt(expanded.slice(offset, offset + 2), 16);
+      return [channel(0), channel(2), channel(4)];
+    }
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/iu.exec(value.trim());
+  if (rgb) {
+    return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  }
+  return [232, 236, 244];
+}
+
+/** Blend two RGB colours for one frame of the handle transition. */
+function mixRgb(
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+  amount: number,
+): readonly [number, number, number] {
+  return [
+    Math.round(from[0] + (to[0] - from[0]) * amount),
+    Math.round(from[1] + (to[1] - from[1]) * amount),
+    Math.round(from[2] + (to[2] - from[2]) * amount),
+  ];
+}
+
+/** Render one RGB triple as a canvas fill colour. */
+function colorFill(color: readonly [number, number, number]): string {
+  const part = (value: number) => Math.round(value).toString(16).padStart(2, "0");
+  return `#${part(color[0])}${part(color[1])}${part(color[2])}`;
+}
+
+/** A labelled Bézier field with one control-point draft and a responsive curve. */
 export function BezierEditor({ points, commit, preview, label }: BezierEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const draftPoints = useRef(normalizePoints(points));
   const dragIndex = useRef<number | null>(null);
+  const hoverIndex = useRef<number | null>(null);
+  /**
+   * The axis captured when a drag starts. The pointer is mapped through it for
+   * the whole gesture so the value cannot chase a rescaling plot; the drawing
+   * itself refits to the draft live.
+   */
+  const dragWindow = useRef<ValueWindow | null>(null);
   const dragChanged = useRef(false);
-  const draftTextRef = useRef(formatPoints(points));
-  const [draftText, setDraftText] = useState(() => formatPoints(points));
+  const [draftText, setDraftText] = useState(() => formatBezierPoints(normalizePoints(points)));
+  const draftTextRef = useRef(draftText);
   const [drawVersion, setDrawVersion] = useState(0);
+  const handleStyles = useRef<HandleStyle[]>([
+    { radius: HANDLE_RADIUS, color: [232, 236, 244] },
+    { radius: HANDLE_RADIUS, color: [232, 236, 244] },
+  ]);
+  const stylesReady = useRef(false);
+  const animationFrame = useRef<number | null>(null);
+  const animation = useRef<{
+    start: number;
+    from: HandleStyle[];
+    to: HandleStyle[];
+  } | null>(null);
+  const paintRef = useRef<() => void>(() => {});
+  const parsedDraft = parseBezierPointText(draftText);
+  // An unfinished draft is not wrong yet; only a complete set with a
+  // non-finite number is marked. Incomplete text restores on blur.
+  const invalid = !parsedDraft.valid && parsedDraft.issue === "non-finite";
 
   useEffect(() => {
     if (dragIndex.current !== null) {
       return;
     }
     const next = normalizePoints(points);
-    const text = formatPoints(next);
+    const text = formatBezierPoints(next);
+    if (text === draftTextRef.current) {
+      return;
+    }
     draftPoints.current = next;
     draftTextRef.current = text;
     setDraftText(text);
@@ -166,7 +187,35 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     };
   }, []);
 
-  useEffect(() => {
+  /** The three resolved handle inks, with fallbacks for a partial theme. */
+  const handleInks = () => {
+    const canvas = canvasRef.current;
+    const style = canvas ? getComputedStyle(canvas) : null;
+    const token = (name: string) => style?.getPropertyValue(name).trim() ?? "";
+    const idle = token("--foreground");
+    return {
+      idle,
+      hover: token("--accent-hover") || token("--accent") || idle,
+      drag: token("--accent-pressed") || token("--accent") || idle,
+    };
+  };
+
+  /** The size and colour each handle settles on for the current state. */
+  const handleTargets = (): HandleStyle[] => {
+    const inks = handleInks();
+    const dragging = dragIndex.current;
+    return HANDLE_POINTS.map((index) => {
+      const active = dragging === index;
+      const hovered = hoverIndex.current === index;
+      return {
+        radius: active || hovered ? HANDLE_ACTIVE_RADIUS : HANDLE_RADIUS,
+        color: colorRgb(active ? inks.drag : hovered ? inks.hover : inks.idle),
+      };
+    });
+  };
+
+  /** Draw the frame, guides, curve, and the current animated handles. */
+  const paint = () => {
     const canvas = canvasRef.current;
     const draw = canvas?.getContext("2d");
     if (!canvas || !draw) {
@@ -183,19 +232,33 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
       cssHeight,
     );
     const draft = draftPoints.current;
+    if (
+      !stylesReady.current ||
+      !Array.isArray(handleStyles.current) ||
+      handleStyles.current.length < 2 ||
+      !handleStyles.current[0] ||
+      !handleStyles.current[1]
+    ) {
+      handleStyles.current = handleTargets();
+      stylesReady.current = true;
+    }
+    const axis = valueWindow(draft);
+    const span = axis.maximum - axis.minimum;
+    const xOf = (value: number) => LEFT + value * PLOT_WIDTH;
+    const yOf = (value: number) => BOTTOM - ((value - axis.minimum) / span) * PLOT_HEIGHT;
     draw.setTransform(1, 0, 0, 1, 0, 0);
     draw.clearRect(0, 0, pixelWidth, pixelHeight);
     draw.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     draw.strokeStyle = token("--foreground-muted");
     draw.lineWidth = 1;
     draw.setLineDash([2, 3]);
-    draw.strokeRect(LEFT, TOP, PLOT_WIDTH, PLOT_HEIGHT);
+    draw.strokeRect(LEFT, yOf(1), PLOT_WIDTH, yOf(0) - yOf(1));
     draw.setLineDash([3, 3]);
     draw.beginPath();
-    draw.moveTo(LEFT, BOTTOM);
-    draw.lineTo(LEFT + draft[0] * PLOT_WIDTH, BOTTOM - draft[1] * PLOT_HEIGHT);
-    draw.moveTo(LEFT + PLOT_WIDTH, TOP);
-    draw.lineTo(LEFT + draft[2] * PLOT_WIDTH, BOTTOM - draft[3] * PLOT_HEIGHT);
+    draw.moveTo(xOf(0), yOf(0));
+    draw.lineTo(xOf(draft[0]), yOf(draft[1]));
+    draw.moveTo(xOf(1), yOf(1));
+    draw.lineTo(xOf(draft[2]), yOf(draft[3]));
     draw.stroke();
     draw.setLineDash([]);
     draw.strokeStyle = token("--warning");
@@ -204,8 +267,8 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     for (let index = 0; index <= 100; index += 1) {
       const progress = index / 100;
       const value = bezier(progress, draft);
-      const x = LEFT + progress * PLOT_WIDTH;
-      const y = BOTTOM - value * PLOT_HEIGHT;
+      const x = xOf(progress);
+      const y = yOf(value);
       if (index === 0) {
         draw.moveTo(x, y);
       } else {
@@ -213,65 +276,144 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
       }
     }
     draw.stroke();
-    draw.fillStyle = token("--foreground");
-    for (const point of [
-      [draft[0], draft[1]],
-      [draft[2], draft[3]],
-    ]) {
+    for (const [styleIndex, pointIndex] of HANDLE_POINTS.entries()) {
+      const handle = handleStyles.current[styleIndex];
+      draw.fillStyle = colorFill(handle.color);
       draw.beginPath();
-      draw.arc(LEFT + point[0] * PLOT_WIDTH, BOTTOM - point[1] * PLOT_HEIGHT, 5, 0, Math.PI * 2);
+      draw.arc(xOf(draft[pointIndex]), yOf(draft[pointIndex + 1]), handle.radius, 0, Math.PI * 2);
       draw.fill();
-    }
-  }, [drawVersion]);
-
-  /** Update one text draft and redraw when all coordinates are valid. */
-  const updatePointText = (index: number, text: string) => {
-    const next = [...draftTextRef.current];
-    next[index] = text;
-    draftTextRef.current = next;
-    setDraftText(next);
-    const parsed = next.map(parsePoint);
-    if (parsed.every((value): value is number => value !== null)) {
-      draftPoints.current = parsed;
-      setDrawVersion((version) => version + 1);
     }
   };
 
-  /** Commit one coordinate while keeping the chart's four-value shape intact. */
-  const commitPoint = (index: number) => {
-    const value = parsePoint(draftTextRef.current[index] ?? "");
-    if (value === null) {
+  useEffect(() => {
+    paintRef.current = paint;
+  });
+  useEffect(() => {
+    paintRef.current();
+  }, [drawVersion]);
+  useEffect(() => {
+    return () => {
+      if (animationFrame.current !== null) {
+        cancelAnimationFrame(animationFrame.current);
+      }
+    };
+  }, []);
+
+  /** Advance both handle looks toward the current interaction state. */
+  const tick = (now: number) => {
+    const state = animation.current;
+    if (!state) {
+      animationFrame.current = null;
       return;
     }
-    const parsed = draftTextRef.current.map(parsePoint);
-    if (!parsed.every((point): point is number => point !== null)) {
-      const text = [...draftTextRef.current];
-      text[index] = formatPoint(value);
-      draftTextRef.current = text;
-      setDraftText(text);
+    const progress = Math.min(1, (now - state.start) / HANDLE_TRANSITION_MS);
+    const eased = 1 - (1 - progress) ** 3;
+    handleStyles.current = state.to.map((target, index) => {
+      const from = state.from[index] ?? target;
+      return {
+        radius: from.radius + (target.radius - from.radius) * eased,
+        color: mixRgb(from.color, target.color, eased),
+      };
+    });
+    paintRef.current();
+    if (progress < 1) {
+      animationFrame.current = requestAnimationFrame(tick);
+    } else {
+      animationFrame.current = null;
+      animation.current = null;
+    }
+  };
+
+  /** Ease both handles from their current look to the state's target look. */
+  const animateHandles = () => {
+    if (!Array.isArray(handleStyles.current) || handleStyles.current.length < 2) {
+      handleStyles.current = handleTargets();
+    }
+    const from = handleStyles.current.map((handle) => ({
+      radius: handle.radius,
+      color: handle.color,
+    }));
+    animation.current = { start: performance.now(), from, to: handleTargets() };
+    if (animationFrame.current === null) {
+      animationFrame.current = requestAnimationFrame(tick);
+    }
+  };
+
+  /** Move the hover look and start its transition when the pointer crosses a handle. */
+  const setHover = (index: number | null) => {
+    if (hoverIndex.current === index) {
       return;
     }
-    const next = parsed;
-    next[index] = value;
-    draftPoints.current = next;
-    const text = formatPoints(next);
+    hoverIndex.current = index;
+    animateHandles();
+  };
+
+  /** Replace the draft text and redraw once it describes a usable curve. */
+  const updateText = (text: string) => {
     draftTextRef.current = text;
     setDraftText(text);
+    const parsed = parseBezierPointText(text);
+    if (!parsed.valid) {
+      return;
+    }
+    draftPoints.current = parsed.points;
+    setDrawVersion((version) => version + 1);
+  };
+
+  /** Write a valid draft to the chart; rejected text stays in the field. */
+  const commitText = (text: string) => {
+    const parsed = parseBezierPointText(text);
+    if (!parsed.valid) {
+      if (parsed.issue === "count") {
+        // Fewer than four numbers is an unfinished draft, not a curve; leaving
+        // the field restores the stored points instead of keeping a partial line.
+        updateText(formatBezierPoints(normalizePoints(points)));
+      }
+      return;
+    }
     const current = normalizePoints(points);
-    if (next.some((point, pointIndex) => point !== current[pointIndex])) {
+    const next = parsed.points;
+    draftPoints.current = next;
+    const formatted = formatBezierPoints(next);
+    draftTextRef.current = formatted;
+    setDraftText(formatted);
+    setDrawVersion((version) => version + 1);
+    if (next.some((value, index) => value !== current[index])) {
       commit(next);
     }
   };
 
-  /** Map a pointer position onto the 0..1 curve space of the drawing. */
-  const canvasPoint = (pointer: ReactPointerEvent<HTMLCanvasElement>) => {
+  /** Map a pointer position onto the visible value window of the drawing. */
+  const canvasPoint = (pointer: ReactPointerEvent<HTMLCanvasElement>, axis: ValueWindow) => {
     const rect = pointer.currentTarget.getBoundingClientRect();
     const logicalX = ((pointer.clientX - rect.left) / rect.width) * WIDTH;
     const logicalY = ((pointer.clientY - rect.top) / rect.height) * HEIGHT;
     return {
       x: clamp01((logicalX - LEFT) / PLOT_WIDTH),
-      y: clamp01((BOTTOM - logicalY) / PLOT_HEIGHT),
+      // The pointer may leave the plot while the drag keeps the capture, so the
+      // value follows the full canvas height and can overshoot the unit square.
+      y: axis.minimum + ((BOTTOM - logicalY) / PLOT_HEIGHT) * (axis.maximum - axis.minimum),
+      logicalX,
+      logicalY,
     };
+  };
+
+  /** The control point under the pointer, or null when none is within reach. */
+  const handleAtPointer = (pointer: ReactPointerEvent<HTMLCanvasElement>) => {
+    const axis = valueWindow(draftPoints.current);
+    const point = canvasPoint(pointer, axis);
+    const span = axis.maximum - axis.minimum;
+    let nearest: { index: number; distance: number } | null = null;
+    for (const index of HANDLE_POINTS) {
+      const x = LEFT + (draftPoints.current[index] ?? 0) * PLOT_WIDTH;
+      const y =
+        BOTTOM - (((draftPoints.current[index + 1] ?? 0) - axis.minimum) / span) * PLOT_HEIGHT;
+      const distance = Math.hypot(point.logicalX - x, point.logicalY - y);
+      if (!nearest || distance < nearest.distance) {
+        nearest = { index, distance };
+      }
+    }
+    return nearest && nearest.distance <= HIT_RADIUS ? nearest.index : null;
   };
 
   /** Release the drag capture and publish the moved control point once. */
@@ -283,7 +425,7 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
       pointer.currentTarget.releasePointerCapture(pointer.pointerId);
     }
     if (dragChanged.current) {
-      const text = formatPoints(draftPoints.current);
+      const text = formatBezierPoints(draftPoints.current);
       draftTextRef.current = text;
       setDraftText(text);
       preview?.(null);
@@ -292,45 +434,41 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
       preview?.(null);
     }
     dragIndex.current = null;
+    dragWindow.current = null;
     dragChanged.current = false;
+    hoverIndex.current = handleAtPointer(pointer);
+    animateHandles();
   };
 
-  const normalizedPoints = normalizePoints(points);
   return (
     <div className="bezier-editor-fields" role="group" aria-label={label}>
-      <div className="bezier-point-fields">
-        {POINT_KEYS.map((key, index) => (
-          <FieldRow
-            key={key}
-            layout="inline"
-            density="compact"
-            label={t(key)}
-            control={(id) => (
-              <PointInput
-                id={id}
-                index={index}
-                label={t(key)}
-                value={draftText[index] ?? formatPoint(normalizedPoints[index] ?? 0)}
-                invalid={parsePoint(draftText[index] ?? "") === null}
-                onText={updatePointText}
-                onWheel={(coordinate, input) => {
-                  updatePointText(coordinate, input.value);
-                  commitPoint(coordinate);
-                }}
-                onBlur={() => commitPoint(index)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    commitPoint(index);
-                    event.currentTarget.blur();
-                  } else if (event.key === "Escape") {
-                    updatePointText(index, formatPoint(points[index] ?? 0));
-                  }
-                }}
-              />
-            )}
+      <FieldRow
+        layout="inline"
+        density="compact"
+        label={label}
+        control={(id) => (
+          <Input
+            id={id}
+            className="bezier-points-input"
+            type="text"
+            textAlign="center"
+            value={draftText}
+            aria-label={label}
+            aria-invalid={invalid}
+            onChange={(event) => updateText(event.currentTarget.value)}
+            onBlur={(event) => commitText(event.currentTarget.value)}
+            onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+              if (event.key === "Enter") {
+                // Blur is the one commit path, so Enter and leaving the field
+                // cannot write the same change twice.
+                event.currentTarget.blur();
+              } else if (event.key === "Escape") {
+                updateText(formatBezierPoints(normalizePoints(points)));
+              }
+            }}
           />
-        ))}
-      </div>
+        )}
+      />
       <canvas
         ref={canvasRef}
         width={WIDTH}
@@ -340,36 +478,46 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
         aria-label={t("design.easing.editor")}
         onPointerDown={(pointer) => {
           pointer.preventDefault();
-          const point = canvasPoint(pointer);
-          const draft = draftPoints.current;
-          const candidates = [0, 2].map((index) => ({
-            index,
-            distance: Math.hypot(point.x - draft[index], point.y - draft[index + 1]),
-          }));
-          const nearest = candidates.reduce((best, candidate) =>
-            candidate.distance < best.distance ? candidate : best,
-          );
-          if (nearest.distance > 0.14) {
+          const index = handleAtPointer(pointer);
+          if (index === null) {
             return;
           }
-          dragIndex.current = nearest.index;
+          hoverIndex.current = index;
+          dragIndex.current = index;
+          dragWindow.current = valueWindow(draftPoints.current);
           dragChanged.current = false;
+          animateHandles();
           pointer.currentTarget.setPointerCapture(pointer.pointerId);
         }}
         onPointerMove={(pointer) => {
           const index = dragIndex.current;
           if (index === null) {
+            setHover(handleAtPointer(pointer));
+            return;
+          }
+          const axis = dragWindow.current;
+          if (!axis) {
             return;
           }
           pointer.preventDefault();
-          const point = canvasPoint(pointer);
-          draftPoints.current[index] = point.x;
-          draftPoints.current[index + 1] = point.y;
-          draftTextRef.current = formatPoints(draftPoints.current);
+          const point = canvasPoint(pointer, axis);
+          const draft = draftPoints.current;
+          draft[index] = point.x;
+          // A captured pointer can travel far outside the canvas; one window
+          // span beyond either edge is enough overshoot for one gesture and
+          // keeps a stray release from writing an absurd value.
+          const span = axis.maximum - axis.minimum;
+          draft[index + 1] = Math.min(axis.maximum + span, Math.max(axis.minimum - span, point.y));
+          draftTextRef.current = formatBezierPoints(draft);
           setDraftText(draftTextRef.current);
           dragChanged.current = true;
-          preview?.([...draftPoints.current]);
+          preview?.([...draft]);
           setDrawVersion((version) => version + 1);
+        }}
+        onPointerLeave={() => {
+          if (dragIndex.current === null) {
+            setHover(null);
+          }
         }}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}

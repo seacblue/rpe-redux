@@ -2,9 +2,12 @@
  * The one curve model shared by the event inspector and both sampling surfaces.
  *
  * A displayed Bézier always has four finite control points whose x coordinates
- * strictly increase inside `[0, 1]`. Missing, malformed, or degenerate stored
- * points open on the identity curve so every entry point draws the same usable
- * editor instead of preserving a shape the renderer cannot evaluate.
+ * lie inside `[0, 1]`. Missing, malformed, or out-of-range stored points open on
+ * the identity curve so every entry point draws the same usable editor instead
+ * of preserving a shape the renderer cannot evaluate. The x pair may repeat or
+ * decrease: both are valid cubic Bézier shapes (RPE authors them) and the
+ * renderer resolves progress from x as long as each x stays inside the unit
+ * interval.
  */
 import { clamp01 } from "../../../../core/utils/numbers.ts";
 
@@ -12,7 +15,7 @@ import { clamp01 } from "../../../../core/utils/numbers.ts";
 export const IDENTITY_BEZIER_POINTS = [0, 0, 1, 1] as const;
 
 /** Why stored control points are not usable. */
-export type BezierPointIssue = "shape" | "non-finite" | "x-range" | "x-order";
+export type BezierPointIssue = "shape" | "non-finite" | "x-range";
 
 /** The normalized control points plus, when rejected, the reason. */
 export type BezierPointValidation =
@@ -31,9 +34,9 @@ function rejected(issue: BezierPointIssue): BezierPointValidation {
 /**
  * Validate stored Bézier control points.
  *
- * The list must hold four finite numbers; `x1` and `x2` must lie inside
- * `[0, 1]`; and `x1` must be strictly less than `x2` so the curve stays a
- * function of its progress. Rejected points return the identity curve.
+ * The list must hold four finite numbers and both x coordinates must lie inside
+ * `[0, 1]`, which keeps x a monotonic function of the curve parameter. Rejected
+ * points return the identity curve.
  */
 export function validateBezierPoints(points: unknown): BezierPointValidation {
   if (!Array.isArray(points) || points.length !== 4) {
@@ -45,9 +48,6 @@ export function validateBezierPoints(points: unknown): BezierPointValidation {
   const [firstX, , secondX] = points as number[];
   if (firstX < 0 || firstX > 1 || secondX < 0 || secondX > 1) {
     return rejected("x-range");
-  }
-  if (!(firstX < secondX)) {
-    return rejected("x-order");
   }
   return { valid: true, points: [...(points as number[])] };
 }

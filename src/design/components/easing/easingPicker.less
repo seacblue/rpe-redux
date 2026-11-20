@@ -55,7 +55,7 @@
 }
 
 // The Bézier editor belongs to this picker, not to a dialog. Its coordinates
-// use ordinary FieldRows and the canvas keeps the intrinsic curve aspect ratio.
+// use an ordinary FieldRow and the canvas keeps the intrinsic curve aspect ratio.
 .bezier-editor {
   width: 100%;
   height: auto;
@@ -71,11 +71,9 @@
   gap: var(--space-2);
 }
 
-.bezier-point-fields {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.bezier-point-input {
+// The four control coordinates share one text field so a whole point set can be
+// pasted and copied at once. The field inherits the interface face like every
+// other inspector value.
+.bezier-points-input {
   width: 100%;
 }

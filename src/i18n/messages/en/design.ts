@@ -50,10 +50,6 @@ export default {
   // vocabulary; they are translated here only so a translation may relabel them.
   "design.easing.id": "Easing id",
   "design.easing.editor": "Bezier editor",
-  "design.easing.control.x1": "x1",
-  "design.easing.control.y1": "y1",
-  "design.easing.control.x2": "x2",
-  "design.easing.control.y2": "y2",
   "design.easing.family": "Easing type",
   "design.easing.direction": "Direction",
   "design.easing.family.linear": "Linear",

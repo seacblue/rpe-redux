@@ -46,10 +46,6 @@ export default {
   // vocabulary; they are translated here only so a translation may relabel them.
   "design.easing.id": "缓动编号",
   "design.easing.editor": "贝塞尔编辑器",
-  "design.easing.control.x1": "x1",
-  "design.easing.control.y1": "y1",
-  "design.easing.control.x2": "x2",
-  "design.easing.control.y2": "y2",
   "design.easing.family": "主类型",
   "design.easing.direction": "方向",
   "design.easing.family.linear": "Linear",

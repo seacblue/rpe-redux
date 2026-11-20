@@ -12,10 +12,14 @@ import {
   validateBezierPoints,
 } from "../../../frontend/screens/editor/sampling/samplingCurveModel.ts";
 
-test("bezier points require four finite numbers with strictly increasing x inside [0, 1]", () => {
+test("bezier points require four finite numbers with x inside [0, 1]", () => {
   assert.deepEqual(usableBezierPoints([0.2, 0, 0.8, 1]), [0.2, 0, 0.8, 1]);
   assert.deepEqual(usableBezierPoints([0, 0, 1, 1]), [0, 0, 1, 1]);
   assert.deepEqual(usableBezierPoints([0.2, -1, 0.8, 2]), [0.2, -1, 0.8, 2]);
+  // RPE authors the x pair in any order; only the unit interval matters.
+  assert.deepEqual(usableBezierPoints([0.71, 0.56, 0.221, 1.49]), [0.71, 0.56, 0.221, 1.49]);
+  assert.deepEqual(usableBezierPoints([0.8, 0, 0.2, 1]), [0.8, 0, 0.2, 1]);
+  assert.deepEqual(usableBezierPoints([0.5, 0, 0.5, 1]), [0.5, 0, 0.5, 1]);
 
   for (const [points, issue] of [
     [undefined, "shape"],
@@ -26,10 +30,6 @@ test("bezier points require four finite numbers with strictly increasing x insid
     [[0, 0, "1", 1], "non-finite"],
     [[-0.1, 0, 0.8, 1], "x-range"],
     [[0.2, 0, 1.1, 1], "x-range"],
-    [[0.8, 0, 0.2, 1], "x-order"],
-    [[0.5, 0, 0.5, 1], "x-order"],
-    [[0, 0, 0, 1], "x-order"],
-    [[0, 0, 0, 0], "x-order"],
   ]) {
     const result = validateBezierPoints(points);
     assert.equal(result.valid, false);
@@ -39,19 +39,15 @@ test("bezier points require four finite numbers with strictly increasing x insid
   }
 });
 
-test("the old event-only degenerate check is subsumed by strict x ordering", () => {
-  // The event inspector used to require `.slice(2).some(Number)`. These values
-  // passed that check but cannot stay a function of progress, so the unified
-  // model now rejects them instead of preserving a shape the renderer guesses at.
+test("repeated and reversed x pairs stay a usable curve", () => {
   for (const points of [
     [0, 0, 0, 1],
     [0.5, 0, 0.5, 1],
     [0.25, 0, 0.25, 0.75],
+    [0.2, 0, 0.3, 0],
   ]) {
-    assert.equal(validateBezierPoints(points).issue, "x-order");
+    assert.deepEqual(usableBezierPoints(points), points);
   }
-  // A value the old check accepted and the strict rule still accepts.
-  assert.deepEqual(usableBezierPoints([0.2, 0, 0.3, 0]), [0.2, 0, 0.3, 0]);
 });
 
 test("range bounds normalize to finite values inside [0, 1]", () => {

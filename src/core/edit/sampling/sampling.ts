@@ -113,7 +113,7 @@ export interface SamplingCurve {
   easingType?: number;
   /** Whether the event uses the cubic bezier control points instead of the preset. */
   bezier?: number | boolean;
-  /** Four control points `[x1, y1, x2, y2]`; x stays in `[0, 1]` and never decreases. */
+  /** Four control points `[x1, y1, x2, y2]`; each x stays in `[0, 1]`. */
   bezierPoints?: number[];
   /** Start of the selected preset sub-range in `[0, 1]`. */
   easingLeft?: number;
@@ -428,10 +428,8 @@ function normalizeProvidedBezierPoints(points: unknown): number[] {
   }
   const values = points as number[];
   const [firstX, , secondX] = values;
-  if (firstX < 0 || firstX > 1 || secondX < 0 || secondX > 1 || firstX > secondX) {
-    throw new Error(
-      "Sampling bezierPoints x coordinates must stay within [0, 1] and not decrease.",
-    );
+  if (firstX < 0 || firstX > 1 || secondX < 0 || secondX > 1) {
+    throw new Error("Sampling bezierPoints x coordinates must stay within [0, 1].");
   }
   const degenerate = values.every((value) => value === values[0]);
   return degenerate ? [...IDENTITY_BEZIER_POINTS] : [...values];
