@@ -236,6 +236,8 @@
   background: var(--surface-raised);
   // The pointer writes the two tilt variables; the hover lift is a third
   // variable, so the two motions compose without either overriding the other.
+  // Hover belongs to the untransformed column: a `:hover` on this card would
+  // follow the tilted projection and drop at the edges it just moved away.
   transform: perspective(1100px) translateY(var(--sleeve-lift)) rotateX(var(--sleeve-tilt-x))
     rotateY(var(--sleeve-tilt-y));
   transform-origin: 50% 50%;
@@ -251,8 +253,8 @@
     box-shadow var(--design-dur-overlay) var(--design-ease-move);
 }
 
-.redux-library-card:hover,
-.redux-library-card:focus-within {
+.redux-library-detail:hover .redux-library-card,
+.redux-library-detail:focus-within .redux-library-card {
   --sleeve-lift: -3px;
   border-color: color-mix(in srgb, var(--accent) 24%, var(--edge-divider));
   box-shadow:
@@ -301,8 +303,8 @@
   transition: transform var(--design-dur-overlay) var(--design-ease-move);
 }
 
-.redux-library-card:hover .redux-library-detail-cover-layer,
-.redux-library-card:focus-within .redux-library-detail-cover-layer {
+.redux-library-detail:hover .redux-library-detail-cover-layer,
+.redux-library-detail:focus-within .redux-library-detail-cover-layer {
   transform: scale(1.025);
 }
 
