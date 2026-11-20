@@ -422,40 +422,9 @@ export function EventInspectorView({
           {t("editorPanels.inspector.event.selectLinkGroup", { group: link })}
         </Button>
       )}
-      {/* Bézier editing is optional. With it off, ordinary events use the
-          easing group only; an event that already carries a Bézier keeps its
-          curve but reports that the editor is disabled rather than presenting
-          easing controls that would not affect the rendered curve. */}
-      <EasingCurveEditor
-        mode={curveMode}
-        easingType={Number(event.easingType ?? 1)}
-        bezier={curveValues.bezier}
-        bezierPoints={curveValues.bezierPoints}
-        easingLeft={curveValues.easingLeft}
-        easingRight={curveValues.easingRight}
-        startValue={typeof event.start === "number" ? event.start : undefined}
-        endValue={typeof event.end === "number" ? event.end : undefined}
-        onChange={changeCurve}
-        onPreview={onCurvePreview}
-        easingLabel={t("editorPanels.inspector.event.easing")}
-        rangeIds={{ left: "event-field-easingLeft", right: "event-field-easingRight" }}
-        modeClassName="is-block"
-        bezierKey={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:bezier`}
-        showRange={rangeVisible}
-        bezierEnabled={() => bezierEnabled}
-        easingRangeEnabled={() => easingRangeEnabled}
-        renderRangeField={(field, row) => (
-          <EasingRangeField
-            session={session}
-            event={event}
-            field={field}
-            title={row.label}
-            reportError={reportError}
-            refresh={refresh}
-            setLiveEventEdit={setLiveEventEdit}
-          />
-        )}
-      />
+      {/* The event tools sit above the curve section: they act on the selected
+          event as a whole, while the easing/Bezier switch below only picks the
+          curve editor. */}
       <div className="action-grid event-tool-actions">
         {samplingSupported && (
           <Button
@@ -519,6 +488,40 @@ export function EventInspectorView({
           {t("editorPanels.inspector.event.swap")}
         </Button>
       </div>
+      {/* Bézier editing is optional. With it off, ordinary events use the
+          easing group only; an event that already carries a Bézier keeps its
+          curve but reports that the editor is disabled rather than presenting
+          easing controls that would not affect the rendered curve. */}
+      <EasingCurveEditor
+        mode={curveMode}
+        easingType={Number(event.easingType ?? 1)}
+        bezier={curveValues.bezier}
+        bezierPoints={curveValues.bezierPoints}
+        easingLeft={curveValues.easingLeft}
+        easingRight={curveValues.easingRight}
+        startValue={typeof event.start === "number" ? event.start : undefined}
+        endValue={typeof event.end === "number" ? event.end : undefined}
+        onChange={changeCurve}
+        onPreview={onCurvePreview}
+        easingLabel={t("editorPanels.inspector.event.easing")}
+        rangeIds={{ left: "event-field-easingLeft", right: "event-field-easingRight" }}
+        modeClassName="is-block"
+        bezierKey={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:bezier`}
+        showRange={rangeVisible}
+        bezierEnabled={() => bezierEnabled}
+        easingRangeEnabled={() => easingRangeEnabled}
+        renderRangeField={(field, row) => (
+          <EasingRangeField
+            session={session}
+            event={event}
+            field={field}
+            title={row.label}
+            reportError={reportError}
+            refresh={refresh}
+            setLiveEventEdit={setLiveEventEdit}
+          />
+        )}
+      />
       <Popconfirm
         open={cutOpen}
         anchor={cutAnchorElement}
