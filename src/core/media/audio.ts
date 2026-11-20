@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- loading, the transport clock, the stretcher handoff, and the media fallback share one playback owner. */
 /**
  * Loading, decoding and playing one piece of music, plus the analyser data the
  * editor draws.
@@ -12,6 +13,7 @@ import { clamp01 } from "../utils/numbers.ts";
 import { t } from "../../i18n/index.ts";
 import { mediaType } from "./mime.ts";
 import { TimeStretchStretcher } from "./timeStretch.ts";
+import { totalOutputLatency, latencyReport, type LatencyReport } from "./outputLatency.ts";
 import { rampGain } from "./gainRamp.ts";
 import { toArrayBuffer, toBlobPart } from "../utils/bytes.ts";
 import {
@@ -20,6 +22,17 @@ import {
   objectUrlFor,
   releaseObjectUrl,
 } from "../platform/browser/mediaHost.ts";
+
+/**
+ * Mute and unmute ramps for the master gain.
+ *
+ * A stop cannot silence the samples already queued for the device, so the gain
+ * has to be pulled down as well. Three milliseconds is below the threshold where
+ * a ramp reads as a fade and is long enough to avoid a step click; the unmute
+ * uses the same length so a resume does not lurch.
+ */
+const STOP_MUTE_SECONDS = 0.003;
+const START_UNMUTE_SECONDS = 0.003;
 
 /** Everything `load`/`decodeForAnalysis` accept as an audio source. */
 export type AudioSource = string | ArrayBuffer | ArrayBufferView;
@@ -349,8 +362,7 @@ export class AudioTransport {
     if (!context) {
       return 0;
     }
-    const value = Number(context.outputLatency ?? context.baseLatency ?? 0);
-    return Number.isFinite(value) ? Math.max(0, Math.min(value, 0.1)) : 0;
+    return totalOutputLatency(context);
   }
 
   /** The audio graph's processing clock, used when scheduling more audio. */
@@ -393,6 +405,22 @@ export class AudioTransport {
       return false;
     }
     return !media.seeking && media.paused !== true && media.readyState >= 2;
+  }
+  /** Device latency terms for the visual clock; see `latencyReport`. */
+  get latencyReport(): LatencyReport & {
+    readonly rate: number;
+    readonly usingStretcher: boolean;
+    readonly playing: boolean;
+  } {
+    return {
+      baseLatency: 0,
+      outputLatency: 0,
+      drainedSeconds: null,
+      ...(this.context ? latencyReport(this.context) : null),
+      rate: this.rate,
+      usingStretcher: this.usesStretcher,
+      playing: this.playing,
+    };
   }
   /**
    * Whether a start is still waiting for its first samples to reach the speaker.
@@ -534,6 +562,9 @@ export class AudioTransport {
 
   /** Start the buffer, stretcher, or media element from the current position. */
   startSource(): void {
+    // Every path that begins producing sound goes through here, so restoring the
+    // gain here keeps a resume from staying silent after a mute.
+    this.unmuteOutput();
     if (this.usesStretcher) {
       this.startStretcher();
       return;
@@ -621,7 +652,14 @@ export class AudioTransport {
     });
   }
 
-  /** Stop every clock source and freeze the current position. */
+  /**
+   * Stop every clock source and freeze the current position.
+   *
+   * The master gain is muted too. Stopping a source only prevents further
+   * rendering: the samples already handed to the device still play, and that
+   * queue is one output chain deep. Left alone, a pause kept sounding for the
+   * length of that queue, which reads as playback continuing.
+   */
   pause(): void {
     this.playRevision++;
     const position = this.time;
@@ -629,11 +667,31 @@ export class AudioTransport {
     const usePausedMediaTime =
       this.playing && this.usesMedia && this.position >= 0 && !this.mediaStart && !media?.seeking;
     this.stopSource();
+    this.muteOutput();
     this.position = Math.min(
       usePausedMediaTime && media ? media.currentTime : position,
       this.duration,
     );
     this.playing = false;
+  }
+
+  /**
+   * Ramp the master gain to silence without a click.
+   *
+   * Short enough to be inaudible as a fade, long enough to avoid a step
+   * discontinuity in the waveform.
+   */
+  muteOutput(): void {
+    if (this.context && this.gain && this.volume > 0) {
+      rampGain(this.gain.gain, this.context.currentTime, 0, STOP_MUTE_SECONDS);
+    }
+  }
+
+  /** Restore the master gain after a mute. */
+  private unmuteOutput(): void {
+    if (this.context && this.gain) {
+      rampGain(this.gain.gain, this.context.currentTime, this.volume, START_UNMUTE_SECONDS);
+    }
   }
 
   /**

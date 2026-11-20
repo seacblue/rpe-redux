@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- settings labels and descriptions share one catalog contract and stay paired with the Chinese catalog. */
 /**
  * The settings window: categories, every field label and description, its own
  * pages, plus the start-up view.
@@ -492,6 +493,10 @@ export default {
   "settings.field.preview-non-current-opacity.label": "Non-current line opacity",
 
   "settings.field.preserve-pitch.label": "Keep pitch when changing speed",
+  "settings.field.audio-visual-lead.label": "Picture lead",
+  "settings.field.audio-visual-lead.description":
+    "Milliseconds the picture is drawn ahead of the sound. Raise it if drum hits sound early.",
+  "settings.unit.milliseconds": "ms",
 
   // ----------------------------------------------------------- audio (3 rows)
   "settings.field.volume.label": "Music volume",

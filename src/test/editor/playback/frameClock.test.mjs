@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createVisualPlaybackClock } from "../../../frontend/screens/editor/workspace/runtime/frame/frameClock.ts";
+import { DISPLAY_LEAD_SECONDS, visualLeadSeconds } from "../../../core/media/outputLatency.ts";
 
 /** A transport stub whose `awaitingOutput` the test controls. */
 function createAudio(initial) {
@@ -74,4 +75,22 @@ test("visual playback clock does not run ahead while the start drains", () => {
   audio.time = 5.03;
   const second = clock.read(frame * 5);
   assert.ok(second > first, `second frame did not advance: ${first} -> ${second}`);
+});
+
+test("the picture is drawn ahead of the sound by the display lead", () => {
+  // A frame painted now is presented one display chain later, so it has to show
+  // the position the sound will have reached when it is seen.
+  assert.ok(Math.abs(visualLeadSeconds() - DISPLAY_LEAD_SECONDS) < 1e-12);
+
+  // A positive calibration moves the picture further ahead, a negative one back.
+  assert.ok(Math.abs(visualLeadSeconds(0.01) - (DISPLAY_LEAD_SECONDS + 0.01)) < 1e-12);
+  assert.ok(Math.abs(visualLeadSeconds(-0.02) - (DISPLAY_LEAD_SECONDS - 0.02)) < 1e-12);
+});
+
+test("the visual lead stays inside a correction-sized range", () => {
+  assert.equal(visualLeadSeconds(10), 0.2);
+  assert.equal(visualLeadSeconds(-10), -0.2);
+  // A missing or unusable setting falls back to the calibrated default.
+  assert.ok(Math.abs(visualLeadSeconds(Number.NaN) - DISPLAY_LEAD_SECONDS) < 1e-12);
+  assert.ok(Math.abs(visualLeadSeconds(undefined) - DISPLAY_LEAD_SECONDS) < 1e-12);
 });

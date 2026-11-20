@@ -48,6 +48,15 @@ export interface PlaybackState {
   rate: number;
   offsetSeconds: number;
   lineIndex: number;
+  /** Device latency terms behind the visual clock, when the host reports them. */
+  latency?: {
+    readonly baseLatency: number;
+    readonly outputLatency: number;
+    readonly drainedSeconds: number | null;
+    readonly rate: number;
+    readonly usingStretcher: boolean;
+    readonly playing: boolean;
+  };
 }
 
 /** One judge line as the last rendered frame drew it. */

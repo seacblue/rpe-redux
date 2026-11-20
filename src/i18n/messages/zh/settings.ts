@@ -424,6 +424,10 @@ export default {
   "settings.field.preview-non-current-opacity.label": "非当前线透明度",
 
   "settings.field.preserve-pitch.label": "变速是否保持音高",
+  "settings.field.audio-visual-lead.label": "画面提前量",
+  "settings.field.audio-visual-lead.description":
+    "画面相对声音提前的毫秒数。若鼓点听起来偏早，调大这个值。",
+  "settings.unit.milliseconds": "毫秒",
 
   "settings.field.volume.label": "音乐音量",
   "settings.field.background-volume.label": "后台音量",
