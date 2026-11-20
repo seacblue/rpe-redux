@@ -35,9 +35,9 @@ const DEVELOPER_ACTIONS = [
 ] as const;
 
 /**
- * The performance monitor is a frontend surface, so its F3 shortcut stays
- * available even in a release host. The menu still hides the developer section;
- * only the monitor can be toggled by a key that the user already knows.
+ * The performance monitor is a frontend surface: its F3 shortcut and the monitor
+ * it toggles work in a release host too. The menu still hides the developer
+ * section; only the monitor can be toggled by a key that the user already knows.
  */
 const ALWAYS_AVAILABLE_ACTIONS: ReadonlySet<string> = new Set(["developer.performanceHud"]);
 /** Whether the action is listed in the developer menu for the current host policy. */

@@ -129,7 +129,7 @@ When the desktop host enables developer mode, or after the About logo is activat
 | Toggle DevTools     | `F12`   |
 | Performance monitor | `F3`    |
 
-The performance monitor's `F3` binding is available in ordinary builds. DevTools and the developer settings page follow the host's developer policy or the About gesture.
+The performance monitor's `F3` binding opens it in every build, including release builds; the monitor does not depend on the developer policy. DevTools and the developer settings page follow the host's developer policy or the About gesture.
 
 ## Mouse keys and held-key chords
 

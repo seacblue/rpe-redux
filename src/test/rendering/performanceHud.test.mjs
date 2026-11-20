@@ -1,7 +1,7 @@
 /**
- * Contracts for the performance HUD: the frame-budget math and the bounded
- * sample store the HUD reads. Both are presentation-side, so they stay unit
- * tests instead of smoke journeys.
+ * Contracts for the performance HUD: its visibility switch, the frame-budget
+ * math, and the bounded sample store the HUD reads. All are presentation-side,
+ * so they stay unit tests instead of smoke journeys.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -15,13 +15,35 @@ import {
   recordPerformanceFrameTiming,
   resetPerformanceFrameTiming,
 } from "../../frontend/overlays/performance/performanceFrameTiming.ts";
-import { getPerformanceHudBlocks } from "../../frontend/overlays/performance/performanceHud.ts";
+import {
+  getPerformanceHudBlocks,
+  isPerformanceHudEnabled,
+  isPerformanceHudVisible,
+  performanceHudEnabled,
+  togglePerformanceHud,
+} from "../../frontend/overlays/performance/performanceHud.ts";
+import { developerReveal } from "../../core/state/developerReveal.ts";
 
 test("performance HUD keeps only the focused playback signals visible", () => {
   assert.deepEqual(
     getPerformanceHudBlocks().map((block) => block.id),
     ["fps", "hotspots", "cpu", "memory"],
   );
+});
+
+test("the monitor's own switch is the only visibility gate", () => {
+  // A release host has no developer mode and no About-page reveal; F3 must still
+  // show the monitor there.
+  developerReveal.set(false);
+  performanceHudEnabled.set(false);
+  assert.equal(isPerformanceHudVisible(), false);
+
+  assert.equal(togglePerformanceHud(), true);
+  assert.equal(isPerformanceHudEnabled(), true);
+  assert.equal(isPerformanceHudVisible(), true);
+
+  assert.equal(togglePerformanceHud(), false);
+  assert.equal(isPerformanceHudVisible(), false);
 });
 
 test("render load is measured against the configured frame budget", () => {

@@ -6,9 +6,7 @@
  */
 import { createValue, defineValue } from "../../../core/state/values.ts";
 import { PREFERENCE_SECTIONS } from "../../../core/state/preferences.ts";
-import { developerMode } from "../../../core/platform/desktop/developer.ts";
 import type { MessageKey } from "../../../i18n/index.ts";
-import { developerReveal, isDeveloperRevealed } from "../../../core/state/developerReveal.ts";
 import {
   publishPerformanceHudFrame as publishPerformanceHudFrameToWindow,
   type PerformanceHudFramePayload,
@@ -81,12 +79,15 @@ export function isPerformanceHudEnabled(): boolean {
   return performanceHudEnabled.get();
 }
 
-/** Whether the monitor is on and developer mode or its reveal makes it available. */
+/**
+ * Whether the monitor is showing.
+ *
+ * Its own switch is the only gate. `F3` is available in every build, so the
+ * monitor appears wherever that key is used, regardless of the host's developer
+ * policy or the About-page reveal.
+ */
 export function isPerformanceHudVisible(): boolean {
-  // The monitor remains a developer surface: either the host build exposes the
-  // developer tools, or the About-page reveal has opened that section. F3 itself
-  // stays globally registered so the same key works on every surface.
-  return (developerMode.get() || isDeveloperRevealed()) && isPerformanceHudEnabled();
+  return isPerformanceHudEnabled();
 }
 
 /** Flips the monitor preference and returns the new value. */
@@ -478,14 +479,7 @@ export function setPerformanceHudSize(size: PerformanceHudSize): void {
   });
 }
 
-/** Subscribes to every store that can change HUD visibility; returns the unsubscribe. */
+/** Subscribes to the switch that changes HUD visibility; returns the unsubscribe. */
 export function subscribePerformanceHudVisibility(listener: () => void): () => void {
-  const unsubscribeEnabled = performanceHudEnabled.subscribe(listener);
-  const unsubscribeDeveloper = developerMode.subscribe(listener);
-  const unsubscribeReveal = developerReveal.subscribe(listener);
-  return () => {
-    unsubscribeEnabled();
-    unsubscribeDeveloper();
-    unsubscribeReveal();
-  };
+  return performanceHudEnabled.subscribe(listener);
 }
