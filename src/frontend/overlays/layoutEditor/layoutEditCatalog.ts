@@ -199,7 +199,7 @@ export function railCatalog(
 
 /** The row an authored toolbar entry declares; an entry with none is never drawn. */
 export function toolbarAuthoredSlot(id: string): LayoutSlotId {
-  return ((toolbar.node(id)?.row ?? 1) as LayoutSlotId);
+  return (toolbar.node(id)?.row ?? 1) as LayoutSlotId;
 }
 
 /**

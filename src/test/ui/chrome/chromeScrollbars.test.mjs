@@ -36,7 +36,9 @@ test("the toolbar rows scroll under one horizontal bar", () => {
   // The bar must not declare the standard properties: Chromium then paints its
   // native bar, ignores `::-webkit-scrollbar`, and needs more room than the seam
   // has, which leaves the bar invisible.
-  const barSection = scrollbarStyles.match(/\.redux-toolbar > \.redux-toolbar-scrollbar \{([\s\S]*?)\n\}/u)?.[1] ?? "";
+  const barSection =
+    scrollbarStyles.match(/\.redux-toolbar > \.redux-toolbar-scrollbar \{([\s\S]*?)\n\}/u)?.[1] ??
+    "";
   assert.doesNotMatch(barSection, /scrollbar-width:/u);
   assert.doesNotMatch(barSection, /scrollbar-color:/u);
   assert.match(scrollbarStyles, /::-webkit-scrollbar-button \{[\s\S]*?display: none;/u);

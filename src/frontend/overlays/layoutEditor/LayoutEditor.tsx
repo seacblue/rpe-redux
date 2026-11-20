@@ -233,9 +233,7 @@ export function LayoutEditor() {
         addSurfaceItem(
           payload.surface,
           at.slot,
-          payload.kind === "divider"
-            ? { id: payload.id, divider: true }
-            : { id: payload.id },
+          payload.kind === "divider" ? { id: payload.id, divider: true } : { id: payload.id },
           at.index,
           registeredIds,
           authoredSlot,
@@ -399,8 +397,7 @@ export function LayoutEditor() {
       ? null
       : (() => {
           const isDivider =
-            carriedKind === "divider" ||
-            findPlacement(slots, carried)?.placement.divider === true;
+            carriedKind === "divider" || findPlacement(slots, carried)?.placement.divider === true;
           return {
             label: placementLabel(carried, isDivider, catalog, tRaw),
             icon: placementIcon(carried, isDivider),
@@ -429,9 +426,7 @@ export function LayoutEditor() {
       >
         <header className="redux-layout-editor-header">
           <h2>
-            {t(
-              surface === "toolbar" ? "layoutEditor.titleToolbar" : "layoutEditor.titleSidebar",
-            )}
+            {t(surface === "toolbar" ? "layoutEditor.titleToolbar" : "layoutEditor.titleSidebar")}
           </h2>
         </header>
         <div className="redux-layout-editor-list">

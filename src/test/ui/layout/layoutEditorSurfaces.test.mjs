@@ -31,10 +31,7 @@ const en = read("i18n/messages/en/layoutEditor.ts");
 test("each surface keeps its own preference key", () => {
   assert.match(store, /toolbar: "toolbarArrangement",/u);
   assert.match(store, /sidebar: "sidebarArrangement",/u);
-  assert.match(
-    store,
-    /\[LAYOUT_ARRANGEMENT_KEYS\[surface\]\]: arrangement\[surface\] \?\? \{\}/u,
-  );
+  assert.match(store, /\[LAYOUT_ARRANGEMENT_KEYS\[surface\]\]: arrangement\[surface\] \?\? \{\}/u);
 });
 
 test("a saved layout survives a restart", () => {
@@ -56,10 +53,7 @@ test("a rule survives being dragged past", () => {
   // Tidying drops a rule that has briefly become leading or trailing. Doing that
   // during a gesture eats the rule the pointer is moving past, so the run is left
   // exactly as the pointer drew it and tidied once, on save.
-  assert.doesNotMatch(
-    layout.section("movePlacement"),
-    /tidyPlacements/u,
-  );
+  assert.doesNotMatch(layout.section("movePlacement"), /tidyPlacements/u);
   assert.match(editorState, /tidyPlacements\(slot\.items\)/u);
   assert.match(editorState, /slots: stored\.slots/u);
 });
@@ -70,7 +64,10 @@ test("a rule is drawn as a vertical line", () => {
 
 test("playback is offered once, through its control", () => {
   // `playback.play` is the same toggle the transport control draws.
-  assert.match(catalog, /const DUPLICATED_BY_CONTROL: ReadonlySet<string> = new Set\(\["playback\.play"\]\);/u);
+  assert.match(
+    catalog,
+    /const DUPLICATED_BY_CONTROL: ReadonlySet<string> = new Set\(\["playback\.play"\]\);/u,
+  );
   assert.match(catalog, /if \(DUPLICATED_BY_CONTROL\.has\(entry\.id\)\) \{\s*return false;/u);
 });
 
@@ -81,9 +78,15 @@ test("a fresh profile draws the authored toolbar, not every registered command",
     catalog,
     /filter\(\(entry\) => toolbarEntryPlaceable\(entry\) && drawsAuthoredRow\(entry\)\)/u,
   );
-  assert.match(catalog, /function drawsAuthoredRow\(entry: ToolbarEntry\): boolean \{\s*return entry\.row !== undefined;/u);
+  assert.match(
+    catalog,
+    /function drawsAuthoredRow\(entry: ToolbarEntry\): boolean \{\s*return entry\.row !== undefined;/u,
+  );
   // The list still offers them, one drag away.
-  assert.match(catalog, /export function toolbarCatalog\(t: \(key: string\) => string\): LayoutEntry\[\]/u);
+  assert.match(
+    catalog,
+    /export function toolbarCatalog\(t: \(key: string\) => string\): LayoutEntry\[\]/u,
+  );
 });
 
 test("the menu offers one command per surface", () => {
@@ -101,7 +104,10 @@ test("nothing is wrapped: the real cell keeps its own geometry", () => {
   assert.doesNotMatch(styles, /\.layout-edit-item/u);
   // The strip publishes the container it drew and the ids it drew into it, so the
   // boxes are found by position instead of by a marker on a product component.
-  assert.match(editSurface, /registerLayoutStrip\(\{ surface, slot, node, axis, ids, selector \}\)/u);
+  assert.match(
+    editSurface,
+    /registerLayoutStrip\(\{ surface, slot, node, axis, ids, selector \}\)/u,
+  );
   assert.match(toolbarRow, /selector: ":scope > \*"/u);
   assert.match(sidebar, /selector: "\.sidebar-item"/u);
 });
@@ -121,7 +127,10 @@ test("the overlay draws no copy of the toolbar or the rail", () => {
 });
 
 test("the list is one command a row, not a wrap of chips", () => {
-  assert.match(styles, /\.redux-layout-editor-group \{\s*display: flex;\s*flex-direction: column;/u);
+  assert.match(
+    styles,
+    /\.redux-layout-editor-group \{\s*display: flex;\s*flex-direction: column;/u,
+  );
   assert.match(styles, /\.redux-app-root \.redux-layout-editor-row\.redux-button \{/u);
   // The shared button centres a row that carries a glyph through a `:has()` clause,
   // which counts its argument, so the row states its alignment beside it.
@@ -149,7 +158,10 @@ test("a gesture is tracked from the pointer, not the browser's drag protocol", (
 
 test("the run reflows under the pointer, not at the end of the gesture", () => {
   assert.match(editor, /place\(next\.payload, at\)/u);
-  assert.match(editor, /const here = findPlacement\(currentSlots\(payload\.surface\), payload\.id\)/u);
+  assert.match(
+    editor,
+    /const here = findPlacement\(currentSlots\(payload\.surface\), payload\.id\)/u,
+  );
   assert.match(editor, /if \(here\.slot === at\.slot && here\.index === at\.index\)/u);
   // A command that is not placed yet joins the surface the moment the pointer
   // enters it, so one gesture places and positions.
@@ -158,19 +170,28 @@ test("the run reflows under the pointer, not at the end of the gesture", () => {
 
 test("a rule is named, never shown by its generated id", () => {
   assert.match(catalog, /export function placementLabel/u);
-  assert.match(catalog, /if \(isDivider \|\| id\.startsWith\(USER_DIVIDER_PREFIX\) \|\| toolbar\.node\(id\)\?\.kind === "divider"\)/u);
+  assert.match(
+    catalog,
+    /if \(isDivider \|\| id\.startsWith\(USER_DIVIDER_PREFIX\) \|\| toolbar\.node\(id\)\?\.kind === "divider"\)/u,
+  );
   assert.match(editor, /label: placementLabel\(carried, isDivider, catalog, tRaw\)/u);
 });
 
 test("the carried command stays listed, so a drop back removes it", () => {
-  assert.match(editor, /const available = catalog\.filter\(\(item\) => !placed\.has\(item\.id\) \|\| item\.id === carried\)/u);
+  assert.match(
+    editor,
+    /const available = catalog\.filter\(\(item\) => !placed\.has\(item\.id\) \|\| item\.id === carried\)/u,
+  );
   assert.match(editor, /data-carried=\{carried === item\.id \? "true" : undefined\}/u);
   assert.match(styles, /&\[data-carried="true"\] \{\s*opacity: 0\.55;/u);
 });
 
 test("the ghost shows a glyph and its name above everything it crosses", () => {
   assert.match(editor, /<Icon name=\{ghost\.icon\} size=\{14\} \/>/u);
-  assert.match(styles, /\.redux-layout-editor-ghost \{\s*position: fixed;\s*z-index: var\(--z-search\);/u);
+  assert.match(
+    styles,
+    /\.redux-layout-editor-ghost \{\s*position: fixed;\s*z-index: var\(--z-search\);/u,
+  );
 });
 
 test("the chrome cannot be operated while it is being arranged", () => {
@@ -178,7 +199,10 @@ test("the chrome cannot be operated while it is being arranged", () => {
   // work; what the editor removes is the effect of a press, which the strip's
   // capture listener cancels.
   assert.doesNotMatch(styles, /\[data-layout-surface\][^{]*\{\s*pointer-events: none;/u);
-  assert.match(editSurface, /for \(const type of INERT_EVENTS\) \{\s*node\.addEventListener\(type, refuse, true\);/u);
+  assert.match(
+    editSurface,
+    /for \(const type of INERT_EVENTS\) \{\s*node\.addEventListener\(type, refuse, true\);/u,
+  );
   assert.match(editSurface, /const INERT_EVENTS = \["click", "auxclick", "dblclick", "submit"\]/u);
   // A menu is a real control and takes the pointer back: `pointer-events` is
   // inherited, and a popover still inherits from its DOM parent.
@@ -187,8 +211,14 @@ test("the chrome cannot be operated while it is being arranged", () => {
 
 test("an arranged item paints a surface of its own", () => {
   // Without a background change nothing says which cell the pointer is over.
-  assert.match(styles, /\[data-layout-surface\] > \* \{[\s\S]*?&:hover \{\s*background: var\(--surface-hover\);/u);
-  assert.match(styles, /\[data-layout-surface\] \.sidebar-item \{[\s\S]*?&:hover > \* \{\s*background: var\(--surface-hover\);/u);
+  assert.match(
+    styles,
+    /\[data-layout-surface\] > \* \{[\s\S]*?&:hover \{\s*background: var\(--surface-hover\);/u,
+  );
+  assert.match(
+    styles,
+    /\[data-layout-surface\] \.sidebar-item \{[\s\S]*?&:hover > \* \{\s*background: var\(--surface-hover\);/u,
+  );
 });
 
 test("the row menu paints above the dim", () => {

@@ -67,11 +67,7 @@ export interface LayoutDragState {
 export const layoutDrag = createValue<LayoutDragState | null>({ initial: null });
 
 /** Start tracking a gesture the chrome received; the overlay decides the drop. */
-export function beginLayoutDrag(
-  payload: LayoutDragPayload,
-  x: number,
-  y: number,
-): void {
+export function beginLayoutDrag(payload: LayoutDragPayload, x: number, y: number): void {
   layoutDrag.set({ payload, moving: false, x, y });
 }
 
@@ -174,10 +170,7 @@ export function consumeSaveOutcome(): boolean {
 }
 
 /** Write one surface's strips into the painted draft. */
-export function writeSurfaceSlots(
-  surface: LayoutSurfaceId,
-  slots: readonly LayoutSlot[],
-): void {
+export function writeSurfaceSlots(surface: LayoutSurfaceId, slots: readonly LayoutSlot[]): void {
   paintedLayout.set(withSurfaceLayout(paintedArrangement(), surface, slots));
 }
 
@@ -244,9 +237,10 @@ export function addSurfaceItem(
 ): void {
   const revealed = revealPlacement(paintedArrangement(), surface, placement.id);
   const slots = resolveSurfaceLayout(revealed, surface, registeredIds, authoredSlot);
-  const target =
-    slots.find((candidate) => candidate.slot === slot) ??
-    { slot, items: [] as LayoutPlacement[] };
+  const target = slots.find((candidate) => candidate.slot === slot) ?? {
+    slot,
+    items: [] as LayoutPlacement[],
+  };
   const items = [...target.items];
   items.splice(Math.max(0, Math.min(index, items.length)), 0, placement);
   const next = slots.some((candidate) => candidate.slot === slot)

@@ -324,15 +324,12 @@ export function movePlacement(
     slot: slot.slot,
     items: slot.items.filter((item) => item.id !== id),
   }));
-  const target =
-    without.find((slot) => slot.slot === targetSlot) ??
-    { slot: targetSlot, items: [] as LayoutPlacement[] };
+  const target = without.find((slot) => slot.slot === targetSlot) ?? {
+    slot: targetSlot,
+    items: [] as LayoutPlacement[],
+  };
   const index = Math.max(0, Math.min(targetIndex, target.items.length));
-  target.items = [
-    ...target.items.slice(0, index),
-    moved.placement,
-    ...target.items.slice(index),
-  ];
+  target.items = [...target.items.slice(0, index), moved.placement, ...target.items.slice(index)];
   const next = without.some((slot) => slot.slot === targetSlot)
     ? without
     : [...without, target].sort((left, right) => left.slot - right.slot);
@@ -346,9 +343,10 @@ export function insertDivider(
   targetIndex: number,
   dividerId: string,
 ): LayoutSlot[] {
-  const target =
-    slots.find((slot) => slot.slot === targetSlot) ??
-    { slot: targetSlot, items: [] as LayoutPlacement[] };
+  const target = slots.find((slot) => slot.slot === targetSlot) ?? {
+    slot: targetSlot,
+    items: [] as LayoutPlacement[],
+  };
   const index = Math.max(0, Math.min(targetIndex, target.items.length));
   const items = [
     ...target.items.slice(0, index),
@@ -364,7 +362,10 @@ export function insertDivider(
 /** Remove one placement, whether it is an entry or a rule. */
 export function removePlacement(slots: readonly LayoutSlot[], id: string): LayoutSlot[] {
   return slots
-    .map((slot) => ({ slot: slot.slot, items: tidyPlacements(slot.items.filter((item) => item.id !== id)) }))
+    .map((slot) => ({
+      slot: slot.slot,
+      items: tidyPlacements(slot.items.filter((item) => item.id !== id)),
+    }))
     .filter((slot) => slot.items.length > 0);
 }
 

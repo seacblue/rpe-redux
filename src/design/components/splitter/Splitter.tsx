@@ -68,10 +68,7 @@ export function Splitter({
   const [dragging, setDragging] = useState(false);
   const seamRef = useRef<HTMLDivElement>(null);
   const horizontal = orientation === "horizontal";
-  const clamp = useCallback(
-    (next: number) => Math.min(Math.max(next, min), max),
-    [min, max],
-  );
+  const clamp = useCallback((next: number) => Math.min(Math.max(next, min), max), [min, max]);
   /**
    * Move the seam by one key step.
    *

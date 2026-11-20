@@ -60,9 +60,7 @@ export function registerLayoutPalette(node: HTMLElement | null): () => void {
 
 /** Where a gesture would land. */
 export type LayoutDropTarget =
-  | { kind: "slot"; slot: LayoutSlotId; index: number }
-  | { kind: "palette" }
-  | { kind: "outside" };
+  { kind: "slot"; slot: LayoutSlotId; index: number } | { kind: "palette" } | { kind: "outside" };
 
 /** One item child of a strip, with the id it was drawn for. */
 interface StripItem {

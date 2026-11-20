@@ -84,8 +84,7 @@ function overlapArea(
   right: { x: number; y: number; width: number; height: number },
 ): number {
   const width = Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x);
-  const height =
-    Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y);
+  const height = Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y);
   return width > 0 && height > 0 ? width * height : 0;
 }
 

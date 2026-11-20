@@ -59,8 +59,7 @@ export function Toolbar({
       if (node.dataset.toolbarOverflow !== "true") {
         return;
       }
-      const delta =
-        Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
       if (delta === 0) {
         return;
       }

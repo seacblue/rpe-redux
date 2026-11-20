@@ -154,7 +154,10 @@ test("a seam resizes by drag, by key, and by double click", () => {
   assert.match(splitterSource, /const KEY_STEP_LARGE = 16;/u);
   assert.match(splitterSource, /event\.shiftKey/u);
   // The drag stays inside the range the caller published.
-  assert.match(splitterSource, /onChange\(clamp\(current\.value \+ travel \* \(invert \? -1 : 1\)\)\)/u);
+  assert.match(
+    splitterSource,
+    /onChange\(clamp\(current\.value \+ travel \* \(invert \? -1 : 1\)\)\)/u,
+  );
 });
 
 test("a region that grows scales its contents, not just its track", () => {
@@ -170,11 +173,7 @@ test("a region that grows scales its contents, not just its track", () => {
   assert.match(tokens, /--type-body: 14px;/u);
   assert.match(designStyles, /\.content-scale\(\) \{/u);
   for (const token of ["--type-body", "--space-2", "--control-height", "--glyph-size-sm"]) {
-    assert.match(
-      designStyles,
-      new RegExp(`${token}: calc\\([^)]*var\\(--ui-scale\\)`, "u"),
-      token,
-    );
+    assert.match(designStyles, new RegExp(`${token}: calc\\([^)]*var\\(--ui-scale\\)`, "u"), token);
   }
 
   // Every adjustable region carries its own scale and re-derives the block.
@@ -198,14 +197,8 @@ test("a region that grows scales its contents, not just its track", () => {
   // region decides the painted size instead of a hard-coded inline width.
   assert.match(iconSource, /"--icon-size": `\$\{size\}px`/u);
   assert.doesNotMatch(iconSource, /width: size,/u);
-  assert.match(
-    iconStyles,
-    /width: calc\(var\(--icon-size, 18px\) \* var\(--ui-scale, 1\)\);/u,
-  );
-  assert.match(
-    iconStyles,
-    /height: calc\(var\(--icon-size, 18px\) \* var\(--ui-scale, 1\)\);/u,
-  );
+  assert.match(iconStyles, /width: calc\(var\(--icon-size, 18px\) \* var\(--ui-scale, 1\)\);/u);
+  assert.match(iconStyles, /height: calc\(var\(--icon-size, 18px\) \* var\(--ui-scale, 1\)\);/u);
 
   // The toolbar's own cell unit is what sizes its buttons, so it scales too.
   // 36px is the authored desktop density; the glyph fills more than half the

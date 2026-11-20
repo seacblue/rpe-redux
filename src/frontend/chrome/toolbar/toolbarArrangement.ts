@@ -50,7 +50,7 @@ export function arrangedToolbarRow(
   const byId = new Map(drawnEntries.map((entry) => [entry.id, entry]));
   const registeredIds = drawnEntries.map((entry) => entry.id);
   const slots = resolveSurfaceLayout(arrangement, "toolbar", registeredIds, (id) =>
-    authoredRow(byId.get(id) ?? { row: 1 } as ToolbarEntry),
+    authoredRow(byId.get(id) ?? ({ row: 1 } as ToolbarEntry)),
   );
   const slot = slots.find((candidate) => candidate.slot === row);
   if (!slot) {

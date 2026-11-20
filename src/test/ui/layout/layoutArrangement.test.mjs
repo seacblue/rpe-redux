@@ -87,7 +87,10 @@ test("a rule the user added survives, a feature's own rule does not", () => {
 test("a move inside one strip reorders without losing an item", () => {
   const slots = [{ slot: 1, items: [{ id: "a" }, { id: "b" }, { id: "c" }] }];
   const moved = movePlacement(slots, "c", 1, 0);
-  assert.deepEqual(moved[0].items.map((item) => item.id), ["c", "a", "b"]);
+  assert.deepEqual(
+    moved[0].items.map((item) => item.id),
+    ["c", "a", "b"],
+  );
   assert.equal(moved.flatMap((slot) => slot.items).length, 3);
 });
 
@@ -112,23 +115,18 @@ test("a rule only survives between two items", () => {
     { id: "b" },
     { id: "d4", divider: true },
   ]);
-  assert.deepEqual(tidied, [
-    { id: "a" },
-    { id: "d2", divider: true },
-    { id: "b" },
-  ]);
+  assert.deepEqual(tidied, [{ id: "a" }, { id: "d2", divider: true }, { id: "b" }]);
 });
 
 test("adding and removing a rule leaves the items alone", () => {
   const slots = [{ slot: 1, items: [{ id: "a" }, { id: "b" }] }];
   const withRule = insertDivider(slots, 1, 1, "rule-1");
-  assert.deepEqual(withRule[0].items, [
-    { id: "a" },
-    { id: "rule-1", divider: true },
-    { id: "b" },
-  ]);
+  assert.deepEqual(withRule[0].items, [{ id: "a" }, { id: "rule-1", divider: true }, { id: "b" }]);
   const removed = removePlacement(withRule, "rule-1");
-  assert.deepEqual(removed[0].items.map((item) => item.id), ["a", "b"]);
+  assert.deepEqual(
+    removed[0].items.map((item) => item.id),
+    ["a", "b"],
+  );
 });
 
 test("removing the only item of a strip drops the strip", () => {
