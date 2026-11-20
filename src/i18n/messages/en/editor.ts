@@ -69,6 +69,8 @@ export default {
   "editor.recording.changed": "The output file changed during export. Choose it again and retry.",
   "editor.recording.noEncoder":
     "The bundled encoder could not be started. Repair or reinstall the application.",
+  "editor.recording.noBundledEncoder":
+    "This build was created without the bundled encoder. Chart export is unavailable.",
   "editor.recording.encoderFailed":
     "The encoder could not write this format. Try another format or a shorter range.",
   "editor.recording.animated": "The image format cannot be decoded for video export.",

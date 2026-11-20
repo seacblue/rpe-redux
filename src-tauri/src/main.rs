@@ -115,6 +115,7 @@ fn main() {
             services::server::write_runtime_port,
             services::tunnel::start_collab_tunnel,
             services::tunnel::stop_collab_tunnel,
+            app::bundled_tools::bundled_tool_status,
             services::lan::start_lan_bridge,
             services::lan::stop_lan_bridge,
             services::session::claim_collab_session,

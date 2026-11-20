@@ -5,6 +5,7 @@
 //! the selected destination is published only after a successful exit and
 //! remains protected against concurrent edits.
 
+use crate::app::bundled_tools::encoder_path;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -21,7 +22,7 @@ use std::{
 };
 use tauri::{
     ipc::{InvokeBody, Request},
-    AppHandle, Manager, State,
+    AppHandle, State,
 };
 use tempfile::{Builder, NamedTempFile};
 use uuid::Uuid;
@@ -30,12 +31,6 @@ type Result<T> = std::result::Result<T, String>;
 // Leaves room for the session id and a 4K PNG fallback frame; platform-encoded
 // H.264 access units are much smaller.
 const MAX_CHUNK: usize = 64 * 1024 * 1024;
-/// Bundled encoder file name for the host platform.
-const ENCODER_FILE: &str = if cfg!(windows) {
-    "ffmpeg.exe"
-} else {
-    "ffmpeg"
-};
 
 /// Active recording sessions, shared by the IPC commands.
 #[derive(Default)]
@@ -274,36 +269,14 @@ fn check_active(session: &Session) -> Result<()> {
     }
 }
 
-/// Locate only the FFmpeg binary shipped with the application. Development
-/// builds use the staged resource directory when there is no installed bundle.
+/// Locate only the FFmpeg binary shipped with the application.
+///
+/// A build made without the pinned download has no encoder; the surface reports
+/// that as an unavailable feature instead of failing at an unrelated step.
 fn bundled_encoder(app: &AppHandle) -> Result<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(resources) = app.path().resource_dir() {
-        candidates.push(
-            resources
-                .join("resources")
-                .join("ffmpeg")
-                .join(ENCODER_FILE),
-        );
-    }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(parent) = executable.parent() {
-            candidates.push(parent.join("resources").join("ffmpeg").join(ENCODER_FILE));
-        }
-    }
-    if cfg!(debug_assertions) {
-        candidates.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("resources")
-                .join("ffmpeg")
-                .join(ENCODER_FILE),
-        );
-    }
-    let encoder = candidates
-        .into_iter()
-        .find(|path| path.is_file())
-        .ok_or("recording_encoder_missing")?;
-    crate::storage::ensure_executable(&encoder).map_err(|_| "recording_encoder_missing")?;
+    let encoder = encoder_path(app).ok_or("recording_encoder_missing")?;
+    crate::storage::ensure_executable(&encoder)
+        .map_err(|_| "recording_encoder_missing".to_string())?;
     Ok(encoder)
 }
 
@@ -949,7 +922,19 @@ mod destination_tests {
 #[cfg(test)]
 mod streaming_tests {
     use super::*;
+    use crate::app::bundled_tools::FFMPEG_FILE;
     use std::{thread, time::Instant};
+
+    /// The staged encoder, or `None` when this build was made without the tool.
+    ///
+    /// A build that skips the pinned download has no encoder to exercise, so the
+    /// encoder-backed tests report a skip instead of failing on a missing file.
+    fn staged_encoder() -> Option<PathBuf> {
+        let encoder = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/ffmpeg")
+            .join(FFMPEG_FILE);
+        encoder.is_file().then_some(encoder)
+    }
 
     /// A player can keep the partial file open without preventing final publication.
     #[cfg(windows)]
@@ -986,13 +971,10 @@ mod streaming_tests {
     /// fragments must decode at nonsequential timestamps while encoding continues.
     #[test]
     fn fragments_are_readable_and_seekable_before_encoder_finishes() {
-        let encoder = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources/ffmpeg")
-            .join(ENCODER_FILE);
-        assert!(
-            encoder.is_file(),
-            "stage the bundled FFmpeg before running this test"
-        );
+        let Some(encoder) = staged_encoder() else {
+            eprintln!("skipping: the bundled FFmpeg is not staged");
+            return;
+        };
         let dir = tempfile::tempdir().unwrap();
         let audio = dir.path().join("audio.raw");
         let output = dir.path().join("partial.mp4");
@@ -1128,9 +1110,10 @@ mod streaming_tests {
     /// layout without a second video encode.
     #[test]
     fn encoded_h264_stream_is_muxed_without_reencoding() {
-        let encoder = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources/ffmpeg")
-            .join(ENCODER_FILE);
+        let Some(encoder) = staged_encoder() else {
+            eprintln!("skipping: the bundled FFmpeg is not staged");
+            return;
+        };
         let dir = tempfile::tempdir().unwrap();
         let video = dir.path().join("video.h264");
         let audio = dir.path().join("audio.raw");

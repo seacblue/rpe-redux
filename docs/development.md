@@ -73,6 +73,7 @@ npm run build                # release installer + staged portable folder
 npm run build -- --portable  # portable folder only
 npm run build -- --fast      # release-shaped smoke build with thin LTO
 npm run build -- --debug     # debug executable for smoke tests
+npm run build -- --without-bundled-tools  # skip the FFmpeg and Cloudflared downloads
 npm run build -- --help      # list the build modes
 npm run build:web            # frontend bundle only
 npm run build:docs           # Extension SDK documentation site
@@ -91,6 +92,10 @@ npm run dev:collab           # standalone collaboration room server
 ```
 
 `npm run check` is the gate; [Testing](testing.md) explains what each part covers, how to run a single test, and where fixtures live.
+
+### Builds without the bundled tools
+
+`--without-bundled-tools` skips the pinned FFmpeg and Cloudflare Tunnel downloads. It applies to `npm run build` and `npm run dev:desktop`, so work that does not touch chart export or public rooms does not wait for them. The application still starts; the affected features degrade with a warning notice instead of failing. Chart export reports that the build has no encoder, and hosting a room uses the LAN bridge instead of a Cloudflare tunnel. Release packaging always stages both tools: publish from a build without the flag.
 
 ### Changesets and release notes
 

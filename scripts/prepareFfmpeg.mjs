@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
+import { SKIPPED_TOOL_NOTE } from "./bundledTools.mjs";
 import {
   findArchiveRoot,
   formatBytes,
@@ -179,6 +180,8 @@ async function main() {
       throw new Error("FFmpeg archive extraction failed.");
     }
     mkdirSync(targetDirectory, { recursive: true });
+    // A build that skipped the download left a note here; the real build replaces it.
+    rmSync(join(targetDirectory, SKIPPED_TOOL_NOTE), { force: true });
     copyFileSync(join(staging, binaryEntry), binaryPath);
     if (platform !== "windows") {
       chmodSync(binaryPath, 0o755);

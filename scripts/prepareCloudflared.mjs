@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { SKIPPED_TOOL_NOTE } from "./bundledTools.mjs";
 import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
 import { formatBytes, loadDependencyPins, selectCloudflaredPin } from "./dependencyArtifacts.mjs";
 
@@ -126,6 +127,8 @@ async function main() {
     }
   }
   mkdirSync(targetDirectory, { recursive: true });
+  // A build that skipped the download left a note here; the real build replaces it.
+  rmSync(join(targetDirectory, SKIPPED_TOOL_NOTE), { force: true });
   copyFileSync(cache, target);
   if (platform !== "windows") {
     chmodSync(target, 0o755);

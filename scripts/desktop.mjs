@@ -7,6 +7,7 @@
  * WebView2 behaviour, and the packaged runtime.
  */
 import { resolve } from "node:path";
+import { SKIP_BUNDLED_TOOLS_FLAG } from "./bundledTools.mjs";
 import { prepareDesktopPrerequisites } from "./desktopPrerequisites.mjs";
 import { desktopPortArgument } from "./desktopLaunchOptions.mjs";
 import { loadOrCreateDevPorts } from "./devPorts.mjs";
@@ -14,6 +15,7 @@ import { runTauri } from "./tauriCli.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const argv = process.argv.slice(2);
+const bundledTools = !argv.includes(SKIP_BUNDLED_TOOLS_FLAG);
 // The desktop webview loads from its own root; a web deployment base is not
 // part of the development URL.
 delete process.env.REDUX_WEB_BASE;
@@ -23,11 +25,12 @@ if (argv.includes("--help") || argv.includes("-h")) {
 
 Stages the Go sidecar and media helpers, then opens the Tauri window.
 
-  --frontend-port <port>  Pin the Vite port for this run.
-  --backend-port <port>   Pin the local service port for this run.
-  --ai-port <port>        Pin the Code Cell bridge port for this run.
-  --collab-port <port>    Pin the collaboration room port for this run.
-  --new-ports             Choose a new fixed port set for this worktree.
+  --frontend-port <port>        Pin the Vite port for this run.
+  --backend-port <port>         Pin the local service port for this run.
+  --ai-port <port>              Pin the Code Cell bridge port for this run.
+  --collab-port <port>          Pin the collaboration room port for this run.
+  --new-ports                   Choose a new fixed port set for this worktree.
+  --without-bundled-tools       Skip the FFmpeg and Cloudflare Tunnel downloads.
 
 The selected ports are stored in .scratch/dev/ports.json and reused by
 npm run dev and npm run dev:desktop.`);
@@ -59,7 +62,10 @@ process.env.REDUX_COLLAB_PORT = String(ports.collabPort);
 // The sidecar trusts the Vite origin only in this development loop. A packaged
 // build never receives this environment variable.
 process.env.REDUX_SERVER_DEV = "1";
-await prepareDesktopPrerequisites(root);
+if (!bundledTools) {
+  console.log("Skipping the bundled FFmpeg and Cloudflare Tunnel tools");
+}
+await prepareDesktopPrerequisites(root, { bundledTools });
 runTauri(root, [
   "dev",
   "--config",

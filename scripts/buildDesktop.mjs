@@ -20,11 +20,14 @@ if (flags.help) {
   process.exit(0);
 }
 
-const { mode, fast } = flags;
+const { mode, fast, bundledTools } = flags;
 // The desktop bundle is served from the app root; a web deployment base must
 // not leak into the packaged build.
 delete process.env.REDUX_WEB_BASE;
 console.log(`Building RPE Redux ${productVersion}`);
+if (!bundledTools) {
+  console.log("Skipping the bundled FFmpeg and Cloudflare Tunnel tools");
+}
 if (fast) {
   // Fast profile: the release feature set with thin LTO and parallel codegen.
   process.env.CARGO_PROFILE_RELEASE_LTO = "thin";
@@ -99,7 +102,7 @@ function stagePortable() {
   console.log(`Portable build staged at ${packageRoot}`);
 }
 
-await prepareDesktopPrerequisites(root);
+await prepareDesktopPrerequisites(root, { bundledTools });
 buildDocsSite();
 // The release build names its bundles explicitly so a host with extra packagers
 // installed still produces the supported installer set.

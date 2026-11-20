@@ -69,6 +69,8 @@ Every desktop build stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cl
 
 A verified archive is cached under `.local-tools/`, and a staged copy under `src-tauri/resources/` is reused while its recorded digest still matches. Later builds therefore need no network. `npm run deps:check` prints the pinned and staged versions without contacting a vendor, and a build that cannot download a pin keeps a verified staged copy with a warning. `REDUX_FFMPEG_ARCHIVE` supplies a local FFmpeg archive instead of the download; it must match the pinned digest.
 
+`npm run build -- --without-bundled-tools` and `npm run dev:desktop -- --without-bundled-tools` skip both downloads, so work unrelated to export or public rooms does not wait for them. The build compiles and the application starts; the two features then degrade with a warning notice instead of failing. Chart export reports that this build carries no encoder, and hosting a room uses the LAN bridge instead of a Cloudflare tunnel. Release packaging always stages both tools; publish only from a build without the flag.
+
 To upgrade a bundled helper, update its `version`, `label`, `archiveName`, `archiveUrl`, `size`, and `sha256` together in `scripts/dependencyPins.json`, run `npm run deps:check`, and stage the new build once. Keep the URL pointing at an exact release rather than a moving `latest` alias. The staging scripts verify every byte again after download; do not bypass the digest to accept a build whose publisher no longer provides one.
 
 ### Architectures

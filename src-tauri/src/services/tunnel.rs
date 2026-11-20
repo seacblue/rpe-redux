@@ -5,22 +5,16 @@
 //! temporary `trycloudflare.com` HTTPS endpoint and reports the URL to the
 //! frontend.
 
+use crate::app::bundled_tools::tunnel_client_path;
 use serde::Serialize;
 use std::{
     io::{BufRead, BufReader, Read},
-    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{mpsc, Arc, Mutex},
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Bundled tunnel client file name for the host platform.
-const CLOUDFLARED_FILE: &str = if cfg!(windows) {
-    "cloudflared.exe"
-} else {
-    "cloudflared"
-};
 /// How long the client may take to report a public URL.
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -60,55 +54,6 @@ impl Default for TunnelProcess {
             }),
         }
     }
-}
-
-/// Locate the bundled client first, then explicit developer overrides and PATH.
-fn cloudflared_path(app: &AppHandle) -> Result<PathBuf, String> {
-    if let Ok(explicit) = std::env::var("REDUX_CLOUDFLARED_BIN") {
-        let path = PathBuf::from(explicit);
-        if path.is_file() {
-            return Ok(path);
-        }
-    }
-    let mut candidates = Vec::new();
-    if let Ok(resources) = app.path().resource_dir() {
-        candidates.push(
-            resources
-                .join("resources")
-                .join("cloudflared")
-                .join(CLOUDFLARED_FILE),
-        );
-        candidates.push(resources.join("cloudflared").join(CLOUDFLARED_FILE));
-    }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(directory) = executable.parent() {
-            candidates.push(
-                directory
-                    .join("resources")
-                    .join("cloudflared")
-                    .join(CLOUDFLARED_FILE),
-            );
-            candidates.push(directory.join(CLOUDFLARED_FILE));
-        }
-    }
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("cloudflared")
-            .join(CLOUDFLARED_FILE),
-    );
-    if let Some(path) = candidates.into_iter().find(|path| path.is_file()) {
-        return Ok(path);
-    }
-    if let Some(paths) = std::env::var_os("PATH") {
-        for directory in std::env::split_paths(&paths) {
-            let path = directory.join(CLOUDFLARED_FILE);
-            if path.is_file() {
-                return Ok(path);
-            }
-        }
-    }
-    Err("Cloudflare Tunnel client is missing. Reinstall the desktop app or set REDUX_CLOUDFLARED_BIN.".into())
 }
 
 /// First `https://*.trycloudflare.com` URL in one client log line.
@@ -188,7 +133,7 @@ fn start(app: &AppHandle) -> Result<String, String> {
     }
 
     report_progress(app, "resolve");
-    let binary = cloudflared_path(app)?;
+    let binary = tunnel_client_path(app)?;
     crate::storage::ensure_executable(&binary)
         .map_err(|error| format!("Cloudflare Tunnel client is not executable: {error}"))?;
     let room_origin = format!(

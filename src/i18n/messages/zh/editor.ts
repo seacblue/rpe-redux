@@ -70,6 +70,7 @@ export default {
   "editor.recording.noMusic": "请先载入可解码的歌曲，再导出。",
   "editor.recording.changed": "导出过程中目标文件发生变化，请重新选择后重试。",
   "editor.recording.noEncoder": "无法启动内置编码器，请修复或重新安装应用。",
+  "editor.recording.noBundledEncoder": "此版本未内置编码器，无法导出谱面。",
   "editor.recording.encoderFailed": "编码器无法写入该格式，请尝试其他格式或缩短导出范围。",
   "editor.recording.animated": "当前环境无法解码这种图片格式用于视频导出。",
   "editor.recording.imageError": "无法准备谱面图片用于导出。",

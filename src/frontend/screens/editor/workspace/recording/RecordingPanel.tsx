@@ -12,6 +12,8 @@ import { Segmented } from "../../../../../design/components/segmented/Segmented.
 import { Select } from "../../../../../design/components/select/Select.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { beatValue, fromNumber, type Beat } from "../../../../../core/global/chart/timing/beat.ts";
+import { bundledToolStatus } from "../../../../../core/platform/desktop/bundledTools.ts";
+import { showToast } from "../../../../../design/patterns/ToastHost.tsx";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { useEditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import { bindInspectorLifecycle } from "../../inspector/controller.ts";
@@ -97,6 +99,9 @@ function formatOutputSeconds(seconds: number): string {
 
 type RecordingRangeMode = "beats" | "time";
 
+/** One warning per session; the panel keeps the inline notice while it stays open. */
+let encoderWarningShown = false;
+
 /** Owns the recording workflow and its offscreen drawing hosts. */
 export function RecordingPanel() {
   const { t } = useTranslation();
@@ -119,7 +124,32 @@ export function RecordingPanel() {
   const [end, setEnd] = useState<number | Beat>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // A build can be made without the pinned encoder; export then reports the
+  // feature as unavailable instead of failing after the destination is chosen.
+  const [encoderMissing, setEncoderMissing] = useState(false);
   const controller = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void bundledToolStatus().then((status) => {
+      if (!active || status.encoder) {
+        return;
+      }
+      setEncoderMissing(true);
+      if (!encoderWarningShown) {
+        encoderWarningShown = true;
+        showToast({
+          message: t("editor.recording.noBundledEncoder"),
+          level: "warning",
+          key: "recording-encoder-unavailable",
+          source: t("editor.recording.title"),
+        });
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [t]);
 
   useEffect(
     () =>
@@ -252,6 +282,15 @@ export function RecordingPanel() {
   /** Captures the chart, asks for a destination, and queues the recording job. */
   const run = async () => {
     if (!runtime || controller.current) {
+      return;
+    }
+    if (encoderMissing) {
+      showToast({
+        message: t("editor.recording.noBundledEncoder"),
+        level: "warning",
+        key: "recording-encoder-unavailable",
+        source: t("editor.recording.title"),
+      });
       return;
     }
     const songDuration = runtime.audio.buffer?.duration;
@@ -651,6 +690,11 @@ export function RecordingPanel() {
           })}
         </span>
       </div>
+      {encoderMissing && (
+        <InlineAlert className="recording-error">
+          {t("editor.recording.noBundledEncoder")}
+        </InlineAlert>
+      )}
       {error && <InlineAlert className="recording-error">{error}</InlineAlert>}
       <div className="recording-actions redux-footer-bar">
         <div className="redux-footer-actions">

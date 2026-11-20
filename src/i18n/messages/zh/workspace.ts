@@ -281,6 +281,8 @@ export default {
   "workspace.collaboration.password": "房间密码",
   "workspace.collaboration.invalidServerUrl": "请填写 ws:// 或 wss:// 服务器地址。",
   "workspace.collaboration.hostFailed": "无法创建房间：{detail}",
+  "workspace.collaboration.tunnelUnavailable":
+    "此版本未内置 Cloudflare Tunnel 客户端，已改为在内网托管房间。",
   "workspace.collaboration.assetsRequiredTitle": "谱面素材不完整",
   "workspace.collaboration.assetsRequiredBody": "创建房间前请先补齐谱面的音频和图像：{names}",
   "workspace.collaboration.sessionBusyTitle": "此设备已在房间中",

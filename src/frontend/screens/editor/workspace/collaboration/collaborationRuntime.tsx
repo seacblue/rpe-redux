@@ -86,6 +86,7 @@ import {
   chartChangesMayAffectAssets,
 } from "../../../../../core/collaboration/assets.ts";
 import { isDesktop } from "../../../../../core/platform/environment.ts";
+import { bundledToolStatus } from "../../../../../core/platform/desktop/bundledTools.ts";
 import { getRuntimePorts } from "../../../../../core/platform/runtimePorts.ts";
 import {
   getEditorRegionSnapshot,
@@ -142,6 +143,7 @@ import {
 import {
   mergeCollaborationSettings,
   readCollaborationSettings,
+  type CollaborationHostMode,
   type CollaborationSettings,
 } from "./collaborationSettings.ts";
 export type { CollaborationHostMode, CollaborationSettings } from "./collaborationSettings.ts";
@@ -160,6 +162,26 @@ const DEFAULT_SETTINGS: CollaborationSettings = Object.freeze({
 /** The loopback room endpoint owned by this desktop process. */
 function localRoomServerUrl(): string {
   return `ws://127.0.0.1:${getRuntimePorts().collabPort}`;
+}
+
+/**
+ * Prefer the requested host transport, falling back to the LAN bridge when this
+ * build carries no Cloudflare Tunnel client.
+ *
+ * Hosting keeps working without the pinned download; the warning notice explains
+ * why the invitation carries a local address instead of a public one.
+ */
+async function resolveHostMode(mode: CollaborationHostMode): Promise<CollaborationHostMode> {
+  if (mode !== "tunnel" || !isDesktop() || (await bundledToolStatus()).tunnel) {
+    return mode;
+  }
+  showToast({
+    message: t("workspace.collaboration.tunnelUnavailable"),
+    level: "warning",
+    key: "collaboration-tunnel-unavailable",
+    source: "collaboration",
+  });
+  return "lan";
 }
 
 /**
@@ -1138,7 +1160,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       let publicUrl = stored.serverUrl;
       if (isDesktop()) {
         try {
-          if (settings.hostMode === "lan") {
+          if ((await resolveHostMode(settings.hostMode)) === "lan") {
             const requested = settings.lanPort.trim();
             publicUrl = normalizeRoomServerUrl(
               await invoke<string>("start_lan_bridge", {
@@ -2265,7 +2287,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     roomDocumentAdopted.current = false;
     collaborationRoomDocument.set(false);
     setStartingRoom(true);
-    const mode = override?.hostMode === "lan" ? "lan" : "tunnel";
+    const requestedMode = override?.hostMode === "lan" ? "lan" : "tunnel";
+    const mode = isDesktop() ? await resolveHostMode(requestedMode) : requestedMode;
     const attempt = ++roomAttempt.current;
     collaborationProgress.set(startRoomProgress("host", mode));
     try {

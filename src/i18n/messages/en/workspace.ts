@@ -299,6 +299,8 @@ export default {
   "workspace.collaboration.password": "Room password",
   "workspace.collaboration.invalidServerUrl": "Enter a ws:// or wss:// server address.",
   "workspace.collaboration.hostFailed": "Could not create the room: {detail}",
+  "workspace.collaboration.tunnelUnavailable":
+    "This build was created without the Cloudflare Tunnel client, so the room is hosted over the local network instead.",
   "workspace.collaboration.assetsRequiredTitle": "Chart assets are incomplete",
   "workspace.collaboration.assetsRequiredBody":
     "Add the chart's audio and images before creating a room: {names}",
