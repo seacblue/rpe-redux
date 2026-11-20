@@ -3,8 +3,8 @@
  *
  * The WebGL overlay rasterizes labels into its own texture when it is active;
  * the Canvas2D context remains the fallback. Both event drawing passes and the
- * multi-line chrome share this seam so a label has one font, alignment, and
- * max-width contract.
+ * multi-line chrome share this seam so a label has one font and alignment and
+ * is never horizontally scaled.
  */
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 
@@ -21,14 +21,13 @@ export function drawEventText(
   text: string,
   x: number,
   y: number,
-  maxWidth: number,
   font: string,
   color: string,
   align: CanvasTextAlign = "left",
   alpha = 1,
 ): void {
   if (batch) {
-    batch.addText(text, x, y, maxWidth, font, color, align, alpha);
+    batch.addText(text, x, y, undefined, font, color, align, alpha);
     return;
   }
   if (!context) {
@@ -38,6 +37,6 @@ export function drawEventText(
   context.font = font;
   context.textAlign = align;
   context.fillStyle = color;
-  context.fillText(text, x, y, maxWidth);
+  context.fillText(text, x, y);
   context.textAlign = previousAlign;
 }

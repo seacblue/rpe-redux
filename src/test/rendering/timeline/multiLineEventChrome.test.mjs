@@ -42,6 +42,9 @@ function fakeContext() {
     fillRect(x, y, width, height) {
       calls.fillRect.push({ x, y, width, height });
     },
+    measureText(text) {
+      return { width: text.length * 10 };
+    },
     fillText(text, x, y, maxWidth) {
       calls.fillText.push({ text, x, y, maxWidth });
     },
@@ -193,7 +196,7 @@ test("an overlay frame queues the judge-line caption above the band fill", () =>
   );
   assert.equal(fixture.batchTexts[0].align, "center");
   assert.equal(fixture.batchTexts[0].x, 100, "the caption is centered over its panel");
-  assert.equal(fixture.batchTexts[0].maxWidth, 184);
+  assert.equal(fixture.batchTexts[0].maxWidth, undefined);
   assert.deepEqual(fixture.batchRects, [
     { x: 2, y: 0, width: 196, height: 23, color: palette.headerSurface },
   ]);
@@ -230,6 +233,42 @@ test("an overlay frame queues the judge-line caption above the band fill", () =>
   );
 });
 
+test("medium event panels truncate an overlong judge-line name", () => {
+  const fixture = fakeReceiver({ overlayActive: true });
+  fixture.receiver.viewport.panelWidth = () => 120;
+  fixture.receiver.viewport.panelStride = () => 120;
+  fixture.receiver.getSession().chart.judgeLineList[0].Name =
+    "This is an extremely long judge line title used to verify truncation";
+
+  drawEvents.call(fixture.receiver, 0);
+
+  assert.deepEqual(
+    fixture.batchTexts.map((entry) => entry.text),
+    [t("editorPanels.timeline.lineHeader", { index: 0, name: "Thi..." })],
+    "an overlong name keeps its number and ends with a literal ellipsis",
+  );
+  assert.equal(fixture.batchTexts[0].maxWidth, undefined);
+});
+
+test("narrow event panels keep only the judge-line number", () => {
+  const fixture = fakeReceiver({ overlayActive: true });
+  fixture.receiver.viewport.panelWidth = () => 50;
+  fixture.receiver.viewport.panelStride = () => 50;
+
+  drawEvents.call(fixture.receiver, 0);
+
+  assert.deepEqual(
+    fixture.batchTexts.map((entry) => entry.text),
+    [t("editorPanels.timeline.lineHeaderIndex", { index: 0 })],
+    "a caption that does not fit the panel drops the name",
+  );
+  assert.equal(
+    fixture.batchTexts[0].maxWidth,
+    undefined,
+    "the remaining number is never horizontally compressed",
+  );
+});
+
 test("the Canvas2D path keeps compositing the cached header strip", () => {
   const fixture = fakeReceiver({ overlayActive: false });
 
@@ -241,6 +280,11 @@ test("the Canvas2D path keeps compositing the cached header strip", () => {
     fixture.layerContext.calls.fillText.map((entry) => entry.text),
     [headerText],
     "the caption is painted into the strip only when it repaints",
+  );
+  assert.equal(
+    fixture.layerContext.calls.fillRect.length,
+    1,
+    "the cached strip paints the header band once when it repaints",
   );
   assert.equal(
     fixture.live.calls.drawImage.length,

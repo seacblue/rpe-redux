@@ -34,6 +34,7 @@ interface MultiLineChromeKeyCache {
   readonly verticalGridColor: string;
   readonly width: number;
   readonly panelWidth: number;
+  readonly font: string;
   readonly offset: number;
   readonly key: string;
 }
@@ -115,6 +116,7 @@ export function drawEventBar(
 function visibleEventHeaders(
   receiver: TimelineEventDrawingReceiver,
   width: number,
+  measureText?: (text: string) => number,
 ): MultiLineEventHeader[] {
   const session = receiver.getSession();
   const panelWidth = receiver.viewport.panelWidth(width, "events");
@@ -133,7 +135,12 @@ function visibleEventHeaders(
     headers.push({
       left: panel * stride - offset + eventInset,
       width: contentWidth,
-      text: multiLineLineLabel(lineIndex, session.chart.judgeLineList?.[lineIndex]),
+      text: multiLineLineLabel(
+        lineIndex,
+        session.chart.judgeLineList?.[lineIndex],
+        Math.max(8, contentWidth - 12),
+        measureText,
+      ),
     });
   }
   return headers;
@@ -150,6 +157,7 @@ export function multiLineChromeKey(
   const panelWidth = receiver.viewport.panelWidth(width, "events");
   const offset = receiver.viewport.multiLineViewportOffset(width, "events");
   const verticalGridColor = receiver.appearance.verticalGridColor;
+  const font = canvasFont("caption");
   const cached = multiLineChromeKeyCache.get(receiver);
   if (
     cached &&
@@ -159,6 +167,7 @@ export function multiLineChromeKey(
     cached.verticalGridColor === verticalGridColor &&
     cached.width === width &&
     cached.panelWidth === panelWidth &&
+    cached.font === font &&
     cached.offset === offset
   ) {
     return cached.key;
@@ -172,6 +181,7 @@ export function multiLineChromeKey(
     palette.bottomValue,
     verticalGridColor,
     palette.outline,
+    font,
   ].join("|");
   multiLineChromeKeyCache.set(receiver, {
     chart: session.chart,
@@ -180,6 +190,7 @@ export function multiLineChromeKey(
     verticalGridColor,
     width,
     panelWidth,
+    font,
     offset,
     key,
   });
@@ -195,8 +206,11 @@ export function drawMultiLineEventChrome(
 ): void {
   const palette = receiver.cache.palette() ?? readCanvasPalette();
   const multiPanel = receiver.viewport.panelCount("events") > 1;
-  const headers = visibleEventHeaders(receiver, width);
   const font = canvasFont("caption");
+  const previousFont = context.font;
+  context.font = font;
+  const headers = visibleEventHeaders(receiver, width, (text) => context.measureText(text).width);
+  context.font = previousFont;
   context.fillStyle = palette.headerSurface;
   for (const header of headers) {
     // The five event columns keep a fixed order, so the band names the judge
@@ -211,7 +225,6 @@ export function drawMultiLineEventChrome(
       header.text,
       header.left + header.width / 2,
       LINE_LABEL_BASELINE,
-      Math.max(8, header.width - 12),
       font,
       palette.bottomValue,
       "center",

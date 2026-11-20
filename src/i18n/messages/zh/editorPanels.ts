@@ -129,6 +129,7 @@ export default {
   "editorPanels.timeline.notesCanvas": "音符时间线",
   "editorPanels.timeline.eventsCanvas": "事件时间线",
   "editorPanels.timeline.lineHeader": "{index} · {name}",
+  "editorPanels.timeline.lineHeaderIndex": "{index}",
   "editorPanels.timeline.noteRange.group": "音符时间轴 X 坐标范围控制",
   "editorPanels.timeline.noteRange.left": "向左移动音符可见范围",
   "editorPanels.timeline.noteRange.reset": "回到默认 X 坐标范围",

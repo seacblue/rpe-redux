@@ -28,6 +28,7 @@ import { noteColor, readCanvasPalette } from "../../canvas/palette.ts";
 import { NOTE_GHOST_FILTER } from "../../canvas/noteGhostVisual.ts";
 import { notePaintLayer } from "../../canvas/noteSpriteGroups.ts";
 import { canvasFont } from "../../canvas/text.ts";
+import { fitNumericText } from "../../canvas/numericText.ts";
 import {
   MultiEditParameters,
   type MultiEditKind,
@@ -706,12 +707,12 @@ export class MultiEditPanel {
             context.fillStyle = palette.surface;
             context.fillRect(bounds.x + 2, position - 11, bounds.width - 4, 14);
             context.fillStyle = palette.foreground;
-            context.fillText(
+            const text = fitNumericText(
               format(value),
-              bounds.x + bounds.width / 2,
-              position,
               bounds.width - 8,
+              (candidate) => context.measureText(candidate).width,
             );
+            context.fillText(text, bounds.x + bounds.width / 2, position);
           }
         }
         context.restore();

@@ -16,6 +16,7 @@ import {
   prepareCanvas,
 } from "../../../canvas/canvas2d.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
+import { fitNumericText } from "../../../canvas/numericText.ts";
 import { extendedLabels, noiseTrackLabels, trackLabels } from "../drawing/canvas.ts";
 import { noiseLineSettings } from "../../../../../../core/global/chart/noise/noiseLine.ts";
 import { NOISE_ACTIVE_EVENTS } from "../../../../../../core/edit/events/eventTracks.ts";
@@ -111,6 +112,25 @@ function formatEventValue(value: unknown): string {
     return value.join(",");
   }
   return String(value ?? "");
+}
+
+/**
+ * Fit one numeric event label at its drawing font.
+ *
+ * Decimals are removed one at a time; a value that still does not fit is
+ * returned unchanged so the caller draws it at full width instead of scaling it.
+ */
+function fitEventValueText(
+  context: CanvasRenderingContext2D,
+  font: string,
+  text: string,
+  maxWidth: number,
+): string {
+  const previousFont = context.font;
+  context.font = font;
+  const fitted = fitNumericText(text, maxWidth, (value) => context.measureText(value).width);
+  context.font = previousFont;
+  return fitted;
 }
 
 /** One selected event's projected values, ready for the always-visible label pass. */
@@ -229,20 +249,18 @@ function drawSelectedEventValues(
     const bottom = Math.min(height - 5, value.bottom - 5);
     if (batch) {
       batch.addTextChip(
-        formatEventValue(value.end),
+        fitEventValueText(context, font, formatEventValue(value.end), availableWidth),
         centerX,
         top,
-        availableWidth,
         font,
         palette.foreground,
         palette.surface,
         opacity,
       );
       batch.addTextChip(
-        formatEventValue(value.start),
+        fitEventValueText(context, font, formatEventValue(value.start), availableWidth),
         centerX,
         bottom,
-        availableWidth,
         font,
         palette.foreground,
         palette.surface,
@@ -251,19 +269,17 @@ function drawSelectedEventValues(
       continue;
     }
     for (const [text, y] of [
-      [formatEventValue(value.end), top],
-      [formatEventValue(value.start), bottom],
+      [fitEventValueText(context, font, formatEventValue(value.end), availableWidth), top],
+      [fitEventValueText(context, font, formatEventValue(value.start), availableWidth), bottom],
     ] as const) {
       // Keep the chip tight to the printed value; a full-column bar would read
-      // as a second event bar behind every selected anchor.
-      const chipWidth = Math.min(
-        availableWidth,
-        Math.max(12, Math.ceil(context.measureText(text).width) + 8),
-      );
+      // as a second event bar behind every selected anchor. The chip may be
+      // wider than the column when the integer still does not fit.
+      const chipWidth = Math.max(12, Math.ceil(context.measureText(text).width) + 8);
       context.fillStyle = palette.surface;
       context.fillRect(centerX - chipWidth / 2, y - 11, chipWidth, 14);
       context.fillStyle = palette.foreground;
-      context.fillText(text, centerX, y, chipWidth - 6);
+      context.fillText(text, centerX, y);
     }
   }
   if (!batch) {
@@ -440,14 +456,12 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
       const shaderLabel = t("editorPanels.timeline.shaderTrack");
       const shaderX = horizontal + channelWidth / 2;
-      const shaderWidth = Math.max(8, channelWidth - 8);
       drawEventText(
         context,
         overlayBatch,
         shaderLabel,
         shaderX,
         16,
-        shaderWidth,
         canvasFont("caption"),
         palette.foreground,
         "center",
@@ -583,13 +597,18 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         const last = lastEntry.event;
         const top = verticalAt(beatValue(last.endTime));
         const bottom = verticalAt(beatValue(first.startTime));
+        const valueMaxWidth = channelWidth - 12;
         drawEventText(
           context,
           overlayBatch,
-          formatEventValue(Number.isFinite(group.max) ? group.max : last.end),
+          fitEventValueText(
+            context,
+            valueFont,
+            formatEventValue(Number.isFinite(group.max) ? group.max : last.end),
+            valueMaxWidth,
+          ),
           horizontal + channelWidth / 2,
           Math.max(36, top + 13),
-          channelWidth - 12,
           valueFont,
           top < 23 ? palette.topValue : palette.foreground,
           "center",
@@ -598,10 +617,14 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
           drawEventText(
             context,
             overlayBatch,
-            formatEventValue(Number.isFinite(group.min) ? group.min : first.start),
+            fitEventValueText(
+              context,
+              valueFont,
+              formatEventValue(Number.isFinite(group.min) ? group.min : first.start),
+              valueMaxWidth,
+            ),
             horizontal + channelWidth / 2,
             Math.min(height - 5, bottom - 5),
-            channelWidth - 12,
             valueFont,
             bottom > height ? palette.bottomValue : palette.foreground,
             "center",
@@ -645,7 +668,6 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         headerLabel,
         horizontal + channelWidth / 2,
         16,
-        Math.max(8, channelWidth - 8),
         canvasFont("caption"),
         palette.foreground,
         "center",
@@ -885,7 +907,7 @@ export function drawMultiLineEvents(
           scratch.labelScratch,
         );
         const centerX = offset + channel * channelWidth + channelWidth / 2;
-        const maxWidth = Math.max(10, channelWidth - 8);
+        const valueMaxWidth = Math.max(10, channelWidth - 8);
         const font = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
         for (const group of valueGroups) {
           const first = group.entries[0].event;
@@ -900,10 +922,14 @@ export function drawMultiLineEvents(
           drawEventText(
             context,
             overlayBatch,
-            formatEventValue(Number.isFinite(group.max) ? group.max : last.end),
+            fitEventValueText(
+              context,
+              font,
+              formatEventValue(Number.isFinite(group.max) ? group.max : last.end),
+              valueMaxWidth,
+            ),
             centerX,
             Math.max(37, top + 13),
-            maxWidth,
             font,
             palette.foreground,
             "center",
@@ -913,10 +939,14 @@ export function drawMultiLineEvents(
             drawEventText(
               context,
               overlayBatch,
-              formatEventValue(Number.isFinite(group.min) ? group.min : first.start),
+              fitEventValueText(
+                context,
+                font,
+                formatEventValue(Number.isFinite(group.min) ? group.min : first.start),
+                valueMaxWidth,
+              ),
               centerX,
               Math.min(height - 5, bottom - 5),
-              maxWidth,
               font,
               palette.foreground,
               "center",

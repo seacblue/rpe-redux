@@ -761,6 +761,7 @@ function visiblePanelLabels(
   receiver: TimelineGridReceiver,
   width: number,
   area: TimelineArea,
+  measureText?: (text: string) => number,
 ): MultiLinePanelLabel[] {
   const session = receiver.getSession();
   const panelWidth = receiver.viewport.panelWidth(width, area);
@@ -777,7 +778,12 @@ function visiblePanelLabels(
     labels.push({
       left: panel * stride - offset,
       width: panelWidth,
-      text: multiLineLineLabel(lineIndex, session.chart.judgeLineList?.[lineIndex]),
+      text: multiLineLineLabel(
+        lineIndex,
+        session.chart.judgeLineList?.[lineIndex],
+        Math.max(8, panelWidth - 12),
+        measureText,
+      ),
     });
   }
   return labels;
@@ -827,7 +833,12 @@ function multiLinePanelLabelLayerKey(
     receiver.viewport.multiLineViewportOffset(width, area),
     receiver.viewport.visiblePanelRange(width, area).join(","),
     JSON.stringify(visiblePanelLabels(receiver, width, area)),
+    canvasFont("caption"),
     palette.bottomValue,
+    palette.headerSurface,
+    palette.outline,
+    receiver.appearance.verticalGridColor,
+    receiver.viewport.panelCount(area),
   ].join("|");
 }
 
@@ -840,15 +851,49 @@ function drawMultiLinePanelLabelsInto(
   area: TimelineArea,
 ): void {
   const palette = this.cache.palette() ?? readCanvasPalette();
+  const font = canvasFont("caption");
+  const previousFont = context.font;
+  context.font = font;
+  const labels = visiblePanelLabels(this, width, area, (text) => context.measureText(text).width);
+  context.font = previousFont;
+  const multiPanel = this.viewport.panelCount(area) > 1;
+  context.fillStyle = palette.headerSurface;
+  for (const label of labels) {
+    context.fillRect(label.left, 0, label.width, 23);
+  }
+  // The band covers the backdrop separators, so restore the panel edges inside
+  // it and keep the same 23px chrome the event field uses.
+  context.lineWidth = 1;
+  context.strokeStyle = this.appearance.verticalGridColor;
+  for (const label of labels) {
+    if (label.left >= 0 && label.left <= width) {
+      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, label.left)), 23);
+    }
+    const right = label.left + label.width;
+    if (right >= 0 && right <= width) {
+      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, right)), 23);
+    }
+  }
+  if (multiPanel) {
+    context.lineWidth = 2;
+    context.strokeStyle = palette.outline;
+    for (const label of labels) {
+      const raw = label.left + label.width;
+      if (raw >= 0 && raw <= width) {
+        strokeVerticalGrid(context, Math.min(width - 1, Math.max(1, raw)), 23);
+      }
+    }
+    context.lineWidth = 1;
+    context.strokeStyle = this.appearance.verticalGridColor;
+  }
   const commands: RenderCommand[] = [];
-  for (const label of visiblePanelLabels(this, width, area)) {
+  for (const label of labels) {
     commands.push({
       kind: "text",
       text: label.text,
       x: label.left + label.width / 2,
       y: LINE_LABEL_BASELINE,
-      maxWidth: Math.max(8, label.width - 12),
-      font: canvasFont("caption"),
+      font,
       color: palette.bottomValue,
       align: "center",
       alpha: 1,

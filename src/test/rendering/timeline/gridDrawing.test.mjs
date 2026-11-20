@@ -536,13 +536,27 @@ test("a multi-line event grid keeps the hovered line inside its panel", () => {
   assert.ok(segments.every(([kind, x]) => (kind === "move" ? x === 50 : x === 80)));
 });
 
-/** A note-grid receiver whose label layer is never cached, forcing the live pass. */
-function panelLabelReceiver(notesMode) {
+/**
+ * A note-grid receiver whose label layer is never cached, forcing the live pass.
+ *
+ * `measureText` uses a fixed 10px advance so label tests can reason about the
+ * header's natural width independently of the host font stack.
+ */
+function panelLabelReceiver(
+  notesMode,
+  {
+    panelWidth = 100,
+    judgeLineList = [{ Name: "First" }, { Name: "Lead" }, {}, { Name: "" }],
+  } = {},
+) {
   const labels = [];
+  const bands = [];
   const context = {
     globalAlpha: 1,
     font: "",
     fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 1,
     textAlign: "left",
     textBaseline: "alphabetic",
     save() {},
@@ -550,6 +564,15 @@ function panelLabelReceiver(notesMode) {
     beginPath() {},
     rect() {},
     clip() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fillRect(x, y, width, height) {
+      bands.push({ x, y, width, height, color: this.fillStyle });
+    },
+    measureText(text) {
+      return { width: text.length * 10 };
+    },
     fillText(text, x, _y, maxWidth) {
       labels.push({ text, x, maxWidth, align: this.textAlign });
     },
@@ -557,37 +580,50 @@ function panelLabelReceiver(notesMode) {
   const receiver = {
     appearance: { verticalGridColor: "#404040", verticalGridCenterColor: "#909020" },
     cache: {
-      palette: () => ({ bottomValue: "#3366FF", foreground: "#FFFFFF" }),
+      palette: () => ({
+        bottomValue: "#3366FF",
+        foreground: "#FFFFFF",
+        headerSurface: "#202020",
+        outline: "#555555",
+      }),
       canvasLayer: () => undefined,
     },
     getSession: () => ({
       notesMode,
       targetLineIndices: [1, 3],
-      chart: { judgeLineList: [{ Name: "First" }, { Name: "Lead" }, {}, { Name: "" }] },
+      chart: { judgeLineList },
     }),
     viewport: {
       panelCount: () => 2,
-      panelWidth: () => 100,
+      panelWidth: () => panelWidth,
       panelStride: () => 120,
       multiLineViewportOffset: () => 0,
       visiblePanelRange: () => [0, 1],
     },
   };
-  return { receiver, context, labels };
+  return { receiver, context, labels, bands };
 }
 
 test("multi-line note panels caption the judge line by number and name", () => {
-  const { receiver, context, labels } = panelLabelReceiver("multi");
+  const { receiver, context, labels, bands } = panelLabelReceiver("multi");
 
   drawMultiLinePanelLabels.call(receiver, context, 240, 300, "notes");
 
   assert.deepEqual(
+    bands,
+    [
+      { x: 0, y: 0, width: 100, height: 23, color: "#202020" },
+      { x: 120, y: 0, width: 100, height: 23, color: "#202020" },
+    ],
+    "each panel paints the same 23px header band as the event field",
+  );
+  assert.deepEqual(
     labels.map(({ text }) => text),
     [
       t("editorPanels.timeline.lineHeader", { index: 1, name: "Lead" }),
-      t("editorPanels.timeline.lineHeader", { index: 3, name: t("model.line.untitled") }),
+      t("editorPanels.timeline.lineHeaderIndex", { index: 3 }),
     ],
-    "each visible panel names its own judge line",
+    "named panels show the name; an untitled panel keeps only its number",
   );
   assert.deepEqual(
     labels.map(({ x }) => x),
@@ -595,12 +631,34 @@ test("multi-line note panels caption the judge line by number and name", () => {
     "the caption is centered over its panel",
   );
   assert.ok(
-    labels.every(({ maxWidth }) => maxWidth === 88),
-    "the caption cannot cross a panel",
+    labels.every(({ maxWidth }) => maxWidth === undefined),
+    "the caption is never horizontally compressed",
   );
   assert.ok(
     labels.every(({ align }) => align === "center"),
     "the caption uses centered text alignment",
+  );
+});
+
+test("multi-line note panels truncate a name that does not fit the panel", () => {
+  const { receiver, context, labels } = panelLabelReceiver("multi", {
+    judgeLineList: [
+      { Name: "First" },
+      { Name: "An extremely long judge line title" },
+      {},
+      { Name: "" },
+    ],
+  });
+
+  drawMultiLinePanelLabels.call(receiver, context, 240, 300, "notes");
+
+  assert.deepEqual(
+    labels.map(({ text }) => text),
+    [
+      t("editorPanels.timeline.lineHeader", { index: 1, name: "A..." }),
+      t("editorPanels.timeline.lineHeaderIndex", { index: 3 }),
+    ],
+    "an overlong name is truncated instead of compressed or hidden",
   );
 });
 

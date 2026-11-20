@@ -139,6 +139,7 @@ export default {
   "editorPanels.timeline.notesCanvas": "Note timeline",
   "editorPanels.timeline.eventsCanvas": "Event timeline",
   "editorPanels.timeline.lineHeader": "{index} · {name}",
+  "editorPanels.timeline.lineHeaderIndex": "{index}",
   "editorPanels.timeline.noteRange.group": "Note timeline X-range controls",
   "editorPanels.timeline.noteRange.left": "Move the note view left",
   "editorPanels.timeline.noteRange.reset": "Return to the default X range",

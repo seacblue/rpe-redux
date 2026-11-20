@@ -188,7 +188,6 @@ export class TimelineOverlayBatch extends WebGlBatchSurface {
     text: string,
     centerX: number,
     baselineY: number,
-    maxWidth: number,
     font: string,
     foreground: string,
     background: string,
@@ -200,17 +199,14 @@ export class TimelineOverlayBatch extends WebGlBatchSurface {
     const context = this.labelContext;
     context.save();
     context.font = font;
-    const chipWidth = Math.min(
-      maxWidth,
-      Math.max(12, Math.ceil(context.measureText(text).width) + 8),
-    );
+    const chipWidth = Math.max(12, Math.ceil(context.measureText(text).width) + 8);
     context.globalAlpha = Math.max(0, Math.min(1, alpha));
     context.fillStyle = background;
     context.fillRect(centerX - chipWidth / 2, baselineY - 11, chipWidth, 14);
     context.fillStyle = foreground;
     context.textAlign = "center";
     context.textBaseline = "alphabetic";
-    context.fillText(text, centerX, baselineY, Math.max(1, chipWidth - 6));
+    context.fillText(text, centerX, baselineY);
     context.restore();
     this.labelDirty = true;
   }

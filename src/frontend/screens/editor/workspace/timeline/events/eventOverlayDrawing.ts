@@ -201,7 +201,6 @@ function paintTrajectory(
     t("editorPanels.timeline.trajectoryTrack"),
     centreX,
     rectangle.y + 30,
-    Math.max(1, rectangle.width - 4),
     canvasFont("caption"),
     palette.inspectorMarker,
     "center",
@@ -426,13 +425,12 @@ export function drawShaderEvents(
     context.fillStyle = palette.eventShaderText;
     context.font = `${this.appearance.eventValueFontSize ?? canvasTypePx("body")}px ${CANVAS_FONT_FAMILY}`;
     context.textAlign = "center";
-    context.fillText(name, projected.x + projected.width / 2, top + 16, projected.width - 4);
+    context.fillText(name, projected.x + projected.width / 2, top + 16);
     if (projected.height > 40) {
       context.fillText(
         `#${entry.item.order ?? 0}${entry.item.global ? ", UI" : ""}`,
         projected.x + projected.width / 2,
         top + 33,
-        projected.width - 4,
       );
     }
     context.restore();
