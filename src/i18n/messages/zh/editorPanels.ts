@@ -239,8 +239,7 @@ export default {
   "editorPanels.inspector.event.bezierDisabled":
     "设置中已关闭贝塞尔曲线。此事件仍保留贝塞尔曲线；启用贝塞尔曲线后可编辑。",
 
-  "editorPanels.inspector.event.stickPrevious": "向前粘合",
-  "editorPanels.inspector.event.stickNext": "向后粘合",
+  "editorPanels.inspector.event.stickNext": "粘合下一事件",
   "editorPanels.inspector.event.cutEvent": "切割事件",
   "editorPanels.inspector.event.cutHint": "长按可设一次性切割倍数",
   "editorPanels.inspector.event.cutDensityTitle": "切割倍数",

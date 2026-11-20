@@ -6,7 +6,7 @@
 
 **新增**
 
-- 新增按 `G` 向后粘合事件：选中事件的结束值会取同一事件轨上下一事件的起始值，与 RPE 的粘合行为一致。事件检查器同时提供“向前粘合”和“向后粘合”两个按钮。
+- 新增按 `G` 向后粘合事件：选中事件的结束值会取同一事件轨上下一事件的起始值，与 RPE 的粘合行为一致。事件检查器新增“粘合下一事件”按钮，执行同一命令。
 
 **变更**
 
@@ -16,7 +16,7 @@
 
 **Added**
 
-- Added backward event sticking on `G`: the selected event's end value takes the start value of the next event on the same track, matching RPE's stick command. The event inspector now carries both a "stick to the previous event" and a "stick to the next event" button.
+- Added backward event sticking on `G`: the selected event's end value takes the start value of the next event on the same track, matching RPE's stick command. The event inspector carries a "stick to the next event" button that runs the same command.
 
 **Changed**
 

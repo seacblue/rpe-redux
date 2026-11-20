@@ -249,7 +249,6 @@ export default {
   "editorPanels.inspector.event.bezierDisabled":
     "Bézier editing is off in Settings. This event keeps its Bézier curve; enable Bézier curves to edit it.",
 
-  "editorPanels.inspector.event.stickPrevious": "Stick to the previous event",
   "editorPanels.inspector.event.stickNext": "Stick to the next event",
   "editorPanels.inspector.event.cutEvent": "Cut event",
   "editorPanels.inspector.event.cutHint": "Long-press for a one-off cut multiplier",

@@ -479,13 +479,6 @@ export function EventInspectorView({
         <Button
           type="button"
           variant="outlined"
-          onClick={() => runEventTool(session, tempo, "stickPrevious", notify, currentBeat())}
-        >
-          {t("editorPanels.inspector.event.stickPrevious")}
-        </Button>
-        <Button
-          type="button"
-          variant="outlined"
           onClick={() => runEventTool(session, tempo, "stickNext", notify, currentBeat())}
         >
           {t("editorPanels.inspector.event.stickNext")}

@@ -8,13 +8,12 @@
 import {
   cutSelectedEvents,
   stickSelectedEvents,
-  type EventStickDirection,
 } from "../../../../../core/edit/events/eventTools.ts";
 import { t } from "../../../../../i18n/index.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { TempoGrid } from "../../../../../core/global/chart/editing/editGrid.ts";
 
-export type EventToolAction = "cut" | "stickNext" | "stickPrevious";
+export type EventToolAction = "cut" | "stickNext";
 
 /** One-off overrides for a tool run; omitted values fall back to the session. */
 export interface EventToolOptions {
@@ -28,14 +27,6 @@ interface EventToolSummary {
   skipped: number;
 }
 
-/** The stick direction one tool action joins. */
-function stickDirection(action: EventToolAction): EventStickDirection | null {
-  if (action === "stickNext") {
-    return "next";
-  }
-  return action === "stickPrevious" ? "previous" : null;
-}
-
 /** Runs a cut or stick tool and reports its counts as one notification. */
 export function runEventTool(
   session: EditorSession,
@@ -46,7 +37,6 @@ export function runEventTool(
   options: EventToolOptions = {},
 ): void {
   try {
-    const direction = stickDirection(action);
     const summary: EventToolSummary =
       action === "cut"
         ? {
@@ -58,7 +48,7 @@ export function runEventTool(
               factor: session.line?.bpmfactor ?? 1,
             }),
           }
-        : { ...stickSelectedEvents(session, direction ?? "previous"), generated: 0 };
+        : { ...stickSelectedEvents(session, "next"), generated: 0 };
     const message = summary.changed
       ? action === "cut"
         ? t("editorPanels.inspector.eventTools.cut", {
