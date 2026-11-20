@@ -34,11 +34,13 @@ import { bindClipboardHistoryPersistence } from "../../../../../../core/edit/cli
 import { openInspector, closeInspector } from "../../../inspector/controller.ts";
 import { nudgeBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { createEditorHomeRuntime } from "../../../../welcome/editorHome.ts";
+import { CHART_FILE_ACCEPT } from "../../document/open/chartFiles.ts";
+import { pickFiles } from "../../../../../platform/filePicker.ts";
 import { connectPeImport } from "../../../../welcome/peImportService.ts";
 import { connectRpeImport } from "../../../../welcome/rpeImportService.ts";
 import { connectExternalImport } from "../../../../welcome/externalImportService.ts";
 import { bindWorkspaceNavigation } from "../commands/workspaceNavigation.ts";
-import { planAppClose } from "../commands/leaveEditor.ts";
+import { isSavedResult, planAppClose } from "../commands/leaveEditor.ts";
 import { collaborationRoomExit } from "../../collaboration/roomExit.ts";
 import {
   getEditorRegionSnapshot,
@@ -871,14 +873,18 @@ export function createEditorAssembly(
     }
     await home.open(projectId);
   };
-  /** Pick paths, import every one, and optionally open the single result. */
+  /** Pick files or paths, import every one, and optionally open the single result. */
   const chooseImport = async (openAfterImport: boolean): Promise<void> => {
-    if (!documents) {
-      notify(t("editor.app.notice.desktopEnvironment"), "warning");
-      return;
+    let imported: readonly string[];
+    if (documents) {
+      imported = await home.importPaths(await documents.chooseImportPaths());
+    } else {
+      const files = await pickFiles({ accept: CHART_FILE_ACCEPT, multiple: true });
+      if (!files?.length) {
+        return;
+      }
+      imported = await home.importPickedFiles(files);
     }
-    const paths = await documents.chooseImportPaths();
-    const imported = await home.importPaths(paths);
     if (!openAfterImport || imported.length !== 1) {
       if (openAfterImport && imported.length > 1) {
         notify(t("editor.app.notice.droppedManyImported", { count: imported.length }), "info");
@@ -1355,11 +1361,9 @@ export function createEditorAssembly(
     if (answer === "save") {
       try {
         const result = await documentRuntime.save();
-        if (!result || result.status !== "saved") {
-          return false;
-        }
-        if (session.current.history.dirty || documentState.assetDirty) {
-          reportError(new Error(t("editor.app.error.stillUnsaved")));
+        // Once the explicit save finished, the confirmed quit must close the
+        // window instead of being held back by a dirty flag settling behind it.
+        if (!isSavedResult(result) && (session.current.history.dirty || documentState.assetDirty)) {
           return false;
         }
       } catch (failure) {

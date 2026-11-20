@@ -12,6 +12,19 @@ import type { CollaborationState } from "../../../../../../core/collaboration/ty
 /** How an exit prompt answers the library request. */
 export type LeaveEditorAction = "save" | "discard" | "exit" | "cancel";
 
+/**
+ * Whether a save call persisted the open document.
+ *
+ * An explicit save is the caller's decision to leave. Once it reports `saved`,
+ * stale dirty bookkeeping must not trap the editor; only a save that did not
+ * complete can keep the workspace open.
+ */
+export function isSavedResult(result: unknown): boolean {
+  return Boolean(
+    result && typeof result === "object" && (result as { status?: unknown }).status === "saved",
+  );
+}
+
 /** One footer button in the exit prompt. */
 export interface LeaveEditorChoice {
   readonly action: LeaveEditorAction;

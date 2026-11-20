@@ -30,6 +30,8 @@ interface ProjectHomeOptions {
   openImported?: (id: string) => Promise<unknown>;
   /** Read a chart file into the library without opening it. */
   importFile: (path: string) => Promise<string | null>;
+  /** Import picked browser files, which have no native path; the web host supplies this. */
+  importFiles?: (files: readonly File[]) => Promise<readonly string[]>;
   /** Import a dropped/selected RPE root; null when the path is not an RPE folder. */
   importRpePath?: (path: string) => Promise<readonly string[] | null>;
   /** Open the review for a native RPE installation; null when classification failed. */
@@ -75,6 +77,7 @@ export class ProjectHome {
   readonly cards: HomeProjectCardsAdapter;
   readonly library: LibraryProjectsController;
   private readonly importFile: (path: string) => Promise<string | null>;
+  private readonly importFiles?: (files: readonly File[]) => Promise<readonly string[]>;
   private readonly importRpePath?: (path: string) => Promise<readonly string[] | null>;
   private readonly importRpeInstallation?: (
     path: string,
@@ -104,6 +107,7 @@ export class ProjectHome {
     openProject,
     openImported,
     importFile,
+    importFiles,
     importRpePath,
     importRpeInstallation,
     importPeInstallation,
@@ -121,6 +125,7 @@ export class ProjectHome {
     changed,
   }: ProjectHomeOptions) {
     this.importFile = importFile;
+    this.importFiles = importFiles;
     this.importRpePath = importRpePath;
     this.importRpeInstallation = importRpeInstallation;
     this.importPeInstallation = importPeInstallation;
@@ -343,6 +348,16 @@ export class ProjectHome {
   /** Opens one library project after an import; the caller handled unsaved work. */
   async open(id: string): Promise<void> {
     await (this.openImported ?? this.openProjectAction)(id);
+  }
+
+  /**
+   * Imports picked browser files into the library.
+   *
+   * A host without the browser callback resolves an empty list, which keeps
+   * the desktop path in charge of native files.
+   */
+  importPickedFiles(files: readonly File[]): Promise<readonly string[]> {
+    return this.importFiles?.(files) ?? Promise.resolve([]);
   }
 
   /** Imports one chart into the library, refreshes the cards, and opens it. */
