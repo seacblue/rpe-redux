@@ -35,9 +35,23 @@ export async function observeWindowState(
   }
   const window = await currentWindow();
   const refresh = async () => changed(await window.isMaximized());
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Dragging an edge emits a resize event per frame; one IPC round trip after
+  // the drag settles is enough to update the caption button.
   const unlisten = await window.onResized(() => {
-    void refresh().catch(() => {});
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    timer = setTimeout(() => {
+      timer = undefined;
+      void refresh().catch(() => {});
+    }, 150);
   });
   await refresh();
-  return unlisten;
+  return () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    unlisten();
+  };
 }

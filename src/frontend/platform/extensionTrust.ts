@@ -31,18 +31,21 @@ export function matchesBuiltinTrust(
 }
 
 /** Encodes a package text part as bytes; undefined becomes empty. */
-function bytesOf(value: string | readonly number[] | undefined): Uint8Array {
+function bytesOf(value: string | ArrayLike<number> | undefined): Uint8Array {
   if (value === undefined) {
     return new Uint8Array();
   }
-  return typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
+  if (typeof value === "string") {
+    return new TextEncoder().encode(value);
+  }
+  return value instanceof Uint8Array ? value : new Uint8Array(value);
 }
 
 /** Computes the review fingerprint from package bytes, never from the extension id. */
 export async function extensionFingerprint(
   manifest: string,
   translations: string | undefined,
-  entry: string | readonly number[] | undefined,
+  entry: string | ArrayLike<number> | undefined,
 ): Promise<string> {
   const parts = [bytesOf(manifest), bytesOf(translations), bytesOf(entry)];
   // Length-prefix every part. Concatenating three variable-length byte runs

@@ -9,7 +9,7 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{ipc::Response, AppHandle, Manager, State};
 
 type Result<T> = std::result::Result<T, String>;
 /// Largest accepted `manifest.json`, in bytes.
@@ -324,12 +324,19 @@ fn insert_package(found: &mut BTreeMap<String, Package>, package: Package) {
 }
 
 /// List every discovered package and its manifest.
+///
+/// The folder poll runs while the editor is open; scanning manifests and i18n
+/// catalogs moves to the blocking pool so the IPC thread keeps answering.
 #[tauri::command]
-pub fn list_extensions(app: AppHandle) -> Result<Vec<PackagedExtension>> {
-    Ok(packages(&app)?
-        .into_iter()
-        .map(|package| package.public)
-        .collect())
+pub async fn list_extensions(app: AppHandle) -> Result<Vec<PackagedExtension>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(packages(&app)?
+            .into_iter()
+            .map(|package| package.public)
+            .collect())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// Refresh the native deadline while the main thread can still answer.
@@ -389,9 +396,8 @@ pub fn start_watchdog(app: AppHandle) {
 }
 
 /// Read one package's code entry after revalidating its path and size.
-#[tauri::command]
-pub fn read_extension_entry(app: AppHandle, id: String) -> Result<Vec<u8>> {
-    let package = packages(&app)?
+fn read_entry_bytes(app: &AppHandle, id: &str) -> Result<Vec<u8>> {
+    let package = packages(app)?
         .into_iter()
         .find(|package| package.public.id == id)
         .ok_or_else(|| format!("Unknown Extension: {id}"))?;
@@ -413,6 +419,17 @@ pub fn read_extension_entry(app: AppHandle, id: String) -> Result<Vec<u8>> {
         return Err(format!("Extension entry escaped its package: {id}"));
     }
     fs::read(canonical).map_err(|error| error.to_string())
+}
+
+/// Read one package's code entry as raw IPC bytes.
+///
+/// An entry can be several megabytes; the read runs on the blocking pool and
+/// crosses IPC as an ArrayBuffer instead of a JSON number array.
+#[tauri::command]
+pub async fn read_extension_entry(app: AppHandle, id: String) -> Result<Response> {
+    tauri::async_runtime::spawn_blocking(move || read_entry_bytes(&app, &id).map(Response::new))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 /// One text file in a managed install request.

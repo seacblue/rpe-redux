@@ -16,6 +16,8 @@ import type { Theme } from "../../../core/theme/themes.ts";
 /** Props passed to a custom control registered for one setting key. */
 export interface SettingControlProps {
   readonly field: SettingDefinition;
+  /** True while the owning settings page is on screen. */
+  readonly active?: boolean;
 }
 
 /** Props passed to a registered category page. */

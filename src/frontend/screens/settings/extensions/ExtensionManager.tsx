@@ -6,9 +6,13 @@
  */
 import { useState } from "react";
 import { useTranslation } from "../../../../i18n/react.ts";
-import { registerSettingsPage } from "../settingsContributions.ts";
+import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
 import type { MessageKey } from "../../../../i18n/index.ts";
-import { getExtensionStartupState } from "../../../platform/extensionLoader.ts";
+import {
+  getExtensionStartupState,
+  refreshPackagedExtensions,
+} from "../../../platform/extensionLoader.ts";
+import { useSurfacePolling } from "../useSurfacePolling.ts";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../design/components/alert/InlineAlert.tsx";
 import { ExtensionListView } from "./ExtensionListView.tsx";
@@ -18,9 +22,12 @@ import { ExtensionInstallDialog } from "./ExtensionInstallDialog.tsx";
  * The settings page owns the page-level safe-mode notice, the installed
  * extension list, and the install dialog.
  */
-export function ExtensionManager() {
+export function ExtensionManager({ active }: SettingsPageContext) {
   const { t } = useTranslation();
   const [installOpen, setInstallOpen] = useState(false);
+  // The page stays mounted while the settings window is open; folder discovery
+  // and manifest reloads only run while this section is the active one.
+  useSurfacePolling(active, refreshPackagedExtensions);
   const startup = getExtensionStartupState();
   const safeModeReason =
     startup.reason === "request"

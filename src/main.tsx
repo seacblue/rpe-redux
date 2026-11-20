@@ -87,11 +87,13 @@ if (isPerformanceHudWindow()) {
   connectCodeCellGuide(codeCellGuide);
   installExtensionRecovery();
   if (isDesktop()) {
+    // The native deadline is twelve seconds; five seconds keeps a wide margin
+    // while cutting the steady IPC wake-ups.
     const heartbeat = globalThis.setInterval(() => {
       void invoke("extension_watchdog_heartbeat", {
         active: document.visibilityState === "visible" && extensionRuntime.list().length > 0,
       }).catch(() => undefined);
-    }, 2000);
+    }, 5000);
     window.addEventListener("beforeunload", () => globalThis.clearInterval(heartbeat), {
       once: true,
     });
