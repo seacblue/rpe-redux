@@ -4,6 +4,12 @@ import { connectScriptParameterHost } from "../../../../../core/extensions/scrip
 import { scriptRegistry } from "../../../../../core/extensions/scripts.ts";
 import { getSelectionSession } from "../../../../../core/edit/selection/api.ts";
 import {
+  formatBeat,
+  normalizeBeat,
+  parseBeat,
+  type Beat,
+} from "../../../../../core/global/chart/timing/beat.ts";
+import {
   allocateScriptJudgeLine,
   releaseScriptJudgeLines,
   type ScriptJudgeLineAllocation,
@@ -40,6 +46,7 @@ import { IconButton } from "../../../../../design/components/button/IconButton.t
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { SchemaControl } from "../../../../../design/components/field/SchemaControl.tsx";
+import { BeatField } from "../beat/BeatField.tsx";
 import {
   dismissModal,
   presentModal,
@@ -111,6 +118,24 @@ function parseMemory(raw: string): Record<string, ExtensionParameterInput> | nul
     return isParameterRecord(parsed) ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * A beat parameter's stored text as the field's three parts.
+ *
+ * The schema stores a beat as `whole:numerator/denominator`, and an empty or
+ * unreadable value seeds the field at the chart's start.
+ */
+function beatOf(value: unknown): Beat {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text === "") {
+    return [0, 0, 1];
+  }
+  try {
+    return normalizeBeat(parseBeat(text));
+  } catch {
+    return [0, 0, 1];
   }
 }
 
@@ -465,12 +490,12 @@ function ParameterControl({
       );
     case "beat":
       return (
-        <SchemaControl
+        <BeatField
           id={id}
-          kind="beat"
-          value={String(value ?? "")}
-          onChange={(next) => onChange(next)}
-          describedBy={describedBy}
+          value={beatOf(value)}
+          onCommit={(next) => {
+            onChange(formatBeat(next));
+          }}
         />
       );
     case "expression":

@@ -52,6 +52,12 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
    * compact toolbar cell or a composed control names another edge explicitly.
    */
   textAlign?: InputTextAlign;
+  /**
+   * The box holds one value, so an in-place click selects all of it even though
+   * its native type is text. A number field is already one value; this declares
+   * the same affordance for a text box that is one part of a composed control.
+   */
+  holdsValue?: boolean;
   /** A bounded step field that is a ring rather than a line: past `max` comes `min`. */
   stepWrap?: boolean;
   /** Draw left/right step buttons around the centered numeric value. */
@@ -186,6 +192,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     stepWrap = false,
     indeterminate = false,
     textAlign = "right",
+    holdsValue = false,
     title,
     tipDescription,
     ...props
@@ -660,7 +667,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         onFocus?.(event);
         // Each focus starts one select-all gesture; clicking again while the
         // field still has focus must leave the caret where the pointer landed.
-        selectAllOnClick.focus(event.currentTarget.type);
+        selectAllOnClick.focus(event.currentTarget.type, holdsValue);
       }}
       onBlur={(event) => {
         onBlur?.(event);
