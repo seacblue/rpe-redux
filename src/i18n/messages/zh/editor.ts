@@ -107,6 +107,21 @@ export default {
   "editor.dialogs.exportDialog.exportAnyway": "仍然导出",
   "editor.dialogs.exportDialog.export": "导出",
 
+  "editor.dialogs.restoreBackup.title": "恢复为备份",
+  "editor.dialogs.restoreBackup.loading": "正在读取备份…",
+  "editor.dialogs.restoreBackup.none":
+    "当前谱面还没有自动备份。编辑期间会按设置的间隔自动保存备份。",
+  "editor.dialogs.restoreBackup.counts": "{notes} 个音符，{events} 个事件",
+  "editor.dialogs.restoreBackup.workedFor": "已编辑 {time}",
+  "editor.dialogs.restoreBackup.workedForLabel": "编辑时长",
+  "editor.dialogs.restoreBackup.savedAt": "保存时间",
+  "editor.dialogs.restoreBackup.notes": "音符数",
+  "editor.dialogs.restoreBackup.events": "事件数",
+  "editor.dialogs.restoreBackup.confirmDescription":
+    "恢复 {time} 的备份将覆盖当前显示的谱面。当前谱面会保留为一条备份，之后可以再次恢复。",
+  "editor.dialogs.restoreBackup.failed": "备份恢复失败，谱面未被改动：{message}",
+  "editor.dialogs.restoreBackup.discard": "不保存",
+
   "editor.app.commit.changeLineTexture": "更改判定线贴图",
 
   "editor.app.commit.renameLineTexture": "同步重命名判定线贴图",

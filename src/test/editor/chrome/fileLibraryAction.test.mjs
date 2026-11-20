@@ -19,6 +19,10 @@ function recordingCommands(calls) {
       newDocument: () => calls.push("new"),
       openDocument: () => calls.push("open"),
       saveDocument: () => calls.push("save"),
+      hasUnsavedChanges: () => false,
+      backupOpenDocument: async () => calls.push("backup"),
+      reloadProject: async (projectId) => calls.push(`reload:${projectId}`),
+      restoreBackup: (projectId) => calls.push(`restore:${projectId ?? "current"}`),
     },
     transport: {
       togglePlayback: () => calls.push("play"),
@@ -53,6 +57,23 @@ test("the File library action runs the shared library confirmation", () => {
     assert.equal(typeof action.run, "function");
     action.run();
     assert.deepEqual(calls, ["close-library"]);
+  } finally {
+    dispose();
+    disposers.forEach((remove) => remove());
+  }
+});
+
+test("the File restore action asks for the open project's backups", () => {
+  const disposers = registerFileActions();
+  const calls = [];
+  const dispose = bindEditorChromeCommands(recordingCommands(calls));
+  try {
+    const action = toolbar.node("document.restoreBackup");
+    assert.ok(action, "the File menu must register document.restoreBackup");
+    // The action is menu-only; the toolbar keeps its document row unchanged.
+    assert.equal(action.toolbar, false);
+    action.run();
+    assert.deepEqual(calls, ["restore:current"]);
   } finally {
     dispose();
     disposers.forEach((remove) => remove());

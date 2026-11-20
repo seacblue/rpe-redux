@@ -163,6 +163,20 @@ Draft ownership is stable across restarts:
 
 The Files settings page exposes **Backups kept per chart** (`autosave-limit`, default 10, range 1-100). Each recovery write sends that value and prunes older drafts for the same owner, so it applies per document path, library project, or untitled family. Startup cleanup additionally removes drafts whose library project no longer exists, surplus drafts beyond the configured limit for every family, and blobs no draft references. The same blob collection runs after each write and delete, so removing a draft reclaims its unique assets immediately while blobs still shared by another draft survive. Age alone never deletes a draft, so upgrading keeps every recoverable draft that fits the retention rule.
 
+A **library project** also keeps a backup branch tree, because a project needs a restorable history the editor can list and reload. `chart_snapshots` stores one full chart per node with its creation time, note count, event count, reason (`auto`, `manual`, `restore`), and parent node; `chart_snapshot_assets` pins the asset manifest that node was saved with, and `chart_snapshot_heads` records the node the project currently sits on. The same `autosave-limit` value prunes this tree, and its blobs are shared with the project and revision manifests through the content-addressed `assets` table.
+
+Every autosave tick appends an `auto` node for the open project and moves the head onto it. **File → Restore from backup…** and the chart-library context menu list a project's nodes newest first. Applying one appends the chart it replaces as a `restore` node, writes the chosen chart back to the project, and moves the head onto the chosen node; the work on screen is therefore never lost, and choosing the `restore` node later returns to the chart that was replaced. A native file has no project and keeps only its recovery draft.
+
+Three rules keep a backup from ever being written incomplete:
+
+- A library document is opened through a paged facade that exposes placeholder lines for content it has not loaded. The snapshot writer resolves the chart's document, materializes every line, and only then serializes, so a large chart is stored whole rather than with its paged-out lines emptied. `registeredChartDocument` also recognizes a shallow copy of a facade by its line array, because the snapshot is taken as `{ ...chart }`.
+- `assertSnapshotComplete` refuses a chart that still contains placeholder lines, turning an upstream bug into a visible backup error instead of silent loss.
+- An automatic backup whose chart and manifest match the current head is skipped: an idle editor must not fill the retention window with copies of itself and evict the history it exists to keep. A manual capture always stores.
+
+A restore is one transaction on the service, so a failure leaves the project exactly as it was.
+
+The `recovery_drafts`/`chart_snapshots` split is deliberate: crash recovery is host-local and survives a library-restore rollback, while backups are library data. A whole-library backup or app backup does not carry the backup trees, and restoring one clears them with the projects they belonged to, so no node points at a chart the restored library no longer has.
+
 ## Multiple instances
 
 Starting another editor first probes the fixed loopback port. A healthy `rpe-redux-server` that serves the same database and reports the same version is reused; a foreign listener, another database profile, or a version mismatch is an error or a restart. The host asks a stale sidecar to stop through its loopback control route before spawning the current build. Each launch keeps its own window and process, while the first copy owns the sidecar process and every copy registers a frontend instance and heartbeat. The owner leaves the sidecar running while another instance is alive, and the backend exits after its last live instance leaves or expires.

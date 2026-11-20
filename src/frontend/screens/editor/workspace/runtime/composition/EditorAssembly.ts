@@ -20,6 +20,7 @@ import { createTimelineRuntime } from "../providers/TimelineProvider.tsx";
 import { createInspectorRuntime } from "../providers/InspectorProvider.tsx";
 import { createDocumentRuntime } from "../providers/DocumentProvider.tsx";
 import { openAssets as openDocumentAssets } from "../../document/lifecycle/service.ts";
+import { appendAutomaticSnapshot } from "../../document/save/snapshots.ts";
 import type { EditorSurfaces } from "./editorSurfaces.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
@@ -523,6 +524,11 @@ export function createEditorAssembly(
             return libraryBackup(onProgress);
           },
         }),
+    // A library project also appends one node per automatic backup, so the
+    // restore dialog can return to any autosaved point. A native file has no
+    // project and returns null.
+    branch: (chart: Chart, editSeconds: number) =>
+      appendAutomaticSnapshot(documentState.libraryProject?.id ?? null, chart, editSeconds),
     assets: () => documentState.assets,
     setLastDraftDocument,
     notify,

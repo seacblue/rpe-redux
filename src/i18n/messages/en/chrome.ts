@@ -241,6 +241,8 @@ export default {
   "chrome.menu.help": "Help",
   "chrome.menu.file.new": "New blank chart",
   "chrome.menu.file.open": "Import chart",
+  "chrome.menu.file.restoreBackup": "Restore from backup…",
+  "chrome.menu.file.restoreBackupHint": "Replace the open chart with an automatic backup of it",
   "chrome.menu.file.closeDocument": "Return to chart library",
   "chrome.menu.file.closeDocumentHint":
     "Check for unsaved changes before returning to the chart library",

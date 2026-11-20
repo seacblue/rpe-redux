@@ -20,6 +20,7 @@ import { summarizeChartLine, summarizeChartLineIncremental } from "./chartLineSu
 import { stringifyChartValue } from "./chartSerialize.ts";
 import { registerChartDocument } from "./chartDocumentRegistry.ts";
 import { yieldToHost } from "../../../utils/yieldToHost.ts";
+import { createWorkBudget, yieldToRenderer } from "../../../utils/yieldToRenderer.ts";
 import type { ChartLineRevisionSeed } from "../chartRevisionSeed.ts";
 import type { ChartValueDigestGroup } from "../chartContentHash.ts";
 import {
@@ -34,6 +35,17 @@ import {
 /** Marker attached to a not-yet-loaded line in a paged chart facade. */
 const LINE_PLACEHOLDER = Symbol("chart-line-placeholder");
 let nextPendingFingerprintId = 1;
+
+/**
+ * Longest uninterrupted stretch of the serialization loop, in milliseconds.
+ *
+ * The editor draws at the display rate, so a slice must leave most of a frame for
+ * the frame that follows it. Four milliseconds keeps the write behind the renderer
+ * instead of in front of it, including on a 120 Hz display where a frame is 8 ms.
+ */
+const SERIALIZE_SLICE_MS = 4;
+/** Lines per slice before yielding even when each line is cheap. */
+const SERIALIZE_SLICE_LINES = 16;
 
 /** True when a line is a paged facade placeholder rather than chart content. */
 export function isPlaceholderLine(line: unknown): boolean {
@@ -751,10 +763,16 @@ export class ChartDocument {
    * Clean lines reuse their raw source text when available; dirty lines are
    * serialized from the materialized object. The output is semantically equal
    * to `serializeChart` but does not build one whole-chart string.
+   *
+   * The loop is cut into slices of roughly one frame. A backup runs inside the
+   * frame loop, and writing a large chart without ever returning to the event loop
+   * drops frames; yielding between slices keeps each uninterrupted stretch short
+   * while the total cost stays the same.
    */
   async serialize(sink: (chunk: string) => Promise<void> | void): Promise<void> {
     const header = headerValues(this.header);
     const keys = Object.keys(header);
+    const budget = createWorkBudget(SERIALIZE_SLICE_MS, SERIALIZE_SLICE_LINES);
     await sink("{");
     for (let index = 0; index < keys.length; index++) {
       const key = keys[index];
@@ -771,15 +789,19 @@ export class ChartDocument {
       }
       if (slot.state === "dirty" && slot.line) {
         await sink(stringifyChartValue(slot.line));
-        continue;
+      } else {
+        // Clean lines are copied from the source without parsing or assigning
+        // ids; the index already validated their structure when it was built.
+        const source = slot.raw ?? (await this.provider.readLine(index));
+        if (source === undefined) {
+          throw new Error(`Missing chart line ${index}`);
+        }
+        await sink(typeof source === "string" ? source : source.raw);
       }
-      // Clean lines are copied from the source without parsing or assigning
-      // ids; the index already validated their structure when it was built.
-      const source = slot.raw ?? (await this.provider.readLine(index));
-      if (source === undefined) {
-        throw new Error(`Missing chart line ${index}`);
+      if (budget.exhausted()) {
+        await yieldToRenderer();
+        budget.reset();
       }
-      await sink(typeof source === "string" ? source : source.raw);
     }
     await sink("]}");
   }

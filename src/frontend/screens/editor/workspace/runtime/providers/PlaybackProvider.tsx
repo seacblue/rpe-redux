@@ -88,6 +88,17 @@ export function createPlaybackRuntime(options: {
   documents: TauriDocumentStore | null;
   /** Browser-host library backup; desktop uses the native recovery store. */
   backup?: (onProgress?: (value: number) => void) => Promise<unknown>;
+  /**
+   * Append one node to the open library project's snapshot tree.
+   *
+   * Returns null when the document has no library project, which is the case for
+   * a native file; that document keeps only its recovery draft.
+   */
+  branch?: (
+    chart: Chart,
+    editSeconds: number,
+    onProgress?: (value: number) => void,
+  ) => Promise<unknown>;
   assets(): AssetMap;
   setLastDraftDocument(chart: Chart): void;
   notify(message: string, severity?: string): void;
@@ -303,6 +314,12 @@ export function createPlaybackRuntime(options: {
         } else {
           throw new Error(t("editor.app.notice.desktopOnlyBackup"));
         }
+        // A library project also keeps a branch tree, so a later restore can
+        // return to this point without depending on the recovery draft list.
+        // A native file has no project and skips this write. The node records the
+        // session's charting time so the backup list can show how much work it
+        // represents; it is the same figure a commit would add to the project.
+        await options.branch?.(snapshot as Chart, current.editSeconds, onProgress);
         if (current === options.session.current) {
           options.setLastDraftDocument(document);
           progress.finish(t("editor.app.notice.backupSaved"), "success");

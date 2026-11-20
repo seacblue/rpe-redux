@@ -223,6 +223,8 @@ export default {
   "chrome.menu.help": "帮助",
   "chrome.menu.file.new": "新建空白谱面",
   "chrome.menu.file.open": "导入谱面",
+  "chrome.menu.file.restoreBackup": "恢复为备份…",
+  "chrome.menu.file.restoreBackupHint": "用当前谱面的自动备份替换正在编辑的谱面",
   "chrome.menu.file.closeDocument": "返回谱面库",
   "chrome.menu.file.closeDocumentHint": "返回谱面库前检查未保存修改",
   "chrome.menu.file.titleScreen": "显示谱面库",

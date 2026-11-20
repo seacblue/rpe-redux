@@ -15,13 +15,35 @@ export interface RegisteredChartDocument {
 }
 
 const documents = new WeakMap<object, RegisteredChartDocument>();
+/**
+ * The same documents keyed by their live `judgeLineList`.
+ *
+ * A snapshot is taken as `{ ...chart }` so a writer cannot mutate the live
+ * document, and that copy is a different object from the facade. Every shallow
+ * copy still shares the facade's line array, so this key recognizes a copy without
+ * iterating the weak registry. Without it, a copied paged facade would serialize
+ * its placeholder lines as if they were content and store an emptied chart.
+ */
+const documentsByLines = new WeakMap<object, RegisteredChartDocument>();
 
-/** Attach the owning document to a chart facade. */
+/** Attach the owning document to a chart facade and to its live line array. */
 export function registerChartDocument(chart: object, document: RegisteredChartDocument): void {
   documents.set(chart, document);
+  const lines = (chart as { judgeLineList?: unknown }).judgeLineList;
+  if (lines && typeof lines === "object") {
+    documentsByLines.set(lines as object, document);
+  }
 }
 
-/** Read the document that owns a chart facade, if any. */
+/** Read the document that owns a chart facade, or a shallow copy of one. */
 export function registeredChartDocument(chart: object): RegisteredChartDocument | undefined {
-  return documents.get(chart);
+  const direct = documents.get(chart);
+  if (direct) {
+    return direct;
+  }
+  const lines = (chart as { judgeLineList?: unknown }).judgeLineList;
+  if (!lines || typeof lines !== "object") {
+    return undefined;
+  }
+  return documentsByLines.get(lines as object);
 }

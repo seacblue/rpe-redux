@@ -1,5 +1,6 @@
 /** Orchestrates one offline chart recording within the existing editor window. */
 import { TempoMap } from "../../../../../core/global/chart/timing/tempo.ts";
+import { yieldToRenderer } from "../../../../../core/utils/yieldToRenderer.ts";
 import {
   beginDesktopRecording,
   recordingFormatSpec,
@@ -52,31 +53,6 @@ function checkCancelled(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new DOMException("Cancelled", "AbortError");
   }
-}
-
-/**
- * Yield to the renderer without the timer clamp.
- *
- * A recording frame is already a complete unit of work, so this only gives the
- * UI a chance to paint the progress and service cancellation. `setTimeout(0)`
- * adds a several-millisecond delay per frame after the first few iterations.
- */
-function yieldToRenderer(): Promise<void> {
-  const scheduler = (
-    globalThis as typeof globalThis & { scheduler?: { yield?: () => Promise<void> } }
-  ).scheduler;
-  if (scheduler?.yield) {
-    return scheduler.yield();
-  }
-  return new Promise((resolve) => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      channel.port1.close();
-      channel.port2.close();
-      resolve();
-    };
-    channel.port2.postMessage(0);
-  });
 }
 
 /** Capture all mutable chart and appearance state synchronously at the click. */

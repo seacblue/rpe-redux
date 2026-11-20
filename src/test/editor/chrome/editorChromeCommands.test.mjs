@@ -14,6 +14,10 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
       newDocument: () => calls.push("new"),
       openDocument: () => calls.push("open"),
       saveDocument: () => calls.push("save"),
+      hasUnsavedChanges: () => true,
+      backupOpenDocument: async () => calls.push("backup"),
+      reloadProject: async (projectId) => calls.push(`reload:${projectId}`),
+      restoreBackup: (projectId) => calls.push(`restore:${projectId}`),
     },
     transport: {
       togglePlayback: () => calls.push("play"),

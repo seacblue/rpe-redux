@@ -110,6 +110,22 @@ export default {
   "editor.dialogs.exportDialog.exportAnyway": "Export anyway",
   "editor.dialogs.exportDialog.export": "Export",
 
+  "editor.dialogs.restoreBackup.title": "Restore a backup",
+  "editor.dialogs.restoreBackup.loading": "Reading backups…",
+  "editor.dialogs.restoreBackup.none":
+    "This chart has no automatic backups yet. They are saved while you edit, at the interval in Settings.",
+  "editor.dialogs.restoreBackup.counts": "{notes} notes, {events} events",
+  "editor.dialogs.restoreBackup.workedFor": "{time} of work",
+  "editor.dialogs.restoreBackup.workedForLabel": "Time edited",
+  "editor.dialogs.restoreBackup.savedAt": "Saved",
+  "editor.dialogs.restoreBackup.notes": "Notes",
+  "editor.dialogs.restoreBackup.events": "Events",
+  "editor.dialogs.restoreBackup.confirmDescription":
+    "Restoring the backup from {time} replaces the chart on screen. The current chart is kept as a backup you can restore again.",
+  "editor.dialogs.restoreBackup.failed":
+    "The backup could not be restored, so nothing was changed: {message}",
+  "editor.dialogs.restoreBackup.discard": "Don't save",
+
   "editor.app.commit.changeLineTexture": "Change judge line texture",
 
   "editor.app.commit.renameLineTexture": "Rename judge line texture everywhere",

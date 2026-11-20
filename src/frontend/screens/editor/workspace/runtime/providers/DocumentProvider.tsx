@@ -65,6 +65,8 @@ import {
   type DocumentLeaseHandle,
 } from "../../document/open/documentLease.ts";
 import { localService } from "../../../../../../core/global/library/service.ts";
+import { openLibraryChartDocument } from "../../../../../../core/global/library/document.ts";
+import { libraryDocumentCandidate } from "../../document/open/libraryCandidate.ts";
 import { serverOrigin } from "../../../../../../core/global/library/client.ts";
 import { editorDocumentCoverUrl } from "../../../../../app/coverBackdropUrl.ts";
 import {
@@ -1258,8 +1260,22 @@ export function createDocumentRuntime(options: {
       getAssets,
       getSession,
       getChartName,
+      libraryProjectId: () => options.document.libraryProject?.id ?? null,
       setLibraryProject: (project) => {
         assignLibraryProject(project);
+      },
+      reloadProject: async (projectId) => {
+        const found = await localService();
+        if (!found) {
+          throw new Error(t("editor.app.error.libraryServiceDown"));
+        }
+        const opened = await openLibraryChartDocument(found.library, projectId);
+        await loadCandidate(
+          libraryDocumentCandidate(opened.project, projectId, opened.chartDocument),
+          opened.assets,
+          undefined,
+          "restore",
+        );
       },
       renderSession: options.renderSession,
       notify: options.notify,
