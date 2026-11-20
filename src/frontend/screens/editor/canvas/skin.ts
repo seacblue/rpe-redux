@@ -339,13 +339,19 @@ export class RpeSkin {
     context.drawImage(source, box.x, box.y, box.width, box.height);
     return true;
   }
-  /** Draw the skin-owned event bar into the timeline event rectangle. */
+  /**
+   * Draw the skin-owned event bar into the timeline event rectangle.
+   *
+   * A hooked event passes the theme's hooked colour; the texture keeps its
+   * alpha and shape while the RGB channels are tinted, exactly like a note tint.
+   */
   eventBar(
     context: CanvasRenderingContext2D,
     centerX: number,
     centerY: number,
     width: number,
     height: number,
+    color?: number[],
   ): boolean {
     const name = this.images.has("event_hold")
       ? "event_hold"
@@ -356,6 +362,7 @@ export class RpeSkin {
     if (!picture || width <= 0 || height <= 0) {
       return false;
     }
+    const source = color ? (this.tinted(name, color) ?? picture) : picture;
     const box = alignedTextureBox(
       this.bounds(name, picture),
       picture.naturalWidth,
@@ -365,7 +372,7 @@ export class RpeSkin {
       width,
       height,
     );
-    context.drawImage(picture, box.x, box.y, box.width, box.height);
+    context.drawImage(source, box.x, box.y, box.width, box.height);
     return true;
   }
 

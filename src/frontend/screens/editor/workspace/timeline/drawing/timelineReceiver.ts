@@ -223,7 +223,7 @@ export type TimelineEventOverlayReceiver = Pick<
 /** The pending event preview contract: placement geometry plus the shared event-bar resources. */
 export type TimelinePendingEventReceiver = Pick<
   TimelineRuntimeSurface,
-  "appearance" | "eventBatch" | "getSession"
+  "appearance" | "cache" | "eventBatch" | "getSession"
 > & {
   readonly gestures: Pick<TimelineGestures, "eventCursor">;
   readonly viewport: Pick<

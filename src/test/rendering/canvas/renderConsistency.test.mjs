@@ -187,8 +187,21 @@ test("GPU event bars carry the per-line opacity alongside the global alpha", () 
   assert.equal(batch.add({ x: 1, y: 2, width: 10, height: 20 }, 0.5), true);
   assert.equal(batch.alpha, 0.8);
   assert.equal(batch.instances[8], 0.5);
+  assert.deepEqual(Array.from(batch.instances.slice(9, 12)), [1, 1, 1]);
   batch.finish();
   assert.equal(calls.draws, 1);
+});
+
+test("GPU event bars normalize the hooked tint into the instance buffer", () => {
+  const { canvas } = fakeWebGLCanvas();
+  const batch = new TimelineEventBatch(canvas);
+  const skin = { eventBarTexture: () => descriptor };
+  assert.equal(batch.begin(100, 100, skin, 1), true);
+  assert.equal(batch.add({ x: 1, y: 2, width: 10, height: 20 }, 0.5, [98, 217, 255]), true);
+  const tint = Array.from(batch.instances.slice(9, 12));
+  assert.ok(Math.abs(tint[0] - 98 / 255) < 1e-6);
+  assert.ok(Math.abs(tint[1] - 217 / 255) < 1e-6);
+  assert.equal(tint[2], 1);
 });
 
 test("GPU event buffers reuse stable capacity without changing packed uploads", () => {
@@ -207,7 +220,7 @@ test("GPU event buffers reuse stable capacity without changing packed uploads", 
   assert.equal(calls.bufferAllocations.length, 1);
   assert.equal(calls.uploads.length, 2);
   assert.notDeepEqual(calls.uploads[1], firstUpload);
-  assert.deepEqual(calls.uploads[1].slice(8), [0.25]);
+  assert.deepEqual(calls.uploads[1].slice(8), [0.25, 1, 1, 1]);
 });
 
 test("timeline line and solid buffers reuse stable capacity", () => {
@@ -348,6 +361,35 @@ test("event-bar opacity matches between the canvas fallback and the batch", () =
   };
   drawEventBar(receiver, {}, { x: 0, y: 0, width: 4, height: 8 }, 0.5);
   assert.deepEqual(calls, [0.5]);
+});
+
+test("a hooked event tint reaches the GPU batch and the canvas skin", () => {
+  const tint = [98, 216, 242];
+  const batched = [];
+  const painted = [];
+  const skin = {
+    eventBar(_context, _centerX, _centerY, _width, _height, color) {
+      painted.push(color);
+      return true;
+    },
+  };
+  const receiver = {
+    eventBatch: {
+      add(_rectangle, alpha, color) {
+        batched.push([alpha, color]);
+        return true;
+      },
+    },
+    appearance: { skin },
+  };
+
+  drawEventBar(receiver, {}, { x: 0, y: 0, width: 4, height: 8 }, 0.5, tint);
+  assert.deepEqual(batched, [[0.5, tint]]);
+  assert.deepEqual(painted, []);
+
+  const fallback = { eventBatch: { add: () => false }, appearance: { skin } };
+  drawEventBar(fallback, {}, { x: 0, y: 0, width: 4, height: 8 }, 0.5, tint);
+  assert.deepEqual(painted, [tint]);
 });
 
 test("Hold fallback keeps the body and head alpha identical", () => {

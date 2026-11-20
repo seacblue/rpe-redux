@@ -26,6 +26,7 @@ function receiver({ batchAccept, skin }) {
   };
   return {
     appearance: { eventOpacity: 0.8, multiLineNonCurrentOpacity: 0.5, skin },
+    cache: { palette: () => undefined },
     eventBatch: {
       add() {
         return batchAccept;
@@ -88,4 +89,41 @@ test("the canvas fallback draws the skin event bar at half opacity", () => {
   assert.equal(bars[0].height, 2);
   assert.equal(bars[0].alpha, 0.4);
   assert.equal(context.globalAlpha, 1);
+});
+
+test("the pending hooked event previews the theme's hooked material", () => {
+  const context = fakeContext();
+  const bars = [];
+  const skin = {
+    eventBar(_context, _centerX, _centerY, _width, _height, color) {
+      bars.push(color);
+      return true;
+    },
+  };
+  const target = receiver({ batchAccept: false, skin });
+  target.cache.palette = () => ({ eventHookedFill: "#62d8f2" });
+
+  drawPendingEvent.call(target, context, { ...pending, inst: true }, 300);
+
+  assert.deepEqual(bars, [[98, 216, 242]]);
+});
+
+test("a zero-length hooked preview stays valid and keeps the hooked material", () => {
+  const context = fakeContext();
+  const bars = [];
+  const skin = {
+    eventBar(_context, _centerX, _centerY, _width, _height, color) {
+      bars.push(color);
+      return true;
+    },
+  };
+  const target = receiver({ batchAccept: false, skin });
+  target.cache.palette = () => ({ eventHookedFill: "#62d8f2" });
+
+  // The same beat at both anchors has no forward duration; the inst flag is
+  // what makes that span legal rather than an overlap-tinted preview.
+  drawPendingEvent.call(target, context, { ...pending, inst: true }, 300);
+
+  assert.equal(bars.length, 1);
+  assert.deepEqual(bars[0], [98, 216, 242]);
 });

@@ -30,6 +30,7 @@ import {
 } from "../../../../../../core/edit/timeline/noteOverlap.ts";
 import {
   checkedNotes,
+  isHookedEvent,
   isTimelineNoteRenderable,
   timelineRenderRange,
 } from "../../../../../../core/edit/timeline/model.ts";
@@ -771,6 +772,7 @@ export class TimelineCache {
           rawEntry.item.startTime,
           rawEntry.item.endTime,
           gridCount,
+          !isHookedEvent(rawEntry.item),
         ));
       if (rawEntry.index < previousIndex) {
         alreadyOrdered = false;

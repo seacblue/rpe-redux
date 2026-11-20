@@ -37,6 +37,27 @@ test("event render queries keep source indexes and project reversed events", () 
   assert.equal(cache.eventEntries(chart, [reversed, valid], 0, 10, 11)[0].end, 4 + 1 / 11);
 });
 
+test("a zero-length hooked event keeps a drawable span without the invalid filter", () => {
+  const chart = createChart();
+  const hooked = { ...createEvent(0, 0, 4, 4), inst: 1 };
+  const cache = new TimelineCache();
+  const [entry] = cache.eventEntries(chart, [hooked], 0, 10, 11);
+
+  assert.equal(entry.start, 4);
+  assert.equal(entry.end, 4 + 1 / 11);
+  assert.equal(entry.invalid, false);
+  assert.equal(timelineRenderRange(hooked.startTime, hooked.endTime, 11, false).invalid, false);
+  assert.equal(timelineRenderRange(hooked.startTime, hooked.endTime, 11).invalid, true);
+});
+
+test("a reversed hooked event still reports an invalid range", () => {
+  const chart = createChart();
+  const reversed = { ...createEvent(0, 0, 5, 4), inst: 1 };
+  const [entry] = new TimelineCache().eventEntries(chart, [reversed], 0, 10, 11);
+
+  assert.equal(entry.invalid, true);
+});
+
 test("event render range cache follows grid density changes", () => {
   const chart = createChart();
   const reversed = createEvent(0, 1, 4, 2);
