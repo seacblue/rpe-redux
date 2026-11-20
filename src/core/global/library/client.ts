@@ -111,6 +111,64 @@ export interface LibraryRevision extends LibraryRevisionSummary {
   chart: unknown;
 }
 
+/** Why a chart snapshot exists. */
+export type LibrarySnapshotReason = "auto" | "restore" | "manual";
+
+/** One node in a project's automatic-backup branch tree. */
+export interface LibrarySnapshotSummary {
+  id: string;
+  projectId: string;
+  /** The node this one continues from; empty for the first node of a branch. */
+  parentId?: string;
+  reason: LibrarySnapshotReason;
+  label: string;
+  createdAt: string;
+  size: number;
+  noteCount: number;
+  eventCount: number;
+  /**
+   * How long the chart had been worked on when this node was taken.
+   *
+   * A node written before the service recorded it reports zero, so a caller must
+   * treat zero as "not recorded" rather than "no work".
+   */
+  editSeconds: number;
+}
+
+/** A snapshot together with its chart payload. */
+export interface LibrarySnapshot extends LibrarySnapshotSummary {
+  chart: unknown;
+}
+
+/** A project's snapshot tree and the node it currently sits on. */
+export interface LibrarySnapshotHistory {
+  snapshots: LibrarySnapshotSummary[];
+  headId?: string;
+}
+
+/** Input for appending one snapshot node. */
+export interface LibrarySnapshotInput {
+  /** Already serialized by the caller's worker; the service validates it. */
+  chartJson: string;
+  /** Continues an existing branch; omitted means the project head. */
+  parentId?: string;
+  reason?: LibrarySnapshotReason;
+  label?: string;
+  /** Move the project head onto the new node. */
+  advanceHead?: boolean;
+  /** Override the stored `autosave-limit` for this write. */
+  retain?: number;
+  /**
+   * Skip the write when the head already holds this exact chart and manifest.
+   *
+   * The service applies this on its own for an `auto` reason; the flag lets a
+   * caller say so explicitly.
+   */
+  dedupe?: boolean;
+  /** How long the chart had been worked on, for the backup list. */
+  editSeconds?: number;
+}
+
 /** Automatic snapshot policy shared by desktop, web, and remote services. */
 export interface LibraryBackupPolicy {
   auto: boolean;
@@ -1016,6 +1074,91 @@ export class LocalLibrary {
   /** Read the preference values stored by the service. */
   preferences(options: RequestOptions = {}): Promise<{ values: Record<string, unknown> }> {
     return request(this.origin, "/api/preferences", options);
+  }
+
+  /** List a project's automatic-backup snapshots, newest first. */
+  snapshots(
+    id: string,
+    { limit }: { limit?: number } = {},
+    options: RequestOptions = {},
+  ): Promise<LibrarySnapshotHistory> {
+    const search$ = query({ limit });
+    return request(
+      this.origin,
+      `/api/projects/${encodeURIComponent(id)}/snapshots${search$ ? `?${search$}` : ""}`,
+      options,
+    );
+  }
+
+  /**
+   * Append one snapshot node to a project's branch tree.
+   *
+   * The chart arrives as pre-serialized text so a paged document is written once
+   * in the caller's worker and never re-marshaled here.
+   */
+  createSnapshot(
+    id: string,
+    input: LibrarySnapshotInput,
+    options: RequestOptions = {},
+  ): Promise<{ snapshot: LibrarySnapshotSummary }> {
+    const fields: string[] = [`"chart":${input.chartJson}`];
+    if (input.parentId !== undefined) {
+      fields.push(`"parentId":${JSON.stringify(input.parentId)}`);
+    }
+    if (input.reason !== undefined) {
+      fields.push(`"reason":${JSON.stringify(input.reason)}`);
+    }
+    if (input.label !== undefined) {
+      fields.push(`"label":${JSON.stringify(input.label)}`);
+    }
+    if (input.advanceHead !== undefined) {
+      fields.push(`"advanceHead":${JSON.stringify(input.advanceHead)}`);
+    }
+    if (input.retain !== undefined) {
+      fields.push(`"retain":${JSON.stringify(input.retain)}`);
+    }
+    if (input.dedupe !== undefined) {
+      fields.push(`"dedupe":${JSON.stringify(input.dedupe)}`);
+    }
+    if (input.editSeconds !== undefined) {
+      fields.push(`"editSeconds":${JSON.stringify(input.editSeconds)}`);
+    }
+    return request(this.origin, `/api/projects/${encodeURIComponent(id)}/snapshots`, {
+      ...options,
+      method: "POST",
+      bodyText: `{${fields.join(",")}}`,
+      timeoutMs: options.timeoutMs ?? 60_000,
+    });
+  }
+
+  /** Read one snapshot with its chart payload. */
+  snapshot(id: string, options: RequestOptions = {}): Promise<{ snapshot: LibrarySnapshot }> {
+    return request(this.origin, `/api/snapshots/${encodeURIComponent(id)}`, options);
+  }
+
+  /** Delete one snapshot node. */
+  removeSnapshot(id: string, options: RequestOptions = {}): Promise<{ deleted: boolean }> {
+    return request(this.origin, `/api/snapshots/${encodeURIComponent(id)}`, {
+      ...options,
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Apply one snapshot as the project chart.
+   *
+   * The chart currently stored is kept as a `restore` node, so the same call
+   * undoes a restore.
+   */
+  restoreSnapshot(
+    id: string,
+    options: RequestOptions = {},
+  ): Promise<{ snapshot: LibrarySnapshotSummary; project: LibraryProjectSummary }> {
+    return request(this.origin, `/api/snapshots/${encodeURIComponent(id)}/restore`, {
+      ...options,
+      method: "POST",
+      timeoutMs: options.timeoutMs ?? 60_000,
+    });
   }
 
   /** Ask the service to checkpoint its SQLite database. */

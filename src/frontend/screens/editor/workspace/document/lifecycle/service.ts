@@ -21,6 +21,8 @@ import type { TauriDocumentStore } from "../../../../../../core/platform/desktop
 import type { EditorCandidate } from "../../../../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../../../../core/global/library/types.ts";
 import { openPane } from "../../../inspector/controller.ts";
+import { showNoBackups, openRestorePrompt } from "../restore/restorePrompt.ts";
+import { appendSnapshot } from "../save/snapshots.ts";
 import { OPEN_METADATA_EVENT } from "../../../../../../core/shell/shellEventNames.ts";
 import { CHART_FILE_ACCEPT, openChartFiles } from "../open/chartFiles.ts";
 import { requestChoice, requestConfirm } from "../../../../../overlays/modals/prompts.ts";
@@ -58,10 +60,20 @@ export interface DocumentServiceBindings {
   save(): unknown;
   saveAs(): unknown;
   pickMedia(kind: MediaKind): Promise<void>;
+  /**
+   * Reload a library project after its stored chart was replaced.
+   *
+   * A restore writes the project's chart in the library, so the editor has to
+   * read it back the same way an open does. The caller has already decided what
+   * happens to unsaved work, so this never asks again.
+   */
+  reloadProject(projectId: string): Promise<void>;
   /** Getter: opening a chart installs a fresh asset map. */
   getAssets(): AssetMap;
   getSession(): EditorSession;
   getChartName(): string;
+  /** The open library project, or null for a native file. */
+  libraryProjectId(): string | null;
   setLibraryProject(project: LibraryProjectRef | null): void;
   renderSession(): void;
   notify(message: string, level: string): void;
@@ -187,6 +199,40 @@ export function saveDocument(): void {
   service.value()?.save();
 }
 
+/** Whether the open document has unsaved chart or resource changes. */
+export function hasUnsavedChanges(): boolean {
+  return service.value()?.hasUnsavedChanges() ?? false;
+}
+
+/**
+ * Append the open chart to its library project's backup tree.
+ *
+ * A restore answers "save" by preserving the work this way: the node keeps the
+ * chart on screen without committing over the stored chart, so the backup being
+ * restored stays a distinct point in the tree.
+ */
+export async function backupOpenDocument(): Promise<void> {
+  const bound = service.value();
+  if (!bound) {
+    return;
+  }
+  const projectId = bound.libraryProjectId();
+  if (!projectId) {
+    throw new Error(t("editor.app.error.libraryServiceDown"));
+  }
+  await appendSnapshot(projectId, bound.getSession().chart, "manual");
+}
+
+/**
+ * Reload a library project after its stored chart was replaced.
+ *
+ * Only an open editor can reload; while the shell sits at the start page the
+ * next open reads the restored chart from the library itself.
+ */
+export async function reloadProject(projectId: string): Promise<void> {
+  await service.value()?.reloadProject(projectId);
+}
+
 /** Save-as needs a store to write a second file into; in the browser it is a no-op. */
 export function saveAsDocument(): void {
   const bound = service.value();
@@ -246,6 +292,26 @@ export async function openAssets(): Promise<void> {
   }
 }
 
+/**
+ * Opens the backup list for a library project.
+ *
+ * The File menu passes the project it is showing; the home library passes the
+ * card's project. A document with no library project has no snapshot tree, so it
+ * reports that instead of opening an empty dialog.
+ */
+export function restoreBackup(projectId?: string): void {
+  const bound = service.value();
+  if (!bound) {
+    return;
+  }
+  const target = projectId ?? bound.libraryProjectId() ?? "";
+  if (!target) {
+    showNoBackups();
+    return;
+  }
+  void openRestorePrompt(target);
+}
+
 /** The document verbs, as the commands' entry point sees them. */
 export const documents = Object.freeze({
   newDocument,
@@ -255,4 +321,8 @@ export const documents = Object.freeze({
   pickBackground,
   pickMusic,
   openAssets,
+  restoreBackup,
+  hasUnsavedChanges,
+  backupOpenDocument,
+  reloadProject,
 });

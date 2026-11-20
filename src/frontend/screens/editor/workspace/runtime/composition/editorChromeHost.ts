@@ -23,6 +23,10 @@ export function connectEditorChromeHost(): () => void {
       newDocument: () => documentService.newDocument(),
       openDocument: () => documentService.openDocument(),
       saveDocument: () => documentService.saveDocument(),
+      hasUnsavedChanges: () => documentService.documents.hasUnsavedChanges(),
+      backupOpenDocument: () => documentService.documents.backupOpenDocument(),
+      reloadProject: (projectId) => documentService.documents.reloadProject(projectId),
+      restoreBackup: (projectId) => documentService.restoreBackup(projectId),
     },
     transport: {
       togglePlayback: () => transport.togglePlayback(),

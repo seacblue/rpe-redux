@@ -14,6 +14,25 @@ export interface EditorDocumentCommands {
   newDocument(): void;
   openDocument(): void;
   saveDocument(): void;
+  /** Whether the open document has unsaved changes or unsaved resource edits. */
+  hasUnsavedChanges(): boolean;
+  /**
+   * Append the open chart to its library project's backup tree.
+   *
+   * A backup node is not a commit: the project's stored chart is untouched, so the
+   * work is preserved without moving the point a later restore would return to.
+   */
+  backupOpenDocument(): Promise<void>;
+  /** Reload a library project after its stored chart was replaced. */
+  reloadProject(projectId: string): Promise<void>;
+  /**
+   * Open the backup list for one library project.
+   *
+   * The argument is the project the caller already identified; without one, the
+   * command reads the project the editor is showing. A native file has no
+   * project, so the command reports that instead of failing.
+   */
+  restoreBackup(projectId?: string): void;
 }
 
 /** Temporary transport options for one held audition. */

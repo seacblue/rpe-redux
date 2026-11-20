@@ -210,6 +210,7 @@ export default {
   "workspace.welcome.library.field.level": "难度",
   "workspace.welcome.library.detail.select": "选择一张谱面查看详情",
   "workspace.welcome.library.open": "打开",
+  "workspace.welcome.library.restoreBackup": "恢复为备份…",
   "workspace.welcome.library.export": "导出",
   "workspace.welcome.library.rename": "重命名",
   "workspace.welcome.library.delete": "删除",

@@ -1,0 +1,86 @@
+// Restore dialog: a bounded list of saved backups and the overwrite
+// confirmation that follows a pick. The list is the dialog's body, so it owns
+// its own scrolling instead of growing past the modal's viewport.
+
+dialog.redux-restore-backup-dialog {
+  width: min(560px, calc(100vw - 32px));
+
+  // The list starts directly under the heading, so the shared body padding
+  // leaves more room than the two need between them.
+  .modal-content {
+    padding-top: var(--space-3);
+  }
+}
+
+.redux-restore-backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: min(420px, 52vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.redux-restore-backup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--foreground);
+  text-align: start;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--edge-control);
+    background: var(--surface-hover);
+  }
+}
+
+.redux-restore-backup-time {
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-restore-backup-counts {
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+  white-space: nowrap;
+}
+
+.redux-restore-backup-empty {
+  margin: 0;
+  color: var(--foreground-muted);
+}
+
+.redux-restore-backup-summary {
+  display: grid;
+  // The summary carries a variable number of facts: the picked backup's time and
+  // note/event counts always, its charting time only when one was recorded.
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  dt {
+    color: var(--foreground-muted);
+    font-size: var(--type-caption);
+  }
+
+  dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -228,6 +228,7 @@ export default {
   "workspace.welcome.library.field.level": "Difficulty",
   "workspace.welcome.library.detail.select": "Select a chart to view details",
   "workspace.welcome.library.open": "Open",
+  "workspace.welcome.library.restoreBackup": "Restore from backup…",
   "workspace.welcome.library.export": "Export",
   "workspace.welcome.library.rename": "Rename",
   "workspace.welcome.library.delete": "Delete",

@@ -170,6 +170,16 @@ func TestSnapshotRestoreAndCompact(t *testing.T) {
 	if draft != "keep me" {
 		t.Fatalf("recovery draft = %q", draft)
 	}
+	// Backup trees belong to the library, not to the host. A restore replaces the
+	// projects they pointed at, so the nodes go with them instead of surviving as
+	// orphans over charts the restored library never had.
+	var snapshots int
+	if err := verifyDB.QueryRow(`SELECT COUNT(*) FROM chart_snapshots`).Scan(&snapshots); err != nil {
+		t.Fatalf("count restored snapshots: %v", err)
+	}
+	if snapshots != 0 {
+		t.Fatalf("chart snapshots after library restore = %d, want 0", snapshots)
+	}
 
 	report, err := service.Verify(ctx, "")
 	if err != nil {

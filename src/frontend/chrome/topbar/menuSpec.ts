@@ -30,6 +30,7 @@ export const APPLICATION_MENUS: readonly MenuSpec[] = [
       "file.new",
       "file.open",
       "document.save",
+      "document.restoreBackup",
       "file.export",
       "document.close",
       "workspace.settings",

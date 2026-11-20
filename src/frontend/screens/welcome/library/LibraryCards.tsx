@@ -29,6 +29,8 @@ import { matchesLibraryGroups, matchesLibraryQuery, type LibraryEntry } from "./
 import { librarySelectionScrollTop } from "./libraryCardNavigation.ts";
 import { normalizeLibraryGroup } from "./libraryGroups.ts";
 import { ProjectDialogs } from "./ProjectDialogs.tsx";
+import { openRestorePrompt } from "../../editor/workspace/document/restore/restorePrompt.ts";
+import { showToast } from "../../../../design/patterns/ToastHost.tsx";
 import {
   ContextMenuPopup,
   createContextMenuState,
@@ -312,6 +314,19 @@ export function LibraryCards({
           label: translate("workspace.welcome.library.open"),
           icon: "open",
           run: () => onOpen(entry),
+        },
+        {
+          id: "library.restoreBackup",
+          label: translate("workspace.welcome.library.restoreBackup"),
+          icon: "recover",
+          run: () => {
+            void openRestorePrompt(entry.source.project.id).catch((error) => {
+              showToast({
+                message: error instanceof Error ? error.message : String(error),
+                level: "error",
+              });
+            });
+          },
         },
         {
           id: "library.export",

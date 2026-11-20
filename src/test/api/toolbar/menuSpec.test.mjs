@@ -10,6 +10,7 @@ test("the File menu keeps its document and settings order", () => {
     "file.new",
     "file.open",
     "document.save",
+    "document.restoreBackup",
     "file.export",
     "document.close",
     "workspace.settings",

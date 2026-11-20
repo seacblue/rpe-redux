@@ -41,6 +41,7 @@ import { RecordingHosts } from "../screens/editor/workspace/recording/RecordingH
 import { TimingDetectionHost } from "../screens/editor/workspace/timingDetection/TimingDetectionHost.tsx";
 import { CollaborationHosts } from "../screens/editor/workspace/collaboration/CollaborationHosts.tsx";
 import { ExportDialog } from "../screens/editor/workspace/document/export/ExportDialog.tsx";
+import { RestoreBackupDialog } from "../screens/editor/workspace/document/restore/RestoreBackupDialog.tsx";
 import { ModalScrimPortal } from "../../design/components/modal/ModalScrimPortal.tsx";
 import { ModalHost } from "../overlays/modals/ModalHost.tsx";
 import { SessionPrompts } from "../overlays/SessionPrompts.tsx";
@@ -414,6 +415,9 @@ function AppContent() {
               hangs off the window frame beside the loading overlay — the other
               `workspace/document/` surface that asks about the whole document. */}
                 <ExportDialog />
+                {/* A restore is a document-wide question that also opens from the
+                    home library, so it mounts beside the export question. */}
+                <RestoreBackupDialog />
                 <RecordingHosts />
                 <TimingDetectionHost />
                 <CollaborationHosts />

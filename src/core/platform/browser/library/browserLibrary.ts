@@ -22,6 +22,10 @@ import {
   type LibraryProjectSummary,
   type LibraryRevision,
   type LibraryRevisionSummary,
+  type LibrarySnapshot,
+  type LibrarySnapshotHistory,
+  type LibrarySnapshotInput,
+  type LibrarySnapshotSummary,
   type ListQuery,
   type OccupancyAcquireInput,
   type ProjectPatch,
@@ -636,6 +640,51 @@ export class BrowserLibrary extends LocalLibrary {
     _options: RequestOptions = {},
   ): Promise<{ deleted: boolean }> {
     return this.result("removeRevision", { id });
+  }
+
+  override snapshots(
+    id: string,
+    { limit }: { limit?: number } = {},
+    _options: RequestOptions = {},
+  ): Promise<LibrarySnapshotHistory> {
+    return this.result("snapshots", { id, limit });
+  }
+
+  override createSnapshot(
+    id: string,
+    input: LibrarySnapshotInput,
+    _options: RequestOptions = {},
+  ): Promise<{ snapshot: LibrarySnapshotSummary }> {
+    return this.result("createSnapshot", {
+      id,
+      chartJson: input.chartJson,
+      parentId: input.parentId,
+      reason: input.reason,
+      label: input.label,
+      advanceHead: input.advanceHead,
+      retain: input.retain,
+    });
+  }
+
+  override snapshot(
+    id: string,
+    _options: RequestOptions = {},
+  ): Promise<{ snapshot: LibrarySnapshot }> {
+    return this.result("snapshot", { id });
+  }
+
+  override removeSnapshot(
+    id: string,
+    _options: RequestOptions = {},
+  ): Promise<{ deleted: boolean }> {
+    return this.result("removeSnapshot", { id });
+  }
+
+  override restoreSnapshot(
+    id: string,
+    _options: RequestOptions = {},
+  ): Promise<{ snapshot: LibrarySnapshotSummary; project: LibraryProjectSummary }> {
+    return this.result("restoreSnapshot", { id });
   }
 
   override preferences(

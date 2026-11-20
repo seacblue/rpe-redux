@@ -28,7 +28,11 @@ const BACKUP_VERSION: u32 = 2;
 /// SQLite `application_id` that marks a library database.
 const LIBRARY_APPLICATION_ID: i64 = 1_380_992_338;
 /// Newest library schema this build can promote and then migrate.
-const LIBRARY_SCHEMA_VERSION: i64 = 2;
+///
+/// The local service migrates an imported database additively after promotion,
+/// so this tracks the service's `schemaVersion`; a newer value would be rejected
+/// before the service could upgrade it.
+const LIBRARY_SCHEMA_VERSION: i64 = 7;
 
 // Import limits. The database is streamed to a staging file; the remaining
 // parts are small documents and theme files.

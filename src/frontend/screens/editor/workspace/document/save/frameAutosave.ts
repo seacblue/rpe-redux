@@ -15,7 +15,13 @@ export interface FrameAutosaveOptions {
   enabled(): boolean;
   seconds(): number;
 }
-/** Keep recovery policy separate from painting; the frame runner only supplies its tick. */
+/**
+ * Keep recovery policy separate from painting; the frame runner only supplies its
+ * tick.
+ *
+ * The clock's save callback decides which destinations it writes, so the tick
+ * condition only has to say that the chart moved since the last draft.
+ */
 export function createFrameAutosave(options: FrameAutosaveOptions) {
   return {
     /** Feeds one frame timestamp to the autosave clock. */

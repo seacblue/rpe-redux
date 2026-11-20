@@ -20,7 +20,7 @@ const DB_PATH = "/redux.db";
 const POOL_DIR = "/rpe-redux-pool";
 const POOL_NAME = "rpe-redux-browser";
 const LIBRARY_APPLICATION_ID = 1380992338;
-const LIBRARY_SCHEMA_VERSION = 5;
+const LIBRARY_SCHEMA_VERSION = 6;
 const DEFAULT_LIBRARY_GROUP = "Default";
 const LIBRARY_THUMBNAIL_ASSET = "__redux/thumbnail.png";
 
@@ -222,6 +222,39 @@ CREATE TABLE IF NOT EXISTS revisions (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_revisions_project ON revisions(project_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS chart_snapshots (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    parent_id   TEXT REFERENCES chart_snapshots(id) ON DELETE SET NULL,
+    reason      TEXT NOT NULL DEFAULT 'auto',
+    label       TEXT NOT NULL DEFAULT '',
+    chart       TEXT NOT NULL DEFAULT '{}',
+    size        INTEGER NOT NULL DEFAULT 0,
+    chart_hash  TEXT NOT NULL DEFAULT '',
+    note_count  INTEGER NOT NULL DEFAULT 0,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    edit_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chart_snapshots_project
+    ON chart_snapshots(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chart_snapshots_parent ON chart_snapshots(parent_id);
+
+CREATE TABLE IF NOT EXISTS chart_snapshot_heads (
+    project_id  TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    snapshot_id TEXT REFERENCES chart_snapshots(id) ON DELETE SET NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chart_snapshot_assets (
+    snapshot_id TEXT NOT NULL REFERENCES chart_snapshots(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    hash        TEXT NOT NULL REFERENCES assets(hash),
+    PRIMARY KEY(snapshot_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_chart_snapshot_assets_hash
+    ON chart_snapshot_assets(hash);
 
 CREATE TABLE IF NOT EXISTS preferences (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
@@ -686,6 +719,13 @@ async function migrateSchema(): Promise<void> {
     "projects",
     "thumbnail",
     "ALTER TABLE projects ADD COLUMN thumbnail TEXT NOT NULL DEFAULT ''",
+  );
+  // A backup records the charting time it represents; rows written before the
+  // column existed read back as zero instead of a guessed value.
+  ensureColumn(
+    "chart_snapshots",
+    "edit_seconds",
+    "ALTER TABLE chart_snapshots ADD COLUMN edit_seconds INTEGER NOT NULL DEFAULT 0",
   );
   const now = nowString();
   run(`INSERT OR IGNORE INTO library_meta (key, value) VALUES ('database_id', ?)`, [
@@ -2370,6 +2410,344 @@ async function commit(params: Record<string, unknown>): Promise<Record<string, u
   return { project: projectSummary(id) };
 }
 
+/** Snapshot reasons the service accepts; anything else is an automatic backup. */
+const SNAPSHOT_REASONS = new Set(["auto", "restore", "manual"]);
+
+/** Snapshot summary columns, matching the Go service's projection. */
+const SNAPSHOT_COLUMNS = `id, project_id, COALESCE(parent_id, '') AS parent_id, reason, label,
+  created_at, size, note_count, event_count, edit_seconds`;
+
+/** A project's charting time, for a node that records the work it replaces. */
+function projectEditSeconds(projectId: string): number {
+  return Number(
+    requireDb().selectValue(`SELECT edit_seconds FROM projects WHERE id = ?`, [projectId]) ?? 0,
+  );
+}
+
+/** Rows a project head points at, or an empty string when it has none. */
+function snapshotHead(projectId: string): string {
+  const row = requireDb().selectObject(
+    `SELECT COALESCE(snapshot_id, '') AS snapshot_id
+       FROM chart_snapshot_heads WHERE project_id = ?`,
+    [projectId],
+  );
+  return row ? String(row.snapshot_id ?? "") : "";
+}
+
+/** One snapshot summary row in the shared camelCase shape. */
+function snapshotSummary(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    parentId: String(row.parent_id ?? ""),
+    reason: String(row.reason ?? "auto"),
+    label: String(row.label ?? ""),
+    createdAt: String(row.created_at ?? ""),
+    size: Number(row.size ?? 0),
+    noteCount: Number(row.note_count ?? 0),
+    eventCount: Number(row.event_count ?? 0),
+    editSeconds: Number(row.edit_seconds ?? 0),
+  };
+}
+
+/** Keep only the newest nodes of one project. */
+function pruneSnapshots(projectId: string, retain: number): void {
+  if (retain <= 0) {
+    return;
+  }
+  run(
+    `DELETE FROM chart_snapshots
+      WHERE project_id = ?1
+        AND id NOT IN (
+          SELECT id FROM chart_snapshots
+           WHERE project_id = ?1
+           ORDER BY created_at DESC, rowid DESC
+           LIMIT ?2
+        )`,
+    [projectId, retain],
+  );
+}
+
+/** List a project's snapshot tree, newest first, with its head. */
+function snapshots(params: Record<string, unknown>): Record<string, unknown> {
+  const id = stringParam(params, "id");
+  const limit =
+    typeof params.limit === "number" && params.limit > 0 ? Math.min(500, params.limit) : 100;
+  projectRow(id);
+  const rows = requireDb().selectObjects(
+    `SELECT ${SNAPSHOT_COLUMNS} FROM chart_snapshots
+      WHERE project_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ?`,
+    [id, limit],
+  );
+  return {
+    snapshots: rows.map(snapshotSummary),
+    headId: snapshotHead(id),
+  };
+}
+
+/** Read one snapshot with its chart payload. */
+function snapshot(params: Record<string, unknown>): Record<string, unknown> {
+  const id = stringParam(params, "id");
+  const row = requireDb().selectObject(
+    `SELECT ${SNAPSHOT_COLUMNS}, chart FROM chart_snapshots WHERE id = ?`,
+    [id],
+  );
+  if (!row) {
+    throw new DbError("not_found", "snapshot not found");
+  }
+  return { snapshot: { ...snapshotSummary(row), chart: parseJson(row.chart, {}) } };
+}
+
+/** Append one node, optionally advancing the head, and prune the project. */
+async function createSnapshot(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const id = stringParam(params, "id");
+  const chartJson = stringParam(params, "chartJson");
+  const chart = parseJson(chartJson, null);
+  if (!isRecord(chart)) {
+    throw new DbError("invalid_request", "chart must be a JSON object");
+  }
+  const hash = await sha256Hex(chartJson);
+  const meta = extractMeta(chart);
+  // Verifies the project exists and yields the manifest copied onto the node.
+  projectRow(id);
+  const reason =
+    typeof params.reason === "string" && SNAPSHOT_REASONS.has(params.reason)
+      ? params.reason
+      : "auto";
+  const parent = typeof params.parentId === "string" ? params.parentId.trim() : "";
+  const snapshotId = crypto.randomUUID();
+  const now = nowString();
+  const advanceHead = params.advanceHead === true;
+  const retain =
+    typeof params.retain === "number" && params.retain > 0 ? Math.trunc(params.retain) : 0;
+  // An omitted parent continues the project head, which is the branch the
+  // editor is working on.
+  const parentId = parent || snapshotHead(id);
+  if (parentId) {
+    const owner = requireDb().selectObject(`SELECT project_id FROM chart_snapshots WHERE id = ?`, [
+      parentId,
+    ]);
+    if (!owner) {
+      throw new DbError("not_found", "snapshot parent not found");
+    }
+    if (String(owner.project_id) !== id) {
+      throw new DbError("invalid_request", "snapshot parent belongs to another project");
+    }
+  }
+
+  // An automatic backup of the head's own content adds nothing and would push
+  // real history out of the retention window, so it returns that node instead of
+  // appending a copy. A manual capture always stores what the user was seeing.
+  if (reason === "auto" && parentId && parentId === snapshotHead(id)) {
+    const existing = requireDb().selectObject(
+      `SELECT chart_hash FROM chart_snapshots WHERE id = ?`,
+      [parentId],
+    );
+    if (existing && String(existing.chart_hash) === hash) {
+      const currentManifest = (assets({ id }) as { assets: LibraryAssetSummary[] }).assets;
+      const recorded = requireDb().selectObjects(
+        `SELECT name, hash FROM chart_snapshot_assets WHERE snapshot_id = ? ORDER BY name`,
+        [parentId],
+      );
+      const same =
+        currentManifest.length === recorded.length &&
+        currentManifest.every((entry) =>
+          recorded.some(
+            (row) => String(row.name) === entry.name && String(row.hash) === entry.hash,
+          ),
+        );
+      if (same) {
+        return snapshot({ id: parentId });
+      }
+    }
+  }
+
+  run("BEGIN IMMEDIATE");
+  try {
+    run(
+      `INSERT INTO chart_snapshots
+          (id, project_id, parent_id, reason, label, chart, size, chart_hash,
+           note_count, event_count, edit_seconds, created_at)
+       VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        snapshotId,
+        id,
+        parentId,
+        reason,
+        typeof params.label === "string" ? params.label.trim() : "",
+        chartJson,
+        chartJson.length,
+        hash,
+        meta.noteCount,
+        meta.eventCount,
+        Math.max(0, Math.floor(Number(params.editSeconds ?? 0))),
+        now,
+      ],
+    );
+    const manifest = assets({ id }) as { assets: LibraryAssetSummary[] };
+    for (const entry of manifest.assets) {
+      run(`INSERT INTO chart_snapshot_assets (snapshot_id, name, hash) VALUES (?, ?, ?)`, [
+        snapshotId,
+        cleanAssetName(entry.name),
+        entry.hash,
+      ]);
+    }
+    if (advanceHead) {
+      run(
+        `INSERT INTO chart_snapshot_heads (project_id, snapshot_id, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET
+           snapshot_id = excluded.snapshot_id, updated_at = excluded.updated_at`,
+        [id, snapshotId, now],
+      );
+    }
+    pruneSnapshots(id, retain);
+    run("COMMIT");
+  } catch (error) {
+    try {
+      run("ROLLBACK");
+    } catch {
+      /* the transaction may already be gone */
+    }
+    throw error;
+  }
+  return {
+    snapshot: {
+      id: snapshotId,
+      projectId: id,
+      parentId,
+      reason,
+      label: typeof params.label === "string" ? params.label.trim() : "",
+      createdAt: now,
+      size: chartJson.length,
+      noteCount: meta.noteCount,
+      eventCount: meta.eventCount,
+    },
+  };
+}
+
+/** Remove one node; children keep their rows and lose the parent link. */
+function removeSnapshot(params: Record<string, unknown>): Record<string, unknown> {
+  const id = stringParam(params, "id");
+  const exists = requireDb().selectValue(`SELECT COUNT(*) FROM chart_snapshots WHERE id = ?`, [id]);
+  if (!exists) {
+    throw new DbError("not_found", "snapshot not found");
+  }
+  run(`DELETE FROM chart_snapshots WHERE id = ?`, [id]);
+  return { deleted: true };
+}
+
+/** Apply one node as the project chart, recording the chart it replaces. */
+async function restoreSnapshot(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const snapshotId = stringParam(params, "id");
+  const target = requireDb().selectObject(
+    `SELECT ${SNAPSHOT_COLUMNS}, chart FROM chart_snapshots WHERE id = ?`,
+    [snapshotId],
+  );
+  if (!target) {
+    throw new DbError("not_found", "snapshot not found");
+  }
+  const projectId = String(target.project_id);
+  const current = projectRow(projectId);
+  const restoredJson = String(target.chart);
+  const hash = await sha256Hex(restoredJson);
+  const meta = extractMeta(parseJson(restoredJson, {}));
+  const now = nowString();
+
+  run("BEGIN IMMEDIATE");
+  try {
+    const currentChart = String(current.chart);
+    if ((await sha256Hex(currentChart)) !== hash) {
+      const preId = crypto.randomUUID();
+      const preMeta = extractMeta(parseJson(currentChart, {}));
+      run(
+        `INSERT INTO chart_snapshots
+            (id, project_id, parent_id, reason, label, chart, size, chart_hash,
+             note_count, event_count, edit_seconds, created_at)
+         VALUES (?, ?, NULLIF(?, ''), 'restore', '', ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          preId,
+          projectId,
+          snapshotHead(projectId),
+          currentChart,
+          currentChart.length,
+          await sha256Hex(currentChart),
+          preMeta.noteCount,
+          preMeta.eventCount,
+          Number(projectEditSeconds(projectId)),
+          now,
+        ],
+      );
+      const manifest = assets({ id: projectId }) as { assets: LibraryAssetSummary[] };
+      for (const entry of manifest.assets) {
+        run(`INSERT INTO chart_snapshot_assets (snapshot_id, name, hash) VALUES (?, ?, ?)`, [
+          preId,
+          entry.name,
+          entry.hash,
+        ]);
+      }
+    }
+    run(
+      `UPDATE projects
+          SET chart = ?, size = ?, chart_hash = ?, revision = ?,
+              charter = ?, composer = ?, level = ?,
+              note_count = ?, event_count = ?, updated_at = ?
+        WHERE id = ?`,
+      [
+        restoredJson,
+        restoredJson.length,
+        hash,
+        Number(current.revision ?? 1) + 1,
+        meta.charter,
+        meta.composer,
+        meta.level,
+        meta.noteCount,
+        meta.eventCount,
+        now,
+        projectId,
+      ],
+    );
+    // The restored chart's assets become the manifest; names the snapshot never
+    // recorded belong to the chart being replaced.
+    run(`DELETE FROM project_assets WHERE project_id = ?`, [projectId]);
+    const snapshotAssets = requireDb().selectObjects(
+      `SELECT name, hash FROM chart_snapshot_assets WHERE snapshot_id = ? ORDER BY name`,
+      [snapshotId],
+    );
+    for (const entry of snapshotAssets) {
+      run(`INSERT INTO project_assets (project_id, name, hash, updated_at) VALUES (?, ?, ?, ?)`, [
+        projectId,
+        String(entry.name),
+        String(entry.hash),
+        now,
+      ]);
+    }
+    // A restore forks: the next backup continues from the node just applied,
+    // and restoring the recorded node returns to the branch that was left.
+    run(
+      `INSERT INTO chart_snapshot_heads (project_id, snapshot_id, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET
+         snapshot_id = excluded.snapshot_id, updated_at = excluded.updated_at`,
+      [projectId, snapshotId, now],
+    );
+    run("COMMIT");
+  } catch (error) {
+    try {
+      run("ROLLBACK");
+    } catch {
+      /* the transaction may already be gone */
+    }
+    throw error;
+  }
+  return {
+    snapshot: snapshotSummary(target),
+    project: projectSummary(projectId),
+  };
+}
+
 function revisions(params: Record<string, unknown>): Record<string, unknown> {
   const id = stringParam(params, "id");
   const limit = typeof params.limit === "number" && params.limit > 0 ? params.limit : 100;
@@ -2605,6 +2983,11 @@ const handlers = new Map<string, Handler>([
   ["createRevision", createRevision],
   ["revision", revision],
   ["removeRevision", removeRevision],
+  ["snapshots", snapshots],
+  ["createSnapshot", createSnapshot],
+  ["snapshot", snapshot],
+  ["removeSnapshot", removeSnapshot],
+  ["restoreSnapshot", restoreSnapshot],
   ["preferences", preferences],
   ["savePreferences", savePreferences],
   ["checkpoint", checkpoint],
@@ -2650,6 +3033,9 @@ const MUTATING_METHODS = new Set([
   "commit",
   "createRevision",
   "removeRevision",
+  "createSnapshot",
+  "removeSnapshot",
+  "restoreSnapshot",
   "savePreferences",
   "packageInstall",
   "packageRemove",

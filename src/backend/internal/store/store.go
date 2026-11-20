@@ -52,7 +52,7 @@ const applicationID = 1380992338
 
 // schemaVersion is the library layout this build creates and expects. Older
 // databases are migrated additively; derived counts may be backfilled.
-const schemaVersion = 5
+const schemaVersion = 7
 
 // timeLayout is the canonical timestamp format (RFC3339, UTC).
 const timeLayout = time.RFC3339
@@ -260,6 +260,40 @@ CREATE TABLE IF NOT EXISTS revisions (
 );
 CREATE INDEX IF NOT EXISTS idx_revisions_project ON revisions(project_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS chart_snapshots (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    parent_id  TEXT REFERENCES chart_snapshots(id) ON DELETE SET NULL,
+    reason     TEXT NOT NULL DEFAULT 'auto',
+    label      TEXT NOT NULL DEFAULT '',
+    chart      TEXT NOT NULL DEFAULT '{}',
+    size       INTEGER NOT NULL DEFAULT 0,
+    chart_hash TEXT NOT NULL DEFAULT '',
+    note_count INTEGER NOT NULL DEFAULT 0,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    edit_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chart_snapshots_project
+    ON chart_snapshots(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chart_snapshots_parent
+    ON chart_snapshots(parent_id);
+
+CREATE TABLE IF NOT EXISTS chart_snapshot_heads (
+    project_id  TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    snapshot_id TEXT REFERENCES chart_snapshots(id) ON DELETE SET NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chart_snapshot_assets (
+    snapshot_id TEXT NOT NULL REFERENCES chart_snapshots(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    hash        TEXT NOT NULL REFERENCES assets(hash),
+    PRIMARY KEY(snapshot_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_chart_snapshot_assets_hash
+    ON chart_snapshot_assets(hash);
+
 CREATE TABLE IF NOT EXISTS preferences (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     data       TEXT NOT NULL DEFAULT '{}',
@@ -315,6 +349,9 @@ CREATE INDEX IF NOT EXISTS idx_revision_assets_hash ON revision_assets(hash);`
 		return err
 	}
 	if err := s.ensureRevisionChartHashColumn(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureSnapshotEditSecondsColumn(ctx); err != nil {
 		return err
 	}
 	if err := s.ensureLibraryMeta(ctx); err != nil {
@@ -552,6 +589,17 @@ func (s *Store) ensureEditSecondsColumn(ctx context.Context) error {
 	return err
 }
 
+// ensureSnapshotEditSecondsColumn adds the charting time a backup was taken at.
+//
+// A backup records the project's edit time at that moment so the list can show
+// how long the chart had been worked on; rows written before this column existed
+// stay at zero rather than guessing a value.
+func (s *Store) ensureSnapshotEditSecondsColumn(ctx context.Context) error {
+	_, err := s.ensureTableColumn(ctx, "chart_snapshots", "edit_seconds",
+		`ALTER TABLE chart_snapshots ADD COLUMN edit_seconds INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
 // ensureProjectThumbnailColumn adds the generated welcome-page preview field.
 func (s *Store) ensureProjectThumbnailColumn(ctx context.Context) error {
 	_, err := s.ensureTableColumn(ctx, "projects", "thumbnail",
@@ -565,7 +613,7 @@ func (s *Store) ensureTableColumn(ctx context.Context, table, name, ddl string) 
 	// Table names are internal constants; rejecting anything else keeps the
 	// interpolated pragma argument from becoming a query injection point.
 	switch table {
-	case "assets", "projects", "revisions":
+	case "assets", "projects", "revisions", "chart_snapshots":
 	default:
 		return false, fmt.Errorf("unsupported table %q", table)
 	}
@@ -1784,8 +1832,9 @@ func gcAssets(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `
         DELETE FROM assets
         WHERE hash NOT IN (SELECT hash FROM project_assets)
-          AND hash NOT IN (SELECT hash FROM revision_assets)
-          AND (staged_at = '' OR staged_at < ?)`, cutoff); err != nil {
+        AND hash NOT IN (SELECT hash FROM revision_assets)
+        AND hash NOT IN (SELECT hash FROM chart_snapshot_assets)
+        AND (staged_at = '' OR staged_at < ?)`, cutoff); err != nil {
 		return fmt.Errorf("collect unused assets: %w", err)
 	}
 	return nil
