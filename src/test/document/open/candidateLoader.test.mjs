@@ -100,7 +100,11 @@ test("library stream installs before audio and completes with every line", async
 
   assert.equal(installed, document.chart, "the session keeps the paged facade");
   assert.equal(installed.judgeLineList.length, 10_001);
-  assert.deepEqual(order, ["replace", "audio"], "audio starts only after the old owner is released");
+  assert.deepEqual(
+    order,
+    ["replace", "audio"],
+    "audio starts only after the old owner is released",
+  );
   assert.equal(
     installed.judgeLineList.some(isPlaceholderLine),
     false,

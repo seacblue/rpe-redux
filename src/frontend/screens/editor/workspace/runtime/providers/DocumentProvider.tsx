@@ -395,8 +395,7 @@ export function createDocumentRuntime(options: {
   };
 
   const loadMusic = createMusicLoader({
-    loadAudio: (bytes, name, onDecoded) =>
-      preview.audio.load(bytes, name, { onDecoded }),
+    loadAudio: (bytes, name, onDecoded) => preview.audio.load(bytes, name, { onDecoded }),
     pause: () => playback.playback.pause(),
     seek: (seconds) => playback.playback.seek(seconds),
     chartSeconds: options.chartSeconds,

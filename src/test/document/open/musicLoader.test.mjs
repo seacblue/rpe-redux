@@ -35,7 +35,8 @@ test("analysis starts when the playable buffer is installed", async () => {
     setAsset: () => events.push("asset"),
     setProgressDuration: () => events.push("duration"),
     duration: () => 100,
-    queueSpectrum: (_source, immediate) => events.push(immediate ? "spectrum-immediate" : "spectrum"),
+    queueSpectrum: (_source, immediate) =>
+      events.push(immediate ? "spectrum-immediate" : "spectrum"),
     renderTimelineMarkers: () => events.push("markers"),
     commitLabel: () => "label",
     onLoaded: () => events.push("loaded"),

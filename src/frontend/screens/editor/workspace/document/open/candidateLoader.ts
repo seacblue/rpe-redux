@@ -158,9 +158,7 @@ export function createCandidateLoader(deps: CandidateLoaderDependencies) {
       chartName: string,
     ): Promise<void> => {
       const references = resourceReferences(chartForAudio, assets, chartName, candidate.info);
-      const songPath = references.song
-        ? assetPath(assets, references.song, chartName)
-        : null;
+      const songPath = references.song ? assetPath(assets, references.song, chartName) : null;
       const songUri = songPath ? assets.uri?.(songPath) : undefined;
       return (async () => {
         const bytes =

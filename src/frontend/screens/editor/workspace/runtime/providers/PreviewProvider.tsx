@@ -188,8 +188,7 @@ export function createPreviewRuntime(options: {
   };
   const removeRegionBinding = subscribeToEditorRegions(refreshRegionVisibility);
   const removeNotesVisibilityBinding = displayValues.showNotes.subscribe(refreshRegionVisibility);
-  const removeEventsVisibilityBinding =
-    displayValues.showEvents.subscribe(refreshRegionVisibility);
+  const removeEventsVisibilityBinding = displayValues.showEvents.subscribe(refreshRegionVisibility);
   const removePreviewVisibilityBinding =
     displayValues.previewEnabled.subscribe(refreshRegionVisibility);
   refreshRegionVisibility();

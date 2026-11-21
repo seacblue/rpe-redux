@@ -1930,8 +1930,7 @@ export class SceneRuntime {
       const cost = summary ? summary.noteCount + summary.eventCount : 1;
       if (
         compiled > 0 &&
-        ((maxLines > 0 && compiled >= maxLines) ||
-          (maxObjects > 0 && objects + cost > maxObjects))
+        ((maxLines > 0 && compiled >= maxLines) || (maxObjects > 0 && objects + cost > maxObjects))
       ) {
         break;
       }
@@ -2271,7 +2270,11 @@ export class SceneRuntime {
         // A static local line under a static parent has a stable world state too.
         // Reuse the complete sampled object instead of resolving its local tracks and
         // entering the parent composition path on every playback frame.
-        if (this.worldStateStatic[index] === 1 && previous?.[index] && previous[index] !== EMPTY_LINE_STATE) {
+        if (
+          this.worldStateStatic[index] === 1 &&
+          previous?.[index] &&
+          previous[index] !== EMPTY_LINE_STATE
+        ) {
           this.lastSampleStats.staticLineCacheHits += 1;
           target[index] = previous[index];
           continue;
