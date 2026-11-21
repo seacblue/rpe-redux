@@ -435,7 +435,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     event.button === 0 &&
     !hit &&
     this.gestures.curvePickPoint?.(
-      this.viewport.snappedBeat(position.y),
+      this.viewport.snappedBeatTriple(position.y),
       this.viewport.positionAt(position.x),
     )
   ) {

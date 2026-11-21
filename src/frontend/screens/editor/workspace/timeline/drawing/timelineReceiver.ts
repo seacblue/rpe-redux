@@ -121,6 +121,68 @@ export type TimelineNoteInsertionReceiver = Pick<
   "changed" | "gestures" | "getSession" | "notesCanvas" | "viewport"
 >;
 
+/** The event pointer interaction contract: hit testing, placement, and edge drags. */
+export type TimelineEventInteractionReceiver = Pick<
+  TimelineRuntimeSurface,
+  | "appearance"
+  | "cache"
+  | "eventBatch"
+  | "eventsCanvas"
+  | "getSession"
+  | "eventTypes"
+  | "changed"
+  | "finishRectangle"
+  | "rectangleTimes"
+  | "updateSweep"
+> & {
+  gestures: Pick<
+    TimelineRuntimeSurface["gestures"],
+    | "eventRects"
+    | "eventRectsForLine"
+    | "eventCursor"
+    | "layer"
+    | "notify"
+    | "hoverArea"
+    | "clipboardPointer"
+    | "tool"
+    | "previewPick"
+    | "overlapHover"
+    | "overlapMenuOpen"
+    | "isEventOverlapHovered"
+    | "suppressNextContextMenu"
+  >;
+  viewport: Pick<
+    TimelineRuntimeSurface["viewport"],
+    | "eventTypesForLine"
+    | "eventBarWidth"
+    | "factorForLine"
+    | "lineIndexAt"
+    | "panelWidth"
+    | "panelIndex"
+    | "panelStride"
+    | "multiLineViewportOffset"
+    | "panMultiLine"
+    | "eventBeatAt"
+    | "eventBeatAtTriple"
+    | "gridCount"
+    | "point"
+    | "panelCount"
+    | "timeAt"
+    | "tempo"
+    | "origin"
+    | "viewHeight"
+    | "judgementOffset"
+    | "scale"
+    | "scaleForArea"
+    | "multiLineScroll"
+    | "eventColumnBounds"
+    | "eventInset"
+    | "verticalForLine"
+    | "eventVertical"
+    | "division"
+  >;
+};
+
 /** The note pointer interaction contract. */
 export type TimelineNoteInteractionReceiver = Pick<
   TimelineRuntimeSurface,
@@ -235,6 +297,7 @@ export type TimelinePendingEventReceiver = Pick<
     TimelineViewport,
     | "eventBarWidth"
     | "eventBeatAt"
+    | "eventBeatAtTriple"
     | "eventInset"
     | "eventTypesForLine"
     | "eventVertical"

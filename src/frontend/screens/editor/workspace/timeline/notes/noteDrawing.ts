@@ -1,5 +1,6 @@
 /** Draws note timelines, their multi-line panels, and the moving playhead. */
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
+import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   fallbackCanvasPixelRatio,
   measureCanvas,
@@ -481,7 +482,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     // The second click may land before the first; the committed Hold always
     // orders its anchors, so the preview must swap them the same way or its
     // head and tail caps would flip on commit.
-    const anchor = this.gestures.pendingHold.beat;
+    const anchor = beatValue(this.gestures.pendingHold.beat);
     const cursorBeat = this.viewport.snappedBeat(this.gestures.cursor.y);
     const startBeat = Math.min(anchor, cursorBeat);
     const endBeat = Math.max(anchor, cursorBeat);

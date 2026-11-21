@@ -6,7 +6,15 @@
  * the snapshot, parameters and seed.
  */
 import { t } from "../../../i18n/index.ts";
-import { beatValue, fromNumber } from "../../global/chart/timing/beat.ts";
+import {
+  addBeatFraction,
+  addBeats,
+  beatValue,
+  fromNumber,
+  normalizeBeat,
+  toBeat,
+  type Beat,
+} from "../../global/chart/timing/beat.ts";
 import { countScoringNotes, HOOK_TAIL_FIELD, pinHookedEvent } from "../../global/chart/chart.ts";
 import type { JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
 import type { ExpressionScope } from "../../utils/batchScript.ts";
@@ -132,7 +140,7 @@ function writeField(item: BatchItem, field: string, value: number): void {
   if (field === "t1" || field === "t2") {
     item[field === "t1" ? "startTime" : "endTime"] = fromNumber(value);
   } else if (field === "duration") {
-    item.endTime = fromNumber(beatValue(item.startTime) + Math.max(0, value));
+    item.endTime = addBeats(item.startTime, toBeat(Math.max(0, value)));
   } else if (field === "both") {
     item.start = value;
     item.end = value;
@@ -186,7 +194,7 @@ export function validateChange(
       change.before.type !== 2 &&
       beatValue(after.endTime) === beatValue(after.startTime)
     ) {
-      after.endTime = fromNumber(beatValue(after.startTime) + 0.25);
+      after.endTime = addBeatFraction(after.startTime, 1, 4);
     }
   }
   if (kind === "notes" && after.type !== 2) {
@@ -494,7 +502,7 @@ export function previewMultiEdit(
         beatValue(left.before.startTime) - beatValue(right.before.startTime) ||
         left.index - right.index,
     );
-    let time = entries.length ? beatValue(entries[0].before.startTime) : 0;
+    let time: Beat = entries.length ? normalizeBeat(entries[0].before.startTime) : [0, 0, 1];
     const groupChanges: BatchChange[] = [];
     entries.forEach((entry, index) => {
       const sourceLine = Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex;
@@ -533,9 +541,10 @@ export function previewMultiEdit(
           after.end = batchOperation(after.end, value, operation);
         } else if (field === "duration" && kind === "events") {
           const duration = Math.max(0, batchOperation(scope.duration, value, operation));
-          after.startTime = fromNumber(time);
-          after.endTime = fromNumber(time + duration);
-          time += duration;
+          const durationBeat = toBeat(duration);
+          after.startTime = time;
+          after.endTime = addBeats(time, durationBeat);
+          time = addBeats(time, durationBeat);
         } else if (field === "order") {
           change.priority = batchOperation(scope.u, value, operation);
         } else {

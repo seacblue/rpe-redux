@@ -2,7 +2,7 @@
  * Pointer interaction for the event field: hit testing, placement, selection,
  * and edge trimming. Gestures become event commands; chart data stays outside.
  */
-import type { TimelineRuntimeSurface } from "../drawing/timelineReceiver.ts";
+import type { TimelineEventInteractionReceiver } from "../drawing/timelineReceiver.ts";
 import {
   selectEventsInRectangle,
   timelineEmptyPanPress,
@@ -13,7 +13,7 @@ import {
   eventEdgePointerDelta,
 } from "../../../../../../core/edit/timeline/dragPreview.ts";
 import { dragPrekeyHeld } from "../../../../../../core/edit/timeline/dragPrekey.ts";
-import { beatValue, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
+import { beatValue, toBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import type { LineEventValue } from "../../../../../../core/global/chart/chart.ts";
 import { eventTypeAt } from "../drawing/tracks.ts";
@@ -23,7 +23,7 @@ import {
   eventListAt,
   eventList,
 } from "../../../../../../core/edit/events/eventTracks.ts";
-import { placeEventAtTarget } from "../../../../../../core/edit/events/eventCommands.ts";
+import { placeEventAtBeatTarget } from "../../../../../../core/edit/events/eventCommands.ts";
 import type { EventInteractionHandle } from "../drawing/canvas.ts";
 import type {
   TimelineEventDrag,
@@ -44,66 +44,6 @@ import {
   syncEventDragPreview,
 } from "./eventEdgeDrag.ts";
 import { drawPendingEvent } from "./eventOverlayDrawing.ts";
-
-type EventTimeline = Pick<
-  TimelineRuntimeSurface,
-  | "appearance"
-  | "cache"
-  | "eventBatch"
-  | "eventsCanvas"
-  | "getSession"
-  | "eventTypes"
-  | "changed"
-  | "finishRectangle"
-  | "rectangleTimes"
-  | "updateSweep"
-> & {
-  gestures: Pick<
-    TimelineRuntimeSurface["gestures"],
-    | "eventRects"
-    | "eventRectsForLine"
-    | "eventCursor"
-    | "layer"
-    | "notify"
-    | "hoverArea"
-    | "clipboardPointer"
-    | "tool"
-    | "previewPick"
-    | "overlapHover"
-    | "overlapMenuOpen"
-    | "isEventOverlapHovered"
-    | "suppressNextContextMenu"
-  >;
-  viewport: Pick<
-    TimelineRuntimeSurface["viewport"],
-    | "eventTypesForLine"
-    | "eventBarWidth"
-    | "factorForLine"
-    | "lineIndexAt"
-    | "panelWidth"
-    | "panelIndex"
-    | "panelStride"
-    | "multiLineViewportOffset"
-    | "panMultiLine"
-    | "eventBeatAt"
-    | "gridCount"
-    | "point"
-    | "panelCount"
-    | "timeAt"
-    | "tempo"
-    | "origin"
-    | "viewHeight"
-    | "judgementOffset"
-    | "scale"
-    | "scaleForArea"
-    | "multiLineScroll"
-    | "eventColumnBounds"
-    | "eventInset"
-    | "verticalForLine"
-    | "eventVertical"
-    | "division"
-  >;
-};
 
 /** Event hit rectangle, matching an element of `timeline.eventRects`. */
 interface EventRect {
@@ -131,14 +71,14 @@ function formatEventValue(value: LineEventValue): string {
 
 /** Pointer interaction for event bars: hit testing, selection, placement, and marquee drags. */
 export class EventInteraction implements EventInteractionHandle {
-  timeline: EventTimeline;
+  timeline: TimelineEventInteractionReceiver;
   canvas: HTMLCanvasElement;
   reportError: (error: unknown) => void;
   drag: TimelineEventDrag | null;
   pending: EventInteractionHandle["pending"];
 
   /** Bind the interaction to the event canvas and its error reporter. */
-  constructor(timeline: EventTimeline, reportError: (error: unknown) => void) {
+  constructor(timeline: TimelineEventInteractionReceiver, reportError: (error: unknown) => void) {
     this.timeline = timeline;
     this.canvas = timeline.eventsCanvas;
     this.reportError = reportError;
@@ -258,7 +198,12 @@ export class EventInteraction implements EventInteractionHandle {
    * Arm placement of a new event, or commit it when placement is already pending.
    * Q makes a hook event and R alone a normal one; the span is the preview.
    */
-  place(type?: string | null, beat?: number, easingType?: number | null, inst = false): boolean {
+  place(
+    type?: string | null,
+    beat?: number | Beat,
+    easingType?: number | null,
+    inst = false,
+  ): boolean {
     const session = this.timeline.getSession();
     if (!session.editable || !session.line) {
       return false;
@@ -288,7 +233,11 @@ export class EventInteraction implements EventInteractionHandle {
       return false;
     }
     const at =
-      beat ?? (point ? this.timeline.viewport.eventBeatAt(point.y, eventType, true) : undefined);
+      beat !== undefined
+        ? toBeat(beat)
+        : point
+          ? this.timeline.viewport.eventBeatAtTriple(point.y, eventType)
+          : undefined;
     if (at === undefined) {
       return false;
     }
@@ -298,16 +247,18 @@ export class EventInteraction implements EventInteractionHandle {
       this.pending = { type: eventType, beat: at, lineIndex, inst };
       session.notify();
     } else {
-      const result = placeEventAtTarget(session, {
-        target: {
-          lineIndex: this.pending.lineIndex ?? lineIndex,
+      const pending = this.pending;
+      const result = placeEventAtBeatTarget(
+        session,
+        {
+          lineIndex: pending.lineIndex ?? lineIndex,
           layer: session.eventLayer,
-          eventType: this.pending.type,
-          from: { beat: this.pending.beat, positionX: 0 },
+          eventType: pending.type,
+          from: { beat: pending.beat, positionX: 0 },
           to: { beat: at, positionX: 0 },
         },
-        payload: { easingType: easingType ?? undefined, instant: inst || this.pending.inst },
-      });
+        { easingType: easingType ?? undefined, instant: inst || pending.inst },
+      );
       if (result.status === "rejected") {
         const issue = result.issues?.[0];
         this.timeline.gestures.notify?.(

@@ -267,8 +267,8 @@ export function setNoiseLineMode(
   // A standard line's scale tracks describe its hidden texture, not the noise
   // area's size; starting from empty tracks keeps size 0.
   const clean = existing ? cleared : withoutScaleTracks(cleared);
-  const appearTime = existing?.area.appearTime ?? fromNumber(0);
-  const disappearTime = existing?.area.disappearTime ?? fromNumber(1000000);
+  const appearTime = existing?.area.appearTime ?? [0, 0, 1];
+  const disappearTime = existing?.area.disappearTime ?? [1000000, 0, 1];
   const activeIntervals = existing ? existing.area.activeIntervals.map(cloneInterval) : [];
   const settings: NoiseLineSettings = {
     version: 2,

@@ -54,6 +54,18 @@ test("a paste records its projected span for the strip and history", () => {
   assert.deepEqual(session.lastEditBeatRange, { start: 20, end: 30 });
 });
 
+test("a paste at a snapped twelfth keeps the exact target triple", () => {
+  const session = new EditorSession(chartWith([createNote(1, 0.25, 0)], []));
+  session.selection = new Set([0]);
+  assert.equal(copyObjects(session), 1);
+
+  assert.equal(pasteObjects(session, [0, 1, 12], { targetLineIndex: 0 }), true);
+  const pasted = session.notes.find(
+    (note) => note.startTime[0] === 0 && note.startTime[1] === 1 && note.startTime[2] === 12,
+  );
+  assert.ok(pasted, "the pasted note lands on the exact twelfth");
+});
+
 test("a deletion records the selected beat span for undo jump", () => {
   const session = new EditorSession(chartWith([createNote(1, 100, 0)], []));
   session.selection = new Set([0]);

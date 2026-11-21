@@ -8,10 +8,13 @@
 import { t } from "../../../../i18n/index.ts";
 import { isRecord } from "../../../utils/guards.ts";
 import {
+  addBeats,
   beatValue,
+  compareBeats,
   fromNumber,
   isOrderedBeatRange,
   normalizeBeat,
+  subtractBeats,
   type Beat,
 } from "../timing/beat.ts";
 import type { Chart, JudgeLineEvent } from "../chart.ts";
@@ -286,11 +289,17 @@ export function alignShaderTrack(track: ShaderVarTrack, beat: readonly number[])
   if (!track.length) {
     return track;
   }
-  const delta = beatValue(beat) - Math.min(...track.map((segment) => beatValue(segment.startTime)));
+  let earliest = track[0].startTime;
+  for (const segment of track) {
+    if (compareBeats(segment.startTime, earliest) < 0) {
+      earliest = segment.startTime;
+    }
+  }
+  const delta = subtractBeats(beat, earliest);
   return track.map((segment) => ({
     ...segment,
-    startTime: fromNumber(beatValue(segment.startTime) + delta),
-    endTime: fromNumber(beatValue(segment.endTime) + delta),
+    startTime: addBeats(segment.startTime, delta),
+    endTime: addBeats(segment.endTime, delta),
   }));
 }
 

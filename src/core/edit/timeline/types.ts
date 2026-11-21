@@ -54,7 +54,8 @@ export interface NoteIndex {
 }
 
 export interface PendingHold {
-  beat: number;
+  /** Exact beat of the first click, so the finished Hold keeps its grid value. */
+  beat: Beat;
   positionX: number;
   lineIndex: number;
 }

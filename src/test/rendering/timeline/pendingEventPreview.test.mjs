@@ -44,6 +44,7 @@ function receiver({ batchAccept, skin }) {
     viewport: {
       eventTypesForLine: () => ["moveXEvents"],
       eventBeatAt: () => 4,
+      eventBeatAtTriple: () => [4, 0, 1],
       eventVertical: (beat) => 400 - beat * 10,
       panelWidth: (width) => width,
       panelIndex: () => 0,
@@ -55,7 +56,7 @@ function receiver({ batchAccept, skin }) {
   };
 }
 
-const pending = { type: "moveXEvents", beat: 2, lineIndex: 0 };
+const pending = { type: "moveXEvents", beat: [2, 0, 1], lineIndex: 0 };
 
 test("the pending event joins the event-bar batch at half the committed opacity", () => {
   const context = fakeContext();
@@ -130,7 +131,7 @@ test("a zero-length placed preview is rejected because both anchors share a beat
   // The cursor sits on the anchor beat, so no forward span exists; the preview
   // keeps the hooked material but carries the rejected tint.
   target.gestures.eventCursor = { x: 0, y: 200 };
-  target.viewport.eventBeatAt = () => pending.beat;
+  target.viewport.eventBeatAtTriple = () => [...pending.beat];
   context.fillRect = (_x, _y, _width, _height) => {
     fills.push(context.fillStyle);
   };

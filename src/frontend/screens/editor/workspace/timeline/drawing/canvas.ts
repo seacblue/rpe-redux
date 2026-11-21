@@ -4,6 +4,7 @@ import type {
   TimelineEventRect,
   TimelineEventDrag,
 } from "../../../../../../core/edit/timeline/types.ts";
+import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 
 import { SPECIAL_TRACKS, specialTrackLabel } from "./tracks.ts";
 
@@ -16,12 +17,17 @@ export type TimelinePalette = CanvasPalette;
 
 export interface EventInteractionHandle {
   drag: TimelineEventDrag | null;
-  pending: { type: string; beat: number; lineIndex?: number; inst?: boolean } | null;
+  pending: { type: string; beat: Beat; lineIndex?: number; inst?: boolean } | null;
   down(event: PointerEvent): void;
   move(event: PointerEvent): void;
   up(event: PointerEvent): void;
   hit(point: TimelinePoint): TimelineEventRect | undefined;
-  place(type?: string | null, beat?: number, easingType?: number | null, inst?: boolean): boolean;
+  place(
+    type?: string | null,
+    beat?: number | Beat,
+    easingType?: number | null,
+    inst?: boolean,
+  ): boolean;
   delta(): number;
   draw(context: CanvasRenderingContext2D, width: number): void;
 }

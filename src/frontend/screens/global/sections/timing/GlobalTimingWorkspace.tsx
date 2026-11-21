@@ -12,7 +12,14 @@ import { EmptyState } from "../../../../../design/components/empty-state/EmptySt
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
 import { useListbox } from "../../../../../design/patterns/list/useListbox.ts";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
-import { beatValue, formatBeat, fromNumber } from "../../../../../core/global/chart/timing/beat.ts";
+import {
+  beatValue,
+  compareBeats,
+  formatBeat,
+  normalizeBeat,
+  type Beat,
+} from "../../../../../core/global/chart/timing/beat.ts";
+import { snapTime } from "../../../../../core/global/chart/editing/editGrid.ts";
 import type { Chart } from "../../../../../core/global/chart/chart.ts";
 import { useEditorRuntime } from "../../../editor/workspace/runtime/composition/EditorRuntime.tsx";
 import { useGlobalChartRevision } from "../../useGlobalChart.ts";
@@ -145,20 +152,22 @@ export function GlobalTimingWorkspace() {
     const tempo = runtime.providers.session.tempo.get();
     const division = runtime.timeline.viewport.division;
     const gridDivision = Math.max(1, Math.trunc(division || 1));
-    const step = 1 / gridDivision;
-    const snapped = Math.round(tempo.beat(playback.chartSeconds(), 1) / step) * step;
+    const snappedBeat = snapTime(playback.chartSeconds(), gridDivision, tempo, 1);
     let previous = entries[0];
-    let previousBeat = Number.NEGATIVE_INFINITY;
+    let previousBeat: Beat | null = null;
     for (const entry of entries) {
-      const start = beatValue(entry.startTime);
-      if (start <= snapped + 1e-9 && start >= previousBeat) {
+      const start = normalizeBeat(entry.startTime);
+      if (
+        compareBeats(start, snappedBeat) <= 0 &&
+        (!previousBeat || compareBeats(start, previousBeat) >= 0)
+      ) {
         previousBeat = start;
         previous = entry;
       }
     }
-    const entry = { bpm: previous?.bpm ?? 120, startTime: fromNumber(snapped, gridDivision) };
-    const next = [...entries, entry].sort(
-      (left, right) => beatValue(left.startTime) - beatValue(right.startTime),
+    const entry = { bpm: previous?.bpm ?? 120, startTime: snappedBeat };
+    const next = [...entries, entry].sort((left, right) =>
+      compareBeats(left.startTime, right.startTime),
     );
     try {
       commit(

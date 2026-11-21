@@ -8,7 +8,7 @@
  * of what a chart document contains.
  */
 import { t } from "../../../i18n/index.ts";
-import { fromNumber, type Beat } from "./timing/beat.ts";
+import { addBeatFraction, toBeat, type Beat } from "./timing/beat.ts";
 import type { EditableTrajectoryOptions } from "./trajectory/curveTrajectory.ts";
 import type { TrajectorySplitInput } from "./trajectory/trajectorySimplify.ts";
 import {
@@ -313,17 +313,24 @@ export function lineParentIndex(father: unknown): number {
   return father === undefined || father === null || father === "" ? NO_LINE_PARENT : Number(father);
 }
 
-/** Create one event with start/end values and beat triples. */
+/**
+ * Create one event with start/end values and beat triples.
+ *
+ * A number is quantized once; a triple is stored verbatim and the default end
+ * beat is one exact beat after the start.
+ */
 export function createEvent(
   start: LineEventValue = 0,
   end: LineEventValue = start,
-  startBeat = 0,
-  endBeat = startBeat + 1,
+  startBeat: number | readonly number[] = 0,
+  endBeat?: number | readonly number[],
 ): JudgeLineEvent {
+  const startTime = toBeat(startBeat);
+  const endTime = endBeat === undefined ? addBeatFraction(startTime, 1, 1) : toBeat(endBeat);
   return {
     id: createChartObjectId(),
-    startTime: fromNumber(startBeat),
-    endTime: fromNumber(endBeat),
+    startTime,
+    endTime,
     start,
     end,
     easingType: 1,
@@ -385,18 +392,31 @@ export function createChart(): Chart {
   };
 }
 
-/** Create a note with the requested type, X position and beat range. */
+/**
+ * Create a note with the requested type, X position and beat range.
+ *
+ * A number is quantized over the default resolution; a beat triple is stored
+ * verbatim, which keeps a grid placement exact even when its denominator does
+ * not divide that resolution.
+ */
 export function createNote(
   type: number,
-  beat: number,
+  beat: number | readonly number[],
   positionX: number,
-  endBeat = beat + 1,
+  endBeat?: number | readonly number[],
 ): JudgeLineNote {
+  const startTime = toBeat(beat);
+  const endTime =
+    type !== 2
+      ? startTime
+      : endBeat === undefined
+        ? addBeatFraction(startTime, 1, 1)
+        : toBeat(endBeat);
   return {
     id: createChartObjectId(),
     type,
-    startTime: fromNumber(beat),
-    endTime: fromNumber(type === 2 ? endBeat : beat),
+    startTime,
+    endTime,
     positionX,
     above: 1,
     isFake: 0,

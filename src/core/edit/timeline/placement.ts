@@ -9,50 +9,52 @@
  * input state rather than a drawing concern.
  */
 
-import { fromNumber } from "../../global/chart/timing/beat.ts";
-import { placementRange } from "../../global/chart/editing/editGrid.ts";
+import { beatValue, maxBeat, minBeat, toBeat, type Beat } from "../../global/chart/timing/beat.ts";
 import type { EditorSession } from "../session/session.ts";
 import type { PendingHold } from "./types.ts";
-import { placeNoteAtTarget } from "./noteCommands.ts";
-import type { ActionTarget } from "../operations/result.ts";
+import { placeNoteAtBeatTarget } from "./noteCommands.ts";
 
 /**
  * Places an instant note or starts/finishes a two-click hold at the target.
+ *
+ * A beat triple reaches `createNote` unchanged so a grid placement keeps its
+ * exact denominator; a plain number is quantized over the default resolution.
  * Returns the pending hold state after the click.
  */
 export function placeTimelineNote(
   session: EditorSession,
   type: number,
-  beat: number,
+  beat: number | Beat,
   positionX: number,
   lineIndex: number,
   pending: PendingHold | null,
 ): PendingHold | null {
   session.focus = "notes";
   session.eventSelection.clear();
+  const nextBeat = toBeat(beat);
   if (!Number.isFinite(positionX)) {
     return pending;
   }
   if (type !== 2) {
-    placeNoteAtTarget(session, type as 1 | 2 | 3 | 4, {
+    placeNoteAtBeatTarget(session, type as 1 | 2 | 3 | 4, {
       lineIndex,
-      from: { beat, positionX },
+      from: { beat: nextBeat, positionX },
     });
     return pending;
   }
   if (!pending) {
-    return { beat, positionX, lineIndex };
+    return { beat: nextBeat, positionX, lineIndex };
   }
-  const range = placementRange(fromNumber(pending.beat), fromNumber(beat));
-  if (range && Number.isFinite(pending.positionX)) {
+  const startBeat = minBeat(pending.beat, nextBeat);
+  const endBeat = maxBeat(pending.beat, nextBeat);
+  if (beatValue(endBeat) - beatValue(startBeat) >= 0.001 && Number.isFinite(pending.positionX)) {
     // A Hold has one chart X coordinate. The second click supplies its end
     // time; the visual tail is independent of the head's X coordinate.
-    const target: ActionTarget = {
+    placeNoteAtBeatTarget(session, 2, {
       lineIndex: pending.lineIndex,
-      from: { beat: range.start, positionX: pending.positionX },
-      to: { beat: range.end, positionX: pending.positionX },
-    };
-    placeNoteAtTarget(session, 2, target);
+      from: { beat: startBeat, positionX: pending.positionX },
+      to: { beat: endBeat, positionX: pending.positionX },
+    });
   }
   return null;
 }

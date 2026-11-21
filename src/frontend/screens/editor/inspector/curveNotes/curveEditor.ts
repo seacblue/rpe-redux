@@ -9,8 +9,9 @@ import { flushSync } from "react-dom";
 import {
   beatCopy,
   compareBeats,
-  fromNumber,
   normalizeBeat,
+  toBeat,
+  type Beat,
 } from "../../../../../core/global/chart/timing/beat.ts";
 import { planCurveNotes } from "../../../../../core/global/chart/editing/curveNotes.ts";
 import { t } from "../../../../../i18n/index.ts";
@@ -309,12 +310,12 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
   }
 
   /** Pick an arbitrary grid point, independent of any existing note. */
-  function pickPoint(beat: number, positionX: number): boolean {
-    if (!anchorMode || !Number.isFinite(beat) || !Number.isFinite(positionX)) {
+  function pickPoint(beat: number | Beat, positionX: number): boolean {
+    if (!anchorMode || !Number.isFinite(positionX)) {
       return false;
     }
     return applyAnchor({
-      startTime: fromNumber(beat),
+      startTime: toBeat(beat),
       positionX,
       type: values.type,
     });

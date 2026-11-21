@@ -18,7 +18,7 @@ export function addAtCursor(this: TimelineNoteInsertionReceiver, type: number): 
         (type === 2
           ? this.viewport.lineIndexAt(this.gestures.cursor.x, this.notesCanvas.clientWidth, "notes")
           : session.lineIndex));
-  const beat = this.viewport.snappedBeat(this.gestures.cursor.y);
+  const beat = this.viewport.snappedBeatTriple(this.gestures.cursor.y);
   const positionX = this.viewport.notePositionAt(this.gestures.cursor.x, requestedLine);
   this.gestures.pendingHold = placeTimelineNote(
     session,

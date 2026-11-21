@@ -62,16 +62,16 @@ function press(overrides = {}) {
 test("a pending Hold or event placement is the only pending placement", () => {
   const { timeline } = timelineForRouting();
   assert.equal(batchPlacementPending(timeline), false);
-  timeline.gestures.pendingHold = { beat: 0, positionX: 0, lineIndex: 0 };
+  timeline.gestures.pendingHold = { beat: [0, 0, 1], positionX: 0, lineIndex: 0 };
   assert.equal(batchPlacementPending(timeline), true);
   timeline.gestures.pendingHold = null;
-  timeline.gestures.eventInteraction.pending = { type: "alphaEvents", beat: 0 };
+  timeline.gestures.eventInteraction.pending = { type: "alphaEvents", beat: [0, 0, 1] };
   assert.equal(batchPlacementPending(timeline), true);
 });
 
 test("a ball press finishes a pending Hold on the note field", () => {
   const { timeline, calls } = timelineForRouting();
-  timeline.gestures.pendingHold = { beat: 0, positionX: 0, lineIndex: 0 };
+  timeline.gestures.pendingHold = { beat: [0, 0, 1], positionX: 0, lineIndex: 0 };
   const event = press();
 
   assert.equal(routePendingPlacement(timeline, "notes", event), true);
@@ -83,7 +83,7 @@ test("a ball press finishes a pending Hold on the note field", () => {
 
 test("a ball press finishes a pending event on the event field", () => {
   const { timeline, calls } = timelineForRouting();
-  timeline.gestures.eventInteraction.pending = { type: "alphaEvents", beat: 0 };
+  timeline.gestures.eventInteraction.pending = { type: "alphaEvents", beat: [0, 0, 1] };
   const event = press();
 
   assert.equal(routePendingPlacement(timeline, "events", event), true);

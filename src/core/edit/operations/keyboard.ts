@@ -20,6 +20,7 @@ import type { EditorSession } from "../session/session.ts";
 import type { TimelineArea } from "../timeline/types.ts";
 import { isSystemCancelKey } from "../../shortcuts/keyMatching.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
+import type { Beat } from "../../global/chart/timing/beat.ts";
 import { recordDiagnosticAction } from "../../diagnostics/interactionLog.ts";
 
 export interface KeyboardActionEvent extends ShortcutEventLike {
@@ -30,8 +31,13 @@ export interface KeyboardActionEvent extends ShortcutEventLike {
 }
 
 interface EventKeyboardTarget {
-  pending: { type: string; beat: number } | null;
-  place(type?: string | null, beat?: number, easing?: number | null, instant?: boolean): boolean;
+  pending: { type: string; beat: Beat } | null;
+  place(
+    type?: string | null,
+    beat?: number | Beat,
+    easing?: number | null,
+    instant?: boolean,
+  ): boolean;
 }
 
 interface KeyboardTimeline {

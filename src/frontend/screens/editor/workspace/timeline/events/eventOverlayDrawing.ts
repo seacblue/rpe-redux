@@ -2,7 +2,7 @@
  * Draws the trajectory preview, the pending event placement, and shader event
  * bars in the event field.
  */
-import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
+import { beatValue, maxBeat, minBeat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { eventKey } from "../../../../../../core/edit/events/eventTracks.ts";
 import { placedEvent } from "../../../../../../core/edit/events/eventCommands.ts";
 import { eventColumnBounds } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
@@ -310,12 +310,12 @@ export function drawPendingEvent(
     return;
   }
   const cursorBeat = this.gestures.eventCursor
-    ? this.viewport.eventBeatAt(this.gestures.eventCursor.y, pending.type, true)
+    ? this.viewport.eventBeatAtTriple(this.gestures.eventCursor.y, pending.type)
     : pending.beat;
   // The endpoint may be earlier than the start. Order the two anchors here so
   // the preview and the committed event share one span.
-  const startBeat = Math.min(pending.beat, cursorBeat);
-  const endBeat = Math.max(pending.beat, cursorBeat);
+  const startBeat = minBeat(pending.beat, cursorBeat);
+  const endBeat = maxBeat(pending.beat, cursorBeat);
   let valid: boolean;
   try {
     // A null result means the span was refused, which includes the identical
@@ -333,12 +333,14 @@ export function drawPendingEvent(
   } catch {
     valid = false;
   }
+  const startValue = beatValue(startBeat);
+  const endValue = beatValue(endBeat);
   const vertical =
     session.multiLineActive && session.multiLineMode === "events"
       ? (beat: number) => this.viewport.verticalForLine(beat, pendingLineIndex)
       : (beat: number) => this.viewport.eventVertical(beat, pending.type);
-  const top = Math.min(vertical(startBeat), vertical(endBeat));
-  const height = Math.max(2, Math.abs(vertical(startBeat) - vertical(endBeat)));
+  const top = Math.min(vertical(startValue), vertical(endValue));
+  const height = Math.max(2, Math.abs(vertical(startValue) - vertical(endValue)));
   const panelWidth = this.viewport.panelWidth(width, "events");
   const panelOffset =
     this.viewport.panelIndex(pendingLineIndex, "events") *

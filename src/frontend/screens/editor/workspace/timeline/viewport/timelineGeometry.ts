@@ -6,6 +6,7 @@
  * viewport receiver.
  */
 import * as coreGeometry from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
+import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   type TimelineArea,
   type TimelineNote,
@@ -325,6 +326,17 @@ export function beatAt(this: TimelineViewportReceiver, vertical: number): number
   );
 }
 
+/** Beat at a canvas y coordinate, snapped to the current division, as an exact triple. */
+export function snappedBeatTriple(this: TimelineViewportReceiver, vertical: number): Beat {
+  return coreGeometry.snappedBeatTriple(
+    vertical,
+    this.viewHeight(),
+    { ...this.scaleConfig(), scale: this.scaleForArea(this.getSession().multiLineMode) },
+    this.division,
+    this.tempo,
+  );
+}
+
 /** Beat at a canvas y coordinate, snapped to the current division. */
 export function snappedBeat(this: TimelineViewportReceiver, vertical: number): number {
   return coreGeometry.snappedBeat(
@@ -356,6 +368,22 @@ export function eventVertical(this: TimelineViewportReceiver, beat: number, type
     beat,
     this.viewHeight(),
     { ...this.scaleConfig(), scale: this.scaleForArea("events") },
+    this.tempo,
+  );
+}
+
+/** Event beat at a canvas y coordinate, snapped, as an exact triple. */
+export function eventBeatAtTriple(
+  this: TimelineViewportReceiver,
+  vertical: number,
+  type: string,
+): Beat {
+  const factor = this.factor;
+  return coreGeometry.snappedBeatTriple(
+    vertical,
+    this.viewHeight(),
+    { ...this.scaleConfig(factor), scale: this.scaleForArea("events") },
+    this.division,
     this.tempo,
   );
 }
@@ -498,9 +526,11 @@ export type TimelineGeometryModule = {
   panelHorizontal: typeof panelHorizontal;
   timeAt: typeof timeAt;
   beatAt: typeof beatAt;
+  snappedBeatTriple: typeof snappedBeatTriple;
   snappedBeat: typeof snappedBeat;
   vertical: typeof vertical;
   eventVertical: typeof eventVertical;
+  eventBeatAtTriple: typeof eventBeatAtTriple;
   eventBeatAt: typeof eventBeatAt;
   horizontal: typeof horizontal;
   noteInset: typeof noteInset;

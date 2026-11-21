@@ -6,7 +6,7 @@
  * agree on where a beat or a note sits. Snapping always runs on the chart side
  * of the conversion.
  */
-import { beatValue } from "../../global/chart/timing/beat.ts";
+import { beatValue, type Beat } from "../../global/chart/timing/beat.ts";
 import { snapPosition, snapTime, type TempoGrid } from "../../global/chart/editing/editGrid.ts";
 
 export interface TimelineScale {
@@ -296,6 +296,17 @@ export function beatAt(
   return tempo.beat(timeAt(vertical, viewHeight, scale, tempo), scale.factor);
 }
 
+/** Beat at a canvas row after snapping, as the exact reduced triple. */
+export function snappedBeatTriple(
+  vertical: number,
+  viewHeight: number,
+  scale: TimelineScale,
+  division: number,
+  tempo: TempoGrid,
+): Beat {
+  return snapTime(timeAt(vertical, viewHeight, scale, tempo), division, tempo, scale.factor);
+}
+
 /** Beat at a canvas row after snapping to the division grid. */
 export function snappedBeat(
   vertical: number,
@@ -304,9 +315,7 @@ export function snappedBeat(
   division: number,
   tempo: TempoGrid,
 ): number {
-  return beatValue(
-    snapTime(timeAt(vertical, viewHeight, scale, tempo), division, tempo, scale.factor),
-  );
+  return beatValue(snappedBeatTriple(vertical, viewHeight, scale, division, tempo));
 }
 
 /** Canvas row at a beat for the given scale and tempo. */

@@ -6,12 +6,19 @@
  */
 
 import { t } from "../../../i18n/index.ts";
-import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
 import { createEvent, isEventTrack, pinHookedEvent } from "../../global/chart/chart.ts";
 import { createChartObjectId } from "../../global/chart/identity.ts";
 import { judgeLineTraits } from "../../global/chart/line/lineTraits.ts";
 import type { JudgeLineEvent, LineEventValue } from "../../global/chart/chart.ts";
-import { beatValue, fromNumber } from "../../global/chart/timing/beat.ts";
+import {
+  beatValue,
+  compareBeats,
+  isBeat,
+  maxBeat,
+  minBeat,
+  toBeat,
+  type Beat,
+} from "../../global/chart/timing/beat.ts";
 import { trajectoryHasRotation } from "../../global/chart/trajectory/curveTrajectory.ts";
 import type { EditorSession } from "../session/session.ts";
 import {
@@ -103,8 +110,8 @@ export function createXYCounterpart(
     const candidate = placedEvent(
       session,
       counterpartType,
-      beatValue(source.startTime),
-      beatValue(source.endTime),
+      source.startTime,
+      source.endTime,
       source.easingType,
       lineIndex,
       Boolean(source.inst),
@@ -116,8 +123,6 @@ export function createXYCounterpart(
     const counterpart = {
       ...candidate,
       id: createChartObjectId(),
-      startTime: structuredClone(source.startTime),
-      endTime: structuredClone(source.endTime),
     };
     const counterpartFields = counterpart as Record<string, unknown>;
     const sourceFields = source as Record<string, unknown>;
@@ -160,28 +165,35 @@ interface EventPlacementOptions {
   end?: LineEventValue;
 }
 
-/** Builds an event for a placed span, rejecting overlaps; null when too short. */
+/**
+ * Builds an event for a placed span, rejecting overlaps; null when too short.
+ *
+ * Triples are ordered and compared exactly, so a grid placement keeps its
+ * denominator. A plain number is quantized once at the boundary.
+ */
 export function placedEvent(
   session: EditorSession,
   type: string,
-  first: number,
-  second: number,
+  first: number | readonly number[],
+  second: number | readonly number[],
   easingType: number | null | undefined,
   lineIndex = session.lineIndex,
   inst = false,
   options: EventPlacementOptions = {},
 ): JudgeLineEvent | PlacedShaderEvent | null {
-  const start = Math.min(first, second);
-  const end = Math.max(first, second);
+  const firstBeat = toBeat(first);
+  const secondBeat = toBeat(second);
+  const start = minBeat(firstBeat, secondBeat);
+  const end = maxBeat(firstBeat, secondBeat);
   // No event may start and end on the same beat, hooked or not.
-  if (end - start < 0.001) {
+  if (beatValue(end) - beatValue(start) < 0.001) {
     return null;
   }
   const events = eventListAt(session, lineIndex, type, options.eventLayer ?? session.eventLayer);
   if (type === "paintEvents") {
     return {
-      startTime: fromNumber(start),
-      endTime: fromNumber(end),
+      startTime: start,
+      endTime: end,
       shader: "chromatic",
       global: false,
       order: 0,
@@ -197,7 +209,7 @@ export function placedEvent(
     : [];
   if (
     [...events, ...trajectories].some(
-      (event) => start < beatValue(event.endTime) && end > beatValue(event.startTime),
+      (event) => compareBeats(start, event.endTime) < 0 && compareBeats(event.startTime, end) < 0,
     )
   ) {
     throw new EventPlacementError(
@@ -206,12 +218,14 @@ export function placedEvent(
     );
   }
   let previous: JudgeLineEvent | undefined;
-  let previousStart = -Infinity;
+  let previousStart: readonly number[] | undefined;
   for (const event of events) {
-    const eventStart = beatValue(event.startTime);
-    if (beatValue(event.endTime) <= start && eventStart >= previousStart) {
+    if (
+      compareBeats(event.endTime, start) <= 0 &&
+      (!previousStart || compareBeats(event.startTime, previousStart) >= 0)
+    ) {
       previous = event;
-      previousStart = eventStart;
+      previousStart = event.startTime;
     }
   }
   const fallback =
@@ -244,8 +258,8 @@ interface EventActionPayload {
   end?: LineEventValue;
   easingType?: number;
   instant?: boolean;
-  nextStartBeat?: number;
-  nextEndBeat?: number;
+  nextStartBeat?: number | Beat;
+  nextEndBeat?: number | Beat;
 }
 
 type EventActionInput = CoordinateActionInput<EventActionPayload>;
@@ -257,7 +271,22 @@ export function isEventActionInput(input: unknown): input is EventActionInput {
   return Boolean(input && typeof input === "object" && "target" in input);
 }
 
-/** Places one event at a target after line and track compatibility checks. */
+/** One exact event endpoint. */
+export interface EventBeatCoordinate {
+  beat: Beat;
+  positionX: number;
+}
+
+/** Exact-beat event target used by pointer placement. */
+export interface EventBeatTarget {
+  lineIndex: number;
+  layer: number;
+  eventType: string;
+  from: EventBeatCoordinate;
+  to: EventBeatCoordinate;
+}
+
+/** Places one event at a numeric target after line and track compatibility checks. */
 export function placeEventAtTarget(
   session: EditorSession,
   input: EventActionInput,
@@ -267,10 +296,43 @@ export function placeEventAtTarget(
     return validation;
   }
   const target = input.target;
-  const type = target.eventType as string;
-  const end = target.to ?? target.from;
   if (!target.to) {
     return rejected("to.requiredForEvent");
+  }
+  return placeEventAtBeatTarget(
+    session,
+    {
+      lineIndex: target.lineIndex,
+      layer: target.layer as number,
+      eventType: target.eventType as string,
+      from: { beat: toBeat(target.from.beat), positionX: target.from.positionX },
+      to: { beat: toBeat(target.to.beat), positionX: target.to.positionX },
+    },
+    input.payload,
+  );
+}
+
+/** Places one event at an exact-beat target, keeping both anchors' triples intact. */
+export function placeEventAtBeatTarget(
+  session: EditorSession,
+  target: EventBeatTarget,
+  payload: EventActionPayload = {},
+): ActionResult<JudgeLineEvent | PlacedShaderEvent> {
+  const type = target.eventType;
+  if (!isEventTrack(type) && type !== NOISE_ACTIVE_EVENTS) {
+    return rejected("eventType.unsupported");
+  }
+  if (!Number.isInteger(target.lineIndex) || target.lineIndex < 0) {
+    return rejected("target.lineIndex.nonNegativeInteger");
+  }
+  if (!Number.isInteger(target.layer) || target.layer < 0) {
+    return rejected("layer.nonNegativeInteger");
+  }
+  if (!isBeat(target.from.beat) || !isBeat(target.to.beat)) {
+    return rejected("target.beat.invalid");
+  }
+  if (!Number.isFinite(target.from.positionX) || !Number.isFinite(target.to.positionX)) {
+    return rejected("target.positionX.finite");
   }
   if (!session.chart.judgeLineList?.[target.lineIndex]) {
     return rejected("target.lineIndex.exists");
@@ -285,17 +347,17 @@ export function placeEventAtTarget(
   }
   const beforeSelection = session.selectionState();
   session.selectLine(target.lineIndex);
-  session.eventLayer = target.layer as number;
+  session.eventLayer = target.layer;
   try {
     const event = placedEvent(
       session,
       type,
       target.from.beat,
-      end.beat,
-      input.payload?.easingType,
+      target.to.beat,
+      payload.easingType,
       target.lineIndex,
-      input.payload?.instant ?? false,
-      { eventLayer: target.layer, start: input.payload?.start, end: input.payload?.end },
+      payload.instant ?? false,
+      { eventLayer: target.layer, start: payload.start, end: payload.end },
     );
     if (!event) {
       return { status: "unchanged", reason: "no_change" };
@@ -450,17 +512,19 @@ export function updateEventsAtTarget(
 
 /** Applies a patch, refusing an empty span; `instant` locks the values only. */
 function updateEvent(event: JudgeLineEvent, payload: EventActionPayload): JudgeLineEvent | null {
-  const startBeat = payload.nextStartBeat ?? beatValue(event.startTime);
-  const endBeat = payload.nextEndBeat ?? beatValue(event.endTime);
-  if (endBeat <= startBeat) {
+  const startBeat =
+    payload.nextStartBeat === undefined ? toBeat(event.startTime) : toBeat(payload.nextStartBeat);
+  const endBeat =
+    payload.nextEndBeat === undefined ? toBeat(event.endTime) : toBeat(payload.nextEndBeat);
+  if (compareBeats(endBeat, startBeat) <= 0) {
     return null;
   }
   const start = payload.start === undefined ? event.start : structuredClone(payload.start);
   const end = payload.instant ? structuredClone(start) : structuredClone(payload.end ?? event.end);
   const next = {
     ...event,
-    startTime: fromNumber(startBeat),
-    endTime: fromNumber(endBeat),
+    startTime: startBeat,
+    endTime: endBeat,
     start,
     end,
     ...(payload.easingType === undefined ? {} : { easingType: payload.easingType }),
@@ -508,11 +572,16 @@ function validateEventPatch(payload: EventActionPayload): ActionResult<never> | 
   for (const [name, value] of [
     ["nextStartBeat", payload.nextStartBeat],
     ["nextEndBeat", payload.nextEndBeat],
-    ["easingType", payload.easingType],
   ] as const) {
-    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) {
-      return rejected(`${name}.finite`);
+    if (value !== undefined && !validBeatInput(value)) {
+      return rejected(`${name}.invalid`);
     }
+  }
+  if (
+    payload.easingType !== undefined &&
+    (typeof payload.easingType !== "number" || !Number.isFinite(payload.easingType))
+  ) {
+    return rejected("easingType.finite");
   }
   if (payload.start !== undefined && !validEventValue(payload.start)) {
     return rejected("start.unsupportedValue");
@@ -521,6 +590,11 @@ function validateEventPatch(payload: EventActionPayload): ActionResult<never> | 
     return rejected("end.unsupportedValue");
   }
   return null;
+}
+
+/** True for a finite numeric beat or a structurally valid triple. */
+function validBeatInput(value: number | readonly number[]): boolean {
+  return typeof value === "number" ? Number.isFinite(value) : isBeat(value);
 }
 
 /** True for null, string, finite number, or a finite-number array value. */
@@ -699,102 +773,3 @@ function addXYCounterpartRemovals(
     removals.set(counterpartType, counterpartIndices);
   }
 }
-
-// ------------------------------------------------------------------ shortcuts
-
-/** Ctrl+Q/W/E/R/T switch the active event layer without touching note keys. */
-export const eventLayerShortcuts: readonly EditorShortcutDefinition[] = [
-  {
-    id: "event.layer.0",
-    category: "editor.editing",
-    title: "shortcuts.editor.eventLayer0",
-    scope: "editor",
-    defaults: [{ key: "Q", modifiers: ["CTRL"] }],
-  },
-  {
-    id: "event.layer.1",
-    category: "editor.editing",
-    title: "shortcuts.editor.eventLayer1",
-    scope: "editor",
-    defaults: [{ key: "W", modifiers: ["CTRL"] }],
-  },
-  {
-    id: "event.layer.2",
-    category: "editor.editing",
-    title: "shortcuts.editor.eventLayer2",
-    scope: "editor",
-    defaults: [{ key: "E", modifiers: ["CTRL"] }],
-  },
-  {
-    id: "event.layer.3",
-    category: "editor.editing",
-    title: "shortcuts.editor.eventLayer3",
-    scope: "editor",
-    defaults: [{ key: "R", modifiers: ["CTRL"] }],
-  },
-  {
-    id: "event.layer.4",
-    category: "editor.editing",
-    title: "shortcuts.editor.eventLayerExtended",
-    scope: "editor",
-    defaults: [{ key: "T", modifiers: ["CTRL"] }],
-    // The editor layer shortcut only takes precedence while the event area owns
-    // the pointer.
-    enabledFor: (context) => context.area === "events",
-  },
-];
-
-/**
- * Placing a note or an event.
- *
- * R is two commands, not one: it places a Hold over the notes timeline and an
- * event over the event area, which is what `enabledFor` decides here. Q places a
- * Tap over the notes timeline and an anchor event over the event area, so it is
- * available in both areas. The other note types stay note-only and never place
- * through the event timeline.
- */
-export const eventShortcuts: readonly EditorShortcutDefinition[] = [
-  {
-    id: "note.place.tap",
-    category: "editor.notes",
-    title: "shortcuts.editor.addTap",
-    scope: "editor",
-    defaults: [{ key: "Q" }],
-  },
-  {
-    id: "note.place.drag",
-    shared: true,
-    category: "editor.notes",
-    title: "shortcuts.editor.addDrag",
-    scope: "editor",
-    defaults: [{ key: "W" }],
-    enabledFor: (context) => context.area !== "events",
-  },
-  {
-    id: "note.place.flick",
-    shared: true,
-    category: "editor.notes",
-    title: "shortcuts.editor.addFlick",
-    scope: "editor",
-    defaults: [{ key: "E" }],
-    enabledFor: (context) => context.area !== "events",
-  },
-  {
-    id: "note.place.hold",
-    shared: true,
-    category: "editor.notes",
-    title: "shortcuts.editor.addHold",
-    scope: "editor",
-    defaults: [{ key: "R" }],
-    enabledFor: (context) => context.area !== "events",
-  },
-  {
-    id: "event.place",
-    shared: true,
-    category: "editor.notes",
-    title: "shortcuts.editor.addEvent",
-    scope: "editor",
-    defaults: [{ key: "R" }],
-    enabledFor: (context) => context.area === "events",
-  },
-];

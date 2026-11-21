@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createChart } from "../../../core/global/chart/chart.ts";
 import { beatValue } from "../../../core/global/chart/timing/beat.ts";
-import { placeEventAtTarget } from "../../../core/edit/events/eventCommands.ts";
+import {
+  placeEventAtBeatTarget,
+  placeEventAtTarget,
+} from "../../../core/edit/events/eventCommands.ts";
 import {
   matchEditorShortcut,
   registerEditorShortcuts,
@@ -43,6 +46,24 @@ test("an event finished before its first click commits the earlier click as the 
   assert.ok(placed, "the placed event carries the ordered 2-4 beat span");
   assert.deepEqual(placed.startTime, [2, 0, 1]);
   assert.deepEqual(placed.endTime, [4, 0, 1]);
+});
+
+test("a twelfth-grid event keeps both anchors exact", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers[0].moveXEvents = [];
+  const session = new EditorSession(chart);
+  const result = placeEventAtBeatTarget(session, {
+    lineIndex: 0,
+    layer: 0,
+    eventType: "moveXEvents",
+    from: { beat: [0, 1, 12], positionX: 0 },
+    to: { beat: [0, 1, 4], positionX: 0 },
+  });
+  assert.equal(result.status, "committed");
+
+  const placed = session.chart.judgeLineList[0].eventLayers[0].moveXEvents.at(-1);
+  assert.deepEqual(placed.startTime, [0, 1, 12]);
+  assert.deepEqual(placed.endTime, [0, 1, 4]);
 });
 
 test("an event whose two anchors share a beat is refused", () => {

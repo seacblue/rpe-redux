@@ -10,7 +10,6 @@ import {
   addBeats,
   beatCopy,
   compareBeats,
-  fromNumber,
   maxBeat,
   subtractBeats,
   type Beat,
@@ -269,7 +268,7 @@ export function renderProperties(
       if (kind === "beat") {
         const defaultBeat =
           key === "startTime"
-            ? fromNumber(0)
+            ? ([0, 0, 1] as Beat)
             : note.type === 2
               ? addBeatFraction(note.startTime, 1, 1)
               : beatCopy(note.startTime);

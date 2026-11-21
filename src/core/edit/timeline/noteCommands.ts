@@ -9,7 +9,16 @@ import { t } from "../../../i18n/index.ts";
 import { countScoringNotes, createNote } from "../../global/chart/chart.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
 import type { JudgeLineNote } from "../../global/chart/chart.ts";
-import { beatValue, fromNumber } from "../../global/chart/timing/beat.ts";
+import {
+  beatValue,
+  fromNumber,
+  isBeat,
+  maxBeat,
+  minBeat,
+  normalizeBeat,
+  toBeat,
+  type Beat,
+} from "../../global/chart/timing/beat.ts";
 import {
   validateActionTarget,
   type ActionResult,
@@ -24,8 +33,8 @@ interface NoteActionPayload {
   type?: NoteType;
   nextType?: NoteType;
   positionX?: number;
-  startBeat?: number;
-  endBeat?: number;
+  startBeat?: number | Beat;
+  endBeat?: number | Beat;
 }
 
 type NoteActionInput = CoordinateActionInput<NoteActionPayload>;
@@ -55,7 +64,20 @@ export function isNoteActionInput(input: unknown): input is NoteActionInput {
   return Boolean(input && typeof input === "object" && "target" in input);
 }
 
-/** Creates one note at a target, validating hold geometry and line editability. */
+/** One action coordinate whose beat is already an exact triple. */
+export interface BeatActionCoordinate {
+  beat: Beat;
+  positionX: number;
+}
+
+/** Exact-beat form of a note action target used by the pointer placement path. */
+export interface BeatActionTarget {
+  lineIndex: number;
+  from: BeatActionCoordinate;
+  to?: BeatActionCoordinate;
+}
+
+/** Creates one note at a numeric target, quantizing its beats over the default resolution. */
 export function placeNoteAtTarget(
   session: EditorSession,
   type: NoteType,
@@ -67,6 +89,39 @@ export function placeNoteAtTarget(
   const validation = validateActionTarget(target);
   if (validation) {
     return validation;
+  }
+  return placeNoteAtBeatTarget(session, type, {
+    lineIndex: target.lineIndex,
+    from: { beat: fromNumber(target.from.beat), positionX: target.from.positionX },
+    to: target.to
+      ? { beat: fromNumber(target.to.beat), positionX: target.to.positionX }
+      : undefined,
+  });
+}
+
+/** Creates one note at an exact-beat target, validating hold geometry and line editability. */
+export function placeNoteAtBeatTarget(
+  session: EditorSession,
+  type: NoteType,
+  target: BeatActionTarget,
+): ActionResult<JudgeLineNote> {
+  if (!NOTE_TYPES.has(type)) {
+    return rejected("type.unsupported");
+  }
+  if (!Number.isInteger(target.lineIndex) || target.lineIndex < 0) {
+    return rejected("target.lineIndex.nonNegativeInteger");
+  }
+  if (!isBeat(target.from.beat)) {
+    return rejected("target.from.beat.invalid");
+  }
+  if (!Number.isFinite(target.from.positionX)) {
+    return rejected("target.from.positionX.finite");
+  }
+  if (target.to && !isBeat(target.to.beat)) {
+    return rejected("target.to.beat.invalid");
+  }
+  if (target.to && !Number.isFinite(target.to.positionX)) {
+    return rejected("target.to.positionX.finite");
   }
   const beforeSelection = session.selectionState();
   const line = session.chart.judgeLineList?.[target.lineIndex];
@@ -80,9 +135,9 @@ export function placeNoteAtTarget(
   if (type === 2 && Math.abs(target.from.positionX - end.positionX) > EPSILON) {
     return rejected("hold.positionX.mustMatch");
   }
-  const startBeat = Math.min(target.from.beat, end.beat);
-  const endBeat = Math.max(target.from.beat, end.beat);
-  if (type === 2 && endBeat - startBeat <= EPSILON) {
+  const startBeat = minBeat(target.from.beat, end.beat);
+  const endBeat = maxBeat(target.from.beat, end.beat);
+  if (type === 2 && beatValue(endBeat) - beatValue(startBeat) <= EPSILON) {
     return rejected("hold.range.nonZero");
   }
   const targetLineIndex = resolveMergedNoteLine(session, target.lineIndex);
@@ -218,15 +273,21 @@ export function updateNotesAtTarget(
 /** Applies a note patch, keeping non-hold notes instantaneous. */
 function updateNote(note: JudgeLineNote, payload: NoteActionPayload): JudgeLineNote {
   const type = payload.nextType ?? note.type;
-  const startBeat = payload.startBeat ?? beatValue(note.startTime);
-  const previousEnd = beatValue(note.endTime);
-  const endBeat = type === 2 ? (payload.endBeat ?? previousEnd) : startBeat;
+  const startBeat =
+    payload.startBeat === undefined ? normalizeBeat(note.startTime) : toBeat(payload.startBeat);
+  const previousEnd = normalizeBeat(note.endTime);
+  const endBeat =
+    type === 2
+      ? payload.endBeat === undefined
+        ? previousEnd
+        : toBeat(payload.endBeat)
+      : startBeat;
   return {
     ...note,
     type,
     positionX: payload.positionX ?? Number(note.positionX ?? 0),
-    startTime: fromNumber(startBeat),
-    endTime: fromNumber(endBeat),
+    startTime: startBeat,
+    endTime: endBeat,
   };
 }
 
@@ -284,13 +345,18 @@ function validateNoteInput(input: NoteActionInput): ActionResult<never> | null {
 
 /** Validates finite coordinates and hold-only beat ranges. */
 function validateNotePatch(payload: NoteActionPayload): ActionResult<never> | null {
+  if (
+    payload.positionX !== undefined &&
+    (typeof payload.positionX !== "number" || !Number.isFinite(payload.positionX))
+  ) {
+    return rejected("positionX.finite");
+  }
   for (const [name, value] of [
-    ["positionX", payload.positionX],
     ["startBeat", payload.startBeat],
     ["endBeat", payload.endBeat],
   ] as const) {
-    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) {
-      return rejected(`${name}.finite`);
+    if (value !== undefined && !validBeatInput(value)) {
+      return rejected(`${name}.invalid`);
     }
   }
   if (
@@ -298,11 +364,16 @@ function validateNotePatch(payload: NoteActionPayload): ActionResult<never> | nu
     payload.nextType !== undefined &&
     payload.endBeat !== undefined &&
     payload.startBeat !== undefined &&
-    Math.abs(payload.endBeat - payload.startBeat) > EPSILON
+    Math.abs(beatValue(toBeat(payload.endBeat)) - beatValue(toBeat(payload.startBeat))) > EPSILON
   ) {
     return rejected("range.onlyHoldMayExtend");
   }
   return null;
+}
+
+/** True for a finite numeric beat or a structurally valid triple. */
+function validBeatInput(value: number | readonly number[]): boolean {
+  return typeof value === "number" ? Number.isFinite(value) : isBeat(value);
 }
 
 /** Builds a rejected result carrying one issue code. */

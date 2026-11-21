@@ -7,7 +7,7 @@
  * the panel draws the result and commits it as one history entry.
  */
 import { t } from "../../../i18n/index.ts";
-import { beatValue, fromNumber } from "../../global/chart/timing/beat.ts";
+import { addBeats, toBeat } from "../../global/chart/timing/beat.ts";
 import type { Chart } from "../../global/chart/chart.ts";
 import { compileExpression } from "../../utils/batchScript.ts";
 import { lineSelectionGroups, parseLineSelectionInput } from "../state/lineSelectionInput.ts";
@@ -114,8 +114,9 @@ export function previewEventClone(
       const offset = targetIndex * increment;
       const after = structuredClone(event);
       if (offset !== 0) {
-        after.startTime = fromNumber(beatValue(event.startTime) + offset);
-        after.endTime = fromNumber(beatValue(event.endTime) + offset);
+        const offsetBeat = toBeat(offset);
+        after.startTime = addBeats(event.startTime, offsetBeat);
+        after.endTime = addBeats(event.endTime, offsetBeat);
       }
       const modifier = modifiers.get(type as CloneChannelType);
       if (modifier) {

@@ -6,6 +6,7 @@
  * action routing out of the clipboard operations themselves.
  */
 import type { EditorSession } from "../session/session.ts";
+import type { Beat } from "../../global/chart/timing/beat.ts";
 import type { ClipboardHistory } from "./clipboardHistory.ts";
 import {
   copyObjects,
@@ -18,7 +19,7 @@ import {
 export interface SelectionClipboardDependencies {
   session(): EditorSession;
   targetLine(): number;
-  targetBeat(): number;
+  targetBeat(): number | Beat;
   clipboardMode(): { mirror?: boolean; keepTime?: boolean };
   setClipboardMode(mode: { mirror?: boolean; keepTime?: boolean }): void;
   history: Pick<ClipboardHistory, "remember" | "clearCurrent">;
@@ -81,7 +82,10 @@ export function createSelectionClipboard(deps: SelectionClipboardDependencies) {
   }
 
   /** Pastes at a beat, defaulting the target line from the active one. */
-  function pasteAt(beat: number, options: SelectionClipboardMode = deps.clipboardMode()): boolean {
+  function pasteAt(
+    beat: number | Beat,
+    options: SelectionClipboardMode = deps.clipboardMode(),
+  ): boolean {
     const { targetLineIndex = targetLine(), ...clipboardMode } = options;
     return pasteObjects(session(), beat, { ...clipboardMode, targetLineIndex });
   }

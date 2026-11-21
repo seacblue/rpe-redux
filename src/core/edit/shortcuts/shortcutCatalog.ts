@@ -27,7 +27,7 @@ import { shortcutScopeAvailable, shortcutScopePriority } from "../../shortcuts/s
 import { historyShortcuts } from "../session/history.ts";
 import { selectionShortcuts } from "../selection/control.ts";
 import { clipboardShortcuts } from "../clipboard/operations.ts";
-import { eventLayerShortcuts, eventShortcuts } from "../events/eventCommands.ts";
+import { eventLayerShortcuts, eventShortcuts } from "../events/eventShortcuts.ts";
 import { trajectoryShortcuts } from "../events/trajectoryCommands.ts";
 import { playbackShortcuts } from "../playback/transport.ts";
 import { multiLineShortcuts } from "../multiLine/multiLineEdit.ts";

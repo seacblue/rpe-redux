@@ -5,7 +5,7 @@
  * beats through the `TempoGrid` seam, and wheel deltas convert to chart seconds.
  * Only arithmetic lives here; the editor owns gesture state.
  */
-import { beatFromFraction, beatValue, fromNumber, type Beat } from "../timing/beat.ts";
+import { beatFromFraction, fromNumber, type Beat } from "../timing/beat.ts";
 
 /** The vertical grid's spacing, first line index and rendered line count. */
 interface VerticalGrid {
@@ -72,16 +72,6 @@ export function snapTime(seconds: number, division: number, tempo: TempoGrid, fa
   return Number.isSafeInteger(division) && division > 0
     ? beatFromFraction(nearest, division)
     : fromNumber(nearest / division);
-}
-
-/** The beat range spanned by two placements, or null when they are effectively equal. */
-export function placementRange(
-  first: readonly number[],
-  second: readonly number[],
-): { start: number; end: number } | null {
-  const start = Math.min(beatValue(first), beatValue(second));
-  const end = Math.max(beatValue(first), beatValue(second));
-  return end - start < 0.001 ? null : { start, end };
 }
 
 /**

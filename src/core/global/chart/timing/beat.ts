@@ -95,6 +95,17 @@ export function fromNumber(value: number, denominator = 10000): Beat {
   return normalizeBeat([whole, Math.floor((value - whole) * denominator), denominator]);
 }
 
+/**
+ * Reduce a numeric or triple beat input to the canonical triple.
+ *
+ * A triple is the exact representation and is only reduced. A number is the
+ * continuous boundary; it is quantized once over {@link fromNumber}'s default
+ * resolution, so callers that already hold a triple must pass it through.
+ */
+export function toBeat(value: number | readonly number[]): Beat {
+  return typeof value === "number" ? fromNumber(value) : normalizeBeat(value);
+}
+
 /** Sum two beats exactly and return the reduced triple. */
 export function addBeats(left: readonly number[], right: readonly number[]): Beat {
   const [a, b, c] = left.map((value: number) => BigInt(value));

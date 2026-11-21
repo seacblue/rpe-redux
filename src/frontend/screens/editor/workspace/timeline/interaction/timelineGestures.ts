@@ -20,6 +20,7 @@ import type {
   PendingHold,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { EventInteractionHandle } from "../drawing/canvas.ts";
+import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 
 const EMPTY_EVENT_RECTS: readonly TimelineEventRect[] = [];
 
@@ -82,7 +83,7 @@ export class TimelineGestures {
   scaleAxis: number | null = null;
   scaleAxisLine: number | null = null;
   curvePick: ((note: TimelineNote, index: number, lineIndex: number) => unknown) | null = null;
-  curvePickPoint?: ((beat: number, positionX: number) => unknown) | null;
+  curvePickPoint?: ((beat: number | Beat, positionX: number) => unknown) | null;
   curveQuickPick: ((note: TimelineNote, index: number, lineIndex: number) => boolean) | null = null;
   curveGhost?: () => TimelineNote[];
   /**

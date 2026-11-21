@@ -12,9 +12,9 @@ import { createChartObjectId } from "../../global/chart/identity.ts";
 import {
   beatValue,
   compareBeats,
-  fromNumber,
   normalizeBeat,
   subtractBeats,
+  toBeat,
   type Beat,
 } from "../../global/chart/timing/beat.ts";
 import type { JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
@@ -418,7 +418,7 @@ export function projectClipboard(
   }
   // The caller may still hand over a continuous coordinate; the subtraction of
   // the clipboard anchor is exact from here on.
-  const targetBeat = typeof beat === "number" ? fromNumber(beat) : normalizeBeat(beat);
+  const targetBeat = toBeat(beat);
   const delta = keepTime ? ([0, 0, 1] as Beat) : subtractBeats(targetBeat, earliest);
   const shifted = compareBeats(delta, [0, 0, 1]) !== 0;
   const sourceLines = [...noteLines, ...eventLines];
