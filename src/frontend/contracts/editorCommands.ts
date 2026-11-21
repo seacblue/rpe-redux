@@ -46,6 +46,14 @@ export interface AuditionOptions {
 /** Playback commands shared by the View menu and the transport controls. */
 export interface EditorTransportCommands {
   togglePlayback(): void;
+  /**
+   * The toolbar play button's verb: play with the note and event regions hidden,
+   * or pause where the chart is and show them again.
+   *
+   * `togglePlayback` stays the plain transport toggle, which is what Space runs;
+   * this command also owns RPE's playback layout.
+   */
+  togglePlaybackPreview(): void;
   beginAudition(options?: AuditionOptions): void;
   endAudition(): void;
   rewind(): void;

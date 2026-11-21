@@ -107,6 +107,8 @@ Audio volume is controlled from the expandable console at the bottom-right of th
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
 
+`Space` is the plain transport toggle and never changes the layout. The toolbar's play button also owns RPE's playback layout: starting hides the note and event regions behind the preview, and pausing shows them again at the current position.
+
 Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` / `Ctrl+Y` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
 
 ## File and application keys

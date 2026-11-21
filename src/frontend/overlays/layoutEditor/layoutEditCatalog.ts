@@ -30,10 +30,11 @@ export interface LayoutEntry {
 /**
  * Commands a surface already offers through a richer control.
  *
- * `playback.play` is the same toggle the transport control draws, so listing both
- * would put two buttons that do one thing on the same bar. The control wins because
- * it is the affordance a user recognises, and the action stays available to menus
- * and to the shortcut it carries.
+ * `playback.play` is the plain transport toggle, while the transport control also
+ * owns RPE's playback layout. Listing both would put two play buttons with
+ * different behavior on the same bar. The control wins because it is the
+ * affordance a user recognises, and the action stays available to menus and to
+ * the Space shortcut it carries.
  */
 const DUPLICATED_BY_CONTROL: ReadonlySet<string> = new Set(["playback.play"]);
 
