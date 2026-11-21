@@ -10,6 +10,10 @@ import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition } from "../types.ts";
 import { LAYOUT_REGIONS } from "../../shell/layoutProportions.ts";
 
+// A hundredth keeps every default and minimum on the slider grid; a twentieth
+// would snap the 0.75 default up to 0.76 on the rows whose minimum is 0.62.
+const STEP = 0.01;
+
 const LayoutSettings: SettingDefinition[] = [
   {
     key: LAYOUT_REGIONS.toolbar.key,
@@ -21,7 +25,7 @@ const LayoutSettings: SettingDefinition[] = [
     default: LAYOUT_REGIONS.toolbar.defaultScale,
     min: LAYOUT_REGIONS.toolbar.minScale,
     max: LAYOUT_REGIONS.toolbar.maxScale,
-    step: 0.02,
+    step: STEP,
     unit: "settings.unit.layout-scale",
   },
   {
@@ -34,7 +38,7 @@ const LayoutSettings: SettingDefinition[] = [
     default: LAYOUT_REGIONS.statusbar.defaultScale,
     min: LAYOUT_REGIONS.statusbar.minScale,
     max: LAYOUT_REGIONS.statusbar.maxScale,
-    step: 0.02,
+    step: STEP,
     unit: "settings.unit.layout-scale",
   },
   {
@@ -47,7 +51,7 @@ const LayoutSettings: SettingDefinition[] = [
     default: LAYOUT_REGIONS.inspector.defaultScale,
     min: LAYOUT_REGIONS.inspector.minScale,
     max: LAYOUT_REGIONS.inspector.maxScale,
-    step: 0.02,
+    step: STEP,
     unit: "settings.unit.layout-scale",
   },
   {
@@ -60,7 +64,7 @@ const LayoutSettings: SettingDefinition[] = [
     default: LAYOUT_REGIONS.sidebar.defaultScale,
     min: LAYOUT_REGIONS.sidebar.minScale,
     max: LAYOUT_REGIONS.sidebar.maxScale,
-    step: 0.02,
+    step: STEP,
     unit: "settings.unit.layout-scale",
   },
   {
@@ -73,7 +77,7 @@ const LayoutSettings: SettingDefinition[] = [
     default: LAYOUT_REGIONS.progress.defaultScale,
     min: LAYOUT_REGIONS.progress.minScale,
     max: LAYOUT_REGIONS.progress.maxScale,
-    step: 0.02,
+    step: STEP,
     unit: "settings.unit.layout-scale",
   },
 ];

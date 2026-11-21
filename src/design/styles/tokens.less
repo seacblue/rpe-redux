@@ -40,26 +40,36 @@
   // authored density at any window size: a larger display gives its extra pixels
   // to the workspace instead of inflating every button around it. The title bar
   // stays a fixed caption row because it also hosts the window controls.
-  // The user's own factor times the display's density, so a profile keeps its
-  // authored visual size when the window moves to a denser panel or a larger
-  // desktop. `--layout-density` is 1 on an ordinary display.
+  // The region's painted content factor is its stored scale times the display's
+  // density, the host factor, and the continuous window factor. React republishes
+  // the factor after clamping it to the viewport, so the box and everything drawn
+  // inside it read the same number. `--layout-display-scale` is 1 on an ordinary
+  // desktop display; `--layout-density` remains the raw pixel ratio.
   --layout-density: 1;
+  --layout-display-scale: var(--layout-density);
   --layout-toolbar-scale: 1;
-  --layout-toolbar-height: calc(96px * var(--layout-toolbar-scale) * var(--layout-density));
+  --layout-toolbar-content-scale: calc(var(--layout-toolbar-scale) * var(--layout-display-scale));
+  --layout-toolbar-height: calc(96px * var(--layout-toolbar-content-scale));
   --layout-statusbar-scale: 1;
-  --layout-statusbar-height: calc(36px * var(--layout-statusbar-scale) * var(--layout-density));
-  --layout-inspector-scale: 1;
-  --layout-inspector-width: min(
-    calc(400px * var(--layout-inspector-scale) * var(--layout-density)),
-    57vw
+  --layout-statusbar-content-scale: calc(
+    var(--layout-statusbar-scale) * var(--layout-display-scale)
   );
+  --layout-statusbar-height: calc(36px * var(--layout-statusbar-content-scale));
+  --layout-inspector-scale: 1;
+  --layout-inspector-content-scale: calc(
+    var(--layout-inspector-scale) * var(--layout-display-scale)
+  );
+  --layout-inspector-width: min(calc(400px * var(--layout-inspector-content-scale)), 57vw);
   --layout-sidebar-scale: 1;
-  --layout-sidebar-width: calc(56px * var(--layout-sidebar-scale) * var(--layout-density));
+  --layout-sidebar-content-scale: calc(var(--layout-sidebar-scale) * var(--layout-display-scale));
+  --layout-sidebar-width: calc(56px * var(--layout-sidebar-content-scale));
+  --layout-progress-scale: 1;
+  --layout-progress-content-scale: calc(var(--layout-progress-scale) * var(--layout-display-scale));
 
   --inspector-width: var(--layout-inspector-width);
   // The document drawer adds this list column beyond the resting inspector
   // width. The property column keeps `--inspector-width`.
-  --drawer-list-width: calc(240px * var(--layout-inspector-scale));
+  --drawer-list-width: calc(240px * var(--layout-inspector-content-scale));
   // The trailing rail column beside the inspector.
   --chrome-sidebar-track: var(--layout-sidebar-width);
   // ------------------------------------------------------------ content scale

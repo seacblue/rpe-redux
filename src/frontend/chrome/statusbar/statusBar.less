@@ -27,7 +27,10 @@
   flex: none;
   gap: var(--space-3);
   min-height: var(--layout-statusbar-height);
-  padding: var(--space-1) var(--space-5);
+  // The bar is one caption row with a compact action, so its vertical padding is
+  // half a space step: the action fills the row instead of the padding pushing the
+  // bar taller than its own controls.
+  padding: calc(var(--space-1) / 2) var(--space-5);
   background: var(--status-bar);
   border-top: 1px solid var(--edge-divider);
   .meta-text();

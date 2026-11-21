@@ -1,36 +1,36 @@
 /* Shell framing: workbench panel edges, shared panel headers, pane action rows,
    and the fixed inspector column that hosts the workspace and sidebar. */
 
-// Every adjustable region carries its own scale and re-derives the size tokens
-// inside its box, so a taller toolbar holds taller buttons and a wider inspector
-// holds larger fields instead of the same contents with more empty space. The
-// mixin is called on the region itself because a custom property resolves where
-// it is declared.
+// Every adjustable region carries its own painted content scale and re-derives
+// the size tokens inside its box, so a taller toolbar holds taller buttons and a
+// wider inspector holds larger fields instead of the same contents with more
+// empty space. The mixin is called on the region itself because a custom property
+// resolves where it is declared.
 //
-// The content scale is the same product the stylesheet multiplies the region's box
-// by: the user's scale times the display's density. Leaving density out leaves
-// that share as empty track — on a 125% display the toolbar frame grows by a
-// quarter while its cells stay authored size, and the slack lands between the two
-// rows.
-.region-content-scale(@scale) {
-  --ui-scale: calc(var(@scale, 1) * var(--layout-density, 1));
+// The published factor already includes the display density, the host factor,
+// the continuous window factor, and the viewport ceiling. The
+// `scale × display-scale` fallback covers the first frame before the React
+// binding publishes the clamped factor; leaving density out would leave that
+// share as empty track on a denser display.
+.region-content-scale(@scale, @content-scale) {
+  --ui-scale: var(@content-scale, calc(var(@scale, 1) * var(--layout-display-scale, 1)));
   .content-scale();
 }
 
 .shell-body > .redux-toolbar {
-  .region-content-scale(--layout-toolbar-scale);
+  .region-content-scale(--layout-toolbar-scale, --layout-toolbar-content-scale);
 }
 
 .shell-body > footer {
-  .region-content-scale(--layout-statusbar-scale);
+  .region-content-scale(--layout-statusbar-scale, --layout-statusbar-content-scale);
 }
 
 .workbench-inspector > .inspector {
-  .region-content-scale(--layout-inspector-scale);
+  .region-content-scale(--layout-inspector-scale, --layout-inspector-content-scale);
 }
 
 .workbench-body > .sidebar {
-  .region-content-scale(--layout-sidebar-scale);
+  .region-content-scale(--layout-sidebar-scale, --layout-sidebar-content-scale);
 }
 
 .redux-app-root .workbench {
@@ -173,12 +173,13 @@
 // same edge and derives a wider width from the frame's morph number, so the
 // edge and the page faces share one timing function instead of running two
 // transitions.
+// The panel may not narrow past its own contents: the authored minimum times the
+// content factor the panel actually paints at, which already answers to the
+// viewport ceiling.
 .workbench-inspector > .inspector {
   flex: 1;
   width: 100%;
-  // The panel may not narrow past its own contents, which is the authored
-  // minimum times the scale the user chose.
-  min-width: calc(260px * var(--layout-inspector-scale, 1));
+  min-width: calc(260px * var(--layout-inspector-content-scale, 1));
   min-height: 0;
 }
 

@@ -1,19 +1,23 @@
 /**
  * React binding for the shell's panel sizes.
  *
- * The scale values are published on the document root so the stylesheet can
- * derive every panel size without a layout pass in JavaScript. The same number is
- * the contents' scale, so a panel that grows draws larger buttons, glyphs, type,
- * and gaps instead of an empty track around authored contents.
+ * The stored scale values and the factors their contents actually paint at are
+ * published on the document root, so the stylesheet can derive every panel size
+ * without a layout pass in JavaScript. The content factor includes the display
+ * density, the host factor, the continuous viewport factor, and the viewport
+ * ceiling; the box and everything drawn inside it read that one number, so
+ * neither can keep growing after the panel reaches a bound.
  *
- * The seam on each panel edits pixels and stores the equivalent scale, which is
- * what keeps a drag and the settings slider writing one value.
+ * The seam on each panel edits painted pixels and stores the equivalent scale,
+ * which is what keeps a drag and the settings slider writing one value.
  */
 import { useCallback, useLayoutEffect, useSyncExternalStore } from "react";
 import { values } from "../../../core/state/values.ts";
+import { isDesktop } from "../../../core/platform/environment.ts";
 import { useSetting } from "../../screens/settings/useSetting.ts";
 import {
   LAYOUT_REGIONS,
+  displayScale,
   formatScale,
   regionBounds,
   regionPixels,
@@ -22,15 +26,37 @@ import {
   type LayoutRegionId,
   type LayoutViewport,
 } from "../../../core/shell/layoutProportions.ts";
+import { hostLayoutScale, viewportLayoutScale } from "./layoutScale.ts";
 
-/** Subscribe to the viewport's CSS size. */
+/**
+ * Subscribe to the viewport size and the display's pixel ratio.
+ *
+ * Moving the window to a display with a different scale does not always resize
+ * the window, so the resolution media query is watched beside `resize`. The query
+ * matches one ratio at a time, so it is re-armed for the new ratio after each
+ * change.
+ */
 function subscribeViewport(listener: () => void): () => void {
   window.addEventListener("resize", listener);
-  return () => window.removeEventListener("resize", listener);
+  let media: MediaQueryList | null = null;
+  const onResolutionChange = () => {
+    armResolution();
+    listener();
+  };
+  const armResolution = () => {
+    media?.removeEventListener("change", onResolutionChange);
+    media = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    media.addEventListener("change", onResolutionChange);
+  };
+  armResolution();
+  return () => {
+    window.removeEventListener("resize", listener);
+    media?.removeEventListener("change", onResolutionChange);
+  };
 }
 
 /**
- * The density factor one region is drawn at.
+ * The density factor the shell is drawn at.
  *
  * A CSS pixel is already the host's scaled unit, so a 4K panel at 200% reads like a
  * 1080p panel and needs nothing extra. A 4K panel at 100% does not: the same 90px
@@ -38,27 +64,31 @@ function subscribeViewport(listener: () => void): () => void {
  * laptop looks like a strip of hairline icons there. This factor restores the
  * authored visual size by following the panel's pixel ratio, and is flat for the
  * ordinary 1x and 2x cases.
+ *
+ * It is clamped so an exotic display cannot blow the chrome up beyond its own
+ * range; the model multiplies it into every painted size, so the default sizes in
+ * this profile differ from display to display.
  */
 function densityFactor(): number {
   const ratio = window.devicePixelRatio;
   if (!Number.isFinite(ratio) || ratio <= 0) {
     return 1;
   }
-  // Clamped so an exotic display cannot blow the chrome up beyond its own range.
   return Math.min(1.6, Math.max(1, ratio));
 }
 
-/** Subscribe to a density change, which follows the window and the display. */
-function subscribeDensity(listener: () => void): () => void {
-  window.addEventListener("resize", listener);
-  window.addEventListener("redux-display-change", listener);
-  return () => {
-    window.removeEventListener("resize", listener);
-    window.removeEventListener("redux-display-change", listener);
-  };
+/** Read the display density through the viewport subscription. */
+function useDensity(): number {
+  return useSyncExternalStore(subscribeViewport, densityFactor, () => 1);
 }
 
-/** Read the viewport size React can re-render against. */
+/**
+ * Read the viewport size and every display factor React can re-render against.
+ *
+ * The host factor is fixed by where the page runs: the web build starts a quarter
+ * larger than the desktop app. The viewport factor is the continuous window or
+ * page share, recomputed on every resize.
+ */
 export function useViewportSize(): LayoutViewport {
   const width = useSyncExternalStore(
     subscribeViewport,
@@ -70,7 +100,13 @@ export function useViewportSize(): LayoutViewport {
     () => window.innerHeight,
     () => window.innerHeight,
   );
-  return { width, height };
+  return {
+    width,
+    height,
+    density: useDensity(),
+    hostScale: hostLayoutScale(isDesktop()),
+    viewportScale: viewportLayoutScale(width, height),
+  };
 }
 
 /** One region's live size and the write its seam performs. */
@@ -79,17 +115,21 @@ export interface LayoutRegionController {
   value: number;
   min: number;
   max: number;
-  /** The size restored by a double click. */
+  /** The painted size restored by a double click. */
   defaultValue: number;
-  /** Store a proposed pixel size as the equivalent scale. */
+  /** The factor the region's own contents paint at. */
+  contentScale: number;
+  /** Store a proposed painted pixel size as the equivalent scale. */
   setPixels(pixels: number): void;
 }
 
 /**
- * Publish every region's scale.
+ * Publish every region's stored scale and its painted content factor.
  *
- * One custom property per region carries the number: the stylesheet multiplies
- * the authored size by it, so the box and its contents cannot drift apart.
+ * One pair of custom properties per region carries the numbers: the stylesheet
+ * multiplies the authored size by the content factor, so the box and its contents
+ * cannot drift apart. The stored scale stays published for the settings row and
+ * for the fallback the stylesheet uses before this effect runs.
  */
 export function useLayoutProportions(): void {
   const toolbar = useSetting<string>(
@@ -112,59 +152,87 @@ export function useLayoutProportions(): void {
     LAYOUT_REGIONS.progress.key,
     formatScale(LAYOUT_REGIONS.progress.defaultScale),
   );
-  // A window dragged to a denser or larger display re-reads this rather than
-  // keeping the factors the first monitor reported.
-  const density = useSyncExternalStore(subscribeDensity, densityFactor, () => 1);
+  // A window dragged to a denser or larger display re-reads the factors rather
+  // than keeping the ones the first frame reported.
+  const { width, height, density = 1, hostScale = 1, viewportScale = 1 } = useViewportSize();
   useLayoutEffect(() => {
+    const display = { width, height, density, hostScale, viewportScale };
     const style = document.documentElement.style;
     style.setProperty("--layout-density", formatScale(density));
-    style.setProperty("--layout-toolbar-scale", toolbar);
-    style.setProperty("--layout-statusbar-scale", statusbar);
-    style.setProperty("--layout-inspector-scale", inspector);
-    style.setProperty("--layout-sidebar-scale", sidebar);
-    style.setProperty("--layout-progress-scale", progress);
+    style.setProperty("--layout-display-scale", formatScale(displayScale(display)));
+    const publish = (id: LayoutRegionId, stored: string, hostContentScale?: number) => {
+      const region = LAYOUT_REGIONS[id];
+      style.setProperty(`--layout-${id}-scale`, stored);
+      style.setProperty(
+        `--layout-${id}-content-scale`,
+        formatScale(regionScale(region, Number(stored), display, hostContentScale)),
+      );
+    };
+    // The transport card is hosted by the toolbar, so its content floor follows
+    // the toolbar's painted content factor instead of the authored one.
+    const toolbarContentScale = regionScale(LAYOUT_REGIONS.toolbar, Number(toolbar), display);
+    publish("toolbar", toolbar);
+    publish("statusbar", statusbar);
+    publish("inspector", inspector);
+    publish("sidebar", sidebar);
+    publish("progress", progress, toolbarContentScale);
     return () => {
       style.removeProperty("--layout-density");
-      style.removeProperty("--layout-toolbar-scale");
-      style.removeProperty("--layout-statusbar-scale");
-      style.removeProperty("--layout-inspector-scale");
-      style.removeProperty("--layout-sidebar-scale");
-      style.removeProperty("--layout-progress-scale");
+      style.removeProperty("--layout-display-scale");
+      for (const id of Object.keys(LAYOUT_REGIONS) as LayoutRegionId[]) {
+        style.removeProperty(`--layout-${id}-scale`);
+        style.removeProperty(`--layout-${id}-content-scale`);
+      }
     };
-  }, [density, toolbar, statusbar, inspector, sidebar, progress]);
+  }, [
+    width,
+    height,
+    density,
+    hostScale,
+    viewportScale,
+    toolbar,
+    statusbar,
+    inspector,
+    sidebar,
+    progress,
+  ]);
 }
 
-/** Read one region's scale as the live controller its splitter edits. */
+/**
+ * Read one region's scale as the live controller its splitter edits.
+ *
+ * `hostContentScale` is the painted content factor of the region that hosts this
+ * one; only a region with a content floor uses it. The transport card passes the
+ * toolbar's factor so its own seam stops where its readouts stop fitting.
+ */
 export function useLayoutRegion(
   id: LayoutRegionId,
   viewport: LayoutViewport,
+  hostContentScale?: number,
 ): LayoutRegionController {
   const region = LAYOUT_REGIONS[id];
   const stored = useSetting<string>(region.key, formatScale(region.defaultScale));
   const scale = Number(stored);
-  const { min, max } = regionBounds(region, viewport);
-  const { width, height } = viewport;
+  const { min, max } = regionBounds(region, viewport, hostContentScale);
+  const { width, height, density, hostScale, viewportScale } = viewport;
   const setPixels = useCallback(
     (pixels: number) => {
-      const next = scaleForPixels(region, pixels, { width, height });
+      const next = scaleForPixels(
+        region,
+        pixels,
+        { width, height, density, hostScale, viewportScale },
+        hostContentScale,
+      );
       values.byId.set(region.key, formatScale(next));
     },
-    [region, width, height],
+    [region, width, height, density, hostScale, viewportScale, hostContentScale],
   );
   return {
-    value: regionPixels(region, scale, viewport),
+    value: regionPixels(region, scale, viewport, hostContentScale),
     min,
     max,
-    defaultValue: regionPixels(region, region.defaultScale, viewport),
+    defaultValue: regionPixels(region, region.defaultScale, viewport, hostContentScale),
+    contentScale: regionScale(region, scale, viewport, hostContentScale),
     setPixels,
   };
-}
-
-/** The contents scale one region paints at, read outside React. */
-export function regionContentScale(id: LayoutRegionId, viewport: LayoutViewport): number {
-  const region = LAYOUT_REGIONS[id];
-  const stored = values.byId.has(region.key)
-    ? values.byId.get<string>(region.key)
-    : formatScale(region.defaultScale);
-  return regionScale(region, Number(stored), viewport);
 }
