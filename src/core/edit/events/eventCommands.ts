@@ -7,7 +7,7 @@
 
 import { t } from "../../../i18n/index.ts";
 import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
-import { createEvent, isEventTrack } from "../../global/chart/chart.ts";
+import { createEvent, isEventTrack, pinHookedEvent } from "../../global/chart/chart.ts";
 import { createChartObjectId } from "../../global/chart/identity.ts";
 import { judgeLineTraits } from "../../global/chart/line/lineTraits.ts";
 import type { JudgeLineEvent, LineEventValue } from "../../global/chart/chart.ts";
@@ -457,7 +457,7 @@ function updateEvent(event: JudgeLineEvent, payload: EventActionPayload): JudgeL
   }
   const start = payload.start === undefined ? event.start : structuredClone(payload.start);
   const end = payload.instant ? structuredClone(start) : structuredClone(payload.end ?? event.end);
-  return {
+  const next = {
     ...event,
     startTime: fromNumber(startBeat),
     endTime: fromNumber(endBeat),
@@ -465,6 +465,7 @@ function updateEvent(event: JudgeLineEvent, payload: EventActionPayload): JudgeL
     end,
     ...(payload.easingType === undefined ? {} : { easingType: payload.easingType }),
   };
+  return pinHookedEvent(next, event);
 }
 
 /** Indices whose start beat falls inside the target range. */

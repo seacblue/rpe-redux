@@ -7,7 +7,7 @@
  */
 import { t } from "../../../i18n/index.ts";
 import type { EditorShortcutDefinition } from "../shortcuts/declarations.ts";
-import { countScoringNotes } from "../../global/chart/chart.ts";
+import { countScoringNotes, HOOK_TAIL_FIELD } from "../../global/chart/chart.ts";
 import { createChartObjectId } from "../../global/chart/identity.ts";
 import {
   beatValue,
@@ -456,6 +456,12 @@ export function projectClipboard(
       typeof next.end === "number"
     ) {
       next = { ...next, start: -next.start, end: -next.end };
+      // A mirrored hook restores its cached tail into the same sign rule, so the
+      // value paste leaves behind matches the mirrored head.
+      const tail = next[HOOK_TAIL_FIELD];
+      if (typeof tail === "number") {
+        next[HOOK_TAIL_FIELD] = -tail;
+      }
     }
     return { type, event: next };
   });

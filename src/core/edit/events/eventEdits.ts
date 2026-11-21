@@ -7,7 +7,7 @@
  * one undo entry" true for every caller.
  */
 
-import { assertChart, isEventTrack } from "../../global/chart/chart.ts";
+import { assertChart, isEventTrack, pinHookedEvent } from "../../global/chart/chart.ts";
 import type { Chart, JudgeLineEvent } from "../../global/chart/chart.ts";
 import { assertEventTrackStructure } from "../../global/chart/chartValidation.ts";
 import { beatValue } from "../../global/chart/timing/beat.ts";
@@ -189,6 +189,11 @@ export function transformEvents(
       updates.set(type, track);
     }
     let next = transform(event, type);
+    if (type !== "paintEvents") {
+      // Every generic edit reaches a hooked event here: the pair stays pinned
+      // and a tail the edit authored replaces the cached one.
+      next = pinHookedEvent(next, event);
+    }
     if (
       type === "paintEvents" &&
       session.shaderAutoAlign !== false &&
@@ -223,7 +228,9 @@ export function transformEvents(
       events[index] = {
         ...event,
         start: structuredClone(next.start),
-        end: structuredClone(next.end),
+        // A linked peer with its own hook keeps its tail locked to the head it
+        // receives; the source event's cached tail belongs to the source only.
+        end: event.inst ? structuredClone(next.start) : structuredClone(next.end),
         easingType: next.easingType,
         easingLeft: next.easingLeft,
         easingRight: next.easingRight,

@@ -16,7 +16,7 @@ import { SliderField } from "../../../../../design/components/slider/SliderField
 import { transformEvents } from "../../../../../core/edit/events/eventEdits.ts";
 import { clamp01 } from "../../../../../core/utils/numbers.ts";
 import { eventList, eventKey } from "../../../../../core/edit/events/eventTracks.ts";
-import type { JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
+import { setEventHooked, type JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
 import type { Beat } from "../../../../../core/global/chart/timing/beat.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { TempoGrid } from "../../../../../core/global/chart/editing/editGrid.ts";
@@ -400,11 +400,7 @@ export function EventInspectorView({
                   applyEventTransform(
                     session,
                     t("editorPanels.inspector.event.modifyHook"),
-                    (current) => ({
-                      ...current,
-                      inst: checked ? 1 : 0,
-                      ...(checked ? { end: structuredClone(current.start) } : {}),
-                    }),
+                    (current) => setEventHooked(current, checked),
                   ),
                 );
               }}

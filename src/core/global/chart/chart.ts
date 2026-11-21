@@ -91,6 +91,76 @@ export function isHookedEvent(event: JudgeLineEvent | null | undefined): boolean
   return event?.inst === true || Number(event?.inst) === 1;
 }
 
+/** Field holding the tail value a hook replaced; export strips it. */
+export const HOOK_TAIL_FIELD = "_reduxHookTailEnd";
+
+/**
+ * Set an event's hook flag.
+ *
+ * A hook pins the rendered tail to the head, so `end` always equals `start` and
+ * every renderer reads the pinned pair. The tail the hook replaces is kept in
+ * the editor-only `HOOK_TAIL_FIELD` cache, which unhooking writes back. Editing
+ * the head while hooked deliberately leaves the cache alone, so unhooking
+ * restores the tail the event had before the head moved.
+ *
+ * Hooking always rewrites the cache from the current tail, so a cache left on an
+ * unhooked event — a cut part, or a pasted copy — can never restore a value that
+ * was not authored. Returning the same object when the flag already matches
+ * keeps a repeated toggle out of the undo history.
+ */
+export function setEventHooked(event: JudgeLineEvent, hooked: boolean): JudgeLineEvent {
+  if (hooked === isHookedEvent(event)) {
+    return event;
+  }
+  const next: JudgeLineEvent = { ...event };
+  if (hooked) {
+    next[HOOK_TAIL_FIELD] = structuredClone(event.end);
+    next.end = structuredClone(event.start);
+    next.inst = 1;
+    return next;
+  }
+  const cached = event[HOOK_TAIL_FIELD];
+  delete next[HOOK_TAIL_FIELD];
+  if (cached !== undefined) {
+    next.end = structuredClone(cached) as LineEventValue;
+  }
+  next.inst = 0;
+  return next;
+}
+
+/**
+ * Re-apply a hook's pinned pair after an edit touched either value.
+ *
+ * A hooked event renders `start` on both anchors, so an edit that reaches the
+ * head through a generic path must leave the pair pinned. An edit that moves
+ * the tail away from the head authored a new tail, which replaces the cache so
+ * the unhook restores that value. Passing the event before the edit is what
+ * separates the two: a pair the edit left equal is a head edit.
+ *
+ * A hooked event whose pair was already unpaired is left alone: another tool
+ * wrote that pair, and this editor did not choose it.
+ */
+export function pinHookedEvent(event: JudgeLineEvent, previous?: JudgeLineEvent): JudgeLineEvent {
+  if (!isHookedEvent(event)) {
+    return event;
+  }
+  if (previous && JSON.stringify(previous.end) !== JSON.stringify(previous.start)) {
+    return event;
+  }
+  const pinnedPair = JSON.stringify(event.end) === JSON.stringify(event.start);
+  if (pinnedPair) {
+    return event;
+  }
+  const authoredTail =
+    previous !== undefined && JSON.stringify(previous.end) !== JSON.stringify(event.end);
+  const next: JudgeLineEvent = { ...event };
+  if (authoredTail) {
+    next[HOOK_TAIL_FIELD] = structuredClone(event.end);
+  }
+  next.end = structuredClone(event.start);
+  return next;
+}
+
 export interface JudgeLineNote {
   id?: ChartObjectId;
   type: number;

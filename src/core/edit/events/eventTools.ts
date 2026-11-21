@@ -16,7 +16,7 @@ import {
   type Beat,
 } from "../../global/chart/timing/beat.ts";
 import { easing, bezier } from "../../utils/easing.ts";
-import { DEFAULT_BEZIER_POINTS, EVENT_TYPES } from "../../global/chart/chart.ts";
+import { DEFAULT_BEZIER_POINTS, EVENT_TYPES, HOOK_TAIL_FIELD } from "../../global/chart/chart.ts";
 import type { JudgeLineEvent } from "../../global/chart/chart.ts";
 import { snapTime } from "../../global/chart/editing/editGrid.ts";
 import type { TempoGrid } from "../../global/chart/editing/editGrid.ts";
@@ -105,7 +105,7 @@ export function cutEventParts(
   };
   return cuts.slice(0, -1).map((point, index) => {
     const next = cuts[index + 1];
-    return {
+    const part: JudgeLineEvent = {
       ...structuredClone(event),
       startTime: point,
       endTime: next,
@@ -119,6 +119,9 @@ export function cutEventParts(
       linkgroup: 0,
       inst: 0,
     };
+    // A part is a plain span, so the source hook's cached tail does not apply.
+    delete part[HOOK_TAIL_FIELD];
+    return part;
   });
 }
 
