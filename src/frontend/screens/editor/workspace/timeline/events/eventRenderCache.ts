@@ -99,8 +99,9 @@ export function drawEventBar(
   context: CanvasRenderingContext2D,
   rectangle: EventBarRectangle,
   lineOpacity = 1,
+  tint?: readonly number[],
 ): void {
-  if (receiver.eventBatch.add(rectangle, lineOpacity)) {
+  if (receiver.eventBatch.add(rectangle, lineOpacity, tint)) {
     return;
   }
   receiver.appearance.skin?.eventBar(
@@ -109,6 +110,7 @@ export function drawEventBar(
     rectangle.y + rectangle.height / 2,
     rectangle.width,
     rectangle.height,
+    tint ? [...tint] : undefined,
   );
 }
 

@@ -1,8 +1,8 @@
 /**
  * Registers the shared play and audition controls.
  *
- * They are shared chrome rather than editor-only controls: the transport keeps
- * Space playback and hold-to-audition working wherever the window is focused.
+ * They are shared chrome rather than editor-only controls, so the play button
+ * and hold-to-audition stay in the toolbar on every document.
  */
 import { toolbar } from "../../../core/shell/registries/toolbar.ts";
 

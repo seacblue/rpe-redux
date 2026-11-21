@@ -748,6 +748,12 @@ export function SettingsWindow({
                             onOpenCategory={openCategory}
                             searching={searching}
                             pageTitle={showPageTitle ? pageLabel : undefined}
+                            active={
+                              open &&
+                              (searching
+                                ? matchingNavigationKeys.has(entry.key)
+                                : category === entry.key)
+                            }
                           />
                         )}
                         {Page && (
@@ -755,7 +761,12 @@ export function SettingsWindow({
                             theme={theme}
                             setTheme={setTheme}
                             openCategory={openCategory}
-                            active={open && category === entry.key}
+                            active={
+                              open &&
+                              (searching
+                                ? matchingNavigationKeys.has(entry.key)
+                                : category === entry.key)
+                            }
                             query={searching ? activeSearchQuery : ""}
                           />
                         )}

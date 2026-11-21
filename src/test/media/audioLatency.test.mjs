@@ -1,7 +1,11 @@
 /** Verify the visual clock subtracts both stages of the output chain. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { latencyReport, totalOutputLatency } from "../../core/media/outputLatency.ts";
+import {
+  latencyReport,
+  startDrainProgress,
+  totalOutputLatency,
+} from "../../core/media/outputLatency.ts";
 
 test("output latency sums the graph and device stages", () => {
   // The reference device reports 10.0 ms in the graph plus 40.0 ms in the
@@ -42,23 +46,22 @@ test("latency report measures the queue the device has not played yet", () => {
   assert.ok(Math.abs(report.drainedSeconds - 0.0536) < 1e-12);
 });
 
-test("latency report treats a missing device timestamp as unknown", () => {
-  const absent = latencyReport({ baseLatency: 0.01, currentTime: 5 });
-  assert.equal(absent.drainedSeconds, null);
+test("the start drain progresses over the output chain", () => {
+  // The source starts at the processing clock; the speaker hears it after the
+  // graph and device stages. The visual clock uses this progress to establish the
+  // display lead only as the sound becomes audible.
+  const source = { baseLatency: 0.01, outputLatency: 0.04, currentTime: 9.99 };
 
-  const unused = latencyReport({
-    baseLatency: 0.01,
-    currentTime: 5,
-    getOutputTimestamp: () => ({ contextTime: 0 }),
-  });
-  assert.equal(unused.drainedSeconds, null, "a zero timestamp means nothing was emitted yet");
+  assert.ok(Math.abs(startDrainProgress(source, 9.965) - 0.5) < 1e-12);
+  assert.equal(startDrainProgress({ ...source, currentTime: 9.95 }, 9.965), 0);
+  assert.equal(startDrainProgress({ ...source, currentTime: 10.02 }, 9.965), 1);
+});
 
-  const throwing = latencyReport({
-    baseLatency: 0.01,
-    currentTime: 5,
-    getOutputTimestamp: () => {
-      throw new Error("unsupported");
-    },
-  });
-  assert.equal(throwing.drainedSeconds, null);
+test("a start without latency has no drain", () => {
+  assert.equal(startDrainProgress({ currentTime: 10 }, 9), 1);
+});
+
+test("an unusable clock or anchor reports a completed drain", () => {
+  assert.equal(startDrainProgress({ baseLatency: 0.01, currentTime: Number.NaN }, 9), 1);
+  assert.equal(startDrainProgress({ baseLatency: 0.01, currentTime: 10 }, Number.NaN), 1);
 });

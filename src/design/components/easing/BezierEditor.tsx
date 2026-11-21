@@ -25,10 +25,10 @@ import { clamp01 } from "../../../core/utils/numbers.ts";
 import { t } from "../../../i18n/index.ts";
 import { formatBezierPoints, parseBezierPointText } from "./bezierPointText.ts";
 import {
-  EASING_BEZIER_PLOT,
   EASING_CANVAS_HEIGHT,
   EASING_CANVAS_WIDTH,
   EASING_GUIDE_ALPHA,
+  EASING_PLOT,
   drawEasingFrame,
   drawEasingUnitLines,
   easingProgressX,
@@ -47,8 +47,8 @@ interface BezierEditorProps {
 
 const WIDTH = EASING_CANVAS_WIDTH;
 const HEIGHT = EASING_CANVAS_HEIGHT;
-const PLOT_WIDTH = EASING_BEZIER_PLOT.right - EASING_BEZIER_PLOT.left;
-const PLOT_HEIGHT = EASING_BEZIER_PLOT.bottom - EASING_BEZIER_PLOT.top;
+const PLOT_WIDTH = EASING_PLOT.right - EASING_PLOT.left;
+const PLOT_HEIGHT = EASING_PLOT.bottom - EASING_PLOT.top;
 const DEFAULT_POINTS = [0, 0, 1, 1];
 /** Control-point indices, in the order their two handle styles are stored. */
 const HANDLE_POINTS = [0, 2] as const;
@@ -223,7 +223,7 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
   /** Draw the frame, control handles, and the current animated handles. */
   const paint = () => {
     const canvas = canvasRef.current;
-    const surface = canvas ? prepareEasingCanvas(canvas, EASING_BEZIER_PLOT) : null;
+    const surface = canvas ? prepareEasingCanvas(canvas, EASING_PLOT) : null;
     if (!canvas || !surface) {
       return;
     }
@@ -392,12 +392,12 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     const logicalX = ((pointer.clientX - rect.left) / rect.width) * WIDTH;
     const logicalY = ((pointer.clientY - rect.top) / rect.height) * HEIGHT;
     return {
-      x: clamp01((logicalX - EASING_BEZIER_PLOT.left) / PLOT_WIDTH),
+      x: clamp01((logicalX - EASING_PLOT.left) / PLOT_WIDTH),
       // The pointer may leave the plot while the drag keeps the capture, so the
       // value follows the full canvas height and can overshoot the unit square.
       y:
         axis.minimum +
-        ((EASING_BEZIER_PLOT.bottom - logicalY) / PLOT_HEIGHT) * (axis.maximum - axis.minimum),
+        ((EASING_PLOT.bottom - logicalY) / PLOT_HEIGHT) * (axis.maximum - axis.minimum),
       logicalX,
       logicalY,
     };
@@ -410,9 +410,9 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     const span = axis.maximum - axis.minimum;
     let nearest: { index: number; distance: number } | null = null;
     for (const index of HANDLE_POINTS) {
-      const x = easingProgressX(draftPoints.current[index] ?? 0, EASING_BEZIER_PLOT);
+      const x = easingProgressX(draftPoints.current[index] ?? 0, EASING_PLOT);
       const y =
-        EASING_BEZIER_PLOT.bottom -
+        EASING_PLOT.bottom -
         (((draftPoints.current[index + 1] ?? 0) - axis.minimum) / span) * PLOT_HEIGHT;
       const distance = Math.hypot(point.logicalX - x, point.logicalY - y);
       if (!nearest || distance < nearest.distance) {

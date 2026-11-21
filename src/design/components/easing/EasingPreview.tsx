@@ -25,15 +25,12 @@ import { useEffect, useRef, useState } from "react";
 import { bezier, easing } from "../../../core/utils/easing.ts";
 import { clamp01 } from "../../../core/utils/numbers.ts";
 import {
-  EASING_AXIS_LABEL_BASELINE,
-  EASING_AXIS_LABEL_FONT,
   EASING_CANVAS_HEIGHT,
   EASING_CANVAS_WIDTH,
   EASING_GUIDE_ALPHA,
   EASING_PLOT,
   drawEasingFrame,
   easingOutputY,
-  easingPreviewValueDomain,
   easingProgressX,
   prepareEasingCanvas,
   strokeEasingPolyline,
@@ -61,11 +58,6 @@ const WIDTH = EASING_CANVAS_WIDTH;
 const HEIGHT = EASING_CANVAS_HEIGHT;
 /** Segments sampled across the transfer; enough for the sharpest bounce curve. */
 const SEGMENTS = 96;
-
-/** Compact numeric bound; two decimals are enough to read the axis at a glance. */
-function formatBound(value: number): string {
-  return String(Number(value.toFixed(2)));
-}
 
 /**
  * Sample one transfer into the plot's logical space.
@@ -95,15 +87,7 @@ function sampleTransfer(
 export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawVersion, setDrawVersion] = useState(0);
-  const {
-    bezier: isBezier,
-    bezierPoints,
-    easingType,
-    easingLeft,
-    easingRight,
-    startValue,
-    endValue,
-  } = event;
+  const { bezier: isBezier, bezierPoints, easingType, easingLeft, easingRight } = event;
 
   useEffect(() => {
     const redraw = () => setDrawVersion((version) => version + 1);
@@ -128,7 +112,6 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
       return;
     }
     const { context, palette, plot } = surface;
-    const valueDomain = easingPreviewValueDomain(startValue, endValue);
 
     drawEasingFrame(surface);
 
@@ -195,32 +178,7 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
       }
       context.restore();
     }
-
-    // The plot's x axis is the event's numeric value range, which the normalized
-    // curve shape cannot show on its own. Printing both bounds keeps a value edit
-    // visible here even when the easing is unchanged.
-    if (Number.isFinite(startValue) && Number.isFinite(endValue)) {
-      context.save();
-      context.fillStyle = palette.guide;
-      context.globalAlpha = EASING_GUIDE_ALPHA;
-      context.font = `${EASING_AXIS_LABEL_FONT}px ${palette.fontFamily || "sans-serif"}`;
-      context.textBaseline = "alphabetic";
-      context.textAlign = "left";
-      context.fillText(formatBound(valueDomain.minimum), plot.left, EASING_AXIS_LABEL_BASELINE);
-      context.textAlign = "right";
-      context.fillText(formatBound(valueDomain.maximum), plot.right, EASING_AXIS_LABEL_BASELINE);
-      context.restore();
-    }
-  }, [
-    drawVersion,
-    isBezier,
-    bezierPoints,
-    easingType,
-    easingLeft,
-    easingRight,
-    startValue,
-    endValue,
-  ]);
+  }, [drawVersion, isBezier, bezierPoints, easingType, easingLeft, easingRight]);
 
   return (
     <canvas

@@ -253,6 +253,15 @@ const EditingSettingsSchema: SettingDefinition[] = [
     max: 1,
     step: 0.01,
   },
+  {
+    key: "event-hooked-color",
+    navigation: "editor.events",
+    group: "settings.group.timelineEvents",
+    label: "settings.field.event-hooked-color.label",
+    description: "settings.field.event-hooked-color.description",
+    control: "color",
+    default: "#62D8F2",
+  },
 ];
 settingsRegistry.registerSettings(EditingSettingsSchema);
 

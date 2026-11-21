@@ -5,6 +5,7 @@ import {
   createChart,
   createEvent,
   createNote,
+  HOOK_TAIL_FIELD,
   serializeChart,
 } from "../../../core/global/chart/chart.ts";
 import { beatValue } from "../../../core/global/chart/timing/beat.ts";
@@ -80,6 +81,25 @@ test("one event-field edit commits once and a repeated value is deduped", () => 
   assert.equal(commits(), 1);
   assert.equal(session.history.undoStack.length, 1);
   assert.equal(session.chart, committedChart);
+});
+
+test("a generic event edit keeps a hooked pair pinned and authored tails cached", () => {
+  // The inspector's start field writes both anchors for a hooked event; any
+  // other generic edit that reaches the tail keeps the pair pinned instead.
+  const hooked = { ...createEvent(10, 10, 2, 6), inst: 1, [HOOK_TAIL_FIELD]: 20 };
+  const headEdit = eventSession("moveXEvents", hooked);
+  transformEvents(headEdit, "head", (event) => ({ ...event, start: 15, end: 15 }));
+
+  const afterHead = headEdit.chart.judgeLineList[0].eventLayers[0].moveXEvents[0];
+  assert.deepEqual([afterHead.start, afterHead.end], [15, 15]);
+  assert.equal(afterHead[HOOK_TAIL_FIELD], 20, "moving the head keeps the cached tail");
+
+  const tailEdit = eventSession("moveXEvents", hooked);
+  transformEvents(tailEdit, "tail", (event) => ({ ...event, end: 99 }));
+
+  const afterTail = tailEdit.chart.judgeLineList[0].eventLayers[0].moveXEvents[0];
+  assert.deepEqual([afterTail.start, afterTail.end], [10, 10], "the rendered pair stays pinned");
+  assert.equal(afterTail[HOOK_TAIL_FIELD], 99, "an authored tail replaces the cache");
 });
 
 test("an event edit with a reversed range commits silently for render filtering", () => {

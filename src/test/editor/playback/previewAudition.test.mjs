@@ -241,6 +241,32 @@ test("RPE playback keys hide the editor while playing and restore it on stop", a
   }
 });
 
+test("the play button's stay command hides the editing regions and restores them on pause", async () => {
+  const runtime = createAuditionRuntime();
+  const disposeView = connectViewControls(runtime.viewRuntime);
+  const disposeTransport = connectTransport(runtime.transportBindings);
+  try {
+    runtime.audio.time = 10;
+    transport.stopPlaybackStay();
+    await Promise.resolve();
+    assert.equal(runtime.audio.playing, true);
+    assert.equal(runtime.audio.time, 10);
+    assert.equal(getEditorRegionSnapshot().showNotes, false);
+    assert.equal(getEditorRegionSnapshot().showEvents, false);
+
+    runtime.audio.time = 16;
+    transport.stopPlaybackStay();
+    assert.equal(runtime.audio.playing, false);
+    assert.equal(runtime.audio.time, 16);
+    assert.equal(getEditorRegionSnapshot().showNotes, true);
+    assert.equal(getEditorRegionSnapshot().showEvents, true);
+  } finally {
+    disposeTransport();
+    disposeView();
+    editorAuditioning.set(false);
+  }
+});
+
 test("RPE playback and clipboard actions dispatch to their owner", async () => {
   const calls = [];
   const deps = {

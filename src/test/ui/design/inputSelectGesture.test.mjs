@@ -34,6 +34,12 @@ test("only a numeric field arms the select-all click", () => {
   assert.equal(selectsValueOnClick(undefined), false);
 });
 
+test("a text field that declares one value arms the select-all click", () => {
+  assert.equal(selectsValueOnClick("text", true), true);
+  assert.equal(selectsValueOnClick(undefined, true), true);
+  assert.equal(selectsValueOnClick("text", false), false);
+});
+
 test("a click that releases where it landed selects the whole value", () => {
   const { outcome } = run([...armedPress(), { type: "click", ...origin, shiftKey: false }]);
   assert.equal(outcome.selectAll, true);

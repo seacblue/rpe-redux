@@ -123,14 +123,19 @@ export function useTitleBarWindowDrag(titleBar: RefObject<HTMLElement | null>): 
       if (!(target instanceof Element)) {
         return;
       }
-      const rect = bar.getBoundingClientRect();
-      if (rect.height <= 0 || event.clientY > rect.bottom) {
-        return;
-      }
       const inBar = bar.contains(target);
       const overScrim = !inBar && target.closest(MODAL_SCRIM_SELECTOR) !== null;
       if (!inBar && !overScrim) {
         return;
+      }
+      // A scrim press only counts when it lands on the title row. Reading the
+      // bar's rectangle here keeps ordinary editor clicks free of a forced
+      // layout.
+      if (overScrim) {
+        const rect = bar.getBoundingClientRect();
+        if (rect.height <= 0 || event.clientY > rect.bottom) {
+          return;
+        }
       }
       if (inBar && target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) {
         return;

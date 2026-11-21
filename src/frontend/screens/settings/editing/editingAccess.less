@@ -18,6 +18,14 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+// One column is a single checkbox, so the group hugs the row's trailing edge.
+// Filling the control column instead would strand the reserved reset slot at
+// the column's leading edge, far from the checkbox it belongs to.
+.editing-access[data-columns="1"] {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 // The whole cell is the hit target, so a click anywhere toggles the checkbox.
 // A single display column ends at the row's trailing edge; with two columns the
 // AI column does the same one column earlier.

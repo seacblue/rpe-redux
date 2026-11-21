@@ -10,6 +10,13 @@ import { Button } from "../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { Icon } from "../../../design/components/icon/Icon.tsx";
 import { SchemaControl } from "../../../design/components/field/SchemaControl.tsx";
+import { BeatField } from "../editor/inspector/beat/BeatField.tsx";
+import {
+  formatBeat,
+  normalizeBeat,
+  parseBeat,
+  type Beat,
+} from "../../../core/global/chart/timing/beat.ts";
 import { ColorField } from "../../../design/components/input/ColorField.tsx";
 import { ICON_NAMES, type IconName } from "../../../design/components/icon/iconAssets.ts";
 import { settingText } from "./settingsCatalog.ts";
@@ -228,7 +235,6 @@ export function SettingControl({
     case "range":
     case "select":
     case "text":
-    case "beat":
       return (
         <SchemaControl
           id={field.key}
@@ -247,6 +253,27 @@ export function SettingControl({
           disabled={!enabled}
         />
       );
+    case "beat": {
+      // A beat setting stores its text form; the field edits the three parts and
+      // writes the same format back.
+      const stored = typeof value === "string" ? value.trim() : "";
+      let beat: Beat = [0, 0, 1];
+      if (stored !== "") {
+        try {
+          beat = normalizeBeat(parseBeat(stored));
+        } catch {
+          beat = [0, 0, 1];
+        }
+      }
+      return (
+        <BeatField
+          id={field.key}
+          value={beat}
+          disabled={!enabled}
+          onCommit={(next) => onCommitValue(field, formatBeat(next))}
+        />
+      );
+    }
     case "color":
       return (
         <ColorField

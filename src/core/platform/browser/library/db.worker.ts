@@ -1935,7 +1935,7 @@ async function create(params: Record<string, unknown>): Promise<Record<string, u
       (id, name, grp, archived, charter, composer, level, background, thumbnail, song, note_count,
        event_count, chart, size, revision, chart_hash, view_state, asset_folders, created_at,
        updated_at)
-      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '{}', '[]', ?, ?)`,
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '{}', '[]', ?, ?)`,
     [
       id,
       name,

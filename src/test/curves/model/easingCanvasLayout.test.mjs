@@ -87,10 +87,10 @@ test("one painter owns the frame, palette, and overshoot fade", async () => {
   );
 });
 
-test("the frame is solid and the shared plot rect is one constant", async () => {
+test("the frame is solid and both previews share one plot rect", async () => {
   const canvasSource = await readFile(canvas, "utf8");
-  assert.match(canvasSource, /top: 14,/);
-  assert.match(canvasSource, /bottom: 86,/);
+  assert.match(canvasSource, /top: 8,/);
+  assert.match(canvasSource, /bottom: 92,/);
   const frameBody = canvasSource.match(/export function drawEasingFrame[\s\S]*?\n\}/)?.[0] ?? "";
   assert.ok(frameBody, "the frame painter must exist");
   assert.doesNotMatch(frameBody, /setLineDash/, "the frame must be solid, not dashed");

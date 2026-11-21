@@ -24,21 +24,13 @@ export interface EasingPlot {
 }
 
 /**
- * The easing preview's plot.
+ * The rectangle both previews paint inside.
  *
- * The easing preview prints the event's value bounds under the curve, so its
- * frame leaves a label band at the bottom. The Bézier editor prints no labels
- * and takes the taller plot instead, which is why the two do not share a rect.
+ * Neither preview prints value labels, so the frame takes the full height and
+ * the band above and below it is only breathing room for a curve that overshoots
+ * the unit range.
  */
 export const EASING_PLOT: EasingPlot = {
-  left: EASING_PLOT_LEFT,
-  top: 14,
-  right: EASING_PLOT_RIGHT,
-  bottom: 86,
-};
-
-/** The Bézier editor's plot: no label band, so the frame uses the full height. */
-export const EASING_BEZIER_PLOT: EasingPlot = {
   left: EASING_PLOT_LEFT,
   top: 8,
   right: EASING_PLOT_RIGHT,
@@ -61,12 +53,6 @@ export const EASING_REFERENCE_ALPHA = 0.22;
 
 /** Alpha of a curve where it runs outside the frame. */
 export const EASING_OVERSHOOT_ALPHA = 0.3;
-
-/** Baseline of the value-axis labels under the frame. */
-export const EASING_AXIS_LABEL_BASELINE = 98;
-
-/** Font of the value-axis labels, in the plot's logical pixels. */
-export const EASING_AXIS_LABEL_FONT = 9;
 
 /** The numeric value domain used by one easing preview. */
 export interface EasingPreviewValueDomain {
@@ -101,7 +87,13 @@ export function easingPreviewValueDomain(
   };
 }
 
-/** Interpolate one actual event value from a normalized easing output. */
+/**
+ * Interpolate a value between two numeric endpoints from a normalized output.
+ *
+ * The preview itself reads progress and the curve's output directly, so this
+ * describes what the numeric endpoints mean to callers that label or read an
+ * axis, and it pins the mapping the preview no longer applies to its x axis.
+ */
 export function easingPreviewValue(
   domain: EasingPreviewValueDomain,
   easedProgress: number,
@@ -111,13 +103,14 @@ export function easingPreviewValue(
 }
 
 /**
- * Sample the sub-range one event's bounds select for the preview.
+ * Sample the sub-range one event's bounds select.
  *
- * The result is the same normalized curve the renderer samples, so the two
- * cannot disagree. Reversed bounds (`left > right`) remain valid: the runtime
- * normalizes the selected segment against its own endpoints, which walks the
- * sub-range backwards, and the preview draws that walk instead of falling back
- * to the uncut curve.
+ * The result is the same normalized curve the renderer samples, so a caller
+ * cannot disagree with the timeline. Reversed bounds (`left > right`) remain
+ * valid: the runtime normalizes the selected segment against its own endpoints,
+ * which walks the sub-range backwards. The preview paints the family curve and
+ * highlights that span rather than drawing this composite, because the composite
+ * fills the whole frame and hides which segment was cut.
  */
 export function easingPreviewCurve(
   type: number,
@@ -292,8 +285,7 @@ export function easingOutputY(output: number, plot: EasingPlot = EASING_PLOT): n
  *
  * `context` already carries the device-pixel transform and is cleared, so a
  * painter only maps its own coordinates. `plot` is the rectangle this canvas
- * paints inside; it differs between the two previews because the easing preview
- * reserves a band for its value labels and the Bézier editor does not.
+ * paints inside, shared by both previews so they cannot drift apart.
  */
 export interface EasingCanvasSurface {
   context: CanvasRenderingContext2D;

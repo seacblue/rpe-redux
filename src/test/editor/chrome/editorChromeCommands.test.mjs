@@ -21,6 +21,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
     },
     transport: {
       togglePlayback: () => calls.push("play"),
+      togglePlaybackPreview: () => calls.push("play-preview"),
       beginAudition: (options) => calls.push(`audition-start:${options?.previewOnly === true}`),
       endAudition: () => calls.push("audition-end"),
       rewind: () => calls.push("rewind"),
@@ -47,6 +48,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
   assert.notEqual(commands, null);
   commands.documents.saveDocument();
   commands.transport.togglePlayback();
+  commands.transport.togglePlaybackPreview();
   commands.transport.beginAudition({ previewOnly: true });
   commands.transport.seekToBeat("4");
   commands.view.toggleRegion("showNotes");
@@ -60,6 +62,7 @@ test("chrome commands are absent until bound and cleared by their disposer", () 
   assert.deepEqual(calls, [
     "save",
     "play",
+    "play-preview",
     "audition-start:true",
     "seek:4",
     "showNotes",

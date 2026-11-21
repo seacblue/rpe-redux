@@ -30,6 +30,7 @@ export function connectEditorChromeHost(): () => void {
     },
     transport: {
       togglePlayback: () => transport.togglePlayback(),
+      togglePlaybackPreview: () => transport.stopPlaybackStay(),
       beginAudition: (options) => transport.beginAudition(options),
       endAudition: () => transport.endAudition(),
       rewind: () => transport.rewind(),

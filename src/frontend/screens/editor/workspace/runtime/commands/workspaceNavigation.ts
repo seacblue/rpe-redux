@@ -18,7 +18,7 @@ import {
 import { TOOLBAR_REFRESH_EVENT } from "../../../../../../core/shell/shellEventNames.ts";
 import { createLateBound } from "../../../../../../core/utils/lateBound.ts";
 import { collaborationRoomExit } from "../../collaboration/roomExit.ts";
-import { planLeaveEditor } from "./leaveEditor.ts";
+import { isSavedResult, planLeaveEditor } from "./leaveEditor.ts";
 
 /** Editor services the home transition drives while leaving a document. */
 export interface WorkspaceNavigationOptions {
@@ -114,8 +114,11 @@ export function createWorkspaceNavigation(options: WorkspaceNavigationOptions) {
       }
       try {
         if (answer === "save") {
-          await options.save();
-          if (options.hasUnsavedChanges()) {
+          const result = await options.save();
+          // A completed save is authoritative: leave even when a later dirty
+          // flag lands while the save is settling. A refused save must not
+          // discard the document, so it still keeps the editor open.
+          if (!isSavedResult(result) && options.hasUnsavedChanges()) {
             throw new Error(t("editor.app.error.stillUnsaved"));
           }
         }

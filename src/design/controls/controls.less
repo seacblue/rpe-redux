@@ -234,6 +234,9 @@
 .redux-stepper-button {
   display: flex;
   flex: 0 0 var(--redux-stepper-button-width);
+  // A step label never sizes its button: the width stays the token's even when
+  // the amount is wider, so the field's insets and the four buttons stay put.
+  min-width: 0;
   align-items: center;
   justify-content: center;
   height: 100%;
@@ -255,8 +258,6 @@
   font-variant-numeric: tabular-nums;
   line-height: 1;
   opacity: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: opacity var(--design-dur-tint);
   white-space: nowrap;
 }
@@ -283,6 +284,14 @@
 
 .redux-stepper-button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 28%, var(--surface-hover));
+}
+
+// The revealed label may be wider than its button. Lift the button while the
+// label is shown so the overflow paints over the neighbouring button instead of
+// being covered by that button's own background.
+.redux-stepper-button:hover:not(:disabled),
+.redux-stepper-button:focus-visible {
+  z-index: 1;
 }
 
 .redux-stepper-button:hover:not(:disabled) .redux-stepper-value,

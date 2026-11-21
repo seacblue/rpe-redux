@@ -45,7 +45,15 @@ test("preview auditions use the held T and U keys", () => {
   assert.equal(bindingOf("view.previewAuditionStay"), "U");
   assert.equal(byId.get("view.previewAudition")?.hold, true);
   assert.equal(byId.get("view.previewAuditionStay")?.hold, true);
-  assert.equal(bindingOf("selection.nudge.up"), "G");
+});
+
+test("time nudges keep only the arrow pair and G/B stick events", () => {
+  assert.equal(bindingOf("selection.nudge.up"), "UPARROW");
+  assert.equal(bindingOf("selection.nudge.down"), "DOWNARROW");
+  assert.equal(byId.get("selection.nudge.up")?.defaults.length, 1);
+  assert.equal(byId.get("selection.nudge.down")?.defaults.length, 1);
+  assert.equal(bindingOf("selection.event.stick.next"), "G");
+  assert.equal(bindingOf("selection.event.stick.previous"), "B");
 });
 
 test("event-edge defaults have left-hand chords before the brackets", () => {
@@ -147,7 +155,24 @@ test("sampling opener yields to the open sampler and the left-hand chords resolv
       "view.previewAudition",
     );
     assert.equal(
+      matchEditorShortcut({ key: "G" }, eventContext, shortcutContext),
+      "selection.event.stick.next",
+    );
+    assert.equal(
+      matchEditorShortcut({ key: "B" }, eventContext, shortcutContext),
+      "selection.event.stick.previous",
+    );
+    // G/B do not stand in for the arrow nudges any more.
+    assert.equal(
       matchEditorShortcut({ key: "G" }, { area: "notes", hasSelection: true }, shortcutContext),
+      undefined,
+    );
+    assert.equal(
+      matchEditorShortcut(
+        { key: "ArrowUp" },
+        { area: "events", hasSelection: true },
+        shortcutContext,
+      ),
       "selection.nudge.up",
     );
   } finally {

@@ -25,7 +25,7 @@ export interface TimelineRenderRange {
  *
  * Positive ranges keep their exact endpoints. A zero-length or reversed range
  * starts at the stored start beat and receives one horizontal-grid division;
- * the caller can use `invalid` to apply the chart-error filter.
+ * `invalid` marks it, so the chart-error filter draws it as rejected.
  */
 export function timelineRenderRange(
   startTime: readonly number[],

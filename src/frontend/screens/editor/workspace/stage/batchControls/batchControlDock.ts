@@ -30,13 +30,6 @@ export interface DockViewport {
   scaleForArea(area: TimelineArea): number;
 }
 
-/** Viewport state the current dock was computed for. */
-export interface DockScroll {
-  readonly origin: number;
-  readonly scale: number;
-  readonly pan: number;
-}
-
 /** Where the dock sits: a chart-time anchor plus its distance from the panel edge. */
 export interface DockAnchor {
   /** Absolute time under the dock, in seconds on `factor`. */
@@ -51,15 +44,23 @@ export interface DockAnchor {
 export interface DockGroup {
   /** Selection signature plus canvas size the dock was last placed for. */
   signature: string;
-  /** Published stage-relative position. */
-  left?: string;
-  top?: string;
   /** Line indices of the docked selection; the panel bounds derive from them. */
   lines?: number[];
   /** Content-relative position, so scroll, pan, and zoom keep the dock attached. */
   anchor?: DockAnchor;
-  /** Viewport scroll state the current dock was computed for. */
-  scroll?: DockScroll;
+  /** Last dock position inside the canvas, in CSS pixels. */
+  dockX?: number;
+  dockY?: number;
+  /** Stage-relative position last written to the element, to skip equal writes. */
+  appliedX?: number;
+  appliedY?: number;
+  /** Canvas size and panel bounds measured at the last structural refresh. */
+  width: number;
+  height: number;
+  bounds?: DockBounds;
+  /** Canvas origin relative to the stage, measured at the last structural refresh. */
+  originX: number;
+  originY: number;
 }
 
 /** One dock computation: the viewport plus the canvas it is measured against. */
@@ -95,21 +96,6 @@ const DEFAULT_JUDGEMENT_OFFSET = 42;
 /** Clamp `value` into `[min, max]`, tolerating an inverted range. */
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-/** Viewport scroll state that decides whether a docked ball has to move. */
-export function dockScroll(viewport: DockViewport, area: TimelineArea, pan: number): DockScroll {
-  return { origin: viewport.origin, scale: viewport.scaleForArea(area), pan };
-}
-
-/** True when the timeline content moved under a docked ball. */
-export function dockScrollChanged(previous: DockScroll | undefined, next: DockScroll): boolean {
-  return (
-    previous === undefined ||
-    previous.origin !== next.origin ||
-    previous.scale !== next.scale ||
-    previous.pan !== next.pan
-  );
 }
 
 /** Panel bounds covering `lines`; an empty list falls back to `fallbackLine`. */
@@ -197,4 +183,107 @@ export function dockPosition(
       input.height - DOCK_STACK_HEIGHT,
     ),
   };
+}
+
+/**
+ * Write one group's measured dock position onto its element.
+ *
+ * The position is a composited transform rather than `left`/`top` so a dock that
+ * follows playback never triggers layout. Equal positions are skipped, which
+ * keeps an idle frame from touching the element at all.
+ */
+export function dockApply(element: HTMLElement, group: DockGroup, x: number, y: number): void {
+  group.dockX = x;
+  group.dockY = y;
+  const left = group.originX + x;
+  const top = group.originY + y;
+  if (group.appliedX === left && group.appliedY === top) {
+    return;
+  }
+  group.appliedX = left;
+  group.appliedY = top;
+  element.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+}
+
+/**
+ * Reproject one docked group against the viewport and write the result.
+ *
+ * Playback advances the viewport origin on every display frame while the dock is
+ * anchored to chart time, so this has to run per frame and cannot go through
+ * React state. Geometry comes from the last structural measurement.
+ */
+export function dockFollow(
+  element: HTMLElement,
+  group: DockGroup,
+  viewport: DockViewport,
+  area: TimelineArea,
+): void {
+  if (!group.anchor || !group.bounds) {
+    return;
+  }
+  const position = dockPosition(
+    { viewport, area, width: group.width, height: group.height },
+    group.anchor,
+    group.bounds,
+  );
+  dockApply(element, group, position.x, position.y);
+}
+
+/**
+ * Selection counts one area's dock is decided from.
+ *
+ * The multi-line maps live per line, so the flattened count is what a visibility
+ * rule can compare against the batch threshold.
+ */
+export function dockSelectionCounts(
+  area: TimelineArea,
+  session: {
+    multiLineSelection?: Map<number, Set<number>>;
+    multiEventSelection?: Map<number, Set<string>>;
+    multiLineActive: boolean;
+    multiLineMode: string;
+    multiSelectionIntent?: unknown;
+    selection: Set<number>;
+    eventSelection: Set<string>;
+  },
+): { selection: number; multiSelection: number; multiMode: boolean; multiIntent: boolean } {
+  const map = area === "notes" ? session.multiLineSelection : session.multiEventSelection;
+  let multiSelection = 0;
+  for (const values of map?.values() ?? []) {
+    multiSelection += values.size;
+  }
+  return {
+    selection:
+      multiSelection + (area === "notes" ? session.selection.size : session.eventSelection.size),
+    multiSelection,
+    multiMode:
+      session.multiLineActive &&
+      ((area === "notes" && session.multiLineMode === "notes") ||
+        (area === "events" && session.multiLineMode === "events")),
+    multiIntent: session.multiSelectionIntent === area,
+  };
+}
+
+/**
+ * Whether one area's group has a selection to show its balls for.
+ *
+ * Events need only one selected event because their bars are not draggable, but
+ * their balls stay hidden on a note-side multi-line pass. Notes keep the batch
+ * threshold unless the user is explicitly gathering a multi-line selection.
+ */
+export function dockVisible(
+  area: TimelineArea,
+  counts: {
+    selection: number;
+    multiSelection: number;
+    multiMode: boolean;
+    multiIntent: boolean;
+    notesMultiLine: boolean;
+  },
+): boolean {
+  const { selection, multiSelection, multiMode, multiIntent, notesMultiLine } = counts;
+  if (area === "events") {
+    return selection > 0 && !notesMultiLine;
+  }
+  return multiMode ? multiSelection > 0 && multiIntent : selection >= 2 || multiIntent;
 }

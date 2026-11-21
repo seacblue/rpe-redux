@@ -48,20 +48,23 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 
 ## Movement and multi-line
 
-| Action                           | Default                                                 |
-| -------------------------------- | ------------------------------------------------------- |
-| Previous / next line             | `Z` / `X` (or `←` / `→`)                                |
-| Jump to a judge line             | Hold `Ctrl`, type a 0-based line number, release `Ctrl` |
-| Nudge selection left / right     | `Z` / `X` (or `←` / `→`)                                |
-| Nudge selection earlier / later  | `B` / `G` (or `↓` / `↑`)                                |
-| Open multi-line editing          | `J`                                                     |
-| Switch multi-line notes / events | `K`                                                     |
+| Action | Default |
+| --- | --- |
+| Previous / next line | `Z` / `X` (or `←` / `→`) |
+| Jump to a judge line | Hold `Ctrl`, type a 0-based line number, release `Ctrl` |
+| Nudge selection left / right | `Z` / `X` (or `←` / `→`) |
+| Nudge selection earlier / later | `↓` / `↑` |
+| Stick events to the next / previous event | `G` / `B` |
+| Open multi-line editing | `J` |
+| Switch multi-line notes / events | `K` |
 
 `Z`/`X` step between lines when nothing is selected and nudge the selection when something is selected. Multi-line shortcuts apply while the editor workspace has an open document.
 
+`G` and `B` stick the selected events' values to their neighbour on the same track: `G` writes the next event's start value into the selected event's end, and `B` writes the previous event's end value into its start. `G` is RPE's stick key, and the event inspector's stick button runs the same forward command. An event without a neighbour in that direction is skipped, and so is a shader event, whose two values are shader parameters. A hooked event keeps both values equal, and sticking a run of selected events chains through the value the previous event just took. Moving a selection in time is the arrow pair.
+
 Hold `Z` while pressing the primary button on an event or a Hold to drag its **head**; hold `Z` while pressing the secondary button on an event or a Hold to drag its **tail**. A plain press near an event bar's top or bottom edge trims that edge; Ctrl+left on an edge trims the event head, and Ctrl+right on a Hold trims its tail. The moved edge follows the pointer row with the usual time snapping, and a right-button drag release opens no menu or editor page. Plain `Z` line stepping/nudging runs when a short `Z` tap is released; starting a pointer gesture or holding `Z` long enough to auto-repeat cancels that pending movement, so preparing a drag never moves the selected Hold. If another shortcut is bound to `Z`, use the arrow-key alternatives or rebind it in **Settings → Shortcuts** before using the drag prekey.
 
-Ctrl+wheel steps the active line. While multi-line editing is active the selected line set stays and only the active line moves, so the line field's `0-15 (3)` annotation follows the wheel. The field itself reads `0,15`, `0，15`, and `0 15` alike, and accepts `0-15`, `0:15`, and `0：15` ranges next to a trailing `(active)` annotation. An optional step writes `80:119/5` with an inclusive end, and a line folder's name adds every line it holds. Folder names drop commas and parentheses when created or renamed, so a folder can always be written here. The written order is preserved: adding a line appends it, removing a line or block splices the affected range where it stands, and the field never merges or sorts the tokens.
+Ctrl+wheel steps the active line. While multi-line editing is active the selected line set stays and only the active line moves, so the line field's `0-15 (3)` annotation follows the wheel. The step stays inside that set and follows ascending line numbers, not the order the expression was written in; from the first or last line of the set it wraps to the other end. The written order is untouched, so the expression never sorts itself. The field itself reads `0,15`, `0，15`, and `0 15` alike, and accepts `0-15`, `0:15`, and `0：15` ranges next to a trailing `(active)` annotation. An optional step writes `80:119/5` with an inclusive end, and a line folder's name adds every line it holds. Folder names drop commas and parentheses when created or renamed, so a folder can always be written here. The written order is preserved: adding a line appends it, removing a line or block splices the affected range where it stands, and the field never merges or sorts the tokens.
 
 While multi-line editing shows more than one panel, dragging empty timeline space with the primary button pans the panels horizontally instead of starting a sweep. Both sweep gestures are unavailable in that layout, so neither the primary-button sweep-select nor the right-button sweep-deselect starts a sweep, and a `Shift`+drag marquee takes over additive and subtractive selection; a primary click that does not drag clears the selection. Single-panel layouts keep both sweeps.
 
@@ -103,6 +106,8 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 Audio volume is controlled from the expandable console at the bottom-right of the sidebar. `Alt+Wheel` remains reserved for timeline zoom when the pointer is over the timeline.
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
+
+`Space` is the plain transport toggle and never changes the layout. The toolbar's play button also owns RPE's playback layout: starting hides the note and event regions behind the preview, and pausing shows them again at the current position.
 
 Play/pause and undo/redo use workspace scope because they belong to the open document rather than the timeline. `Space`, `Ctrl+Z`, and `Ctrl+Shift+Z` / `Ctrl+Y` therefore work on the global and design pages while a chart is open. Text fields keep their native editing keys.
 

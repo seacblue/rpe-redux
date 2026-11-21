@@ -51,6 +51,7 @@ export interface SidebarNavigationItem {
   visibility?: NavigationVisibility;
   indicator?: NavigationVisibility;
   badge?: Pick<ValueCell<number>, "get" | "subscribe">;
+  badgeTone?: Pick<ValueCell<"error" | "warning">, "get" | "subscribe">;
   onActivate(): void;
 }
 
@@ -112,6 +113,7 @@ export function mergeSidebarNavigation(
           visibility: entry.icon.visibility,
           indicator: entry.icon.indicator,
           badge: entry.icon.badge,
+          badgeTone: entry.icon.badgeTone,
           onActivate: entry.onActivate,
         },
   );

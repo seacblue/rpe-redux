@@ -26,6 +26,7 @@ function recordingCommands(calls) {
     },
     transport: {
       togglePlayback: () => calls.push("play"),
+      togglePlaybackPreview: () => calls.push("play-preview"),
       beginAudition: () => calls.push("audition-start"),
       endAudition: () => calls.push("audition-end"),
       rewind: () => calls.push("rewind"),

@@ -24,6 +24,15 @@ import { holdLayout } from "./noteGeometry.ts";
 import { splitPhiraHitFx, splitPhiraHoldAtlas } from "./phiraAtlas.ts";
 import type { NoteColor, TextureDescriptor } from "./noteSpriteGroups.ts";
 
+/**
+ * The selected-line pointer sprite, published at the asset root.
+ *
+ * It is an application resource, not a note-skin slot: the marker identifies the
+ * selected judge line, so a skin pack cannot replace it and every chart reads it
+ * the same way.
+ */
+const LINE_POINTER_ASSET = "redux/chrome/line_pointer.png";
+
 /** Note type → normal texture name. */
 const names: Record<number, string> = { 1: "tap", 2: "hold_head", 3: "flick", 4: "drag" };
 /** Note type → highlighted texture name. */
@@ -99,20 +108,13 @@ export class RpeSkin {
 
   /** Decode the base chrome images, then apply the active note skin. */
   async load(): Promise<void> {
-    await Promise.all(
-      ["Pause", "Arrow2"].map(async (name) => {
-        const picture = new Image();
-        picture.src = assetUrl(`redux/Texture/${name}.png`);
-        try {
-          await picture.decode();
-          if (!this.disposed) {
-            this.images.set(name, picture);
-          }
-        } catch {
-          return;
-        }
-      }),
-    );
+    await Promise.all([
+      this.loadChrome("Pause", "redux/Texture/Pause.png"),
+      // The line pointer ships with the application rather than with a skin
+      // pack: it identifies a selected judge line, so every chart draws the
+      // same marker regardless of the active skin.
+      this.loadChrome("line_pointer", LINE_POINTER_ASSET),
+    ]);
     // The bundled line image is the base texture; a skin pack may replace it.
     const defaultLine = new Image();
     defaultLine.src = bundledNoteSkinUrl("line.png");
@@ -129,6 +131,20 @@ export class RpeSkin {
     }
     this.baseImages = new Map(this.images);
     await this.applySelection();
+  }
+
+  /** Decode one application-owned bitmap, ignoring a missing file. */
+  private async loadChrome(name: string, path: string): Promise<void> {
+    const picture = new Image();
+    picture.src = assetUrl(path);
+    try {
+      await picture.decode();
+      if (!this.disposed) {
+        this.images.set(name, picture);
+      }
+    } catch {
+      // A missing chrome bitmap falls back to the renderer's drawn shape.
+    }
   }
 
   /** Decode the selected skin pack and swap it in, keeping the old bitmaps on failure. */
@@ -323,13 +339,19 @@ export class RpeSkin {
     context.drawImage(source, box.x, box.y, box.width, box.height);
     return true;
   }
-  /** Draw the skin-owned event bar into the timeline event rectangle. */
+  /**
+   * Draw the skin-owned event bar into the timeline event rectangle.
+   *
+   * A hooked event passes the theme's hooked colour; the texture keeps its
+   * alpha and shape while the RGB channels are tinted, exactly like a note tint.
+   */
   eventBar(
     context: CanvasRenderingContext2D,
     centerX: number,
     centerY: number,
     width: number,
     height: number,
+    color?: number[],
   ): boolean {
     const name = this.images.has("event_hold")
       ? "event_hold"
@@ -340,6 +362,7 @@ export class RpeSkin {
     if (!picture || width <= 0 || height <= 0) {
       return false;
     }
+    const source = color ? (this.tinted(name, color) ?? picture) : picture;
     const box = alignedTextureBox(
       this.bounds(name, picture),
       picture.naturalWidth,
@@ -349,7 +372,7 @@ export class RpeSkin {
       width,
       height,
     );
-    context.drawImage(picture, box.x, box.y, box.width, box.height);
+    context.drawImage(source, box.x, box.y, box.width, box.height);
     return true;
   }
 

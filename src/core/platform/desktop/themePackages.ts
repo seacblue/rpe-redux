@@ -25,8 +25,11 @@ export async function listExternalThemePackages(): Promise<readonly DiscoveredTh
       const source = entry["source"] === "portable" ? "portable" : "user";
       return [{ payload, source }];
     });
-  } catch {
-    return [];
+  } catch (error) {
+    // An empty list means "no packages"; a failed scan must not remove the
+    // packages already painted or registered.
+    console.error("Unable to scan theme packages", error);
+    throw error;
   }
 }
 

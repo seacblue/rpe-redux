@@ -424,6 +424,9 @@ export default {
     "Draws easing curves once the event bar reaches the width threshold.",
   "settings.field.event-opacity.label": "Event bar opacity",
   "settings.field.event-bar-width.label": "Event bar width ratio",
+  "settings.field.event-hooked-color.label": "Hooked event colour",
+  "settings.field.event-hooked-color.description":
+    "Paints the bar of a hooked event whose start and end values are locked together.",
   // -------------------------------------------------------- timeline (5 rows)
   "settings.field.scroll-speed.label": "Wheel seek speed",
   "settings.field.timeline-exclusive-width.label": "Exclusive timeline width",
@@ -500,6 +503,18 @@ export default {
   "settings.field.audio-visual-lead.description":
     "Milliseconds the picture is drawn ahead of the sound. Raise it if drum hits sound early.",
   "settings.unit.milliseconds": "ms",
+  "settings.unit.seconds": "s",
+  "settings.unit.issues": "issues",
+
+  // ------------------------------------------------------- chart issues (3 groups)
+  "settings.group.issues": "Chart issues",
+  "settings.group.issuesScan": "Background check",
+  "settings.group.issuesKinds": "Checked kinds",
+  "settings.group.issuesDensity": "On-screen density",
+  "settings.field.chart-issues-enabled.label": "Check chart issues",
+  "settings.field.chart-issues-density-caution.label": "On-screen note limit",
+  "settings.field.chart-issues-density-caution.description":
+    "The check reports a passage when more notes share the screen at once than this. Adjust it to what the target simulator can afford.",
 
   // ----------------------------------------------------------- audio (3 rows)
   "settings.field.volume.label": "Music volume",

@@ -55,8 +55,18 @@ export function externalNoteSkins(): readonly ExternalNoteSkinSummary[] {
   return cached;
 }
 
+let refreshPromise: Promise<void> | null = null;
+
 /** Re-scan the host skin roots; notify only when the folder set changed. */
-export async function refreshExternalNoteSkins(): Promise<void> {
+export function refreshExternalNoteSkins(): Promise<void> {
+  refreshPromise ??= scanExternalNoteSkins().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
+/** One scan; concurrent callers share the in-flight pass. */
+async function scanExternalNoteSkins(): Promise<void> {
   let next: ExternalNoteSkinSummary[];
   try {
     next = isDesktop()
@@ -90,6 +100,12 @@ export async function refreshExternalNoteSkins(): Promise<void> {
   }
   const id = active.slice(EXTERNAL_NOTE_SKIN_PREFIX.length);
   const fingerprint = cached.find((entry) => entry.id === id)?.fingerprint;
+  // A deleted active package has nothing new to decode. Keep the bitmaps and
+  // hit sounds this session already loaded; the picker shows the missing id and
+  // selecting another package still reloads normally.
+  if (fingerprint === undefined) {
+    return;
+  }
   // The picker may only need a redraw, but the preview has to decode the new
   // bytes when the active package itself changed.
   if (previous.get(id) !== fingerprint) {

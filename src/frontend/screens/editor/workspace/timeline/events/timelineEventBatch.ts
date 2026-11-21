@@ -17,7 +17,7 @@ import {
 } from "../../../canvas/webgl.ts";
 
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
-const INSTANCE_STRIDE = 9;
+const INSTANCE_STRIDE = 12;
 
 interface SkinTextureDescriptor {
   readonly source: HTMLImageElement;
@@ -46,6 +46,7 @@ export class TimelineEventBatch {
   private rectLocation = -1;
   private uvLocation = -1;
   private alphaLocation = -1;
+  private colorLocation = -1;
   private alphaUniform: WebGLUniformLocation | null = null;
   private active = false;
   private width = 0;
@@ -106,6 +107,7 @@ export class TimelineEventBatch {
     this.rectLocation = -1;
     this.uvLocation = -1;
     this.alphaLocation = -1;
+    this.colorLocation = -1;
     this.textureSource = null;
     this.descriptor = null;
     this.instanceCount = 0;
@@ -136,15 +138,18 @@ export class TimelineEventBatch {
       in vec4 a_rect;
       in vec4 a_uv;
       in float a_alpha;
+      in vec3 a_color;
       uniform vec2 u_resolution;
       out vec2 v_uv;
       out float v_alpha;
+      out vec3 v_color;
       void main() {
         vec2 pixel = a_rect.xy + a_corner * a_rect.zw;
         vec2 clip = pixel / u_resolution * 2.0 - 1.0;
         gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
         v_uv = mix(a_uv.xy, a_uv.zw, a_corner);
         v_alpha = a_alpha;
+        v_color = a_color;
       }
     `,
         `#version 300 es
@@ -153,9 +158,11 @@ export class TimelineEventBatch {
       uniform float u_alpha;
       in vec2 v_uv;
       in float v_alpha;
+      in vec3 v_color;
       out vec4 outColor;
       void main() {
-        outColor = texture(u_texture, v_uv) * vec4(1.0, 1.0, 1.0, u_alpha * v_alpha);
+        vec4 texel = texture(u_texture, v_uv);
+        outColor = vec4(texel.rgb * v_color, texel.a * u_alpha * v_alpha);
       }
     `,
       );
@@ -171,6 +178,7 @@ export class TimelineEventBatch {
     this.rectLocation = this.program ? gl.getAttribLocation(this.program, "a_rect") : -1;
     this.uvLocation = this.program ? gl.getAttribLocation(this.program, "a_uv") : -1;
     this.alphaLocation = this.program ? gl.getAttribLocation(this.program, "a_alpha") : -1;
+    this.colorLocation = this.program ? gl.getAttribLocation(this.program, "a_color") : -1;
     this.alphaUniform = this.program ? gl.getUniformLocation(this.program, "u_alpha") : null;
     if (this.texture) {
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
@@ -223,8 +231,13 @@ export class TimelineEventBatch {
     return true;
   }
 
-  /** Queue one bar instance; false means the caller must use the canvas fallback. */
-  add(rectangle: EventBarRectangle, lineAlpha = 1): boolean {
+  /**
+   * Queue one bar instance; false means the caller must use the canvas fallback.
+   *
+   * `tint` is an opaque 0-255 RGB triple; a hooked event passes the theme's
+   * hooked colour so the skin texture is recoloured without a second upload.
+   */
+  add(rectangle: EventBarRectangle, lineAlpha = 1, tint?: readonly number[]): boolean {
     if (!this.active || this.isContextLost() || rectangle.width <= 0 || rectangle.height <= 0) {
       return false;
     }
@@ -252,6 +265,12 @@ export class TimelineEventBatch {
     this.instances[offset + 6] = (useful.x + useful.width) / width;
     this.instances[offset + 7] = (useful.y + useful.height) / height;
     this.instances[offset + 8] = lineAlpha;
+    const red = tint ? (tint[0] ?? 255) / 255 : 1;
+    const green = tint ? (tint[1] ?? 255) / 255 : 1;
+    const blue = tint ? (tint[2] ?? 255) / 255 : 1;
+    this.instances[offset + 9] = red;
+    this.instances[offset + 10] = green;
+    this.instances[offset + 11] = blue;
     this.instanceCount += 1;
     return true;
   }
@@ -297,6 +316,7 @@ export class TimelineEventBatch {
     bindInstanceAttribute(gl, this.rectLocation, 4, INSTANCE_STRIDE, 0);
     bindInstanceAttribute(gl, this.uvLocation, 4, INSTANCE_STRIDE, 4);
     bindInstanceAttribute(gl, this.alphaLocation, 1, INSTANCE_STRIDE, 8);
+    bindInstanceAttribute(gl, this.colorLocation, 3, INSTANCE_STRIDE, 9);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.instanceCount);
   }
 

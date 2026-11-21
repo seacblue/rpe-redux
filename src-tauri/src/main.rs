@@ -256,8 +256,14 @@ fn main() {
             assets::extensions::start_watchdog(app.handle().clone());
             Ok(())
         })
-        .register_uri_scheme_protocol("redux", |context, request| {
-            media_response(context.app_handle(), request)
+        // The synchronous protocol hook runs on the WebView's thread. Media
+        // requests read files, so hand each one to the blocking pool and answer
+        // through the responder instead of freezing input while it reads.
+        .register_asynchronous_uri_scheme_protocol("redux", |context, request, responder| {
+            let app = context.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media_response(&app, request));
+            });
         })
         .invoke_handler(move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
             // The extension sandbox shares the `main` webview label with the

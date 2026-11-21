@@ -12,11 +12,16 @@ import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx"
 import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { Popconfirm } from "../../../../../design/components/popconfirm/Popconfirm.tsx";
+import { Select } from "../../../../../design/components/select/Select.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { transformEvents } from "../../../../../core/edit/events/eventEdits.ts";
+import {
+  convertEventType,
+  isConvertibleEventType,
+} from "../../../../../core/edit/events/eventTypeConversion.ts";
 import { clamp01 } from "../../../../../core/utils/numbers.ts";
 import { eventList, eventKey } from "../../../../../core/edit/events/eventTracks.ts";
-import type { JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
+import { setEventHooked, type JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
 import type { Beat } from "../../../../../core/global/chart/timing/beat.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { TempoGrid } from "../../../../../core/global/chart/editing/editGrid.ts";
@@ -30,6 +35,7 @@ import {
 } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
 import { applyEventTransform, EventField } from "./EventField.tsx";
 import type { FieldKey, ValueKind } from "./eventFieldModel.ts";
+import { eventTypeOptions } from "./eventTypeOptions.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { eventHasLinkGroup } from "../../../../../core/global/chart/optionalFeatures.ts";
 import { samplingAxisForEventType } from "../../../../../core/edit/sampling/sampling.ts";
@@ -147,6 +153,8 @@ export function EventInspectorView({
   const bezierEnabled = useEditingFeature("bezier");
   const linkgroupEnabled = useEditingFeature("linkgroup");
   const easingRangeEnabled = useEditingFeature("easingRange");
+  const eventLayersEnabled = useEditingFeature("eventLayers");
+  const extendedEventsEnabled = useEditingFeature("extendedEvents");
   const [cutAnchorElement, setCutAnchorElement] = useState<HTMLButtonElement | null>(null);
   const [cutOpen, setCutOpen] = useState(false);
   const [cutDensity, setCutDensity] = useState("");
@@ -163,6 +171,23 @@ export function EventInspectorView({
     return <InspectorEmpty>{t("editorPanels.inspector.event.emptyHint")}</InspectorEmpty>;
   }
   const eventType = entry.type;
+  const selectedLine = session.chart.judgeLineList?.[entry.lineIndex ?? session.lineIndex];
+  const typeOptions = isConvertibleEventType(eventType)
+    ? eventTypeOptions(
+        selectedLine,
+        session.eventLayer,
+        { eventLayers: eventLayersEnabled, extendedEvents: extendedEventsEnabled },
+        eventType,
+      )
+    : [];
+  // The row converts one authored track. A wider selection would have to merge
+  // several tracks, which the existing event tools already cover.
+  const singleEventSelected =
+    session.multiLineActive && session.multiLineMode === "events"
+      ? [...session.multiEventSelection.values()].reduce((total, keys) => total + keys.size, 0) ===
+        1
+      : session.eventSelection.size === 1;
+  const showTypeRow = singleEventSelected && typeOptions.length > 1;
   /** Runs an edit action and reports its failure without unwinding the form. */
   const safely = (action: () => void) => {
     try {
@@ -413,6 +438,46 @@ export function EventInspectorView({
   return (
     <>
       <FieldRows>
+        {showTypeRow && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="event-field-type"
+            label={t("editorPanels.inspector.event.type")}
+            control={
+              <Select
+                id="event-field-type"
+                data-inspector-field="type"
+                value={eventType}
+                onChange={(input) => {
+                  const select = input.currentTarget;
+                  const nextType = select.value;
+                  if (nextType === eventType) {
+                    return;
+                  }
+                  try {
+                    convertEventType(
+                      session,
+                      { lineIndex: entry.lineIndex, type: eventType, index: entry.index },
+                      nextType,
+                    );
+                  } catch (error) {
+                    // A refused conversion leaves the authored track in place;
+                    // return the closed select to it before reporting.
+                    select.value = eventType;
+                    reportError(error);
+                  }
+                }}
+              >
+                {typeOptions.map((option) => (
+                  <option value={option.type} key={option.type}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            }
+          />
+        )}
         {fields.map(([field, title, kind]) => (
           <EventField
             key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}`}
@@ -445,11 +510,7 @@ export function EventInspectorView({
                   applyEventTransform(
                     session,
                     t("editorPanels.inspector.event.modifyHook"),
-                    (current) => ({
-                      ...current,
-                      inst: checked ? 1 : 0,
-                      ...(checked ? { end: structuredClone(current.start) } : {}),
-                    }),
+                    (current) => setEventHooked(current, checked),
                   ),
                 );
               }}
@@ -467,41 +528,9 @@ export function EventInspectorView({
           {t("editorPanels.inspector.event.selectLinkGroup", { group: link })}
         </Button>
       )}
-      {/* Bézier editing is optional. With it off, ordinary events use the
-          easing group only; an event that already carries a Bézier keeps its
-          curve but reports that the editor is disabled rather than presenting
-          easing controls that would not affect the rendered curve. */}
-      <EasingCurveEditor
-        mode={curveMode}
-        easingType={Number(event.easingType ?? 1)}
-        bezier={curveValues.bezier}
-        bezierPoints={curveValues.bezierPoints}
-        easingLeft={previewCurveValues.easingLeft}
-        easingRight={previewCurveValues.easingRight}
-        startValue={typeof event.start === "number" ? event.start : undefined}
-        endValue={typeof event.end === "number" ? event.end : undefined}
-        onChange={changeCurve}
-        onPreview={onCurvePreview}
-        easingLabel={t("editorPanels.inspector.event.easing")}
-        rangeIds={{ left: "event-field-easingLeft", right: "event-field-easingRight" }}
-        modeClassName="is-block"
-        bezierKey={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:bezier`}
-        showRange={rangeVisible}
-        bezierEnabled={() => bezierEnabled}
-        easingRangeEnabled={() => easingRangeEnabled}
-        renderRangeField={(field, row) => (
-          <EasingRangeField
-            session={session}
-            field={field}
-            title={row.label}
-            range={liveRange(field)}
-            onDraft={(value) => setDraftRange(field, value)}
-            onCommit={(value) => commitRange(field, value)}
-            refresh={refresh}
-            setLiveEventEdit={setLiveEventEdit}
-          />
-        )}
-      />
+      {/* The event tools sit above the curve section: they act on the selected
+          event as a whole, while the easing/Bezier switch below only picks the
+          curve editor. */}
       <div className="action-grid event-tool-actions">
         {samplingSupported && (
           <Button
@@ -525,9 +554,9 @@ export function EventInspectorView({
         <Button
           type="button"
           variant="outlined"
-          onClick={() => runEventTool(session, tempo, "stick", notify, currentBeat())}
+          onClick={() => runEventTool(session, tempo, "stickNext", notify, currentBeat())}
         >
-          {t("editorPanels.inspector.event.stickPrevious")}
+          {t("editorPanels.inspector.event.stickNext")}
         </Button>
         <Button
           ref={setCutAnchorElement}
@@ -565,6 +594,41 @@ export function EventInspectorView({
           {t("editorPanels.inspector.event.swap")}
         </Button>
       </div>
+      {/* Bézier editing is optional. With it off, ordinary events use the
+          easing group only; an event that already carries a Bézier keeps its
+          curve but reports that the editor is disabled rather than presenting
+          easing controls that would not affect the rendered curve. */}
+      <EasingCurveEditor
+        mode={curveMode}
+        easingType={Number(event.easingType ?? 1)}
+        bezier={curveValues.bezier}
+        bezierPoints={curveValues.bezierPoints}
+        easingLeft={previewCurveValues.easingLeft}
+        easingRight={previewCurveValues.easingRight}
+        startValue={typeof event.start === "number" ? event.start : undefined}
+        endValue={typeof event.end === "number" ? event.end : undefined}
+        onChange={changeCurve}
+        onPreview={onCurvePreview}
+        easingLabel={t("editorPanels.inspector.event.easing")}
+        rangeIds={{ left: "event-field-easingLeft", right: "event-field-easingRight" }}
+        modeClassName="is-block"
+        bezierKey={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:bezier`}
+        showRange={rangeVisible}
+        bezierEnabled={() => bezierEnabled}
+        easingRangeEnabled={() => easingRangeEnabled}
+        renderRangeField={(field, row) => (
+          <EasingRangeField
+            session={session}
+            field={field}
+            title={row.label}
+            range={liveRange(field)}
+            onDraft={(value) => setDraftRange(field, value)}
+            onCommit={(value) => commitRange(field, value)}
+            refresh={refresh}
+            setLiveEventEdit={setLiveEventEdit}
+          />
+        )}
+      />
       <Popconfirm
         open={cutOpen}
         anchor={cutAnchorElement}

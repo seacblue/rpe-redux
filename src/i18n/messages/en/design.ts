@@ -7,8 +7,6 @@
  * would move the string twice.
  */
 export default {
-  "design.beatInput.hint": "Integer, decimal or 0:1/4",
-
   // The three boxes a beat is typed into. The separators between them are the
   // format's own `:` and `/`, so the labels only name the parts.
   "design.beat.whole": "Whole",

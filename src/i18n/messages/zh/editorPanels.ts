@@ -156,13 +156,21 @@ export default {
   "editorPanels.overlap.beat": "拍 {value}",
   "editorPanels.overlap.layer": "层 {value}",
 
-  "editorPanels.issues.summary": "{count} 处谱面错误",
+  "editorPanels.issues.summaryErrors": "{count} 处谱面错误",
+  "editorPanels.issues.summaryWarnings": "{count} 处谱面警告",
   "editorPanels.issues.emptyTitle": "没有发现谱面错误",
   "editorPanels.issues.empty": "暂未发现需要处理的谱面问题。",
-  "editorPanels.issues.line": "判定线 {index}",
+  "editorPanels.issues.disabledTitle": "谱面检查已关闭",
+  "editorPanels.issues.disabled":
+    "在设置中打开「检查谱面错误」后，这里会显示结构问题和同屏密度提示。",
+  "editorPanels.issues.openSettings": "打开设置",
+  "editorPanels.issues.scanning": "正在后台检查谱面…",
+  "editorPanels.issues.scanFailed": "后台检查失败，编辑不受影响。",
+  "editorPanels.issues.line": "#{index}",
+  "editorPanels.issues.lineNamed": "#{index} {name}",
+  "editorPanels.issues.title": "{kind}（{line}）",
   "editorPanels.issues.layer": "层级 {value}",
   "editorPanels.issues.extendedLayer": "扩展层",
-  "editorPanels.issues.notesLayer": "音符",
   "editorPanels.issues.holdTrack": "Hold",
   "editorPanels.issues.negativeBeat": "拍数不能小于 0",
   "editorPanels.issues.beat": "拍 {value}",
@@ -171,6 +179,21 @@ export default {
   "editorPanels.issues.locate": "定位",
   "editorPanels.issues.trackIncline": "倾斜",
   "editorPanels.issues.trackGif": "GIF",
+  "editorPanels.issues.masterSwitch": "检查谱面错误",
+  "editorPanels.issues.densityPeak": "同屏 {count} 个音符",
+  "editorPanels.issues.filter.label": "按类型筛选问题",
+  "editorPanels.issues.filter.emptyTitle": "所有类型都被筛掉了",
+  "editorPanels.issues.filter.empty": "在上方筛选中重新启用一个类型即可查看对应条目。",
+  "editorPanels.issues.kind.overlap": "事件重叠",
+  "editorPanels.issues.kind.overlap.description":
+    "同一轨道上的两个事件时间重叠，其中一个不会播放。",
+  "editorPanels.issues.kind.invalidRange": "没有时长",
+  "editorPanels.issues.kind.invalidRange.description":
+    "Hold 或事件的结束位置不晚于开始位置，因此无法播放。",
+  "editorPanels.issues.kind.negativeBeat": "负拍数",
+  "editorPanels.issues.kind.negativeBeat.description": "位置早于谱面第一拍，永远无法到达。",
+  "editorPanels.issues.kind.density": "同屏音符过多",
+  "editorPanels.issues.kind.density.description": "预览可以承受这个密度，但目标模拟器可能掉帧。",
 
   "editorPanels.lineSwitcher.empty": "当前可视范围内没有符合条件的判定线",
 
@@ -207,6 +230,9 @@ export default {
 
   "editorPanels.inspector.event.emptyHint":
     "选择事件后可编辑。拖动移动，拖动上/下边缘改变时间；Shift、Ctrl 多选。",
+  "editorPanels.inspector.event.type": "事件类型",
+  "editorPanels.inspector.event.modifyType": "修改事件类型",
+  "editorPanels.inspector.event.typeUnsupported": "该事件类型不能转换",
   "editorPanels.inspector.event.startAlpha": "起始透明度",
   "editorPanels.inspector.event.endAlpha": "结束透明度",
   "editorPanels.inspector.event.startSpeed": "起始速度",
@@ -239,7 +265,7 @@ export default {
   "editorPanels.inspector.event.bezierDisabled":
     "设置中已关闭贝塞尔曲线。此事件仍保留贝塞尔曲线；启用贝塞尔曲线后可编辑。",
 
-  "editorPanels.inspector.event.stickPrevious": "粘合前一事件",
+  "editorPanels.inspector.event.stickNext": "粘合下一事件",
   "editorPanels.inspector.event.cutEvent": "切割事件",
   "editorPanels.inspector.event.cutHint": "长按可设一次性切割倍数",
   "editorPanels.inspector.event.cutDensityTitle": "切割倍数",

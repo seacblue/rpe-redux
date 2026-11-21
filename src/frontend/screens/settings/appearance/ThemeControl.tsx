@@ -20,11 +20,16 @@ import { Select } from "../../../../design/components/select/Select.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { registerSettingControl, type SettingControlProps } from "../settingsContributions.ts";
 import { packageName } from "../../../../core/utils/packageName.ts";
+import { refreshExternalThemes } from "../../../app/externalThemeCatalog.ts";
+import { useSurfacePolling } from "../useSurfacePolling.ts";
 
 /** Theme picker with the active package's display name. */
-export function ThemeControl({ field }: SettingControlProps) {
+export function ThemeControl({ field, active = false }: SettingControlProps) {
   const { t, language } = useTranslation();
   const theme = useSyncExternalStore(subscribeActiveTheme, activeTheme, activeTheme);
+  // The settings window keeps every page mounted, so the picker polls only
+  // while its section is on screen.
+  useSurfacePolling(active, refreshExternalThemes);
   /** Label a theme option with its package source when it is not built in. */
   const themeLabel = (option: ReturnType<typeof getThemes>[number]) => {
     const name = packageName(option.name, language);

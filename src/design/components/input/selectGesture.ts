@@ -18,16 +18,16 @@
 export const SELECT_CLICK_SLOP_PX = 4;
 
 /**
- * Input types where an in-place press replaces the whole value.
+ * Whether an in-place press replaces the whole value of this field.
  *
- * Only a numeric entry field holds one value the user almost always wants to
- * retype, so selecting it on click is an affordance. Every other text field —
- * prose, a name, a path, a search query or a multi-token expression — places the
- * caret where the click landed so one token can be edited without selecting the
- * rest.
+ * A numeric entry field holds one value the user almost always wants to retype,
+ * so selecting it on click is an affordance. A text field holds prose, a name, a
+ * path, a search query or a multi-token expression, and places the caret where
+ * the click landed so one token can be edited without selecting the rest — unless
+ * the caller declares that its box also holds one value (`holdsValue`).
  */
-export function selectsValueOnClick(type: string | undefined): boolean {
-  return type === "number";
+export function selectsValueOnClick(type: string | undefined, holdsValue = false): boolean {
+  return holdsValue || type === "number";
 }
 
 /** The press that has not ended yet, remembered by where it landed. */

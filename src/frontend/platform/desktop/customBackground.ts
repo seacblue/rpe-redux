@@ -28,7 +28,9 @@ export function cleanupCustomBackgrounds(activeReference: string): Promise<void>
   return invoke<void>("cleanup_custom_backgrounds", { activeReference });
 }
 
-/** Read a previously stored custom background by its relative app-data reference. */
+/** Read a previously stored custom background by its relative app-data reference.
+ * The host returns raw bytes; the number-array branch keeps an older host working.
+ */
 export async function readCustomBackground(reference: string): Promise<Uint8Array> {
   const response = await invoke<number[] | ArrayBuffer>("read_custom_background", { reference });
   return response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response);
