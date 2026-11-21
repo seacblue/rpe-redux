@@ -12,7 +12,13 @@ import {
   timelineSweepEnabled,
 } from "../../../../../../core/edit/timeline/selection.ts";
 import { moveTimelineNote } from "../../../../../../core/edit/timeline/dragPreview.ts";
-import { dragPrekeyHeld } from "../../../../../../core/edit/timeline/dragPrekey.ts";
+import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
+import {
+  dragPrekeyHeld,
+  selectedHoldTarget,
+} from "../../../../../../core/edit/timeline/dragPrekey.ts";
+import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
+import { compareBeats } from "../../../../../../core/global/chart/timing/beat.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import type {
   TimelineNote,
@@ -28,6 +34,25 @@ import {
 import { selectOverlappingNote } from "./noteSelectionDrawing.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
 import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
+
+/** Publish the live edge of a prekey Hold drag for the inspector. */
+function syncNoteDragPreview(
+  receiver: TimelineNoteInteractionReceiver,
+  session: EditorSession,
+): boolean {
+  const drag = receiver.gestures.drag;
+  const entry = drag?.prekey ? session.selectedNoteEntries()[0] : undefined;
+  if (!entry) {
+    return false;
+  }
+  return setTimelineDragPreview({
+    kind: "note",
+    lineIndex: entry.lineIndex,
+    index: entry.index,
+    // A prekey drag is always an edge drag, which never reads positionX.
+    note: receiver.movedNote(entry.note as TimelineNote),
+  });
+}
 
 /** The note with the active drag applied, for drawing and commit. */
 export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineNote): TimelineNote {
@@ -79,6 +104,9 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
           this.viewport.judgementOffset -
           this.gestures.drag.current.y) /
           this.viewport.scaleForArea("notes");
+    }
+    if (syncNoteDragPreview(this, this.getSession())) {
+      this.getSession().notify("selection");
     }
     if (this.gestures.drag.kind === "multi-pan") {
       // Pan through the clamped viewport seam so the note and event fields
@@ -213,6 +241,42 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     tool: Boolean(this.gestures.tool),
     pending: Boolean(this.gestures.pendingHold),
   });
+  // RPE's drag prekey trims the single selected Hold from anywhere in the
+  // field. A press on a Hold without that selection still selects and trims it
+  // below, and Ctrl keeps its edge-only gesture.
+  const prekeyHold =
+    dragPrekey && !this.gestures.pendingHold && session.focus === "notes"
+      ? selectedHoldTarget(session.selectedNoteEntries())
+      : null;
+  if (prekeyHold && (event.button === 0 || event.button === 2)) {
+    const lineIndex = prekeyHold.lineIndex;
+    const factor = this.viewport.noteFactorForLine(lineIndex);
+    const originSeconds = this.viewport.tempo.seconds(this.viewport.origin, factor);
+    session.focus = "notes";
+    session.selectionMode = "single";
+    this.gestures.drag = {
+      kind: event.button === 0 ? "startTime" : "endTime",
+      prekey: true,
+      start: position,
+      current: position,
+      anchor: prekeyHold.index,
+      lineIndex,
+      startFactor: factor,
+      currentSeconds:
+        this.viewport.tempo.seconds(this.viewport.origin, factor) +
+        (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
+          this.viewport.scaleForArea("notes"),
+      originSeconds,
+    };
+    syncNoteDragPreview(this, session);
+    this.notesCanvas.setPointerCapture(event.pointerId);
+    if (event.button === 2) {
+      this.gestures.suppressNextContextMenu();
+    }
+    session.notify();
+    this.changed();
+    return;
+  }
   // RPE drag prekey: Z or Ctrl + right drag edits a Hold tail, even when the
   // pointer is not within the ordinary edge handle.
   if ((dragPrekey || event.ctrlKey) && hit?.item.type === 2 && event.button === 2) {
@@ -226,6 +290,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     session.focus = "notes";
     this.gestures.drag = {
       kind: "endTime",
+      prekey: dragPrekey,
       start: position,
       current: position,
       anchor: hit.index,
@@ -562,6 +627,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
             : "move";
     this.gestures.drag = {
       kind,
+      prekey: dragPrekey && kind !== "move",
       start: position,
       current: position,
       anchor: hit.index,
@@ -677,21 +743,36 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
         this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes"),
       (lineIndex, bottom, top) => this.cache.noteEntriesInRange(lineIndex, bottom, top),
     );
-  } else if (
-    ["move", "startTime", "endTime"].includes(drag.kind) &&
-    (drag.scrolled || Math.hypot(drag.current.x - drag.start.x, drag.current.y - drag.start.y) > 4)
-  ) {
-    commitNoteDrag(
-      session,
-      (note) => this.movedNote(note),
-      drag.kind === "move"
-        ? t("editorPanels.timeline.moveNote")
-        : t("editorPanels.timeline.resizeHold"),
-      () => {
-        this.gestures.drag = null;
-      },
-    );
+  } else if (["move", "startTime", "endTime"].includes(drag.kind)) {
+    const startsAtPointer = drag.prekey === true;
+    const moved =
+      drag.scrolled || Math.hypot(drag.current.x - drag.start.x, drag.current.y - drag.start.y) > 4;
+    const changed =
+      !startsAtPointer ||
+      session.selectedNoteEntries().some(({ note }) => {
+        // A prekey drag is always an edge drag, which never reads positionX.
+        const next = this.movedNote(note as TimelineNote);
+        return (
+          compareBeats(next.startTime, note.startTime) !== 0 ||
+          compareBeats(next.endTime, note.endTime) !== 0
+        );
+      });
+    if ((moved || startsAtPointer) && changed) {
+      commitNoteDrag(
+        session,
+        (note) => this.movedNote(note),
+        drag.kind === "move"
+          ? t("editorPanels.timeline.moveNote")
+          : t("editorPanels.timeline.resizeHold"),
+        () => {
+          this.gestures.drag = null;
+        },
+      );
+    }
   }
   this.gestures.drag = null;
+  if (setTimelineDragPreview(null)) {
+    session.notify("selection");
+  }
   this.changed();
 }

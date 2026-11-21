@@ -1,20 +1,15 @@
 /**
- * Draws hit animation frames and the four-square burst at recent note hits.
+ * Draws the skin's hit animation and Phira's four-square burst at recent hits.
  * Hit timing and particle state come from the sibling `hitEffects` and
  * `hitParticles` readers; this module owns only the canvas pass.
  */
-import { recentHitsInto, type Hit } from "./hitEffects.ts";
-import { hitParticlesInto, type HitParticle } from "./hitParticles.ts";
-import {
-  HIT_DURATION,
-  HIT_FRAME_COUNT,
-  HIT_FRAME_SECONDS,
-  PREVIEW_LOGICAL_SIZE,
-  hitFrame,
-  previewNoteWidth,
-} from "../scene/constants.ts";
+import { noteIsAbove } from "../../../../../../core/global/chart/chart.ts";
+import { HIT_FX_DURATION_DEFAULT, HIT_FRAME_COUNT, hitFrame } from "../../../canvas/hitFrame.ts";
+import { PHIRA_HIT_FX_WIDTH_RATIO, previewNoteWidth } from "../scene/constants.ts";
 import type { PreviewFrame, PreviewSkin } from "../scene/previewTypes.ts";
 import type { SampledLineState } from "../../../../../../core/global/chart/runtime/scene.ts";
+import { recentHitsInto, type Hit } from "./hitEffects.ts";
+import { hitParticleAlpha, hitParticlesInto, type HitParticle } from "./hitParticles.ts";
 
 type SampleAt = (index: number) => SampledLineState;
 
@@ -24,6 +19,9 @@ interface ResolvedHitColor {
   readonly css: string;
   readonly alpha: number;
 }
+
+/** Phira's untinted hit-effect colour. */
+const UNTINTED_HIT_COLOR = [255, 255, 255] as const;
 
 /** Resolve a hit colour array to CSS and channels once per distinct array. */
 function resolveHitColor(
@@ -78,18 +76,22 @@ function scratchFor(surface: object): HitEffectScratch {
   const scratch: HitEffectScratch = {
     hits: [],
     particles: [],
-    hitStates: new Map<number, SampleAt>(),
+    hitStates: new Map(),
   };
   hitEffectScratch.set(surface, scratch);
   return scratch;
 }
 
-/** Resolve a chart tint, keeping the configured colour only as a fallback. */
-export function resolveParticleColor(
+/** Phira's hit-effect colour: an explicit note tint wins over the skin policy. */
+function hitEffectColor(
   tint: unknown,
   defaultParticleColor: readonly number[],
+  tinted: boolean,
 ): readonly number[] {
-  return Array.isArray(tint) ? tint : defaultParticleColor;
+  if (Array.isArray(tint)) {
+    return tint;
+  }
+  return tinted ? defaultParticleColor : UNTINTED_HIT_COLOR;
 }
 
 /** Draws the skin-owned hit frame and the four-square burst at each recent note hit. */
@@ -107,27 +109,28 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
     hitStates.clear();
   }
   const { hits, particles } = scratch;
+  const frameCount = surface.skin?.particleFrameCount ?? HIT_FRAME_COUNT;
+  const duration = Math.max(1e-6, surface.skin?.hitFxDuration ?? HIT_FX_DURATION_DEFAULT);
+  const lifetime = Math.max(duration, 1e-6);
   for (const index of order) {
     const runtime = frame.scene.lines[index];
     if (!runtime) {
       continue;
     }
-    const particleFrameCount = surface.skin?.particleFrameCount ?? HIT_FRAME_COUNT;
-    const particleDuration = particleFrameCount * HIT_FRAME_SECONDS;
-    const hitCount = recentHitsInto(
-      runtime,
-      seconds,
-      surface.effectsSince,
-      hits,
-      Math.max(particleDuration || HIT_DURATION, 2 / 3),
-    );
+    const hitCount = recentHitsInto(runtime, seconds, surface.effectsSince, hits, lifetime);
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
       const hit = hits[hitIndex];
       const { entry, time } = hit;
-      const effectFrame = hitFrame(seconds - time, particleFrameCount);
-      // An explicit chart tint wins; otherwise the user-configured default applies.
+      const age = seconds - time;
+      const effectFrame = hitFrame(age, frameCount, duration);
+      // An explicit chart tint wins; otherwise the skin policy decides between
+      // the user's particle colour and Phira's untinted white.
       const hitColor = resolveHitColor(
-        resolveParticleColor(entry.note.tintHitEffects, surface.defaultParticleColor),
+        hitEffectColor(
+          entry.note.tintHitEffects,
+          surface.defaultParticleColor,
+          surface.skin?.hitFxTinted !== false,
+        ),
         hitColorCache,
       );
       const picture =
@@ -150,21 +153,34 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
         originX + (state.x + position.x * Math.cos(angle) + position.y * Math.sin(angle)) * scaleX;
       const vertical =
         originY + (-state.y + position.x * Math.sin(angle) - position.y * Math.cos(angle)) * scaleY;
+      const noteWidth = previewNoteWidth(surface.noteSize) * scaleX;
+      const sizeScale = (surface.skin?.hitFxScale ?? 1) * surface.hitEffectScale;
+      const fade = hitParticleAlpha(age / duration);
       // The skin supplies its own animation; the burst stays correct without one.
       if (picture && effectFrame !== null) {
-        const size = previewNoteWidth(surface.noteSize) * surface.hitEffectScale * 1.4 * scaleX;
-        context.globalAlpha = hitColor.alpha;
-        context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
+        const size = noteWidth * PHIRA_HIT_FX_WIDTH_RATIO * sizeScale;
+        context.globalAlpha = hitColor.alpha * fade;
+        if (surface.skin?.hitFxRotate) {
+          context.save();
+          context.translate(horizontal, vertical);
+          context.rotate(angle + (noteIsAbove(entry.note) ? 0 : Math.PI));
+          context.drawImage(picture, -size / 2, -size / 2, size, size);
+          context.restore();
+        } else {
+          context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
+        }
+      }
+      if (surface.skin?.hideParticles === true) {
+        continue;
       }
       context.fillStyle = hitColor.css;
       const particleCount = hitParticlesInto(
-        seconds - time,
+        age,
+        duration,
         index * 65537 + hit.seed,
-        previewNoteWidth(surface.noteSize) * surface.hitEffectScale * scaleX,
-        // The burst belongs to the chart content: drive its travel with the
-        // projected chart width so free-camera zoom and resize cannot detach
-        // the particles from the scaled hit point.
-        PREVIEW_LOGICAL_SIZE.width * surface.hitEffectScale * scaleX,
+        noteWidth,
+        sizeScale,
+        surface.hitEffectScale,
         particles,
       );
       for (let particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {
@@ -177,11 +193,11 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
           particle.radius * 2,
         );
       }
-      // Do not leak burst transparency into later draw passes.
-      context.globalAlpha = 1;
     }
   }
-  const oldestActiveHit = seconds - Math.max(HIT_DURATION, 2 / 3);
+  // Do not leak burst transparency into later draw passes.
+  context.globalAlpha = 1;
+  const oldestActiveHit = seconds - lifetime;
   for (const time of hitStates.keys()) {
     if (time < oldestActiveHit) {
       hitStates.delete(time);

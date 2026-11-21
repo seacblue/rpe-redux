@@ -17,7 +17,6 @@ export function delay(milliseconds) {
 export async function restartWithSameProfile(runner, beforeStart, { crash = false } = {}) {
   const profileDir = runner.profileDir;
   runner.assert(Boolean(profileDir), "profile restart needs an owned profile directory");
-  // Crash recovery keeps the last periodic sample; a clean close clears it.
   await runner.close({ preserveProfile: true, crash });
   await beforeStart?.(profileDir);
   const restarted = new SmokeRunner({ profileDir });

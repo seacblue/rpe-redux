@@ -346,7 +346,7 @@ export default {
   "settings.field.particle-effects-enabled.label": "渲染粒子效果",
   "settings.field.particle-effects-enabled.description":
     "播放预览时在每次打击处绘制皮肤打击动画与方形爆发粒子。",
-  "settings.field.note-size.label": "预览音符大小",
+  "settings.field.note-size.label": "预览音符缩放",
   "settings.field.timeline-note-size.label": "时间轴音符大小",
   "settings.field.hit-effect-size.label": "打击效果大小",
   "settings.field.note-opacity.label": "音符不透明度",
@@ -437,6 +437,18 @@ export default {
   "settings.field.audio-visual-lead.description":
     "画面相对声音提前的毫秒数。若鼓点听起来偏早，调大这个值。",
   "settings.unit.milliseconds": "毫秒",
+  "settings.unit.seconds": "秒",
+  "settings.unit.issues": "处",
+
+  // --------------------------------------------------------- 谱面问题（3 组）
+  "settings.group.issues": "谱面问题",
+  "settings.group.issuesScan": "后台检查",
+  "settings.group.issuesKinds": "检查类型",
+  "settings.group.issuesDensity": "同屏密度",
+  "settings.field.chart-issues-enabled.label": "检查谱面错误",
+  "settings.field.chart-issues-density-caution.label": "同屏音符上限",
+  "settings.field.chart-issues-density-caution.description":
+    "同一时刻同屏音符数超过该值时提示。依据目标模拟器能承受的密度调整。",
 
   "settings.field.volume.label": "音乐音量",
   "settings.field.background-volume.label": "后台音量",
@@ -454,7 +466,6 @@ export default {
   "settings.field.audio-analysis-width.label": "波形宽度",
   "settings.field.audio-analysis-curve.label": "波形增幅",
 
-  "settings.field.session-restore.label": "崩溃或更新后恢复谱面",
   "settings.field.autosave-enabled.label": "启用自动保存",
   "settings.field.autosave-seconds.label": "自动保存间隔",
   "settings.field.autosave-limit.label": "每谱保留备份数",
@@ -640,6 +651,10 @@ export default {
   "settings.startup.preparing": "正在准备工作区",
   "settings.startup.retry": "重新启动",
   "settings.startup.progress": "正在启动编辑器…",
+  "settings.startup.downloading": "正在下载 {downloaded} / {total}",
+  "settings.startup.downloadingSpeed": "正在下载 {downloaded} / {total} · {speed}",
+  "settings.startup.downloaded": "已下载 {downloaded}",
+  "settings.startup.downloadedSpeed": "已下载 {downloaded} · {speed}",
   "settings.startup.testWarning.title": "测试功能提示",
   "settings.startup.testWarning.description":
     "RPE Redux 仍在测试中，可能出现显示异常或偶尔不稳定；遇到问题请通过“帮助 > 问卷调查”反馈。",

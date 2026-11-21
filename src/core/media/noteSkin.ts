@@ -45,7 +45,6 @@ export interface PhiraSkinManifest {
   holdFile: string;
   holdFileMH: string;
   hitFxFile: string;
-  eventHoldFile?: string;
 }
 /** Every semantic texture slot the runtime renders. */
 export const NOTE_TEXTURES = [
@@ -64,6 +63,11 @@ export const NOTE_TEXTURES = [
   "event_hold",
 ] as const;
 
+/** Phira's default and selectable note-scale range. */
+export const PHIRA_NOTE_SCALE_DEFAULT = 1;
+export const PHIRA_NOTE_SCALE_MIN = 0.8;
+export const PHIRA_NOTE_SCALE_MAX = 1.2;
+
 /** Validate the PNG signature and IHDR dimensions, rejecting oversized images. */
 export function validatePngDimensions(bytes: Uint8Array): { width: number; height: number } {
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -81,6 +85,46 @@ export function validatePngDimensions(bytes: Uint8Array): { width: number; heigh
     throw new Error(t("model.noteSkin.invalidSize"));
   }
   return { width, height };
+}
+
+/**
+ * Phira's simultaneous-note width multiplier.
+ *
+ * `prpr` scales one `_mh` note by the normal and highlighted click widths, so a
+ * skin whose highlight art is wider also renders a wider note.
+ */
+export function highlightWidthScale(baseWidth: number, highlightWidth: number): number {
+  return baseWidth > 0 && highlightWidth > 0 ? highlightWidth / baseWidth : 1;
+}
+
+/** The three vertical slices of a Phira Hold atlas, in image coordinates. */
+export interface HoldAtlasSlices {
+  tail: { y: number; height: number };
+  body: { y: number; height: number };
+  head: { y: number; height: number };
+}
+
+/**
+ * Split a Phira Hold atlas into tail, body, and head rows.
+ *
+ * Phira puts the tail at the top and the head at the bottom; `holdAtlas` and
+ * `holdAtlasMH` name their heights, in that order. Either cap may be zero, but
+ * the body must keep at least one row.
+ */
+export function phiraHoldAtlasSlices(
+  textureHeight: number,
+  atlas: readonly [number, number],
+): HoldAtlasSlices | null {
+  const [tail, head] = atlas;
+  const body = textureHeight - tail - head;
+  if (tail < 0 || head < 0 || body <= 0) {
+    return null;
+  }
+  return {
+    tail: { y: 0, height: tail },
+    body: { y: tail, height: body },
+    head: { y: tail + body, height: head },
+  };
 }
 
 /** Draw the full PNG around its logical centre without stretching aspect ratio. */

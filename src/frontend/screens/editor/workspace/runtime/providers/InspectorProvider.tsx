@@ -2,9 +2,17 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { t } from "../../../../../../i18n/index.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
+import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import { assetNames } from "../../../../../../core/global/document/resources.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import { EventIssueMonitor } from "../../../../../../core/edit/validation/eventIssueMonitor.ts";
+import {
+  readChartIssueScanOptions,
+  readChartIssuesEnabled,
+  readChartIssuesScanDelay,
+  subscribeChartIssueSettings,
+} from "../../../../../../core/edit/validation/chartIssueSettings.ts";
+import { ChartIssueWorkerClient } from "./chartIssueWorker.ts";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
 import type { EditorTempoSource } from "../session/tempoSource.ts";
 import type { EditorUiState } from "../composition/editorUiState.ts";
@@ -94,26 +102,121 @@ export function createInspectorRuntime(options: {
   persistEditor(): void;
 }): InspectorRuntime {
   const getSession = () => options.session.current;
-  // The monitor follows the active session. It returns early while the chart
-  // object is unchanged, so selection-only notifications never scan the chart.
-  const eventIssues = new EventIssueMonitor();
+  // The monitor follows the active session, but the scan runs in a worker: a
+  // session notification only schedules one, and a burst of edits collapses
+  // into a single scan of the newest chart.
+  const issueWorker = new ChartIssueWorkerClient();
+  const eventIssues = new EventIssueMonitor((input) => issueWorker.scan(input));
   let issueSession: EditorSession | null = null;
-  const syncEventIssues = () => eventIssues.update(getSession().chart);
+  let issueTimer: number | null = null;
+  let issueSettings: (() => void) | null = null;
+  /** The full snapshot produced for the current paged document, if any. */
+  let issueSnapshot: { document: unknown; revision: number; chart: Chart } | null = null;
+  /**
+   * Return the chart a scan must read.
+   *
+   * A library document pages its lines: an unloaded line is a placeholder with
+   * empty notes and events, and its marker is a process-local Symbol that does
+   * not survive a worker post. Scanning the facade would therefore report a
+   * clean chart. A paged document is materialized per content revision, and the
+   * scan reads that snapshot until the document changes.
+   */
+  const issueChart = async (session: EditorSession): Promise<Chart> => {
+    const document = session.chartDocument;
+    if (!document) {
+      return session.chart;
+    }
+    const revision = session.contentRevision;
+    if (issueSnapshot?.document === document && issueSnapshot.revision === revision) {
+      return issueSnapshot.chart;
+    }
+    const chart = await document.materializeAll();
+    issueSnapshot = { document, revision, chart };
+    issueWorker.resetLines();
+    return chart;
+  };
+  const scanEventIssues = () => {
+    issueTimer = null;
+    // Switching the check off has to withdraw what it already published: the
+    // badge and the pane would otherwise keep showing a stale result.
+    if (!readChartIssuesEnabled()) {
+      eventIssues.clear();
+      return;
+    }
+    const session = issueSession;
+    if (!session) {
+      return;
+    }
+    const document = session.chartDocument;
+    if (!document) {
+      eventIssues.request({
+        chart: session.chart,
+        options: readChartIssueScanOptions(),
+      });
+      return;
+    }
+    // A paged chart needs an async materialize step first; the request is
+    // dropped when the document moved on while the snapshot was built, because
+    // the newest notification already scheduled its own scan.
+    const revision = session.contentRevision;
+    void issueChart(session)
+      .then((chart) => {
+        if (
+          issueSession === session &&
+          session.chartDocument === document &&
+          session.contentRevision === revision &&
+          readChartIssuesEnabled()
+        ) {
+          eventIssues.request({ chart, options: readChartIssueScanOptions() });
+        }
+      })
+      .catch(() => undefined);
+  };
+  /** An edit settles before it is scanned, so a burst costs one scan. */
+  const scheduleEventIssues = () => {
+    if (issueTimer !== null) {
+      window.clearTimeout(issueTimer);
+    }
+    const delay = readChartIssuesScanDelay();
+    issueTimer = window.setTimeout(scanEventIssues, delay);
+  };
+  /**
+   * A settings change is not an edit: the author is looking at the result and
+   * expects the new threshold applied now, so the pending debounce is dropped
+   * instead of waited out.
+   */
+  const rescanEventIssues = () => {
+    if (issueTimer !== null) {
+      window.clearTimeout(issueTimer);
+      issueTimer = null;
+    }
+    scanEventIssues();
+  };
   const bindIssueSession = () => {
     const next = getSession();
     if (next === issueSession) {
       return;
     }
-    issueSession?.removeEventListener("change", syncEventIssues);
+    issueSession?.removeEventListener("change", scheduleEventIssues);
     issueSession = next;
-    issueSession.addEventListener("change", syncEventIssues);
-    syncEventIssues();
+    issueSession.addEventListener("change", scheduleEventIssues);
+    scanEventIssues();
   };
   bindIssueSession();
   options.scope.add(options.session.subscribe(bindIssueSession));
+  // A changed threshold or kind switch invalidates the published list, so the
+  // rescan starts at once instead of waiting for the edit debounce.
+  issueSettings = subscribeChartIssueSettings(rescanEventIssues);
   options.scope.add(() => {
-    issueSession?.removeEventListener("change", syncEventIssues);
+    issueSession?.removeEventListener("change", scheduleEventIssues);
     issueSession = null;
+    issueSettings?.();
+    issueSettings = null;
+    if (issueTimer !== null) {
+      window.clearTimeout(issueTimer);
+      issueTimer = null;
+    }
+    issueWorker.dispose();
   });
   const activatePane = (name: string) => {
     if (name) {

@@ -4,84 +4,146 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use two inline annotations: `@name` credits a GitHub user (rendered bold and underlined), and `<red>text</red>` colours a run of text. The tag name is the colour: `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown tag, so the release page still reads as plain words.
 
-## 1.0.14
+## 1.0.15
 
 ### 中文
 
 **新增功能**
 
-- 工具栏、状态栏、检查器、侧栏、进度卡可分别调整尺寸，内部按钮、文字、控件按同一倍率缩放。
-- 自定义工具栏与侧边栏功能。
-- 进度条下方新增纵向拉伸条，可在“编辑器 → 时间轴布局”中开关。
-- 更好的节拍检测，噪声环境下相位稳定性提高。
-- 新增“设置 → 播放 → 画面提前量（毫秒）”。
+- 加入了备份恢复功能，你们不说我还真忘了要加！
+- 设置项和快捷键绑定现在会记录用户是否主动修改过。
+- 新增按 `G/B` 向后/向前粘合事件。
+- 事件时间线现在用钩定事件颜色绘制钩定事件条。
+- 外观设置新增「钩定事件颜色」。
+- 取消钩定时的事件尾部将会还原。
+- 新增“多选判定线颜色”设置项：同时选中多条判定线时，除当前判定线外的选中线使用该颜色，默认 `#7DC87D`。
+- 现在工具栏的播放按钮可以同时操作事件/音符时间轴的显隐了。
+- 多事件编辑新增“编辑 / 克隆”切换与克隆页：按线号序列克隆选中事件，七个通道各自设置上下缓扰与周期数列，支持保留源和结果虚影。
+- 事件现在可以在检查器里直接改类型，数值保持不变。
+- 新增「同屏音符过多」的谱面错误项：超过阈值时给黄色警告，不计入错误数量。
+
+**网页端**
+
+- 修复了网页端“载入谱面”只提示需要桌面版的问题。
+- 修复了网页端谱面库新建项目时的 SQLite 错误。
+- 修复了网页端谱面库中的项目无法打开的问题。
 
 **改进**
 
-- 工具栏单元格由 41px 调整为 36px。
-- 工具栏超宽时使用真实水平滚动条。
-- 多线编辑事件区顶部，每条判定线窗口顶部居中显示编号与名称。
-- 桌面构建锁定 FFmpeg 与 Cloudflared 精确版本。
+- 优化了 Bezier 输入框与界面的使用逻辑。
+- 缓动预览不再在曲线框下方绘制首尾数值。
+- 采样首尾值、粘合前一事件、切割事件、首尾交换四个事件操作按钮移到了「缓动 / Bezier」开关上方。
+- 现在多线编辑下的滚轮切换线号更加合理。
+- 优化时间标记功能与时间轴显示。
+- 重写了「今日运势」的条目文案，让宜忌更贴近写谱场景，英文同步重译。
 
 **修复**
 
-- 修复播放开始时播放头跳动、暂停时判定线跳动、暂停后恢复播放红线抖动。
-- 修复时间偏移后打击音效错位、播放中调整导致附近音符重复发声。
-- 修复时值列表在偏移修改、增删时值点后不刷新。
-- 修复多线合并视图放置音符后不立即显示，行范围缓存改为按每行音符数组重建。
-- 播放中按 J 开关多线编辑、按 K 切换音符/事件模式会立即更新时间轴和检查器。
-- 多选控制球跟随时间轴滚动、多线平移和纵向缩放。
-- 多线分栏窗口宽度与横向滚动范围按概览条之间的绘图区计算。
-- 按住 Z 准备拖拽不再触发左移/上一行；Z 拖拽 Hold 头时头边缘跟随鼠标所在行。
-- 修复分页谱面编辑后事件时间线沿用旧范围、选中事件叠黑色数值标签、事件检查器聚焦时停止发布、Bezier 控制点滚轮改值不立即写入等问题。
-- 采样浮层不再被自由相机层遮挡，引导线与浮动缓动面板可正常接收鼠标操作。
-- 高亮辅助线直接决定吸附取值，XY 轴独立吸附并保持一致。
-- 拖拽采样时辅助线保持高亮，完成后可直接重画替换。
-- 采样浮动面板改用指针捕获拖拽；展开检查器保持在浮层层级。
-- 时间轴图层切换条与音符横向导航按钮静止时保持 25% 透明度。
-- 判定线输入框支持 X:Y/Z 步长范围与分组名，点击分组整组加入或移除。
-- 音符检查器修改类型后打击音效立即跟随，类型下拉顺序调整为 Tap、Drag、Flick、Hold。
-- 负长度 Hold 按 Phira 方式渲染。
-- 移除悬停音符的“该音符来自 X 号线”提示及无用设置项。
-- 素材库音频预览不再绘制频谱柱状图，空格键切换音频播放/暂停。
-- 文件菜单“返回谱面库”改用统一保存询问窗口。
+- 修复了未启用 AI 代码单元时「高级编辑」页面恢复默认值按钮漂浮在行中间的问题。
+- 修复了播放时三个拖动器跟随时明显抖动的问题。
+- 现在节拍输入支持对所有 `X:Y/Z` 等数值的解析。
+- 修复了 Bezier 手柄无法在 Y 方向超出 `[0, 1]` 范围的 Bug。
+- Ctrl + 滚轮切换线号的逻辑与 RPE 保持一致。
+- 桌面端打开和保存谱面时不再反复读取并哈希整包歌曲、背景和视频：未变化的文件按大小与修改时间复用摘要，磁盘快照在阻塞线程计算，保存成功后也不再额外探测一次。
+- 歌曲、图片和自定义背景的读取移到阻塞线程，`redux://` 媒体响应支持 ETag 复用，打开谱面和选择纹理时不再因同步文件读取卡住界面。
+- 主题、皮肤和扩展文件夹只在对应设置页可见时按五秒间隔扫描，窗口隐藏时暂停。
+- 拖动窗口边缘与点击标题栏不再每个事件都发一次 IPC 或强制一次布局。
+- 事件层第一个事件的缓动曲线现在会向左延拓到第一个事件开始之前。
+- 修复了选谱主页左侧卡片跳变的 Bug。
+- 现在在多线编辑下，文本不会压缩，检测到标题为“Untitled”时自动不显示标题。
+- 更换判定线的三角形指示标记，在低透明度下更好辨认方向。
+- 修复了合并音符下添加音符时，音符所在线号错误的 Bug。
+- 播放时的时间跳动更加稳定。
+- 修复了进度条向左无法拉伸到 0 的 Bug。
+- 修复了数字输入框的步进按钮会被步长文字撑宽的问题。
+- 修复了缓动预览在缓动左边界大于右边界时不绘制截取后曲线的问题。
+- 修复了缓动预览与 Bézier 画布观感不一致的问题。
+- 修复了缓动预览横轴不是线性的问题。
+- 修复了缓动预览高亮切面方向错误的问题，并把左右边界改成各自的主题色。
+- 修复了 Bézier 编辑区上下多出空隙的问题，并补上 y = ±1 两条参考线。
+- 修复了拖动缓动左/右边界滑块时预览卡顿与闪烁的问题。
+- 修复了 125% 等非整数显示缩放时工具栏两行之间出现过宽空隙的问题。
+- 修复了“简化渲染”图标不随工具栏缩放的问题。
+- 保存并返回、保存并退出现在以保存结果为准，保存完成后一定会离开编辑器。
+
+**变更**
+
+- 按住 `Z` 时，只要事件或 Hold 处于单选状态，就可以在时间轴任意位置按下：单击把对应头/尾落到指针所在拍，拖动则实时预览并在松开时提交，与 RPE 一致。
+
+**代码优化**
+
+- 新增 `--without-bundled-tools` 参数：构建或 `npm run dev:desktop` 时跳过 FFmpeg 和 Cloudflared 下载。
+- 去除了 BeatInput 控件。
+- 修复了开发服务器对开发者模式的影响。开发者界面不再随构建模式自动打开，所有宿主（包括 `npm run dev` 的浏览器循环）都从关闭状态开始。
+- 重构了谱面错误的分析逻辑：检查改在后台运行，连续编辑只触发一次；每类检查可以单独关闭，并新增「谱面问题」设置页集中管理。
 
 ### English
 
 **Features**
 
-- The toolbar, status bar, inspector, sidebar, and transport card are sized separately, and the buttons, text, and controls inside them scale by the same factor.
-- Customize toolbar and Customize sidebar.
-- A vertical stretch bar below the progress bar, switched on or off under Editor → Timeline layout.
-- Better beat detection, with steadier phase under noise.
-- Settings → Playback → Picture lead (milliseconds).
+- Backup restore is in, and you had to remind me to add it.
+- Settings values and shortcut bindings now record whether you changed them yourself.
+- `G` / `B` now stick events backward and forward.
+- The event timeline now paints hooked event bars in the hooked-event colour.
+- Appearance settings gain a "Hooked event colour" row.
+- Unhooking an event now restores its tail.
+- Added the "Multi-select judgement-line colour" setting: when several judge lines are selected, the lines other than the current one use this colour, defaulting to `#7DC87D`.
+- The toolbar play button now also shows and hides the note and event timelines.
+- Multi-event editing gains an Edit/Clone switch and a clone page: selected events are cloned onto a line sequence, each of the seven channels has its own lower/upper/easing and cycle sequences, and keep-source and result ghosts are supported.
+- Events can now change type directly in the inspector, keeping their values.
+- Added a "too many notes on screen" chart issue: a passage above the limit gets a yellow warning and stays out of the error count.
+
+**Web**
+
+- Fixed the web "import chart" action only reporting that the desktop build is required.
+- Fixed the SQLite error when the web chart library created a project.
+- Fixed web-library projects failing to open.
 
 **Improvements**
 
-- Toolbar cells are 36px instead of 41px.
-- A toolbar wider than the window scrolls under a real horizontal bar.
-- Each judge-line window centers its number and name in the header of the multi-line event area.
-- Desktop builds pin FFmpeg and Cloudflared to exact versions.
+- The Bezier input field and the interface around it are easier to use.
+- The easing preview no longer prints the start and end values below the plot.
+- The sample start/end, stick previous event, cut event, and swap start/end buttons now sit above the easing/Bezier switch.
+- Wheel line switching while multi-line editing now behaves more sensibly.
+- Improved the time marker editor and the timeline display.
+- Rewrote the daily-fortune entries so the suitable and avoid notes fit charting better, with matching English.
 
 **Fixes**
 
-- Fixed the playhead jumping at the start of playback, the judgement line jumping on pause, and the playhead jittering when playback resumes after a pause.
-- Fixed hit sounds drifting after a time-offset change, and notes near the playhead repeating when the offset is adjusted during playback.
-- Fixed the timing list not refreshing after an offset change or an added or removed timing point.
-- Fixed notes placed in the merged multi-line view not appearing immediately; the range cache now rebuilds from each line's note array.
-- Pressing J to toggle multi-line editing or K to switch its notes/events field during playback now updates the timeline and Inspector immediately.
-- The batch control balls follow timeline scrolling, multi-line panning, and vertical zoom.
-- Multi-line window width and horizontal range are measured between the overview bars.
-- Holding Z to prepare a drag no longer triggers left-nudge/previous-line, and a Z Hold-head drag places the head on the pointer row.
-- Fixed the event timeline keeping a stale range after editing a paged chart, a second dark value label on a selected event, the event inspector stopping while a field had focus, and a Bezier control point changed by the wheel not being written immediately.
-- The sampler overlay is no longer covered by the free-camera pointer layer, so its guides and easing panel receive pointer input.
-- A highlighted guide supplies the snapped value directly, with XY axes snapping independently.
-- Guides stay highlighted while dragging, and a completed sample can be redrawn to replace it.
-- The sampling panel drag uses pointer capture, and the expanded inspector stays on the floating rung.
-- The timeline layer switch strip and note navigation buttons sit at 25% opacity until hovered or focused.
-- The line field accepts X:Y/Z ranges and group names, and clicking a group adds or removes the whole group.
-- Changing a note's type in the inspector updates its hit sound immediately, and the type dropdown now lists Tap, Drag, Flick, Hold.
-- Negative-length Holds are rendered the way Phira draws them.
-- Removed the hover note's source-line prompt and its now-unused setting.
-- The asset library audio preview no longer draws spectrum bars, and Space toggles that audio.
-- File → Return to chart library asks with the same save prompt as every other library trip.
+- Fixed the advanced-editing reset button floating mid-row while AI code cells are disabled.
+- Fixed the three drag handles visibly jittering while they follow playback.
+- Beat input now parses every `X:Y/Z` form and its numeric variants.
+- Fixed Bezier handles being unable to leave the `[0, 1]` range in Y.
+- Ctrl + Wheel line switching now follows RPE's direction.
+- Opening and saving a desktop chart no longer re-reads and re-hashes every song, background, and video: unchanged files reuse a digest keyed by size and modification time, snapshots run on the blocking pool, and a successful save no longer probes the disk again.
+- Song, image, and custom-background reads move off the main thread, and `redux://` media responses revalidate with an ETag, so opening charts and picking textures no longer stall on synchronous file reads.
+- Theme, skin, and Extension folders are scanned every five seconds only while their settings page is visible, and pause while the window is hidden.
+- Resizing a window edge or pressing the title bar no longer sends an IPC call per event or forces a layout on every press.
+- The first event of a layer now extends its easing curve to the left of its own start.
+- Fixed the selected-chart card on the home screen jumping on hover.
+- In multi-line editing, text is no longer compressed, and a line title detected as "Untitled" is hidden automatically.
+- Replaced the judge line's triangle marker so its direction stays readable at low opacity.
+- Fixed notes added in merged multi-line mode landing on the wrong judge line.
+- Playback timing is more stable.
+- Fixed the progress bar not reaching zero when dragged left.
+- Fixed number input step buttons widening to fit their step labels.
+- Fixed the easing preview dropping the cut curve when the left bound is greater than the right bound.
+- Fixed the easing preview and the Bezier editor looking inconsistent.
+- Fixed the easing preview's horizontal axis not being linear.
+- Fixed the easing preview highlighting the wrong dimension, and gave the left and right bounds their own theme colours.
+- Fixed the Bezier editor carrying extra vertical gap, and added the y = ±1 reference lines.
+- Fixed the easing preview stuttering and flashing while a bound slider is dragged.
+- Fixed the toolbar rows drifting apart on 125% and other fractional display scales.
+- Fixed the simplified-rendering icon not scaling with the toolbar.
+- Save and return / save and quit now follow the save result, so a completed save always leaves the editor.
+
+**Changed**
+
+- With `Z` held, a single selected event or Hold can be trimmed from anywhere in the timeline: a click moves that edge to the pointer row, and a drag previews live and commits on release, matching RPE.
+
+**Code**
+
+- Added `--without-bundled-tools`, which skips the FFmpeg and Cloudflared downloads for `npm run build` and `npm run dev:desktop`.
+- Removed the BeatInput control.
+- Fixed the development server affecting developer mode. The developer section no longer opens with the build mode; every host, including the `npm run dev` browser loop, starts closed.
+- Reworked how chart issues are analyzed: the checks now run in the background, a burst of edits costs one scan, each kind can be turned off, and a new Chart issues settings page owns them.

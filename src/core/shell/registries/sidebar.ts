@@ -27,8 +27,16 @@ export interface SidebarIconDescriptor {
   active?: Pick<ValueCell<boolean>, "get" | "subscribe">;
   /** A small accent dot for live but non-selected state, such as a room. */
   indicator?: Pick<ValueCell<boolean>, "get" | "subscribe">;
-  /** A small red count badge for actionable problems on this route. */
+  /** A count badge for actionable problems on this route. */
   badge?: Pick<ValueCell<number>, "get" | "subscribe">;
+  /**
+   * Whether the badge describes a broken state or a caution.
+   *
+   * A rail that only ever paints red forces every contribution to look like an
+   * error; a hint such as an on-screen density warning belongs in the caution
+   * colour instead. Missing means `"error"`.
+   */
+  badgeTone?: Pick<ValueCell<"error" | "warning">, "get" | "subscribe">;
 }
 
 /** One independently owned icon route inserted into the shell's sidebar. */

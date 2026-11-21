@@ -75,7 +75,11 @@ export function Toolbar({
   const row2 = entries.some((entry) => entry.row === 2);
   const rows = Number(row1) + Number(row2);
   const ToolbarRows = SurfaceToolbarRows ?? DefaultToolbarRows;
-  const progressSeam = useLayoutRegion("progress", useViewportSize());
+  const viewport = useViewportSize();
+  // The transport card sits inside the toolbar and carries the toolbar's content
+  // scale, so its own floor follows that painted factor.
+  const toolbarSeam = useLayoutRegion("toolbar", viewport);
+  const progressSeam = useLayoutRegion("progress", viewport, toolbarSeam.contentScale);
   const { t } = useTranslation();
   return (
     <div

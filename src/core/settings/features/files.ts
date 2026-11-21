@@ -1,6 +1,6 @@
 /**
- * The files settings page under General: autosave timing and retention, session
- * restore, and the action that opens the data folder.
+ * The files settings page under General: autosave timing and retention, and the
+ * action that opens the data folder.
  *
  * Autosave rows are read by the workspace's editor assembly through their
  * registered keys, so changing a default here changes the save policy without
@@ -22,15 +22,6 @@ const FilesSettingsNavigation: SettingsNavigation = {
 const AUTOSAVE_ENABLED = { key: "autosave-enabled", equals: true } as const;
 
 const FilesSettingsSchema: SettingDefinition[] = [
-  {
-    key: "session-restore",
-    navigation: "files",
-    group: "settings.group.files",
-    label: "settings.field.session-restore.label",
-    control: "toggle",
-    default: true,
-    hosts: ["desktop"],
-  },
   {
     key: "autosave-enabled",
     navigation: "files",

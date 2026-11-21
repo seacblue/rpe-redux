@@ -6,6 +6,7 @@ node_modules/
 .agents/
 .local-tools/
 .scratch/
+.commandcode/
 .env
 .env.*
 *.pem

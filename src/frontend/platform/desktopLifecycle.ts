@@ -19,12 +19,12 @@ export interface DesktopLifecycleBindings {
   openPaths(paths: string[]): Promise<void>;
   /** Handle paths dropped on the window; the active surface decides the action. */
   dropPaths(paths: string[]): Promise<void>;
-  /** Reopen the last document and restore its view/panel state. */
-  restoreLastSession(): Promise<void>;
-  /** Release the route mirror once startup files or a restored session settle. */
+  /** Open the document named by the boot address, if the address names one. */
+  applyBootRoute(): Promise<void>;
+  /** Release the route mirror once the boot document settles. */
   markBootSettled(): void;
-  /** Persist the last workspace state and flush durable preferences before exit. */
-  persistSession(): Promise<void>;
+  /** Flush durable preferences before exit. */
+  persistPreferences(): Promise<void>;
   pendingSave(): Promise<void> | null;
   /** One prompt that combines unsaved edits and any active room exit. */
   confirmClose(): Promise<boolean>;
@@ -33,10 +33,10 @@ export interface DesktopLifecycleBindings {
   notifyUnsupported(): void;
 }
 
-/** Browser-only startup: restore the library session and mark the host surface. */
+/** Browser-only startup: apply the boot address and mark the host surface. */
 export interface BrowserLifecycleBindings {
-  /** Reopen the project recorded by the last workspace session. */
-  restoreLastSession(): Promise<void>;
+  /** Open the document named by the boot address, if the address names one. */
+  applyBootRoute(): Promise<void>;
   reportError(error: unknown): void;
 }
 
@@ -44,13 +44,13 @@ export interface BrowserLifecycleBindings {
  * Bind the browser host.
  *
  * A browser page has no native window, file association, or drag-drop path
- * source, but the chart library and the workspace-session record are shared
- * with the desktop build. Restoring that record makes a refresh reopen the
- * project the developer was editing without a Tauri window.
+ * source, but it shares the route grammar with the desktop build. Applying that
+ * address makes a refresh continue the destination the address names; a plain
+ * load keeps the editor on the library.
  */
 export function bindBrowserLifecycle(bindings: BrowserLifecycleBindings): void {
   document.body.dataset.environment = "browser";
-  void bindings.restoreLastSession().catch(bindings.reportError);
+  void bindings.applyBootRoute().catch(bindings.reportError);
 }
 
 type DesktopExitGuard = () => Promise<boolean>;
@@ -109,7 +109,7 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
             await pending;
           }
           try {
-            await bindings.persistSession();
+            await bindings.persistPreferences();
           } catch (error) {
             bindings.reportError(error);
           }
@@ -140,7 +140,7 @@ export function bindDesktopLifecycle(bindings: DesktopLifecycleBindings): void {
       if (paths.length) {
         await bindings.openPaths(paths);
       } else {
-        await bindings.restoreLastSession();
+        await bindings.applyBootRoute();
       }
     })
     .catch(bindings.reportError)

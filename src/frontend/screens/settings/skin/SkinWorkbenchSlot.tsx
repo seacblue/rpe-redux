@@ -124,8 +124,8 @@ export function WorkbenchSlotView({
             <span>{t("settings.skin.workbench.cut.tail")}</span>
             <Input
               type="number"
-              min={1}
-              value={asset.atlas?.[0] || ""}
+              min={0}
+              value={asset.atlas?.[0] ?? ""}
               onChange={(event) => onAtlasChange(0, event.target.value)}
             />
           </label>
@@ -133,8 +133,8 @@ export function WorkbenchSlotView({
             <span>{t("settings.skin.workbench.cut.head")}</span>
             <Input
               type="number"
-              min={1}
-              value={asset.atlas?.[1] || ""}
+              min={0}
+              value={asset.atlas?.[1] ?? ""}
               onChange={(event) => onAtlasChange(1, event.target.value)}
             />
           </label>

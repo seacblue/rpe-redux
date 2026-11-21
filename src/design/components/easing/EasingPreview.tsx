@@ -10,10 +10,16 @@
  * `0 → -3` transition runs from the right edge to the left edge. Without
  * endpoints it falls back to the normalized `0..1` value domain.
  *
+ * This component owns sampling only. The frame, the overshoot fade, and the axis
+ * labels come from `easingCanvas.ts`, which the Bézier editor paints through as
+ * well, so the two previews cannot drift apart.
+ *
  * Sampling uses the same `easing`/`bezier` functions the renderer uses, so the
  * drawing cannot drift from the animation. The base curve is sampled with no
  * bounds (`easing(t, type, 0, 1)`) on purpose: the bounds select a sub-range of
  * that curve, and drawing the composed value would hide which segment was cut.
+ * A reversed sub-range (`left > right`) is drawn like the renderer samples it,
+ * as the selected segment walked backwards, rather than as the uncut curve.
  */
 import { useEffect, useRef, useState } from "react";
 import { bezier, easing } from "../../../core/utils/easing.ts";
@@ -21,12 +27,14 @@ import { clamp01 } from "../../../core/utils/numbers.ts";
 import {
   EASING_CANVAS_HEIGHT,
   EASING_CANVAS_WIDTH,
-  EASING_PLOT_LEFT,
-  EASING_PLOT_RIGHT,
-  easingPreviewValue,
-  easingPreviewValueDomain,
-  easingPreviewX,
-  resizeEasingCanvas,
+  EASING_GUIDE_ALPHA,
+  EASING_PLOT,
+  drawEasingFrame,
+  easingOutputY,
+  easingProgressX,
+  prepareEasingCanvas,
+  strokeEasingPolyline,
+  type EasingPolyline,
 } from "./easingCanvas.ts";
 
 /**
@@ -48,49 +56,38 @@ interface EasingPreviewEvent {
 
 const WIDTH = EASING_CANVAS_WIDTH;
 const HEIGHT = EASING_CANVAS_HEIGHT;
-const TOP = 12;
-const BOTTOM = 88;
-const PLOT_WIDTH = EASING_PLOT_RIGHT - EASING_PLOT_LEFT;
+/** Segments sampled across the transfer; enough for the sharpest bounce curve. */
+const SEGMENTS = 96;
 
-const yOfProgress = (progress: number): number => BOTTOM - progress * (BOTTOM - TOP);
-
-/** Stroke one sampled segment of a curve into the canvas. */
-function drawCurve(
-  draw: CanvasRenderingContext2D,
-  from: number,
-  to: number,
-  curve: (progress: number) => number,
-  xOfEasedValue: (easedProgress: number) => number,
-): void {
-  draw.beginPath();
-  for (let index = 0; index <= 120; index++) {
-    const progress = from + ((to - from) * index) / 120;
-    const easedProgress = curve(progress);
-    if (!Number.isFinite(easedProgress)) {
+/**
+ * Sample one transfer into the plot's logical space.
+ *
+ * Progress runs along the horizontal axis from `0` to `1`, and the curve's
+ * output sets the height. This is the shape an easing field is read as, so a
+ * bound at `0.18` sits at 18% of the frame's width no matter which curve is
+ * selected.
+ */
+function sampleTransfer(
+  transfer: (progress: number) => number,
+  style: EasingPolyline["style"],
+): EasingPolyline {
+  const points: number[] = [];
+  for (let index = 0; index <= SEGMENTS; index++) {
+    const progress = index / SEGMENTS;
+    const eased = transfer(progress);
+    if (!Number.isFinite(eased)) {
       continue;
     }
-    if (index === 0) {
-      draw.moveTo(xOfEasedValue(easedProgress), yOfProgress(progress));
-    } else {
-      draw.lineTo(xOfEasedValue(easedProgress), yOfProgress(progress));
-    }
+    points.push(easingProgressX(progress, EASING_PLOT), easingOutputY(eased, EASING_PLOT));
   }
-  draw.stroke();
+  return { points, style };
 }
 
-/** Draws the easing curve, its active bounds, and its control points for one event. */
+/** Draws the easing curve, its active bounds, and its discarded segment. */
 export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawVersion, setDrawVersion] = useState(0);
-  const {
-    bezier: isBezier,
-    bezierPoints,
-    easingType,
-    easingLeft,
-    easingRight,
-    startValue,
-    endValue,
-  } = event;
+  const { bezier: isBezier, bezierPoints, easingType, easingLeft, easingRight } = event;
 
   useEffect(() => {
     const redraw = () => setDrawVersion((version) => version + 1);
@@ -110,92 +107,78 @@ export function EasingPreview({ event }: { event: EasingPreviewEvent }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const draw = canvas?.getContext("2d");
-    if (!canvas || !draw) {
+    const surface = canvas ? prepareEasingCanvas(canvas) : null;
+    if (!canvas || !surface) {
       return;
     }
-    const style = getComputedStyle(canvas);
-    const accent = style.getPropertyValue("--accent").trim();
-    const quiet = style.getPropertyValue("--foreground-muted").trim();
-    if (!accent || !quiet) {
-      return;
-    }
-    const rect = canvas.getBoundingClientRect();
-    const valueDomain = easingPreviewValueDomain(startValue, endValue);
-    const xOfEasedValue = (easedProgress: number) =>
-      easingPreviewX(valueDomain, easingPreviewValue(valueDomain, easedProgress));
-    const { pixelWidth, pixelHeight, scaleX, scaleY } = resizeEasingCanvas(
-      canvas,
-      rect.width || WIDTH,
-      rect.height || HEIGHT,
-    );
-    draw.setTransform(1, 0, 0, 1, 0, 0);
-    draw.clearRect(0, 0, pixelWidth, pixelHeight);
-    draw.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    const { context, palette, plot } = surface;
 
-    // The unit range is the closed frame; overshooting curves remain visible in
-    // the breathing room outside it without making any frame edge protrude.
-    draw.strokeStyle = quiet;
-    draw.lineWidth = 1;
-    draw.setLineDash([2, 3]);
-    draw.strokeRect(EASING_PLOT_LEFT, TOP, PLOT_WIDTH, BOTTOM - TOP);
-    draw.setLineDash([]);
+    drawEasingFrame(surface);
 
     if (isBezier) {
       const points = bezierPoints ?? [];
-      draw.strokeStyle = quiet;
-      draw.setLineDash([3, 3]);
-      draw.beginPath();
-      draw.moveTo(xOfEasedValue(0), yOfProgress(0));
-      draw.lineTo(xOfEasedValue(points[1] ?? 0), yOfProgress(points[0] ?? 0));
-      draw.moveTo(xOfEasedValue(1), yOfProgress(1));
-      draw.lineTo(xOfEasedValue(points[3] ?? 1), yOfProgress(points[2] ?? 1));
-      draw.stroke();
-      draw.setLineDash([]);
-      draw.strokeStyle = accent;
-      draw.lineWidth = 2;
-      drawCurve(draw, 0, 1, (progress) => bezier(progress, points), xOfEasedValue);
+      // The control handles are context for the curve, so they share the guide
+      // weight rather than the curve's.
+      context.save();
+      context.strokeStyle = palette.guide;
+      context.globalAlpha = EASING_GUIDE_ALPHA;
+      context.lineWidth = 1;
+      context.setLineDash([3, 3]);
+      context.beginPath();
+      context.moveTo(easingProgressX(0, plot), easingOutputY(0, plot));
+      context.lineTo(easingProgressX(points[0] ?? 0, plot), easingOutputY(points[1] ?? 0, plot));
+      context.moveTo(easingProgressX(1, plot), easingOutputY(1, plot));
+      context.lineTo(easingProgressX(points[2] ?? 1, plot), easingOutputY(points[3] ?? 1, plot));
+      context.stroke();
+      context.restore();
+      strokeEasingPolyline(
+        surface,
+        sampleTransfer((progress) => bezier(progress, points), "curve"),
+        2,
+      );
       return;
     }
 
+    const type = easingType ?? 1;
     const left = clamp01(easingLeft ?? 0);
     const right = clamp01(easingRight ?? 1);
-    const type = easingType ?? 1;
-    const baseCurve = (progress: number) => easing(progress, type, 0, 1);
-    const activeCurve = (progress: number) =>
-      right > left ? easing(progress, type, left, right) : baseCurve(progress);
-    draw.strokeStyle = quiet;
-    draw.lineWidth = 1.5;
-    drawCurve(draw, 0, 1, baseCurve, xOfEasedValue);
-    // The active event curve is normalized back to its actual start/end values.
-    draw.strokeStyle = accent;
-    draw.lineWidth = 2;
-    drawCurve(draw, 0, 1, activeCurve, xOfEasedValue);
-    if (right > left) {
-      draw.strokeStyle = quiet;
-      draw.lineWidth = 1;
-      draw.setLineDash([3, 3]);
-      for (const boundary of [left, right]) {
+    // The family curve is what the bounds are read against: the animation plays
+    // the segment between them and discards the rest, so that segment is drawn
+    // at full weight and everything else stays dim.
+    strokeEasingPolyline(
+      surface,
+      {
+        ...sampleTransfer((progress) => easing(progress, type, 0, 1), "curve"),
+        highlight: { from: left, to: right },
+      },
+      2,
+    );
+
+    if (left !== right) {
+      context.save();
+      context.globalAlpha = EASING_GUIDE_ALPHA;
+      context.lineWidth = 1;
+      // Each bound keeps its own ink so the two sides stay distinguishable while
+      // a drag sweeps one of them past the other.
+      for (const [boundary, ink] of [
+        [left, palette.leftBound],
+        [right, palette.rightBound],
+      ] as const) {
         if (boundary <= 0 || boundary >= 1) {
           continue;
         }
-        draw.beginPath();
-        draw.moveTo(xOfEasedValue(baseCurve(boundary)), TOP);
-        draw.lineTo(xOfEasedValue(baseCurve(boundary)), BOTTOM);
-        draw.stroke();
+        // The bound is a progress value, so the guide stands at that share of the
+        // frame's width rather than at the curve's height there.
+        const x = easingProgressX(boundary, plot);
+        context.strokeStyle = ink;
+        context.beginPath();
+        context.moveTo(x, plot.top);
+        context.lineTo(x, plot.bottom);
+        context.stroke();
       }
-      draw.setLineDash([]);
+      context.restore();
     }
-  }, [
-    drawVersion,
-    isBezier,
-    bezierPoints,
-    easingType,
-    easingLeft,
-    easingRight,
-    startValue,
-    endValue,
-  ]);
+  }, [drawVersion, isBezier, bezierPoints, easingType, easingLeft, easingRight]);
 
   return (
     <canvas

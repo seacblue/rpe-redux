@@ -1,12 +1,12 @@
 /**
- * Browser entry point. Installs the plugin facade and host bridges, resolves the
- * initial theme/language preferences, and mounts the single React root.
+ * Browser entry point. Applies the initial language/theme, installs the small
+ * startup shell, and mounts the single React root. The editor and the Extension
+ * pipeline arrive as separate chunks after the startup screen paints.
  */
-import { installLoadingPaint } from "./frontend/screens/editor/workspace/document/loading/loadingPaint.ts";
+import { waitForBootStyles } from "./frontend/screens/startup/bootSplash.ts";
+import { BootSplashHandoff } from "./frontend/screens/startup/BootSplashHandoff.tsx";
 import { createRoot } from "react-dom/client";
 import { App } from "./frontend/app/App.tsx";
-import { installReduxApi, redux } from "./core/api/index.ts";
-import { connectExtensionApi } from "./core/extensions/extensionApi.ts";
 import { detectLanguage, setLanguage } from "./i18n/index.ts";
 import { PREFERENCE_SECTIONS, readPreference } from "./core/state/preferences.ts";
 import { DEFAULT_THEME, type Theme } from "./core/theme/themes.ts";
@@ -15,24 +15,11 @@ import { applyTheme } from "./core/theme/applyTheme.ts";
 import { installInteractionPolicy } from "./frontend/app/interactionPolicy.ts";
 import { installDocumentTitle } from "./frontend/chrome/topbar/windowControls/windowTitle.ts";
 import { initializeDeveloperMode } from "./core/platform/desktop/developer.ts";
-import { installExtensionStyleHost } from "./frontend/platform/extensionStyleHost.ts";
-import { installExtensionThemeTokens } from "./frontend/platform/extensionThemeTokens.ts";
-import { installScriptUiHost } from "./frontend/platform/ScriptUiHost.tsx";
-import { installExtensionRecovery } from "./frontend/platform/extensionShortcutBridge.ts";
-import { installExtensionUiHost } from "./frontend/platform/extensionUiHost.ts";
-import { installCodeCellBridge } from "./frontend/platform/codeCellBridge.ts";
-import { codeCellRuntime, installCodeCellApi } from "./core/codecell/runtime.ts";
-import { connectCodeCellGuide } from "./core/edit/codecell/guide.ts";
-import codeCellGuide from "../sdk/llm-guide.md?raw";
-import { createExtensionSandbox } from "./frontend/platform/extensionSandbox.tsx";
-import { extensionRuntime } from "./core/extensions/extensionRuntime.ts";
-import { hostKind, isDesktop } from "./core/platform/environment.ts";
-import { invoke } from "@tauri-apps/api/core";
+import { hostKind } from "./core/platform/environment.ts";
 import { isPerformanceHudWindow } from "./core/platform/desktop/performanceHudWindow.ts";
 import { setBootRoute } from "./frontend/contracts/appRoute.ts";
 import { initializeBootRoute } from "./frontend/app/routing/bootRoute.ts";
 import { initializeLocationRoute } from "./frontend/app/routing/routeLocation.ts";
-import { PerformanceHudWindow } from "./frontend/overlays/performance/PerformanceHudWindow.tsx";
 import { syncNativeWindowTheme } from "./frontend/platform/desktop/windowTheme.ts";
 import { registerModalHost } from "./design/components/modal/Modal.tsx";
 import { PortalHostProvider } from "./design/patterns/portalHost.tsx";
@@ -72,34 +59,25 @@ registerModalHost(container);
 registerFloatingHost(container);
 
 if (isPerformanceHudWindow()) {
-  createRoot(container).render(<PerformanceHudWindow />);
+  // The detached HUD shares this HTML, so it also starts under the inline
+  // splash. Wait for the deferred stylesheet and register the product-page
+  // catalogs it reads, then hand off in the same commit.
+  void Promise.all([
+    waitForBootStyles(),
+    import("./frontend/overlays/performance/PerformanceHudWindow.tsx"),
+    import("./i18n/deferred.ts"),
+  ]).then(([, module, catalogs]) => {
+    catalogs.registerDeferredCatalogs();
+    const PerformanceHud = module.PerformanceHudWindow;
+    createRoot(container).render(
+      <>
+        <BootSplashHandoff />
+        <PerformanceHud />
+      </>,
+    );
+  });
 } else {
   installDocumentTitle();
-  installReduxApi();
-  installCodeCellApi(window);
-  connectExtensionApi(redux);
-  installExtensionStyleHost();
-  installExtensionThemeTokens();
-  installScriptUiHost();
-  installExtensionUiHost();
-  installCodeCellBridge();
-  extensionRuntime.setSandboxFactory(createExtensionSandbox);
-  codeCellRuntime.setSandboxFactory(createExtensionSandbox);
-  connectCodeCellGuide(codeCellGuide);
-  installExtensionRecovery();
-  if (isDesktop()) {
-    // The native deadline is twelve seconds; five seconds keeps a wide margin
-    // while cutting the steady IPC wake-ups.
-    const heartbeat = globalThis.setInterval(() => {
-      void invoke("extension_watchdog_heartbeat", {
-        active: document.visibilityState === "visible" && extensionRuntime.list().length > 0,
-      }).catch(() => undefined);
-    }, 5000);
-    window.addEventListener("beforeunload", () => globalThis.clearInterval(heartbeat), {
-      once: true,
-    });
-  }
-  installLoadingPaint();
   installInteractionPolicy();
   void initializeDeveloperMode();
   // The runtime subscribes to the host policy and the detector switch, so a
@@ -108,19 +86,21 @@ if (isPerformanceHudWindow()) {
   const renderApp = () =>
     createRoot(container).render(
       <PortalHostProvider host={container}>
+        <BootSplashHandoff />
         <App />
       </PortalHostProvider>,
     );
   // A desktop chart link has to become the boot route before the editor
-  // assembly decides whether to restore the last session.
-  void initializeBootRoute()
-    .then((route) => {
-      setBootRoute(route);
-      renderApp();
-    })
-    .catch((error: unknown) => {
-      console.warn("Unable to resolve the boot route", error);
-      setBootRoute(initializeLocationRoute());
-      renderApp();
-    });
+  // assembly decides whether to restore the last session. The web build also
+  // deferred its application stylesheet so the inline splash could paint; wait
+  // for that sheet before mounting React, then let the boot hand-off switch it
+  // on and remove the splash in the same commit.
+  const bootRoute = initializeBootRoute().catch((error: unknown) => {
+    console.warn("Unable to resolve the boot route", error);
+    return initializeLocationRoute();
+  });
+  void Promise.all([bootRoute, waitForBootStyles()]).then(([route]) => {
+    setBootRoute(route);
+    renderApp();
+  });
 }

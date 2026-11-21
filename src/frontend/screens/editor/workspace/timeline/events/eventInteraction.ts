@@ -5,7 +5,6 @@
 import type { TimelineRuntimeSurface } from "../drawing/timelineReceiver.ts";
 import {
   selectEventsInRectangle,
-  shiftSelectedEvents,
   timelineEmptyPanPress,
   timelineSweepEnabled,
 } from "../../../../../../core/edit/timeline/selection.ts";
@@ -14,11 +13,7 @@ import {
   eventEdgePointerDelta,
 } from "../../../../../../core/edit/timeline/dragPreview.ts";
 import { dragPrekeyHeld } from "../../../../../../core/edit/timeline/dragPrekey.ts";
-import {
-  beatValue,
-  compareBeats,
-  type Beat,
-} from "../../../../../../core/global/chart/timing/beat.ts";
+import { beatValue, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import type { LineEventValue } from "../../../../../../core/global/chart/chart.ts";
 import { eventTypeAt } from "../drawing/tracks.ts";
@@ -40,7 +35,14 @@ import {
   type OverlapMenuAction,
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
-import { eventEdgeAt, eventEdgeDragFor, selectEventEdgeTarget } from "./eventEdgeDrag.ts";
+import {
+  clearEventDragPreview,
+  commitEventEdgeDrag,
+  eventEdgeAt,
+  eventEdgeDragFor,
+  eventEdgePressDrag,
+  syncEventDragPreview,
+} from "./eventEdgeDrag.ts";
 import { drawPendingEvent } from "./eventOverlayDrawing.ts";
 
 type EventTimeline = Pick<
@@ -359,24 +361,19 @@ export class EventInteraction implements EventInteractionHandle {
     const sweepMode = timelineSweepEnabled({ multiLineActive: multiMode, panelCount })
       ? timelineSweepMode(session, event, "events")
       : null;
-    // Ctrl or Z + right drag trims the tail; it wins over the right-button sweep.
-    if ((event.ctrlKey || dragPrekey) && event.button === 2 && rectangle) {
-      selectEventEdgeTarget(session, rectangle);
-      const edgeDrag = eventEdgeDragFor(
-        this.timeline,
-        rectangle,
-        point,
-        "endTime",
-        event.pointerId,
-      );
-      if (edgeDrag) {
-        this.drag = edgeDrag;
+    // Z trims the single selected event from anywhere; Ctrl needs a bar press.
+    const pending = Boolean(this.pending);
+    const prekey = dragPrekey;
+    const edgeDrag = eventEdgePressDrag(this.timeline, event, point, rectangle, pending, prekey);
+    if (edgeDrag) {
+      this.drag = edgeDrag;
+      if (event.button === 2) {
         this.timeline.gestures.suppressNextContextMenu();
-        this.canvas.setPointerCapture(event.pointerId);
-        session.notify();
-        this.timeline.changed();
-        return;
       }
+      this.canvas.setPointerCapture(event.pointerId);
+      session.notify();
+      this.timeline.changed();
+      return;
     }
     if (
       sweepMode &&
@@ -606,6 +603,7 @@ export class EventInteraction implements EventInteractionHandle {
           event.pointerId,
         );
         if (edgeDrag) {
+          edgeDrag.prekey = dragPrekey;
           this.drag = edgeDrag;
         }
       }
@@ -635,6 +633,9 @@ export class EventInteraction implements EventInteractionHandle {
             (this.timeline.viewport.judgementOffset ?? 42) -
             drag.current.y) /
             this.timeline.viewport.scaleForArea("events");
+      }
+      if (syncEventDragPreview(this.timeline, drag, this.beatDelta())) {
+        this.timeline.getSession().notify("selection");
       }
       if (drag.kind === "multi-pan") {
         const deltaX = point.x - previous.x;
@@ -769,21 +770,14 @@ export class EventInteraction implements EventInteractionHandle {
             },
           },
         );
-      } else if (
-        compareBeats(delta, [0, 0, 1]) !== 0 &&
-        Math.abs(drag.current.y - drag.start.y) > 5
-      ) {
-        shiftSelectedEvents(
-          session,
-          drag.kind,
-          delta,
-          drag.kind === "move"
-            ? t("editorPanels.inspector.eventInteraction.move")
-            : t("editorPanels.inspector.eventInteraction.resize"),
-        );
+      } else {
+        commitEventEdgeDrag(session, drag, delta);
       }
     } catch (error) {
       this.reportError(error);
+    }
+    if (clearEventDragPreview()) {
+      session.notify("selection");
     }
     this.timeline.changed();
   }

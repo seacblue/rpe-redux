@@ -10,6 +10,7 @@
 import { useSyncExternalStore } from "react";
 import { t } from "../../../../i18n/index.ts";
 import { Button } from "../../../../design/components/button/Button.tsx";
+import { Icon } from "../../../../design/components/icon/Icon.tsx";
 import { detailedNoiseRendering } from "../../../../core/edit/state/noiseRendering.ts";
 
 /** Second-row toggle between simplified and full preview rendering. */
@@ -30,7 +31,7 @@ export function NoiseRenderingToggle() {
       data-tip-desc={t("chrome.toolbar.noiseRenderingHint")}
       onClick={() => detailedNoiseRendering.set(!detailed)}
     >
-      <span className="noise-rendering-hatch" aria-hidden="true" />
+      <Icon name="noiseOff" size={13} />
     </Button>
   );
 }

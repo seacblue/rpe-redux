@@ -39,6 +39,7 @@ import {
   commitSelectionEdit,
   editCapturedSelection,
 } from "../../../../../core/edit/selection/edits.ts";
+import { timelineDragPreview } from "../../../../../core/edit/timeline/dragPreviewState.ts";
 import {
   defaultHitSound,
   isBuiltInHitSound,
@@ -138,12 +139,21 @@ export function disposeProperties(state: NotesInspectorState): void {
 
 /** Collects the current note selection in single-line or multi-line mode. */
 function selectedNoteEntries(session: EditorSession): NoteCaptureEntry[] {
-  if (session.multiLineActive && session.multiLineMode === "notes") {
-    return session.selectedNoteEntries();
+  const entries =
+    session.multiLineActive && session.multiLineMode === "notes"
+      ? session.selectedNoteEntries()
+      : [...session.selection]
+          .map((index) => ({ lineIndex: session.lineIndex, index, note: session.notes[index] }))
+          .filter((entry) => entry.note);
+  const preview = timelineDragPreview();
+  if (preview?.kind !== "note") {
+    return entries;
   }
-  return [...session.selection]
-    .map((index) => ({ lineIndex: session.lineIndex, index, note: session.notes[index] }))
-    .filter((entry) => entry.note);
+  return entries.map((entry) =>
+    entry.lineIndex === preview.lineIndex && entry.index === preview.index
+      ? { ...entry, note: preview.note }
+      : entry,
+  );
 }
 
 /** Applies a note transform through the active selection edit path. */

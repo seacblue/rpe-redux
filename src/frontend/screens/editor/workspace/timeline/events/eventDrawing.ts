@@ -33,7 +33,10 @@ import type {
   TimelineEventRect,
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
-import type { EventChain } from "../../../../../../core/edit/timeline/eventChains.ts";
+import type {
+  EventChain,
+  EventChainEntry,
+} from "../../../../../../core/edit/timeline/eventChains.ts";
 import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.ts";
 import { readCanvasPalette, rgbChannels, type CanvasPalette } from "../../../canvas/palette.ts";
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
@@ -101,6 +104,47 @@ export function eventBeatRangeForTypes(
   }
   const type = eventTypes[0] ?? "";
   return [viewport.eventBeatAt(height, type), viewport.eventBeatAt(0, type)];
+}
+
+/** One event's previewed start and end beats while an edge drag moves it. */
+function eventPreviewTimes(
+  entry: { index: number; start: number; end: number },
+  selected: ReadonlySet<number>,
+  drag: { kind: string } | null,
+  delta: number,
+): { start: number; end: number } {
+  if (!drag || !delta || !selected.has(entry.index)) {
+    return { start: entry.start, end: entry.end };
+  }
+  if (drag.kind === "move") {
+    return { start: entry.start + delta, end: entry.end + delta };
+  }
+  if (drag.kind === "startTime") {
+    return { start: Math.min(entry.start + delta, entry.end), end: entry.end };
+  }
+  if (drag.kind === "endTime") {
+    return { start: entry.start, end: Math.max(entry.end + delta, entry.start) };
+  }
+  return { start: entry.start, end: entry.end };
+}
+
+/** Previewed start and end beats for one event-chain entry. */
+function chainPreviewTimes(
+  entry: EventChainEntry<JudgeLineEvent>,
+  selected: ReadonlySet<number>,
+  drag: { kind: string } | null,
+  delta: number,
+): { start: number; end: number } {
+  return eventPreviewTimes(
+    {
+      index: entry.index,
+      start: beatValue(entry.event.startTime),
+      end: beatValue(entry.event.endTime),
+    },
+    selected,
+    drag,
+    delta,
+  );
 }
 
 /** Format an event start/end value for the value labels. */
@@ -291,6 +335,7 @@ function drawSelectedEventValues(
 export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number): void {
   this.gestures.beginEventRectFrame();
   const palette = this.cache.palette() ?? readCanvasPalette();
+  const hidden = this.getPreviewSession?.() ? undefined : this.hiddenEvents;
   const hookedTint = palette.eventHookedFill
     ? (rgbChannels(palette.eventHookedFill) ?? undefined)
     : undefined;
@@ -447,13 +492,14 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       eventBeatRange[1],
       this.viewport.gridCount,
     );
+    const visibleEntries = hidden ? entries.filter((entry) => !hidden.has(entry.item)) : entries;
     const selectedIndexes = selectedIndexesForChannel(
       scratch.selectedIndexesBySelection,
       session.eventSelection,
       type,
     );
     if (type === "paintEvents") {
-      this.drawShaderEvents(context, entries, channel, width, height, selectedIndexes);
+      this.drawShaderEvents(context, visibleEntries, channel, width, height, selectedIndexes);
       context.fillStyle = palette.headerSurface;
       context.fillRect(horizontal, 0, channelWidth, 23);
       overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
@@ -473,26 +519,16 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     }
     const ranges = cached.ranges[channel];
     const drawCurves =
-      this.appearance.eventCurvesEnabled !== false && shouldDrawEventCurves(entries.length, height);
+      this.appearance.eventCurvesEnabled !== false &&
+      shouldDrawEventCurves(visibleEntries.length, height);
     const edgeDrag = this.gestures.eventInteraction.drag;
     const edgeDelta =
       edgeDrag && ["move", "startTime", "endTime"].includes(edgeDrag.kind)
         ? this.gestures.eventInteraction.delta()
         : 0;
-    for (const entry of entries) {
+    for (const entry of visibleEntries) {
       const selected = selectedIndexes.has(entry.index);
-      let start = entry.start;
-      let end = entry.end;
-      if (edgeDelta && selected && edgeDrag) {
-        if (edgeDrag.kind === "move") {
-          start += edgeDelta;
-          end += edgeDelta;
-        } else if (edgeDrag.kind === "startTime") {
-          start = Math.min(start + edgeDelta, end);
-        } else {
-          end = Math.max(end + edgeDelta, start);
-        }
-      }
+      const { start, end } = eventPreviewTimes(entry, selectedIndexes, edgeDrag, edgeDelta);
       const vertical = verticalAt(end);
       const bottom = verticalAt(start);
       if (bottom < 0 || vertical > height) {
@@ -583,26 +619,35 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     const valueFont = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
     if (type !== NOISE_ACTIVE_EVENTS && channelWidth >= valueThreshold) {
       const valueGroups = labelGroupsFromEntries(
-        entries,
+        visibleEntries,
         ranges,
         height,
         (group) => group.entries.some((entry) => selectedIndexes.has(entry.index)),
         (group) => ({
-          top: verticalAt(beatValue(group.entries.at(-1)!.event.endTime)),
-          bottom: verticalAt(beatValue(group.entries[0]!.event.startTime)),
+          top: verticalAt(
+            chainPreviewTimes(group.entries.at(-1)!, selectedIndexes, edgeDrag, edgeDelta).end,
+          ),
+          bottom: verticalAt(
+            chainPreviewTimes(group.entries[0]!, selectedIndexes, edgeDrag, edgeDelta).start,
+          ),
         }),
         scratch.labelScratch,
       );
       for (const group of valueGroups) {
-        const first = group.entries[0].event;
+        const firstEntry = group.entries[0];
+        const first = firstEntry.event;
         const lastEntry = group.entries.at(-1);
         if (!lastEntry) {
           continue;
         }
         scratch.labeledGroups.add(group);
         const last = lastEntry.event;
-        const top = verticalAt(beatValue(last.endTime));
-        const bottom = verticalAt(beatValue(first.startTime));
+        const top = verticalAt(
+          chainPreviewTimes(lastEntry, selectedIndexes, edgeDrag, edgeDelta).end,
+        );
+        const bottom = verticalAt(
+          chainPreviewTimes(firstEntry, selectedIndexes, edgeDrag, edgeDelta).start,
+        );
         const valueMaxWidth = channelWidth - 12;
         drawEventText(
           context,
@@ -706,6 +751,7 @@ export function drawMultiLineEvents(
   const scratch = scratchFor(this);
   scratch.selectedIndexesBySelection.clear();
   const palette = this.cache.palette() ?? readCanvasPalette();
+  const hidden = this.getPreviewSession?.() ? undefined : this.hiddenEvents;
   const hookedTint = palette.eventHookedFill
     ? (rgbChannels(palette.eventHookedFill) ?? undefined)
     : undefined;
@@ -795,6 +841,7 @@ export function drawMultiLineEvents(
         eventBeatRange[1],
         this.viewport.gridCount,
       );
+      const visibleEntries = hidden ? entries.filter((entry) => !hidden.has(entry.item)) : entries;
       const selectedIndexes = selectedIndexesForChannel(
         scratch.selectedIndexesBySelection,
         lineSelection,
@@ -802,10 +849,25 @@ export function drawMultiLineEvents(
       );
       const drawCurves =
         this.appearance.eventCurvesEnabled !== false &&
-        shouldDrawEventCurves(entries.length, height);
-      for (const { index, item: event, start, end, invalid } of entries) {
-        const top = verticalAt(end);
-        const bottom = verticalAt(start);
+        shouldDrawEventCurves(visibleEntries.length, height);
+      const edgeDrag =
+        this.gestures.eventInteraction.drag?.lineIndex === lineIndex
+          ? this.gestures.eventInteraction.drag
+          : null;
+      const edgeDelta =
+        edgeDrag && ["move", "startTime", "endTime"].includes(edgeDrag.kind)
+          ? this.gestures.eventInteraction.delta()
+          : 0;
+      for (const { index, item: event, start, end, invalid } of visibleEntries) {
+        const selected = selectedIndexes.has(index);
+        const preview = eventPreviewTimes(
+          { index, start, end },
+          selectedIndexes,
+          edgeDrag,
+          edgeDelta,
+        );
+        const top = verticalAt(preview.end);
+        const bottom = verticalAt(preview.start);
         if (bottom < 23 || top > height) {
           continue;
         }
@@ -818,7 +880,6 @@ export function drawMultiLineEvents(
           type,
           lineIndex,
         );
-        const selected = selectedIndexes.has(index);
         // The hover check only decides the highlight while the overlap picker is open.
         const highlightSelection = overlapSelectionSuppressed
           ? this.gestures.isEventOverlapHovered(lineIndex, type, index)
@@ -906,13 +967,17 @@ export function drawMultiLineEvents(
                 : 0;
       if (type !== "paintEvents" && valueFontSize > 0) {
         const valueGroups = labelGroupsFromEntries(
-          entries,
+          visibleEntries,
           ranges,
           height,
           (group) => group.entries.some((entry) => selectedIndexes.has(entry.index)),
           (group) => ({
-            top: verticalAt(beatValue(group.entries.at(-1)!.event.endTime)),
-            bottom: verticalAt(beatValue(group.entries[0]!.event.startTime)),
+            top: verticalAt(
+              chainPreviewTimes(group.entries.at(-1)!, selectedIndexes, edgeDrag, edgeDelta).end,
+            ),
+            bottom: verticalAt(
+              chainPreviewTimes(group.entries[0]!, selectedIndexes, edgeDrag, edgeDelta).start,
+            ),
           }),
           scratch.labelScratch,
         );
@@ -920,15 +985,20 @@ export function drawMultiLineEvents(
         const valueMaxWidth = Math.max(10, channelWidth - 8);
         const font = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
         for (const group of valueGroups) {
-          const first = group.entries[0].event;
+          const firstEntry = group.entries[0];
+          const first = firstEntry.event;
           const lastEntry = group.entries.at(-1);
           if (!lastEntry) {
             continue;
           }
           scratch.labeledGroups.add(group);
           const last = lastEntry.event;
-          const top = verticalAt(beatValue(last.endTime));
-          const bottom = verticalAt(beatValue(first.startTime));
+          const top = verticalAt(
+            chainPreviewTimes(lastEntry, selectedIndexes, edgeDrag, edgeDelta).end,
+          );
+          const bottom = verticalAt(
+            chainPreviewTimes(firstEntry, selectedIndexes, edgeDrag, edgeDelta).start,
+          );
           drawEventText(
             context,
             overlayBatch,

@@ -1,6 +1,6 @@
 /**
  * The P0 smoke suite: API/Extension contract, documents, settings pages,
- * session restore, and the experience journeys that drive the packaged window
+ * startup isolation, and the experience journeys that drive the packaged window
  * through real keyboard and pointer input.
  *
  * Feature-specific journeys are not part of the default run. Their logic is
@@ -17,7 +17,7 @@ import {
 } from "./journeys.mjs";
 import { apiContract, replacePolicy } from "./contractJourneys.mjs";
 import { settingsSmoke } from "./settingsSmokeJourney.mjs";
-import { sessionRestore } from "./sessionRestoreJourney.mjs";
+import { startupHome } from "./startupHomeJourney.mjs";
 import {
   experienceEventField,
   experienceFirstChart,
@@ -51,7 +51,7 @@ export const journeys = {
     ["replace-policy", replacePolicy],
   ]),
   settings: settingsSmoke,
-  "session-restore": sessionRestore,
+  "startup-home": startupHome,
   "experience-create": experienceFirstChart,
   "experience-events": experienceEventField,
   "experience-settings": experienceSettingsWindow,

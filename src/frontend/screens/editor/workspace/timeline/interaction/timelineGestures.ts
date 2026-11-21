@@ -9,6 +9,7 @@
  */
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { SelectionState } from "../../../../../../core/edit/session/selectionHistory.ts";
+import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import { EXTENDED_EVENT_LAYER } from "../drawing/tracks.ts";
 import type {
   TimelinePoint,
@@ -293,6 +294,9 @@ export class TimelineGestures {
     this.eventInteraction.pending = null;
     this.drag = null;
     this.eventInteraction.drag = null;
+    if (setTimelineDragPreview(null)) {
+      trackedSession?.notify("selection");
+    }
     this.previewCancel?.();
     this.previewMarquee = null;
     this.selectionHistoryBaseline = null;

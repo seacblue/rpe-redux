@@ -17,6 +17,7 @@ import "./editingSettings.ts";
 import "./timeline.ts";
 import "./audio.ts";
 import "./preview.ts";
+import "./issues.ts";
 import "./files.ts";
 import "./webStorage.ts";
 import "./libraryBackup.ts";

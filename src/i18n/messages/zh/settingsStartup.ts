@@ -1,0 +1,21 @@
+/** Simplified Chinese startup-screen settings keys, paired with the English file. */
+export default {
+  "settings.startup.reportTitle": "RPE Redux — 启动失败",
+  "settings.startup.reportTime": "时间：{time}",
+  "settings.startup.reportRuntime": "运行环境：{runtime}",
+  "settings.startup.logGuide": "调用堆栈已自动保存，请在反馈中上传 frontend.log。",
+  "settings.startup.logPath": "日志文件：{path}",
+  "settings.startup.logUnavailable": "日志文件未能写入。请复制下方的错误报告用于反馈。",
+  "settings.startup.copyReport": "复制错误报告",
+  "settings.startup.copySuccess": "已复制报告",
+  "settings.startup.copyFailed": "复制失败",
+  "settings.startup.openLogs": "打开日志文件夹",
+  "settings.startup.failed": "启动未完成",
+  "settings.startup.preparing": "正在准备工作区",
+  "settings.startup.retry": "重新启动",
+  "settings.startup.progress": "正在启动编辑器…",
+  "settings.startup.downloading": "正在下载 {downloaded} / {total}",
+  "settings.startup.downloadingSpeed": "正在下载 {downloaded} / {total} · {speed}",
+  "settings.startup.downloaded": "已下载 {downloaded}",
+  "settings.startup.downloadedSpeed": "已下载 {downloaded} · {speed}",
+} as const;

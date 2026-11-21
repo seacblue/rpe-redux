@@ -20,6 +20,8 @@ export interface TextureDescriptor {
     readonly width: number;
     readonly height: number;
   };
+  /** Whether V samples beyond 0–1 and needs a REPEAT-wrapped GPU texture. */
+  readonly repeat?: boolean;
 }
 
 /** Instances sharing one texture, with their packed vertex data. */
@@ -29,8 +31,8 @@ export interface SpriteGroup {
   count: number;
 }
 
-/** One texture group map; the batch keeps one per paint layer. */
-type SpriteGroupMap = Map<HTMLImageElement, SpriteGroup>;
+/** One texture group map; a source may appear once per wrap mode. */
+type SpriteGroupMap = Map<string, SpriteGroup>;
 
 /** Floats per instance: transform, rotation, shear, UV rect, alpha, tint, and colorize mode. */
 export const INSTANCE_STRIDE = 15;
@@ -59,6 +61,9 @@ export function notePaintLayer(type: number): NotePaintLayer {
 
 /** Texture groups per paint layer, plus the selected instances' foreground pass. */
 export class NoteSpriteGroups {
+  /** Stable per-source ids keep clamp and repeat groups apart without cloning images. */
+  private readonly sourceIds = new WeakMap<HTMLImageElement, number>();
+  private nextSourceId = 1;
   /** Judge-line groups paint beneath every note and Hold. */
   readonly line: SpriteGroupMap = new Map();
   /** Dynamic judge-line groups are rebuilt beside notes while static lines are retained. */
@@ -84,14 +89,20 @@ export class NoteSpriteGroups {
   }
 
   private groupFor(groups: SpriteGroupMap, descriptor: TextureDescriptor): SpriteGroup {
-    let group = groups.get(descriptor.source);
+    let sourceId = this.sourceIds.get(descriptor.source);
+    if (sourceId === undefined) {
+      sourceId = this.nextSourceId++;
+      this.sourceIds.set(descriptor.source, sourceId);
+    }
+    const key = `${descriptor.repeat === true ? "r" : "c"}:${sourceId}`;
+    let group = groups.get(key);
     if (!group) {
       group = {
         descriptor,
         instances: new Float32Array(INSTANCE_STRIDE * 64),
         count: 0,
       };
-      groups.set(descriptor.source, group);
+      groups.set(key, group);
     }
     return group;
   }

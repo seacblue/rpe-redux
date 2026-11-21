@@ -23,7 +23,7 @@ built_in_original/
 
 Each direct child folder containing `info.yml` is one package. A package id is derived from its display `name` by the shared rule in `src/core/utils/packageName.ts` (`packageSlug`): ASCII letters and digits survive, every other run collapses to `_`, and a name with no ASCII characters falls back to a stable hash. The built-in name "Built-in - Original" therefore lives in `built_in_original/`. Saving a package always writes the id it was opened with, so editing the built-in keeps one package identity instead of adding a picker entry.
 
-`mh` means the highlight variant. `hold.png` and `hold_mh.png` are vertical atlases; `holdAtlas` and `holdAtlasMH` give their tail and head heights in pixels, while the middle strip is the body. Redux uses the optional `event_hold.png` for event bars and `line.png` at the package root as the judge-line texture.
+`mh` means the highlight variant. A simultaneous note renders at the base width multiplied by `click_mh.png` width divided by `click.png` width, exactly as Phira does. `hold.png` and `hold_mh.png` are vertical atlases; `holdAtlas` and `holdAtlasMH` give their tail and head heights in pixels, while the middle strip is the body. A tail or head height may be zero when the pack has no art for that cap. Redux reads two fixed-name extensions: `event_hold.png` at the package root for event bars and `line.png` at the package root as the judge-line texture. Neither needs an `info.yml` entry.
 
 ## `info.yml`
 
@@ -32,10 +32,18 @@ Each direct child folder containing `info.yml` is one package. A package id is d
 | `name` | Required display name; also the source of the package id. |
 | `author` / `description` | Optional package metadata. |
 | `hitFx` | Required `[columns, rows]` grid for `hit_fx.png`. |
-| `holdAtlas` / `holdAtlasMH` | Required `[tailHeight, headHeight]` pixel boundaries for the two Hold atlases. |
-| `eventHold` | Optional Redux extension path, defaulting to `event_hold.png` when present. |
+| `holdAtlas` / `holdAtlasMH` | Required `[tailHeight, headHeight]` pixel boundaries for the two Hold atlases. Either cap may be zero; the body must stay non-empty. |
+| `hitFxDuration` | Optional hit-effect lifetime in seconds, defaulting to `0.5`. |
+| `hitFxScale` | Optional hit-effect size multiplier, defaulting to `1`. |
+| `hitFxRotate` / `hitFxTinted` | Optional rotation and tint switches; rotation follows the note and tint follows the note's hit colour. |
+| `hideParticles` | Optional switch that suppresses the four-square burst while keeping the sprite. |
+| `holdKeepHead` | Optional switch that keeps the head cap after the Hold reaches the line. |
+| `holdRepeat` | Optional switch that tiles the body at its intrinsic height instead of stretching it. |
+| `holdCompact` | Optional switch that centres each cap on its anchor so it overlaps the body. |
 
 Required files are the nine fixed Phira images: `click`, `click_mh`, `drag`, `drag_mh`, `flick`, `flick_mh`, `hold`, `hold_mh`, and `hit_fx`. Audio files are optional. A package is limited to 64 MB and 256 files; each PNG is limited to 8 MB, 4096×4096, and 16 million pixels. Atlas boundaries must leave a non-empty body, and `hitFx` must divide the hit-effect image dimensions exactly. The workbench may save a partial package; the runtime fills missing slots from the built-in package and then from the first installed skin that provides them.
+
+The built-in package uses Phira's default proportions (`click.png` 998×100, `hold.png` 1000×1100 with 50px caps, `hold_mh.png` 1150×1250 with 130px caps, and an 8×7 `hit_fx.png`), but its artwork is Redux's own. Preview note width uses Phira's `note_scale` mapping: a scale of `1` spans 13.175% of the stage, and the setting range is `0.8`–`1.2`.
 
 Limits: manifest 64 KB; package 64 MB and 256 asset files; each PNG at most 8 MB, 4096×4096, and 16 million pixels.
 

@@ -1,23 +1,15 @@
 /**
  * Product entry for the React shell: starts the owned backend and local service,
- * applies theme preferences, installs design-system hosts and editor surface
- * providers, and gates the shell behind startup readiness.
+ * applies theme preferences, mounts the startup screen, and loads the editor
+ * shell as a separate chunk after the first screen is on display.
  */
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Shell } from "./Shell.tsx";
-import { EditorBackdrop } from "./EditorBackdrop.tsx";
-import { useTooltipHost, setShortcutLookup } from "../../design/patterns/TooltipHost.tsx";
-import { ControlHost } from "../../design/controls/ControlHost.tsx";
-import { SettingsWindow } from "../screens/settings/SettingsWindow.tsx";
-import { initializeUpdates } from "../screens/settings/updates/updateStore.ts";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType } from "react";
 import { preferences } from "../../core/state/preferences.ts";
 import { values } from "../../core/state/values.ts";
 import { setLongTaskBootState } from "../../core/state/longTasks.ts";
 
 import { activeTheme, setActiveTheme, subscribeActiveTheme } from "../../core/theme/activeTheme.ts";
 import { applyTheme } from "../../core/theme/applyTheme.ts";
-import { refreshExternalNoteSkins } from "../../core/platform/desktop/noteSkinPackages.ts";
-import { loadPackagedExtensions } from "../platform/extensionLoader.ts";
 import { refreshExternalThemes } from "./externalThemeCatalog.ts";
 import { syncNativeWindowTheme } from "../platform/desktop/windowTheme.ts";
 import { waitForLocalService } from "../../core/global/library/service.ts";
@@ -26,59 +18,18 @@ import {
   adoptRuntimePortSettings,
   initializeRuntimePorts,
 } from "../platform/desktop/runtimePorts.ts";
-import { NOTE_SKIN_EVENT, installNoteSkinBridge } from "../platform/noteSkinBridge.ts";
+import { NOTE_SKIN_EVENT } from "../platform/noteSkinEvents.ts";
+import { ensureExtensionPipeline } from "../platform/extensionPipeline.ts";
 import { prepareBackendInstance, startBackend } from "../../core/platform/desktop/backend.ts";
 import { cleanupCustomBackgrounds } from "../platform/desktop/customBackground.ts";
 import { StartupView } from "../screens/startup/StartupView.tsx";
 import { StartupBoundary } from "../screens/startup/StartupBoundary.tsx";
 import type { StartupFailureSource } from "../screens/startup/startupDiagnostics.ts";
-import { ExperimentalWarning } from "../screens/startup/ExperimentalWarning.tsx";
 import { diagnosticText } from "../platform/diagnosticLog.ts";
-import { ChartLoading } from "../screens/editor/workspace/document/loading/ChartLoading.tsx";
-import { RecordingHosts } from "../screens/editor/workspace/recording/RecordingHosts.tsx";
-import { TimingDetectionHost } from "../screens/editor/workspace/timingDetection/TimingDetectionHost.tsx";
-import { CollaborationHosts } from "../screens/editor/workspace/collaboration/CollaborationHosts.tsx";
-import { ExportDialog } from "../screens/editor/workspace/document/export/ExportDialog.tsx";
-import { RestoreBackupDialog } from "../screens/editor/workspace/document/restore/RestoreBackupDialog.tsx";
-import { ModalScrimPortal } from "../../design/components/modal/ModalScrimPortal.tsx";
-import { ModalHost } from "../overlays/modals/ModalHost.tsx";
-import { SessionPrompts } from "../overlays/SessionPrompts.tsx";
-import { ToastHost } from "../../design/patterns/ToastHost.tsx";
-import { ScriptGuideHost } from "../platform/ScriptGuideHost.tsx";
-import { OnboardingHost } from "../onboarding/OnboardingHost.tsx";
-import { ExtensionOverlays } from "../platform/ExtensionOverlays.tsx";
 import { WindowControls } from "../chrome/topbar/windowControls/WindowControls.tsx";
 import { isDesktop } from "../../core/platform/environment.ts";
 import "../../design/styles/index.less";
-import { actionShortcuts, toolbar } from "../../core/shell/registries/toolbar.ts";
-import { shortcutChips } from "../../design/components/keyboardHint/shortcutChips.ts";
-import {
-  getEditorVisibility,
-  subscribeToEditorVisibility,
-} from "../../core/edit/state/visibility.ts";
-import { EditorProviderTree } from "../screens/editor/workspace/runtime/composition/EditorProviderTree.tsx";
-import {
-  EditorSessionProvider,
-  useEditorSession,
-} from "../screens/editor/workspace/runtime/providers/SessionProvider.tsx";
-import {
-  TimelineDomSurfaceProvider,
-  createTimelineDomSurface,
-} from "../screens/editor/workspace/timeline/surface/TimelineDomSurface.tsx";
-import {
-  PreviewSurfaceProvider,
-  createPreviewSurface,
-} from "../screens/editor/workspace/preview/surface/PreviewDomSurface.tsx";
-import {
-  InspectorSurfaceProvider,
-  createInspectorSurface,
-} from "../screens/editor/inspector/InspectorDomSurface.tsx";
-import {
-  TransportSurfaceProvider,
-  createTransportSurface,
-} from "../chrome/transport/TransportDomSurface.tsx";
 import { useSetting } from "../screens/settings/useSetting.ts";
-import { RouteRuntime } from "./routing/RouteRuntime.tsx";
 import {
   applyWindowDisplaySettings,
   dominantMonitorSignature,
@@ -87,49 +38,70 @@ import {
   watchWindowMonitor,
   type WindowDisplayMode,
 } from "../platform/desktop/windowDisplay.ts";
-import { readShortcutContext } from "../platform/shortcuts/shortcutContext.ts";
-import { consumeEscape } from "../platform/shortcuts/escapeHandlers.ts";
-
-// Install the note-skin bridge at module load so the media layer can resolve
-// bundled skins and announce changes before any skin is read.
-installNoteSkinBridge();
+import { EditorShellBoundary } from "./EditorShellBoundary.tsx";
+import type { EditorShellProps } from "./EditorShell.tsx";
 
 /**
- * Root component: installs window controls and the startup boundary, then wraps
- * the session provider around the shell content.
+ * Loads the editor shell after the startup screen has mounted.
+ *
+ * The loader is a normal component rather than `lazy()` so a failed chunk import
+ * can be reported to the startup report and retried by a new `resetKey`.
+ */
+function EditorShellLoader({ onError, resetKey, ...props }: EditorShellProps) {
+  const [Shell, setShell] = useState<ComponentType<EditorShellProps> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // The shell and the Extension/host-API pipeline load in parallel. The shell
+    // renders only after both finish; the startup screen covers the wait.
+    void Promise.all([ensureExtensionPipeline(), import("./EditorShell.tsx")]).then(
+      ([, module]) => {
+        if (!cancelled) {
+          // Wrap the component in a function so React does not treat it as an
+          // updater for the previous state value.
+          setShell(() => module.EditorShell);
+        }
+      },
+      (failure: unknown) => {
+        if (!cancelled) {
+          onError(diagnosticText(failure));
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [onError, resetKey]);
+
+  if (!Shell) {
+    return null;
+  }
+  return <Shell {...props} onError={onError} resetKey={resetKey} />;
+}
+
+/**
+ * Root component: installs window controls and the startup boundary. The editor
+ * session and shell live in a lazily loaded chunk.
  */
 export function App() {
   return (
     <>
       {isDesktop() && <WindowControls />}
       <StartupBoundary>
-        <EditorSessionProvider>
-          <AppContent />
-        </EditorSessionProvider>
+        <AppContent />
       </StartupBoundary>
     </>
   );
 }
 
-/** Owns startup readiness, theme application, and the surface providers around the shell. */
+/** Owns startup readiness, theme application, the backend handshake, and the window. */
 function AppContent() {
-  const editorSession = useEditorSession();
-  const tooltip = useTooltipHost();
   const theme = useSyncExternalStore(subscribeActiveTheme, activeTheme, activeTheme);
   const setTheme = setActiveTheme;
-  const editorVisibility = useSyncExternalStore(
-    subscribeToEditorVisibility,
-    getEditorVisibility,
-    getEditorVisibility,
-  );
   const [error, setError] = useState("");
   const [errorSource, setErrorSource] = useState<StartupFailureSource>("unknown");
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [timelineSurface] = useState(createTimelineDomSurface);
-  const [previewSurface] = useState(createPreviewSurface);
-  const [inspectorSurface] = useState(createInspectorSurface);
-  const [transportSurface] = useState(createTransportSurface);
   const [backendReady, setBackendReady] = useState(false);
   const windowDisplayMode = useSetting<WindowDisplayMode>("window-display-mode", "windowed");
   const windowResolution = useSetting<string>("window-resolution", "auto");
@@ -162,36 +134,12 @@ function AppContent() {
   // I/O, and deleting a folder never interrupts the cached live session.
   useEffect(() => {
     void refreshExternalThemes();
-    void refreshExternalNoteSkins();
   }, []);
 
   useEffect(() => {
     const suppressNativeMenus = (event: MouseEvent) => event.preventDefault();
     document.addEventListener("contextmenu", suppressNativeMenus, true);
     let cancelled = false;
-    // The tooltip resolves live shortcut chips through this layer's toolbar
-    // registry, so the lookup is installed here rather than in design.
-    setShortcutLookup((actionId, shortcutId) => {
-      const action = toolbar.node(actionId);
-      if (action?.kind === "action") {
-        return shortcutChips(actionShortcuts(action));
-      }
-      if (!shortcutId) {
-        return [];
-      }
-      return shortcutChips(
-        actionShortcuts({
-          kind: "action",
-          id: "tooltip",
-          group: "editor",
-          order: 0,
-          label: "",
-          tooltip: "",
-          icon: "keyboard",
-          shortcutId,
-        }),
-      );
-    });
 
     // Construct the provider tree only after the owned backend is healthy.
     initializeRuntimePorts()
@@ -220,7 +168,10 @@ function AppContent() {
           });
         }
         // Extension consent is kept in durable preferences, so package
-        // discovery runs only after the preference store attaches.
+        // discovery runs only after the preference store attaches. The host API
+        // and sandbox pipeline are separate chunks, shared with the editor shell.
+        await ensureExtensionPipeline();
+        const { loadPackagedExtensions } = await import("../platform/extensionLoader.ts");
         await loadPackagedExtensions();
         if (!cancelled) {
           window.dispatchEvent(new Event(NOTE_SKIN_EVENT));
@@ -246,55 +197,6 @@ function AppContent() {
       cancelled = true;
     };
   }, [attempt]);
-
-  // Update checks and automatic package downloads are background work. Wait
-  // until the editor has crossed the startup barrier so a failed boot cannot
-  // continue the update flow behind the startup report.
-  useEffect(() => {
-    if (ready && backendReady) {
-      void initializeUpdates();
-    }
-  }, [backendReady, ready]);
-
-  useEffect(() => {
-    if (ready) {
-      window.dispatchEvent(new Event("resize"));
-    }
-  }, [ready]);
-
-  // Escape is a cancel/close key only. Menus, dialogs, control popups,
-  // onboarding, text fields, and active editor surfaces answer first; when no
-  // surface owns it, the key is consumed without changing the destination.
-  useEffect(() => {
-    if (!ready) {
-      return undefined;
-    }
-    const onEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) {
-        return;
-      }
-      const context = readShortcutContext(event.target);
-      if (
-        context.modal !== "none" ||
-        context.capturing ||
-        context.textEntry ||
-        context.surface !== null
-      ) {
-        return;
-      }
-      // Give surface-owned Escape handlers one turn to claim the key. If no
-      // surface can close, Escape remains a no-op instead of opening Settings.
-      window.setTimeout(() => {
-        if (event.defaultPrevented) {
-          return;
-        }
-        event.preventDefault();
-        consumeEscape();
-      }, 0);
-    };
-    window.addEventListener("keydown", onEscape);
-    return () => window.removeEventListener("keydown", onEscape);
-  }, [ready]);
 
   // The native window starts hidden so the first visible frame already has its
   // restored geometry and the persisted display mode. Backend failure still
@@ -359,72 +261,33 @@ function AppContent() {
   }, [windowDisplayMode, windowResolution]);
 
   return (
-    <TimelineDomSurfaceProvider surface={timelineSurface}>
-      <PreviewSurfaceProvider surface={previewSurface}>
-        <InspectorSurfaceProvider surface={inspectorSurface}>
-          <TransportSurfaceProvider surface={transportSurface}>
-            <EditorProviderTree
-              session={editorSession}
-              enabled={backendReady}
-              resetKey={attempt}
-              onReady={handleEditorReady}
-              onError={handleEditorError}
-            >
-              <ModalScrimPortal />
-              <RouteRuntime enabled={ready} />
-              <div
-                className="redux-app-shell"
-                data-at-home={editorVisibility.atHome}
-                aria-hidden={!ready}
-                inert={!ready}
-              >
-                {!editorVisibility.atHome && <EditorBackdrop />}
-                <Shell />
-                <ExtensionOverlays scope="window" />
-                <ModalHost />
-                <SessionPrompts />
-                <ScriptGuideHost />
-                {ready && <OnboardingHost />}
-                <ControlHost />
-                <SettingsWindow theme={theme} setTheme={setTheme} />
-                <ExperimentalWarning enabled={ready} />
-                <ChartLoading />
-                {/* The export question is about the document, not about a panel, so it
-              hangs off the window frame beside the loading overlay — the other
-              `workspace/document/` surface that asks about the whole document. */}
-                <ExportDialog />
-                {/* A restore is a document-wide question that also opens from the
-                    home library, so it mounts beside the export question. */}
-                <RestoreBackupDialog />
-                <RecordingHosts />
-                <TimingDetectionHost />
-                <CollaborationHosts />
-              </div>
-              {/* The toast stack is a document-level peer of the app shell. A
-                  modal scrim portals above the shell and must never clip, blur,
-                  or inert the app's notices. */}
-              {ready && (
-                <ToastHost className={`app-toasts${editorVisibility.atHome ? " is-home" : ""}`} />
-              )}
-              {tooltip.element}
-            </EditorProviderTree>
-            {!ready && (
-              <StartupView
-                error={error}
-                source={errorSource}
-                retry={() => {
-                  setLongTaskBootState("loading");
-                  setError("");
-                  setErrorSource("unknown");
-                  setReady(false);
-                  setBackendReady(false);
-                  setAttempt((value) => value + 1);
-                }}
-              />
-            )}
-          </TransportSurfaceProvider>
-        </InspectorSurfaceProvider>
-      </PreviewSurfaceProvider>
-    </TimelineDomSurfaceProvider>
+    <>
+      <EditorShellBoundary key={attempt} onError={handleEditorError}>
+        <EditorShellLoader
+          enabled={backendReady}
+          resetKey={attempt}
+          ready={ready}
+          onReady={handleEditorReady}
+          onError={handleEditorError}
+          theme={theme}
+          setTheme={setTheme}
+        />
+      </EditorShellBoundary>
+      {!ready && (
+        <StartupView
+          error={error}
+          source={errorSource}
+          resetKey={attempt}
+          retry={() => {
+            setLongTaskBootState("loading");
+            setError("");
+            setErrorSource("unknown");
+            setReady(false);
+            setBackendReady(false);
+            setAttempt((value) => value + 1);
+          }}
+        />
+      )}
+    </>
   );
 }

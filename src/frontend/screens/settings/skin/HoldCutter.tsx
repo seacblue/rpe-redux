@@ -84,8 +84,8 @@ export function HoldCutter({
     headValue !== null &&
     Number.isInteger(tailValue) &&
     Number.isInteger(headValue) &&
-    tailValue > 0 &&
-    headValue > 0 &&
+    tailValue >= 0 &&
+    headValue >= 0 &&
     body > 0;
 
   useEffect(() => {
@@ -109,9 +109,9 @@ export function HoldCutter({
       const ratio = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height));
       const pixel = ratio * height;
       if (dragging === "tail") {
-        setTail(clampBoundary(pixel, 1, Math.max(1, height - (headValue ?? 1) - 1)));
+        setTail(clampBoundary(pixel, 0, Math.max(0, height - (headValue ?? 0) - 1)));
       } else {
-        setHead(clampBoundary(height - pixel, 1, Math.max(1, height - (tailValue ?? 1) - 1)));
+        setHead(clampBoundary(height - pixel, 0, Math.max(0, height - (tailValue ?? 0) - 1)));
       }
     };
     const stop = () => setDragging(null);

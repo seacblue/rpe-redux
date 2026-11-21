@@ -81,8 +81,71 @@ test("a complete draft writes every canonical Phira file", () => {
   assert.deepEqual(parsed.info.holdAtlas, [3, 3]);
   assert.deepEqual(parsed.info.holdAtlasMH, [4, 4]);
   assert.deepEqual(parsed.info.hitFx, [4, 2]);
-  assert.equal(parsed.info.eventHold, "event_hold.png");
   assert.deepEqual(missingPhiraWorkbenchSlots(completeDraft()), []);
+});
+
+test("a Hold atlas may omit one cap, as Phira allows", () => {
+  const draft = completeDraft();
+  draft.hold = { ...draft.hold, atlas: [0, 3] };
+  const files = buildPhiraWorkbenchFiles({ name: "Zero-cap Hold", draft });
+  const parsed = parsePhiraRespack(files);
+  assert.deepEqual(parsed.info.holdAtlas, [0, 3]);
+});
+
+test("the Phigros_Demo-era field set round-trips through info.yml", () => {
+  const draft = completeDraft();
+  draft.hold = {
+    bytes: png(985, 354),
+    fileName: "hold.png",
+    width: 985,
+    height: 354,
+    atlas: [0, 280],
+  };
+  draft.hold_highlight = {
+    bytes: png(985, 354),
+    fileName: "hold_mh.png",
+    width: 985,
+    height: 354,
+    atlas: [0, 280],
+  };
+  draft.hit_fx = {
+    bytes: png(1280, 1536),
+    fileName: "hit_fx.png",
+    width: 1280,
+    height: 1536,
+    grid: [5, 6],
+  };
+  const files = buildPhiraWorkbenchFiles({
+    name: "Demo-like",
+    draft,
+    baseInfo: {
+      description: "Phigros_Demo",
+      hitFxScale: 1.8,
+      hitFxDuration: 0.5,
+      hitFxRotate: true,
+      hitFxTinted: true,
+      hideParticles: true,
+      holdKeepHead: false,
+      holdRepeat: false,
+      holdCompact: true,
+      colorPerfect: 0xffeb9d,
+      colorGood: 0xb9e2ff,
+    },
+  });
+  const info = parsePhiraRespack(files).info;
+  assert.deepEqual(info.holdAtlas, [0, 280]);
+  assert.deepEqual(info.holdAtlasMH, [0, 280]);
+  assert.deepEqual(info.hitFx, [5, 6]);
+  assert.equal(info.hitFxScale, 1.8);
+  assert.equal(info.hitFxDuration, 0.5);
+  assert.equal(info.hitFxRotate, true);
+  assert.equal(info.hitFxTinted, true);
+  assert.equal(info.hideParticles, true);
+  assert.equal(info.holdKeepHead, false);
+  assert.equal(info.holdRepeat, false);
+  assert.equal(info.holdCompact, true);
+  assert.equal(info.colorPerfect, 0xffeb9d);
+  assert.equal(info.colorGood, 0xb9e2ff);
 });
 
 test("an incomplete board can be saved with missing and unusable slots omitted", () => {

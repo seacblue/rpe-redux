@@ -171,6 +171,10 @@ export function drawNote(
           alpha,
           noteColorStyle,
           undefined,
+          1,
+          true,
+          this.appearance.skin?.holdCompact === true,
+          this.appearance.skin?.holdRepeat === true,
         )
       : this.noteBatch.addHead(
           this.appearance.skin,
@@ -198,6 +202,10 @@ export function drawNote(
           true,
           noteColorStyle,
           undefined,
+          1,
+          true,
+          this.appearance.skin?.holdCompact === true,
+          this.appearance.skin?.holdRepeat === true,
         ) ?? false;
     } else if (shear !== 0 || rotation !== 0) {
       context.save();
@@ -489,6 +497,14 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
       head,
       tail,
       68 * this.viewport.renderNoteScale,
+      false,
+      true,
+      undefined,
+      undefined,
+      1,
+      true,
+      this.appearance.skin?.holdCompact === true,
+      this.appearance.skin?.holdRepeat === true,
     );
     if (!rendered && !this.appearance.skin) {
       context.fillRect(pendingHorizontal - 20, Math.min(head, tail), 40, Math.abs(tail - head));

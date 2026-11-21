@@ -21,6 +21,9 @@ import {
 } from "../../core/platform/desktop/noteSkinPackages.ts";
 import { packageSlug, type PackageName } from "../../core/utils/packageName.ts";
 import { t } from "../../i18n/index.ts";
+import { NOTE_SKIN_EVENT } from "./noteSkinEvents.ts";
+
+export { NOTE_SKIN_EVENT } from "./noteSkinEvents.ts";
 
 /**
  * The browser half of the note-skin story.
@@ -50,9 +53,6 @@ const bundledLineAssets =
 /** The built-in judgement line texture the bundled skin ships. */
 export const DEFAULT_BUNDLED_LINE_TEXTURE_URL =
   Object.entries(bundledLineAssets ?? {}).find(([path]) => path.endsWith("/line.png"))?.[1] ?? "";
-
-/** The interface's note-skin-changed event; the shell and the preview both listen. */
-export const NOTE_SKIN_EVENT = "redux:note-skin-changed";
 
 /** Canonical files shipped by the built-in Phira resource pack. */
 const BUNDLED_PHIRA_FILES = [

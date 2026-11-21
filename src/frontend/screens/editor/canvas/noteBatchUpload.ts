@@ -1,5 +1,5 @@
 /** Upload and draw note sprite groups while preserving their paint order. */
-import { INSTANCE_STRIDE, type SpriteGroup } from "./noteSpriteGroups.ts";
+import { INSTANCE_STRIDE, type SpriteGroup, type TextureDescriptor } from "./noteSpriteGroups.ts";
 import { bindInstanceAttribute } from "./webgl.ts";
 
 /** Reusable staging arrays for one note batch's grouped instance upload. */
@@ -65,7 +65,7 @@ export function nextBufferCapacity(requiredBytes: number, currentCapacity: numbe
 /** Collect drawable groups once so a retained buffer can replay the same offsets. */
 export function collectNoteBatchGroups(
   source: Iterable<SpriteGroup>,
-  textureFor: (source: HTMLImageElement) => WebGLTexture | null,
+  textureFor: (descriptor: TextureDescriptor) => WebGLTexture | null,
   reuse?: NoteBatchUploadState,
 ): PackedNoteGroups {
   const groups = reuse?.groups ?? [];
@@ -79,7 +79,7 @@ export function collectNoteBatchGroups(
     if (!group.count) {
       continue;
     }
-    const texture = textureFor(group.descriptor.source);
+    const texture = textureFor(group.descriptor);
     if (!texture) {
       continue;
     }
@@ -94,7 +94,7 @@ export function collectNoteBatchGroups(
 /** Collect several paint layers into one reusable packed group list. */
 export function collectNoteBatchGroupSources(
   sources: readonly Iterable<SpriteGroup>[],
-  textureFor: (source: HTMLImageElement) => WebGLTexture | null,
+  textureFor: (descriptor: TextureDescriptor) => WebGLTexture | null,
   reuse?: NoteBatchUploadState,
 ): PackedNoteGroups {
   const groups = reuse?.groups ?? [];
@@ -109,7 +109,7 @@ export function collectNoteBatchGroupSources(
       if (!group.count) {
         continue;
       }
-      const texture = textureFor(group.descriptor.source);
+      const texture = textureFor(group.descriptor);
       if (!texture) {
         continue;
       }
@@ -128,7 +128,7 @@ export function collectNoteBatchGroupLayers(
   second: Iterable<SpriteGroup>,
   third: Iterable<SpriteGroup>,
   fourth: Iterable<SpriteGroup>,
-  textureFor: (source: HTMLImageElement) => WebGLTexture | null,
+  textureFor: (descriptor: TextureDescriptor) => WebGLTexture | null,
   reuse?: NoteBatchUploadState,
 ): PackedNoteGroups {
   const groups = reuse?.groups ?? [];
@@ -143,7 +143,7 @@ export function collectNoteBatchGroupLayers(
       if (!group.count) {
         continue;
       }
-      const texture = textureFor(group.descriptor.source);
+      const texture = textureFor(group.descriptor);
       if (!texture) {
         continue;
       }
@@ -273,7 +273,7 @@ export function submitNoteBatchGroups(
   holdLayer: Iterable<SpriteGroup>,
   headLayer: Iterable<SpriteGroup>,
   selected: Iterable<SpriteGroup>,
-  textureFor: (source: HTMLImageElement) => WebGLTexture | null,
+  textureFor: (descriptor: TextureDescriptor) => WebGLTexture | null,
   textureUniform: WebGLUniformLocation | null,
   attributes: readonly [number, number, number, number, number, number, number],
   instanceBufferCapacity: number,

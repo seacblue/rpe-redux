@@ -166,13 +166,21 @@ export default {
   "editorPanels.overlap.beat": "Beat {value}",
   "editorPanels.overlap.layer": "Layer {value}",
 
-  "editorPanels.issues.summary": "{count} chart issues",
+  "editorPanels.issues.summaryErrors": "{count} chart errors",
+  "editorPanels.issues.summaryWarnings": "{count} chart warnings",
   "editorPanels.issues.emptyTitle": "No chart issues",
   "editorPanels.issues.empty": "No chart issues detected.",
-  "editorPanels.issues.line": "Line {index}",
+  "editorPanels.issues.disabledTitle": "Chart checks are off",
+  "editorPanels.issues.disabled":
+    "Turn on “Check chart issues” in Settings to see structural problems and on-screen density hints here.",
+  "editorPanels.issues.openSettings": "Open settings",
+  "editorPanels.issues.scanning": "Checking the chart in the background…",
+  "editorPanels.issues.scanFailed": "The background check failed. Editing continues normally.",
+  "editorPanels.issues.line": "#{index}",
+  "editorPanels.issues.lineNamed": "#{index} {name}",
+  "editorPanels.issues.title": "{kind} ({line})",
   "editorPanels.issues.layer": "Layer {value}",
   "editorPanels.issues.extendedLayer": "Extended layer",
-  "editorPanels.issues.notesLayer": "Notes",
   "editorPanels.issues.holdTrack": "Hold",
   "editorPanels.issues.negativeBeat": "Beat cannot be negative",
   "editorPanels.issues.beat": "Beat {value}",
@@ -181,6 +189,24 @@ export default {
   "editorPanels.issues.locate": "Locate",
   "editorPanels.issues.trackIncline": "Incline",
   "editorPanels.issues.trackGif": "GIF",
+  "editorPanels.issues.masterSwitch": "Check chart issues",
+  "editorPanels.issues.densityPeak": "{count} notes on screen at once",
+  "editorPanels.issues.filter.label": "Filter issues by type",
+  "editorPanels.issues.filter.emptyTitle": "Every issue type is filtered out",
+  "editorPanels.issues.filter.empty":
+    "Enable an issue type in the filter above to see its rows again.",
+  "editorPanels.issues.kind.overlap": "Overlapping events",
+  "editorPanels.issues.kind.overlap.description":
+    "Two events on one track share a time range; one of them never plays.",
+  "editorPanels.issues.kind.invalidRange": "No duration",
+  "editorPanels.issues.kind.invalidRange.description":
+    "A Hold or an event ends at or before its own start, so it cannot play.",
+  "editorPanels.issues.kind.negativeBeat": "Negative beat",
+  "editorPanels.issues.kind.negativeBeat.description":
+    "The position is before the chart's first beat and cannot be reached.",
+  "editorPanels.issues.kind.density": "Too many notes on screen",
+  "editorPanels.issues.kind.density.description":
+    "The preview survives this density, but a target simulator may drop frames.",
 
   "editorPanels.lineSwitcher.empty": "No judgement line matches inside the currently visible range",
 
@@ -217,6 +243,9 @@ export default {
 
   "editorPanels.inspector.event.emptyHint":
     "Select an event to edit it. Drag to move it, or drag its top or bottom edge to change its time; Shift and Ctrl select multiple.",
+  "editorPanels.inspector.event.type": "Event type",
+  "editorPanels.inspector.event.modifyType": "Change the event type",
+  "editorPanels.inspector.event.typeUnsupported": "This event type cannot be converted",
   "editorPanels.inspector.event.startAlpha": "Start opacity",
   "editorPanels.inspector.event.endAlpha": "End opacity",
   "editorPanels.inspector.event.startSpeed": "Start speed",
@@ -474,6 +503,26 @@ export default {
   "editorPanels.multiEdit.history": "Batch edit history",
   "editorPanels.multiEdit.historyPrevious": "Previous batch edit",
   "editorPanels.multiEdit.historyNext": "Next batch edit",
+  "editorPanels.multiEdit.mode": "Multi-event mode",
+  "editorPanels.multiEdit.mode.edit": "Edit",
+  "editorPanels.multiEdit.mode.clone": "Clone",
+  "editorPanels.multiEdit.clone.targets": "Target lines",
+  "editorPanels.multiEdit.clone.targetsPlaceholder": "e.g. 34:42 60:62 65:67",
+  "editorPanels.multiEdit.clone.increment": "Increment / line",
+  "editorPanels.multiEdit.clone.channel.x": "X",
+  "editorPanels.multiEdit.clone.channel.y": "Y",
+  "editorPanels.multiEdit.clone.channel.rotation": "Rotation",
+  "editorPanels.multiEdit.clone.channel.opacity": "Opacity",
+  "editorPanels.multiEdit.clone.channel.speed": "Speed",
+  "editorPanels.multiEdit.clone.channel.scaleX": "Scale X",
+  "editorPanels.multiEdit.clone.channel.scaleY": "Scale Y",
+  "editorPanels.multiEdit.clone.retainSource": "Keep source",
+  "editorPanels.multiEdit.clone.reset": "Reset",
+  "editorPanels.multiEdit.clone.apply": "Execute",
+  "editorPanels.multiEdit.clone.overlapWarning":
+    "A target line is also a source line; keeping the source will overlap the copies.",
+  "editorPanels.multiEdit.clone.appliedNotify": "Cloned {count} events onto {lines} lines",
+  "editorPanels.multiEdit.clone.recipe": "Clone events",
 
   "editorPanels.trajectory.field.trimStart": "Trim start (0–1)",
   "editorPanels.trajectory.field.trimEnd": "Trim end (0–1)",

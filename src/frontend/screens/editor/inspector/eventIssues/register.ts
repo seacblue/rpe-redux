@@ -8,7 +8,10 @@ import { registerInspectorPanel } from "../controller.ts";
 import { registerInspectorSidebar } from "../inspectorShell.ts";
 import { IssuesPanel } from "./IssuesPanel.tsx";
 import { INSPECTOR_TUTORIALS } from "../tutorials.ts";
-import { chartIssueCount } from "../../../../../core/edit/validation/eventIssueMonitor.ts";
+import {
+  chartIssueBadgeTone,
+  chartIssueCount,
+} from "../../../../../core/edit/validation/eventIssueMonitor.ts";
 
 const disposePanel = registerInspectorPanel({
   id: "issues",
@@ -25,6 +28,7 @@ const disposeSidebar = registerInspectorSidebar({
   label: "chrome.pane.issues",
   domId: "issues-pane",
   badge: chartIssueCount,
+  badgeTone: chartIssueBadgeTone,
 });
 
 const unregister = () => {

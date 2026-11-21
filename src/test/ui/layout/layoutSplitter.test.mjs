@@ -15,37 +15,62 @@ const tokens = read("design/styles/tokens.less");
 test("every adjustable region derives its size from a scale token", () => {
   for (const name of [
     "--layout-toolbar-scale",
+    "--layout-toolbar-content-scale",
     "--layout-toolbar-height",
     "--layout-statusbar-scale",
+    "--layout-statusbar-content-scale",
     "--layout-statusbar-height",
     "--layout-inspector-scale",
+    "--layout-inspector-content-scale",
     "--layout-inspector-width",
     "--layout-sidebar-scale",
+    "--layout-sidebar-content-scale",
     "--layout-sidebar-width",
+    "--layout-progress-scale",
+    "--layout-progress-content-scale",
   ]) {
     assert.match(tokens, new RegExp(`${name}:`, "u"), name);
   }
-  // The authored size times the user's scale times the display's density, with no
+  // The authored size times the region's painted content factor, with no
   // window-relative term: a bigger display must not inflate the chrome, but a
-  // denser panel must keep the authored visual size.
+  // denser panel, a larger web host, and a larger window do. The content factor
+  // is the published clamp; the `scale × display-scale` definition is only the
+  // pre-React fallback.
+  for (const name of ["toolbar", "statusbar", "inspector", "sidebar", "progress"]) {
+    assert.match(
+      tokens,
+      new RegExp(
+        `--layout-${name}-content-scale: calc\\(\\s*var\\(--layout-${name}-scale\\) \\* var\\(--layout-display-scale\\)\\s*\\);`,
+        "u",
+      ),
+      name,
+    );
+  }
+  assert.match(tokens, /--layout-display-scale: var\(--layout-density\);/u);
   assert.match(
     tokens,
-    /--layout-toolbar-height: calc\(90px \* var\(--layout-toolbar-scale\) \* var\(--layout-density\)\);/u,
+    /--layout-toolbar-height: calc\(96px \* var\(--layout-toolbar-content-scale\)\);/u,
   );
   assert.match(
     tokens,
-    /--layout-statusbar-height: calc\(36px \* var\(--layout-statusbar-scale\) \* var\(--layout-density\)\);/u,
+    /--layout-statusbar-height: calc\(36px \* var\(--layout-statusbar-content-scale\)\);/u,
   );
   assert.match(
     tokens,
-    /--layout-inspector-width: min\(\s*calc\(400px \* var\(--layout-inspector-scale\) \* var\(--layout-density\)\),\s*57vw\s*\);/u,
+    /--layout-inspector-width: min\(\s*calc\(400px \* var\(--layout-inspector-content-scale\)\),\s*57vw\s*\);/u,
   );
   assert.match(
     tokens,
-    /--layout-sidebar-width: calc\(56px \* var\(--layout-sidebar-scale\) \* var\(--layout-density\)\);/u,
+    /--layout-sidebar-width: calc\(56px \* var\(--layout-sidebar-content-scale\)\);/u,
   );
   assert.match(tokens, /--layout-density: 1;/u);
   assert.doesNotMatch(tokens, /--layout-toolbar-share|--layout-inspector-share/u);
+  // The document drawer follows the inspector's painted factor instead of its
+  // stored scale, so it stays in proportion when the viewport caps the panel.
+  assert.match(
+    tokens,
+    /--drawer-list-width: calc\(240px \* var\(--layout-inspector-content-scale\)\);/u,
+  );
   // The existing aliases still resolve, so no reader had to learn a new name.
   assert.match(tokens, /--inspector-width: var\(--layout-inspector-width\);/u);
   assert.match(tokens, /--chrome-sidebar-track: var\(--layout-sidebar-width\);/u);
@@ -67,6 +92,54 @@ test("the toolbar and status bar read the scale instead of a literal height", ()
   assert.match(
     shellStyles,
     /--cover-backdrop-workbench-top: calc\(var\(--titlebar-height\) \+ var\(--layout-toolbar-height\)\);/u,
+  );
+});
+
+test("a display scale change reaches the layout without a window resize", () => {
+  const hook = read("frontend/app/layout/useLayoutProportions.ts");
+  // The resolution query follows devicePixelRatio when the window moves to a
+  // display with another scale; a resize alone does not fire on every such move.
+  assert.match(hook, /window\.matchMedia\(`\(resolution: \$\{window\.devicePixelRatio\}dppx\)`\)/u);
+  assert.match(hook, /media\.addEventListener\("change", onResolutionChange\);/u);
+  // The published factor is the clamped painted scale, not the raw setting.
+  assert.match(
+    hook,
+    /style\.setProperty\(\s*`--layout-\$\{id\}-content-scale`,\s*formatScale\(regionScale\(region, Number\(stored\), display, hostContentScale\)\),\s*\);/u,
+  );
+});
+
+test("the web host and the window size feed the published factor", () => {
+  const scale = read("frontend/app/layout/layoutScale.ts");
+  const hook = read("frontend/app/layout/useLayoutProportions.ts");
+  // The web build is a quarter larger, and the factor is fixed by the host.
+  assert.match(scale, /export const WEB_LAYOUT_SCALE = 1\.25;/u);
+  assert.match(scale, /export function hostLayoutScale\(desktop: boolean\): number \{/u);
+  assert.match(scale, /return desktop \? 1 : WEB_LAYOUT_SCALE;/u);
+  // Both factors reach the model and the stylesheet fallback.
+  assert.match(hook, /hostScale: hostLayoutScale\(isDesktop\(\)\),/u);
+  assert.match(hook, /viewportScale: viewportLayoutScale\(width, height\),/u);
+  assert.match(
+    hook,
+    /style\.setProperty\("--layout-display-scale", formatScale\(displayScale\(display\)\)\);/u,
+  );
+});
+
+test("the status bar compresses to its own caption row", () => {
+  const statusbar = read("frontend/chrome/statusbar/statusBar.less");
+  // Half a space step of vertical padding: the compact action fills the row
+  // instead of the padding setting a taller floor than the controls.
+  assert.match(statusbar, /padding: calc\(var\(--space-1\) \/ 2\) var\(--space-5\);/u);
+});
+
+test("the transport card follows its published factor and content floor", () => {
+  const toolbar = read("frontend/chrome/toolbar/toolbar.less");
+  assert.match(
+    toolbar,
+    /--chrome-progress-width: min\(\s*calc\(480px \* var\(--layout-progress-content-scale, 1\)\),\s*50vw\s*\);/u,
+  );
+  assert.match(
+    read("frontend/chrome/toolbar/Toolbar.tsx"),
+    /useLayoutRegion\("progress", viewport, toolbarSeam\.contentScale\)/u,
   );
 });
 
@@ -164,6 +237,7 @@ test("a region that grows scales its contents, not just its track", () => {
   const designStyles = read("design/design.less");
   const iconStyles = read("design/components/icon/icon.less");
   const iconSource = read("design/components/icon/Icon.tsx");
+  const iconCatalog = read("design/components/icon/iconAssets.ts");
   const railStyles = read("design/patterns/railItem.less");
   const toolbarGrid = read("frontend/screens/editor/toolbar/toolbarGrid.less");
   const tokens = read("design/styles/tokens.less");
@@ -176,22 +250,51 @@ test("a region that grows scales its contents, not just its track", () => {
     assert.match(designStyles, new RegExp(`${token}: calc\\([^)]*var\\(--ui-scale\\)`, "u"), token);
   }
 
-  // Every adjustable region carries its own scale and re-derives the block.
-  for (const [selector, variable] of [
-    [".shell-body > .redux-toolbar", "--layout-toolbar-scale"],
-    [".shell-body > footer", "--layout-statusbar-scale"],
-    [".workbench-inspector > .inspector", "--layout-inspector-scale"],
-    [".workbench-body > .sidebar", "--layout-sidebar-scale"],
+  // Every adjustable region carries its own painted content factor and re-derives
+  // the block. The factor already includes the display density, the host factor,
+  // the continuous window factor, and the viewport ceiling, so the box and its
+  // contents cannot drift apart at a bound.
+  assert.match(
+    shellStyles,
+    /\.region-content-scale\(@scale, @content-scale\) \{\s*--ui-scale: var\(@content-scale, calc\(var\(@scale, 1\) \* var\(--layout-display-scale, 1\)\)\);\s*\.content-scale\(\);/u,
+  );
+  for (const [selector, variable, contentVariable] of [
+    [".shell-body > .redux-toolbar", "--layout-toolbar-scale", "--layout-toolbar-content-scale"],
+    [".shell-body > footer", "--layout-statusbar-scale", "--layout-statusbar-content-scale"],
+    [
+      ".workbench-inspector > .inspector",
+      "--layout-inspector-scale",
+      "--layout-inspector-content-scale",
+    ],
+    [".workbench-body > .sidebar", "--layout-sidebar-scale", "--layout-sidebar-content-scale"],
   ]) {
     assert.match(
       shellStyles,
       new RegExp(
-        `${selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} \\{\\s*--ui-scale: var\\(${variable}, 1\\);\\s*\\.content-scale\\(\\);`,
+        `${selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} \\{\\s*\\.region-content-scale\\(${variable}, ${contentVariable}\\);`,
         "u",
       ),
       selector,
     );
   }
+  // The panel boxes read the same content factor as their contents.
+  for (const name of [
+    "--layout-toolbar-height",
+    "--layout-statusbar-height",
+    "--layout-sidebar-width",
+  ]) {
+    assert.match(
+      tokens,
+      new RegExp(`${name}: calc\\([^;]*var\\(--layout-[a-z]+-content-scale\\)\\);`, "u"),
+      name,
+    );
+  }
+  // The inspector's own minimum and the drawer list follow the clamped factor, so
+  // a viewport-capped panel cannot force its contents wider than the track.
+  assert.match(
+    shellStyles,
+    /min-width: calc\(260px \* var\(--layout-inspector-content-scale, 1\)\);/u,
+  );
 
   // A glyph keeps its authored size as data and scales in the stylesheet, so the
   // region decides the painted size instead of a hard-coded inline width.
@@ -212,4 +315,14 @@ test("a region that grows scales its contents, not just its track", () => {
   // The rail row grows with its larger glyph instead of clipping it.
   assert.match(railStyles, /height: calc\(41px \* var\(--ui-scale, 1\)\);/u);
   assert.match(railStyles, /min-height: calc\(41px \* var\(--ui-scale, 1\)\);/u);
+
+  // A glyph painted in CSS rather than by the icon set used to drift: a fixed px
+  // box does not read `--ui-scale`, so it stayed one size while the icons beside
+  // it grew. The simplified-rendering switch draws the shared PNG mask instead,
+  // which sizes from `--icon-size` times the region's scale like every other
+  // glyph.
+  const noiseToggle = read("frontend/screens/editor/toolbar/NoiseRenderingToggle.tsx");
+  assert.match(noiseToggle, /<Icon name="noiseOff" size=\{13\} \/>/u);
+  assert.doesNotMatch(noiseToggle, /noise-rendering-hatch/u);
+  assert.match(iconCatalog, /noiseOff: "icons\/noise_off.png",/u);
 });

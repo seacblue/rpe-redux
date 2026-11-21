@@ -58,7 +58,6 @@ import { bindEditorWindowEvents } from "../../../../../platform/windowEvents.ts"
 import { preferences } from "../../../../../../core/state/preferences.ts";
 import { getDrawerState } from "../../../../../chrome/drawer/drawerPanes.ts";
 import { getWorkspaceModeState } from "../../container/workspaceModes.ts";
-import { createWorkspaceSessionRuntime } from "../../session/workspaceSessionRuntime.ts";
 import { bindCurveActions } from "../../../inspector/curveNotes/actions.ts";
 import { bindTrajectoryAction } from "../../../inspector/trajectory/actions.ts";
 import { bindAnalysisActions } from "../../../../settings/audio/analysisActions.ts";
@@ -1137,11 +1136,9 @@ export function createEditorAssembly(
   function save(): Promise<unknown> {
     return documentRuntime.save();
   }
-  /** Closes the document and clears its workspace-session record when accepted. */
+  /** Closes the document and returns the editor to the home screen. */
   function closeTheDocument(): void {
-    if (documentRuntime.closeDocument()) {
-      workspaceSession.clear();
-    }
+    documentRuntime.closeDocument();
   }
   scope.add(
     connectTransport({
@@ -1408,42 +1405,21 @@ export function createEditorAssembly(
     metrics: playbackMetrics,
   });
   disposeSelection = bindEditorSelection(() => session.current, timeline, selectionClipboard);
-  const workspaceSession = createWorkspaceSessionRuntime({
-    documents,
-    hasDocument,
-    document: documentState,
-    session: () => session.current,
-    viewport: timeline.viewport,
-    chartSeconds,
-    activeInspector: ui.activeInspector,
-    getChartInfoExpanded,
-    seek: (seconds) => playback.seek(seconds),
-    loadCandidate: (candidate, assets) =>
-      documentRuntime.loadCandidate(candidate, assets, undefined, "restore"),
-    invalidate,
-    renderSession,
-  });
-  scope.add(workspaceSession.dispose);
-
   /**
    * Apply the address that was present before the first render.
    *
-   * A chart route replaces the last-session restore because the address is the
-   * explicit request. A settings-only route leaves the editor at home; every
-   * other boot keeps the existing reopen-last-document behavior. The settled
+   * Only an address opens a document at launch: a chart route opens that
+   * project, and every other launch keeps the editor at home. Nothing is
+   * reopened from the previous run, so a restart, a crash, a reload, and a hot
+   * reload all start on the library until the user opens a chart. The settled
    * flag lets the URL mirror wait until this work finishes.
    */
-  const restoreLastSession = async (): Promise<void> => {
+  const applyBootRoute = async (): Promise<void> => {
     try {
       const boot = getBootRoute();
       if (boot?.kind === "chart") {
         await openRouteProject(boot.projectId);
-        return;
       }
-      if (boot?.kind === "home" && boot.settings !== null) {
-        return;
-      }
-      await workspaceSession.restore();
     } finally {
       markBootSettled();
     }
@@ -1483,13 +1459,9 @@ export function createEditorAssembly(
         }
         // Keep the result in the library; the user can open it from the card.
       },
-      restoreLastSession,
+      applyBootRoute,
       markBootSettled,
-      persistSession: async () => {
-        // A normal close clears the record so the next launch starts empty; only
-        // periodic samples survive a crash or update restart.
-        workspaceSession.clear();
-        workspaceSession.dispose();
+      persistPreferences: async () => {
         await preferences.flush();
       },
       pendingSave: () => documentSaver.pending?.then(() => undefined) ?? null,
@@ -1500,7 +1472,7 @@ export function createEditorAssembly(
     });
   } else {
     bindBrowserLifecycle({
-      restoreLastSession,
+      applyBootRoute,
       reportError,
     });
   }

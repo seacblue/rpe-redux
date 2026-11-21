@@ -13,104 +13,53 @@ import { captureSelection } from "../../../../../core/edit/selection/snapshot.ts
 import type { SelectionSnapshot } from "../../../../../core/edit/selection/snapshot.ts";
 import { commitSelectionEdit } from "../../../../../core/edit/selection/edits.ts";
 import { previewMultiEdit } from "../../../../../core/edit/multiEdit/plan.ts";
+import { previewEventClone } from "../../../../../core/edit/multiEdit/clone.ts";
 import { EVENT_BATCH_FIELDS } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import type {
   BatchChange,
   MultiEditResult,
 } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import { beatValue } from "../../../../../core/global/chart/timing/beat.ts";
-import type { Chart } from "../../../../../core/global/chart/chart.ts";
-import { normalizeChartObjectIds } from "../../../../../core/global/chart/chart.ts";
-import { isChartObjectId, type ChartObjectId } from "../../../../../core/global/chart/identity.ts";
+import type { Chart, JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { eventColumnBounds } from "../../../../../core/edit/timeline/timelineCoordinates.ts";
-import { noteColor, readCanvasPalette } from "../../canvas/palette.ts";
+import type { EventChain } from "../../../../../core/edit/timeline/eventChains.ts";
+import { readCanvasPalette } from "../../canvas/palette.ts";
 import { NOTE_GHOST_FILTER } from "../../canvas/noteGhostVisual.ts";
-import { notePaintLayer } from "../../canvas/noteSpriteGroups.ts";
 import { canvasFont } from "../../canvas/text.ts";
 import { fitNumericText } from "../../canvas/numericText.ts";
 import {
   MultiEditParameters,
+  type CloneParameters,
   type MultiEditKind,
 } from "../../../../../core/edit/multiEdit/parameters.ts";
 import { PREFERENCE_SECTIONS, preferenceStorage } from "../../../../../core/state/preferences.ts";
-import { t, tRaw } from "../../../../../i18n/index.ts";
-import type {
-  MultiEditFormHandle,
-  MultiEditFormModule,
-  MultiEditFormValues,
-} from "./MultiEditForm.tsx";
+import { t } from "../../../../../i18n/index.ts";
+import type { MultiEditFormValues } from "./MultiEditForm.tsx";
+import type { MultiEditMode, MultiEditPaneHandle } from "./MultiEditPane.tsx";
 import type { MultiEditState } from "./model.ts";
 import type { EditorFeedback } from "../../workspace/runtime/session/feedback.ts";
-import { drawEventGhost } from "./eventGhostDrawing.ts";
 import { eventColumnForTrack } from "../../workspace/timeline/events/eventColumns.ts";
-
-const OPERATION_LABELS: Readonly<Record<string, string>> = {
-  By: "editor.commands.multiEdit.operation.by",
-  To: "editor.commands.multiEdit.operation.to",
-  Times: "editor.commands.multiEdit.operation.times",
-  Max: "editor.commands.multiEdit.operation.max",
-  Min: "editor.commands.multiEdit.operation.min",
-  Flip: "editor.commands.multiEdit.operation.flip",
-};
-
-/** Localized recipe name for the current operation. */
-function recipeName(values: Pick<MultiEditFormValues, "operation">): string {
-  return tRaw(
-    OPERATION_LABELS[values.operation] ?? "editor.commands.multiEdit.error.unknownOperation",
-  );
-}
-
-/** Compares two batch items by their serialized form. */
-function sameBatchItem(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-/** Returns the distinct event tracks represented by the current selection. */
-function selectedEventTypes(session: EditorSession): string[] {
-  return [...new Set(captureSelection(session).events.map((entry) => entry.type))];
-}
-
-/** Paint layer of one planned note edit; the item may omit its type. */
-function batchPaintLayer(change: BatchChange): number {
-  return notePaintLayer(typeof change.after.type === "number" ? change.after.type : 1);
-}
-
-/** Finds the chart line that currently owns a note or event object. */
-function sourceLineIndex(session: EditorSession, item: object): number | undefined {
-  const index = (session.chart.judgeLineList ?? []).findIndex((line) => {
-    if ((line.notes ?? []).some((note) => note === item)) {
-      return true;
-    }
-    return [...(line.eventLayers ?? []), line.extended].some((layer) =>
-      Object.values(layer ?? {}).some(
-        (events) => Array.isArray(events) && events.some((event) => event === item),
-      ),
-    );
-  });
-  return index >= 0 ? index : undefined;
-}
-
-/** Collects ids of objects the batch actually changes, copies, or moves. */
-function affectedObjectIds(session: EditorSession, result: MultiEditResult): ChartObjectId[] {
-  normalizeChartObjectIds(result.chart);
-  const ids = new Set<ChartObjectId>();
-  for (const change of result.changes) {
-    const id = change.after.id;
-    if (!isChartObjectId(id)) {
-      continue;
-    }
-    const moved = sourceLineIndex(session, change.before) !== change.lineIndex;
-    if (change.copy || moved || !sameBatchItem(change.before, change.after)) {
-      ids.add(id);
-    }
-  }
-  return [...ids];
-}
+import { drawEventCurve, eventCurveStroke } from "../../workspace/timeline/events/eventCurve.ts";
+import {
+  affectedObjectIds,
+  batchPaintLayer,
+  ghostEventRanges,
+  recipeName,
+  selectedEventTypes,
+  sourceLineIndex,
+} from "./multiEditCommit.ts";
 
 type MultiEditTimeline = Pick<
   Timeline,
-  "notesCanvas" | "eventsCanvas" | "eventTypes" | "eventColumns" | "appearance"
+  | "notesCanvas"
+  | "eventsCanvas"
+  | "eventTypes"
+  | "eventColumns"
+  | "appearance"
+  | "cache"
+  | "changed"
+  | "hiddenEvents"
 > & {
   viewport: Pick<
     Timeline["viewport"],
@@ -130,7 +79,6 @@ type MultiEditTimeline = Pick<
     | "eventInset"
     | "eventBarWidth"
   >;
-  cache: Pick<Timeline["cache"], "eventRange">;
 };
 
 /** Batch-edit panel model for the inspector. */
@@ -151,18 +99,28 @@ export class MultiEditPanel {
   committing?: boolean;
   private noiseActivationSelected = false;
   previewEnabled?: { checked: boolean };
-  form?: MultiEditFormHandle;
-  formModule?: Promise<MultiEditFormModule>;
+  form?: MultiEditPaneHandle;
+  formModule?: Promise<typeof import("./MultiEditPane.tsx")>;
   /** Retains the paint order for an unchanged batch result. */
   private ghostChanges?: { result: MultiEditResult; changes: readonly BatchChange[] };
+  /** Chain ranges for the result chart, including its unchanged events. */
+  private ghostRanges?: {
+    result: MultiEditResult;
+    ranges: Map<BatchChange, EventChain<JudgeLineEvent> | null>;
+  };
+  /** Source events a clone preview removes; hidden only while its ghost is on. */
+  private hiddenSourceEvents?: ReadonlySet<JudgeLineEvent>;
   /** Keeps selected events addressable while the visible event layer changes. */
   private selectionSnapshot?: SelectionSnapshot;
   /** Selection membership associated with `selectionSnapshot`. */
   private selectionSnapshotSignature?: string;
   /** These closures are assigned inside `open()` before any caller invokes them. */
   updateHistory?: (event?: Event) => void;
-  load?: (value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }) => void;
-  read?: () => MultiEditFormValues;
+  load?: (
+    value: MultiEditFormValues | Partial<CloneParameters>,
+    options?: { preserveCurrent?: boolean },
+  ) => void;
+  read?: () => MultiEditFormValues | CloneParameters;
 
   /** Binds the panel to the live session, timeline, and host callbacks. */
   constructor(
@@ -204,25 +162,47 @@ export class MultiEditPanel {
     this.seed = 1;
     this.result = null;
     this.ghostChanges = undefined;
+    this.ghostRanges = undefined;
+    this.hiddenSourceEvents = undefined;
+    this.timeline.hiddenEvents = undefined;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
     this.signature = null;
+    const editFallback = (): MultiEditFormValues => ({
+      mode: "edit",
+      ...this.parameters.read(kind),
+      eventApplicationMode: "per-line",
+      eventType: selectedEventTypes(this.getSession())[0] ?? "",
+    });
     this.updateHistory = () => this.renderForm(kind);
-    this.read = () =>
-      this.form?.read() ?? {
-        ...this.parameters.read(kind),
-        eventApplicationMode: "per-line",
-        eventType: selectedEventTypes(this.getSession())[0] ?? "",
-      };
-    this.load = (value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }) => {
+    this.read = () => this.form?.read() ?? editFallback();
+    this.load = (
+      value: MultiEditFormValues | Partial<CloneParameters>,
+      options?: { preserveCurrent?: boolean },
+    ) => {
+      if ((value as Partial<CloneParameters>).mode === "clone") {
+        const incoming = value as Partial<CloneParameters>;
+        const base = this.parameters.readClone(String(this.getSession().lineIndex));
+        const clone: CloneParameters = {
+          ...base,
+          ...incoming,
+          mode: "clone",
+          channels: { ...base.channels, ...(incoming.channels ?? {}) },
+        };
+        this.form?.load(clone, options);
+        this.parameters.updateClone(clone);
+        this.refresh(clone);
+        return;
+      }
       // Load over what the form shows now: a history entry carries only the batch
       // parameters, so the multi-line application mode must survive the load.
-      const current = this.read?.() ?? {
-        ...this.parameters.read(kind),
-        eventApplicationMode: "per-line",
-        eventType: selectedEventTypes(this.getSession())[0] ?? "",
+      const shown = this.read?.();
+      const current: MultiEditFormValues = shown && shown.mode === "edit" ? shown : editFallback();
+      const next = {
+        ...current,
+        ...(value as Partial<MultiEditFormValues>),
+        mode: "edit" as const,
       };
-      const next = { ...current, ...value };
       if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === next.field)) {
         next.field = "both";
       }
@@ -238,10 +218,10 @@ export class MultiEditPanel {
     this.scrollInspectorToTop();
   }
 
-  /** Loads the form module and publishes a fresh form element. */
+  /** Loads the pane module and publishes a fresh form element. */
   renderForm(kind: MultiEditKind): void {
-    this.formModule ??= import("./MultiEditForm.tsx");
-    void this.formModule.then(({ MultiEditForm }) => {
+    this.formModule ??= import("./MultiEditPane.tsx");
+    void this.formModule.then(({ MultiEditPane }) => {
       if (!this.active || this.kind !== kind) {
         return;
       }
@@ -251,14 +231,17 @@ export class MultiEditPanel {
         captureSelection(session).events.some((entry) => entry.type === NOISE_ACTIVE_EVENTS);
       const eventTypes = kind === "events" ? selectedEventTypes(session) : [];
       this.noiseActivationSelected = noiseActivation;
-      const view = createElement(MultiEditForm, {
+      const view = createElement(MultiEditPane, {
         key: `${kind}:${noiseActivation}`,
         kind,
         noiseActivation,
         eventTypes,
         multiEventEdit:
           kind === "events" && session.multiLineActive && session.multiLineMode === "events",
-        history: this.parameters.history[kind],
+        editHistory: this.parameters.history[kind],
+        cloneHistory: this.parameters.cloneHistory,
+        cloneValues: this.parameters.readClone(String(session.lineIndex)),
+        defaultCloneTargets: String(session.lineIndex),
         onReady: (form) => {
           this.form = form;
           this.previewEnabled = {
@@ -268,11 +251,21 @@ export class MultiEditPanel {
           };
         },
         onChange: (value) => {
+          if (value.mode === "clone") {
+            this.parameters.updateClone(value);
+            if (this.form?.read().mode === "clone") {
+              this.refresh(value);
+            }
+            return;
+          }
           this.parameters.update(kind, value);
-          this.refresh(value);
+          if (this.form?.read().mode !== "clone") {
+            this.refresh(value);
+          }
         },
-        onHistory: (index) => {
-          const entries = this.parameters.history[kind];
+        onHistory: (index, mode: MultiEditMode) => {
+          const entries =
+            mode === "clone" ? this.parameters.cloneHistory : this.parameters.history[kind];
           if (entries.length) {
             const position = (index + entries.length) % entries.length;
             this.form?.selectHistory(String(position));
@@ -294,7 +287,15 @@ export class MultiEditPanel {
               result.eventLayer === visibleEventLayer
                 ? result
                 : { ...result, eventLayer: visibleEventLayer };
-            const values = this.read?.() ?? this.parameters.read(kind);
+            const values =
+              this.read?.() ??
+              ({
+                mode: "edit",
+                ...this.parameters.read(kind),
+                eventApplicationMode: "per-line",
+                eventType: selectedEventTypes(session)[0] ?? "",
+              } satisfies MultiEditFormValues);
+            const isClone = values.mode === "clone";
             const name = recipeName(values);
             commitSelectionEdit(
               session,
@@ -303,7 +304,7 @@ export class MultiEditPanel {
               {
                 affectedObjectIds: affectedObjectIds(session, result),
                 recipe: {
-                  id: `builtin.multi-edit.${kind}`,
+                  id: isClone ? "builtin.multi-edit.clone" : `builtin.multi-edit.${kind}`,
                   name,
                   version: 1,
                   params: structuredClone(values),
@@ -317,23 +318,49 @@ export class MultiEditPanel {
               session.eventSelection.clear();
               session.notify();
             }
-            this.parameters.remember(kind, values);
+            if (isClone) {
+              this.parameters.rememberClone(values);
+            } else {
+              this.parameters.remember(kind, values);
+            }
             this.updateHistory?.();
             this.form?.selectHistory("");
             this.result = null;
             this.ghostChanges = undefined;
+            this.ghostRanges = undefined;
             this.selectionSnapshot = undefined;
             this.selectionSnapshotSignature = undefined;
             this.chart = this.getSession().chart;
             this.signature = this.selectionSignature();
             this.form?.setResult("", false);
-            this.notify(t("editorPanels.multiEdit.appliedNotify", { count: amount }), "success");
+            this.form?.setReady?.(false);
+            this.form?.setWarning?.("");
+            const lineCount = new Set(result.changes.map((change) => change.lineIndex)).size;
+            this.notify(
+              isClone
+                ? t("editorPanels.multiEdit.clone.appliedNotify", {
+                    count: amount,
+                    lines: lineCount,
+                  })
+                : t("editorPanels.multiEdit.appliedNotify", { count: amount }),
+              "success",
+            );
             this.invalidate();
           } catch (error) {
             this.notify(error instanceof Error ? error.message : String(error), "error");
           } finally {
             this.committing = false;
           }
+        },
+        onModeChange: () => {
+          // A mode switch changes which form `read()` returns; drop the old
+          // proposal and rebuild the ghost and readiness for the new face.
+          this.result = null;
+          this.ghostChanges = undefined;
+          this.ghostRanges = undefined;
+          this.selectionSnapshot = undefined;
+          this.selectionSnapshotSignature = undefined;
+          this.refresh();
         },
       });
       flushSync(() =>
@@ -352,6 +379,9 @@ export class MultiEditPanel {
     this.active = false;
     this.result = null;
     this.ghostChanges = undefined;
+    this.ghostRanges = undefined;
+    this.hiddenSourceEvents = undefined;
+    this.timeline.hiddenEvents = undefined;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
     this.invalidate();
@@ -364,6 +394,8 @@ export class MultiEditPanel {
     this.result = null;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
+    this.form?.setReady?.(false);
+    this.form?.setWarning?.("");
     this.updateHistory?.();
     this.invalidate();
   }
@@ -372,11 +404,16 @@ export class MultiEditPanel {
   clearPreview(): void {
     this.result = null;
     this.ghostChanges = undefined;
+    this.ghostRanges = undefined;
+    this.hiddenSourceEvents = undefined;
+    this.timeline.hiddenEvents = undefined;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
     this.chart = this.getSession().chart;
     this.signature = this.selectionSignature();
     this.form?.setResult("", false);
+    this.form?.setReady?.(false);
+    this.form?.setWarning?.("");
     this.invalidate();
   }
 
@@ -385,6 +422,8 @@ export class MultiEditPanel {
     this.active = false;
     this.form = undefined;
     this.previewEnabled = undefined;
+    this.hiddenSourceEvents = undefined;
+    this.timeline.hiddenEvents = undefined;
     flushSync(() => this.state.set(null));
   }
 
@@ -432,11 +471,13 @@ export class MultiEditPanel {
     return `${session.lineIndex}:${this.timeline.viewport.division}:${[...session.selection]}:${currentEventSelection}:${multiEvents}`;
   }
 
-  /** Recomputes the batch preview and reports errors to the form. */
-  refresh(values?: Partial<MultiEditFormValues>): void {
+  /** Recomputes the active preview and reports any error to the form. */
+  refresh(values?: MultiEditFormValues | CloneParameters): void {
     this.result = null;
     this.ghostChanges = undefined;
-    let summary: string;
+    this.ghostRanges = undefined;
+    this.hiddenSourceEvents = undefined;
+    let message = "";
     let isError = false;
     try {
       const session = this.getSession();
@@ -458,15 +499,47 @@ export class MultiEditPanel {
         this.selectionSnapshot = undefined;
         this.selectionSnapshotSignature = undefined;
       }
-      const options = values ?? this.read?.() ?? this.parameters.read(this.kind);
-      this.result = previewMultiEdit(snapshot, this.kind, options);
-      // The ghost overlay carries the affected count; the form keeps its status empty.
-      summary = "";
+      const options =
+        values ??
+        this.read?.() ??
+        ({
+          mode: "edit",
+          ...this.parameters.read(this.kind),
+          eventApplicationMode: "per-line",
+          eventType: selectedEventTypes(session)[0] ?? "",
+        } satisfies MultiEditFormValues);
+      if (this.kind === "events" && options.mode === "clone") {
+        const preview = previewEventClone(snapshot, options, this.timeline.viewport.division);
+        this.result = preview.result;
+        // Without keep-source the result drops the selection; the ghost alone
+        // shows the copies, so the real source bars must leave the canvas.
+        this.hiddenSourceEvents =
+          options.retainSource === false
+            ? new Set(snapshot.events.map((entry) => entry.event))
+            : undefined;
+        this.form?.setReady?.(true);
+        this.form?.setWarning?.(
+          options.retainSource && preview.overlapsSource
+            ? t("editorPanels.multiEdit.clone.overlapWarning")
+            : "",
+        );
+      } else {
+        this.result = previewMultiEdit(snapshot, this.kind, options as MultiEditFormValues);
+        this.form?.setReady?.(false);
+        this.form?.setWarning?.("");
+      }
     } catch (error) {
-      summary = error instanceof Error ? error.message : String(error);
+      message = error instanceof Error ? error.message : String(error);
       isError = true;
+      this.form?.setReady?.(false);
+      this.form?.setWarning?.("");
     }
-    this.form?.setResult(summary, isError);
+    this.form?.setResult(message, isError);
+    const previewOn = this.form?.isPreviewEnabled() ?? this.previewEnabled?.checked ?? false;
+    this.syncHiddenEvents(previewOn ? this.hiddenSourceEvents : undefined, false);
+    // Every clone draft change, including the preview and keep-source switches,
+    // repaints the timeline with the same proposal the form now shows.
+    this.timeline.changed?.();
     this.invalidate();
   }
 
@@ -474,9 +547,8 @@ export class MultiEditPanel {
    * The edit this panel would commit right now, or null when the preview is off
    * or there is nothing to preview.
    *
-   * One gate, two consumers: `drawTimeline` draws these changes onto the timeline canvas and
-   * `previewChart` hands the chart to the realtime preview. Keeping the conditions here
-   * guarantees both surfaces show the same proposal.
+   * The gate feeds only the timeline ghost; the preview stage and playback keep
+   * sampling the live chart, so a proposal never becomes actual execution.
    */
   previewResult(): MultiEditResult | null {
     if (
@@ -489,14 +561,39 @@ export class MultiEditPanel {
     return this.result;
   }
 
-  /** The chart `previewResult()` proposes, or null when nothing is being previewed. */
-  previewChart(): Chart | null {
-    return this.previewResult()?.chart ?? null;
+  /** Hand the removed-source set to the timeline, redrawing only when it changes. */
+  private syncHiddenEvents(hidden: ReadonlySet<JudgeLineEvent> | undefined, redraw = true): void {
+    if (this.timeline.hiddenEvents === hidden) {
+      return;
+    }
+    this.timeline.hiddenEvents = hidden;
+    this.timeline.changed?.();
+    if (redraw) {
+      this.invalidate();
+    }
+  }
+
+  /**
+   * Resolve every preview change against the result chart's own event chains.
+   *
+   * The chain min/max must include the unchanged events too, or a ghost curve
+   * spans only its own start/end and stops matching its neighbours.
+   */
+  private eventRanges(
+    result: MultiEditResult,
+  ): Map<BatchChange, EventChain<JudgeLineEvent> | null> {
+    if (this.ghostRanges?.result === result) {
+      return this.ghostRanges.ranges;
+    }
+    const ranges = ghostEventRanges(result, this.timeline.cache);
+    this.ghostRanges = { result, ranges };
+    return ranges;
   }
 
   /** Draws the preview batch's before/after ghosts on the timeline canvas. */
   drawTimeline(): void {
     const result = this.previewResult();
+    this.syncHiddenEvents(result ? this.hiddenSourceEvents : undefined);
     if (!result) {
       return;
     }
@@ -509,41 +606,13 @@ export class MultiEditPanel {
     const context = canvas.getContext("2d") as CanvasRenderingContext2D;
     const palette = readCanvasPalette();
     context.save();
-    context.setLineDash([5, 3]);
-    context.lineWidth = 2;
     context.beginPath();
     context.rect(0, this.kind === "events" ? 23 : 0, canvas.clientWidth, canvas.clientHeight);
     context.clip();
-    const ranges = new Map<string, [number, number]>();
-    if (this.kind === "events") {
-      for (const change of result.changes) {
-        const rangeKey = `${change.lineIndex}:${change.type}`;
-        const range = ranges.get(rangeKey) ?? [Infinity, -Infinity];
-        const chain =
-          change.lineIndex === session.lineIndex
-            ? timeline.cache.eventRange(
-                eventColumnForTrack(timeline.eventColumns, change.type),
-                change.index,
-              )
-            : null;
-        if (chain && Number.isFinite(chain.min) && Number.isFinite(chain.max)) {
-          range[0] = Math.min(range[0], chain.min);
-          range[1] = Math.max(range[1], chain.max);
-        }
-        for (const item of [change.before, change.after]) {
-          if (
-            typeof item.start === "number" &&
-            typeof item.end === "number" &&
-            Number.isFinite(item.start) &&
-            Number.isFinite(item.end)
-          ) {
-            range[0] = Math.min(range[0], item.start, item.end);
-            range[1] = Math.max(range[1], item.start, item.end);
-          }
-        }
-        ranges.set(rangeKey, range);
-      }
-    }
+    const multiArea = session.multiLineActive && session.multiLineMode === this.kind;
+    const visibleLines = multiArea ? new Set(session.targetLineIndices) : null;
+    const visibleInView = (lineIndex: number) =>
+      multiArea ? visibleLines?.has(lineIndex) === true : lineIndex === session.lineIndex;
     // Ghosts follow the real note paint order, so a ghost Hold body stays
     // beneath the ghost heads it would otherwise cover.
     let changes: readonly BatchChange[] = result.changes;
@@ -558,10 +627,15 @@ export class MultiEditPanel {
       }
       changes = this.ghostChanges.changes;
     }
+    const eventRanges = this.kind === "events" ? this.eventRanges(result) : null;
     for (const change of changes) {
       const item = change.after;
       const lineIndex = Number.isInteger(change.lineIndex) ? change.lineIndex : session.lineIndex;
-      const multiArea = session.multiLineActive && session.multiLineMode === this.kind;
+      // A clone can target lines the current view does not show; painting those
+      // onto the single-line canvas would put every copy on the active line.
+      if (!visibleInView(lineIndex)) {
+        continue;
+      }
       const width = canvas.clientWidth;
       const panelWidth = multiArea ? timeline.viewport.panelWidth(width, this.kind) : width;
       const panelOffset = multiArea
@@ -617,29 +691,10 @@ export class MultiEditPanel {
               : undefined;
           const noteColorStyle = color ? { mode: "tint" as const, color } : undefined;
           const skin = timeline.appearance.skin;
-          const painted =
-            note.type === 2
-              ? skin?.hold(context, horizontal, bottom, top, noteWidth, false, true, noteColorStyle)
-              : skin?.head(
-                  context,
-                  note.type,
-                  horizontal,
-                  bottom,
-                  noteWidth,
-                  false,
-                  noteColorStyle,
-                );
-          if (!painted && !skin) {
-            context.fillStyle = noteColor(palette, note.type);
-            if (note.type === 2) {
-              context.fillRect(
-                horizontal - noteWidth / 2,
-                top,
-                noteWidth,
-                Math.max(0, bottom - top),
-              );
-            }
-            context.fillRect(horizontal - noteWidth / 2, bottom - 4, noteWidth, 8);
+          if (note.type === 2) {
+            skin?.hold(context, horizontal, bottom, top, noteWidth, false, true, noteColorStyle);
+          } else {
+            skin?.head(context, note.type, horizontal, bottom, noteWidth, false, noteColorStyle);
           }
           context.restore();
         }
@@ -664,32 +719,45 @@ export class MultiEditPanel {
         context.beginPath();
         context.rect(bounds.x, 23, bounds.width, canvas.clientHeight);
         context.clip();
+        const ghostHeight = Math.max(2, bottom - top);
         context.globalAlpha = 0.5;
-        context.strokeStyle = palette.outline;
-        context.setLineDash([2, 4]);
-        context.lineWidth = 1;
-        drawEventGhost(
+        context.filter = NOTE_GHOST_FILTER;
+        timeline.appearance.skin?.eventBar(
           context,
-          change.before,
-          bounds.x,
+          bounds.x + bounds.width / 2,
+          top + ghostHeight / 2,
           bounds.width,
-          vertical,
-          ranges.get(`${lineIndex}:${change.type}`),
+          ghostHeight,
         );
-        context.fillStyle = palette.selectionEventsFill;
-        context.fillRect(bounds.x, top, bounds.width, Math.max(2, bottom - top));
-        context.strokeStyle = palette.overlayValidStroke;
-        context.setLineDash([5, 3]);
-        context.lineWidth = 2.5;
-        drawEventGhost(
-          context,
-          item,
-          bounds.x,
-          bounds.width,
-          vertical,
-          ranges.get(`${lineIndex}:${change.type}`),
-        );
+        context.filter = "none";
         context.globalAlpha = 1;
+        // The skin bar alone does not communicate the eased result; reuse the
+        // timeline's own event curve so the ghost keeps the same easing symbol.
+        // Its chain range comes from the result chart, so unchanged neighbours
+        // and their values pull the curve into the same min/max.
+        const startValue = typeof item.start === "number" ? item.start : Number.NaN;
+        const endValue = typeof item.end === "number" ? item.end : Number.NaN;
+        if (Number.isFinite(startValue) && Number.isFinite(endValue)) {
+          const range = eventRanges?.get(change) ?? {
+            entries: [],
+            min: Math.min(startValue, endValue),
+            max: Math.max(startValue, endValue),
+          };
+          context.save();
+          context.globalAlpha = 0.75;
+          context.filter = NOTE_GHOST_FILTER;
+          context.strokeStyle = eventCurveStroke(palette, true);
+          drawEventCurve(
+            context,
+            item as unknown as JudgeLineEvent,
+            range,
+            { x: bounds.x, y: 23, width: bounds.width, height: canvas.clientHeight - 23 },
+            bottom,
+            top,
+            { steps: 24, padding: 4, lineWidth: 1.5 },
+          );
+          context.restore();
+        }
         context.font = canvasFont("caption");
         context.textAlign = "center";
         const format = (value: unknown) =>
@@ -699,14 +767,12 @@ export class MultiEditPanel {
               ? value.join(",")
               : String(value ?? "");
         if (bottom - top > 24) {
+          context.fillStyle = palette.foreground;
           const labels: readonly [unknown, number][] = [
             [item.end ?? item.shader, Math.max(36, top + 13)],
             [item.start ?? item.shader, Math.min(canvas.clientHeight - 5, bottom - 4)],
           ];
           for (const [value, position] of labels) {
-            context.fillStyle = palette.surface;
-            context.fillRect(bounds.x + 2, position - 11, bounds.width - 4, 14);
-            context.fillStyle = palette.foreground;
             const text = fitNumericText(
               format(value),
               bounds.width - 8,

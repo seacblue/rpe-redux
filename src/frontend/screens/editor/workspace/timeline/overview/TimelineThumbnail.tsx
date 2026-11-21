@@ -82,7 +82,7 @@ export function TimelineThumbnailView() {
     preview.visible = true;
     preview.applyShaders = false;
     preview.showHitEffects = false;
-    preview.noteSize = 110;
+    preview.noteSize = 110 / 175;
     preview.lineScale = 1.1;
     preview.backgroundAlpha = 0.45;
     preview.backgroundBrightness = 1;

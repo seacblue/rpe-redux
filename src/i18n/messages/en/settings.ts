@@ -405,7 +405,7 @@ export default {
   "settings.field.particle-effects-enabled.label": "Render hit particles",
   "settings.field.particle-effects-enabled.description":
     "Draws the skin hit animation and its square burst at every hit during preview playback.",
-  "settings.field.note-size.label": "Preview note size",
+  "settings.field.note-size.label": "Preview note scale",
   "settings.field.timeline-note-size.label": "Timeline note size",
   "settings.field.hit-effect-size.label": "Hit effect size",
   "settings.field.note-opacity.label": "Note opacity",
@@ -507,6 +507,18 @@ export default {
   "settings.field.audio-visual-lead.description":
     "Milliseconds the picture is drawn ahead of the sound. Raise it if drum hits sound early.",
   "settings.unit.milliseconds": "ms",
+  "settings.unit.seconds": "s",
+  "settings.unit.issues": "issues",
+
+  // ------------------------------------------------------- chart issues (3 groups)
+  "settings.group.issues": "Chart issues",
+  "settings.group.issuesScan": "Background check",
+  "settings.group.issuesKinds": "Checked kinds",
+  "settings.group.issuesDensity": "On-screen density",
+  "settings.field.chart-issues-enabled.label": "Check chart issues",
+  "settings.field.chart-issues-density-caution.label": "On-screen note limit",
+  "settings.field.chart-issues-density-caution.description":
+    "The check reports a passage when more notes share the screen at once than this. Adjust it to what the target simulator can afford.",
 
   // ----------------------------------------------------------- audio (3 rows)
   "settings.field.volume.label": "Music volume",
@@ -526,8 +538,7 @@ export default {
   "settings.field.audio-analysis-width.label": "Waveform width",
   "settings.field.audio-analysis-curve.label": "Waveform emphasis",
 
-  // ----------------------------------------------------- files & saving (3 rows)
-  "settings.field.session-restore.label": "Recover the last chart after a crash or update",
+  // ----------------------------------------------------- files & saving (4 rows)
   "settings.field.autosave-enabled.label": "Enable autosave",
   "settings.field.autosave-seconds.label": "Autosave interval",
   "settings.field.autosave-limit.label": "Backups kept per chart",
@@ -731,6 +742,10 @@ export default {
   "settings.startup.preparing": "Preparing the workspace",
   "settings.startup.retry": "Start again",
   "settings.startup.progress": "Starting the editor…",
+  "settings.startup.downloading": "Downloading {downloaded} / {total}",
+  "settings.startup.downloadingSpeed": "Downloading {downloaded} / {total} · {speed}",
+  "settings.startup.downloaded": "Downloaded {downloaded}",
+  "settings.startup.downloadedSpeed": "Downloaded {downloaded} · {speed}",
   "settings.startup.testWarning.title": "Test feature notice",
   "settings.startup.testWarning.description":
     "RPE Redux is still in testing; you may see visual glitches or occasional instability. Report problems from Help > Survey.",

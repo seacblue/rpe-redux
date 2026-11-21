@@ -48,9 +48,9 @@ async function canvasPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
  * Provide the Redux event-bar texture.
  *
  * Phira has no event texture of its own, so a package without `event_hold.png`
- * or an `eventHold` entry falls back to its Hold body strip, which the runtime
- * also uses for event bars. The strip lies between the tail and head slices of
- * the vertical Hold atlas.
+ * falls back to its Hold body strip, which the runtime also uses for event
+ * bars. The strip lies between the tail and head slices of the vertical Hold
+ * atlas.
  */
 async function composeEventHold(pack: LoadedNoteSkin): Promise<Uint8Array> {
   const event = pack.manifest.events.event_hold;
@@ -92,9 +92,9 @@ function judgeLineBytes(pack: LoadedNoteSkin): Uint8Array | undefined {
  * Project a loaded Phira package into the canonical file map for export.
  *
  * The source package is copied, then the Redux extensions are written at their
- * canonical package-root paths: `event_hold.png` with its `eventHold` info.yml
- * entry, and the judge-line texture as `line.png`. `info.yml` is re-serialized
- * so the exported package states the current extension contract.
+ * canonical package-root paths: `event_hold.png` and the judge-line texture as
+ * `line.png`. `info.yml` is re-serialized so the exported package states the
+ * current extension contract.
  */
 export async function phiraExportFiles(pack: LoadedNoteSkin): Promise<Map<string, Uint8Array>> {
   const phira = pack.manifest.phira;
@@ -112,9 +112,6 @@ export async function phiraExportFiles(pack: LoadedNoteSkin): Promise<Map<string
     files.set(JUDGE_LINE_FILE, lineBytes);
   }
   files.delete(LEGACY_JUDGE_LINE_FILE);
-  files.set(
-    "info.yml",
-    new TextEncoder().encode(serializePhiraInfo({ ...phira.info, eventHold: EVENT_HOLD_FILE })),
-  );
+  files.set("info.yml", new TextEncoder().encode(serializePhiraInfo(phira.info)));
   return files;
 }

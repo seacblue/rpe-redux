@@ -370,6 +370,9 @@ function drawPreviewNoteEntry(
   // angle here would rotate them twice inside the already-rotated context.
   const invertedCapRotation = invertedHold ? (above ? Math.PI : 0) : null;
   const holdRotation = rotation + (above ? Math.PI : 0);
+  const showHead = position.showHead || (isHold && surface.skin?.holdKeepHead === true);
+  const holdCompact = isHold && surface.skin?.holdCompact === true;
+  const holdRepeat = isHold && surface.skin?.holdRepeat === true;
   if (surface.collectGeometry) {
     appendPreviewNoteHitArea(
       surface,
@@ -379,7 +382,7 @@ function drawPreviewNoteEntry(
       noteWidth,
       highlight,
       lineRotation,
-      position.showHead,
+      showHead,
       holdCapScale,
     );
   }
@@ -396,12 +399,14 @@ function drawPreviewNoteEntry(
         geometry.tailX,
         geometry.tailY,
         noteWidth,
-        position.showHead,
+        showHead,
         noteAlpha,
         noteColorStyle,
         holdRotation,
         holdCapScale,
         !invertedHold,
+        holdCompact,
+        holdRepeat,
       )
     : surface.noteBatch.addHeadSlotted(
         surface.noteTextures,
@@ -444,6 +449,8 @@ function drawPreviewNoteEntry(
     holdCapScale,
     invertedHold,
     invertedCapRotation,
+    holdCompact,
+    holdRepeat,
   );
   if (restoreBatchTransform) {
     context.restore();
@@ -475,7 +482,10 @@ function paintPreviewNoteFallback(
   holdCapScale: number,
   invertedHold: boolean,
   invertedCapRotation: number | null,
+  holdCompact: boolean,
+  holdRepeat: boolean,
 ): void {
+  const showHead = position.showHead || (noteType === 2 && surface.skin?.holdKeepHead === true);
   context.globalAlpha = alpha;
   const tint = noteColorStyle?.color;
   context.fillStyle = selected
@@ -498,11 +508,13 @@ function paintPreviewNoteFallback(
         -position.tail * scaleY,
         noteWidth,
         highlight,
-        position.showHead,
+        showHead,
         noteColorStyle,
         holdAxisRotation,
         holdCapScale,
         !invertedHold,
+        holdCompact,
+        holdRepeat,
       ) ?? false;
   }
   if (noteType === 2 && !drawnHold) {
@@ -519,7 +531,7 @@ function paintPreviewNoteFallback(
       );
     }
   }
-  if (position.showHead && !drawnHold) {
+  if (showHead && !drawnHold) {
     // Hold skins already isolate their own rotation. Only note heads need a
     // local transform, so do not pay for a save/restore on every hold body.
     context.save();
@@ -872,7 +884,11 @@ export function drawLinePasses(
           } else {
             stats.notes += 1;
           }
-          const noteWidth = previewNoteWidth(surface.noteSize) * scaleX * position.size;
+          const highlight = shouldHighlightPreviewNote(surface, entry);
+          const highlightScale =
+            highlight && surface.skin?.highlightWidthScale ? surface.skin.highlightWidthScale() : 1;
+          const noteWidth =
+            previewNoteWidth(surface.noteSize) * scaleX * position.size * highlightScale;
           const geometry = previewNoteScreenGeometry(
             noteGeometry,
             position,
@@ -897,7 +913,6 @@ export function drawLinePasses(
               hoveredNote.noteIndex === entry.noteIndex
             : entry.noteIndex !== undefined &&
               prepared.selectedNotes?.has(entry.noteIndex) === true;
-          const highlight = shouldHighlightPreviewNote(surface, entry);
           if (
             drawPreviewNoteEntry(
               surface,

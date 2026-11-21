@@ -109,7 +109,7 @@ export const displayValues = {
   historyLimit: display("history-limit", "150"),
   /** Whether wheel scrolling accelerates over a held gesture. */
   scrollAcceleration: settingFlag("scroll-acceleration"),
-  /** Note texture size in preview pixels; 175 is the authored size. */
+  /** Phira note scale for the preview; 1 is the authored width. */
   noteSize: settingDisplay("note-size"),
   /** Note texture size in the timeline's note area; 175 is the authored size. */
   timelineNoteSize: settingDisplay("timeline-note-size"),

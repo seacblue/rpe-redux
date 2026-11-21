@@ -11,14 +11,10 @@
 // The toolbar frame keeps one height in every mode. Global and design only fill
 // one row, but the frame stays put so switching modes never resizes the shell.
 .redux-toolbar {
-  // The card's width is its authored 480px times the progress scale, floored so a
-  // row of readouts still fits and capped by the window so the card never crowds
-  // the commands out of their own row.
-  --chrome-progress-width: clamp(
-    calc(312px * var(--ui-scale)),
-    calc(480px * var(--layout-progress-scale, 1)),
-    50vw
-  );
+  // The card's width is its authored 480px times the painted content factor,
+  // which already includes the display density and the card's content floor. The
+  // window cap keeps the card from crowding the commands out of their own row.
+  --chrome-progress-width: min(calc(480px * var(--layout-progress-content-scale, 1)), 50vw);
   // The docked progress card owns an inline margin on both sides. The trailing
   // column therefore reserves the card plus both margins; sizing the column from
   // the same inset is what keeps the card's trailing edge inside the frame at
@@ -62,8 +58,11 @@
   align-content: stretch;
   height: 100%;
   min-width: 0;
-  // The two rows share the frame's inner height, so this is the only gap between
-  // them. It scales with the region like every other inset in the row.
+  // The two rows are separated by one explicit gap rather than by whatever slack
+  // the frame happens to have left, so the row rhythm stays readable at every
+  // scale. `--layout-toolbar-height` reserves this gap in its authored size. The
+  // padding is the frame's own inset above the first row and below the second.
+  row-gap: var(--space-1-5);
   padding: calc(2px * var(--ui-scale)) 0;
 }
 
@@ -308,13 +307,6 @@
 .redux-app-root .redux-app-shell[data-at-home="true"] .redux-status-card,
 .redux-app-root .redux-status-card[hidden] {
   display: none;
-}
-
-@media (max-width: 1100px) {
-  .redux-app-root .redux-toolbar {
-    --chrome-progress-width: clamp(252px, 38vw, 480px);
-    grid-template-columns: minmax(0, 1fr) var(--chrome-progress-column);
-  }
 }
 
 // The transport button swaps its two glyphs on the playing flag instead of the

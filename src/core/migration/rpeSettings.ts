@@ -7,6 +7,7 @@
  * assembly and hotkey reader stay in `rpe.ts`.
  */
 import { HIT_SOUND_KINDS } from "../media/hitsounds.ts";
+import { PHIRA_NOTE_SCALE_MAX, PHIRA_NOTE_SCALE_MIN } from "../media/noteSkin.ts";
 import { TIMELINE_GRID_COLORS, timelineGridColorKey } from "../settings/timelineGridColors.ts";
 import { formatHexColor, normalizeHexColor, parseHexColor } from "../utils/colors.ts";
 import { isRecord } from "../utils/guards.ts";
@@ -417,7 +418,12 @@ export function parseSettings(raw: Record<string, unknown>): RpeSettingWrite[] {
 
   add("render-fps", nearestFps(raw.FpsLimit));
   const noteSize = numberText(raw.NoteSize, 40, 400, 2);
-  add("note-size", noteSize);
+  add(
+    "note-size",
+    noteSize === undefined
+      ? undefined
+      : numberText(Number(noteSize) / 175, PHIRA_NOTE_SCALE_MIN, PHIRA_NOTE_SCALE_MAX, 3),
+  );
   add("timeline-note-size", noteSize);
   add("bar-width", numberText(raw.BarWidth, 0.5, 10));
   add("bar-alpha", numberText(raw.BarAlpha, 0.1, 2));

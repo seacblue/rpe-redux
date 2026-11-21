@@ -12,8 +12,13 @@ import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx"
 import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { Popconfirm } from "../../../../../design/components/popconfirm/Popconfirm.tsx";
+import { Select } from "../../../../../design/components/select/Select.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { transformEvents } from "../../../../../core/edit/events/eventEdits.ts";
+import {
+  convertEventType,
+  isConvertibleEventType,
+} from "../../../../../core/edit/events/eventTypeConversion.ts";
 import { clamp01 } from "../../../../../core/utils/numbers.ts";
 import { eventList, eventKey } from "../../../../../core/edit/events/eventTracks.ts";
 import { setEventHooked, type JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
@@ -30,6 +35,7 @@ import {
 } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
 import { applyEventTransform, EventField } from "./EventField.tsx";
 import type { FieldKey, ValueKind } from "./eventFieldModel.ts";
+import { eventTypeOptions } from "./eventTypeOptions.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { eventHasLinkGroup } from "../../../../../core/global/chart/optionalFeatures.ts";
 import { samplingAxisForEventType } from "../../../../../core/edit/sampling/sampling.ts";
@@ -77,35 +83,25 @@ function eventValueKind(type: string, value: unknown): ValueKind {
  * transform as every other field.
  */
 function EasingRangeField({
-  session,
-  event,
   field,
   title,
-  reportError,
-  refresh,
+  range,
+  onDraft,
+  onCommit,
   setLiveEventEdit,
+  refresh,
+  session,
 }: {
-  session: EditorSession;
-  event: JudgeLineEvent;
   field: "easingLeft" | "easingRight";
   title: string;
-  reportError: (error: unknown) => void;
-  refresh: () => void;
+  /** The value the preview is showing, which a drag keeps ahead of the event. */
+  range: number;
+  onDraft(value: number): void;
+  onCommit(value: number): void;
   setLiveEventEdit: (active: boolean) => void;
+  refresh: () => void;
+  session: EditorSession;
 }) {
-  const fallback = field === "easingRight" ? 1 : 0;
-  const value = clamp01(Number(event[field] ?? fallback));
-  const commit = (next: number) => {
-    try {
-      applyEventTransform(
-        session,
-        t("editorPanels.inspector.event.modify", { field: title }),
-        (current) => ({ ...current, [field]: clamp01(next) }),
-      );
-    } catch (error) {
-      reportError(error);
-    }
-  };
   const id = `event-field-${field}`;
   return (
     <FieldRow
@@ -119,10 +115,11 @@ function EasingRangeField({
           min={0}
           max={1}
           step={0.01}
-          value={value}
+          value={range}
           data-inspector-field={field}
           aria-label={title}
-          onChange={(input) => commit(Number(input.currentTarget.value))}
+          onChange={(input) => onDraft(Number(input.currentTarget.value))}
+          onCommit={onCommit}
           onFocus={() => setLiveEventEdit(true)}
           onBlur={() => {
             setLiveEventEdit(false);
@@ -156,9 +153,17 @@ export function EventInspectorView({
   const bezierEnabled = useEditingFeature("bezier");
   const linkgroupEnabled = useEditingFeature("linkgroup");
   const easingRangeEnabled = useEditingFeature("easingRange");
+  const eventLayersEnabled = useEditingFeature("eventLayers");
+  const extendedEventsEnabled = useEditingFeature("extendedEvents");
   const [cutAnchorElement, setCutAnchorElement] = useState<HTMLButtonElement | null>(null);
   const [cutOpen, setCutOpen] = useState(false);
   const [cutDensity, setCutDensity] = useState("");
+  // The two range sliders share one draft so the preview follows a drag while
+  // the event keeps its stored values until the gesture ends.
+  const [rangeDraft, setRangeDraft] = useState<{
+    easingLeft: number | null;
+    easingRight: number | null;
+  }>({ easingLeft: null, easingRight: null });
   const cutPressAt = useRef<number | null>(null);
   const cutLongPressed = useRef(false);
   const event = entry?.event;
@@ -166,6 +171,23 @@ export function EventInspectorView({
     return <InspectorEmpty>{t("editorPanels.inspector.event.emptyHint")}</InspectorEmpty>;
   }
   const eventType = entry.type;
+  const selectedLine = session.chart.judgeLineList?.[entry.lineIndex ?? session.lineIndex];
+  const typeOptions = isConvertibleEventType(eventType)
+    ? eventTypeOptions(
+        selectedLine,
+        session.eventLayer,
+        { eventLayers: eventLayersEnabled, extendedEvents: extendedEventsEnabled },
+        eventType,
+      )
+    : [];
+  // The row converts one authored track. A wider selection would have to merge
+  // several tracks, which the existing event tools already cover.
+  const singleEventSelected =
+    session.multiLineActive && session.multiLineMode === "events"
+      ? [...session.multiEventSelection.values()].reduce((total, keys) => total + keys.size, 0) ===
+        1
+      : session.eventSelection.size === 1;
+  const showTypeRow = singleEventSelected && typeOptions.length > 1;
   /** Runs an edit action and reports its failure without unwinding the form. */
   const safely = (action: () => void) => {
     try {
@@ -357,6 +379,54 @@ export function EventInspectorView({
     easingLeft: event.easingLeft,
     easingRight: event.easingRight,
   });
+  // The two range sliders share one draft so the preview follows a drag while
+  // the event keeps its stored values until the gesture ends.
+  const setDraftRange = (field: "easingLeft" | "easingRight", value: number | null) =>
+    setRangeDraft((current) =>
+      current[field] === value ? current : { ...current, [field]: value },
+    );
+  // A drag emits a step per pointer move. Committing each one rebuilt the whole
+  // event track and its history entry, which starved the preview canvas, so one
+  // commit writes the value the gesture ends on.
+  const commitRange = (field: "easingLeft" | "easingRight", next: number) => {
+    const stored = clamp01(Number(event[field] ?? (field === "easingRight" ? 1 : 0)));
+    if (clamp01(next) === stored) {
+      setDraftRange(field, null);
+      return;
+    }
+    const title = t(
+      field === "easingLeft"
+        ? "editorPanels.inspector.event.easingLeft"
+        : "editorPanels.inspector.event.easingRight",
+    );
+    try {
+      applyEventTransform(
+        session,
+        t("editorPanels.inspector.event.modify", { field: title }),
+        (current) => ({
+          ...current,
+          [field]: clamp01(next),
+        }),
+      );
+    } catch (error) {
+      // The edit was refused, so the draft has nothing to agree with.
+      setDraftRange(field, null);
+      reportError(error);
+    }
+  };
+  // The panel republishes a frame or more after the commit, so the draft stays
+  // authoritative until the stored event carries its value. Deriving the live
+  // value from the stored one means no limbo frame where the old value is back.
+  const liveRange = (field: "easingLeft" | "easingRight") => {
+    const stored = clamp01(Number(event[field] ?? (field === "easingRight" ? 1 : 0)));
+    const draft = rangeDraft[field];
+    return draft === null || Math.abs(draft - stored) < 1e-9 ? stored : draft;
+  };
+  const previewCurveValues = {
+    ...curveValues,
+    easingLeft: liveRange("easingLeft"),
+    easingRight: liveRange("easingRight"),
+  };
   const curveMode = bezierEnabled && curveValues.bezier ? "bezier" : "easing";
   const rangeVisible =
     easingRangeEnabled ||
@@ -368,6 +438,46 @@ export function EventInspectorView({
   return (
     <>
       <FieldRows>
+        {showTypeRow && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="event-field-type"
+            label={t("editorPanels.inspector.event.type")}
+            control={
+              <Select
+                id="event-field-type"
+                data-inspector-field="type"
+                value={eventType}
+                onChange={(input) => {
+                  const select = input.currentTarget;
+                  const nextType = select.value;
+                  if (nextType === eventType) {
+                    return;
+                  }
+                  try {
+                    convertEventType(
+                      session,
+                      { lineIndex: entry.lineIndex, type: eventType, index: entry.index },
+                      nextType,
+                    );
+                  } catch (error) {
+                    // A refused conversion leaves the authored track in place;
+                    // return the closed select to it before reporting.
+                    select.value = eventType;
+                    reportError(error);
+                  }
+                }}
+              >
+                {typeOptions.map((option) => (
+                  <option value={option.type} key={option.type}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            }
+          />
+        )}
         {fields.map(([field, title, kind]) => (
           <EventField
             key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}`}
@@ -493,8 +603,8 @@ export function EventInspectorView({
         easingType={Number(event.easingType ?? 1)}
         bezier={curveValues.bezier}
         bezierPoints={curveValues.bezierPoints}
-        easingLeft={curveValues.easingLeft}
-        easingRight={curveValues.easingRight}
+        easingLeft={previewCurveValues.easingLeft}
+        easingRight={previewCurveValues.easingRight}
         startValue={typeof event.start === "number" ? event.start : undefined}
         endValue={typeof event.end === "number" ? event.end : undefined}
         onChange={changeCurve}
@@ -509,10 +619,11 @@ export function EventInspectorView({
         renderRangeField={(field, row) => (
           <EasingRangeField
             session={session}
-            event={event}
             field={field}
             title={row.label}
-            reportError={reportError}
+            range={liveRange(field)}
+            onDraft={(value) => setDraftRange(field, value)}
+            onCommit={(value) => commitRange(field, value)}
             refresh={refresh}
             setLiveEventEdit={setLiveEventEdit}
           />
