@@ -33,25 +33,27 @@ import { commitSelectionEdit } from "../../../../../../core/edit/selection/edits
 import { isSystemCancelKey } from "../../../../../../core/shortcuts/keyMatching.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import {
+  dockApply,
   dockBoundsForLines,
+  dockFollow,
   dockPlacement,
-  dockPosition,
-  dockScroll,
-  dockScrollChanged,
+  dockSelectionCounts,
+  dockVisible,
+  type DockAnchor,
   type DockGroup as Group,
   type DockInput,
 } from "./batchControlDock.ts";
 
 export interface BatchControlPresentation {
   visible: boolean;
-  left: string;
-  top: string;
 }
 export interface BatchControlActions {
   onDown(area: string, kind: string, event: PointerEvent, button: HTMLButtonElement): void;
   onMove(event: PointerEvent): void;
   onUp(event: PointerEvent): void;
   onCancel(): void;
+  /** Hand the controller the group element it positions directly on every frame. */
+  attachGroup(area: string, element: HTMLDivElement | null): void;
 }
 export interface BatchControlsState {
   readonly actions: ValueCell<BatchControlActions | null>;
@@ -62,6 +64,9 @@ export interface BatchControlsState {
 export function createBatchControlsState(): BatchControlsState {
   return Object.freeze({
     actions: createValue<BatchControlActions | null>({ initial: null }),
+    // Only visibility is React state. The docked position is written to the group
+    // element by the controller on every frame, so a moving dock never commits a
+    // render and never waits behind the HUD cadence.
     presentations: createValue<Record<string, BatchControlPresentation>>({
       initial: {},
       equals: (a, b) => {
@@ -70,12 +75,7 @@ export function createBatchControlsState(): BatchControlsState {
           areas.length === Object.keys(b).length &&
           areas.every((area) => {
             const next = b[area];
-            return (
-              next !== undefined &&
-              a[area].visible === next.visible &&
-              a[area].left === next.left &&
-              a[area].top === next.top
-            );
+            return next !== undefined && a[area].visible === next.visible;
           })
         );
       },
@@ -209,6 +209,8 @@ export class BatchControls {
   enabled: () => boolean;
   reportError: (error: unknown) => void;
   groups: Map<TimelineArea, Group>;
+  /** Group elements by area, used to write the docked position without a render. */
+  private dockElements: Map<string, HTMLDivElement>;
   active: ActiveBatch | null;
   /** Clear another inspector proposal after this batch becomes the committed chart. */
   onCommit?: () => void;
@@ -234,16 +236,17 @@ export class BatchControls {
     this.enabled = enabled;
     this.reportError = reportError;
     this.groups = new Map();
+    this.dockElements = new Map();
     this.active = null;
     this.cancelledPointerCapture = null;
     this.updateFrame = null;
     this.anchorMode = 0;
     for (const area of Object.keys(batchControlConfigurations) as TimelineArea[]) {
-      this.groups.set(area, { signature: "" });
+      this.groups.set(area, { signature: "", width: 0, height: 0, originX: 0, originY: 0 });
       state.hints.set(area, "");
       state.presentations.update({
         ...state.presentations.get(),
-        [area]: { visible: false, left: "", top: "" },
+        [area]: { visible: false },
       });
     }
     state.actions.set({
@@ -252,6 +255,22 @@ export class BatchControls {
       onMove: (event) => this.move(event),
       onUp: (event) => this.up(event),
       onCancel: () => this.cancel(),
+      attachGroup: (area, element) => {
+        if (!element) {
+          this.dockElements.delete(area);
+          return;
+        }
+        this.dockElements.set(area, element);
+        // A group mounts on the commit that makes it visible, which can precede
+        // the next frame. Place it from the cached geometry so it never appears
+        // at an unpositioned origin.
+        const group = this.groups.get(area as TimelineArea);
+        if (group?.dockX !== undefined && group.dockY !== undefined) {
+          group.appliedX = undefined;
+          group.appliedY = undefined;
+          dockApply(element, group, group.dockX, group.dockY);
+        }
+      },
     });
     // Pointer capture is the primary path, but a few embedded WebView input sources can
     // retarget a captured move/up to the canvas. Keep the active drag alive at the document
@@ -358,59 +377,35 @@ export class BatchControls {
     }
     const stage = this.stage.getBoundingClientRect();
     for (const [area, group] of this.groups) {
-      const multiSelection =
-        area === "notes"
-          ? [...(session.multiLineSelection?.values() ?? [])].reduce(
-              (sum, values) => sum + values.size,
-              0,
-            )
-          : [...(session.multiEventSelection?.values() ?? [])].reduce(
-              (sum, values) => sum + values.size,
-              0,
-            );
-      const selection =
-        area === "notes"
-          ? multiSelection + session.selection.size
-          : multiSelection + session.eventSelection.size;
-      const multiMode =
-        session.multiLineActive &&
-        ((area === "notes" && session.multiLineMode === "notes") ||
-          (area === "events" && session.multiLineMode === "events"));
-      const multiIntent = session.multiSelectionIntent === area;
-      const canShow =
-        area === "events"
-          ? // Event bars are no longer draggable themselves, so even one selected
-            // event needs the three control balls to move or resize it.
-            selection > 0 && !(session.multiLineActive && session.multiLineMode === "notes")
-          : multiMode
-            ? multiSelection > 0 && multiIntent
-            : selection >= 2 || (selection > 0 && multiIntent);
-      const visible = this.enabled() && canShow && hasVisibleBatchSelection(area, session);
-      this.state.presentations.update({
-        ...this.state.presentations.get(),
-        [area]: {
-          visible,
-          left: group.left ?? "",
-          top: group.top ?? "",
-        },
-      });
+      const counts = dockSelectionCounts(area, session);
+      const visible =
+        this.enabled() &&
+        dockVisible(area, {
+          ...counts,
+          notesMultiLine: session.multiLineActive && session.multiLineMode === "notes",
+        }) &&
+        hasVisibleBatchSelection(area, session);
       if (this.active || !visible) {
+        this.state.presentations.update({
+          ...this.state.presentations.get(),
+          [area]: { visible },
+        });
         continue;
       }
       const canvas = area === "notes" ? this.timeline.notesCanvas : this.timeline.eventsCanvas;
       const rectangle = canvas.getBoundingClientRect();
+      const element = this.dockElements.get(area);
       if (!rectangle.width) {
         this.state.presentations.update({
           ...this.state.presentations.get(),
-          [area]: {
-            visible: false,
-            left: group.left ?? "",
-            top: group.top ?? "",
-          },
+          [area]: { visible: false },
         });
         continue;
       }
-      const signature = `${this.signature(area, session)}:${rectangle.width}:${rectangle.height}`;
+      this.state.presentations.update({
+        ...this.state.presentations.get(),
+        [area]: { visible: true },
+      });
       const input: DockInput = {
         viewport: this.timeline.viewport,
         area,
@@ -418,17 +413,9 @@ export class BatchControls {
         height: canvas.clientHeight,
       };
       const boundsOf = (lineIndex: number) => this.panelBounds(area, lineIndex, canvas);
-      const scroll = dockScroll(
-        this.timeline.viewport,
-        area,
-        this.timeline.viewport.multiLineViewportOffset(canvas.clientWidth, area),
-      );
-      const signatureChanged = signature !== group.signature;
-      if (!signatureChanged && !dockScrollChanged(group.scroll, scroll)) {
-        continue;
-      }
-      let docked: { x: number; y: number } | null = null;
-      if (signatureChanged) {
+      const signature = `${this.signature(area, session)}:${rectangle.width}:${rectangle.height}`;
+      let placed: { anchor: DockAnchor; x: number; y: number } | null = null;
+      if (signature !== group.signature) {
         group.signature = signature;
         const point =
           area === "notes" ? this.timeline.gestures.cursor : this.timeline.gestures.eventCursor;
@@ -441,34 +428,49 @@ export class BatchControls {
             ),
           ),
         ];
-        const placed = dockPlacement(input, {
+        placed = dockPlacement(input, {
           bounds: selectionPanelBounds(area, snapshot, boundsOf),
           point: point ?? null,
           factor: this.timeline.viewport.factorForLine?.(session.lineIndex) ?? 1,
         });
         group.anchor = placed.anchor;
-        docked = placed;
-      } else if (group.anchor) {
-        // A scroll, pan, or zoom moved the selection under the ball, so the dock
-        // follows the content instead of keeping its first screen position.
-        docked = dockPosition(
-          input,
-          group.anchor,
-          dockBoundsForLines(group.lines ?? [], session.lineIndex, boundsOf),
-        );
       }
-      group.scroll = scroll;
-      if (!docked) {
+      // The geometry a moving dock needs is measured here, once per structural
+      // refresh, so the per-frame placement never reads layout.
+      group.width = input.width;
+      group.height = input.height;
+      group.bounds = dockBoundsForLines(group.lines ?? [], session.lineIndex, boundsOf);
+      group.originX = rectangle.left - stage.left;
+      group.originY = rectangle.top - stage.top;
+      if (!group.anchor) {
         continue;
       }
-      const left = `${rectangle.left - stage.left + docked.x}px`;
-      const top = `${rectangle.top - stage.top + docked.y}px`;
-      group.left = left;
-      group.top = top;
-      this.state.presentations.update({
-        ...this.state.presentations.get(),
-        [area]: { visible: true, left, top },
-      });
+      // A fresh anchor is the only structural placement. Without one the dock
+      // already holds a position and `follow()` is what keeps it current, so
+      // writing here would only push a stale position for a frame.
+      if (placed && element) {
+        dockApply(element, group, placed.x, placed.y);
+      }
+    }
+  }
+
+  /**
+   * Reposition the attached groups for the frame being painted.
+   *
+   * Playback advances the viewport origin on every display frame while this dock
+   * is anchored to chart time, so the balls have to move on the same cadence as
+   * the playhead beneath them. No layout read, no React commit, and no dependence
+   * on the HUD cadence; geometry comes from the last `sync()`.
+   */
+  follow(): void {
+    if (this.active) {
+      return;
+    }
+    for (const [area, group] of this.groups) {
+      const element = this.dockElements.get(area);
+      if (element) {
+        dockFollow(element, group, this.timeline.viewport, area);
+      }
     }
   }
 
@@ -737,6 +739,10 @@ export class BatchControls {
     const deltaX = active.point.x - active.start.x;
     const deltaY = active.point.y - active.start.y;
     active.button.style.transform = "";
+    // The ball's own transform returns it home; the group's transform is frozen
+    // for the animation, so the next frame has to rewrite it from the anchor.
+    group.appliedX = undefined;
+    group.appliedY = undefined;
     // A larger ease-out exponent pulls the ball home through the middle of the
     // animation instead of letting it hover near the dock for the last second.
     const returnCoefficient = 3;

@@ -85,7 +85,7 @@ export interface FrameDrawingOptions {
   /** True while a play request is still settling before audio reports playing. */
   playbackPending(): boolean;
   timeline: FrameTimeline;
-  batchControls: { active: unknown; sync(): void };
+  batchControls: { active: unknown; sync(): void; follow(): void };
   lineSwitcher: { active: boolean };
   multiEdit: Pick<MultiEditPanel, "drawTimeline" | "previewChart">;
   selectionOverlay: Pick<SelectionOverlay, "draw">;
@@ -156,6 +156,11 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
         runtime.audio.playing,
         runtime.playbackPending(),
       );
+      // The dock is anchored to chart time, so it has to be projected against the
+      // origin this frame publishes. Running it after the write above and outside
+      // the HUD cadence is what keeps them moving with the playhead instead of
+      // stair-stepping behind it.
+      runtime.batchControls.follow();
       const selectionStarted = performance.now();
       runtime.timeline.gestures.previewRefresh?.();
       const selectionMs = performance.now() - selectionStarted;
