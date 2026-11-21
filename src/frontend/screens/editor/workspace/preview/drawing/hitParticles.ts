@@ -1,31 +1,28 @@
 /**
- * Four-square hit burst adapted from RPE Recorder's particle pass.
+ * Phira's four-square hit burst.
  *
- * Recorder settings `low_sq`, `high_sq`, `sq_size`, and `sq_time` define the
- * burst: four squares pick a random direction, start with a small random radial
- * offset, travel outward with a quadratic ease-out, and fade linearly while the
- * size follows Recorder's two-phase curve. This module keeps that structure and
- * applies three preview-only tweaks: 12% shorter travel, ±8% square-size
- * jitter, and a 520 ms lifetime instead of 500 ms.
- *
- * Geometry only: no canvas, no DOM. `previewHitEffects` owns the drawing.
+ * `prpr` emits four squares from the hit point: each starts with a random
+ * direction, a slightly reduced speed, and a slightly reduced size, then decays
+ * against a linear acceleration of 6 and fades over the skin's hit-effect
+ * lifetime. Geometry only: no canvas, no DOM; `previewHitEffects` owns drawing.
  */
+import { HIT_FX_DURATION_DEFAULT } from "../../../canvas/hitFrame.ts";
+import { PHIRA_NOTE_WIDTH_RATIO } from "../scene/constants.ts";
 
-/** How long a burst stays on screen, in seconds. */
-export const HIT_PARTICLE_LIFETIME = 0.52;
+/** Phira's default hit-effect lifetime in seconds. */
+export const HIT_PARTICLE_LIFETIME = HIT_FX_DURATION_DEFAULT;
 
 /** Squares released by one hit. */
 export const HIT_PARTICLE_COUNT = 4;
 
-/** Recorder normalizes its square-speed range by 4/9 before scaling to width. */
-const RECORDER_SPEED_NORMALIZER = 4 / 9;
-const RECORDER_LOW_SQ = 0.2 * RECORDER_SPEED_NORMALIZER;
-const RECORDER_HIGH_SQ = 0.25 * RECORDER_SPEED_NORMALIZER;
-const RECORDER_SQ_SIZE = 0.175;
-
-/** Preview-only tuning applied on top of the Recorder values. */
-const PREVIEW_TRAVEL_SCALE = 0.88;
-const PREVIEW_SIZE_JITTER = 0.08;
+/** Square side per full note width; Phira uses `hitFxScale * noteScale / 44`. */
+const SQUARE_SIZE_RATIO = 1 / 44 / (2 * PHIRA_NOTE_WIDTH_RATIO);
+/** Initial speed per full note width per second; Phira uses `2.5 * noteScale`. */
+const SQUARE_SPEED_RATIO = 2.5 / (2 * PHIRA_NOTE_WIDTH_RATIO);
+/** Phira's linear deceleration applied to the square velocity. */
+const LINEAR_DECELERATION = 6;
+const SPEED_RANDOMNESS = 0.1;
+const SIZE_RANDOMNESS = 0.3;
 
 /** One square of the burst: a screen-pixel offset from the hit point and half a side. */
 export interface HitParticle {
@@ -36,45 +33,54 @@ export interface HitParticle {
 }
 
 /**
+ * Phira's particle alpha curve: full, 70% at the midpoint, transparent at the end.
+ *
+ * @param progress Normalized lifetime in `[0, 1]`.
+ */
+export function hitParticleAlpha(progress: number): number {
+  if (progress <= 0) {
+    return 1;
+  }
+  if (progress >= 1) {
+    return 0;
+  }
+  return progress < 0.5 ? 1 - 0.3 * (progress / 0.5) : 0.7 * (1 - (progress - 0.5) / 0.5);
+}
+
+/**
  * Fill a caller-owned four-particle buffer without allocating a new array.
  *
- * `noteWidth` is the on-screen note width in pixels and drives square size;
- * `burstWidth` is the width the burst expands across: the projected chart-frame
- * width times the skin's hit-effect scale. Both are pixels, so the result is
- * resolution-independent.
+ * `noteWidth` is the on-screen note width in pixels. `sizeScale` folds the
+ * skin's `hitFxScale` and the editor's hit-effect setting; `travelScale` only
+ * folds the editor setting because Phira's `hitFxScale` affects size alone.
  *
  * @returns the number of particles written, or zero outside the lifetime.
  */
 export function hitParticlesInto(
   age: number,
+  lifetime: number,
   seed: number,
   noteWidth: number,
-  burstWidth: number,
+  sizeScale: number,
+  travelScale: number,
   particles: HitParticle[],
 ): number {
-  if (age < 0 || age >= HIT_PARTICLE_LIFETIME || noteWidth <= 0 || burstWidth <= 0) {
+  if (age < 0 || age >= lifetime || lifetime <= 0 || noteWidth <= 0) {
     return 0;
   }
-  const progress = age / HIT_PARTICLE_LIFETIME;
-  const travel = 1 - (1 - progress) ** 2;
-  const alpha = 1 - progress;
-  const sizeCurve =
-    progress < 2 / 3
-      ? 0.5 + 0.5 * (1 - (1 - progress * 1.5) ** 2)
-      : 0.7 + 0.3 * (1 - (1 - (1 - progress) * 3) ** 2);
-  const baseTravel = burstWidth * RECORDER_LOW_SQ * PREVIEW_TRAVEL_SCALE;
-  const randomTravel = burstWidth * (RECORDER_HIGH_SQ - RECORDER_LOW_SQ) * PREVIEW_TRAVEL_SCALE;
-  const baseRadius = noteWidth * RECORDER_SQ_SIZE * 0.5;
+  const progress = age / lifetime;
+  const alpha = hitParticleAlpha(progress);
+  const speed = noteWidth * SQUARE_SPEED_RATIO * travelScale;
+  const distance = (speed * (1 - Math.exp(-LINEAR_DECELERATION * age))) / LINEAR_DECELERATION;
+  const baseSize = noteWidth * SQUARE_SIZE_RATIO * sizeScale;
   for (let index = 0; index < HIT_PARTICLE_COUNT; index++) {
     const angle = seededFraction(seed, index) * Math.PI * 2;
-    const offset = randomTravel * seededFraction(seed, index + 101);
-    const distance = offset + baseTravel * travel;
-    const jitter =
-      1 - PREVIEW_SIZE_JITTER + seededFraction(seed, index + 211) * PREVIEW_SIZE_JITTER * 2;
+    const velocity = 1 - SPEED_RANDOMNESS * seededFraction(seed, index + 101);
+    const size = baseSize * (1 - SIZE_RANDOMNESS * seededFraction(seed, index + 211));
     const particle = particles[index] ?? (particles[index] = { x: 0, y: 0, radius: 0, alpha: 0 });
-    particle.x = Math.cos(angle) * distance;
-    particle.y = Math.sin(angle) * distance;
-    particle.radius = baseRadius * sizeCurve * jitter;
+    particle.x = Math.cos(angle) * distance * velocity;
+    particle.y = Math.sin(angle) * distance * velocity;
+    particle.radius = size / 2;
     particle.alpha = alpha;
   }
   return HIT_PARTICLE_COUNT;
@@ -96,16 +102,18 @@ function seededFraction(seed: number, salt: number): number {
  * The burst of a hit that happened `age` seconds ago.
  *
  * `seed` identifies the hit; the caller mixes the line and note indices into it.
- * `noteWidth` and `burstWidth` are screen-pixel widths; see `hitParticlesInto`.
+ * Widths and scales are screen-pixel values; see `hitParticlesInto`.
  */
 export function hitParticles(
   age: number,
+  lifetime: number,
   seed: number,
   noteWidth: number,
-  burstWidth: number,
+  sizeScale: number,
+  travelScale: number,
 ): HitParticle[] {
   const particles: HitParticle[] = [];
-  const count = hitParticlesInto(age, seed, noteWidth, burstWidth, particles);
+  const count = hitParticlesInto(age, lifetime, seed, noteWidth, sizeScale, travelScale, particles);
   particles.length = count;
   return particles;
 }

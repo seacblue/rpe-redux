@@ -71,6 +71,12 @@ export function drawCurveGhost(
                 width,
                 false,
                 true,
+                undefined,
+                undefined,
+                1,
+                true,
+                skin.holdCompact,
+                skin.holdRepeat,
               )
             : skin.head(context, note.type, renderedHorizontal, startVertical, width, false);
       } catch {

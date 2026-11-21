@@ -1,6 +1,6 @@
 name: "Built-in - Original"
 author: "RPE Redux"
-hitFx: [8, 4]
+hitFx: [8, 7]
 holdAtlas: [50, 50]
-holdAtlasMH: [50, 99]
-eventHold: "event_hold.png"
+holdAtlasMH: [130, 130]
+hitFxScale: 0.9

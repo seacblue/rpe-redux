@@ -7,6 +7,12 @@
  */
 import { settingsRegistry } from "../settings.ts";
 import type { SettingDefinition } from "../types.ts";
+import { values } from "../../state/values.ts";
+import {
+  PHIRA_NOTE_SCALE_DEFAULT,
+  PHIRA_NOTE_SCALE_MAX,
+  PHIRA_NOTE_SCALE_MIN,
+} from "../../media/noteSkin.ts";
 import type { SettingsNavigation } from "../types.ts";
 import { COVER_BACKGROUND_KEYS } from "./coverBackground.ts";
 
@@ -231,10 +237,10 @@ const AppearanceSettingsSchema: SettingDefinition[] = [
     group: "settings.group.notes",
     label: "settings.field.note-size.label",
     control: "number",
-    default: 175,
-    min: 40,
-    max: 400,
-    step: 1,
+    default: PHIRA_NOTE_SCALE_DEFAULT,
+    min: PHIRA_NOTE_SCALE_MIN,
+    max: PHIRA_NOTE_SCALE_MAX,
+    step: 0.005,
   },
   {
     key: "timeline-note-size",
@@ -281,3 +287,16 @@ settingsRegistry.registerNavigations([
   AppearanceNotesNavigation,
 ]);
 settingsRegistry.registerSettings(AppearanceSettingsSchema);
+
+// The preview note size used to be a Recorder pixel width in the 1200-wide
+// authoring box. Phira expresses it as a scale around 1, so convert a stored
+// pixel value once; 175 was the previous default and maps to 1.
+const noteSize = values.getHandle<string>("note-size");
+const storedNoteSize = Number(noteSize.get());
+if (Number.isFinite(storedNoteSize) && storedNoteSize > PHIRA_NOTE_SCALE_MAX) {
+  const scale = Math.min(
+    PHIRA_NOTE_SCALE_MAX,
+    Math.max(PHIRA_NOTE_SCALE_MIN, storedNoteSize / 175),
+  );
+  noteSize.set(String(Number(scale.toFixed(3))));
+}

@@ -60,6 +60,17 @@ export interface PreviewImages {
 export interface PreviewSkin extends NoteBatchSkin {
   images?: Map<string, CanvasImageSource>;
   particleFrameCount?: number;
+  /** Phira's simultaneous-note width multiplier from `click_mh` / `click`. */
+  highlightWidthScale?(): number;
+  /** Phira Hold and hit-effect switches resolved from the active package. */
+  holdKeepHead?: boolean;
+  holdRepeat?: boolean;
+  holdCompact?: boolean;
+  hitFxDuration?: number;
+  hitFxScale?: number;
+  hitFxRotate?: boolean;
+  hitFxTinted?: boolean;
+  hideParticles?: boolean;
   tinted(name: string, color: unknown): CanvasImageSource | null;
   tintedSource(name: string, source: unknown, color: unknown): CanvasImageSource | null;
   colorized(name: string, color: unknown): CanvasImageSource | null;
@@ -94,6 +105,8 @@ export interface PreviewSkin extends NoteBatchSkin {
     rotation?: number,
     capScale?: number,
     drawBody?: boolean,
+    compact?: boolean,
+    repeat?: boolean,
   ): boolean;
   noteTexture(
     type: number,

@@ -40,6 +40,7 @@ function fakeWebGLCanvas() {
     bufferAllocations: [],
     drawSources: [],
     blendSeparates: [],
+    texParameters: [],
   };
   const textureSources = new Map();
   let pendingTexture = null;
@@ -61,6 +62,7 @@ function fakeWebGLCanvas() {
       TEXTURE_WRAP_T: 12,
       LINEAR: 13,
       CLAMP_TO_EDGE: 14,
+      REPEAT: 24,
       BLEND: 15,
       SRC_ALPHA: 16,
       ONE_MINUS_SRC_ALPHA: 17,
@@ -102,6 +104,9 @@ function fakeWebGLCanvas() {
         if (typeof size === "number") {
           calls.bufferAllocations.push(size);
         }
+      },
+      texParameteri: (_target, parameter, value) => {
+        calls.texParameters.push([parameter, value]);
       },
       blendFuncSeparate: (...args) => {
         calls.blendSeparates.push(args);
@@ -577,7 +582,7 @@ test("active note batches skip line transforms while fallback notes restore them
       multiSelectLineColor: [],
       selectedNotes: new Map(),
       simultaneous: null,
-      noteSize: 175,
+      noteSize: 1,
       lineFrames: [],
       noteHitAreas: [],
       collectGeometry: false,
@@ -769,6 +774,68 @@ test("negative-length Hold caps keep the line frame and upright UVs", () => {
     assert.equal(cap.v0, 1, "the cap V axis is not inverted");
     assert.equal(cap.v1, 0);
   }
+});
+
+test("Hold compact centres caps on their anchors", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+  };
+  /** Queue one Hold with a known vertical span and return its instance data. */
+  const instances = (compact) => {
+    const batch = new NoteBatch(canvas);
+    batch.begin(100, 100, skin);
+    assert.equal(
+      batch.addHold(skin, false, 50, 100, 50, 40, 8, true, 1, null, 0, 1, true, compact),
+      true,
+    );
+    batch.finish();
+    return calls.uploads.at(-1);
+  };
+
+  const ordinary = instances(false);
+  const compact = instances(true);
+  // Body, tail cap, and head cap share one texture group. Each instance starts
+  // with its centre; the cap centres move inward by half a cap when compact.
+  assert.equal(ordinary[1], 70, "ordinary body centre");
+  assert.equal(ordinary[16], 36, "ordinary tail cap sits outside the tail");
+  assert.equal(ordinary[31], 104, "ordinary head cap sits outside the head");
+  assert.equal(compact[16], 40, "compact tail cap sits on the tail anchor");
+  assert.equal(compact[31], 100, "compact head cap sits on the head anchor");
+});
+
+test("Hold repeat stays batched with a repeat-wrapped body texture", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+  };
+  const batch = new NoteBatch(canvas);
+  batch.begin(100, 100, skin);
+  assert.equal(
+    batch.addHold(skin, false, 50, 100, 50, 40, 8, true, 1, null, 0, 1, true, false, true),
+    true,
+  );
+  batch.finish();
+
+  // The upload packs the repeat body and the clamp-wrapped caps together. The
+  // body V range is the tile count; the cap instances keep the single V range.
+  const instances = calls.uploads[0];
+  assert.equal(instances.length, 45, "body plus both caps");
+  assert.equal(instances[7], 7.5, "body V starts at the tile count");
+  assert.equal(instances[9], 0, "body V ends at zero after the flip");
+  assert.equal(instances[22], 1, "tail cap keeps a single V tile");
+  assert.equal(instances[37], 1, "head cap keeps a single V tile");
+  assert.equal(calls.draws, 2, "repeat body and clamp caps are separate groups");
+  assert.ok(
+    calls.texParameters.some(([parameter, value]) => parameter === 12 && value === 24),
+    "the body texture is REPEAT-wrapped on V",
+  );
 });
 
 test("Holds keep the low paint layer for every Tap, Drag, and Flick head", () => {

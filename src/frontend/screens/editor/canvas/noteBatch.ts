@@ -40,6 +40,8 @@ const NOTE_SLOT_COUNT = NOTE_TYPE_SLOTS * 2;
 /** Resolved Hold textures and skin-specific cap ratios for the current skin. */
 interface HoldTextureSet {
   body: TextureDescriptor | null;
+  /** Cached repeat-marked body when the skin flag is set without the marker. */
+  repeatBody: TextureDescriptor | null | undefined;
   end: TextureDescriptor | null;
   head: TextureDescriptor | null | undefined;
   endRatio: number;
@@ -83,6 +85,8 @@ export class NoteBatch {
   private cornerBuffer: WebGLBuffer | null = null;
   private instanceBuffer: WebGLBuffer | null = null;
   private readonly textures = new Map<HTMLImageElement, WebGLTexture>();
+  /** REPEAT-wrapped variants for Hold bodies that tile their V axis. */
+  private readonly repeatTextures = new Map<HTMLImageElement, WebGLTexture>();
   private resolution: WebGLUniformLocation | null = null;
   private textureUniform: WebGLUniformLocation | null = null;
   private cornerLocation = -1;
@@ -132,7 +136,7 @@ export class NoteBatch {
   /** Whether the line groups contain a reusable static judge-line layer. */
   private retainedLineBatchValid = false;
   private active = false;
-  private prewarmQueue: HTMLImageElement[] = [];
+  private prewarmQueue: TextureDescriptor[] = [];
   private prewarmTimer: number | ReturnType<typeof setTimeout> | null = null;
   private prewarmIdle = false;
   private contextLost = false;
@@ -174,7 +178,7 @@ export class NoteBatch {
       this.gl,
       this.contextLost,
       this.active,
-      this.textures.size,
+      this.textures.size + this.repeatTextures.size,
       this.prewarmQueue.length,
     );
   }
@@ -210,6 +214,7 @@ export class NoteBatch {
     this.tintLocation = -1;
     this.colorizeLocation = -1;
     this.textures.clear();
+    this.repeatTextures.clear();
     this.groups.clear();
     this.retainedLineBatchValid = false;
     this.clearDescriptorCaches();
@@ -230,6 +235,7 @@ export class NoteBatch {
     this.groups.clear();
     this.retainedLineBatchValid = false;
     this.textures.clear();
+    this.repeatTextures.clear();
     this.instanceBufferCapacity = 0;
     this.staticLineBufferCapacity = 0;
     this.staticLineGroups = null;
@@ -350,14 +356,21 @@ export class NoteBatch {
     if (!this.gl || this.isContextLost()) {
       return;
     }
-    const seen = new Set<HTMLImageElement>();
-    /** Queue one texture source at most once per prewarm pass. */
+    const seenClamp = new WeakSet<HTMLImageElement>();
+    const seenRepeat = new WeakSet<HTMLImageElement>();
+    /** Queue one texture variant at most once per prewarm pass. */
     const enqueue = (descriptor: TextureDescriptor | null): void => {
-      if (!descriptor || seen.has(descriptor.source) || this.textures.has(descriptor.source)) {
+      if (!descriptor) {
+        return;
+      }
+      const repeat = descriptor.repeat === true;
+      const seen = repeat ? seenRepeat : seenClamp;
+      const cache = repeat ? this.repeatTextures : this.textures;
+      if (seen.has(descriptor.source) || cache.has(descriptor.source)) {
         return;
       }
       seen.add(descriptor.source);
-      this.prewarmQueue.push(descriptor.source);
+      this.prewarmQueue.push(descriptor);
     };
     for (const highlight of [false, true]) {
       for (const type of [1, 2, 3, 4]) {
@@ -379,9 +392,9 @@ export class NoteBatch {
     }
     const step = (): void => {
       this.prewarmTimer = null;
-      const source = this.prewarmQueue.shift();
-      if (source && this.gl && !this.isContextLost()) {
-        this.textureFor(source);
+      const descriptor = this.prewarmQueue.shift();
+      if (descriptor && this.gl && !this.isContextLost()) {
+        this.textureFor(descriptor);
       }
       this.schedulePrewarm();
     };
@@ -638,6 +651,8 @@ export class NoteBatch {
    *
    * `drawBody` false paints the two caps only; an inverted Hold uses that to
    * match Phira, which rejects a Hold body whose longitudinal size is negative.
+   * `repeat` tiles the body with V coordinates above 1 against a repeat-wrapped
+   * texture, so the Hold stays in the batch.
    */
   addHold(
     skin: NoteBatchSkin | null,
@@ -653,6 +668,8 @@ export class NoteBatch {
     fallbackRotation = 0,
     capScale = 1,
     drawBody = true,
+    compact = false,
+    repeat = false,
   ): boolean {
     if (!this.active || this.isContextLost()) {
       return false;
@@ -668,7 +685,7 @@ export class NoteBatch {
       );
       textures.head = head;
     }
-    if ((drawBody && !body) || !end || (showHead && !head)) {
+    if ((drawBody && !body) || (showHead && !head)) {
       return false;
     }
     // A Hold with no visible body (speed zero, or a tail already at the line)
@@ -695,12 +712,23 @@ export class NoteBatch {
       tailLength,
       this.holdDirection,
     );
+    if (compact) {
+      layout.headCap.x += (this.holdDirection.x * headLength) / 2;
+      layout.headCap.y += (this.holdDirection.y * headLength) / 2;
+      layout.tailCap.x -= (this.holdDirection.x * tailLength) / 2;
+      layout.tailCap.y -= (this.holdDirection.y * tailLength) / 2;
+    }
     let bodyAdded = true;
     if (drawBody && body) {
+      const repeatBody =
+        repeat && body.repeat !== true ? (textures.repeatBody ??= { ...body, repeat: true }) : body;
+      const tileHeight = width * (body.useful.height / body.useful.width);
+      const bodyTiles = repeat || body.repeat === true;
+      const vRepeat = bodyTiles && tileHeight > 0 ? layout.bodyLength / tileHeight : 1;
       bodyAdded =
         layout.bodyLength <= 0.5 ||
         this.add(
-          body,
+          repeatBody,
           (layout.bodyHead.x + layout.bodyTail.x) / 2,
           (layout.bodyHead.y + layout.bodyTail.y) / 2,
           width,
@@ -711,6 +739,7 @@ export class NoteBatch {
           true,
           color,
           HOLD_PAINT_LAYER,
+          vRepeat,
         );
     }
     return (
@@ -825,7 +854,8 @@ export class NoteBatch {
       gl.enableVertexAttribArray(this.cornerLocation);
       gl.vertexAttribPointer(this.cornerLocation, 2, gl.FLOAT, false, 0, 0);
     }
-    const textureFor = (source: HTMLImageElement): WebGLTexture | null => this.textureFor(source);
+    const textureFor = (descriptor: TextureDescriptor): WebGLTexture | null =>
+      this.textureFor(descriptor);
     const emptyMetrics = {
       groupCount: 0,
       instanceCount: 0,
@@ -921,8 +951,12 @@ export class NoteBatch {
       for (const texture of this.textures.values()) {
         this.gl.deleteTexture(texture);
       }
+      for (const texture of this.repeatTextures.values()) {
+        this.gl.deleteTexture(texture);
+      }
     }
     this.textures.clear();
+    this.repeatTextures.clear();
     this.clear();
     this.groups.clear();
     this.retainedLineBatchValid = false;
@@ -969,8 +1003,12 @@ export class NoteBatch {
       for (const texture of this.textures.values()) {
         this.gl.deleteTexture(texture);
       }
+      for (const texture of this.repeatTextures.values()) {
+        this.gl.deleteTexture(texture);
+      }
     }
     this.textures.clear();
+    this.repeatTextures.clear();
   }
 
   /** Resolve one texture descriptor, caching misses until the skin changes. */
@@ -1009,6 +1047,7 @@ export class NoteBatch {
         `hold-body:${highlight ? 1 : 0}`,
         () => skin?.holdBodyTexture(highlight) ?? null,
       ),
+      repeatBody: undefined,
       end,
       head: undefined,
       endRatio: end ? end.useful.height / end.useful.width : 0,
@@ -1051,6 +1090,7 @@ export class NoteBatch {
     flipV: boolean,
     color: NoteColor | null | undefined,
     layer: NotePaintLayer,
+    vRepeat = 1,
   ): boolean {
     const colorize = color?.mode === "selected";
     return this.writeInstance(
@@ -1064,6 +1104,7 @@ export class NoteBatch {
       alpha,
       flipV,
       color,
+      vRepeat,
     );
   }
 
@@ -1113,6 +1154,7 @@ export class NoteBatch {
     alpha: number,
     flipV: boolean,
     color: NoteColor | null | undefined,
+    vRepeat = 1,
   ): boolean {
     if (!this.active || this.isContextLost() || !width || !height) {
       return false;
@@ -1154,9 +1196,9 @@ export class NoteBatch {
     const centerOffsetX = -width / 2 - descriptor.useful.x * scaleX + quadWidth / 2;
     const quadOffsetY = flipV && centerOffsetY !== 0 ? -centerOffsetY : centerOffsetY;
     const u0 = 0;
-    const v0 = flipV ? 1 : 0;
+    const v0 = flipV ? vRepeat : 0;
     const u1 = 1;
-    const v1 = flipV ? 0 : 1;
+    const v1 = flipV ? 0 : vRepeat;
     let rotationValues = this.rotationCache.get(rotation);
     if (!rotationValues) {
       rotationValues = [Math.cos(rotation), Math.sin(rotation)];
@@ -1190,12 +1232,14 @@ export class NoteBatch {
     return true;
   }
 
-  /** Return the cached GL texture for an image, uploading it on first use. */
-  private textureFor(source: HTMLImageElement): WebGLTexture | null {
+  /** Return the cached GL texture for a descriptor, uploading it on first use. */
+  private textureFor(descriptor: TextureDescriptor): WebGLTexture | null {
     if (!this.gl || this.isContextLost()) {
       return null;
     }
-    const cached = this.textures.get(source);
+    const { source, repeat } = descriptor;
+    const cache = repeat === true ? this.repeatTextures : this.textures;
+    const cached = cache.get(source);
     if (cached) {
       return cached;
     }
@@ -1206,6 +1250,9 @@ export class NoteBatch {
     }
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
     configureTextureSampling(this.gl);
+    if (repeat === true) {
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
+    }
     this.gl.pixelStorei(this.gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     this.gl.texImage2D(
       this.gl.TEXTURE_2D,
@@ -1215,7 +1262,7 @@ export class NoteBatch {
       this.gl.UNSIGNED_BYTE,
       source,
     );
-    this.textures.set(source, texture);
+    cache.set(source, texture);
     this.diagnostics.upload(true);
     this.reportState();
     return texture;

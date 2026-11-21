@@ -88,8 +88,8 @@ export function phiraHoldAtlasValid(asset: PhiraWorkbenchAsset | undefined): boo
   return (
     Number.isInteger(asset.atlas[0]) &&
     Number.isInteger(asset.atlas[1]) &&
-    asset.atlas[0] > 0 &&
-    asset.atlas[1] > 0 &&
+    asset.atlas[0] >= 0 &&
+    asset.atlas[1] >= 0 &&
     asset.atlas[0] + asset.atlas[1] < asset.height
   );
 }
@@ -133,7 +133,7 @@ function slotFile(manifest: NoteSkinManifest, slot: PhiraWorkbenchSlot): string 
     case "hold_highlight":
       return manifest.phira?.holdFileMH;
     case "event_hold":
-      return manifest.events.event_hold?.file ?? manifest.events.event_bar?.file;
+      return manifest.events.event_hold?.file;
     case "judgeline":
       return manifest.judgeline?.line.file;
     case "hit_fx":
@@ -297,7 +297,6 @@ export function buildPhiraWorkbenchFiles({
     holdAtlasMH: holdHighlight?.atlas
       ? [holdHighlight.atlas[0], holdHighlight.atlas[1]]
       : (baseInfo?.holdAtlasMH ?? [1, 1]),
-    eventHold: PHIRA_WORKBENCH_FILES.event_hold,
   };
   const built = serializePhiraRespack(info, files);
   // The serializer only bounds file sizes; the parser is the single authority on

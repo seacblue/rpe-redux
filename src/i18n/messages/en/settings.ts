@@ -401,7 +401,7 @@ export default {
   "settings.field.particle-effects-enabled.label": "Render hit particles",
   "settings.field.particle-effects-enabled.description":
     "Draws the skin hit animation and its square burst at every hit during preview playback.",
-  "settings.field.note-size.label": "Preview note size",
+  "settings.field.note-size.label": "Preview note scale",
   "settings.field.timeline-note-size.label": "Timeline note size",
   "settings.field.hit-effect-size.label": "Hit effect size",
   "settings.field.note-opacity.label": "Note opacity",

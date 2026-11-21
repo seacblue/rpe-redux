@@ -87,8 +87,6 @@ test("export keeps event_hold and moves a legacy judge line to the package root"
   );
   assert.deepEqual(exported.get("line.png"), lineBytes);
 
-  const info = new TextDecoder().decode(exported.get("info.yml"));
-  assert.match(info, /eventHold: "event_hold\.png"/);
   const reparsed = parsePhiraRespack(exported);
   assert.equal(reparsed.manifest.judgeline?.line.file, "line.png");
   assert.ok(reparsed.manifest.events.event_hold, "the event bar did not survive the export");
@@ -102,14 +100,24 @@ test("export writes a package event texture at the canonical event_hold.png", as
   files.delete("event_hold.png");
   files.set("custom-event.png", eventBytes);
   manifest.events.event_hold = { file: "custom-event.png" };
-  manifest.phira.info.eventHold = "custom-event.png";
 
   const exported = await phiraExportFiles({ id: "test", manifest, files });
   assert.deepEqual(exported.get("event_hold.png"), eventBytes);
-  const info = new TextDecoder().decode(exported.get("info.yml"));
-  assert.match(info, /eventHold: "event_hold\.png"/);
   const reparsed = parsePhiraRespack(exported);
   assert.equal(reparsed.manifest.events.event_hold?.file, "event_hold.png");
+});
+
+test("an info.yml eventHold path is ignored in favour of the fixed event_hold.png", () => {
+  const files = completeFiles();
+  const info = new TextDecoder().decode(files.get("info.yml"));
+  const eventBytes = files.get("event_hold.png");
+  assert.ok(eventBytes);
+  files.set("custom-event.png", eventBytes);
+  files.set("info.yml", new TextEncoder().encode(`${info}eventHold: "custom-event.png"\n`));
+  assert.equal(parsePhiraRespack(files).manifest.events.event_hold?.file, "event_hold.png");
+
+  files.delete("event_hold.png");
+  assert.equal(parsePhiraRespack(files).manifest.events.event_hold, undefined);
 });
 
 test("export rejects a package that is not a Phira respack", async () => {

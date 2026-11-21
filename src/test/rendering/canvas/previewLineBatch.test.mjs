@@ -67,7 +67,7 @@ test("default judge lines batch once and fall back to Canvas when disabled", () 
       multiSelectLineColor: [],
       selectedNotes: new Map(),
       simultaneous: null,
-      noteSize: 175,
+      noteSize: 1,
       lineFrames: [],
       noteHitAreas: [],
       collectGeometry: false,

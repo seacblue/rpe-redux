@@ -15,7 +15,7 @@ import {
 import type { PreviewViewport } from "./viewport.ts";
 import { PreviewCameraTracker, previewCameraView, type PreviewCamera } from "./previewCamera.ts";
 import { linePasses, type RenderPass } from "../drawing/previewLines.ts";
-import { PREVIEW_LOGICAL_SIZE } from "./constants.ts";
+import { PHIRA_NOTE_SCALE_DEFAULT, PREVIEW_LOGICAL_SIZE } from "./constants.ts";
 import { lineGuides, type LineGuide } from "../drawing/guides.ts";
 import { readShaderSource } from "../../../../../platform/shaderSource.ts";
 import {
@@ -732,7 +732,7 @@ export class Preview {
       );
     this.noteOpacity = 180 / 255;
     this.visible = false;
-    this.noteSize = 175;
+    this.noteSize = PHIRA_NOTE_SCALE_DEFAULT;
     this.lineScale = 1.4;
     this.defaultLineColor = [237, 236, 176];
     this.defaultParticleColor = [237, 236, 176];

@@ -5,10 +5,9 @@
  * and sound resources. Redux's own extensions are optional files in the same
  * package and are ignored by Phira clients that do not know them: the event-bar
  * texture `event_hold.png` and the judge-line texture at the package root
- * `line.png`.
+ * `line.png`. Both extensions use fixed names; neither needs an info.yml entry.
  */
 import { isPackageName, type PackageName } from "../utils/packageName.ts";
-import { isRecord } from "../utils/guards.ts";
 import type { NoteSkinManifest, NoteTexture, UsefulRect } from "./noteSkin.ts";
 
 const SKIN_MAX_BYTES = 64 * 1024 * 1024;
@@ -52,8 +51,6 @@ export interface PhiraInfo {
   holdCompact?: boolean;
   colorPerfect?: number;
   colorGood?: number;
-  /** Redux extension: an event hold texture in the same package. */
-  eventHold?: string;
 }
 
 /** A complete Phira package as bytes plus the normalized Redux view. */
@@ -136,17 +133,27 @@ function parseInfoYaml(text: string): Record<string, unknown> {
   return result;
 }
 
-/** Require a finite number pair such as holdAtlas or hitFx. */
-function pair(value: unknown, fallback: [number, number], key: string): [number, number] {
+/**
+ * Require a finite integer pair such as holdAtlas or hitFx.
+ *
+ * Hold atlas boundaries may be zero: Phira accepts a Hold with only a body and
+ * one cap. Hit-effect grids always need at least one row and column.
+ */
+function pair(
+  value: unknown,
+  fallback: [number, number],
+  key: string,
+  allowZero = false,
+): [number, number] {
   if (value === undefined) {
     return [...fallback] as [number, number];
   }
-  if (
-    !Array.isArray(value) ||
-    value.length !== 2 ||
-    !value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry > 0)
-  ) {
-    throw new Error(`Invalid Phira ${key}; expected two positive integers`);
+  const valid = (entry: unknown): boolean =>
+    typeof entry === "number" && Number.isInteger(entry) && (allowZero ? entry >= 0 : entry > 0);
+  if (!Array.isArray(value) || value.length !== 2 || !value.every(valid)) {
+    throw new Error(
+      `Invalid Phira ${key}; expected two ${allowZero ? "non-negative" : "positive"} integers`,
+    );
   }
   return [value[0] as number, value[1] as number];
 }
@@ -159,8 +166,8 @@ function normalizeInfo(raw: Record<string, unknown>): PhiraInfo {
   const info: PhiraInfo = {
     name: raw.name,
     hitFx: pair(raw.hitFx, DEFAULT_INFO.hitFx, "hitFx"),
-    holdAtlas: pair(raw.holdAtlas, DEFAULT_INFO.holdAtlas, "holdAtlas"),
-    holdAtlasMH: pair(raw.holdAtlasMH, DEFAULT_INFO.holdAtlasMH, "holdAtlasMH"),
+    holdAtlas: pair(raw.holdAtlas, DEFAULT_INFO.holdAtlas, "holdAtlas", true),
+    holdAtlasMH: pair(raw.holdAtlasMH, DEFAULT_INFO.holdAtlasMH, "holdAtlasMH", true),
   };
   for (const key of ["author", "description"] as const) {
     if (typeof raw[key] === "string") {
@@ -183,9 +190,6 @@ function normalizeInfo(raw: Record<string, unknown>): PhiraInfo {
     if (typeof raw[key] === "boolean") {
       info[key] = raw[key];
     }
-  }
-  if (typeof raw.eventHold === "string" && raw.eventHold.trim()) {
-    info.eventHold = raw.eventHold;
   }
   return info;
 }
@@ -315,14 +319,7 @@ function normalizedManifest(
   for (const name of ["hold_head_highlight", "hold_body_highlight"] as const) {
     add(name, "hold_mh.png");
   }
-  const eventPath =
-    info.eventHold && files.has(info.eventHold)
-      ? info.eventHold
-      : files.has("event_hold.png")
-        ? "event_hold.png"
-        : undefined;
-  const eventTexture = eventPath ? image(eventPath) : undefined;
-  const eventFile = eventTexture?.file;
+  const eventTexture = files.has("event_hold.png") ? image("event_hold.png") : undefined;
   const lineTexture = files.has("line.png") ? image("line.png") : undefined;
   const name: PackageName = isPackageName(info.name) ? info.name : "Phira skin";
   return {
@@ -335,7 +332,6 @@ function normalizedManifest(
       holdFile: "hold.png",
       holdFileMH: "hold_mh.png",
       hitFxFile: "hit_fx.png",
-      eventHoldFile: eventFile,
     },
     audio: Object.fromEntries(
       (["tap", "drag", "flick"] as const)
@@ -408,7 +404,6 @@ export function serializePhiraInfo(info: PhiraInfo): string {
     "holdCompact",
     "colorPerfect",
     "colorGood",
-    "eventHold",
   ] as const) {
     const value = info[key];
     if (value === undefined) {
@@ -428,14 +423,4 @@ export function serializePhiraRespack(
   next.set("info.yml", new TextEncoder().encode(serializePhiraInfo(info)));
   validateFiles(next);
   return next;
-}
-
-/** Return the custom event_hold path when it is present and valid. */
-export function eventHoldFile(manifest: NoteSkinManifest): string | undefined {
-  if (!isRecord(manifest.phira)) {
-    return undefined;
-  }
-  return typeof manifest.phira.eventHoldFile === "string"
-    ? manifest.phira.eventHoldFile
-    : undefined;
 }

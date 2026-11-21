@@ -342,7 +342,7 @@ export default {
   "settings.field.particle-effects-enabled.label": "渲染粒子效果",
   "settings.field.particle-effects-enabled.description":
     "播放预览时在每次打击处绘制皮肤打击动画与方形爆发粒子。",
-  "settings.field.note-size.label": "预览音符大小",
+  "settings.field.note-size.label": "预览音符缩放",
   "settings.field.timeline-note-size.label": "时间轴音符大小",
   "settings.field.hit-effect-size.label": "打击效果大小",
   "settings.field.note-opacity.label": "音符不透明度",

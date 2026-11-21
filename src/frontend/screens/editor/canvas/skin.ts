@@ -3,11 +3,13 @@
  * the preview and timeline. Skin selection and alignment rules live in core/media;
  * this class owns browser decoding, tinting, and URL lifetime.
  */
+/* eslint-disable max-lines -- decode, tint, note, and Hold rendering share one skin cache. */
 import { assetUrl } from "../../../../core/platform/assetUrl.ts";
 import { t } from "../../../../i18n/index.ts";
 import {
   alignedTexture,
   alignedTextureBox,
+  highlightWidthScale,
   type UsefulRect,
   NOTE_TEXTURES,
 } from "../../../../core/media/noteSkin.ts";
@@ -19,7 +21,7 @@ import {
 } from "../../../../core/media/noteSkins.ts";
 import { bundledNoteSkinUrl } from "../../../platform/noteSkinBridge.ts";
 import { toBlobPart } from "../../../../core/utils/bytes.ts";
-import { HIT_FRAME_COUNT } from "./hitFrame.ts";
+import { HIT_FRAME_COUNT, HIT_FX_DURATION_DEFAULT } from "./hitFrame.ts";
 import { holdLayout } from "./noteGeometry.ts";
 import { splitPhiraHitFx, splitPhiraHoldAtlas } from "./phiraAtlas.ts";
 import type { NoteColor, TextureDescriptor } from "./noteSpriteGroups.ts";
@@ -61,6 +63,13 @@ function isCustomTint(value: number[] | undefined): value is number[] {
   );
 }
 
+/** Resolve the simultaneous-note width multiplier from the decoded slots. */
+function highlightScaleOf(images: Map<string, HTMLImageElement>): number {
+  const base = images.get("tap");
+  const highlight = images.get("tap_highlight");
+  return highlightWidthScale(base?.naturalWidth ?? 0, highlight?.naturalWidth ?? 0);
+}
+
 /** Browser-side note skin cache and Canvas 2D renderer. */
 export class RpeSkin {
   images: Map<string, HTMLImageElement>;
@@ -69,6 +78,17 @@ export class RpeSkin {
   nextSourceId: number;
   invalidate: () => void;
   particleFrameCount = HIT_FRAME_COUNT;
+  /** Phira's simultaneous-note width multiplier from `click_mh` / `click`. */
+  highlightScale = 1;
+  /** Phira Hold and hit-effect switches resolved from the active package. */
+  holdKeepHead = false;
+  holdRepeat = false;
+  holdCompact = false;
+  hitFxDuration = HIT_FX_DURATION_DEFAULT;
+  hitFxScale = 1;
+  hitFxRotate = false;
+  hitFxTinted = true;
+  hideParticles = false;
   private baseImages = new Map<string, HTMLImageElement>();
   private useful = new Map<string, UsefulRect>();
   private urls: string[] = [];
@@ -103,6 +123,15 @@ export class RpeSkin {
     copy.activeId = this.activeId;
     copy.revision = this.revision;
     copy.particleFrameCount = this.particleFrameCount;
+    copy.highlightScale = this.highlightScale;
+    copy.holdKeepHead = this.holdKeepHead;
+    copy.holdRepeat = this.holdRepeat;
+    copy.holdCompact = this.holdCompact;
+    copy.hitFxDuration = this.hitFxDuration;
+    copy.hitFxScale = this.hitFxScale;
+    copy.hitFxRotate = this.hitFxRotate;
+    copy.hitFxTinted = this.hitFxTinted;
+    copy.hideParticles = this.hideParticles;
     return copy;
   }
 
@@ -221,31 +250,54 @@ export class RpeSkin {
       if (pack.manifest.phira) {
         const atlas = images.get("hold_body");
         const atlasMh = images.get("hold_body_highlight");
-        if (atlas && atlasMh) {
-          const [head, body, end] = await splitPhiraHoldAtlas(
+        /** Replace one atlas slot set with its split head, body, and end. */
+        const applyAtlas = async (
+          picture: HTMLImageElement,
+          heights: readonly [number, number],
+          headSlot: string,
+          bodySlot: string,
+          endSlot: string,
+        ): Promise<void> => {
+          const [head, body, end] = await splitPhiraHoldAtlas(picture, heights);
+          if (head) {
+            images.set(headSlot, head);
+          } else {
+            images.delete(headSlot);
+          }
+          images.set(bodySlot, body);
+          if (end) {
+            images.set(endSlot, end);
+          } else {
+            images.delete(endSlot);
+          }
+        };
+        if (atlas) {
+          await applyAtlas(
             atlas,
             pack.manifest.phira.info.holdAtlas,
-          );
-          const [headMh, bodyMh, endMh] = await splitPhiraHoldAtlas(
-            atlasMh,
-            pack.manifest.phira.info.holdAtlasMH,
-          );
-          images.set("hold_head", head);
-          images.set("hold_body", body);
-          images.set("hold_end", end);
-          images.set("hold_head_highlight", headMh);
-          images.set("hold_body_highlight", bodyMh);
-          images.set("hold_end_highlight", endMh);
-          for (const name of [
             "hold_head",
             "hold_body",
             "hold_end",
+          );
+        }
+        if (atlasMh) {
+          await applyAtlas(
+            atlasMh,
+            pack.manifest.phira.info.holdAtlasMH,
             "hold_head_highlight",
             "hold_body_highlight",
             "hold_end_highlight",
-          ]) {
-            useful.delete(name);
-          }
+          );
+        }
+        for (const name of [
+          "hold_head",
+          "hold_body",
+          "hold_end",
+          "hold_head_highlight",
+          "hold_body_highlight",
+          "hold_end_highlight",
+        ]) {
+          useful.delete(name);
         }
         const hitFx = images.get("phira_hit_fx");
         if (hitFx) {
@@ -262,6 +314,16 @@ export class RpeSkin {
       this.images = images;
       this.useful = useful;
       this.particleFrameCount = [...images.keys()].filter((name) => /^img-\d+$/.test(name)).length;
+      this.highlightScale = highlightScaleOf(images);
+      const phira = pack.manifest.phira?.info;
+      this.holdKeepHead = phira?.holdKeepHead === true;
+      this.holdRepeat = phira?.holdRepeat === true;
+      this.holdCompact = phira?.holdCompact === true;
+      this.hitFxDuration = phira?.hitFxDuration ?? HIT_FX_DURATION_DEFAULT;
+      this.hitFxScale = phira?.hitFxScale ?? 1;
+      this.hitFxRotate = phira?.hitFxRotate === true;
+      this.hitFxTinted = phira?.hitFxTinted !== false;
+      this.hideParticles = phira?.hideParticles === true;
       this.activeId = id;
       this.clearTints();
       // The same RpeSkin instance survives a selection change; the revision is
@@ -396,6 +458,11 @@ export class RpeSkin {
     return source ? { source, useful: this.bounds(name, source) } : null;
   }
 
+  /** Phira's simultaneous-note width multiplier. */
+  highlightWidthScale(): number {
+    return this.highlightScale;
+  }
+
   /** Return an untinted note texture for the preview GPU batch. */
   noteTexture(
     type: number,
@@ -407,11 +474,19 @@ export class RpeSkin {
   }
 
   /** Return the hold body texture, preferring the highlighted variant. */
-  holdBodyTexture(highlight: boolean): { source: HTMLImageElement; useful: UsefulRect } | null {
+  holdBodyTexture(
+    highlight: boolean,
+  ): { source: HTMLImageElement; useful: UsefulRect; repeat?: boolean } | null {
     const name =
       highlight && this.images.has("hold_body_highlight") ? "hold_body_highlight" : "hold_body";
     const source = this.images.get(name);
-    return source ? { source, useful: this.bounds(name, source) } : null;
+    return source
+      ? {
+          source,
+          useful: this.bounds(name, source),
+          ...(this.holdRepeat ? { repeat: true } : {}),
+        }
+      : null;
   }
 
   /** Return the hold head texture, preferring the highlighted variant. */
@@ -674,7 +749,8 @@ export class RpeSkin {
    *
    * `rotation` is the line's angle; without it, the Hold is drawn head-up or
    * flipped when the tail is above the head. `drawBody` false paints the caps
-   * only, which is how a negative-length Hold matches Phira.
+   * only, which is how a negative-length Hold matches Phira. `compact` centres
+   * each cap on its anchor; `repeat` tiles the body at its intrinsic height.
    */
   hold(
     context: CanvasRenderingContext2D,
@@ -688,6 +764,8 @@ export class RpeSkin {
     rotation?: number,
     capScale = 1,
     drawBody = true,
+    compact = false,
+    repeat = false,
   ): boolean {
     const bodyName =
       highlight && this.images.has("hold_body_highlight") ? "hold_body_highlight" : "hold_body";
@@ -727,21 +805,49 @@ export class RpeSkin {
       showHead && headRect ? width * (headRect.height / headRect.width) * capScale : 0;
     const tailLength = endRect ? width * (endRect.height / endRect.width) * capScale : 0;
     const layout = holdLayout(0, 0, 0, span, headLength, tailLength, { x: 0, y: 1 });
+    if (compact) {
+      layout.headCap.y += headLength / 2;
+      layout.tailCap.y -= tailLength / 2;
+    }
     context.save();
     context.translate(horizontal, head);
     context.rotate(axisRotation);
     if (drawBody && body && bodyRect && span > 0) {
-      const bodyCenter = span / 2;
-      const bodyBox = alignedTextureBox(
-        bodyRect,
-        body.naturalWidth || body.width || bodyRect.width,
-        body.naturalHeight || body.height || bodyRect.height,
-        0,
-        bodyCenter,
-        width,
-        span,
-      );
-      this.drawHoldTexture(context, texture(bodyName, highlight), bodyBox, 0, bodyCenter);
+      const bodyTexture = texture(bodyName, highlight);
+      if (repeat) {
+        const tileHeight = width * (bodyRect.height / bodyRect.width);
+        if (tileHeight > 0) {
+          context.save();
+          context.beginPath();
+          context.rect(-width / 2, 0, width, span);
+          context.clip();
+          for (let top = span - tileHeight; top > -tileHeight; top -= tileHeight) {
+            const bodyBox = alignedTextureBox(
+              bodyRect,
+              body.naturalWidth || body.width || bodyRect.width,
+              body.naturalHeight || body.height || bodyRect.height,
+              0,
+              top + tileHeight / 2,
+              width,
+              tileHeight,
+            );
+            this.drawHoldTexture(context, bodyTexture, bodyBox, 0, top + tileHeight / 2);
+          }
+          context.restore();
+        }
+      } else {
+        const bodyCenter = span / 2;
+        const bodyBox = alignedTextureBox(
+          bodyRect,
+          body.naturalWidth || body.width || bodyRect.width,
+          body.naturalHeight || body.height || bodyRect.height,
+          0,
+          bodyCenter,
+          width,
+          span,
+        );
+        this.drawHoldTexture(context, bodyTexture, bodyBox, 0, bodyCenter);
+      }
     }
     if (end && layout.tailCapLength > 0) {
       const rect = this.bounds(endName, end);

@@ -6,7 +6,7 @@ import { PreviewFrameCapture } from "../../../frontend/screens/editor/workspace/
 
 function fakePreview() {
   return {
-    noteSize: 175,
+    noteSize: 1,
     hitEffectScale: 1,
     lineScale: 1.4,
     backgroundEnabled: true,

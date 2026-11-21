@@ -10,12 +10,16 @@ import {
 } from "../../../core/global/chart/chart.ts";
 import { SceneRuntime } from "../../../core/global/chart/runtime/scene.ts";
 import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
-import { previewNoteWidth } from "../../../frontend/screens/editor/workspace/preview/scene/constants.ts";
+import {
+  PHIRA_HIT_FX_WIDTH_RATIO,
+  previewNoteWidth,
+} from "../../../frontend/screens/editor/workspace/preview/scene/constants.ts";
 import { drawHitEffects } from "../../../frontend/screens/editor/workspace/preview/drawing/previewHitEffects.ts";
 
-test("the standard 175 setting matches the Recorder note width", () => {
-  assert.ok(Math.abs(previewNoteWidth(175) - 175.21875) < 1e-9);
-  assert.ok(previewNoteWidth(175) >= 131 * 1.2);
+test("note scale 1 matches Phira's authored note width", () => {
+  assert.ok(Math.abs(previewNoteWidth(1) - 177.862716) < 1e-6);
+  assert.ok(previewNoteWidth(0.8) < previewNoteWidth(1));
+  assert.ok(previewNoteWidth(1.2) > previewNoteWidth(1));
 });
 
 test("hit effects use the post-event position and the configured effect scale", () => {
@@ -54,7 +58,7 @@ test("hit effects use the post-event position and the configured effect scale", 
   };
   const surface = {
     skin: { particleFrameCount: 30, tinted: () => ({}) },
-    noteSize: 175,
+    noteSize: 1,
     hitEffectScale: 1,
     effectsSince: 0,
     defaultParticleColor: [255, 255, 255],
@@ -62,13 +66,69 @@ test("hit effects use the post-event position and the configured effect scale", 
   };
   drawHitEffects(surface, frame);
   const first = pictures.at(-1);
-  const effectWidth = previewNoteWidth(175) * 1.4;
+  const effectWidth = previewNoteWidth(1) * PHIRA_HIT_FX_WIDTH_RATIO;
   assert.equal(first[1] + first[3] / 2, 300);
   assert.equal(first[3], effectWidth);
   surface.hitEffectScale = 2;
   drawHitEffects(surface, frame);
   assert.equal(pictures.at(-1)[3], effectWidth * 2);
   assert.equal(pictures.at(-1)[1] + pictures.at(-1)[3] / 2, 300);
+});
+
+test("skin hit-fx metadata controls the frame, tint, rotation, scale, and particles", () => {
+  const hit = { start: 2, end: 2, note: { type: 1, above: 0 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  const tinted = [];
+  const transforms = [];
+  const bursts = [];
+  const surface = {
+    skin: {
+      particleFrameCount: 4,
+      hitFxDuration: 0.4,
+      hitFxScale: 2,
+      hitFxRotate: true,
+      hitFxTinted: false,
+      hideParticles: true,
+      tinted: (name, color) => {
+        tinted.push({ name, color });
+        return {};
+      },
+    },
+    noteSize: 1,
+    hitEffectScale: 1,
+    effectsSince: 0,
+    defaultParticleColor: [255, 0, 0],
+  };
+  drawHitEffects(surface, {
+    context: {
+      drawImage: () => {},
+      fillRect: (...args) => bursts.push(args),
+      save: () => transforms.push("save"),
+      restore: () => transforms.push("restore"),
+      translate: () => transforms.push("translate"),
+      rotate: (angle) => transforms.push(angle),
+    },
+    scene: {
+      lines: [line],
+      sampler: () => () => ({ x: 0, y: 0, rotation: 0 }),
+    },
+    order: [0],
+    seconds: 2.1,
+    width: 200,
+    height: 200,
+    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
+  });
+
+  assert.equal(tinted[0].name, "img-2");
+  assert.deepEqual(tinted[0].color, [255, 255, 255]);
+  assert.deepEqual(transforms, ["save", "translate", Math.PI, "restore"]);
+  assert.equal(bursts.length, 0);
 });
 
 test("minimal hit-effect surfaces do not retain sampled positions across frames", () => {
@@ -82,7 +142,7 @@ test("minimal hit-effect surfaces do not retain sampled positions across frames"
   const pictures = [];
   const surface = {
     skin: { particleFrameCount: 30, tinted: () => ({}) },
-    noteSize: 175,
+    noteSize: 1,
     hitEffectScale: 1,
     effectsSince: 0,
     defaultParticleColor: [255, 255, 255],
@@ -122,7 +182,7 @@ test("timeline-visible previews do not draw hit effects", () => {
   drawHitEffects(
     {
       skin: { particleFrameCount: 30, tinted: () => ({}) },
-      noteSize: 175,
+      noteSize: 1,
       hitEffectScale: 1,
       effectsSince: 0,
       defaultParticleColor: [255, 255, 255],
@@ -164,7 +224,7 @@ test("hit particle travel scales with the projected chart frame", () => {
   };
   const surface = {
     skin: null,
-    noteSize: 175,
+    noteSize: 1,
     hitEffectScale: 1,
     effectsSince: 0,
     defaultParticleColor: [255, 255, 255],
@@ -213,7 +273,7 @@ test("a hit samples both the line and its parent after simultaneous teleports", 
   drawHitEffects(
     {
       skin: { particleFrameCount: 30, tinted: () => ({}) },
-      noteSize: 175,
+      noteSize: 1,
       hitEffectScale: 1,
       effectsSince: 0,
       defaultParticleColor: [255, 255, 255],

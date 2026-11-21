@@ -5,18 +5,21 @@
  * resource dimensions are converted once when a skin is adopted.
  */
 import { t } from "../../../../i18n/index.ts";
+import { phiraHoldAtlasSlices } from "../../../../core/media/noteSkin.ts";
 
 /** Crop Phira's vertical Hold atlas into the three Redux Hold slots. */
 export async function splitPhiraHoldAtlas(
   source: HTMLImageElement,
   atlas: readonly [number, number],
-): Promise<[HTMLImageElement, HTMLImageElement, HTMLImageElement]> {
-  const [tailHeight, headHeight] = atlas;
-  const bodyHeight = source.naturalHeight - tailHeight - headHeight;
-  if (tailHeight <= 0 || headHeight <= 0 || bodyHeight <= 0) {
+): Promise<[HTMLImageElement | null, HTMLImageElement, HTMLImageElement | null]> {
+  const slices = phiraHoldAtlasSlices(source.naturalHeight, atlas);
+  if (!slices) {
     throw new Error(t("editor.skin.invalidHoldAtlas"));
   }
-  const crop = async (y: number, height: number): Promise<HTMLImageElement> => {
+  const crop = async (y: number, height: number): Promise<HTMLImageElement | null> => {
+    if (height === 0) {
+      return null;
+    }
     const canvas = document.createElement("canvas");
     canvas.width = source.naturalWidth;
     canvas.height = height;
@@ -31,10 +34,13 @@ export async function splitPhiraHoldAtlas(
     return image;
   };
   const [end, body, head] = await Promise.all([
-    crop(0, tailHeight),
-    crop(tailHeight, bodyHeight),
-    crop(tailHeight + bodyHeight, headHeight),
+    crop(slices.tail.y, slices.tail.height),
+    crop(slices.body.y, slices.body.height),
+    crop(slices.head.y, slices.head.height),
   ]);
+  if (!body) {
+    throw new Error(t("editor.skin.invalidHoldAtlas"));
+  }
   return [head, body, end];
 }
 

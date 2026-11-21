@@ -47,7 +47,7 @@ test("RPE settings map to the visible and runtime settings they share", () => {
   const plan = createRpeMigrationPlan(SETTINGS, "");
   const values = Object.fromEntries(plan.settings.map((setting) => [setting.key, setting.value]));
   assert.equal(values["render-fps"], "120");
-  assert.equal(values["note-size"], "175");
+  assert.equal(values["note-size"], "1");
   assert.equal(values["timeline-note-size"], "175");
   assert.equal(values["bar-width"], "2.5");
   assert.equal(values["bar-alpha"], "0.6");
