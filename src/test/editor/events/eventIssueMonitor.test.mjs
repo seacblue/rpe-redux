@@ -193,7 +193,7 @@ test("the publisher collapses a burst into one scan of the newest chart", async 
   const second = chart([line("line-1", "First", [{ moveXEvents: [event(4, 4, "bad")] }])]);
   monitor.request({ chart: first, options: structuralOnly() });
   monitor.request({ chart: second, options: structuralOnly() });
-  await settle(20);
+  await settleUntil(() => monitor.state.get().status === "ready");
   assert.deepEqual(scanned, [first, second]);
   assert.deepEqual(
     monitor.state.get().issues.map((issue) => issue.kind),
@@ -487,6 +487,29 @@ test("the snapshot separates errors from warnings", async () => {
 /** Wait for the publisher's queued work to drain. */
 function settle(milliseconds = 5) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+/**
+ * Wait for a condition instead of a fixed delay.
+ *
+ * A busy Windows runner can stretch a one-millisecond timer far past any small
+ * budget, so a test that waits for the publisher to settle must poll the state
+ * it is waiting for rather than assume the timers finished.
+ */
+function settleUntil(condition, timeoutMilliseconds = 2000) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMilliseconds;
+    const poll = () => {
+      if (condition()) {
+        resolve();
+      } else if (Date.now() > deadline) {
+        reject(new Error(`Condition did not settle within ${timeoutMilliseconds} ms.`));
+      } else {
+        setTimeout(poll, 5);
+      }
+    };
+    poll();
+  });
 }
 
 function createHold(start, end, id) {
