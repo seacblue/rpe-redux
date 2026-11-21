@@ -30,7 +30,7 @@ test("a fresh profile paints the authored density at any window size", () => {
 });
 
 test("the authored sizes are the compact desktop density", () => {
-  assert.equal(LAYOUT_REGIONS.toolbar.basePixels, 90);
+  assert.equal(LAYOUT_REGIONS.toolbar.basePixels, 96);
   assert.equal(LAYOUT_REGIONS.statusbar.basePixels, 36);
   assert.equal(LAYOUT_REGIONS.inspector.basePixels, 400);
   assert.equal(LAYOUT_REGIONS.sidebar.basePixels, 56);
@@ -42,7 +42,7 @@ test("a scale grows the box and its contents together", () => {
   // The contents factor is what the stylesheet multiplies authored tokens by, so
   // the panel never gains empty space around fixed-size contents.
   assert.equal(regionScale(LAYOUT_REGIONS.inspector, 1.5, desktop), 1.5);
-  assert.equal(regionPixels(LAYOUT_REGIONS.toolbar, 0.62, desktop), 55.8);
+  assert.equal(regionPixels(LAYOUT_REGIONS.toolbar, 0.62, desktop), 59.52);
   assert.equal(regionScale(LAYOUT_REGIONS.toolbar, 0.62, desktop), 0.62);
 });
 

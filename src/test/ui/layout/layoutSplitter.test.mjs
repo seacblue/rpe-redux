@@ -30,7 +30,7 @@ test("every adjustable region derives its size from a scale token", () => {
   // denser panel must keep the authored visual size.
   assert.match(
     tokens,
-    /--layout-toolbar-height: calc\(90px \* var\(--layout-toolbar-scale\) \* var\(--layout-density\)\);/u,
+    /--layout-toolbar-height: calc\(96px \* var\(--layout-toolbar-scale\) \* var\(--layout-density\)\);/u,
   );
   assert.match(
     tokens,
@@ -164,6 +164,7 @@ test("a region that grows scales its contents, not just its track", () => {
   const designStyles = read("design/design.less");
   const iconStyles = read("design/components/icon/icon.less");
   const iconSource = read("design/components/icon/Icon.tsx");
+  const iconCatalog = read("design/components/icon/iconAssets.ts");
   const railStyles = read("design/patterns/railItem.less");
   const toolbarGrid = read("frontend/screens/editor/toolbar/toolbarGrid.less");
   const tokens = read("design/styles/tokens.less");
@@ -176,7 +177,14 @@ test("a region that grows scales its contents, not just its track", () => {
     assert.match(designStyles, new RegExp(`${token}: calc\\([^)]*var\\(--ui-scale\\)`, "u"), token);
   }
 
-  // Every adjustable region carries its own scale and re-derives the block.
+  // Every adjustable region carries its own scale and re-derives the block. The
+  // mixin multiplies that scale by the display's density, the same product the
+  // region's own box is sized by, so a denser panel never leaves slack between
+  // fixed-size contents.
+  assert.match(
+    shellStyles,
+    /\.region-content-scale\(@scale\) \{\s*--ui-scale: calc\(var\(@scale, 1\) \* var\(--layout-density, 1\)\);\s*\.content-scale\(\);/u,
+  );
   for (const [selector, variable] of [
     [".shell-body > .redux-toolbar", "--layout-toolbar-scale"],
     [".shell-body > footer", "--layout-statusbar-scale"],
@@ -186,10 +194,23 @@ test("a region that grows scales its contents, not just its track", () => {
     assert.match(
       shellStyles,
       new RegExp(
-        `${selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} \\{\\s*--ui-scale: var\\(${variable}, 1\\);\\s*\\.content-scale\\(\\);`,
+        `${selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} \\{\\s*\\.region-content-scale\\(${variable}\\);`,
         "u",
       ),
       selector,
+    );
+  }
+  // The toolbar frame grows by its scale times the density; the contents must
+  // grow by the same product or the difference shows up as air between the rows.
+  for (const name of [
+    "--layout-toolbar-height",
+    "--layout-statusbar-height",
+    "--layout-sidebar-width",
+  ]) {
+    assert.match(
+      tokens,
+      new RegExp(`${name}: calc\\([^;]*var\\(--layout-density\\)\\)`, "u"),
+      name,
     );
   }
 
@@ -212,4 +233,14 @@ test("a region that grows scales its contents, not just its track", () => {
   // The rail row grows with its larger glyph instead of clipping it.
   assert.match(railStyles, /height: calc\(41px \* var\(--ui-scale, 1\)\);/u);
   assert.match(railStyles, /min-height: calc\(41px \* var\(--ui-scale, 1\)\);/u);
+
+  // A glyph painted in CSS rather than by the icon set used to drift: a fixed px
+  // box does not read `--ui-scale`, so it stayed one size while the icons beside
+  // it grew. The simplified-rendering switch draws the shared PNG mask instead,
+  // which sizes from `--icon-size` times the region's scale like every other
+  // glyph.
+  const noiseToggle = read("frontend/screens/editor/toolbar/NoiseRenderingToggle.tsx");
+  assert.match(noiseToggle, /<Icon name="noiseOff" size=\{13\} \/>/u);
+  assert.doesNotMatch(noiseToggle, /noise-rendering-hatch/u);
+  assert.match(iconCatalog, /noiseOff: "icons\/noise_off.png",/u);
 });

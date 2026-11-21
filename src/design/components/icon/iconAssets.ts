@@ -83,6 +83,7 @@ export const ICON_ASSETS = {
   eye: "icons/eye.png",
   eyeOff: "icons/eye_off.png",
   mute: "icons/mute.png",
+  noiseOff: "icons/noise_off.png",
   loop: "icons/repeat.png",
   list: "icons/menu.png",
   refresh: "icons/refresh.png",

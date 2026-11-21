@@ -6,24 +6,31 @@
 // holds larger fields instead of the same contents with more empty space. The
 // mixin is called on the region itself because a custom property resolves where
 // it is declared.
-.shell-body > .redux-toolbar {
-  --ui-scale: var(--layout-toolbar-scale, 1);
+//
+// The content scale is the same product the stylesheet multiplies the region's box
+// by: the user's scale times the display's density. Leaving density out leaves
+// that share as empty track — on a 125% display the toolbar frame grows by a
+// quarter while its cells stay authored size, and the slack lands between the two
+// rows.
+.region-content-scale(@scale) {
+  --ui-scale: calc(var(@scale, 1) * var(--layout-density, 1));
   .content-scale();
+}
+
+.shell-body > .redux-toolbar {
+  .region-content-scale(--layout-toolbar-scale);
 }
 
 .shell-body > footer {
-  --ui-scale: var(--layout-statusbar-scale, 1);
-  .content-scale();
+  .region-content-scale(--layout-statusbar-scale);
 }
 
 .workbench-inspector > .inspector {
-  --ui-scale: var(--layout-inspector-scale, 1);
-  .content-scale();
+  .region-content-scale(--layout-inspector-scale);
 }
 
 .workbench-body > .sidebar {
-  --ui-scale: var(--layout-sidebar-scale, 1);
-  .content-scale();
+  .region-content-scale(--layout-sidebar-scale);
 }
 
 .redux-app-root .workbench {

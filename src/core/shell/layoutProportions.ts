@@ -52,11 +52,12 @@ export const LAYOUT_REGIONS: Readonly<Record<LayoutRegionId, LayoutRegionDefinit
     defaultScale: 1,
     minScale: 0.62,
     maxScale: 1.8,
-    // Two 36px rows, the frame's vertical padding, the row padding, and the 1px
-    // frame border. The border does not scale with the rest, so the authored
-    // height carries a pixel of slack: at the smallest scale the two rows still
-    // fit inside the frame instead of clipping by a fraction of a pixel.
-    basePixels: 90,
+    // Two 36px rows, the gap between them, the frame's vertical padding, the row
+    // padding, and the 1px frame border. The border does not scale with the rest,
+    // so the authored height carries a pixel of slack: at the smallest scale the
+    // two rows still fit inside the frame instead of clipping by a fraction of a
+    // pixel.
+    basePixels: 96,
   },
   statusbar: {
     key: "layout-statusbar-scale",

@@ -62,8 +62,11 @@
   align-content: stretch;
   height: 100%;
   min-width: 0;
-  // The two rows share the frame's inner height, so this is the only gap between
-  // them. It scales with the region like every other inset in the row.
+  // The two rows are separated by one explicit gap rather than by whatever slack
+  // the frame happens to have left, so the row rhythm stays readable at every
+  // scale. `--layout-toolbar-height` reserves this gap in its authored size. The
+  // padding is the frame's own inset above the first row and below the second.
+  row-gap: var(--space-1-5);
   padding: calc(2px * var(--ui-scale)) 0;
 }
 

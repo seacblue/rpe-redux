@@ -54,6 +54,7 @@ export const ICON_SOURCES = {
   "icons/multi.png": "users",
   "icons/music.png": "music",
   "icons/mute.png": "volume-x",
+  "icons/noise_off.png": "noise-off",
   "icons/palette.png": "palette",
   "icons/panel_right.png": "panel-right",
   "icons/paste.png": "clipboard-paste",
