@@ -1896,9 +1896,14 @@ async function list(params: Record<string, unknown>): Promise<Record<string, unk
           : sort === "created"
             ? (project: LibraryProjectSummary) => project.createdAt
             : (project: LibraryProjectSummary) => project.updatedAt;
-  projects.sort((left, right) => field(left).localeCompare(field(right)) * direction);
+  // The id tie-breaker keeps offset paging stable when the sort field matches.
+  projects.sort((left, right) => {
+    const byField = field(left).localeCompare(field(right));
+    return byField === 0 ? right.id.localeCompare(left.id) : byField * direction;
+  });
   const total = projects.length;
-  const limit = typeof query.limit === "number" && query.limit > 0 ? query.limit : 500;
+  const limit =
+    typeof query.limit === "number" && query.limit > 0 ? Math.min(500, query.limit) : 100;
   const offset = typeof query.offset === "number" && query.offset > 0 ? query.offset : 0;
   return { projects: projects.slice(offset, offset + limit), total };
 }
@@ -2748,25 +2753,84 @@ async function restoreSnapshot(params: Record<string, unknown>): Promise<Record<
   };
 }
 
+interface WorkerRevisionSnapshot {
+  projectId: string;
+  expiresAt: number;
+  revisions: LibraryRevisionSummary[];
+}
+
+const revisionSnapshots = new Map<string, WorkerRevisionSnapshot>();
+const REVISION_SNAPSHOT_TTL_MS = 5 * 60_000;
+const MAX_REVISION_SNAPSHOTS = 32;
+
+/** Drop expired revision snapshots before a page or a new token. */
+function pruneRevisionSnapshots(now = Date.now()): void {
+  for (const [token, snapshot] of revisionSnapshots) {
+    if (now > snapshot.expiresAt) {
+      revisionSnapshots.delete(token);
+    }
+  }
+  while (revisionSnapshots.size >= MAX_REVISION_SNAPSHOTS) {
+    const oldest = revisionSnapshots.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    revisionSnapshots.delete(oldest);
+  }
+}
+
+/** Materialize one ordered revision list for a consistent token. */
+function revisionSnapshotRows(projectId: string): LibraryRevisionSummary[] {
+  return requireDb()
+    .selectObjects(
+      `SELECT id, project_id, label, size, created_at
+         FROM revisions
+        WHERE project_id = ?
+        ORDER BY created_at DESC, rowid DESC`,
+      [projectId],
+    )
+    .map((row) => ({
+      id: String(row.id),
+      projectId: String(row.project_id),
+      label: String(row.label ?? ""),
+      createdAt: String(row.created_at ?? ""),
+      size: Number(row.size ?? 0),
+    }));
+}
+
 function revisions(params: Record<string, unknown>): Record<string, unknown> {
   const id = stringParam(params, "id");
-  const limit = typeof params.limit === "number" && params.limit > 0 ? params.limit : 100;
-  const rows = requireDb().selectObjects(
-    `SELECT id, project_id, label, size, created_at
-       FROM revisions
-      WHERE project_id = ?
-      ORDER BY created_at DESC
-      LIMIT ?`,
-    [id, limit],
-  );
-  const result: LibraryRevisionSummary[] = rows.map((row) => ({
-    id: String(row.id),
-    projectId: String(row.project_id),
-    label: String(row.label ?? ""),
-    createdAt: String(row.created_at ?? ""),
-    size: Number(row.size ?? 0),
-  }));
-  return { revisions: result };
+  const limit =
+    typeof params.limit === "number" && params.limit > 0 ? Math.min(200, params.limit) : 50;
+  const offset = typeof params.offset === "number" && params.offset > 0 ? params.offset : 0;
+  const requestedToken =
+    typeof params.snapshotToken === "string" && params.snapshotToken ? params.snapshotToken : "";
+  pruneRevisionSnapshots();
+  let token = requestedToken;
+  let all: LibraryRevisionSummary[];
+  if (token) {
+    const snapshot = revisionSnapshots.get(token);
+    if (!snapshot || snapshot.projectId !== id || Date.now() > snapshot.expiresAt) {
+      throw new DbError("snapshot_expired", "the revision snapshot expired; reload the list");
+    }
+    all = snapshot.revisions;
+  } else {
+    all = revisionSnapshotRows(id);
+    if (all.length > 10_000) {
+      throw new DbError(
+        "snapshot_too_large",
+        "the project has too many revisions for one snapshot",
+      );
+    }
+    token = crypto.randomUUID();
+    revisionSnapshots.set(token, {
+      projectId: id,
+      expiresAt: Date.now() + REVISION_SNAPSHOT_TTL_MS,
+      revisions: all,
+    });
+  }
+  const result = all.slice(offset, offset + limit);
+  return { revisions: result, total: all.length, snapshotToken: token };
 }
 
 async function createRevision(params: Record<string, unknown>): Promise<Record<string, unknown>> {

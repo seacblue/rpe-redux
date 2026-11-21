@@ -38,6 +38,9 @@ export default {
   "settings.extensions.capability.assets.write.label": "Change library assets",
   "settings.extensions.capability.assets.write.description":
     "Add or remove assets in the open document's library project.",
+  "settings.extensions.capability.assets.read.label": "Read package media",
+  "settings.extensions.capability.assets.read.description":
+    "Read images, GIFs, and animation frames shipped inside this package.",
   "settings.extensions.capability.playback.read.label": "Read playback",
   "settings.extensions.capability.playback.read.description":
     "Read playback state, rendered textures, frames, and metrics.",
@@ -61,7 +64,7 @@ export default {
     "Register sidebar icons, routes, and dividers.",
   "settings.extensions.capability.ui.overlay.label": "Draw overlays",
   "settings.extensions.capability.ui.overlay.description":
-    "Register stage or window overlays above the editor.",
+    "Register stage or window overlays, including draggable interactive surfaces, above the editor.",
   "settings.extensions.capability.ui.toolbar.label": "Add toolbar entries",
   "settings.extensions.capability.ui.toolbar.description":
     "Register toolbar actions, fields, controls, dividers, and spacers.",

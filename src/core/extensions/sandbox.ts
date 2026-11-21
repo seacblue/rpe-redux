@@ -7,9 +7,18 @@
  * message bridge.
  */
 import type { ReduxApi } from "../api/index.ts";
+import type { ApiResult } from "../api/contract.ts";
 import type { SettingsApi } from "../api/settings.ts";
 import type { ExtensionThemeTokens } from "../api/theme.ts";
+import type {
+  ChartReadAllOptions,
+  ChartReadCollection,
+  ChartReadItem,
+  ChartReadPage,
+  ChartReadPageOptions,
+} from "../edit/chart/api.ts";
 import type { Shortcut, ShortcutScope } from "../shortcuts/types.ts";
+import type { AssetInfo } from "./assets.ts";
 import type { ExtensionCapability } from "./capabilities.ts";
 import type {
   PublicHookInvokeOptions,
@@ -26,6 +35,7 @@ import type { ExtensionParameterSchema } from "./parameters.ts";
 import type { ExtensionScriptStep } from "./steps.ts";
 import type { ExtensionI18n, ExtensionText, ExtensionTranslations } from "./i18n.ts";
 import type {
+  ExtensionAssetResolver,
   ExtensionHostContext,
   MaterializedExtensionManifest,
   TrustedExtensionManifest,
@@ -45,11 +55,28 @@ export type AsyncApi<T> = T extends (...args: infer A) => infer R
       ? { readonly [K in keyof T]: AsyncApi<T[K]> }
       : T;
 
+/**
+ * Async chart reads keep their collection literal.
+ *
+ * `AsyncApi` cannot map a generic signature, so the generic read methods are
+ * restated here; otherwise `readAll("timing")` would widen to every item type.
+ */
+type AsyncChartApi<T> = Omit<AsyncApi<T>, "read" | "readAll"> & {
+  read<Collection extends ChartReadCollection>(
+    collection: Collection,
+    options?: ChartReadPageOptions,
+  ): Promise<ApiResult<ChartReadPage<ChartReadItem<Collection>>>>;
+  readAll<Collection extends ChartReadCollection>(
+    collection: Collection,
+    options?: ChartReadAllOptions,
+  ): Promise<ApiResult<readonly ChartReadItem<Collection>[]>>;
+};
+
 /** Host-only handles that never cross the package bridge. */
 type HostOnlyHandle = "settings" | "workspace" | "extensions";
 
-/** The sandbox sees the host handles minus host-only and unsupported operations. */
-type SandboxHostApi = Omit<ReduxApi, HostOnlyHandle | "theme"> & {
+/** The full host handles a sandbox can see, including host-tool-only operations. */
+type FullSandboxHostApi = Omit<ReduxApi, HostOnlyHandle | "theme"> & {
   readonly settings: SettingsApi;
   /**
    * Token reads become promises like every other bridged call. The subscription
@@ -61,16 +88,159 @@ type SandboxHostApi = Omit<ReduxApi, HostOnlyHandle | "theme"> & {
   };
 };
 
-/** The asynchronous `redux` facade available inside the sandbox. */
-export type SandboxReduxApi = AsyncApi<SandboxHostApi>;
-
-/** The cell facade adds the exact grant list to the normal async facade. */
-export type SandboxCodeCellApi = AsyncApi<
-  SandboxHostApi & { capabilities(): readonly ExtensionCapability[] }
+/** Chart reads a package may use; whole-chart and duplicate helpers stay host-only. */
+type PackageChartApi = Omit<
+  ReduxApi["chart"],
+  "snapshot" | "metadata" | "lines" | "notes" | "events"
 >;
+
+/** Transport controls stay; renderer inspection and metric capture stay host-only. */
+type PackagePlaybackApi = Omit<
+  ReduxApi["playback"],
+  | "replay"
+  | "inspect"
+  | "renderAt"
+  | "textures"
+  | "frames"
+  | "startMeasurement"
+  | "stopMeasurement"
+  | "metrics"
+  | "resetDiagnostics"
+>;
+
+/** Contribution registration and lookup stay; host refresh/introspection stay inside. */
+type PackageToolbarApi = Omit<
+  ReduxApi["toolbar"],
+  "refresh" | "available" | "bindings" | "shortcutText"
+>;
+
+/** Named values stay; broad snapshots and cross-package subscriptions do not. */
+type PackageValuesApi = Omit<ReduxApi["values"], "getHandle" | "byId"> & {
+  readonly byId: Omit<ReduxApi["values"]["byId"], "subscribeAll" | "snapshot">;
+};
+
+/** Only the redacted snapshot is published to packages. */
+type PackageDiagnosticsApi = Omit<ReduxApi["diagnostics"], "trace">;
+
+/** Geometry and renderer frames remain host inspection surfaces. */
+type PackageHitTestApi = Omit<ReduxApi["hitTest"], "geometry">;
+type PackagePreviewApi = Omit<ReduxApi["preview"], "frame">;
+
+/** Host navigation stays host-owned; packages may register tutorials only. */
+type PackageHelpApi = Omit<ReduxApi["help"], "openChangelog" | "openGuide">;
+
+/** The narrow package facade; `methodRegistry.ts` lists exactly these paths. */
+type SandboxHostApi = Omit<
+  FullSandboxHostApi,
+  | "chart"
+  | "playback"
+  | "toolbar"
+  | "values"
+  | "diagnostics"
+  | "hitTest"
+  | "preview"
+  | "layout"
+  | "help"
+> & {
+  readonly chart: PackageChartApi;
+  readonly playback: PackagePlaybackApi;
+  readonly toolbar: PackageToolbarApi;
+  readonly values: PackageValuesApi;
+  readonly diagnostics: PackageDiagnosticsApi;
+  readonly hitTest: PackageHitTestApi;
+  readonly preview: PackagePreviewApi;
+  readonly help: PackageHelpApi;
+};
+
+/** The asynchronous `redux` facade available inside the package sandbox. */
+export type SandboxReduxApi = AsyncApi<Omit<SandboxHostApi, "chart">> & {
+  readonly chart: AsyncChartApi<PackageChartApi>;
+};
+
+/** Code cells keep the full host inspection surface plus the explicit grant list. */
+export type SandboxCodeCellApi = AsyncApi<
+  Omit<FullSandboxHostApi, "chart"> & { capabilities(): readonly ExtensionCapability[] }
+> & {
+  readonly chart: AsyncChartApi<FullSandboxHostApi["chart"]>;
+};
 
 /** A CSS declaration set. Custom properties are allowed. */
 export type SandboxStyle = Readonly<Record<string, string | number>>;
+
+/** A coordinate or size in a host-rendered surface. */
+export type SandboxPlacementUnit = "px" | "fraction" | "percent";
+
+/** Where a surface or node sits relative to its containing surface. */
+export interface SandboxPlacement {
+  /** Normalized position, 0-1, independent of `unit`. */
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  /** Unit for `width`/`height`: 0-1 fraction, 0-100 percent, or CSS pixels. */
+  readonly unit?: SandboxPlacementUnit;
+  readonly anchor?:
+    | "top-left"
+    | "top-center"
+    | "top-right"
+    | "center-left"
+    | "center"
+    | "center-right"
+    | "bottom-left"
+    | "bottom-center"
+    | "bottom-right";
+  readonly z?: number;
+}
+
+/** One frame in a host-played animation. */
+export interface SandboxAnimationFrame {
+  readonly src: string;
+  /** Per-frame duration; `fps` is used when omitted. */
+  readonly durationMs?: number;
+}
+
+/** An image, GIF, or host-played frame sequence. */
+export type SandboxMedia =
+  | { readonly kind: "image"; readonly src: string }
+  | {
+      readonly kind: "animation";
+      readonly frames: readonly SandboxAnimationFrame[];
+      readonly fps?: number;
+      readonly loop?: boolean;
+    };
+
+/** An image, GIF, or animation placed inside a surface. */
+export interface SandboxMediaNode {
+  readonly kind: "media";
+  readonly id?: string;
+  readonly media: SandboxMedia;
+  readonly placement?: SandboxPlacement;
+  readonly fit?: "contain" | "cover" | "fill";
+  /** Non-empty alternative text; media is never rendered as a decorative blank. */
+  readonly alt: string;
+  readonly pointerEvents?: "auto" | "none";
+  readonly draggable?: boolean;
+}
+
+/** A first-class button with independent placement. */
+export interface SandboxButtonNode {
+  readonly kind: "button";
+  readonly id: string;
+  readonly label: string;
+  readonly icon?: string;
+  readonly placement?: SandboxPlacement;
+  readonly variant?: "solid" | "outlined" | "ghost" | "danger";
+  readonly disabled?: boolean;
+}
+
+/** A flow or absolutely positioned group of nodes. */
+export interface SandboxGroupNode {
+  readonly kind: "group";
+  readonly id?: string;
+  readonly layout?: "flow" | "absolute";
+  readonly placement?: SandboxPlacement;
+  readonly children: readonly SandboxUiNode[];
+}
 
 /** One host-rendered element in a declarative Extension surface. */
 export interface SandboxElementNode {
@@ -92,15 +262,116 @@ export interface SandboxTextNode {
 }
 
 /** One node in a declarative surface tree. */
-export type SandboxUiNode = SandboxElementNode | SandboxTextNode;
+export type SandboxUiNode =
+  SandboxElementNode | SandboxTextNode | SandboxMediaNode | SandboxButtonNode | SandboxGroupNode;
 
 /** What the host renderer sends back for one interactive node. */
 export interface SandboxUiEvent {
   readonly nodeId: string;
-  readonly kind: "click" | "input" | "change" | "file";
+  readonly kind:
+    | "click"
+    | "input"
+    | "change"
+    | "file"
+    | "pointerdown"
+    | "pointermove"
+    | "pointerup"
+    | "hover-enter"
+    | "hover-leave"
+    | "keydown"
+    | "drag-start"
+    | "drag-move"
+    | "drag-end";
   readonly value?: string;
   readonly checked?: boolean;
   readonly file?: SandboxPickedImage;
+  /** Pointer position normalized to the node's box, 0-1. */
+  readonly x?: number;
+  readonly y?: number;
+  readonly button?: number;
+  readonly key?: string;
+}
+
+/** A file returned by the host picker; bytes cross the bridge as a byte array. */
+export interface SandboxPickedFile {
+  readonly name: string;
+  readonly type: string;
+  readonly bytes: Uint8Array;
+}
+
+/** Options for the host file picker. */
+export interface SandboxPickFileOptions {
+  readonly accept?: readonly string[];
+  readonly multiple?: boolean;
+  readonly maxBytes?: number;
+}
+
+/** Options for the host save dialog. */
+export interface SandboxSaveFileOptions {
+  readonly suggestedName: string;
+  readonly mimeType?: string;
+  readonly bytes?: Uint8Array;
+}
+
+/** The display name the host used for a saved file. */
+export interface SandboxSavedFile {
+  readonly name: string;
+}
+
+/** A surface that remains mounted until the package disposes it. */
+export interface SandboxSurfaceDefinition {
+  readonly id: string;
+  readonly tree: SandboxUiNode;
+  readonly placement?: SandboxPlacement;
+  readonly interactive?: boolean;
+  readonly draggable?: boolean;
+  readonly clickThrough?: boolean;
+  /** Optional surface box; nodes may still place themselves inside it. */
+  readonly width?: number;
+  readonly height?: number;
+  readonly order?: number;
+  onEvent?(event: SandboxUiEvent): void;
+  onClose?(): void;
+}
+
+/** A blocking surface; a button click or dismissal resolves the result. */
+export interface SandboxModalSurfaceDefinition extends SandboxSurfaceDefinition {
+  readonly title?: string;
+  /** `none` makes the tree the whole visual; `host` adds the standard frame. */
+  readonly chrome?: "host" | "none";
+  readonly dismissible?: boolean;
+}
+
+/** A non-modal surface anchored to a point, the pointer, or another surface. */
+export interface SandboxAnchoredSurfaceDefinition extends SandboxSurfaceDefinition {
+  readonly anchor:
+    | { readonly kind: "pointer" }
+    | { readonly kind: "surface"; readonly id: string }
+    | { readonly kind: "node"; readonly nodeId: string }
+    | { readonly kind: "point"; readonly x: number; readonly y: number };
+  readonly side?: "top" | "bottom" | "left" | "right";
+  readonly dismissible?: boolean;
+}
+
+/** The result of a modal surface. */
+export interface SandboxSurfaceResult {
+  readonly action: string | null;
+  readonly values: Readonly<Record<string, string | boolean>>;
+  readonly dismissed: boolean;
+}
+
+/** Base control handle for one rendered panel or overlay tree. */
+export interface SandboxSurfaceHandle {
+  /** Replace the rendered tree; `replace` remounts inputs to reset their values. */
+  update(tree: SandboxUiNode, options?: { replace?: boolean }): void;
+  dispose(): void;
+}
+
+/** A persistent surface also exposes placement, visibility, and close. */
+export interface SandboxPersistentSurfaceHandle extends SandboxSurfaceHandle {
+  setPlacement(placement: SandboxPlacement): void;
+  setVisible(visible: boolean): void;
+  close(): void;
 }
 
 /** An image selected through the host picker and returned as a data URL. */
@@ -108,13 +379,6 @@ export interface SandboxPickedImage {
   readonly name: string;
   readonly type: string;
   readonly dataUrl: string;
-}
-
-/** Control handle for one rendered panel or overlay tree. */
-export interface SandboxSurfaceHandle {
-  /** Replace the rendered tree; `replace` remounts inputs to reset their values. */
-  update(tree: SandboxUiNode, options?: { replace?: boolean }): void;
-  dispose(): void;
 }
 
 /** One panel tree and the event callback routed back to the package. */
@@ -191,6 +455,16 @@ export interface SandboxUiContext {
   };
   /** Host-mediated image picker; the package never receives a file handle. */
   pickImage(options?: { maxBytes?: number }): Promise<SandboxPickedImage | null>;
+  /** Host-mediated file picker; bytes are bounded and copied across the bridge. */
+  pickFile(options?: SandboxPickFileOptions): Promise<readonly SandboxPickedFile[] | null>;
+  /** Host save dialog; returns a display name, never a filesystem path. */
+  saveFile(options: SandboxSaveFileOptions): Promise<SandboxSavedFile | null>;
+  /** Mount a persistent surface with arbitrary media and pointer input. */
+  registerSurface(definition: SandboxSurfaceDefinition): SandboxPersistentSurfaceHandle;
+  /** Open a blocking surface; button ids become the result action. */
+  openModalSurface(definition: SandboxModalSurfaceDefinition): Promise<SandboxSurfaceResult>;
+  /** Open a non-modal surface next to an anchor; returns a live handle. */
+  openAnchoredSurface(definition: SandboxAnchoredSurfaceDefinition): SandboxPersistentSurfaceHandle;
   registerPanel(definition: SandboxPanelDefinition): SandboxSurfaceHandle;
   /** Read the versioned host design-component and slot catalog. */
   designCatalog(): Promise<ExtensionDesignCatalog>;
@@ -204,6 +478,18 @@ export interface SandboxUiContext {
   registerSidebar(definition: SandboxSidebarDefinition): () => void;
 }
 
+/** Package-relative media assets exposed inside the sandbox. */
+export interface SandboxAssets {
+  /** Declared asset names, stable in manifest order. */
+  names(): readonly string[];
+  /** Copy one asset's bytes across the bridge. */
+  read(name: string): Promise<Uint8Array>;
+  /** Resolve one asset to a data URL the opaque sandbox can render. */
+  url(name: string): Promise<string>;
+  /** Read the declared media type, size, and atlas metadata without exposing a path. */
+  info(name: string): Promise<AssetInfo>;
+}
+
 /** The context a sandboxed script receives. */
 export interface SandboxScriptContext {
   readonly manifest: MaterializedExtensionManifest;
@@ -212,6 +498,7 @@ export interface SandboxScriptContext {
   readonly i18n: ExtensionI18n;
   readonly params: Readonly<Record<string, unknown>>;
   readonly ui: SandboxUiContext;
+  readonly assets: SandboxAssets;
 }
 
 /** A script contribution declared inside the sandbox. */
@@ -235,6 +522,7 @@ export interface SandboxExtensionContext {
   readonly api: SandboxReduxApi;
   readonly i18n: ExtensionI18n;
   readonly ui: SandboxUiContext;
+  readonly assets: SandboxAssets;
   readonly events: {
     on(name: string, callback: (payload: unknown) => void, priority?: number): () => void;
   };
@@ -318,6 +606,8 @@ export interface ExtensionSandboxFactoryInput {
   manifest: MaterializedExtensionManifest;
   translations: ExtensionTranslations | undefined;
   source: string;
+  /** Package media reader; absent when the loader has no declared assets. */
+  assets?: ExtensionAssetResolver;
   /** Capability-gated host handles used only by the bridge, never by the package. */
   context: ExtensionHostContext;
   reportFailure(error: unknown, action: string): void;

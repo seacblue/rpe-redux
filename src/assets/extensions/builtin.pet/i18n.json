@@ -1,0 +1,12 @@
+{
+  "en": {
+    "name": "In-app Pet",
+    "bubble": "Hello! I live inside the editor.",
+    "close": "Close"
+  },
+  "zh": {
+    "name": "应用内桌宠",
+    "bubble": "你好！我住在编辑器里。",
+    "close": "关闭"
+  }
+}

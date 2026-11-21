@@ -35,6 +35,9 @@ export default {
   "settings.extensions.capability.assets.write.label": "修改库资源",
   "settings.extensions.capability.assets.write.description":
     "向当前文档所属的谱面库项目添加或移除资源。",
+  "settings.extensions.capability.assets.read.label": "读取包内媒体",
+  "settings.extensions.capability.assets.read.description":
+    "读取随扩展包分发的图片、GIF 和动画帧序列。",
   "settings.extensions.capability.playback.read.label": "读取播放状态",
   "settings.extensions.capability.playback.read.description": "读取播放状态、渲染纹理、帧和指标。",
   "settings.extensions.capability.playback.control.label": "控制播放",
@@ -53,7 +56,8 @@ export default {
   "settings.extensions.capability.ui.sidebar.label": "添加侧栏条目",
   "settings.extensions.capability.ui.sidebar.description": "注册侧栏图标、路由和分隔线。",
   "settings.extensions.capability.ui.overlay.label": "绘制叠加层",
-  "settings.extensions.capability.ui.overlay.description": "在编辑器上方注册舞台或窗口叠加层。",
+  "settings.extensions.capability.ui.overlay.description":
+    "在编辑器上方注册舞台或窗口叠加层，包括可拖拽的交互 surface。",
   "settings.extensions.capability.ui.toolbar.label": "添加工具栏条目",
   "settings.extensions.capability.ui.toolbar.description":
     "注册工具栏动作、字段、控件、分隔线和占位。",

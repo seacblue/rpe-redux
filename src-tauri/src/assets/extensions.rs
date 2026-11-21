@@ -5,11 +5,13 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, HashSet},
     fs,
+    io::Read,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{Duration, Instant},
 };
 use tauri::{ipc::Response, AppHandle, Manager, State};
+use zip::ZipArchive;
 
 type Result<T> = std::result::Result<T, String>;
 /// Largest accepted `manifest.json`, in bytes.
@@ -23,9 +25,9 @@ const MAX_PACKAGES: usize = 256;
 /// Largest accepted file in a managed install, in bytes.
 const MAX_INSTALL_FILE_BYTES: usize = 4 * 1024 * 1024;
 /// Largest accepted managed install, in bytes.
-const MAX_INSTALL_TOTAL_BYTES: usize = 8 * 1024 * 1024;
-/// File count cap for a managed install.
-const MAX_INSTALL_FILES: usize = 8;
+const MAX_INSTALL_TOTAL_BYTES: usize = 24 * 1024 * 1024;
+/// File count cap for a managed install: manifest, i18n, entry, and assets.
+const MAX_INSTALL_FILES: usize = 72;
 /// Heartbeat age after which the main WebView is considered stuck.
 const WATCHDOG_STALE_AFTER: Duration = Duration::from_secs(12);
 
@@ -432,12 +434,74 @@ pub async fn read_extension_entry(app: AppHandle, id: String) -> Result<Response
         .map_err(|error| error.to_string())?
 }
 
-/// One text file in a managed install request.
+/// Read one declared media asset from a package.
+fn read_asset_bytes(app: &AppHandle, id: &str, relative: &str) -> Result<Vec<u8>> {
+    let package = packages(app)?
+        .into_iter()
+        .find(|package| package.public.id == id)
+        .ok_or_else(|| format!("Unknown Extension: {id}"))?;
+    let declared = package
+        .public
+        .manifest
+        .get("assets")
+        .and_then(Value::as_object)
+        .is_some_and(|assets| {
+            assets
+                .values()
+                .any(|value| value.as_str() == Some(relative))
+        });
+    if !declared || !valid_install_file(relative) {
+        return Err(format!("Extension asset is not declared: {relative}"));
+    }
+    let path = package.root.join(relative);
+    let metadata = fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > MAX_INSTALL_FILE_BYTES as u64
+    {
+        return Err(format!("Extension asset changed or is unsafe: {relative}"));
+    }
+    let canonical = path.canonicalize().map_err(|error| error.to_string())?;
+    if !canonical.starts_with(&package.root) {
+        return Err(format!("Extension asset escaped its package: {relative}"));
+    }
+    fs::read(canonical).map_err(|error| error.to_string())
+}
+
+/// Read one declared package media asset as raw IPC bytes.
+#[tauri::command]
+pub async fn read_extension_asset(app: AppHandle, id: String, path: String) -> Result<Response> {
+    tauri::async_runtime::spawn_blocking(move || {
+        read_asset_bytes(&app, &id, &path).map(Response::new)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// One file in a managed install request.
 #[derive(Clone, Deserialize)]
 pub struct ExtensionInstallFile {
     /// Package-relative path.
     pub path: String,
+    /// UTF-8 contents for text files.
+    #[serde(default)]
     pub contents: String,
+    /// Base64 contents for binary assets.
+    #[serde(default)]
+    pub base64: Option<String>,
+}
+
+impl ExtensionInstallFile {
+    /// Decode one install file into its exact bytes.
+    fn bytes(&self) -> Result<Vec<u8>> {
+        if let Some(base64) = &self.base64 {
+            use base64::Engine as _;
+            return base64::engine::general_purpose::STANDARD
+                .decode(base64)
+                .map_err(|error| format!("Extension file is not valid base64: {}", error));
+        }
+        Ok(self.contents.as_bytes().to_vec())
+    }
 }
 
 /// Managed install root under the application data directory.
@@ -457,6 +521,301 @@ fn valid_install_file(path: &str) -> bool {
         && path
             .split('/')
             .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
+/// One file read from a local folder or ZIP for frontend review.
+#[derive(Serialize)]
+pub struct LocalExtensionFile {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base64: Option<String>,
+    pub bytes: usize,
+}
+
+/// The exact files a local package would install.
+#[derive(Serialize)]
+pub struct LocalExtensionPackage {
+    pub files: Vec<LocalExtensionFile>,
+}
+
+/// Encode one local package byte run as text or base64.
+fn local_file(path: &str, bytes: Vec<u8>, text: bool) -> Result<LocalExtensionFile> {
+    let byte_count = bytes.len();
+    if text {
+        let text = String::from_utf8(bytes)
+            .map_err(|error| format!("Extension file is not UTF-8: {path}: {error}"))?;
+        return Ok(LocalExtensionFile {
+            path: path.to_owned(),
+            text: Some(text),
+            base64: None,
+            bytes: byte_count,
+        });
+    }
+    use base64::Engine as _;
+    Ok(LocalExtensionFile {
+        path: path.to_owned(),
+        text: None,
+        base64: Some(base64::engine::general_purpose::STANDARD.encode(bytes)),
+        bytes: byte_count,
+    })
+}
+
+/// Whether one package file crosses the bridge as text.
+fn install_text_file(manifest: &Value, path: &str) -> bool {
+    path == "manifest.json"
+        || manifest.get("entry").and_then(Value::as_str) == Some(path)
+        || manifest.get("i18n").and_then(Value::as_str) == Some(path)
+        || (manifest.get("i18n").is_none() && path == "i18n.json")
+}
+
+/// The declared files every local package must contain.
+fn required_install_paths(manifest: &Value) -> HashSet<String> {
+    let mut required = HashSet::from(["manifest.json".to_owned()]);
+    if let Some(entry) = manifest.get("entry").and_then(Value::as_str) {
+        required.insert(entry.to_owned());
+    }
+    if let Some(i18n) = manifest.get("i18n").and_then(Value::as_str) {
+        required.insert(i18n.to_owned());
+    }
+    if let Some(assets) = manifest.get("assets").and_then(Value::as_object) {
+        for path in assets.values().filter_map(Value::as_str) {
+            required.insert(path.to_owned());
+        }
+    }
+    required
+}
+
+/// Read one regular package file and enforce its byte budget.
+fn read_local_regular(path: &Path, relative: &str, limit: u64) -> Result<Vec<u8>> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!("Extension file is not a regular file: {relative}"));
+    }
+    if metadata.len() > limit {
+        return Err(format!("Extension file is too large: {relative}"));
+    }
+    fs::read(path).map_err(|error| error.to_string())
+}
+
+/// Read a local package folder into the exact allowlisted files.
+fn read_local_folder(folder: &Path) -> Result<LocalExtensionPackage> {
+    let metadata = fs::symlink_metadata(folder).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!(
+            "Extension package is not a regular folder: {}",
+            folder.display()
+        ));
+    }
+    let root = folder.canonicalize().map_err(|error| error.to_string())?;
+    let manifest_path = root.join("manifest.json");
+    let manifest_bytes = read_local_regular(&manifest_path, "manifest.json", MAX_MANIFEST_BYTES)?;
+    let manifest: Value = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("Extension manifest is not valid JSON: {error}"))?;
+    let id = manifest
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Extension manifest has no id".to_owned())?;
+    let allowed = install_allowlist(&manifest, id)?;
+    let required = required_install_paths(&manifest);
+    let mut paths: Vec<_> = allowed.into_iter().collect();
+    paths.sort();
+    if paths.len() > MAX_INSTALL_FILES {
+        return Err("Extension local package contains too many files".to_owned());
+    }
+    let mut files = Vec::with_capacity(paths.len());
+    let mut total = 0usize;
+    for relative in paths {
+        let full = root.join(&relative);
+        let exists = match fs::symlink_metadata(&full) {
+            Ok(_) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.to_string()),
+        };
+        if !exists {
+            if required.contains(&relative) {
+                return Err(format!(
+                    "Extension package is missing declared file: {relative}"
+                ));
+            }
+            continue;
+        }
+        let bytes = read_local_regular(&full, &relative, MAX_INSTALL_FILE_BYTES as u64)?;
+        total = total
+            .checked_add(bytes.len())
+            .ok_or_else(|| "Extension package size overflow".to_owned())?;
+        if total > MAX_INSTALL_TOTAL_BYTES {
+            return Err("Extension local package is too large".to_owned());
+        }
+        files.push(local_file(
+            &relative,
+            bytes,
+            install_text_file(&manifest, &relative),
+        )?);
+    }
+    for required_path in required {
+        if !files.iter().any(|file| file.path == required_path) {
+            return Err(format!(
+                "Extension package is missing declared file: {required_path}"
+            ));
+        }
+    }
+    Ok(LocalExtensionPackage { files })
+}
+
+/// Read a bounded ZIP entry into memory.
+fn read_zip_entry<R: Read + ?Sized>(
+    entry: &mut zip::read::ZipFile<'_, R>,
+    relative: &str,
+) -> Result<Vec<u8>> {
+    if entry.size() > MAX_INSTALL_FILE_BYTES as u64 {
+        return Err(format!("Extension file is too large: {relative}"));
+    }
+    let mut bytes = Vec::new();
+    entry
+        .take(MAX_INSTALL_FILE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    if bytes.len() > MAX_INSTALL_FILE_BYTES {
+        return Err(format!("Extension file is too large: {relative}"));
+    }
+    Ok(bytes)
+}
+
+/// Read a local ZIP package without extracting it to disk.
+fn read_local_zip(path: &Path) -> Result<LocalExtensionPackage> {
+    let file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("Extension ZIP is invalid: {error}"))?;
+    let mut names = Vec::new();
+    let mut seen = HashSet::new();
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("Extension ZIP entry is invalid: {error}"))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry
+            .name()
+            .map_err(|error| format!("Extension ZIP entry name is invalid: {error}"))?
+            .into_owned();
+        if !valid_install_file(&name) {
+            return Err(format!("Extension ZIP entry path is unsafe: {name}"));
+        }
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err(format!("Extension ZIP entry is a symbolic link: {name}"));
+        }
+        let key = name.to_ascii_lowercase();
+        if !seen.insert(key) {
+            return Err(format!("Extension ZIP repeats a file: {name}"));
+        }
+        names.push(name);
+        drop(entry);
+    }
+    let root_manifest = names.iter().find(|name| *name == "manifest.json");
+    let (manifest_name, base) = if let Some(name) = root_manifest {
+        (name.clone(), String::new())
+    } else {
+        let candidates: Vec<_> = names
+            .iter()
+            .filter(|name| name.ends_with("/manifest.json"))
+            .collect();
+        if candidates.len() != 1 {
+            return Err("Extension ZIP must contain exactly one manifest.json".to_owned());
+        }
+        let name = candidates[0].clone();
+        let base = name[..name.len() - "manifest.json".len()].to_owned();
+        (name, base)
+    };
+    let manifest_bytes = {
+        let mut entry = archive
+            .by_name(&manifest_name)
+            .map_err(|error| error.to_string())?;
+        read_zip_entry(&mut entry, "manifest.json")?
+    };
+    if manifest_bytes.len() > MAX_MANIFEST_BYTES as usize {
+        return Err("Extension manifest is too large".to_owned());
+    }
+    let manifest: Value = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("Extension manifest is not valid JSON: {error}"))?;
+    let id = manifest
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Extension manifest has no id".to_owned())?;
+    let allowed = install_allowlist(&manifest, id)?;
+    let required = required_install_paths(&manifest);
+    let mut paths: Vec<_> = allowed.into_iter().collect();
+    paths.sort();
+    if paths.len() > MAX_INSTALL_FILES {
+        return Err("Extension ZIP contains too many declared files".to_owned());
+    }
+    let mut files = Vec::with_capacity(paths.len());
+    let mut total = 0usize;
+    for relative in paths {
+        let archive_name = format!("{base}{relative}");
+        let bytes = match archive.by_name(&archive_name) {
+            Ok(mut entry) => read_zip_entry(&mut entry, &relative)?,
+            Err(zip::result::ZipError::FileNotFound) => {
+                if required.contains(&relative) {
+                    return Err(format!(
+                        "Extension package is missing declared file: {relative}"
+                    ));
+                }
+                continue;
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+        total = total
+            .checked_add(bytes.len())
+            .ok_or_else(|| "Extension package size overflow".to_owned())?;
+        if total > MAX_INSTALL_TOTAL_BYTES {
+            return Err("Extension local package is too large".to_owned());
+        }
+        files.push(local_file(
+            &relative,
+            bytes,
+            install_text_file(&manifest, &relative),
+        )?);
+    }
+    for required_path in required {
+        if !files.iter().any(|file| file.path == required_path) {
+            return Err(format!(
+                "Extension package is missing declared file: {required_path}"
+            ));
+        }
+    }
+    Ok(LocalExtensionPackage { files })
+}
+
+/// Read one user-selected package folder or ZIP for the install review.
+#[tauri::command]
+pub async fn read_extension_package(path: String) -> Result<LocalExtensionPackage> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(path);
+        let metadata = fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
+        if metadata.file_type().is_symlink() {
+            return Err("Extension package path is a symbolic link".to_owned());
+        }
+        if metadata.is_dir() {
+            return read_local_folder(&path);
+        }
+        if metadata.is_file()
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+        {
+            return read_local_zip(&path);
+        }
+        Err("Choose an Extension folder or a .zip package".to_owned())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// The package-relative files a manifest may install.
@@ -488,6 +847,20 @@ fn install_allowlist(manifest: &Value, id: &str) -> Result<HashSet<String>> {
         allowed.insert(i18n.to_owned());
     } else {
         allowed.insert("i18n.json".to_owned());
+    }
+    if let Some(assets) = manifest.get("assets") {
+        let assets = assets
+            .as_object()
+            .ok_or_else(|| "Extension assets must be an object".to_owned())?;
+        for value in assets.values() {
+            let path = value
+                .as_str()
+                .ok_or_else(|| "Extension asset paths must be strings".to_owned())?;
+            if !valid_install_file(path) {
+                return Err(format!("Extension asset path is unsafe: {path}"));
+            }
+            allowed.insert(path.to_owned());
+        }
     }
     Ok(allowed)
 }
@@ -527,6 +900,7 @@ fn stage_package(root: &Path, id: &str, files: &[ExtensionInstallFile]) -> Resul
     }
     let mut seen = HashSet::new();
     let mut total = 0usize;
+    let mut decoded = Vec::with_capacity(files.len());
     for file in files {
         if !valid_install_file(&file.path) {
             return Err(format!("Extension install path is unsafe: {}", file.path));
@@ -540,15 +914,17 @@ fn stage_package(root: &Path, id: &str, files: &[ExtensionInstallFile]) -> Resul
         if !seen.insert(file.path.to_ascii_lowercase()) {
             return Err(format!("Extension install repeats a file: {}", file.path));
         }
-        if file.contents.len() > MAX_INSTALL_FILE_BYTES {
+        let bytes = file.bytes()?;
+        if bytes.len() > MAX_INSTALL_FILE_BYTES {
             return Err(format!(
                 "Extension install file is too large: {}",
                 file.path
             ));
         }
         total = total
-            .checked_add(file.contents.len())
+            .checked_add(bytes.len())
             .ok_or_else(|| "Extension install size overflow".to_owned())?;
+        decoded.push((file.path.clone(), bytes));
     }
     if total > MAX_INSTALL_TOTAL_BYTES {
         return Err("Extension install is too large".to_owned());
@@ -556,12 +932,12 @@ fn stage_package(root: &Path, id: &str, files: &[ExtensionInstallFile]) -> Resul
     let staging = root.join(format!(".install-{id}-{}", uuid::Uuid::new_v4()));
     let write: std::io::Result<()> = (|| {
         fs::create_dir_all(&staging)?;
-        for file in files {
-            let target = staging.join(&file.path);
+        for (path, bytes) in &decoded {
+            let target = staging.join(path);
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::write(&target, &file.contents)?;
+            fs::write(&target, bytes)?;
         }
         Ok(())
     })();
@@ -651,6 +1027,53 @@ mod tests {
     }
 
     #[test]
+    fn local_folder_reader_returns_only_allowlisted_files() {
+        let temporary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!(".extension-local-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temporary);
+        let folder = temporary.join("demo.pet");
+        write_package(
+            &folder,
+            r#"{"id":"demo.pet","version":"1.0.0","engines":{"rpe-redux":">=1.0.0"},"entry":"index.js","i18n":"i18n.json","assets":{"idle":"assets/idle.svg"}}"#,
+            Some((
+                "i18n.json",
+                r#"{"en":{"hello":"hello"},"zh":{"hello":"你好"}}"#,
+            )),
+        );
+        fs::create_dir_all(folder.join("assets")).unwrap();
+        fs::write(
+            folder.join("assets/idle.svg"),
+            "<svg width=\"4\" height=\"2\"/>",
+        )
+        .unwrap();
+        fs::write(folder.join("README.md"), "not part of the package").unwrap();
+        let package = read_local_folder(&folder).unwrap();
+        let paths: Vec<_> = package
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect();
+        assert_eq!(
+            paths,
+            ["assets/idle.svg", "i18n.json", "index.js", "manifest.json"]
+        );
+        assert!(package
+            .files
+            .iter()
+            .find(|file| file.path == "manifest.json")
+            .and_then(|file| file.text.as_deref())
+            .is_some_and(|text| text.contains("demo.pet")));
+        assert!(package
+            .files
+            .iter()
+            .find(|file| file.path == "assets/idle.svg")
+            .and_then(|file| file.base64.as_deref())
+            .is_some());
+        let _ = fs::remove_dir_all(&temporary);
+    }
+
+    #[test]
     fn i18n_loader_probe_covers_declared_and_metadata_only_packages() {
         let temporary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
@@ -734,33 +1157,44 @@ mod tests {
         let manifest = serde_json::json!({
             "id": "demo.install",
             "entry": "index.js",
-            "i18n": "locales/strings.json"
+            "i18n": "locales/strings.json",
+            "assets": { "pet": "assets/pet.svg" }
         })
         .to_string();
         let files = vec![
             ExtensionInstallFile {
                 path: "manifest.json".to_owned(),
                 contents: manifest,
+                base64: None,
             },
             ExtensionInstallFile {
                 path: "index.js".to_owned(),
                 contents: "export default {};".to_owned(),
+                base64: None,
             },
             ExtensionInstallFile {
                 path: "locales/strings.json".to_owned(),
                 contents: r#"{"en":{"name":"Demo","description":"ok"}}"#.to_owned(),
+                base64: None,
+            },
+            ExtensionInstallFile {
+                path: "assets/pet.svg".to_owned(),
+                contents: String::new(),
+                base64: Some("PHN2Zy8+".to_owned()),
             },
         ];
         let staging = stage_package(temporary.path(), "demo.install", &files).unwrap();
         assert!(staging.join("manifest.json").is_file());
         assert!(staging.join("index.js").is_file());
         assert!(staging.join("locales/strings.json").is_file());
+        assert_eq!(fs::read(staging.join("assets/pet.svg")).unwrap(), b"<svg/>");
         fs::remove_dir_all(staging).unwrap();
 
         let mut traversal = files.clone();
         traversal.push(ExtensionInstallFile {
             path: "../outside.js".to_owned(),
             contents: "x".to_owned(),
+            base64: None,
         });
         assert!(stage_package(temporary.path(), "demo.install", &traversal).is_err());
 
@@ -768,6 +1202,7 @@ mod tests {
         undeclared.push(ExtensionInstallFile {
             path: "extra.js".to_owned(),
             contents: "x".to_owned(),
+            base64: None,
         });
         assert!(stage_package(temporary.path(), "demo.install", &undeclared).is_err());
 

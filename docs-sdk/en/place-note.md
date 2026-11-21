@@ -27,7 +27,7 @@ The user sees these capabilities in the install dialog. Do not request `chart.wr
 The chart handle returns detached snapshots. Do not mutate them; use their ids and positions to build a transaction.
 
 ```js
-const lines = await api.chart.lines();
+const lines = await api.chart.readAll("lines");
 if (!lines.ok) {
   ui.notice(lines.error.message, { level: "error" });
   return;
@@ -42,14 +42,14 @@ if (!firstLine) {
 
 Useful reads:
 
-| Call                | Returns                                                 |
-| ------------------- | ------------------------------------------------------- |
-| `chart.state()`     | Current chart fingerprint and generation.               |
-| `chart.lines()`     | Every judge line, with notes and event layers.          |
-| `chart.notes()`     | Every note ref with its owning line id and index.       |
-| `chart.events()`    | Every event ref with its line, track, layer, and index. |
-| `chart.snapshot()`  | One frozen copy of the whole chart.                     |
-| `selection.state()` | Selected note and event refs.                           |
+| Call                      | Returns                                                 |
+| ------------------------- | ------------------------------------------------------- |
+| `chart.state()`           | Current chart fingerprint and generation.               |
+| `chart.readAll("lines")`  | Every judge line, with notes and event layers.          |
+| `chart.readAll("notes")`  | Every note ref with its owning line id and index.       |
+| `chart.readAll("events")` | Every event ref with its line, track, layer, and index. |
+| `chart.note(id)`          | One note ref by id.                                     |
+| `selection.state()`       | Selected note and event refs.                           |
 
 ## Add a note
 
@@ -65,7 +65,7 @@ export default {
       icon: "plus",
 
       async run({ api, ui }) {
-        const lines = await api.chart.lines();
+        const lines = await api.chart.readAll("lines");
         if (!lines.ok) {
           ui.notice(`Read failed: ${lines.error.code}`, { level: "error" });
           return;
@@ -168,7 +168,7 @@ Limits that matter:
 
 ## Update selected notes
 
-`selection.state()` returns references, not note objects. Use `chart.lines()` to resolve each reference to its current note id.
+Each `SelectedNoteRef` carries the stable note `id` alongside its line and array index. Read the note by id, then submit an id-addressed update:
 
 ```js
 async run({ api, ui }) {
@@ -178,17 +178,15 @@ async run({ api, ui }) {
     return;
   }
 
-  const lines = await api.chart.lines();
-  if (!lines.ok) return;
-
-  const updates = selection.value.notes
-    .map((ref) => {
-      const note = lines.value[ref.lineIndex]?.notes?.[ref.index];
-      return note?.id
-        ? { id: note.id, patch: { positionX: -(note.positionX ?? 0) } }
-        : null;
-    })
-    .filter(Boolean);
+  const updates = [];
+  for (const ref of selection.value.notes) {
+    const read = await api.chart.note(ref.id);
+    if (!read.ok || !read.value) continue;
+    updates.push({
+      id: ref.id,
+      patch: { positionX: -(read.value.note.positionX ?? 0) },
+    });
+  }
 
   const result = await api.transaction.apply({
     label: "Mirror selected notes",
@@ -201,11 +199,28 @@ async run({ api, ui }) {
 }
 ```
 
+For a large selection, `chart.readAll("notes")` and an index map avoids one bridge call per note.
+
 This example needs `selection.read` in addition to `chart.read` and `chart.write`.
 
 ## Preview, apply, and result status
 
-Use `preview` when the request is complex or the user should confirm a count before writing. Use `apply` directly for a simple, already-confirmed action.
+Call `apply(request)` once for a normal tool. It plans, validates, and commits atomically, and returns the final status and issues:
+
+```js
+const result = await api.transaction.apply(request);
+if (!result.ok) {
+  ui.notice(result.error.message ?? "The edit failed.", { level: "error" });
+  return;
+}
+if (result.value.status !== "committed") {
+  const issue = result.value.issues[0]?.message ?? result.value.status;
+  ui.notice(`Not committed: ${issue}`, { level: "error" });
+  return;
+}
+```
+
+Use `preview` only when the user should confirm the affected count or see a diff before writing, then apply the returned preview id:
 
 ```js
 const preview = await api.transaction.preview(request);
@@ -237,8 +252,8 @@ When `apply` returns `rejected` or `conflict`, show a concise message rather tha
 
 ## Common mistakes
 
-- **Mutating a read result.** `chart.lines()` and `chart.notes()` return frozen detached copies. Build a transaction from their ids and values.
-- **Inventing ids.** Read ids from `chart.lines()`, `chart.notes()`, or `chart.events()`. Inserts omit `id`.
+- **Mutating a read result.** `chart.readAll("lines")` and `chart.readAll("notes")` return frozen detached copies. Build a transaction from their ids and values.
+- **Inventing ids.** Read ids from `chart.readAll("lines")`, `chart.readAll("notes")`, or `chart.readAll("events")`. Inserts omit `id`.
 - **Using seconds instead of beats.** Note and event times are reduced beat triples, for example `[4, 1, 2]`.
 - **Treating `apply` as fire-and-forget.** It is asynchronous and returns an `ApiResult` around a domain status.
 - **Requesting only `chart.read`.** A transaction needs `chart.write`; reading selected notes also needs `selection.read`.

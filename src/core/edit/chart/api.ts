@@ -7,6 +7,7 @@
  */
 import {
   lineParentIndex,
+  type BpmEntry,
   type Chart,
   type ChartMeta,
   type JudgeLine,
@@ -29,19 +30,22 @@ export type ReadonlyChart<T> = T extends (...args: never[]) => unknown
 
 export type ChartReadSnapshot = ReadonlyChart<Chart>;
 export type ChartReadMeta = ReadonlyChart<ChartMeta>;
+export type ChartReadTiming = ReadonlyChart<BpmEntry>;
 export type ChartReadLine = ReadonlyChart<JudgeLine>;
 export type ChartReadNote = ReadonlyChart<JudgeLineNote>;
 export type ChartReadEvent = ReadonlyChart<JudgeLineEvent>;
 
-export type ChartReadCollection = "metadata" | "lines" | "notes" | "events";
+export type ChartReadCollection = "metadata" | "timing" | "lines" | "notes" | "events";
 
 export type ChartReadItem<Collection extends ChartReadCollection> = Collection extends "metadata"
   ? ChartReadMeta
-  : Collection extends "lines"
-    ? ChartReadLine
-    : Collection extends "notes"
-      ? ChartNoteReadRef
-      : ChartEventReadRef;
+  : Collection extends "timing"
+    ? ChartReadTiming
+    : Collection extends "lines"
+      ? ChartReadLine
+      : Collection extends "notes"
+        ? ChartNoteReadRef
+        : ChartEventReadRef;
 
 export interface ChartReadState {
   readonly chartFingerprint: string | null;
@@ -51,8 +55,15 @@ export interface ChartReadState {
 export interface ChartReadPageOptions {
   readonly chartFingerprint?: string | null;
   readonly cursor?: string | null;
+  /** Zero-based first item of the page. Ignored when `cursor` is supplied. */
+  readonly offset?: number;
+  /** Requested page size, clamped to the host maximum. Defaults to 50. */
   readonly limit?: number;
 }
+
+/** Stable reasons a paged read rejected its request. */
+export type ChartReadPageIssue =
+  "invalid_cursor" | "invalid_limit" | "invalid_offset" | "conflicting_paging";
 
 export type ChartReadPage<T> =
   | {
@@ -60,6 +71,13 @@ export type ChartReadPage<T> =
       readonly chartFingerprint: string | null;
       readonly generation: number;
       readonly items: readonly T[];
+      /** Zero-based item offset of the first returned item. */
+      readonly offset: number;
+      /** Page size the host applied after clamping. */
+      readonly limit: number;
+      /** Collection length at this revision, independent of the page. */
+      readonly total: number;
+      readonly hasMore: boolean;
       readonly nextCursor: string | null;
     }
   | {
@@ -71,7 +89,7 @@ export type ChartReadPage<T> =
     }
   | {
       readonly status: "invalid_request";
-      readonly reason: "invalid_cursor";
+      readonly reason: ChartReadPageIssue;
     };
 
 export interface ChartNoteReadRef {
@@ -96,6 +114,32 @@ export interface ChartResourceReference {
   readonly kind: "song" | "background" | "lineTexture" | "attachUI";
   readonly name: string;
 }
+
+/** Options for reading a whole collection in one call. */
+export interface ChartReadAllOptions {
+  readonly chartFingerprint?: string | null;
+  /** Page size fetched internally; defaults to the host maximum. */
+  readonly limit?: number;
+}
+
+/** The complete collection at one revision, or the reason it could not be read. */
+export type ChartReadAllResult<T> =
+  | {
+      readonly status: "ok";
+      readonly chartFingerprint: string | null;
+      readonly generation: number;
+      readonly items: readonly T[];
+      readonly total: number;
+    }
+  | {
+      readonly status: "stale_read";
+      readonly requestedFingerprint: string | null;
+      readonly currentFingerprint: string | null;
+    }
+  | {
+      readonly status: "invalid_request";
+      readonly reason: ChartReadPageIssue;
+    };
 
 export interface ChartApiHost {
   chart(): Chart | null;
@@ -147,6 +191,7 @@ const detachedSnapshots = new WeakMap<
 >();
 const detachedLineSnapshots = new WeakMap<object, ChartReadLine>();
 const detachedMetaSnapshots = new WeakMap<object, ChartReadMeta>();
+const detachedTimingSnapshots = new WeakMap<object, ChartReadTiming>();
 const detachedNoteSnapshots = new WeakMap<object, ChartReadNote>();
 const detachedEventSnapshots = new WeakMap<object, ChartReadEvent>();
 
@@ -169,6 +214,11 @@ function detachedLine(line: JudgeLine): ChartReadLine {
 /** Return one detached metadata block without copying chart content. */
 function detachedMeta(meta: ChartMeta): ChartReadMeta {
   return detachedValue(meta, detachedMetaSnapshots);
+}
+
+/** Return one detached tempo entry without copying the rest of the map. */
+function detachedTiming(entry: BpmEntry): ChartReadTiming {
+  return detachedValue(entry, detachedTimingSnapshots);
 }
 
 /** Return one detached note without copying its owning line. */
@@ -203,6 +253,8 @@ interface ChartReadCursor {
   readonly chartFingerprint: string | null;
   readonly generation: number;
   readonly offset: number;
+  /** Page size captured when the cursor was issued, so continuation keeps it. */
+  readonly limit?: number;
 }
 
 interface ChartCapture {
@@ -218,6 +270,22 @@ function encodeCursor(cursor: ChartReadCursor): string {
   return `chart-read-v1.${encodeURIComponent(JSON.stringify(cursor))}`;
 }
 
+/** Returns the requested page size, or null when it is not a positive integer. */
+function pageSize(value: number | undefined): number | null {
+  if (value === undefined) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  return Number.isSafeInteger(value) && value > 0 ? Math.min(value, MAX_PAGE_SIZE) : null;
+}
+
+/** Returns the requested start offset, or null when it is not a non-negative integer. */
+function pageOffset(value: number | undefined): number | null {
+  if (value === undefined) {
+    return 0;
+  }
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
 /** Decodes a read cursor; null means malformed or unsupported input. */
 function decodeCursor(value: string): ChartReadCursor | null {
   if (!value.startsWith("chart-read-v1.")) {
@@ -230,11 +298,13 @@ function decodeCursor(value: string): ChartReadCursor | null {
     }
     const cursor = parsed as Partial<ChartReadCursor>;
     if (
-      !["metadata", "lines", "notes", "events"].includes(cursor.collection ?? "") ||
+      !["metadata", "timing", "lines", "notes", "events"].includes(cursor.collection ?? "") ||
       (cursor.chartFingerprint !== null && typeof cursor.chartFingerprint !== "string") ||
       !Number.isSafeInteger(cursor.generation) ||
       !Number.isSafeInteger(cursor.offset) ||
-      (cursor.offset ?? -1) < 0
+      (cursor.offset ?? -1) < 0 ||
+      (cursor.limit !== undefined &&
+        (!Number.isSafeInteger(cursor.limit) || cursor.limit < 1 || cursor.limit > MAX_PAGE_SIZE))
     ) {
       return null;
     }
@@ -242,13 +312,6 @@ function decodeCursor(value: string): ChartReadCursor | null {
   } catch {
     return null;
   }
-}
-
-/** Clamps a requested page size to the supported range. */
-function pageSize(value: number | undefined): number {
-  return Number.isSafeInteger(value) && value !== undefined && value > 0
-    ? Math.min(value, MAX_PAGE_SIZE)
-    : DEFAULT_PAGE_SIZE;
 }
 
 type SourceItem = ChartNoteReadRef | ChartEventReadRef;
@@ -377,49 +440,142 @@ function resourceReferences(snapshot: ChartReadSnapshot): readonly ChartResource
   return Object.freeze(references);
 }
 
-interface ReadPageSlice {
-  readonly items: readonly unknown[];
-  readonly hasMore: boolean;
-}
-
 /** Read one page directly from the live chart without assembling all items. */
 function readPageFromSource(
   source: Chart | null,
   collection: ChartReadCollection,
   offset: number,
   size: number,
-): ReadPageSlice {
+): readonly unknown[] {
   if (!source) {
-    return { items: [], hasMore: false };
+    return Object.freeze([]);
   }
   if (collection === "metadata") {
-    return offset === 0
-      ? { items: [detachedMeta(source.META)], hasMore: false }
-      : { items: [], hasMore: false };
+    return offset === 0 ? Object.freeze([detachedMeta(source.META)]) : Object.freeze([]);
+  }
+  if (collection === "timing") {
+    const page = (source.BPMList ?? []).slice(offset, offset + size).map(detachedTiming);
+    return Object.freeze(page);
   }
   if (collection === "lines") {
-    const lines = source.judgeLineList ?? [];
-    const page = lines.slice(offset, offset + size).map(detachedLine);
-    return { items: page, hasMore: offset + page.length < lines.length };
+    const page = (source.judgeLineList ?? []).slice(offset, offset + size).map(detachedLine);
+    return Object.freeze(page);
   }
 
   const items: SourceItem[] = [];
   let seen = 0;
-  let hasMore = false;
   visitSourceItems(source, collection, (_id, create) => {
     if (seen < offset) {
       seen += 1;
       return false;
     }
     if (items.length >= size) {
-      hasMore = true;
       return true;
     }
     seen += 1;
     items.push(create());
     return false;
   });
-  return { items: Object.freeze(items), hasMore };
+  return Object.freeze(items);
+}
+
+interface CollectionCount {
+  readonly fingerprint: string | null;
+  readonly total: number;
+}
+
+const collectionCounts = new WeakMap<Chart, Partial<Record<"notes" | "events", CollectionCount>>>();
+
+/** Count one item collection without cloning or freezing its payloads. */
+function countSourceItems(source: Chart, collection: "notes" | "events"): number {
+  let total = 0;
+  visitSourceItems(source, collection, () => {
+    total += 1;
+    return false;
+  });
+  return total;
+}
+
+/** Collection length for one revision, cached per chart identity and fingerprint. */
+function collectionTotal(
+  source: Chart | null,
+  collection: ChartReadCollection,
+  fingerprint: string | null,
+): number {
+  if (!source) {
+    return 0;
+  }
+  if (collection === "metadata") {
+    return 1;
+  }
+  if (collection === "timing") {
+    return source.BPMList?.length ?? 0;
+  }
+  if (collection === "lines") {
+    return source.judgeLineList?.length ?? 0;
+  }
+  const cached = collectionCounts.get(source)?.[collection];
+  if (cached && cached.fingerprint === fingerprint) {
+    return cached.total;
+  }
+  const count = Object.freeze({
+    fingerprint,
+    total: countSourceItems(source, collection),
+  });
+  const entry = collectionCounts.get(source) ?? {};
+  entry[collection] = count;
+  collectionCounts.set(source, entry);
+  return count.total;
+}
+
+/**
+ * Read every item of one collection by draining pages internally.
+ *
+ * The caller receives one array and never handles a cursor or page offset.
+ * Pages are fetched through the supplied `read`, so the sandbox can collect
+ * them across the bridge without sending one oversized result.
+ */
+export function readAllChartItems<Collection extends ChartReadCollection>(
+  read: (
+    collection: Collection,
+    options?: ChartReadPageOptions,
+  ) => ChartReadPage<ChartReadItem<Collection>>,
+  collection: Collection,
+  options: ChartReadAllOptions = {},
+): ChartReadAllResult<ChartReadItem<Collection>> {
+  const items: ChartReadItem<Collection>[] = [];
+  const limit = options.limit ?? MAX_PAGE_SIZE;
+  let cursor: string | null = null;
+  for (;;) {
+    const page = read(collection, {
+      ...(cursor ? { cursor } : { offset: 0 }),
+      limit,
+      ...(options.chartFingerprint === undefined
+        ? {}
+        : { chartFingerprint: options.chartFingerprint }),
+    });
+    if (page.status === "invalid_request") {
+      return page;
+    }
+    if (page.status === "stale_read") {
+      return {
+        status: "stale_read",
+        requestedFingerprint: page.requestedFingerprint,
+        currentFingerprint: page.currentFingerprint,
+      };
+    }
+    items.push(...page.items);
+    if (!page.nextCursor) {
+      return {
+        status: "ok",
+        chartFingerprint: page.chartFingerprint,
+        generation: page.generation,
+        items: Object.freeze(items),
+        total: page.total,
+      };
+    }
+    cursor = page.nextCursor;
+  }
 }
 
 /** Builds the detached chart read model over one host. */
@@ -454,12 +610,23 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     collection: Collection,
     options: ChartReadPageOptions = {},
   ): ChartReadPage<ChartReadItem<Collection>> => {
-    const captureResult = capture();
     const cursor = options.cursor ? decodeCursor(options.cursor) : null;
     if (options.cursor && !cursor) {
       return { status: "invalid_request", reason: "invalid_cursor" };
     }
+    if (cursor && options.offset !== undefined) {
+      return { status: "invalid_request", reason: "conflicting_paging" };
+    }
+    const offset = cursor?.offset ?? pageOffset(options.offset);
+    if (offset === null) {
+      return { status: "invalid_request", reason: "invalid_offset" };
+    }
+    const size = pageSize(options.limit ?? cursor?.limit);
+    if (size === null) {
+      return { status: "invalid_request", reason: "invalid_limit" };
+    }
 
+    const captureResult = capture();
     const requestedFingerprint = cursor?.chartFingerprint ?? options.chartFingerprint ?? null;
     const requestedGeneration = cursor?.generation ?? null;
     if (
@@ -489,17 +656,26 @@ export function createChartApi(host: ChartApiHost): ChartApi {
       };
     }
 
-    const offset = cursor?.offset ?? 0;
-    const size = pageSize(options.limit);
-    const page = readPageFromSource(captureResult.source, collection, offset, size);
-    const items = page.items as readonly ChartReadItem<Collection>[];
+    const total = collectionTotal(
+      captureResult.source,
+      collection,
+      captureResult.revision.chartFingerprint,
+    );
+    const items = readPageFromSource(
+      captureResult.source,
+      collection,
+      offset,
+      size,
+    ) as readonly ChartReadItem<Collection>[];
     const nextOffset = offset + items.length;
-    const nextCursor = page.hasMore
+    const hasMore = nextOffset < total;
+    const nextCursor = hasMore
       ? encodeCursor({
           collection,
           chartFingerprint: captureResult.revision.chartFingerprint,
           generation: captureResult.revision.generation,
           offset: nextOffset,
+          limit: size,
         })
       : null;
     return {
@@ -507,6 +683,10 @@ export function createChartApi(host: ChartApiHost): ChartApi {
       chartFingerprint: captureResult.revision.chartFingerprint,
       generation: captureResult.revision.generation,
       items: Object.freeze([...items]),
+      offset,
+      limit: size,
+      total,
+      hasMore,
       nextCursor,
     } as ChartReadPage<ChartReadItem<Collection>>;
   };
@@ -541,8 +721,12 @@ export function createChartApi(host: ChartApiHost): ChartApi {
       if (!source) {
         return Object.freeze([]);
       }
-      const page = readPageFromSource(source, "notes", 0, Number.MAX_SAFE_INTEGER);
-      return page.items as readonly ChartNoteReadRef[];
+      return readPageFromSource(
+        source,
+        "notes",
+        0,
+        Number.MAX_SAFE_INTEGER,
+      ) as readonly ChartNoteReadRef[];
     },
     note(id: ChartObjectId): ChartNoteReadRef | null {
       const source = capture().source;
@@ -561,8 +745,12 @@ export function createChartApi(host: ChartApiHost): ChartApi {
       if (!source) {
         return Object.freeze([]);
       }
-      const page = readPageFromSource(source, "events", 0, Number.MAX_SAFE_INTEGER);
-      return page.items as readonly ChartEventReadRef[];
+      return readPageFromSource(
+        source,
+        "events",
+        0,
+        Number.MAX_SAFE_INTEGER,
+      ) as readonly ChartEventReadRef[];
     },
     event(id: ChartObjectId): ChartEventReadRef | null {
       const source = capture().source;

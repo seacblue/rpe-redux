@@ -41,16 +41,10 @@ function bytesOf(value: string | ArrayLike<number> | undefined): Uint8Array {
   return value instanceof Uint8Array ? value : new Uint8Array(value);
 }
 
-/** Computes the review fingerprint from package bytes, never from the extension id. */
-export async function extensionFingerprint(
-  manifest: string,
-  translations: string | undefined,
-  entry: string | ArrayLike<number> | undefined,
-): Promise<string> {
-  const parts = [bytesOf(manifest), bytesOf(translations), bytesOf(entry)];
-  // Length-prefix every part. Concatenating three variable-length byte runs
-  // without boundaries makes the digest ambiguous even before a package grows
-  // additional files.
+/** Hash one length-prefixed sequence of byte parts. */
+async function hashParts(parts: readonly Uint8Array[]): Promise<string> {
+  // Length-prefix every part. Concatenating variable-length byte runs without
+  // boundaries makes the digest ambiguous even before a package grows files.
   const header = new Uint8Array(parts.length * 4);
   const headerView = new DataView(header.buffer);
   let total = header.byteLength;
@@ -67,6 +61,32 @@ export async function extensionFingerprint(
   }
   const digest = await globalThis.crypto.subtle.digest("SHA-256", input);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Computes the review fingerprint from package bytes, never from the extension id. */
+export async function extensionFingerprint(
+  manifest: string,
+  translations: string | undefined,
+  entry: string | ArrayLike<number> | undefined,
+  assetsDigest?: string,
+): Promise<string> {
+  return hashParts([
+    bytesOf(manifest),
+    bytesOf(translations),
+    bytesOf(entry),
+    ...(assetsDigest === undefined ? [] : [bytesOf(assetsDigest)]),
+  ]);
+}
+
+/** Hash every declared asset name, path, and byte run in a stable order. */
+export async function assetDigest(
+  assets: readonly { readonly name: string; readonly path?: string; readonly bytes: Uint8Array }[],
+): Promise<string> {
+  const parts: Uint8Array[] = [];
+  for (const asset of [...assets].sort((left, right) => left.name.localeCompare(right.name))) {
+    parts.push(bytesOf(asset.name), bytesOf(asset.path ?? ""), asset.bytes);
+  }
+  return hashParts(parts);
 }
 
 /**
@@ -97,10 +117,12 @@ export async function builtinTrustFingerprint(
   manifest: unknown,
   translations: unknown,
   entry: string | undefined,
+  assetsDigest?: string,
 ): Promise<string> {
   return extensionFingerprint(
     stableJson(manifest),
     translations === undefined ? undefined : stableJson(translations),
     entry,
+    assetsDigest,
   );
 }

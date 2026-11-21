@@ -403,6 +403,7 @@ test("event subscriptions accept only the host allowlist", async () => {
       "document:restored",
       "document:saved",
       "document:closed",
+      "chart:changed",
       "selection:after-paste",
     ]);
     assert.deepEqual(

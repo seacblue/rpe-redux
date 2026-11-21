@@ -1,0 +1,16 @@
+{
+  "kind": "script",
+  "id": "builtin.pet",
+  "name": "In-app Pet",
+  "version": "1.0.0",
+  "engines": { "rpe-redux": 1 },
+  "entry": "index.js",
+  "i18n": "i18n.json",
+  "assets": {
+    "idle": "assets/idle.svg",
+    "blink": "assets/blink.svg",
+    "wave": "assets/wave.svg",
+    "sleep": "assets/sleep.svg"
+  },
+  "capabilities": ["assets.read", "ui.overlay"]
+}

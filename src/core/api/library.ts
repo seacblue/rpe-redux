@@ -23,10 +23,16 @@
  */
 import { t } from "../../i18n/index.ts";
 import { editorProjectId } from "../edit/state/publishedValues.ts";
-import type { LibraryProjectScope, LocalLibrary } from "../global/library/client.ts";
+import type {
+  LibraryProjectScope,
+  LibraryRevisionSummary,
+  LocalLibrary,
+} from "../global/library/client.ts";
 import { localService, localServiceStatus } from "../global/library/service.ts";
 import { apiCallAsync, availabilityFor, unavailableResult } from "./support.ts";
 import type { ApiAvailability, ApiResult } from "./contract.ts";
+
+export type { LibraryRevisionPage } from "../global/library/client.ts";
 
 /** Run one library operation against the connected local service. */
 async function libraryCall<T>(
@@ -37,6 +43,46 @@ async function libraryCall<T>(
     return unavailableResult<T>(t("system.library.notRunning"));
   }
   return apiCallAsync(async () => run(service.library));
+}
+
+/**
+ * Drain one paged library collection into a stable, id-deduplicated array.
+ *
+ * The catalog can change between pages; duplicate ids are dropped, and a
+ * shrinking total ends the walk. `revisionsAll` supplies the server's snapshot
+ * token to every later page, so this helper is reserved for collections that
+ * have no token contract.
+ */
+export async function collectLibraryPages<T>(
+  getPage: (
+    offset: number,
+    limit: number,
+  ) => Promise<{ readonly items: readonly T[]; readonly total: number }>,
+  identify: (item: T) => string,
+  pageSize: number,
+): Promise<readonly T[]> {
+  const limit = Math.max(1, Math.min(pageSize, 500));
+  const items: T[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+  for (let page = 0; page < 10_000; page += 1) {
+    const result = await getPage(offset, limit);
+    if (result.items.length === 0) {
+      break;
+    }
+    for (const item of result.items) {
+      const key = identify(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push(item);
+      }
+    }
+    offset += result.items.length;
+    if (offset >= result.total) {
+      break;
+    }
+  }
+  return Object.freeze(items);
 }
 
 /** One project's library handle; every method omits the project id. */
@@ -76,6 +122,19 @@ export interface LibraryProjectHandle {
     query?: Parameters<LocalLibrary["revisions"]>[1],
     options?: Parameters<LocalLibrary["revisions"]>[2],
   ): Promise<ApiResult<Awaited<ReturnType<LocalLibrary["revisions"]>>>>;
+  revisionsAll(
+    query?: Omit<
+      NonNullable<Parameters<LocalLibrary["revisions"]>[1]>,
+      "limit" | "offset" | "snapshotToken"
+    >,
+    options?: Parameters<LocalLibrary["revisions"]>[2],
+  ): Promise<
+    ApiResult<{
+      readonly revisions: readonly LibraryRevisionSummary[];
+      total: number;
+      readonly snapshotToken: string;
+    }>
+  >;
   createRevision(
     input: Parameters<LocalLibrary["createRevision"]>[1],
     options?: Parameters<LocalLibrary["createRevision"]>[2],
@@ -108,6 +167,32 @@ export function libraryProject(id: string): LibraryProjectHandle {
     addAsset: (name, bytes, options) => call((project) => project.addAsset(name, bytes, options)),
     removeAsset: (name, options) => call((project) => project.removeAsset(name, options)),
     revisions: (query, options) => call((project) => project.revisions(query, options)),
+    revisionsAll: (query, options) =>
+      call(async (project) => {
+        let snapshotToken: string | undefined;
+        const revisions = await collectLibraryPages(
+          async (offset, limit) => {
+            const page = await project.revisions(
+              {
+                ...query,
+                offset,
+                limit,
+                ...(snapshotToken === undefined ? {} : { snapshotToken }),
+              },
+              options,
+            );
+            snapshotToken ??= page.snapshotToken;
+            return { items: page.revisions, total: page.total };
+          },
+          (revision) => revision.id,
+          200,
+        );
+        return {
+          revisions,
+          total: revisions.length,
+          snapshotToken: snapshotToken ?? "",
+        };
+      }),
     createRevision: (input, options) => call((project) => project.createRevision(input, options)),
     revision: (revisionId, options) => call((project) => project.revision(revisionId, options)),
     removeRevision: (revisionId, options) =>

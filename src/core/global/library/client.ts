@@ -111,6 +111,14 @@ export interface LibraryRevision extends LibraryRevisionSummary {
   chart: unknown;
 }
 
+/** One consistent page of revision summaries. */
+export interface LibraryRevisionPage {
+  revisions: LibraryRevisionSummary[];
+  total: number;
+  /** Pin this token on later pages to keep reading the same snapshot. */
+  snapshotToken: string;
+}
+
 /** Why a chart snapshot exists. */
 export type LibrarySnapshotReason = "auto" | "restore" | "manual";
 
@@ -394,9 +402,9 @@ export interface LibraryProjectScope {
   ): Promise<{ removed: boolean; project: LibraryProjectSummary }>;
   commit(input: LibraryCommitInput, options?: RequestOptions): Promise<LibraryCommitResult>;
   revisions(
-    query?: { limit?: number },
+    query?: { limit?: number; offset?: number; snapshotToken?: string },
     options?: RequestOptions,
-  ): Promise<{ revisions: LibraryRevisionSummary[] }>;
+  ): Promise<LibraryRevisionPage>;
   createRevision(
     input: { chart: unknown; label: string },
     options?: RequestOptions,
@@ -1031,13 +1039,17 @@ export class LocalLibrary {
     );
   }
 
-  /** List stored revisions, newest first. */
+  /** List one page of stored revisions, newest first. */
   revisions(
     id: string,
-    { limit }: { limit?: number } = {},
+    {
+      limit,
+      offset,
+      snapshotToken,
+    }: { limit?: number; offset?: number; snapshotToken?: string } = {},
     options: RequestOptions = {},
-  ): Promise<{ revisions: LibraryRevisionSummary[] }> {
-    const search$ = query({ limit });
+  ): Promise<LibraryRevisionPage> {
+    const search$ = query({ limit, offset, snapshotToken });
     return request(
       this.origin,
       `/api/projects/${encodeURIComponent(id)}/revisions${search$ ? `?${search$}` : ""}`,

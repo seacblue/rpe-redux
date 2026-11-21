@@ -409,7 +409,14 @@ mod tests {
         }
         let mut archive = ZipArchive::new(Cursor::new(output.into_inner())).unwrap();
         let names: Vec<String> = (0..archive.len())
-            .map(|index| archive.by_index(index).unwrap().name().to_owned())
+            .map(|index| {
+                archive
+                    .by_index(index)
+                    .unwrap()
+                    .name()
+                    .unwrap()
+                    .into_owned()
+            })
             .collect();
         assert!(names.contains(&"renderer.json".to_owned()));
         assert!(names.contains(&"frame.json".to_owned()));

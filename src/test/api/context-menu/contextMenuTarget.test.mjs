@@ -17,8 +17,25 @@ import {
 
 const chart = {
   judgeLineList: [
-    { notes: [{ id: "note-a" }, { id: "note-b" }, {}] },
-    { notes: [{ id: "note-c" }] },
+    {
+      notes: [{ id: "note-a" }, { id: "note-b" }, {}],
+      eventLayers: [
+        {},
+        {},
+        {
+          moveXEvents: [
+            { id: "event-move-0" },
+            { id: "event-move-1" },
+            { id: "event-move-2" },
+            { id: "event-move-3" },
+          ],
+        },
+      ],
+    },
+    {
+      notes: [{ id: "note-c" }],
+      eventLayers: [{}, {}, { alphaEvents: [{ id: "event-alpha-0" }] }],
+    },
   ],
 };
 
@@ -130,6 +147,7 @@ test("a plain right press in multi-line mode drops other panels", () => {
 
 test("event keys become typed references and one target", () => {
   const refs = eventRefsFromSelection(
+    chart,
     [
       { lineIndex: 0, key: "moveXEvents:3" },
       { lineIndex: 1, key: "alphaEvents:0" },
@@ -138,8 +156,8 @@ test("event keys become typed references and one target", () => {
     2,
   );
   assert.deepEqual(refs, [
-    { lineIndex: 0, eventType: "moveXEvents", layer: 2, index: 3 },
-    { lineIndex: 1, eventType: "alphaEvents", layer: 2, index: 0 },
+    { id: "event-move-3", lineIndex: 0, eventType: "moveXEvents", layer: 2, index: 3 },
+    { id: "event-alpha-0", lineIndex: 1, eventType: "alphaEvents", layer: 2, index: 0 },
   ]);
   assert.deepEqual(eventTargetFromRefs(refs, 4, 1.25), {
     surface: "events",

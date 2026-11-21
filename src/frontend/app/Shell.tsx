@@ -20,6 +20,7 @@ import {
   subscribeToEditorVisibility,
 } from "../../core/edit/state/visibility.ts";
 import { PerformanceHud } from "../overlays/performance/PerformanceHud.tsx";
+import { DevDetector } from "../overlays/devDetector/DevDetector.tsx";
 import { InputOverlays } from "../screens/editor/workspace/stage/inputOverlays/InputOverlays.tsx";
 import { CoverBackdrop } from "./CoverBackdrop.tsx";
 import { Splitter } from "../../design/components/splitter/Splitter.tsx";
@@ -115,6 +116,7 @@ export const Shell = memo(function Shell() {
       <TimelineMenu />
       <InputOverlays />
       <PerformanceHud />
+      <DevDetector />
       <LayoutEditor />
     </>
   );

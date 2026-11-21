@@ -10,6 +10,8 @@
  */
 import type { LibraryProjectHandle } from "../api/library.ts";
 import type { ReduxApi } from "../api/index.ts";
+import { createRecipeHandle } from "../api/recipe.ts";
+import { subscribePlaybackForOwner } from "../api/playback.ts";
 import type { PublicValueDefinition } from "../api/values.ts";
 import { createSettingsApi } from "../api/settings.ts";
 import { createHelpApi } from "../api/help.ts";
@@ -194,6 +196,13 @@ export function projectExtensionEventPayload(
       },
     };
   }
+  if (name === "chart:changed") {
+    return {
+      label: record.label,
+      reason: record.reason,
+      ...(chart ? { chartFingerprint: record.chartFingerprint } : {}),
+    };
+  }
   if (name === "extension:callback-error") {
     return payload;
   }
@@ -376,6 +385,10 @@ function libraryProjectView(
       check("library.read", "library.revisions");
       return project.revisions(query, requestOptions);
     },
+    revisionsAll: (query, requestOptions) => {
+      check("library.read", "library.revisionsAll");
+      return project.revisionsAll(query, requestOptions);
+    },
     createRevision: (input, requestOptions) => {
       check("library.write", "library.createRevision");
       return project.createRevision(input, requestOptions);
@@ -390,6 +403,34 @@ function libraryProjectView(
     },
   };
   return Object.freeze(view);
+}
+
+/** Recipe planning keeps its own read/write/selection checks and owner. */
+function recipeView(granted: Granted, owner?: string): ReduxApi["recipe"] {
+  const recipe = createRecipeHandle(owner ?? "host");
+  const check = (capability: ExtensionCapability, action: string): void => {
+    require(granted, capability, action, owner);
+  };
+  return Object.freeze({
+    availability() {
+      check("chart.read", "recipe.availability");
+      return recipe.availability();
+    },
+    plan(request: Parameters<ReduxApi["recipe"]["plan"]>[0]) {
+      check("chart.read", "recipe.plan");
+      check("selection.read", "recipe.plan");
+      check("chart.write", "recipe.plan");
+      return recipe.plan(request);
+    },
+    apply(planId: string) {
+      check("chart.write", "recipe.apply");
+      return recipe.apply(planId);
+    },
+    cancel(planId: string) {
+      check("chart.write", "recipe.cancel");
+      return recipe.cancel(planId);
+    },
+  });
 }
 
 /** Library handle limited to the project behind the open document. */
@@ -951,6 +992,10 @@ function playbackView(api: ReduxApi, granted: Granted, owner?: string): ReduxApi
   return {
     availability: read("playback.availability", api.playback.availability),
     state: read("playback.state", api.playback.state),
+    subscribe: (listener, options) => {
+      require(granted, "playback.read", "playback.subscribe", owner);
+      return subscribePlaybackForOwner(owner ?? "host", listener, options);
+    },
     play: control("playback.play", api.playback.play),
     pause: control("playback.pause", api.playback.pause),
     stop: control("playback.stop", api.playback.stop),
@@ -1059,6 +1104,7 @@ export function gateExtensionApi(
 
   allow("chart", "chart.read", api.chart);
   allow("transaction", "chart.write", api.transaction);
+  allow("recipe", "chart.write", recipeView(granted, owner));
   if (granted.has("selection.read")) {
     allow("selection", "selection.read", selectionView(api.selection, granted, owner));
   } else {
@@ -1089,7 +1135,6 @@ export function gateExtensionApi(
   allow("diagnostics", "diagnostics", api.diagnostics);
   allow("hitTest", ["hitTest.read", "preview.read"], hitTestView(api, granted, owner));
   allow("preview", "preview.read", api.preview);
-  allow("layout", "preview.read", api.layout);
   allow("theme", "styles", themeView(api, granted, owner, options));
   allow("help", "ui.guide", owner ? createHelpApi(owner) : api.help);
   // Workspace drawer navigation and Extension management stay host-only: they

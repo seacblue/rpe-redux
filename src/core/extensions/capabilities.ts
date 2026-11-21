@@ -19,6 +19,7 @@ export const EXTENSION_CAPABILITIES = Object.freeze([
   "library.read",
   "library.write",
   "assets.write",
+  "assets.read",
   "playback.read",
   "playback.control",
   "ui.notice",

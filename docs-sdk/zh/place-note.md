@@ -27,7 +27,7 @@
 `chart` 返回的是 detached 快照，不能直接改。读取 id、索引和位置，用它们组装事务。
 
 ```js
-const lines = await api.chart.lines();
+const lines = await api.chart.readAll("lines");
 if (!lines.ok) {
   ui.notice(lines.error.message, { level: "error" });
   return;
@@ -42,14 +42,14 @@ if (!firstLine) {
 
 常用读取：
 
-| 调用                | 返回                                     |
-| ------------------- | ---------------------------------------- |
-| `chart.state()`     | 当前谱面指纹和修订代数。                 |
-| `chart.lines()`     | 所有判定线，以及每条线的音符和事件层。   |
-| `chart.notes()`     | 所有音符引用，带所属判定线 id 和索引。   |
-| `chart.events()`    | 所有事件引用，带判定线、轨道、层和索引。 |
-| `chart.snapshot()`  | 整张谱面的冻结副本。                     |
-| `selection.state()` | 当前选中的音符和事件引用。               |
+| 调用                      | 返回                                     |
+| ------------------------- | ---------------------------------------- |
+| `chart.state()`           | 当前谱面指纹和修订代数。                 |
+| `chart.readAll("lines")`  | 所有判定线，以及每条线的音符和事件层。   |
+| `chart.readAll("notes")`  | 所有音符引用，带所属判定线 id 和索引。   |
+| `chart.readAll("events")` | 所有事件引用，带判定线、轨道、层和索引。 |
+| `chart.note(id)`          | 按 id 读取一个音符引用。                 |
+| `selection.state()`       | 当前选中的音符和事件引用。               |
 
 ## 放一个音符
 
@@ -65,7 +65,7 @@ export default {
       icon: "plus",
 
       async run({ api, ui }) {
-        const lines = await api.chart.lines();
+        const lines = await api.chart.readAll("lines");
         if (!lines.ok) {
           ui.notice(`读取失败：${lines.error.code}`, { level: "error" });
           return;
@@ -168,7 +168,7 @@ export default {
 
 ## 更新选中音符
 
-`selection.state()` 返回的是引用，不是音符对象。用 `chart.lines()` 把引用解析成当前音符 id。
+每个 `SelectedNoteRef` 除了行号和数组下标，还带有稳定的音符 `id`。按 id 读取音符，再提交按 id 定位的更新：
 
 ```js
 async run({ api, ui }) {
@@ -178,17 +178,15 @@ async run({ api, ui }) {
     return;
   }
 
-  const lines = await api.chart.lines();
-  if (!lines.ok) return;
-
-  const updates = selection.value.notes
-    .map((ref) => {
-      const note = lines.value[ref.lineIndex]?.notes?.[ref.index];
-      return note?.id
-        ? { id: note.id, patch: { positionX: -(note.positionX ?? 0) } }
-        : null;
-    })
-    .filter(Boolean);
+  const updates = [];
+  for (const ref of selection.value.notes) {
+    const read = await api.chart.note(ref.id);
+    if (!read.ok || !read.value) continue;
+    updates.push({
+      id: ref.id,
+      patch: { positionX: -(read.value.note.positionX ?? 0) },
+    });
+  }
 
   const result = await api.transaction.apply({
     label: "镜像选中音符",
@@ -201,11 +199,28 @@ async run({ api, ui }) {
 }
 ```
 
+选中数量很大时，用 `chart.readAll("notes")` 建一次索引表，避免每个音符一次桥接调用。
+
 这个例子除了 `chart.read` 和 `chart.write`，还需要 `selection.read`。
 
 ## 预览、应用和结果状态
 
-请求复杂、或需要先让用户确认影响范围时，用 `preview`；简单且已经确认的动作可以直接 `apply`。
+普通工具只需要调用一次 `apply(request)`。它会完成计划、校验和原子提交，并返回最终状态与问题列表：
+
+```js
+const result = await api.transaction.apply(request);
+if (!result.ok) {
+  ui.notice(result.error.message ?? "提交失败。", { level: "error" });
+  return;
+}
+if (result.value.status !== "committed") {
+  const issue = result.value.issues[0]?.message ?? result.value.status;
+  ui.notice(`未提交：${issue}`, { level: "error" });
+  return;
+}
+```
+
+只有需要让用户先确认影响数量或查看差异时，才用 `preview`，然后再应用返回的 preview id：
 
 ```js
 const preview = await api.transaction.preview(request);
@@ -237,8 +252,8 @@ const applied = await api.transaction.apply(preview.value.previewId);
 
 ## 常见错误
 
-- **直接修改读取结果。** `chart.lines()` 和 `chart.notes()` 返回冻结的 detached 副本；要用它们的 id 和值组装事务。
-- **自己造 id。** id 从 `chart.lines()`、`chart.notes()` 或 `chart.events()` 读取；插入时省略 `id`。
+- **直接修改读取结果。** `chart.readAll("lines")` 和 `chart.readAll("notes")` 返回冻结的 detached 副本；要用它们的 id 和值组装事务。
+- **自己造 id。** id 从 `chart.readAll("lines")`、`chart.readAll("notes")` 或 `chart.readAll("events")` 读取；插入时省略 `id`。
 - **把秒当成拍。** 音符和事件时间都是约分后的拍三元组，例如 `[4, 1, 2]`。
 - **把 `apply` 当成同步调用。** 它是异步的，返回 `ApiResult`，里面再包一层领域状态。
 - **只申请 `chart.read`。** 事务需要 `chart.write`；读选区还需要 `selection.read`。

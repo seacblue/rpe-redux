@@ -195,12 +195,16 @@ export default {
   "settings.extensions.error.dependentEnabled":
     "An enabled Extension depends on this Extension: {value}.",
   "settings.extensions.installed.title": "Extensions",
-  "settings.extensions.install.open": "Install from GitHub…",
+  "settings.extensions.install.open": "Install Extension…",
   "settings.extensions.install.safeModeHint":
     "Extension safe mode is active; restart without the safe-mode flag before installing a package.",
-  "settings.extensions.install.title": "Install Extension from GitHub",
+  "settings.extensions.install.title": "Install Extension",
   "settings.extensions.install.description":
-    "Paste a GitHub repository or a /tree/<ref>/<path> link. Inspecting the link reads the manifest and declared package files; nothing is installed or executed until you confirm the review.",
+    "Paste a GitHub repository or a /tree/<ref>/<path> link, or choose a local package folder or .zip file. Inspecting reads the manifest and declared package files; nothing is installed or executed until you confirm the review.",
+  "settings.extensions.install.localFolder": "Choose folder",
+  "settings.extensions.install.localArchive": "Choose ZIP",
+  "settings.extensions.install.localFolderTitle": "Choose an Extension folder",
+  "settings.extensions.install.localArchiveTitle": "Choose an Extension ZIP",
   "settings.extensions.install.source": "GitHub link",
   "settings.extensions.install.sourceDescription":
     "A repository root works when it contains one manifest.json. Use a /tree/<ref>/<path> link for a package inside a larger repository.",
@@ -578,7 +582,7 @@ export default {
     "help update survey changelog release onboarding guide walkthrough",
   "settings.search.aboutKeywords": "about version author rights licence license credits",
   "settings.search.developerKeywords":
-    "developer environment runtime version channel system GPU path performance HUD note borders diagnostic bundle logs",
+    "developer environment runtime version channel system GPU path performance HUD note borders detector findings F4 diagnostic bundle logs",
   "settings.search.shortcutsKeywords": "shortcut key binding hotkey keyboard mouse wheel",
 
   "settings.action.close": "Close settings",
@@ -702,6 +706,9 @@ export default {
   "settings.help.developer.performanceHud": "Enable performance monitor",
   "settings.help.developer.performanceHudHint":
     "Show FPS, draw time, memory and render-load graphs.",
+  "settings.help.developer.detector": "Enable developer detector",
+  "settings.help.developer.detectorHint":
+    "Collect deprecated, out-of-range, invalid and error findings. F4 opens the panel.",
   "settings.help.developer.noteBorders": "Enable note borders",
   "settings.help.developer.noteBordersHint":
     "Draw a red border around every preview note; a Hold shows head, body, and tail borders. Click a border to turn it green and show its parameters.",

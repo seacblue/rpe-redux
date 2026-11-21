@@ -8,6 +8,7 @@
 import type { EditorFocus, EditorSession } from "../session/session.ts";
 import { eventKey, eventListAt, parseEventKey } from "../events/eventTracks.ts";
 import { EVENT_TYPES, type JudgeLineNote } from "../../global/chart/chart.ts";
+import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { beatValue } from "../../global/chart/timing/beat.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
 import type { SelectionClipboardMode } from "../clipboard/selectionClipboard.ts";
@@ -75,11 +76,15 @@ export interface EventSelectionRangeRequest {
 }
 
 export interface SelectedNoteRef {
+  /** Stable note id; use it with `chart.note` and transaction updates. */
+  readonly id: ChartObjectId;
   lineIndex: number;
   index: number;
 }
 
 export interface SelectedEventRef {
+  /** Stable event id; use it with `chart.event` and transaction updates. */
+  readonly id: ChartObjectId;
   lineIndex: number;
   eventType: string;
   layer: EventLayerRef;
@@ -474,14 +479,16 @@ function selectEventRange(session: EditorSession, request: EventSelectionRangeRe
 function noteRefs(session: EditorSession): SelectedNoteRef[] {
   if (session.multiLineActive && session.multiLineMode === "notes") {
     return [...session.multiLineSelection].flatMap(([lineIndex, indices]) =>
-      [...indices]
-        .filter((index) => session.chart.judgeLineList?.[lineIndex]?.notes?.[index])
-        .map((index) => ({ lineIndex, index })),
+      [...indices].flatMap((index) => {
+        const note = session.chart.judgeLineList?.[lineIndex]?.notes?.[index];
+        return note?.id ? [{ id: note.id, lineIndex, index }] : [];
+      }),
     );
   }
-  return [...session.selection]
-    .filter((index) => session.notes[index])
-    .map((index) => ({ lineIndex: session.lineIndex, index }));
+  return [...session.selection].flatMap((index) => {
+    const note = session.notes[index];
+    return note?.id ? [{ id: note.id, lineIndex: session.lineIndex, index }] : [];
+  });
 }
 
 /** Resolves selected event keys to typed, line-qualified references. */
@@ -497,16 +504,19 @@ function eventRefs(session: EditorSession): SelectedEventRef[] {
     if (!parsed) {
       return [];
     }
-    return eventListAt(session, lineIndex, parsed.type, session.eventLayer)[parsed.index]
-      ? [
-          {
-            lineIndex,
-            eventType: parsed.type,
-            layer: layerOf(parsed.type, session.eventLayer),
-            index: parsed.index,
-          },
-        ]
-      : [];
+    const event = eventListAt(session, lineIndex, parsed.type, session.eventLayer)[parsed.index];
+    if (!event?.id) {
+      return [];
+    }
+    return [
+      {
+        id: event.id,
+        lineIndex,
+        eventType: parsed.type,
+        layer: layerOf(parsed.type, session.eventLayer),
+        index: parsed.index,
+      },
+    ];
   });
 }
 

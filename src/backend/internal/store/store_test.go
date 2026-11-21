@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"reflect"
@@ -540,6 +541,47 @@ func TestCreateRevisionStoresChartHash(t *testing.T) {
 	}
 	if hash != sha256Hex(chart) {
 		t.Fatalf("revision hash = %q, want %q", hash, sha256Hex(chart))
+	}
+}
+
+func TestListRevisionsPagesNewestFirst(t *testing.T) {
+	store := testStore(t)
+	project := createTestProject(t, store)
+	ctx := context.Background()
+	for index := 0; index < 5; index++ {
+		if _, err := store.CreateRevision(ctx, CreateRevisionInput{
+			ProjectID: project.ID,
+			Chart:     testChart("revision"),
+			Label:     fmt.Sprintf("v%d", index),
+		}); err != nil {
+			t.Fatalf("create revision %d: %v", index, err)
+		}
+	}
+
+	total, err := store.CountRevisions(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("count revisions: %v", err)
+	}
+	if total != 5 {
+		t.Fatalf("revision total = %d, want 5", total)
+	}
+
+	first, err := store.ListRevisions(ctx, project.ID, 2, 0)
+	if err != nil {
+		t.Fatalf("list first page: %v", err)
+	}
+	second, err := store.ListRevisions(ctx, project.ID, 2, 2)
+	if err != nil {
+		t.Fatalf("list second page: %v", err)
+	}
+	if len(first) != 2 || len(second) != 2 {
+		t.Fatalf("page lengths = %d, %d, want 2, 2", len(first), len(second))
+	}
+	if first[0].Label != "v4" || first[1].Label != "v3" {
+		t.Fatalf("first page labels = %q, %q, want v4, v3", first[0].Label, first[1].Label)
+	}
+	if second[0].Label != "v2" || second[1].Label != "v1" {
+		t.Fatalf("second page labels = %q, %q, want v2, v1", second[0].Label, second[1].Label)
 	}
 }
 

@@ -382,7 +382,11 @@ export class TimelineMarkers {
           );
         }
         target = eventTargetFromRefs(
-          eventRefsFromSelection(selectedEventKeys(session), timeline.gestures.layer),
+          eventRefsFromSelection(
+            session.chart,
+            selectedEventKeys(session),
+            timeline.gestures.layer,
+          ),
           beat,
           chartSeconds,
         );

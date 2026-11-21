@@ -115,6 +115,14 @@ export interface TransactionLineInsert {
 export interface TransactionLineOperations {
   readonly insert?: readonly TransactionLineInsert[];
   readonly update?: readonly TransactionJudgeLineUpdate[];
+  /**
+   * Remove judge lines by id.
+   *
+   * Notes and events owned by a deleted line are removed with it. Child lines
+   * whose `father` points at a deleted line are re-parented to the root, and
+   * shader effect references are remapped. At least one line must remain.
+   */
+  readonly delete?: readonly ChartObjectId[];
 }
 
 /** Replace the complete tempo map; entries are sorted by beat on apply. */

@@ -44,6 +44,8 @@ export interface PlaybackState {
   audioSeconds: number;
   /** The same position expressed in chart time. */
   chartSeconds: number;
+  /** The chart beat at the current chart position, when the host can compute it. */
+  beat?: number;
   duration: number;
   rate: number;
   offsetSeconds: number;

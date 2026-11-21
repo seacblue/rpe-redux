@@ -590,6 +590,7 @@ const CAPABILITY_DESCRIPTIONS = Object.freeze({
   "library.read": "读取曲库项目、资源与修订。",
   "library.write": "创建、更新、删除曲库项目与修订（敏感）。",
   "assets.write": "向项目添加或移除资源（敏感）。",
+  "assets.read": "读取扩展包内声明的图片、GIF 和动画帧（只读）。",
   "playback.read": "读取播放状态、帧、纹理和性能指标。",
   "playback.control": "控制播放、跳转、倍速、渲染和测量。",
   "ui.notice": "显示官方通知和进度条。",

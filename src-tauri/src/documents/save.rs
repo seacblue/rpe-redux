@@ -1377,7 +1377,7 @@ mod tests {
         assert_eq!(
             archive
                 .file_names()
-                .filter(|name| *name == "extra.json")
+                .filter(|name| name.as_ref().is_ok_and(|name| name == "extra.json"))
                 .count(),
             1
         );

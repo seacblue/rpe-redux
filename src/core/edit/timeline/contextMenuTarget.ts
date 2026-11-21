@@ -9,6 +9,7 @@
 import type { Chart } from "../../global/chart/chart.ts";
 import type { EventLayerRef, SelectedEventRef } from "../selection/api.ts";
 import type { ContextMenuTarget, ToolbarActionRunner } from "../../shell/registries/toolbar.ts";
+import { eventListAt } from "../events/eventTracks.ts";
 
 /** One note selected by line and index. */
 export interface NoteSelectionRef {
@@ -139,8 +140,9 @@ export function noteTargetFromRefs(
   return { surface: "notes", noteIds, lineIndex, beat, chartSeconds };
 }
 
-/** Convert the session's `type:index` keys into typed event references. */
+/** Convert the session's `type:index` keys into id-addressed event references. */
 export function eventRefsFromSelection(
+  chart: Chart,
   selection: readonly EventSelectionKeyRef[],
   layer: EventLayerRef,
 ): SelectedEventRef[] {
@@ -151,7 +153,16 @@ export function eventRefsFromSelection(
     if (separator <= 0 || !eventType || !Number.isInteger(index) || index < 0) {
       return [];
     }
-    return [{ lineIndex, eventType, layer, index }];
+    const event = eventListAt(
+      { chart, lineIndex, eventLayer: layer === "extended" ? 0 : layer },
+      lineIndex,
+      eventType,
+      layer === "extended" ? 0 : layer,
+    )[index];
+    if (!event?.id) {
+      return [];
+    }
+    return [{ id: event.id, lineIndex, eventType, layer, index }];
   });
 }
 

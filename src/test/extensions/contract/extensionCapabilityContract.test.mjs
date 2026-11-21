@@ -332,6 +332,21 @@ test("event payloads carry chart and selection data only with the matching grant
       result: { changed: true, count: 2, beforeFingerprint: "before", afterFingerprint: "after" },
     },
   );
+
+  const changedPayload = { label: "Move", chartFingerprint: "fingerprint", reason: "commit" };
+  assert.deepEqual(
+    projectExtensionEventPayload("chart:changed", changedPayload, new Set(["events"])),
+    { label: "Move", reason: "commit" },
+  );
+  assert.deepEqual(
+    projectExtensionEventPayload(
+      "chart:changed",
+      changedPayload,
+      new Set(["events", "chart.read"]),
+    ),
+    changedPayload,
+  );
+
   assert.deepEqual(
     projectExtensionEventPayload(
       "custom:event",

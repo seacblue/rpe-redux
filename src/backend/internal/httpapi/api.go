@@ -53,14 +53,15 @@ type CollabHealth struct {
 
 // API wires the store into an http.Handler.
 type API struct {
-	store          *store.Store
-	instances      *instances.Hub
-	collab         CollabHealth
-	shutdown       func()
-	origins        map[string]bool
-	docs           *docsHandler
-	chartIndexes   *chartIndexCache
-	commitSessions *commitSessionManager
+	store             *store.Store
+	instances         *instances.Hub
+	collab            CollabHealth
+	shutdown          func()
+	origins           map[string]bool
+	docs              *docsHandler
+	chartIndexes      *chartIndexCache
+	commitSessions    *commitSessionManager
+	revisionSnapshots *revisionSnapshotCache
 }
 
 // NewAPI builds the HTTP handler tree. extraOrigins adds CORS origins on top of
@@ -110,14 +111,15 @@ func newAPI(
 	extraOrigins ...string,
 ) http.Handler {
 	a := &API{
-		store:          data,
-		instances:      hub,
-		collab:         collab,
-		shutdown:       shutdown,
-		origins:        originSet(extraOrigins),
-		docs:           newDocsHandler(docsDir),
-		chartIndexes:   newChartIndexCache(),
-		commitSessions: newCommitSessionManager(),
+		store:             data,
+		instances:         hub,
+		collab:            collab,
+		shutdown:          shutdown,
+		origins:           originSet(extraOrigins),
+		docs:              newDocsHandler(docsDir),
+		chartIndexes:      newChartIndexCache(),
+		commitSessions:    newCommitSessionManager(),
+		revisionSnapshots: newRevisionSnapshotCache(),
 	}
 	mux := http.NewServeMux()
 
@@ -836,12 +838,35 @@ func (a *API) handleListRevisions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_query", "limit must be an integer")
 		return
 	}
-	revisions, err := a.store.ListRevisions(r.Context(), id, limit)
+	offset, err := queryInt(r, "offset", 0)
 	if err != nil {
-		writeStoreError(w, err)
+		writeError(w, http.StatusBadRequest, "invalid_query", "offset must be an integer")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"revisions": revisions})
+	revisions, total, snapshotToken, err := a.revisionSnapshots.page(
+		r.Context(),
+		a.store,
+		id,
+		r.URL.Query().Get("snapshotToken"),
+		limit,
+		offset,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, errRevisionSnapshotExpired):
+			writeError(w, http.StatusGone, "snapshot_expired", "the revision snapshot expired; reload the list")
+		case errors.Is(err, store.ErrRevisionSnapshotTooLarge):
+			writeError(w, http.StatusRequestEntityTooLarge, "snapshot_too_large", "the project has too many revisions for one snapshot")
+		default:
+			writeStoreError(w, err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"revisions":     revisions,
+		"total":         total,
+		"snapshotToken": snapshotToken,
+	})
 }
 
 // createRevisionRequest is the POST body for a snapshot.

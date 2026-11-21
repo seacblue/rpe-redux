@@ -16,6 +16,17 @@ import {
   type SandboxedExtensionSource,
   type TrustedExtensionManifest,
 } from "../../core/extensions/extensionRuntime.ts";
+import type { ExtensionAssetResolver } from "../../core/extensions/extensionContract.ts";
+import {
+  assetDataUrl,
+  assetDimensions,
+  assetMime,
+  type AssetInfo,
+  manifestAssetNames,
+  manifestAssetPath,
+  MAX_ASSET_BYTES,
+  MAX_ASSET_TOTAL_BYTES,
+} from "../../core/extensions/assets.ts";
 import {
   clearExtensionBootMarker,
   consumeExtensionSafeModeRequest,
@@ -31,6 +42,7 @@ import {
 import { preferences } from "../../core/state/preferences.ts";
 import {
   DEFAULT_ENABLED_BUILTIN_IDS,
+  assetDigest,
   builtinTrustFingerprint,
   extensionFingerprint,
   matchesBuiltinTrust,
@@ -83,6 +95,10 @@ const bundledEntrySources = import.meta.glob<string>("../../assets/extensions/**
   query: "?raw",
   import: "default",
 });
+const bundledAssetUrls = import.meta.glob<string>(
+  "../../assets/extensions/**/*.{png,jpg,jpeg,webp,gif,svg,avif,bmp}",
+  { query: "?url", import: "default" },
+);
 
 const DEFAULT_I18N_FILE = "i18n.json";
 
@@ -257,9 +273,15 @@ function bundledTrust(): Promise<Map<string, BundledTrust>> {
         if (entryPath !== undefined && entrySource === undefined) {
           continue;
         }
+        const assets = bundledAssetResolver(manifest, manifestPath);
         trust.set(manifest.id, {
           version: manifest.version,
-          fingerprint: await builtinTrustFingerprint(manifest, translations?.value, entrySource),
+          fingerprint: await builtinTrustFingerprint(
+            manifest,
+            translations?.value,
+            entrySource,
+            await resolverDigest(assets),
+          ),
         });
       } catch (error) {
         console.warn("[redux.extensions] unable to fingerprint a bundled package", error);
@@ -308,6 +330,161 @@ async function bundledTranslations(
 /** Returns an error's message, or the string form of a thrown value. */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Read one bundled asset through its Vite URL and return a data URL. */
+function bundledAssetResolver(
+  manifest: TrustedExtensionManifest,
+  manifestPath: string,
+): ExtensionAssetResolver | undefined {
+  const names = manifestAssetNames(manifest);
+  if (!names.length) {
+    return undefined;
+  }
+  const base = manifestPath.replace(/manifest\.json$/, "");
+  const cache = new Map<string, Promise<Uint8Array>>();
+  let totalBytes = 0;
+  const read = (name: string): Promise<Uint8Array> => {
+    const relative = manifestAssetPath(manifest, name);
+    if (!relative) {
+      return Promise.reject(new Error(`Unknown Extension asset: ${name}`));
+    }
+    const cached = cache.get(relative);
+    if (cached) {
+      return cached;
+    }
+    const load = bundledAssetUrls[`${base}${relative}`];
+    if (!load) {
+      return Promise.reject(new Error(`Extension asset is missing: ${relative}`));
+    }
+    const pending = (async () => {
+      const url = await load();
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Extension asset could not be read: ${relative}`);
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (
+        bytes.byteLength > MAX_ASSET_BYTES ||
+        totalBytes + bytes.byteLength > MAX_ASSET_TOTAL_BYTES
+      ) {
+        throw new Error(`Extension asset is too large: ${relative}`);
+      }
+      totalBytes += bytes.byteLength;
+      return bytes;
+    })();
+    cache.set(relative, pending);
+    return pending;
+  };
+  return {
+    names,
+    read,
+    async url(name: string) {
+      const relative = manifestAssetPath(manifest, name);
+      if (!relative) {
+        throw new Error(`Unknown Extension asset: ${name}`);
+      }
+      return assetDataUrl(relative, await read(name));
+    },
+    async info(name: string) {
+      const relative = manifestAssetPath(manifest, name);
+      if (!relative) {
+        throw new Error(`Unknown Extension asset: ${name}`);
+      }
+      return packageAssetInfo(manifest, name, relative, await read(name));
+    },
+  };
+}
+
+/** Build the bridge-safe metadata for one declared asset. */
+function packageAssetInfo(
+  manifest: TrustedExtensionManifest,
+  name: string,
+  relative: string,
+  bytes: Uint8Array,
+): AssetInfo {
+  const dimensions = assetDimensions(relative, bytes);
+  return {
+    name,
+    type: assetMime(relative),
+    bytes: bytes.byteLength,
+    width: dimensions?.width ?? null,
+    height: dimensions?.height ?? null,
+    atlas: manifest.assetMetadata?.[name] ?? null,
+  };
+}
+
+/** Read one installed or portable asset through the native host. */
+function nativeAssetResolver(
+  id: string,
+  manifest: TrustedExtensionManifest,
+): ExtensionAssetResolver | undefined {
+  const names = manifestAssetNames(manifest);
+  if (!names.length) {
+    return undefined;
+  }
+  const cache = new Map<string, Promise<Uint8Array>>();
+  let totalBytes = 0;
+  const read = (name: string): Promise<Uint8Array> => {
+    const relative = manifestAssetPath(manifest, name);
+    if (!relative) {
+      return Promise.reject(new Error(`Unknown Extension asset: ${name}`));
+    }
+    const cached = cache.get(relative);
+    if (cached) {
+      return cached;
+    }
+    const pending = (async () => {
+      const response = await invoke<ArrayBuffer | number[]>("read_extension_asset", {
+        id,
+        path: relative,
+      });
+      const bytes =
+        response instanceof ArrayBuffer ? new Uint8Array(response) : Uint8Array.from(response);
+      if (
+        bytes.byteLength > MAX_ASSET_BYTES ||
+        totalBytes + bytes.byteLength > MAX_ASSET_TOTAL_BYTES
+      ) {
+        throw new Error(`Extension asset is too large: ${relative}`);
+      }
+      totalBytes += bytes.byteLength;
+      return bytes;
+    })();
+    cache.set(relative, pending);
+    return pending;
+  };
+  return {
+    names,
+    read,
+    async url(name: string) {
+      const relative = manifestAssetPath(manifest, name);
+      if (!relative) {
+        throw new Error(`Unknown Extension asset: ${name}`);
+      }
+      return assetDataUrl(relative, await read(name));
+    },
+    async info(name: string) {
+      const relative = manifestAssetPath(manifest, name);
+      if (!relative) {
+        throw new Error(`Unknown Extension asset: ${name}`);
+      }
+      return packageAssetInfo(manifest, name, relative, await read(name));
+    },
+  };
+}
+
+/** Hash every asset resolved by one package resolver. */
+async function resolverDigest(
+  resolver: ExtensionAssetResolver | undefined,
+): Promise<string | undefined> {
+  if (!resolver) {
+    return undefined;
+  }
+  const entries: { name: string; bytes: Uint8Array }[] = [];
+  for (const name of resolver.names) {
+    entries.push({ name, bytes: await resolver.read(name) });
+  }
+  return entries.length ? assetDigest(entries) : undefined;
 }
 
 /** Records the package files the consent dialog will display. */
@@ -371,11 +548,17 @@ async function loadBundledExtensions(enableDefaults = true): Promise<void> {
     let manifest: TrustedExtensionManifest | undefined;
     try {
       const manifestRaw = await loadManifest();
-      manifest = manifestFromText(manifestRaw);
-      const translations = await bundledTranslations(manifest, manifestPath);
+      const parsedManifest = manifestFromText(manifestRaw);
+      if (!parsedManifest) {
+        throw new Error("Bundled Extension manifest is empty");
+      }
+      manifest = parsedManifest;
+      const translations = await bundledTranslations(parsedManifest, manifestPath);
       const translationValue = translations?.value;
       const translationRaw = translations?.raw;
-      const identity = packageContentIdentity(manifest, translationValue);
+      const assets = bundledAssetResolver(manifest, manifestPath);
+      const assetsDigest = await resolverDigest(assets);
+      const identity = packageContentIdentity(manifest, translationValue, assetsDigest);
       if (isExtensionRemoved(preferences, manifest.id, identity)) {
         // A browser bundled package removed from the list stays hidden until its
         // manifest bytes change.
@@ -391,12 +574,17 @@ async function loadBundledExtensions(enableDefaults = true): Promise<void> {
       if (entryPath !== undefined && entrySource === undefined) {
         throw new Error(`Extension entry source is missing: ${manifest.id}`);
       }
-      const fingerprint = await extensionFingerprint(manifestRaw, translationRaw, entrySource);
+      const fingerprint = await extensionFingerprint(
+        manifestRaw,
+        translationRaw,
+        entrySource,
+        assetsDigest,
+      );
       const expected = trust.get(manifest.id);
       const verifiedBuiltin = matchesBuiltinTrust(
         expected,
         manifest.version,
-        await builtinTrustFingerprint(manifest, translationValue, entrySource),
+        await builtinTrustFingerprint(manifest, translationValue, entrySource, assetsDigest),
       );
       await registerReview(manifest, "bundled", null, fingerprint, [
         { path: "manifest.json", text: manifestRaw },
@@ -415,6 +603,7 @@ async function loadBundledExtensions(enableDefaults = true): Promise<void> {
           : async () => ({
               source: entrySource,
               translations: translationValue as SandboxedExtensionSource["translations"],
+              assets,
             }),
         { fingerprint, source: "bundled", verifiedBuiltin },
       );
@@ -454,7 +643,9 @@ async function loadPortableExtensions(
   const trust = await bundledTrust();
   for (const packaged of packages) {
     try {
-      const identity = packageContentIdentity(packaged.manifest, packaged.i18n);
+      const assets = nativeAssetResolver(packaged.id, packaged.manifest);
+      const assetsDigest = await resolverDigest(assets);
+      const identity = packageContentIdentity(packaged.manifest, packaged.i18n, assetsDigest);
       const existing = extensionRuntime
         .list()
         .find((entry) => entry.manifest.id === packaged.manifest.id);
@@ -521,7 +712,7 @@ async function loadPortableExtensions(
         matchesBuiltinTrust(
           expected,
           manifest.version,
-          await builtinTrustFingerprint(packaged.manifest, packaged.i18n, entryText),
+          await builtinTrustFingerprint(packaged.manifest, packaged.i18n, entryText, assetsDigest),
         );
       if (manifest.id.startsWith("builtin.") && !verifiedBuiltin) {
         // A writable source/portable root must never impersonate a built-in id.
@@ -534,7 +725,12 @@ async function loadPortableExtensions(
         // The user removed this package while its entry was being read.
         continue;
       }
-      const fingerprint = await extensionFingerprint(manifestRaw, translationRaw, entryData);
+      const fingerprint = await extensionFingerprint(
+        manifestRaw,
+        translationRaw,
+        entryData,
+        assetsDigest,
+      );
       await registerReview(manifest, source, packaged.id, fingerprint, [
         { path: "manifest.json", text: manifestRaw },
         ...(translationRaw === undefined
@@ -551,6 +747,7 @@ async function loadPortableExtensions(
             async () => ({
               source: entryText,
               translations: packaged.i18n as SandboxedExtensionSource["translations"],
+              assets,
             }),
         { fingerprint, source, verifiedBuiltin },
       );

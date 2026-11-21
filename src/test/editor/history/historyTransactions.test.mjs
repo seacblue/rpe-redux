@@ -88,6 +88,35 @@ test("an over-limit transaction remains undoable and reports its own committed e
   assert.equal(session.chart.META.name, "changed");
 });
 
+test("chart changes emit commit, undo, and redo reasons", () => {
+  const session = new EditorSession(createChart());
+  const changes = [];
+  const dispose = extensionRegistry.onEvent("chart:changed", (payload) => changes.push(payload));
+  try {
+    const result = applyChartTransaction(session, {
+      label: "rename chart",
+      metadata: { name: "changed" },
+    });
+    assert.equal(result.status, "committed");
+    assert.equal(session.travel("undo"), true);
+    assert.equal(session.travel("redo"), true);
+
+    assert.deepEqual(
+      changes.map((payload) => payload.reason),
+      ["commit", "undo", "redo"],
+    );
+    assert.deepEqual(
+      changes.map((payload) => payload.label),
+      ["rename chart", "rename chart", "rename chart"],
+    );
+    assert.equal(typeof changes[0].chartFingerprint, "string");
+    assert.notEqual(changes[0].chartFingerprint, changes[1].chartFingerprint);
+    assert.equal(changes[0].chartFingerprint, changes[2].chartFingerprint);
+  } finally {
+    dispose();
+  }
+});
+
 test("a cyclic chart still fingerprints instead of overflowing the stack", async () => {
   const { warmChartFingerprintAsync } =
     await import("../../../core/edit/document/chartRevision.ts");

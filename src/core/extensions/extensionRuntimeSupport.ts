@@ -30,6 +30,7 @@ import {
   isExtensionCapability,
   type ExtensionCapability,
 } from "./capabilities.ts";
+import { isSafeAssetPath, MAX_ASSETS } from "./assets.ts";
 
 /** One package lifetime: its abort signal and reverse-ordered cleanups. */
 export class ExtensionScope {
@@ -788,6 +789,19 @@ function invalidCapabilities(value: unknown): {
   };
 }
 
+/** Build the error for an invalid package asset map. */
+function invalidAssets(value: unknown): {
+  reason: string;
+  code: ExtensionOperationErrorCode;
+  value: string;
+} {
+  return {
+    reason: `Extension assets are invalid: ${String(value)}`,
+    code: "invalidAssets",
+    value: String(value),
+  };
+}
+
 /** Build the localized error for an unknown collaboration scope. */
 function invalidCollaboration(value: unknown): {
   reason: string;
@@ -931,6 +945,86 @@ export function validateManifest(
     const translationError = validateTranslationShape(manifest.translations);
     if (translationError) {
       return invalidTranslations(translationError.value);
+    }
+  }
+  if (manifest.assets !== undefined) {
+    if (!isRecord(manifest.assets)) {
+      return invalidAssets(manifest.assets);
+    }
+    const entries = Object.entries(manifest.assets);
+    if (entries.length === 0 || entries.length > MAX_ASSETS) {
+      return invalidAssets(`asset count ${entries.length}`);
+    }
+    const paths = new Set<string>();
+    for (const [name, path] of entries) {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(name)) {
+        return invalidAssets(`asset name ${name}`);
+      }
+      if (typeof path !== "string" || !isSafeAssetPath(path) || paths.has(path)) {
+        return invalidAssets(`${name}: ${String(path)}`);
+      }
+      paths.add(path);
+    }
+  }
+  const assetMetadata = (manifest as unknown as { assetMetadata?: unknown }).assetMetadata;
+  if (assetMetadata !== undefined) {
+    const assetNames = new Set(Object.keys(manifest.assets ?? {}));
+    if (!isRecord(assetMetadata)) {
+      return invalidAssets(`assetMetadata: ${String(assetMetadata)}`);
+    }
+    const entries = Object.entries(assetMetadata);
+    if (entries.length > MAX_ASSETS) {
+      return invalidAssets(`asset metadata count ${entries.length}`);
+    }
+    for (const [name, value] of entries) {
+      if (!assetNames.has(name) || !isRecord(value)) {
+        return invalidAssets(`assetMetadata.${name}`);
+      }
+      const allowed = new Set([
+        "frameWidth",
+        "frameHeight",
+        "columns",
+        "rows",
+        "frameCount",
+        "margin",
+        "spacing",
+      ]);
+      if (Object.keys(value).some((key) => !allowed.has(key))) {
+        return invalidAssets(`assetMetadata.${name} has an unknown field`);
+      }
+      const positive = (key: string): boolean => {
+        const number = value[key];
+        return (
+          number === undefined ||
+          (typeof number === "number" &&
+            Number.isInteger(number) &&
+            number > 0 &&
+            number <= 100_000)
+        );
+      };
+      const nonNegative = (key: string): boolean => {
+        const number = value[key];
+        return (
+          number === undefined ||
+          (typeof number === "number" &&
+            Number.isInteger(number) &&
+            number >= 0 &&
+            number <= 100_000)
+        );
+      };
+      if (
+        !positive("frameWidth") ||
+        !positive("frameHeight") ||
+        !positive("columns") ||
+        !positive("rows") ||
+        !positive("frameCount") ||
+        !nonNegative("margin") ||
+        !nonNegative("spacing") ||
+        value.frameWidth === undefined ||
+        value.frameHeight === undefined
+      ) {
+        return invalidAssets(`assetMetadata.${name} has invalid frame geometry`);
+      }
     }
   }
   if (
