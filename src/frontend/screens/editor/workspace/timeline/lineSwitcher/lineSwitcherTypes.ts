@@ -18,6 +18,14 @@ export interface LineSwitcherContext {
   visible: boolean;
   layer?: number;
   extended?: boolean;
+  /**
+   * The multi-line line set while multi-line editing is active, empty otherwise.
+   *
+   * Stepping stays inside this set so Ctrl+wheel moves the active line across
+   * the selected windows instead of leaving the set, and the step order follows
+   * ascending line number rather than the order the lines were written in.
+   */
+  lineSet?: readonly number[];
 }
 
 export interface LineThumbnailSnapshot {
