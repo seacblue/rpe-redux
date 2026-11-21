@@ -361,9 +361,9 @@ function builtAssetPath(url: string, outDir: string, base: string): string | nul
 /** Byte sizes of every script and stylesheet the built page requests. */
 function bootAssetSizes(html: string, outDir: string, base: string): Record<string, number> {
   const sizes: Record<string, number> = {};
-  for (const tag of html.match(/<(?:script|link)\b[^>]*>/gu) ?? []) {
+  for (const tag of html.match(/<(?:script|link)\b[^>]*>/giu) ?? []) {
     const rel = tagAttribute(tag, "rel") ?? "";
-    const isScript = tag.startsWith("<script") && tagAttribute(tag, "type") === "module";
+    const isScript = /^<script\b/iu.test(tag) && tagAttribute(tag, "type") === "module";
     const isStylesheet = rel.split(/\s+/u).includes("stylesheet");
     const isPreload = /\b(?:modulepreload|preload)\b/u.test(rel);
     if (!isScript && !isStylesheet && !isPreload) {
@@ -394,8 +394,8 @@ function bootAssetSizes(html: string, outDir: string, base: string): Record<stri
 
 /** Make the application stylesheet non-blocking for the inline splash. */
 function deferBootStyles(html: string): string {
-  return html.replace(/<link\b[^>]*>/gu, (tag) => {
-    if (!/\brel="stylesheet"/u.test(tag) || tag.includes(BOOT_STYLES_ATTR)) {
+  return html.replace(/<link\b[^>]*>/giu, (tag) => {
+    if (!/\brel="stylesheet"/iu.test(tag) || tag.includes(BOOT_STYLES_ATTR)) {
       return tag;
     }
     let marked = /\bmedia="/u.test(tag)
