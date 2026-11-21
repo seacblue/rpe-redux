@@ -534,8 +534,7 @@ export default {
   "settings.field.audio-analysis-width.label": "Waveform width",
   "settings.field.audio-analysis-curve.label": "Waveform emphasis",
 
-  // ----------------------------------------------------- files & saving (3 rows)
-  "settings.field.session-restore.label": "Recover the last chart after a crash or update",
+  // ----------------------------------------------------- files & saving (4 rows)
   "settings.field.autosave-enabled.label": "Enable autosave",
   "settings.field.autosave-seconds.label": "Autosave interval",
   "settings.field.autosave-limit.label": "Backups kept per chart",

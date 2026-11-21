@@ -1,9 +1,8 @@
 /**
  * Maps a library project payload to the editor's unvalidated candidate shape.
  *
- * Home-screen opening and workspace-session restore both need the same title
- * fallback and project reference; only the surrounding guard/record behavior
- * differs.
+ * The home screen and a project reload need the same title fallback and project
+ * reference; only the surrounding guard behavior differs.
  */
 import type {
   EditorCandidate,

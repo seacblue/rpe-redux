@@ -462,7 +462,6 @@ export default {
   "settings.field.audio-analysis-width.label": "波形宽度",
   "settings.field.audio-analysis-curve.label": "波形增幅",
 
-  "settings.field.session-restore.label": "崩溃或更新后恢复谱面",
   "settings.field.autosave-enabled.label": "启用自动保存",
   "settings.field.autosave-seconds.label": "自动保存间隔",
   "settings.field.autosave-limit.label": "每谱保留备份数",

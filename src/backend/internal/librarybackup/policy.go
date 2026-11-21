@@ -40,7 +40,6 @@ var excludedSettingKeys = map[string]bool{
 	"autosave-enabled":                true,
 	"autosave-seconds":                true,
 	"autosave-limit":                  true,
-	"session-restore":                 true,
 	"update-auto-check":               true,
 	"update-download-policy":          true,
 	"update-prereleases":              true,

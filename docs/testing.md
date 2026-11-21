@@ -119,12 +119,12 @@ It reports whole-chart parse, scan/index, eager materialization, paged time-wind
 | `api-contract` | `window.redux` API and Extension contract |
 | `documents` | cold open, PEZ open with resources, PE package conversion, create, save round trip, replace policy |
 | `settings` | settings pages and persistence |
-| `session-restore` | restart with the same profile and restore the workspace |
+| `startup-home` | a clean exit and a crash both relaunch to the empty library |
 | `experience-create` | home → Ctrl+N → pointer placement, selection, nudge, undo/redo, delete, hold placement, region toggle, playback |
 | `experience-events` | event-field placement through the keyboard path and undo |
 | `experience-settings` | settings window from the home button, rail navigation, a real toggle, and its persistence across close/reopen |
 
-The first four groups are **contract journeys**: they keep the shared startup chart and call the public API, so they prove the document and Extension pipeline. The `experience-*` groups are **experience journeys**: they start on the home screen (`startsAtHome`), press real keys, move a real pointer over the timelines, and click real toolbar and settings controls, then assert the resulting document, selection, and DOM state. A mixed selection needs one process per group, which `npm run smoke` does.
+The first four groups are **contract journeys**: they keep the shared startup chart and call the public API, so they prove the document and Extension pipeline. `startup-home` restarts the packaged app on one profile and proves a launch never reopens a chart. The `experience-*` groups are **experience journeys**: they start on the home screen (`startsAtHome`), press real keys, move a real pointer over the timelines, and click real toolbar and settings controls, then assert the resulting document, selection, and DOM state. A mixed selection needs one process per group, which `npm run smoke` does.
 
 ```powershell
 npm run build -- --debug            # prerequisite

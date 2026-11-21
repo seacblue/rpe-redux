@@ -51,8 +51,6 @@ export const PREFERENCE_SECTIONS = Object.freeze({
   collaboration: "collaboration",
   /** Interface language; absent means "follow the machine". */
   language: "language",
-  /** Last workspace session: document, playhead, line, and panel state. */
-  session: "session",
   /** Toolbar judge-line selection mode and folder disclosure state. */
   lineSelection: "lineSelection",
   /** Workspace sampler grid, angle step, and XY binding. */

@@ -124,7 +124,6 @@ var preferenceSections = map[string]preferenceSectionRule{
 	"server":         {kind: preferenceString, nullable: true},
 	"collaboration":  {kind: preferenceObject, nullable: true},
 	"language":       {kind: preferenceString, nullable: true},
-	"session":        {kind: preferenceObject, nullable: true},
 	"lineSelection":  {kind: preferenceObject, nullable: true},
 	"sampler":        {kind: preferenceObject, nullable: true},
 	"welcome":        {kind: preferenceObject, nullable: true},

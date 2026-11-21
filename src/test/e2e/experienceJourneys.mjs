@@ -479,28 +479,23 @@ export async function experienceSettingsWindow(runner) {
   );
 
   // Bring the setting into view and toggle it with a real pointer click.
+  const autosaveToggle = "dialog.redux-settings[open] #autosave-enabled";
   await runner.evaluate(`(() => {
-    const input = document.querySelector('dialog.redux-settings[open] #session-restore');
+    const input = document.querySelector('${autosaveToggle}');
     input?.scrollIntoView({ block: 'center' });
     return Boolean(input);
   })()`);
   await settle(400);
-  const toggle = await boundsOf(runner, "dialog.redux-settings[open] #session-restore");
-  runner.assert(Boolean(toggle), "the session-restore setting is missing from the files page");
-  const before = await runner.evaluate(
-    "document.querySelector('dialog.redux-settings[open] #session-restore').checked",
-  );
+  const toggle = await boundsOf(runner, autosaveToggle);
+  runner.assert(Boolean(toggle), "the autosave setting is missing from the files page");
+  const before = await runner.evaluate(`document.querySelector('${autosaveToggle}').checked`);
   await clickPoint(runner, { x: toggle.centerX, y: toggle.centerY });
   await runner.waitFor("toggle setting", () =>
-    runner.evaluate(
-      `document.querySelector('dialog.redux-settings[open] #session-restore').checked !== ${before}`,
-    ),
+    runner.evaluate(`document.querySelector('${autosaveToggle}').checked !== ${before}`),
   );
-  const after = await runner.evaluate(
-    "document.querySelector('dialog.redux-settings[open] #session-restore').checked",
-  );
+  const after = await runner.evaluate(`document.querySelector('${autosaveToggle}').checked`);
   runner.assert(
-    (await runner.evaluate("window.redux.values.byId.get('session-restore')")) === after,
+    (await runner.evaluate("window.redux.values.byId.get('autosave-enabled')")) === after,
     "the settings checkbox and the stored value disagree",
   );
 
@@ -531,22 +526,18 @@ export async function experienceSettingsWindow(runner) {
     `${filesCategory}?.getAttribute('aria-current') === 'true'`,
   );
   await runner.waitFor("settings value persisted", () =>
-    runner.evaluate(
-      `document.querySelector('dialog.redux-settings[open] #session-restore')?.checked === ${after}`,
-    ),
+    runner.evaluate(`document.querySelector('${autosaveToggle}')?.checked === ${after}`),
   );
   await runner.evaluate(`(() => {
-    const input = document.querySelector('dialog.redux-settings[open] #session-restore');
+    const input = document.querySelector('${autosaveToggle}');
     input?.scrollIntoView({ block: 'center' });
     return Boolean(input);
   })()`);
   await settle(300);
-  const restore = await boundsOf(runner, "dialog.redux-settings[open] #session-restore");
+  const restore = await boundsOf(runner, autosaveToggle);
   await clickPoint(runner, { x: restore.centerX, y: restore.centerY });
   await runner.waitFor("restore setting", () =>
-    runner.evaluate(
-      `document.querySelector('dialog.redux-settings[open] #session-restore').checked === ${before}`,
-    ),
+    runner.evaluate(`document.querySelector('${autosaveToggle}').checked === ${before}`),
   );
   await clickExpression(
     runner,

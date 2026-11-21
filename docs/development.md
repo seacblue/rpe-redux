@@ -184,7 +184,7 @@ npm run build -- --debug
 npm run smoke
 ```
 
-`npm run smoke` launches the debug application and runs the P0 scenarios in `src/test/e2e/`: API and Extension contract, document open/create/save, settings pages, and session restore. Feature-specific regression suites are not part of the default run; [Testing](testing.md) lists the groups and their commands. The harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux acceptance is manual until a WebDriver harness exists.
+`npm run smoke` launches the debug application and runs the P0 scenarios in `src/test/e2e/`: API and Extension contract, document open/create/save, settings pages, and startup isolation. Feature-specific regression suites are not part of the default run; [Testing](testing.md) lists the groups and their commands. The harness drives WebView2 over CDP, so the smoke suite runs on Windows only; Linux acceptance is manual until a WebDriver harness exists.
 
 Source checks verify types, lint, unit behavior, and formatting. Inspect the running desktop app for input, rendering, playback, native dialogs, and other behavior that the browser loop cannot reach. `npm run build` is the full release build and belongs at the end of the task, not in the edit loop.
 

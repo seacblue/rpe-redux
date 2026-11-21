@@ -75,7 +75,6 @@ const BACKUP_EXCLUDED_SETTINGS = new Set([
   "autosave-enabled",
   "autosave-seconds",
   "autosave-limit",
-  "session-restore",
   "update-auto-check",
   "update-download-policy",
   "update-prereleases",
