@@ -1,8 +1,9 @@
 /**
- * Guards the easing canvases against a wide-box stretch regression.
+ * Guards the easing previews against diverging from each other.
  *
- * Both preview modes share the same logical 260x100 drawing space, so their
- * responsive boxes must preserve that ratio instead of forcing a 100px height.
+ * Both modes share one logical drawing space and one painter in
+ * `easingCanvas.ts`. Keeping them on the same frame, palette, and overshoot
+ * treatment is what stops a fix in one preview from leaving the other odd.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -14,6 +15,7 @@ const easingPreview = new URL(
   import.meta.url,
 );
 const bezierEditor = new URL("../../../design/components/easing/BezierEditor.tsx", import.meta.url);
+const canvas = new URL("../../../design/components/easing/easingCanvas.ts", import.meta.url);
 
 test("easing and Bezier previews preserve the logical canvas aspect ratio", async () => {
   const source = await readFile(stylesheet, "utf8");
@@ -29,11 +31,67 @@ test("easing and Bezier previews preserve the logical canvas aspect ratio", asyn
   }
 });
 
-test("both previews draw a closed reference frame", async () => {
-  const [easingSource, bezierSource] = await Promise.all([
+test("both preview canvases share one transparent surface", async () => {
+  const source = await readFile(stylesheet, "utf8");
+  const ruleOf = (selector) => {
+    const match = source.match(new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n\\}`));
+    assert.ok(match, `${selector} must have a rule`);
+    return match[1];
+  };
+  for (const selector of ["\\.easing-preview", "\\.bezier-editor"]) {
+    const rule = ruleOf(selector);
+    assert.match(rule, /background:\s*transparent;/, `${selector} must not paint its own fill`);
+    assert.doesNotMatch(rule, /border:\s*1px/, `${selector} must not paint its own border`);
+  }
+});
+
+test("one painter owns the frame, palette, and overshoot fade", async () => {
+  const [easingSource, bezierSource, canvasSource] = await Promise.all([
     readFile(easingPreview, "utf8"),
     readFile(bezierEditor, "utf8"),
+    readFile(canvas, "utf8"),
   ]);
-  assert.match(easingSource, /draw\.strokeRect\(\s*EASING_PLOT_LEFT[\s\S]*?BOTTOM - TOP\s*\)/);
-  assert.match(bezierSource, /draw\.strokeRect\(LEFT, yOf\(1\), PLOT_WIDTH, yOf\(0\) - yOf\(1\)\)/);
+
+  for (const [name, source] of [
+    ["easing", easingSource],
+    ["Bezier", bezierSource],
+  ]) {
+    assert.match(
+      source,
+      /prepareEasingCanvas\(/,
+      `${name} preview must share the prepared surface`,
+    );
+    assert.match(source, /drawEasingFrame\(/, `${name} preview must share the frame painter`);
+    assert.match(source, /strokeEasingPolyline\(/, `${name} preview must share the curve painter`);
+    assert.doesNotMatch(source, /strokeRect\(/u, `${name} preview must not paint its own frame`);
+    assert.doesNotMatch(
+      source,
+      /getPropertyValue\("--accent"\)/u,
+      `${name} preview must not resolve its own palette`,
+    );
+  }
+
+  // The shared painter keeps the bounded segment at full weight and fades the
+  // part that leaves the frame, which is what both previews must agree on.
+  assert.match(canvasSource, /EASING_OVERSHOOT_ALPHA = [\d.]+;/);
+  assert.match(canvasSource, /EASING_FRAME_ALPHA = [\d.]+;/);
+  assert.match(
+    canvasSource,
+    /context\.globalAlpha = EASING_OVERSHOOT_ALPHA;/,
+    "the shared painter must fade the curve outside the frame",
+  );
+  assert.match(
+    canvasSource,
+    /context\.clip\(\);/u,
+    "the shared painter must clip the bounded segment",
+  );
+});
+
+test("the frame is solid and the shared plot rect is one constant", async () => {
+  const canvasSource = await readFile(canvas, "utf8");
+  assert.match(canvasSource, /top: 14,/);
+  assert.match(canvasSource, /bottom: 86,/);
+  const frameBody = canvasSource.match(/export function drawEasingFrame[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.ok(frameBody, "the frame painter must exist");
+  assert.doesNotMatch(frameBody, /setLineDash/, "the frame must be solid, not dashed");
 });

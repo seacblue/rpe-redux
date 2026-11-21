@@ -32,6 +32,8 @@
     "--canvas-event-shader-fill": "#7c3aed",
     "--canvas-event-shader-text": "#f5f3ff",
     "--canvas-event-stroke": "#7c2d12",
+    "--canvas-easing-left-bound": "#ececb0",
+    "--canvas-easing-right-bound": "#a0ec4a",
     "--canvas-inspector-marker": "#15803d",
     "--canvas-inspector-path": "#7a5f18",
     "--canvas-note-drag": "#7a5f18",

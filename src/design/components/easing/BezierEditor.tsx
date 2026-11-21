@@ -5,8 +5,11 @@
  * through a single draft: a pasted control-point line can be corrected as a
  * whole, and its first four numbers become the curve. The canvas remains a
  * direct-manipulation preview of the same draft. Both x coordinates stay inside
- * `[0, 1]`; y may overshoot either end, so the vertical axis grows to keep every
- * handle visible. Without overshoot the axis is exactly the unit square.
+ * `[0, 1]`; y may overshoot either end, and the shared plot rect keeps every
+ * handle reachable without moving the frame.
+ *
+ * Painting goes through `easingCanvas.ts` like the easing preview does, so the
+ * frame, the overshoot fade, and the theme colours are the same code.
  */
 import {
   useEffect,
@@ -21,7 +24,17 @@ import { bezier } from "../../../core/utils/easing.ts";
 import { clamp01 } from "../../../core/utils/numbers.ts";
 import { t } from "../../../i18n/index.ts";
 import { formatBezierPoints, parseBezierPointText } from "./bezierPointText.ts";
-import { EASING_CANVAS_HEIGHT, EASING_CANVAS_WIDTH, resizeEasingCanvas } from "./easingCanvas.ts";
+import {
+  EASING_BEZIER_PLOT,
+  EASING_CANVAS_HEIGHT,
+  EASING_CANVAS_WIDTH,
+  EASING_GUIDE_ALPHA,
+  drawEasingFrame,
+  drawEasingUnitLines,
+  easingProgressX,
+  prepareEasingCanvas,
+  strokeEasingPolyline,
+} from "./easingCanvas.ts";
 
 interface BezierEditorProps {
   points: readonly number[];
@@ -34,12 +47,8 @@ interface BezierEditorProps {
 
 const WIDTH = EASING_CANVAS_WIDTH;
 const HEIGHT = EASING_CANVAS_HEIGHT;
-const LEFT = 10;
-/** Plot edges; the 20px bands above and below hold an overshooting handle. */
-const TOP = 20;
-const BOTTOM = 80;
-const PLOT_WIDTH = WIDTH - LEFT * 2;
-const PLOT_HEIGHT = BOTTOM - TOP;
+const PLOT_WIDTH = EASING_BEZIER_PLOT.right - EASING_BEZIER_PLOT.left;
+const PLOT_HEIGHT = EASING_BEZIER_PLOT.bottom - EASING_BEZIER_PLOT.top;
 const DEFAULT_POINTS = [0, 0, 1, 1];
 /** Control-point indices, in the order their two handle styles are stored. */
 const HANDLE_POINTS = [0, 2] as const;
@@ -50,6 +59,8 @@ const HANDLE_RADIUS = 4;
 const HANDLE_ACTIVE_RADIUS = 5.2;
 /** Handle colour and size transitions. */
 const HANDLE_TRANSITION_MS = 140;
+/** Curve segments across the transfer. */
+const SEGMENTS = 96;
 
 /** The value range the vertical axis shows; the unit square is always part of it. */
 interface ValueWindow {
@@ -187,50 +198,36 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     };
   }, []);
 
-  /** The three resolved handle inks, with fallbacks for a partial theme. */
-  const handleInks = () => {
-    const canvas = canvasRef.current;
-    const style = canvas ? getComputedStyle(canvas) : null;
-    const token = (name: string) => style?.getPropertyValue(name).trim() ?? "";
-    const idle = token("--foreground");
-    return {
-      idle,
-      hover: token("--accent-hover") || token("--accent") || idle,
-      drag: token("--accent-pressed") || token("--accent") || idle,
-    };
-  };
-
   /** The size and colour each handle settles on for the current state. */
   const handleTargets = (): HandleStyle[] => {
-    const inks = handleInks();
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return handleStyles.current;
+    }
+    const style = getComputedStyle(canvas);
+    const token = (name: string) => style.getPropertyValue(name).trim();
+    const idle = token("--foreground");
+    const hover = token("--accent-hover") || token("--accent") || idle;
+    const active = token("--accent-pressed") || token("--accent") || idle;
     const dragging = dragIndex.current;
     return HANDLE_POINTS.map((index) => {
-      const active = dragging === index;
-      const hovered = hoverIndex.current === index;
+      const isActive = dragging === index;
+      const isHovered = hoverIndex.current === index;
       return {
-        radius: active || hovered ? HANDLE_ACTIVE_RADIUS : HANDLE_RADIUS,
-        color: colorRgb(active ? inks.drag : hovered ? inks.hover : inks.idle),
+        radius: isActive || isHovered ? HANDLE_ACTIVE_RADIUS : HANDLE_RADIUS,
+        color: colorRgb(isActive ? active : isHovered ? hover : idle),
       };
     });
   };
 
-  /** Draw the frame, guides, curve, and the current animated handles. */
+  /** Draw the frame, control handles, and the current animated handles. */
   const paint = () => {
     const canvas = canvasRef.current;
-    const draw = canvas?.getContext("2d");
-    if (!canvas || !draw) {
+    const surface = canvas ? prepareEasingCanvas(canvas, EASING_BEZIER_PLOT) : null;
+    if (!canvas || !surface) {
       return;
     }
-    const style = getComputedStyle(canvas);
-    const token = (name: string) => style.getPropertyValue(name).trim();
-    const rect = canvas.getBoundingClientRect();
-    const cssWidth = Math.max(1, rect.width || WIDTH);
-    const cssHeight = Math.max(1, rect.height || HEIGHT);
-    const { pixelWidth, pixelHeight, scaleX, scaleY } = resizeEasingCanvas(
-      canvas,
-      cssWidth,
-      cssHeight,
-    );
+    const { context, palette, plot } = surface;
     const draft = draftPoints.current;
     if (
       !stylesReady.current ||
@@ -242,46 +239,52 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
       handleStyles.current = handleTargets();
       stylesReady.current = true;
     }
+
     const axis = valueWindow(draft);
     const span = axis.maximum - axis.minimum;
-    const xOf = (value: number) => LEFT + value * PLOT_WIDTH;
-    const yOf = (value: number) => BOTTOM - ((value - axis.minimum) / span) * PLOT_HEIGHT;
-    draw.setTransform(1, 0, 0, 1, 0, 0);
-    draw.clearRect(0, 0, pixelWidth, pixelHeight);
-    draw.setTransform(scaleX, 0, 0, scaleY, 0, 0);
-    draw.strokeStyle = token("--foreground-muted");
-    draw.lineWidth = 1;
-    draw.setLineDash([2, 3]);
-    draw.strokeRect(LEFT, yOf(1), PLOT_WIDTH, yOf(0) - yOf(1));
-    draw.setLineDash([3, 3]);
-    draw.beginPath();
-    draw.moveTo(xOf(0), yOf(0));
-    draw.lineTo(xOf(draft[0]), yOf(draft[1]));
-    draw.moveTo(xOf(1), yOf(1));
-    draw.lineTo(xOf(draft[2]), yOf(draft[3]));
-    draw.stroke();
-    draw.setLineDash([]);
-    draw.strokeStyle = token("--warning");
-    draw.lineWidth = 2;
-    draw.beginPath();
-    for (let index = 0; index <= 100; index += 1) {
-      const progress = index / 100;
-      const value = bezier(progress, draft);
-      const x = xOf(progress);
-      const y = yOf(value);
-      if (index === 0) {
-        draw.moveTo(x, y);
-      } else {
-        draw.lineTo(x, y);
-      }
+    const yOf = (value: number) => plot.bottom - ((value - axis.minimum) / span) * PLOT_HEIGHT;
+    const xOfProgress = (progress: number) => easingProgressX(progress, plot);
+
+    drawEasingFrame(surface);
+    // A control point may sit past ±1, which is what the limit lines are for; a
+    // draft inside the range needs no line because the frame edges are the limit.
+    drawEasingUnitLines(surface, yOf, [draft[1], draft[3]]);
+
+    // The two control-handle tangents are context, so they take the guide weight
+    // and stay dashed: a dashed guide is what separates an editable handle line
+    // from the curve itself.
+    context.save();
+    context.strokeStyle = palette.guide;
+    context.globalAlpha = EASING_GUIDE_ALPHA;
+    context.lineWidth = 1;
+    context.setLineDash([3, 3]);
+    context.beginPath();
+    context.moveTo(xOfProgress(0), yOf(0));
+    context.lineTo(xOfProgress(draft[0]), yOf(draft[1]));
+    context.moveTo(xOfProgress(1), yOf(1));
+    context.lineTo(xOfProgress(draft[2]), yOf(draft[3]));
+    context.stroke();
+    context.restore();
+
+    const points: number[] = [];
+    for (let index = 0; index <= SEGMENTS; index += 1) {
+      const progress = index / SEGMENTS;
+      points.push(xOfProgress(progress), yOf(bezier(progress, draft)));
     }
-    draw.stroke();
+    strokeEasingPolyline(surface, { points, style: "curve" }, 2);
+
     for (const [styleIndex, pointIndex] of HANDLE_POINTS.entries()) {
       const handle = handleStyles.current[styleIndex];
-      draw.fillStyle = colorFill(handle.color);
-      draw.beginPath();
-      draw.arc(xOf(draft[pointIndex]), yOf(draft[pointIndex + 1]), handle.radius, 0, Math.PI * 2);
-      draw.fill();
+      context.fillStyle = colorFill(handle.color);
+      context.beginPath();
+      context.arc(
+        xOfProgress(draft[pointIndex]),
+        yOf(draft[pointIndex + 1]),
+        handle.radius,
+        0,
+        Math.PI * 2,
+      );
+      context.fill();
     }
   };
 
@@ -389,10 +392,12 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     const logicalX = ((pointer.clientX - rect.left) / rect.width) * WIDTH;
     const logicalY = ((pointer.clientY - rect.top) / rect.height) * HEIGHT;
     return {
-      x: clamp01((logicalX - LEFT) / PLOT_WIDTH),
+      x: clamp01((logicalX - EASING_BEZIER_PLOT.left) / PLOT_WIDTH),
       // The pointer may leave the plot while the drag keeps the capture, so the
       // value follows the full canvas height and can overshoot the unit square.
-      y: axis.minimum + ((BOTTOM - logicalY) / PLOT_HEIGHT) * (axis.maximum - axis.minimum),
+      y:
+        axis.minimum +
+        ((EASING_BEZIER_PLOT.bottom - logicalY) / PLOT_HEIGHT) * (axis.maximum - axis.minimum),
       logicalX,
       logicalY,
     };
@@ -405,9 +410,10 @@ export function BezierEditor({ points, commit, preview, label }: BezierEditorPro
     const span = axis.maximum - axis.minimum;
     let nearest: { index: number; distance: number } | null = null;
     for (const index of HANDLE_POINTS) {
-      const x = LEFT + (draftPoints.current[index] ?? 0) * PLOT_WIDTH;
+      const x = easingProgressX(draftPoints.current[index] ?? 0, EASING_BEZIER_PLOT);
       const y =
-        BOTTOM - (((draftPoints.current[index + 1] ?? 0) - axis.minimum) / span) * PLOT_HEIGHT;
+        EASING_BEZIER_PLOT.bottom -
+        (((draftPoints.current[index + 1] ?? 0) - axis.minimum) / span) * PLOT_HEIGHT;
       const distance = Math.hypot(point.logicalX - x, point.logicalY - y);
       if (!nearest || distance < nearest.distance) {
         nearest = { index, distance };

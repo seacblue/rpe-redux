@@ -41,26 +41,29 @@
 }
 
 // The drawn easing curve. It is the replacement for the 29 shipped pictures: the
-// same picture is produced from the chart's own easing functions.
+// same picture is produced from the chart's own easing functions. The canvas
+// owns no surface of its own — no border, fill, or radius — so the plot frame
+// inside it is the only box and the curve reads against the panel.
 .easing-preview {
   display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 2.6;
   margin: 0 0 var(--space-2);
-  background: var(--input-surface);
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-control);
+  background: transparent;
+  border: 0;
   box-sizing: border-box;
 }
 
 // The Bézier editor belongs to this picker, not to a dialog. Its coordinates
 // use an ordinary FieldRow and the canvas keeps the intrinsic curve aspect ratio.
+// It shares the easing preview's transparent surface and spacing so switching
+// modes never shifts the rows below the plot.
 .bezier-editor {
   width: 100%;
   height: auto;
   aspect-ratio: 2.6;
-  margin: var(--space-1) 0;
+  background: transparent;
   cursor: var(--app-cursor-pointer);
   touch-action: none;
   user-select: none;

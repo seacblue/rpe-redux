@@ -77,35 +77,25 @@ function eventValueKind(type: string, value: unknown): ValueKind {
  * transform as every other field.
  */
 function EasingRangeField({
-  session,
-  event,
   field,
   title,
-  reportError,
-  refresh,
+  range,
+  onDraft,
+  onCommit,
   setLiveEventEdit,
+  refresh,
+  session,
 }: {
-  session: EditorSession;
-  event: JudgeLineEvent;
   field: "easingLeft" | "easingRight";
   title: string;
-  reportError: (error: unknown) => void;
-  refresh: () => void;
+  /** The value the preview is showing, which a drag keeps ahead of the event. */
+  range: number;
+  onDraft(value: number): void;
+  onCommit(value: number): void;
   setLiveEventEdit: (active: boolean) => void;
+  refresh: () => void;
+  session: EditorSession;
 }) {
-  const fallback = field === "easingRight" ? 1 : 0;
-  const value = clamp01(Number(event[field] ?? fallback));
-  const commit = (next: number) => {
-    try {
-      applyEventTransform(
-        session,
-        t("editorPanels.inspector.event.modify", { field: title }),
-        (current) => ({ ...current, [field]: clamp01(next) }),
-      );
-    } catch (error) {
-      reportError(error);
-    }
-  };
   const id = `event-field-${field}`;
   return (
     <FieldRow
@@ -119,10 +109,11 @@ function EasingRangeField({
           min={0}
           max={1}
           step={0.01}
-          value={value}
+          value={range}
           data-inspector-field={field}
           aria-label={title}
-          onChange={(input) => commit(Number(input.currentTarget.value))}
+          onChange={(input) => onDraft(Number(input.currentTarget.value))}
+          onCommit={onCommit}
           onFocus={() => setLiveEventEdit(true)}
           onBlur={() => {
             setLiveEventEdit(false);
@@ -159,6 +150,12 @@ export function EventInspectorView({
   const [cutAnchorElement, setCutAnchorElement] = useState<HTMLButtonElement | null>(null);
   const [cutOpen, setCutOpen] = useState(false);
   const [cutDensity, setCutDensity] = useState("");
+  // The two range sliders share one draft so the preview follows a drag while
+  // the event keeps its stored values until the gesture ends.
+  const [rangeDraft, setRangeDraft] = useState<{
+    easingLeft: number | null;
+    easingRight: number | null;
+  }>({ easingLeft: null, easingRight: null });
   const cutPressAt = useRef<number | null>(null);
   const cutLongPressed = useRef(false);
   const event = entry?.event;
@@ -357,6 +354,54 @@ export function EventInspectorView({
     easingLeft: event.easingLeft,
     easingRight: event.easingRight,
   });
+  // The two range sliders share one draft so the preview follows a drag while
+  // the event keeps its stored values until the gesture ends.
+  const setDraftRange = (field: "easingLeft" | "easingRight", value: number | null) =>
+    setRangeDraft((current) =>
+      current[field] === value ? current : { ...current, [field]: value },
+    );
+  // A drag emits a step per pointer move. Committing each one rebuilt the whole
+  // event track and its history entry, which starved the preview canvas, so one
+  // commit writes the value the gesture ends on.
+  const commitRange = (field: "easingLeft" | "easingRight", next: number) => {
+    const stored = clamp01(Number(event[field] ?? (field === "easingRight" ? 1 : 0)));
+    if (clamp01(next) === stored) {
+      setDraftRange(field, null);
+      return;
+    }
+    const title = t(
+      field === "easingLeft"
+        ? "editorPanels.inspector.event.easingLeft"
+        : "editorPanels.inspector.event.easingRight",
+    );
+    try {
+      applyEventTransform(
+        session,
+        t("editorPanels.inspector.event.modify", { field: title }),
+        (current) => ({
+          ...current,
+          [field]: clamp01(next),
+        }),
+      );
+    } catch (error) {
+      // The edit was refused, so the draft has nothing to agree with.
+      setDraftRange(field, null);
+      reportError(error);
+    }
+  };
+  // The panel republishes a frame or more after the commit, so the draft stays
+  // authoritative until the stored event carries its value. Deriving the live
+  // value from the stored one means no limbo frame where the old value is back.
+  const liveRange = (field: "easingLeft" | "easingRight") => {
+    const stored = clamp01(Number(event[field] ?? (field === "easingRight" ? 1 : 0)));
+    const draft = rangeDraft[field];
+    return draft === null || Math.abs(draft - stored) < 1e-9 ? stored : draft;
+  };
+  const previewCurveValues = {
+    ...curveValues,
+    easingLeft: liveRange("easingLeft"),
+    easingRight: liveRange("easingRight"),
+  };
   const curveMode = bezierEnabled && curveValues.bezier ? "bezier" : "easing";
   const rangeVisible =
     easingRangeEnabled ||
@@ -431,8 +476,8 @@ export function EventInspectorView({
         easingType={Number(event.easingType ?? 1)}
         bezier={curveValues.bezier}
         bezierPoints={curveValues.bezierPoints}
-        easingLeft={curveValues.easingLeft}
-        easingRight={curveValues.easingRight}
+        easingLeft={previewCurveValues.easingLeft}
+        easingRight={previewCurveValues.easingRight}
         startValue={typeof event.start === "number" ? event.start : undefined}
         endValue={typeof event.end === "number" ? event.end : undefined}
         onChange={changeCurve}
@@ -447,10 +492,11 @@ export function EventInspectorView({
         renderRangeField={(field, row) => (
           <EasingRangeField
             session={session}
-            event={event}
             field={field}
             title={row.label}
-            reportError={reportError}
+            range={liveRange(field)}
+            onDraft={(value) => setDraftRange(field, value)}
+            onCommit={(value) => commitRange(field, value)}
             refresh={refresh}
             setLiveEventEdit={setLiveEventEdit}
           />

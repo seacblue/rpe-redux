@@ -26,6 +26,8 @@ const TOKENS = [
   "--canvas-event-shader-fill",
   "--canvas-event-shader-text",
   "--canvas-event-stroke",
+  "--canvas-easing-left-bound",
+  "--canvas-easing-right-bound",
   "--canvas-inspector-marker",
   "--canvas-inspector-path",
   "--canvas-note-drag",
