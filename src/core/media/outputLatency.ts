@@ -51,6 +51,22 @@ export interface LatencyReportSource extends LatencyStages {
   readonly getOutputTimestamp?: () => { readonly contextTime?: number };
 }
 
+/**
+ * How far a start has drained toward the speaker, from 0 to 1.
+ *
+ * A source scheduled at `anchor` becomes audible one output chain later. Until
+ * then the audible clock stands still, so a picture that leads at full strength
+ * would run ahead of the silent start. Non-draining playback reports 1.
+ */
+export function startDrainProgress(source: LatencyReportSource, anchor: number): number {
+  const latency = totalOutputLatency(source);
+  const elapsed = Number(source.currentTime) - Number(anchor);
+  if (!(latency > 0) || !Number.isFinite(elapsed)) {
+    return 1;
+  }
+  return Math.min(1, Math.max(0, elapsed / latency));
+}
+
 /** What the visual clock subtracts, next to what the device reports. */
 export interface LatencyReport {
   /** Render-graph delay reported by the host, in seconds. */

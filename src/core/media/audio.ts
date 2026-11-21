@@ -13,7 +13,12 @@ import { clamp01 } from "../utils/numbers.ts";
 import { t } from "../../i18n/index.ts";
 import { mediaType } from "./mime.ts";
 import { TimeStretchStretcher } from "./timeStretch.ts";
-import { totalOutputLatency, latencyReport, type LatencyReport } from "./outputLatency.ts";
+import {
+  totalOutputLatency,
+  latencyReport,
+  startDrainProgress,
+  type LatencyReport,
+} from "./outputLatency.ts";
 import { rampGain } from "./gainRamp.ts";
 import { toArrayBuffer, toBlobPart } from "../utils/bytes.ts";
 import {
@@ -423,6 +428,24 @@ export class AudioTransport {
     };
   }
   /**
+   * How far a start has drained toward the speaker, from 0 to 1.
+   *
+   * A start schedules samples at the processing clock; the speaker hears them one
+   * output chain later. The picture has to know this window because a frame painted
+   * during it is presented before the sound has moved, so the display lead is only
+   * established as the queue drains. Non-draining playback reports 1.
+   */
+  get outputDrainProgress(): number {
+    if (!this.playing || this.usesMedia) {
+      return 1;
+    }
+    const context = this.context;
+    if (!context) {
+      return 1;
+    }
+    return startDrainProgress(context, this.anchor);
+  }
+  /**
    * Whether a start is still waiting for its first samples to reach the speaker.
    *
    * `time` holds the start position for this window, so a caller that
@@ -431,14 +454,7 @@ export class AudioTransport {
    * sample catches up.
    */
   get awaitingOutput(): boolean {
-    if (!this.playing) {
-      return false;
-    }
-    if (this.usesMedia) {
-      return false;
-    }
-    const context = this.context;
-    return Boolean(context && context.currentTime - this.anchor < this.outputLatency);
+    return this.outputDrainProgress < 1;
   }
   /** How far ahead callers may schedule when the media clock is not ready. */
   get scheduleHorizon(): number {

@@ -2,7 +2,11 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { showProgressToast } from "../../../../../../design/patterns/ToastHost.tsx";
 import { AutoSaveClock } from "../../../../../../core/edit/session/autosave.ts";
-import { EditorPlayback } from "../../../../../../core/edit/playback/transport.ts";
+import {
+  EditorPlayback,
+  type PlaybackSeekReason,
+} from "../../../../../../core/edit/playback/transport.ts";
+import { createPictureClock } from "../../../../../../core/edit/playback/pictureClock.ts";
 import { PlaybackMetrics } from "../../../../../../core/edit/perf/playbackMetrics.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { idleScheduler } from "../../document/save/idleScheduler.ts";
@@ -18,6 +22,13 @@ import type { TimelineRuntime } from "./TimelineProvider.tsx";
 /** Transport, playback clocks, metrics, and draft autosave for one editor mount. */
 export interface PlaybackRuntime {
   chartSeconds(): number;
+  /**
+   * Chart time the picture shows for an audible position.
+   *
+   * The frame clock and the seek report share this basis, so the playhead, the
+   * viewport origin, and the paused hold describe one instant.
+   */
+  drawnSeconds(audibleSeconds: number): number;
   currentBeat(): number;
   readonly playback: EditorPlayback;
   readonly playbackMetrics: PlaybackMetrics;
@@ -114,20 +125,22 @@ export function createPlaybackRuntime(options: {
   const { audio, hitSounds, realtimePreview } = options.preview;
   const chartSeconds = () => audio.time - options.offsetSeconds();
   /**
-   * Chart time as the picture draws it.
+   * The chart time the picture shows, with the display lead while the transport
+   * moves and the last drawn position while it is paused.
    *
-   * The visual clock leads the audible position by the display delay while the
-   * transport moves, and every playback frame publishes the viewport origin from
-   * that lead position. A seek has to publish the same basis, or the origin snaps
-   * back by the lead while the picture keeps it — one displaced frame at the
-   * moment playback stops.
-   *
-   * A paused transport draws at the position it holds: nothing advances while the
-   * frame is presented, so the lead would invent a position. The origin follows
-   * the same rule, which is what lets a seek to the start report exactly zero.
+   * The frame clock and every seek report use this basis. A pause holds the
+   * playhead where the last frame drew it instead of dropping back by the lead;
+   * an explicit seek releases the hold so a paused seek reports the transport
+   * position itself, including zero at the start. A start establishes the lead
+   * while its first samples drain toward the speaker, so pressing play does not
+   * jump the picture forward before any sound is audible.
    */
-  const drawnChartSeconds = () =>
-    chartSeconds() + (audio.playing ? options.visualLeadSeconds() : 0);
+  const picture = createPictureClock({
+    playing: () => audio.playing,
+    leadSeconds: options.visualLeadSeconds,
+    drainProgress: () => audio.outputDrainProgress,
+  });
+  const drawnChartSeconds = () => picture.seconds(chartSeconds());
   let preloadAt = Number.NEGATIVE_INFINITY;
   let preloadPending = false;
   /** Keep the paged line window ahead of a seek or playback start. */
@@ -160,9 +173,14 @@ export function createPlaybackRuntime(options: {
    *
    * A transport seek and an offset edit both move the chart position under the
    * playhead, so both need the same viewport, preview, preload, and repaint work.
-   * The transport position itself is the caller's business.
+   * A pause keeps the picture where it was drawn; a seek releases that hold and
+   * reports the transport position. The transport position itself is the caller's
+   * business.
    */
-  const publishSeek = () => {
+  const publishSeek = (reason: PlaybackSeekReason = "seek") => {
+    if (reason === "seek") {
+      picture.release();
+    }
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
     options.timeline.viewport.setOrigin(
       options.tempo().beat(drawnChartSeconds(), options.session.current.line?.bpmfactor ?? 1),
@@ -375,13 +393,14 @@ export function createPlaybackRuntime(options: {
 
   return {
     chartSeconds,
+    drawnSeconds: (audibleSeconds: number) => picture.seconds(audibleSeconds),
     currentBeat,
     playback,
     playbackMetrics,
     autoSave,
     seekBeat,
     seekByBeats,
-    resync: publishSeek,
+    resync: () => publishSeek("seek"),
     togglePlayback,
     /** Stops the chase, cancels autosave, and pauses the transport. */
     dispose() {

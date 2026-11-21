@@ -44,17 +44,17 @@ function createAudio(state) {
   };
 }
 
-test("pause republishes the viewport origin", () => {
+test("pause republishes the viewport origin at the held position", () => {
   // `drawn` is ahead of the frozen position by the interpolation lead, exactly
   // as the visual clock is.
   const state = { drawn: 11.012 };
   const audio = createAudio(state);
-  let seeks = 0;
+  const reasons = [];
   const playback = new EditorPlayback(
     audio,
     { chart: null, prepare: async () => {}, stop: () => {} },
-    () => {
-      seeks += 1;
+    (reason) => {
+      reasons.push(reason);
     },
   );
 
@@ -64,36 +64,36 @@ test("pause republishes the viewport origin", () => {
 
   assert.equal(audio.playing, false, "pause must stop the transport");
   assert.equal(audio.position, 11.012, "pause freezes the authoritative position");
-  assert.equal(seeks, 1, "pause must publish one seek so the origin re-anchors");
+  assert.deepEqual(reasons, ["pause"], "pause must publish one held report");
 });
 
-test("seek publishes one report, not two", () => {
+test("seek publishes one report with its final position", () => {
   const state = { drawn: 11 };
   const audio = createAudio(state);
-  let seeks = 0;
+  const reasons = [];
   const playback = new EditorPlayback(
     audio,
     { chart: null, prepare: async () => {}, stop: () => {} },
-    () => {
-      seeks += 1;
+    (reason) => {
+      reasons.push(reason);
     },
   );
 
   playback.seek(20);
 
   assert.equal(audio.position, 20);
-  assert.equal(seeks, 1, "a seek publishes its final position once");
+  assert.deepEqual(reasons, ["seek"], "a seek releases the hold and reports once");
 });
 
-test("toggle pauses a running transport and reports the freeze", async () => {
+test("toggle pauses a running transport and reports the hold", async () => {
   const state = { drawn: 12.5 };
   const audio = createAudio(state);
-  let seeks = 0;
+  const reasons = [];
   const playback = new EditorPlayback(
     audio,
     { chart: null, prepare: async () => {}, stop: () => {} },
-    () => {
-      seeks += 1;
+    (reason) => {
+      reasons.push(reason);
     },
   );
 
@@ -101,5 +101,5 @@ test("toggle pauses a running transport and reports the freeze", async () => {
   await playback.toggle({ judgeLineList: [] });
 
   assert.equal(audio.playing, false);
-  assert.equal(seeks, 1);
+  assert.deepEqual(reasons, ["pause"]);
 });

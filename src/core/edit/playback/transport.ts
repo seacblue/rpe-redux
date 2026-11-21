@@ -32,11 +32,19 @@ export interface PlaybackSounds {
   stop(): void;
 }
 
+/**
+ * Why a transport report was published.
+ *
+ * A pause keeps the picture at its last drawn position; a seek releases that
+ * position so the picture follows the transport to its new time.
+ */
+export type PlaybackSeekReason = "pause" | "seek";
+
 /** Drives play, pause, rate, and seeking across audio and hitsound owners. */
 export class EditorPlayback {
   audio: PlaybackAudio;
   sounds: PlaybackSounds;
-  onSeek: () => void;
+  onSeek: (reason: PlaybackSeekReason) => void;
   onStateChange: () => void;
   request: number;
   pending: boolean;
@@ -46,7 +54,7 @@ export class EditorPlayback {
   constructor(
     audio: PlaybackAudio,
     sounds: PlaybackSounds,
-    onSeek: () => void,
+    onSeek: (reason: PlaybackSeekReason) => void,
     onStateChange: () => void = () => {},
   ) {
     this.audio = audio;
@@ -60,14 +68,14 @@ export class EditorPlayback {
   /**
    * Stop audio and hitsounds and invalidate any pending start.
    *
-   * The pause reports a seek as well as a state change. The transport freezes
-   * `position` at the authoritative audio time, while the timeline's viewport
-   * origin was last published from the *interpolated* visual time of the frame
-   * before. Nothing republishes the origin once `playing` is false, so the grid
-   * would keep the interpolated position while the playhead snapped to the
-   * authoritative one — up to one display frame of difference, drawn as a jump
-   * at the moment playback stops. Publishing a seek re-anchors both to the same
-   * value.
+   * The pause reports the held drawn position as well as a state change. The
+   * transport freezes `position` at the authoritative audio time, while the
+   * timeline's viewport origin was last published from the drawn time of the frame
+   * before, which leads the audible position by the picture lead. Nothing
+   * republishes the origin once `playing` is false, so the grid would keep the
+   * drawn anchor while the playhead snapped to the audible one — a visible jump by
+   * the lead at the moment playback stops. The pause report re-anchors both to the
+   * held drawn position.
    */
   pause(): void {
     this.request++;
@@ -75,13 +83,13 @@ export class EditorPlayback {
     this.audio.pause();
     this.sounds.stop();
     this.onStateChange();
-    this.onSeek();
+    this.onSeek("pause");
   }
   /** Seeks the transport, stopping hitsounds and notifying the seek listener. */
   seek(seconds: number, pause = true): void {
     if (pause) {
-      // `pause()` already publishes the seek for the frozen position; the explicit
-      // seek below publishes the new one, so the intermediate report is skipped.
+      // A seek releases the held picture and publishes its own final position;
+      // the intermediate pause report would describe the position it leaves.
       this.request++;
       this.pending = false;
       this.audio.pause();
@@ -90,7 +98,7 @@ export class EditorPlayback {
     }
     this.audio.seek(seconds);
     this.sounds.stop();
-    this.onSeek();
+    this.onSeek("seek");
   }
   /** Pauses when playing or pending; otherwise starts playback. */
   async toggle(chart: Chart): Promise<void> {

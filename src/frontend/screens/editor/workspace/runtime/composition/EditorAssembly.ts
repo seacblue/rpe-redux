@@ -543,6 +543,7 @@ export function createEditorAssembly(
   });
   const {
     chartSeconds,
+    drawnSeconds,
     currentBeat,
     playback,
     playbackMetrics,
@@ -1262,7 +1263,7 @@ export function createEditorAssembly(
       session: () => session.current,
       tempo: tempo.get,
       chartSeconds,
-      visualLeadSeconds: visualLead,
+      drawnSeconds,
       invalidate,
     },
     drawing: {
