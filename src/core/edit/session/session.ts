@@ -5,7 +5,7 @@ import {
   inheritValueContentFingerprint,
   markValueContentFingerprintDirty,
 } from "../../global/chart/chartContentHash.ts";
-import { warmChartFingerprintAsync } from "../document/chartRevision.ts";
+import { chartFingerprint, warmChartFingerprintAsync } from "../document/chartRevision.ts";
 import type { ChartDocument } from "../../global/chart/streaming/chartDocument.ts";
 import {
   History,
@@ -988,7 +988,13 @@ export class EditorSession extends EventTarget {
         return false;
       }
     }
-    const afterSelection = options.afterSelection ?? this.selectionState();
+    const currentSelection = this.selectionState();
+    const lineCountChanged =
+      (this.chart.judgeLineList?.length ?? 0) !== (before.chart.judgeLineList?.length ?? 0);
+    const remappedSelection = lineCountChanged
+      ? remapSelection(this.chart, before.chart, currentSelection)
+      : null;
+    const afterSelection = options.afterSelection ?? remappedSelection ?? currentSelection;
     // A transaction has already checked its revisions before entering this
     // boundary. Extension hooks may replace the chart, so only reuse those
     // tokens when no hook can invalidate the planned fingerprint.
@@ -1045,6 +1051,8 @@ export class EditorSession extends EventTarget {
           : { notes: 0, events: 0 });
       if (options.afterSelection) {
         restoreSelection(this, options.afterSelection);
+      } else if (remappedSelection) {
+        restoreSelection(this, remappedSelection);
       }
       const entry = this.history.undoStack.at(-1);
       if (entry) {
@@ -1069,6 +1077,13 @@ export class EditorSession extends EventTarget {
       extensionRegistry.emitHook("session:after-commit", {
         label: before.label,
         chart: structuredClone(this.chart),
+      });
+    }
+    if (committed) {
+      extensionRegistry.emitEvent("chart:changed", {
+        label: before.label,
+        chartFingerprint: chartFingerprint(this.chart),
+        reason: remote ? "external" : "commit",
       });
     }
     this.notify();
@@ -1339,6 +1354,11 @@ export class EditorSession extends EventTarget {
     );
     this.lastEditBeatRange = command.beatRange ?? null;
     this.notify();
+    extensionRegistry.emitEvent("chart:changed", {
+      label: command.label,
+      chartFingerprint: chartFingerprint(this.chart),
+      reason: direction,
+    });
     return true;
   }
 

@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { library } from "../../../core/api/library.ts";
+import { collectLibraryPages, library } from "../../../core/api/library.ts";
 import { editorProjectId } from "../../../core/edit/state/publishedValues.ts";
 import { gateExtensionApi } from "../../../core/extensions/capabilityGate.ts";
 import { LocalLibrary } from "../../../core/global/library/client.ts";
@@ -74,6 +74,25 @@ test("the public current handle follows the open document's project", () => {
   } finally {
     editorProjectId.set(previous);
   }
+});
+
+test("collectLibraryPages drains every page and deduplicates ids", async () => {
+  const data = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" }];
+  let calls = 0;
+  const items = await collectLibraryPages(
+    async (offset, limit) => {
+      calls += 1;
+      return { items: data.slice(offset, offset + limit), total: data.length };
+    },
+    (item) => item.id,
+    2,
+  );
+
+  assert.deepEqual(
+    items.map((item) => item.id),
+    ["a", "b", "c", "d", "e"],
+  );
+  assert.equal(calls, 3);
 });
 
 test("LocalLibrary.scope keeps every call on its captured project", async () => {

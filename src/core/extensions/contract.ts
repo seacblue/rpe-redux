@@ -76,6 +76,13 @@ export interface SelectionAfterPastePayload {
   result: SelectionOperationResult;
 }
 
+/** One committed chart revision; subscribers re-read when they need the data. */
+export interface ChartChangedPayload {
+  readonly label: string | null;
+  readonly chartFingerprint: string | null;
+  readonly reason: "commit" | "undo" | "redo" | "external";
+}
+
 /**
  * Built-in notifications currently emitted by the extension runtime.
  *
@@ -89,6 +96,7 @@ export interface ExtensionEventPayloads {
   "document:restored": DocumentLifecyclePayload;
   "document:saved": DocumentLifecyclePayload;
   "document:closed": DocumentLifecyclePayload;
+  "chart:changed": ChartChangedPayload;
   "selection:after-paste": SelectionAfterPastePayload;
 }
 
@@ -106,6 +114,7 @@ export const EXTENSION_EVENT_NAMES = Object.freeze([
   "document:restored",
   "document:saved",
   "document:closed",
+  "chart:changed",
   "selection:after-paste",
 ] as const);
 

@@ -15,6 +15,7 @@ import { LANGUAGE_NAMES } from "../../../../i18n/index.ts";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { isDesktop } from "../../../../core/platform/environment.ts";
 import { developerMode } from "../../../../core/platform/desktop/developer.ts";
+import { devDetectorEnabled } from "../../../../core/state/devDetector.ts";
 import { developerNoteBorders } from "../../../../core/state/developerNoteBorders.ts";
 import { developerReveal, isDeveloperRevealed } from "../../../../core/state/developerReveal.ts";
 import { getTheme } from "../../../../core/theme/themes.ts";
@@ -95,6 +96,11 @@ export function DeveloperSettings({ theme }: SettingsPageContext) {
     developerNoteBorders.subscribe,
     developerNoteBorders.get,
     developerNoteBorders.get,
+  );
+  const detectorEnabled = useSyncExternalStore(
+    devDetectorEnabled.subscribe,
+    devDetectorEnabled.get,
+    devDetectorEnabled.get,
   );
   const developerSource = useSyncExternalStore(
     subscribeDeveloperSource,
@@ -274,6 +280,21 @@ export function DeveloperSettings({ theme }: SettingsPageContext) {
             type="checkbox"
             checked={performanceHudEnabledValue}
             onChange={togglePerformanceHud}
+          />
+        }
+      />
+      <FieldRow
+        className="redux-setting"
+        data-control="toggle"
+        htmlFor="developer-detector"
+        label={t("settings.help.developer.detector")}
+        description={t("settings.help.developer.detectorHint")}
+        control={
+          <Input
+            id="developer-detector"
+            type="checkbox"
+            checked={detectorEnabled}
+            onChange={(event) => devDetectorEnabled.set(event.currentTarget.checked)}
           />
         }
       />

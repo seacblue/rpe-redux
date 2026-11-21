@@ -79,6 +79,7 @@ import {
 } from "./mutable.ts";
 import { applyJudgeLinePatch, validateTouchedLineRelations } from "./linePatches.ts";
 import { applyTiming } from "./timing.ts";
+import { remapShaderLines } from "../../global/chart/shader/shaderEvents.ts";
 
 const NOTE_PATCH_BLOCKLIST = new Set(["id"]);
 const EVENT_PATCH_BLOCKLIST = new Set(["id", "line", "lineIndex", "eventType", "layer"]);
@@ -815,6 +816,118 @@ function updateEvents(
   }
 }
 
+/** Record one line and every note/event it owns as affected by the edit. */
+function addLineAffected(state: MutableTransactionState, line: JudgeLine): void {
+  addAffected(state, line.id);
+  for (const note of line.notes ?? []) {
+    addAffected(state, note.id);
+  }
+  for (const layer of [...(line.eventLayers ?? []), line.extended]) {
+    if (!layer) {
+      continue;
+    }
+    for (const value of Object.values(layer)) {
+      if (!Array.isArray(value)) {
+        continue;
+      }
+      for (const event of value) {
+        if (isRecord(event)) {
+          addAffected(state, event.id);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Removes judge lines by id.
+ *
+ * Deletion runs before line inserts and updates, so no later operation needs
+ * its index-keyed copy-on-write state re-based. A child whose parent is deleted
+ * moves to the root; every later line shifts down and its `father` is remapped.
+ */
+function deleteLines(state: MutableTransactionState, entries: readonly unknown[]): void {
+  const lines = state.chart.judgeLineList ?? [];
+  const deletions = new Map<number, ChartObjectId>();
+  const seen = new Set<ChartObjectId>();
+  for (const [position, entry] of entries.entries()) {
+    const id = validateObjectId(entry, `lines.delete[${position}]`, state);
+    if (!id) {
+      continue;
+    }
+    if (seen.has(id)) {
+      state.issues.push(issue("object.operation.conflict", `lines.delete[${position}]`, id));
+      continue;
+    }
+    seen.add(id);
+    const index = lines.findIndex((line) => line.id === id);
+    if (index < 0) {
+      state.issues.push(issue("line.id.notFound", `lines.delete[${position}]`, id));
+      continue;
+    }
+    deletions.set(index, id);
+  }
+  if (!deletions.size) {
+    return;
+  }
+  if (lines.length - deletions.size < 1) {
+    state.issues.push(issue("lines.delete.lastLine", "lines.delete"));
+    return;
+  }
+  for (const index of deletions.keys()) {
+    const line = lines[index];
+    if (line) {
+      addLineAffected(state, line);
+    }
+  }
+  const destinations = new Map<number, number>();
+  let destination = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!deletions.has(index)) {
+      destinations.set(index, destination);
+      destination += 1;
+    }
+  }
+  const nextLines = lines.flatMap((line, index) => {
+    if (deletions.has(index)) {
+      return [];
+    }
+    const rawFather = line.father;
+    if (rawFather === undefined || rawFather === null) {
+      return [line];
+    }
+    const father = Number(rawFather);
+    if (!Number.isSafeInteger(father) || father < 0) {
+      return [line];
+    }
+    const nextFather = deletions.has(father) ? -1 : (destinations.get(father) ?? -1);
+    if (nextFather === father) {
+      return [line];
+    }
+    addAffected(state, line.id);
+    if (line.id) {
+      state.relationTouched.add(line.id);
+    }
+    return [{ ...line, father: nextFather }];
+  });
+  const remapped = remapShaderLines(
+    state.chart,
+    { ...state.chart, judgeLineList: nextLines },
+    destinations,
+  );
+  state.chart.judgeLineList = remapped.judgeLineList ?? nextLines;
+  if (remapped.effects !== undefined) {
+    state.chart.effects = remapped.effects;
+  }
+  if (remapped.shaderEvents !== undefined) {
+    state.chart.shaderEvents = remapped.shaderEvents;
+  }
+  if (remapped.META !== undefined) {
+    state.chart.META = remapped.META;
+  }
+  rebuildChartLocations(state.chart);
+}
+
 /** Inserts one judge line and then applies its editable patch fields. */
 function insertLine(
   state: MutableTransactionState,
@@ -933,6 +1046,7 @@ export function applyRequest(
     if (!isRecord(request.lines)) {
       state.issues.push(issue("lines.object.required", "lines"));
     } else {
+      deleteLines(state, readArray(request.lines.delete, "lines.delete", state));
       for (const [index, entry] of readArray(
         request.lines.insert,
         "lines.insert",

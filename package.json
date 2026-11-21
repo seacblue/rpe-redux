@@ -37,7 +37,7 @@
     "check:changelog": "node scripts/checkChangelog.mjs",
     "release:changelog": "node scripts/generateChangelog.mjs",
     "release:prepare": "node scripts/prepareRelease.mjs",
-    "check": "npm run check:types && npm run check:lint && npm run check:style && npm run check:docs && npm run check:icons && npm run check:sdk && npm run check:extensions && npm run check:changeset && npm run check:changelog && npm run test:unit && npm run test:server",
+    "check": "npm run check:types && npm run check:lint && npm run check:style && npm run check:docs && npm run check:icons && npm run check:sdk && npm run check:extensions && npm run check:deprecations && npm run check:changeset && npm run check:changelog && npm run test:unit && npm run test:server",
     "check:types": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsconfig.tsbuildinfo",
     "check:lint": "eslint . --cache --cache-location node_modules/.cache/eslint.cache",
     "check:style": "node scripts/checkStyleRules.mjs && node scripts/checkStylesCompile.mjs",
@@ -45,6 +45,8 @@
     "check:icons": "npm run icons:check",
     "check:sdk": "tsc -p sdk/tsconfig.json --incremental --tsBuildInfoFile node_modules/.cache/sdk.tsbuildinfo",
     "check:extensions": "node scripts/checkExtensionMethods.mjs",
+    "check:deprecations": "node scripts/checkDeprecations.mjs",
+    "generate:deprecations": "node scripts/checkDeprecations.mjs --write",
     "check:native": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo check --manifest-path src-tauri/Cargo.toml",
     "verify": "npm run check && prettier --check --cache --cache-location node_modules/.cache/prettier-cache \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"**/*.md\" \"sdk/**/*.{ts,js,json,md}\" \"*.{html,json,js,ts}\"",
     "fix": "eslint . --fix && prettier --write \"src/**/*.{ts,tsx,less,mjs}\" \"scripts/**/*.mjs\" \"**/*.md\" \"sdk/**/*.{ts,js,json,md}\" \"*.{html,json,js,ts}\""
@@ -52,6 +54,7 @@
   "devDependencies": {
     "@babel/core": "^8.1.0",
     "@babel/eslint-parser": "^8.1.2",
+    "@babel/parser": "^8.1.0",
     "@babel/plugin-syntax-jsx": "^8.0.1",
     "@babel/preset-typescript": "^8.0.7",
     "@changesets/cli": "^3.0.3",

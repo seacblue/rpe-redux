@@ -21,6 +21,7 @@ import {
   type LibraryProject,
   type LibraryProjectSummary,
   type LibraryRevision,
+  type LibraryRevisionPage,
   type LibraryRevisionSummary,
   type LibrarySnapshot,
   type LibrarySnapshotHistory,
@@ -68,7 +69,15 @@ export interface AppPackageRecord extends AppPackageSummary {
 function browserError(error: WorkerResponse["error"]): LocalLibraryError {
   const code = error?.code ?? "browser_library_error";
   const status =
-    code === "not_found" ? 404 : code === "revision_conflict" || code === "occupied" ? 409 : 400;
+    code === "snapshot_expired"
+      ? 410
+      : code === "snapshot_too_large"
+        ? 413
+        : code === "not_found"
+          ? 404
+          : code === "revision_conflict" || code === "occupied"
+            ? 409
+            : 400;
   return new LocalLibraryError(error?.message ?? "browser library request failed", {
     code,
     status,
@@ -610,10 +619,14 @@ export class BrowserLibrary extends LocalLibrary {
 
   override revisions(
     id: string,
-    { limit }: { limit?: number } = {},
+    {
+      limit,
+      offset,
+      snapshotToken,
+    }: { limit?: number; offset?: number; snapshotToken?: string } = {},
     _options: RequestOptions = {},
-  ): Promise<{ revisions: LibraryRevisionSummary[] }> {
-    return this.result("revisions", { id, limit });
+  ): Promise<LibraryRevisionPage> {
+    return this.result("revisions", { id, limit, offset, snapshotToken });
   }
 
   override createRevision(

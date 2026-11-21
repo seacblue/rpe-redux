@@ -16,6 +16,7 @@ import {
 import { isDeveloperRevealed } from "../../../../core/state/developerReveal.ts";
 import { SHORTCUT_CATEGORIES } from "../../../../core/shortcuts/categories.ts";
 import { togglePerformanceHud } from "../../../overlays/performance/performanceHud.ts";
+import { toggleDevDetectorPanel } from "../../../overlays/devDetector/devDetector.ts";
 
 const DEVELOPER_ACTIONS = [
   {
@@ -31,6 +32,13 @@ const DEVELOPER_ACTIONS = [
     icon: "monitor",
     shortcuts: [{ key: "F3" }],
     run: togglePerformanceHud,
+  },
+  {
+    id: "developer.detector",
+    label: "chrome.developer.detector",
+    icon: "monitor",
+    shortcuts: [{ key: "F4" }],
+    run: toggleDevDetectorPanel,
   },
 ] as const;
 

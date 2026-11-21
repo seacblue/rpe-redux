@@ -110,9 +110,16 @@ The host projects payload fields according to the package capabilities. A docume
 | `document:restored` | `DocumentLifecyclePayload` | A saved session document finishes restoring |
 | `document:saved` | `DocumentLifecyclePayload` | A save completes successfully |
 | `document:closed` | `DocumentLifecyclePayload` | The current document is cleared; `chart` is `null` |
+| `chart:changed` | `ChartChangedPayload` | A committed edit, undo, redo, or external change updates the chart; re-read when `chart.read` is granted |
 | `selection:after-paste` | `SelectionAfterPastePayload` | A paste attempt completes, including a cancelled or unchanged attempt |
 
 ```ts
+interface ChartChangedPayload {
+  label: string | null;
+  chartFingerprint: string | null;
+  reason: "commit" | "undo" | "redo" | "external";
+}
+
 interface DocumentLifecyclePayload {
   name: string;
   path: string | null;
@@ -172,8 +179,9 @@ These hooks are cancellation points, not notifications. The corresponding succes
 | --- | --- |
 | Let another package decorate or calculate JSON data | `context.hooks` |
 | Observe open, save, close, or paste completion | `context.events` |
+| React to a committed chart edit | `context.events.on("chart:changed", ...)` |
 | Change or reject a host lifecycle operation | Host lifecycle hook, if you are writing a trusted host integration |
-| Change chart state from a package | `context.api.transaction.preview` → `context.api.transaction.apply` |
+| Change chart state from a package | `context.api.transaction.apply(request)` (preview first when confirming) |
 
 For package code, request `hooks` only for public hook cooperation and `events` only for host notifications. A package must not depend on the host-only hook names being present in the sandbox.
 

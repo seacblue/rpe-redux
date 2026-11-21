@@ -25,6 +25,8 @@ if (available.status !== "available") {
 
 Separate read and write features in the package. Explain sensitive permissions in the manifest and degrade to a read-only view when consent is withheld.
 
+Package media requires `assets.read`; `assets.write` is separate and only applies to library assets. Interactive overlays require `ui.overlay`, and modal surfaces require `ui.dialog`.
+
 ## Permissions and limits
 
 {{CAPABILITY_TABLE}}

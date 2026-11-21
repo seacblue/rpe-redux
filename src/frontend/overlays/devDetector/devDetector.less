@@ -1,0 +1,189 @@
+// The F4 developer findings panel: counters, filters, and deduplicated rows.
+
+.redux-dev-detector {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-debug);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(80vh, 900px);
+  padding: var(--space-3);
+  border: 1px solid var(--edge-emphasis);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  box-shadow: var(--shadow-panel);
+  color: var(--foreground);
+  font-size: var(--type-caption);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.redux-dev-detector[data-enabled="false"] {
+  border-color: var(--edge-divider);
+}
+
+.redux-dev-detector-head,
+.redux-dev-detector-title,
+.redux-dev-detector-actions,
+.redux-dev-detector-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.redux-dev-detector-head {
+  justify-content: space-between;
+}
+
+.redux-dev-detector-title {
+  min-width: 0;
+}
+
+.redux-dev-detector-title strong {
+  font-size: var(--type-label);
+}
+
+.redux-dev-detector-status {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+}
+
+.redux-dev-detector[data-enabled="false"] .redux-dev-detector-status {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.redux-dev-detector-actions {
+  gap: var(--space-1);
+}
+
+.redux-dev-detector-hint {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--foreground-muted);
+}
+
+.redux-dev-detector-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.redux-dev-detector-search {
+  width: 100%;
+}
+
+.redux-dev-detector-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  overflow: auto;
+}
+
+.redux-dev-detector-row {
+  padding: var(--space-2);
+  border: 1px solid var(--edge-divider);
+  border-inline-start: 3px solid var(--foreground-muted);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.redux-dev-detector-row[data-kind="deprecated"] {
+  border-inline-start-color: var(--accent);
+}
+
+.redux-dev-detector-row[data-kind="out-of-range"] {
+  border-inline-start-color: var(--danger);
+}
+
+.redux-dev-detector-row[data-kind="invalid"] {
+  border-inline-start-color: var(--foreground-muted);
+}
+
+.redux-dev-detector-row[data-kind="error"] {
+  border-inline-start-color: var(--danger);
+}
+
+.redux-dev-detector-row-head {
+  flex-wrap: wrap;
+}
+
+.redux-dev-detector-kind {
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.redux-dev-detector-source {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-dev-detector-count {
+  margin-inline-start: auto;
+  color: var(--foreground-muted);
+}
+
+.redux-dev-detector-message {
+  margin: var(--space-1) 0 0;
+  color: var(--foreground);
+  line-height: 1.4;
+}
+
+.redux-dev-detector-detail {
+  margin: var(--space-1) 0 0;
+  color: var(--foreground-muted);
+  font-size: var(--type-caption);
+}
+
+.redux-dev-detector-time {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+}
+
+.redux-dev-detector-stack {
+  margin-top: var(--space-1);
+}
+
+.redux-dev-detector-stack summary {
+  cursor: pointer;
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+}
+
+.redux-dev-detector-stack pre {
+  margin: var(--space-1) 0 0;
+  overflow: auto;
+  color: var(--foreground-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  white-space: pre-wrap;
+}
+
+.redux-dev-detector-empty {
+  margin: 0;
+  padding: var(--space-4) var(--space-2);
+  color: var(--foreground-muted);
+  text-align: center;
+}
+
+.redux-dev-detector-foot {
+  color: var(--foreground-muted);
+  font-size: var(--type-micro);
+}

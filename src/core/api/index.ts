@@ -28,6 +28,7 @@ import { playback as playbackFacade } from "./playback.ts";
 import { selection as selectionApi } from "./selection.ts";
 import { document as documentApi } from "./document.ts";
 import { chart as chartApi } from "./chart.ts";
+import { recipe as recipeApi } from "./recipe.ts";
 import { transaction as transactionApi } from "./transaction.ts";
 import { diagnostics as diagnosticsApi } from "./diagnostics.ts";
 import { extensions as extensionsApi } from "./extensions.ts";
@@ -38,6 +39,7 @@ import { theme as themeApi } from "./theme.ts";
 import { workspace as workspaceApi } from "./workspace.ts";
 import { help as helpApi } from "./help.ts";
 import { BUILD_APP_VERSION } from "../platform/buildInfo.ts";
+import { guardDevFacade } from "../dev/apiGuard.ts";
 
 export const settings = settingsApi;
 export const shortcuts = shortcutsApi;
@@ -51,6 +53,7 @@ export const selection = selectionApi;
 export const document = documentApi;
 export const chart = chartApi;
 export const transaction = transactionApi;
+export const recipe = recipeApi;
 export const diagnostics = diagnosticsApi;
 export const extensions = extensionsApi;
 export const hitTest = hitTestApi;
@@ -78,6 +81,7 @@ export const redux = Object.freeze({
   document,
   chart,
   transaction,
+  recipe,
   diagnostics,
   extensions,
   hitTest,
@@ -117,6 +121,9 @@ export function installReduxApi(target: Window = window): void {
     configurable: false,
     enumerable: true,
     writable: false,
-    value: redux,
+    // The global exists only in development and debug builds, so the developer
+    // guard stays off the released path. It rebuilds the frozen facade rather
+    // than proxying it, because wrapped values would violate Proxy invariants.
+    value: guardDevFacade(redux),
   });
 }

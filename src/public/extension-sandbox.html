@@ -480,6 +480,56 @@
           };
         }
 
+        /**
+         * Reads a whole collection by draining pages internally.
+         *
+         * The page cursor is local state: the package receives one array and
+         * never handles a page offset, total, or cursor.
+         */
+        async function readAllChartItems(collection, options = {}) {
+          const read = makeApi(["chart", "read"]);
+          const items = [];
+          const limit = options.limit ?? 100;
+          let cursor = null;
+          for (;;) {
+            const request = {
+              ...(cursor ? { cursor } : { offset: 0 }),
+              limit,
+              ...(options.chartFingerprint === undefined
+                ? {}
+                : { chartFingerprint: options.chartFingerprint }),
+            };
+            const result = await read(collection, request);
+            if (!result.ok) {
+              return result;
+            }
+            const page = result.value;
+            if (page.status === "stale_read") {
+              return {
+                ok: false,
+                error: {
+                  code: "stale_read",
+                  message: "Chart changed while reading; retry against the new revision",
+                },
+              };
+            }
+            if (page.status !== "ok") {
+              return {
+                ok: false,
+                error: {
+                  code: "invalid_request",
+                  message: `Chart read request was rejected: ${page.reason || page.status}`,
+                },
+              };
+            }
+            items.push(...page.items);
+            if (!page.nextCursor) {
+              return { ok: true, value: Object.freeze(items) };
+            }
+            cursor = page.nextCursor;
+          }
+        }
+
         /** Builds the proxy that turns property paths and calls into host RPCs. */
         function makeApi(path) {
           const target = (...args) => rpc("api.call", [path, args]);
@@ -499,6 +549,13 @@
                 property === "__proto__"
               ) {
                 return undefined;
+              }
+              // Whole-collection reads are assembled locally from the paged
+              // read, so one oversized result never crosses the bridge.
+              if (path.length === 1 && path[0] === "chart") {
+                if (property === "readAll") {
+                  return readAllChartItems;
+                }
               }
               return makeApi([...path, property]);
             },
@@ -534,27 +591,67 @@
             typeof definition.onEvent === "function"
               ? registerCallback(definition.onEvent)
               : undefined;
+          const closeId =
+            typeof definition.onClose === "function"
+              ? registerCallback(definition.onClose)
+              : undefined;
           const request = {
             id: definition.id,
             tree: definition.tree,
             eventId,
+            closeId,
             ...(kind === "overlay" ? { order: definition.order, scope: definition.scope } : {}),
+            ...(kind === "surface" || kind === "anchored"
+              ? {
+                  placement: definition.placement,
+                  interactive: definition.interactive,
+                  draggable: definition.draggable,
+                  clickThrough: definition.clickThrough,
+                  width: definition.width,
+                  height: definition.height,
+                  anchor: definition.anchor,
+                  side: definition.side,
+                  title: definition.title,
+                  chrome: definition.chrome,
+                  dismissible: definition.dismissible,
+                }
+              : {}),
           };
-          const method = kind === "panel" ? "ui.registerPanel" : "ui.registerOverlay";
-          void rpc(method, [{ surfaceId: localId, definition: request }]).catch((error) =>
-            fail(error, method),
-          );
+          const method =
+            kind === "panel"
+              ? "ui.registerPanel"
+              : kind === "overlay"
+                ? "ui.registerOverlay"
+                : "ui.registerSurface";
+          const payload =
+            kind === "surface" || kind === "anchored"
+              ? { surfaceId: localId, kind, definition: request }
+              : { surfaceId: localId, definition: request };
+          let disposed = false;
+          const remove = () => {
+            if (disposed) {
+              return;
+            }
+            disposed = true;
+            void rpc("ui.remove", [{ surfaceId: localId }]).catch((error) =>
+              fail(error, "ui.remove"),
+            );
+          };
+          void rpc(method, [payload]).catch((error) => fail(error, method));
           return {
             update(tree, options) {
               notify("ui.update", [
                 { surfaceId: localId, tree, replace: options?.replace === true },
               ]);
             },
-            dispose() {
-              void rpc("ui.remove", [{ surfaceId: localId }]).catch((error) =>
-                fail(error, "ui.remove"),
-              );
+            setPlacement(placement) {
+              notify("ui.updatePlacement", [{ surfaceId: localId, placement }]);
             },
+            setVisible(visible) {
+              notify("ui.setVisible", [{ surfaceId: localId, visible: visible !== false }]);
+            },
+            close: remove,
+            dispose: remove,
           };
         }
 
@@ -584,6 +681,36 @@
               };
             },
             pickImage: (options) => rpc("ui.pickImage", [options]),
+            pickFile: (options) => rpc("ui.pickFile", [options]),
+            saveFile: (options) => rpc("ui.saveFile", [options]),
+            registerSurface: (definition) => surfaceHandle("surface", definition),
+            openAnchoredSurface: (definition) => surfaceHandle("anchored", definition),
+            openModalSurface(definition) {
+              const eventId =
+                typeof definition.onEvent === "function"
+                  ? registerCallback(definition.onEvent)
+                  : undefined;
+              const closeId =
+                typeof definition.onClose === "function"
+                  ? registerCallback(definition.onClose)
+                  : undefined;
+              const request = {
+                id: definition.id,
+                tree: definition.tree,
+                eventId,
+                closeId,
+                placement: definition.placement,
+                interactive: definition.interactive,
+                draggable: definition.draggable,
+                clickThrough: definition.clickThrough,
+                width: definition.width,
+                height: definition.height,
+                title: definition.title,
+                chrome: definition.chrome,
+                dismissible: definition.dismissible,
+              };
+              return rpc("ui.openModalSurface", [{ definition: request }]);
+            },
             designCatalog: () => rpc("ui.designCatalog", []),
             registerDesignPanel(definition) {
               const localId = `design-panel:${nextId++}`;
@@ -905,12 +1032,19 @@
           const api = makeApi([]);
           const i18n = makeI18n(message.translations, message.language);
           const timers = makeTimers(message);
+          const assets = {
+            names: () => Object.freeze(Object.keys(message.manifest.assets ?? {})),
+            read: (name) => rpc("assets.read", [String(name)]),
+            url: (name) => rpc("assets.url", [String(name)]),
+            info: (name) => rpc("assets.info", [String(name)]),
+          };
           const context = {
             manifest: message.manifest,
             signal: controller.signal,
             api,
             i18n,
             ui,
+            assets,
             events: {
               on(name, callback, priority) {
                 const localId = `event:${nextId++}`;
@@ -1503,6 +1637,7 @@
               i18n: context.i18n,
               params: message.params ?? {},
               ui: context.ui,
+              assets: context.assets,
             };
             Promise.resolve()
               .then(() => {

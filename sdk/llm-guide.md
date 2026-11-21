@@ -255,13 +255,13 @@ interface CodeCellResult {
 - `redux.preview.availability/snapshot/frame`
 - `redux.capabilities()`
 
-`read` cannot call or even access `redux.transaction`, `redux.library`, `redux.playback`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.help`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
+`read` cannot call or even access `redux.transaction`, `redux.recipe`, `redux.library`, `redux.playback`, `redux.layout`, `redux.settings`, `redux.values`, `redux.toolbar`, `redux.sidebar`, `redux.help`, or any document write method. Those accesses return `capabilityDenied` and never partially write.
 
 `write` adds:
 
 - `redux.transaction.availability/preview/apply/cancel/history`
 - `redux.library.availability/list/scope/current`
-- `redux.library.current.get/assets/asset/revisions/revision`
+- `redux.library.current.get/assets/asset/revisions/revisionsAll/revision`
 - `redux.library.current.addAsset/removeAsset` (`assets.write`)
 
 `write` still cannot use `redux.transaction.undo`, `redux.transaction.redo`, document writes, `redux.library.create/createRaw/current.update/current.remove/current.duplicate/current.createRevision/current.removeRevision`, playback, layout, settings, values, toolbar, sidebar, help, or extensions. Use `redux.transaction.apply` for every chart edit.
@@ -327,9 +327,14 @@ redux.chart.read<C extends ChartReadCollection>(
   options?: {
     chartFingerprint?: string | null;
     cursor?: string | null;
-    limit?: number; // default 50, maximum 100; non-positive/non-integer uses 50
+    offset?: number; // default 0; must be a non-negative integer
+    limit?: number; // default 50, maximum 100; non-positive/non-integer is invalid
   },
 ): Promise<ApiResult<ChartReadPage<ChartReadItem<C>>>>;
+redux.chart.readAll<C extends ChartReadCollection>(
+  collection: C,
+  options?: { chartFingerprint?: string | null; limit?: number },
+): Promise<ApiResult<readonly ChartReadItem<C>[]>>;
 redux.chart.snapshot(): Promise<ApiResult<Chart | null>>;
 redux.chart.metadata(): Promise<ApiResult<ChartMeta | null>>;
 redux.chart.resources(): Promise<ApiResult<readonly ChartResourceReference[]>>;
@@ -347,6 +352,10 @@ type ChartReadPage<T> =
       chartFingerprint: string | null;
       generation: number;
       items: readonly T[];
+      offset: number;
+      limit: number;
+      total: number;
+      hasMore: boolean;
       nextCursor: string | null;
     }
   | {
@@ -356,7 +365,10 @@ type ChartReadPage<T> =
       requestedGeneration: number | null;
       currentGeneration: number;
     }
-  | { status: "invalid_request"; reason: "invalid_cursor" };
+  | {
+      status: "invalid_request";
+      reason: "invalid_cursor" | "invalid_limit" | "invalid_offset" | "conflicting_paging";
+    };
 
 interface ChartNoteReadRef {
   id: string;
@@ -392,8 +404,9 @@ interface SelectionApiSnapshot {
   lineIndex: number;
   eventLayer: number;
   focus: "notes" | "events";
-  notes: readonly { lineIndex: number; index: number }[];
+  notes: readonly { id: ChartObjectId; lineIndex: number; index: number }[];
   events: readonly {
+    id: ChartObjectId;
     lineIndex: number;
     eventType: string;
     layer: number | "extended";
@@ -451,6 +464,47 @@ redux.transaction.apply(
 redux.transaction.cancel(previewId: string): Promise<ApiResult<boolean>>;
 redux.transaction.history(): Promise<ApiResult<TransactionHistoryState>>;
 
+// Recipe planning (write profile only). A plan is consumed once by apply.
+redux.recipe.availability(): Promise<ApiAvailability>;
+redux.recipe.plan(request: {
+  steps: readonly ExtensionScriptStep[];
+  params?: Readonly<Record<string, string | number | boolean | readonly number[]>>;
+  chartFingerprint?: string | null;
+  label?: string;
+}): Promise<ApiResult<RecipePlanSummary>>;
+redux.recipe.apply(planId: string): Promise<ApiResult<RecipeApplyResult>>;
+redux.recipe.cancel(planId: string): Promise<ApiResult<boolean>>;
+
+interface RecipePlanSummary {
+  planId: string | null;
+  status: "planned" | "unchanged" | "rejected";
+  affectedObjectIds: readonly ChartObjectId[];
+  changedObjectIds: readonly ChartObjectId[];
+  issues: readonly TransactionIssue[];
+  counts: { lines: number; notes: number; events: number };
+}
+
+interface RecipeApplyResult {
+  status: "committed" | "unchanged";
+  affectedObjectIds: readonly ChartObjectId[];
+}
+
+// Playback clock (playback.read).
+redux.playback.availability(): Promise<ApiAvailability>;
+redux.playback.state(): Promise<ApiResult<PlaybackState>>;
+redux.playback.subscribe(
+  listener: (tick: PlaybackTick) => void,
+  options?: { maxHz?: number },
+): Promise<() => void>;
+
+interface PlaybackTick {
+  chartSeconds: number;
+  beat: number;
+  playing: boolean;
+  rate: number;
+  lineIndex: number;
+}
+
 // Library reads and assets (write profile only).
 type RequestOptions = { timeoutMs?: number };
 
@@ -498,9 +552,15 @@ interface LibraryProjectHandle {
     options?: RequestOptions,
   ): Promise<ApiResult<{ removed: boolean; project: LibraryProjectSummary }>>;
   revisions(
-    query?: { limit?: number },
+    query?: { limit?: number; offset?: number; snapshotToken?: string },
     options?: RequestOptions,
-  ): Promise<ApiResult<{ revisions: LibraryRevisionSummary[] }>>;
+  ): Promise<ApiResult<{ revisions: LibraryRevisionSummary[]; total: number; snapshotToken: string }>>;
+  revisionsAll(
+    query?: object,
+    options?: RequestOptions,
+  ): Promise<
+    ApiResult<{ revisions: LibraryRevisionSummary[]; total: number; snapshotToken: string }>
+  >;
   createRevision(
     input: { chart: Chart; label: string },
     options?: RequestOptions,
@@ -637,7 +697,16 @@ const notes = unwrap(await redux.chart.notes());
 const events = unwrap(await redux.chart.events());
 ```
 
-For a large chart, page with `redux.chart.read` instead of copying the whole chart:
+For a large chart, use `redux.chart.readAll` instead of copying the whole chart. The host drains pages internally and resolves to one array:
+
+```js
+const notes = unwrap(await redux.chart.readAll("notes"));
+return { summary: `${notes.length} notes` };
+```
+
+A chart edit during the read returns `stale_read` and no partial array; retry against the new revision. `readAll` accepts `limit` as the internal page size and `chartFingerprint` to pin a revision. Packages read whole collections with `readAll`; code cells may also use `chart.notes()`, `chart.events()`, and `chart.lines()`.
+
+When you need explicit page boundaries, `redux.chart.read` returns pages:
 
 ```js
 let cursor;
@@ -652,9 +721,13 @@ do {
 return { summary: `${count} notes` };
 ```
 
-The readable collections are `metadata`, `lines`, `notes`, and `events`. `limit` defaults to `50` and is clamped to `100`; a non-positive or non-integer value uses the default. A chart cursor pins the fingerprint and generation, so an edit invalidates it. When the result must match an earlier read, pass `chartFingerprint` and treat a `stale_read` result as a request to read the chart again.
+The readable collections are `metadata`, `timing`, `lines`, `notes`, and `events`. `limit` defaults to `50` and is clamped to `100`; a non-positive or non-integer value is `invalid_request` with `reason: "invalid_limit"`. `offset` defaults to `0` and must be a non-negative integer; otherwise the page reports `reason: "invalid_offset"`. Do not send `cursor` and `offset` together: that reports `reason: "conflicting_paging"`. Every successful page echoes the applied `offset` and `limit` and returns `total` and `hasMore`, so any page can be addressed directly and the last page is unambiguous.
+
+A chart cursor pins the fingerprint and generation, so an edit invalidates it. When the result must match an earlier read, pass `chartFingerprint` and treat a `stale_read` result as a request to read the chart again. Ordering is the chart's own order: line order for `lines`, line-then-array order for `notes`, and line-then-layer-then-array order for `events`.
 
 The `cursor` is an opaque token. Only pass back a `nextCursor` you received; never parse, construct, or reuse it across fingerprints. If a cursor is malformed, the page status is `invalid_request` with `reason: "invalid_cursor"`.
+
+`chart.snapshot()` materializes the whole chart in one result and can exceed the bridge limit. Prefer `chart.readAll` when a package needs chart data; it assembles pages internally.
 
 `redux.chart.resources()` lists resource names referenced by the chart. Use it before replacing a song, background, line texture, or attached UI. `META.illustration` is the illustrator credit text, not an asset name.
 
@@ -1160,7 +1233,7 @@ Rules:
 - Every section is optional; omitted sections leave the chart unchanged.
 - `metadata` is a partial `META` patch. It accepts `name`, `composer`, `charter`, `illustration`, `level`, `song`, `background`, `offset`, `RPEVersion`, `ReduxVersion`, and extra format fields. Do not use `BPMList` here; use `timing`.
 - `timing.bpmList` replaces the whole tempo map. It must be non-empty; entries are sorted by `startTime` on apply.
-- `lines.insert` appends a judge line. `line` accepts the same editable fields as `lines.update`; the editor assigns the id and a default event layer. The new line's index is the previous line count plus its position in `insert`, so later notes/events in the same transaction can target it with `lineIndex`. `lines.delete` is not available. Line patches accept `Name`, `Group`, `Texture`, and the `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` point arrays.
+- `lines.insert` appends a judge line. `line` accepts the same editable fields as `lines.update`; the editor assigns the id and a default event layer. The new line's index is the previous line count plus its position in `insert`, so later notes/events in the same transaction can target it with `lineIndex`. `lines.delete` removes lines by id; line-owned notes/events go with them, child lines are re-parented to the root, shader line references are remapped, and at least one line must remain. Deletion runs before inserts and updates, so later `lineIndex` targets use the post-delete order. Line patches accept `Name`, `Group`, `Texture`, and the `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` point arrays.
   <!-- ai-block:lineBpmFactor -->
   Add `bpmfactor` to change a line's local time scale.
   <!-- /ai-block:lineBpmFactor -->

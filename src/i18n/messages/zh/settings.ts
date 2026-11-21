@@ -162,12 +162,16 @@ export default {
   "settings.extensions.error.conflictEnabled": "这个扩展与已启用的扩展冲突：{value}。",
   "settings.extensions.error.dependentEnabled": "已启用的扩展依赖这个扩展：{value}。",
   "settings.extensions.installed.title": "扩展",
-  "settings.extensions.install.open": "从 GitHub 安装…",
+  "settings.extensions.install.open": "安装扩展…",
   "settings.extensions.install.safeModeHint":
     "扩展安全模式已启用；请在不带安全模式参数的情况下重启后再安装扩展包。",
-  "settings.extensions.install.title": "从 GitHub 安装扩展",
+  "settings.extensions.install.title": "安装扩展",
   "settings.extensions.install.description":
-    "粘贴 GitHub 仓库链接或 /tree/<ref>/<path> 链接。检查链接只会读取 manifest 和声明的包文件；在确认审阅结果前不会安装或执行任何内容。",
+    "粘贴 GitHub 仓库链接或 /tree/<ref>/<path> 链接，也可以选择本地扩展文件夹或 .zip 包。检查只会读取 manifest 和声明的包文件；在确认审阅结果前不会安装或执行任何内容。",
+  "settings.extensions.install.localFolder": "选择文件夹",
+  "settings.extensions.install.localArchive": "选择 ZIP",
+  "settings.extensions.install.localFolderTitle": "选择扩展文件夹",
+  "settings.extensions.install.localArchiveTitle": "选择扩展 ZIP 包",
   "settings.extensions.install.source": "GitHub 链接",
   "settings.extensions.install.sourceDescription":
     "如果仓库根目录只有一个 manifest.json，可以直接使用仓库链接；更大仓库中的包请使用 /tree/<ref>/<path> 链接。",
@@ -507,7 +511,7 @@ export default {
   "settings.search.helpKeywords": "帮助 更新 问卷调查 更新日志 上手 引导 教程 提示",
   "settings.search.aboutKeywords": "关于 版本 作者 权利 许可 致谢",
   "settings.search.developerKeywords":
-    "开发者 运行环境 版本 渠道 系统 显卡 目录 性能 HUD 音符边框 诊断包 日志",
+    "开发者 运行环境 版本 渠道 系统 显卡 目录 性能 HUD 音符边框 检测器 检测 F4 诊断包 日志",
   "settings.search.shortcutsKeywords": "快捷键 键位 绑定 键盘 鼠标 滚轮",
 
   "settings.action.close": "关闭设置",
@@ -630,6 +634,8 @@ export default {
   "settings.help.developer.copyFailed": "复制失败，请检查剪贴板权限",
   "settings.help.developer.performanceHud": "启用性能监测窗口",
   "settings.help.developer.performanceHudHint": "显示 FPS、绘制耗时、内存和渲染负载图。",
+  "settings.help.developer.detector": "启用开发检测器",
+  "settings.help.developer.detectorHint": "采集弃用、越界、无效和错误检测结果。按 F4 打开面板。",
   "settings.help.developer.noteBorders": "启用音符边框",
   "settings.help.developer.noteBordersHint":
     "在预览中绘制所有音符的红色边框；Hold 会显示头部、身体和尾部三段。点击边框变绿并显示参数。",

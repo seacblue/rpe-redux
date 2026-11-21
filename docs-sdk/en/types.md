@@ -23,9 +23,15 @@ Transaction groups:
 | ---------- | ------------------------------------------------------------- |
 | `metadata` | Partial chart metadata.                                       |
 | `timing`   | `{ bpmList }`; replaces the complete tempo map.               |
-| `lines`    | `insert` and `update`; no delete.                             |
+| `lines`    | `insert`, `update`, and `delete` by id.                       |
 | `notes`    | `insert`, `update`, and `delete`.                             |
 | `events`   | `insert`, `update`, and `delete`, grouped by track and layer. |
+
+Deleting a line removes its notes and events, re-parents child lines to the root, and remaps shader line references. At least one line must remain. Deletion runs before `insert` and `update`, so any `lineIndex` in the same request refers to the post-delete order.
+
+## Selection references
+
+`selection.state()` returns note refs with a stable `id`, `lineIndex`, and `index`, and event refs with a stable `id`, `lineIndex`, `eventType`, `layer`, and `index`. Pass the id to `chart.note`/`chart.event` or to a transaction update/delete.
 
 ## ChartTransactionResult
 
@@ -33,7 +39,19 @@ Transaction groups:
 
 ## Read snapshots
 
-The `ChartRead*` types are immutable snapshots used for inspection and for id-addressed transaction planning. `ChartReadPage<T>` carries an opaque cursor; do not construct or reuse a cursor across chart fingerprints.
+The `ChartRead*` types are immutable snapshots used for inspection and for id-addressed transaction planning.
+
+A page carries `items`, the applied `offset` and `limit`, the collection's `total`, `hasMore`, and an opaque `nextCursor`. Either pass `offset` and `limit` to address a page directly or pass `cursor` to continue; the two forms cannot be combined. A cursor pins the chart fingerprint and generation, so do not construct or reuse a cursor across chart fingerprints.
+
+`invalid_request` reports one of `invalid_cursor`, `invalid_limit`, `invalid_offset`, or `conflicting_paging` in `reason`.
+
+## Whole-collection reads
+
+`chart.readAll` returns `ApiResult<readonly ChartReadItem<Collection>[]>`. Its `ChartReadAllOptions` accepts `limit` (the internal page size) and `chartFingerprint` (pin one revision). Pages are drained by the host, so the result has no cursor, offset, or `hasMore` field.
+
+## Timing
+
+`chart.readAll("timing")` returns the ordered tempo map as `readonly ChartReadTiming[]`. Each item is a `BpmEntry` with `bpm` and `startTime`; pass the array to `transaction.timing.bpmList` to replace the map. `chart.read("timing")` pages it like any other collection.
 
 ## Theme and settings
 

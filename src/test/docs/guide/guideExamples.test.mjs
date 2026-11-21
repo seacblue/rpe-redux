@@ -36,21 +36,22 @@ function fencedBlocks(text, language) {
 const PRELUDE = `import type {
   ApiResult,
   ChartTransactionRequest,
+  CodeCellApi,
   CodeCellRequest,
   CodeCellResult,
   ExtensionCapability,
-  ReduxApi,
 } from "@rpe-redux/extension-sdk";
 
 type CellApi = {
   readonly version: string;
   capabilities(): Promise<readonly ExtensionCapability[]>;
-  readonly document: Pick<ReduxApi["document"], "availability" | "state">;
+  readonly document: Pick<CodeCellApi["document"], "availability" | "state">;
   readonly chart: Pick<
-    ReduxApi["chart"],
+    CodeCellApi["chart"],
     | "availability"
     | "state"
     | "read"
+    | "readAll"
     | "snapshot"
     | "metadata"
     | "resources"
@@ -62,14 +63,14 @@ type CellApi = {
     | "events"
     | "event"
   >;
-  readonly selection: Pick<ReduxApi["selection"], "availability" | "state" | "subscribe">;
-  readonly preview: Pick<ReduxApi["preview"], "availability" | "snapshot" | "frame">;
+  readonly selection: Pick<CodeCellApi["selection"], "availability" | "state" | "subscribe">;
+  readonly preview: Pick<CodeCellApi["preview"], "availability" | "snapshot" | "frame">;
   readonly transaction: Pick<
-    ReduxApi["transaction"],
+    CodeCellApi["transaction"],
     "availability" | "preview" | "apply" | "cancel" | "history"
   >;
   readonly library: Pick<
-    ReduxApi["library"],
+    CodeCellApi["library"],
     "availability" | "list" | "create" | "createRaw" | "scope" | "current"
   >;
 };

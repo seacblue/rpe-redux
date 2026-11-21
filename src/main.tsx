@@ -26,6 +26,7 @@ import { PortalHostProvider } from "./design/patterns/portalHost.tsx";
 import { setLongTaskBootState } from "./core/state/longTasks.ts";
 import { registerFloatingHost } from "./frontend/overlays/floatingHost.ts";
 import { installFrontendDiagnosticCapture } from "./frontend/platform/diagnosticCapture.ts";
+import { initializeDevDetectorRuntime } from "./frontend/platform/devDetectorRuntime.ts";
 
 // Keep background operations behind the workspace boot barrier. The barrier is
 // opened only after the editor assembly has published a usable workspace.
@@ -79,6 +80,9 @@ if (isPerformanceHudWindow()) {
   installDocumentTitle();
   installInteractionPolicy();
   void initializeDeveloperMode();
+  // The runtime subscribes to the host policy and the detector switch, so a
+  // late developer-mode answer starts capture without another call here.
+  initializeDevDetectorRuntime();
   const renderApp = () =>
     createRoot(container).render(
       <PortalHostProvider host={container}>

@@ -7,7 +7,7 @@
  * code reaches the app only through the capability-gated host context handed to
  * this adapter; UI is a declarative tree rendered by the host.
  */
-import { createElement, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createElement, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Button } from "../../design/components/button/Button.tsx";
 import { ColorField } from "../../design/components/input/ColorField.tsx";
@@ -16,6 +16,10 @@ import { Select } from "../../design/components/select/Select.tsx";
 import { Slider } from "../../design/components/slider/Slider.tsx";
 import { createValue, type ValueCell, type ValueHandle } from "../../core/state/values.ts";
 import { BUILD_APP_VERSION } from "../../core/platform/buildInfo.ts";
+import { isDesktop } from "../../core/platform/environment.ts";
+import { dismissModal, presentModal } from "../overlays/modals/modalQueue.ts";
+import { pickFiles } from "./filePicker.ts";
+import { writeExportBytes } from "./desktop/externalChart.ts";
 import { CELL_WORKER_SOURCE } from "../../core/codecell/workerSource.ts";
 import { EXTENSION_TIMER_LIMITS } from "../../core/extensions/extensionRuntime.ts";
 import {
@@ -25,7 +29,10 @@ import {
 } from "../../core/extensions/extensionApi.ts";
 import { grantScriptDefaultShortcuts } from "../../core/extensions/extensionRuntimeSupport.ts";
 import { projectExtensionEventPayload } from "../../core/extensions/capabilityGate.ts";
-import type { ExtensionCapability } from "../../core/extensions/capabilities.ts";
+import {
+  requireExtensionCapability,
+  type ExtensionCapability,
+} from "../../core/extensions/capabilities.ts";
 import {
   ExtensionMethodRegistrationError,
   lookupMethod,
@@ -37,7 +44,7 @@ import {
   encodeBridgeResult,
 } from "./sandboxBridge.ts";
 import { SandboxUiUpdateBudget, UI_UPDATE_BURST, UI_UPDATE_STEADY_HZ } from "./sandboxUiBudget.ts";
-import { getLanguage } from "../../i18n/index.ts";
+import { getLanguage, t } from "../../i18n/index.ts";
 import type {
   ExtensionScriptDefinition,
   ExtensionScriptStep,
@@ -49,9 +56,17 @@ import type { MaterializedExtensionManifest } from "../../core/extensions/extens
 import type {
   ExtensionSandboxFactoryInput,
   ExtensionSandboxHost,
+  SandboxAnchoredSurfaceDefinition,
+  SandboxButtonNode,
   SandboxCellResult,
+  SandboxElementNode,
+  SandboxGroupNode,
+  SandboxMediaNode,
+  SandboxPickedFile,
   SandboxPickedImage,
+  SandboxPlacement,
   SandboxStyle,
+  SandboxSurfaceResult,
   SandboxUiEvent,
   SandboxUiNode,
 } from "../../core/extensions/sandbox.ts";
@@ -64,6 +79,11 @@ import type {
   ExtensionServiceInfo,
 } from "../../core/extensions/serviceRegistry.ts";
 import type { PublicHookPayloadSchema } from "../../core/extensions/publicHooks.ts";
+import {
+  inspectDevApiResult,
+  reportDevApiCall,
+  reportDevApiError,
+} from "../../core/dev/apiGuard.ts";
 
 const SANDBOX_READY_TIMEOUT_MS = 10_000;
 const SANDBOX_LOAD_TIMEOUT_MS = 20_000;
@@ -78,6 +98,12 @@ const MAX_UI_NODES = 256;
 const MAX_UI_DEPTH = 16;
 const MAX_CELL_LOGS = 200;
 const MAX_IMAGE_BYTES = 512_000;
+const MAX_FILE_BYTES = 8_000_000;
+const MAX_PICK_TOTAL_BYTES = 12_000_000;
+const MAX_ANIMATION_FRAMES = 120;
+const MAX_UI_SURFACES = 16;
+const MAX_MODAL_SURFACES = 3;
+const POINTER_EVENT_INTERVAL_MS = 1000 / 30;
 const BLOCKED_API_KEYS = new Set(["__proto__", "constructor", "prototype", "then", "toJSON"]);
 const ALLOWED_TAGS = new Set([
   "div",
@@ -130,6 +156,19 @@ const ALLOWED_ATTRS = new Set([
 ]);
 const STYLE_KEY = /^(?:--[A-Za-z0-9-]+|[A-Za-z-]+)$/u;
 const IMAGE_SRC = /^(?:data:image\/|blob:)/iu;
+const PLACEMENT_UNITS = new Set(["px", "fraction", "percent"]);
+const PLACEMENT_ANCHORS = new Set([
+  "top-left",
+  "top-center",
+  "top-right",
+  "center-left",
+  "center",
+  "center-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+]);
+const SURFACE_BUTTON_VARIANTS = new Set(["solid", "outlined", "ghost", "danger"]);
 
 /** One rendered declaration tree and the version that keys its remount. */
 interface TreeState {
@@ -204,6 +243,8 @@ interface SandboxPayload {
 interface Surface {
   readonly store: ValueCell<TreeState>;
   readonly dispose: () => void;
+  setPlacement?(placement: SandboxPlacement): void;
+  setVisible?(visible: boolean): void;
 }
 
 /** Returns an error's message, or the string form of a thrown value. */
@@ -345,6 +386,163 @@ function safeAttrs(value: unknown): Record<string, string | number | boolean> | 
   return Object.keys(attrs).length ? attrs : undefined;
 }
 
+/** Reads one finite number inside an inclusive range. */
+function boundedNumber(value: unknown, min: number, max: number): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, value))
+    : undefined;
+}
+
+/** Validates one placement without trusting caller coordinates. */
+function safePlacement(value: unknown): SandboxPlacement | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const unit =
+    typeof record.unit === "string" && PLACEMENT_UNITS.has(record.unit)
+      ? (record.unit as SandboxPlacement["unit"])
+      : "fraction";
+  const sizeMax = unit === "fraction" ? 1 : unit === "percent" ? 100 : 100_000;
+  const sizeMin = unit === "px" ? 1 : 0;
+  const placement: SandboxPlacement = {
+    ...(boundedNumber(record.x, 0, 1) === undefined ? {} : { x: boundedNumber(record.x, 0, 1) }),
+    ...(boundedNumber(record.y, 0, 1) === undefined ? {} : { y: boundedNumber(record.y, 0, 1) }),
+    ...(boundedNumber(record.width, sizeMin, sizeMax) === undefined
+      ? {}
+      : { width: boundedNumber(record.width, sizeMin, sizeMax) }),
+    ...(boundedNumber(record.height, sizeMin, sizeMax) === undefined
+      ? {}
+      : { height: boundedNumber(record.height, sizeMin, sizeMax) }),
+    ...(unit === "fraction" ? {} : { unit }),
+    ...(typeof record.anchor === "string" && PLACEMENT_ANCHORS.has(record.anchor)
+      ? { anchor: record.anchor as SandboxPlacement["anchor"] }
+      : {}),
+    ...(boundedNumber(record.z, 0, 10_000) === undefined
+      ? {}
+      : { z: Math.floor(boundedNumber(record.z, 0, 10_000) ?? 0) }),
+  };
+  return Object.keys(placement).length ? placement : undefined;
+}
+
+/** Validates an image, GIF, or frame sequence and its source URLs. */
+function safeMedia(value: unknown): SandboxMediaNode["media"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.kind === "image") {
+    const src = safeImageSource(record.src);
+    return src ? { kind: "image", src } : undefined;
+  }
+  if (record.kind !== "animation" || !Array.isArray(record.frames)) {
+    return undefined;
+  }
+  const frames = [];
+  for (const frame of record.frames.slice(0, MAX_ANIMATION_FRAMES)) {
+    if (!frame || typeof frame !== "object" || Array.isArray(frame)) {
+      continue;
+    }
+    const entry = frame as Record<string, unknown>;
+    const src = safeImageSource(entry.src);
+    if (!src) {
+      continue;
+    }
+    const durationMs = boundedNumber(entry.durationMs, 16, 60_000);
+    frames.push({ src, ...(durationMs === undefined ? {} : { durationMs }) });
+  }
+  if (!frames.length) {
+    return undefined;
+  }
+  return {
+    kind: "animation",
+    frames,
+    ...(boundedNumber(record.fps, 1, 60) === undefined
+      ? {}
+      : { fps: boundedNumber(record.fps, 1, 60) }),
+    ...(typeof record.loop === "boolean" ? { loop: record.loop } : {}),
+  };
+}
+
+/** Validates a first-class media node. */
+function sanitizeMediaNode(
+  record: Record<string, unknown>,
+  budget: { count: number },
+): SandboxMediaNode | null {
+  const media = safeMedia(record.media);
+  if (!media || typeof record.alt !== "string" || !record.alt.trim() || record.alt.length > 512) {
+    return null;
+  }
+  budget.count += 1;
+  return {
+    kind: "media",
+    ...(typeof record.id === "string" && record.id.length <= 128 ? { id: record.id } : {}),
+    media,
+    ...(safePlacement(record.placement) ? { placement: safePlacement(record.placement) } : {}),
+    ...(record.fit === "contain" || record.fit === "cover" || record.fit === "fill"
+      ? { fit: record.fit }
+      : {}),
+    alt: record.alt,
+    ...(record.pointerEvents === "auto" || record.pointerEvents === "none"
+      ? { pointerEvents: record.pointerEvents }
+      : {}),
+    ...(record.draggable === true ? { draggable: true } : {}),
+  };
+}
+
+/** Validates one first-class button node. */
+function sanitizeButtonNode(
+  record: Record<string, unknown>,
+  budget: { count: number },
+): SandboxUiNode | null {
+  if (
+    typeof record.id !== "string" ||
+    !record.id ||
+    record.id.length > 128 ||
+    typeof record.label !== "string" ||
+    record.label.length > 512
+  ) {
+    return null;
+  }
+  budget.count += 1;
+  return {
+    kind: "button",
+    id: record.id,
+    label: record.label,
+    ...(typeof record.icon === "string" && record.icon.length <= 128 ? { icon: record.icon } : {}),
+    ...(safePlacement(record.placement) ? { placement: safePlacement(record.placement) } : {}),
+    ...(typeof record.variant === "string" && SURFACE_BUTTON_VARIANTS.has(record.variant)
+      ? { variant: record.variant as "solid" | "outlined" | "ghost" | "danger" }
+      : {}),
+    ...(record.disabled === true ? { disabled: true } : {}),
+  };
+}
+
+/** Validates a group and sanitizes its children under the shared budget. */
+function sanitizeGroupNode(
+  record: Record<string, unknown>,
+  depth: number,
+  budget: { count: number },
+): SandboxUiNode | null {
+  budget.count += 1;
+  const children: SandboxUiNode[] = [];
+  if (Array.isArray(record.children)) {
+    for (const child of record.children) {
+      const node = sanitizeNode(child, depth + 1, budget);
+      if (node) {
+        children.push(node);
+      }
+    }
+  }
+  return {
+    kind: "group",
+    ...(typeof record.id === "string" && record.id.length <= 128 ? { id: record.id } : {}),
+    layout: record.layout === "absolute" ? "absolute" : "flow",
+    ...(safePlacement(record.placement) ? { placement: safePlacement(record.placement) } : {}),
+    children,
+  };
+}
+
 /** Validates one declared node against the tag, attribute, depth, and node budgets. */
 function sanitizeNode(value: unknown, depth = 0, budget = { count: 0 }): SandboxUiNode | null {
   if (depth > MAX_UI_DEPTH || budget.count >= MAX_UI_NODES) {
@@ -361,6 +559,15 @@ function sanitizeNode(value: unknown, depth = 0, budget = { count: 0 }): Sandbox
   if (record.kind === "text" && typeof record.text === "string") {
     budget.count += 1;
     return { kind: "text", text: record.text };
+  }
+  if (record.kind === "media") {
+    return sanitizeMediaNode(record, budget);
+  }
+  if (record.kind === "button") {
+    return sanitizeButtonNode(record, budget);
+  }
+  if (record.kind === "group") {
+    return sanitizeGroupNode(record, depth, budget);
   }
   if (record.kind !== "element" || typeof record.tag !== "string") {
     return null;
@@ -438,6 +645,192 @@ function SandboxColorInput({
   );
 }
 
+/** Converts one placement into host-safe absolute positioning. */
+function placementStyle(placement: SandboxPlacement | undefined): SandboxStyle | undefined {
+  if (!placement) {
+    return undefined;
+  }
+  const unit = placement.unit ?? "fraction";
+  const sizeLength = (value: number): string =>
+    unit === "fraction" ? `${value * 100}%` : unit === "percent" ? `${value}%` : `${value}px`;
+  const style: Record<string, string | number> = {};
+  if (placement.x !== undefined) {
+    style.left = `${placement.x * 100}%`;
+  }
+  if (placement.y !== undefined) {
+    style.top = `${placement.y * 100}%`;
+  }
+  if (placement.width !== undefined) {
+    style.width = sizeLength(placement.width);
+  }
+  if (placement.height !== undefined) {
+    style.height = sizeLength(placement.height);
+  }
+  if (placement.anchor) {
+    style.transform = anchorTransform(placement.anchor);
+  }
+  if (placement.z !== undefined) {
+    style.zIndex = placement.z;
+  }
+  return Object.keys(style).length ? style : undefined;
+}
+
+/** Maps a placement anchor to the transform that moves the box onto it. */
+function anchorTransform(anchor: NonNullable<SandboxPlacement["anchor"]>): string {
+  switch (anchor) {
+    case "top-center":
+      return "translate(-50%, 0)";
+    case "top-right":
+      return "translate(-100%, 0)";
+    case "center-left":
+      return "translate(0, -50%)";
+    case "center":
+      return "translate(-50%, -50%)";
+    case "center-right":
+      return "translate(-100%, -50%)";
+    case "bottom-left":
+      return "translate(0, -100%)";
+    case "bottom-center":
+      return "translate(-50%, -100%)";
+    case "bottom-right":
+      return "translate(-100%, -100%)";
+    default:
+      return "none";
+  }
+}
+
+/** Surface nodes that carry an id and can emit pointer events. */
+type SurfaceInteractiveNode =
+  SandboxElementNode | SandboxMediaNode | SandboxButtonNode | SandboxGroupNode;
+
+/** One pointer-like event with the fields the declaration router publishes. */
+interface SurfacePointerEvent {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly button: number;
+  readonly currentTarget: {
+    getBoundingClientRect(): { left: number; top: number; width: number; height: number };
+  };
+}
+
+/** Convert a browser pointer position into a bounded node-relative coordinate. */
+function pointerEvent(
+  node: SurfaceInteractiveNode,
+  kind: SandboxUiEvent["kind"],
+  event: SurfacePointerEvent,
+): SandboxUiEvent | null {
+  if (!node.id) {
+    return null;
+  }
+  const rect = event.currentTarget.getBoundingClientRect();
+  return {
+    nodeId: node.id,
+    kind,
+    x: rect.width > 0 ? Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) : 0,
+    y: rect.height > 0 ? Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)) : 0,
+    button: event.button,
+  };
+}
+
+/** Wire pointer, hover, click, and key events for a first-class surface node. */
+function surfacePointerHandlers(
+  node: SurfaceInteractiveNode,
+  onEvent: (event: SandboxUiEvent) => void,
+  includeClick = true,
+): Record<string, (event: never) => void> {
+  if (!node.id) {
+    return {};
+  }
+  const emit = (kind: SandboxUiEvent["kind"], event: SurfacePointerEvent) => {
+    const payload = pointerEvent(node, kind, event);
+    if (payload) {
+      onEvent(payload);
+    }
+  };
+  return {
+    onPointerDown: (event: never) => emit("pointerdown", event),
+    onPointerMove: (event: never) => emit("pointermove", event),
+    onPointerUp: (event: never) => emit("pointerup", event),
+    onPointerEnter: (event: never) => emit("hover-enter", event),
+    onPointerLeave: (event: never) => emit("hover-leave", event),
+    ...(includeClick ? { onClick: (event: never) => emit("click", event) } : {}),
+    onKeyDown: (event: { key: string }) => {
+      if (node.id) {
+        onEvent({ nodeId: node.id, kind: "keydown", key: event.key });
+      }
+    },
+  };
+}
+
+/** Host-played image, GIF, or frame sequence. */
+function SandboxMediaView({
+  node,
+  onEvent,
+}: {
+  node: SandboxMediaNode;
+  onEvent: (event: SandboxUiEvent) => void;
+}) {
+  const media = node.media;
+  const [frameIndex, setFrameIndex] = useState(0);
+  useEffect(() => {
+    if (media.kind !== "animation" || media.frames.length <= 1) {
+      return;
+    }
+    let index = 0;
+    let timer = 0;
+    let stopped = false;
+    const fps = media.fps ?? 12;
+    const next = () => {
+      const frame = media.frames[index];
+      const delay = frame?.durationMs ?? 1000 / fps;
+      timer = window.setTimeout(
+        () => {
+          if (stopped) {
+            return;
+          }
+          index += 1;
+          if (index >= media.frames.length) {
+            if (media.loop === false) {
+              return;
+            }
+            index = 0;
+          }
+          setFrameIndex(index);
+          next();
+        },
+        Math.max(16, delay),
+      );
+    };
+    next();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [media]);
+  const src =
+    media.kind === "image"
+      ? media.src
+      : media.frames[Math.min(frameIndex, media.frames.length - 1)]?.src;
+  if (!src) {
+    return null;
+  }
+  return createElement("img", {
+    src,
+    alt: node.alt,
+    draggable: false,
+    "data-extension-node": node.id,
+    tabIndex: node.id ? 0 : undefined,
+    style: {
+      ...(node.placement
+        ? { position: "absolute", ...placementStyle(node.placement) }
+        : { position: "relative", width: "100%", height: "100%" }),
+      objectFit: node.fit ?? "contain",
+      pointerEvents: node.pointerEvents ?? "auto",
+    },
+    ...surfacePointerHandlers(node, onEvent),
+  });
+}
+
 /** Renders one sanitized node as a React element, wiring its declared events. */
 function renderNode(
   node: SandboxUiNode,
@@ -447,6 +840,52 @@ function renderNode(
 ): ReactNode {
   if (node.kind === "text") {
     return node.text;
+  }
+  if (node.kind === "media") {
+    return createElement(SandboxMediaView, {
+      key: node.id ?? `media:${index}`,
+      node,
+      onEvent,
+    });
+  }
+  if (node.kind === "button") {
+    return createElement(
+      Button,
+      {
+        key: node.id,
+        variant: node.variant ?? "outlined",
+        disabled: node.disabled === true,
+        style: {
+          ...(node.placement ? { position: "absolute", ...placementStyle(node.placement) } : {}),
+        },
+        onClick: () => onEvent({ nodeId: node.id, kind: "click" }),
+        ...surfacePointerHandlers(node, onEvent, false),
+      },
+      node.label,
+    );
+  }
+  if (node.kind === "group") {
+    const children = node.children.map((child, childIndex) =>
+      renderNode(child, childIndex, onEvent, onPickImage),
+    );
+    return createElement(
+      "div",
+      {
+        key: node.id ?? `group:${index}`,
+        "data-extension-node": node.id,
+        className: node.layout === "absolute" ? "extension-surface-absolute" : undefined,
+        style:
+          node.layout === "absolute"
+            ? node.placement
+              ? { position: "absolute", ...placementStyle(node.placement) }
+              : { position: "relative", width: "100%", height: "100%" }
+            : node.placement
+              ? { position: "absolute", ...placementStyle(node.placement) }
+              : undefined,
+        ...surfacePointerHandlers(node, onEvent),
+      },
+      children,
+    );
   }
   const key = node.id ?? `${node.tag}:${index}`;
   if (node.tag === "img") {
@@ -573,21 +1012,318 @@ function SandboxTreeView({
   store,
   onEvent,
   onPickImage,
+  surfaceRoot = false,
 }: {
   store: ValueCell<TreeState>;
   onEvent: (event: SandboxUiEvent) => void;
   onPickImage?: (maxBytes: number) => Promise<SandboxPickedImage | null>;
+  surfaceRoot?: boolean;
 }) {
   const state = useSyncExternalStore(store.subscribe, store.get, store.get);
   return createElement(
     "div",
     {
       key: state.version,
-      className: "extension-sandbox-content",
+      className: surfaceRoot
+        ? "extension-sandbox-content extension-surface-root"
+        : "extension-sandbox-content",
       "data-extension-tree-version": state.version,
+      style: surfaceRoot
+        ? { position: "relative", width: "100%", height: "100%", overflow: "visible" }
+        : undefined,
     },
     renderNode(state.tree, 0, onEvent, onPickImage),
   );
+}
+
+/** Host-side surface fields after bridge validation. */
+interface SanitizedSurface {
+  readonly id: string;
+  readonly tree: SandboxUiNode;
+  readonly placement?: SandboxPlacement;
+  readonly width?: number;
+  readonly height?: number;
+  readonly interactive: boolean;
+  readonly draggable: boolean;
+  readonly clickThrough: boolean;
+  readonly order?: number;
+  readonly title?: string;
+  readonly chrome: "host" | "none";
+  readonly dismissible: boolean;
+  readonly anchor?: SandboxAnchoredSurfaceDefinition["anchor"];
+  readonly side?: "top" | "bottom" | "left" | "right";
+}
+
+/** Resolve the viewport point an anchored surface should follow. */
+function surfaceAnchorPoint(
+  anchor: SandboxAnchoredSurfaceDefinition["anchor"] | undefined,
+  pointer: { x: number; y: number },
+  hosts: ReadonlyMap<string, HTMLElement>,
+): { x: number; y: number } {
+  if (!anchor || anchor.kind === "pointer") {
+    return pointer;
+  }
+  if (anchor.kind === "point") {
+    return { x: anchor.x, y: anchor.y };
+  }
+  let element: HTMLElement | null = null;
+  if (anchor.kind === "surface") {
+    element = hosts.get(anchor.id) ?? null;
+  } else {
+    for (const host of hosts.values()) {
+      const found = host.querySelector(`[data-extension-node="${CSS.escape(anchor.nodeId)}"]`);
+      if (found instanceof HTMLElement) {
+        element = found;
+        break;
+      }
+    }
+  }
+  if (element) {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+  return pointer;
+}
+
+/** Apply a validated placement or anchor to one host-owned surface element. */
+function applySurfacePlacement(
+  host: HTMLElement,
+  placement: SandboxPlacement | undefined,
+  width: number | undefined,
+  height: number | undefined,
+  anchor?: SandboxAnchoredSurfaceDefinition["anchor"],
+  side: "top" | "bottom" | "left" | "right" = "bottom",
+  pointer?: { x: number; y: number },
+  hosts: ReadonlyMap<string, HTMLElement> = new Map(),
+): void {
+  host.style.position = "fixed";
+  host.style.left = "";
+  host.style.right = "";
+  host.style.top = "";
+  host.style.bottom = "";
+  host.style.width = "";
+  host.style.height = "";
+  host.style.transform = "";
+  if (anchor) {
+    const point = surfaceAnchorPoint(anchor, pointer ?? { x: 0, y: 0 }, hosts);
+    host.style.left = `${point.x}px`;
+    host.style.top = `${point.y}px`;
+    host.style.width = `${width ?? 320}px`;
+    host.style.height = `${height ?? 240}px`;
+    host.style.transform =
+      side === "top"
+        ? "translate(-50%, calc(-100% - 8px))"
+        : side === "left"
+          ? "translate(calc(-100% - 8px), -50%)"
+          : side === "right"
+            ? "translate(8px, -50%)"
+            : "translate(-50%, 8px)";
+    return;
+  }
+  const style = placementStyle(placement);
+  if (style) {
+    Object.assign(host.style, style);
+    if (placement?.x === undefined && placement?.y === undefined && !placement?.anchor) {
+      host.style.left = "50%";
+      host.style.top = "50%";
+      host.style.transform = "translate(-50%, -50%)";
+    }
+    if (width !== undefined && placement?.width === undefined) {
+      host.style.width = `${width}px`;
+    }
+    if (height !== undefined && placement?.height === undefined) {
+      host.style.height = `${height}px`;
+    }
+    return;
+  }
+  host.style.right = "24px";
+  host.style.bottom = "24px";
+  host.style.width = `${width ?? 240}px`;
+  host.style.height = `${height ?? 240}px`;
+}
+
+/** Let one persistent surface follow a pointer drag inside the viewport. */
+function attachSurfaceDrag(
+  host: HTMLElement,
+  signal: AbortSignal,
+  report?: (kind: "drag-start" | "drag-move" | "drag-end", x: number, y: number) => void,
+): () => void {
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+  /** Report a viewport-normalized drag position to the package. */
+  const reportAt = (kind: "drag-start" | "drag-move" | "drag-end", event: PointerEvent) => {
+    report?.(
+      kind,
+      window.innerWidth > 0 ? Math.min(1, Math.max(0, event.clientX / window.innerWidth)) : 0,
+      window.innerHeight > 0 ? Math.min(1, Math.max(0, event.clientY / window.innerHeight)) : 0,
+    );
+  };
+  const down = (event: PointerEvent) => {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("button, input, select, textarea, a, [role='button']")
+    ) {
+      return;
+    }
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    const rect = host.getBoundingClientRect();
+    startLeft = rect.left;
+    startTop = rect.top;
+    host.style.left = `${rect.left}px`;
+    host.style.top = `${rect.top}px`;
+    host.style.right = "auto";
+    host.style.bottom = "auto";
+    host.style.transform = "none";
+    host.setPointerCapture?.(event.pointerId);
+    reportAt("drag-start", event);
+  };
+  const move = (event: PointerEvent) => {
+    if (!dragging) {
+      return;
+    }
+    host.style.left = `${startLeft + event.clientX - startX}px`;
+    host.style.top = `${startTop + event.clientY - startY}px`;
+    reportAt("drag-move", event);
+  };
+  const up = (event: PointerEvent) => {
+    if (!dragging) {
+      return;
+    }
+    dragging = false;
+    host.releasePointerCapture?.(event.pointerId);
+    reportAt("drag-end", event);
+  };
+  host.addEventListener("pointerdown", down);
+  host.addEventListener("pointermove", move);
+  host.addEventListener("pointerup", up);
+  host.addEventListener("pointercancel", up);
+  const cleanup = () => {
+    host.removeEventListener("pointerdown", down);
+    host.removeEventListener("pointermove", move);
+    host.removeEventListener("pointerup", up);
+    host.removeEventListener("pointercancel", up);
+  };
+  signal.addEventListener("abort", cleanup, { once: true });
+  return cleanup;
+}
+
+/** Validate the surface fields shared by persistent, modal, and anchored surfaces. */
+function sanitizeSurface(definition: Record<string, unknown>): SanitizedSurface {
+  if (!definition || typeof definition.id !== "string" || !definition.id.trim()) {
+    throw new Error("Extension surface id must be non-empty");
+  }
+  const width = boundedNumber(definition.width, 1, 100_000);
+  const height = boundedNumber(definition.height, 1, 100_000);
+  const order = boundedNumber(definition.order, -10_000, 10_000);
+  const anchorRecord =
+    definition.anchor && typeof definition.anchor === "object" && !Array.isArray(definition.anchor)
+      ? (definition.anchor as Record<string, unknown>)
+      : undefined;
+  let anchor: SandboxAnchoredSurfaceDefinition["anchor"] | undefined;
+  if (anchorRecord?.kind === "pointer") {
+    anchor = { kind: "pointer" };
+  } else if (anchorRecord?.kind === "point") {
+    anchor = {
+      kind: "point",
+      x: boundedNumber(anchorRecord.x, -100_000, 100_000) ?? 0,
+      y: boundedNumber(anchorRecord.y, -100_000, 100_000) ?? 0,
+    };
+  } else if (
+    anchorRecord?.kind === "surface" &&
+    typeof anchorRecord.id === "string" &&
+    anchorRecord.id.trim()
+  ) {
+    anchor = { kind: "surface", id: anchorRecord.id.slice(0, 128) };
+  } else if (
+    anchorRecord?.kind === "node" &&
+    typeof anchorRecord.nodeId === "string" &&
+    anchorRecord.nodeId.trim()
+  ) {
+    anchor = { kind: "node", nodeId: anchorRecord.nodeId.slice(0, 128) };
+  }
+  return {
+    id: definition.id.slice(0, 128),
+    tree: sanitizeTree(definition.tree),
+    ...(safePlacement(definition.placement)
+      ? { placement: safePlacement(definition.placement) }
+      : {}),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    interactive: definition.interactive !== false,
+    draggable: definition.draggable === true,
+    clickThrough: definition.clickThrough === true,
+    ...(order === undefined ? {} : { order: Math.floor(order) }),
+    ...(typeof definition.title === "string" && definition.title.length <= 256
+      ? { title: definition.title }
+      : {}),
+    chrome: definition.chrome === "none" ? "none" : "host",
+    dismissible: definition.dismissible !== false,
+    ...(anchor ? { anchor } : {}),
+    ...(definition.side === "top" ||
+    definition.side === "bottom" ||
+    definition.side === "left" ||
+    definition.side === "right"
+      ? { side: definition.side }
+      : {}),
+  };
+}
+
+/** Collect the button ids that close a modal surface. */
+function surfaceButtonIds(node: SandboxUiNode, ids = new Set<string>()): Set<string> {
+  if (node.kind === "button") {
+    ids.add(node.id);
+  } else if (node.kind === "group") {
+    for (const child of node.children) {
+      surfaceButtonIds(child, ids);
+    }
+  } else if (node.kind === "element") {
+    for (const child of node.children ?? []) {
+      surfaceButtonIds(child, ids);
+    }
+  }
+  return ids;
+}
+
+/** Keep a caller-provided download name bounded and path-free. */
+function safeDownloadName(value: string): string {
+  const name = value
+    .trim()
+    .replaceAll(/[\\/:*?"<>|]/gu, "_")
+    .slice(0, 200)
+    .trim();
+  return name || "file";
+}
+
+/** Collect initial named input values for a modal result. */
+function surfaceValues(
+  node: SandboxUiNode,
+  values: Record<string, string | boolean> = {},
+): Record<string, string | boolean> {
+  if (node.kind === "element") {
+    if (node.id && node.tag === "input") {
+      if (node.attrs?.type === "checkbox") {
+        values[node.id] = node.attrs.checked === true;
+      } else if (node.attrs?.value !== undefined) {
+        values[node.id] = String(node.attrs.value);
+      }
+    } else if (node.id && node.tag === "select" && node.attrs?.value !== undefined) {
+      values[node.id] = String(node.attrs.value);
+    }
+    for (const child of node.children ?? []) {
+      surfaceValues(child, values);
+    }
+  } else if (node.kind === "group") {
+    for (const child of node.children) {
+      surfaceValues(child, values);
+    }
+  }
+  return values;
 }
 
 /**
@@ -606,6 +1342,8 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
   let nextId = 1;
   const valueHandles = createSandboxValueHandleTable(() => nextId++);
   const surfaces = new Map<string, Surface>();
+  const surfaceHosts = new Map<string, HTMLElement>();
+  const modalSurfaces = new Map<string, () => void>();
   /** Per-surface update budgets; a burst coalesces into its newest tail frame. */
   const uiUpdateBudget = new SandboxUiUpdateBudget<SandboxUiNode>(owner);
   const progress = new Map<
@@ -722,6 +1460,10 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
       surface.dispose();
     }
     surfaces.clear();
+    for (const close of modalSurfaces.values()) {
+      close();
+    }
+    modalSurfaces.clear();
     uiUpdateBudget.dispose();
     for (const handle of progress.values()) {
       handle.close();
@@ -878,6 +1620,7 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
     try {
       const resolved = resolveApi(path);
       label = resolved.label;
+      reportDevApiCall(label);
       const decoded = Array.isArray(callArgs) ? (decodeArgs(callArgs) as unknown[]) : [];
       if (
         Array.isArray(path) &&
@@ -888,34 +1631,56 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
         assertBridgedValueDefinition(decoded[0]);
       }
       const result = await resolved.method.apply(resolved.target, decoded);
+      inspectDevApiResult(label, result, owner ? `owner: ${owner}` : undefined);
       return encodeResult(result);
     } catch (error) {
       const denied = deniedCapability(error);
       if (denied) {
         logExtensionCapabilityDenial(owner, denied, label);
       }
+      reportDevApiError(label, error, owner ? `owner: ${owner}` : undefined);
       throw withCallContext(label, error);
     }
   };
 
-  /** Registers a declared panel or overlay surface and keeps its tree cell. */
+  /** Registers a declared panel, overlay, persistent surface, or anchored surface. */
   const registerSurface = (
-    kind: "panel" | "overlay",
+    kind: "panel" | "overlay" | "surface" | "anchored",
     payload: { surfaceId?: unknown; definition?: Record<string, unknown> },
   ): void => {
     const surfaceId = typeof payload.surfaceId === "string" ? payload.surfaceId : "";
     if (!surfaceId || surfaces.has(surfaceId)) {
       throw new Error("Extension UI surface id is invalid or already registered");
     }
-    const definition = payload.definition;
-    if (!definition || typeof definition.id !== "string" || !definition.id.trim()) {
+    if (surfaces.size >= MAX_UI_SURFACES) {
+      throw new Error(`Extension UI surface limit reached: ${MAX_UI_SURFACES}`);
+    }
+    const rawDefinition = payload.definition;
+    if (!rawDefinition || typeof rawDefinition.id !== "string" || !rawDefinition.id.trim()) {
       throw new Error("Extension UI surface id must be non-empty");
     }
-    const tree = sanitizeTree(definition.tree);
-    const eventId = typeof definition.eventId === "number" ? definition.eventId : undefined;
-    const store = createValue<TreeState>({ initial: { tree, version: 0 } });
+    const tree =
+      kind === "surface" || kind === "anchored" ? undefined : sanitizeTree(rawDefinition.tree);
+    const surface =
+      kind === "surface" || kind === "anchored" ? sanitizeSurface(rawDefinition) : undefined;
+    if (kind === "anchored" && surface && !surface.anchor) {
+      throw new Error("An anchored surface requires an anchor");
+    }
+    const eventId = typeof rawDefinition.eventId === "number" ? rawDefinition.eventId : undefined;
+    const closeId = typeof rawDefinition.closeId === "number" ? rawDefinition.closeId : undefined;
+    const store = createValue<TreeState>({
+      initial: { tree: surface?.tree ?? (tree as SandboxUiNode), version: 0 },
+    });
+    let lastPointerMove = 0;
     /** Forwards a rendered UI event to the sandbox callback that declared it. */
     const dispatch = (event: SandboxUiEvent): void => {
+      if (event.kind === "pointermove" || event.kind === "drag-move") {
+        const now = performance.now();
+        if (now - lastPointerMove < POINTER_EVENT_INTERVAL_MS) {
+          return;
+        }
+        lastPointerMove = now;
+      }
       if (eventId !== undefined) {
         send({ type: "callback", id: eventId, args: [event] });
       }
@@ -925,16 +1690,16 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
       const component = () =>
         createElement(SandboxTreeView, { store, onEvent: dispatch, onPickImage: pickImage });
       disposeSurface = input.context.ui.registerPanel({
-        id: definition.id,
+        id: rawDefinition.id,
         component,
       });
-    } else {
-      const order = typeof definition.order === "number" ? definition.order : undefined;
-      const scope = definition.scope === "window" ? "window" : "stage";
+    } else if (kind === "overlay") {
+      const order = typeof rawDefinition.order === "number" ? rawDefinition.order : undefined;
+      const scope = rawDefinition.scope === "window" ? "window" : "stage";
       let root: Root | null = null;
       let stopped = false;
       disposeSurface = input.context.ui.registerOverlay({
-        id: definition.id,
+        id: rawDefinition.id,
         ...(order === undefined ? {} : { order }),
         scope,
         mount(layer, signal) {
@@ -963,8 +1728,260 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
           return stop;
         },
       });
+    } else if (surface) {
+      let hostElement: HTMLDivElement | null = null;
+      let currentPlacement = surface.placement;
+      let visible = true;
+      let closed = false;
+      let closeSurface = () => {};
+      let pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      const updatePlacement = (): void => {
+        if (!hostElement) {
+          return;
+        }
+        applySurfacePlacement(
+          hostElement,
+          currentPlacement,
+          surface.width,
+          surface.height,
+          surface.anchor,
+          surface.side,
+          pointer,
+          surfaceHosts,
+        );
+        hostElement.style.zIndex = String(currentPlacement?.z ?? 1000);
+      };
+      let root: Root | null = null;
+      let stopped = false;
+      disposeSurface = input.context.ui.registerOverlay({
+        id: rawDefinition.id,
+        ...(surface.order === undefined ? {} : { order: surface.order }),
+        scope: "window",
+        mount(layer, signal) {
+          const host = document.createElement("div");
+          host.className = "extension-surface-host";
+          host.dataset.extensionSurfaceId = surface.id;
+          host.style.pointerEvents = surface.clickThrough
+            ? "none"
+            : surface.interactive
+              ? "auto"
+              : "none";
+          host.style.touchAction = "none";
+          host.style.display = visible ? "" : "none";
+          applySurfacePlacement(
+            host,
+            currentPlacement,
+            surface.width,
+            surface.height,
+            surface.anchor,
+            surface.side,
+            pointer,
+            surfaceHosts,
+          );
+          host.style.zIndex = String(currentPlacement?.z ?? 1000);
+          layer.append(host);
+          hostElement = host;
+          surfaceHosts.set(surface.id, host);
+          const inner = document.createElement("div");
+          inner.className = "extension-surface-inner";
+          inner.style.cssText = "position:relative;width:100%;height:100%;";
+          host.append(inner);
+          root = createRoot(inner);
+          const render = () => {
+            root?.render(
+              createElement(SandboxTreeView, {
+                store,
+                onEvent: dispatch,
+                onPickImage: pickImage,
+                surfaceRoot: true,
+              }),
+            );
+          };
+          const unsubscribe = store.subscribe(render);
+          const stopDrag = surface.draggable
+            ? attachSurfaceDrag(host, signal, (kind, x, y) =>
+                dispatch({ nodeId: surface.id, kind, x, y }),
+              )
+            : undefined;
+          const pointerMove = (event: PointerEvent) => {
+            pointer = { x: event.clientX, y: event.clientY };
+            if (surface.anchor?.kind === "pointer") {
+              updatePlacement();
+            }
+          };
+          if (surface.anchor?.kind === "pointer") {
+            window.addEventListener("pointermove", pointerMove, { passive: true });
+          }
+          const outside = (event: PointerEvent) => {
+            if (event.target instanceof Node && !host.contains(event.target)) {
+              closeSurface();
+            }
+          };
+          const escape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+              closeSurface();
+            }
+          };
+          if (kind === "anchored" && surface.dismissible) {
+            window.addEventListener("pointerdown", outside, true);
+            window.addEventListener("keydown", escape);
+          }
+          const stop = () => {
+            if (stopped) {
+              return;
+            }
+            stopped = true;
+            unsubscribe();
+            stopDrag?.();
+            window.removeEventListener("pointermove", pointerMove);
+            window.removeEventListener("pointerdown", outside, true);
+            window.removeEventListener("keydown", escape);
+            root?.unmount();
+            root = null;
+            host.remove();
+            if (surfaceHosts.get(surface.id) === host) {
+              surfaceHosts.delete(surface.id);
+            }
+            if (hostElement === host) {
+              hostElement = null;
+            }
+          };
+          signal.addEventListener("abort", stop, { once: true });
+          render();
+          return stop;
+        },
+      });
+      closeSurface = () => {
+        disposeSurface();
+        surfaces.delete(surfaceId);
+        uiUpdateBudget.release(surfaceId);
+        if (!closed) {
+          closed = true;
+          if (closeId !== undefined) {
+            send({ type: "callback", id: closeId, args: [] });
+          }
+        }
+      };
+      surfaces.set(surfaceId, {
+        store,
+        dispose: closeSurface,
+        setPlacement(placement) {
+          currentPlacement = placement;
+          updatePlacement();
+        },
+        setVisible(next) {
+          visible = next;
+          if (hostElement) {
+            hostElement.style.display = visible ? "" : "none";
+          }
+        },
+      });
+      return;
+    } else {
+      throw new Error("Extension surface definition is invalid");
     }
     surfaces.set(surfaceId, { store, dispose: disposeSurface });
+  };
+
+  /** Opens a blocking surface and resolves one action, value map, or dismissal. */
+  const openModalSurface = (payload: {
+    definition?: Record<string, unknown>;
+  }): Promise<SandboxSurfaceResult> => {
+    if (!granted.has("ui.dialog")) {
+      return Promise.resolve({ action: null, values: {}, dismissed: true });
+    }
+    if (modalSurfaces.size >= MAX_MODAL_SURFACES) {
+      throw new Error(`Extension modal surface limit reached: ${MAX_MODAL_SURFACES}`);
+    }
+    const definition = payload?.definition;
+    if (!definition) {
+      throw new Error("Extension modal surface definition is invalid");
+    }
+    const surface = sanitizeSurface(definition);
+    const eventId = typeof definition.eventId === "number" ? definition.eventId : undefined;
+    const closeId = typeof definition.closeId === "number" ? definition.closeId : undefined;
+    const store = createValue<TreeState>({ initial: { tree: surface.tree, version: 0 } });
+    const values = surfaceValues(surface.tree);
+    const buttonIds = surfaceButtonIds(surface.tree);
+    const modalId = `surface-modal:${nextId++}`;
+    return new Promise<SandboxSurfaceResult>((resolve) => {
+      let settled = false;
+      /** Resolve once and remove the modal from the queue. */
+      const settle = (result: SandboxSurfaceResult): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        modalSurfaces.delete(modalId);
+        dismissModal(modalId);
+        if (closeId !== undefined) {
+          send({ type: "callback", id: closeId, args: [] });
+        }
+        resolve(result);
+      };
+      modalSurfaces.set(modalId, () =>
+        settle({ action: null, values: { ...values }, dismissed: true }),
+      );
+      let lastPointerMove = 0;
+      const dispatch = (event: SandboxUiEvent): void => {
+        if (event.kind === "pointermove") {
+          const now = performance.now();
+          if (now - lastPointerMove < POINTER_EVENT_INTERVAL_MS) {
+            return;
+          }
+          lastPointerMove = now;
+        }
+        if (event.kind === "input" || event.kind === "change") {
+          values[event.nodeId] = event.checked ?? event.value ?? "";
+        }
+        if (event.kind === "click" && buttonIds.has(event.nodeId)) {
+          settle({ action: event.nodeId, values: { ...values }, dismissed: false });
+          return;
+        }
+        if (eventId !== undefined) {
+          send({ type: "callback", id: eventId, args: [event] });
+        }
+      };
+      presentModal(modalId, {
+        ...(surface.chrome === "host" && surface.title ? { label: surface.title } : {}),
+        closeButton: surface.chrome === "host" && surface.dismissible,
+        className:
+          surface.chrome === "none"
+            ? "extension-surface-modal extension-surface-modal-bare"
+            : "extension-surface-modal",
+        role: "dialog",
+        dismissOnScrim: surface.dismissible,
+        ...(surface.dismissible
+          ? {}
+          : { onCancel: (event: { preventDefault(): void }) => event.preventDefault() }),
+        onClose: () => settle({ action: null, values: { ...values }, dismissed: true }),
+        children: createElement(
+          "div",
+          {
+            className: "extension-surface-modal-body",
+            style: {
+              position: "relative",
+              ...(surface.width === undefined
+                ? surface.chrome === "none"
+                  ? { width: "360px" }
+                  : {}
+                : { width: `${surface.width}px` }),
+              ...(surface.height === undefined
+                ? surface.chrome === "none"
+                  ? { height: "260px" }
+                  : {}
+                : { height: `${surface.height}px` }),
+            },
+          },
+          createElement(SandboxTreeView, {
+            store,
+            onEvent: dispatch,
+            onPickImage: pickImage,
+            surfaceRoot: true,
+          }),
+        ),
+      });
+    });
   };
 
   /** Opens an image picker for the sandbox and returns the selection within its byte limit. */
@@ -1015,6 +2032,96 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
     });
   };
 
+  /** Opens the host file picker and copies bounded bytes across the bridge. */
+  const pickFile = async (value: unknown): Promise<readonly SandboxPickedFile[] | null> => {
+    if (!granted.has("ui.dialog")) {
+      return null;
+    }
+    const record =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const accept = Array.isArray(record.accept)
+      ? record.accept
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.slice(0, 128))
+          .slice(0, 20)
+      : [];
+    const maxBytes = boundedNumber(record.maxBytes, 1, MAX_FILE_BYTES) ?? MAX_FILE_BYTES;
+    const files = await pickFiles({
+      ...(accept.length ? { accept: accept.join(",") } : {}),
+      multiple: record.multiple === true,
+    });
+    if (!files) {
+      return null;
+    }
+    const picked: SandboxPickedFile[] = [];
+    let totalBytes = 0;
+    for (const file of files) {
+      if (file.size > maxBytes || totalBytes + file.size > MAX_PICK_TOTAL_BYTES) {
+        continue;
+      }
+      totalBytes += file.size;
+      picked.push({
+        name: file.name,
+        type: file.type,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      });
+    }
+    return picked.length ? picked : null;
+  };
+
+  /** Opens the host save dialog and writes bounded bytes without exposing a path. */
+  const saveFile = async (value: unknown): Promise<{ name: string } | null> => {
+    if (!granted.has("ui.dialog")) {
+      return null;
+    }
+    const record =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    if (typeof record.suggestedName !== "string" || !record.suggestedName.trim()) {
+      throw new Error("A file name is required");
+    }
+    const name = safeDownloadName(record.suggestedName);
+    const bytes =
+      record.bytes instanceof Uint8Array
+        ? record.bytes
+        : record.bytes instanceof ArrayBuffer
+          ? new Uint8Array(record.bytes)
+          : new Uint8Array();
+    if (bytes.byteLength > MAX_FILE_BYTES) {
+      throw new Error("File exceeds the Extension save limit");
+    }
+    const mimeType =
+      typeof record.mimeType === "string" &&
+      /^[A-Za-z0-9.+-]+\/[A-Za-z0-9.+-]+$/u.test(record.mimeType)
+        ? record.mimeType
+        : "application/octet-stream";
+    if (isDesktop()) {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const extension = /\.([A-Za-z0-9]{1,10})$/u.exec(name)?.[1];
+      const path = await save({
+        defaultPath: name,
+        ...(extension
+          ? { filters: [{ name: t("system.files.fileFilter"), extensions: [extension] }] }
+          : {}),
+      });
+      if (!path) {
+        return null;
+      }
+      await writeExportBytes(path, bytes);
+      return { name: path.replaceAll("\\", "/").split("/").at(-1) || name };
+    }
+    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    return { name };
+  };
+
   /** Dispatches one bridged method to its host capability. */
   const dispatchRpc = async (message: SandboxPayload): Promise<unknown> => {
     const method = message.method ?? "";
@@ -1025,6 +2132,24 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
     switch (method) {
       case "api.call":
         return callApi(args);
+      case "assets.read":
+        requireExtensionCapability(granted, "assets.read", "assets.read");
+        if (!input.assets) {
+          throw new Error("Extension package has no declared assets");
+        }
+        return encodeResult(await input.assets.read(String(args[0])));
+      case "assets.url":
+        requireExtensionCapability(granted, "assets.read", "assets.url");
+        if (!input.assets) {
+          throw new Error("Extension package has no declared assets");
+        }
+        return input.assets.url(String(args[0]));
+      case "assets.info":
+        requireExtensionCapability(granted, "assets.read", "assets.info");
+        if (!input.assets) {
+          throw new Error("Extension package has no declared assets");
+        }
+        return input.assets.info(String(args[0]));
       case "values.get":
         return cloneForSandbox(requireValueHandle(args[0]).get());
       case "values.set":
@@ -1106,6 +2231,10 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
             ? (args[0] as { maxBytes: number }).maxBytes
             : MAX_IMAGE_BYTES,
         );
+      case "ui.pickFile":
+        return encodeResult(await pickFile(decodeArgs(args[0])));
+      case "ui.saveFile":
+        return encodeResult(await saveFile(decodeArgs(args[0])));
       case "ui.designCatalog":
         return input.context.ui.designCatalog();
       case "ui.registerDesignPanel": {
@@ -1146,6 +2275,17 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
           args[0] as { surfaceId?: string; definition?: Record<string, unknown> },
         );
         return undefined;
+      case "ui.registerSurface": {
+        const payload = args[0] as {
+          surfaceId?: string;
+          kind?: string;
+          definition?: Record<string, unknown>;
+        };
+        registerSurface(payload?.kind === "anchored" ? "anchored" : "surface", payload);
+        return undefined;
+      }
+      case "ui.openModalSurface":
+        return openModalSurface(args[0] as { definition?: Record<string, unknown> });
       case "ui.update": {
         const payload = args[0] as { surfaceId?: unknown; tree?: unknown; replace?: unknown };
         const surfaceId = String(payload?.surfaceId);
@@ -1186,6 +2326,18 @@ export function createExtensionSandbox(input: ExtensionSandboxFactoryInput): Ext
         surface?.dispose();
         surfaces.delete(surfaceId);
         uiUpdateBudget.release(surfaceId);
+        return undefined;
+      }
+      case "ui.updatePlacement": {
+        const payload = args[0] as { surfaceId?: unknown; placement?: unknown };
+        surfaces
+          .get(String(payload?.surfaceId))
+          ?.setPlacement?.(safePlacement(payload?.placement) ?? {});
+        return undefined;
+      }
+      case "ui.setVisible": {
+        const payload = args[0] as { surfaceId?: unknown; visible?: unknown };
+        surfaces.get(String(payload?.surfaceId))?.setVisible?.(payload?.visible !== false);
         return undefined;
       }
       case "ui.registerSidebar": {

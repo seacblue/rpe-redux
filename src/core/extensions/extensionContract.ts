@@ -8,6 +8,7 @@ import type { ExtensionScriptDefinition, ScriptUiContext } from "./scripts.ts";
 import type { ExtensionI18n, ExtensionText, ExtensionTranslations } from "./i18n.ts";
 import type { ExtensionScriptStep } from "./steps.ts";
 import type { ExtensionParameterSchema } from "./parameters.ts";
+import type { AssetAtlas, AssetInfo } from "./assets.ts";
 import type { ExtensionCapability } from "./capabilities.ts";
 import type {
   PublicHookHandler,
@@ -75,6 +76,10 @@ export interface TrustedExtensionManifest {
   engines: { "rpe-redux": number | string };
   entry?: string;
   i18n?: string;
+  /** Media files shipped with the package; values are package-relative paths. */
+  assets?: Readonly<Record<string, string>>;
+  /** Optional frame-grid metadata keyed by an asset name declared above. */
+  assetMetadata?: Readonly<Record<string, AssetAtlas>>;
   capabilities?: readonly ExtensionCapability[];
   /** Built-in-only declaration that the package tolerates paged chart facades. */
   pagedChartSafe?: boolean;
@@ -135,6 +140,16 @@ export interface ExtensionTimerHost {
   cancelAnimationFrame?(handle: number): void;
 }
 
+/** Host-side reader for a package's declared media files. */
+export interface ExtensionAssetResolver {
+  readonly names: readonly string[];
+  read(name: string): Promise<Uint8Array>;
+  /** A data URL for one asset; the opaque sandbox cannot fetch host blob URLs. */
+  url(name: string): Promise<string>;
+  /** Byte length, intrinsic size, and atlas metadata for one declared asset. */
+  info(name: string): Promise<AssetInfo>;
+}
+
 /** The host handles a trusted package receives and owns until disposal. */
 export interface ExtensionHostContext {
   readonly manifest: MaterializedExtensionManifest;
@@ -143,6 +158,7 @@ export interface ExtensionHostContext {
   readonly api: ReduxApi;
   readonly i18n: ExtensionI18n;
   readonly ui: ScriptUiContext;
+  readonly assets?: ExtensionAssetResolver;
   readonly events: {
     on(name: string, callback: ExtensionCallback<unknown>, priority?: number): ExtensionDisposer;
   };
@@ -202,6 +218,7 @@ export interface TrustedExtensionDefinition {
 export interface SandboxedExtensionSource {
   readonly source: string;
   readonly translations?: ExtensionTranslations;
+  readonly assets?: ExtensionAssetResolver;
 }
 
 /** Resolves sandboxed entry source only after the host has accepted its risk. */
@@ -237,6 +254,7 @@ export type ExtensionOperationErrorCode =
   | "riskNotAcknowledged"
   | "consentStale"
   | "invalidProvenance"
+  | "invalidAssets"
   | "invalidCapabilities"
   | "capabilityDenied"
   | "conflictEnabled"

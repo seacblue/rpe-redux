@@ -87,7 +87,7 @@ export default {
           return;
         }
 
-        const lines = await api.chart.lines();
+        const lines = await api.chart.readAll("lines");
         if (!lines.ok) {
           ui.notice(lines.error.message, { level: "error" });
           return;
@@ -102,18 +102,18 @@ export default {
         }
         if (updates.length === 0) return;
 
-        const preview = await api.transaction.preview({
+        const applied = await api.transaction.apply({
           label: "Shift notes",
           notes: { update: updates },
         });
-        if (!preview.ok || preview.value.status !== "previewed" || !preview.value.previewId) {
-          ui.notice("Preview failed.", { level: "error" });
+        if (!applied.ok) {
+          ui.notice(applied.error.message, { level: "error" });
           return;
         }
-
-        const applied = await api.transaction.apply(preview.value.previewId);
-        if (applied.ok && applied.value.status === "committed") {
+        if (applied.value.status === "committed") {
           ui.notice(`Moved ${updates.length} notes.`, { level: "success" });
+        } else {
+          ui.notice(`Not committed: ${applied.value.status}`, { level: "warning" });
         }
       },
     });
@@ -121,7 +121,7 @@ export default {
 };
 ```
 
-A chart write uses `transaction.preview` then `apply`. A chart that changed before the commit returns `conflict`; a paged `chart.read` with an old cursor returns `stale_read`.
+A chart write is one `transaction.apply(request)` call. Use `transaction.preview` only when the user should confirm the diff first. A chart that changed before the commit returns `conflict`; a paged `chart.read` with an old cursor returns `stale_read`.
 
 ## Provider and consumer
 

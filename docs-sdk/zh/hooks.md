@@ -110,9 +110,16 @@ interface PublicHookInvokeOptions {
 | `document:restored` | `DocumentLifecyclePayload` | 会话保存的文档完成恢复 |
 | `document:saved` | `DocumentLifecyclePayload` | 保存成功完成 |
 | `document:closed` | `DocumentLifecyclePayload` | 当前文档被清空；`chart` 为 `null` |
+| `chart:changed` | `ChartChangedPayload` | 一次已提交编辑、撤销、重做或外部变更更新了谱面；有 `chart.read` 时重新读取 |
 | `selection:after-paste` | `SelectionAfterPastePayload` | 一次粘贴尝试完成，包括被取消或没有产生变化的情况 |
 
 ```ts
+interface ChartChangedPayload {
+  label: string | null;
+  chartFingerprint: string | null;
+  reason: "commit" | "undo" | "redo" | "external";
+}
+
 interface DocumentLifecyclePayload {
   name: string;
   path: string | null;
@@ -172,8 +179,9 @@ interface SelectionOperationResult {
 | --- | --- |
 | 让其他扩展装饰或计算 JSON 数据 | `context.hooks` |
 | 观察打开、保存、关闭或粘贴完成 | `context.events` |
+| 响应已提交的谱面编辑 | `context.events.on("chart:changed", ...)` |
 | 修改或拒绝宿主生命周期操作 | 宿主生命周期 Hook，仅限受信任的宿主集成 |
-| 从扩展修改谱面状态 | `context.api.transaction.preview` → `context.api.transaction.apply` |
+| 从扩展修改谱面状态 | `context.api.transaction.apply(request)`（需要确认时先 preview） |
 
 扩展包只应为公开 Hook 协作申请 `hooks`，只应为宿主通知申请 `events`。不要让沙箱中的扩展依赖宿主专用 Hook 名称存在。
 

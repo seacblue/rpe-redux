@@ -199,7 +199,7 @@ export default {
           return;
         }
 
-        const lines = await api.chart.lines();
+        const lines = await api.chart.readAll("lines");
         if (!lines.ok) {
           ui.notice(lines.error.message, { level: "error" });
           return;
@@ -218,17 +218,18 @@ export default {
 
         if (updates.length === 0) return;
 
-        const preview = await api.transaction.preview({
+        const applied = await api.transaction.apply({
           label: "Shift notes",
           notes: { update: updates },
         });
-        if (!preview.ok || preview.value.status !== "previewed") {
-          ui.notice("预览失败", { level: "error" });
+        if (!applied.ok) {
+          ui.notice(applied.error.message, { level: "error" });
           return;
         }
-
-        const applied = await api.transaction.apply(preview.value.previewId);
-        if (!applied.ok || applied.value.status !== "committed") return;
+        if (applied.value.status !== "committed") {
+          ui.notice(`未提交：${applied.value.status}`, { level: "warning" });
+          return;
+        }
 
         ui.notice(`已移动 ${updates.length} 个音符`, { level: "success" });
       },
@@ -237,4 +238,4 @@ export default {
 };
 ```
 
-谱面写入使用 `transaction.preview` → `apply`；提交前谱面发生变化时 `apply` 返回 `conflict`，分页 `chart.read` 使用旧游标时返回 `stale_read`。相关接口见左侧 **API** 树与[谱面操作](place-note.md)。
+谱面写入只需要一次 `transaction.apply(request)`。只有需要让用户先确认差异时才用 `transaction.preview`；提交前谱面发生变化时 `apply` 返回 `conflict`，分页 `chart.read` 使用旧游标时返回 `stale_read`。相关接口见左侧 **API** 树与[谱面操作](place-note.md)。

@@ -26,6 +26,7 @@ import {
 } from "./preferences.ts";
 import { isRecord } from "../utils/guards.ts";
 import { assertSafeIdentifier } from "../utils/safeIdentifier.ts";
+import { devReportValidation } from "../dev/checks.ts";
 
 /** Preference section that records which values the user committed. */
 const VALUE_META_SECTION: PreferenceSection = PREFERENCE_SECTIONS.valueMeta;
@@ -340,7 +341,21 @@ class ValueStore {
         : definition.persist === true
           ? PREFERENCE_SECTIONS.values
           : definition.persist;
-    const cell = createValue(definition);
+    const cell = createValue({
+      ...definition,
+      ...(validate === undefined
+        ? {}
+        : {
+            validate: (value: T) => {
+              try {
+                validate(value);
+              } catch (error) {
+                devReportValidation(`value.${id}`, error);
+                throw error;
+              }
+            },
+          }),
+    });
     const handle = Object.freeze({
       id,
       ...cell,

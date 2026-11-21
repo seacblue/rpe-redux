@@ -6,7 +6,7 @@ API 页面里会出现一些类型名。本页解释最常见的几个；阅读�
 
 - `context.api.chart` 这样的对象叫 **handle**：它是一组宿主能力的入口，调用是异步的。
 - `context` 是扩展自己的运行时上下文：`context.scripts`、`context.ui`、`context.storage` 等不是 API handle。
-- `context.api.layout` 和 `context.api.theme` 是只读快照 handle；`context.ui` 是界面辅助，不是 `context.api.ui`。
+- `context.api.preview` 和 `context.api.theme` 是只读快照 handle；`context.ui` 是界面辅助，不是 `context.api.ui`。
 
 ## ApiResult
 
@@ -42,11 +42,17 @@ interface ChartTransactionRequest {
   label?: string;
   metadata?: Partial<ChartMeta>;
   timing?: { bpmList: BpmEntry[] };
-  lines?: { insert?: LineInsert[]; update?: LineUpdate[] };
+  lines?: { insert?: LineInsert[]; update?: LineUpdate[]; delete?: ChartObjectId[] };
   notes?: { insert?: NoteInsert[]; update?: NoteUpdate[]; delete?: ChartObjectId[] };
   events?: { insert?: EventInsert[]; update?: EventUpdate[]; delete?: ChartObjectId[] };
 }
 ```
+
+删除判定线会一并删除线内音符和事件，把子线重挂到根，并重映射 shader 的线引用；至少保留一条线。删除在 `insert`/`update` 之前应用，因此同一请求里的 `lineIndex` 以删除后的线序为准。
+
+## 选区引用
+
+`selection.state()` 返回的音符引用带稳定 `id`、`lineIndex` 和 `index`；事件引用带稳定 `id`、`lineIndex`、`eventType`、`layer` 和 `index`。把 id 传给 `chart.note`/`chart.event`，或用于事务的 update/delete。
 
 ## ChartTransactionResult
 
@@ -74,11 +80,21 @@ interface ChartTransactionRequest {
 
 ## ChartReadCollection
 
-`chart.read` 接受的集合名：`metadata`、`lines`、`notes` 或 `events`。
+`chart.read` 接受的集合名：`metadata`、`timing`、`lines`、`notes` 或 `events`。
+
+## Timing
+
+`chart.readAll("timing")` 返回有序速度表 `readonly ChartReadTiming[]`。每一项是带 `bpm` 和 `startTime` 的 `BpmEntry`；把数组传给 `transaction.timing.bpmList` 即可替换速度表。`chart.read("timing")` 像其他集合一样分页。
 
 ## ChartReadPage
 
-分页读取结果携带 `items` 和不透明的 `nextCursor`。游标绑定读取时的谱面指纹，谱面变化后必须从头读取。
+分页结果携带 `items`、实际生效的 `offset` 和 `limit`、集合的 `total`、`hasMore`，以及不透明的 `nextCursor`。既可以传 `offset` 和 `limit` 直接定位任意一页，也可以传 `cursor` 顺序续读；两种方式不能同时使用。游标绑定读取时的谱面指纹和 generation，谱面变化后必须从头读取。
+
+`invalid_request` 的 `reason` 可能是 `invalid_cursor`、`invalid_limit`、`invalid_offset` 或 `conflicting_paging`。
+
+## 整集合读取
+
+`chart.readAll` 返回 `ApiResult<readonly ChartReadItem<Collection>[]>`。`ChartReadAllOptions` 接受 `limit`（内部页大小）和 `chartFingerprint`（固定修订）。分页由宿主在内部完成，结果中没有游标、偏移或 `hasMore`。
 
 ## ChartReadItem
 

@@ -21,7 +21,10 @@ export type {
   ChartReadMeta,
   ChartReadNote,
   ChartNoteReadRef,
+  ChartReadAllOptions,
+  ChartReadAllResult,
   ChartReadPage,
+  ChartReadPageIssue,
   ChartReadPageOptions,
   ChartReadSnapshot,
   ChartReadState,
@@ -66,6 +69,7 @@ export type {
   LibraryProject,
   LibraryProjectSummary,
   LibraryRevision,
+  LibraryRevisionPage,
   LibraryRevisionSummary,
   ListQuery,
   LocalLibraryError,
@@ -81,7 +85,14 @@ export type {
   PlaybackSeekOptions,
   PlaybackState,
   PlaybackTextureStatus,
+  PlaybackTick,
 } from "./playback.ts";
+export type {
+  RecipeApplyResult,
+  RecipeParameterValues,
+  RecipePlanRequest,
+  RecipePlanSummary,
+} from "./recipe.ts";
 export type {
   EventLayerRef,
   EventSelectionRangeRequest,
@@ -95,6 +106,7 @@ export type {
   SelectionOperationResult,
   SelectionPasteRequest,
   SelectionPoint,
+  SelectedNoteRef,
 } from "./selection.ts";
 export type {
   SettingDefinition,
@@ -187,6 +199,7 @@ export type {
 } from "../edit/layout/api.ts";
 
 /* Extension capabilities, UI definitions, and runtime contracts. */
+export type { ExtensionAssetResolver } from "../extensions/extensionContract.ts";
 export type { ExtensionCapability } from "../extensions/capabilities.ts";
 export type { ExtensionEventPayloads, ExtensionHookPayloads } from "../extensions/contract.ts";
 export type {
@@ -200,6 +213,7 @@ export type {
   PublicHookPayloadSchema,
 } from "../extensions/publicHooks.ts";
 export type { ExtensionCallbackFailure } from "../extensions/registry.ts";
+export type { AssetAtlas, AssetInfo } from "../extensions/assets.ts";
 export type {
   ExtensionConsent,
   ExtensionCollaborationMode,
@@ -219,19 +233,36 @@ export type {
 export type {
   SandboxCodeCellApi as CodeCellApi,
   SandboxedExtensionDefinition as TrustedExtensionDefinition,
+  SandboxAnimationFrame,
+  SandboxAnchoredSurfaceDefinition,
+  SandboxAssets,
+  SandboxButtonNode,
   SandboxElementNode,
   SandboxExtensionContext as TrustedExtensionContext,
+  SandboxGroupNode,
+  SandboxMedia,
+  SandboxMediaNode,
+  SandboxModalSurfaceDefinition,
   SandboxOverlayDefinition,
   SandboxJsonStore,
   SandboxPanelDefinition,
+  SandboxPickedFile,
   SandboxPickedImage,
+  SandboxPickFileOptions,
+  SandboxPlacement,
+  SandboxPlacementUnit,
+  SandboxPersistentSurfaceHandle,
   SandboxReduxApi,
+  SandboxSaveFileOptions,
+  SandboxSavedFile,
   SandboxScriptContext as ExtensionScriptContext,
   SandboxScriptDefinition as ExtensionScriptDefinition,
   SandboxSidebarDefinition,
   SandboxStore,
   SandboxStyle,
+  SandboxSurfaceDefinition,
   SandboxSurfaceHandle,
+  SandboxSurfaceResult,
   SandboxTextNode,
   SandboxUiContext as ScriptUiContext,
   SandboxUiEvent,

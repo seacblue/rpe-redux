@@ -26,6 +26,8 @@ Each directory is one package, and its directory name must equal the manifest `i
 | `engines` | `{ "rpe-redux": <major> }` for the legacy major check, or a semver range string over the full host version. |
 | `entry` | Optional package-relative JavaScript file. Its absence makes the package data-only. |
 | `i18n` | Optional package-relative JSON catalog; `i18n.json` is read when present and undeclared. |
+| `assets` | Optional name-to-relative-path map for package media. Only bounded image extensions are accepted; reading requires `assets.read`, and `context.assets` returns bytes, metadata, or data URLs. |
+| `assetMetadata` | Optional atlas metadata keyed by an asset name: `frameWidth`, `frameHeight`, and optional `columns`, `rows`, `frameCount`, `margin`, and `spacing`. `context.assets.info()` returns the declared atlas beside the detected intrinsic size. |
 | `capabilities` | Optional capability names; unknown names and duplicates are rejected. |
 | `pagedChartSafe` | Built-in-only compatibility declaration for dense paged chart facades; external packages cannot use it to bypass eager loading. |
 | `collaboration` | Optional scope: `local` (default), `chart` for changes carried by normal chart transactions, or `shared-service` when peers using the feature must install the same package. The room never transfers or executes Extension code. |
@@ -54,9 +56,11 @@ The existing chunked upload path is intentionally limited to validated chart ass
 
 A range is checked before registration. An invalid range reports `invalidHostVersionRange`; a valid range the host does not satisfy reports `incompatibleHostVersion` with both the declared range and the running version.
 
-## Installing from GitHub
+## Installing packages
 
 The Extensions settings page accepts a repository URL, a raw link, or `owner/repo` shorthand. A `/tree/<ref>/<path>` link selects one package inside a monorepo. A repository link with one manifest is resolved at its default branch; several manifests produce a `manifestMultiple` failure that lists the candidates.
+
+**Choose folder** and **Choose ZIP** install a local package through the same review. The native host reads only the manifest, its declared entry and i18n files, and declared assets; a ZIP is never extracted to disk. Local packages use the managed install root, so later updates still need the same review and fingerprint. A folder placed directly in the portable extensions root remains discoverable without the install step.
 
 Inspecting a link downloads only `manifest.json`, the declared `entry`, and the declared or conventional `i18n.json`. The review dialog shows the package name, author, description, version, engine range, capabilities, source commit, and files. Confirming writes those exact bytes to `user-data/extensions/<id>` and enables the package without a restart. A failed install reports a stable code and the phase that failed (`input`, `marketplace`, `resolve`, `download`, `validate`, `persist`, `load`, or `enable`), plus the request URL, HTTP status, detail, cause, and recovery hint. Inspection and installation are desktop-only; the browser preview cannot read a repository or write the managed root.
 
@@ -145,11 +149,11 @@ A toolbar registration is a structural descriptor. `kind` must be `action`, `con
 
 ## Scripts and context
 
-A code package registers scripts from its `activate(context)` entry. A data-only package declares the same script shape in the manifest. `activate` receives `manifest`, `signal`, the gated `api`, `i18n`, `ui`, `events`, `scripts`, `settings`, `storage`, `timers`, `styles`, and `addCleanup`.
+A code package registers scripts from its `activate(context)` entry. A data-only package declares the same script shape in the manifest. `activate` receives `manifest`, `signal`, the gated `api`, `i18n`, `ui`, `assets`, `events`, `scripts`, `settings`, `storage`, `timers`, `styles`, and `addCleanup`.
 
-A script provides either `run(context)` or a declarative `steps` array, never both. A script `run` context contains `api`, `params`, `i18n`, `ui`, `signal`, and `manifest`. Every sandbox API call is asynchronous and returns a promise. Snippets below use `api` for that gated facade. Package event subscriptions are read-only host events; mutating hooks and host DOM listeners are not part of the sandbox contract. The context never exposes the editor session, timeline, canvas, React state, or file handles.
+A script provides either `run(context)` or a declarative `steps` array, never both. A script `run` context contains `api`, `params`, `i18n`, `ui`, `assets`, `signal`, and `manifest`. Every sandbox API call is asynchronous and returns a promise. Snippets below use `api` for that gated facade. Package event subscriptions are read-only host events; mutating hooks and host DOM listeners are not part of the sandbox contract. The context never exposes the editor session, timeline, canvas, React state, or file handles.
 
-Runtime limits: 2 MB entry source; 64 active scripts; 32 stylesheets of 100 KB each; 128 event subscriptions (theme listeners share this budget); 64 live timers with a 16 ms minimum interval; 128-character store keys and 256 KB store values, including JSON-encoded storage entries.
+Runtime limits: 2 MB entry source; 64 active scripts; 32 stylesheets of 100 KB each; 128 event subscriptions (theme listeners share this budget); 64 live timers with a 16 ms minimum interval; 128-character store keys and 256 KB store values, including JSON-encoded storage entries. Package media is limited to 64 declared files, 4 MB per file and 12 MB per package.
 
 `context.timers` is the only timer surface inside the sandbox. Global `setTimeout`, `setInterval`, `setImmediate`, and animation-frame helpers are blocked whether or not the package holds `timers`; granted handles cross the bridge to the host timer wrapper, which owns the 64-handle budget and clamps every interval to at least 16 ms. Timer calls still return their synchronous local handle.
 

@@ -22,8 +22,14 @@ export interface RemovedExtensionMark {
 }
 
 /** Deterministic JSON text for one discovered package's raw content. */
-export function packageContentIdentity(manifest: unknown, i18n: unknown): string {
-  return stableText([manifest ?? null, i18n ?? null]);
+export function packageContentIdentity(
+  manifest: unknown,
+  i18n: unknown,
+  assetsDigest?: string,
+): string {
+  return assetsDigest === undefined
+    ? stableText([manifest ?? null, i18n ?? null])
+    : stableText([manifest ?? null, i18n ?? null, assetsDigest]);
 }
 
 /** Stable JSON with object keys sorted, so property order is not content. */

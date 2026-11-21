@@ -133,8 +133,9 @@ When the desktop host enables developer mode, or after the About logo is activat
 | ------------------- | ------- |
 | Toggle DevTools     | `F12`   |
 | Performance monitor | `F3`    |
+| Developer findings  | `F4`    |
 
-Both keys follow the same gate: in a release host they answer nothing until the About gesture opens the developer section, and they stop answering again when the gesture closes it. The monitor is a developer surface end to end — its switch refuses to move and the panel stays hidden while the section is closed, so neither the key nor the settings checkbox can store an "on" preference behind a closed section.
+These keys follow the same gate: in a release host they answer nothing until the About gesture opens the developer section, and they stop answering again when the gesture closes it. The monitor and the findings panel are developer surfaces end to end — their switches refuse to move and their panels stay hidden while the section is closed, so neither the keys nor the settings checkboxes can store an "on" preference behind a closed section.
 
 ## Mouse keys and held-key chords
 

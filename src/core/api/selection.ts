@@ -109,6 +109,7 @@ export type {
   SelectionMode,
   SelectionPoint,
   SelectedEventRef,
+  SelectedNoteRef,
   SelectionApiSnapshot as SelectionSnapshot,
   SelectionOperationResult,
   SelectionPasteRequest,

@@ -77,6 +77,8 @@ import type {
   TrustedExtensionManifest,
 } from "./extensionContract.ts";
 import type { ExtensionSandboxFactory, ExtensionSandboxHost } from "./sandbox.ts";
+import { clearRecipePlans } from "./recipePlans.ts";
+import { clearPlaybackSubscriptions } from "../api/playback.ts";
 import {
   clearPersistedExtensionState,
   errorMessage,
@@ -1303,6 +1305,7 @@ export class ExtensionRuntime {
         manifest: record.manifest,
         translations: record.translations,
         source: source.source,
+        ...(source.assets ? { assets: source.assets } : {}),
         context,
         reportFailure: (error, action) =>
           this.reportActivationFailure(record, generation, error, action),
@@ -1377,6 +1380,8 @@ export class ExtensionRuntime {
     // they tear down, and a later enable declares them afresh.
     add(() => valueRegistry.removeOwner(manifest.id));
     add(() => removeExtensionServices(manifest.id));
+    add(() => clearRecipePlans(manifest.id));
+    add(() => clearPlaybackSubscriptions(manifest.id));
     let activeSubscriptions = 0;
     let activeScripts = 0;
     let activeStyles = 0;

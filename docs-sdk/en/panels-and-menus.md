@@ -121,4 +121,4 @@ Duplicate ids, invalid descriptors, missing capabilities, and unavailable surfac
 
 ## Related APIs
 
-See [Declarative UI](ui-reference.md), [Layout](api:layout.anchors), [Toolbar](api:toolbar.register), [Sidebar](api:sidebar.register), and [Context menu](api:contextMenu.register).
+See [Declarative UI](ui-reference.md), [Toolbar](api:toolbar.register), [Sidebar](api:sidebar.register), and [Context menu](api:contextMenu.register).

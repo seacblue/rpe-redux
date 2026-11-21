@@ -12,6 +12,7 @@ export type ApiErrorCode =
   | "unchanged"
   | "rejected"
   | "conflict"
+  | "stale_read"
   | "unsaved_changes"
   | "multiple_candidates"
   | "save_conflict"

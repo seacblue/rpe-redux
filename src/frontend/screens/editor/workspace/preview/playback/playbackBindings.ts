@@ -53,6 +53,7 @@ export function bindEditorPlayback(bindings: EditorPlaybackBindings): () => void
         pending: playback.pending,
         audioSeconds,
         chartSeconds: audioSeconds - offset,
+        beat: tempo().beat(audioSeconds - offset, getSession().line?.bpmfactor ?? 1),
         duration: audio.duration,
         rate: audio.rate,
         offsetSeconds: offset,

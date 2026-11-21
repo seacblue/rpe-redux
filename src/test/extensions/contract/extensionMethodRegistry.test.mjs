@@ -25,6 +25,7 @@ const FACADE_HANDLES = [
   "transaction",
   "selection",
   "document",
+  "recipe",
   "library",
   "playback",
   "toolbar",
@@ -36,7 +37,6 @@ const FACADE_HANDLES = [
   "diagnostics",
   "hitTest",
   "preview",
-  "layout",
   "theme",
   "help",
 ];
@@ -96,9 +96,52 @@ test("read methods never claim to write host state", () => {
 test("the completeness check accepts a facade built from the registry", () => {
   const facade = facadeFrom(EXTENSION_METHODS);
   assert.doesNotThrow(() => assertRegistryComplete(facade));
-  assert.equal(lookupMethod("chart", "notes")?.capability, "chart.read");
+  assert.equal(lookupMethod("chart", "readAll")?.capability, "chart.read");
+  assert.equal(lookupMethod("recipe", "plan")?.capability, "chart.write");
   assert.equal(lookupMethod("library", "current.createRevision")?.capability, "library.write");
   assert.equal(lookupMethod("", "ui.notice")?.capability, "ui.notice");
+});
+
+test("host-only operations stay out of the package registry", () => {
+  const removed = [
+    ["chart", "snapshot"],
+    ["chart", "metadata"],
+    ["chart", "lines"],
+    ["chart", "notes"],
+    ["chart", "events"],
+    ["playback", "replay"],
+    ["playback", "inspect"],
+    ["playback", "renderAt"],
+    ["playback", "textures"],
+    ["playback", "frames"],
+    ["playback", "startMeasurement"],
+    ["playback", "stopMeasurement"],
+    ["playback", "metrics"],
+    ["playback", "resetDiagnostics"],
+    ["toolbar", "refresh"],
+    ["toolbar", "available"],
+    ["toolbar", "bindings"],
+    ["toolbar", "shortcutText"],
+    ["values", "getHandle"],
+    ["values", "byId.subscribeAll"],
+    ["values", "byId.snapshot"],
+    ["diagnostics", "trace.enabled"],
+    ["diagnostics", "trace.setEnabled"],
+    ["diagnostics", "trace.clear"],
+    ["hitTest", "geometry"],
+    ["preview", "frame"],
+    ["layout", "availability"],
+    ["layout", "anchors"],
+    ["help", "openChangelog"],
+    ["help", "openGuide"],
+  ];
+  for (const [handle, method] of removed) {
+    assert.equal(
+      lookupMethod(handle, method),
+      undefined,
+      `${handle}.${method} must stay host-only`,
+    );
+  }
 });
 
 test("the completeness check rejects an unregistered facade method", () => {
@@ -117,12 +160,12 @@ test("the completeness check rejects an unregistered facade method", () => {
 
 test("the completeness check rejects an unregistered nested method", () => {
   const facade = facadeFrom(EXTENSION_METHODS);
-  facade.diagnostics.trace.unregisteredTraceMethod = () => {};
+  facade.values.byId.unregisteredByIdMethod = () => {};
   assert.throws(
     () => assertRegistryComplete(facade),
     (error) => {
       assert.equal(error.code, "methodNotRegistered");
-      assert.equal(error.path, "diagnostics.trace.unregisteredTraceMethod");
+      assert.equal(error.path, "values.byId.unregisteredByIdMethod");
       return true;
     },
   );
@@ -147,7 +190,7 @@ test("the capability vocabulary stays under the charter cap and excludes univers
 });
 
 test("the capability catalog covers all names and consent excludes host.patch", () => {
-  assert.equal(EXTENSION_CAPABILITIES.length, 34);
+  assert.equal(EXTENSION_CAPABILITIES.length, 35);
   assert.equal(CAPABILITY_CATALOG.length, EXTENSION_CAPABILITIES.length);
   assert.deepEqual(
     CAPABILITY_CATALOG.map((row) => row.capability),
@@ -185,7 +228,7 @@ test("the capability catalog covers all names and consent excludes host.patch", 
 
   const grantable = EXTENSION_CAPABILITIES.filter((capability) => capability !== "host.patch");
   assert.equal(CAPABILITY_CONSENT_ROWS.length, grantable.length);
-  assert.equal(CAPABILITY_CONSENT_ROWS.length, 33);
+  assert.equal(CAPABILITY_CONSENT_ROWS.length, 34);
   assert.deepEqual(
     CAPABILITY_CONSENT_ROWS.map((row) => row.capability),
     grantable,

@@ -62,6 +62,7 @@ type FacadeHandle =
   | "transaction"
   | "selection"
   | "document"
+  | "recipe"
   | "library"
   | "playback"
   | "toolbar"
@@ -73,7 +74,6 @@ type FacadeHandle =
   | "diagnostics"
   | "hitTest"
   | "preview"
-  | "layout"
   | "theme"
   | "help";
 
@@ -130,15 +130,11 @@ const HANDLE_METHODS = {
     ["availability", "chart.read", "read", false],
     ["state", "chart.read", "read", false],
     ["read", "chart.read", "read", false],
-    ["snapshot", "chart.read", "read", false],
-    ["metadata", "chart.read", "read", false],
+    ["readAll", "chart.read", "read", false],
     ["resources", "chart.read", "read", false],
-    ["lines", "chart.read", "read", false],
     ["line", "chart.read", "read", false],
     ["parentId", "chart.read", "read", false],
-    ["notes", "chart.read", "read", false],
     ["note", "chart.read", "read", false],
-    ["events", "chart.read", "read", false],
     ["event", "chart.read", "read", false],
   ],
   transaction: [
@@ -173,6 +169,12 @@ const HANDLE_METHODS = {
     ["save", "document.write", "sensitive", true],
     ["close", "document.write", "sensitive", true],
   ],
+  recipe: [
+    ["availability", "chart.read", "read", false],
+    ["plan", "chart.write", "write", false],
+    ["apply", "chart.write", "write", true],
+    ["cancel", "chart.write", "write", false],
+  ],
   library: [
     ["availability", "library.read", "read", false],
     ["list", "library.read", "read", false],
@@ -188,6 +190,7 @@ const HANDLE_METHODS = {
     ["current.addAsset", "assets.write", "sensitive", true],
     ["current.removeAsset", "assets.write", "sensitive", true],
     ["current.revisions", "library.read", "read", false],
+    ["current.revisionsAll", "library.read", "read", false],
     ["current.createRevision", "library.write", "sensitive", true],
     ["current.revision", "library.read", "read", false],
     ["current.removeRevision", "library.write", "sensitive", true],
@@ -195,21 +198,13 @@ const HANDLE_METHODS = {
   playback: [
     ["availability", "playback.read", "read", false],
     ["state", "playback.read", "read", false],
+    ["subscribe", "playback.read", "read", false],
     ["play", "playback.control", "write", false],
     ["pause", "playback.control", "write", false],
     ["stop", "playback.control", "write", false],
-    ["replay", "playback.control", "write", false],
     ["seek", "playback.control", "write", false],
     ["seekBeat", "playback.control", "write", false],
     ["setRate", "playback.control", "write", false],
-    ["inspect", "playback.read", "read", false],
-    ["renderAt", "playback.control", "write", false],
-    ["textures", "playback.read", "read", false],
-    ["frames", "playback.read", "read", false],
-    ["startMeasurement", "playback.control", "write", false],
-    ["stopMeasurement", "playback.control", "write", false],
-    ["metrics", "playback.read", "read", false],
-    ["resetDiagnostics", "playback.control", "write", false],
   ],
   toolbar: [
     ["register", "ui.toolbar", "write", true],
@@ -217,10 +212,6 @@ const HANDLE_METHODS = {
     ["get", "ui.toolbar", "read", false],
     ["subscribe", "ui.toolbar", "read", false],
     ["entry", "ui.toolbar", "read", false],
-    ["refresh", "ui.toolbar", "write", false],
-    ["available", "ui.toolbar", "read", false],
-    ["bindings", "ui.toolbar", "read", false],
-    ["shortcutText", "ui.toolbar", "read", false],
   ],
   sidebar: [
     ["register", "ui.sidebar", "write", true],
@@ -248,41 +239,27 @@ const HANDLE_METHODS = {
   ],
   values: [
     ["define", "values", "write", true],
-    ["getHandle", "values", "read", false],
     ["byId.has", "values", "read", false],
     ["byId.ownerOf", "values", "read", false],
     ["byId.get", "values", "read", false],
     ["byId.set", "values", "write", true],
     ["byId.update", "values", "write", true],
     ["byId.subscribe", "values", "read", false],
-    ["byId.subscribeAll", "values", "read", false],
-    ["byId.snapshot", "values", "read", false],
   ],
   shortcuts: [
     ["registerCategory", "shortcuts", "write", true],
     ["registerShortcut", "shortcuts", "write", true],
   ],
-  diagnostics: [
-    ["snapshot", "diagnostics", "read", false],
-    ["trace.enabled", "diagnostics", "read", false],
-    ["trace.setEnabled", "diagnostics", "write", false],
-    ["trace.clear", "diagnostics", "write", false],
-  ],
+  diagnostics: [["snapshot", "diagnostics", "read", false]],
   hitTest: [
     ["availability", "preview.read", "read", false],
     ["pick", "preview.read", "read", false],
     ["queryAt", "hitTest.read", "read", false],
-    ["geometry", "preview.read", "read", false],
   ],
   preview: [
     ["availability", "preview.read", "read", false],
     ["snapshot", "preview.read", "read", false],
-    ["frame", "preview.read", "read", false],
     ["subscribe", "preview.read", "read", false],
-  ],
-  layout: [
-    ["availability", "preview.read", "read", false],
-    ["anchors", "preview.read", "read", false],
   ],
   theme: [
     ["tokens", "styles", "read", false],
@@ -290,8 +267,6 @@ const HANDLE_METHODS = {
   ],
   help: [
     ["availability", "ui.guide", "read", false],
-    ["openChangelog", "ui.guide", "write", false],
-    ["openGuide", "ui.guide", "write", false],
     ["registerTutorial", "ui.guide", "write", true],
   ],
 } as const satisfies HandleSeedTable;
@@ -306,7 +281,11 @@ type ContextMethodPath =
   | `storage.${"get" | "set" | "delete" | "clear" | "getJSON" | "setJSON"}`
   | `timers.${"setTimeout" | "setInterval" | "requestAnimationFrame" | "clearTimeout" | "clearInterval" | "cancelAnimationFrame"}`
   | "styles.add"
-  | `ui.${"notice" | "confirm" | "progress" | "input" | "select" | "guide" | "designCatalog" | "registerDesignPanel" | "registerPanel" | "registerSidebar" | "registerOverlay"}`;
+  | "assets.read"
+  | "assets.url"
+  | "assets.info"
+  | `services.${"provide" | "resolve" | "call" | "onChange" | "provideData" | "readData" | "updateData" | "onDataChange"}`
+  | `ui.${"notice" | "confirm" | "progress" | "input" | "select" | "guide" | "pickImage" | "pickFile" | "saveFile" | "designCatalog" | "registerDesignPanel" | "registerPanel" | "registerSidebar" | "registerOverlay" | "registerSurface" | "openModalSurface" | "openAnchoredSurface"}`;
 
 /** Context seeds carry an already namespaced method path and an empty handle. */
 const CONTEXT_METHODS = [
@@ -331,17 +310,34 @@ const CONTEXT_METHODS = [
   ["timers.clearInterval", "timers", "write", false],
   ["timers.cancelAnimationFrame", "timers", "write", false],
   ["styles.add", "styles", "write", true],
+  ["services.provide", "services", "write", true],
+  ["services.resolve", "services", "read", false],
+  ["services.call", "services", "write", false],
+  ["services.onChange", "services", "read", false],
+  ["services.provideData", "services", "write", true],
+  ["services.readData", "services", "read", false],
+  ["services.updateData", "services", "write", true],
+  ["services.onDataChange", "services", "read", false],
+  ["assets.read", "assets.read", "read", false],
+  ["assets.url", "assets.read", "read", false],
+  ["assets.info", "assets.read", "read", false],
   ["ui.notice", "ui.notice", "write", false],
   ["ui.progress", "ui.notice", "write", false],
   ["ui.confirm", "ui.dialog", "sensitive", false],
   ["ui.input", "ui.dialog", "sensitive", false],
   ["ui.select", "ui.dialog", "sensitive", false],
   ["ui.guide", "ui.dialog", "sensitive", false],
+  ["ui.pickImage", "ui.dialog", "sensitive", false],
+  ["ui.pickFile", "ui.dialog", "sensitive", false],
+  ["ui.saveFile", "ui.dialog", "sensitive", true],
   ["ui.designCatalog", "ui.panel", "read", false],
   ["ui.registerDesignPanel", "ui.panel", "write", true],
   ["ui.registerPanel", "ui.panel", "write", true],
   ["ui.registerSidebar", "ui.sidebar", "write", true],
   ["ui.registerOverlay", "ui.overlay", "write", true],
+  ["ui.registerSurface", "ui.overlay", "write", true],
+  ["ui.openAnchoredSurface", "ui.overlay", "write", true],
+  ["ui.openModalSurface", "ui.dialog", "sensitive", false],
 ] as const satisfies readonly (readonly [
   method: ContextMethodPath,
   capability: ExtensionCapability,

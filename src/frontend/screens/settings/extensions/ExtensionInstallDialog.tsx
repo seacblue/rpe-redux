@@ -26,6 +26,7 @@ import {
   installResolvedExtension,
   manifestDescription,
   resolveGitHubExtension,
+  resolveLocalExtension,
   type ResolvedExtensionPackage,
 } from "../../../platform/extensionInstaller.ts";
 import { requestConfirm } from "../../../overlays/modals/prompts.ts";
@@ -175,6 +176,44 @@ export function ExtensionInstallDialog({
     });
   };
 
+  /** Pick one local folder or ZIP and show the same review as a GitHub package. */
+  const inspectLocal = async (directory: boolean) => {
+    setBusy("resolve");
+    setFailure(null);
+    setResolved(null);
+    setConsentSelection(new Set());
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory,
+        multiple: false,
+        title: t(
+          directory
+            ? "settings.extensions.install.localFolderTitle"
+            : "settings.extensions.install.localArchiveTitle",
+        ),
+        ...(directory ? {} : { filters: [{ name: "Extension package", extensions: ["zip"] }] }),
+      });
+      if (typeof selected !== "string") {
+        return;
+      }
+      const next = await resolveLocalExtension(selected);
+      setSource(selected);
+      setResolved(next);
+      setConsentSelection(defaultConsentSelection(next.manifest.capabilities ?? []));
+    } catch (error) {
+      setFailure(
+        asExtensionInstallFailure(error, {
+          code: "unknown",
+          phase: "resolve",
+          message: "Unable to read the local Extension package.",
+        }),
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
   /** Install the reviewed package and report the installed id. */
   const install = async () => {
     if (!resolved || !consent.ok) {
@@ -316,6 +355,22 @@ export function ExtensionInstallDialog({
               />
             }
           />
+          <div className="redux-extension-install-local">
+            <Button
+              variant="outlined"
+              disabled={busy !== null || autoResolving}
+              onClick={() => void inspectLocal(true)}
+            >
+              {t("settings.extensions.install.localFolder")}
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={busy !== null || autoResolving}
+              onClick={() => void inspectLocal(false)}
+            >
+              {t("settings.extensions.install.localArchive")}
+            </Button>
+          </div>
           {failure && <ExtensionInstallError failure={failure} />}
         </div>
       )}
@@ -403,7 +458,7 @@ function ExtensionReview({
             <code>{file.path}</code>
             <span>
               {t("settings.extensions.install.bytes", {
-                count: new TextEncoder().encode(file.text).byteLength,
+                count: file.bytes ?? new TextEncoder().encode(file.text ?? "").byteLength,
               })}
             </span>
           </li>

@@ -50,6 +50,7 @@ const CAPABILITY_RISK = Object.freeze({
   "library.read": "read",
   "library.write": "sensitive",
   "assets.write": "sensitive",
+  "assets.read": "read",
   "playback.read": "read",
   "playback.control": "write",
   "ui.notice": "write",

@@ -68,33 +68,34 @@ export default {
 
 ### 按功能拆分能力
 
-| 功能                           | 需要的能力                               |
-| ------------------------------ | ---------------------------------------- |
-| 注册脚本                       | `scripts`                                |
-| 读取谱面                       | `chart.read`                             |
-| 写入谱面                       | `chart.write`                            |
-| 读取选区                       | `selection.read`                         |
-| 修改选区                       | `selection.write`                        |
-| 读取文档                       | `document.read`                          |
-| 新建/打开/保存/关闭            | `document.write`                         |
-| 读取曲库                       | `library.read`                           |
-| 写入曲库                       | `library.write`                          |
-| 写入资源                       | `assets.write`                           |
-| 播放控制                       | `playback.read` / `playback.control`     |
-| 通知与进度                     | `ui.notice`                              |
-| 确认/输入/选择/引导            | `ui.dialog`                              |
-| 面板 / 侧栏 / 覆盖层           | `ui.panel` / `ui.sidebar` / `ui.overlay` |
-| 工具栏 / 右键菜单              | `ui.toolbar` / `ui.contextMenu`          |
-| 快捷键                         | `shortcuts`                              |
-| 读取快捷键文本                 | `shortcuts.read`                         |
-| 设置行                         | `settings`                               |
-| 值                             | `values`                                 |
-| 私有存储                       | `storage`                                |
-| 宿主事件                       | `events`                                 |
-| 样式表                         | `styles`                                 |
-| 计时器                         | `timers`                                 |
-| 诊断                           | `diagnostics`                            |
-| 预览几何 / 命中测试 / 布局锚点 | `preview.read`                           |
+| 功能                 | 需要的能力                               |
+| -------------------- | ---------------------------------------- |
+| 注册脚本             | `scripts`                                |
+| 读取谱面             | `chart.read`                             |
+| 写入谱面             | `chart.write`                            |
+| 读取选区             | `selection.read`                         |
+| 修改选区             | `selection.write`                        |
+| 读取文档             | `document.read`                          |
+| 新建/打开/保存/关闭  | `document.write`                         |
+| 读取曲库             | `library.read`                           |
+| 写入曲库             | `library.write`                          |
+| 写入资源             | `assets.write`                           |
+| 读取包内媒体         | `assets.read`                            |
+| 播放控制             | `playback.read` / `playback.control`     |
+| 通知与进度           | `ui.notice`                              |
+| 确认/输入/选择/引导  | `ui.dialog`                              |
+| 面板 / 侧栏 / 覆盖层 | `ui.panel` / `ui.sidebar` / `ui.overlay` |
+| 工具栏 / 右键菜单    | `ui.toolbar` / `ui.contextMenu`          |
+| 快捷键               | `shortcuts`                              |
+| 读取快捷键文本       | `shortcuts.read`                         |
+| 设置行               | `settings`                               |
+| 值                   | `values`                                 |
+| 私有存储             | `storage`                                |
+| 宿主事件             | `events`                                 |
+| 样式表               | `styles`                                 |
+| 计时器               | `timers`                                 |
+| 诊断                 | `diagnostics`                            |
+| 预览快照 / 命中测试  | `preview.read`                           |
 
 ### 读取能力使用情况
 

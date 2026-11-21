@@ -28,7 +28,13 @@ import type {
 } from "../../core/extensions/extensionContract.ts";
 import { resolveExtensionText, type ExtensionTranslations } from "../../core/extensions/i18n.ts";
 import { extensionRuntime } from "../../core/extensions/extensionRuntime.ts";
-import { extensionFingerprint } from "./extensionTrust.ts";
+import { assetDigest, extensionFingerprint } from "./extensionTrust.ts";
+import {
+  isSafeAssetPath,
+  manifestAssetNames,
+  MAX_ASSET_BYTES,
+  MAX_ASSET_TOTAL_BYTES,
+} from "../../core/extensions/assets.ts";
 import {
   clearPackagedExtensionRemoval,
   getExtensionStartupState,
@@ -73,9 +79,33 @@ interface FetchedFile {
   text: string;
 }
 
-/** One package resolved from a repository, with the exact bytes to install. */
+/** A user-selected local folder or ZIP reviewed before a managed install. */
+export interface LocalPackageSource {
+  readonly kind: "local";
+  readonly path: string;
+  readonly canonicalUrl: string;
+  readonly label: string;
+}
+
+/** Where one reviewed package came from. */
+export type ResolvedPackageSource = GitHubPackageSource | LocalPackageSource;
+
+/** One file returned by the native local-package reader. */
+interface LocalExtensionFile {
+  path: string;
+  text?: string;
+  base64?: string;
+  bytes: number;
+}
+
+/** Exact allowlisted files read from a local package. */
+interface LocalExtensionPackage {
+  files: LocalExtensionFile[];
+}
+
+/** One package resolved from a repository or local path, with its exact bytes. */
 export interface ResolvedExtensionPackage {
-  source: GitHubPackageSource;
+  source: ResolvedPackageSource;
   commit: string;
   manifest: MaterializedExtensionManifest;
   manifestText: string;
@@ -84,7 +114,12 @@ export interface ResolvedExtensionPackage {
   entryPath: string | null;
   entryText: string | null;
   fingerprint: string;
-  files: readonly { path: string; text: string }[];
+  files: readonly {
+    path: string;
+    text?: string;
+    base64?: string;
+    bytes?: number;
+  }[];
 }
 
 /** Install one resolved package; an updated package keeps its previous enablement. */
@@ -145,7 +180,11 @@ export async function installResolvedExtension(
       });
     }
   }
-  const files = resolved.files.map((file) => ({ path: file.path, contents: file.text }));
+  const files = resolved.files.map((file) => ({
+    path: file.path,
+    contents: file.text ?? "",
+    ...(file.base64 === undefined ? {} : { base64: file.base64 }),
+  }));
   try {
     await invoke<string>("install_extension", {
       id: resolved.manifest.id,
@@ -341,6 +380,214 @@ export async function resolveGitHubExtension(
   }
 }
 
+/**
+ * Reads one user-selected folder or ZIP into the same review shape as a GitHub
+ * package. The native reader returns only manifest-allowlisted files; this
+ * layer validates the manifest and computes the exact install fingerprint.
+ */
+export async function resolveLocalExtension(path: string): Promise<ResolvedExtensionPackage> {
+  ensureDesktop();
+  if (!path.trim()) {
+    throw new ExtensionInstallFailure({
+      code: "unknown",
+      phase: "input",
+      message: "Choose an Extension folder or ZIP.",
+    });
+  }
+  let payload: LocalExtensionPackage;
+  try {
+    payload = await invoke<LocalExtensionPackage>("read_extension_package", { path });
+  } catch (error) {
+    throw asExtensionInstallFailure(error, {
+      code: "packageFileInvalid",
+      phase: "resolve",
+      message: "Unable to read the local Extension package.",
+      source: path,
+    });
+  }
+  return reviewLocalPackage(path, payload);
+}
+
+/** Resolve a local package payload into validated, reviewable bytes. */
+async function reviewLocalPackage(
+  path: string,
+  payload: LocalExtensionPackage,
+): Promise<ResolvedExtensionPackage> {
+  const source: LocalPackageSource = {
+    kind: "local",
+    path,
+    canonicalUrl: path,
+    label: path,
+  };
+  const files = new Map<string, LocalExtensionFile>();
+  for (const file of payload.files) {
+    if (files.has(file.path)) {
+      throw new ExtensionInstallFailure({
+        code: "packageFileInvalid",
+        phase: "validate",
+        message: `The local package repeats a file: ${file.path}`,
+        source: path,
+      });
+    }
+    files.set(file.path, file);
+  }
+  const manifestFile = files.get("manifest.json");
+  if (!manifestFile) {
+    throw new ExtensionInstallFailure({
+      code: "manifestMissing",
+      phase: "resolve",
+      message: "The local package has no manifest.json.",
+      source: path,
+    });
+  }
+  const manifestText = localText(manifestFile, path);
+  const manifest = parseManifest({ path: "manifest.json", text: manifestText }, source);
+  const declaredI18n =
+    typeof (manifest as unknown as { i18n?: unknown }).i18n === "string"
+      ? (manifest as unknown as { i18n: string }).i18n
+      : null;
+  const i18nPath = declaredI18n ?? "i18n.json";
+  const i18nFile = files.get(i18nPath);
+  if (declaredI18n !== null && !i18nFile) {
+    throw new ExtensionInstallFailure({
+      code: "packageFileMissing",
+      phase: "validate",
+      message: `Extension ${manifest.id} declares a missing i18n file: ${declaredI18n}`,
+      source: path,
+    });
+  }
+  const i18nText = i18nFile ? localText(i18nFile, path) : null;
+  let i18nValue: ExtensionTranslations | null = null;
+  if (i18nText !== null) {
+    try {
+      i18nValue = JSON.parse(i18nText) as ExtensionTranslations;
+    } catch (cause) {
+      throw new ExtensionInstallFailure({
+        code: "packageFileInvalid",
+        phase: "validate",
+        message: `Extension ${manifest.id} i18n file is not valid JSON.`,
+        detail: i18nPath,
+        source: path,
+        cause: errorMessage(cause),
+      });
+    }
+  }
+  const materialized = materializeManifest(manifest, i18nValue ?? undefined);
+  const manifestError = validateManifest(materialized, BUILD_APP_VERSION);
+  if (manifestError) {
+    throw new ExtensionInstallFailure({
+      code: "manifestInvalid",
+      phase: "validate",
+      message: `Extension ${String(materialized.id ?? "?")} has an invalid manifest.`,
+      detail: `${manifestError.code ?? "manifestInvalid"}: ${manifestError.reason}`,
+      source: path,
+    });
+  }
+  const entryPath = materialized.entry ?? null;
+  const entryFile = entryPath === null ? undefined : files.get(entryPath);
+  if (entryPath !== null && !entryFile) {
+    throw new ExtensionInstallFailure({
+      code: "packageFileMissing",
+      phase: "validate",
+      message: `Extension ${materialized.id} declares a missing entry file: ${entryPath}`,
+      source: path,
+    });
+  }
+  const entryText = entryFile ? localText(entryFile, path) : null;
+  if (entryPath !== null && !entryText?.trim()) {
+    throw new ExtensionInstallFailure({
+      code: "packageFileInvalid",
+      phase: "validate",
+      message: `Extension ${materialized.id} entry file is empty.`,
+      detail: entryPath,
+      source: path,
+    });
+  }
+  if (entryPath === null) {
+    const dataError = validateDataOnlyManifest(materialized);
+    if (dataError) {
+      throw new ExtensionInstallFailure({
+        code: "manifestInvalid",
+        phase: "validate",
+        message: `Extension ${materialized.id} has no code entry and no declarative scripts.`,
+        detail: `${dataError.code ?? "entryActivateRequired"}: ${dataError.reason}`,
+        source: path,
+      });
+    }
+  }
+  const assetData: { name: string; bytes: Uint8Array }[] = [];
+  for (const [name, relative] of Object.entries(materialized.assets ?? {})) {
+    const file = files.get(relative);
+    if (!file) {
+      throw new ExtensionInstallFailure({
+        code: "packageFileMissing",
+        phase: "validate",
+        message: `Extension ${materialized.id} declares a missing asset: ${relative}`,
+        source: path,
+      });
+    }
+    assetData.push({ name, bytes: localBytes(file) });
+  }
+  const assetsDigest = assetData.length ? await assetDigest(assetData) : undefined;
+  const fingerprint = await extensionFingerprint(
+    manifestText,
+    i18nText ?? undefined,
+    entryText ?? undefined,
+    assetsDigest,
+  );
+  return {
+    source,
+    commit: "local",
+    manifest: materialized as MaterializedExtensionManifest,
+    manifestText,
+    i18nPath: i18nFile ? i18nPath : null,
+    i18nText,
+    entryPath,
+    entryText,
+    fingerprint,
+    files: payload.files.map((file) => ({
+      path: file.path,
+      ...(file.text === undefined ? {} : { text: file.text }),
+      ...(file.base64 === undefined ? {} : { base64: file.base64 }),
+      bytes: file.bytes,
+    })),
+  };
+}
+
+/** Decode one review file as UTF-8 text. */
+function localText(file: LocalExtensionFile, source: string): string {
+  if (file.text !== undefined) {
+    return file.text;
+  }
+  if (file.base64) {
+    return new TextDecoder().decode(base64Bytes(file.base64));
+  }
+  throw new ExtensionInstallFailure({
+    code: "packageFileInvalid",
+    phase: "validate",
+    message: `The local package file has no readable contents: ${file.path}`,
+    source,
+  });
+}
+
+/** Decode one review file into bytes. */
+function localBytes(file: LocalExtensionFile): Uint8Array {
+  if (file.base64) {
+    return base64Bytes(file.base64);
+  }
+  return new TextEncoder().encode(file.text ?? "");
+}
+
+/** Decode standard base64 without relying on Node's Buffer. */
+function base64Bytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
 /** Resolves a parsed source into validated package files without writing anything. */
 async function resolveSource(source: GitHubPackageSource): Promise<ResolvedExtensionPackage> {
   const repositoryUrl = `${GITHUB_API}/repos/${source.owner}/${source.repo}`;
@@ -448,15 +695,25 @@ async function resolveSource(source: GitHubPackageSource): Promise<ResolvedExten
       });
     }
   }
+  const assets = await resolveAssets(source, commit.sha, packageDirectory, materialized, blobs);
+  const assetsDigest = assets.length
+    ? await assetDigest(assets.map((asset) => ({ name: asset.name, bytes: asset.data })))
+    : undefined;
   const fingerprint = await extensionFingerprint(
     manifestFile.text,
     i18n.text ?? undefined,
     entry.text ?? undefined,
+    assetsDigest,
   );
   const files = [
     { path: "manifest.json", text: manifestFile.text },
     ...(i18n.path === null ? [] : [{ path: i18n.path, text: i18n.text ?? "" }]),
     ...(entry.path === null ? [] : [{ path: entry.path, text: entry.text ?? "" }]),
+    ...assets.map((asset) => ({
+      path: asset.path,
+      base64: asset.base64,
+      bytes: asset.bytes,
+    })),
   ];
   return {
     source,
@@ -624,13 +881,131 @@ async function resolveEntry(
   return { path: manifest.entry, text: file.text };
 }
 
+/** Encode package bytes for the JSON install request. */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
+}
+
+/** Download one declared media asset without decoding it as text. */
+async function downloadAsset(
+  source: GitHubPackageSource,
+  commit: string,
+  path: string,
+): Promise<{ path: string; bytes: Uint8Array }> {
+  if (!isSafePackageRelativePath(path)) {
+    throw new ExtensionInstallFailure({
+      code: "manifestInvalid",
+      phase: "validate",
+      message: `Extension asset path is unsafe: ${path}`,
+      source: source.canonicalUrl,
+    });
+  }
+  const encoded = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const url = `${RAW_HOST}/${source.owner}/${source.repo}/${commit}/${encoded}`;
+  const response = await request(url, "download", source, "application/octet-stream");
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) {
+    throw new ExtensionInstallFailure({
+      code: "packageFileTooLarge",
+      phase: "download",
+      message: `Extension asset exceeds ${MAX_ASSET_BYTES} bytes.`,
+      detail: `${path} declares ${declared} bytes.`,
+      source: url,
+    });
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > MAX_ASSET_BYTES) {
+    throw new ExtensionInstallFailure({
+      code: "packageFileTooLarge",
+      phase: "download",
+      message: `Extension asset exceeds ${MAX_ASSET_BYTES} bytes.`,
+      detail: `${path} is ${bytes.byteLength} bytes.`,
+      source: url,
+    });
+  }
+  return { path, bytes };
+}
+
+/** Resolve every manifest-declared asset into the install payload. */
+async function resolveAssets(
+  source: GitHubPackageSource,
+  commit: string,
+  packageDirectory: string,
+  manifest: TrustedExtensionManifest,
+  blobs: ReadonlySet<string>,
+): Promise<
+  readonly { name: string; path: string; base64: string; bytes: number; data: Uint8Array }[]
+> {
+  const names = manifestAssetNames(manifest);
+  if (!names.length) {
+    return [];
+  }
+  const resolved: {
+    name: string;
+    path: string;
+    base64: string;
+    bytes: number;
+    data: Uint8Array;
+  }[] = [];
+  let total = 0;
+  for (const name of names) {
+    const relative = manifest.assets?.[name];
+    if (!relative || !isSafeAssetPath(relative)) {
+      throw new ExtensionInstallFailure({
+        code: "manifestInvalid",
+        phase: "validate",
+        message: `Extension ${manifest.id} declares an invalid asset: ${name}`,
+        source: source.canonicalUrl,
+      });
+    }
+    const path = packagePath(packageDirectory, relative);
+    if (!blobs.has(path)) {
+      throw new ExtensionInstallFailure({
+        code: "packageFileMissing",
+        phase: "download",
+        message: `Extension ${manifest.id} declares a missing asset: ${relative}`,
+        source: source.canonicalUrl,
+      });
+    }
+    const file = await downloadAsset(source, commit, path);
+    total += file.bytes.byteLength;
+    if (total > MAX_ASSET_TOTAL_BYTES) {
+      throw new ExtensionInstallFailure({
+        code: "packageFileTooLarge",
+        phase: "download",
+        message: `Extension ${manifest.id} assets exceed ${MAX_ASSET_TOTAL_BYTES} bytes.`,
+        source: source.canonicalUrl,
+      });
+    }
+    resolved.push({
+      name,
+      path: relative,
+      base64: bytesToBase64(file.bytes),
+      bytes: file.bytes.byteLength,
+      data: file.bytes,
+    });
+  }
+  return resolved;
+}
+
 /** Joins a package directory with a path relative to it. */
 function packagePath(directory: string, relative: string): string {
   return directory ? `${directory}/${relative}` : relative;
 }
 
 /** Parses downloaded manifest text, rejecting non-object JSON. */
-function parseManifest(file: FetchedFile, source: GitHubPackageSource): TrustedExtensionManifest {
+function parseManifest(
+  file: FetchedFile,
+  source: { readonly canonicalUrl: string },
+): TrustedExtensionManifest {
   let value: unknown;
   try {
     value = JSON.parse(file.text) as unknown;

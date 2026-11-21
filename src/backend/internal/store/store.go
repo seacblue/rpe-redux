@@ -1958,18 +1958,26 @@ func (s *Store) CreateRevision(ctx context.Context, in CreateRevisionInput) (*Re
 	return s.GetRevision(ctx, id)
 }
 
-// ListRevisions returns a project's snapshots, newest first.
-func (s *Store) ListRevisions(ctx context.Context, projectID string, limit int) ([]RevisionSummary, error) {
+// ListRevisions returns one page of a project's snapshots, newest first.
+func (s *Store) ListRevisions(
+	ctx context.Context,
+	projectID string,
+	limit int,
+	offset int,
+) ([]RevisionSummary, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 200 {
 		limit = 200
 	}
+	if offset < 0 {
+		offset = 0
+	}
 	rows, err := s.db.QueryContext(ctx, `
         SELECT id, project_id, label, created_at, size
         FROM revisions WHERE project_id = ?
-        ORDER BY created_at DESC, rowid DESC LIMIT ?`, projectID, limit)
+        ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`, projectID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list revisions: %w", err)
 	}
@@ -2034,6 +2042,43 @@ func (s *Store) DeleteRevision(ctx context.Context, id string) error {
 		return fmt.Errorf("commit delete revision: %w", err)
 	}
 	return nil
+}
+
+// maxRevisionSnapshotRows bounds the summaries held by one consistent snapshot.
+const maxRevisionSnapshotRows = 10_000
+
+// ErrRevisionSnapshotTooLarge reports a project with more revisions than one
+// consistent in-memory snapshot may hold.
+var ErrRevisionSnapshotTooLarge = errors.New("revision snapshot is too large")
+
+// ListAllRevisions returns every summary for a project in page order. Callers
+// use it to materialize one consistent snapshot before serving pages.
+func (s *Store) ListAllRevisions(ctx context.Context, projectID string) ([]RevisionSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+        SELECT id, project_id, label, created_at, size
+        FROM revisions WHERE project_id = ?
+        ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+		projectID, maxRevisionSnapshotRows+1)
+	if err != nil {
+		return nil, fmt.Errorf("list all revisions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]RevisionSummary, 0)
+	for rows.Next() {
+		var r RevisionSummary
+		if err := rows.Scan(&r.ID, &r.ProjectID, &r.Label, &r.CreatedAt, &r.Size); err != nil {
+			return nil, fmt.Errorf("scan all revisions: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate all revisions: %w", err)
+	}
+	if len(out) > maxRevisionSnapshotRows {
+		return nil, ErrRevisionSnapshotTooLarge
+	}
+	return out, nil
 }
 
 // CountRevisions returns how many snapshots a project has.

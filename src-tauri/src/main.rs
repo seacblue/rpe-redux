@@ -171,6 +171,8 @@ fn main() {
             startup_files,
             assets::extensions::list_extensions,
             assets::extensions::read_extension_entry,
+            assets::extensions::read_extension_asset,
+            assets::extensions::read_extension_package,
             assets::extensions::install_extension,
             assets::extensions::remove_extension,
             assets::extensions::extension_watchdog_heartbeat,

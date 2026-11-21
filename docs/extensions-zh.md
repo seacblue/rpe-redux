@@ -8,7 +8,7 @@ Extension 在独立的 iframe 沙箱中运行，用于添加快捷键、工具�
 
 - [包结构](#包结构)
 - [Manifest](#manifest)
-- [从 GitHub 安装](#从-github-安装)
+- [安装扩展包](#安装扩展包)
 - [插件市场](#插件市场)
 - [Capabilities](#capabilities)
 - [方法登记表](#方法登记表)
@@ -33,13 +33,13 @@ Extension 在独立的 iframe 沙箱中运行，用于添加快捷键、工具�
   i18n.json
 ```
 
-带 `entry` 的包是可执行代码；没有 `entry` 的 manifest 是 data-only 包。内置包位于 `src/assets/extensions/`，外部包从配置的资源目录发现。包内路径保持相对路径。一个包可以注册任意数量的脚本，代码包和数据型包都一样。从 GitHub 或插件市场安装的包写入 `user-data/extensions/`，来源显示为 `installed`；移除时会删除该目录。
+带 `entry` 的包是可执行代码；没有 `entry` 的 manifest 是 data-only 包。内置包位于 `src/assets/extensions/`，外部包从配置的资源目录发现。包内路径保持相对路径。一个包可以注册任意数量的脚本，代码包和数据型包都一样。从 GitHub、插件市场或本地文件夹/ZIP 安装的包写入 `user-data/extensions/`，来源显示为 `installed`；移除时会删除该目录。
 
 ## Manifest
 
 内置包可以声明 `pagedChartSafe`，表示它能处理尚未完全加载的谱面线；外部包不会凭此声明跳过完整解析。
 
-`manifest.json` 声明 `id`、`version`、可选的 `kind`、`name`、`author`、`license`、可选的来源 URL、`engines`、`entry`、`i18n` 和 `capabilities`。`kind` 的 `"extension"` 与已弃用的 `"mod"` 别名对两种包形态都有效；`"data-only"` 要求声明 `scripts` 且没有 `entry`，`"script"` 要求有 `entry`。声明未知 `kind` 返回 `invalidKind`，与实际包形态不一致返回 `kindMismatch`。数据型包不写 `entry`，改为声明 `scripts` 数组；每项有包内唯一的 `id`、可选的标签/描述、可选参数 schema 和 steps。宿主会校验字段形状、宿主版本声明和 provenance，并拒绝无效声明。旧 data-only manifest 如果漏写 `scripts` capability 仍可加载：宿主会补上隐式授权并写弃用警告，因为运行时本来就在启用时要求它。
+`manifest.json` 声明 `id`、`version`、可选的 `kind`、`name`、`author`、`license`、可选的来源 URL、`engines`、`entry`、`i18n`、`assets`、`assetMetadata` 和 `capabilities`。`kind` 的 `"extension"` 与已弃用的 `"mod"` 别名对两种包形态都有效；`"data-only"` 要求声明 `scripts` 且没有 `entry`，`"script"` 要求有 `entry`。声明未知 `kind` 返回 `invalidKind`，与实际包形态不一致返回 `kindMismatch`。数据型包不写 `entry`，改为声明 `scripts` 数组；每项有包内唯一的 `id`、可选的标签/描述、可选参数 schema 和 steps。宿主会校验字段形状、宿主版本声明和 provenance，并拒绝无效声明。旧 data-only manifest 如果漏写 `scripts` capability 仍可加载：宿主会补上隐式授权并写弃用警告，因为运行时本来就在启用时要求它。
 
 `engines["rpe-redux"]` 可以使用旧版整数主版本，也可以使用针对完整宿主版本的semver 范围。范围支持精确/部分版本、`x`/`*` 通配符、`^`、`~`、比较运算符、连字符范围、空格 AND 和 `||` OR：
 
@@ -49,11 +49,13 @@ Extension 在独立的 iframe 沙箱中运行，用于添加快捷键、工具�
 
 注册前会检查范围。格式错误的范围返回 `invalidHostVersionRange`；格式正确但当前宿主不满足时返回 `incompatibleHostVersion`，并同时给出声明范围和运行版本。
 
-## 从 GitHub 安装
+## 安装扩展包
 
 扩展设置页接受仓库链接、raw 链接或 `owner/repo` 简写。`/tree/<ref>/<path>` 链接用于选择 monorepo 中的单个包。仓库链接会使用默认分支解析；如果找到多个 manifest，会返回 `manifestMultiple` 并列出候选路径。
 
-检查链接时只下载 `manifest.json`、声明的 `entry` 以及声明或约定的 `i18n.json`。审阅对话框会显示包名、作者、描述、版本、宿主版本范围、能力、来源提交和文件列表。确认后，宿主把完全相同的字节写入 `user-data/extensions/<id>`，并在不重启的情况下启用。安装失败会返回稳定错误码和失败阶段（`input`、`marketplace`、`resolve`、`download`、`validate`、`persist`、 `load` 或 `enable`），同时显示请求 URL、HTTP 状态、技术细节、底层原因和恢复建议。检查和安装只在桌面应用中可用，浏览器预览无法读取仓库或写入托管目录。
+**选择文件夹**和**选择 ZIP**会走同一个审阅流程。原生宿主只读取 manifest、声明的 entry/i18n 和声明的资源；ZIP 不会解压到磁盘。本地包同样写入托管安装目录，之后更新仍需重新审阅和指纹确认；直接放入 portable 扩展目录的文件夹仍可被扫描发现。
+
+检查包时只读取 `manifest.json`、声明的 `entry` 以及声明或约定的 `i18n.json`。审阅对话框会显示包名、作者、描述、版本、宿主版本范围、能力、来源提交和文件列表。确认后，宿主把完全相同的字节写入 `user-data/extensions/<id>`，并在不重启的情况下启用。安装失败会返回稳定错误码和失败阶段（`input`、`marketplace`、`resolve`、`download`、`validate`、`persist`、 `load` 或 `enable`），同时显示请求 URL、HTTP 状态、技术细节、底层原因和恢复建议。检查和安装只在桌面应用中可用，浏览器预览无法读取仓库或写入托管目录。
 
 ## 插件市场
 
