@@ -87,7 +87,7 @@ export interface FrameDrawingOptions {
   timeline: FrameTimeline;
   batchControls: { active: unknown; sync(): void; follow(): void };
   lineSwitcher: { active: boolean };
-  multiEdit: Pick<MultiEditPanel, "drawTimeline" | "previewChart">;
+  multiEdit: Pick<MultiEditPanel, "drawTimeline">;
   selectionOverlay: Pick<SelectionOverlay, "draw">;
   timelineOverview: Pick<TimelineOverview, "draw">;
   /** Repositions transport markers and the timeline's bookmark rail after drawing. */
@@ -180,9 +180,9 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
         runtime.realtimePreview,
       );
       const cameraPreview = freeCameraState.get().active;
-      // One answer to "which chart is being previewed": the panel owns its own gate.
-      const viewChart =
-        trajectoryView?.chart ?? runtime.multiEdit.previewChart() ?? viewSession.chart;
+      // A multi-edit ghost is a timeline overlay only; the preview stage keeps
+      // sampling the live chart so a proposal never becomes its execution.
+      const viewChart = trajectoryView?.chart ?? viewSession.chart;
       const viewSeconds = trajectoryView?.seconds ?? frameSeconds;
       const previewChartChanged = viewChart !== previousPreviewChart;
       const previewSession = runtime.timeline.getPreviewSession();

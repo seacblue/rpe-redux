@@ -16,6 +16,7 @@ import { TimelineAppearance } from "../drawing/timelineAppearance.ts";
 import { TimelineCache } from "../drawing/timelineCache.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
+import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import { EventInteraction } from "../events/eventInteraction.ts";
 import { TimelineEventBatch } from "../events/timelineEventBatch.ts";
@@ -74,6 +75,11 @@ export class Timeline {
    * session to fake one.
    */
   getSession: () => EditorSession;
+  /**
+   * Events an active editor preview removes from its result. The event layer
+   * skips them visually while the preview is on; the chart itself is untouched.
+   */
+  hiddenEvents?: ReadonlySet<JudgeLineEvent>;
 
   /**
    * Note ids selected by other room members, rendered with the collaboration tint.

@@ -1,8 +1,26 @@
 // Multi-edit pane styling: the preview toggle, feedback, the apply row, and
 // the applied-parameter history.
 //
-// Apply is the pane's only commit action, so it gets its own centered row; the
-// history scrolls instead of growing and pushing the form off screen.
+// Apply is the pane's only commit action, so it shares the docked row with the
+// history pager and stays in reach while the form scrolls.
+
+// The history pager and the commit row stay docked to the bottom of the page
+// while the form scrolls, so the one commit action never leaves the viewport.
+.batch-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-content-overlay);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--edge-divider);
+  background: var(--surface);
+}
+
+// The dock owns the separation from the form; the pager carries only its row.
+.batch-dock .batch-history {
+  margin-top: 0;
+  padding-top: 0;
+}
 
 // Apply is the panel's one commit action and belongs at the bottom-right.
 .batch-apply {
@@ -32,4 +50,28 @@
 
 .batch-history-button {
   flex: none;
+}
+
+// The event pane's mode switch fills the first row. Without a visible label
+// both choices share the width, so the switch reads as the panel's face rather
+// than as one more field.
+.multi-edit-mode {
+  width: 100%;
+  margin-bottom: var(--space-3);
+}
+
+.multi-edit-mode .redux-segmented-options {
+  width: 100%;
+}
+
+.multi-edit-mode .redux-segmented-option {
+  flex: 1;
+}
+
+// Field blocks and channels share one vertical rhythm; the channel heading
+// itself uses the shared section-title class, including its accent rule.
+.batch-clone-form
+  > :is(.redux-field-rows, .batch-channel)
+  + :is(.redux-field-rows, .batch-channel) {
+  margin-top: var(--space-2);
 }

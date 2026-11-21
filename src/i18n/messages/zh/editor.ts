@@ -324,6 +324,12 @@ export default {
     "首尾数值编辑适用于数值事件；颜色、文字、着色器可编辑时间或克隆",
   "editor.commands.multiEdit.error.unsupportedField": "当前物件不支持此数值属性",
   "editor.commands.multiEdit.error.noMatch": "没有匹配的选中物件",
+  "editor.commands.multiEdit.clone.error.targets": "请输入至少一个有效的目标线号",
+  "editor.commands.multiEdit.clone.error.noSelection": "请先选择要克隆的事件",
+  "editor.commands.multiEdit.clone.error.tooMany":
+    "本次克隆会创建 {count} 个物件，请减少目标线或选择",
+  "editor.commands.multiEdit.clone.error.noise": "噪域激活事件不能克隆",
+  "editor.commands.multiEdit.clone.error.increment": "时间增量不是有限数字",
   "editor.commands.multiEditParameters.error.storage":
     "批量参数无法写入本机存储，请检查可用空间；当前参数仍保留在本次会话。",
   "editor.commands.multiLineEdit.error.invalidRange": "线号范围无效：{range}",

@@ -38,6 +38,8 @@ type Option = readonly [string | number, string];
 const MULTI_EDIT_EVENT_TYPES: readonly string[] = [...EVENT_TRACKS, NOISE_ACTIVE_EVENTS];
 
 export type MultiEditFormValues = BatchParameters & {
+  /** Discriminates the original form batch from the event clone draft. */
+  mode: "edit";
   eventApplicationMode: string;
   eventType: string;
 };
@@ -182,6 +184,7 @@ export function MultiEditForm({
   const noteColorEnabled = useEditingFeature("noteColor");
   const noteHitSoundEnabled = useEditingFeature("noteHitSound");
   const [values, setValues] = useState<MultiEditFormValues>(() => ({
+    mode: "edit",
     ...defaultBatchParameters(kind),
     ...(noiseActivation ? { field: "t1" } : {}),
     eventApplicationMode: "per-line",
@@ -205,6 +208,7 @@ export function MultiEditForm({
       read: () => values,
       load: (next, options) => {
         const value = {
+          mode: "edit" as const,
           ...defaultBatchParameters(kind),
           eventApplicationMode: "per-line",
           eventType: eventTypes[0] ?? "",
@@ -389,32 +393,34 @@ export function MultiEditForm({
           {resultMessage}
         </InlineAlert>
       )}
-      <div className="batch-history" aria-label={t("editorPanels.multiEdit.history")}>
-        <IconButton
-          icon="chevronLeft"
-          size="small"
-          className="batch-history-button"
-          label={t("editorPanels.multiEdit.historyPrevious")}
-          disabled={!canLoadPrevious}
-          onClick={() => loadHistory(activeIndex - 1)}
-        />
-        <span className="batch-history-position" aria-live="polite">
-          {`${historyPosition}/${currentIndex + 1}`}
-        </span>
-        <IconButton
-          icon="chevronRight"
-          size="small"
-          className="batch-history-button"
-          label={t("editorPanels.multiEdit.historyNext")}
-          disabled={!canLoadNext}
-          onClick={() => loadHistory(activeIndex + 1)}
-        />
-      </div>
-      <div className="batch-apply redux-footer-bar">
-        <div className="redux-footer-actions">
-          <Button type="button" variant="solid" onClick={onApply}>
-            {t("editorPanels.multiEdit.apply")}
-          </Button>
+      <div className="batch-dock">
+        <div className="batch-history" aria-label={t("editorPanels.multiEdit.history")}>
+          <IconButton
+            icon="chevronLeft"
+            size="small"
+            className="batch-history-button"
+            label={t("editorPanels.multiEdit.historyPrevious")}
+            disabled={!canLoadPrevious}
+            onClick={() => loadHistory(activeIndex - 1)}
+          />
+          <span className="batch-history-position" aria-live="polite">
+            {`${historyPosition}/${currentIndex + 1}`}
+          </span>
+          <IconButton
+            icon="chevronRight"
+            size="small"
+            className="batch-history-button"
+            label={t("editorPanels.multiEdit.historyNext")}
+            disabled={!canLoadNext}
+            onClick={() => loadHistory(activeIndex + 1)}
+          />
+        </div>
+        <div className="batch-apply redux-footer-bar">
+          <div className="redux-footer-actions">
+            <Button type="button" variant="solid" onClick={onApply}>
+              {t("editorPanels.multiEdit.apply")}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -150,7 +150,12 @@ function writeField(item: BatchItem, field: string, value: number): void {
   }
 }
 
-function validateChange(change: BatchChange, lineCount: number, snapshot: SelectionSnapshot): void {
+/** Validate one planned event or note change; the clone planner shares this gate. */
+export function validateChange(
+  change: BatchChange,
+  lineCount: number,
+  snapshot: SelectionSnapshot,
+): void {
   const { after, kind, type } = change;
   if (
     !Number.isInteger(change.lineIndex) ||
@@ -242,11 +247,19 @@ function validateChange(change: BatchChange, lineCount: number, snapshot: Select
   }
 }
 
-function assemble(
+/**
+ * Build the chart a plan describes and record the selection it leaves behind.
+ *
+ * The clone planner shares this assembler: `removeSource` drops the original
+ * selection, and `selectCopies` focuses the new copies so a clone commit behaves
+ * like a paste rather than like an edit.
+ */
+export function assemble(
   snapshot: SelectionSnapshot,
   changes: BatchChange[],
   kind: MultiEditKind,
   removeSource = false,
+  selectCopies = false,
 ): MultiEditResult {
   let chart = snapshot.chart;
   const selection = new Set<number>(
@@ -259,6 +272,20 @@ function assemble(
           .map((entry) => eventKey(entry.type, entry.index))
       : [],
   );
+  const multiEventSelection = new Map<number, Set<string>>();
+  // A plan that keeps its sources leaves them selected on every source line;
+  // copies add their own entries below. A removal starts from an empty map.
+  if (kind === "events" && !removeSource) {
+    for (const entry of snapshot.events) {
+      const lineIndex = Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex;
+      let lineSelection = multiEventSelection.get(lineIndex);
+      if (!lineSelection) {
+        lineSelection = new Set();
+        multiEventSelection.set(lineIndex, lineSelection);
+      }
+      lineSelection.add(eventKey(entry.type, entry.index));
+    }
+  }
   const sourceEventLines = new Set<number>(
     snapshot.events.map((entry) =>
       Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex,
@@ -341,10 +368,19 @@ function assemble(
       }
       const events = updates?.get(change.type) ?? [];
       if (change.copy) {
-        if (change.lineIndex === snapshot.lineIndex) {
-          eventSelection.add(eventKey(change.type, events.length));
-        }
+        const position = events.length;
         events.push(change.after as JudgeLineEvent);
+        if (change.lineIndex === snapshot.lineIndex) {
+          eventSelection.add(eventKey(change.type, position));
+        }
+        if (selectCopies) {
+          let lineSelection = multiEventSelection.get(change.lineIndex);
+          if (!lineSelection) {
+            lineSelection = new Set();
+            multiEventSelection.set(change.lineIndex, lineSelection);
+          }
+          lineSelection.add(eventKey(change.type, position));
+        }
       } else {
         events[change.index] = change.after as JudgeLineEvent;
       }
@@ -375,7 +411,6 @@ function assemble(
   // This chart is a UI preview. The commit path (`commitSelectionEdit`) owns
   // structural validation; validating here rebuilt and walked the whole large
   // chart every time multi-selection changed.
-  const multiEventSelection = new Map<number, Set<string>>();
   if (kind === "events" && !removeSource) {
     for (const change of changes) {
       if (!change.copy) {

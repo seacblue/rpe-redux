@@ -56,6 +56,50 @@ export type BatchParameters = {
   eventApplicationMode?: string;
 };
 
+/** The event tracks a clone can offset once per target sequence entry. */
+export const CLONE_CHANNELS = [
+  "moveXEvents",
+  "moveYEvents",
+  "rotateEvents",
+  "alphaEvents",
+  "speedEvents",
+  "scaleXEvents",
+  "scaleYEvents",
+] as const;
+
+/** One channel the clone page can distribute across target lines. */
+export type CloneChannelType = (typeof CLONE_CHANNELS)[number];
+
+/** Clone channels whose event track is present in the selected event types. */
+export function cloneChannelsFor(eventTypes: readonly string[]): CloneChannelType[] {
+  const selected = new Set(eventTypes);
+  return CLONE_CHANNELS.filter((type) => selected.has(type));
+}
+
+/** One clone channel's distribution parameters. */
+export interface CloneChannelParameters {
+  lower: string;
+  upper: string;
+  easingType: number;
+  disturbance: string;
+  /** Multipliers selected by target index; `_` skips this channel there. */
+  cycle: string;
+}
+
+/** The event clone page's parameter set. */
+export interface CloneParameters {
+  /** Discriminates a clone draft from the original form batch parameters. */
+  mode: "clone";
+  /** Target line expression; repeated lines stay separate copies. */
+  targets: string;
+  /** Horizontal grid lines added for each target sequence entry. */
+  increment: string;
+  /** Keep the source events after cloning. */
+  retainSource: boolean;
+  seed: number;
+  channels: Record<CloneChannelType, CloneChannelParameters>;
+}
+
 /**
  * Draft storage has a `getItem`/`setItem` shape so the editor can hand in the
  * durable preference store and tests can hand in a map. The default is an
@@ -90,6 +134,31 @@ export function defaultBatchParameters(kind: MultiEditKind): BatchParameters {
   };
 }
 
+/** Returns one channel at its neutral clone defaults. */
+export function defaultCloneChannelParameters(): CloneChannelParameters {
+  return { lower: "0", upper: "0", easingType: 1, disturbance: "0", cycle: "1" };
+}
+
+/** Returns the clone page's defaults, with an optional active line as target. */
+export function defaultCloneParameters(targets = ""): CloneParameters {
+  return {
+    mode: "clone",
+    targets,
+    increment: "0",
+    retainSource: false,
+    seed: 1,
+    channels: {
+      moveXEvents: defaultCloneChannelParameters(),
+      moveYEvents: defaultCloneChannelParameters(),
+      rotateEvents: defaultCloneChannelParameters(),
+      alphaEvents: defaultCloneChannelParameters(),
+      speedEvents: defaultCloneChannelParameters(),
+      scaleXEvents: defaultCloneChannelParameters(),
+      scaleYEvents: defaultCloneChannelParameters(),
+    },
+  };
+}
+
 /**
  * Decode stored data into the current parameter shape.
  *
@@ -119,6 +188,70 @@ function parameters(kind: MultiEditKind, value: unknown): BatchParameters {
   return result as BatchParameters;
 }
 
+/** Decode one stored clone channel, falling back per field. */
+function cloneChannel(value: unknown): CloneChannelParameters {
+  const defaults = defaultCloneChannelParameters();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+  const stored = value as Record<string, unknown>;
+  return {
+    lower:
+      typeof stored.lower === "string" || typeof stored.lower === "number"
+        ? String(stored.lower)
+        : defaults.lower,
+    upper:
+      typeof stored.upper === "string" || typeof stored.upper === "number"
+        ? String(stored.upper)
+        : defaults.upper,
+    easingType: isEasingType(stored.easingType) ? stored.easingType : defaults.easingType,
+    disturbance:
+      typeof stored.disturbance === "string" || typeof stored.disturbance === "number"
+        ? String(stored.disturbance)
+        : defaults.disturbance,
+    cycle:
+      typeof stored.cycle === "string" || typeof stored.cycle === "number"
+        ? String(stored.cycle)
+        : defaults.cycle,
+  };
+}
+
+/** Decode stored clone data into the current parameter shape. */
+function cloneParameters(value: unknown): CloneParameters {
+  const defaults = defaultCloneParameters();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+  const stored = value as Record<string, unknown>;
+  const storedChannels =
+    stored.channels && typeof stored.channels === "object"
+      ? (stored.channels as Record<string, unknown>)
+      : {};
+  return {
+    mode: "clone",
+    targets:
+      typeof stored.targets === "string" || typeof stored.targets === "number"
+        ? String(stored.targets)
+        : defaults.targets,
+    increment:
+      typeof stored.increment === "string" || typeof stored.increment === "number"
+        ? String(stored.increment)
+        : defaults.increment,
+    retainSource:
+      typeof stored.retainSource === "boolean" ? stored.retainSource : defaults.retainSource,
+    seed: isSeed(stored.seed) ? stored.seed : defaults.seed,
+    channels: {
+      moveXEvents: cloneChannel(storedChannels.moveXEvents),
+      moveYEvents: cloneChannel(storedChannels.moveYEvents),
+      rotateEvents: cloneChannel(storedChannels.rotateEvents),
+      alphaEvents: cloneChannel(storedChannels.alphaEvents),
+      speedEvents: cloneChannel(storedChannels.speedEvents),
+      scaleXEvents: cloneChannel(storedChannels.scaleXEvents),
+      scaleYEvents: cloneChannel(storedChannels.scaleYEvents),
+    },
+  };
+}
+
 /** Whether a stored draft came from the form editing mode. */
 function isFormMode(value: unknown): boolean {
   if (!value || typeof value !== "object") {
@@ -134,6 +267,8 @@ export class MultiEditParameters {
   onError: (message: string) => void;
   drafts: Record<MultiEditKind, BatchParameters>;
   history: Record<MultiEditKind, BatchParameters[]>;
+  cloneDraft: CloneParameters;
+  cloneHistory: CloneParameters[];
 
   /** Restores durable drafts from `storage`, reporting errors through `onError`. */
   constructor(
@@ -147,6 +282,8 @@ export class MultiEditParameters {
       events: defaultBatchParameters("events"),
     };
     this.history = { notes: [], events: [] };
+    this.cloneDraft = defaultCloneParameters();
+    this.cloneHistory = [];
     let stored: Record<string, unknown>;
     try {
       stored = JSON.parse(String(storage?.getItem(storageKey) ?? "{}"));
@@ -169,12 +306,16 @@ export class MultiEditParameters {
       // chart session and is cleared whenever a different chart is opened.
       this.history[kind] = [];
     }
+    this.cloneDraft = cloneParameters(stored.clone);
   }
 
   /** Writes durable drafts; applied history is scoped to the open chart. */
   persist(): void {
     try {
-      this.storage?.setItem(storageKey, JSON.stringify({ drafts: this.drafts }));
+      this.storage?.setItem(
+        storageKey,
+        JSON.stringify({ drafts: this.drafts, clone: this.cloneDraft }),
+      );
     } catch {
       this.onError(t("editor.commands.multiEditParameters.error.storage"));
     }
@@ -183,9 +324,22 @@ export class MultiEditParameters {
   read(kind: MultiEditKind): BatchParameters {
     return structuredClone(this.drafts[kind]);
   }
+  /** Returns a copy of the clone draft, filling an empty target with the active line. */
+  readClone(fallbackTargets = ""): CloneParameters {
+    const draft = structuredClone(this.cloneDraft);
+    if (!draft.targets && fallbackTargets) {
+      draft.targets = fallbackTargets;
+    }
+    return draft;
+  }
   /** Replaces the draft for one object kind and persists it. */
   update(kind: MultiEditKind, value: unknown): void {
     this.drafts[kind] = parameters(kind, value);
+    this.persist();
+  }
+  /** Replaces the clone draft and persists it. */
+  updateClone(value: unknown): void {
+    this.cloneDraft = cloneParameters(value);
     this.persist();
   }
   /** Clears the applied parameter history for the current chart session. */
@@ -193,6 +347,7 @@ export class MultiEditParameters {
     for (const kind of kinds) {
       this.history[kind] = [];
     }
+    this.cloneHistory = [];
   }
   /** Append an applied set, newest last; a repeat of an old one is promoted, not duplicated. */
   remember(kind: MultiEditKind, value: unknown): number {
@@ -203,5 +358,15 @@ export class MultiEditParameters {
     this.history[kind] = this.history[kind].slice(-historyLimit());
     this.persist();
     return this.history[kind].length - 1;
+  }
+  /** Append an applied clone set, newest last; exact repeats are promoted. */
+  rememberClone(value: unknown): number {
+    const next = cloneParameters(value);
+    const signature = JSON.stringify(next);
+    this.cloneHistory = this.cloneHistory.filter((entry) => JSON.stringify(entry) !== signature);
+    this.cloneHistory.push(next);
+    this.cloneHistory = this.cloneHistory.slice(-historyLimit());
+    this.persist();
+    return this.cloneHistory.length - 1;
   }
 }

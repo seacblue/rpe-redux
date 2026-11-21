@@ -3,6 +3,7 @@
  * satellite modules; the runtime supplies these fields to every method.
  */
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
+import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
 import type { TimelineAppearance } from "./timelineAppearance.ts";
 import type { TimelineCache } from "./timelineCache.ts";
 import type { TimelineGestures } from "../interaction/timelineGestures.ts";
@@ -49,6 +50,8 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   eventOverlayBatch: TimelineOverlayBatch;
   getSession: () => EditorSession;
   getPreviewSession(): EditorSession | null;
+  /** Events an active editor preview removes; the event layer skips them visually. */
+  hiddenEvents?: ReadonlySet<JudgeLineEvent>;
   /** Note ids another room member selected, drawn with the collaboration tint. */
   readonly remoteSelectedNoteIds: ReadonlySet<string>;
   /** Event ids another room member selected, drawn with the collaboration tint. */
@@ -200,9 +203,11 @@ export type TimelineEventDrawingReceiver = Pick<
   | "eventsBackdrop"
   | "eventsGridBatch"
   | "eventsCanvas"
+  | "getPreviewSession"
   | "getSession"
   | "gestures"
   | "grid"
+  | "hiddenEvents"
   | "rectangleStart"
   | "remoteSelectedEventIds"
   | "viewport"

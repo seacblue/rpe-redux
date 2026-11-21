@@ -395,6 +395,10 @@ export function drawShaderEvents(
   const selectedEventColor = selectionColor("selected-event-color", "#00C800");
   const bounds = this.viewport.eventColumnBounds(channel, width);
   for (const entry of entries) {
+    // The multi-edit clone preview hides the paint events it will remove.
+    if (!this.getPreviewSession?.() && this.hiddenEvents?.has(entry.item)) {
+      continue;
+    }
     const placement = this.cache.shaderLane(entry.index);
     if (!placement) {
       continue;

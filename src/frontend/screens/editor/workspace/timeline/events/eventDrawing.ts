@@ -335,6 +335,7 @@ function drawSelectedEventValues(
 export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number): void {
   this.gestures.beginEventRectFrame();
   const palette = this.cache.palette() ?? readCanvasPalette();
+  const hidden = this.getPreviewSession?.() ? undefined : this.hiddenEvents;
   const hookedTint = palette.eventHookedFill
     ? (rgbChannels(palette.eventHookedFill) ?? undefined)
     : undefined;
@@ -491,13 +492,14 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       eventBeatRange[1],
       this.viewport.gridCount,
     );
+    const visibleEntries = hidden ? entries.filter((entry) => !hidden.has(entry.item)) : entries;
     const selectedIndexes = selectedIndexesForChannel(
       scratch.selectedIndexesBySelection,
       session.eventSelection,
       type,
     );
     if (type === "paintEvents") {
-      this.drawShaderEvents(context, entries, channel, width, height, selectedIndexes);
+      this.drawShaderEvents(context, visibleEntries, channel, width, height, selectedIndexes);
       context.fillStyle = palette.headerSurface;
       context.fillRect(horizontal, 0, channelWidth, 23);
       overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
@@ -517,13 +519,14 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     }
     const ranges = cached.ranges[channel];
     const drawCurves =
-      this.appearance.eventCurvesEnabled !== false && shouldDrawEventCurves(entries.length, height);
+      this.appearance.eventCurvesEnabled !== false &&
+      shouldDrawEventCurves(visibleEntries.length, height);
     const edgeDrag = this.gestures.eventInteraction.drag;
     const edgeDelta =
       edgeDrag && ["move", "startTime", "endTime"].includes(edgeDrag.kind)
         ? this.gestures.eventInteraction.delta()
         : 0;
-    for (const entry of entries) {
+    for (const entry of visibleEntries) {
       const selected = selectedIndexes.has(entry.index);
       const { start, end } = eventPreviewTimes(entry, selectedIndexes, edgeDrag, edgeDelta);
       const vertical = verticalAt(end);
@@ -616,7 +619,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     const valueFont = `${valueFontSize}px ${CANVAS_FONT_FAMILY}`;
     if (type !== NOISE_ACTIVE_EVENTS && channelWidth >= valueThreshold) {
       const valueGroups = labelGroupsFromEntries(
-        entries,
+        visibleEntries,
         ranges,
         height,
         (group) => group.entries.some((entry) => selectedIndexes.has(entry.index)),
@@ -748,6 +751,7 @@ export function drawMultiLineEvents(
   const scratch = scratchFor(this);
   scratch.selectedIndexesBySelection.clear();
   const palette = this.cache.palette() ?? readCanvasPalette();
+  const hidden = this.getPreviewSession?.() ? undefined : this.hiddenEvents;
   const hookedTint = palette.eventHookedFill
     ? (rgbChannels(palette.eventHookedFill) ?? undefined)
     : undefined;
@@ -837,6 +841,7 @@ export function drawMultiLineEvents(
         eventBeatRange[1],
         this.viewport.gridCount,
       );
+      const visibleEntries = hidden ? entries.filter((entry) => !hidden.has(entry.item)) : entries;
       const selectedIndexes = selectedIndexesForChannel(
         scratch.selectedIndexesBySelection,
         lineSelection,
@@ -844,7 +849,7 @@ export function drawMultiLineEvents(
       );
       const drawCurves =
         this.appearance.eventCurvesEnabled !== false &&
-        shouldDrawEventCurves(entries.length, height);
+        shouldDrawEventCurves(visibleEntries.length, height);
       const edgeDrag =
         this.gestures.eventInteraction.drag?.lineIndex === lineIndex
           ? this.gestures.eventInteraction.drag
@@ -853,7 +858,7 @@ export function drawMultiLineEvents(
         edgeDrag && ["move", "startTime", "endTime"].includes(edgeDrag.kind)
           ? this.gestures.eventInteraction.delta()
           : 0;
-      for (const { index, item: event, start, end, invalid } of entries) {
+      for (const { index, item: event, start, end, invalid } of visibleEntries) {
         const selected = selectedIndexes.has(index);
         const preview = eventPreviewTimes(
           { index, start, end },
@@ -962,7 +967,7 @@ export function drawMultiLineEvents(
                 : 0;
       if (type !== "paintEvents" && valueFontSize > 0) {
         const valueGroups = labelGroupsFromEntries(
-          entries,
+          visibleEntries,
           ranges,
           height,
           (group) => group.entries.some((entry) => selectedIndexes.has(entry.index)),

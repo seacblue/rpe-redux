@@ -119,6 +119,23 @@ export function resolveLineSelection(
 }
 
 /**
+ * Resolve every token as one ordered sequence, preserving repeated lines.
+ *
+ * Batch event clones read targets this way: writing one line twice must place
+ * two copies on it, and each copy keeps its own sequence index for the time
+ * increment and channel distribution. Line selection keeps the union semantics
+ * above, where a repeated line names one selected line.
+ */
+export function resolveLineSequence(
+  tokens: readonly LineSelectionToken[],
+  available: ReadonlySet<number> | readonly number[],
+  groups: readonly LineSelectionGroup[] = [],
+): number[] {
+  const known = availableSetOf(available);
+  return tokens.flatMap((token) => resolveToken(token, known, groups));
+}
+
+/**
  * Compact programmatic lines into line and step-1 range tokens.
  *
  * The input order is preserved; only adjacent values become one range. This is

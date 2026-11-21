@@ -348,6 +348,12 @@ export default {
   "editor.commands.multiEdit.error.unsupportedField":
     "The current object does not support this numeric field.",
   "editor.commands.multiEdit.error.noMatch": "No selected object matches.",
+  "editor.commands.multiEdit.clone.error.targets": "Enter at least one valid target line.",
+  "editor.commands.multiEdit.clone.error.noSelection": "Select at least one event to clone.",
+  "editor.commands.multiEdit.clone.error.tooMany":
+    "Cloning would create {count} objects; reduce the target lines or selection.",
+  "editor.commands.multiEdit.clone.error.noise": "Noise activation events cannot be cloned.",
+  "editor.commands.multiEdit.clone.error.increment": "The time increment is not a finite number.",
   "editor.commands.multiEditParameters.error.storage":
     "Batch parameters could not be written to local storage; check the free space. They stay in this session.",
   "editor.commands.multiLineEdit.error.invalidRange": "Invalid line range: {range}",
