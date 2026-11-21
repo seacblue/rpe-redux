@@ -7,6 +7,7 @@
  */
 import { selectedEvents } from "../../../../../core/edit/events/eventEdits.ts";
 import { eventListAt } from "../../../../../core/edit/events/eventTracks.ts";
+import { timelineDragPreview } from "../../../../../core/edit/timeline/dragPreviewState.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { TempoGrid } from "../../../../../core/global/chart/editing/editGrid.ts";
 import type { Beat } from "../../../../../core/global/chart/timing/beat.ts";
@@ -23,18 +24,34 @@ export type { InspectorEventEntry } from "./EventInspectorView.tsx";
 
 /** Collects the selected events from the single-line or multi-line selection. */
 function inspectorEntries(session: EditorSession): InspectorEventEntry[] {
-  if (session.multiLineActive && session.multiLineMode === "events") {
-    return [...(session.multiEventSelection ?? new Map())]
-      .flatMap(([lineIndex, keys]) =>
-        [...keys].map((key) => {
-          const [type, indexText] = String(key).split(":");
-          const index = Number(indexText);
-          return { type, index, lineIndex, event: eventListAt(session, lineIndex, type)?.[index] };
-        }),
-      )
-      .filter((entry) => entry.event);
+  const entries: InspectorEventEntry[] =
+    session.multiLineActive && session.multiLineMode === "events"
+      ? [...(session.multiEventSelection ?? new Map())]
+          .flatMap(([lineIndex, keys]) =>
+            [...keys].map((key) => {
+              const [type, indexText] = String(key).split(":");
+              const index = Number(indexText);
+              return {
+                type,
+                index,
+                lineIndex,
+                event: eventListAt(session, lineIndex, type)?.[index],
+              };
+            }),
+          )
+          .filter((entry) => entry.event)
+      : selectedEvents(session);
+  const preview = timelineDragPreview();
+  if (preview?.kind !== "event") {
+    return entries;
   }
-  return selectedEvents(session);
+  return entries.map((entry) =>
+    (entry.lineIndex ?? session.lineIndex) === preview.lineIndex &&
+    entry.type === preview.type &&
+    entry.index === preview.index
+      ? { ...entry, event: preview.event }
+      : entry,
+  );
 }
 
 /** Inputs that determine the published event inspector rows. */

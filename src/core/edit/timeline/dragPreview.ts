@@ -52,7 +52,8 @@ export function moveTimelineNote(
   }
   if (
     Math.hypot(drag.current.x - drag.start.x, drag.current.y - drag.start.y) <= 4 &&
-    !drag.scrolled
+    !drag.scrolled &&
+    !drag.prekey
   ) {
     return note;
   }

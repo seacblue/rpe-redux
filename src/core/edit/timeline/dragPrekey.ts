@@ -1,12 +1,15 @@
 /**
- * RPE's drag prekey: holding Z turns a pointer drag on a Hold or an event bar
- * into a head/tail edge edit instead of a move or a selection.
+ * RPE's drag prekey: holding Z turns a pointer drag into a head/tail edge edit
+ * of the selected event or Hold instead of a move or a selection.
  *
- * The keyboard dispatcher owns the held-key set; timeline interaction reads it
- * at pointer-down so the modifier is sampled once per gesture.
+ * With exactly one object selected the drag may start anywhere in the field;
+ * pressing on an object without that single selection still selects and trims
+ * it. The keyboard dispatcher owns the held-key set, and timeline interaction
+ * reads it at pointer-down so the modifier is sampled once per gesture.
  */
 import { heldShortcutKeys } from "../../shortcuts/inputKeys.ts";
 import { normalizeShortcutKey } from "../../shortcuts/keys.ts";
+import type { SelectedNoteEntry } from "../session/session.ts";
 
 /** Plain Z movement actions that wait for key-up so they can yield to a drag. */
 export const Z_DEFERRED_MOVE_ACTIONS = new Set(["selection.nudge.left", "playback.step.previous"]);
@@ -35,4 +38,11 @@ export function deferPlainZMovement(
 /** Whether the drag prekey is held for the pointer gesture starting now. */
 export function dragPrekeyHeld(): boolean {
   return heldShortcutKeys().has("Z");
+}
+
+/** The single selected Hold a Z drag may trim from any pointer position. */
+export function selectedHoldTarget(
+  entries: readonly SelectedNoteEntry[],
+): SelectedNoteEntry | null {
+  return entries.length === 1 && entries[0].note.type === 2 ? entries[0] : null;
 }

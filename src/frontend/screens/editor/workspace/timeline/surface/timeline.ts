@@ -14,6 +14,7 @@ import {
 } from "../interaction/timelineGestures.ts";
 import { TimelineAppearance } from "../drawing/timelineAppearance.ts";
 import { TimelineCache } from "../drawing/timelineCache.ts";
+import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import { EventInteraction } from "../events/eventInteraction.ts";
@@ -290,6 +291,9 @@ export class Timeline {
             return;
           }
           this.gestures.drag = null;
+          if (setTimelineDragPreview(null)) {
+            this.getSession().notify("selection");
+          }
           this.gestures.finishSelectionHistory(this.getSession());
           this.changed();
         },
@@ -319,6 +323,9 @@ export class Timeline {
             return;
           }
           this.gestures.eventInteraction.drag = null;
+          if (setTimelineDragPreview(null)) {
+            this.getSession().notify("selection");
+          }
           this.gestures.finishSelectionHistory(this.getSession());
           this.changed();
         },

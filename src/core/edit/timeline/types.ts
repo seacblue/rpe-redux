@@ -82,6 +82,8 @@ interface DragCommon {
   lastSelectionKey?: string;
   startFactor?: number;
   lineIndex?: number;
+  /** A Z-prekey edge press, which commits even when the pointer never moves. */
+  prekey?: boolean;
 }
 
 export interface MoveDrag extends DragCommon {
@@ -131,6 +133,7 @@ export type TimelineDrag = MoveDrag | PanDrag | RectangleDrag | SweepDrag;
 export interface EventMoveDrag extends DragCommon {
   kind: "move" | "startTime" | "endTime";
   type?: string;
+  index?: number;
   anchor?: number[];
   originSeconds?: number;
 }
