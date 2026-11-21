@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { beatValue, fromNumber } from "../../../core/global/chart/timing/beat.ts";
+import { HOOK_TAIL_FIELD } from "../../../core/global/chart/chart.ts";
 import { EVENT_BATCH_FIELDS } from "../../../core/edit/multiEdit/planVocabulary.ts";
 import { previewMultiEdit } from "../../../core/edit/multiEdit/plan.ts";
 
@@ -98,4 +99,45 @@ test("event type filter edits only the selected track", () => {
   assert.equal(result.changes[0].type, "moveXEvents");
   assert.equal(result.changes[0].after.start, 5);
   assert.equal(result.changes[0].after.end, 6);
+});
+
+test("a batch edit keeps a hooked event's pair pinned and caches a new tail", () => {
+  const hooked = {
+    startTime: [0, 0, 1],
+    endTime: [1, 0, 1],
+    start: 10,
+    end: 10,
+    easingType: 1,
+    inst: 1,
+    [HOOK_TAIL_FIELD]: 20,
+  };
+  const snapshot = {
+    chart: { judgeLineList: [{ eventLayers: [{ moveXEvents: [hooked] }] }] },
+    lineIndex: 0,
+    eventLayer: 0,
+    focus: "events",
+    notes: [],
+    events: [{ type: "moveXEvents", index: 0, lineIndex: 0, event: hooked }],
+  };
+
+  // A tail edit replaces the cache so the unhook restores what the batch wrote.
+  const tailEdit = previewMultiEdit(snapshot, "events", {
+    field: "end",
+    operation: "To",
+    lower: "40",
+    upper: "40",
+  });
+  assert.equal(tailEdit.changes[0].after.end, 10, "the rendered pair stays pinned");
+  assert.equal(tailEdit.changes[0].after[HOOK_TAIL_FIELD], 40);
+
+  // A head edit leaves the cached tail alone, matching an inspector edit.
+  const headEdit = previewMultiEdit(snapshot, "events", {
+    field: "start",
+    operation: "To",
+    lower: "15",
+    upper: "15",
+  });
+  assert.equal(headEdit.changes[0].after.start, 15);
+  assert.equal(headEdit.changes[0].after.end, 15);
+  assert.equal(headEdit.changes[0].after[HOOK_TAIL_FIELD], 20);
 });

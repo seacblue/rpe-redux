@@ -7,7 +7,7 @@
  */
 import { t } from "../../../i18n/index.ts";
 import { beatValue, fromNumber } from "../../global/chart/timing/beat.ts";
-import { countScoringNotes } from "../../global/chart/chart.ts";
+import { countScoringNotes, HOOK_TAIL_FIELD, pinHookedEvent } from "../../global/chart/chart.ts";
 import type { JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
 import type { ExpressionScope } from "../../utils/batchScript.ts";
 import { alignShaderParameters } from "../../global/chart/shader/shaderEvents.ts";
@@ -194,14 +194,26 @@ function validateChange(change: BatchChange, lineCount: number, snapshot: Select
       after.endTime = [...after.startTime];
     }
   }
+  // A batch edit may target either value of a hooked event. Its tail stays
+  // locked to the head, so a tail the batch actually authored replaces the
+  // cache and the pair is pinned again; a batch that only moves the head keeps
+  // the tail cached before the edit. A batch that clears the hook gives up the
+  // cache instead of restoring it, because the batch wrote that tail on purpose.
+  if (kind === "events" && after.inst) {
+    change.after = pinHookedEvent(after as JudgeLineEvent, change.before as JudgeLineEvent);
+  } else if (kind === "events" && change.before.inst) {
+    delete after[HOOK_TAIL_FIELD];
+  }
+  // A hook whose pair this editor cannot pin — another tool wrote it unpaired —
+  // keeps its flag only while both values still match.
   if (
     kind === "events" &&
-    after.inst &&
-    JSON.stringify(after.start) !== JSON.stringify(after.end)
+    change.after.inst &&
+    JSON.stringify(change.after.start) !== JSON.stringify(change.after.end)
   ) {
-    after.inst = 0;
+    change.after.inst = 0;
   }
-  const inst = after.inst ?? 0;
+  const inst = change.after.inst ?? 0;
   if (kind === "events" && !(inst === 0 || inst === 1 || inst === false || inst === true)) {
     throw new Error(t("editor.commands.multiEdit.error.inst"));
   }

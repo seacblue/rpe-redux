@@ -7,6 +7,8 @@ function fakeContext() {
   const stack = [];
   return {
     globalAlpha: 1,
+    fillStyle: "#000000",
+    fillRect() {},
     save() {
       stack.push(this.globalAlpha);
     },
@@ -26,6 +28,12 @@ function receiver({ batchAccept, skin }) {
   };
   return {
     appearance: { eventOpacity: 0.8, multiLineNonCurrentOpacity: 0.5, skin },
+    cache: {
+      palette: () => ({
+        eventHookedFill: "#62d8f2",
+        overlayInvalidFill: "rgba(255,64,64,0.5)",
+      }),
+    },
     eventBatch: {
       add() {
         return batchAccept;
@@ -35,6 +43,7 @@ function receiver({ batchAccept, skin }) {
     gestures: { eventCursor: null },
     viewport: {
       eventTypesForLine: () => ["moveXEvents"],
+      eventBeatAt: () => 4,
       eventVertical: (beat) => 400 - beat * 10,
       panelWidth: (width) => width,
       panelIndex: () => 0,
@@ -88,4 +97,46 @@ test("the canvas fallback draws the skin event bar at half opacity", () => {
   assert.equal(bars[0].height, 2);
   assert.equal(bars[0].alpha, 0.4);
   assert.equal(context.globalAlpha, 1);
+});
+
+test("the pending hooked event previews the theme's hooked material", () => {
+  const context = fakeContext();
+  const bars = [];
+  const skin = {
+    eventBar(_context, _centerX, _centerY, _width, _height, color) {
+      bars.push(color);
+      return true;
+    },
+  };
+  const target = receiver({ batchAccept: false, skin });
+  target.cache.palette = () => ({ eventHookedFill: "#62d8f2" });
+
+  drawPendingEvent.call(target, context, { ...pending, inst: true }, 300);
+
+  assert.deepEqual(bars, [[98, 216, 242]]);
+});
+
+test("a zero-length placed preview is rejected because both anchors share a beat", () => {
+  const context = fakeContext();
+  const bars = [];
+  const fills = [];
+  const skin = {
+    eventBar(_context, _centerX, _centerY, _width, _height, color) {
+      bars.push(color);
+      return true;
+    },
+  };
+  const target = receiver({ batchAccept: false, skin });
+  // The cursor sits on the anchor beat, so no forward span exists; the preview
+  // keeps the hooked material but carries the rejected tint.
+  target.gestures.eventCursor = { x: 0, y: 200 };
+  target.viewport.eventBeatAt = () => pending.beat;
+  context.fillRect = (_x, _y, _width, _height) => {
+    fills.push(context.fillStyle);
+  };
+
+  drawPendingEvent.call(target, context, { ...pending, inst: true }, 300);
+
+  assert.deepEqual(bars, [[98, 216, 242]]);
+  assert.deepEqual(fills, ["rgba(255,64,64,0.5)"]);
 });

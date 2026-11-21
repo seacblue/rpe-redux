@@ -197,7 +197,7 @@ test("batch preview rebuilds coalesce within one display frame", () => {
   }
 });
 
-/** A controller docked on two selected notes, with a mutable viewport. */
+/** A controller docked on two selected notes, with a mutable viewport and element. */
 function dockedController() {
   const chart = createChart();
   chart.judgeLineList[0].notes = [createNote(1, 0, 0), createNote(1, 4, 0)];
@@ -226,12 +226,30 @@ function dockedController() {
     snapX: false,
     gridCount: 11,
   };
+  const element = {
+    writes: 0,
+    style: {
+      transform: "",
+    },
+  };
+  // Count style writes so an idle frame can prove it left the element alone.
+  let applied = "";
+  Object.defineProperty(element.style, "transform", {
+    get: () => applied,
+    set: (value) => {
+      applied = value;
+      element.writes += 1;
+    },
+  });
   const controller = Object.create(BatchControls.prototype);
   controller.anchorMode = 0;
   controller.getSession = () => session;
   controller.enabled = () => true;
   controller.active = null;
-  controller.groups = new Map([["notes", { signature: "" }]]);
+  controller.groups = new Map([
+    ["notes", { signature: "", width: 0, height: 0, originX: 0, originY: 0 }],
+  ]);
+  controller.dockElements = new Map([["notes", element]]);
   controller.state = {
     hints: { set() {} },
     presentations: { get: () => ({}), update: () => {} },
@@ -246,36 +264,40 @@ function dockedController() {
     cancelPlacement() {},
   };
   controller.stage = { getBoundingClientRect: () => ({ left: 0, top: 0 }) };
-  return { controller, viewport, group: controller.groups.get("notes") };
+  return { controller, viewport, element, group: controller.groups.get("notes") };
 }
 
 test("a docked control ball follows the timeline scroll", () => {
-  const { controller, viewport, group } = dockedController();
+  const { controller, viewport, element, group } = dockedController();
 
   controller.sync();
-  assert.equal(group.left, "160px");
-  assert.equal(group.top, "90px");
+  assert.equal(group.dockX, 150);
+  assert.equal(group.dockY, 70);
+  assert.equal(element.style.transform, "translate3d(160px, 90px, 0)");
 
   // Scrolling forward moves the selection down the canvas by the scrolled time.
   viewport.origin = 10;
-  controller.sync();
+  controller.follow();
 
-  assert.equal(group.top, "100px", "the ball follows the scrolled selection");
-  assert.equal(group.left, "160px", "scrolling time does not move the dock sideways");
+  assert.equal(group.dockY, 80, "the ball follows the scrolled selection");
+  assert.equal(group.dockX, 150, "scrolling time does not move the dock sideways");
+  assert.equal(element.style.transform, "translate3d(160px, 100px, 0)");
 });
 
 test("a docked control ball follows a multi-line horizontal pan", () => {
-  const { controller, viewport, group } = dockedController();
+  const { controller, viewport, element, group } = dockedController();
 
   controller.sync();
-  assert.equal(group.left, "160px");
+  assert.equal(group.dockX, 150);
 
   // Panning the panels left moves their content left by the same distance.
   viewport.multiLineViewportOffset = () => 30;
   controller.sync();
+  controller.follow();
 
-  assert.equal(group.left, "130px", "the ball follows the panned panel");
-  assert.equal(group.top, "90px", "panning does not move the dock vertically");
+  assert.equal(group.dockX, 120, "the ball follows the panned panel");
+  assert.equal(group.dockY, 70, "panning does not move the dock vertically");
+  assert.equal(element.style.transform, "translate3d(130px, 90px, 0)");
 });
 
 test("a docked control ball follows a vertical zoom", () => {
@@ -285,11 +307,49 @@ test("a docked control ball follows a vertical zoom", () => {
   controller.timeline.gestures.cursor = { x: 100, y: 128 };
 
   controller.sync();
-  assert.equal(group.top, "118px");
+  assert.equal(group.dockY, 98);
 
   // Zooming in doubles the distance from the judgement line to the dock.
   viewport.scaleForArea = () => 2;
   controller.sync();
+  controller.follow();
 
-  assert.equal(group.top, "58px", "the ball keeps the same time under it when zooming");
+  assert.equal(group.dockY, 38, "the ball keeps the same time under it when zooming");
+});
+
+test("the docked ball moves on the frame path without another sync", () => {
+  const { controller, viewport, element, group } = dockedController();
+  controller.sync();
+  const afterSync = element.style.transform;
+
+  // Playback advances the origin every display frame; `sync()` runs at the HUD
+  // cadence, so the per-frame path has to carry the movement on its own.
+  viewport.origin = 0.5;
+  controller.follow();
+
+  assert.notEqual(element.style.transform, afterSync, "the ball moved without a sync");
+  assert.equal(group.dockY, 70.5);
+});
+
+test("an unchanged dock does not rewrite the element transform", () => {
+  const { controller, element } = dockedController();
+  controller.sync();
+  const writesAfterSync = element.writes;
+
+  controller.follow();
+  controller.follow();
+
+  assert.equal(element.writes, writesAfterSync, "idle frames leave the transform alone");
+});
+
+test("a dragging ball stops the dock following the origin", () => {
+  const { controller, viewport, element } = dockedController();
+  controller.sync();
+  const before = element.style.transform;
+  controller.active = {};
+
+  viewport.origin = 4;
+  controller.follow();
+
+  assert.equal(element.style.transform, before, "the live gesture owns the ball");
 });

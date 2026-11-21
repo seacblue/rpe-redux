@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { measureCanvas } from "../../../frontend/screens/editor/canvas/canvas2d.ts";
+import { WebGlRenderBackend } from "../../../frontend/screens/editor/canvas/renderBackend.ts";
+import { PreviewGuideBatch } from "../../../frontend/screens/editor/workspace/preview/render/previewGuideBatch.ts";
 import { NoteBatch } from "../../../frontend/screens/editor/canvas/noteBatch.ts";
 import { notePaintLayer } from "../../../frontend/screens/editor/canvas/noteSpriteGroups.ts";
 import { TimelineLineBatch } from "../../../frontend/screens/editor/canvas/timelineLineBatch.ts";
@@ -185,8 +187,21 @@ test("GPU event bars carry the per-line opacity alongside the global alpha", () 
   assert.equal(batch.add({ x: 1, y: 2, width: 10, height: 20 }, 0.5), true);
   assert.equal(batch.alpha, 0.8);
   assert.equal(batch.instances[8], 0.5);
+  assert.deepEqual(Array.from(batch.instances.slice(9, 12)), [1, 1, 1]);
   batch.finish();
   assert.equal(calls.draws, 1);
+});
+
+test("GPU event bars normalize the hooked tint into the instance buffer", () => {
+  const { canvas } = fakeWebGLCanvas();
+  const batch = new TimelineEventBatch(canvas);
+  const skin = { eventBarTexture: () => descriptor };
+  assert.equal(batch.begin(100, 100, skin, 1), true);
+  assert.equal(batch.add({ x: 1, y: 2, width: 10, height: 20 }, 0.5, [98, 217, 255]), true);
+  const tint = Array.from(batch.instances.slice(9, 12));
+  assert.ok(Math.abs(tint[0] - 98 / 255) < 1e-6);
+  assert.ok(Math.abs(tint[1] - 217 / 255) < 1e-6);
+  assert.equal(tint[2], 1);
 });
 
 test("GPU event buffers reuse stable capacity without changing packed uploads", () => {
@@ -205,7 +220,7 @@ test("GPU event buffers reuse stable capacity without changing packed uploads", 
   assert.equal(calls.bufferAllocations.length, 1);
   assert.equal(calls.uploads.length, 2);
   assert.notDeepEqual(calls.uploads[1], firstUpload);
-  assert.deepEqual(calls.uploads[1].slice(8), [0.25]);
+  assert.deepEqual(calls.uploads[1].slice(8), [0.25, 1, 1, 1]);
 });
 
 test("timeline line and solid buffers reuse stable capacity", () => {
@@ -346,6 +361,35 @@ test("event-bar opacity matches between the canvas fallback and the batch", () =
   };
   drawEventBar(receiver, {}, { x: 0, y: 0, width: 4, height: 8 }, 0.5);
   assert.deepEqual(calls, [0.5]);
+});
+
+test("a hooked event tint reaches the GPU batch and the canvas skin", () => {
+  const tint = [98, 216, 242];
+  const batched = [];
+  const painted = [];
+  const skin = {
+    eventBar(_context, _centerX, _centerY, _width, _height, color) {
+      painted.push(color);
+      return true;
+    },
+  };
+  const receiver = {
+    eventBatch: {
+      add(_rectangle, alpha, color) {
+        batched.push([alpha, color]);
+        return true;
+      },
+    },
+    appearance: { skin },
+  };
+
+  drawEventBar(receiver, {}, { x: 0, y: 0, width: 4, height: 8 }, 0.5, tint);
+  assert.deepEqual(batched, [[0.5, tint]]);
+  assert.deepEqual(painted, []);
+
+  const fallback = { eventBatch: { add: () => false }, appearance: { skin } };
+  drawEventBar(fallback, {}, { x: 0, y: 0, width: 4, height: 8 }, 0.5, tint);
+  assert.deepEqual(painted, [tint]);
 });
 
 test("Hold fallback keeps the body and head alpha identical", () => {
@@ -866,4 +910,60 @@ test("a paused viewport seek repaints the timeline after wheel movement settles"
 
   assert.equal(settled.work.timeline, true);
   assert.equal(settled.work.playhead, true);
+});
+
+/** A guide packet carrying one selected-line pointer and no labels. */
+function pointerPacket(source, { rotation = 0, offset = 0 } = {}) {
+  return {
+    atlas: { getCanvas: () => null, getRevision: () => 0 },
+    glyphs: [],
+    arrows: [{ x: 40, y: 50, rotation, offset, size: 22.5, color: "#00c800", source }],
+    groupCount: 1,
+    visibleGroupCount: 1,
+    textCacheHits: 0,
+    textCacheMisses: 0,
+  };
+}
+
+test("the GPU guide batch draws the selected-line pointer", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const backend = new WebGlRenderBackend(canvas);
+  const batch = new PreviewGuideBatch(canvas, backend);
+  const source = { naturalWidth: 256, naturalHeight: 256, width: 256, height: 256 };
+
+  const stats = batch.render(pointerPacket(source), 100, 100);
+
+  // The pointer used to disappear on this path because the sprite was missing
+  // and `ensureArrowTexture(null)` bailed out without submitting a draw.
+  assert.ok(stats, "the batch reports a submission");
+  assert.equal(calls.draws, 1, "one instanced draw carries the pointer");
+  assert.equal(calls.drawSources[0], source, "the pointer sprite is the drawn texture");
+  batch.dispose();
+});
+
+test("the GPU pointer keeps the Canvas2D anchor, extent, rotation, and stand-off", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const backend = new WebGlRenderBackend(canvas);
+  const batch = new PreviewGuideBatch(canvas, backend);
+  const source = { naturalWidth: 256, naturalHeight: 256, width: 256, height: 256 };
+
+  batch.render(pointerPacket(source), 100, 100);
+  batch.render(pointerPacket(source, { rotation: 90, offset: 5.625 }), 100, 100);
+
+  const first = calls.uploads[0];
+  // Instance layout: centre, size, rotation, then the UV rectangle. The sprite
+  // is anchored at its centre and spans twice the marker height, matching the
+  // `drawImage` box the Canvas2D path uses.
+  assert.deepEqual(first.slice(0, 5), [40, 50, 45, 45, 0]);
+  const second = calls.uploads[1];
+  // Instances are packed as float32, so the angle compares within its precision.
+  assert.ok(Math.abs(second[4] - Math.PI / 2) < 1e-6, "the GPU pointer rotates with its line");
+  // A 90° line's normal is +X, so the stand-off moves the quad along X while the
+  // Canvas2D `translate(0, -offset)` does the same in its local frame.
+  assert.ok(Math.abs(second[0] - 45.625) < 1e-4, "the stand-off moves along the normal");
+  assert.ok(Math.abs(second[1] - 50) < 1e-4, "the stand-off does not slide across the line");
+  // Sampling runs top-left to bottom-right: the sprite is already top-down, so
+  // flipping V here would mirror the marker.
+  assert.deepEqual(second.slice(5, 9), [0, 0, 1, 1]);
+  batch.dispose();
 });

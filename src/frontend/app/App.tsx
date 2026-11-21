@@ -14,13 +14,11 @@ import { preferences } from "../../core/state/preferences.ts";
 import { values } from "../../core/state/values.ts";
 import { setLongTaskBootState } from "../../core/state/longTasks.ts";
 
-import { DEFAULT_THEME } from "../../core/theme/themes.ts";
 import { activeTheme, setActiveTheme, subscribeActiveTheme } from "../../core/theme/activeTheme.ts";
 import { applyTheme } from "../../core/theme/applyTheme.ts";
-import { getThemePackage, replaceDiscoveredThemes } from "../../core/theme/registry.ts";
-import { listExternalThemePackages } from "../../core/platform/desktop/themePackages.ts";
 import { refreshExternalNoteSkins } from "../../core/platform/desktop/noteSkinPackages.ts";
-import { loadPackagedExtensions, refreshPackagedExtensions } from "../platform/extensionLoader.ts";
+import { loadPackagedExtensions } from "../platform/extensionLoader.ts";
+import { refreshExternalThemes } from "./externalThemeCatalog.ts";
 import { syncNativeWindowTheme } from "../platform/desktop/windowTheme.ts";
 import { waitForLocalService } from "../../core/global/library/service.ts";
 import { createDesktopPreferenceClient } from "../platform/preferencesClient.ts";
@@ -158,37 +156,14 @@ function AppContent() {
     syncNativeWindowTheme(theme);
   }, [theme]);
 
-  // Live folder sniffing: themes, skin folders, and Extension folders are
-  // re-read on one timer, so dropping a package in place updates the UI without
-  // a manual refresh. Each helper no-ops outside the desktop host.
+  // Discover external packages once at startup so a persisted theme or skin
+  // is available for the first paint. Continuous folder polling belongs to the
+  // settings surfaces that list the packages; an idle editor does no package
+  // I/O, and deleting a folder never interrupts the cached live session.
   useEffect(() => {
-    let cancelled = false;
-    let themeSignature = "";
-    const scan = async () => {
-      const documents = await listExternalThemePackages();
-      if (cancelled) {
-        return;
-      }
-      const signature = JSON.stringify(documents);
-      if (signature !== themeSignature) {
-        themeSignature = signature;
-        replaceDiscoveredThemes(documents);
-        if (!getThemePackage(theme)) {
-          setTheme(DEFAULT_THEME);
-        } else {
-          applyTheme(theme);
-        }
-      }
-      void refreshPackagedExtensions();
-      void refreshExternalNoteSkins();
-    };
-    void scan();
-    const timer = window.setInterval(() => void scan(), 1500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [theme, setTheme]);
+    void refreshExternalThemes();
+    void refreshExternalNoteSkins();
+  }, []);
 
   useEffect(() => {
     const suppressNativeMenus = (event: MouseEvent) => event.preventDefault();

@@ -26,8 +26,13 @@ export interface FrameClockOptions {
   session(): EditorSession;
   tempo(): TempoMap;
   chartSeconds(): number;
-  /** How far ahead of the audible position the picture must be drawn. */
-  visualLeadSeconds(): number;
+  /**
+   * Chart time to draw for the audible position of this frame.
+   *
+   * The playback runtime owns the display lead and the position a pause holds, so
+   * every frame and every seek report share one basis.
+   */
+  drawnSeconds(audibleSeconds: number): number;
   invalidate(): void;
 }
 
@@ -212,18 +217,11 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
     /**
      * Chart time to draw for this frame.
      *
-     * The clock reports the audible position, which is what the speakers have
-     * already emitted. A frame painted now is not visible until the compositor
-     * presents it, and by then the sound has moved on, so the picture has to lead
-     * by that display delay — otherwise it trails the sound by exactly that much.
-     *
-     * The lead belongs to a moving transport. A paused transport does not advance
-     * while the frame is being presented, so a lead there would show a position
-     * nobody asked for: the transport would sit at the start while the readouts
-     * and the playhead reported a lead's worth of time, and the same lead would
-     * follow every pause wherever it happened.
+     * The visual clock reports the audible position, which is what the speakers
+     * have already emitted. The playback runtime turns that into the picture
+     * position: it adds the display lead while the transport moves and holds the
+     * last drawn position while it is paused.
      */
-    seconds: (timestamp: number) =>
-      visualClock.read(timestamp) + (options.audio.playing ? options.visualLeadSeconds() : 0),
+    seconds: (timestamp: number) => options.drawnSeconds(visualClock.read(timestamp)),
   };
 }

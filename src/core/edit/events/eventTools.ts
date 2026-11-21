@@ -2,7 +2,7 @@
  * Event value tools that act on the selected events.
  *
  * Cutting samples an event into smaller trajectory-free parts, while sticking
- * moves each selected event's start onto its predecessor's end; both commit
+ * joins an event's value to its neighbour in either direction; both commit
  * through `eventEdits.ts`, so a tool run stays a single undo entry.
  */
 import { t } from "../../../i18n/index.ts";
@@ -16,7 +16,7 @@ import {
   type Beat,
 } from "../../global/chart/timing/beat.ts";
 import { easing, bezier } from "../../utils/easing.ts";
-import { DEFAULT_BEZIER_POINTS, EVENT_TYPES } from "../../global/chart/chart.ts";
+import { DEFAULT_BEZIER_POINTS, EVENT_TYPES, HOOK_TAIL_FIELD } from "../../global/chart/chart.ts";
 import type { JudgeLineEvent } from "../../global/chart/chart.ts";
 import { snapTime } from "../../global/chart/editing/editGrid.ts";
 import type { TempoGrid } from "../../global/chart/editing/editGrid.ts";
@@ -105,7 +105,7 @@ export function cutEventParts(
   };
   return cuts.slice(0, -1).map((point, index) => {
     const next = cuts[index + 1];
-    return {
+    const part: JudgeLineEvent = {
       ...structuredClone(event),
       startTime: point,
       endTime: next,
@@ -119,6 +119,9 @@ export function cutEventParts(
       linkgroup: 0,
       inst: 0,
     };
+    // A part is a plain span, so the source hook's cached tail does not apply.
+    delete part[HOOK_TAIL_FIELD];
+    return part;
   });
 }
 
@@ -168,40 +171,75 @@ export function cutSelectedEvents(
   return { changed, generated, skipped };
 }
 
-/** Aligns selected event starts to their predecessors' ends; returns counts. */
-export function stickSelectedEvents(session: EditorSession): { changed: number; skipped: number } {
+/** Which neighbour a stick edit joins. */
+export type EventStickDirection = "next" | "previous";
+
+/**
+ * Sticks each selected event's value to its neighbour on the same track.
+ *
+ * Sticking to the next event writes that event's start value into the selected
+ * event's end; sticking to the previous one writes the previous event's end
+ * value into its start. A hooked event carries one value, so both anchors
+ * receive it. A track without a neighbour in that direction is skipped, and so
+ * is a shader track, whose value pair is shader parameters rather than an
+ * interpolated number.
+ */
+export function stickSelectedEvents(
+  session: EditorSession,
+  direction: EventStickDirection,
+): { changed: number; skipped: number } {
   const updates = new Map<string, JudgeLineEvent[]>();
+  const selected = selectedEvents(session);
   let changed = 0;
   let skipped = 0;
-  for (const type of new Set(selectedEvents(session).map((entry) => entry.type))) {
-    const events = [...eventList(session, type)];
+  for (const type of new Set(selected.map((entry) => entry.type))) {
     if (type === "paintEvents") {
-      skipped += selectedEvents(session).filter((entry) => entry.type === type).length;
+      skipped += selected.filter((entry) => entry.type === type).length;
       continue;
     }
+    const events = [...eventList(session, type)];
     const order = events
       .map((event, index) => ({ event, index }))
       .sort(
         (left, right) =>
           compareBeats(left.event.startTime, right.event.startTime) || left.index - right.index,
       );
-    order.forEach((entry, position) => {
+    const step = direction === "next" ? 1 : -1;
+    for (let position = 0; position < order.length; position++) {
+      const entry = order[position];
       if (!session.eventSelection.has(eventKey(type, entry.index))) {
-        return;
+        continue;
       }
-      if (!position) {
+      const neighbour = order[position + step];
+      if (!neighbour) {
         skipped++;
-        return;
+        continue;
       }
-      const previous = events[order[position - 1].index];
-      const start = structuredClone(previous.end);
-      events[entry.index] = {
-        ...entry.event,
-        start,
-        ...(entry.event.inst ? { end: structuredClone(start) } : {}),
+      // Read the neighbour as it stands now, so a run of selected events chains
+      // through the value the previous iteration already wrote.
+      const source = events[neighbour.index];
+      const value = structuredClone(direction === "next" ? source.start : source.end);
+      const current = events[entry.index];
+      const next: JudgeLineEvent = {
+        ...current,
+        ...(direction === "next" ? { end: value } : { start: value }),
+        ...(current.inst
+          ? direction === "next"
+            ? { start: structuredClone(value) }
+            : { end: structuredClone(value) }
+          : {}),
       };
+      // An event already touching its neighbour is not a change; reporting it
+      // would make a second stick look like a new edit.
+      if (
+        JSON.stringify(next.start) === JSON.stringify(current.start) &&
+        JSON.stringify(next.end) === JSON.stringify(current.end)
+      ) {
+        continue;
+      }
+      events[entry.index] = next;
       changed++;
-    });
+    }
     updates.set(type, events);
   }
   if (changed) {

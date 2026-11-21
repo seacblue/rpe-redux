@@ -62,6 +62,7 @@ export interface PreviewSkin extends NoteBatchSkin {
   particleFrameCount?: number;
   tinted(name: string, color: unknown): CanvasImageSource | null;
   tintedSource(name: string, source: unknown, color: unknown): CanvasImageSource | null;
+  colorized(name: string, color: unknown): CanvasImageSource | null;
   prewarmHitEffects?(color: number[]): void;
   drawAligned(
     context: CanvasRenderingContext2D,

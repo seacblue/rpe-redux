@@ -45,8 +45,9 @@ test("an event finished before its first click commits the earlier click as the 
   assert.deepEqual(placed.endTime, [4, 0, 1]);
 });
 
-test("an instant event places both anchors on the same beat", () => {
+test("an event whose two anchors share a beat is refused", () => {
   const session = new EditorSession(createChart());
+  const before = (session.chart.judgeLineList[0].eventLayers[0].moveXEvents ?? []).length;
   const result = placeEventAtTarget(session, {
     target: {
       lineIndex: 0,
@@ -57,12 +58,10 @@ test("an instant event places both anchors on the same beat", () => {
     },
     payload: { instant: true },
   });
-  assert.equal(result.status, "committed");
+  assert.equal(result.status, "unchanged");
 
-  const event = result.value;
-  assert.deepEqual(event.startTime, [4, 0, 1]);
-  assert.deepEqual(event.endTime, [4, 0, 1]);
-  assert.equal(event.inst, 1);
+  const events = session.chart.judgeLineList[0].eventLayers[0].moveXEvents ?? [];
+  assert.equal(events.length, before, "the identical anchors place nothing");
 });
 
 test("Q stays available over the event area for anchor events", () => {

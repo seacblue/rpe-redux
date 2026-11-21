@@ -22,7 +22,10 @@ import { openSettings } from "../settings/settingsWindowController.ts";
 import type { AssetMap, EditorCandidate } from "../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../core/global/library/types.ts";
 import type { Chart } from "../../../core/global/chart/chart.ts";
-import { libraryDocumentCandidate } from "../editor/workspace/document/open/libraryCandidate.ts";
+import {
+  libraryCandidate,
+  libraryDocumentCandidate,
+} from "../editor/workspace/document/open/libraryCandidate.ts";
 import {
   catalogIdFor,
   catalogPathFor,
@@ -54,6 +57,7 @@ import {
   type ExternalImportDeps,
 } from "./externalImport.ts";
 import { importLoadProgress, importWriteProgress, throwIfAborted } from "./importProgress.ts";
+import { importBrowserChartFiles } from "./browserImport.ts";
 
 /** Error raised when the local library service is unavailable. */
 function libraryMissing(): Error {
@@ -139,12 +143,25 @@ export function createEditorHomeRuntime(deps: {
       if (!found) {
         throw libraryMissing();
       }
-      const opened = await openLibraryChartDocument(found.library, id);
+      // The HTTP service streams chart lines; a host that keeps the whole
+      // chart in its own database (the browser library) returns the project
+      // directly instead of answering the frame endpoints.
+      const opened = found.library.supportsChartStream()
+        ? await openLibraryChartDocument(found.library, id).then((document) => ({
+            candidate: libraryDocumentCandidate(document.project, id, document.chartDocument),
+            assets: document.assets,
+            dispose: () => document.chartDocument.dispose?.(),
+          }))
+        : await openLibraryProject(found.library, id).then((project) => ({
+            candidate: libraryCandidate(project.project, id),
+            assets: project.assets,
+            dispose: () => undefined,
+          }));
       if (requestId !== latestOpenRequest) {
-        opened.chartDocument.dispose?.();
+        opened.dispose();
         return;
       }
-      await installOpenedProject(id, opened, task);
+      await installOpenedProject(id, opened.candidate, opened.assets, task);
       if (loadingProgress.getSnapshot()?.id === task.id) {
         loadingProgress.dismiss();
       }
@@ -160,11 +177,11 @@ export function createEditorHomeRuntime(deps: {
   /** Loads one already-read library project into the editor. */
   const installOpenedProject = async (
     id: string,
-    opened: Awaited<ReturnType<typeof openLibraryChartDocument>>,
+    candidate: EditorCandidate,
+    assets: AssetMap,
     task?: LoadTask,
   ): Promise<boolean> => {
-    const candidate = libraryDocumentCandidate(opened.project, id, opened.chartDocument);
-    if ([...(opened.assets.names?.() ?? [])].length === 0) {
+    if ([...(assets.names?.() ?? [])].length === 0) {
       try {
         await repairAssets(id, { chart: candidate.chart, name: candidate.name });
       } catch (error) {
@@ -174,7 +191,7 @@ export function createEditorHomeRuntime(deps: {
       }
     }
     await deps.documents?.close();
-    await deps.loadCandidate(candidate, opened.assets, task);
+    await deps.loadCandidate(candidate, assets, task);
     const current = loadingProgress.getSnapshot();
     if (task && current?.id === task.id && current.status === "loading") {
       task.complete();
@@ -460,6 +477,11 @@ export function createEditorHomeRuntime(deps: {
     },
     openImported,
     importFile,
+    importFiles: (files) =>
+      importBrowserChartFiles(files, {
+        reportError: deps.reportError,
+        refresh: refreshHome,
+      }),
     exportProject,
     reportError: deps.reportError,
     changed: (project: LibraryProjectSummary) => {

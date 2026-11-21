@@ -16,7 +16,7 @@ import type { Chart, JudgeLine } from "../../../../../../core/global/chart/chart
 import type { LineState } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { PreviewImage, PreviewTextureSurface } from "../scene/previewTypes.ts";
 import { canvasPixelRatio } from "../../../canvas/canvas2d.ts";
-import { readCanvasPalette } from "../../../canvas/palette.ts";
+import { readCanvasPalette, rgbChannels } from "../../../canvas/palette.ts";
 import {
   PreviewGuideTextAtlas,
   type GuideAtlasGlyph,
@@ -56,7 +56,10 @@ export interface GuideRenderArrow {
   x: number;
   y: number;
   rotation: number;
+  /** The marker's height in preview pixels. */
   size: number;
+  /** Stand-off along the line's normal between the judge line and the base. */
+  offset: number;
   color: string;
   source: CanvasImageSource | null;
 }
@@ -191,22 +194,89 @@ function paintGuideGlyph(
   context.restore();
 }
 
+/**
+ * Half the base of an equilateral triangle one unit tall.
+ *
+ * The marker's outline is authored in units of its own height, so this is the
+ * x extent each foot is measured from.
+ */
+const POINTER_HALF_BASE = 1 / Math.sqrt(3);
+
+/** The pointer notch's height as a fraction of the marker's height. */
+const POINTER_NOTCH = 0.26;
+
+/**
+ * The marker's height before its own scale factor, in preview pixels.
+ *
+ * The old centred triangle used 30; this one is a quarter smaller so the marker
+ * stays subordinate to the note labels it sits beside.
+ */
+const POINTER_SIZE = 30 * 0.75;
+
+/**
+ * The stand-off between the judge line and the marker's base.
+ *
+ * A quarter of the marker's height, so the gap reads as deliberate spacing
+ * rather than the marker floating away from the line it identifies.
+ */
+const POINTER_OFFSET = POINTER_SIZE * 0.25;
+
+/**
+ * The pointer outline in units of the marker's height.
+ *
+ * An equilateral triangle whose base lies on the judge line and whose apex sits
+ * one unit above it, with a smaller equilateral triangle removed from the middle
+ * of the base. The notch is what keeps the direction readable when the line
+ * itself is fully transparent: at a few pixels tall the apex alone does not
+ * carry a reading, while the two feet left by the notch still do.
+ *
+ * The sprite at `assets/redux/chrome/line_pointer.png` carries the same
+ * geometry, so both paths must change together.
+ */
+const LINE_POINTER_OUTLINE: readonly (readonly [number, number])[] = (() => {
+  const half = POINTER_HALF_BASE;
+  // The notch is equilateral too, so its height fixes the width it removes.
+  const mouth = half * POINTER_NOTCH;
+  return [
+    [-half, 0],
+    [0, -1],
+    [half, 0],
+    [mouth, 0],
+    [0, -mouth * Math.sqrt(3)],
+    [-mouth, 0],
+  ];
+})();
+
+/** Paint the pointer as geometry when its sprite is unavailable. */
+function traceLinePointer(context: CanvasRenderingContext2D, size: number): void {
+  context.beginPath();
+  LINE_POINTER_OUTLINE.forEach(([x, y], index) => {
+    if (index) {
+      context.lineTo(x * size, y * size);
+    } else {
+      context.moveTo(x * size, y * size);
+    }
+  });
+  context.closePath();
+  context.fill();
+}
+
 /** Paint one retained selected arrow independently from line-number labels. */
 function paintGuideArrow(context: CanvasRenderingContext2D, arrow: GuideRenderArrow): void {
   context.save();
   context.translate(arrow.x, arrow.y);
   context.rotate((arrow.rotation * Math.PI) / 180);
+  // The local frame's -Y axis is the line's normal, which is the direction the
+  // marker points; lifting by the stand-off keeps a deliberate gap between the
+  // base and the judge line instead of resting on it.
+  context.translate(0, -arrow.offset);
   context.fillStyle = arrow.color;
   if (arrow.source) {
-    context.rotate(Math.PI);
+    // The sprite is square and centred on its anchor, whose row is the marker's
+    // base: its box spans the marker's height to either side of the anchor.
     context.drawImage(arrow.source, -arrow.size, -arrow.size, arrow.size * 2, arrow.size * 2);
   } else {
-    context.beginPath();
-    context.moveTo(0, -arrow.size * 0.96);
-    context.lineTo(-arrow.size * 0.48, -arrow.size * 0.32);
-    context.lineTo(arrow.size * 0.48, -arrow.size * 0.32);
-    context.closePath();
-    context.fill();
+    traceLinePointer(context, arrow.size);
   }
   context.restore();
 }
@@ -286,7 +356,16 @@ export function buildGuidePacket(
       cache.revision = revision;
     }
   }
-  const arrowImage = surface.lineArrows ? surface.skin?.images?.get("Arrow2") : undefined;
+  // The pointer sprite is a white alpha mask, so it needs the selected-line
+  // colour applied here: drawing it untinted would paint a white marker on both
+  // themes and ignore a theme's own accent. Both the tint canvas and the hex
+  // parse are cached, so a frame pays only a map lookup.
+  const pointerMask = surface.lineArrows ? surface.skin?.images?.get("line_pointer") : undefined;
+  const pointerTint = rgbChannels(palette.previewLineSelected);
+  const arrowImage =
+    pointerMask && pointerTint
+      ? (surface.skin?.colorized("line_pointer", pointerTint) ?? pointerMask)
+      : pointerMask;
   const atlasGeneration = cache.atlas.getGeneration();
   if (cache.atlasGeneration !== atlasGeneration) {
     cache.atlasGlyphs.clear();
@@ -306,7 +385,10 @@ export function buildGuidePacket(
     }
     const angle = (group.rotation * Math.PI) / 180;
     const color = selected ? palette.previewLineSelected : palette.previewLine;
-    const arrow = surface.lineArrows && selected ? 30 * scale : 0;
+    // The marker reaches one stand-off plus its own height along the normal, and
+    // half its base to either side.
+    const arrowExtent = surface.lineArrows && selected ? POINTER_OFFSET + POINTER_SIZE : 0;
+    const arrow = arrowExtent * scale;
     const labelKey =
       cache.labelKeys.get(group) ??
       (() => {
@@ -397,13 +479,15 @@ export function buildGuidePacket(
         y: 0,
         rotation: 0,
         size: 0,
+        offset: 0,
         color: "",
         source: null,
       };
       guideArrow.x = group.x;
       guideArrow.y = group.y;
       guideArrow.rotation = group.rotation;
-      guideArrow.size = 30 * scale;
+      guideArrow.size = POINTER_SIZE * scale;
+      guideArrow.offset = POINTER_OFFSET * scale;
       guideArrow.color = color;
       guideArrow.source = arrowImage ?? null;
       arrows[arrowWrite++] = guideArrow;

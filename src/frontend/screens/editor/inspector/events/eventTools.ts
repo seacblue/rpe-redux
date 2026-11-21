@@ -13,7 +13,7 @@ import { t } from "../../../../../i18n/index.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { TempoGrid } from "../../../../../core/global/chart/editing/editGrid.ts";
 
-export type EventToolAction = "cut" | "stick";
+export type EventToolAction = "cut" | "stickNext";
 
 /** One-off overrides for a tool run; omitted values fall back to the session. */
 export interface EventToolOptions {
@@ -39,14 +39,16 @@ export function runEventTool(
   try {
     const summary: EventToolSummary =
       action === "cut"
-        ? cutSelectedEvents(session, {
-            division: session.division,
-            density: options.density ?? session.cutDensity,
-            beat,
-            tempo,
-            factor: session.line?.bpmfactor ?? 1,
-          })
-        : { ...stickSelectedEvents(session), generated: 0 };
+        ? {
+            ...cutSelectedEvents(session, {
+              division: session.division,
+              density: options.density ?? session.cutDensity,
+              beat,
+              tempo,
+              factor: session.line?.bpmfactor ?? 1,
+            }),
+          }
+        : { ...stickSelectedEvents(session, "next"), generated: 0 };
     const message = summary.changed
       ? action === "cut"
         ? t("editorPanels.inspector.eventTools.cut", {

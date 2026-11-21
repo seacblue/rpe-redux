@@ -213,18 +213,25 @@ fn folder_fingerprint(root: &Path) -> String {
 }
 
 /// Packages dropped into `skins/` beside the executable, ready for the picker.
+///
+/// The fingerprint walks every file in every package, so the poll runs on the
+/// blocking pool instead of the IPC thread.
 #[tauri::command]
-pub fn list_note_skins(app: AppHandle) -> Result<Vec<NoteSkinSummary>> {
-    Ok(packages(&app)
-        .into_iter()
-        .map(|package| NoteSkinSummary {
-            name: skin_name(&package.manifest, &package.id),
-            fingerprint: folder_fingerprint(&package.folder),
-            builtin: package.id == BUILTIN_SKIN_ID,
-            id: package.id,
-            source: package.source.to_owned(),
-        })
-        .collect())
+pub async fn list_note_skins(app: AppHandle) -> Result<Vec<NoteSkinSummary>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(packages(&app)
+            .into_iter()
+            .map(|package| NoteSkinSummary {
+                name: skin_name(&package.manifest, &package.id),
+                fingerprint: folder_fingerprint(&package.folder),
+                builtin: package.id == BUILTIN_SKIN_ID,
+                id: package.id,
+                source: package.source.to_owned(),
+            })
+            .collect())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// The package id the build ships as its built-in note skin.

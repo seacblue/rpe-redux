@@ -626,6 +626,9 @@ export function applySamplingAnchors(
   const positionalEasing = typeof easingType === "number" ? easingType : undefined;
   const curvePayload: SamplingCurve =
     typeof easingType === "number" ? { ...(curve ?? {}) } : { ...easingType, ...(curve ?? {}) };
+  // A hook renders its head on both anchors, so sampling one writes the head
+  // only. The spread keeps the cached tail the hook wrote, which the unhook
+  // restores later.
   const nextEvent = applySamplingCurve(
     {
       ...event,

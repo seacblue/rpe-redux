@@ -23,6 +23,8 @@ Chart math and serialization changes need coverage of exact beat boundaries, def
 
 Speed events integrate the eased speed value. Events are sorted by time before integration, and accumulated distance uses RPE's 120 px per speed unit per second.
 
+A hooked event (`inst: 1`) renders its head on both anchors, so its stored `end` always equals `start` and every sampler reads the pinned pair. The tail the hook replaced lives in the editor-only `_reduxHookTailEnd` field, which keeps the authored value for the unhook that restores it. File export strips that field and records its value in `META.ReduxExportDefaults.hookTails`; other tools therefore read the pinned pair, while this editor restores the tail when it reopens the export. A chart exported by another tool has no cache, and unhooking keeps the pinned value it already stores.
+
 ## External charts
 
 `core/global/chart/formats/` owns the conversion layer. Detection is by content, not extension: an official chart has `formatVersion` and `judgeLineList`, while PEC is command text and may be stored under a `.json` name by PhiEdit.

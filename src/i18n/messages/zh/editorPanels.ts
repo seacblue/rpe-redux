@@ -230,6 +230,9 @@ export default {
 
   "editorPanels.inspector.event.emptyHint":
     "选择事件后可编辑。拖动移动，拖动上/下边缘改变时间；Shift、Ctrl 多选。",
+  "editorPanels.inspector.event.type": "事件类型",
+  "editorPanels.inspector.event.modifyType": "修改事件类型",
+  "editorPanels.inspector.event.typeUnsupported": "该事件类型不能转换",
   "editorPanels.inspector.event.startAlpha": "起始透明度",
   "editorPanels.inspector.event.endAlpha": "结束透明度",
   "editorPanels.inspector.event.startSpeed": "起始速度",
@@ -262,7 +265,7 @@ export default {
   "editorPanels.inspector.event.bezierDisabled":
     "设置中已关闭贝塞尔曲线。此事件仍保留贝塞尔曲线；启用贝塞尔曲线后可编辑。",
 
-  "editorPanels.inspector.event.stickPrevious": "粘合前一事件",
+  "editorPanels.inspector.event.stickNext": "粘合下一事件",
   "editorPanels.inspector.event.cutEvent": "切割事件",
   "editorPanels.inspector.event.cutHint": "长按可设一次性切割倍数",
   "editorPanels.inspector.event.cutDensityTitle": "切割倍数",

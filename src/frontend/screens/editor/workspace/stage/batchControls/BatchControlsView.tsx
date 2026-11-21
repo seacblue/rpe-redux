@@ -2,6 +2,10 @@
  * Draws the batch control balls and their drag hints inside the stage overlay.
  * All state and pointer actions come from `batchControls`; this component only
  * renders what that controller publishes.
+ *
+ * The group's position is deliberately not a prop: the controller writes it to
+ * the element every frame, because a dock anchored to chart time has to move
+ * with the playhead rather than at the rate React commits renders.
  */
 import {
   useSyncExternalStore,
@@ -44,9 +48,8 @@ function BatchControlGroup({
       className="batch-controls"
       data-area={area}
       hidden={!presentation?.visible}
-      style={{
-        left: presentation?.left,
-        top: presentation?.top,
+      ref={(element) => {
+        actions.attachGroup(area, element);
       }}
     >
       {entries.map(({ kind, title, color }) => (

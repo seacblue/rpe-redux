@@ -13,6 +13,7 @@ import {
   CURRENT_RPE_VERSION,
   DEFAULT_BEZIER_POINTS,
   EVENT_TRACKS,
+  HOOK_TAIL_FIELD,
   lineEventLayers,
   serializeChart,
   type Chart,
@@ -22,6 +23,7 @@ import {
   type JudgeLineEvent,
   type JudgeLineNote,
   type LineEventLayer,
+  type LineEventValue,
 } from "./chart.ts";
 import { CONTROL_TRACKS, type ControlTrackField } from "./chartTracks.ts";
 import { projectNoiseLinesForExport } from "./noise/noiseLine.ts";
@@ -52,6 +54,8 @@ interface ExportDefaults {
   notes?: number[];
   /** Line indices whose event tracks received native default fields. */
   events?: number[];
+  /** Hooked events' cached tails, keyed by object id, removed from the file. */
+  hookTails?: Record<string, LineEventValue>;
   [key: string]: unknown;
 }
 
@@ -134,6 +138,7 @@ interface NormalizedLine {
 function normalizeLine(
   line: JudgeLine,
   defaults: ReturnType<typeof createControlDefaults>,
+  hookTails: Map<string, LineEventValue>,
 ): NormalizedLine {
   const addedControls = CONTROL_TRACKS.some(({ field }) => !Array.isArray(line[field]));
   const addedIncline = line.extended?.inclineEvents == null;
@@ -151,7 +156,7 @@ function normalizeLine(
     if (!layer) {
       return layer;
     }
-    const normalized = withLayerDefaults(layer);
+    const normalized = withLayerDefaults(layer, hookTails);
     if (normalized.added) {
       addedEvents = true;
     }
@@ -161,7 +166,7 @@ function normalizeLine(
     ...line.extended,
     inclineEvents: line.extended?.inclineEvents ?? [],
   };
-  const extended = withLayerDefaults(extendedSource);
+  const extended = withLayerDefaults(extendedSource, hookTails);
   if (extended.added) {
     addedEvents = true;
   }
@@ -252,13 +257,27 @@ function withNoteDefaults(note: JudgeLineNote): { note: JudgeLineNote; added: bo
  * Speed tracks omit bezier fields in native output; every track still gets the
  * easing range and link group so RPE does not read a missing right boundary as
  * zero and collapse the event.
+ *
+ * A hook's cached tail is editor-only, so it is removed here and collected for
+ * `META.ReduxExportDefaults`; the file therefore carries the pinned pair every
+ * other tool expects while this editor can restore the tail it replaced.
  */
 function withEventDefaults(
   event: JudgeLineEvent,
   type: EventTrackName,
+  hookTails: Map<string, LineEventValue>,
 ): { event: JudgeLineEvent; added: boolean } {
   const next: JudgeLineEvent = { ...event };
   let added = false;
+  let stripped = false;
+  const cachedTail = next[HOOK_TAIL_FIELD];
+  if (cachedTail !== undefined) {
+    delete next[HOOK_TAIL_FIELD];
+    if (typeof next.id === "string") {
+      hookTails.set(next.id, structuredClone(cachedTail) as LineEventValue);
+    }
+    stripped = true;
+  }
   if (next.linkgroup == null) {
     next.linkgroup = 0;
     added = true;
@@ -285,16 +304,20 @@ function withEventDefaults(
       added = true;
     }
   }
-  return { event: added ? next : event, added };
+  return { event: added || stripped ? next : event, added };
 }
 
 /** Fill every ordinary track on one layer; shader paint events keep their own shape. */
-function withLayerDefaults(layer: LineEventLayer): {
+function withLayerDefaults(
+  layer: LineEventLayer,
+  hookTails: Map<string, LineEventValue>,
+): {
   layer: LineEventLayer;
   added: boolean;
 } {
   const next: LineEventLayer = { ...layer };
   let added = false;
+  let replaced = false;
   for (const type of EVENT_TRACKS) {
     if (type === "paintEvents") {
       continue;
@@ -308,18 +331,21 @@ function withLayerDefaults(layer: LineEventLayer): {
       if (!isRecord(event)) {
         return event;
       }
-      const result = withEventDefaults(event as JudgeLineEvent, type);
-      if (result.added) {
+      const result = withEventDefaults(event as JudgeLineEvent, type, hookTails);
+      if (result.event !== event) {
         changed = true;
+      }
+      if (result.added) {
+        added = true;
       }
       return result.event;
     });
     if (changed) {
       next[type] = normalized;
-      added = true;
+      replaced = true;
     }
   }
-  return { layer: added ? next : layer, added };
+  return { layer: replaced ? next : layer, added };
 }
 
 /**
@@ -345,13 +371,14 @@ export function projectChartForExport(chart: Chart, chartName = ""): Chart {
   }
   const sourceLines = projected.judgeLineList;
   const controlDefaults = createControlDefaults();
+  const hookTails = new Map<string, LineEventValue>();
   const controlLines: number[] = [];
   const inclineLines: number[] = [];
   const extendedLines: number[] = [];
   const noteLines: number[] = [];
   const eventLines: number[] = [];
   const lines = sourceLines?.map((line, index) => {
-    const normalized = normalizeLine(line, controlDefaults);
+    const normalized = normalizeLine(line, controlDefaults, hookTails);
     if (normalized.addedControls) {
       controlLines.push(index);
     }
@@ -384,6 +411,9 @@ export function projectChartForExport(chart: Chart, chartName = ""): Chart {
   if (eventLines.length) {
     defaults.events = eventLines;
   }
+  if (hookTails.size) {
+    defaults.hookTails = Object.fromEntries(hookTails);
+  }
   const meta = { ...projected.META };
   delete meta.ReduxExportDefaults;
   return {
@@ -408,6 +438,48 @@ export function projectChartForExport(chart: Chart, chartName = ""): Chart {
 /** Serialize the chart exactly as a JSON document or PEZ package should contain it. */
 export function serializeChartForExport(chart: Chart, chartName = ""): string {
   return serializeChart(projectChartForExport(chart, chartName));
+}
+
+/**
+ * Put each hook's cached tail back onto the event that exported it.
+ *
+ * The file carries only the pinned pair, so the cache that lets this editor
+ * unhook the event again travels in `ReduxExportDefaults` and is written back
+ * here. An id that no event carries is dropped: the event was removed between
+ * export and import, and inventing a tail would change an authored value.
+ */
+function restoreHookTails(lines: readonly unknown[], hookTails: Record<string, unknown>): void {
+  const pending = new Map(Object.entries(hookTails));
+  if (!pending.size) {
+    return;
+  }
+  for (const line of lines) {
+    if (!isRecord(line)) {
+      continue;
+    }
+    for (const layer of lineEventLayers(line as JudgeLine)) {
+      for (const type of EVENT_TRACKS) {
+        if (type === "paintEvents") {
+          continue;
+        }
+        const events = layer[type];
+        if (!Array.isArray(events)) {
+          continue;
+        }
+        for (const event of events) {
+          if (!isRecord(event) || typeof event.id !== "string") {
+            continue;
+          }
+          const tail = pending.get(event.id);
+          if (tail === undefined) {
+            continue;
+          }
+          event[HOOK_TAIL_FIELD] = tail;
+          pending.delete(event.id);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -440,6 +512,9 @@ export function stripReduxExportVersion(chart: unknown): void {
     delete chart.judgeLineGroup;
   }
   const lines = Array.isArray(chart.judgeLineList) ? chart.judgeLineList : [];
+  if (isRecord(defaults.hookTails)) {
+    restoreHookTails(lines, defaults.hookTails);
+  }
   if (Array.isArray(defaults.controls)) {
     for (const index of defaults.controls) {
       const line = Number.isInteger(index) ? lines[index as number] : undefined;

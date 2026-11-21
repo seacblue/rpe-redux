@@ -117,6 +117,24 @@ test("the scan isolates tracks and reports the extended layer's synthetic index"
   assert.equal(result.issues[0].kind, "overlap");
 });
 
+test("the scan reports a zero-length hooked event as an invalid range", () => {
+  const hooked = { ...event(4, 4, "hooked"), inst: 1 };
+  const result = scan([line("line-1", "First", [{ moveXEvents: [hooked] }])]);
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.kind, issue.target]),
+    [["invalid-range", "event"]],
+  );
+});
+
+test("the scan still reports a reversed hooked event", () => {
+  const reversed = { ...event(6, 4, "reversed"), inst: 1 };
+  const result = scan([line("line-1", "First", [{ moveXEvents: [reversed] }])]);
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.kind, issue.target]),
+    [["invalid-range", "event"]],
+  );
+});
+
 test("the scan reports non-positive events and holds as chart issues", () => {
   const result = scan([
     line("line-1", "First", [{ moveXEvents: [event(4, 4, "equal")] }]),

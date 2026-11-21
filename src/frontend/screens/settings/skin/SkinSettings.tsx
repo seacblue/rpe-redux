@@ -32,7 +32,8 @@ import {
   subscribeExternalNoteSkins,
 } from "../../../../core/platform/desktop/noteSkinPackages.ts";
 import { useTranslation } from "../../../../i18n/react.ts";
-import { registerSettingsPage } from "../settingsContributions.ts";
+import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
+import { useSurfacePolling } from "../useSurfacePolling.ts";
 import { useActiveNoteSkin } from "./useActiveNoteSkin.ts";
 import { bundledNoteSkinName, NOTE_SKIN_EVENT } from "../../../platform/noteSkinBridge.ts";
 import { packageName, packageSlug, type PackageName } from "../../../../core/utils/packageName.ts";
@@ -52,7 +53,7 @@ import { MODAL_PRIORITY } from "../../../overlays/modals/modalQueue.ts";
 import { requestConfirm, showNotice } from "../../../overlays/modals/prompts.ts";
 
 /** The package picker and the entry points into the skin workbench. */
-export function SkinSettings() {
+export function SkinSettings({ active: pageActive }: SettingsPageContext) {
   const { t, language } = useTranslation();
   const active = useActiveNoteSkin();
   const [bundledName, setBundledName] = useState<PackageName>("Redux Default");
@@ -77,18 +78,13 @@ export function SkinSettings() {
   const [actionBusy, setActionBusy] = useState(false);
   const [workbench, setWorkbench] = useState<SkinWorkbenchMode | null>(null);
   const [scanned, setScanned] = useState(false);
-  // Rescan external packages on mount and mark the scan as finished.
-  useEffect(() => {
-    let mounted = true;
-    void refreshExternalNoteSkins().finally(() => {
-      if (mounted) {
-        setScanned(true);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
+  // The page stays mounted while the settings window is open, so poll only
+  // while this section is the active one. The first scan marks the picker as
+  // ready, which is what enables the missing-package warning.
+  const scanSkins = useCallback(() => {
+    void refreshExternalNoteSkins().finally(() => setScanned(true));
   }, []);
+  useSurfacePolling(pageActive, scanSkins);
   const activeExternal = external.find(
     (skin) => `${EXTERNAL_NOTE_SKIN_PREFIX}${skin.id}` === active,
   );

@@ -514,12 +514,21 @@ pub(crate) fn resource_bytes(doc: &Document, name: &str) -> Result<Vec<u8>> {
 }
 
 /// Read one authorized resource as binary IPC data.
+///
+/// A song can be over a hundred megabytes, so the read runs on the blocking
+/// pool instead of the IPC main thread.
 #[tauri::command]
-pub fn read_asset(state: State<'_, DocumentHost>, id: String, name: String) -> Result<Response> {
-    Ok(Response::new(resource_bytes(
-        &document(&state, &id)?,
-        &name,
-    )?))
+pub async fn read_asset(
+    state: State<'_, DocumentHost>,
+    id: String,
+    name: String,
+) -> Result<Response> {
+    let document = document(&state, &id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        resource_bytes(&document, &name).map(Response::new)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// Unregister a document and stop watching its folders.

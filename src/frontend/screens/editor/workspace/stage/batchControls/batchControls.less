@@ -17,10 +17,15 @@
 
 .batch-controls {
   position: absolute;
+  top: 0;
+  left: 0;
   z-index: 4;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  // The controller writes `transform` here on every frame, so the compositor can
+  // move the whole stack without a layout pass or a React commit.
+  will-change: transform;
   // Only the balls are targets. The group itself spans the gaps between them
   // and would otherwise swallow a placement click aimed past a ball.
   pointer-events: none;

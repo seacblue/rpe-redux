@@ -20,7 +20,7 @@ import type {
   TimelineEventOverlayReceiver,
   TimelinePendingEventReceiver,
 } from "../drawing/timelineReceiver.ts";
-import { readCanvasPalette, selectionColor } from "../../../canvas/palette.ts";
+import { readCanvasPalette, rgbChannels, selectionColor } from "../../../canvas/palette.ts";
 import { CANVAS_FONT_FAMILY, canvasFont, canvasTypePx } from "../../../canvas/text.ts";
 import { multiLineLineOpacity } from "../multiLine/multiLinePresentation.ts";
 import { eventColumnForTrack } from "./eventColumns.ts";
@@ -316,9 +316,20 @@ export function drawPendingEvent(
   // the preview and the committed event share one span.
   const startBeat = Math.min(pending.beat, cursorBeat);
   const endBeat = Math.max(pending.beat, cursorBeat);
-  let valid = true;
+  let valid: boolean;
   try {
-    placedEvent(session, pending.type, startBeat, endBeat, undefined, pending.lineIndex);
+    // A null result means the span was refused, which includes the identical
+    // anchors of an empty span; only a throw used to carry the overlap case.
+    valid =
+      placedEvent(
+        session,
+        pending.type,
+        startBeat,
+        endBeat,
+        undefined,
+        pending.lineIndex,
+        pending.inst ?? false,
+      ) !== null;
   } catch {
     valid = false;
   }
@@ -351,14 +362,19 @@ export function drawPendingEvent(
         )
       : 1;
   const previewLineOpacity = lineOpacity / 2;
+  const palette = this.cache.palette();
+  const hookedTint =
+    pending.inst && palette?.eventHookedFill
+      ? (rgbChannels(palette.eventHookedFill) ?? undefined)
+      : undefined;
   context.save();
   context.globalAlpha = eventBarOpacity(appearance.eventOpacity, previewLineOpacity);
-  drawEventBar(this, context, rectangle, previewLineOpacity);
+  drawEventBar(this, context, rectangle, previewLineOpacity, hookedTint);
   context.restore();
   if (!valid) {
     // Reuse the committed-event overlap tint so a rejected span keeps the
     // track's existing warning language.
-    drawEventOverlapFilter(context, rectangle, readCanvasPalette());
+    drawEventOverlapFilter(context, rectangle, palette ?? readCanvasPalette());
   }
 }
 

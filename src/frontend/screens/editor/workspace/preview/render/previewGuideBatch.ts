@@ -110,7 +110,11 @@ export class PreviewGuideBatch {
       return null;
     }
     const atlas = packet.atlas.getCanvas();
-    if (!atlas || !this.ensureAtlas(packet)) {
+    // The atlas only holds line-number text. A frame that draws the pointer with
+    // line numbers switched off has no glyphs and therefore no atlas, and it
+    // still has to submit its arrows.
+    const needsAtlas = packet.glyphs.length > 0;
+    if (needsAtlas && (!atlas || !this.ensureAtlas(packet))) {
       return null;
     }
     const gl = this.gl;
@@ -150,7 +154,7 @@ export class PreviewGuideBatch {
     this.bindInstanceAttribute(this.rotationLocation, 1, 4);
     this.bindInstanceAttribute(this.uvLocation, 4, 5);
     let drawCalls = 0;
-    if (packet.glyphs.length) {
+    if (needsAtlas && atlas) {
       this.ensureInstanceCapacity(packet.glyphs.length);
       const instances = this.instanceData;
       const atlasWidth = Math.max(1, atlas.width);
@@ -186,15 +190,23 @@ export class PreviewGuideBatch {
       const instances = this.instanceData;
       packet.arrows.forEach((arrow, index) => {
         const offset = index * INSTANCE_STRIDE;
-        instances[offset] = arrow.x;
-        instances[offset + 1] = arrow.y;
+        // The stand-off moves the quad along the line's own normal, which is the
+        // local -Y axis; rotating (0, -offset) is what the Canvas2D path does
+        // with `translate`, so both backends place the base the same distance
+        // above the judge line.
+        const angle = (arrow.rotation * Math.PI) / 180;
+        instances[offset] = arrow.x + arrow.offset * Math.sin(angle);
+        instances[offset + 1] = arrow.y - arrow.offset * Math.cos(angle);
         instances[offset + 2] = arrow.size * 2;
         instances[offset + 3] = arrow.size * 2;
-        instances[offset + 4] = (arrow.rotation * Math.PI) / 180 + Math.PI;
+        instances[offset + 4] = angle;
+        // Canvas-backed uploads keep row zero at v=0, so the sprite already
+        // matches the top-down corner buffer; sampling it top-left to
+        // bottom-right keeps the marker's feet on the side Canvas2D paints them.
         instances[offset + 5] = 0;
-        instances[offset + 6] = 1;
+        instances[offset + 6] = 0;
         instances[offset + 7] = 1;
-        instances[offset + 8] = 0;
+        instances[offset + 8] = 1;
       });
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.arrowTexture);

@@ -147,7 +147,14 @@ export class LineSwitcher {
     return this.cache.get(key);
   }
 
-  /** Indices of the lines the switcher may show, memoized by range and layer. */
+  /**
+   * Indices of the lines the switcher may show, in step order.
+   *
+   * Multi-line editing limits both the cards and the Ctrl+wheel step to the
+   * lines it displays, ordered by line number so the wheel follows the list
+   * instead of the order the expression was written in. Otherwise every line in
+   * the chart is listed. The result is memoized by range, layer, and line set.
+   */
   filteredLines({
     chart,
     tempo,
@@ -155,6 +162,7 @@ export class LineSwitcher {
     end,
     layer = 0,
     extended = false,
+    lineSet = [],
   }: {
     chart: Chart;
     tempo: TempoSource;
@@ -162,6 +170,7 @@ export class LineSwitcher {
     end: number;
     layer?: number;
     extended?: boolean;
+    lineSet?: readonly number[];
   }): number[] {
     if (chart !== this.chart || tempo !== this.tempo) {
       this.cache.clear();
@@ -169,18 +178,24 @@ export class LineSwitcher {
       this.tempo = tempo;
       this.filterKey = null;
     }
-    const key = `${start}:${end}:${layer}:${extended ? 1 : 0}`;
+    const scoped = [...new Set(lineSet)].sort((left, right) => left - right);
+    const key = `${start}:${end}:${layer}:${extended ? 1 : 0}:${scoped.join(",")}`;
     if (this.filterKey === key) {
       return this.indices as number[];
     }
     this.filterKey = key;
-    this.indices = (chart.judgeLineList ?? []).map((_line, index) => index);
+    this.indices = scoped.length
+      ? scoped
+      : (chart.judgeLineList ?? []).map((_line, index) => index);
     return this.indices as number[];
   }
 
   /** Move the selection by `direction` and show the switcher; false when no line exists. */
   step(direction: number): unknown {
     const context = this.getContext();
+    // An active line outside the visible line set enters it from the end the
+    // step comes from, so the wheel never strands the active line on a line the
+    // set does not show.
     const index = stepOverviewLine(context.selected, direction, this.filteredLines(context));
     return index === null ? false : (this.stepSelect ?? this.select)(index);
   }
@@ -260,6 +275,7 @@ export class LineSwitcher {
       visible,
       layer = 0,
       extended = false,
+      lineSet = [],
     } = this.getContext();
     if (!visible || !this.enabled || !chart.judgeLineList?.length) {
       this.hide();
@@ -267,7 +283,7 @@ export class LineSwitcher {
     }
     this.lastFrame = timestamp;
     const changedChart = chart !== this.chart || tempo !== this.tempo;
-    const indices = this.filteredLines({ chart, tempo, start, end, layer, extended });
+    const indices = this.filteredLines({ chart, tempo, start, end, layer, extended, lineSet });
     const width = this.stage.clientWidth;
     const height = this.stage.clientHeight;
     const layout = lineOverviewLayout(width, height);

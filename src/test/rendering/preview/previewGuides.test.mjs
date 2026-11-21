@@ -169,3 +169,240 @@ test("visible guide labels paint directly and off-screen labels are culled", () 
     }
   }
 });
+
+/**
+ * Paint one frame of guides against a recording Canvas2D stub.
+ *
+ * `sprite` stands in for the decoded pointer mask so the sprite path and the
+ * drawn fallback can be compared through the same call.
+ */
+function paintPointer({ sprite = null, rotation = 0, size = 30 } = {}) {
+  const previousDocument = globalThis.document;
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  const previousWindow = globalThis.window;
+  const calls = { drawn: [], path: [], fillStyles: [], translations: [], rotations: [] };
+  let drawing = false;
+  const closed = [];
+  const target = {
+    canvas: { width: 200, height: 200 },
+    globalAlpha: 1,
+    globalCompositeOperation: "source-over",
+    filter: "none",
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+    save() {},
+    restore() {},
+    measureText: () => ({
+      width: 8,
+      actualBoundingBoxLeft: 4,
+      actualBoundingBoxRight: 4,
+      actualBoundingBoxAscent: 12,
+      actualBoundingBoxDescent: 4,
+    }),
+    fillText() {},
+    translate(x, y) {
+      calls.translations.push([x, y]);
+    },
+    rotate(radians) {
+      calls.rotations.push(radians);
+    },
+    drawImage(source, x, y, width, height) {
+      calls.drawn.push({ source, x, y, width, height });
+    },
+    beginPath() {
+      drawing = true;
+      calls.path = [];
+      closed.length = 0;
+    },
+    moveTo(x, y) {
+      assert.ok(drawing, "moveTo outside a path");
+      calls.path.push([x, y]);
+    },
+    lineTo(x, y) {
+      assert.ok(drawing, "lineTo outside a path");
+      calls.path.push([x, y]);
+    },
+    closePath() {
+      closed.push(true);
+    },
+    fill() {
+      calls.fillStyles.push(target.fillStyle);
+    },
+  };
+  globalThis.document = { documentElement: {} };
+  globalThis.getComputedStyle = () => ({
+    getPropertyValue: (name) => (name === "--canvas-preview-line-selected" ? "#00c800" : "#FFFFFF"),
+  });
+  globalThis.window = { addEventListener() {} };
+  const surface = {
+    chart: { judgeLineList: [{}] },
+    guides: [{ index: 0, x: 100, y: 100, rotation }],
+    guideRevision: 1,
+    lineNumbers: false,
+    lineArrows: true,
+    mergeLineNumbers: true,
+    skin: sprite ? { images: new Map([["line_pointer", sprite]]), colorized: () => sprite } : null,
+  };
+  try {
+    drawGuides(surface, target, 1, 0);
+  } finally {
+    if (previousDocument === undefined) {
+      delete globalThis.document;
+    } else {
+      globalThis.document = previousDocument;
+    }
+    if (previousGetComputedStyle === undefined) {
+      delete globalThis.getComputedStyle;
+    } else {
+      globalThis.getComputedStyle = previousGetComputedStyle;
+    }
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+  }
+  return { calls, closed: closed.length, size };
+}
+
+test("the pointer is an equilateral triangle based on the judge line", () => {
+  const { calls } = paintPointer();
+  // Vertices before the notch: the far foot, the apex, the near foot.
+  const [far, apex, near] = calls.path;
+  assert.equal(far[1], 0, "the far foot sits on the judge line");
+  assert.equal(near[1], 0, "the near foot sits on the judge line");
+  assert.ok(apex[1] < 0, "the apex rises above the line");
+  const base = near[0] - far[0];
+  const height = -apex[1];
+  // An equilateral triangle's height is √3/2 of its base.
+  assert.ok(
+    Math.abs(height - (base * Math.sqrt(3)) / 2) < 0.01,
+    `the outline is equilateral: base ${base}, height ${height}`,
+  );
+  assert.equal(apex[0], (far[0] + near[0]) / 2, "the apex is centred over the base");
+});
+
+test("the pointer's base is lifted off the judge line by its stand-off", () => {
+  const { calls } = paintPointer();
+  // The marker is translated to the line and then a second time along its own
+  // normal, so the base never touches the line it identifies.
+  const [toLine, standOff] = calls.translations;
+  assert.deepEqual(toLine, [100, 100], "the marker starts at the line's anchor");
+  assert.equal(standOff[0], 0, "the stand-off stays on the normal, not across it");
+  // A quarter of the marker's size, which is what keeps the gap proportional.
+  assert.deepEqual(standOff[1], -22.5 * 0.25, "the stand-off is a quarter of the marker");
+});
+
+test("the pointer notch keeps a reading at zero opacity", () => {
+  const { calls, closed } = paintPointer();
+  assert.equal(closed, 1, "the pointer is a single closed outline");
+  const corners = calls.path;
+  const onLine = corners.filter(([, y]) => y === 0).map(([x]) => x);
+  // The notch is cut into the base, so two feet remain on the base row while
+  // the notch apex lifts away from it.
+  const mouth = onLine.filter((x) => Math.abs(x) < 12);
+  assert.equal(mouth.length, 2, "the notch opens two mouths on the base");
+  const notchApex = corners.find(([, y]) => y < 0 && y > -30);
+  assert.ok(notchApex, "the notch apex is inside the body");
+  assert.equal(notchApex[0], 0, "the notch is centred on the base");
+  // Both feet lie beyond both mouths, so the notch is strictly narrower than
+  // the marker's base.
+  const feet = onLine.filter((x) => !mouth.includes(x));
+  assert.equal(feet.length, 2, "the base keeps a foot beside each mouth");
+  assert.ok(
+    feet.every((foot) => mouth.every((edge) => Math.abs(foot) > Math.abs(edge))),
+    "each foot reaches past the notch",
+  );
+});
+
+test("the pointer points up the line's local normal", () => {
+  const { calls } = paintPointer();
+  const tip = calls.path.reduce((highest, point) => (point[1] < highest[1] ? point : highest));
+  // A quarter smaller than the old 30px marker.
+  assert.deepEqual(tip, [0, -22.5], "the apex is directly above the anchor");
+  assert.equal(calls.fillStyles.length, 1, "the fallback fills exactly one shape");
+});
+
+test("the sprite path and the drawn fallback use the same anchor and extent", () => {
+  const sprite = { width: 256, height: 256 };
+  const painted = paintPointer({ sprite });
+  assert.equal(painted.calls.drawn.length, 1, "a decoded sprite is drawn instead of traced");
+  const [draw] = painted.calls.drawn;
+  assert.equal(draw.source, sprite);
+  // The sprite is centred on the anchor and spans twice the marker size, so its
+  // base row lands exactly where the vector outline's base does.
+  assert.deepEqual(
+    [draw.x, draw.y, draw.width, draw.height],
+    [-22.5, -22.5, 45, 45],
+    "the sprite covers the same box as the fallback outline",
+  );
+  assert.equal(painted.calls.path.length, 0, "the fallback is not also painted");
+});
+
+test("the pointer follows the line rotation on both paths", () => {
+  const angles = [];
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  globalThis.document = { documentElement: {} };
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#FFFFFF" });
+  globalThis.window = { addEventListener() {} };
+  try {
+    const target = {
+      canvas: { width: 200, height: 200 },
+      globalAlpha: 1,
+      globalCompositeOperation: "source-over",
+      filter: "none",
+      shadowBlur: 0,
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      save() {},
+      restore() {},
+      measureText: () => ({
+        width: 8,
+        actualBoundingBoxLeft: 4,
+        actualBoundingBoxRight: 4,
+        actualBoundingBoxAscent: 12,
+        actualBoundingBoxDescent: 4,
+      }),
+      fillText() {},
+      translate() {},
+      rotate(radians) {
+        angles.push(radians);
+      },
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      closePath() {},
+      fill() {},
+    };
+    drawGuides(
+      {
+        chart: { judgeLineList: [{}] },
+        guides: [{ index: 0, x: 100, y: 100, rotation: 90 }],
+        guideRevision: 1,
+        lineNumbers: false,
+        lineArrows: true,
+        mergeLineNumbers: true,
+        skin: null,
+      },
+      target,
+      1,
+      0,
+    );
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+    if (previousDocument === undefined) {
+      delete globalThis.document;
+    } else {
+      globalThis.document = previousDocument;
+    }
+  }
+  assert.deepEqual(angles, [Math.PI / 2], "the marker rotates with its line");
+});

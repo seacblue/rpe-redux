@@ -6,6 +6,7 @@ import {
   createVisualPlaybackClock,
 } from "../../../frontend/screens/editor/workspace/runtime/frame/frameClock.ts";
 import { DISPLAY_LEAD_SECONDS, visualLeadSeconds } from "../../../core/media/outputLatency.ts";
+import { createPictureClock } from "../../../core/edit/playback/pictureClock.ts";
 
 /** A transport stub whose `awaitingOutput` the test controls. */
 function createAudio(initial) {
@@ -98,12 +99,18 @@ test("the visual lead stays inside a correction-sized range", () => {
   assert.ok(Math.abs(visualLeadSeconds(undefined) - DISPLAY_LEAD_SECONDS) < 1e-12);
 });
 
-test("the frame clock draws at the held position while paused", () => {
-  // A paused transport does not advance while the frame is presented, so a lead
-  // there would report a position nobody asked for. At the start that showed as a
-  // nonzero readout and playhead after seeking to zero.
+test("the frame clock keeps the drawn picture when playback stops", () => {
+  // The picture clock owns the display lead and the paused hold; the frame clock
+  // hands it the interpolated audible position. A seek before playback reports the
+  // transport position, a playing frame leads it, and a pause keeps the last drawn
+  // frame instead of dropping back by the lead.
   const audio = createAudio({ playing: false, time: 0 });
-  const paused = createFrameClock(
+  const picture = createPictureClock({
+    playing: () => audio.playing,
+    leadSeconds: () => DISPLAY_LEAD_SECONDS,
+    drainProgress: () => 1,
+  });
+  const clock = createFrameClock(
     {
       audio,
       timeline: { autoScroll() {} },
@@ -113,15 +120,23 @@ test("the frame clock draws at the held position while paused", () => {
       session: () => ({}),
       tempo: () => ({ points: [{ beat: 0, secondsPerBeat: 0.5 }] }),
       chartSeconds: () => audio.time,
-      visualLeadSeconds: () => DISPLAY_LEAD_SECONDS,
+      drawnSeconds: (seconds) => picture.seconds(seconds),
       invalidate() {},
     },
     { atHome: () => false, hasDocument: () => true, documentHidden: () => false },
   );
 
-  assert.equal(paused.seconds(0), 0);
+  assert.equal(clock.seconds(0), 0);
 
   audio.playing = true;
   audio.time = 3;
-  assert.ok(Math.abs(paused.seconds(0) - (3 + DISPLAY_LEAD_SECONDS)) < 1e-12);
+  const drawn = 3 + DISPLAY_LEAD_SECONDS;
+  assert.ok(Math.abs(clock.seconds(1000) - drawn) < 1e-12);
+
+  audio.playing = false;
+  audio.time = 3.01;
+  assert.ok(Math.abs(clock.seconds(1016) - drawn) < 1e-12);
+
+  picture.release();
+  assert.equal(clock.seconds(1032), 3.01);
 });

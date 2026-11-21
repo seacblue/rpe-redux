@@ -292,6 +292,8 @@ export function createTimelineRuntime(options: {
       start: timeline.viewport.timeAt(timeline.viewport.viewHeight()),
       end: timeline.viewport.timeAt(0),
       visible: options.hasDocument() && !options.atHome() && !hasOpenModal(),
+      // Multi-line editing limits Ctrl+wheel to the lines it displays.
+      lineSet: getSession().multiLineActive ? getSession().multiLineIndices : [],
     }),
     options.ui.lineSwitcher,
     { select: options.selectOverviewLine, stepSelect: options.selectStepLine },

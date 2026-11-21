@@ -670,9 +670,9 @@ export function createDocumentRuntime(options: {
       if (result.storage === "library") {
         localStats.markSaved();
       }
-      // runSave publishes the saved fingerprint and rescans after the
-      // coordinator accepts the save; this callback only records the native
-      // write so the disk observer can recognize it.
+      // runSave publishes the post-write snapshot when the coordinator accepts
+      // the save; this callback records the native write so the watcher's
+      // debounced scan can classify its own event without a separate probe.
     },
   });
   /** Saves through the change coordinator, honoring the before-save hook. */
@@ -735,9 +735,9 @@ export function createDocumentRuntime(options: {
           return null;
         }
         const result = admitted.value ?? null;
-        if (!backup && result?.status === "saved") {
-          void diskObserver?.rescan();
-        }
+        // The save admission above already stores the post-write snapshot and
+        // onSaved registered it as a self-write, so the watcher's debounced
+        // scan recognizes this write without an extra probe here.
         if (!backup && result?.status === "saved" && extensionRegistry.hasEvent("document:saved")) {
           extensionRegistry.emitEvent("document:saved", {
             name: getChartName(),
