@@ -17,12 +17,12 @@ import {
   timelineGridHighlightColorKey,
   timelineVerticalGridColorKey,
 } from "../timelineGridColors.ts";
-import { DEFAULT_NOTE_OVERLAP_THRESHOLD } from "../../edit/timeline/noteOverlap.ts";
 import {
   MULTI_LINE_WINDOW_WIDTH_DEFAULT,
   MULTI_LINE_WINDOW_WIDTH_MAX,
   MULTI_LINE_WINDOW_WIDTH_MIN,
 } from "../../edit/timeline/timelineCoordinates.ts";
+import { DEFAULT_NOTE_OVERLAP_THRESHOLD } from "../../edit/timeline/noteOverlap.ts";
 
 const EditorSettingsNavigation: SettingsNavigation = {
   key: "editor",

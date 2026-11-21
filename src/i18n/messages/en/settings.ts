@@ -500,6 +500,18 @@ export default {
   "settings.field.audio-visual-lead.description":
     "Milliseconds the picture is drawn ahead of the sound. Raise it if drum hits sound early.",
   "settings.unit.milliseconds": "ms",
+  "settings.unit.seconds": "s",
+  "settings.unit.issues": "issues",
+
+  // ------------------------------------------------------- chart issues (3 groups)
+  "settings.group.issues": "Chart issues",
+  "settings.group.issuesScan": "Background check",
+  "settings.group.issuesKinds": "Checked kinds",
+  "settings.group.issuesDensity": "On-screen density",
+  "settings.field.chart-issues-enabled.label": "Check chart issues",
+  "settings.field.chart-issues-density-caution.label": "On-screen note limit",
+  "settings.field.chart-issues-density-caution.description":
+    "The check reports a passage when more notes share the screen at once than this. Adjust it to what the target simulator can afford.",
 
   // ----------------------------------------------------------- audio (3 rows)
   "settings.field.volume.label": "Music volume",

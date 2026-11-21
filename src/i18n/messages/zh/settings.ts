@@ -431,6 +431,18 @@ export default {
   "settings.field.audio-visual-lead.description":
     "画面相对声音提前的毫秒数。若鼓点听起来偏早，调大这个值。",
   "settings.unit.milliseconds": "毫秒",
+  "settings.unit.seconds": "秒",
+  "settings.unit.issues": "处",
+
+  // --------------------------------------------------------- 谱面问题（3 组）
+  "settings.group.issues": "谱面问题",
+  "settings.group.issuesScan": "后台检查",
+  "settings.group.issuesKinds": "检查类型",
+  "settings.group.issuesDensity": "同屏密度",
+  "settings.field.chart-issues-enabled.label": "检查谱面错误",
+  "settings.field.chart-issues-density-caution.label": "同屏音符上限",
+  "settings.field.chart-issues-density-caution.description":
+    "同一时刻同屏音符数超过该值时提示。依据目标模拟器能承受的密度调整。",
 
   "settings.field.volume.label": "音乐音量",
   "settings.field.background-volume.label": "后台音量",

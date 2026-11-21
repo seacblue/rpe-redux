@@ -42,6 +42,8 @@ export interface SidebarDescriptor {
 const neverSubscribe = () => () => {};
 const inactive = () => false;
 const noBadge = () => 0;
+/** A contribution without a tone keeps the rail's original error colour. */
+const errorTone = (): "error" | "warning" => "error";
 const alwaysVisible = () => true;
 
 /** One rail entry, including its reactive visibility and active state. */
@@ -85,6 +87,11 @@ function SidebarEntry({
     item.badge?.get ?? noBadge,
     item.badge?.get ?? noBadge,
   );
+  const badgeTone = useSyncExternalStore(
+    item.badgeTone?.subscribe ?? neverSubscribe,
+    item.badgeTone?.get ?? errorTone,
+    item.badgeTone?.get ?? errorTone,
+  );
   if (!visible) {
     return null;
   }
@@ -123,7 +130,7 @@ function SidebarEntry({
         }}
       />
       {badge > 0 && (
-        <span className="redux-sidebar-badge" aria-hidden="true">
+        <span className="redux-sidebar-badge" data-tone={badgeTone} aria-hidden="true">
           {badge > 99 ? "99+" : badge}
         </span>
       )}

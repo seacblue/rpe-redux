@@ -133,6 +133,11 @@
   line-height: 13px;
   text-align: center;
   pointer-events: none;
+
+  // A caution is not a broken chart, so it reads in the warning colour.
+  &[data-tone="warning"] {
+    background: var(--warning);
+  }
 }
 
 // The compact rail only shows the icon column. Both the active fill and the

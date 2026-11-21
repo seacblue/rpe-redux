@@ -166,13 +166,21 @@ export default {
   "editorPanels.overlap.beat": "Beat {value}",
   "editorPanels.overlap.layer": "Layer {value}",
 
-  "editorPanels.issues.summary": "{count} chart issues",
+  "editorPanels.issues.summaryErrors": "{count} chart errors",
+  "editorPanels.issues.summaryWarnings": "{count} chart warnings",
   "editorPanels.issues.emptyTitle": "No chart issues",
   "editorPanels.issues.empty": "No chart issues detected.",
-  "editorPanels.issues.line": "Line {index}",
+  "editorPanels.issues.disabledTitle": "Chart checks are off",
+  "editorPanels.issues.disabled":
+    "Turn on “Check chart issues” in Settings to see structural problems and on-screen density hints here.",
+  "editorPanels.issues.openSettings": "Open settings",
+  "editorPanels.issues.scanning": "Checking the chart in the background…",
+  "editorPanels.issues.scanFailed": "The background check failed. Editing continues normally.",
+  "editorPanels.issues.line": "#{index}",
+  "editorPanels.issues.lineNamed": "#{index} {name}",
+  "editorPanels.issues.title": "{kind} ({line})",
   "editorPanels.issues.layer": "Layer {value}",
   "editorPanels.issues.extendedLayer": "Extended layer",
-  "editorPanels.issues.notesLayer": "Notes",
   "editorPanels.issues.holdTrack": "Hold",
   "editorPanels.issues.negativeBeat": "Beat cannot be negative",
   "editorPanels.issues.beat": "Beat {value}",
@@ -181,6 +189,24 @@ export default {
   "editorPanels.issues.locate": "Locate",
   "editorPanels.issues.trackIncline": "Incline",
   "editorPanels.issues.trackGif": "GIF",
+  "editorPanels.issues.masterSwitch": "Check chart issues",
+  "editorPanels.issues.densityPeak": "{count} notes on screen at once",
+  "editorPanels.issues.filter.label": "Filter issues by type",
+  "editorPanels.issues.filter.emptyTitle": "Every issue type is filtered out",
+  "editorPanels.issues.filter.empty":
+    "Enable an issue type in the filter above to see its rows again.",
+  "editorPanels.issues.kind.overlap": "Overlapping events",
+  "editorPanels.issues.kind.overlap.description":
+    "Two events on one track share a time range; one of them never plays.",
+  "editorPanels.issues.kind.invalidRange": "No duration",
+  "editorPanels.issues.kind.invalidRange.description":
+    "A Hold or an event ends at or before its own start, so it cannot play.",
+  "editorPanels.issues.kind.negativeBeat": "Negative beat",
+  "editorPanels.issues.kind.negativeBeat.description":
+    "The position is before the chart's first beat and cannot be reached.",
+  "editorPanels.issues.kind.density": "Too many notes on screen",
+  "editorPanels.issues.kind.density.description":
+    "The preview survives this density, but a target simulator may drop frames.",
 
   "editorPanels.lineSwitcher.empty": "No judgement line matches inside the currently visible range",
 

@@ -42,6 +42,8 @@ export interface InspectorSidebarDefinition {
   visibility?: Pick<ValueCell<boolean>, "get" | "subscribe">;
   indicator?: Pick<ValueCell<boolean>, "get" | "subscribe">;
   badge?: Pick<ValueCell<number>, "get" | "subscribe">;
+  /** Badge colour; missing keeps the rail's error red. */
+  badgeTone?: Pick<ValueCell<"error" | "warning">, "get" | "subscribe">;
 }
 
 /** Registers a sidebar route through the host-owned sidebar descriptor. */
@@ -57,6 +59,7 @@ export function registerInspectorSidebar(definition: InspectorSidebarDefinition)
       visibility: definition.visibility,
       indicator: definition.indicator,
       badge: definition.badge,
+      badgeTone: definition.badgeTone,
     },
     onActivate: () => {
       openPane(definition.panelId);
