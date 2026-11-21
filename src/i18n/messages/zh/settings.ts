@@ -645,6 +645,10 @@ export default {
   "settings.startup.preparing": "正在准备工作区",
   "settings.startup.retry": "重新启动",
   "settings.startup.progress": "正在启动编辑器…",
+  "settings.startup.downloading": "正在下载 {downloaded} / {total}",
+  "settings.startup.downloadingSpeed": "正在下载 {downloaded} / {total} · {speed}",
+  "settings.startup.downloaded": "已下载 {downloaded}",
+  "settings.startup.downloadedSpeed": "已下载 {downloaded} · {speed}",
   "settings.startup.testWarning.title": "测试功能提示",
   "settings.startup.testWarning.description":
     "RPE Redux 仍在测试中，可能出现显示异常或偶尔不稳定；遇到问题请通过“帮助 > 问卷调查”反馈。",

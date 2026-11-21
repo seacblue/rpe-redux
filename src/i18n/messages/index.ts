@@ -1,123 +1,129 @@
 /**
- * The two catalogs, assembled from one file per namespace.
+ * The catalogs, assembled from one file per namespace.
  *
- * English is the source of truth: `MessageKey` is derived from it, so a key
- * that English does not declare cannot be typed, and the Chinese catalog is
- * annotated with `Record<MessageKey, string>` so a key that English declares and
- * Chinese forgets is a compile error rather than a string that silently renders
- * in the wrong language.
+ * The startup screen needs only a small set of namespaces. The rest are
+ * registered when the editor shell loads, so the startup graph does not carry
+ * the settings, editor, chart, welcome, or Extension text catalogs.
  *
- * Namespaces are split by where the text lives in `src/`, not by who reads it:
- * a reviewer looking at `src/frontend/screens/settings/` knows the text is in the settings
- * namespace without searching for it.
+ * English remains the source of truth: `MessageKey` is derived from every
+ * English namespace, including the deferred ones. The Chinese runtime catalog
+ * covers the initial namespaces; `ZhCatalogCheck` keeps the deferred Chinese
+ * types complete at compile time, and the catalog suite checks the merged pair.
  */
 import type { Catalog } from "../types.ts";
 
 import enCommon from "./en/common.ts";
 import enDesign from "./en/design.ts";
-import enModel from "./en/model.ts";
 import enSystem from "./en/system.ts";
-import enShortcuts from "./en/shortcuts.ts";
+import enStartup from "./en/startup.ts";
 import enChrome from "./en/chrome.ts";
 import enWindowControls from "./en/windowControls.ts";
-import enWorkspace from "./en/workspace.ts";
-import enWelcomeLibrary from "./en/welcomeLibrary.ts";
-import enWelcomeReview from "./en/welcomeReview.ts";
-import enWorkspaceProgress from "./en/workspaceProgress.ts";
-import enDocumentErrors from "./en/documentErrors.ts";
-import enEditor from "./en/editor.ts";
-import enEditorPanels from "./en/editorPanels.ts";
-import enTimingDetection from "./en/timingDetection.ts";
-import enSettings from "./en/settings.ts";
-import enSettingsStepper from "./en/settingsStepper.ts";
-import enSettingsLayout from "./en/settingsLayout.ts";
-import enLayoutEditor from "./en/layoutEditor.ts";
-import enSkinWorkbench from "./en/skinWorkbench.ts";
-import enStartup from "./en/startup.ts";
-import enCapabilities from "./en/capabilities.ts";
+import enSettingsStartup from "./en/settingsStartup.ts";
+import type enModel from "./en/model.ts";
+import type enShortcuts from "./en/shortcuts.ts";
+import type enWorkspace from "./en/workspace.ts";
+import type enWelcomeLibrary from "./en/welcomeLibrary.ts";
+import type enWelcomeReview from "./en/welcomeReview.ts";
+import type enWorkspaceProgress from "./en/workspaceProgress.ts";
+import type enDocumentErrors from "./en/documentErrors.ts";
+import type enEditor from "./en/editor.ts";
+import type enEditorPanels from "./en/editorPanels.ts";
+import type enTimingDetection from "./en/timingDetection.ts";
+import type enSettings from "./en/settings.ts";
+import type enSettingsStepper from "./en/settingsStepper.ts";
+import type enSettingsLayout from "./en/settingsLayout.ts";
+import type enLayoutEditor from "./en/layoutEditor.ts";
+import type enSkinWorkbench from "./en/skinWorkbench.ts";
+import type enCapabilities from "./en/capabilities.ts";
 
 import zhCommon from "./zh/common.ts";
 import zhDesign from "./zh/design.ts";
-import zhModel from "./zh/model.ts";
 import zhSystem from "./zh/system.ts";
-import zhShortcuts from "./zh/shortcuts.ts";
+import zhStartup from "./zh/startup.ts";
 import zhChrome from "./zh/chrome.ts";
 import zhWindowControls from "./zh/windowControls.ts";
-import zhWorkspace from "./zh/workspace.ts";
-import zhWelcomeLibrary from "./zh/welcomeLibrary.ts";
-import zhWelcomeReview from "./zh/welcomeReview.ts";
-import zhWorkspaceProgress from "./zh/workspaceProgress.ts";
-import zhDocumentErrors from "./zh/documentErrors.ts";
-import zhEditor from "./zh/editor.ts";
-import zhEditorPanels from "./zh/editorPanels.ts";
-import zhTimingDetection from "./zh/timingDetection.ts";
-import zhSettings from "./zh/settings.ts";
-import zhSettingsStepper from "./zh/settingsStepper.ts";
-import zhSettingsLayout from "./zh/settingsLayout.ts";
-import zhLayoutEditor from "./zh/layoutEditor.ts";
-import zhSkinWorkbench from "./zh/skinWorkbench.ts";
-import zhStartup from "./zh/startup.ts";
-import zhCapabilities from "./zh/capabilities.ts";
+import zhSettingsStartup from "./zh/settingsStartup.ts";
+import type zhModel from "./zh/model.ts";
+import type zhShortcuts from "./zh/shortcuts.ts";
+import type zhWorkspace from "./zh/workspace.ts";
+import type zhWelcomeLibrary from "./zh/welcomeLibrary.ts";
+import type zhWelcomeReview from "./zh/welcomeReview.ts";
+import type zhWorkspaceProgress from "./zh/workspaceProgress.ts";
+import type zhDocumentErrors from "./zh/documentErrors.ts";
+import type zhEditor from "./zh/editor.ts";
+import type zhEditorPanels from "./zh/editorPanels.ts";
+import type zhTimingDetection from "./zh/timingDetection.ts";
+import type zhSettings from "./zh/settings.ts";
+import type zhSettingsStepper from "./zh/settingsStepper.ts";
+import type zhSettingsLayout from "./zh/settingsLayout.ts";
+import type zhLayoutEditor from "./zh/layoutEditor.ts";
+import type zhSkinWorkbench from "./zh/skinWorkbench.ts";
+import type zhCapabilities from "./zh/capabilities.ts";
 
-/** English: the reference catalog every other language is checked against. */
+/** Startup graph: the chrome and startup namespaces, no product-page text. */
 export const en = {
   ...enCommon,
   ...enDesign,
-  ...enModel,
   ...enSystem,
-  ...enShortcuts,
+  ...enStartup,
   ...enChrome,
   ...enWindowControls,
-  ...enWorkspace,
-  ...enWelcomeLibrary,
-  ...enWelcomeReview,
-  ...enWorkspaceProgress,
-  ...enDocumentErrors,
-  ...enEditor,
-  ...enEditorPanels,
-  ...enTimingDetection,
-  ...enSettings,
-  ...enSettingsStepper,
-  ...enSettingsLayout,
-  ...enLayoutEditor,
-  ...enSkinWorkbench,
-  ...enStartup,
-  ...enCapabilities,
-};
+  ...enSettingsStartup,
+} as const;
 
-/** Every key the interface can ask for. Derived, never hand-written. */
-export type MessageKey = keyof typeof en;
+/** Every key the interface can ask for, including deferred namespaces. */
+type FullEn = typeof en &
+  typeof enModel &
+  typeof enShortcuts &
+  typeof enWorkspace &
+  typeof enWelcomeLibrary &
+  typeof enWelcomeReview &
+  typeof enWorkspaceProgress &
+  typeof enDocumentErrors &
+  typeof enEditor &
+  typeof enEditorPanels &
+  typeof enTimingDetection &
+  typeof enSettings &
+  typeof enSettingsStepper &
+  typeof enSettingsLayout &
+  typeof enLayoutEditor &
+  typeof enSkinWorkbench &
+  typeof enCapabilities;
+export type MessageKey = keyof FullEn;
 
-/** Chinese, required to cover every English key. */
-export const zh: Record<MessageKey, string> = {
+const zhInitial = {
   ...zhCommon,
   ...zhDesign,
-  ...zhModel,
   ...zhSystem,
-  ...zhShortcuts,
+  ...zhStartup,
   ...zhChrome,
   ...zhWindowControls,
-  ...zhWorkspace,
-  ...zhWelcomeLibrary,
-  ...zhWelcomeReview,
-  ...zhWorkspaceProgress,
-  ...zhDocumentErrors,
-  ...zhEditor,
-  ...zhEditorPanels,
-  ...zhTimingDetection,
-  ...zhSettings,
-  ...zhSettingsStepper,
-  ...zhSettingsLayout,
-  ...zhLayoutEditor,
-  ...zhSkinWorkbench,
-  ...zhStartup,
-  ...zhCapabilities,
-};
+  ...zhSettingsStartup,
+} as const;
 
-/**
- * The catalog for one language, widened to `Catalog`.
- *
- * `zh` is built from the same spread shape as `en`, so its own inferred type is
- * a literal-keyed object; widening it keeps `t()`'s lookup a plain index.
- */
+/** Startup graph Chinese catalog; deferred namespaces register with the shell. */
+export const zh: Catalog = zhInitial;
+
+/** Compile-time completeness check for the deferred Chinese namespaces. */
+type FullZh = typeof zhInitial &
+  typeof zhModel &
+  typeof zhShortcuts &
+  typeof zhWorkspace &
+  typeof zhWelcomeLibrary &
+  typeof zhWelcomeReview &
+  typeof zhWorkspaceProgress &
+  typeof zhDocumentErrors &
+  typeof zhEditor &
+  typeof zhEditorPanels &
+  typeof zhTimingDetection &
+  typeof zhSettings &
+  typeof zhSettingsStepper &
+  typeof zhSettingsLayout &
+  typeof zhLayoutEditor &
+  typeof zhSkinWorkbench &
+  typeof zhCapabilities;
+type AssertNever<T extends never> = T;
+export type ZhCatalogCheck = AssertNever<Exclude<MessageKey, keyof FullZh>>;
+
+/** The catalog for one language, widened to `Catalog`. */
 export const CATALOGS: Record<"en" | "zh", Catalog> = { en, zh };

@@ -154,10 +154,11 @@ export default [
     // Repository boundary rule: a shell element is
     // handed to the engine as an argument, never looked up by a selector string.
     // A component may still query inside the subtree it owns (`panel.querySelector`),
-    // which is why only `document.*` is banned here. `src/main.tsx` is the one
-    // exception: it finds the React root, and there is nothing above it to own it.
+    // which is why only `document.*` is banned here. `src/main.tsx` finds the
+    // React root, and the inline startup splash runs before React exists; both
+    // have nothing above them to own the nodes they query.
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/main.tsx"],
+    ignores: ["src/main.tsx", "src/frontend/screens/startup/bootSplash.ts"],
     rules: {
       "no-restricted-syntax": ["error", noDocumentLookupSyntax],
     },

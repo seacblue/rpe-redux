@@ -735,6 +735,10 @@ export default {
   "settings.startup.preparing": "Preparing the workspace",
   "settings.startup.retry": "Start again",
   "settings.startup.progress": "Starting the editor…",
+  "settings.startup.downloading": "Downloading {downloaded} / {total}",
+  "settings.startup.downloadingSpeed": "Downloading {downloaded} / {total} · {speed}",
+  "settings.startup.downloaded": "Downloaded {downloaded}",
+  "settings.startup.downloadedSpeed": "Downloaded {downloaded} · {speed}",
   "settings.startup.testWarning.title": "Test feature notice",
   "settings.startup.testWarning.description":
     "RPE Redux is still in testing; you may see visual glitches or occasional instability. Report problems from Help > Survey.",

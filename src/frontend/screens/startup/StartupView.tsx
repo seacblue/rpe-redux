@@ -13,11 +13,11 @@ import { useTranslation } from "../../../i18n/react.ts";
 import type { MessageKey } from "../../../i18n/index.ts";
 import { isDesktop } from "../../../core/platform/environment.ts";
 import { preferences } from "../../../core/state/preferences.ts";
-import { writeExtensionSafeModeRequest } from "../../../core/extensions/extensionRuntimeSupport.ts";
+import { getExtensionStartupState } from "../../../core/extensions/extensionStartupState.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { openDiagnosticLogs, writeDiagnosticLog } from "../../platform/diagnosticLog.ts";
-import { getExtensionStartupState } from "../../platform/extensionLoader.ts";
 import { useDocumentSurface } from "./useDocumentSurface.ts";
+import { useResourceDownload } from "../../platform/useResourceDownload.ts";
 import {
   classifyStartupFailure,
   isBackendPortConflict,
@@ -40,14 +40,27 @@ export function StartupView({
   error,
   retry,
   source = "unknown",
+  resetKey = 0,
 }: {
   error: string;
   retry: () => void;
   /** Where the error text came from, which selects the explanation. */
   source?: StartupFailureSource;
+  /** Bumped when the editor shell is retried, restarting the download report. */
+  resetKey?: number;
 }) {
   const { t } = useTranslation();
   const surface = useDocumentSurface();
+  const download = useResourceDownload(!error, resetKey);
+  const progressText =
+    download === null
+      ? t("settings.startup.progress")
+      : download.speed
+        ? t("settings.startup.downloadedSpeed", {
+            downloaded: download.downloaded,
+            speed: download.speed,
+          })
+        : t("settings.startup.downloaded", { downloaded: download.downloaded });
   const [writtenLog, setWrittenLog] = useState<{ report: string; path: string | null }>({
     report: "",
     path: null,
@@ -108,12 +121,14 @@ export function StartupView({
   };
 
   /** Persist the one-shot request, then reload so the next pass skips Extensions. */
-  const requestSafeMode = () => {
+  const requestSafeMode = async () => {
     if (safeModeStarted.current) {
       return;
     }
     safeModeStarted.current = true;
     setSafeModeRequested(true);
+    const { writeExtensionSafeModeRequest } =
+      await import("../../../core/extensions/extensionRuntimeSupport.ts");
     writeExtensionSafeModeRequest(preferences);
     window.location.reload();
   };
@@ -139,7 +154,7 @@ export function StartupView({
         {!error && (
           <>
             <div className="redux-startup-progress" />
-            <small>{t("settings.startup.progress")}</small>
+            <small>{progressText}</small>
           </>
         )}
       </div>
