@@ -217,6 +217,9 @@ export default {
 
   "editorPanels.inspector.event.emptyHint":
     "Select an event to edit it. Drag to move it, or drag its top or bottom edge to change its time; Shift and Ctrl select multiple.",
+  "editorPanels.inspector.event.type": "Event type",
+  "editorPanels.inspector.event.modifyType": "Change the event type",
+  "editorPanels.inspector.event.typeUnsupported": "This event type cannot be converted",
   "editorPanels.inspector.event.startAlpha": "Start opacity",
   "editorPanels.inspector.event.endAlpha": "End opacity",
   "editorPanels.inspector.event.startSpeed": "Start speed",

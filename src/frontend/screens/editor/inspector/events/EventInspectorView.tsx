@@ -12,8 +12,13 @@ import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx"
 import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { Popconfirm } from "../../../../../design/components/popconfirm/Popconfirm.tsx";
+import { Select } from "../../../../../design/components/select/Select.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { transformEvents } from "../../../../../core/edit/events/eventEdits.ts";
+import {
+  convertEventType,
+  isConvertibleEventType,
+} from "../../../../../core/edit/events/eventTypeConversion.ts";
 import { clamp01 } from "../../../../../core/utils/numbers.ts";
 import { eventList, eventKey } from "../../../../../core/edit/events/eventTracks.ts";
 import type { JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
@@ -30,6 +35,7 @@ import {
 } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
 import { applyEventTransform, EventField } from "./EventField.tsx";
 import type { FieldKey, ValueKind } from "./eventFieldModel.ts";
+import { eventTypeOptions } from "./eventTypeOptions.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { eventHasLinkGroup } from "../../../../../core/global/chart/optionalFeatures.ts";
 import { samplingAxisForEventType } from "../../../../../core/edit/sampling/sampling.ts";
@@ -156,6 +162,8 @@ export function EventInspectorView({
   const bezierEnabled = useEditingFeature("bezier");
   const linkgroupEnabled = useEditingFeature("linkgroup");
   const easingRangeEnabled = useEditingFeature("easingRange");
+  const eventLayersEnabled = useEditingFeature("eventLayers");
+  const extendedEventsEnabled = useEditingFeature("extendedEvents");
   const [cutAnchorElement, setCutAnchorElement] = useState<HTMLButtonElement | null>(null);
   const [cutOpen, setCutOpen] = useState(false);
   const [cutDensity, setCutDensity] = useState("");
@@ -166,6 +174,23 @@ export function EventInspectorView({
     return <InspectorEmpty>{t("editorPanels.inspector.event.emptyHint")}</InspectorEmpty>;
   }
   const eventType = entry.type;
+  const selectedLine = session.chart.judgeLineList?.[entry.lineIndex ?? session.lineIndex];
+  const typeOptions = isConvertibleEventType(eventType)
+    ? eventTypeOptions(
+        selectedLine,
+        session.eventLayer,
+        { eventLayers: eventLayersEnabled, extendedEvents: extendedEventsEnabled },
+        eventType,
+      )
+    : [];
+  // The row converts one authored track. A wider selection would have to merge
+  // several tracks, which the existing event tools already cover.
+  const singleEventSelected =
+    session.multiLineActive && session.multiLineMode === "events"
+      ? [...session.multiEventSelection.values()].reduce((total, keys) => total + keys.size, 0) ===
+        1
+      : session.eventSelection.size === 1;
+  const showTypeRow = singleEventSelected && typeOptions.length > 1;
   /** Runs an edit action and reports its failure without unwinding the form. */
   const safely = (action: () => void) => {
     try {
@@ -368,6 +393,46 @@ export function EventInspectorView({
   return (
     <>
       <FieldRows>
+        {showTypeRow && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            htmlFor="event-field-type"
+            label={t("editorPanels.inspector.event.type")}
+            control={
+              <Select
+                id="event-field-type"
+                data-inspector-field="type"
+                value={eventType}
+                onChange={(input) => {
+                  const select = input.currentTarget;
+                  const nextType = select.value;
+                  if (nextType === eventType) {
+                    return;
+                  }
+                  try {
+                    convertEventType(
+                      session,
+                      { lineIndex: entry.lineIndex, type: eventType, index: entry.index },
+                      nextType,
+                    );
+                  } catch (error) {
+                    // A refused conversion leaves the authored track in place;
+                    // return the closed select to it before reporting.
+                    select.value = eventType;
+                    reportError(error);
+                  }
+                }}
+              >
+                {typeOptions.map((option) => (
+                  <option value={option.type} key={option.type}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            }
+          />
+        )}
         {fields.map(([field, title, kind]) => (
           <EventField
             key={`${entry.lineIndex ?? ""}:${entry.type}:${entry.index}:${field}`}

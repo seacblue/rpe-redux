@@ -207,6 +207,9 @@ export default {
 
   "editorPanels.inspector.event.emptyHint":
     "选择事件后可编辑。拖动移动，拖动上/下边缘改变时间；Shift、Ctrl 多选。",
+  "editorPanels.inspector.event.type": "事件类型",
+  "editorPanels.inspector.event.modifyType": "修改事件类型",
+  "editorPanels.inspector.event.typeUnsupported": "该事件类型不能转换",
   "editorPanels.inspector.event.startAlpha": "起始透明度",
   "editorPanels.inspector.event.endAlpha": "结束透明度",
   "editorPanels.inspector.event.startSpeed": "起始速度",
