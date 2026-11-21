@@ -85,7 +85,7 @@ export function applyDocumentLanguage(): void {
  * visibly without throwing.
  */
 export function t(key: MessageKey, params?: MessageParams): string {
-  const text = CATALOGS[current][key] ?? en[key];
+  const text = CATALOGS[current][key] ?? (en as Catalog)[key];
   if (text === undefined) {
     return String(key);
   }
@@ -107,6 +107,22 @@ export function tRaw(key: string, params?: MessageParams): string {
     return key;
   }
   return interpolate(text, params);
+}
+
+/**
+ * Register the core namespaces that the editor shell owns.
+ *
+ * The startup graph only carries the chrome/startup text. The shell imports the
+ * remaining catalogs and registers them before it renders, so a deferred key
+ * never reaches a visible surface as a raw id.
+ */
+export function registerCoreCatalog(catalogs: Partial<Record<Language, Catalog>>): void {
+  for (const language of LANGUAGES) {
+    const catalog = catalogs[language];
+    if (catalog) {
+      Object.assign(CATALOGS[language], catalog);
+    }
+  }
 }
 
 /**

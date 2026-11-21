@@ -25,7 +25,6 @@ import {
   readExtensionBootMarker,
   summarizeExtensionStartup,
   writeExtensionBootMarker,
-  type ExtensionStartupActivation,
   type ExtensionStartupFailure,
 } from "../../core/extensions/extensionRuntimeSupport.ts";
 import { preferences } from "../../core/state/preferences.ts";
@@ -42,6 +41,11 @@ import {
   setExtensionReview,
   type ExtensionReviewFile,
 } from "./extensionReview.ts";
+import {
+  setExtensionStartupState,
+  type ExtensionSafeModeReason,
+  type ExtensionStartupState,
+} from "../../core/extensions/extensionStartupState.ts";
 import {
   ANY_PACKAGE_CONTENT,
   ExtensionContentIndex,
@@ -89,15 +93,10 @@ const DEFAULT_I18N_FILE = "i18n.json";
 /** Content identities recorded by the last successful registration per package. */
 const extensionContent = new ExtensionContentIndex();
 
-export type ExtensionSafeModeReason = "query" | "flag" | "request" | "interrupted" | null;
-
-/** Startup verdict for the Extension pass and the evidence behind it. */
-export interface ExtensionStartupState {
-  readonly safeMode: boolean;
-  readonly reason: ExtensionSafeModeReason;
-  readonly failures: readonly ExtensionStartupFailure[];
-  readonly activations: readonly ExtensionStartupActivation[];
-}
+export type {
+  ExtensionSafeModeReason,
+  ExtensionStartupState,
+} from "../../core/extensions/extensionStartupState.ts";
 
 let startupState: ExtensionStartupState = Object.freeze({
   safeMode: false,
@@ -114,6 +113,12 @@ let startupCaughtFailures: ExtensionStartupFailure[] = [];
 /** Why the startup pass skipped Extension code, for the settings surface. */
 export function getExtensionStartupState(): ExtensionStartupState {
   return startupState;
+}
+
+/** Keep the lightweight failure-screen mirror on the same evidence. */
+function updateStartupState(next: ExtensionStartupState): void {
+  startupState = next;
+  setExtensionStartupState(next);
 }
 
 /** Record one operation result while the startup pass is collecting evidence. */
@@ -149,24 +154,28 @@ function publishStartupDiagnostics(): void {
       failures.push(failure);
     }
   }
-  startupState = Object.freeze({
-    safeMode: startupState.safeMode,
-    reason: startupState.reason,
-    failures: Object.freeze(failures),
-    activations: summarized.activations,
-  });
+  updateStartupState(
+    Object.freeze({
+      safeMode: startupState.safeMode,
+      reason: startupState.reason,
+      failures: Object.freeze(failures),
+      activations: summarized.activations,
+    }),
+  );
 }
 
 /** Clear the evidence before one startup pass begins. */
 function resetStartupDiagnostics(): void {
   startupResults = [];
   startupCaughtFailures = [];
-  startupState = Object.freeze({
-    safeMode: false,
-    reason: null,
-    failures: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.failures,
-    activations: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.activations,
-  });
+  updateStartupState(
+    Object.freeze({
+      safeMode: false,
+      reason: null,
+      failures: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.failures,
+      activations: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.activations,
+    }),
+  );
 }
 
 /** Byte length of a string in UTF-8. */
@@ -822,12 +831,14 @@ export async function loadPackagedExtensions(): Promise<void> {
               ? previousSafeReason
               : null;
     if (reason) {
-      startupState = Object.freeze({
-        safeMode: true,
-        reason,
-        failures: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.failures,
-        activations: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.activations,
-      });
+      updateStartupState(
+        Object.freeze({
+          safeMode: true,
+          reason,
+          failures: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.failures,
+          activations: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.activations,
+        }),
+      );
       clearExtensionBootMarker(preferences);
       document.documentElement.dataset.extensionSafeMode = reason;
       try {
@@ -848,12 +859,14 @@ export async function loadPackagedExtensions(): Promise<void> {
       return;
     }
 
-    startupState = Object.freeze({
-      safeMode: false,
-      reason: null,
-      failures: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.failures,
-      activations: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.activations,
-    });
+    updateStartupState(
+      Object.freeze({
+        safeMode: false,
+        reason: null,
+        failures: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.failures,
+        activations: EMPTY_EXTENSION_STARTUP_DIAGNOSTICS.activations,
+      }),
+    );
     writeExtensionBootMarker("startup", preferences);
     try {
       if (isTauri()) {

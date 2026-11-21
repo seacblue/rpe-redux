@@ -81,6 +81,7 @@ npm run build:web            # frontend bundle only
 npm run build:docs           # Extension SDK documentation site
 npm run build:server         # target-specific Go sidecar
 npm run build:icons          # regenerate both theme icon packages
+npm run build:font           # regenerate the CJK UI subset and lazy slices
 npm run deps:check           # pinned and staged FFmpeg/Cloudflared versions, offline
 npm run check                # types, lint, style, docs, icons, SDK, extensions, unit, and Go tests
 npm run check:native         # Rust formatting and compile check

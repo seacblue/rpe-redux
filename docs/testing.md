@@ -57,12 +57,12 @@ The style gate rejects raw colours, fonts, radii, and `!important`; take values 
 
 ## Unit suite
 
-`npm run test:unit` runs `node --test "src/test/**/*.test.mjs"`. The files execute the TypeScript sources directly through Node's built-in type stripping, so there is no bundler step and no compiled test output.
+`npm run test:unit` runs `node --import ./src/test/setup.mjs --test "src/test/**/*.test.mjs"`. The files execute the TypeScript sources directly through Node's built-in type stripping, so there is no bundler step and no compiled test output. The setup registers the product-page catalogs that the browser defers to the editor shell, so text assertions see the complete English and Chinese pair.
 
 ```powershell
 npm run test:unit                          # whole suite
-node --test src/test/editor/transactions/transactionKernel.test.mjs
-node --test --test-name-pattern="delete" "src/test/**/*.test.mjs"
+node --import ./src/test/setup.mjs --test src/test/editor/transactions/transactionKernel.test.mjs
+node --import ./src/test/setup.mjs --test --test-name-pattern="delete" "src/test/**/*.test.mjs"
 ```
 
 Each file owns one contract and starts with a header comment naming it. Tests are grouped below `src/test/` by topic and subsystem, such as `chart/format/`, `editor/events/`, `rendering/preview/`, `extensions/sandbox/`, and `settings/registry/`. The files import production modules with explicit `.ts` extensions and use `node:test` with `node:assert/strict`. There are no per-directory fixtures for the unit suite; data lives in the test file unless several suites share it.
@@ -145,7 +145,7 @@ Keep implementation-detail assertions out of the unit suite. A test that pins "t
 ## Quick audio check
 
 ```powershell
-node --test src/test/editor/timeline/timeStretch.test.mjs
+node --import ./src/test/setup.mjs --test src/test/editor/timeline/timeStretch.test.mjs
 npm run dev:desktop
 ```
 
