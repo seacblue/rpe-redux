@@ -388,7 +388,7 @@ function main() {
   const write = process.argv.includes("--write");
   const deprecations = collectFacadeDeprecations();
   const generated = renderGenerated(deprecations);
-  const current = readFileSync(GENERATED_PATH, "utf8");
+  const current = readFileSync(GENERATED_PATH, "utf8").replace(/\r\n/gu, "\n");
   if (current !== generated) {
     if (write) {
       writeFileSync(GENERATED_PATH, generated);
