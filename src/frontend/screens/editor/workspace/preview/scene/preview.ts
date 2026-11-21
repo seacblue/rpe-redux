@@ -1293,6 +1293,9 @@ export class Preview {
     // swap it left the live surface sampling the previous empty runtime when
     // the first frame landed before the preview became visible.
     this.scene = scene;
+    // Old sample slots belong to the previous runtime and may hold the frozen
+    // empty state; a fresh scene must start from a clean reusable target.
+    this.sampledStates.length = 0;
     this.sceneRefreshPending = true;
     this.lastFrame = null;
     this.lastDrawRequest = null;

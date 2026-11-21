@@ -1234,6 +1234,11 @@ function emptyLineState(): SampledLineState {
   return EMPTY_LINE_STATE;
 }
 
+/** Reuse a sampled state only when it is writable; the shared empty state is frozen. */
+function reusableLineState(state: SampledLineState | undefined): SampledLineState | undefined {
+  return state === EMPTY_LINE_STATE ? undefined : state;
+}
+
 /** Compose one line's local state under its parent's world transform. */
 function composeParentState(
   parent: SampledLineState,
@@ -2231,13 +2236,17 @@ export class SceneRuntime {
         : Array.from({ length: this.lines.length }, (unused, index) => index);
       for (const index of indexes) {
         const runtime = this.lines[index];
-        if (runtime?.staticState && previous?.[index]) {
+        if (runtime?.staticState && previous?.[index] && previous[index] !== EMPTY_LINE_STATE) {
           this.lastSampleStats.staticLineCacheHits += 1;
           target[index] = previous[index];
         } else if (runtime) {
           this.lastSampleStats.sampledLineCount += 1;
           this.lastSampleStats.continuousLineCount += 1;
-          target[index] = runtime.state(seconds, target[index], includeFloorForEmptyLines);
+          target[index] = runtime.state(
+            seconds,
+            reusableLineState(target[index]),
+            includeFloorForEmptyLines,
+          );
         } else {
           target[index] = emptyLineState();
         }
@@ -2262,7 +2271,7 @@ export class SceneRuntime {
         // A static local line under a static parent has a stable world state too.
         // Reuse the complete sampled object instead of resolving its local tracks and
         // entering the parent composition path on every playback frame.
-        if (this.worldStateStatic[index] === 1 && previous?.[index]) {
+        if (this.worldStateStatic[index] === 1 && previous?.[index] && previous[index] !== EMPTY_LINE_STATE) {
           this.lastSampleStats.staticLineCacheHits += 1;
           target[index] = previous[index];
           continue;

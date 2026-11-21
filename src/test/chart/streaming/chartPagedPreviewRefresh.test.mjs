@@ -88,6 +88,26 @@ test("a full scene compiles in bounded slices before it is published", () => {
   assert.deepEqual(scene.noteOrder, scene.order);
 });
 
+test("a sampled empty slot can be reused after its line materializes", async () => {
+  const chart = pagedChart();
+  const document = documentFromText(serializeChart(chart), { maxCachedLines: 2 });
+  const tempo = new TempoMap(chart.BPMList);
+  const placeholderScene = new SceneRuntime();
+  placeholderScene.compile(document.chart, tempo);
+  const target = [];
+  placeholderScene.sampleInto(0, target);
+  assert.equal(target.length, 12);
+  assert.ok(target[0], "an unloaded line still has a read-only placeholder state");
+
+  await document.materializeAll();
+  const preparedScene = new SceneRuntime();
+  preparedScene.compile(document.chart, tempo);
+  assert.doesNotThrow(
+    () => preparedScene.sampleInto(0, target),
+    "the frozen placeholder state is never reused as a writable sample target",
+  );
+});
+
 test("paged note insertion refreshes the compiled scene without a new chart", async () => {
   const { session, tempo } = await pagedSession();
   const scene = new SceneRuntime();
