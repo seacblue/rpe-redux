@@ -10,7 +10,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,10 +58,12 @@ type commitSession struct {
 	closed bool
 }
 
-// commitSessionManager owns the process-local upload sessions.
+// commitSessionManager owns the process-local upload sessions. staging is the
+// directory that holds one temp folder per in-flight upload.
 type commitSessionManager struct {
 	mu       sync.Mutex
 	sessions map[string]*commitSession
+	staging  string
 }
 
 // newCommitSessionManager builds an empty manager.
@@ -76,26 +80,80 @@ func newCommitSessionID() (string, error) {
 	return hex.EncodeToString(value[:]), nil
 }
 
-// begin creates one temp file and registers a session for it.
+// stagingDirName is the folder beside the library that holds in-flight uploads.
+const stagingDirName = "commit-staging"
+
+// commitStagingRoot returns the directory that keeps in-flight uploads beside
+// the library database, or an empty string when the database path is unknown.
+func commitStagingRoot(dbPath string) string {
+	if dbPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(dbPath), stagingDirName)
+}
+
+// setStagingRoot sets the directory that holds in-flight upload folders.
+//
+// The library directory is preferred over the system temp directory because a
+// packaged application can run under an account that cannot create entries in
+// `%TEMP%`; a commit would then fail before a single byte of the chart arrived.
+func (m *commitSessionManager) setStagingRoot(dir string) {
+	m.mu.Lock()
+	m.staging = dir
+	m.mu.Unlock()
+}
+
+// stagingRoot returns the directory the next upload should stage under.
+func (m *commitSessionManager) stagingRoot() string {
+	m.mu.Lock()
+	dir := m.staging
+	m.mu.Unlock()
+	return dir
+}
+
+// begin creates one temp folder and registers a session for it.
+//
+// The library directory is tried first, then the system temp directory. The
+// error names the directory that was rejected so a permission problem is
+// diagnosable from the log instead of reading as a bare 500.
 func (m *commitSessionManager) begin(projectID string, request beginCommitRequest) (*commitSession, error) {
 	m.sweep(time.Now().Add(-commitSessionTTL))
 	id, err := newCommitSessionID()
 	if err != nil {
 		return nil, err
 	}
-	dir, err := os.MkdirTemp("", "rpe-redux-commit-")
-	if err != nil {
-		return nil, err
+	var (
+		dir     string
+		attempt error
+	)
+	for _, root := range m.stagingCandidates() {
+		if root != "" {
+			if err := os.MkdirAll(root, 0o700); err != nil {
+				attempt = fmt.Errorf("staging root %s: %w", root, err)
+				continue
+			}
+		}
+		created, err := os.MkdirTemp(root, "rpe-redux-commit-")
+		if err != nil {
+			attempt = fmt.Errorf("staging root %s: %w", root, err)
+			continue
+		}
+		dir = created
+		attempt = nil
+		break
+	}
+	if dir == "" {
+		return nil, fmt.Errorf("no writable commit staging directory: %w", attempt)
 	}
 	path := filepath.Join(dir, "chart.json")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		_ = os.RemoveAll(dir)
-		return nil, err
+		return nil, fmt.Errorf("create session file in %s: %w", dir, err)
 	}
 	if err := file.Close(); err != nil {
 		_ = os.RemoveAll(dir)
-		return nil, err
+		return nil, fmt.Errorf("close session file in %s: %w", dir, err)
 	}
 	session := &commitSession{
 		id:        id,
@@ -109,6 +167,16 @@ func (m *commitSessionManager) begin(projectID string, request beginCommitReques
 	m.sessions[id] = session
 	m.mu.Unlock()
 	return session, nil
+}
+
+// stagingCandidates lists the directories an upload may stage under, most
+// specific first. An empty element selects the system temp directory.
+func (m *commitSessionManager) stagingCandidates() []string {
+	root := m.stagingRoot()
+	if root == "" {
+		return []string{""}
+	}
+	return []string{root, ""}
 }
 
 // lookup returns a session for one project without consuming it.
@@ -179,6 +247,7 @@ func (a *API) handleBeginCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	session, err := a.commitSessions.begin(projectID, request)
 	if err != nil {
+		log.Printf("commit session unavailable for %s: %v", projectID, err)
 		writeError(w, http.StatusInternalServerError, "session_unavailable", "the commit session could not be created")
 		return
 	}

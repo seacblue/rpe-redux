@@ -121,6 +121,10 @@ func newAPI(
 		commitSessions:    newCommitSessionManager(),
 		revisionSnapshots: newRevisionSnapshotCache(),
 	}
+	// Streamed commits stage the incoming chart beside the library so an upload
+	// never depends on the process account being able to write to the system
+	// temp directory.
+	a.commitSessions.setStagingRoot(commitStagingRoot(data.Path))
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
