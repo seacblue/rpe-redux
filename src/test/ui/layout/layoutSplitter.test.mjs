@@ -108,15 +108,15 @@ test("a display scale change reaches the layout without a window resize", () => 
   );
 });
 
-test("the web host and the window size feed the published factor", () => {
+test("the host and the window size feed the published factor", () => {
   const scale = read("frontend/app/layout/layoutScale.ts");
   const hook = read("frontend/app/layout/useLayoutProportions.ts");
-  // The web build is a quarter larger, and the factor is fixed by the host.
-  assert.match(scale, /export const WEB_LAYOUT_SCALE = 1\.25;/u);
-  assert.match(scale, /export function hostLayoutScale\(desktop: boolean\): number \{/u);
-  assert.match(scale, /return desktop \? 1 : WEB_LAYOUT_SCALE;/u);
+  // Both hosts paint at one fixed factor, so neither depends on where it runs.
+  assert.match(scale, /export const LAYOUT_HOST_SCALE = 1\.25;/u);
+  assert.match(scale, /export function hostLayoutScale\(\): number \{/u);
+  assert.match(scale, /return LAYOUT_HOST_SCALE;/u);
   // Both factors reach the model and the stylesheet fallback.
-  assert.match(hook, /hostScale: hostLayoutScale\(isDesktop\(\)\),/u);
+  assert.match(hook, /hostScale: hostLayoutScale\(\),/u);
   assert.match(hook, /viewportScale: viewportLayoutScale\(width, height\),/u);
   assert.match(
     hook,

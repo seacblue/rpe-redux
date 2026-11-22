@@ -1,18 +1,19 @@
-/** The web host is a quarter larger, and the window factor is proportional. */
+/** Every host paints the authored chrome at one factor, and the window factor is proportional. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  LAYOUT_HOST_SCALE,
   LAYOUT_REFERENCE_HEIGHT,
   LAYOUT_REFERENCE_WIDTH,
-  WEB_LAYOUT_SCALE,
   hostLayoutScale,
   viewportLayoutScale,
 } from "../../../frontend/app/layout/layoutScale.ts";
 
-test("the web build starts a quarter larger than the desktop app", () => {
-  assert.equal(WEB_LAYOUT_SCALE, 1.25);
-  assert.equal(hostLayoutScale(true), 1);
-  assert.equal(hostLayoutScale(false), 1.25);
+test("both hosts paint the authored chrome a quarter larger", () => {
+  assert.equal(LAYOUT_HOST_SCALE, 1.25);
+  // The desktop app and the web page share one factor, so a profile paints the
+  // same size in either host.
+  assert.equal(hostLayoutScale(), 1.25);
 });
 
 test("the window factor is directly proportional and has no band", () => {

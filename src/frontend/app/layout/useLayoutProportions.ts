@@ -13,7 +13,6 @@
  */
 import { useCallback, useLayoutEffect, useSyncExternalStore } from "react";
 import { values } from "../../../core/state/values.ts";
-import { isDesktop } from "../../../core/platform/environment.ts";
 import { useSetting } from "../../screens/settings/useSetting.ts";
 import {
   LAYOUT_REGIONS,
@@ -85,9 +84,9 @@ function useDensity(): number {
 /**
  * Read the viewport size and every display factor React can re-render against.
  *
- * The host factor is fixed by where the page runs: the web build starts a quarter
- * larger than the desktop app. The viewport factor is the continuous window or
- * page share, recomputed on every resize.
+ * The host factor is shared by both hosts, so a profile paints the same size in
+ * the app window and in a browser page. The viewport factor is the continuous
+ * window or page share, recomputed on every resize.
  */
 export function useViewportSize(): LayoutViewport {
   const width = useSyncExternalStore(
@@ -104,7 +103,7 @@ export function useViewportSize(): LayoutViewport {
     width,
     height,
     density: useDensity(),
-    hostScale: hostLayoutScale(isDesktop()),
+    hostScale: hostLayoutScale(),
     viewportScale: viewportLayoutScale(width, height),
   };
 }

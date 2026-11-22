@@ -61,12 +61,12 @@ test("a denser display paints every default at its density", () => {
   );
 });
 
-test("the web host and the window size multiply every painted size", () => {
+test("the host and the window size multiply every painted size", () => {
   const web = { ...desktop, hostScale: 1.25 };
   const both = { ...desktop, hostScale: 1.25, viewportScale: 1.2 };
   assert.equal(displayScale(web), 1.25);
   assert.equal(displayScale(both), 1.5);
-  // The web build starts a quarter larger than the desktop at the same window.
+  // Every host paints the authored size a quarter larger at the same window.
   assert.equal(regionPixels(LAYOUT_REGIONS.inspector, DEFAULT_LAYOUT_SCALE, web), 375);
   assert.equal(regionScale(LAYOUT_REGIONS.inspector, DEFAULT_LAYOUT_SCALE, web), 0.9375);
   // A larger window grows the same profile in both hosts.

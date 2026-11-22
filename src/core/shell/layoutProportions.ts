@@ -62,7 +62,7 @@ export interface LayoutViewport {
   height: number;
   /** The display pixel ratio; absent or unreadable reads as 1. */
   density?: number;
-  /** The host factor; the web build paints a quarter larger than the desktop app. */
+  /** The host factor, shared by the desktop app and the web page. */
   hostScale?: number;
   /** The continuous window or page factor shared by every region. */
   viewportScale?: number;
@@ -158,7 +158,7 @@ function factor(value: number | undefined): number {
  * The product of every factor an authored pixel is painted at.
  *
  * Display density keeps the authored visual size across panels, the host factor
- * makes the web build a quarter larger than the desktop app, and the viewport
+ * paints every host a quarter larger than the authored baseline, and the viewport
  * factor follows the window or page size continuously. All three multiply the
  * stored scale, so one drag mapping and one content factor cover the display.
  */
