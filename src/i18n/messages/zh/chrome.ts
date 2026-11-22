@@ -48,6 +48,8 @@ export default {
   "chrome.toolbar.lineSelectionCollapse": "收起 {name}",
   "chrome.toolbar.lineSelectionGroupSelectAll": "选中「{name}」中的全部判定线",
   "chrome.toolbar.lineSelectionGroupClearAll": "取消选中「{name}」中的全部判定线",
+  "chrome.toolbar.scrollStart": "向左滚动工具栏",
+  "chrome.toolbar.scrollEnd": "向右滚动工具栏",
   "chrome.global.timing.emptyTitle": "还没有时值点",
   "chrome.global.timing.empty": "在播放头处添加一个 BPM 时值点，开始为谱面定速。",
   "chrome.developer.devtools": "切换 DevTools",

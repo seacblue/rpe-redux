@@ -119,7 +119,11 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
     if (
       !visibility.atHome() &&
       !visibility.documentHidden() &&
-      (clock.playing() || state.dirty || drawing.active() || drawing.interacting())
+      (clock.playing() ||
+        state.dirty ||
+        drawing.active() ||
+        drawing.interacting() ||
+        options.drawing.realtimePreview.hasActiveHitEffects())
     ) {
       painted = true;
       state.frameSampleCount++;
@@ -159,7 +163,10 @@ export function createEditorFrameRunner(options: FrameRunnerOptions): (timestamp
     }
     const scheduleStarted = performance.now();
     options.schedule(
-      !visibility.atHome() && (clock.playing() || drawing.interacting()),
+      !visibility.atHome() &&
+        (clock.playing() ||
+          drawing.interacting() ||
+          options.drawing.realtimePreview.hasActiveHitEffects()),
       visibility.documentHidden(),
       clock.playing(),
     );

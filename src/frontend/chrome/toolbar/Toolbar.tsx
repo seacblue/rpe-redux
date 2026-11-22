@@ -14,7 +14,7 @@ import { useTranslation } from "../../../i18n/react.ts";
 import { useLayoutRegion, useViewportSize } from "../../app/layout/useLayoutProportions.ts";
 import { TransportHost } from "../transport/TransportHost.tsx";
 import { DefaultToolbarRows } from "./DefaultToolbarRows.tsx";
-import { ToolbarScrollbar } from "./ToolbarScrollbar.tsx";
+import { ToolbarScrollControls } from "./ToolbarScrollControls.tsx";
 import type { ToolbarOverflowState } from "./toolbarOverflow.ts";
 
 /** The surface's own toolbar rows; omitted falls back to the shared action rows. */
@@ -28,8 +28,8 @@ type ToolbarRows = ComponentType<{
  *
  * Rows come from the registry, so a feature or plugin adds to them by
  * registering rather than by editing this file. Commands that live in a menu
- * draw no toolbar node. A toolbar that overflows scrolls as one surface under a
- * single horizontal bar; there are no arrow buttons to step through it.
+ * draw no toolbar node. A toolbar that overflows scrolls as one surface through
+ * the left/right chevrons at its edges.
  */
 export function Toolbar({
   hidden = false,
@@ -48,8 +48,8 @@ export function Toolbar({
   const entries = useSyncExternalStore(toolbar.subscribe, toolbar.getSnapshot);
   useSyncExternalStore(values.byId.subscribeAll, values.getVersion);
   // A horizontal run has no vertical scroll to give a normal wheel to, so the
-  // toolbar maps the wheel onto its own axis. Both rows and the shared bar move
-  // together, because the rows are the scroll region and the bar follows them.
+  // toolbar maps the wheel onto its own axis. Both rows move together because
+  // they are one synchronized scroll surface.
   useEffect(() => {
     const node = toolbarRef.current;
     if (!node) {
@@ -107,7 +107,7 @@ export function Toolbar({
         onChange={progressSeam.setPixels}
         invert
       />
-      <ToolbarScrollbar toolbarRef={toolbarRef} onStateChange={setToolbarOverflow} />
+      <ToolbarScrollControls toolbarRef={toolbarRef} onStateChange={setToolbarOverflow} />
       <TransportHost />
     </div>
   );

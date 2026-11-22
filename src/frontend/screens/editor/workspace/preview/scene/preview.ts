@@ -55,8 +55,8 @@ import type {
 } from "../../../../../../core/edit/hitTest/api.ts";
 import { PreviewGeometryCache, type PreviewGeometryKey } from "./previewGeometry.ts";
 import {
+  canReusePreviewFrame,
   sameLineSelection,
-  samePreviewFrameRequest,
   type PreviewFrameRequest,
 } from "./previewFrameRequest.ts";
 import { CompletionTimesCache } from "./completionTimes.ts";
@@ -163,6 +163,8 @@ export interface PreviewDrawOptions {
    * edits, such as a paged document facade. A change forces a scene recompile.
    */
   readonly documentRevision?: number;
+  /** Wall-clock seconds used by hit effects; chart time remains pauseable. */
+  readonly effectTime?: number;
 }
 
 /**
@@ -246,6 +248,12 @@ export class Preview {
   /** Free camera is the only region on screen, so the underlay must be opaque. */
   declare forceOpaque: boolean;
   declare showHitEffects: boolean;
+  declare showHitParticles: boolean;
+  /** Generation for a real seek; active effects survive across generations. */
+  hitEffectEpoch = 0;
+  /** Reset token used when a document is replaced. */
+  hitEffectReset = 0;
+  private hitEffectsActive = false;
   /** Whether an authoring timeline is currently painted over this preview. */
   authoringRegionVisible = false;
   declare noteHitAreas: PreviewHitArea[];
@@ -390,6 +398,8 @@ export class Preview {
     this.pendingFrame = null;
     this.lastVisibleNoteCount = 0;
     this.hitStateCache.clear();
+    this.hitEffectReset += 1;
+    this.hitEffectsActive = false;
     this.cameraTracker.reset();
     this.invalidateFrame();
     this.geometryCache.clear();
@@ -458,6 +468,16 @@ export class Preview {
   /** Changes whenever an external resource or document invalidates the preview. */
   get invalidationRevision(): number {
     return this.invalidationVersion;
+  }
+
+  /** Whether a previously spawned hit effect still needs animation frames. */
+  hasActiveHitEffects(): boolean {
+    return this.visible && this.hitEffectsActive;
+  }
+
+  /** Starts a new future-hit generation without interrupting active effects. */
+  beginHitEffectSeek(): void {
+    this.hitEffectEpoch += 1;
   }
 
   /** Upload skin textures and pre-tint hit frames while the editor is idle. */
@@ -748,7 +768,7 @@ export class Preview {
     this.noteOpacity = 180 / 255;
     this.visible = false;
     this.noteSize = PHIRA_NOTE_SCALE_DEFAULT;
-    this.lineScale = 1.4;
+    this.lineScale = 1;
     this.defaultLineColor = [237, 236, 176];
     this.defaultParticleColor = [237, 236, 176];
     this.selectedLineColor = [];
@@ -763,6 +783,7 @@ export class Preview {
     this.opacity = 1;
     this.forceOpaque = false;
     this.showHitEffects = true;
+    this.showHitParticles = true;
     this.noteHitAreas = [];
     this.selectedNotes = new Map();
     this.soloLine = null;
@@ -828,13 +849,14 @@ export class Preview {
       state.lineColorChanged ||
       state.selectionChanged ||
       !this.cameraTracker.matches(this.camera) ||
-      !samePreviewFrameRequest(
+      !canReusePreviewFrame(
         this.lastDrawRequest,
         chart,
         tempo,
         seconds,
         selectedLine,
         selectedNotes,
+        this.hitEffectsActive,
       )
     ) {
       return false;
@@ -925,8 +947,13 @@ export class Preview {
       });
     if (!notesSame && !visualNoteArraysOnly) {
       this.simultaneous = this.simultaneousCache.update(chart, tempo);
-      this.completionTimes = this.completionTimesCache.update(this.scene.lines, noteSources, tempo);
     }
+    // A scene refresh can materialize another line without changing the chart's
+    // note-array identities. The completion cache must still observe every
+    // refresh so Combo includes runtimes that appeared after an earlier slice;
+    // CompletionTimesCache keeps unchanged lines lazy and does not walk them
+    // again.
+    this.completionTimes = this.completionTimesCache.update(this.scene.lines, noteSources, tempo);
     if (!orderSame) {
       this.passes = linePasses(sourceLines, this.scene.order);
     }
@@ -1219,9 +1246,7 @@ export class Preview {
     }
     const notesMs = performance.now() - notesStarted;
     const effectsStarted = performance.now();
-    if (this.showHitEffects) {
-      drawHitEffects(this, frame);
-    }
+    this.hitEffectsActive = this.showHitEffects ? drawHitEffects(this, frame) : false;
     const effectsMs = performance.now() - effectsStarted;
     const compositeStarted = performance.now();
     const shaderInputEligible =
@@ -1546,6 +1571,7 @@ export class Preview {
       scale,
       scaleX,
       scaleY,
+      effectTime: options.effectTime ?? performance.now() / 1000,
       viewport,
       shaderEffects,
       shaderSourceRevision: this.shaderSourceRevision,

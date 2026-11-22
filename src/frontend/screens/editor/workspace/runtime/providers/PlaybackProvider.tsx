@@ -17,6 +17,7 @@ import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.
 import type { PreviewRuntime } from "./PreviewProvider.tsx";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
 import type { TimelineRuntime } from "./TimelineProvider.tsx";
+import { updatePlaybackViewportOrigin } from "../frame/playbackOrigin.ts";
 
 /** Transport, playback clocks, metrics, and draft autosave for one editor mount. */
 export interface PlaybackRuntime {
@@ -153,13 +154,21 @@ export function createPlaybackRuntime(options: {
   const publishSeek = (reason: PlaybackSeekReason = "seek") => {
     if (reason === "seek") {
       picture.release();
+      realtimePreview.beginHitEffectSeek();
+      // A real seek starts a new hit-effect window. Pausing must keep the
+      // existing window so effects already on screen can finish on wall time.
+      realtimePreview.effectsSince = chartSeconds();
     }
-    options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
-    options.timeline.viewport.setOrigin(options.tempo().beat(drawnChartSeconds()), "seek");
+    updatePlaybackViewportOrigin(
+      options.timeline.viewport,
+      options.tempo().beat(drawnChartSeconds()),
+      audio.playing,
+      playback.pending,
+      { publishWhilePaused: true },
+    );
     // Seeking changes the time-dependent grid even when the viewport origin
     // rounds to the same beat as the previous frame.
     options.timeline.changed();
-    realtimePreview.effectsSince = chartSeconds();
     options.invalidate();
   };
   const playback = new EditorPlayback(audio, hitSounds, publishSeek, options.onPlaybackStateChange);

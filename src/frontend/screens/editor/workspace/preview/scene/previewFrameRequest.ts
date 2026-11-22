@@ -70,3 +70,19 @@ export function samePreviewFrameRequest(
     samePreviewSelection(previous.selectedNotes, selectedNotes)
   );
 }
+
+/** Whether a preview frame may be reused without advancing a live effect. */
+export function canReusePreviewFrame(
+  previous: PreviewFrameRequest | null,
+  chart: Chart,
+  tempo: TempoSource,
+  seconds: number,
+  selectedLine: number,
+  selectedNotes: PreviewNoteSelection,
+  hitEffectsActive: boolean,
+): boolean {
+  return (
+    !hitEffectsActive &&
+    samePreviewFrameRequest(previous, chart, tempo, seconds, selectedLine, selectedNotes)
+  );
+}

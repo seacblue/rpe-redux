@@ -121,7 +121,7 @@ test("tolerates floating-point roundoff without losing a real trailing frame", (
   assert.equal(after.frameCount, 15);
 });
 
-test("formats and parses song times in both range modes", () => {
+test("formats and parses recording range song times", () => {
   assert.equal(formatRecordingTime(0), "0:00.000");
   assert.equal(formatRecordingTime(83.456), "1:23.456");
   assert.equal(formatRecordingTime(3723.5), "1:02:03.500");

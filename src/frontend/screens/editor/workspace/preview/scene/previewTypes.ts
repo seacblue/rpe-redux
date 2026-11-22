@@ -68,6 +68,7 @@ export interface PreviewSkin extends NoteBatchSkin {
   holdCompact?: boolean;
   hitFxDuration?: number;
   hitFxScale?: number;
+  /** Rotate the skin hit-effect sprite with the note side and line angle. */
   hitFxRotate?: boolean;
   hitFxTinted?: boolean;
   hideParticles?: boolean;
@@ -113,19 +114,19 @@ export interface PreviewSkin extends NoteBatchSkin {
     highlight: boolean,
   ): {
     source: HTMLImageElement;
-    useful: { x: number; y: number; width: number; height: number };
+    bounds: { x: number; y: number; width: number; height: number };
   } | null;
   holdBodyTexture(highlight: boolean): {
     source: HTMLImageElement;
-    useful: { x: number; y: number; width: number; height: number };
+    bounds: { x: number; y: number; width: number; height: number };
   } | null;
   holdHeadTexture(highlight: boolean): {
     source: HTMLImageElement;
-    useful: { x: number; y: number; width: number; height: number };
+    bounds: { x: number; y: number; width: number; height: number };
   } | null;
   holdEndTexture(highlight: boolean): {
     source: HTMLImageElement;
-    useful: { x: number; y: number; width: number; height: number };
+    bounds: { x: number; y: number; width: number; height: number };
   } | null;
 }
 
@@ -199,6 +200,8 @@ export interface PreviewFrame {
   /** Independent axis mapping from the 1350×900 logical box to the frame. */
   scaleX: number;
   scaleY: number;
+  /** Monotonic wall-clock time used only by effects that outlive a pause. */
+  effectTime: number;
   viewport: PreviewViewport;
   /** Shader effects sampled once for this frame and shared by composition passes. */
   shaderEffects: readonly PreviewShaderEffect[];

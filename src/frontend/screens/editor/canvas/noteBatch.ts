@@ -559,7 +559,7 @@ export class NoteBatch {
     if (!descriptor) {
       return false;
     }
-    const height = (width * descriptor.useful.height) / descriptor.useful.width;
+    const height = (width * descriptor.bounds.height) / descriptor.bounds.width;
     return this.add(
       descriptor,
       centerX,
@@ -601,7 +601,7 @@ export class NoteBatch {
     if (!descriptor) {
       return false;
     }
-    const height = (width * descriptor.useful.height) / descriptor.useful.width;
+    const height = (width * descriptor.bounds.height) / descriptor.bounds.width;
     return this.add(
       descriptor,
       centerX,
@@ -696,7 +696,7 @@ export class NoteBatch {
       ? holdRenderRotation(headX, headY, tailX, tailY, fallbackRotation)
       : fallbackRotation;
     if (showHead && textures.headRatio === undefined) {
-      textures.headRatio = head ? head.useful.height / head.useful.width : 0;
+      textures.headRatio = head ? head.bounds.height / head.bounds.width : 0;
     }
     const headLength = head ? width * (textures.headRatio ?? 0) * capScale : 0;
     const tailLength = width * textures.endRatio * capScale;
@@ -722,7 +722,7 @@ export class NoteBatch {
     if (drawBody && body) {
       const repeatBody =
         repeat && body.repeat !== true ? (textures.repeatBody ??= { ...body, repeat: true }) : body;
-      const tileHeight = width * (body.useful.height / body.useful.width);
+      const tileHeight = width * (body.bounds.height / body.bounds.width);
       const bodyTiles = repeat || body.repeat === true;
       const vRepeat = bodyTiles && tileHeight > 0 ? layout.bodyLength / tileHeight : 1;
       bodyAdded =
@@ -1050,7 +1050,7 @@ export class NoteBatch {
       repeatBody: undefined,
       end,
       head: undefined,
-      endRatio: end ? end.useful.height / end.useful.width : 0,
+      endRatio: end ? end.bounds.height / end.bounds.width : 0,
       headRatio: undefined,
     };
     this.holdDescriptorSets[slot] = result;
@@ -1172,9 +1172,9 @@ export class NoteBatch {
       next.set(group.instances);
       group.instances = next;
     }
-    const usefulWidth = descriptor.useful.width;
-    const usefulHeight = descriptor.useful.height;
-    if (usefulWidth <= 0 || usefulHeight <= 0) {
+    const boundsWidth = descriptor.bounds.width;
+    const boundsHeight = descriptor.bounds.height;
+    if (boundsWidth <= 0 || boundsHeight <= 0) {
       return false;
     }
     const channels = color?.color;
@@ -1188,12 +1188,12 @@ export class NoteBatch {
         : null;
     // Keep this hot path allocation-free: the aligned quad is written directly
     // into the instance buffer for every note.
-    const scaleX = width / usefulWidth;
-    const scaleY = height / usefulHeight;
+    const scaleX = width / boundsWidth;
+    const scaleY = height / boundsHeight;
     const quadWidth = sourceWidth * scaleX;
     const quadHeight = sourceHeight * scaleY;
-    const centerOffsetY = -height / 2 - descriptor.useful.y * scaleY + quadHeight / 2;
-    const centerOffsetX = -width / 2 - descriptor.useful.x * scaleX + quadWidth / 2;
+    const centerOffsetY = -height / 2 - descriptor.bounds.y * scaleY + quadHeight / 2;
+    const centerOffsetX = -width / 2 - descriptor.bounds.x * scaleX + quadWidth / 2;
     const quadOffsetY = flipV && centerOffsetY !== 0 ? -centerOffsetY : centerOffsetY;
     const u0 = 0;
     const v0 = flipV ? vRepeat : 0;

@@ -10,10 +10,10 @@ import type { JudgeLine, JudgeLineNote } from "../../../../core/global/chart/cha
 export interface NoteTextureMetrics {
   readonly textureWidth: number;
   readonly textureHeight: number;
-  readonly usefulX: number;
-  readonly usefulY: number;
-  readonly usefulWidth: number;
-  readonly usefulHeight: number;
+  readonly boundsX: number;
+  readonly boundsY: number;
+  readonly boundsWidth: number;
+  readonly boundsHeight: number;
 }
 
 export interface AlignedTextureQuad {
@@ -36,7 +36,7 @@ export interface AlignedTextureOptions {
   readonly flipV?: boolean;
 }
 
-export interface HoldUsefulInterval {
+export interface HoldPaintedInterval {
   readonly head: { x: number; y: number };
   readonly tail: { x: number; y: number };
 }
@@ -48,14 +48,14 @@ export interface HoldUsefulInterval {
  * span extends past the head by the head cap and past the tail by the tail
  * cap. The anchors remain the interpolation endpoints for picking.
  */
-export function holdUsefulInterval(area: {
+export function holdPaintedInterval(area: {
   readonly head: { x: number; y: number };
   readonly tail: { x: number; y: number };
-}): HoldUsefulInterval {
+}): HoldPaintedInterval {
   return { head: { ...area.head }, tail: { ...area.tail } };
 }
 
-/** Resolve the complete texture quad aligned by its useful area. */
+/** Resolve the complete texture quad aligned by its declared bounds. */
 export function alignedTextureQuad(
   metrics: NoteTextureMetrics,
   logicalWidth: number,
@@ -67,20 +67,20 @@ export function alignedTextureQuad(
     logicalHeight <= 0 ||
     metrics.textureWidth <= 0 ||
     metrics.textureHeight <= 0 ||
-    metrics.usefulWidth <= 0 ||
-    metrics.usefulHeight <= 0
+    metrics.boundsWidth <= 0 ||
+    metrics.boundsHeight <= 0
   ) {
     return null;
   }
   const flipV = options.flipV === true;
-  const scaleX = logicalWidth / metrics.usefulWidth;
-  const scaleY = logicalHeight / metrics.usefulHeight;
+  const scaleX = logicalWidth / metrics.boundsWidth;
+  const scaleY = logicalHeight / metrics.boundsHeight;
   const width = metrics.textureWidth * scaleX;
   const height = metrics.textureHeight * scaleY;
-  const centerOffsetY = -logicalHeight / 2 - metrics.usefulY * scaleY + height / 2;
+  const centerOffsetY = -logicalHeight / 2 - metrics.boundsY * scaleY + height / 2;
   return {
-    centerOffsetX: -logicalWidth / 2 - metrics.usefulX * scaleX + width / 2,
-    // Mirroring V moves the useful rows to the other half of the full texture,
+    centerOffsetX: -logicalWidth / 2 - metrics.boundsX * scaleX + width / 2,
+    // Mirroring V moves the bounded rows to the other half of the full texture,
     // so the shift that keeps those rows centred on the logical box mirrors too.
     centerOffsetY: flipV ? (centerOffsetY === 0 ? 0 : -centerOffsetY) : centerOffsetY,
     width,

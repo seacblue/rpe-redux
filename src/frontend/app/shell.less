@@ -93,6 +93,9 @@
 // exactly where the panel ends.
 .shell-body > .layout-splitter--toolbar {
   top: calc(var(--layout-toolbar-height) - 4.5px);
+  // The workbench owns the trailing rail's vertical seam. Stop the toolbar
+  // seam before that rail, so the two hit areas do not stack at the corner.
+  inset-inline: 0 calc(var(--chrome-sidebar-track) + 9px);
 }
 
 .shell-body > .layout-splitter--statusbar {

@@ -39,6 +39,8 @@ export interface RenderRequest {
   readonly previewContentRevision?: number;
   readonly previewSession: unknown;
   readonly previewSelection: unknown;
+  /** A paused preview still has hit effects that must finish animating. */
+  readonly previewAnimationActive?: boolean;
   /**
    * Whether an authoring region shares the stage with the preview.
    *
@@ -144,6 +146,7 @@ export class EditorRenderScheduler {
         request.previewContentRevision === this.committed.previewContentRevision &&
         request.previewSession === this.committed.previewSession &&
         request.previewSelection === this.committed.previewSelection &&
+        request.previewAnimationActive !== true &&
         request.authoringRegionVisible === this.committed.authoringRegionVisible &&
         request.seconds === this.committed.seconds;
       if (request.previewVisible && !timelineOnlyInvalidation) {
@@ -270,7 +273,8 @@ export class EditorRenderScheduler {
         previewInvalidated ||
         request.previewSession !== this.committed.previewSession ||
         request.previewSelection !== this.committed.previewSelection ||
-        request.authoringRegionVisible !== this.committed.authoringRegionVisible);
+        request.authoringRegionVisible !== this.committed.authoringRegionVisible ||
+        request.previewAnimationActive === true);
     // The playhead canvases are independent layers. They only need a repaint
     // when the frame that owns them changed or the playhead actually moved.
     // Playback alone is not a reason: a stalled clock or a repeated timestamp

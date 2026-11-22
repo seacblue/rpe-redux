@@ -96,7 +96,12 @@ export interface FrameDrawingOptions {
   audioAnalysis: Pick<AudioAnalysis, "draw">;
   realtimePreview: Pick<
     Preview,
-    "duration" | "visible" | "draw" | "invalidationRevision" | "authoringRegionVisible"
+    | "duration"
+    | "visible"
+    | "draw"
+    | "invalidationRevision"
+    | "authoringRegionVisible"
+    | "hasActiveHitEffects"
   > &
     Parameters<TrajectoryPanel["tick"]>[3];
   offsetSeconds(): number;
@@ -190,6 +195,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       const previewSessionChanged = previewSession !== previousPreviewSession;
       const previewSelectionChanged = previewSelection !== previousPreviewSelection;
       const previewSecondsChanged = viewSeconds !== previousPreviewSeconds;
+      const previewAnimationActive = runtime.realtimePreview.hasActiveHitEffects();
       previousPreviewChart = viewChart;
       previousPreviewSession = previewSession;
       previousPreviewSelection = previewSelection;
@@ -226,6 +232,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           beatsPerPixel: runtime.timeline.viewport.beatsPerPixel(),
           previewSession,
           previewSelection,
+          previewAnimationActive,
           authoringRegionVisible: runtime.authoringRegionVisible(),
         },
         {
@@ -295,6 +302,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                   // edits, so the preview needs the content revision to repaint.
                   documentRevision:
                     viewChart === viewSession.chart ? viewSession.contentRevision : undefined,
+                  effectTime: request.now / 1000,
                 },
               );
               runtime.realtimePreview.visible = visible;

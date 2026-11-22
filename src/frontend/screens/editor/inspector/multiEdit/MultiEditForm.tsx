@@ -265,12 +265,12 @@ export function MultiEditForm({
       : EVENT_BATCH_FIELDS.filter(([key]) =>
           noiseActivation ? ["t1", "t2"].includes(key) : key !== "linkgroup" || linkgroupEnabled,
         )
-  ).map(([key, label]) => [key, shortLabel(label)] as const);
+  ).map(([key, label]) => [key, shortLabel(t(label))] as const);
   const eventTypeOptions: readonly Option[] = MULTI_EDIT_EVENT_TYPES.map((type) => [
     type,
     eventTypeLabel(type),
   ]);
-  const operations = BATCH_OPERATIONS.map(([key, label]) => [key, shortLabel(label)] as const);
+  const operations = BATCH_OPERATIONS.map(([key, label]) => [key, shortLabel(t(label))] as const);
   const beatBounds = kind === "events" && (values.field === "t1" || values.field === "t2");
   const historyIndex = Number(historySelection);
   const selectedHistoryIndex =

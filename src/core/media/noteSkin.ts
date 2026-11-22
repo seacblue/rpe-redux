@@ -13,17 +13,16 @@ import type { PackageName } from "../utils/packageName.ts";
 import { parsePhiraRespack } from "./phiraRespack.ts";
 import type { PhiraInfo } from "./phiraRespack.ts";
 
-/** Logical bounds exclude transparent padding/glow, as in PCE AlignedNoteTexture. */
-export interface UsefulRect {
+/** Texture bounds used by the renderer after transparent padding is removed. */
+export interface TextureBounds {
   x: number;
   y: number;
   width: number;
   height: number;
 }
-/** One texture slot and its optional logical bounds. */
+/** One texture slot in the Phira package. */
 export interface NoteTexture {
   file: string;
-  useful?: UsefulRect;
 }
 /** The validated shape of a note skin's manifest. */
 export interface NoteSkinManifest {
@@ -129,7 +128,7 @@ export function phiraHoldAtlasSlices(
 
 /** Draw the full PNG around its logical centre without stretching aspect ratio. */
 export function alignedTexture(
-  rect: UsefulRect,
+  rect: TextureBounds,
   textureWidth: number,
   textureHeight: number,
   x: number,
@@ -145,9 +144,9 @@ export function alignedTexture(
   };
 }
 
-/** Draws the full image so its declared useful rectangle aligns to a logical box. */
+/** Draws the full image so its declared bounds align to a logical box. */
 export function alignedTextureBox(
-  rect: UsefulRect,
+  rect: TextureBounds,
   textureWidth: number,
   textureHeight: number,
   centerX: number,

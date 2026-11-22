@@ -21,7 +21,7 @@ const INSTANCE_STRIDE = 12;
 
 interface SkinTextureDescriptor {
   readonly source: HTMLImageElement;
-  readonly useful: {
+  readonly bounds: {
     readonly x: number;
     readonly y: number;
     readonly width: number;
@@ -245,7 +245,7 @@ export class TimelineEventBatch {
     if (!descriptor) {
       return false;
     }
-    const { source, useful } = descriptor;
+    const { source, bounds } = descriptor;
     if (this.textureSource !== source) {
       this.uploadTexture(source);
     }
@@ -260,10 +260,10 @@ export class TimelineEventBatch {
     this.instances[offset + 1] = rectangle.y;
     this.instances[offset + 2] = rectangle.width;
     this.instances[offset + 3] = rectangle.height;
-    this.instances[offset + 4] = useful.x / width;
-    this.instances[offset + 5] = useful.y / height;
-    this.instances[offset + 6] = (useful.x + useful.width) / width;
-    this.instances[offset + 7] = (useful.y + useful.height) / height;
+    this.instances[offset + 4] = bounds.x / width;
+    this.instances[offset + 5] = bounds.y / height;
+    this.instances[offset + 6] = (bounds.x + bounds.width) / width;
+    this.instances[offset + 7] = (bounds.y + bounds.height) / height;
     this.instances[offset + 8] = lineAlpha;
     const red = tint ? (tint[0] ?? 255) / 255 : 1;
     const green = tint ? (tint[1] ?? 255) / 255 : 1;
