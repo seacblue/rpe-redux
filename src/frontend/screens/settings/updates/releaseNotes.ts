@@ -15,6 +15,9 @@
  *   supported names are the theme tokens below, so notes follow the active light
  *   or dark theme instead of pinning a hex value. GitHub drops the unknown tag,
  *   so the same line reads as plain words on the release page.
+ * - Backticks render inline code and triple-backtick fences render multiline code
+ *   blocks. Code content stays literal, so annotations inside a snippet are not
+ *   interpreted as release-note markup.
  *
  * Unknown or unbalanced tags stay literal text, so ordinary prose can still use
  * angle brackets without a parser error.
@@ -65,6 +68,7 @@ const COLOR_ALIASES: Record<string, ReleaseNoteColor> = {
 /** One inline run of release-note text. */
 export type ReleaseNoteInline =
   | { kind: "text"; text: string }
+  | { kind: "code"; text: string }
   | { kind: "mention"; name: string }
   | { kind: "color"; color: ReleaseNoteColor; content: readonly ReleaseNoteInline[] };
 
@@ -72,6 +76,7 @@ export type ReleaseNoteInline =
 export type ReleaseNoteBlock =
   | { kind: "heading"; content: readonly ReleaseNoteInline[] }
   | { kind: "list"; items: readonly (readonly ReleaseNoteInline[])[] }
+  | { kind: "code"; language: string | null; content: string }
   | { kind: "paragraph"; content: readonly ReleaseNoteInline[] };
 
 /** One published release, as much of it as the changelog needs. */
@@ -165,6 +170,16 @@ function parseSegment(
 
   while (index < source.length) {
     const character = source[index];
+    if (character === "`" && source[index - 1] !== "`" && source[index + 1] !== "`") {
+      const close = source.indexOf("`", index + 1);
+      if (close >= index + 1) {
+        flushPlain(index);
+        nodes.push({ kind: "code", text: source.slice(index + 1, close) });
+        index = close + 1;
+        plainStart = index;
+        continue;
+      }
+    }
     if (character === "<") {
       const close = COLOR_CLOSE.exec(source.slice(index));
       if (close) {
@@ -215,11 +230,12 @@ export function parseReleaseNoteInline(text: string): readonly ReleaseNoteInline
 }
 
 /**
- * Split selected release-note text into headings, bullet lists, and paragraphs.
+ * Split selected release-note text into headings, bullet lists, code blocks, and paragraphs.
  *
  * `**Section**` lines become headings and `- ` lines become list items, which is
- * the shape the changelog file uses inside each language. Everything else stays
- * a paragraph so older free-form notes keep their line breaks as sentences.
+ * the shape the changelog file uses inside each language. Triple-backtick fences
+ * become code blocks; everything else stays a paragraph so older free-form notes
+ * keep their line breaks as sentences.
  */
 export function parseReleaseNoteBlocks(notes: string): readonly ReleaseNoteBlock[] {
   const blocks: ReleaseNoteBlock[] = [];
@@ -246,11 +262,29 @@ export function parseReleaseNoteBlocks(notes: string): readonly ReleaseNoteBlock
     flushItems();
   };
 
-  for (const raw of notes.split(/\r?\n/u)) {
+  const lines = notes.split(/\r?\n/u);
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index] ?? "";
     const line = raw.trim();
     if (!line) {
       flush();
       continue;
+    }
+    const fence = /^```([A-Za-z0-9_+.-]*)$/u.exec(line);
+    if (fence) {
+      const closing = lines.findIndex(
+        (candidate, candidateIndex) => candidateIndex > index && candidate.trim() === "```",
+      );
+      if (closing >= 0) {
+        flush();
+        blocks.push({
+          kind: "code",
+          language: fence[1] || null,
+          content: lines.slice(index + 1, closing).join("\n"),
+        });
+        index = closing;
+        continue;
+      }
     }
     const heading = /^\*\*(.+)\*\*$/u.exec(line);
     if (heading) {
@@ -268,7 +302,9 @@ export function parseReleaseNoteBlocks(notes: string): readonly ReleaseNoteBlock
   }
   flush();
   return blocks.filter((block) =>
-    block.kind === "list" ? block.items.length > 0 : block.content.length > 0,
+    block.kind === "list"
+      ? block.items.length > 0
+      : block.kind === "code" || block.content.length > 0,
   );
 }
 

@@ -41,6 +41,9 @@ function flatten(nodes) {
       if (node.kind === "text") {
         return node.text;
       }
+      if (node.kind === "code") {
+        return node.text;
+      }
       if (node.kind === "mention") {
         return `@${node.name}`;
       }
@@ -111,6 +114,40 @@ test("renders @name credits as mentions", () => {
 
 test("keeps addresses that merely contain @ as plain text", () => {
   assert.deepEqual(parseReleaseNoteInline("foo@bar.com"), [{ kind: "text", text: "foo@bar.com" }]);
+});
+
+test("renders inline code as a literal run", () => {
+  assert.deepEqual(parseReleaseNoteInline("Use `@redux/<red>` here."), [
+    { kind: "text", text: "Use " },
+    { kind: "code", text: "@redux/<red>" },
+    { kind: "text", text: " here." },
+  ]);
+});
+
+test("renders fenced code as a literal multiline block", () => {
+  assert.deepEqual(
+    parseReleaseNoteBlocks(
+      "Before\n\n```ts\nconst value = `@name`;\n<red>literal</red>\n```\n\nAfter",
+    ),
+    [
+      { kind: "paragraph", content: [{ kind: "text", text: "Before" }] },
+      {
+        kind: "code",
+        language: "ts",
+        content: "const value = `@name`;\n<red>literal</red>",
+      },
+      { kind: "paragraph", content: [{ kind: "text", text: "After" }] },
+    ],
+  );
+});
+
+test("keeps an unclosed code fence as ordinary text", () => {
+  assert.deepEqual(parseReleaseNoteBlocks("```ts\nconst value = 1;"), [
+    {
+      kind: "paragraph",
+      content: [{ kind: "text", text: "```ts const value = 1;" }],
+    },
+  ]);
 });
 
 test("parses colour runs with their canonical colour name", () => {

@@ -4,8 +4,9 @@
  * The text is the published release body, already narrowed to the interface
  * language by the caller. Lines shaped like `**Section**` become headings and
  * `- ` lines become list items; anything else renders as a paragraph. Inline
- * spans come from `parseReleaseNoteInline`: plain runs stay text, `@name`
- * becomes a bold underlined credit, and color runs become theme-coloured spans.
+ * spans come from `parseReleaseNoteInline`: plain runs stay text, backticks
+ * become code, `@name` becomes a bold underlined credit, and color runs become
+ * theme-coloured spans. Fenced code blocks render as literal preformatted text.
  */
 import { parseReleaseNoteBlocks, type ReleaseNoteInline } from "./releaseNotes.ts";
 
@@ -23,6 +24,13 @@ function ReleaseNoteSpans({
             <strong key={index} className="redux-release-note-mention">
               @{span.name}
             </strong>
+          );
+        }
+        if (span.kind === "code") {
+          return (
+            <code key={index} className="redux-release-note-inline-code">
+              {span.text}
+            </code>
           );
         }
         if (span.kind === "color") {
@@ -60,6 +68,13 @@ export function ReleaseNotesBody({ notes }: { notes: string }) {
                 </li>
               ))}
             </ul>
+          );
+        }
+        if (block.kind === "code") {
+          return (
+            <pre key={index} className="redux-release-note-code-block">
+              <code>{block.content}</code>
+            </pre>
           );
         }
         return (
