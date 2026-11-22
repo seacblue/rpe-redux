@@ -9,7 +9,10 @@ import {
   isSafeAssetPath,
   manifestAssetNames,
 } from "../../../core/extensions/assets.ts";
-import { validateManifest } from "../../../core/extensions/extensionRuntimeSupport.ts";
+import {
+  validateManifest,
+  materializeManifest,
+} from "../../../core/extensions/extensionRuntimeSupport.ts";
 import { assetDigest, extensionFingerprint } from "../../../frontend/platform/extensionTrust.ts";
 
 const base = {
@@ -148,18 +151,12 @@ test("asset bytes participate in the package fingerprint", async () => {
   assert.notEqual(withoutAssets, withAssets);
 });
 
-test("the built-in pet ships a valid manifest and every declared asset", () => {
-  const manifest = JSON.parse(
-    readFileSync(
-      new URL("../../../assets/extensions/builtin.pet/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  );
-  assert.equal(validateManifest(manifest, "1.0.14"), null);
-  for (const relative of Object.values(manifest.assets)) {
-    assert.equal(
-      existsSync(new URL(`../../../assets/extensions/builtin.pet/${relative}`, import.meta.url)),
-      true,
-    );
+test("a package directory ships every declared asset", () => {
+  const root = new URL("../../../assets/extensions/builtin.official/", import.meta.url);
+  const manifest = JSON.parse(readFileSync(new URL("manifest.json", root), "utf8"));
+  const i18n = JSON.parse(readFileSync(new URL("i18n.json", root), "utf8"));
+  assert.equal(validateManifest(materializeManifest(manifest, i18n), "1.0.14"), null);
+  for (const relative of Object.values(manifest.assets ?? {})) {
+    assert.equal(existsSync(new URL(relative, root)), true);
   }
 });

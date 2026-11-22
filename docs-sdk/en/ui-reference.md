@@ -333,7 +333,7 @@ const pet = context.ui.registerSurface({
 });
 ```
 
-Assets are restricted to relative media paths (PNG, JPEG, WebP, GIF, SVG, AVIF, BMP), at most 64 per package, 4 MB per file and 12 MB total. The package must declare `assets.read`. Bundled packages read from the application bundle; installed and portable packages read from their package folder. `builtin.pet` is a working example.
+Assets are restricted to relative media paths (PNG, JPEG, WebP, GIF, SVG, AVIF, BMP), at most 64 per package, 4 MB per file and 12 MB total. The package must declare `assets.read`. Bundled packages read from the application bundle; installed and portable packages read from their package folder.
 
 Declare atlas geometry in the manifest when one image contains a frame grid:
 

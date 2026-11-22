@@ -155,7 +155,6 @@ export default {
   "workspace.welcome.importDialog.external": "选择其它谱面",
   "workspace.welcome.drop.title": "松开即可导入",
   "workspace.welcome.drop.imported": "已导入 {name}",
-  "workspace.welcome.drop.extensionDetected": "检测到扩展：{name}",
   "workspace.welcome.drop.skinDetected": "检测到皮肤：{name}",
   "workspace.welcome.drop.openSettings": "打开设置",
   "workspace.welcome.drop.invalidPackage": "无法验证包 {name}。",

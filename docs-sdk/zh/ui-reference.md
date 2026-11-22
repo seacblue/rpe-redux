@@ -430,7 +430,7 @@ const pet = context.ui.registerSurface({
 });
 ```
 
-资源只接受相对媒体路径（PNG、JPEG、WebP、GIF、SVG、AVIF、BMP），每个包最多 64 个，单文件 4 MB、总计 12 MB。包需要声明 `assets.read`。内置包从应用包读取，安装包和便携包从扩展目录读取。`builtin.pet` 是一个可直接启用的完整示例。
+资源只接受相对媒体路径（PNG、JPEG、WebP、GIF、SVG、AVIF、BMP），每个包最多 64 个，单文件 4 MB、总计 12 MB。包需要声明 `assets.read`。内置包从应用包读取，安装包和便携包从扩展目录读取。
 
 如果一张图包含帧网格，可以在 manifest 中声明 atlas：
 

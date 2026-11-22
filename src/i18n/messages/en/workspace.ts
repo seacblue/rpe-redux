@@ -168,7 +168,6 @@ export default {
   "workspace.welcome.importDialog.external": "Choose another chart",
   "workspace.welcome.drop.title": "Drop to import",
   "workspace.welcome.drop.imported": "Imported {name}",
-  "workspace.welcome.drop.extensionDetected": "Detected Extension: {name}",
   "workspace.welcome.drop.skinDetected": "Detected note skin: {name}",
   "workspace.welcome.drop.openSettings": "Open settings",
   "workspace.welcome.drop.invalidPackage": "The package {name} could not be validated.",
