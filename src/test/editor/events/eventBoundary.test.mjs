@@ -231,7 +231,7 @@ test("a trajectory first event holds its start value across the prefix", () => {
 });
 
 test("an empty track keeps its fallback at every time", () => {
-  const empty = new EventTrack([], tempo, 1, 7);
+  const empty = new EventTrack([], tempo, 7);
 
   assert.equal(empty.value(0), 7);
   assert.equal(empty.value(-3), 7);

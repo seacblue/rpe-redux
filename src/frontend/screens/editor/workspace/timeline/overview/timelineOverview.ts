@@ -82,8 +82,8 @@ function paintRangeBar(
   let start: number;
   let end: number;
   try {
-    start = tempo.seconds(range.start, factor);
-    end = tempo.seconds(range.end, factor);
+    start = tempo.seconds(range.start);
+    end = tempo.seconds(range.end);
   } catch {
     return;
   }

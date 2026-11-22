@@ -133,11 +133,10 @@ export class LineOverviewIndex {
     layer: number | undefined = undefined,
     extended = false,
   ) {
-    const factor = line.bpmfactor ?? 1;
     const timing = <TItem extends OverviewTimedItem>(item: TItem): OverviewEntry<TItem> => ({
       item,
-      start: tempo.seconds(item.startTime, factor),
-      end: tempo.seconds(item.endTime, factor),
+      start: tempo.seconds(item.startTime),
+      end: tempo.seconds(item.endTime),
       channel: 0,
       layer: 0,
     });

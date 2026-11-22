@@ -90,7 +90,7 @@ export default {
   "settings.field.editing-bezier-enabled.label": "贝塞尔曲线",
   "settings.field.editing-line-extended-enabled.label": "判定线扩展属性",
   "settings.field.editing-parent-lines-enabled.label": "父子线",
-  "settings.field.editing-line-bpmfactor-enabled.label": "BPM Factor",
+  "settings.field.editing-line-bpmfactor-enabled.label": "Hold 打击特效速率",
   "settings.field.editing-line-anchor-enabled.label": "锚点",
   "settings.editingAccess.aiUse": "AI 使用",
   "settings.editingAccess.visible": "显示",

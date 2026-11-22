@@ -37,6 +37,8 @@ export interface PreviewCompositeSurface extends PreviewGuideSurface {
   opacity: number;
   forceOpaque?: boolean;
   duration?: number | null;
+  /** Fixed shader target size in device pixels, or null for the CSS-size policy. */
+  shaderTextureLimit?: { width: number; height: number } | null;
   completionTimes: number[];
   noteBatch: NoteBatch;
   sharedNoteBatch: boolean;
@@ -92,6 +94,7 @@ export function drawComposite(
       sourceRevision: frame.shaderSourceRevision,
       overlayCanvas: shaderOverlay,
       inputLayer: shaderInput,
+      textureLimit: surface.shaderTextureLimit ?? null,
     });
     if (surface.shaderCanvas) {
       surface.display.setShaderVisible(shaderRendered);

@@ -54,12 +54,6 @@ function beatOfText(text: string): Beat {
   }
 }
 
-/** The active judge line's tempo factor, defaulting to normal speed. */
-function lineFactor(runtime: EditorHostRuntime): number {
-  const session = runtime.getSession();
-  return session.chart.judgeLineList?.[session.lineIndex]?.bpmfactor ?? 1;
-}
-
 /** The transport's current position in chart seconds. */
 function currentChartSeconds(runtime: EditorHostRuntime): number {
   return runtime.audio.time - chartOffset(runtime);
@@ -75,7 +69,7 @@ function prefillValue(runtime: EditorHostRuntime | null, mode: JumpMode): string
     return seconds.toFixed(3);
   }
   const session = runtime.getSession();
-  return new TempoMap(session.chart.BPMList).beat(seconds, lineFactor(runtime)).toFixed(3);
+  return new TempoMap(session.chart.BPMList).beat(seconds).toFixed(3);
 }
 
 /** The progress card's jump-to-time dialog, mounted only while it is open. */
@@ -126,8 +120,7 @@ function JumpDialog({ onClose }: { onClose(): void }) {
       try {
         const beat = beatValue(parseBeat(value));
         const session = runtime.getSession();
-        audioSeconds =
-          new TempoMap(session.chart.BPMList).seconds(beat, lineFactor(runtime)) + offset;
+        audioSeconds = new TempoMap(session.chart.BPMList).seconds(beat) + offset;
       } catch {
         setError(t("chrome.transport.jump.invalidBeat"));
         return;

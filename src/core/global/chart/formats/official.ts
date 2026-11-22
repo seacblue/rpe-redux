@@ -434,16 +434,15 @@ function pushFrame(
 function chartSeconds(chart: Chart, tempo: TempoMap): number {
   let maximum = 0;
   for (const line of chart.judgeLineList ?? []) {
-    const factor = positiveNumber(line.bpmfactor, 1);
     for (const layer of [...(line.eventLayers ?? []), line.extended]) {
       for (const event of Object.values(layer ?? {})) {
         for (const entry of event ?? []) {
-          maximum = Math.max(maximum, tempo.seconds(entry.endTime, factor));
+          maximum = Math.max(maximum, tempo.seconds(entry.endTime));
         }
       }
     }
     for (const note of line.notes ?? []) {
-      maximum = Math.max(maximum, tempo.seconds(note.endTime, factor));
+      maximum = Math.max(maximum, tempo.seconds(note.endTime));
     }
   }
   return maximum;
@@ -463,18 +462,17 @@ function sampleTimes(chart: Chart, tempo: TempoMap, baseBpm: number, maxUnits: n
     }
   };
   for (const line of chart.judgeLineList ?? []) {
-    const factor = positiveNumber(line.bpmfactor, 1);
     for (const layer of [...(line.eventLayers ?? []), line.extended]) {
       for (const events of Object.values(layer ?? {})) {
         for (const event of events ?? []) {
-          add(tempo.seconds(event.startTime, factor));
-          add(tempo.seconds(event.endTime, factor));
+          add(tempo.seconds(event.startTime));
+          add(tempo.seconds(event.endTime));
         }
       }
     }
     for (const note of line.notes ?? []) {
-      add(tempo.seconds(note.startTime, factor));
-      add(tempo.seconds(note.endTime, factor));
+      add(tempo.seconds(note.startTime));
+      add(tempo.seconds(note.endTime));
     }
   }
   return [...times].sort((left, right) => left - right);
@@ -577,7 +575,6 @@ export function serializeOfficialChart(chart: Chart): SerializedExternalChart {
   const officialLines: OfficialJudgeLine[] = indices.map((index, outputIndex) => {
     const builder = builders[outputIndex];
     const line = lines[index]!;
-    const factor = positiveNumber(line.bpmfactor, 1);
     const runtime = scene.lines[index]!;
     const notesAbove: OfficialNote[] = [];
     const notesBelow: OfficialNote[] = [];
@@ -600,8 +597,8 @@ export function serializeOfficialChart(chart: Chart): SerializedExternalChart {
       if (Number(note.visibleTime ?? 999999) !== 999999) {
         warnings.add("Note visible time is not exported to the official format.");
       }
-      const start = tempo.seconds(note.startTime, factor);
-      const end = tempo.seconds(note.endTime, factor);
+      const start = tempo.seconds(note.startTime);
+      const end = tempo.seconds(note.endTime);
       const official: OfficialNote = {
         type,
         time: roundNumber((start * baseBpm) / 1.875, 6),

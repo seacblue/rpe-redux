@@ -99,7 +99,7 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
     if (this.gestures.drag.startFactor !== undefined) {
       this.gestures.drag.currentSeconds =
-        this.viewport.tempo.seconds(this.viewport.origin, this.gestures.drag.startFactor) +
+        this.viewport.tempo.seconds(this.viewport.origin) +
         (this.viewport.viewHeight() -
           this.viewport.judgementOffset -
           this.gestures.drag.current.y) /
@@ -251,7 +251,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   if (prekeyHold && (event.button === 0 || event.button === 2)) {
     const lineIndex = prekeyHold.lineIndex;
     const factor = this.viewport.noteFactorForLine(lineIndex);
-    const originSeconds = this.viewport.tempo.seconds(this.viewport.origin, factor);
+    const originSeconds = this.viewport.tempo.seconds(this.viewport.origin);
     session.focus = "notes";
     session.selectionMode = "single";
     this.gestures.drag = {
@@ -263,7 +263,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       lineIndex,
       startFactor: factor,
       currentSeconds:
-        this.viewport.tempo.seconds(this.viewport.origin, factor) +
+        this.viewport.tempo.seconds(this.viewport.origin) +
         (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
           this.viewport.scaleForArea("notes"),
       originSeconds,
@@ -297,16 +297,10 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       lineIndex,
       startFactor: this.viewport.noteFactorForLine(lineIndex),
       currentSeconds:
-        this.viewport.tempo.seconds(
-          this.viewport.origin,
-          this.viewport.noteFactorForLine(lineIndex),
-        ) +
+        this.viewport.tempo.seconds(this.viewport.origin) +
         (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
           this.viewport.scaleForArea("notes"),
-      originSeconds: this.viewport.tempo.seconds(
-        this.viewport.origin,
-        this.viewport.noteFactorForLine(lineIndex),
-      ),
+      originSeconds: this.viewport.tempo.seconds(this.viewport.origin),
     };
     this.notesCanvas.setPointerCapture(event.pointerId);
     this.gestures.suppressNextContextMenu();
@@ -343,16 +337,10 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
         lineIndex,
         startFactor: this.viewport.noteFactorForLine(lineIndex),
         currentSeconds:
-          this.viewport.tempo.seconds(
-            this.viewport.origin,
-            this.viewport.noteFactorForLine(lineIndex),
-          ) +
+          this.viewport.tempo.seconds(this.viewport.origin) +
           (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
             this.viewport.scaleForArea("notes"),
-        originSeconds: this.viewport.tempo.seconds(
-          this.viewport.origin,
-          this.viewport.noteFactorForLine(lineIndex),
-        ),
+        originSeconds: this.viewport.tempo.seconds(this.viewport.origin),
       };
       this.notesCanvas.setPointerCapture(event.pointerId);
       session.notify();
@@ -531,10 +519,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
         this.gestures.cursorLineIndex ?? session.lineIndex,
       ),
       startSeconds:
-        this.viewport.tempo.seconds(
-          this.viewport.origin,
-          this.viewport.noteFactorForLine(this.gestures.cursorLineIndex ?? session.lineIndex),
-        ) +
+        this.viewport.tempo.seconds(this.viewport.origin) +
         (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
           this.viewport.scaleForArea("notes"),
       current: position,
@@ -565,10 +550,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
         this.gestures.cursorLineIndex ?? session.lineIndex,
       ),
       startSeconds:
-        this.viewport.tempo.seconds(
-          this.viewport.origin,
-          this.viewport.noteFactorForLine(this.gestures.cursorLineIndex ?? session.lineIndex),
-        ) +
+        this.viewport.tempo.seconds(this.viewport.origin) +
         (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
           this.viewport.scaleForArea("notes"),
       current: position,
@@ -634,16 +616,10 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       lineIndex: hit.lineIndex,
       startFactor: this.viewport.noteFactorForLine(hit.lineIndex ?? session.lineIndex),
       currentSeconds:
-        this.viewport.tempo.seconds(
-          this.viewport.origin,
-          this.viewport.noteFactorForLine(hit.lineIndex ?? session.lineIndex),
-        ) +
+        this.viewport.tempo.seconds(this.viewport.origin) +
         (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
           this.viewport.scaleForArea("notes"),
-      originSeconds: this.viewport.tempo.seconds(
-        this.viewport.origin,
-        this.viewport.noteFactorForLine(hit.lineIndex ?? session.lineIndex),
-      ),
+      originSeconds: this.viewport.tempo.seconds(this.viewport.origin),
     };
     session.notify();
   }
@@ -699,7 +675,7 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
     drag.current.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
   if (drag.startFactor !== undefined) {
     drag.currentSeconds =
-      this.viewport.tempo.seconds(this.viewport.origin, drag.startFactor) +
+      this.viewport.tempo.seconds(this.viewport.origin) +
       (this.viewport.viewHeight() - this.viewport.judgementOffset - drag.current.y) /
         this.viewport.scaleForArea("notes");
   }

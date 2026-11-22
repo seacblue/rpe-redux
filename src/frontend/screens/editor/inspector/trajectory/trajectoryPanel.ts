@@ -437,9 +437,8 @@ export class TrajectoryPanel {
       this.scene = scene;
       scene.compile(previewChart, this.getContext().tempo);
       const { tempo } = this.getContext();
-      const factor = session.chart.judgeLineList?.[this.lineIndex]?.bpmfactor ?? 1;
-      this.beginSeconds = tempo.seconds(this.startTime, factor);
-      this.endSeconds = tempo.seconds(this.endTime, factor);
+      this.beginSeconds = tempo.seconds(this.startTime);
+      this.endSeconds = tempo.seconds(this.endTime);
       this.worldPoints = points.map(
         (point, index) =>
           scene.sample(

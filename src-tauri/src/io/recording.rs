@@ -131,6 +131,13 @@ impl RecordingFormat {
     }
 }
 
+impl VideoInput {
+    /// H.264 encoders may emit one codec-configuration chunk beside the frames.
+    fn allows_extra_chunk(self) -> bool {
+        matches!(self, Self::H264)
+    }
+}
+
 /// One recording: staging files, encoder process, and frame counters.
 struct Session {
     target: PathBuf,
@@ -570,6 +577,12 @@ fn encoder_command(
         if let Some(filter) = atempo_filter(speed) {
             command.args(["-filter:a", &filter]);
         }
+        if !format.audio_only() {
+            // Atempo is approximate, so the compressed soundtrack can outlast
+            // the frame stream by a few samples. Stop at the shorter stream
+            // instead of leaving a tail of audio-only video time.
+            command.args(["-shortest"]);
+        }
     }
     match format {
         RecordingFormat::Mp4 | RecordingFormat::Mkv | RecordingFormat::Mov => {
@@ -705,7 +718,8 @@ pub async fn recording_frame(host: State<'_, RecordingHost>, request: Request<'_
             return Err("recording_invalid_frame".into());
         }
         let mut count = entry.written_frames.lock().map_err(err)?;
-        if *count >= entry.frame_count {
+        let limit = entry.frame_count + u32::from(entry.video_input.allows_extra_chunk());
+        if *count >= limit {
             return Err("recording_too_many_frames".into());
         }
         entry
@@ -792,9 +806,15 @@ pub async fn recording_finish(host: State<'_, RecordingHost>, id: String) -> Res
     let entry = session(&host, &id)?;
     let result = tauri::async_runtime::spawn_blocking(move || {
         check_active(&entry)?;
-        if !entry.format.audio_only()
-            && *entry.written_frames.lock().map_err(err)? != entry.frame_count
-        {
+        let written = *entry.written_frames.lock().map_err(err)?;
+        // PNG writes exactly one image per frame. H.264 chunks are encoded
+        // access units and may include one configuration chunk, so require at
+        // least every frame without rejecting a valid stream that ends higher.
+        let complete = match entry.video_input {
+            VideoInput::Png => written == entry.frame_count,
+            VideoInput::H264 => written >= entry.frame_count,
+        };
+        if !entry.format.audio_only() && !complete {
             return Err("recording_incomplete_frames".into());
         }
         if *entry.audio_bytes.lock().map_err(err)? != entry.expected_audio_bytes {
@@ -1232,6 +1252,7 @@ mod format_tests {
         assert!(has_pair(&args, "-c:a", "aac"));
         assert!(has_pair(&args, "-f", "matroska"));
         assert!(has_pair(&args, "-map", "0:v:0"));
+        assert!(args.contains(&"-shortest".to_owned()));
         assert!(args.contains(&"output.mkv".to_owned()));
     }
 
@@ -1320,6 +1341,7 @@ mod format_tests {
         assert!(args.contains(&"-an".to_owned()));
         assert!(has_pair(&args, "-f", "gif"));
         assert!(!args.contains(&"aac".to_owned()));
+        assert!(!args.contains(&"-shortest".to_owned()));
     }
 
     #[test]

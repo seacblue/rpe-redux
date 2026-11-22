@@ -989,6 +989,8 @@ export class ShaderPipeline {
    * revision reuses the uploaded texture. `inputLayer` is rendered into the
    * transparent overlay texture when it shares this pipeline's WebGL2 context,
    * then uses the same GPU composite equation as the Canvas overlay path.
+   * `textureLimit` pins the render target to an explicit device-pixel size;
+   * offscreen renders use it so a shader layer is not stretched from CSS size.
    */
   render(
     sourceCanvas: HTMLCanvasElement,
@@ -1000,6 +1002,7 @@ export class ShaderPipeline {
     sourceRevision?: number,
     overlayCanvas?: HTMLCanvasElement | null,
     inputLayer?: ShaderInputLayer | null,
+    textureLimit?: { width: number; height: number } | null,
   ): boolean {
     renderProfileMark("preview.shader.render.start");
     this.lastFrameMetrics.sourceUploadMs = 0;
@@ -1015,7 +1018,12 @@ export class ShaderPipeline {
       measurement.width > 0 ? measurement.width : sourceCanvas.width / fallbackRatio;
     const displayHeight =
       measurement.height > 0 ? measurement.height : sourceCanvas.height / fallbackRatio;
-    const { width, height } = shaderTextureSize(displayWidth, displayHeight);
+    const { width, height } = textureLimit
+      ? {
+          width: Math.max(1, Math.round(textureLimit.width)),
+          height: Math.max(1, Math.round(textureLimit.height)),
+        }
+      : shaderTextureSize(displayWidth, displayHeight);
     if (
       targetCanvas.width !== width ||
       targetCanvas.height !== height ||

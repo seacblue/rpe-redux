@@ -41,7 +41,7 @@ export function eventTrackSamplingStats(): {
 
 /** The only `TempoMap` surface the tracks need: beats (or beat tuples) to seconds. */
 export interface TempoSource {
-  seconds(beat: number | readonly number[], factor?: number): number;
+  seconds(beat: number | readonly number[]): number;
 }
 
 /** One event paired with its resolved start/end seconds. */
@@ -106,7 +106,6 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   declare numericOnly: boolean;
   declare linearNumeric: boolean;
   declare tempo: TempoSource;
-  declare factor: number;
   private cachedValueEntry: TimedEvent<T> | null = null;
   private cachedValueIndex = 0;
   private cachedValueSeconds = Number.NaN;
@@ -114,7 +113,6 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
   constructor(
     events: readonly T[] | undefined,
     tempo: TempoSource,
-    factor = 1,
     fallback: LineEventValue = 0,
     integerEndpoints = false,
   ) {
@@ -122,12 +120,11 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
     this.integerEndpoints = integerEndpoints;
     this.rawSources = events ?? [];
     this.tempo = tempo;
-    this.factor = factor;
     const ordered = (events ?? [])
       .map((event) => ({
         event,
-        start: tempo.seconds(event.startTime, factor),
-        end: tempo.seconds(event.endTime, factor),
+        start: tempo.seconds(event.startTime),
+        end: tempo.seconds(event.endTime),
       }))
       .filter((entry) => isOrderedBeatRange(entry.event.startTime, entry.event.endTime))
       .sort((a, b) => a.start - b.start);
@@ -264,13 +261,7 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
         return next;
       }
     }
-    return new EventTrack<T>(
-      sources,
-      this.tempo,
-      this.factor,
-      this.fallback,
-      this.integerEndpoints,
-    );
+    return new EventTrack<T>(sources, this.tempo, this.fallback, this.integerEndpoints);
   }
 
   /**
@@ -309,8 +300,8 @@ export class EventTrack<T extends JudgeLineEvent = JudgeLineEvent> {
       if (!isOrderedBeatRange(event.startTime, event.endTime)) {
         return null;
       }
-      const start = this.tempo.seconds(event.startTime, this.factor);
-      const end = this.tempo.seconds(event.endTime, this.factor);
+      const start = this.tempo.seconds(event.startTime);
+      const end = this.tempo.seconds(event.endTime);
       if (start < lastStart) {
         return null;
       }
@@ -808,12 +799,12 @@ export class SpeedIntegral<T extends JudgeLineEvent = JudgeLineEvent> {
   private stepRate = 0;
 
   /** Compile speed events and their distance prefixes for repeated sampling. */
-  constructor(events: readonly T[] | undefined, tempo: TempoSource, factor = 1) {
+  constructor(events: readonly T[] | undefined, tempo: TempoSource) {
     const ordered = (events ?? [])
       .map((event) => ({
         event,
-        start: tempo.seconds(event.startTime, factor),
-        end: tempo.seconds(event.endTime, factor),
+        start: tempo.seconds(event.startTime),
+        end: tempo.seconds(event.endTime),
       }))
       .sort((left, right) => left.start - right.start);
     const compacted = compactFlatNumericEvents(ordered);

@@ -101,7 +101,7 @@ export function GlobalTimingWorkspace() {
       if (!active) {
         return;
       }
-      const beat = tempo.get().beat(playback.chartSeconds(), 1);
+      const beat = tempo.get().beat(playback.chartSeconds());
       let index = 0;
       let best = Number.NEGATIVE_INFINITY;
       for (let current = 0; current < entries.length; current += 1) {
@@ -152,7 +152,7 @@ export function GlobalTimingWorkspace() {
     const tempo = runtime.providers.session.tempo.get();
     const division = runtime.timeline.viewport.division;
     const gridDivision = Math.max(1, Math.trunc(division || 1));
-    const snappedBeat = snapTime(playback.chartSeconds(), gridDivision, tempo, 1);
+    const snappedBeat = snapTime(playback.chartSeconds(), gridDivision, tempo);
     let previous = entries[0];
     let previousBeat: Beat | null = null;
     for (const entry of entries) {

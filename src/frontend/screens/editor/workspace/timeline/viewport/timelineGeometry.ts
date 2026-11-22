@@ -46,21 +46,26 @@ export function eventColumnBounds(
   );
 }
 
-/** The beat multiplier declared by one line. */
+/**
+ * Retained per-line accessor.
+ *
+ * Every line shares the chart's global BPM grid, so the time factor is always 1.
+ * The argument stays for existing callers.
+ */
 export function factorForLine(this: TimelineViewportReceiver, lineIndex: number): number {
-  return this.getSession().chart.judgeLineList?.[lineIndex]?.bpmfactor ?? 1;
+  void lineIndex;
+  return 1;
 }
 
 /**
  * The factor that places a note on the visible time axis.
  *
- * Each solo/non-merged panel owns its line factor. Merged note mode draws every
- * selected line into one panel, so all of them have to share the active line's
- * factor; otherwise notes drift away from the one grid as the view scrolls.
+ * Solo, merged and multi-line panels all share the chart's global grid, so this
+ * is always 1; the helper stays as the one seam the drag and paint paths call.
  */
 export function noteFactorForLine(this: TimelineViewportReceiver, lineIndex: number): number {
-  const session = this.getSession();
-  return session.notesMode === "multi_merged" ? this.factor : this.factorForLine(lineIndex);
+  void lineIndex;
+  return 1;
 }
 
 /** Shared vertical projection for one factor, height, and area. */

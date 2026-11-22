@@ -232,7 +232,7 @@ function cachedTempoSeconds(
   beat: number,
   factor: number,
 ): number {
-  return cache.tempoSeconds?.call(cache, tempo, beat, factor) ?? tempo.seconds(beat, factor);
+  return cache.tempoSeconds?.call(cache, tempo, beat, factor) ?? tempo.seconds(beat);
 }
 
 /** Pick the retained device for one timeline area and one moving/static layer. */
@@ -333,7 +333,7 @@ function hoveredGridLine(
   const seconds =
     cachedTempoSeconds(receiver.cache, receiver.viewport.tempo, receiver.viewport.origin, factor) +
     (height - receiver.viewport.judgementOffset - pointer.y) / receiver.viewport.scaleForArea(area);
-  const beat = receiver.viewport.tempo.beat(seconds, factor);
+  const beat = receiver.viewport.tempo.beat(seconds);
   const snapped = Math.round(beat * receiver.viewport.division) / receiver.viewport.division;
   return Number.isFinite(snapped) ? { lineIndex, beat: snapped, pointerY: pointer.y } : null;
 }
@@ -393,8 +393,7 @@ export function grid(
   );
   const secondsAt = (vertical: number) =>
     originSeconds + (height - this.viewport.judgementOffset - vertical) / scale;
-  const beatAt = (vertical: number) =>
-    this.viewport.tempo.beat(secondsAt(vertical), this.viewport.factor);
+  const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical));
   const verticalAt = (beat: number) =>
     height -
     this.viewport.judgementOffset -
@@ -508,7 +507,7 @@ export function gridForLine(
   const secondsAt = (vertical: number) =>
     originSeconds +
     (height - this.viewport.judgementOffset - vertical) / this.viewport.scaleForArea(area);
-  const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical), factor);
+  const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical));
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
   // Every visible tick is retained; nearby-only mode controls alpha, not geometry.
@@ -584,8 +583,8 @@ export function gridForLine(
     }
   }
   if (draws(parts, "playhead")) {
-    const playSeconds = this.viewport.tempo.seconds(playBeat, this.viewport.factor);
-    const playLineBeat = this.viewport.tempo.beat(playSeconds, factor);
+    const playSeconds = this.viewport.tempo.seconds(playBeat);
+    const playLineBeat = this.viewport.tempo.beat(playSeconds);
     const vertical = this.viewport.verticalForLine(playLineBeat, lineIndex, height, area);
     const color = this.appearance.playheadColor ?? palette.playhead;
     commands.push({
@@ -626,7 +625,7 @@ export function drawMultiLineGrid(
     const palette = this.cache.palette() ?? readCanvasPalette();
     const lineWidth = playheadLineWidth(this.appearance);
     const color = this.appearance.playheadColor ?? palette.playhead;
-    const playSeconds = this.viewport.tempo.seconds(playBeat, this.viewport.factor);
+    const playSeconds = this.viewport.tempo.seconds(playBeat);
     const commands: RenderCommand[] = [];
     for (let panel = firstPanel; panel <= lastPanel; panel++) {
       const lineIndex = targetLines[panel];
@@ -634,10 +633,7 @@ export function drawMultiLineGrid(
         continue;
       }
       const left = panel * stride - offset;
-      const playLineBeat = this.viewport.tempo.beat(
-        playSeconds,
-        this.viewport.factorForLine(lineIndex),
-      );
+      const playLineBeat = this.viewport.tempo.beat(playSeconds);
       const vertical = this.viewport.verticalForLine(playLineBeat, lineIndex, height, area);
       if (!Number.isFinite(vertical)) {
         continue;
@@ -705,7 +701,7 @@ export function drawMultiLineBeatLabels(
   const secondsAt = (vertical: number) =>
     originSeconds +
     (height - this.viewport.judgementOffset - vertical) / this.viewport.scaleForArea(area);
-  const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical), factor);
+  const beatAt = (vertical: number) => this.viewport.tempo.beat(secondsAt(vertical));
   const first = Math.max(0, Math.floor(beatAt(height) * this.viewport.division));
   const last = Math.ceil(beatAt(0) * this.viewport.division);
   const localBeatHeight = Math.abs(

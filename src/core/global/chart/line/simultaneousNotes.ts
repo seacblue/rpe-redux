@@ -2,10 +2,10 @@
  * Notes that share a judge time.
  *
  * Two notes are simultaneous when their start maps to the same microsecond of
- * chart time — across every judge line, so a note on a line with a different
- * `bpmfactor` still counts. Both the timeline (which marks them) and the preview
- * (which draws their connector) read the same fact, so it is derived here in the
- * chart domain.
+ * chart time across every judge line. Notes on different lines share one global
+ * BPM grid; `bpmfactor` only changes a Hold's hit-effect pulse rate, so it never
+ * separates notes judged at the same instant. Both the timeline (which marks
+ * them) and the preview (which draws their connector) read this fact.
  *
  * `SimultaneousNotesCache` is the incremental form: it keeps per-line times and
  * a multi-set of counts, so a redraw after one line's notes were replaced only
@@ -17,18 +17,17 @@ import type { TempoSource } from "../timing/events.ts";
 /**
  * Return every note whose start shares a chart time with another note.
  *
- * Times are compared at microsecond resolution across all judge lines, with each
- * line's `bpmfactor` applied.
+ * Times are compared at microsecond resolution across all judge lines.
  */
 export function simultaneousNotes<T extends JudgeLineNote>(
-  chart: { judgeLineList?: readonly { notes?: readonly T[]; bpmfactor?: number }[] },
+  chart: { judgeLineList?: readonly { notes?: readonly T[] }[] },
   tempo: TempoSource,
 ): Set<T> {
   const counts = new Map<number, number>();
   const times = new Map<T, number>();
   for (const line of chart.judgeLineList ?? []) {
     for (const note of line.notes ?? []) {
-      const time = Math.round(tempo.seconds(note.startTime, line.bpmfactor ?? 1) * 1000000);
+      const time = Math.round(tempo.seconds(note.startTime) * 1000000);
       times.set(note, time);
       counts.set(time, (counts.get(time) ?? 0) + 1);
     }
@@ -38,10 +37,9 @@ export function simultaneousNotes<T extends JudgeLineNote>(
   );
 }
 
-/** A line's cached note times and the note/factor pair they were computed from. */
+/** A line's cached note times and the note array they were computed from. */
 interface CachedLineTimes<T extends JudgeLineNote> {
   notes: readonly T[] | undefined;
-  factor: number;
   entries: Array<[T, number]>;
 }
 
@@ -82,15 +80,14 @@ export class SimultaneousNotesCache<T extends JudgeLineNote = JudgeLineNote> {
   /**
    * Refresh the cache for `chart` and return the simultaneous-note set.
    *
-   * Only lines whose note array or BPM factor changed are recomputed; changing
-   * the tempo source clears the cache.
+   * Only lines whose note array changed are recomputed; changing the tempo
+   * source clears the cache.
    */
   update(
     chart: {
       judgeLineList?: readonly {
         id?: string;
         notes?: readonly T[];
-        bpmfactor?: number;
       }[];
     },
     tempo: TempoSource,
@@ -106,23 +103,22 @@ export class SimultaneousNotesCache<T extends JudgeLineNote = JudgeLineNote> {
       }
       const key = typeof line.id === "string" ? line.id : line;
       seen.add(key);
-      const factor = line.bpmfactor ?? 1;
       const cached = this.lines.get(key);
-      if (cached && cached.notes === line.notes && cached.factor === factor) {
+      if (cached && cached.notes === line.notes) {
         continue;
       }
-      if (cached && cached.factor === factor && appendsTo(cached.notes, line.notes)) {
+      if (cached && appendsTo(cached.notes, line.notes)) {
         // Placement appends to the same line. The cached note times are still
         // valid and only the new notes need a tempo lookup and a group update.
         const notes = line.notes ?? [];
         const entries = cached.entries;
         for (let index = cached.notes?.length ?? 0; index < notes.length; index += 1) {
           const note = notes[index];
-          const time = Math.round(tempo.seconds(note.startTime, factor) * 1000000);
+          const time = Math.round(tempo.seconds(note.startTime) * 1000000);
           entries.push([note, time]);
           this.add(note, time);
         }
-        this.lines.set(key, { notes: line.notes, factor, entries });
+        this.lines.set(key, { notes: line.notes, entries });
         continue;
       }
       if (cached) {
@@ -130,11 +126,11 @@ export class SimultaneousNotesCache<T extends JudgeLineNote = JudgeLineNote> {
       }
       const entries: Array<[T, number]> = [];
       for (const note of line.notes ?? []) {
-        const time = Math.round(tempo.seconds(note.startTime, factor) * 1000000);
+        const time = Math.round(tempo.seconds(note.startTime) * 1000000);
         entries.push([note, time]);
         this.add(note, time);
       }
-      this.lines.set(key, { notes: line.notes, factor, entries });
+      this.lines.set(key, { notes: line.notes, entries });
     }
     for (const [key, cached] of this.lines) {
       if (!seen.has(key)) {

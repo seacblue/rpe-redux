@@ -13,6 +13,8 @@ export interface ShaderCompositeRenderPacket {
   readonly sourceRevision?: number;
   readonly overlayCanvas?: HTMLCanvasElement | null;
   readonly inputLayer?: ShaderInputLayer | null;
+  /** Fixed device-pixel target size, or null to follow the source measurement. */
+  readonly textureLimit?: { width: number; height: number } | null;
 }
 
 /** Render device that owns the shader pipeline submission seam. */
@@ -36,6 +38,8 @@ export class ShaderCompositeRenderDevice implements RenderDevice<ShaderComposite
         packet.viewport,
         packet.sourceRevision,
         packet.overlayCanvas,
+        undefined,
+        packet.textureLimit,
       );
     }
     return this.pipeline.render(
@@ -48,6 +52,7 @@ export class ShaderCompositeRenderDevice implements RenderDevice<ShaderComposite
       packet.sourceRevision,
       packet.overlayCanvas,
       packet.inputLayer,
+      packet.textureLimit,
     );
   }
 

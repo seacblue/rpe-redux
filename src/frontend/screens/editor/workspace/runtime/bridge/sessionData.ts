@@ -42,7 +42,6 @@ export function createSessionData(options: SessionDataOptions) {
   let placementContext: string | undefined;
   let timelineModeContext: string | undefined;
   let originSession: EditorSession | null = null;
-  let originFactor: number | null = null;
   let tempoEntries = options.session().chart.BPMList;
   return {
     /** Synchronizes placement, timing, and settings, then returns the values to publish. */
@@ -79,21 +78,12 @@ export function createSessionData(options: SessionDataOptions) {
       applySessionRuntimeSettings(session, options.hitSounds);
       // A publication is not a seek. Only a newly installed document follows
       // the playhead here; playback and explicit seeks own later origin updates,
-      // so panel-driven publishes never pull a scrolled timeline back.
-      const factor = session.line?.bpmfactor ?? 1;
-      if (originSession !== session || originFactor === null) {
+      // so panel-driven publishes never pull a scrolled timeline back. Every
+      // line shares the global BPM grid, so switching lines never re-times it.
+      if (originSession !== session) {
         originSession = session;
         timeline.viewport.setOrigin(options.currentBeat(), "session");
-      } else if (factor !== originFactor) {
-        // A line switch changes the factor that maps the origin's beat to
-        // seconds. Re-express the same instant in the new factor so selecting
-        // another line does not shift the visible time.
-        timeline.viewport.setOrigin(
-          currentTempo.beat(currentTempo.seconds(timeline.viewport.origin, originFactor), factor),
-          "session",
-        );
       }
-      originFactor = factor;
 
       return { session, tempo: currentTempo };
     },

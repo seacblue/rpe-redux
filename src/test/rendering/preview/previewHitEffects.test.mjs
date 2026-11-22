@@ -14,12 +14,36 @@ import {
   PHIRA_HIT_FX_WIDTH_RATIO,
   previewNoteWidth,
 } from "../../../frontend/screens/editor/workspace/preview/scene/constants.ts";
+import {
+  HOLD_HIT_INTERVAL,
+  recentHits,
+} from "../../../frontend/screens/editor/workspace/preview/drawing/hitEffects.ts";
 import { drawHitEffects } from "../../../frontend/screens/editor/workspace/preview/drawing/previewHitEffects.ts";
 
 test("note scale 1 matches Phira's authored note width", () => {
   assert.ok(Math.abs(previewNoteWidth(1) - 177.862716) < 1e-6);
   assert.ok(previewNoteWidth(0.8) < previewNoteWidth(1));
   assert.ok(previewNoteWidth(1.2) > previewNoteWidth(1));
+});
+
+test("bpmfactor scales Hold pulse frequency without moving its time", () => {
+  const entry = { start: 1, end: 3, note: { type: 2 } };
+  const runtime = (holdHitRate) => ({
+    hitTimes: [entry],
+    holdIndex: { query: () => [{ item: entry, index: 0 }] },
+    holdHitRate,
+  });
+  const base = recentHits(runtime(1), 1.5, 0);
+  const fast = recentHits(runtime(2), 1.5, 0);
+  const slow = recentHits(runtime(0.5), 1.5, 0);
+  assert.equal(base.length, 4);
+  assert.equal(fast.length, 7);
+  assert.equal(slow.length, 2);
+  assert.ok(Math.abs(fast[1].time - fast[0].time - HOLD_HIT_INTERVAL / 2) < 1e-9);
+  assert.ok(Math.abs(slow[1].time - slow[0].time - HOLD_HIT_INTERVAL * 2) < 1e-9);
+  for (const hit of [...base, ...fast, ...slow]) {
+    assert.ok(hit.time >= entry.start && hit.time <= entry.end);
+  }
 });
 
 test("hit effects use the post-event position and the configured effect scale", () => {

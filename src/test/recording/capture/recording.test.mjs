@@ -340,7 +340,7 @@ test("captures chart, appearance, and sound settings at the request", async () =
   runtime.preview.hitEffectScale = 2;
   sounds.transport.volume = 0;
   const [images, audio] = await snapshot.pending;
-  assert.equal(snapshot.chart.META.name, oldName);
+  assert.equal((await snapshot.chart).META.name, oldName);
   assert.equal(snapshot.reference.defaultLineColor[0], 255);
   assert.equal(snapshot.reference.hitEffectScale, 1.25);
   assert.equal(audio.musicVolume, 0.4);

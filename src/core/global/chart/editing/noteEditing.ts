@@ -21,20 +21,15 @@ export interface VisibleNote {
 }
 
 /** The note's visible window measured in beats before its hit time. */
-export function visibleBeats(note: VisibleNote, tempo: TempoGrid, factor = 1): number {
+export function visibleBeats(note: VisibleNote, tempo: TempoGrid): number {
   const start = beatValue(note.startTime);
-  return start - tempo.beat(tempo.seconds(start, factor) - (note.visibleTime ?? 999999), factor);
+  return start - tempo.beat(tempo.seconds(start) - (note.visibleTime ?? 999999));
 }
 
 /** Converts a beat window before the note's hit time into chart seconds. */
-export function visibleSeconds(
-  note: VisibleNote,
-  beats: number,
-  tempo: TempoGrid,
-  factor = 1,
-): number {
+export function visibleSeconds(note: VisibleNote, beats: number, tempo: TempoGrid): number {
   const start = beatValue(note.startTime);
-  return tempo.seconds(start, factor) - tempo.seconds(start - Math.max(0, beats), factor);
+  return tempo.seconds(start) - tempo.seconds(start - Math.max(0, beats));
 }
 
 /** Wheel notch sizes for the inspector's event controls, per event track. */

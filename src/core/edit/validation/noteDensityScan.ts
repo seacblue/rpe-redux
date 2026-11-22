@@ -99,10 +99,9 @@ export function scanNoteDensity(chart: Chart, options: NoteDensityOptions): Note
       continue;
     }
     const rateAt = lineRateSampler(line, tempo);
-    const factor = line.bpmfactor ?? 1;
     const notes = Array.isArray(line.notes) ? line.notes : [];
     for (const note of notes) {
-      const interval = noteVisibilityInterval(note, rateAt, factor, tempo, options);
+      const interval = noteVisibilityInterval(note, rateAt, tempo, options);
       if (!interval) {
         continue;
       }
@@ -155,7 +154,6 @@ function clampIndex(value: number, length: number): number {
  * compiled here. A line without speed events is stationary.
  */
 function lineRateSampler(line: JudgeLine, tempo: TempoMap): (seconds: number) => number {
-  const factor = line.bpmfactor ?? 1;
   const layers = Array.isArray(line.eventLayers) ? line.eventLayers.slice(0, 5) : [];
   const integrals: SpeedIntegral[] = [];
   for (const layer of layers) {
@@ -163,7 +161,7 @@ function lineRateSampler(line: JudgeLine, tempo: TempoMap): (seconds: number) =>
     if (!events?.length) {
       continue;
     }
-    integrals.push(new SpeedIntegral(events, tempo, factor));
+    integrals.push(new SpeedIntegral(events, tempo));
   }
   if (!integrals.length) {
     return () => 0;
@@ -197,7 +195,6 @@ function noteVisibilityInterval(
     endTime?: readonly number[];
   },
   rateAt: (seconds: number) => number,
-  factor: number,
   tempo: TempoMap,
   options: NoteDensityOptions,
 ): DensityInterval | null {
@@ -214,8 +211,8 @@ function noteVisibilityInterval(
   let start: number;
   let end: number;
   try {
-    start = tempo.seconds(note.startTime, factor);
-    end = tempo.seconds(note.endTime, factor);
+    start = tempo.seconds(note.startTime);
+    end = tempo.seconds(note.endTime);
   } catch {
     return null;
   }

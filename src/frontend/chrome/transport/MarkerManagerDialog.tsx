@@ -227,7 +227,7 @@ export function MarkerManagerDialog() {
     const chartSeconds = Number.isFinite(playhead) ? Math.max(0, playhead - offsetSeconds) : 0;
     const playheadBeat = (() => {
       try {
-        return runtime.timeline.viewport.tempo.beat(chartSeconds, 1);
+        return runtime.timeline.viewport.tempo.beat(chartSeconds);
       } catch {
         return 0;
       }

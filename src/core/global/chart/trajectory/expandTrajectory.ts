@@ -39,7 +39,6 @@ export interface TrajectoryExpandOverrides extends TrajectorySplitInput {
 export function expandTrajectory(
   event: JudgeLineEvent,
   tempo: TempoMap,
-  factor = 1,
   overrides: TrajectoryExpandOverrides = {},
 ): Map<string, JudgeLineEvent[]> {
   const trajectory = event.trajectory;
@@ -47,8 +46,8 @@ export function expandTrajectory(
     throw trajectoryError("eventRequired");
   }
   const evaluate = compileTrajectory(trajectory.options);
-  const start = tempo.seconds(event.startTime, factor);
-  const end = tempo.seconds(event.endTime, factor);
+  const start = tempo.seconds(event.startTime);
+  const end = tempo.seconds(event.endTime);
   const count = overrides.segments ?? trajectory.segments ?? 128;
   if (!Number.isInteger(count) || count < 4 || count > 8192) {
     throw trajectoryError("invalidSegments");
@@ -66,7 +65,7 @@ export function expandTrajectory(
       ? beatValue(event.startTime)
       : index === count
         ? beatValue(event.endTime)
-        : tempo.beat(start + ((end - start) * index) / count, factor);
+        : tempo.beat(start + ((end - start) * index) / count);
   for (const [type, entries] of result) {
     const values = samples.map((point) => point[TRAJECTORY_AXES[type]]);
     const pieces = settings.simplify

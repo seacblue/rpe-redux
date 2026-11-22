@@ -859,7 +859,7 @@ export class TimelineCache {
     if (cached !== undefined) {
       return cached;
     }
-    const seconds = tempo.seconds(beat, normalizedFactor);
+    const seconds = tempo.seconds(beat);
     // Keep pathological charts from turning this cache into an unbounded store.
     if (byBeat.size >= 131072) {
       byBeat.clear();

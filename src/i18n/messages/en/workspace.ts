@@ -727,7 +727,7 @@ export default {
     "The tree lists judge lines and groups. Select a line to open its properties; selecting a group shows group actions instead of pretending the group is one line.",
   "tutorial.lines.edit.title": "Edit line properties",
   "tutorial.lines.edit.body":
-    "Edit the name, anchors, z-order, mask, texture, and BPM factor in the properties face. These are chart values and can affect every note and event attached to the line.",
+    "Edit the name, anchors, z-order, mask, texture, and Hold hit-effect rate in the properties face. These are chart values and can affect every note and event attached to the line.",
   "tutorial.lines.organize.title": "Organise groups and parents",
   "tutorial.lines.organize.body":
     "Use groups for structure and parent relationships for inherited motion. A multi-selection exposes only safe shared fields; mixed values are written only after you choose a replacement.",

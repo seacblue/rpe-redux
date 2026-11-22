@@ -108,8 +108,8 @@ function eventValueAt(
   tempo: Pick<TempoMap, "seconds">,
   factor: number,
 ): HitTestValue {
-  const start = tempo.seconds(event.startTime, factor);
-  const end = tempo.seconds(event.endTime, factor);
+  const start = tempo.seconds(event.startTime);
+  const end = tempo.seconds(event.endTime);
   const track = new EventTrack([event], tempo, factor);
   return copiedValue(track.sample({ event, start, end }, seconds));
 }

@@ -140,8 +140,7 @@ export function createPlaybackRuntime(options: {
     drainProgress: () => audio.outputDrainProgress,
   });
   const drawnChartSeconds = () => picture.seconds(chartSeconds());
-  const currentBeat = () =>
-    options.tempo().beat(chartSeconds(), options.session.current.line?.bpmfactor ?? 1);
+  const currentBeat = () => options.tempo().beat(chartSeconds());
   /**
    * Republish everything derived from the chart clock.
    *
@@ -156,10 +155,7 @@ export function createPlaybackRuntime(options: {
       picture.release();
     }
     options.timeline.viewport.setPlaybackActive(audio.playing || playback.pending);
-    options.timeline.viewport.setOrigin(
-      options.tempo().beat(drawnChartSeconds(), options.session.current.line?.bpmfactor ?? 1),
-      "seek",
-    );
+    options.timeline.viewport.setOrigin(options.tempo().beat(drawnChartSeconds()), "seek");
     // Seeking changes the time-dependent grid even when the viewport origin
     // rounds to the same beat as the previous frame.
     options.timeline.changed();
@@ -229,7 +225,6 @@ export function createPlaybackRuntime(options: {
       return;
     }
     const current = options.session.current;
-    const factor = current.line?.bpmfactor ?? 1;
     const offset = (current.chart.META.offset ?? 0) / 1000;
     const tempo = options.tempo();
     // Negative chart time is the pre-roll before beat zero. The viewport's
@@ -243,7 +238,7 @@ export function createPlaybackRuntime(options: {
     const chartEnd = options.preview.timelineActivity.duration;
     const chartAudioEnd = Number.isFinite(chartEnd) && chartEnd > 0 ? chartEnd + offset : 0;
     const maximum = Math.max(mediaEnd, chartAudioEnd) || Infinity;
-    const maximumBeat = Number.isFinite(maximum) ? tempo.beat(maximum - offset, factor) : Infinity;
+    const maximumBeat = Number.isFinite(maximum) ? tempo.beat(maximum - offset) : Infinity;
 
     if (audio.playing || playback.pending) {
       // The paused glide owns the playhead from here; the running transport's
@@ -264,7 +259,7 @@ export function createPlaybackRuntime(options: {
       wheelSeek = {
         current: audio.time,
         target: audio.time,
-        targetBeat: tempo.beat(audio.time - offset, factor),
+        targetBeat: tempo.beat(audio.time - offset),
         minimum,
         last: performance.now(),
         frame: null,
@@ -273,12 +268,9 @@ export function createPlaybackRuntime(options: {
     const state = wheelSeek;
     state.targetBeat = Math.min(
       maximumBeat,
-      Math.max(tempo.beat(minimum - offset, factor), state.targetBeat + deltaBeats),
+      Math.max(tempo.beat(minimum - offset), state.targetBeat + deltaBeats),
     );
-    state.target = Math.max(
-      minimum,
-      Math.min(maximum, tempo.seconds(state.targetBeat, factor) + offset),
-    );
+    state.target = Math.max(minimum, Math.min(maximum, tempo.seconds(state.targetBeat) + offset));
     state.minimum = minimum;
     if (state.frame === null) {
       state.frame = requestAnimationFrame(() => stepWheelSeek(state));
@@ -343,8 +335,7 @@ export function createPlaybackRuntime(options: {
   function seekBeat(value: number, pause = true): void {
     cancelWheelSeek();
     playback.seek(
-      options.tempo().seconds(value, options.session.current.line?.bpmfactor ?? 1) +
-        (options.session.current.chart.META.offset ?? 0) / 1000,
+      options.tempo().seconds(value) + (options.session.current.chart.META.offset ?? 0) / 1000,
       pause,
     );
     options.invalidate();

@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties } fro
 import { t } from "../../../../../i18n/index.ts";
 import { recordingError } from "./recordingErrors.ts";
 import { startLongTask } from "../../../../../core/state/longTasks.ts";
+import { canvasPixelRatio } from "../../canvas/canvas2d.ts";
 import {
   runRecording,
   type RecordingJobOptions,
@@ -83,7 +84,11 @@ function Host({ entry }: { entry: Entry }) {
       });
     }
   }, [entry]);
-  const ratio = globalThis.devicePixelRatio || 1;
+  // Size the host in CSS pixels that the renderer's capped pixel ratio turns
+  // back into exactly `entry.width × entry.height` backing pixels. The capped
+  // ratio matters: dividing by the raw DPR made a 250–300% display render at
+  // 2/DPR of the requested resolution and then upscale it.
+  const ratio = canvasPixelRatio();
   const host: CSSProperties = {
     position: "fixed",
     left: "-100000px",

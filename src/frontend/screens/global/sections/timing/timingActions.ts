@@ -28,7 +28,7 @@ export function selectTimingPoint(
   const tempo = runtime.providers.session.tempo.get();
   const offset = Number(chart?.META.offset ?? 0) / 1000;
   runtime.providers.playback.playback.seek(
-    tempo.seconds(beatValue(entry.startTime), 1) + offset,
+    tempo.seconds(beatValue(entry.startTime)) + offset,
     true,
   );
 }

@@ -27,8 +27,7 @@ function selectedEventSpeed(
   if (!event) {
     return null;
   }
-  const duration =
-    tempo.seconds(event.endTime, lineFactor) - tempo.seconds(event.startTime, lineFactor);
+  const duration = tempo.seconds(event.endTime) - tempo.seconds(event.startTime);
   if (
     !Number.isFinite(duration) ||
     Math.abs(duration) < 0.000001 ||
@@ -125,7 +124,7 @@ export function buildLineInfoText(
   }`;
   const globalShaders: string[] = [];
   for (const index of chart.judgeLineList?.keys?.() ?? []) {
-    const eventBeat = tempo.beat(seconds, chart.judgeLineList?.[index]?.bpmfactor ?? 1);
+    const eventBeat = tempo.beat(seconds);
     for (const event of shaderEvents(chart, index)) {
       if (!event.global) {
         continue;

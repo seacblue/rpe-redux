@@ -74,10 +74,9 @@ export function batchDragDeltas(input: BatchDragGeometry): {
   dragX: number;
 } {
   const secondsAt = (y: number, factor: number) =>
-    input.tempo.seconds(input.origin, factor) +
-    (input.height - input.judgementOffset - y) / input.scale;
+    input.tempo.seconds(input.origin) + (input.height - input.judgementOffset - y) / input.scale;
   const beatAt = (y: number, factor: number) =>
-    beatValue(snapTime(secondsAt(y, factor), input.division, input.tempo, factor));
+    beatValue(snapTime(secondsAt(y, factor), input.division, input.tempo));
   const deltaX = input.point.x - input.start.x;
   return {
     deltaBeat: beatAt(input.point.y, input.factor) - input.startBeat,

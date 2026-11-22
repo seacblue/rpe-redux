@@ -112,7 +112,7 @@ export default {
   "settings.field.editing-bezier-enabled.label": "Bézier curves",
   "settings.field.editing-line-extended-enabled.label": "Extended line properties",
   "settings.field.editing-parent-lines-enabled.label": "Parent and child lines",
-  "settings.field.editing-line-bpmfactor-enabled.label": "BPM Factor",
+  "settings.field.editing-line-bpmfactor-enabled.label": "Hold hit-effect rate",
   "settings.field.editing-line-anchor-enabled.label": "Anchor",
   "settings.editingAccess.aiUse": "AI access",
   "settings.editingAccess.visible": "Shown",

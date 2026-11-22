@@ -91,7 +91,6 @@ async function createOffscreenRenderer(
   return new OffscreenPreviewRenderer({
     ...options,
     surface: detachedSurface(options.width, options.height),
-    detached: true,
   });
 }
 

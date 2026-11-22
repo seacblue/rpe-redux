@@ -327,7 +327,7 @@ function updateRectangleSeconds(receiver: TimelineSelectionReceiver, drag: Recta
     return;
   }
   drag.currentSeconds =
-    receiver.viewport.tempo.seconds(receiver.viewport.origin, drag.startFactor) +
+    receiver.viewport.tempo.seconds(receiver.viewport.origin) +
     (receiver.viewport.viewHeight() - receiver.viewport.judgementOffset - drag.current.y) /
       receiver.viewport.scaleForArea(drag.area ?? "notes");
 }

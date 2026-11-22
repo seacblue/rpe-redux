@@ -67,20 +67,18 @@ export function moveTimelineNote(
     return note;
   }
   const { tempo, origin, division, scale } = context;
-  const factor = context.factor;
   const key = drag.kind === "endTime" ? "endTime" : "startTime";
-  const scroll =
-    tempo.seconds(origin, factor) - (drag.originSeconds ?? tempo.seconds(origin, factor));
+  const scroll = tempo.seconds(origin) - (drag.originSeconds ?? tempo.seconds(origin));
   // The Z prekey can start a Hold edge drag anywhere inside the bar. For an
   // edge drag the pointer row, not the pointer's travel distance, is the time
   // the moved edge must land on.
   const seconds =
     drag.kind !== "move" && drag.currentSeconds !== undefined
       ? drag.currentSeconds
-      : tempo.seconds(anchor[key], factor) + (drag.start.y - drag.current.y) / scale + scroll;
+      : tempo.seconds(anchor[key]) + (drag.start.y - drag.current.y) / scale + scroll;
   // Snap once, then move the triple exactly: the delta is a rational difference
   // of two beats, not a float that gets re-rounded on the way into the chart.
-  const deltaBeat = subtractBeats(snapTime(seconds, division, tempo, factor), anchor[key]);
+  const deltaBeat = subtractBeats(snapTime(seconds, division, tempo), anchor[key]);
   if (drag.kind !== "move") {
     if (note.type !== 2) {
       return note;
@@ -131,11 +129,9 @@ export function eventDragDelta(
     return ZERO_BEAT;
   }
   const { tempo, origin, scale, division } = context;
-  const scroll =
-    tempo.seconds(origin, factor) - (drag.originSeconds ?? tempo.seconds(origin, factor));
-  const seconds =
-    tempo.seconds(drag.anchor, factor) + (drag.start.y - drag.current.y) / scale + scroll;
-  return subtractBeats(snapTime(seconds, division, tempo, factor), drag.anchor);
+  const scroll = tempo.seconds(origin) - (drag.originSeconds ?? tempo.seconds(origin));
+  const seconds = tempo.seconds(drag.anchor) + (drag.start.y - drag.current.y) / scale + scroll;
+  return subtractBeats(snapTime(seconds, division, tempo), drag.anchor);
 }
 
 /**
@@ -160,10 +156,7 @@ export function eventEdgePointerDelta(
   ) {
     return ZERO_BEAT;
   }
-  return subtractBeats(
-    snapTime(drag.currentSeconds, context.division, context.tempo, factor),
-    drag.anchor,
-  );
+  return subtractBeats(snapTime(drag.currentSeconds, context.division, context.tempo), drag.anchor);
 }
 
 /** How far a drag that has left the panel should scroll it, per elapsed fraction. */

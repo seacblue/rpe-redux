@@ -76,13 +76,12 @@ export function sampleValue(
   events: readonly ShaderVarEvent[] | undefined,
   seconds: number,
   tempo: ShaderTempo | null,
-  factor: number,
   fallback: unknown,
 ): unknown {
   if (!events?.length) {
     return cloneValue(fallback);
   }
-  const beat = tempo?.beat?.(seconds, factor) ?? seconds;
+  const beat = tempo?.beat?.(seconds) ?? seconds;
   const low = upperBound(events, beat, (event) => beatNumber(event.startTime, event.start ?? 0));
   if (!low) {
     return undefined;
@@ -90,8 +89,8 @@ export function sampleValue(
   const selected = events[low - 1];
   const startBeat = beatNumber(selected.startTime, selected.start ?? 0);
   const endBeat = beatNumber(selected.endTime, selected.end ?? startBeat);
-  const startSeconds = tempo?.seconds(startBeat, factor) ?? startBeat;
-  const endSeconds = tempo?.seconds(endBeat, factor) ?? endBeat;
+  const startSeconds = tempo?.seconds(startBeat) ?? startBeat;
+  const endSeconds = tempo?.seconds(endBeat) ?? endBeat;
   const progress =
     endSeconds <= startSeconds
       ? seconds >= endSeconds

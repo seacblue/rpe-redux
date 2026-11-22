@@ -50,6 +50,18 @@ export const DEFAULT_LINE_COLOR = [237, 236, 176] as const;
 const CHANNELS = ["moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents"] as const;
 const CHANNEL_COUNT = CHANNELS.length;
 
+/**
+ * Read the line's Hold hit-effect rate from `bpmfactor`.
+ *
+ * `bpmfactor` is not a chart time scale. Notes, events, shader effects and the
+ * playhead always follow the global `BPMList`; only a Hold's repeated hit pulse
+ * on this line uses this multiplier. A missing or non-positive value reads as 1.
+ */
+export function holdHitRateOf(line: { bpmfactor?: number } | undefined): number {
+  const value = Number(line?.bpmfactor ?? 1);
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
 /** Reusable broad-phase candidates for a line whose spatial query is invariant. */
 interface VisibilityCandidateCache {
   floor: number;
@@ -402,7 +414,14 @@ function canCoverActiveHoldsSpatially(speeds: readonly SpeedIntegral[]): boolean
 export class LineRuntime {
   declare line: JudgeLine;
   declare tempo: TempoSource;
-  declare factor: number;
+  /**
+   * Multiplier for this line's Hold hit-effect pulse rate.
+   *
+   * The authored `bpmfactor` only changes how often a Hold on this line emits a
+   * hit pulse. It is not a time scale: notes, events and shader effects always
+   * use the chart's global BPM grid.
+   */
+  declare holdHitRate: number;
   declare tracks: Record<
     "moveXEvents" | "moveYEvents" | "rotateEvents" | "alphaEvents",
     EventTrack[]
@@ -483,8 +502,7 @@ export class LineRuntime {
   ) {
     this.line = line;
     this.tempo = tempo;
-    const factor = line.bpmfactor ?? 1;
-    this.factor = factor;
+    this.holdHitRate = holdHitRateOf(line);
     this.tracks = Object.fromEntries(
       (["moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents"] as const).map((type) => [
         type,
@@ -501,7 +519,7 @@ export class LineRuntime {
                   trajectoryAxis: type === "moveYEvents" ? "y" : "rotation",
                 }))
             : [];
-          return new EventTrack([...(layer?.[type] ?? []), ...virtual], tempo, factor, 0);
+          return new EventTrack([...(layer?.[type] ?? []), ...virtual], tempo, 0);
         }),
       ]),
     ) as LineRuntime["tracks"];
@@ -509,7 +527,7 @@ export class LineRuntime {
     this.applyTrackOffsets();
     this.speeds = (line.eventLayers ?? [])
       .slice(0, 5)
-      .map((layer) => new SpeedIntegral(layer?.speedEvents, tempo, factor));
+      .map((layer) => new SpeedIntegral(layer?.speedEvents, tempo));
     this.floorCursor = new LineFloorCursor(this.speeds);
     this.floorIsStatic = this.floorCursor.isStatic;
     this.holdActivationCoveredBySpatial = canCoverActiveHoldsSpatially(this.speeds);
@@ -528,7 +546,7 @@ export class LineRuntime {
     this.extended = Object.fromEntries(
       defaults.map(([type, fallback]) => [
         type,
-        new EventTrack(line.extended?.[type], tempo, factor, fallback),
+        new EventTrack(line.extended?.[type], tempo, fallback),
       ]),
     ) as LineRuntime["extended"];
     this.controls = Object.fromEntries(
@@ -550,8 +568,8 @@ export class LineRuntime {
       if (!isOrderedBeatRange(note.startTime, note.endTime)) {
         return [];
       }
-      const start = tempo.seconds(note.startTime, factor);
-      const end = tempo.seconds(note.endTime, factor);
+      const start = tempo.seconds(note.startTime);
+      const end = tempo.seconds(note.endTime);
       return [
         {
           noteIndex,
@@ -598,7 +616,7 @@ export class LineRuntime {
     const previous = this.line.notes ?? [];
     const next = line.notes ?? [];
     this.line = line;
-    this.factor = line.bpmfactor ?? 1;
+    this.holdHitRate = holdHitRateOf(line);
     let appendedHold = false;
     for (let index = previous.length; index < next.length; index++) {
       const note = next[index];
@@ -608,8 +626,8 @@ export class LineRuntime {
       if (note.type === 2) {
         appendedHold = true;
       }
-      const start = this.tempo.seconds(note.startTime, this.factor);
-      const end = this.tempo.seconds(note.endTime, this.factor);
+      const start = this.tempo.seconds(note.startTime);
+      const end = this.tempo.seconds(note.endTime);
       const startFloor = this.floor(start);
       const endFloor = this.floor(end);
       const offset = note.yOffset ?? 0;
@@ -652,8 +670,7 @@ export class LineRuntime {
     const next = Object.create(LineRuntime.prototype) as LineRuntime;
     Object.assign(next, this);
     next.line = line;
-    const factor = line.bpmfactor ?? 1;
-    next.factor = factor;
+    next.holdHitRate = holdHitRateOf(line);
     const sourceNotes = line.notes ?? [];
     const reusableChanges =
       hint?.kind === "visual" && sourceNotes.length === (this.line.notes ?? []).length
@@ -683,8 +700,8 @@ export class LineRuntime {
       if (!isOrderedBeatRange(note.startTime, note.endTime)) {
         return [];
       }
-      const start = next.tempo.seconds(note.startTime, factor);
-      const end = next.tempo.seconds(note.endTime, factor);
+      const start = next.tempo.seconds(note.startTime);
+      const end = next.tempo.seconds(note.endTime);
       const startFloor = next.floor(start);
       const endFloor = next.floor(end);
       const offset = note.yOffset ?? 0;
@@ -719,7 +736,7 @@ export class LineRuntime {
   withEventLine(line: JudgeLine): LineRuntime | null {
     if (
       line.notes !== this.line.notes ||
-      line.bpmfactor !== this.factor ||
+      line.bpmfactor !== this.line.bpmfactor ||
       line.Texture !== this.line.Texture ||
       line.attachUI !== this.line.attachUI ||
       !sameControlSources(this.line, line) ||
@@ -730,7 +747,7 @@ export class LineRuntime {
     const next = Object.create(LineRuntime.prototype) as LineRuntime;
     Object.assign(next, this);
     next.line = line;
-    next.factor = line.bpmfactor ?? 1;
+    next.holdHitRate = holdHitRateOf(line);
     const newLayers = line.eventLayers ?? [];
     next.tracks = Object.fromEntries(
       (["moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents"] as const).map((type) => [
@@ -749,7 +766,7 @@ export class LineRuntime {
           if (previous) {
             return previous.withSources(sources);
           }
-          return new EventTrack(sources, this.tempo, next.factor, 0);
+          return new EventTrack(sources, this.tempo, 0);
         }),
       ]),
     ) as LineRuntime["tracks"];
@@ -757,8 +774,7 @@ export class LineRuntime {
     next.speeds = newLayers
       .slice(0, 5)
       .map(
-        (layer, index) =>
-          this.speeds[index] ?? new SpeedIntegral(layer?.speedEvents, this.tempo, next.factor),
+        (layer, index) => this.speeds[index] ?? new SpeedIntegral(layer?.speedEvents, this.tempo),
       );
     next.floorCursor = new LineFloorCursor(next.speeds);
     const defaults: [keyof LineRuntime["extended"], LineEventValue][] = [

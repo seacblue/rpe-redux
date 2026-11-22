@@ -1,8 +1,8 @@
 /**
  * Derives the absolute-time hit-sound trigger list from a chart's notes.
  *
- * Note types and custom hitsound names map to tap, drag, flick and custom offsets,
- * with each line's beat factor applied through the tempo grid.
+ * Note types and custom hitsound names map to tap, drag, flick and custom offsets
+ * on the chart's global BPM grid.
  */
 import type { Chart, JudgeLine } from "../global/chart/chart.ts";
 import type { TempoGrid } from "../global/chart/editing/editGrid.ts";
@@ -49,7 +49,7 @@ function offsetFor(offsets: number[] | HitSoundOffsetMap, noteType: number, soun
  * Build the sorted hit-sound triggers for a chart.
  *
  * Pass a `lineIndex` to include only that judge line. Offsets are added after the
- * chart's audio offset and the line's beat factor.
+ * chart's audio offset; every note uses the chart's global BPM grid.
  */
 export function hitTimeline(
   chart: Chart,
@@ -71,7 +71,7 @@ export function hitTimeline(
       const sound = custom ? (custom === "hold" ? "tap" : custom) : defaultHitSound(note.type);
       entries.push({
         time:
-          tempo.seconds(note.startTime, line.bpmfactor ?? 1) +
+          tempo.seconds(note.startTime) +
           (chart.META.offset ?? 0) / 1000 +
           offsetFor(offsets, note.type, sound),
         sound,

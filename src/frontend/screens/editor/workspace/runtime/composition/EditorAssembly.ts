@@ -574,15 +574,13 @@ export function createEditorAssembly(
     if (beat === null) {
       return false;
     }
-    const current = session.current;
-    const factor =
-      lineIndex === null ? 1 : (current.chart.judgeLineList?.[lineIndex]?.bpmfactor ?? 1);
-    const nextOffsetMs = alignedOffsetMs(audio.time, tempo.get().seconds(beat, factor));
+    const nextOffsetMs = alignedOffsetMs(audio.time, tempo.get().seconds(beat));
     // Disarm first: a refused commit must not leave the pick swallowing presses.
     disarmOffsetAlign(runtimeRef.current);
     if (nextOffsetMs === null) {
       return false;
     }
+    const current = session.current;
     try {
       current.commitChart(
         t("editorPanels.inspector.form.bpm.offsetCommit"),

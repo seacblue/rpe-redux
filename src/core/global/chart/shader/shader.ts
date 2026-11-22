@@ -320,7 +320,6 @@ export class ShaderRuntime {
   /** Source identities used to prove a note-only chart revision keeps effects unchanged. */
   declare effectRootSources: readonly unknown[];
   declare paintEventSources: readonly unknown[];
-  declare effectFactors: readonly number[];
   /** Bumped whenever loaded source text changes; callers use it as a cache key. */
   declare sourceRevision: number;
   /** Reusable interval candidates for the per-frame active-effect query. */
@@ -353,7 +352,6 @@ export class ShaderRuntime {
     this.sourcesWanted = new Set();
     this.effectRootSources = [];
     this.paintEventSources = [];
-    this.effectFactors = [];
     this.sourceRevision = 0;
     this.activeCandidates = [];
   }
@@ -397,15 +395,12 @@ export class ShaderRuntime {
     this.tempo = tempo;
     this.compiledRevision = revision;
     this.effects = chartEffects(chart);
-    const timed = this.effects.map((effect, index) => {
-      const factor = chart.judgeLineList?.[effect.line]?.bpmfactor ?? 1;
-      return {
-        effect,
-        index,
-        start: tempo?.seconds(effect.startBeat, factor) ?? effect.startBeat,
-        end: tempo?.seconds(effect.endBeat, factor) ?? effect.endBeat,
-      };
-    });
+    const timed = this.effects.map((effect, index) => ({
+      effect,
+      index,
+      start: tempo?.seconds(effect.startBeat) ?? effect.startBeat,
+      end: tempo?.seconds(effect.endBeat) ?? effect.endBeat,
+    }));
     this.activeIndex = new IntervalIndex(
       timed,
       (entry) => entry.start,
@@ -413,7 +408,6 @@ export class ShaderRuntime {
     );
     this.effectRootSources = [chart.effects, chart.shaderEvents, chart.META?.effects];
     this.paintEventSources = (chart.judgeLineList ?? []).map((line) => line.extended?.paintEvents);
-    this.effectFactors = (chart.judgeLineList ?? []).map((line) => Number(line.bpmfactor ?? 1));
     this.sourcesWanted = new Set(
       this.effects.map((effect) => shaderSourceKey(effect.shader, effect.sourceName)),
     );
@@ -449,16 +443,11 @@ export class ShaderRuntime {
       return false;
     }
     const lines = chart.judgeLineList ?? [];
-    if (
-      lines.length !== this.paintEventSources.length ||
-      lines.length !== this.effectFactors.length
-    ) {
+    if (lines.length !== this.paintEventSources.length) {
       return false;
     }
     return lines.every(
-      (line, index) =>
-        line.extended?.paintEvents === this.paintEventSources[index] &&
-        Number(line.bpmfactor ?? 1) === this.effectFactors[index],
+      (line, index) => line.extended?.paintEvents === this.paintEventSources[index],
     );
   }
 
@@ -536,8 +525,7 @@ export class ShaderRuntime {
     const candidates = this.activeIndex.queryItemsInto(seconds, seconds, this.activeCandidates);
     candidates.sort((left, right) => left.index - right.index);
     for (const { effect, index } of candidates) {
-      const factor = this.chart?.judgeLineList?.[effect.line]?.bpmfactor ?? 1;
-      const beat = this.tempo?.beat?.(seconds, factor) ?? seconds;
+      const beat = this.tempo?.beat?.(seconds) ?? seconds;
       if (beat < effect.startBeat || beat >= effect.endBeat) {
         continue;
       }
@@ -548,7 +536,7 @@ export class ShaderRuntime {
       }
       valueKeys.length = 0;
       for (const [name, events] of Object.entries(effect.vars)) {
-        const value = sampleValue(events, seconds, this.tempo, factor, events[0]?.start);
+        const value = sampleValue(events, seconds, this.tempo, events[0]?.start);
         if (value !== undefined) {
           values[name] = value;
           valueKeys.push(name);

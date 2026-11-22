@@ -186,12 +186,7 @@ export function createPlaybackApi(host: PlaybackApiHost) {
       if (!Number.isFinite(beat)) {
         throw new RangeError("beat must be finite");
       }
-      return api.seek(
-        host
-          .tempo()
-          .seconds(beat, host.chart().judgeLineList?.[frameState().lineIndex]?.bpmfactor ?? 1),
-        options,
-      );
+      return api.seek(host.tempo().seconds(beat), options);
     },
     setRate(rate: number): PlaybackState {
       requireChart();

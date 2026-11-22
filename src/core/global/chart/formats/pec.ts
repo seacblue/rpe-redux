@@ -19,7 +19,6 @@ import {
   RPE_SPEED_PER_PEC_SPEED,
   type SerializedExternalChart,
   finiteNumber,
-  positiveNumber,
   roundNumber,
   textNumber,
 } from "./common.ts";
@@ -78,16 +77,15 @@ function pushPecFrame(
 function chartSeconds(chart: Chart, tempo: TempoMap): number {
   let maximum = 0;
   for (const line of chart.judgeLineList ?? []) {
-    const factor = positiveNumber(line.bpmfactor, 1);
     for (const layer of [...(line.eventLayers ?? []), line.extended]) {
       for (const events of Object.values(layer ?? {})) {
         for (const event of events ?? []) {
-          maximum = Math.max(maximum, tempo.seconds(event.endTime, factor));
+          maximum = Math.max(maximum, tempo.seconds(event.endTime));
         }
       }
     }
     for (const note of line.notes ?? []) {
-      maximum = Math.max(maximum, tempo.seconds(note.endTime, factor));
+      maximum = Math.max(maximum, tempo.seconds(note.endTime));
     }
   }
   return maximum;
@@ -107,18 +105,17 @@ function sampleBeats(chart: Chart, tempo: TempoMap, maxBeat: number): number[] {
     }
   };
   for (const line of chart.judgeLineList ?? []) {
-    const factor = positiveNumber(line.bpmfactor, 1);
     for (const layer of [...(line.eventLayers ?? []), line.extended]) {
       for (const events of Object.values(layer ?? {})) {
         for (const event of events ?? []) {
-          add(tempo.seconds(event.startTime, factor));
-          add(tempo.seconds(event.endTime, factor));
+          add(tempo.seconds(event.startTime));
+          add(tempo.seconds(event.endTime));
         }
       }
     }
     for (const note of line.notes ?? []) {
-      add(tempo.seconds(note.startTime, factor));
-      add(tempo.seconds(note.endTime, factor));
+      add(tempo.seconds(note.startTime));
+      add(tempo.seconds(note.endTime));
     }
   }
   return [...beats].sort((left, right) => left - right);
@@ -254,7 +251,6 @@ export function serializePecChart(chart: Chart): SerializedExternalChart {
 
   for (const [outputIndex, index] of indices.entries()) {
     const line = lines[index]!;
-    const factor = positiveNumber(line.bpmfactor, 1);
     for (const note of line.notes ?? []) {
       const command = RPE_NOTE_TO_PEC[note.type];
       if (!command) {
@@ -270,8 +266,8 @@ export function serializePecChart(chart: Chart): SerializedExternalChart {
       if (Number(note.visibleTime ?? 999999) !== 999999) {
         warnings.add("Note visible time is not exported to PEC.");
       }
-      const startBeat = tempo.beat(tempo.seconds(note.startTime, factor));
-      const endBeat = tempo.beat(tempo.seconds(note.endTime, factor));
+      const startBeat = tempo.beat(tempo.seconds(note.startTime));
+      const endBeat = tempo.beat(tempo.seconds(note.endTime));
       const x = (Number(note.positionX ?? 0) * PEC_LINE_HALF_WIDTH) / RPE_LINE_HALF_WIDTH;
       const above = Number(note.above ?? 1) === 1 ? 1 : 2;
       const fake = Number(note.isFake ?? 0) === 1 ? 1 : 0;

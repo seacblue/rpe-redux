@@ -145,7 +145,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       if (refreshHud) {
         runtime.batchControls.sync();
       }
-      const beat = tempo.beat(frameSeconds, session.line?.bpmfactor ?? 1);
+      const beat = tempo.beat(frameSeconds);
       session.editSeconds = Math.max(0, frameSeconds);
       if (refreshHud) {
         runtime.updateLineInfo();

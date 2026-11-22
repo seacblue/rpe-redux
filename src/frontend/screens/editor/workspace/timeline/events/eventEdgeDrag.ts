@@ -108,10 +108,7 @@ export function eventEdgeDragFor(
     start: point,
     current: point,
     startFactor: timeline.viewport.factorForLine(lineIndex),
-    originSeconds: timeline.viewport.tempo.seconds(
-      timeline.viewport.origin,
-      timeline.viewport.factorForLine(lineIndex),
-    ),
+    originSeconds: timeline.viewport.tempo.seconds(timeline.viewport.origin),
   };
 }
 

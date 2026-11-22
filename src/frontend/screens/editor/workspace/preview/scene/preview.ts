@@ -285,6 +285,12 @@ export class Preview {
   declare aspectRatio?: number;
   declare viewDivisor?: number;
   declare duration?: number | null;
+  /**
+   * Fixed shader render-target size in device pixels, or null to size the
+   * target from the canvas's CSS measurement (the live-preview cost policy).
+   * Offscreen renders set this so shader passes run at the output resolution.
+   */
+  shaderTextureLimit: { width: number; height: number } | null = null;
   declare highlight?: boolean;
   declare showGameUI?: boolean;
   declare gameUiCornerCompression?: boolean;
