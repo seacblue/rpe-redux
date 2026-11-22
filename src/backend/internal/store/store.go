@@ -753,14 +753,6 @@ type chartMeta struct {
 	EventCount int
 }
 
-// chartEventTracks mirrors the chart vocabulary's event arrays counted for the
-// library summary.
-var chartEventTracks = []string{
-	"moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents", "speedEvents",
-	"scaleXEvents", "scaleYEvents", "colorEvents", "paintEvents", "textEvents",
-	"inclineEvents", "gifEvents",
-}
-
 // metaString tolerates numbers and other scalars in string-valued fields.
 func metaString(v any) string {
 	switch t := v.(type) {
@@ -804,58 +796,59 @@ func metaInt(v any) int {
 	return 0
 }
 
-// extractMeta reads searchable fields from a chart object, tolerating any shape.
-func extractMeta(chart json.RawMessage) chartMeta {
+// readChartMeta scans one chart source into the library's stored fields.
+//
+// The note total prefers the sum of every line's `notes` array and falls back to
+// `META.numOfNotes` when no line carried one, matching what the editor writes.
+func readChartMeta(chart json.RawMessage) (chartMeta, bool) {
 	var m chartMeta
 	if len(chart) == 0 {
-		return m
+		return m, false
 	}
-	var root map[string]any
-	if err := json.Unmarshal(chart, &root); err != nil {
-		return m
+	counts, err := scanChart(chart)
+	if err != nil {
+		return m, false
 	}
-	meta, _ := root["META"].(map[string]any)
-	lineList, _ := root["judgeLineList"].([]any)
+	m.EventCount = counts.events
+	if counts.sawNotes {
+		m.NoteCount = counts.notes
+	} else if counts.meta != nil {
+		m.NoteCount = metaInt(counts.meta["numOfNotes"])
+	}
+	if counts.meta != nil {
+		m.Charter = metaString(counts.meta["charter"])
+		m.Composer = metaString(counts.meta["composer"])
+		m.Level = metaString(counts.meta["level"])
+		m.Background = metaString(counts.meta["background"])
+		m.Song = metaString(counts.meta["song"])
+	}
+	return m, true
+}
 
-	sum := 0
-	eventCount := 0
-	found := false
-	for _, line := range lineList {
-		lm, ok := line.(map[string]any)
-		if !ok {
-			continue
-		}
-		if notes, ok := lm["notes"].([]any); ok {
-			found = true
-			sum += len(notes)
-		}
-		for _, track := range chartEventTracks {
-			if events, ok := lm[track].([]any); ok {
-				eventCount += len(events)
-			}
-		}
+// extractMeta reads searchable fields and totals from a chart object.
+//
+// It scans the source once instead of decoding the chart: the library stores
+// five strings and two counts, and a whole-document decode into `map[string]any`
+// costs seconds and hundreds of megabytes on a large chart. A chart that cannot
+// be scanned keeps whatever was already stored, so a damaged document never
+// rewrites the row's metadata with zeros.
+func extractMeta(chart json.RawMessage) chartMeta {
+	meta, ok := readChartMeta(chart)
+	if !ok {
+		return chartMeta{}
 	}
-	m.EventCount = eventCount
-	if found {
-		m.NoteCount = sum
-	} else if meta != nil {
-		m.NoteCount = metaInt(meta["numOfNotes"])
-	}
-	if meta != nil {
-		m.Charter = metaString(meta["charter"])
-		m.Composer = metaString(meta["composer"])
-		m.Level = metaString(meta["level"])
-		m.Background = metaString(meta["background"])
-		m.Song = metaString(meta["song"])
-	}
-	return m
+	return meta
 }
 
 // CountChartEvents returns the number of event objects in a chart document.
 // Backup restore uses it so a restored project carries a current count even
 // when the backup predates the stored field.
 func CountChartEvents(chart json.RawMessage) int {
-	return extractMeta(chart).EventCount
+	counts, err := scanChart(chart)
+	if err != nil {
+		return 0
+	}
+	return counts.events
 }
 
 // imageAssetPattern matches the formats the library can draw as a cover.
