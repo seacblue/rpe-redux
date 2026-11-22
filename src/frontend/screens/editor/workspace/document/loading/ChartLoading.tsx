@@ -2,6 +2,10 @@
  * The chart-loading overlay: progress and stage text, or the error that stopped
  * the load. It subscribes to the core loading snapshot; the document lifecycle
  * decides when a load starts and ends.
+ *
+ * The overlay reports no transfer size or rate: a chart usually opens from local
+ * disk, so Resource Timing bytes would describe the same machine reading its own
+ * files. Network transfer belongs to the startup splash, not to this surface.
  */
 import { useEffect, useSyncExternalStore } from "react";
 import { loadingProgress } from "../../../../../../core/global/document/loading.ts";
@@ -9,7 +13,6 @@ import { Button } from "../../../../../../design/components/button/Button.tsx";
 import { Modal } from "../../../../../../design/components/modal/Modal.tsx";
 import { Progress } from "../../../../../../design/components/progress/Progress.tsx";
 import { useTranslation } from "../../../../../../i18n/react.ts";
-import { useResourceDownload } from "../../../../../platform/useResourceDownload.ts";
 
 /**
  * The chart-loading modal.
@@ -24,7 +27,6 @@ export function ChartLoading() {
   // A completed load stays on screen briefly, so the bar is seen landing.
   const id = state?.id;
   const status = state?.status;
-  const download = useResourceDownload(Boolean(state) && state?.status !== "error", id ?? 0);
   useEffect(() => {
     if (status !== "complete" || id === undefined) {
       return;
@@ -96,16 +98,6 @@ export function ChartLoading() {
               valueText={`${Math.floor(shown?.percent ?? 0)}%`}
             />
             <p className="redux-loading-percent">{Math.floor(shown?.percent ?? 0)}%</p>
-            {download && (
-              <p className="redux-loading-download">
-                {download.speed
-                  ? t("settings.startup.downloadedSpeed", {
-                      downloaded: download.downloaded,
-                      speed: download.speed,
-                    })
-                  : t("settings.startup.downloaded", { downloaded: download.downloaded })}
-              </p>
-            )}
           </>
         )}
       </div>

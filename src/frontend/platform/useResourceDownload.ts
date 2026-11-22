@@ -1,10 +1,11 @@
 /**
- * Resource-download telemetry for a surface that paints before its data lands.
+ * Resource-download telemetry for the startup splash, which paints before its
+ * data lands.
  *
- * The startup screen uses it while the editor and Extension chunks arrive; the
- * chart-loading overlay uses it while worker chunks, textures, audio, and other
- * library resources load. The total is unknown at this layer, so callers keep
- * their own progress bar and show the observed bytes and speed beside it.
+ * The splash uses it while the editor and Extension chunks arrive. The total is
+ * unknown at this layer, so the caller keeps its own progress bar and shows the
+ * observed bytes and speed beside it. Surfaces that open local documents must
+ * not use it: reading a chart from disk crosses no network.
  */
 import { useEffect, useState } from "react";
 import {
