@@ -48,7 +48,7 @@ export function ChangelogContent({
   }
   return (
     <div className="redux-changelog">
-      <ReleaseNotesBody notes={release.notes} />
+      <ReleaseNotesBody notes={release.notes} sourceUrl={release.url} />
     </div>
   );
 }

@@ -84,6 +84,7 @@ export interface ReleaseNotesSource {
   version: string;
   publishedAt: string;
   notes: string;
+  url?: string;
 }
 
 /** The release whose notes one changelog mode shows. */
@@ -92,6 +93,8 @@ export interface ChangelogRelease {
   publishedAt: string;
   /** The section of the published body written in the requested language. */
   notes: string;
+  /** The published GitHub Release page for the notes. */
+  url: string;
 }
 
 /** GitHub usernames: letters, digits, and inner hyphens, up to 39 characters. */
@@ -340,6 +343,7 @@ export function selectChangelogRelease(
       version: release.version,
       publishedAt: release.publishedAt,
       notes: selectLanguageNotes(release.notes, language),
+      url: release.url ?? "",
     }))
     .filter((release) => release.notes.length > 0);
   return current.find((release) => compareVersions(release.version, currentVersion) === 0) ?? null;
@@ -361,6 +365,7 @@ export function selectUpdateChangelogRelease(
       version: release.version,
       publishedAt: release.publishedAt,
       notes: selectLanguageNotes(release.notes, language),
+      url: release.url ?? "",
     }))
     .filter(
       (release) => release.notes.length > 0 && compareVersions(release.version, currentVersion) > 0,

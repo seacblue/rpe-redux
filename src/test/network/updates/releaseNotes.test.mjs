@@ -225,12 +225,23 @@ test("formats a release timestamp as year-month-day", () => {
 
 test("selects the running version's release when it has notes", () => {
   const releases = [
-    { version: "1.0.2", publishedAt: "2026-11-07T00:00:00Z", notes: BILINGUAL },
-    { version: "1.0.1", publishedAt: "2026-11-06T12:00:00Z", notes: BILINGUAL },
+    {
+      version: "1.0.2",
+      publishedAt: "2026-11-07T00:00:00Z",
+      notes: BILINGUAL,
+      url: "https://github.com/acme/rpe/releases/tag/v1.0.2",
+    },
+    {
+      version: "1.0.1",
+      publishedAt: "2026-11-06T12:00:00Z",
+      notes: BILINGUAL,
+      url: "https://github.com/acme/rpe/releases/tag/v1.0.1",
+    },
   ];
   const current = selectChangelogRelease(releases, "1.0.1", "zh");
   assert.equal(current?.version, "1.0.1");
   assert.equal(current?.publishedAt, "2026-11-06T12:00:00Z");
+  assert.equal(current?.url, "https://github.com/acme/rpe/releases/tag/v1.0.1");
   assert.match(current?.notes ?? "", /修复甲/u);
   assert.doesNotMatch(current?.notes ?? "", /Fix one/u);
 });
