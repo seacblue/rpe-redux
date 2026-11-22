@@ -36,6 +36,36 @@ test("a note sweep selects and then removes the note it crosses", () => {
   assert.deepEqual([...session.selection], []);
 });
 
+test("a fast sweep applies its add or remove mode to every crossed note", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes = [createNote(1, 2, 0), createNote(1, 2, 0)];
+  const session = new EditorSession(chart);
+  const indexes = new Map();
+  refreshNoteIndex(indexes, 0, session.notes);
+  const bounds = (note, lineIndex, index) => ({
+    left: index * 40,
+    right: index * 40 + 10,
+    top: 45,
+    bottom: 55,
+  });
+
+  const added = selectNotesAlongSegment(
+    session,
+    { startX: -20, startY: 50, endX: 60, endY: 50 },
+    { indexForLine: (lineIndex) => indexes.get(lineIndex), bounds },
+  );
+  assert.equal(added.changed, true);
+  assert.deepEqual([...session.selection], [0, 1]);
+
+  const removed = selectNotesAlongSegment(
+    session,
+    { startX: 60, startY: 50, endX: -20, endY: 50, remove: true },
+    { indexForLine: (lineIndex) => indexes.get(lineIndex), bounds },
+  );
+  assert.equal(removed.changed, true);
+  assert.deepEqual([...session.selection], []);
+});
+
 test("an event sweep uses drawn event bars and does not select an unrelated bar", () => {
   const chart = createChart();
   chart.judgeLineList[0].eventLayers[0].moveXEvents = [createEvent(0, 1, 2, 3)];

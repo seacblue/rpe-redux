@@ -14,7 +14,7 @@ import type { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
 import type { TrajectoryPanel } from "../../../inspector/trajectory/trajectoryPanel.ts";
 import type { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import type { Preview } from "../../preview/scene/preview.ts";
-import { selectionMapForSession } from "../../preview/interaction/previewSelection.ts";
+import { previewSelectionForFrame } from "../../preview/interaction/previewSelectionMap.ts";
 import { EditorRenderScheduler, type RenderTiming } from "./renderScheduler.ts";
 import { freeCameraState } from "../../stage/freeCamera/freeCamera.ts";
 import { isPerformanceHudVisible } from "../../../../../overlays/performance/performanceHud.ts";
@@ -191,7 +191,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       const viewSeconds = trajectoryView?.seconds ?? frameSeconds;
       const previewChartChanged = viewChart !== previousPreviewChart;
       const previewSession = runtime.timeline.getPreviewSession();
-      const previewSelection = viewSession.selection;
+      const previewSelection = previewSelectionForFrame(viewSession);
       const previewSessionChanged = previewSession !== previousPreviewSession;
       const previewSelectionChanged = previewSelection !== previousPreviewSelection;
       const previewSecondsChanged = viewSeconds !== previousPreviewSeconds;
@@ -217,6 +217,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
             runtime.realtimePreview.visible || Boolean(trajectoryView) || cameraPreview,
           contentRefreshRate,
           previewMarqueeActive: Boolean(runtime.timeline.gestures.previewMarquee),
+          previewSelectionActive: selectionOverlayActive,
           previewChart: viewChart,
           previewRevision: runtime.realtimePreview.invalidationRevision,
           previewContentRevision:
@@ -287,7 +288,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                 tempo,
                 viewSeconds,
                 viewSession.lineIndex,
-                selectionMapForSession(viewSession),
+                previewSelection,
                 {
                   deferHeavyFrame:
                     !runtime.audio.playing && previewHighDensity && !work.previewInvalidated,
