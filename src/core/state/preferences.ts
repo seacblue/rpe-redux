@@ -20,7 +20,7 @@ export const PREFERENCE_SECTIONS = Object.freeze({
   shortcuts: "shortcuts",
   /** Active note texture pack id; image bytes remain on disk. */
   noteSkin: "noteSkin",
-  /** Clipboard history entries. */
+  /** The app-private clipboard history and current clipboard snapshot. */
   clipboard: "clipboard",
   /** Active interface skin id. */
   appearance: "appearance",
@@ -241,7 +241,31 @@ export class PreferenceStore {
     }
     try {
       const revisions = new Map(this.dirty);
-      await this.client.savePreferences({ ...this.values });
+      let stored: Record<string, unknown> = {};
+      try {
+        const payload = await this.client.preferences();
+        stored = isRecord(payload?.values) ? payload.values : {};
+      } catch {
+        // Keep the existing write path available when a service only accepts
+        // the write request during a short restart window.
+      }
+      const values = { ...stored };
+      for (const [section, value] of Object.entries(this.values)) {
+        if (this.dirty.has(section as PreferenceSection) || stored[section] === undefined) {
+          values[section] = value;
+        }
+      }
+      await this.client.savePreferences(values);
+      for (const [section, value] of Object.entries(stored)) {
+        if (
+          !this.dirty.has(section as PreferenceSection) &&
+          JSON.stringify(this.values[section]) !== JSON.stringify(value)
+        ) {
+          this.values[section] = value;
+          this.notify(section as PreferenceSection);
+        }
+      }
+      this.mirrorNow();
       for (const [section, revision] of revisions) {
         if (this.dirty.get(section) === revision) {
           this.dirty.delete(section);
@@ -276,6 +300,49 @@ export class PreferenceStore {
   /** Wait for an in-flight database read before committing a discrete choice. */
   async ready(): Promise<void> {
     await this.attachment;
+  }
+
+  /**
+   * Refresh selected sections from the durable client without overwriting a
+   * local section that still has an unsent write.
+   *
+   * This pull seam lets browser tabs and desktop windows share one local
+   * service without sharing a JavaScript runtime.
+   */
+  async refresh(
+    sections: readonly PreferenceSection[] = Object.values(PREFERENCE_SECTIONS),
+  ): Promise<readonly PreferenceSection[]> {
+    const client = this.client;
+    if (!client || !sections.length) {
+      return [];
+    }
+    try {
+      const payload = await client.preferences();
+      const stored = isRecord(payload?.values) ? payload.values : {};
+      const changed: PreferenceSection[] = [];
+      for (const section of sections) {
+        if (this.dirty.has(section) || stored[section] === undefined) {
+          continue;
+        }
+        if (JSON.stringify(this.values[section]) === JSON.stringify(stored[section])) {
+          continue;
+        }
+        this.values[section] = stored[section];
+        changed.push(section);
+      }
+      if (!changed.length) {
+        return changed;
+      }
+      this.mirrorNow();
+      for (const section of changed) {
+        this.notify(section);
+      }
+      return changed;
+    } catch {
+      // A transiently stopped sidecar is expected during restart. The next
+      // refresh retries without turning a healthy local cache into an error.
+      return [];
+    }
   }
 
   /** Merge the database document with unsaved local sections and upload the rest. */

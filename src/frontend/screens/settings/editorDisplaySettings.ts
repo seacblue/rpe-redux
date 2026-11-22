@@ -294,6 +294,7 @@ export function readEditorDisplaySettings() {
       mouseTrailEnabled: contributedFlag("mouse-trail-enabled"),
       hoverGuidesEnabled: contributedFlag("hover-guides-enabled"),
       nearbyGuidesOnly: contributedFlag("nearby-guides-only-enabled"),
+      clipboardGhostEnabled: contributedFlag("timeline-clipboard-range-bars-enabled"),
       densityBarsEnabled: contributedFlag("timeline-density-bars-enabled"),
       hoverPreviewEnabled: contributedFlag("timeline-hover-preview-enabled"),
       barWidth: contributedNumber("bar-width"),

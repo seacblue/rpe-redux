@@ -1,4 +1,5 @@
 /** Draws note timelines, their multi-line panels, and the moving playhead. */
+/* eslint-disable max-lines -- note layers and skin-backed clipboard ghosts share one draw order. */
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
@@ -42,6 +43,8 @@ import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
 import { drawNoteTimelineCues } from "./noteOffscreenCueDrawing.ts";
+import { CLIPBOARD_GHOST_ALPHA, projectClipboardGhost } from "../clipboardGhost.ts";
+import { NOTE_GHOST_FILTER } from "../../../canvas/noteGhostVisual.ts";
 
 interface MultiLineNoteScratch {
   readonly lineLabelCuller: TimelineLabelCuller;
@@ -282,6 +285,71 @@ export function drawNote(
   context.globalAlpha = 1;
 }
 
+/** Draws clipboard notes at the current paste target through the active skin. */
+function drawClipboardGhostNotes(
+  this: TimelineNoteDrawingReceiver,
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const session = this.getSession();
+  const targetLine = this.gestures.cursorLineIndex ?? session.lineIndex;
+  const projection = projectClipboardGhost(this, targetLine);
+  if (!projection) {
+    return;
+  }
+  const notes = projection.notes.filter(
+    (unused, index) => (projection.noteLines?.[index] ?? targetLine) === targetLine,
+  );
+  if (!notes.length) {
+    return;
+  }
+  const palette = this.cache.palette() ?? readCanvasPalette();
+  const { factor: noteFactor, project: verticalProjection } = noteProjectionFor(
+    this,
+    targetLine,
+    height,
+  );
+  const panelProjection = this.viewport.notePanelProjectionForLine(width, targetLine);
+  context.save();
+  context.filter = NOTE_GHOST_FILTER;
+  for (const sourceNote of notes) {
+    const note = checkedNote(sourceNote);
+    if (!isTimelineNoteRenderable(note)) {
+      continue;
+    }
+    const vertical = verticalProjection(
+      this.cache.tempoSeconds(this.viewport.tempo, beatValue(note.startTime), noteFactor),
+    );
+    const endVertical = verticalProjection(
+      this.cache.tempoSeconds(this.viewport.tempo, beatValue(note.endTime), noteFactor),
+    );
+    const noteWidth = this.viewport.noteWidth(note);
+    const renderedHorizontal = panelProjection.clamp(
+      panelProjection.horizontal(note.positionX),
+      noteWidth,
+    );
+    if (
+      renderedHorizontal == null ||
+      (Math.max(vertical, endVertical) < 0 && Math.min(vertical, endVertical) < 0) ||
+      (Math.min(vertical, endVertical) > height && Math.max(vertical, endVertical) > height)
+    ) {
+      continue;
+    }
+    drawNote.call(this, context, {
+      palette,
+      note,
+      horizontal: renderedHorizontal,
+      vertical,
+      endVertical,
+      noteWidth,
+      height,
+      opacityMultiplier: CLIPBOARD_GHOST_ALPHA,
+    });
+  }
+  context.restore();
+}
+
 /** Draw the note field for the current mode: grid, notes, ghosts, and multi-line chrome. */
 export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void {
   const session = this.getSession();
@@ -353,6 +421,7 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     this.drawMultiLineNotes(context, width, height);
   }
   this.drawCurveGhost(context);
+  drawClipboardGhostNotes.call(this, context, width, height);
   // Only the single-line pass paints here; the multi-line panels paint above.
   if (!multiNotes) {
     // Resolving the visible notes also refreshes this line's index, which the

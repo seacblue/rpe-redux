@@ -209,6 +209,7 @@ export default {
   "editor.app.notice.backupSaved": "自动备份已保存",
   "editor.app.notice.clipboardHistoryLoadFailed": "剪贴板历史读取失败：{message}",
   "editor.app.notice.clipboardHistorySaveFailed": "剪贴板历史保存失败：{message}",
+  "editor.app.notice.clipboardHistoryReceived": "已从其他 RPE Redux 实例或外部来源获取剪贴板内容。",
   "editor.app.notice.desktopEnvironment":
     "部分原生功能需要桌面版；浏览器中仍可使用谱面库和编辑器。",
   "editor.app.notice.desktopOnlyBackup": "仅桌面版支持自动备份",

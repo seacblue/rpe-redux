@@ -820,11 +820,5 @@ export default {
   "settings.field.timeline-undo-jump.label": "Jump to the changed time after undo or redo",
   "settings.field.timeline-undo-jump.description":
     "Moves the playhead and view to the edited time when an undo or redo step completes.",
-  "settings.field.timeline-clipboard-range-bars-enabled.label":
-    "Show clipboard and paste ranges on overview bars",
-  "settings.field.timeline-clipboard-range-color.label": "Clipboard range colour",
-  "settings.field.timeline-paste-range-color.label": "Paste range colour",
-  "settings.field.timeline-range-bar-opacity.label": "Range area opacity",
-  "settings.field.timeline-range-bar-opacity.description":
-    "Opacity of the clipboard and paste ranges on the timeline overview bars.",
+  "settings.field.timeline-clipboard-ghost-enabled.label": "Show clipboard ghost preview",
 } as const;

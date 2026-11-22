@@ -58,6 +58,7 @@ import {
 } from "./eventLabelLayout.ts";
 import { drawTrajectory } from "./eventOverlayDrawing.ts";
 import { drawEventText } from "./eventTextDrawing.ts";
+import { CLIPBOARD_GHOST_ALPHA, projectClipboardGhost } from "../clipboardGhost.ts";
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
 
 interface EventCurveEntry {
@@ -70,6 +71,57 @@ interface EventCurveEntry {
 const EMPTY_EVENTS: readonly JudgeLineEvent[] = [];
 const EMPTY_SELECTION = new Set<string>();
 const EMPTY_SELECTED_INDEXES = new Set<number>();
+
+/** Draws clipboard events at the current paste target through the event skin. */
+function drawClipboardGhostEvents(
+  this: TimelineEventDrawingReceiver,
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const session = this.getSession();
+  const targetLine = session.lineIndex;
+  const projection = projectClipboardGhost(this, targetLine);
+  if (!projection) {
+    return;
+  }
+  const eventTypes = this.viewport.eventTypesForLine(targetLine);
+  if (!eventTypes.length) {
+    return;
+  }
+  const verticalAt = createVerticalAtBeat(this, this.viewport.factorForLine(targetLine), height);
+  const multiLine = session.multiLineActive && session.multiLineMode === "events";
+  const panelWidth = multiLine ? this.viewport.panelWidth(width, "events") : width;
+  const panelOffset = multiLine
+    ? this.viewport.panelIndex(targetLine, "events") * this.viewport.panelStride(width, "events") -
+      this.viewport.multiLineViewportOffset(width, "events")
+    : 0;
+  context.save();
+  for (const [index, entry] of projection.events.entries()) {
+    if ((projection.eventLines?.[index] ?? targetLine) !== targetLine) {
+      continue;
+    }
+    const channel = eventTypes.indexOf(entry.type);
+    if (channel < 0) {
+      continue;
+    }
+    const column = this.viewport.eventColumnBounds(channel, panelWidth);
+    const top = verticalAt(beatValue(entry.event.endTime));
+    const bottom = verticalAt(beatValue(entry.event.startTime));
+    if (bottom < 23 || top > height) {
+      continue;
+    }
+    const rectangle = {
+      x: panelOffset + column.x,
+      y: Math.max(23, top),
+      width: column.width,
+      height: Math.max(2, Math.min(height, bottom) - Math.max(23, top)),
+    };
+    context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, CLIPBOARD_GHOST_ALPHA);
+    drawEventBar(this, context, rectangle, CLIPBOARD_GHOST_ALPHA);
+  }
+  context.restore();
+}
 
 /** Decode canonical event-selection keys once before scanning one track. */
 export function selectedEventIndexesForType(
@@ -416,6 +468,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
       this.eventsGridBatch.finish();
     }
     this.drawMultiLineGrid(context, width, height, playBeat, "events", FOREGROUND_GRID);
+    drawClipboardGhostEvents.call(this, context, width, height);
     if (repaintBatch) {
       this.drawMultiLineEvents(playBeat, backdrop.context);
     }
@@ -459,6 +512,7 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
   // and allocates the track list, so calling it from loop bounds multiplies work
   // across every event channel in the frame.
   const eventTypes = this.eventTypes;
+  drawClipboardGhostEvents.call(this, context, width, height);
   const eventTypeCount = eventTypes.length;
   const cached = this.cache.events(session.chart, indexKey, eventTypes, layer);
   const labels = noiseLineSettings(session.line) ? noiseTrackLabels() : trackLabels();

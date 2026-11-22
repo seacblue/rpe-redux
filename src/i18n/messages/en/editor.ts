@@ -221,6 +221,8 @@ export default {
   "editor.app.notice.backupSaved": "Automatic backup saved",
   "editor.app.notice.clipboardHistoryLoadFailed": "Could not read the clipboard history: {message}",
   "editor.app.notice.clipboardHistorySaveFailed": "Could not save the clipboard history: {message}",
+  "editor.app.notice.clipboardHistoryReceived":
+    "Clipboard content was received from another RPE Redux instance or an external source.",
   "editor.app.notice.desktopEnvironment":
     "Some native features need the desktop application; the chart library and editor stay available in the browser.",
   "editor.app.notice.desktopOnlyBackup": "Automatic backup needs the desktop app",

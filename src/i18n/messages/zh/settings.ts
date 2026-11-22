@@ -722,10 +722,5 @@ export default {
   "settings.field.timeline-undo-jump.label": "撤销/重做后跳转到改动位置",
   "settings.field.timeline-undo-jump.description":
     "撤销或重做完成后，将播放头和视图移动到本次改动的时间位置。",
-  "settings.field.timeline-clipboard-range-bars-enabled.label": "在概览条显示剪贴板与粘贴范围",
-  "settings.field.timeline-clipboard-range-color.label": "剪贴板范围颜色",
-  "settings.field.timeline-paste-range-color.label": "粘贴范围颜色",
-  "settings.field.timeline-range-bar-opacity.label": "范围区域透明度",
-  "settings.field.timeline-range-bar-opacity.description":
-    "时间轴两侧概览条上剪贴板与粘贴范围的透明度。",
+  "settings.field.timeline-clipboard-ghost-enabled.label": "显示剪贴板虚影预览",
 } as const;

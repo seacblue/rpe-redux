@@ -101,9 +101,10 @@ type preferenceSectionRule struct {
 }
 
 const (
-	preferenceObject = "object"
-	preferenceArray  = "array"
-	preferenceString = "string"
+	preferenceObject        = "object"
+	preferenceArray         = "array"
+	preferenceArrayOrObject = "array_or_object"
+	preferenceString        = "string"
 )
 
 // preferenceSections mirrors the frontend PREFERENCE_SECTIONS catalog. Unknown
@@ -111,7 +112,7 @@ const (
 var preferenceSections = map[string]preferenceSectionRule{
 	"shortcuts":      {kind: preferenceObject},
 	"noteSkin":       {kind: preferenceString},
-	"clipboard":      {kind: preferenceArray, nullable: true},
+	"clipboard":      {kind: preferenceArrayOrObject, nullable: true},
 	"appearance":     {kind: preferenceString},
 	"icons":          {kind: preferenceString},
 	"settings":       {kind: preferenceObject},
@@ -180,6 +181,16 @@ func validatePreferenceValue(name string, raw json.RawMessage, rule preferenceSe
 		var value []json.RawMessage
 		if err := json.Unmarshal(raw, &value); err != nil || value == nil {
 			return fmt.Errorf("preference section %q must be an array", name)
+		}
+	case preferenceArrayOrObject:
+		var value any
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return fmt.Errorf("preference section %q must be an array or object", name)
+		}
+		if _, ok := value.([]any); !ok {
+			if _, ok := value.(map[string]any); !ok {
+				return fmt.Errorf("preference section %q must be an array or object", name)
+			}
 		}
 	case preferenceObject:
 		var value map[string]json.RawMessage
