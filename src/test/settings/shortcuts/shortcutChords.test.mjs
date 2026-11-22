@@ -87,6 +87,38 @@ test("the recorder adds held keys and a mouse release commits the chord", () => 
   assert.deepEqual(released.state, createShortcutCaptureState());
 });
 
+test("the capture preview includes every pressed modifier and chord key", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "Control", code: "ControlLeft", ctrlKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "CTRL", modifiers: [] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "Shift", code: "ShiftLeft", ctrlKey: true, shiftKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "CTRL", keys: ["SHIFT"], modifiers: [] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "Delete", code: "Delete", ctrlKey: true, shiftKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "DELETE", modifiers: ["CTRL", "SHIFT"] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "Delete", code: "Delete", ctrlKey: true, shiftKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "DELETE", modifiers: ["CTRL", "SHIFT"] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "Control", code: "ControlLeft", shiftKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "DELETE", modifiers: ["CTRL", "SHIFT"] });
+});
+
 test("chord dispatch prefers the more specific binding", () => {
   const registry = new ShortcutRegistry();
   const category = registry.registerCategory({ id: "test.chords", title: "Chords", order: 0 });
