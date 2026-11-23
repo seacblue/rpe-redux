@@ -8,7 +8,6 @@ import type { RefObject } from "react";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Popconfirm } from "../../../../../design/components/popconfirm/Popconfirm.tsx";
-import { sanitizeLineGroupName } from "../../../../../core/global/chart/line/lineTreeEdits.ts";
 import { t } from "../../../../../i18n/index.ts";
 
 /** One new line group may hold at most this many lines in a single batch. */
@@ -86,11 +85,7 @@ export function LineTreeCreatePrompt({
             value={prompt?.value ?? ""}
             onChange={(event) => {
               const value = event.currentTarget.value;
-              onValueChange(
-                prompt?.kind === "group" && prompt.mode === "name"
-                  ? sanitizeLineGroupName(value)
-                  : value,
-              );
+              onValueChange(value);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {

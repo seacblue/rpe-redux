@@ -8,6 +8,7 @@
  * - an inclusive range (`2:5`, `2-5`, `2：5`) with an optional `/step`
  *   (`80:119/5`). A missing step means 1, the end is always included, and a
  *   reversed range is read in ascending order;
+ * - the RPE keyword `all`, which selects every available line;
  * - a folder name, matched before numbers so a folder named `3` stays a
  *   folder. Matching ignores case and surrounding spaces. A name containing
  *   spaces must be a whole comma-separated part; an unspaced name may sit
@@ -25,7 +26,11 @@
  * `5,3,1`, and the formatter writes each token back as it was written.
  */
 import type { Chart } from "../../global/chart/chart.ts";
-import { groupNames, lineGroupIndex } from "../../global/chart/line/lineGroups.ts";
+import {
+  groupNames,
+  lineGroupIndex,
+  MULTI_LINE_ALL_KEYWORD,
+} from "../../global/chart/line/lineGroups.ts";
 import {
   formatLineSelectionTokens,
   lineSelectionGroupName,
@@ -157,6 +162,10 @@ export function parseLineSelectionInput(
     if (!trimmed) {
       continue;
     }
+    if (trimmed.toLocaleLowerCase() === MULTI_LINE_ALL_KEYWORD) {
+      tokens.push({ kind: "all" });
+      continue;
+    }
     // A folder name may contain spaces, so test the whole comma-separated part
     // before whitespace is treated as a separator.
     const wholeGroup = matchGroup(trimmed, groups);
@@ -171,6 +180,10 @@ export function parseLineSelectionInput(
     const normalized = trimmed.replace(OPERATOR_SPACES, "$1$2$3");
     for (const tokenText of normalized.split(WHITESPACE)) {
       if (!tokenText) {
+        continue;
+      }
+      if (tokenText.toLocaleLowerCase() === MULTI_LINE_ALL_KEYWORD) {
+        tokens.push({ kind: "all" });
         continue;
       }
       const group = matchGroup(tokenText, groups);

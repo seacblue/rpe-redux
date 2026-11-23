@@ -42,6 +42,7 @@ import {
 } from "../../global/chart/noise/noiseLine.ts";
 import { lineNoiseConflicts } from "../../global/chart/noise/lineNoiseConflicts.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
+import { MULTI_LINE_ALL_KEYWORD } from "../../global/chart/line/lineGroups.ts";
 import { assertNoNewNegativeBeatRanges } from "../../global/chart/chartValidation.ts";
 import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
 import { lineSelectionGroups, parseLineSelectionInput } from "../state/lineSelectionInput.ts";
@@ -191,8 +192,11 @@ function persistedLineSelection(chart: Chart): PersistedLineSelection {
   return { tokens, lines: resolveLineSelection(tokens, available, groups) };
 }
 
-/** Write one numeric token in the colon-range syntax native RPE charts read. */
+/** Write one persisted token in the syntax native RPE charts read. */
 function persistedTokenText(token: LineSelectionToken): string[] {
+  if (token.kind === "all") {
+    return [MULTI_LINE_ALL_KEYWORD];
+  }
   if (token.kind === "line") {
     return [String(token.line)];
   }

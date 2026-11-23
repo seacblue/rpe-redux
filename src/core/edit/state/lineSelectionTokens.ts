@@ -2,16 +2,23 @@
  * Owns the authored judge-line selection expression and the splice operations
  * that edit it without merging or reordering what the user wrote.
  *
- * One token is one written piece: a line, an inclusive range with an optional
- * step, or a folder name. Resolution is a union in written order, so the first
- * occurrence of a line wins while later duplicate tokens stay in the text.
+ * One token is one written piece: the RPE all keyword, a line, an inclusive
+ * range with an optional step, or a folder name. Resolution is a union in
+ * written order, so the first occurrence of a line wins while later duplicate
+ * tokens stay in the text.
  * Adding a block removes its lines from the existing tokens and appends the
  * block; removing a block splits each affected token in place. Only the
  * programmatic token builders compact adjacent runs.
  */
 
+import {
+  isReservedLineGroupName,
+  MULTI_LINE_ALL_KEYWORD,
+} from "../../global/chart/line/lineGroups.ts";
+
 /** One authored piece of a line-selection expression. */
 export type LineSelectionToken =
+  | { kind: "all" }
   | { kind: "line"; line: number }
   | { kind: "range"; start: number; end: number; step: number }
   | { kind: "group"; group: number; name: string };
@@ -79,6 +86,9 @@ function resolveToken(
   available: ReadonlySet<number>,
   groups: readonly LineSelectionGroup[],
 ): number[] {
+  if (token.kind === "all") {
+    return [...available];
+  }
   if (token.kind === "line") {
     return available.has(token.line) ? [token.line] : [];
   }
@@ -234,6 +244,14 @@ function splitToken(
   available: ReadonlySet<number>,
   groups: readonly LineSelectionGroup[],
 ): LineSelectionToken[] {
+  if (token.kind === "all") {
+    const full = [...available];
+    if (!full.length) {
+      return [];
+    }
+    const kept = full.filter((line) => !remove.has(line));
+    return kept.length === full.length ? [{ ...token }] : tokensFromLines(kept);
+  }
   if (token.kind === "line") {
     return remove.has(token.line) || !available.has(token.line) ? [] : [{ ...token }];
   }
@@ -339,7 +357,12 @@ export function addGroupSelection(
  * only an imported chart can still hold one.
  */
 function isWritableGroupName(name: string): boolean {
-  return name.length > 0 && name === name.trim() && !/[，,()（）\r\n]/u.test(name);
+  return (
+    name.length > 0 &&
+    name === name.trim() &&
+    !isReservedLineGroupName(name) &&
+    !/[，,()（）\r\n]/u.test(name)
+  );
 }
 
 /**
@@ -355,6 +378,10 @@ export function formatLineSelectionTokens(
 ): string {
   const parts: string[] = [];
   for (const token of tokens) {
+    if (token.kind === "all") {
+      parts.push(MULTI_LINE_ALL_KEYWORD);
+      continue;
+    }
     if (token.kind === "line") {
       parts.push(String(token.line));
       continue;

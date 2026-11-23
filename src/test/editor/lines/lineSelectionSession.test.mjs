@@ -34,6 +34,19 @@ test("a session keeps the written order and persists it numerically", () => {
   assert.equal(session.chart.multiLineString, "5,3,1");
 });
 
+test("a session restores and preserves the RPE all keyword", () => {
+  const chart = chartWithLines(4);
+  chart.multiLineString = "all";
+  const session = new EditorSession(chart);
+
+  assert.deepEqual(session.multiLineRestore, [0, 1, 2, 3]);
+  assert.deepEqual(session.multiLineRestoreTokens, [{ kind: "all" }]);
+  session.setMultiLineSelection(session.multiLineRestore, {
+    tokens: session.multiLineRestoreTokens,
+  });
+  assert.equal(session.chart.multiLineString, "all");
+});
+
 test("a step token survives the session and persists as its explicit lines", () => {
   const session = new EditorSession(chartWithLines(121));
   const tokens = [{ kind: "range", start: 80, end: 119, step: 5 }];

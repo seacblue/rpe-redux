@@ -174,6 +174,22 @@ test("a folder name adds every member in chart order", () => {
   assert.deepEqual(select("Default", LINES, GROUPS), [0, 1]);
 });
 
+test("the RPE all keyword selects every available line", () => {
+  assert.deepEqual(select("all"), LINES);
+  assert.deepEqual(select("ALL"), LINES);
+  assert.deepEqual(select("all, 2"), LINES);
+  assert.deepEqual(select("all", LINES, [{ index: 4, name: "all", indices: [2] }]), LINES);
+});
+
+test("a legacy folder named all formats as its numeric members", () => {
+  const groups = [{ index: 4, name: "all", indices: [2, 4] }];
+  assert.deepEqual(select("all", LINES, groups), LINES);
+  assert.equal(
+    formatLineSelectionTokens([{ kind: "group", group: 4, name: "all" }], groups),
+    "2,4",
+  );
+});
+
 test("a folder name can be mixed with numbers and other folders", () => {
   assert.deepEqual(select("Drums 2", LINES, GROUPS), [4, 5, 6, 2]);
   assert.deepEqual(select("Lead A, 2, Drums", LINES, GROUPS), [10, 11, 2, 4, 5, 6]);

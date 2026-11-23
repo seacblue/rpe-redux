@@ -274,8 +274,8 @@ export class LinePanel {
   }
 
   /**
-   * Rename one folder after stripping characters a folder expression cannot
-   * carry, rejecting only empty and duplicate names.
+   * Rename one folder after stripping expression characters and suffixing
+   * reserved names into the first available slot.
    *
    * The folder panel keeps an uncontrolled name field, so a rejected name needs
    * a synchronous answer to roll the visible value back.
@@ -286,7 +286,10 @@ export class LinePanel {
     if (!Number.isInteger(group) || group < 0 || group >= names.length) {
       return false;
     }
-    const next = sanitizeLineGroupName(name);
+    const next = sanitizeLineGroupName(
+      name,
+      names.filter((unused, current) => current !== group),
+    );
     if (!next) {
       this.notify(t("editorPanels.linePanel.groupNameRequired"), "warning");
       return false;

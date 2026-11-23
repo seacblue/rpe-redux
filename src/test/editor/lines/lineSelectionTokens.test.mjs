@@ -23,6 +23,7 @@ const LEAD = { index: 2, name: "Lead A", indices: [10, 11] };
 const GROUPS = [DRUMS, LEAD];
 
 const line = (value) => ({ kind: "line", line: value });
+const all = () => ({ kind: "all" });
 const range = (start, end, step = 1) => ({ kind: "range", start, end, step });
 const group = (index, name) => ({ kind: "group", group: index, name });
 
@@ -30,6 +31,12 @@ test("resolution keeps the written order and drops duplicate lines", () => {
   assert.deepEqual(resolveLineSelection([line(5), line(3), line(1)], LINES), [5, 3, 1]);
   assert.deepEqual(resolveLineSelection([line(5), line(3), line(5)], LINES), [5, 3]);
   assert.deepEqual(resolveLineSelection([range(4, 2)], LINES), [2, 3, 4]);
+});
+
+test("the all token resolves and formats as the RPE keyword", () => {
+  assert.deepEqual(resolveLineSelection([all()], LINES), LINES);
+  assert.equal(formatLineSelectionTokens([all()]), "all");
+  assert.deepEqual(subtractLineSelection([all()], [2], LINES), [range(0, 1), range(3, 23)]);
 });
 
 test("a step range resolves inclusively and filters unavailable lines", () => {
