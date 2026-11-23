@@ -20,10 +20,10 @@ const numeric = {
   default: 4,
 };
 
-test("a modified value equal to the default still offers reset", () => {
-  assert.equal(settingShowsReset(numeric, 4, false), false);
-  assert.equal(settingShowsReset(numeric, 4, true), true);
-  assert.equal(settingShowsReset(numeric, 8, false), true);
+test("a value equal to the default does not offer reset", () => {
+  assert.equal(settingShowsReset(numeric, 4), false);
+  assert.equal(settingShowsReset(numeric, "4.0"), false);
+  assert.equal(settingShowsReset(numeric, 8), true);
 });
 
 test("numeric and colour comparisons ignore formatting differences", () => {
@@ -41,6 +41,6 @@ test("action rows never offer a reset", () => {
     control: "action",
     action: { kind: "navigate", target: "test" },
   };
-  assert.equal(settingShowsReset(action, 4, true), false);
-  assert.equal(settingShowsReset({ ...numeric, default: undefined }, 4, true), false);
+  assert.equal(settingShowsReset(action, 4), false);
+  assert.equal(settingShowsReset({ ...numeric, default: undefined }, 4), false);
 });
