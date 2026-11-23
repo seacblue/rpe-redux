@@ -4,6 +4,8 @@ User-visible changes for the current release. Chinese first, English second. The
 
 Inside either language section the notes may use inline annotations: `@name` credits a GitHub user (rendered bold and underlined), `<red>text</red>` colours a run of text, and backticks render inline code. Triple-backtick fences render multiline code blocks with an optional language label; code content is shown literally. The colour tag name may be `accent`, `red`, `yellow`, `green`, `blue`, `purple`, or `gray`. Each resolves through the active theme, so write the name rather than a hex value. GitHub drops the unknown colour tag, so the release page still reads as plain words.
 
+Contributor credits are generated from the Changesets. A Changeset names them in a language-neutral `### Contributors` block, and one without that block credits the human author of the pull request that added it; bots, maintainers, and logins the note already names are left out. The release closes the change's last bullet with the names and ends each language section with a contributor category (`贡献者` / `Contributors`).
+
 ## 1.0.16
 
 ### 中文

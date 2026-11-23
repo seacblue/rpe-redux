@@ -173,6 +173,51 @@ test("rewrites the changelog as one bilingual section that keeps the preamble", 
   });
 });
 
+test("renders an explicit contributor block as inline and release-wide credits", () => {
+  withFixture({ changesets: [] }, (root) => {
+    writeFileSync(
+      join(root, ".changeset", "credited.md"),
+      '---\n"rpe-redux": patch\n---\n\n### 中文\n\n**修复**\n\n- 修复。\n\n### English\n\n**Fixes**\n\n- Fixed.\n\n### Contributors\n\n- @alice\n- @bob\n',
+    );
+    prepareRelease({ root });
+    const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
+    assert.match(changelog, /- 修复。（由 @alice、@bob 贡献）/u);
+    assert.match(changelog, /- Fixed\. \(contributed by @alice and @bob\)/u);
+    assert.match(changelog, /\*\*贡献者\*\*\n\n- @alice\n- @bob/u);
+    assert.match(changelog, /\*\*Contributors\*\*\n\n- @alice\n- @bob/u);
+  });
+});
+
+test("credits the contributor a resolver returns for an unnamed changeset", () => {
+  withFixture({ changesets: [] }, (root) => {
+    writeFileSync(
+      join(root, ".changeset", "auto.md"),
+      '---\n"rpe-redux": patch\n---\n\n### 中文\n\n**修复**\n\n- 修复。\n\n### English\n\n**Fixes**\n\n- Fixed.\n',
+    );
+    const path = join(root, ".changeset", "auto.md");
+    const plan = prepareRelease({
+      root,
+      resolveCredits: () => new Map([[path, ["carol"]]]),
+    });
+    assert.deepEqual(plan.contributors, [{ changeset: ".changeset/auto.md", logins: ["carol"] }]);
+    const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
+    assert.match(changelog, /（由 @carol 贡献）/u);
+    assert.match(changelog, /\*\*Contributors\*\*\n\n- @carol/u);
+  });
+});
+
+test("leaves an unnamed changeset uncredited when the lookup is offline", () => {
+  withFixture({ changesets: [] }, (root) => {
+    writeFileSync(
+      join(root, ".changeset", "offline.md"),
+      '---\n"rpe-redux": patch\n---\n\n### 中文\n\n**修复**\n\n- 修复。\n\n### English\n\n**Fixes**\n\n- Fixed.\n',
+    );
+    const plan = prepareRelease({ root, offline: true });
+    assert.deepEqual(plan.contributors, []);
+    assert.doesNotMatch(readFileSync(join(root, "CHANGELOG.md"), "utf8"), /Contributors/u);
+  });
+});
+
 test("derives a minor release from the highest pending bump", () => {
   withFixture({}, (root) => {
     writeFileSync(
@@ -184,7 +229,6 @@ test("derives a minor release from the highest pending bump", () => {
     assert.equal(plan.version, "1.1.0");
   });
 });
-
 test("honours an explicit release version", () => {
   withFixture({}, (root) => {
     const plan = prepareRelease({ root, version: "v2.0.0" });
