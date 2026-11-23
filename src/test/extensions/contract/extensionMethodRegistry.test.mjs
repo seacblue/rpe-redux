@@ -97,6 +97,9 @@ test("the completeness check accepts a facade built from the registry", () => {
   const facade = facadeFrom(EXTENSION_METHODS);
   assert.doesNotThrow(() => assertRegistryComplete(facade));
   assert.equal(lookupMethod("chart", "readAll")?.capability, "chart.read");
+  assert.equal(lookupMethod("chart", "lines")?.capability, "chart.read");
+  assert.equal(lookupMethod("chart", "notes")?.capability, "chart.read");
+  assert.equal(lookupMethod("chart", "events")?.capability, "chart.read");
   assert.equal(lookupMethod("recipe", "plan")?.capability, "chart.write");
   assert.equal(lookupMethod("library", "current.createRevision")?.capability, "library.write");
   assert.equal(lookupMethod("", "ui.notice")?.capability, "ui.notice");
@@ -106,9 +109,6 @@ test("host-only operations stay out of the package registry", () => {
   const removed = [
     ["chart", "snapshot"],
     ["chart", "metadata"],
-    ["chart", "lines"],
-    ["chart", "notes"],
-    ["chart", "events"],
     ["playback", "replay"],
     ["playback", "inspect"],
     ["playback", "renderAt"],
