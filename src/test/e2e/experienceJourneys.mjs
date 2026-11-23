@@ -128,6 +128,7 @@ async function readState(runner) {
       document: { status: doc.status, name: doc.name, dirty: doc.dirty },
       notes: notes.ok ? notes.value : null,
       events: events.ok ? events.value.length : null,
+      lastEventInst: events.ok ? (events.value.at(-1)?.event.inst ?? 0) : null,
       selection: selection.ok ? selection.value : null,
       title: document.title,
     };
@@ -405,13 +406,13 @@ export async function experienceEventField(runner) {
   const eventCanvas = await boundsOf(runner, "#events");
   runner.assert(Boolean(eventCanvas), "the event timeline canvas is missing");
 
-  // R over the event field starts one event; the second R commits its range.
+  // Q over the event field starts one event; R completes its range without a hook.
   await hover(runner, {
     x: eventCanvas.centerX,
     y: eventCanvas.y + Math.round(eventCanvas.height * 0.4),
   });
   await settle(250);
-  await pressKey(runner, KEYS.event);
+  await pressKey(runner, KEYS.tap);
   await hover(runner, {
     x: eventCanvas.centerX,
     y: eventCanvas.y + Math.round(eventCanvas.height * 0.55),
@@ -425,6 +426,10 @@ export async function experienceEventField(runner) {
   );
   const placed = await readState(runner);
   runner.assert(placed.document.dirty === true, "placing an event should mark the chart unsaved");
+  runner.assert(
+    placed.lastEventInst === 0,
+    `Q-R event placement should finish unhooked: ${JSON.stringify(placed)}`,
+  );
   runner.assert(
     placed.selection?.focus === "events",
     `event placement must move focus to the event field: ${JSON.stringify(placed.selection)}`,

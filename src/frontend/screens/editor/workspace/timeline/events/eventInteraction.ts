@@ -196,7 +196,8 @@ export class EventInteraction implements EventInteractionHandle {
 
   /**
    * Arm placement of a new event, or commit it when placement is already pending.
-   * Q makes a hook event and R alone a normal one; the span is the preview.
+   * The key used to complete placement decides whether the event is hooked:
+   * Q synchronizes both values and R leaves them independent.
    */
   place(
     type?: string | null,
@@ -257,7 +258,9 @@ export class EventInteraction implements EventInteractionHandle {
           from: { beat: pending.beat, positionX: 0 },
           to: { beat: at, positionX: 0 },
         },
-        { easingType: easingType ?? undefined, instant: inst || pending.inst },
+        // The completion key owns the hook state. The pending key only affects
+        // the preview, so Q followed by R must finish as an ordinary event.
+        { easingType: easingType ?? undefined, instant: inst },
       );
       if (result.status === "rejected") {
         const issue = result.issues?.[0];
