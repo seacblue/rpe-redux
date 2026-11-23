@@ -155,6 +155,10 @@ func TestPreferencesWriteAcceptsKnownSectionsAndTokenFile(t *testing.T) {
 	if response := preferencePut(t, server.URL, token, body); response.StatusCode != http.StatusOK {
 		t.Fatalf("valid write status = %d, want 200", response.StatusCode)
 	}
+	objectClipboard := `{"values":{"language":"en","clipboard":{"version":1,"entries":[],"current":{"notes":[],"events":[]},"activeId":null},"settings":{"code-execution-enabled":true,"autosave-limit":"4"}}}`
+	if response := preferencePut(t, server.URL, token, objectClipboard); response.StatusCode != http.StatusOK {
+		t.Fatalf("versioned clipboard write status = %d, want 200", response.StatusCode)
+	}
 
 	response, err := http.Get(server.URL + "/api/preferences")
 	if err != nil {

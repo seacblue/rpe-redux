@@ -496,7 +496,12 @@ export function createEditorAssembly(
     inspectorRuntime;
   batchControls.onCommit = () => multiEdit.clearPreview();
   scope.add(
-    bindClipboardHistoryPersistence(clipboardHistory, (message) => notify(message, "error")),
+    bindClipboardHistoryPersistence(clipboardHistory, (message) => notify(message, "error"), {
+      session: () => session.current,
+      invalidate,
+      onExternalClipboard: () =>
+        notify(t("editor.app.notice.clipboardHistoryReceived"), "info", 5000),
+    }),
   );
   scope.add(
     bindAnalysisActions({
@@ -634,13 +639,6 @@ export function createEditorAssembly(
     ui,
     densityBarsEnabled: () => values.byId.get<boolean>("timeline-density-bars-enabled"),
     hoverPreviewEnabled: () => values.byId.get<boolean>("timeline-hover-preview-enabled"),
-    clipboardRangesEnabled: () =>
-      values.byId.get<boolean>("timeline-clipboard-range-bars-enabled") === true,
-    rangeBarOpacity: () => {
-      const stored = values.byId.get<unknown>("timeline-range-bar-opacity");
-      const value = typeof stored === "number" ? stored : Number(stored);
-      return Number.isFinite(value) ? Math.max(0.02, Math.min(0.8, value)) : 0.18;
-    },
     visibility: { hasDocument, atHome },
   });
   // Alt+wheel writes the scale continuously; persisting it re-applies every

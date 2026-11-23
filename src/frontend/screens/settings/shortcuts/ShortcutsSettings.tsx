@@ -10,7 +10,9 @@
  * next key belongs to. A row's key cap records a replacement for that slot; the
  * plus button records an addition. Nothing here writes a key table. The capture
  * dialog keeps its last rendered values while the shared modal fades out, so
- * closing never blanks the text before the dialog disappears.
+ * closing never blanks the text before the dialog disappears. The preview slot
+ * is always present, so changing the captured chord never changes the dialog's
+ * height or its centered position.
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "../../../../design/components/button/Button.tsx";
@@ -31,23 +33,7 @@ import { developerReveal, isDeveloperRevealed } from "../../../../core/state/dev
 import { useShortcuts } from "./useShortcuts.ts";
 import { advanceShortcutCapture, createShortcutCaptureState } from "./shortcutCapture.ts";
 import { setShortcutRecording } from "./recordingState.ts";
-import type {
-  Shortcut,
-  ShortcutEventLike,
-  ShortcutView,
-} from "../../../../core/shortcuts/types.ts";
-
-/** The modifiers held while the last key of a chord is still missing. */
-function heldModifiers(event: ShortcutEventLike): string {
-  return [
-    event.ctrlKey ? "Ctrl" : "",
-    event.altKey ? "Alt" : "",
-    event.shiftKey ? "Shift" : "",
-    event.metaKey ? "Meta" : "",
-  ]
-    .filter(Boolean)
-    .join(" + ");
-}
+import type { Shortcut, ShortcutView } from "../../../../core/shortcuts/types.ts";
 
 /** Resolve the localized names of commands that share one binding. */
 function conflictLabels(
@@ -97,14 +83,13 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
     developerAvailableNow,
   );
   const views = visibleShortcutViews(allViews, developerAvailable);
-  const [message, setMessage] = useState("");
+  const [captureError, setCaptureError] = useState("");
   // The recording target and its display data outlive the open session by one
   // exit transition: the dialog keeps painting while `recordingOpen` is false.
   const [recording, setRecording] = useState<string | null>(null);
   const [recordingOpen, setRecordingOpen] = useState(false);
   const [recordingBinding, setRecordingBinding] = useState<Shortcut | null>(null);
   const [bindingIndex, setBindingIndex] = useState<number | null>(null);
-  const [modifierPreview, setModifierPreview] = useState("");
   const [candidatePreview, setCandidatePreview] = useState<Shortcut | null>(null);
   const [pendingShortcut, setPendingShortcut] = useState<Shortcut | null>(null);
   const captureState = useRef(createShortcutCaptureState());
@@ -136,8 +121,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
     captureState.current = createShortcutCaptureState();
     recordingOpenRef.current = true;
     setShortcutRecording(true);
-    setMessage("");
-    setModifierPreview("");
+    setCaptureError("");
     setCandidatePreview(null);
     setPendingShortcut(null);
     pendingShortcutRef.current = null;
@@ -170,30 +154,11 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         ? shortcuts.addBinding(recording, shortcut)
         : shortcuts.replaceBinding(recording, bindingIndex, shortcut);
     if (result.ok) {
-      // Read the fresh views: the registry has just written the binding, while
-      // this component has not rendered again yet.
-      const updatedViews = shortcuts.shortcuts();
-      const updatedView = updatedViews.find((view) => view.id === recording);
-      const conflicts =
-        updatedView && pendingShortcut
-          ? conflictLabels(
-              updatedView.bindingConflicts[shortcutConflictKey(pendingShortcut)] ?? [],
-              updatedViews,
-              tRaw,
-            )
-          : [];
-      if (conflicts.length > 0) {
-        setMessage(
-          t("shortcuts.conflictNotice", {
-            actions: conflicts.join(t("shortcuts.conflictSeparator")),
-          }),
-        );
-      }
       stopRecording();
       return;
     }
-    setMessage(tRaw(result.error ?? "shortcuts.error.invalidShortcut"));
-  }, [bindingIndex, pendingShortcut, recording, recordingOpen, stopRecording, t, tRaw]);
+    setCaptureError(tRaw(result.error ?? "shortcuts.error.invalidShortcut"));
+  }, [bindingIndex, pendingShortcut, recording, recordingOpen, stopRecording, tRaw]);
 
   // Capture keyboard, pointer, and wheel input while a row is recording.
   useEffect(() => {
@@ -208,7 +173,6 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       pendingShortcutRef.current = shortcut;
       setPendingShortcut(shortcut);
       setCandidatePreview(shortcut);
-      setModifierPreview("");
       captureState.current = createShortcutCaptureState();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -232,13 +196,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         stopRecording();
         return;
       }
-      if (transition.state.candidate) {
-        setCandidatePreview(transition.state.candidate);
-        setModifierPreview("");
-      } else {
-        setCandidatePreview(null);
-        setModifierPreview(heldModifiers(event));
-      }
+      setCandidatePreview(transition.state.preview);
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (!recordingOpenRef.current) {
@@ -256,14 +214,12 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       captureState.current = transition.state;
       if (transition.commit) {
         commit(transition.commit);
-      } else if (transition.state.candidate) {
-        setCandidatePreview(transition.state.candidate);
-        setModifierPreview("");
+      } else if (transition.state.preview) {
+        setCandidatePreview(transition.state.preview);
       } else if (pendingShortcutRef.current === null) {
         // Releasing the modifiers after a pointer or wheel capture must not
         // blank the shortcut that is already waiting for Save.
         setCandidatePreview(null);
-        setModifierPreview(heldModifiers(event));
       }
     };
     const onPointerDown = (event: PointerEvent) => {
@@ -280,13 +236,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         event,
       });
       captureState.current = transition.state;
-      if (transition.state.candidate) {
-        setCandidatePreview(transition.state.candidate);
-        setModifierPreview("");
-      } else {
-        setCandidatePreview(null);
-        setModifierPreview(heldModifiers(event));
-      }
+      setCandidatePreview(transition.state.preview);
     };
     const onPointerUp = (event: PointerEvent) => {
       if (!recordingOpenRef.current) {
@@ -306,9 +256,8 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       captureState.current = transition.state;
       if (transition.commit) {
         commit(transition.commit);
-      } else if (transition.state.candidate) {
-        setCandidatePreview(transition.state.candidate);
-        setModifierPreview("");
+      } else if (transition.state.preview) {
+        setCandidatePreview(transition.state.preview);
       }
     };
     const onWheel = (event: WheelEvent) => {
@@ -401,11 +350,6 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
 
   return (
     <div className="redux-setting-group redux-shortcuts">
-      {message && (
-        <p className="redux-shortcut-message" role="status">
-          {message}
-        </p>
-      )}
       {groups.map(({ category, entries }) => (
         <section key={category.id} className="redux-shortcut-category">
           <h3>{tRaw(category.title)}</h3>
@@ -507,13 +451,14 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
             </div>
           </div>
         )}
-        {candidatePreview && (
-          <div className="redux-shortcut-recording-preview">
+        <div className="redux-shortcut-recording-preview" aria-live="polite" aria-atomic="true">
+          {candidatePreview ? (
             <ShortcutBindings bindings={[candidatePreview]} />
-          </div>
-        )}
-        {modifierPreview && <p className="redux-shortcut-recording-modifiers">{modifierPreview}</p>}
-        {message && <p className="redux-shortcut-recording-message">{message}</p>}
+          ) : (
+            <span aria-hidden="true" />
+          )}
+        </div>
+        {captureError && <p className="redux-shortcut-recording-message">{captureError}</p>}
       </KeyboardCaptureModal>
     </div>
   );

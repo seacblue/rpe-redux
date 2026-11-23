@@ -1,6 +1,6 @@
 /**
- * Draws the timeline side strips: clipboard and paste ranges, the current-time
- * marker, and drag seeking.
+ * Draws the timeline side strips: density, history, the current-time marker,
+ * and drag seeking.
  *
  * Hovering a strip feeds the floating thumbnail preview; chart sampling and
  * navigation math come from core.
@@ -16,7 +16,7 @@ import {
   type TimelineBindingsState,
   type TimelineOverviewBindings,
 } from "../surface/timelineBindings.ts";
-import { readCanvasPalette, selectionColor } from "../../../canvas/palette.ts";
+import { readCanvasPalette } from "../../../canvas/palette.ts";
 
 export interface TimelineOverviewSnapshot {
   chart: Chart;
@@ -31,12 +31,6 @@ export interface TimelineOverviewSnapshot {
   historyRevision: number;
   /** Changes only when the committed document content changes. */
   contentRevision: number;
-  /** The active line's tempo factor, used to place clipboard beat spans. */
-  bpmFactor: number;
-  /** The clipboard's current beat span, when it holds objects. */
-  clipboardRange: { start: number; end: number } | null;
-  /** The most recent paste's beat span. */
-  pasteRange: { start: number; end: number } | null;
   hasDocument: boolean;
   atHome: boolean;
 }
@@ -51,64 +45,8 @@ export interface TimelineOverviewOptions {
   bindings: TimelineBindingsState;
   densityBarsEnabled: () => boolean;
   hoverPreviewEnabled: () => boolean;
-  clipboardRangesEnabled: () => boolean;
-  rangeBarOpacity: () => number;
   getSnapshot: () => TimelineOverviewSnapshot;
   seek: (seconds: number) => void;
-}
-
-/**
- * Paint one clipboard or paste span over a strip.
- *
- * The span is stored in beats so it stays valid when the tempo map changes; the
- * strip itself is addressed in chart seconds. Rounded corners keep the marker
- * distinct from a plain rectangle, and the caller supplies the fill opacity so
- * the strips stay quiet behind the timeline.
- */
-function paintRangeBar(
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  duration: number,
-  range: { start: number; end: number },
-  tempo: TempoMap,
-  factor: number,
-  color: string,
-  opacity: number,
-): void {
-  if (!width || !height || !(duration > 0)) {
-    return;
-  }
-  let start: number;
-  let end: number;
-  try {
-    start = tempo.seconds(range.start);
-    end = tempo.seconds(range.end);
-  } catch {
-    return;
-  }
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return;
-  }
-  const startY = height - (clamp(start, 0, duration) / duration) * height;
-  const endY = height - (clamp(end, 0, duration) / duration) * height;
-  const barX = 2;
-  const barWidth = Math.max(1, width - 4);
-  const top = Math.max(1, Math.min(height - 2, Math.min(startY, endY)));
-  const bottom = Math.max(top + 2, Math.min(height - 1, Math.max(startY, endY)));
-  const barHeight = bottom - top;
-  const radius = Math.min(3, barWidth / 2, barHeight / 2);
-  context.save();
-  context.beginPath();
-  context.roundRect(barX, top, barWidth, barHeight, radius);
-  context.globalAlpha = opacity;
-  context.fillStyle = color;
-  context.fill();
-  context.globalAlpha = Math.min(1, opacity + 0.3);
-  context.lineWidth = 1;
-  context.strokeStyle = color;
-  context.stroke();
-  context.restore();
 }
 
 /** Owns the timeline side-strip drawing, hover preview and drag seeking. */
@@ -164,10 +102,6 @@ export class TimelineOverview {
     );
     const markerY =
       height - (clamp(currentSeconds ?? snapshot.currentSeconds, 0, duration) / duration) * height;
-    const rangeBarsEnabled = this.options.clipboardRangesEnabled();
-    const rangeBarOpacity = clamp(this.options.rangeBarOpacity(), 0.02, 0.8);
-    const clipboardColor = selectionColor("timeline-clipboard-range-color", "#00C800");
-    const pasteColor = selectionColor("timeline-paste-range-color", "#FFCC66");
     const frameKey: OverviewFrameKey = {
       chart: snapshot.chart,
       line: snapshot.lineIndex,
@@ -180,52 +114,12 @@ export class TimelineOverview {
       historyRevision: snapshot.historyRevision,
       palette,
       markerY,
-      rangeBarsEnabled,
-      rangeBarOpacity,
-      clipboardRangeKey: snapshot.clipboardRange
-        ? `${snapshot.clipboardRange.start}:${snapshot.clipboardRange.end}`
-        : "",
-      pasteRangeKey: snapshot.pasteRange
-        ? `${snapshot.pasteRange.start}:${snapshot.pasteRange.end}`
-        : "",
-      clipboardColor,
-      pasteColor,
     };
     if (sameOverviewFrame(this.drawnFrame, frameKey)) {
       return;
     }
     const noteFrame = prepareCanvas(densityCanvas);
     const historyFrame = prepareCanvas(historyCanvas);
-    if (rangeBarsEnabled) {
-      for (const frame of [noteFrame, historyFrame]) {
-        if (snapshot.clipboardRange) {
-          paintRangeBar(
-            frame.context,
-            frame.width,
-            height,
-            duration,
-            snapshot.clipboardRange,
-            snapshot.tempo,
-            snapshot.bpmFactor,
-            clipboardColor,
-            rangeBarOpacity,
-          );
-        }
-        if (snapshot.pasteRange) {
-          paintRangeBar(
-            frame.context,
-            frame.width,
-            height,
-            duration,
-            snapshot.pasteRange,
-            snapshot.tempo,
-            snapshot.bpmFactor,
-            pasteColor,
-            rangeBarOpacity,
-          );
-        }
-      }
-    }
     for (const frame of [noteFrame, historyFrame]) {
       frame.context.strokeStyle = palette.bottomValue;
       frame.context.lineWidth = 1;

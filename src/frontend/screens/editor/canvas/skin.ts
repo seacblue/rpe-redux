@@ -10,7 +10,7 @@ import {
   alignedTexture,
   alignedTextureBox,
   highlightWidthScale,
-  type UsefulRect,
+  type TextureBounds,
   NOTE_TEXTURES,
 } from "../../../../core/media/noteSkin.ts";
 import {
@@ -86,11 +86,9 @@ export class RpeSkin {
   holdCompact = false;
   hitFxDuration = HIT_FX_DURATION_DEFAULT;
   hitFxScale = 1;
-  hitFxRotate = false;
   hitFxTinted = true;
   hideParticles = false;
   private baseImages = new Map<string, HTMLImageElement>();
-  private useful = new Map<string, UsefulRect>();
   private urls: string[] = [];
   private generation = 0;
   private revision = 0;
@@ -119,7 +117,6 @@ export class RpeSkin {
   cloneForRecording(): RpeSkin {
     const copy = new RpeSkin(() => {});
     copy.images = new Map(this.images);
-    copy.useful = new Map(this.useful);
     copy.activeId = this.activeId;
     copy.revision = this.revision;
     copy.particleFrameCount = this.particleFrameCount;
@@ -129,7 +126,6 @@ export class RpeSkin {
     copy.holdCompact = this.holdCompact;
     copy.hitFxDuration = this.hitFxDuration;
     copy.hitFxScale = this.hitFxScale;
-    copy.hitFxRotate = this.hitFxRotate;
     copy.hitFxTinted = this.hitFxTinted;
     copy.hideParticles = this.hideParticles;
     return copy;
@@ -184,7 +180,6 @@ export class RpeSkin {
     const generation = ++this.generation;
     const id = activeNoteSkin();
     const images = new Map(this.baseImages);
-    const useful = new Map<string, UsefulRect>();
     const urls: string[] = [];
     let adopted = false;
     try {
@@ -192,13 +187,12 @@ export class RpeSkin {
       for (const name of NOTE_TEXTURES) {
         images.delete(name);
       }
-      const assets: { name: string; file: string; useful?: UsefulRect }[] = [
+      const assets: { name: string; file: string }[] = [
         ...(pack.manifest.judgeline?.line
           ? [
               {
                 name: "line",
                 file: pack.manifest.judgeline.line.file,
-                useful: pack.manifest.judgeline.line.useful,
               },
             ]
           : []),
@@ -209,7 +203,6 @@ export class RpeSkin {
           ([name, entry]) => ({
             name,
             file: entry.file,
-            useful: entry.useful,
           }),
         ),
         ...Object.entries(pack.manifest.particles ?? {}).map(([name, file]) => ({ name, file })),
@@ -242,9 +235,6 @@ export class RpeSkin {
         assets.map(async (entry) => {
           const image = await decodeFile(entry.file);
           images.set(entry.name, image);
-          if (entry.useful) {
-            useful.set(entry.name, entry.useful);
-          }
         }),
       );
       if (pack.manifest.phira) {
@@ -289,16 +279,6 @@ export class RpeSkin {
             "hold_end_highlight",
           );
         }
-        for (const name of [
-          "hold_head",
-          "hold_body",
-          "hold_end",
-          "hold_head_highlight",
-          "hold_body_highlight",
-          "hold_end_highlight",
-        ]) {
-          useful.delete(name);
-        }
         const hitFx = images.get("phira_hit_fx");
         if (hitFx) {
           const frames = await splitPhiraHitFx(hitFx, pack.manifest.phira.info.hitFx);
@@ -312,7 +292,6 @@ export class RpeSkin {
       this.urls.forEach((url) => URL.revokeObjectURL(url));
       this.urls = urls;
       this.images = images;
-      this.useful = useful;
       this.particleFrameCount = [...images.keys()].filter((name) => /^img-\d+$/.test(name)).length;
       this.highlightScale = highlightScaleOf(images);
       const phira = pack.manifest.phira?.info;
@@ -321,7 +300,6 @@ export class RpeSkin {
       this.holdCompact = phira?.holdCompact === true;
       this.hitFxDuration = phira?.hitFxDuration ?? HIT_FX_DURATION_DEFAULT;
       this.hitFxScale = phira?.hitFxScale ?? 1;
-      this.hitFxRotate = phira?.hitFxRotate === true;
       this.hitFxTinted = phira?.hitFxTinted !== false;
       this.hideParticles = phira?.hideParticles === true;
       this.activeId = id;
@@ -348,30 +326,27 @@ export class RpeSkin {
     }
   }
 
-  /** The useful rectangle for a texture, defaulting to the whole picture. */
-  private bounds(name: string, picture: HTMLImageElement): UsefulRect {
-    // Preserve RPE's built-in measurements; imported packs explicitly normalize useful bounds.
-    return (
-      this.useful.get(name) ?? {
-        x: 0,
-        y: 0,
-        width: picture.naturalWidth,
-        height: picture.naturalHeight,
-      }
-    );
+  /** The complete PNG bounds used by every normalized skin texture. */
+  private bounds(_name: string, picture: HTMLImageElement): TextureBounds {
+    return {
+      x: 0,
+      y: 0,
+      width: picture.naturalWidth,
+      height: picture.naturalHeight,
+    };
   }
 
-  /** Descriptor for the default judge-line texture, aligned by its useful rect. */
+  /** Descriptor for the default judge-line texture, aligned by its PNG bounds. */
   lineTexture(): TextureDescriptor | null {
     const picture = this.images.get("line");
     if (!picture) {
       return null;
     }
     const rect = this.bounds("line", picture);
-    return rect.width > 0 && rect.height > 0 ? { source: picture, useful: rect } : null;
+    return rect.width > 0 && rect.height > 0 ? { source: picture, bounds: rect } : null;
   }
 
-  /** Draw one texture aligned by its useful rectangle into a logical box. */
+  /** Draw one texture aligned by its PNG bounds into a logical box. */
   drawAligned(
     context: CanvasRenderingContext2D,
     name: string,
@@ -448,14 +423,14 @@ export class RpeSkin {
   }
 
   /** Return the skin-owned event texture for GPU batch renderers. */
-  eventBarTexture(): { source: HTMLImageElement; useful: UsefulRect } | null {
+  eventBarTexture(): { source: HTMLImageElement; bounds: TextureBounds } | null {
     const name = this.images.has("event_hold")
       ? "event_hold"
       : this.images.has("event_bar")
         ? "event_bar"
         : "hold_body";
     const source = this.images.get(name);
-    return source ? { source, useful: this.bounds(name, source) } : null;
+    return source ? { source, bounds: this.bounds(name, source) } : null;
   }
 
   /** Phira's simultaneous-note width multiplier. */
@@ -467,42 +442,42 @@ export class RpeSkin {
   noteTexture(
     type: number,
     highlight: boolean,
-  ): { source: HTMLImageElement; useful: UsefulRect } | null {
+  ): { source: HTMLImageElement; bounds: TextureBounds } | null {
     const name = highlight && this.images.has(highlights[type]) ? highlights[type] : names[type];
     const source = this.images.get(name);
-    return source ? { source, useful: this.bounds(name, source) } : null;
+    return source ? { source, bounds: this.bounds(name, source) } : null;
   }
 
   /** Return the hold body texture, preferring the highlighted variant. */
   holdBodyTexture(
     highlight: boolean,
-  ): { source: HTMLImageElement; useful: UsefulRect; repeat?: boolean } | null {
+  ): { source: HTMLImageElement; bounds: TextureBounds; repeat?: boolean } | null {
     const name =
       highlight && this.images.has("hold_body_highlight") ? "hold_body_highlight" : "hold_body";
     const source = this.images.get(name);
     return source
       ? {
           source,
-          useful: this.bounds(name, source),
+          bounds: this.bounds(name, source),
           ...(this.holdRepeat ? { repeat: true } : {}),
         }
       : null;
   }
 
   /** Return the hold head texture, preferring the highlighted variant. */
-  holdHeadTexture(highlight: boolean): { source: HTMLImageElement; useful: UsefulRect } | null {
+  holdHeadTexture(highlight: boolean): { source: HTMLImageElement; bounds: TextureBounds } | null {
     const name =
       highlight && this.images.has("hold_head_highlight") ? "hold_head_highlight" : "hold_head";
     const source = this.images.get(name);
-    return source ? { source, useful: this.bounds(name, source) } : null;
+    return source ? { source, bounds: this.bounds(name, source) } : null;
   }
 
   /** Return the hold tail cap texture, preferring the highlighted variant. */
-  holdEndTexture(highlight: boolean): { source: HTMLImageElement; useful: UsefulRect } | null {
+  holdEndTexture(highlight: boolean): { source: HTMLImageElement; bounds: TextureBounds } | null {
     const name =
       highlight && this.images.has("hold_end_highlight") ? "hold_end_highlight" : "hold_end";
     const source = this.images.get(name);
-    return source ? { source, useful: this.bounds(name, source) } : null;
+    return source ? { source, bounds: this.bounds(name, source) } : null;
   }
   /** Release every generated tint canvas and reset source identity tracking. */
   private clearTints() {
@@ -523,7 +498,6 @@ export class RpeSkin {
     this.images.clear();
     this.particleFrameCount = 0;
     this.baseImages.clear();
-    this.useful.clear();
   }
   /** Filter a caller color down to a finite custom tint. */
   private color(color?: number[]): number[] | undefined {
@@ -727,8 +701,7 @@ export class RpeSkin {
    * Draw a Hold texture mirrored on V about the logical centre.
    *
    * Hold art is authored head-down while `hold` draws along local +Y from head
-   * to tail. The mirror pivots on the logical centre because the useful
-   * rectangle may not be centred in the PNG.
+   * to tail. The mirror pivots on the logical centre of the cropped PNG.
    */
   private drawHoldTexture(
     context: CanvasRenderingContext2D,

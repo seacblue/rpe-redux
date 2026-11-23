@@ -3,14 +3,36 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { beatValue, fromNumber } from "../../../core/global/chart/timing/beat.ts";
 import { HOOK_TAIL_FIELD } from "../../../core/global/chart/chart.ts";
-import { EVENT_BATCH_FIELDS } from "../../../core/edit/multiEdit/planVocabulary.ts";
+import {
+  EVENT_BATCH_FIELDS,
+  NOTE_BATCH_FIELDS,
+  BATCH_OPERATIONS,
+} from "../../../core/edit/multiEdit/planVocabulary.ts";
 import { previewMultiEdit } from "../../../core/edit/multiEdit/plan.ts";
+import { registerDeferredCatalogs } from "../../../i18n/deferred.ts";
+import { getLanguage, setLanguage, t } from "../../../i18n/index.ts";
 
 test("event multi-edit omits duration and order and lists start before end", () => {
   assert.deepEqual(
     EVENT_BATCH_FIELDS.map(([key]) => key),
     ["both", "start", "end", "easing", "t1", "t2", "line", "linkgroup"],
   );
+});
+
+test("batch labels resolve after the editor catalog is registered", () => {
+  const previous = getLanguage();
+  registerDeferredCatalogs();
+  try {
+    setLanguage("zh");
+    const field = NOTE_BATCH_FIELDS.find(([key]) => key === "x");
+    const operation = BATCH_OPERATIONS.find(([key]) => key === "By");
+    assert.equal(field?.[1], "editor.commands.multiEdit.channel.x");
+    assert.equal(operation?.[1], "editor.commands.multiEdit.operation.by");
+    assert.equal(t(field?.[1]), "X，横坐标");
+    assert.equal(t(operation?.[1]), "By，增减");
+  } finally {
+    setLanguage(previous);
+  }
 });
 
 test("startTime bounds accept beat notation and write beat values", () => {

@@ -14,7 +14,7 @@ import type {
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { Preview } from "../../preview/scene/preview.ts";
-import { holdUsefulInterval } from "../../../canvas/noteGeometry.ts";
+import { holdPaintedInterval } from "../../../canvas/noteGeometry.ts";
 import {
   distanceSquaredToSegment,
   previewNoteGrid,
@@ -80,7 +80,7 @@ function previewHits(
     const grid = previewNoteGrid(geometry);
     const candidates = grid.queryPoint(request.point, grid.maxQueryRadius + tolerance);
     for (const area of candidates) {
-      const interval = area.kind === "hold" ? holdUsefulInterval(area) : area;
+      const interval = area.kind === "hold" ? holdPaintedInterval(area) : area;
       const limit = area.radius + tolerance;
       const distanceSquared = distanceSquaredToSegment(request.point, interval.head, interval.tail);
       if (distanceSquared > limit * limit) {

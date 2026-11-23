@@ -23,7 +23,7 @@ interface ChartFileOpenOptions {
 }
 
 /** Chart file extensions the web picker offers; the desktop store filters natively. */
-export const CHART_FILE_ACCEPT = ".json,.pez,.zip";
+export const CHART_FILE_ACCEPT = ".json,.pec,.pez,.zip";
 
 /**
  * Loads chart files chosen from the platform picker.

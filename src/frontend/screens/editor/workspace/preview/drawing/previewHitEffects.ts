@@ -3,8 +3,8 @@
  * Hit timing and particle state come from the sibling `hitEffects` and
  * `hitParticles` readers; this module owns only the canvas pass.
  */
-import { noteIsAbove } from "../../../../../../core/global/chart/chart.ts";
 import { HIT_FX_DURATION_DEFAULT, HIT_FRAME_COUNT, hitFrame } from "../../../canvas/hitFrame.ts";
+import { noteIsAbove } from "../../../../../../core/global/chart/chart.ts";
 import { PHIRA_HIT_FX_WIDTH_RATIO, previewNoteWidth } from "../scene/constants.ts";
 import type { PreviewFrame, PreviewSkin } from "../scene/previewTypes.ts";
 import type { SampledLineState } from "../../../../../../core/global/chart/runtime/scene.ts";
@@ -53,16 +53,31 @@ export interface PreviewHitEffectSurface {
   noteSize: number;
   hitEffectScale: number;
   effectsSince: number;
+  /** Whether the programmatic square burst is enabled by the editor setting. */
+  showHitParticles?: boolean;
   /** True when the authoring timeline shares the stage with the preview. */
   authoringRegionVisible?: boolean;
   defaultParticleColor: readonly number[];
   hitStateCache?: Map<number, SampleAt>;
+  /** Increments for a real seek; active effects survive an epoch change. */
+  hitEffectEpoch?: number;
+  /** Increments when the preview document is replaced. */
+  hitEffectReset?: number;
+}
+
+interface ActiveHit {
+  lineIndex: number;
+  hit: Hit;
 }
 
 interface HitEffectScratch {
   hits: Hit[];
   particles: HitParticle[];
   hitStates: Map<number, SampleAt>;
+  hitStartedAt: Map<string, number>;
+  activeHits: Map<string, ActiveHit>;
+  completedHits: Set<string>;
+  resetToken: number;
 }
 
 const hitEffectScratch = new WeakMap<object, HitEffectScratch>();
@@ -77,6 +92,10 @@ function scratchFor(surface: object): HitEffectScratch {
     hits: [],
     particles: [],
     hitStates: new Map(),
+    hitStartedAt: new Map(),
+    activeHits: new Map(),
+    completedHits: new Set(),
+    resetToken: Number.NaN,
   };
   hitEffectScratch.set(surface, scratch);
   return scratch;
@@ -95,23 +114,36 @@ function hitEffectColor(
 }
 
 /** Draws the skin-owned hit frame and the four-square burst at each recent note hit. */
-export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewFrame): void {
+export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewFrame): boolean {
   if (surface.authoringRegionVisible || !Number.isFinite(surface.effectsSince)) {
-    return;
+    return false;
   }
   const { context, order, seconds, width, height, centerX, centerY, scaleX, scaleY } = frame;
   const originX = centerX ?? width / 2;
   const originY = centerY ?? height / 2;
   const scratch = scratchFor(surface);
   const hitStates = surface.hitStateCache ?? scratch.hitStates;
+  const resetToken = surface.hitEffectReset ?? 0;
+  if (scratch.resetToken !== resetToken) {
+    scratch.resetToken = resetToken;
+    scratch.activeHits.clear();
+    scratch.completedHits.clear();
+    scratch.hitStartedAt.clear();
+    hitStates.clear();
+  }
   if (!surface.hitStateCache) {
     // Optional test/minimal surfaces do not promise sampler stability across frames.
     hitStates.clear();
   }
   const { hits, particles } = scratch;
+  const effectTime = Number.isFinite(frame.effectTime)
+    ? frame.effectTime
+    : performance.now() / 1000;
   const frameCount = surface.skin?.particleFrameCount ?? HIT_FRAME_COUNT;
   const duration = Math.max(1e-6, surface.skin?.hitFxDuration ?? HIT_FX_DURATION_DEFAULT);
   const lifetime = Math.max(duration, 1e-6);
+  const drawParticles = surface.showHitParticles !== false && surface.skin?.hideParticles !== true;
+  const epoch = surface.hitEffectEpoch ?? 0;
   for (const index of order) {
     const runtime = frame.scene.lines[index];
     if (!runtime) {
@@ -121,63 +153,91 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
     for (let hitIndex = 0; hitIndex < hitCount; hitIndex += 1) {
       const hit = hits[hitIndex];
       const { entry, time } = hit;
-      const age = seconds - time;
-      const effectFrame = hitFrame(age, frameCount, duration);
-      // An explicit chart tint wins; otherwise the skin policy decides between
-      // the user's particle colour and Phira's untinted white.
-      const hitColor = resolveHitColor(
-        hitEffectColor(
-          entry.note.tintHitEffects,
-          surface.defaultParticleColor,
-          surface.skin?.hitFxTinted !== false,
-        ),
-        hitColorCache,
-      );
-      const picture =
-        effectFrame === null
-          ? null
-          : surface.skin?.tinted(`img-${effectFrame}`, hitColor.source as number[]);
-      let sampleAt = hitStates.get(time);
-      if (!sampleAt) {
-        // Event tracks retain the preceding event at the exact boundary. The
-        // smallest practical forward step selects events starting at the hit without
-        // advancing the note or visibly moving continuously animated lines.
-        const afterHit = time + Math.max(Number.MIN_VALUE, Math.abs(time) * Number.EPSILON);
-        sampleAt = frame.scene.sampler(afterHit);
-        hitStates.set(time, sampleAt);
-      }
-      const state = sampleAt(index);
-      const position = runtime.noteState(entry, state, time);
-      const angle = (state.rotation * Math.PI) / 180;
-      const horizontal =
-        originX + (state.x + position.x * Math.cos(angle) + position.y * Math.sin(angle)) * scaleX;
-      const vertical =
-        originY + (-state.y + position.x * Math.sin(angle) - position.y * Math.cos(angle)) * scaleY;
-      const noteWidth = previewNoteWidth(surface.noteSize) * scaleX;
-      const sizeScale = (surface.skin?.hitFxScale ?? 1) * surface.hitEffectScale;
-      const fade = hitParticleAlpha(age / duration);
-      // The skin supplies its own animation; the burst stays correct without one.
-      if (picture && effectFrame !== null) {
-        const size = noteWidth * PHIRA_HIT_FX_WIDTH_RATIO * sizeScale;
-        context.globalAlpha = hitColor.alpha * fade;
-        if (surface.skin?.hitFxRotate) {
-          context.save();
-          context.translate(horizontal, vertical);
-          context.rotate(angle + (noteIsAbove(entry.note) ? 0 : Math.PI));
-          context.drawImage(picture, -size / 2, -size / 2, size, size);
-          context.restore();
-        } else {
-          context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
-        }
-      }
-      if (surface.skin?.hideParticles === true) {
+      const key = `${epoch}:${index}:${hit.seed}:${time}`;
+      if (scratch.completedHits.has(key)) {
         continue;
       }
+      if (!scratch.activeHits.has(key)) {
+        scratch.hitStartedAt.set(key, effectTime - Math.max(0, seconds - time));
+        scratch.activeHits.set(key, {
+          lineIndex: index,
+          hit: { entry, time, seed: hit.seed },
+        });
+      }
+    }
+  }
+
+  let active = false;
+  for (const [key, activeHit] of scratch.activeHits) {
+    const { lineIndex, hit } = activeHit;
+    const runtime = frame.scene.lines[lineIndex];
+    const startedAt = scratch.hitStartedAt.get(key);
+    if (!runtime || startedAt === undefined) {
+      scratch.activeHits.delete(key);
+      continue;
+    }
+    const { entry, time } = hit;
+    const age = Math.max(0, effectTime - startedAt);
+    const effectFrame = hitFrame(age, frameCount, duration);
+    if (effectFrame === null) {
+      scratch.activeHits.delete(key);
+      scratch.hitStartedAt.delete(key);
+      scratch.completedHits.add(key);
+      continue;
+    }
+    // An explicit chart tint wins; otherwise the skin policy decides between
+    // the user's particle colour and Phira's untinted white.
+    const hitColor = resolveHitColor(
+      hitEffectColor(
+        entry.note.tintHitEffects,
+        surface.defaultParticleColor,
+        surface.skin?.hitFxTinted !== false,
+      ),
+      hitColorCache,
+    );
+    const picture = surface.skin?.tinted(`img-${effectFrame}`, hitColor.source as number[]);
+    let sampleAt = hitStates.get(time);
+    if (!sampleAt) {
+      // Event tracks retain the preceding event at the exact boundary. The
+      // smallest practical forward step selects events starting at the hit without
+      // advancing the note or visibly moving continuously animated lines.
+      const afterHit = time + Math.max(Number.MIN_VALUE, Math.abs(time) * Number.EPSILON);
+      sampleAt = frame.scene.sampler(afterHit);
+      hitStates.set(time, sampleAt);
+    }
+    const state = sampleAt(lineIndex);
+    const position = runtime.noteState(entry, state, time);
+    const angle = (state.rotation * Math.PI) / 180;
+    const horizontal =
+      originX + (state.x + position.x * Math.cos(angle) + position.y * Math.sin(angle)) * scaleX;
+    const vertical =
+      originY + (-state.y + position.x * Math.sin(angle) - position.y * Math.cos(angle)) * scaleY;
+    const noteWidth = previewNoteWidth(surface.noteSize) * scaleX;
+    const sizeScale = (surface.skin?.hitFxScale ?? 1) * surface.hitEffectScale;
+    const fade = hitParticleAlpha(age / duration);
+    // The skin supplies its own animation; the burst stays correct without one.
+    if (picture) {
+      const size = noteWidth * PHIRA_HIT_FX_WIDTH_RATIO * sizeScale;
+      context.globalAlpha = hitColor.alpha * fade;
+      if (surface.skin?.hitFxRotate) {
+        context.save();
+        context.translate(horizontal, vertical);
+        context.rotate(angle + (noteIsAbove(entry.note) ? 0 : Math.PI));
+        context.drawImage(picture, -size / 2, -size / 2, size, size);
+        context.restore();
+      } else {
+        // Without the skin switch, the hit effect remains an unrotated
+        // screen-space sprite while its centre follows the note.
+        context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
+      }
+      active = true;
+    }
+    if (drawParticles) {
       context.fillStyle = hitColor.css;
       const particleCount = hitParticlesInto(
         age,
         duration,
-        index * 65537 + hit.seed,
+        lineIndex * 65537 + hit.seed,
         noteWidth,
         sizeScale,
         surface.hitEffectScale,
@@ -193,14 +253,16 @@ export function drawHitEffects(surface: PreviewHitEffectSurface, frame: PreviewF
           particle.radius * 2,
         );
       }
+      active ||= particleCount > 0;
     }
   }
   // Do not leak burst transparency into later draw passes.
   context.globalAlpha = 1;
-  const oldestActiveHit = seconds - lifetime;
+  const oldestChartHit = seconds - lifetime;
   for (const time of hitStates.keys()) {
-    if (time < oldestActiveHit) {
+    if (time < oldestChartHit) {
       hitStates.delete(time);
     }
   }
+  return active;
 }

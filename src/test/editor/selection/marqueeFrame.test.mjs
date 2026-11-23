@@ -2,6 +2,49 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EditorRenderScheduler } from "../../../frontend/screens/editor/workspace/runtime/frame/renderScheduler.ts";
+import { previewSelectionForFrame } from "../../../frontend/screens/editor/workspace/preview/interaction/previewSelectionMap.ts";
+
+/** A paused preview must observe in-place selection mutations as a new frame input. */
+test("paused preview repaints after a selection notification", () => {
+  const session = {
+    selectionProjectionRevision: 0,
+    lineIndex: 0,
+    selection: new Set([0]),
+    multiLineActive: false,
+    multiLineMode: "notes",
+    multiLineSelection: new Map(),
+  };
+  const scheduler = new EditorRenderScheduler();
+  const chart = {};
+  const firstSelection = previewSelectionForFrame(session);
+  const request = {
+    now: 0,
+    seconds: 0,
+    playing: false,
+    previewVisible: true,
+    contentRefreshRate: 144,
+    timelineRevision: 1,
+    viewportOrigin: 0,
+    previewChart: chart,
+    previewRevision: 0,
+    previewSession: null,
+    previewSelection: firstSelection,
+    authoringRegionVisible: true,
+  };
+  scheduler.tick(request, { paint() {} });
+
+  session.selection.clear();
+  session.selection.add(1);
+  session.selectionProjectionRevision += 1;
+  const nextSelection = previewSelectionForFrame(session);
+  const result = scheduler.tick(
+    { ...request, now: 1, previewSelection: nextSelection },
+    { paint() {} },
+  );
+
+  assert.notStrictEqual(nextSelection, firstSelection);
+  assert.equal(result.work.preview, true);
+});
 
 test("active preview marquee bypasses the preview content rate limit", () => {
   const scheduler = new EditorRenderScheduler();
@@ -27,6 +70,76 @@ test("active preview marquee bypasses the preview content rate limit", () => {
     const result = scheduler.tick({ ...request, now: frame * 7, seconds: frame * 0.007 }, adapter);
     assert.equal(result.work.preview, true);
   }
+});
+
+test("active timeline sweep bypasses the preview content rate limit", () => {
+  const scheduler = new EditorRenderScheduler();
+  const chart = {};
+  const firstRequest = {
+    now: 0,
+    seconds: 0,
+    playing: true,
+    previewVisible: true,
+    contentRefreshRate: 30,
+    previewSelectionActive: true,
+    timelineRevision: 1,
+    viewportOrigin: 0,
+    previewChart: chart,
+    previewRevision: 0,
+    previewSession: null,
+    previewSelection: new Map([[0, new Set([0])]]),
+    authoringRegionVisible: true,
+  };
+  const adapter = { paint() {} };
+  scheduler.tick(firstRequest, adapter);
+
+  const result = scheduler.tick(
+    {
+      ...firstRequest,
+      now: 1,
+      seconds: 0.001,
+      previewSelection: new Map([[0, new Set([0, 1])]]),
+    },
+    adapter,
+  );
+
+  assert.equal(result.work.preview, true);
+});
+
+test("a selection change still repaints after the sweep has ended", () => {
+  const scheduler = new EditorRenderScheduler();
+  const chart = {};
+  const firstSelection = new Map([[0, new Set([0])]]);
+  const request = {
+    now: 0,
+    seconds: 0,
+    playing: true,
+    previewVisible: true,
+    contentRefreshRate: 30,
+    previewSelectionActive: false,
+    timelineRevision: 1,
+    viewportOrigin: 0,
+    previewChart: chart,
+    previewRevision: 0,
+    previewSession: null,
+    previewSelection: firstSelection,
+    authoringRegionVisible: true,
+  };
+  const adapter = { paint() {} };
+  scheduler.tick(request, adapter);
+
+  const result = scheduler.tick(
+    {
+      ...request,
+      now: 1,
+      seconds: 0.001,
+      previewSelectionActive: false,
+      previewSelection: new Map([[0, new Set([0, 1])]]),
+    },
+    adapter,
+  );
+
+  assert.equal(result.work.preview, true);
 });
 
 test("selection overlay invalidation does not repaint timeline content", () => {

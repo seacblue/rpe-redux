@@ -10,6 +10,8 @@ export interface RenderRequest {
   readonly contentRefreshRate: number;
   /** A live preview marquee needs geometry from every workspace frame. */
   readonly previewMarqueeActive?: boolean;
+  /** A timeline selection gesture needs its changing selection in every preview frame. */
+  readonly previewSelectionActive?: boolean;
   /** Revision of the retained timeline selection overlay. */
   readonly selectionOverlayRevision?: number;
   /** Whether the retained selection overlay currently has geometry to paint. */
@@ -39,6 +41,8 @@ export interface RenderRequest {
   readonly previewContentRevision?: number;
   readonly previewSession: unknown;
   readonly previewSelection: unknown;
+  /** A paused preview still has hit effects that must finish animating. */
+  readonly previewAnimationActive?: boolean;
   /**
    * Whether an authoring region shares the stage with the preview.
    *
@@ -144,6 +148,7 @@ export class EditorRenderScheduler {
         request.previewContentRevision === this.committed.previewContentRevision &&
         request.previewSession === this.committed.previewSession &&
         request.previewSelection === this.committed.previewSelection &&
+        request.previewAnimationActive !== true &&
         request.authoringRegionVisible === this.committed.authoringRegionVisible &&
         request.seconds === this.committed.seconds;
       if (request.previewVisible && !timelineOnlyInvalidation) {
@@ -243,6 +248,7 @@ export class EditorRenderScheduler {
     const previewInvalidated = request.previewRevision !== this.committed.previewRevision;
     const selectionOverlayRevision = request.selectionOverlayRevision ?? 0;
     const selectionOverlayActive = request.selectionOverlayActive ?? false;
+    const previewSelectionChanged = request.previewSelection !== this.committed.previewSelection;
     // Playback moves the origin every frame, but the note field only changes
     // once that movement crosses a device pixel. Reusing the timeline content
     // for a sub-pixel move is exactly what a scroll would do on its own.
@@ -269,8 +275,9 @@ export class EditorRenderScheduler {
         request.previewContentRevision !== this.committed.previewContentRevision ||
         previewInvalidated ||
         request.previewSession !== this.committed.previewSession ||
-        request.previewSelection !== this.committed.previewSelection ||
-        request.authoringRegionVisible !== this.committed.authoringRegionVisible);
+        previewSelectionChanged ||
+        request.authoringRegionVisible !== this.committed.authoringRegionVisible ||
+        request.previewAnimationActive === true);
     // The playhead canvases are independent layers. They only need a repaint
     // when the frame that owns them changed or the playhead actually moved.
     // Playback alone is not a reason: a stalled clock or a repeated timestamp
@@ -283,7 +290,12 @@ export class EditorRenderScheduler {
 
     const cadenceDue =
       !request.playing || this.contentCadence.allow(request.now, request.contentRefreshRate);
-    const contentDue = cadenceDue || previewInvalidated || request.previewMarqueeActive === true;
+    const contentDue =
+      cadenceDue ||
+      previewInvalidated ||
+      previewSelectionChanged ||
+      request.previewMarqueeActive === true ||
+      request.previewSelectionActive === true;
 
     return {
       // Timeline is the editing surface and must stay at RAF rate. Content

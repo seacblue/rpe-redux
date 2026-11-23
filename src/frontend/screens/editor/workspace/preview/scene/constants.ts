@@ -1,8 +1,9 @@
 /**
  * The preview's fixed logical stage size and the derived note and line scales
- * used to map authored values into that box. Note width follows Phira's
- * `note_scale`; line dimensions keep the Recorder-authored values. Hit-frame
- * timing is re-exported here so preview drawing code reads a single module.
+ * used to map authored values into that box. Note and judge-line dimensions
+ * follow Phira's authored defaults while remaining Redux-owned rendering
+ * constants. Hit-frame timing is re-exported here so preview drawing code
+ * reads a single module.
  */
 
 export {
@@ -32,22 +33,30 @@ export {
 /**
  * Phira's hit-effect sprite side as a fraction of the full note width.
  *
- * `prpr` sizes the particle at `hitFxScale * note_scale / 5` world units while
- * a full note spans `2 * 0.13175016 * note_scale`, which reduces to this ratio.
+ * `prpr` sizes the particle mesh at `hitFxScale * note_scale / 5` world
+ * half-width while a note mesh has half-width `note_scale * ratio`. Both
+ * meshes use the same `-1..1` quad, so the full-width ratio is `1 / (5 *
+ * ratio)`.
  */
-export const PHIRA_HIT_FX_WIDTH_RATIO = 1 / 5 / (2 * PHIRA_NOTE_WIDTH_RATIO);
+export const PHIRA_HIT_FX_WIDTH_RATIO = 1 / 5 / PHIRA_NOTE_WIDTH_RATIO;
 
 /** Converts a Phira note scale into the 1350×900 chart box. */
 export function previewNoteWidth(noteScale: number): number {
   return noteScale * PHIRA_NOTE_WIDTH_RATIO * PREVIEW_LOGICAL_SIZE.width;
 }
 
-/** Authoring width of a judge line, in stage pixels. */
-export const DEFAULT_LINE_WIDTH = 4000;
 /**
- * Authoring height of a judge line at `line_size = 1`.
+ * Authoring width of a default judge line, in stage pixels.
  *
- * Recorder's height-scaled line thickness is `line_size * 2 * height / 405`;
- * at the canonical 900-unit height that is 4.444… stage units.
+ * Phira's default `line_length` is six world units on either side of the
+ * origin. RPE's two world units span the 1350-pixel authoring width, so the
+ * full line maps to `6 * 2 * 1350 / 2 = 8100` pixels.
  */
-export const DEFAULT_LINE_HEIGHT = (2 * PREVIEW_LOGICAL_SIZE.height) / 405;
+export const DEFAULT_LINE_WIDTH = 8100;
+/**
+ * Authoring height of a judge line at Phira's default `line_size = 0.01`.
+ *
+ * The Phira line width is measured in the same two-unit world span as the
+ * 1350-pixel RPE width, so 0.01 world units are 6.75 stage pixels.
+ */
+export const DEFAULT_LINE_HEIGHT = (PREVIEW_LOGICAL_SIZE.width / 2) * 0.01;

@@ -2,16 +2,14 @@
 // each binding renders.
 
 .redux-shortcut-hint,
-.redux-shortcut-recording,
-.redux-shortcut-message {
+.redux-shortcut-recording {
   margin: 0 0 var(--space-3);
   color: var(--foreground-muted);
   font-size: var(--type-body);
   line-height: var(--line-body);
 }
 
-.redux-shortcut-recording,
-.redux-shortcut-message {
+.redux-shortcut-recording {
   color: var(--accent);
 }
 
@@ -242,19 +240,12 @@
 
 .redux-shortcut-recording-preview {
   display: flex;
+  align-items: center;
   justify-content: center;
+  min-height: 18px;
 }
 
-.redux-shortcut-recording-modifiers,
 .redux-shortcut-recording-message {
   margin: 0;
-}
-
-.redux-shortcut-recording-modifiers {
-  color: var(--accent);
-  font-family: var(--font-mono);
-}
-
-.redux-shortcut-recording-message {
-  color: var(--accent);
+  color: var(--danger);
 }

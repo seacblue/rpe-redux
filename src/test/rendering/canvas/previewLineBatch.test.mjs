@@ -47,7 +47,7 @@ test("default judge lines batch once and fall back to Canvas when disabled", () 
     };
     const lineDescriptor = {
       source: { naturalWidth: DEFAULT_LINE_WIDTH, naturalHeight: DEFAULT_LINE_HEIGHT },
-      useful: { x: 0, y: 0, width: DEFAULT_LINE_WIDTH, height: DEFAULT_LINE_HEIGHT },
+      bounds: { x: 0, y: 0, width: DEFAULT_LINE_WIDTH, height: DEFAULT_LINE_HEIGHT },
     };
     const addLineCalls = [];
     const surface = {
@@ -173,7 +173,7 @@ test("line groups share reset and clear with the note layers", () => {
   const groups = new NoteSpriteGroups();
   const descriptor = {
     source: {},
-    useful: { x: 0, y: 0, width: 1, height: 1 },
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
   };
   const line = groups.lineGroup(descriptor);
   const dynamicLine = groups.dynamicLineGroup(descriptor);

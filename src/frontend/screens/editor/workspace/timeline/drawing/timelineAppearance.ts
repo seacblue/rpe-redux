@@ -18,6 +18,8 @@ type AppearanceSettings = Pick<
   | "overlapThreshold"
   | "hoverGuidesEnabled"
   | "nearbyGuidesOnly"
+  | "clipboardGhostEnabled"
+  | "clipboardGhostOpacity"
   | "barWidth"
   | "barAlpha"
   | "playheadWidth"
@@ -43,6 +45,8 @@ export class TimelineAppearance {
   overlapThreshold = DEFAULT_NOTE_OVERLAP_THRESHOLD;
   hoverGuidesEnabled = true;
   nearbyGuidesOnly = false;
+  clipboardGhostEnabled = true;
+  clipboardGhostOpacity = 0.2;
   skin: RpeSkin | null = null;
   barWidth?: number;
   barAlpha?: number;
@@ -76,6 +80,8 @@ export class TimelineAppearance {
     this.overlapThreshold = config.overlapThreshold;
     this.hoverGuidesEnabled = config.hoverGuidesEnabled;
     this.nearbyGuidesOnly = config.nearbyGuidesOnly;
+    this.clipboardGhostEnabled = config.clipboardGhostEnabled;
+    this.clipboardGhostOpacity = config.clipboardGhostOpacity;
     this.barWidth = config.barWidth;
     this.barAlpha = config.barAlpha;
     this.playheadWidth = config.playheadWidth;

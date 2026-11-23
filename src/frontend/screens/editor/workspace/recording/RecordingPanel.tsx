@@ -8,16 +8,13 @@ import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { FieldReset } from "../../../../../design/components/field/FieldReset.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
-import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
-import { beatValue, fromNumber, type Beat } from "../../../../../core/global/chart/timing/beat.ts";
 import { bundledToolStatus } from "../../../../../core/platform/desktop/bundledTools.ts";
 import { showToast } from "../../../../../design/patterns/ToastHost.tsx";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { useEditorRuntime } from "../runtime/composition/EditorRuntime.tsx";
 import { bindInspectorLifecycle } from "../../inspector/controller.ts";
-import { BeatField } from "../../inspector/beat/BeatField.tsx";
 import { RecordingTimeField } from "./RecordingTimeField.tsx";
 import { recordingError } from "./recordingErrors.ts";
 import { captureRecording } from "./recordingJob.ts";
@@ -97,8 +94,6 @@ function formatOutputSeconds(seconds: number): string {
   return Number.isFinite(seconds) && seconds > 0 ? seconds.toFixed(1) : "0.0";
 }
 
-type RecordingRangeMode = "beats" | "time";
-
 /** One warning per session; the panel keeps the inline notice while it stays open. */
 let encoderWarningShown = false;
 
@@ -118,10 +113,8 @@ export function RecordingPanel() {
   const [rateControl, setRateControl] = useState<RecordingRateControl>("standard");
   const [musicVolume, setMusicVolume] = useState("100");
   const [effectsVolume, setEffectsVolume] = useState("100");
-  const [rangeMode, setRangeMode] = useState<RecordingRangeMode>("beats");
-  // Keep each endpoint in the unit it was entered in.
-  const [start, setStart] = useState<number | Beat>(0);
-  const [end, setEnd] = useState<number | Beat>(0);
+  const [start, setStart] = useState(0);
+  const [end, setEnd] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // A build can be made without the pinned encoder; export then reports the
@@ -192,27 +185,8 @@ export function RecordingPanel() {
       : ""
     : bitrate;
   const audioDuration = runtime?.audio.buffer?.duration ?? 0;
-  const chartOffset = Number(runtime?.session.chart.META.offset ?? 0) / 1000;
-  const tempo = runtime?.providers.session.tempo.get() ?? null;
-  /** Resolve a beat endpoint on the song clock; time endpoints are already exact. */
-  const secondsOf = (endpoint: number | Beat): number => {
-    if (typeof endpoint === "number") {
-      return endpoint;
-    }
-    if (!tempo) {
-      return 0;
-    }
-    try {
-      return tempo.seconds(beatValue(endpoint)) + chartOffset;
-    } catch {
-      return 0;
-    }
-  };
-  /** Display a time endpoint in beat mode without changing the stored range. */
-  const beatOf = (endpoint: number | Beat): Beat =>
-    typeof endpoint === "number" ? fromNumber(tempo?.beat(endpoint - chartOffset) ?? 0) : endpoint;
-  const startSeconds = secondsOf(start);
-  const endSeconds = secondsOf(end);
+  const startSeconds = start;
+  const endSeconds = end;
   const estimatedSeconds = Math.max(0, endSeconds - startSeconds);
   const estimate = estimateRecording({
     width: estimateSize.width,
@@ -224,46 +198,22 @@ export function RecordingPanel() {
     speed: selectedSpeed,
   });
 
-  /** Accept a start inside the song and before the current end. */
+  /** Accept a start time inside the song and before the current end. */
   const commitStartSeconds = (seconds: number): boolean => {
-    if (!tempo || !Number.isFinite(seconds) || seconds < 0 || seconds >= endSeconds) {
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds >= endSeconds) {
       return false;
     }
     setStart(seconds);
     return true;
   };
-  /** Accept an end inside the song and after the current start. */
+  /** Accept an end time inside the song and after the current start. */
   const commitEndSeconds = (seconds: number): boolean => {
-    if (
-      !tempo ||
-      !Number.isFinite(seconds) ||
-      seconds <= startSeconds ||
-      seconds > audioDuration + 1e-6
-    ) {
+    if (!Number.isFinite(seconds) || seconds <= startSeconds || seconds > audioDuration + 1e-6) {
       return false;
     }
     setEnd(Math.min(seconds, audioDuration));
     return true;
   };
-  /** Keep an exact beat when the range is edited in beat mode. */
-  const commitStartBeat = (beat: Beat): boolean => {
-    const seconds = secondsOf(beat);
-    if (seconds < 0 || seconds >= endSeconds) {
-      return false;
-    }
-    setStart(beat);
-    return true;
-  };
-  /** Keep an exact beat when the range is edited in beat mode. */
-  const commitEndBeat = (beat: Beat): boolean => {
-    const seconds = secondsOf(beat);
-    if (seconds <= startSeconds || seconds > audioDuration + 1e-6) {
-      return false;
-    }
-    setEnd(beat);
-    return true;
-  };
-
   /** Keep the current output area when switching to another fixed ratio. */
   const changeRatio = (next: RecordingRatio) => {
     if (next === ratio) {
@@ -615,70 +565,30 @@ export function RecordingPanel() {
         <FieldRow
           layout="inline"
           density="compact"
-          label={t("editor.recording.rangeInput")}
-          control={
-            <Segmented<RecordingRangeMode>
-              className="recording-range-mode"
-              ariaLabel={t("editor.recording.rangeInput")}
-              value={rangeMode}
+          label={t("editor.recording.startTime")}
+          control={(id) => (
+            <RecordingTimeField
+              id={id}
+              value={startSeconds}
+              max={endSeconds}
               disabled={busy}
-              options={[
-                { value: "beats", label: t("editor.recording.mode.beats") },
-                { value: "time", label: t("editor.recording.mode.time") },
-              ]}
-              onChange={setRangeMode}
+              onCommit={commitStartSeconds}
             />
-          }
-        />
-        <FieldRow
-          layout="inline"
-          density="compact"
-          label={t(
-            rangeMode === "beats" ? "editor.recording.startBeat" : "editor.recording.startTime",
           )}
-          control={(id) =>
-            rangeMode === "beats" ? (
-              <BeatField
-                id={id}
-                value={beatOf(start)}
-                disabled={busy}
-                dataField="recording-start"
-                onCommit={commitStartBeat}
-              />
-            ) : (
-              <RecordingTimeField
-                id={id}
-                value={startSeconds}
-                max={endSeconds}
-                disabled={busy}
-                onCommit={commitStartSeconds}
-              />
-            )
-          }
         />
         <FieldRow
           layout="inline"
           density="compact"
-          label={t(rangeMode === "beats" ? "editor.recording.endBeat" : "editor.recording.endTime")}
-          control={(id) =>
-            rangeMode === "beats" ? (
-              <BeatField
-                id={id}
-                value={beatOf(end)}
-                disabled={busy}
-                dataField="recording-end"
-                onCommit={commitEndBeat}
-              />
-            ) : (
-              <RecordingTimeField
-                id={id}
-                value={endSeconds}
-                max={audioDuration}
-                disabled={busy}
-                onCommit={commitEndSeconds}
-              />
-            )
-          }
+          label={t("editor.recording.endTime")}
+          control={(id) => (
+            <RecordingTimeField
+              id={id}
+              value={endSeconds}
+              max={audioDuration}
+              disabled={busy}
+              onCommit={commitEndSeconds}
+            />
+          )}
         />
       </div>
       <div className="recording-estimate">

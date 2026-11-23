@@ -267,14 +267,14 @@ function appendPreviewNoteHitArea(
   const holdHeadTexture = isHold ? surface.skin?.holdHeadTexture(highlight) : null;
   const texture = isHold ? holdHeadTexture : surface.skin?.noteTexture(entry.note.type, highlight);
   const noteHeight = texture
-    ? (noteWidth * texture.useful.height) / texture.useful.width
+    ? (noteWidth * texture.bounds.height) / texture.bounds.width
     : Math.max(8, noteWidth * 0.25);
   const holdEndTexture = isHold ? surface.skin?.holdEndTexture(highlight) : null;
   const holdHeadLength = holdHeadTexture
-    ? (noteWidth * holdHeadTexture.useful.height * holdCapScale) / holdHeadTexture.useful.width
+    ? (noteWidth * holdHeadTexture.bounds.height * holdCapScale) / holdHeadTexture.bounds.width
     : 0;
   const holdTailLength = holdEndTexture
-    ? (noteWidth * holdEndTexture.useful.height * holdCapScale) / holdEndTexture.useful.width
+    ? (noteWidth * holdEndTexture.bounds.height * holdCapScale) / holdEndTexture.bounds.width
     : 0;
   surface.noteHitAreas.push({
     noteIndex: entry.noteIndex,

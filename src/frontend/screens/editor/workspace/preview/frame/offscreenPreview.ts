@@ -181,7 +181,7 @@ export class OffscreenPreviewRenderer {
   /** Render and copy every visible layer synchronously before the WebGL buffer can clear. */
   render(seconds: number): HTMLCanvasElement {
     const { primary, notes, shader, overlay, output } = this.surface;
-    this.preview.draw(this.chart, this.tempo, seconds, -1);
+    this.preview.draw(this.chart, this.tempo, seconds, -1, new Map(), { effectTime: seconds });
     if (this.noiseFailed) {
       throw new Error("preview_frame_noise_unavailable");
     }

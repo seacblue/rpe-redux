@@ -71,6 +71,35 @@ export async function settingsSmoke(runner) {
   await runner.waitFor("shortcut capture open", () =>
     runner.evaluate("Boolean(document.querySelector('dialog.redux-keyboard-capture[open]'))"),
   );
+  const capturePositionBefore = await runner.evaluate(`(() => {
+    const dialog = document.querySelector('dialog.redux-keyboard-capture[open]');
+    if (!dialog) return null;
+    const box = dialog.getBoundingClientRect();
+    return { top: box.top, height: box.height };
+  })()`);
+  runner.assert(Boolean(capturePositionBefore), "shortcut capture dialog has no measurable bounds");
+  const modifier = {
+    key: "Control",
+    code: "ControlLeft",
+    windowsVirtualKeyCode: 17,
+    nativeVirtualKeyCode: 17,
+  };
+  await runner.command("Input.dispatchKeyEvent", { type: "keyDown", ...modifier });
+  const capturePositionWithPreview = await runner.evaluate(`(() => {
+    const dialog = document.querySelector('dialog.redux-keyboard-capture[open]');
+    if (!dialog) return null;
+    const box = dialog.getBoundingClientRect();
+    return { top: box.top, height: box.height };
+  })()`);
+  runner.assert(
+    Boolean(capturePositionWithPreview),
+    "shortcut capture dialog closed while previewing",
+  );
+  runner.assert(
+    Math.abs(capturePositionWithPreview.top - capturePositionBefore.top) < 0.5,
+    `shortcut capture dialog moved when the preview appeared: ${JSON.stringify({ before: capturePositionBefore, after: capturePositionWithPreview })}`,
+  );
+  await runner.command("Input.dispatchKeyEvent", { type: "keyUp", ...modifier });
   const key = { key: "F9", code: "F9", windowsVirtualKeyCode: 120, nativeVirtualKeyCode: 120 };
   await runner.command("Input.dispatchKeyEvent", { type: "keyDown", ...key });
   await runner.command("Input.dispatchKeyEvent", { type: "keyUp", ...key });

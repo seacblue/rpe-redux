@@ -16,7 +16,7 @@ export const HIT_PARTICLE_LIFETIME = HIT_FX_DURATION_DEFAULT;
 export const HIT_PARTICLE_COUNT = 4;
 
 /** Square side per full note width; Phira uses `hitFxScale * noteScale / 44`. */
-const SQUARE_SIZE_RATIO = 1 / 44 / (2 * PHIRA_NOTE_WIDTH_RATIO);
+const SQUARE_SIZE_RATIO = 1 / 44 / PHIRA_NOTE_WIDTH_RATIO;
 /** Initial speed per full note width per second; Phira uses `2.5 * noteScale`. */
 const SQUARE_SPEED_RATIO = 2.5 / (2 * PHIRA_NOTE_WIDTH_RATIO);
 /** Phira's linear deceleration applied to the square velocity. */

@@ -11,6 +11,8 @@ import {
 import { SceneRuntime } from "../../../core/global/chart/runtime/scene.ts";
 import { TempoMap } from "../../../core/global/chart/timing/tempo.ts";
 import {
+  DEFAULT_LINE_HEIGHT,
+  DEFAULT_LINE_WIDTH,
   PHIRA_HIT_FX_WIDTH_RATIO,
   previewNoteWidth,
 } from "../../../frontend/screens/editor/workspace/preview/scene/constants.ts";
@@ -24,6 +26,15 @@ test("note scale 1 matches Phira's authored note width", () => {
   assert.ok(Math.abs(previewNoteWidth(1) - 177.862716) < 1e-6);
   assert.ok(previewNoteWidth(0.8) < previewNoteWidth(1));
   assert.ok(previewNoteWidth(1.2) > previewNoteWidth(1));
+});
+
+test("hit-effect sprite width matches Phira's full particle quad", () => {
+  assert.ok(Math.abs(PHIRA_HIT_FX_WIDTH_RATIO - 1 / (5 * 0.13175016)) < 1e-12);
+});
+
+test("preview line defaults match Phira's RPE logical geometry", () => {
+  assert.equal(DEFAULT_LINE_WIDTH, 8100);
+  assert.equal(DEFAULT_LINE_HEIGHT, 6.75);
 });
 
 test("bpmfactor scales Hold pulse frequency without moving its time", () => {
@@ -99,7 +110,7 @@ test("hit effects use the post-event position and the configured effect scale", 
   assert.equal(pictures.at(-1)[1] + pictures.at(-1)[3] / 2, 300);
 });
 
-test("skin hit-fx metadata controls the frame, tint, rotation, scale, and particles", () => {
+test("skin hit-fx metadata controls the frame, tint, scale, particles, and rotation", () => {
   const hit = { start: 2, end: 2, note: { type: 1, above: 0 } };
   const line = {
     hitTimes: [hit],
@@ -138,7 +149,7 @@ test("skin hit-fx metadata controls the frame, tint, rotation, scale, and partic
     },
     scene: {
       lines: [line],
-      sampler: () => () => ({ x: 0, y: 0, rotation: 0 }),
+      sampler: () => () => ({ x: 0, y: 0, rotation: 90 }),
     },
     order: [0],
     seconds: 2.1,
@@ -151,8 +162,133 @@ test("skin hit-fx metadata controls the frame, tint, rotation, scale, and partic
 
   assert.equal(tinted[0].name, "img-2");
   assert.deepEqual(tinted[0].color, [255, 255, 255]);
-  assert.deepEqual(transforms, ["save", "translate", Math.PI, "restore"]);
+  assert.deepEqual(transforms, ["save", "translate", (3 * Math.PI) / 2, "restore"]);
   assert.equal(bursts.length, 0);
+});
+
+test("procedural particles can be hidden while the skin animation remains", () => {
+  const hit = { start: 2, end: 2, note: { type: 1 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  const pictures = [];
+  const bursts = [];
+  const active = drawHitEffects(
+    {
+      skin: { particleFrameCount: 4, hitFxDuration: 0.4, tinted: () => ({}) },
+      noteSize: 1,
+      hitEffectScale: 1,
+      effectsSince: 0,
+      showHitParticles: false,
+      defaultParticleColor: [255, 255, 255],
+    },
+    {
+      context: {
+        drawImage: (...args) => pictures.push(args),
+        fillRect: (...args) => bursts.push(args),
+      },
+      scene: {
+        lines: [line],
+        sampler: () => () => ({ x: 0, y: 0, rotation: Math.PI / 2 }),
+      },
+      order: [0],
+      seconds: 2.1,
+      effectTime: 10.1,
+      width: 200,
+      height: 200,
+      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
+    },
+  );
+
+  assert.equal(active, true);
+  assert.equal(pictures.length, 1);
+  assert.equal(bursts.length, 0);
+});
+
+test("hit effects keep animating when chart time is paused", () => {
+  const hit = { start: 2, end: 2, note: { type: 1 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  const frames = [];
+  const surface = {
+    skin: { particleFrameCount: 4, hitFxDuration: 0.4, tinted: (name) => name },
+    noteSize: 1,
+    hitEffectScale: 1,
+    effectsSince: 0,
+    showHitParticles: false,
+    defaultParticleColor: [255, 255, 255],
+    hitStateCache: new Map(),
+  };
+  const base = {
+    context: { drawImage: (...args) => frames.push(args), fillRect() {} },
+    scene: {
+      lines: [line],
+      sampler: () => () => ({ x: 0, y: 0, rotation: 0 }),
+    },
+    order: [0],
+    seconds: 2.1,
+    width: 200,
+    height: 200,
+    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
+  };
+
+  assert.equal(drawHitEffects(surface, { ...base, effectTime: 10.01 }), true);
+  assert.equal(frames.at(-1)[0], "img-1");
+  assert.equal(drawHitEffects(surface, { ...base, effectTime: 10.21 }), true);
+  assert.equal(frames.at(-1)[0], "img-4");
+  assert.equal(drawHitEffects(surface, { ...base, effectTime: 10.31 }), false);
+  assert.equal(drawHitEffects(surface, { ...base, effectTime: 10.32 }), false);
+});
+
+test("seeking does not interrupt an effect that is already playing", () => {
+  const hit = { start: 2, end: 2, note: { type: 1 } };
+  const line = {
+    hitTimes: [hit],
+    holdIndex: { query: () => [] },
+    noteState: () => ({ x: 0, y: 0 }),
+  };
+  const frames = [];
+  const surface = {
+    skin: { particleFrameCount: 4, hitFxDuration: 0.4, tinted: (name) => name },
+    noteSize: 1,
+    hitEffectScale: 1,
+    effectsSince: 0,
+    hitEffectEpoch: 0,
+    showHitParticles: false,
+    defaultParticleColor: [255, 255, 255],
+    hitStateCache: new Map(),
+  };
+  const base = {
+    context: { drawImage: (...args) => frames.push(args), fillRect() {} },
+    scene: {
+      lines: [line],
+      sampler: () => () => ({ x: 0, y: 0, rotation: 0 }),
+    },
+    order: [0],
+    width: 200,
+    height: 200,
+    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
+  };
+
+  assert.equal(drawHitEffects(surface, { ...base, seconds: 2.1, effectTime: 20 }), true);
+  surface.effectsSince = 20;
+  surface.hitEffectEpoch = 1;
+  assert.equal(drawHitEffects(surface, { ...base, seconds: 20, effectTime: 20.1 }), true);
+  surface.effectsSince = 0;
+  surface.hitEffectEpoch = 2;
+  assert.equal(drawHitEffects(surface, { ...base, seconds: 1, effectTime: 20.2 }), true);
+  assert.equal(frames.length, 3);
 });
 
 test("minimal hit-effect surfaces do not retain sampled positions across frames", () => {
@@ -268,6 +404,7 @@ test("hit particle travel scales with the projected chart frame", () => {
       scaleY: scale,
       centerX: 400,
       centerY: 300,
+      effectTime: 10,
     });
     return bursts;
   };

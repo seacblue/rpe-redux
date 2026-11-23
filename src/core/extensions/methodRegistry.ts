@@ -132,9 +132,12 @@ const HANDLE_METHODS = {
     ["read", "chart.read", "read", false],
     ["readAll", "chart.read", "read", false],
     ["resources", "chart.read", "read", false],
+    ["lines", "chart.read", "read", false],
     ["line", "chart.read", "read", false],
     ["parentId", "chart.read", "read", false],
+    ["notes", "chart.read", "read", false],
     ["note", "chart.read", "read", false],
+    ["events", "chart.read", "read", false],
     ["event", "chart.read", "read", false],
   ],
   transaction: [

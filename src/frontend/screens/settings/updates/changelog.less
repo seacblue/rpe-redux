@@ -46,11 +46,50 @@ dialog.redux-changelog-dialog {
     margin: 0;
   }
 
+  .redux-release-note-source a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+
+    &:hover {
+      color: var(--accent-hover);
+    }
+  }
+
   ul {
     display: grid;
     gap: var(--space-1);
     margin: 0;
     padding-inline-start: var(--space-4);
+  }
+
+  .redux-release-note-inline-code {
+    padding-inline: var(--space-1);
+    border: 1px solid var(--edge-divider);
+    border-radius: var(--radius-control);
+    background: var(--surface-muted);
+    font-family: var(--font-mono);
+    font-size: var(--type-caption);
+  }
+
+  .redux-release-note-code-block {
+    max-width: 100%;
+    margin: 0;
+    padding: var(--space-3);
+    overflow-x: auto;
+    border: 1px solid var(--edge-divider);
+    border-radius: var(--radius-control);
+    background: var(--surface-sunken);
+    color: var(--foreground);
+    font-family: var(--font-mono);
+    font-size: var(--type-caption);
+    line-height: var(--line-label);
+    white-space: pre;
+
+    code {
+      font: inherit;
+    }
   }
 }
 

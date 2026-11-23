@@ -266,6 +266,7 @@ export function readEditorDisplaySettings() {
       selectedLineColor: contributedColor("current-line-color"),
       multiSelectLineColor: contributedColor("multi-select-line-color"),
       showHitEffects: contributedFlag("particle-effects-enabled"),
+      showHitParticles: contributedFlag("procedural-particle-effects-enabled"),
       lineScale: contributedNumber("default-line-thickness"),
       backgroundAlpha: numberOf(displayValues.backgroundAlpha),
       lineNumbers: contributedFlag("line-numbers"),
@@ -281,7 +282,9 @@ export function readEditorDisplaySettings() {
       exclusiveRatio: Math.max(0, Math.min(1, contributedNumber("timeline-exclusive-width") / 100)),
       noteOpacity: contributedNumber("note-opacity"),
       multiLineNonCurrentOpacity: contributedNumber("preview-non-current-opacity") / 255,
-      overlapThreshold: contributedNumber("note-overlap-threshold"),
+      overlapThreshold: contributedFlag("note-nearby-merge-enabled")
+        ? contributedNumber("note-overlap-threshold")
+        : 0,
       gridCount: numberOf(displayValues.gridCount),
       scale: numberOf(displayValues.scale),
       division: numberOf(displayValues.division),
@@ -294,6 +297,8 @@ export function readEditorDisplaySettings() {
       mouseTrailEnabled: contributedFlag("mouse-trail-enabled"),
       hoverGuidesEnabled: contributedFlag("hover-guides-enabled"),
       nearbyGuidesOnly: contributedFlag("nearby-guides-only-enabled"),
+      clipboardGhostEnabled: contributedFlag("timeline-clipboard-range-bars-enabled"),
+      clipboardGhostOpacity: contributedNumber("timeline-clipboard-ghost-opacity"),
       densityBarsEnabled: contributedFlag("timeline-density-bars-enabled"),
       hoverPreviewEnabled: contributedFlag("timeline-hover-preview-enabled"),
       barWidth: contributedNumber("bar-width"),

@@ -15,7 +15,7 @@ import type {
 } from "../../../../../../core/edit/hitTest/api.ts";
 import type { Timeline } from "../../timeline/surface/timeline.ts";
 import type { ResourceScope } from "../../../../../../core/utils/resourceScope.ts";
-import { holdUsefulInterval as getHoldUsefulInterval } from "../../../canvas/noteGeometry.ts";
+import { holdPaintedInterval as getHoldPaintedInterval } from "../../../canvas/noteGeometry.ts";
 import { distanceSquaredToSegment, previewNoteGrid } from "./previewSpatialIndex.ts";
 import { previewNoteContains } from "./previewHitGeometry.ts";
 import { t } from "../../../../../../i18n/index.ts";
@@ -48,11 +48,11 @@ export function previewOwnsPointer(target: EventTarget | null, stage: HTMLElemen
 type Point = PreviewPoint;
 
 /** The hold's head-to-tail anchor span used by picking. */
-export function holdUsefulInterval(area: HitTestNoteGeometry): {
+export function holdPaintedInterval(area: HitTestNoteGeometry): {
   head: Point;
   tail: Point;
 } {
-  return getHoldUsefulInterval(area);
+  return getHoldPaintedInterval(area);
 }
 
 /** Live marquee and click state for one pointer sequence. */
@@ -186,7 +186,7 @@ export function previewRectangleHits(
   if (area.kind !== "hold") {
     return pointInRectangle(area.head, left, right, top, bottom);
   }
-  const interval = holdUsefulInterval(area);
+  const interval = holdPaintedInterval(area);
   return segmentIntersectsRectangle(interval.head, interval.tail, left, right, top, bottom);
 }
 
@@ -365,8 +365,8 @@ function noteCandidates(preview: Preview, point: Point): HitTestNoteGeometry[] {
         area.noteIndex !== undefined &&
         distanceSquaredToSegment(
           point,
-          area.kind === "hold" ? holdUsefulInterval(area).head : area.head,
-          area.kind === "hold" ? holdUsefulInterval(area).tail : area.tail,
+          area.kind === "hold" ? holdPaintedInterval(area).head : area.head,
+          area.kind === "hold" ? holdPaintedInterval(area).tail : area.tail,
         ) <=
           area.radius * area.radius,
     )

@@ -1,19 +1,17 @@
 /**
  * The per-setting reset affordance.
  *
- * It appears when the committed value differs from the schema default or when
- * the user has explicitly committed the setting, so a value they edited back to
- * its default can still be cleared. Clicking writes the default through the
- * reset path, which also clears that provenance.
+ * It appears when the committed value differs from the schema default. Clicking
+ * writes the default through the reset path, which also clears its provenance.
  */
 import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
 import type { SettingDefinition, SettingValue } from "../../../core/settings/types.ts";
 import { settingText } from "./settingsCatalog.ts";
 import { settingShowsReset } from "./settingResetState.ts";
-import { useSetting, useSettingModified } from "./useSetting.ts";
+import { useSetting } from "./useSetting.ts";
 
-/** Reset one setting to its schema default; hidden when neither condition applies. */
+/** Reset one setting to its schema default when its value differs. */
 export function SettingReset({
   field,
   onReset,
@@ -26,8 +24,7 @@ export function SettingReset({
   const { t } = useTranslation();
   const fallback = field.default;
   const current = useSetting<SettingValue>(field.key, fallback ?? "");
-  const modified = useSettingModified(field.key);
-  if (!settingShowsReset(field, current, modified)) {
+  if (!settingShowsReset(field, current)) {
     return null;
   }
   const name = settingText(field.label);

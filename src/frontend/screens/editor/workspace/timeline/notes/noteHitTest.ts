@@ -66,8 +66,8 @@ function candidates(
         const skin = this.appearance.skin;
         const texture =
           note.type === 2 ? skin?.holdHeadTexture(false) : skin?.noteTexture(note.type, false);
-        return texture && texture.useful.width > 0
-          ? (width * texture.useful.height) / texture.useful.width / 2
+        return texture && texture.bounds.width > 0
+          ? (width * texture.bounds.height) / texture.bounds.width / 2
           : 4;
       },
       visible: (horizontal, width, lineIndex) =>

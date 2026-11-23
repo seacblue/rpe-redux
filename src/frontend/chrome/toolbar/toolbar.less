@@ -173,6 +173,88 @@
   display: none;
 }
 
+// The row remains horizontally scrollable instead of shrinking or clipping an
+// action. These affordances span both toolbar rows at their seams and appear
+// only while a row has content beyond the visible edge.
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance {
+  --toolbar-hover-translucent: color-mix(in srgb, var(--foreground) 50%, transparent);
+  --toolbar-hover-ink: var(--foreground);
+  position: absolute;
+  z-index: var(--z-content-overlay);
+  inset-block: 0;
+  width: calc(var(--tool-cell) + var(--space-2));
+  min-width: calc(var(--tool-cell) + var(--space-2));
+  height: auto;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--design-dur-tint) var(--design-ease-move),
+    color var(--design-dur-tint) var(--design-ease-move);
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--design-dur-tint) var(--design-ease-move);
+}
+
+// IconButton's preset is a square control. The seam affordance is a full
+// toolbar-height hit area instead, so it keeps the shared icon but fills the
+// whole edge between the two rows.
+.redux-app-root .redux-toolbar .redux-icon-button.redux-toolbar-scroll-affordance {
+  width: calc(var(--tool-cell) + var(--space-2));
+  min-width: calc(var(--tool-cell) + var(--space-2));
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-start {
+  left: 0;
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-start::before {
+  background: linear-gradient(to right, var(--toolbar-hover-translucent) 0%, transparent 100%);
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-end {
+  right: var(--chrome-progress-column);
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance.is-end::before {
+  background: linear-gradient(to right, transparent 0%, var(--toolbar-hover-translucent) 100%);
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:hover:not(:disabled) {
+  color: var(--toolbar-hover-ink);
+  --icon-color: var(--toolbar-hover-ink);
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.redux-app-root .redux-toolbar .redux-toolbar-scroll-affordance:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
 .redux-toolbar-slot {
   display: inline-block;
   width: calc(var(--tool-cell) * var(--slot-cells, 5.2));

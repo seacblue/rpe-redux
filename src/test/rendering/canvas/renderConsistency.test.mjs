@@ -168,14 +168,14 @@ const textureSource = {
 };
 const descriptor = {
   source: textureSource,
-  useful: { x: 0, y: 0, width: 8, height: 8 },
+  bounds: { x: 0, y: 0, width: 8, height: 8 },
 };
 
 /** A texture descriptor whose source carries a label for draw-order assertions. */
 function labeledDescriptor(label) {
   return {
     source: { label, naturalWidth: 8, naturalHeight: 8, width: 8, height: 8 },
-    useful: { x: 0, y: 0, width: 8, height: 8 },
+    bounds: { x: 0, y: 0, width: 8, height: 8 },
   };
 }
 
@@ -977,6 +977,33 @@ test("a paused viewport seek repaints the timeline after wheel movement settles"
 
   assert.equal(settled.work.timeline, true);
   assert.equal(settled.work.playhead, true);
+});
+
+test("a paused preview keeps repainting while a hit effect is active", () => {
+  const scheduler = new EditorRenderScheduler();
+  const request = {
+    now: 0,
+    seconds: 2,
+    playing: false,
+    previewVisible: true,
+    contentRefreshRate: 144,
+    timelineRevision: 1,
+    viewportOrigin: 0,
+    previewChart: {},
+    previewRevision: 0,
+    previewSession: null,
+    previewSelection: null,
+    previewAnimationActive: true,
+    authoringRegionVisible: false,
+  };
+  const adapter = { paint() {} };
+
+  const first = scheduler.tick(request, adapter);
+  assert.equal(first.work.preview, true);
+  const active = scheduler.tick({ ...request, now: 16 }, adapter);
+  assert.equal(active.work.preview, true);
+  const finished = scheduler.tick({ ...request, now: 32, previewAnimationActive: false }, adapter);
+  assert.equal(finished.work.preview, false);
 });
 
 /** A guide packet carrying one selected-line pointer and no labels. */

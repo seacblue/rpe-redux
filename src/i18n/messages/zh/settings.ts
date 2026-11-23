@@ -346,6 +346,9 @@ export default {
   "settings.field.particle-effects-enabled.label": "渲染粒子效果",
   "settings.field.particle-effects-enabled.description":
     "播放预览时在每次打击处绘制皮肤打击动画与方形爆发粒子。",
+  "settings.field.procedural-particle-effects-enabled.label": "渲染程序化打击粒子",
+  "settings.field.procedural-particle-effects-enabled.description":
+    "保留皮肤打击动画，但关闭程序生成的方形爆发粒子。",
   "settings.field.note-size.label": "预览音符缩放",
   "settings.field.timeline-note-size.label": "时间轴音符大小",
   "settings.field.hit-effect-size.label": "打击效果大小",
@@ -392,9 +395,10 @@ export default {
   "settings.field.timeline-overview-strip-width.label": "概览条宽度",
   "settings.field.timeline-overview-strip-width.description": "时间轴两侧概览条的宽度。",
   "settings.field.timeline-hover-preview-enabled.label": "显示概览悬停预览",
-  "settings.field.note-overlap-threshold.label": "音符重叠提示距离",
-  "settings.field.note-overlap-threshold.description":
-    "同一拍上相距小于该值的音符视为重叠；0 关闭提示。",
+  "settings.field.note-nearby-merge-enabled.label": "音符过近时合并",
+  "settings.field.note-merge-distance.label": "音符合并距离",
+  "settings.field.note-merge-distance.description":
+    "将同一拍内相距小于该值的音符合并为一个视觉重叠组。",
   "settings.field.timeline-grid-color-1.label": "1/1 节拍线颜色",
   "settings.field.timeline-grid-color-2.label": "1/2 节拍线颜色",
   "settings.field.timeline-grid-color-3.label": "1/3 节拍线颜色",
@@ -722,10 +726,6 @@ export default {
   "settings.field.timeline-undo-jump.label": "撤销/重做后跳转到改动位置",
   "settings.field.timeline-undo-jump.description":
     "撤销或重做完成后，将播放头和视图移动到本次改动的时间位置。",
-  "settings.field.timeline-clipboard-range-bars-enabled.label": "在概览条显示剪贴板与粘贴范围",
-  "settings.field.timeline-clipboard-range-color.label": "剪贴板范围颜色",
-  "settings.field.timeline-paste-range-color.label": "粘贴范围颜色",
-  "settings.field.timeline-range-bar-opacity.label": "范围区域透明度",
-  "settings.field.timeline-range-bar-opacity.description":
-    "时间轴两侧概览条上剪贴板与粘贴范围的透明度。",
+  "settings.field.timeline-clipboard-ghost-enabled.label": "显示剪贴板虚影预览",
+  "settings.field.timeline-clipboard-ghost-opacity.label": "剪贴板虚影透明度",
 } as const;

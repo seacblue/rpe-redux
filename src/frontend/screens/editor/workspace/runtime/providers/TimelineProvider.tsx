@@ -13,7 +13,6 @@ import { bindMultiLineScroll } from "../../timeline/multiLine/multiLineScrollBin
 import { createLineSwitcher } from "../../timeline/lineSwitcher/lineSwitcherBindings.ts";
 import { createScrubberSpectrumLoader } from "../../../../../chrome/transport/scrubberSpectrumLoader.ts";
 import { createSelectionClipboard } from "../../../../../../core/edit/clipboard/selectionClipboard.ts";
-import { clipboardBeatRange } from "../../../../../../core/edit/clipboard/operations.ts";
 import { clipboardBeat } from "../../timeline/interaction/clipboardTarget.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { hasOpenModal } from "../../../../../../design/components/modal/Modal.tsx";
@@ -118,8 +117,6 @@ export function createTimelineOverview(options: {
   ui: EditorUiState;
   densityBarsEnabled(): boolean;
   hoverPreviewEnabled(): boolean;
-  clipboardRangesEnabled(): boolean;
-  rangeBarOpacity(): number;
   visibility: { hasDocument(): boolean; atHome(): boolean };
 }): TimelineOverview {
   const overview = new TimelineOverview({
@@ -131,8 +128,6 @@ export function createTimelineOverview(options: {
     bindings: options.ui.timelineBindings,
     densityBarsEnabled: options.densityBarsEnabled,
     hoverPreviewEnabled: options.hoverPreviewEnabled,
-    clipboardRangesEnabled: options.clipboardRangesEnabled,
-    rangeBarOpacity: options.rangeBarOpacity,
     getSnapshot: () => {
       const session = options.session.current;
       return {
@@ -146,9 +141,6 @@ export function createTimelineOverview(options: {
         offsetSeconds: options.offsetSeconds(),
         historyRevision: session.history.revision,
         contentRevision: session.contentRevision,
-        bpmFactor: session.line?.bpmfactor ?? 1,
-        clipboardRange: clipboardBeatRange(session),
-        pasteRange: session.lastPasteBeatRange,
         hasDocument: options.visibility.hasDocument(),
         atHome: options.visibility.atHome(),
       };

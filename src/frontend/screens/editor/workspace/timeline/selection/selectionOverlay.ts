@@ -7,7 +7,7 @@
  * Canvas2D and WebGL sinks share one projection.
  */
 import type { ResourceScope } from "../../../../../../core/utils/resourceScope.ts";
-import { readCanvasPalette, rgbChannels, selectionColor } from "../../../canvas/palette.ts";
+import { readCanvasPalette, selectionColor } from "../../../canvas/palette.ts";
 import { RenderGraph, type RenderPacket } from "../../../canvas/renderGraph.ts";
 import { TimelineOverlayRenderDevice } from "../../../canvas/timelineOverlayRenderDevice.ts";
 import { type Timeline } from "../surface/timeline.ts";
@@ -104,13 +104,12 @@ export class SelectionOverlay {
     );
     const sweepAddColor = selectionColor("timeline-sweep-add-color", "#33FF33");
     const sweepRemoveColor = selectionColor("timeline-sweep-remove-color", "#FFFFFF");
-    const noteRgb = rgbChannels(noteColor) ?? [0, 103, 184];
-    const eventRgb = rgbChannels(eventColor) ?? [180, 83, 9];
+    // Keep the timeline fill identical to the preview marquee. Only the
+    // timeline's configurable stroke colours are overlaid here; the preview
+    // and timeline therefore share the same theme-owned interior alpha.
     const marqueePalette = {
       ...palette,
-      selectionNotesFill: `rgba(${noteRgb.join(", ")}, 0.18)`,
       selectionNotesStroke: noteColor,
-      selectionEventsFill: `rgba(${eventRgb.join(", ")}, 0.24)`,
       selectionEventsStroke: eventColor,
     };
     let commands;

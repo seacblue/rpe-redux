@@ -158,7 +158,7 @@ test("the rail keeps the trailing grid track and its own box on one token", () =
 test("each seam sits on the edge it moves", () => {
   assert.match(
     shellStyles,
-    /\.shell-body > \.layout-splitter--toolbar \{\s*top: calc\(var\(--layout-toolbar-height\) - 4\.5px\);/u,
+    /\.shell-body > \.layout-splitter--toolbar \{\s*top: calc\(var\(--layout-toolbar-height\) - 4\.5px\);\s*\/\/ The workbench owns[\s\S]*?inset-inline: 0 calc\(var\(--chrome-sidebar-track\) \+ 9px\);/u,
   );
   assert.match(
     shellStyles,
