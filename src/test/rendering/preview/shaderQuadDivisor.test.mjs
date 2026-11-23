@@ -8,6 +8,7 @@ const DIVISOR = 0x88fe;
 function recordingGl(divisors) {
   const draws = [];
   const divisorWrites = [];
+  const divisorQueries = [];
   const gl = {
     FRAMEBUFFER: 0x8d40,
     COLOR_ATTACHMENT0: 0x8ce0,
@@ -31,8 +32,10 @@ function recordingGl(divisors) {
     uniform1i() {},
     drawArrays: () => draws.push("draw"),
     bindTextureNoop() {},
-    getVertexAttrib: (location, parameter) =>
-      parameter === DIVISOR ? (divisors.has(location) ? 1 : 0) : 0,
+    getVertexAttrib: (location, parameter) => {
+      divisorQueries.push([location, parameter]);
+      return parameter === DIVISOR ? (divisors.has(location) ? 1 : 0) : 0;
+    },
     vertexAttribDivisor: (location, value) => {
       divisorWrites.push([location, value]);
       if (value === 0) {
@@ -41,7 +44,7 @@ function recordingGl(divisors) {
     },
   };
   gl.context = () => gl;
-  return { gl, draws, divisorWrites };
+  return { gl, draws, divisorWrites, divisorQueries };
 }
 
 test("drawQuad clears a leftover divisor before drawing the full-screen quad", () => {
@@ -79,8 +82,8 @@ test("drawQuad clears a leftover divisor before drawing the full-screen quad", (
   );
 });
 
-test("a slot already without a divisor is not written again", () => {
-  const { gl, divisorWrites } = recordingGl(new Set([1]));
+test("drawQuad resets both attribute divisors without querying GL state", () => {
+  const { gl, divisorWrites, divisorQueries } = recordingGl(new Set([1]));
   const pipeline = new ShaderPipeline();
   pipeline.gl = gl;
 
@@ -103,7 +106,11 @@ test("a slot already without a divisor is not written again", () => {
     [64, 64],
   );
 
-  assert.deepEqual(divisorWrites, [[1, 0]]);
+  assert.deepEqual(divisorWrites, [
+    [0, 0],
+    [1, 0],
+  ]);
+  assert.deepEqual(divisorQueries, []);
 });
 
 test("a WebGL1 context without vertexAttribDivisor still draws", () => {

@@ -7,7 +7,10 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { lineBatchable } from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
+import {
+  lineBatchable,
+  lineCanvasTransformNeeded,
+} from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
 
 const line = (overrides = {}) => ({ Texture: "line.png", ...overrides });
 
@@ -41,4 +44,10 @@ test("a custom line texture keeps the Canvas path", () => {
 test("one custom texture is enough to leave the batch", () => {
   const lines = [line(), line(), line({ Texture: "skins/line2.png" })];
   assert.equal(lineBatchable(lines), false);
+});
+
+test("batched lyric lines keep the Canvas transform for their text", () => {
+  assert.equal(lineCanvasTransformNeeded("line", true, true, true), true);
+  assert.equal(lineCanvasTransformNeeded("line", true, true, false), false);
+  assert.equal(lineCanvasTransformNeeded("note", true, true, false), false);
 });

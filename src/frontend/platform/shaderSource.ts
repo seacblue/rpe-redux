@@ -7,14 +7,10 @@
 import { assetUrl } from "../../core/platform/assetUrl.ts";
 import { assetPath } from "../../core/global/document/resources.ts";
 import type { ReadableDocumentAssets } from "./documentStoreHandle.ts";
-import { currentDocumentAssets, currentDocumentStore } from "./documentStoreHandle.ts";
+import { currentDocumentAssets } from "./documentStoreHandle.ts";
 
 function readDocumentAssets(): ReadableDocumentAssets | null {
-  const stored = currentDocumentStore()?.assets as ReadableDocumentAssets | undefined;
-  if (stored && stored.size > 0) {
-    return stored;
-  }
-  return currentDocumentAssets() ?? stored ?? null;
+  return currentDocumentAssets();
 }
 
 /**

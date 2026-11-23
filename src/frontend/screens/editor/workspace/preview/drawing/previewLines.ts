@@ -100,6 +100,16 @@ export function lineBatchable(lines: readonly JudgeLine[]): boolean {
   return lines.every((line) => !line.Texture || line.Texture === "line.png");
 }
 
+/** Returns whether a pass needs the Canvas transform around its paint call. */
+export function lineCanvasTransformNeeded(
+  kind: RenderPass["kind"],
+  drawnByBatch: boolean,
+  batchActive: boolean,
+  hasLyrics: boolean,
+): boolean {
+  return kind === "line" ? !drawnByBatch || hasLyrics : !batchActive;
+}
+
 /**
  * Depth-sorted draw order: judge lines by `zOrder`, then Holds, then note heads.
  *
@@ -797,6 +807,8 @@ export function drawLinePasses(
       const { rotation, cosine, sine } = prepared;
       let drawnByBatch = false;
       let effectiveLineColor: readonly number[] = state.color;
+      const canvasLyrics =
+        pass.kind === "line" && Boolean(runtime.line.extended?.textEvents?.length);
       if (pass.kind === "line") {
         stats.lines += 1;
         if (surface.collectGeometry) {
@@ -842,7 +854,7 @@ export function drawLinePasses(
                   ? surface.multiSelectLineColor
                   : surface.selectedLineColor
               : state.color;
-        if (lineBatch && state.scaleX > 0 && state.scaleY > 0) {
+        if (lineBatch && !canvasLyrics && state.scaleX > 0 && state.scaleY > 0) {
           lineColorStyle.color[0] = effectiveLineColor[0] ?? 255;
           lineColorStyle.color[1] = effectiveLineColor[1] ?? 255;
           lineColorStyle.color[2] = effectiveLineColor[2] ?? 255;
@@ -860,8 +872,13 @@ export function drawLinePasses(
         }
       }
       // NoteBatch receives screen-space coordinates. Canvas needs the line
-      // transform only when it will paint the line or the fallback notes.
-      const usesCanvasLineTransform = pass.kind === "line" ? !drawnByBatch : !batchActive;
+      // transform for a fallback line and for lyrics beside a batched line.
+      const usesCanvasLineTransform = lineCanvasTransformNeeded(
+        pass.kind,
+        drawnByBatch,
+        batchActive,
+        canvasLyrics,
+      );
       if (usesCanvasLineTransform) {
         context.save();
         context.translate(lineCenterX, lineCenterY);
@@ -871,7 +888,6 @@ export function drawLinePasses(
         // A batch instance covers the line's skin quad but not its lyrics: a
         // lined judge line paints only its subtitle text on the Canvas pass, so
         // the text still has to run even when the quad came from the batch.
-        const canvasLyrics = drawnByBatch && Boolean(runtime.line.extended?.textEvents?.length);
         if (!drawnByBatch || canvasLyrics) {
           const canvasState =
             samplingAlpha === null && effectiveLineColor === state.color

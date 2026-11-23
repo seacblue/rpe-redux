@@ -934,9 +934,10 @@ export class ShaderPipeline {
     if (typeof gl.vertexAttribDivisor !== "function") {
       return;
     }
-    if (gl.getVertexAttrib(location, gl.VERTEX_ATTRIB_ARRAY_DIVISOR) !== 0) {
-      gl.vertexAttribDivisor(location, 0);
-    }
+    // Keep this hot path write-only. Reading the divisor from the driver adds a
+    // synchronous round trip to every shader pass, while resetting zero is
+    // already idempotent and clears any state left by an instanced batch.
+    gl.vertexAttribDivisor(location, 0);
   }
 
   /** Draws one full-screen quad through `result` into `framebuffer`. */
