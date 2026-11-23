@@ -7,6 +7,7 @@ import test from "node:test";
 import "../../../core/settings/features/index.ts";
 import { settingsRegistry } from "../../../core/settings/settings.ts";
 import { values } from "../../../core/state/values.ts";
+import { readEditorDisplaySettings } from "../../../frontend/screens/settings/editorDisplaySettings.ts";
 
 test("built-in settings do not hide dependent rows", () => {
   for (const definition of settingsRegistry.definitions()) {
@@ -83,6 +84,41 @@ test("clipboard ghosts follow the overview bar toggle", () => {
     settingsRegistry.definition("timeline-clipboard-range-bars-enabled")?.enabledWhen?.equals,
     true,
   );
+});
+
+test("clipboard ghost opacity is a percentage range gated by the ghost toggle", () => {
+  const opacity = settingsRegistry.definition("timeline-clipboard-ghost-opacity");
+  assert.equal(opacity?.control, "range");
+  assert.equal(opacity?.default, 0.2);
+  assert.equal(opacity?.min, 0);
+  assert.equal(opacity?.max, 1);
+  assert.equal(opacity?.step, 0.01);
+  assert.equal(opacity?.percentage, true);
+  assert.equal(opacity?.enabledWhen?.key, "timeline-clipboard-range-bars-enabled");
+  assert.equal(opacity?.enabledWhen?.equals, true);
+});
+
+test("nearby note merging gates its distance input", () => {
+  const enabled = settingsRegistry.definition("note-nearby-merge-enabled");
+  const distance = settingsRegistry.definition("note-overlap-threshold");
+  assert.equal(enabled?.control, "toggle");
+  assert.equal(enabled?.default, true);
+  assert.equal(distance?.control, "number");
+  assert.equal(distance?.default, 50);
+  assert.equal(distance?.enabledWhen?.key, "note-nearby-merge-enabled");
+  assert.equal(distance?.enabledWhen?.equals, true);
+});
+
+test("disabling nearby note merging removes its distance from the runtime", () => {
+  const previous = values.byId.get("note-nearby-merge-enabled");
+  try {
+    values.byId.set("note-nearby-merge-enabled", false);
+    assert.equal(readEditorDisplaySettings().timeline.overlapThreshold, 0);
+    values.byId.set("note-nearby-merge-enabled", true);
+    assert.equal(readEditorDisplaySettings().timeline.overlapThreshold, 50);
+  } finally {
+    values.byId.set("note-nearby-merge-enabled", previous);
+  }
 });
 
 test("merged multi-line note labels follow the merge-notes setting", () => {

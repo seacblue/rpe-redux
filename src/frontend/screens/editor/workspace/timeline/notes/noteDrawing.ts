@@ -43,7 +43,7 @@ import { selectedNoteIndices } from "./noteSelectionDrawing.ts";
 import { noteOverlapRotation } from "./noteRotation.ts";
 import { drawNoteLanes } from "./noteLaneDrawing.ts";
 import { drawNoteTimelineCues } from "./noteOffscreenCueDrawing.ts";
-import { CLIPBOARD_GHOST_ALPHA, projectClipboardGhost } from "../clipboardGhost.ts";
+import { projectClipboardGhost } from "../clipboardGhost.ts";
 import { NOTE_GHOST_FILTER } from "../../../canvas/noteGhostVisual.ts";
 
 interface MultiLineNoteScratch {
@@ -344,7 +344,7 @@ function drawClipboardGhostNotes(
       endVertical,
       noteWidth,
       height,
-      opacityMultiplier: CLIPBOARD_GHOST_ALPHA,
+      opacityMultiplier: this.appearance.clipboardGhostOpacity,
     });
   }
   context.restore();
