@@ -38,6 +38,7 @@ import { freeCameraState } from "../../stage/freeCamera/freeCamera.ts";
 import { detailedNoiseRendering } from "../../../../../../core/edit/state/noiseRendering.ts";
 import { bindBackgroundVolume } from "../../../../../platform/backgroundVolume.ts";
 import { audioMixer } from "../../../../../../core/media/audioMixer.ts";
+import missingImageUrl from "../../../../../../core/media/missing-image.png?inline";
 
 /** Preview media, skin resources, and stage helpers for one editor mount. */
 export interface PreviewRuntime {
@@ -289,6 +290,7 @@ export function createPreviewRuntime(options: {
         ],
       });
     },
+    missingImageUrl,
   );
   const customBackground = values.getHandle<string | undefined>("custom-background");
   let customBackgroundRequest = 0;

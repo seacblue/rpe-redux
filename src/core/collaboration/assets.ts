@@ -1,6 +1,7 @@
 /** Content-addressed asset rules shared by the client and room server. */
 
 import type { ChartChange } from "./changes.ts";
+import { builtinShaderReference, shaderAssetPath } from "../global/chart/shader/shader.ts";
 
 /** The largest single audio/image blob a room accepts. */
 export const MAX_ASSET_BYTES = 256 * 1024 * 1024;
@@ -137,9 +138,8 @@ export function chartAssetNames(chart: unknown): string[] {
       if (!line || typeof line !== "object") {
         continue;
       }
-      const entry = line as { Texture?: unknown; attachUI?: unknown; notes?: unknown };
+      const entry = line as { Texture?: unknown; notes?: unknown; extended?: unknown };
       add(entry.Texture);
-      add(entry.attachUI);
       if (Array.isArray(entry.notes)) {
         for (const note of entry.notes) {
           if (note && typeof note === "object") {
@@ -148,6 +148,39 @@ export function chartAssetNames(chart: unknown): string[] {
           }
         }
       }
+      const paintEvents =
+        entry.extended && typeof entry.extended === "object"
+          ? (entry.extended as { paintEvents?: unknown }).paintEvents
+          : undefined;
+      for (const effect of Array.isArray(paintEvents) ? paintEvents : []) {
+        if (effect && typeof effect === "object") {
+          const value =
+            (effect as Record<string, unknown>).shader ??
+            (effect as Record<string, unknown>).shaderType ??
+            (effect as Record<string, unknown>).name;
+          if (!builtinShaderReference(value)) {
+            add(shaderAssetPath(value));
+          }
+        }
+      }
+    }
+  }
+  for (const effect of [
+    ...(Array.isArray((record as { effects?: unknown }).effects)
+      ? ((record as { effects: unknown[] }).effects ?? [])
+      : []),
+    ...(Array.isArray((record as { shaderEvents?: unknown }).shaderEvents)
+      ? ((record as { shaderEvents: unknown[] }).shaderEvents ?? [])
+      : []),
+  ]) {
+    if (effect && typeof effect === "object") {
+      const value =
+        (effect as Record<string, unknown>).shader ??
+        (effect as Record<string, unknown>).shaderType ??
+        (effect as Record<string, unknown>).name;
+      if (!builtinShaderReference(value)) {
+        add(shaderAssetPath(value));
+      }
     }
   }
   return [...names];
@@ -155,14 +188,7 @@ export function chartAssetNames(chart: unknown): string[] {
 
 // `META.illustration` is the illustrator credit, not an image name. Only the
 // fields that resolve to an asset travel in the reference list.
-const ASSET_REFERENCE_FIELDS = new Set([
-  "song",
-  "background",
-  "Texture",
-  "attachUI",
-  "hitSound",
-  "hitsound",
-]);
+const ASSET_REFERENCE_FIELDS = new Set(["song", "background", "Texture", "hitSound", "hitsound"]);
 
 /** Decode one JSON-pointer path token for resource-change classification. */
 function decodeChangeToken(token: string): string {

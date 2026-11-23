@@ -1036,8 +1036,70 @@ pub(crate) fn remap_chart(chart: &mut Value, remap: &HashMap<String, String>) {
                     }
                 }
             }
+            if let Some(events) = line
+                .get_mut("extended")
+                .and_then(|extended| extended.get_mut("paintEvents"))
+                .and_then(Value::as_array_mut)
+            {
+                for event in events {
+                    for key in ["shader", "source", "shaderPath"] {
+                        if let Some(value) = event.get_mut(key) {
+                            rewrite(value);
+                        }
+                    }
+                }
+            }
         }
     }
+    for key in ["effects", "shaderEvents"] {
+        if let Some(events) = chart.get_mut(key).and_then(Value::as_array_mut) {
+            for event in events {
+                for field in ["shader", "source", "shaderPath"] {
+                    if let Some(value) = event.get_mut(field) {
+                        rewrite(value);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(events) = chart
+        .get_mut("META")
+        .and_then(|meta| meta.get_mut("effects"))
+        .and_then(Value::as_array_mut)
+    {
+        for event in events {
+            for field in ["shader", "source", "shaderPath"] {
+                if let Some(value) = event.get_mut(field) {
+                    rewrite(value);
+                }
+            }
+        }
+    }
+}
+
+/// Flatten one relative PEZ resource path while preserving a readable name.
+///
+/// Phira-compatible packages keep resources at the archive root. Directory
+/// components therefore become `<folder><stable-eight-digit-hash>`, joined to
+/// the file name with underscores. The hash is stable so repeated exports keep
+/// chart references and archive diffs predictable.
+pub(crate) fn flatten_pez_name(name: &str) -> String {
+    let parts: Vec<&str> = name.split('/').filter(|part| !part.is_empty()).collect();
+    if parts.len() < 2 {
+        return name.to_owned();
+    }
+    let file = parts.last().copied().unwrap_or_default();
+    let mut folders = Vec::new();
+    for index in 0..parts.len() - 1 {
+        let path = parts[..=index].join("/");
+        let mut hash = 0x811c9dc5u32;
+        for byte in path.as_bytes() {
+            hash ^= u32::from(*byte);
+            hash = hash.wrapping_mul(0x01000193);
+        }
+        folders.push(format!("{}{hash:08x}", parts[index]));
+    }
+    format!("{}_{}", folders.join("_"), file)
 }
 
 /// Resource bytes supplied either directly or staged in a session directory.
@@ -1487,5 +1549,14 @@ mod tests {
     fn chart_payload_keeps_the_existing_parse_error_code() {
         let payload = super::ChartPayload::Json("{".into());
         assert_eq!(payload.into_value().unwrap_err(), "invalid_save_chart");
+    }
+
+    #[test]
+    fn flat_pez_names_keep_files_at_the_archive_root() {
+        let first = flatten_pez_name("images/background.png");
+        assert!(first.starts_with("images"));
+        assert!(first.ends_with("_background.png"));
+        assert_eq!(first, flatten_pez_name("images/background.png"));
+        assert_eq!(flatten_pez_name("song.ogg"), "song.ogg");
     }
 }

@@ -10,13 +10,19 @@ import type { MessageKey } from "../../../i18n/index.ts";
 import type { Beat } from "../../global/chart/timing/beat.ts";
 
 /** Every issue category the scanner can report. */
-export const CHART_ISSUE_KINDS = ["overlap", "invalid-range", "negative-beat", "density"] as const;
+export const CHART_ISSUE_KINDS = [
+  "missing-resource",
+  "overlap",
+  "invalid-range",
+  "negative-beat",
+  "density",
+] as const;
 
 /** One issue category. */
 export type ChartIssueKind = (typeof CHART_ISSUE_KINDS)[number];
 
 /** How strongly an issue should be presented. */
-export type ChartIssueSeverity = "warning" | "error";
+export type ChartIssueSeverity = "warning" | "error" | "fatal";
 
 /** The shared presentation contract for one issue kind. */
 export interface ChartIssueKindDefinition {
@@ -33,6 +39,13 @@ export interface ChartIssueKindDefinition {
 
 /** Every kind with its display contract, in filter order. */
 export const CHART_ISSUE_KIND_DEFINITIONS: readonly ChartIssueKindDefinition[] = [
+  {
+    kind: "missing-resource",
+    severity: "fatal",
+    label: "editorPanels.issues.kind.missingResource",
+    description: "editorPanels.issues.kind.missingResource.description",
+    settingKey: "chart-issues-check-missing-resource",
+  },
   {
     kind: "overlap",
     severity: "error",
@@ -79,7 +92,7 @@ export interface ChartIssue {
   kind: ChartIssueKind;
   severity: ChartIssueSeverity;
   /** The chart object represented by this issue. */
-  target: "event" | "hold" | "note" | "line";
+  target: "event" | "hold" | "note" | "line" | "resource";
   /** Stable key for React and list diffs. */
   id: string;
   lineIndex: number;
@@ -108,6 +121,9 @@ export interface ChartIssue {
   endBeat: number;
   /** The on-screen note peak, for a density issue. */
   peak?: number;
+  /** Name and media class for a missing chart resource. */
+  resourceName?: string;
+  resourceKind?: "image" | "audio" | "other";
 }
 
 /** One immutable publication consumed by the inspector. */

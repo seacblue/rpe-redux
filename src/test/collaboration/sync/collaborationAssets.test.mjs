@@ -9,6 +9,7 @@ import {
   mimeForAsset,
   sanitizeAssetName,
 } from "../../../core/collaboration/assets.ts";
+import { missingChartResources } from "../../../core/global/document/resources.ts";
 import {
   decodeBinaryAssetFrame,
   encodeBinaryAssetFrame,
@@ -27,8 +28,9 @@ test("chart resource names include assets but not the illustration credit", () =
   });
   assert.deepEqual(
     [...names].sort(),
-    ["audio/song.mp3", "cover.png", "hit-2.wav", "hit.wav", "line.png", "ui/skin.png"].sort(),
+    ["audio/song.mp3", "cover.png", "hit-2.wav", "hit.wav", "line.png"].sort(),
   );
+  assert.equal(names.includes("ui/skin.png"), false);
   assert.equal(names.includes("artist credit"), false);
 });
 
@@ -73,6 +75,30 @@ test("resource-change classification skips ordinary note edits", () => {
     ]),
     false,
   );
+});
+
+test("missing resource checks ignore UI bindings and built-in line textures", () => {
+  const resources = missingChartResources(
+    {
+      META: { song: "music/song.ogg", background: "cover.png" },
+      judgeLineList: [
+        {
+          Texture: "line.png",
+          attachUI: "score",
+          notes: [{ hitSound: "custom-hit.wav" }],
+          extended: { paintEvents: [{ shader: "effects/custom.frag" }] },
+        },
+      ],
+    },
+    new Map([["other.ogg", new Uint8Array([1])]]),
+    "chart.json",
+  );
+  assert.deepEqual(resources, [
+    { name: "music/song.ogg", kind: "audio" },
+    { name: "cover.png", kind: "image" },
+    { name: "custom-hit.wav", kind: "audio" },
+    { name: "effects/custom.frag", kind: "other" },
+  ]);
 });
 
 test("binary asset frames round-trip their header and chunk", () => {

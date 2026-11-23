@@ -3,7 +3,10 @@ import { createContext, useContext, type ReactNode } from "react";
 import { t } from "../../../../../../i18n/index.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
-import { assetNames } from "../../../../../../core/global/document/resources.ts";
+import {
+  assetNames,
+  missingChartResources,
+} from "../../../../../../core/global/document/resources.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import { EventIssueMonitor } from "../../../../../../core/edit/validation/eventIssueMonitor.ts";
 import {
@@ -39,6 +42,7 @@ import { createCurveEditor } from "../../../inspector/curveNotes/curveEditor.ts"
 import { viewControls } from "../commands/viewControls.ts";
 import type { EditorTimelineMode } from "../commands/viewControls.ts";
 import { pickFiles } from "../../../../../platform/filePicker.ts";
+import type { ChartIssue } from "../../../../../../core/edit/validation/chartIssueTypes.ts";
 
 /** The document fields the inspector panes read and mutate. */
 export interface InspectorDocumentState {
@@ -147,6 +151,38 @@ export function createInspectorRuntime(options: {
     if (!session) {
       return;
     }
+    const missingResourceIssues: ChartIssue[] =
+      readChartIssueScanOptions().checks["missing-resource"] === false
+        ? []
+        : missingChartResources(
+            session.chart,
+            options.document.assets,
+            options.document.chartName,
+          ).map((resource) => ({
+            kind: "missing-resource",
+            severity: "fatal",
+            target: "resource",
+            id: `missing-resource:${resource.name}`,
+            lineIndex: -1,
+            lineId: "",
+            lineName: "",
+            layer: -1,
+            extended: false,
+            track: "",
+            firstEventIndex: -1,
+            secondEventIndex: -1,
+            firstEventId: "",
+            secondEventId: "",
+            startTime: [0, 0, 1] as [number, number, number],
+            endTime: [0, 0, 1] as [number, number, number],
+            startSeconds: 0,
+            endSeconds: 0,
+            beat: 0,
+            endBeat: 0,
+            resourceName: resource.name,
+            resourceKind: resource.kind,
+          }));
+    eventIssues.setExternalIssues(missingResourceIssues);
     const document = session.chartDocument;
     if (!document) {
       eventIssues.request({

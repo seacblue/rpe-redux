@@ -167,6 +167,7 @@ export default {
   "editorPanels.overlap.layer": "Layer {value}",
 
   "editorPanels.issues.summaryErrors": "{count} chart errors",
+  "editorPanels.issues.summaryFatal": "{count} fatal errors",
   "editorPanels.issues.summaryWarnings": "{count} chart warnings",
   "editorPanels.issues.emptyTitle": "No chart issues",
   "editorPanels.issues.empty": "No chart issues detected.",
@@ -191,6 +192,8 @@ export default {
   "editorPanels.issues.trackGif": "GIF",
   "editorPanels.issues.masterSwitch": "Check chart issues",
   "editorPanels.issues.densityPeak": "{count} notes on screen at once",
+  "editorPanels.issues.missingResourceTitle": "{kind}",
+  "editorPanels.issues.missingResourceDetail": "Missing resource: {name}",
   "editorPanels.issues.filter.label": "Filter issues by type",
   "editorPanels.issues.filter.emptyTitle": "Every issue type is filtered out",
   "editorPanels.issues.filter.empty":
@@ -207,6 +210,9 @@ export default {
   "editorPanels.issues.kind.density": "Too many notes on screen",
   "editorPanels.issues.kind.density.description":
     "The preview survives this density, but a target simulator may drop frames.",
+  "editorPanels.issues.kind.missingResource": "Missing resource",
+  "editorPanels.issues.kind.missingResource.description":
+    "The chart refers to a local image, audio file, or other asset that is not available.",
 
   "editorPanels.lineSwitcher.empty": "No judgement line matches inside the currently visible range",
 
@@ -457,6 +463,12 @@ export default {
     "External editing is available in the desktop app",
   "editorPanels.assetLibrary.openExternalUnavailable":
     "This asset's bytes could not be read from the project library",
+  "editorPanels.assetLibrary.missingDescription":
+    "This chart reference has no local file. Choose a file to keep the reference and restore the asset.",
+  "editorPanels.assetLibrary.replaceMissing": "Replace with local file",
+  "editorPanels.assetLibrary.replacedMissing": "The missing asset was replaced",
+  "editorPanels.assetLibrary.missingReplacementInvalid":
+    "Choose a local file with the same media type as the missing asset",
   "editorPanels.assetLibrary.deleted": "The asset was deleted",
   "editorPanels.assetLibrary.moved": "The asset was moved",
   "editorPanels.assetLibrary.movedFolder": "The asset folder was moved",

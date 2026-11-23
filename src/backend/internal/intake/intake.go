@@ -302,10 +302,10 @@ func classifyArchive(file string) Item {
 		candidates = candidates[:maxArchiveChartCandidates]
 	}
 	var (
-		chartName string
-		format    string
-		name      string
-		valid     []string
+		chartName   string
+		chartFormat string
+		chartTitle  string
+		valid       []string
 	)
 	for _, candidate := range candidates {
 		entry := entries[candidate]
@@ -316,7 +316,11 @@ func classifyArchive(file string) Item {
 		if err != nil {
 			continue
 		}
-		var ok bool
+		var (
+			format string
+			name   string
+			ok     bool
+		)
 		switch strings.ToLower(path.Ext(candidate)) {
 		case ".json":
 			format, name, ok = detectJSONChartHeader(data)
@@ -333,8 +337,10 @@ func classifyArchive(file string) Item {
 		valid = append(valid, candidate)
 		if chartName == "" {
 			chartName = candidate
+			chartFormat = format
+			chartTitle = name
 			if name == "" {
-				name = archiveChartStem(candidate)
+				chartTitle = archiveChartStem(candidate)
 			}
 		}
 	}
@@ -359,7 +365,7 @@ func classifyArchive(file string) Item {
 		}
 		return unknown(file, "archive does not contain a supported chart, Extension manifest, or Phira info.yml")
 	}
-	return chartItem(file, file, format, name, valid, "chart archive")
+	return chartItem(file, file, chartFormat, chartTitle, valid, "chart archive")
 }
 
 // classifyExtensionArchive validates a manifest kept inside an archive.

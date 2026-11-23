@@ -9,7 +9,11 @@ import {
 } from "../../../core/global/chart/exportProjection.ts";
 import { buildInfoText } from "../../../core/global/document/info.ts";
 import { createChartExport } from "../../../core/global/document/export.ts";
-import { packageEntries, preparePezExportAssets } from "../../../core/global/document/package.ts";
+import {
+  flattenPezAssetName,
+  packageEntries,
+  preparePezExportAssets,
+} from "../../../core/global/document/package.ts";
 
 const decoder = new TextDecoder();
 
@@ -165,6 +169,21 @@ test("package layout uses the project id as the root chart entry", () => {
   assert.match(info, new RegExp(`^Chart: ${id}\\.json$`, "m"));
 });
 
+test("package layout flattens nested assets and rewrites chart references", () => {
+  const chart = createChart();
+  chart.META.background = "images/background.png";
+  const flattened = flattenPezAssetName("images/background.png");
+  const entries = packageEntries(
+    chart,
+    new Map([["images/background.png", new Uint8Array([1])]]),
+    "chart.pez",
+  );
+  assert.ok(entries.has(flattened));
+  assert.equal(entries.has("images/background.png"), false);
+  const chartName = `${chartExportId(chart, "chart.pez")}.json`;
+  assert.equal(JSON.parse(decoder.decode(entries.get(chartName))).META.background, flattened);
+});
+
 test("native PEZ export replaces a stale extra sidecar with current effects", () => {
   const chart = createChart();
   chart.META.id = "1234567890123456";
@@ -188,7 +207,12 @@ test("native PEZ export replaces a stale extra sidecar with current effects", ()
   const output = preparePezExportAssets(chart, assets, "chart.json");
   const extra = JSON.parse(decoder.decode(output.get("extra.json")));
 
-  assert.deepEqual(extra.effects, chart.effects);
+  assert.deepEqual(extra.effects, [
+    {
+      ...chart.effects[0],
+      shader: flattenPezAssetName("shaders/tokonagi.glsl"),
+    },
+  ]);
   assert.notEqual(output.get("extra.json"), stale);
   assert.deepEqual(output.get("shaders/tokonagi.glsl"), assets.get("shaders/tokonagi.glsl"));
 });

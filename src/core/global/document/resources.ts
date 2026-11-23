@@ -9,6 +9,16 @@ import type { AssetMap } from "./types.ts";
 import { decodeChartText } from "../../utils/text.ts";
 import { parseInfo } from "./info.ts";
 import { cachedNormalizePath } from "../../io/pathCache.ts";
+import { builtinShaderReference, shaderAssetPath } from "../chart/shader/shader.ts";
+
+/** The media class used when a chart resource cannot be resolved. */
+export type ChartResourceKind = "image" | "audio" | "other";
+
+/** One chart resource reference that has no matching local asset. */
+export interface MissingChartResource {
+  name: string;
+  kind: ChartResourceKind;
+}
 
 /** Every known asset name, including paths whose bytes are not loaded yet. */
 export function assetNames(
@@ -178,4 +188,90 @@ export function resourceReferences(
       /\.(png|jpe?g|webp|gif|bmp|avif)$/i,
     ),
   };
+}
+
+const BUILT_IN_HIT_SOUNDS = new Set(["tap", "drag", "flick", "hold", "custom"]);
+const IMAGE_RESOURCE = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
+const AUDIO_RESOURCE = /\.(mp3|ogg|wav|flac|m4a|aac|opus|webm)$/i;
+
+/** Classify a resource name without treating UI markers as files. */
+function chartResourceKind(name: string): ChartResourceKind {
+  if (IMAGE_RESOURCE.test(name)) {
+    return "image";
+  }
+  if (AUDIO_RESOURCE.test(name)) {
+    return "audio";
+  }
+  return "other";
+}
+
+/** Collect authored media references that are absent from the current asset map. */
+export function missingChartResources(
+  chart: Chart,
+  assets: ReadonlyMap<string, Uint8Array> & { names?: () => Iterable<string> },
+  chartName: string,
+  fallback: Record<string, string> = {},
+): MissingChartResource[] {
+  const references = resourceReferences(chart, assets, chartName, fallback);
+  const names = new Map<string, ChartResourceKind>();
+  const add = (name: unknown, kind: ChartResourceKind): void => {
+    if (
+      typeof name !== "string" ||
+      !name ||
+      names.has(name) ||
+      assetPath(assets, name, chartName)
+    ) {
+      return;
+    }
+    names.set(name, kind);
+  };
+  // Preserve an authored name before `resourceReferences` applies its
+  // compatibility inference. An unrelated local song must not hide a broken
+  // explicit reference.
+  add(chart.META.song, "audio");
+  add(chart.META.background, "image");
+  const infoMatches = matchingInfo(assets, chartName);
+  if (infoMatches.length === 1) {
+    const info = parseInfo(decodeChartText(infoMatches[0][1]));
+    add(info.Song, "audio");
+    add(info.Picture, "image");
+  }
+  add(references.song, "audio");
+  add(references.background, "image");
+  for (const line of chart.judgeLineList ?? []) {
+    if (line.Texture !== "line.png") {
+      add(line.Texture, "image");
+    }
+    for (const note of line.notes ?? []) {
+      const hitSound = note.hitSound ?? note.hitsound;
+      if (typeof hitSound === "string" && !BUILT_IN_HIT_SOUNDS.has(hitSound)) {
+        add(hitSound, chartResourceKind(hitSound));
+      }
+    }
+  }
+  const addShader = (effect: unknown): void => {
+    if (!effect || typeof effect !== "object") {
+      return;
+    }
+    const record = effect as Record<string, unknown>;
+    const reference = record.shader ?? record.shaderType ?? record.name;
+    if (!builtinShaderReference(reference)) {
+      const path = shaderAssetPath(reference);
+      if (path) {
+        add(path, "other");
+      }
+    }
+  };
+  const rootEffects = [chart.effects, chart.shaderEvents].flatMap((value) =>
+    Array.isArray(value) ? value : [],
+  );
+  for (const effect of rootEffects) {
+    addShader(effect);
+  }
+  for (const line of chart.judgeLineList ?? []) {
+    for (const effect of line.extended?.paintEvents ?? []) {
+      addShader(effect);
+    }
+  }
+  return [...names].map(([name, kind]) => ({ name, kind }));
 }

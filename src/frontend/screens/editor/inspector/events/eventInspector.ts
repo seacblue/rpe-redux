@@ -18,7 +18,7 @@ import type { InspectorEventEntry } from "./EventInspectorView.tsx";
 import type { EasingCurvePatch } from "../../../../../design/components/easing/EasingCurveEditor.tsx";
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
 import { eventCurvePreviewSession } from "./eventCurvePreview.ts";
-import { currentDocumentStore } from "../../../../platform/documentStoreHandle.ts";
+import { currentDocumentAssetNames } from "../../../../platform/documentStoreHandle.ts";
 import { shaderAssetPath } from "../../../../../core/global/chart/shader/shader.ts";
 export type { InspectorEventEntry } from "./EventInspectorView.tsx";
 
@@ -97,7 +97,7 @@ export function renderEventInspector(
 ): void {
   const entries = inspectorEntries(session);
   const language = getLanguage();
-  const shaderAssets = [...(currentDocumentStore()?.assets?.names ?? [])]
+  const shaderAssets = [...currentDocumentAssetNames()]
     .filter((name) => Boolean(shaderAssetPath(name)))
     .sort()
     .join("\u0000");

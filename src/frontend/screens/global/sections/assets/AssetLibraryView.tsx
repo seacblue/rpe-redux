@@ -142,11 +142,20 @@ function AssetThumb({
   url,
   alt,
   kind,
+  missing = false,
 }: {
   url: string;
   alt: string;
   kind: AssetViewKind;
+  missing?: boolean;
 }): React.JSX.Element {
+  if (missing) {
+    return (
+      <span className="asset-image asset-missing" aria-hidden="true">
+        <AsyncImage src={url} alt="" loading="lazy" decoding="async" />
+      </span>
+    );
+  }
   if (kind === "audio") {
     return (
       <span className="asset-image asset-audio" aria-hidden="true">
@@ -214,12 +223,13 @@ function AssetFileRow({
     <Button
       type="button"
       variant="plain"
-      className={`asset-row${file.selected ? " is-selected" : ""}`}
+      className={`asset-row${file.selected ? " is-selected" : ""}${file.missing ? " is-missing" : ""}`}
       data-asset-name={file.name}
       data-asset-kind={file.kind}
+      data-asset-missing={file.missing ? "true" : undefined}
       onClick={() => onSelect(file.name)}
     >
-      <AssetThumb url={file.url} alt={file.file} kind={file.kind} />
+      <AssetThumb url={file.url} alt={file.file} kind={file.kind} missing={file.missing} />
       <span
         className="asset-row-name"
         onDoubleClick={(event) => {
@@ -241,6 +251,7 @@ function AssetFolderView({
   onToggle,
   onSelect,
   onRename,
+  onReplaceMissing,
   onSelectFolder,
   empty = false,
 }: {
@@ -250,6 +261,7 @@ function AssetFolderView({
   onToggle(path: string): void;
   onSelect(name: string): void;
   onRename(name: string): void;
+  onReplaceMissing(name: string): void;
   onSelectFolder(path: string): void;
   empty?: boolean;
 }): React.JSX.Element {
@@ -304,6 +316,7 @@ function AssetFolderView({
           onToggle={onToggle}
           onSelect={onSelect}
           onRename={onRename}
+          onReplaceMissing={onReplaceMissing}
           onSelectFolder={onSelectFolder}
         />
       ))}
@@ -342,6 +355,7 @@ export function AssetLibraryView({
   addInputRef,
   onSelect,
   onRename,
+  onReplaceMissing,
   onConfigureShader,
   onOpenExternal,
   onDelete,
@@ -449,6 +463,7 @@ export function AssetLibraryView({
               onToggle={toggleFolder}
               onSelect={onSelect}
               onRename={onRename}
+              onReplaceMissing={onReplaceMissing}
               onSelectFolder={onSelectFolder}
               empty={folder.path === "" ? empty : false}
             />
@@ -478,7 +493,7 @@ export function AssetLibraryView({
               {t("editorPanels.assetLibrary.newFolderButton")}
             </span>
           </Button>
-          {(selected || (selectedFolderExists && !blank)) && (
+          {((selected && !selected.missing) || (selectedFolderExists && !blank && !selected)) && (
             <Button
               type="button"
               variant="danger"
@@ -503,7 +518,15 @@ export function AssetLibraryView({
   const detailsFace = selected ? (
     <div className="asset-details">
       <strong className="asset-details-name">{assetLabel(selected.name)}</strong>
-      {selected.kind === "audio" ? (
+      {selected.missing ? (
+        <div className="asset-missing-details">
+          <AssetThumb url={selected.url} alt="" kind={selected.kind} missing />
+          <p>{t("editorPanels.assetLibrary.missingDescription")}</p>
+          <Button type="button" variant="solid" onClick={() => onReplaceMissing(selected.name)}>
+            {t("editorPanels.assetLibrary.replaceMissing")}
+          </Button>
+        </div>
+      ) : selected.kind === "audio" ? (
         <AudioPlayer ref={audioPlayer} src={selected.url} label={assetLabel(selected.name)} />
       ) : selected.kind === "shader" ? (
         <>
@@ -516,13 +539,17 @@ export function AssetLibraryView({
         <AssetThumb url={selected.url} alt={selected.name} kind={selected.kind} />
       )}
       <div className="asset-detail-actions">
-        <Button type="button" variant="outlined" onClick={() => onRename()}>
-          {t("common.action.rename")}
-        </Button>
-        <Button type="button" variant="outlined" onClick={onOpenExternal}>
-          <Icon name="external" size={14} />
-          {t("editorPanels.assetLibrary.openExternal")}
-        </Button>
+        {!selected.missing && (
+          <Button type="button" variant="outlined" onClick={() => onRename()}>
+            {t("common.action.rename")}
+          </Button>
+        )}
+        {!selected.missing && (
+          <Button type="button" variant="outlined" onClick={onOpenExternal}>
+            <Icon name="external" size={14} />
+            {t("editorPanels.assetLibrary.openExternal")}
+          </Button>
+        )}
       </div>
     </div>
   ) : (

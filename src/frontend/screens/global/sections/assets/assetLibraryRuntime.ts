@@ -7,6 +7,7 @@
  * platform access.
  */
 import type { AssetMap } from "../../../../../core/global/document/types.ts";
+import { missingChartResources } from "../../../../../core/global/document/resources.ts";
 import { withChartFolders } from "../../../../../core/global/document/folders.ts";
 import {
   setShaderParameterOverrides,
@@ -105,6 +106,11 @@ export function createAssetLibraryRuntime(deps: {
       folders: deps.getAssetFolders(),
       chartDirectoryName: chartDirectoryName(),
       chart: deps.getSession().chart,
+      missingAssets: missingChartResources(
+        deps.getSession().chart,
+        deps.getAssets(),
+        deps.getChartName(),
+      ).map(({ name }) => name),
     }),
     {
       state: deps.state,

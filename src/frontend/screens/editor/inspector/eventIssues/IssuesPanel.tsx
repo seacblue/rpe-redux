@@ -190,16 +190,19 @@ function IssuesContent() {
   // Errors and warnings are different claims: one says the chart is broken, the
   // other says a target renderer may struggle. The summary reports them apart.
   const summary = useMemo(() => {
+    let fatal = 0;
     let errors = 0;
     let warnings = 0;
     for (const issue of visible) {
-      if (issue.severity === "error") {
+      if (issue.severity === "fatal") {
+        fatal += 1;
+      } else if (issue.severity === "error") {
         errors += 1;
       } else {
         warnings += 1;
       }
     }
-    return { errors, warnings };
+    return { fatal, errors, warnings };
   }, [visible]);
   // A hidden kind that is later switched off is not an active filter any more:
   // it left the list entirely, so the button must not claim a filter is on.
@@ -223,6 +226,13 @@ function IssuesContent() {
    */
   const locate = (issue: ChartIssue) => {
     if (!runtime) {
+      return;
+    }
+    if (issue.target === "resource") {
+      if (issue.resourceName) {
+        runtime.providers.inspector.assetLibrary.selectAsset(issue.resourceName);
+      }
+      runtime.providers.inspector.activatePane("assets");
       return;
     }
     const session = runtime.getSession();
@@ -344,6 +354,12 @@ function IssuesContent() {
     >
       <div className="event-issue-filter-bar">
         <span className="event-issue-filter-summary">
+          {summary.fatal > 0 && (
+            <span className="event-issue-summary-fatal">
+              {t("editorPanels.issues.summaryFatal", { count: summary.fatal })}
+            </span>
+          )}
+          {summary.fatal > 0 && (summary.errors > 0 || summary.warnings > 0) && ", "}
           {summary.errors > 0 && (
             <span className="event-issue-summary-error">
               {t("editorPanels.issues.summaryErrors", { count: summary.errors })}
@@ -391,17 +407,30 @@ function IssuesContent() {
             // What the row is about, in one word: a density peak, a Hold, or the
             // named event track. The lane is only added when it is not obvious.
             const detail =
-              issue.kind === "density"
-                ? t("editorPanels.issues.densityPeak", { count: issue.peak ?? 0 })
-                : issue.target === "hold"
-                  ? t("editorPanels.issues.holdTrack")
-                  : trackLabel(issue.track, t);
+              issue.target === "resource"
+                ? t("editorPanels.issues.missingResourceDetail", {
+                    name: issue.resourceName ?? "",
+                  })
+                : issue.kind === "density"
+                  ? t("editorPanels.issues.densityPeak", { count: issue.peak ?? 0 })
+                  : issue.target === "hold"
+                    ? t("editorPanels.issues.holdTrack")
+                    : trackLabel(issue.track, t);
             const layer =
               issue.layer >= 0 && !issue.extended
                 ? t("editorPanels.issues.layer", { value: issue.layer })
                 : issue.extended
                   ? t("editorPanels.issues.extendedLayer")
                   : "";
+            const title =
+              issue.target === "resource"
+                ? t("editorPanels.issues.missingResourceTitle", {
+                    kind: t(definition.label),
+                  })
+                : t("editorPanels.issues.title", {
+                    kind: t(definition.label),
+                    line,
+                  });
             return (
               <Fragment key={issue.id}>
                 {index > 0 && <Divider axis="x" />}
@@ -412,17 +441,10 @@ function IssuesContent() {
                   data-severity={issue.severity}
                 >
                   <div className="event-issue-main">
-                    <strong className="event-issue-title">
-                      {t("editorPanels.issues.title", {
-                        kind: t(definition.label),
-                        line,
-                      })}
-                    </strong>
+                    <strong className="event-issue-title">{title}</strong>
                     <span className="event-issue-meta">
                       {detail}
-                      {layer ? `, ${layer}` : ""}
-                      {", "}
-                      {time}
+                      {issue.target === "resource" ? "" : `${layer ? `, ${layer}` : ""}, ${time}`}
                     </span>
                   </div>
                   <IconButton

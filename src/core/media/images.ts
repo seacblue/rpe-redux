@@ -64,7 +64,12 @@ export interface ImageRecord {
   scale: number;
   image: DecodedImage | null;
   cost: number;
+  /** True when the record is a missing chart image rendered with the fallback. */
+  missing: boolean;
 }
+
+/** Stable dimensions of the baked missing-image fallback. */
+export const DEFAULT_MISSING_IMAGE_SIZE = Object.freeze({ width: 256, height: 144 });
 
 /**
  * The image/texture cache for one chart.
@@ -90,9 +95,16 @@ export class ProjectImages {
   decodedBytes: number;
   budget: number;
   controller: AbortController;
+  /** Last known natural dimensions by chart resource name, retained across reloads. */
+  imageSizes: Map<string, { width: number; height: number }>;
+  fallbackImageUrl: string;
 
   /** Create an empty cache; `invalidate` is called whenever decoded state changes. */
-  constructor(invalidate: () => void, report: (issue: MediaIssue) => void = () => {}) {
+  constructor(
+    invalidate: () => void,
+    report: (issue: MediaIssue) => void = () => {},
+    fallbackImageUrl = "",
+  ) {
     this.invalidate = invalidate;
     this.report = report;
     this.images = new Map();
@@ -109,6 +121,8 @@ export class ProjectImages {
     this.decodedBytes = 0;
     this.budget = 128 * 1024 ** 2;
     this.controller = new AbortController();
+    this.imageSizes = new Map();
+    this.fallbackImageUrl = fallbackImageUrl;
   }
 
   /**
@@ -147,9 +161,37 @@ export class ProjectImages {
             message: t("system.image.missing", { name }),
           });
         }
+        if (this.fallbackImageUrl && name !== "line.png") {
+          const size = this.imageSizes.get(name) ?? DEFAULT_MISSING_IMAGE_SIZE;
+          this.records.set(name, {
+            name,
+            bytes: null,
+            uri: this.fallbackImageUrl,
+            naturalWidth: size.width,
+            naturalHeight: size.height,
+            animated: false,
+            lastUsed: 0,
+            requestedScale: 0,
+            generation: this.generation,
+            signal: this.controller.signal,
+            pending: null,
+            complete: () => {},
+            failed: false,
+            scale: 0,
+            image: null,
+            cost: 0,
+            missing: true,
+          });
+        }
         continue;
       }
       const dimensions = probePngDimensions(bytes ?? new Uint8Array());
+      if (dimensions.naturalWidth && dimensions.naturalHeight) {
+        this.imageSizes.set(name, {
+          width: dimensions.naturalWidth,
+          height: dimensions.naturalHeight,
+        });
+      }
       this.records.set(name, {
         name,
         bytes: bytes ?? null,
@@ -167,6 +209,7 @@ export class ProjectImages {
         scale: 0,
         image: null,
         cost: 0,
+        missing: false,
       });
     }
     const background = this.records.get(this.backgroundName);
@@ -284,13 +327,14 @@ export class ProjectImages {
         record.naturalWidth = source.naturalWidth;
         record.naturalHeight = source.naturalHeight;
       } else {
-        const options: ImageBitmapOptions = record.naturalWidth
-          ? {
-              resizeWidth: Math.max(1, Math.ceil(record.naturalWidth * scale)),
-              resizeHeight: Math.max(1, Math.ceil(record.naturalHeight * scale)),
-              resizeQuality: "high",
-            }
-          : {};
+        const options: ImageBitmapOptions =
+          record.naturalWidth && !record.missing
+            ? {
+                resizeWidth: Math.max(1, Math.ceil(record.naturalWidth * scale)),
+                resizeHeight: Math.max(1, Math.ceil(record.naturalHeight * scale)),
+                resizeQuality: "high",
+              }
+            : {};
         const bitmap = await decodeImageBitmap(blob, options);
         source = bitmap;
         if (!record.naturalWidth) {
@@ -303,7 +347,13 @@ export class ProjectImages {
         return;
       }
       this.release(record);
-      record.scale = record.animated ? 1 : source.width / record.naturalWidth;
+      if (record.naturalWidth && record.naturalHeight) {
+        this.imageSizes.set(record.name, {
+          width: record.naturalWidth,
+          height: record.naturalHeight,
+        });
+      }
+      record.scale = record.animated || record.missing ? 1 : source.width / record.naturalWidth;
       record.image = {
         source,
         naturalWidth: record.naturalWidth,
@@ -390,6 +440,7 @@ export class ProjectImages {
   /** Release all decoded media when the preview runtime itself is disposed. */
   dispose(): void {
     this.clear();
+    this.imageSizes.clear();
     this.customBackgroundBytes = null;
     this.customBackgroundReference = "";
   }
@@ -444,6 +495,7 @@ export class ProjectImages {
       scale: 0,
       image: null,
       cost: 0,
+      missing: false,
     };
     this.records.set(reference, record);
     this.backgroundName = reference;

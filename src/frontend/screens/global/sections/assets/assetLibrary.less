@@ -179,6 +179,16 @@
   background: var(--active-accent-fill);
 }
 
+.asset-row.is-missing {
+  color: var(--placeholder-text);
+  opacity: 0.72;
+}
+
+.asset-row.is-missing .asset-image {
+  color: var(--placeholder-text);
+  background: var(--surface-muted);
+}
+
 // An audio row is the preview target, not a filled selection block: the accent
 // edge is enough, so the row keeps the library's dark surface behind it.
 .asset-row[data-asset-kind="audio"].is-selected {
@@ -234,6 +244,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--accent);
+}
+
+.asset-missing-details {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--placeholder-text);
+}
+
+.asset-missing-details .asset-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.asset-missing-details p {
+  margin: 0;
 }
 
 .asset-details > .asset-image {

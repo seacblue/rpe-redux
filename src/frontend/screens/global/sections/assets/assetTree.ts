@@ -29,6 +29,8 @@ import {
 export interface AssetSnapshotOptions {
   assets: AssetMap;
   entries: readonly [string, Uint8Array][];
+  missingAssets?: readonly string[];
+  missingUrl?: string;
   folders: ReadonlySet<string>;
   selected: string | null;
   selectedFolder: string;
@@ -55,7 +57,17 @@ export interface AssetSnapshotResult {
 export async function buildAssetSnapshot(
   options: AssetSnapshotOptions,
 ): Promise<AssetSnapshotResult | null> {
-  const { assets, entries, folders, selected, defaultFolder, urlFor, isCurrent } = options;
+  const {
+    assets,
+    entries,
+    missingAssets = [],
+    missingUrl = "",
+    folders,
+    selected,
+    defaultFolder,
+    urlFor,
+    isCurrent,
+  } = options;
   const folderPaths = [...folders].filter(Boolean);
   const root: AssetNode = { folders: new Map(), files: [] };
   /** Returns the chart node for a folder path, creating missing ancestors. */
@@ -76,15 +88,24 @@ export async function buildAssetSnapshot(
   }
   // Images directly inside the chart's folder are listed on their own; there is
   // no synthetic root node, because the chart folder is the panel's whole scope.
-  const rootFiles: [string, string, Uint8Array][] = [];
+  const rootFiles: [string, string, Uint8Array | null, boolean][] = [];
   for (const [name, bytes] of entries) {
     const parts = imageName(name).split("/").filter(Boolean);
     const file = parts.pop() ?? name;
     if (!parts.length) {
-      rootFiles.push([name, file, bytes]);
+      rootFiles.push([name, file, bytes, false]);
       continue;
     }
-    ensureFolder(root, parts).files.push([name, file, bytes]);
+    ensureFolder(root, parts).files.push([name, file, bytes, false]);
+  }
+  for (const name of missingAssets) {
+    const parts = imageName(name).split("/").filter(Boolean);
+    const file = parts.pop() ?? name;
+    if (!parts.length) {
+      rootFiles.push([name, file, null, true]);
+    } else {
+      ensureFolder(root, parts).files.push([name, file, null, true]);
+    }
   }
   // Root files imply a Default group when the chart has no folder field.
   const rootVisible = folders.has("") || rootFiles.length > 0;
@@ -106,22 +127,28 @@ export async function buildAssetSnapshot(
     return isCurrent();
   };
   /** Maps one asset entry to its view row, retaining its cached URL. */
-  const toViewFile = (name: string, file: string, bytes: Uint8Array): AssetViewFile => {
+  const toViewFile = (
+    name: string,
+    file: string,
+    bytes: Uint8Array | null,
+    missing: boolean,
+  ): AssetViewFile => {
     const kind = assetKind(name);
     return {
       name,
       file,
-      url: urlFor(name, bytes),
+      url: missing ? missingUrl : urlFor(name, bytes ?? new Uint8Array()),
       kind,
       selected: selected === name,
-      ...(kind === "shader" ? { text: new TextDecoder().decode(bytes) } : {}),
+      ...(missing ? { missing: true } : {}),
+      ...(kind === "shader" && bytes ? { text: new TextDecoder().decode(bytes) } : {}),
     };
   };
   /** Recursively maps a folder node and its children, yielding between batches. */
   const toViewFolder = async (node: AssetNode, path: string): Promise<AssetViewFolder | null> => {
     const files: AssetViewFile[] = [];
-    for (const [name, file, bytes] of node.files) {
-      files.push(toViewFile(name, file ?? "", bytes));
+    for (const [name, file, bytes, missing] of node.files) {
+      files.push(toViewFile(name, file ?? "", bytes, missing));
       if (!(await step())) {
         return null;
       }
@@ -145,8 +172,8 @@ export async function buildAssetSnapshot(
   };
 
   const files: AssetViewFile[] = [];
-  for (const [name, file, bytes] of rootFiles) {
-    files.push(toViewFile(name, file, bytes));
+  for (const [name, file, bytes, missing] of rootFiles) {
+    files.push(toViewFile(name, file, bytes, missing));
     if (!(await step())) {
       return null;
     }
@@ -162,14 +189,18 @@ export async function buildAssetSnapshot(
   }
 
   const selectedBytes = selected ? assets.get(selected) : undefined;
+  const selectedMissing = Boolean(selected && missingAssets.includes(selected) && !selectedBytes);
   let selectedView: AssetViewSelected | undefined;
-  if (selected && selectedBytes) {
+  if (selected && (selectedBytes || selectedMissing)) {
     const selectedText =
-      assetKind(selected) === "shader" ? new TextDecoder().decode(selectedBytes) : undefined;
+      assetKind(selected) === "shader" && selectedBytes
+        ? new TextDecoder().decode(selectedBytes)
+        : undefined;
     selectedView = {
       name: selected,
-      url: urlFor(selected, selectedBytes),
+      url: selectedMissing ? missingUrl : urlFor(selected, selectedBytes ?? new Uint8Array()),
       kind: assetKind(selected),
+      ...(selectedMissing ? { missing: true } : {}),
       ...(selectedText === undefined ? {} : { text: selectedText }),
       ...(selectedText === undefined
         ? {}
@@ -186,7 +217,7 @@ export async function buildAssetSnapshot(
     : defaultFolder(folders);
   const selectedFolderExists = folderExists(selectedFolder);
   const selectedFolderCount = selectedFolderExists
-    ? entries.reduce((count, [name]) => {
+    ? [...entries.map(([name]) => name), ...missingAssets].reduce((count, name) => {
         const normalized = imageName(name);
         const matches =
           selectedFolder === ""
@@ -197,14 +228,15 @@ export async function buildAssetSnapshot(
     : 0;
   // An empty root group is still an empty library: the workspace shows its
   // full empty screen until an asset or a user-created folder exists.
-  const blank = !entries.length && !viewFolders.length;
+  const totalAssets = entries.length + missingAssets.length;
+  const blank = !totalAssets && !viewFolders.length;
   return {
     selectedFolder,
     snapshot: {
-      assetCount: entries.length,
+      assetCount: totalAssets,
       files,
       folders: viewFolders,
-      empty: !entries.length,
+      empty: !totalAssets,
       rootVisible,
       blank,
       rootIndex,

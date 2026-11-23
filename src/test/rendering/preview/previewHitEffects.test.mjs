@@ -33,7 +33,7 @@ test("hit-effect sprite width matches Phira's full particle quad", () => {
 });
 
 test("preview line defaults match Phira's RPE logical geometry", () => {
-  assert.equal(DEFAULT_LINE_WIDTH, 8100);
+  assert.equal(DEFAULT_LINE_WIDTH, 4000);
   assert.equal(DEFAULT_LINE_HEIGHT, 6.75);
 });
 

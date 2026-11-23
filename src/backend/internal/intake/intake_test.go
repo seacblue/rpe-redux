@@ -216,7 +216,8 @@ func TestClassifyArchives(t *testing.T) {
 	}
 
 	pez := writeArchive(t, filepath.Join(root, "chart.pez"), map[string]string{
-		"chart.json": `{"META":{"name":"PEZ Song"},"BPMList":[]}`,
+		"chart.json":       `{"META":{"name":"PEZ Song"},"BPMList":[]}`,
+		"z-unrelated.json": `{"notAChart":true}`,
 	})
 	item = Classify(pez)
 	if item.Kind != KindChart || item.Format != FormatRPE || item.Name != "PEZ Song" {

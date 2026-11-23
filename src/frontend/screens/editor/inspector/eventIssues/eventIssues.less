@@ -47,6 +47,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.event-issue-summary-fatal {
+  color: var(--danger-fatal);
+  font-variant-numeric: tabular-nums;
+}
+
 .event-issue-summary-warning {
   color: var(--warning);
   font-variant-numeric: tabular-nums;
@@ -85,6 +90,10 @@
   // density estimate is advice about a target renderer and stays a yellow hint.
   &[data-severity="error"] .event-issue-title {
     color: var(--danger);
+  }
+
+  &[data-severity="fatal"] .event-issue-title {
+    color: var(--danger-fatal);
   }
 
   &[data-severity="warning"] .event-issue-title {

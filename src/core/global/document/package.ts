@@ -13,6 +13,77 @@ import { serializeShaderEvent } from "../chart/shader/shaderEvents.ts";
 import { normalizePath } from "../../utils/paths.ts";
 import { buildInfoText } from "./info.ts";
 
+/** Return a stable eight-digit folder id used by flat PEZ packages. */
+function folderHash(path: string): string {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(path)) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * Flatten a relative asset path for players that only read package-root files.
+ *
+ * Each directory keeps its readable name and receives a stable hash of its
+ * position, so `images/background.png` becomes `images<hash>_background.png`.
+ * The hash is deterministic rather than regenerated on every export: chart
+ * references remain stable and repeated exports do not create needless diffs.
+ */
+export function flattenPezAssetName(name: string): string {
+  const normalized = normalizePath(name);
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length < 2) {
+    return normalized;
+  }
+  const file = parts.pop()!;
+  const folders: string[] = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    const path = parts.slice(0, index + 1).join("/");
+    folders.push(`${parts[index]}${folderHash(path)}`);
+  }
+  return [...folders, file].join("_");
+}
+
+/** Rewrite chart fields that carry resource names after a package flatten. */
+function remapChartResources(chart: Chart, remap: ReadonlyMap<string, string>): void {
+  const rewrite = (value: unknown): unknown =>
+    typeof value === "string" ? (remap.get(normalizePath(value)) ?? value) : value;
+  const meta = chart.META as (Chart["META"] & Record<string, unknown>) | undefined;
+  if (meta) {
+    for (const key of ["song", "background"] as const) {
+      meta[key] = rewrite(meta[key]) as never;
+    }
+  }
+  for (const line of chart.judgeLineList ?? []) {
+    line.Texture = rewrite(line.Texture) as string;
+    for (const note of line.notes ?? []) {
+      note.hitsound = rewrite(note.hitsound) as string;
+      note.hitSound = rewrite(note.hitSound) as string;
+    }
+    for (const event of line.extended?.paintEvents ?? []) {
+      for (const key of ["shader", "source", "shaderPath"] as const) {
+        event[key] = rewrite(event[key]) as never;
+      }
+    }
+  }
+  const effectLists = [chart.effects, chart.shaderEvents, chart.META?.effects].flatMap((effects) =>
+    Array.isArray(effects) ? effects : [],
+  );
+  for (const effect of effectLists) {
+    if (!effect || typeof effect !== "object") {
+      continue;
+    }
+    for (const key of ["shader", "source", "shaderPath"] as const) {
+      const record = effect as Record<string, unknown>;
+      if (key in record) {
+        record[key] = rewrite(record[key]);
+      }
+    }
+  }
+}
+
 /**
  * Build the entry map written into a PEZ or project export.
  *
@@ -28,15 +99,29 @@ export function packageEntries(
 ): Map<string, Uint8Array> {
   const output = new Map<string, Uint8Array>();
   const previousChart = normalizePath(chartName);
+  const projected = options.projected
+    ? structuredClone(chart)
+    : projectChartForExport(chart, chartName);
+  const remap = new Map<string, string>();
+  const used = new Set<string>();
   for (const [name, bytes] of assets) {
     // The source chart entry is replaced by the projected chart below; keeping
     // the old name would leave two chart JSON files in the package.
     if (previousChart && normalizePath(name) === previousChart) {
       continue;
     }
-    output.set(name, bytes);
+    const flattened = flattenPezAssetName(name);
+    let outputName = flattened;
+    let suffix = 1;
+    while (used.has(outputName)) {
+      outputName = `${suffix}-${flattened}`;
+      suffix += 1;
+    }
+    used.add(outputName);
+    remap.set(normalizePath(name), outputName);
+    output.set(outputName, bytes);
   }
-  const projected = options.projected ? chart : projectChartForExport(chart, chartName);
+  remapChartResources(projected, remap);
   const id = String(projected.META.id ?? "").trim();
   // PEZ stores every package file at the root; native RPE uses the project id
   // as the chart stem and as the Resources folder name.

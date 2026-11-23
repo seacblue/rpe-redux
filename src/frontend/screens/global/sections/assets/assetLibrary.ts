@@ -37,6 +37,7 @@ import { flushSync } from "react-dom";
 import { openAssetPrompt } from "./assetPrompts.ts";
 import { requestConfirm } from "../../../../overlays/modals/prompts.ts";
 import type { ShaderParameterOverrides } from "../../../../../core/global/chart/shader/shaderEvents.ts";
+import missingImageUrl from "../../../../../core/media/missing-image.png?inline";
 
 /** The editor-context slice read and written by the panel. */
 export interface AssetContext {
@@ -50,6 +51,8 @@ export interface AssetContext {
   chartDirectoryName?: string;
   /** The open chart; it stores the persisted folder organization. */
   chart?: Chart | null;
+  /** Chart references with no bytes in the current document. */
+  missingAssets?: readonly string[];
 }
 
 /** A file returned by the desktop drop reader. */
@@ -129,6 +132,12 @@ export class AssetLibraryPanel {
     this.generation += 1;
     this.disposeUrls();
     flushSync(() => this.state.set(null));
+  }
+
+  /** Select an asset by chart reference and reveal its current detail state. */
+  selectAsset(name: string): void {
+    this.selected = name;
+    void this.render();
   }
 
   /**
@@ -559,6 +568,8 @@ export class AssetLibraryPanel {
     const result = await buildAssetSnapshot({
       assets: this.getContext().assets,
       entries: assetEntries(this.getContext().assets),
+      missingAssets: this.getContext().missingAssets ?? [],
+      missingUrl: missingImageUrl,
       folders: this.currentFolders(),
       selected: this.selected,
       selectedFolder: this.selectedFolder,
@@ -705,9 +716,12 @@ export class AssetLibraryPanel {
       },
       onRename: (name) => {
         const target = name ?? this.selected;
-        if (target) {
+        if (target && !this.getContext().missingAssets?.includes(target)) {
           this.renameImage(target);
         }
+      },
+      onReplaceMissing: (name) => {
+        void this.replaceMissing(name);
       },
       onConfigureShader: (name, overrides) => {
         this.onConfigureShader(name, overrides);
@@ -725,5 +739,29 @@ export class AssetLibraryPanel {
         }
       },
     };
+  }
+
+  /** Replace a missing chart reference with one local file while keeping its name. */
+  private async replaceMissing(name: string): Promise<void> {
+    const files = await new Promise<FileList | null>((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*,audio/*,.glsl,.frag,.vert,.vsh,.fsh,.shader";
+      input.onchange = () => resolve(input.files);
+      input.click();
+    });
+    const file = files?.[0];
+    if (!file) {
+      return;
+    }
+    if (!ASSET_EXTENSIONS.test(file.name) || assetKind(file.name) !== assetKind(name)) {
+      this.notify(t("editorPanels.assetLibrary.missingReplacementInvalid"), "warning");
+      return;
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await this.mutate((next) => {
+      next.set(name, bytes);
+      this.selected = name;
+    }, t("editorPanels.assetLibrary.replacedMissing"));
   }
 }

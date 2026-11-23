@@ -57,6 +57,7 @@
     "--control-on-border": "#b8b8b8",
     "--control-on-surface": "#f0f0f0",
     "--danger": "#c42b1c",
+    "--danger-fatal": "#7f1d1d",
     "--focus-ring": "#0067b8",
     "--foreground": "#1f1f1f",
     "--foreground-muted": "#5f5f5f",

@@ -21,6 +21,7 @@ export interface AssetViewFile {
   url: string;
   selected: boolean;
   kind: AssetViewKind;
+  missing?: boolean;
   text?: string;
 }
 
@@ -40,6 +41,7 @@ export interface AssetViewSelected {
   name: string;
   url: string;
   kind: AssetViewKind;
+  missing?: boolean;
   text?: string;
   shaderParameters?: ShaderParameter[];
   shaderParameterOverrides?: ShaderParameterOverrides | null;
@@ -59,6 +61,7 @@ export interface AssetLibraryViewActions {
   addInputRef(node: HTMLInputElement | null): void;
   onSelect(name: string): void;
   onRename(name?: string): void;
+  onReplaceMissing(name: string): void;
   onConfigureShader(name: string, overrides: ShaderParameterOverrides): void;
   onOpenExternal(): void;
   onDelete(): void;

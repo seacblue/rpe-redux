@@ -45,14 +45,8 @@ export function previewNoteWidth(noteScale: number): number {
   return noteScale * PHIRA_NOTE_WIDTH_RATIO * PREVIEW_LOGICAL_SIZE.width;
 }
 
-/**
- * Authoring width of a default judge line, in stage pixels.
- *
- * Phira's default `line_length` is six world units on either side of the
- * origin. RPE's two world units span the 1350-pixel authoring width, so the
- * full line maps to `6 * 2 * 1350 / 2 = 8100` pixels.
- */
-export const DEFAULT_LINE_WIDTH = 8100;
+/** The fixed authoring length of a default judge line, in stage pixels. */
+export const DEFAULT_LINE_WIDTH = 4000;
 /**
  * Authoring height of a judge line at Phira's default `line_size = 0.01`.
  *

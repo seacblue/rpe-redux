@@ -27,8 +27,8 @@ export const ASSETS_PER_YIELD = 24;
 /** A node in the asset tree. */
 export interface AssetNode {
   folders: Map<string, AssetNode>;
-  /** [full path, file name, bytes]; the name is undefined when unavailable. */
-  files: [string, string | undefined, Uint8Array][];
+  /** [full path, file name, bytes, missing]; missing rows have no local bytes. */
+  files: [string, string | undefined, Uint8Array | null, boolean][];
 }
 
 /** An image object URL paired with the bytes used to create it. */

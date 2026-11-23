@@ -51,6 +51,7 @@ const TOKENS = [
   "--control-on-border",
   "--control-on-surface",
   "--danger",
+  "--danger-fatal",
   "--focus-ring",
   "--foreground",
   "--foreground-muted",

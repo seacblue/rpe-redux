@@ -72,7 +72,9 @@ function sameIssue(left: ChartIssue, right: ChartIssue): boolean {
     left.secondEventIndex === right.secondEventIndex &&
     left.beat === right.beat &&
     left.endBeat === right.endBeat &&
-    left.peak === right.peak
+    left.peak === right.peak &&
+    left.resourceName === right.resourceName &&
+    left.resourceKind === right.resourceKind
   );
 }
 
@@ -105,6 +107,9 @@ export class EventIssueMonitor {
   private queued: ChartIssueScanInput | null = null;
   private running = false;
   private readonly scanner: ChartIssueScanner;
+  private scannedIssues: readonly ChartIssue[] = [];
+  private scannedPeak = 0;
+  private externalIssues: readonly ChartIssue[] = [];
 
   constructor(scanner: ChartIssueScanner) {
     this.scanner = scanner;
@@ -165,6 +170,9 @@ export class EventIssueMonitor {
     this.queued = null;
     this.requestedChart = null;
     this.requestedOptions = "";
+    this.scannedIssues = [];
+    this.scannedPeak = 0;
+    this.externalIssues = [];
     chartIssueCount.set(0);
     chartIssueBadgeTone.set("error");
     if (this.state.get() === EMPTY_CHART_ISSUE_SNAPSHOT) {
@@ -174,26 +182,37 @@ export class EventIssueMonitor {
     this.state.set(EMPTY_CHART_ISSUE_SNAPSHOT);
   }
 
+  /** Replace issues supplied by a media/resource loader and republish the list. */
+  setExternalIssues(issues: readonly ChartIssue[]): void {
+    this.externalIssues = issues;
+    this.publish(this.scannedIssues, this.scannedPeak);
+  }
+
   /** Merge one completed scan into the published snapshot. */
   private publish(issues: readonly ChartIssue[], peak: number): void {
+    this.scannedIssues = issues;
+    this.scannedPeak = peak;
+    const merged = [...issues, ...this.externalIssues];
     const previous = this.state.get();
     // The rail badge counts every published issue, warnings included: a density
     // hint is still something the chart author has to look at. Its colour is
     // decided by the list's strongest severity, so a caution never reads as a
     // broken chart.
-    chartIssueCount.set(issues.length);
+    chartIssueCount.set(merged.length);
     chartIssueBadgeTone.set(
-      issues.some((issue) => issue.severity === "error") ? "error" : "warning",
+      merged.some((issue) => issue.severity === "error" || issue.severity === "fatal")
+        ? "error"
+        : "warning",
     );
     // The peak is read by the HUD on its own, so an unchanged list still has to
     // publish a changed peak.
-    if (previous.peak === peak && sameIssues(previous.issues, issues)) {
+    if (previous.peak === peak && sameIssues(previous.issues, merged)) {
       return;
     }
     this.revision += 1;
     this.state.set({
       revision: this.revision,
-      issues: Object.freeze(issues),
+      issues: Object.freeze(merged),
       status: previous.status,
       peak,
     });

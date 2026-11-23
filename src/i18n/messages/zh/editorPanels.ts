@@ -157,6 +157,7 @@ export default {
   "editorPanels.overlap.layer": "层 {value}",
 
   "editorPanels.issues.summaryErrors": "{count} 处谱面错误",
+  "editorPanels.issues.summaryFatal": "{count} 个致命错误",
   "editorPanels.issues.summaryWarnings": "{count} 处谱面警告",
   "editorPanels.issues.emptyTitle": "没有发现谱面错误",
   "editorPanels.issues.empty": "暂未发现需要处理的谱面问题。",
@@ -181,6 +182,8 @@ export default {
   "editorPanels.issues.trackGif": "GIF",
   "editorPanels.issues.masterSwitch": "检查谱面错误",
   "editorPanels.issues.densityPeak": "同屏 {count} 个音符",
+  "editorPanels.issues.missingResourceTitle": "{kind}",
+  "editorPanels.issues.missingResourceDetail": "缺失素材：{name}",
   "editorPanels.issues.filter.label": "按类型筛选问题",
   "editorPanels.issues.filter.emptyTitle": "所有类型都被筛掉了",
   "editorPanels.issues.filter.empty": "在上方筛选中重新启用一个类型即可查看对应条目。",
@@ -194,6 +197,9 @@ export default {
   "editorPanels.issues.kind.negativeBeat.description": "位置早于谱面第一拍，永远无法到达。",
   "editorPanels.issues.kind.density": "同屏音符过多",
   "editorPanels.issues.kind.density.description": "预览可以承受这个密度，但目标模拟器可能掉帧。",
+  "editorPanels.issues.kind.missingResource": "素材缺失",
+  "editorPanels.issues.kind.missingResource.description":
+    "谱面引用了本机当前不可用的图像、音频或其他素材。",
 
   "editorPanels.lineSwitcher.empty": "当前可视范围内没有符合条件的判定线",
 
@@ -434,6 +440,11 @@ export default {
   "editorPanels.assetLibrary.openExternal": "用外部编辑器打开",
   "editorPanels.assetLibrary.openExternalDesktopOnly": "外部编辑仅在桌面应用中可用",
   "editorPanels.assetLibrary.openExternalUnavailable": "无法从项目素材库读取这个素材的数据",
+  "editorPanels.assetLibrary.missingDescription":
+    "这个谱面引用的本地文件当前不可用。选择一个文件即可保留引用并恢复素材。",
+  "editorPanels.assetLibrary.replaceMissing": "替换成本机文件",
+  "editorPanels.assetLibrary.replacedMissing": "缺失素材已替换",
+  "editorPanels.assetLibrary.missingReplacementInvalid": "请选择与缺失素材类型相同的本机文件",
   "editorPanels.assetLibrary.deleted": "素材已删除",
   "editorPanels.assetLibrary.moved": "素材已移动",
   "editorPanels.assetLibrary.movedFolder": "素材文件夹已移动",

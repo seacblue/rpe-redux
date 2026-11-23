@@ -14,7 +14,7 @@ import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.t
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import { readShaderSource } from "../../../../../platform/shaderSource.ts";
 import { shaderAssetPath } from "../../../../../../core/global/chart/shader/shader.ts";
-import { currentDocumentStore } from "../../../../../platform/documentStoreHandle.ts";
+import { currentDocumentAssetNames } from "../../../../../platform/documentStoreHandle.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import type { ShaderDefinition, ShaderInspectorState } from "./ShaderInspectorView.tsx";
 import type { EventInspectorState } from "../model.ts";
@@ -104,7 +104,7 @@ export function renderShaderInspector(
     reportError,
     refresh,
     parametersFor,
-    shaderOptions: [...(currentDocumentStore()?.assets?.names ?? [])].filter((name) =>
+    shaderOptions: [...currentDocumentAssetNames()].filter((name) =>
       Boolean(shaderAssetPath(name)),
     ),
     setParameter: (parameter: string) => {

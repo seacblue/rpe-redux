@@ -3,7 +3,7 @@
 //! snapshot.
 
 use super::{
-    atomic_write, decode_session_chunk, document, error, external_resources_of,
+    atomic_write, decode_session_chunk, document, error, external_resources_of, flatten_pez_name,
     normalize_resource_name, remap_chart, resolve_path, resolve_references, resource_names, watch,
     zip_name, AssetSource, Document, DocumentHost, ExternalResources, Result, SaveRequest,
     SaveSession, MAX_CHART_BYTES, MAX_RESOURCE_BYTES, MAX_RESOURCE_TOTAL_BYTES,
@@ -1159,6 +1159,11 @@ pub(crate) fn write_document(
             if d.packed {
                 let mut archive =
                     ZipArchive::new(File::open(&d.path).map_err(error)?).map_err(error)?;
+                let mut packed_remap = HashMap::new();
+                let mut used = std::collections::HashSet::new();
+                used.insert(chart_name.clone());
+                used.insert("extra.json".into());
+                used.insert("info.txt".into());
                 for i in 0..archive.len() {
                     let mut file = archive.by_index(i).map_err(error)?;
                     let name = file.name().map_err(error)?.into_owned();
@@ -1172,9 +1177,21 @@ pub(crate) fn write_document(
                         continue;
                     }
                     save_zip_name(&name)?;
-                    writer.start_file(name, options).map_err(error)?;
+                    let mut output = flatten_pez_name(&name);
+                    let mut suffix = 1;
+                    while !used.insert(output.clone()) {
+                        output = format!("{suffix}-{output}");
+                        suffix += 1;
+                    }
+                    if output != name {
+                        packed_remap.insert(name, output.clone());
+                    }
+                    writer.start_file(output, options).map_err(error)?;
                     std::io::copy(&mut file, &mut writer).map_err(error)?;
                 }
+                remap_chart(&mut chart, &packed_remap);
+                chart_changed |= !packed_remap.is_empty();
+                saved_remap.extend(packed_remap);
             } else {
                 let root =
                     fs::canonicalize(d.path.parent().unwrap_or(Path::new("."))).map_err(error)?;
@@ -1205,15 +1222,10 @@ pub(crate) fn write_document(
                     if !path.is_file() {
                         return Err(format!("save_asset_missing:{name}").into());
                     }
-                    let stem = path
-                        .file_name()
-                        .ok_or_else(|| format!("save_asset_filename_missing:{name}"))?
-                        .to_string_lossy()
-                        .into_owned();
-                    let mut output = stem.clone();
+                    let mut output = flatten_pez_name(&normalized);
                     let mut suffix = 1;
                     while !used.insert(output.clone()) {
-                        output = format!("{suffix}-{stem}");
+                        output = format!("{suffix}-{output}");
                         suffix += 1;
                     }
                     writer.start_file(&output, options).map_err(error)?;
@@ -1240,14 +1252,18 @@ pub(crate) fn write_document(
         update_info(&mut info, &chart, &chart_name, &chart_id);
         writer.start_file("info.txt", options).map_err(error)?;
         writer.write_all(&info).map_err(error)?;
+        let mut asset_remap = HashMap::new();
         for name in assets.names() {
             if is_info_name(&name) || name == chart_name {
                 continue;
             }
             save_zip_name(&name)?;
-            writer.start_file(&name, options).map_err(error)?;
+            let output = flatten_pez_name(&name);
+            asset_remap.insert(name.clone(), output.clone());
+            writer.start_file(&output, options).map_err(error)?;
             assets.copy_to(&name, &mut writer)?;
         }
+        remap_chart(&mut chart, &asset_remap);
         // Recheck the final entry name after all fallbacks. An opened package
         // keeps its original chart path, which may predate current validation.
         save_zip_name(&chart_name)?;
