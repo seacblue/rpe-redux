@@ -70,6 +70,61 @@ export type PreferenceSection = (typeof PREFERENCE_SECTIONS)[keyof typeof PREFER
 
 const SECTION_NAMES: ReadonlySet<string> = new Set(Object.values(PREFERENCE_SECTIONS));
 
+/** Clone JSON-shaped preference data before handing it across an async boundary. */
+function clonePreference<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => clonePreference(item)) as T;
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, clonePreference(item)]),
+    ) as T;
+  }
+  return value;
+}
+
+/** Produce an order-independent representation for JSON-shaped preference data. */
+function preferenceSignature(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => preferenceSignature(item)).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${preferenceSignature(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? String(value);
+}
+
+/** Compare preference values without treating object key order as a change. */
+function samePreference(left: unknown, right: unknown): boolean {
+  return preferenceSignature(left) === preferenceSignature(right);
+}
+
+/** Merge local changes into the latest durable section without losing peer keys. */
+function mergePreferenceSection(base: unknown, local: unknown, remote: unknown): unknown {
+  if (!isRecord(base) || !isRecord(local)) {
+    return clonePreference(local);
+  }
+  const merged = isRecord(remote) ? clonePreference(remote) : {};
+  const keys = new Set([...Object.keys(base), ...Object.keys(local)]);
+  for (const key of keys) {
+    const baseHas = Object.hasOwn(base, key);
+    const localHas = Object.hasOwn(local, key);
+    const changed = baseHas !== localHas || !samePreference(local[key], base[key]);
+    if (!changed) {
+      continue;
+    }
+    if (localHas) {
+      merged[key] = clonePreference(local[key]);
+    } else {
+      delete merged[key];
+    }
+  }
+  return merged;
+}
+
 /** The host operations the store needs to read and write durable preferences. */
 export interface PreferenceClient {
   preferences(): Promise<{ values?: unknown }>;
@@ -105,7 +160,8 @@ export class PreferenceStore {
   /** Tail of the serialized write queue. */
   pending: Promise<void> = Promise.resolve();
   private timer: ReturnType<typeof setTimeout> | 0 = 0;
-  private dirty = new Map<string, number>();
+  private dirty = new Map<PreferenceSection, number>();
+  private dirtyBaselines = new Map<PreferenceSection, unknown>();
   private revision = 0;
   private attachment: Promise<AttachResult> | null = null;
   private readonly sectionListeners = new Map<PreferenceSection, Set<() => void>>();
@@ -204,6 +260,9 @@ export class PreferenceStore {
     if (!SECTION_NAMES.has(section)) {
       throw new Error(t("system.preferences.unknownSection", { section }));
     }
+    if (!this.dirty.has(section)) {
+      this.dirtyBaselines.set(section, clonePreference(this.values[section]));
+    }
     this.values[section] = value;
     this.dirty.set(section, ++this.revision);
     this.mirrorNow();
@@ -234,22 +293,67 @@ export class PreferenceStore {
     }, 250);
   }
 
-  /** Send the whole cache to the durable client and clear written revisions. */
+  /** Merge the latest durable document with local changes and clear written revisions. */
   private async push(): Promise<void> {
     if (!this.client) {
       return;
     }
     try {
       const revisions = new Map(this.dirty);
-      await this.client.savePreferences({ ...this.values });
-      for (const [section, revision] of revisions) {
-        if (this.dirty.get(section) === revision) {
-          this.dirty.delete(section);
+      const localValues = new Map<PreferenceSection, unknown>();
+      const baselines = new Map<PreferenceSection, unknown>();
+      for (const section of revisions.keys()) {
+        localValues.set(section, clonePreference(this.values[section]));
+        baselines.set(section, clonePreference(this.dirtyBaselines.get(section)));
+      }
+
+      const response = await this.client.preferences();
+      const stored = isRecord(response?.values) ? response.values : {};
+      const payload: Record<string, unknown> = Object.fromEntries(
+        Object.entries(stored).filter(([section]) => SECTION_NAMES.has(section)),
+      );
+      for (const [section, value] of Object.entries(this.values)) {
+        if (payload[section] === undefined && !revisions.has(section as PreferenceSection)) {
+          payload[section] = clonePreference(value);
         }
       }
+      for (const section of revisions.keys()) {
+        payload[section] = mergePreferenceSection(
+          baselines.get(section),
+          localValues.get(section),
+          stored[section],
+        );
+      }
+
+      await this.client.savePreferences(payload);
+      const changedSections = new Set<PreferenceSection>();
+      for (const [section, revision] of revisions) {
+        if (this.dirty.get(section) === revision) {
+          const next = payload[section];
+          if (!samePreference(this.values[section], next)) {
+            this.values[section] = clonePreference(next);
+            changedSections.add(section);
+          }
+          this.dirty.delete(section);
+          this.dirtyBaselines.delete(section);
+        }
+      }
+      for (const [section, value] of Object.entries(payload)) {
+        if (!SECTION_NAMES.has(section) || this.dirty.has(section as PreferenceSection)) {
+          continue;
+        }
+        if (!samePreference(this.values[section], value)) {
+          this.values[section] = clonePreference(value);
+          changedSections.add(section as PreferenceSection);
+        }
+      }
+      this.mirrorNow();
       this.durable = true;
       this.error = "";
       this.publishStatus();
+      for (const section of changedSections) {
+        this.notify(section);
+      }
     } catch (error) {
       this.durable = false;
       this.error = error instanceof Error ? error.message : String(error);
@@ -291,8 +395,8 @@ export class PreferenceStore {
         // Unknown sections are ignored, so they must not be counted as adopted.
         if (
           !SECTION_NAMES.has(section) ||
-          protectedSections.has(section) ||
-          this.dirty.has(section)
+          protectedSections.has(section as PreferenceSection) ||
+          this.dirty.has(section as PreferenceSection)
         ) {
           continue;
         }
