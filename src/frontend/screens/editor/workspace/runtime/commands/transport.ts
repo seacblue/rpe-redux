@@ -15,7 +15,10 @@
 import { beatValue, parseBeat } from "../../../../../../core/global/chart/timing/beat.ts";
 import type { EditorPlayback } from "../../../../../../core/edit/playback/transport.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
-import { editorAuditioning } from "../../../../../../core/edit/state/publishedValues.ts";
+import {
+  editorAuditioning,
+  editorAuditionKind,
+} from "../../../../../../core/edit/state/publishedValues.ts";
 import { createLateBound } from "../../../../../../core/utils/lateBound.ts";
 import type { AuditionOptions } from "../../../../../contracts/editorCommands.ts";
 import { viewControls } from "./viewControls.ts";
@@ -41,8 +44,10 @@ export function connectTransport(bindings: TransportBindings): () => void {
   auditionReturnsTime = true;
   auditionPreviewOnly = false;
   auditionLayoutOnly = false;
+  auditionPausesOnRelease = false;
   playbackAnchor = null;
   editorAuditioning.set(false);
+  editorAuditionKind.set(null);
   return transportBindings.bind(bindings);
 }
 
@@ -54,9 +59,11 @@ let auditionReturnsTime = true;
 let auditionPreviewOnly = false;
 /**
  * Whether the current hold only hides the authoring surfaces over a running
- * playback. Such a hold never starts, pauses, or seeks the transport.
+ * playback. The U hold pauses the transport when it is released.
  */
 let auditionLayoutOnly = false;
+/** Whether a layout-only hold should pause the running transport on release. */
+let auditionPausesOnRelease = false;
 /** Guards a pending play start from clearing a newer audition's state. */
 let auditionRequest = 0;
 /** Audio position when the current playback started; the restore key uses it. */
@@ -105,9 +112,10 @@ export function togglePlayback(): void {
  *
  * The toolbar's hold button and the held T/U shortcuts use this. Preview-only
  * auditions restore the layout on release; `restoreTime` also returns to the
- * moment the user was inspecting. A playback that is already running keeps the
- * clock: the hold then only hides the authoring surfaces, so releasing it
- * neither pauses nor seeks and the chart keeps playing.
+ * moment the user was inspecting. T changes an active playback into an
+ * audition, so releasing T seeks back to its starting position. U keeps the
+ * current position while held and pauses there when playback was already
+ * running.
  */
 export function beginAudition(options: AuditionOptions = {}): boolean {
   const bound = transportBindings.value();
@@ -118,8 +126,18 @@ export function beginAudition(options: AuditionOptions = {}): boolean {
     if (options.previewOnly !== true) {
       return false;
     }
-    auditionLayoutOnly = true;
+    if (options.restoreTime === false) {
+      auditionLayoutOnly = true;
+      auditionPausesOnRelease = true;
+      viewControls.beginPreviewOnlyHold();
+      return true;
+    }
+    auditionAnchor = bound.playback.audio.time;
+    auditionReturnsTime = true;
+    auditionPreviewOnly = true;
     viewControls.beginPreviewOnlyHold();
+    editorAuditioning.set(true);
+    editorAuditionKind.set("restore");
     return true;
   }
   const request = ++auditionRequest;
@@ -130,6 +148,7 @@ export function beginAudition(options: AuditionOptions = {}): boolean {
     viewControls.beginPreviewOnlyHold();
   }
   editorAuditioning.set(true);
+  editorAuditionKind.set(auditionPreviewOnly ? (auditionReturnsTime ? "restore" : "stay") : null);
   void bound.playback
     .play(bound.getSession().chart)
     .then(bound.invalidate)
@@ -144,6 +163,7 @@ export function beginAudition(options: AuditionOptions = {}): boolean {
       auditionReturnsTime = true;
       auditionPreviewOnly = false;
       editorAuditioning.set(false);
+      editorAuditionKind.set(null);
       bound.reportError(error);
     });
   return true;
@@ -152,13 +172,20 @@ export function beginAudition(options: AuditionOptions = {}): boolean {
 /**
  * Stop a temporary audition, restoring its layout and optionally its position.
  *
- * A layout-only hold leaves a running playback untouched; releasing it only
- * restores the regions it hid.
+ * A layout-only hold restores the regions it hid; a U hold over active playback
+ * also pauses at the release position.
  */
 export function endAudition(): void {
   if (auditionLayoutOnly) {
+    const bound = transportBindings.value();
+    const pauseOnRelease = auditionPausesOnRelease;
     auditionLayoutOnly = false;
+    auditionPausesOnRelease = false;
     viewControls.endPreviewOnlyHold();
+    if (pauseOnRelease) {
+      bound?.playback.pause();
+      bound?.invalidate();
+    }
     return;
   }
   const bound = transportBindings.value();
@@ -173,6 +200,7 @@ export function endAudition(): void {
   auditionReturnsTime = true;
   auditionPreviewOnly = false;
   editorAuditioning.set(false);
+  editorAuditionKind.set(null);
   if (restorePreview) {
     viewControls.endPreviewOnlyHold();
   }

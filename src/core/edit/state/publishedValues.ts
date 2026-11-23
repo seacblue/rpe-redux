@@ -168,6 +168,12 @@ export const editorAuditioning = defineValue({
   initial: false,
 });
 
+/** Which preview audition owns the toolbar hold indicator, or null when idle. */
+export const editorAuditionKind = defineValue<"restore" | "stay" | null>({
+  id: "editor.auditionKind",
+  initial: null,
+});
+
 /** How many milliseconds one beat occupies on screen. */
 export const editorScale = defineValue({ id: "editor.scale", initial: "500" });
 
