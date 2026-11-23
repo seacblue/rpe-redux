@@ -55,12 +55,15 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Nudge selection left / right | `Z` / `X` (or `←` / `→`) |
 | Nudge selection earlier / later | `↓` / `↑` |
 | Stick events to the next / previous event | `G` / `B` |
+| Toggle hook state for selected events | `F` |
 | Open multi-line editing | `J` |
 | Switch multi-line notes / events | `K` |
 
 `Z`/`X` step between lines when nothing is selected and nudge the selection when something is selected. Multi-line shortcuts apply while the editor workspace has an open document.
 
 `G` and `B` stick the selected events' values to their neighbour on the same track: `G` writes the next event's start value into the selected event's end, and `B` writes the previous event's end value into its start. `G` is RPE's stick key, and the event inspector's stick button runs the same forward command. An event without a neighbour in that direction is skipped, and so is a shader event, whose two values are shader parameters. A hooked event keeps both values equal, and sticking a run of selected events chains through the value the previous event just took. Moving a selection in time is the arrow pair.
+
+`F` toggles the hook state of all selected events in one edit. The last event added to the selection decides the target state: if it is unhooked, all selected events become hooked; if it is hooked, all selected events become unhooked. For a box selection, left-to-right uses the rightmost hit and right-to-left uses the leftmost hit. While the sampler is open, `F` keeps its sampling-apply meaning.
 
 Hold `Z` and press the primary button to drag the **head** of the single selected event or Hold; use the secondary button for its **tail**. With exactly one object selected, the press may start anywhere in that field, including empty space: a click moves that edge to the pointer row, and a drag follows it live. Without that single selection, start on the object itself to select and trim it. A plain press near an event bar's top or bottom edge trims that edge; Ctrl+left on an edge trims the event head, and Ctrl+right on a Hold trims its tail. The moved edge follows the pointer row with the usual time snapping, the inspector's start and end fields and the timeline's head and tail value labels follow the preview, and a right-button drag release opens no menu or editor page. Plain `Z` line stepping/nudging runs when a short `Z` tap is released; starting a pointer gesture or holding `Z` long enough to auto-repeat cancels that pending movement, so preparing a drag never moves the selected Hold. If another shortcut is bound to `Z`, use the arrow-key alternatives or rebind it in **Settings → Shortcuts** before using the drag prekey.
 

@@ -54,6 +54,27 @@ test("an event sweep uses drawn event bars and does not select an unrelated bar"
   assert.deepEqual([...session.eventSelection], ["moveXEvents:0"]);
 });
 
+test("an event sweep remembers the last event hit by the gesture", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].eventLayers[0].moveXEvents = [
+    createEvent(0, 1, 2, 3),
+    createEvent(4, 5, 2, 3),
+  ];
+  const session = new EditorSession(chart);
+  selectEventsAlongSegment(
+    session,
+    { startX: 0, startY: 5, endX: 100, endY: 5 },
+    {
+      scroll: 0,
+      rectangles: [
+        { x: 0, y: 0, width: 10, height: 10, type: "moveXEvents", index: 0 },
+        { x: 20, y: 0, width: 10, height: 10, type: "moveXEvents", index: 1 },
+      ],
+    },
+  );
+  assert.deepEqual(session.eventSelectionAnchor, { lineIndex: 0, key: "moveXEvents:1" });
+});
+
 test("right-click sweep suppresses the menu only after movement", () => {
   assert.equal(shouldSuppressTimelineContextMenu({ button: 2, moved: false }), false);
   assert.equal(shouldSuppressTimelineContextMenu({ button: 2, moved: true }), true);

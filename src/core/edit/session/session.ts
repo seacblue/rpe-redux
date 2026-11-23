@@ -63,6 +63,12 @@ export interface PlacementStats {
   events: number;
 }
 
+/** Identifies the event most recently added by a selection gesture. */
+export interface EventSelectionAnchor {
+  lineIndex: number;
+  key: string;
+}
+
 /** Collect stable note and event ids from one line into the supplied sets. */
 function collectLineObjectIds(line: JudgeLine, notes: Set<string>, events: Set<string>): void {
   for (const note of line.notes ?? []) {
@@ -303,6 +309,8 @@ export class EditorSession extends EventTarget {
   clipboard: JudgeLineNote[];
   clipboardNoteLines: number[];
   eventSelection: Set<string>;
+  /** Event most recently added by a freehand, marquee, or click selection. */
+  eventSelectionAnchor: EventSelectionAnchor | null;
   eventClipboard: ClippedEvent[];
   eventClipboardLines: number[];
   /** Source layer of each clipped event; empty for older clipboard entries. */
@@ -422,6 +430,7 @@ export class EditorSession extends EventTarget {
     this.clipboard = [];
     this.clipboardNoteLines = [];
     this.eventSelection = new Set();
+    this.eventSelectionAnchor = null;
     this.eventClipboard = [];
     this.eventClipboardLines = [];
     this.eventClipboardLayers = [];

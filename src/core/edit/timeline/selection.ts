@@ -24,6 +24,11 @@ import { captureSelection } from "../selection/snapshot.ts";
 import { commitSelectionEdit, editCapturedSelection } from "../selection/edits.ts";
 import { eventKey, eventList, eventListAt } from "../events/eventTracks.ts";
 import { selectedEvents, transformEvents } from "../events/eventEdits.ts";
+import {
+  clearEventSelectionAnchor,
+  reconcileEventSelectionAnchor,
+  rememberEventSelection,
+} from "../selection/eventSelectionAnchor.ts";
 import { checkedNotes, hasNonPositiveRange, isTimelineNoteRenderable } from "./model.ts";
 import type { NoteIndex, TimelineEventRect, TimelineNote } from "./types.ts";
 import type { IntervalEntry } from "../../utils/intervalIndex.ts";
@@ -41,6 +46,8 @@ export interface SelectionRectangle {
   baseEvents?: ReadonlyMap<number, ReadonlySet<string>>;
   /** Visible multi-line panels; omitted callers retain the full target set. */
   lineIndices?: readonly number[];
+  /** Horizontal direction of the drag, used to identify its final event. */
+  selectionDirection?: "forward" | "reverse";
 }
 
 /** One screen-space segment used by the timeline's freehand selection gesture. */
@@ -619,6 +626,7 @@ export function selectEventsAlongSegment(
     dirty = true;
     if (!sweep.remove) {
       selected.add(key);
+      rememberEventSelection(session, lineIndex, key);
     }
     if (multi) {
       session.multiEventSelection.set(lineIndex, selected);
@@ -626,6 +634,13 @@ export function selectEventsAlongSegment(
   }
   if (multi) {
     session.eventSelection = new Set(session.multiEventSelection.get(session.lineIndex) ?? []);
+  }
+  if (dirty) {
+    if (sweep.remove) {
+      reconcileEventSelectionAnchor(session);
+    } else if (!session.eventSelection.size && !session.multiEventSelection.size) {
+      clearEventSelectionAnchor(session);
+    }
   }
   if (dirty) {
     session.notifySelection();
@@ -654,6 +669,22 @@ export function selectEventsInRectangle(
   geometry: EventSelectionGeometry,
 ): SelectionGestureResult {
   const { left, right, bottom, top, remove } = rectangle;
+  const direction = rectangle.selectionDirection ?? "forward";
+  const lastEvent = (
+    current: { lineIndex: number; key: string; x: number } | null,
+    candidate: { lineIndex: number; key: string; x: number },
+  ): { lineIndex: number; key: string; x: number } => {
+    if (!current) {
+      return candidate;
+    }
+    return direction === "reverse"
+      ? candidate.x <= current.x
+        ? candidate
+        : current
+      : candidate.x >= current.x
+        ? candidate
+        : current;
+  };
   // Keep a stationary replace marquee from publishing a new session state on
   // every pointer sample. Event rectangles can be numerous in shader tracks,
   // so the allocation and notification avoidance matters even when the paint
@@ -663,6 +694,7 @@ export function selectEventsInRectangle(
     let matched = false;
     if (multi) {
       const next = new Map<number, Set<string>>();
+      let lastAdded: { lineIndex: number; key: string; x: number } | null = null;
       for (const hit of geometry.rectangles) {
         if (hit.x + geometry.scroll >= right || hit.x + hit.width + geometry.scroll <= left) {
           continue;
@@ -685,7 +717,15 @@ export function selectEventsInRectangle(
         }
         matched = true;
         const selected = next.get(lineIndex) ?? new Set<string>();
-        selected.add(eventKey(hit.type, hit.index));
+        const key = eventKey(hit.type, hit.index);
+        if (!selected.has(key)) {
+          selected.add(key);
+          lastAdded = lastEvent(lastAdded, {
+            lineIndex,
+            key,
+            x: hit.x + geometry.scroll,
+          });
+        }
         next.set(lineIndex, selected);
       }
       let changed = next.size !== session.multiEventSelection.size;
@@ -696,6 +736,11 @@ export function selectEventsInRectangle(
             break;
           }
         }
+      }
+      if (lastAdded) {
+        rememberEventSelection(session, lastAdded.lineIndex, lastAdded.key);
+      } else if (!next.size) {
+        clearEventSelectionAnchor(session);
       }
       if (changed) {
         session.multiEventSelection.clear();
@@ -708,6 +753,7 @@ export function selectEventsInRectangle(
       return { changed, matched };
     }
     const next = new Set<string>();
+    let lastAdded: { lineIndex: number; key: string; x: number } | null = null;
     geometry.eventTypes.forEach((type, channel) => {
       const bounds = geometry.columnBounds(channel);
       if (bounds.x >= right || bounds.x + bounds.width <= left) {
@@ -716,22 +762,37 @@ export function selectEventsInRectangle(
       const items = eventList(session, type);
       const lanes = type === "paintEvents" ? lanesFor(items) : null;
       for (const entry of geometry.eventsInRange(type, bottom, top)) {
+        let eventX = bounds.x;
         if (lanes) {
           const lane = lanes.get(entry.index);
           if (!lane) {
             continue;
           }
           const width = bounds.width / lane.count;
-          const x = bounds.x + lane.lane * width;
-          if (x >= right || x + Math.max(2, width - (lane.count > 1 ? 2 : 0)) <= left) {
+          eventX = bounds.x + lane.lane * width;
+          if (eventX >= right || eventX + Math.max(2, width - (lane.count > 1 ? 2 : 0)) <= left) {
             continue;
           }
         }
         matched = true;
-        next.add(eventKey(type, entry.index));
+        const key = eventKey(type, entry.index);
+        if (!next.has(key)) {
+          next.add(key);
+          lastAdded = lastEvent(lastAdded, {
+            lineIndex: session.lineIndex,
+            key,
+            x: eventX,
+          });
+        }
       }
     });
     const changed = !sameStringSet(session.eventSelection, next);
+    const anchor = lastAdded as { lineIndex: number; key: string; x: number } | null;
+    if (anchor) {
+      rememberEventSelection(session, session.lineIndex, anchor.key);
+    } else if (!next.size) {
+      clearEventSelectionAnchor(session);
+    }
     if (changed) {
       session.eventSelection.clear();
       for (const key of next) {
@@ -743,6 +804,7 @@ export function selectEventsInRectangle(
   }
   let dirty = restoreEventBaseline(session, rectangle.baseEvents, rectangle.append ?? false);
   let matched = false;
+  let lastAdded: { lineIndex: number; key: string; x: number } | null = null;
   dirty = pruneEventBaseline(session) || dirty;
   if (session.multiLineActive && session.multiLineMode === "events") {
     for (const hit of geometry.rectangles) {
@@ -770,6 +832,11 @@ export function selectEventsInRectangle(
         dirty = true;
         if (!remove) {
           selected.add(key);
+          lastAdded = lastEvent(lastAdded, {
+            lineIndex,
+            key,
+            x: hit.x + geometry.scroll,
+          });
         }
       }
       if (lineIndex === session.lineIndex) {
@@ -808,12 +875,22 @@ export function selectEventsInRectangle(
           dirty = true;
           if (!remove) {
             session.eventSelection.add(key);
+            lastAdded = lastEvent(lastAdded, {
+              lineIndex: session.lineIndex,
+              key,
+              x: bounds.x,
+            });
           }
         }
       }
     });
   }
   if (dirty) {
+    if (remove) {
+      reconcileEventSelectionAnchor(session);
+    } else if (lastAdded) {
+      rememberEventSelection(session, lastAdded.lineIndex, lastAdded.key);
+    }
     session.notifySelection();
   }
   return { changed: dirty, matched };

@@ -3,6 +3,7 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import { matchesEditorShortcut } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
 import type { TimelineArea } from "../../../../../../core/edit/timeline/types.ts";
 import { readShortcutContext } from "../../../../../platform/shortcuts/shortcutContext.ts";
+import { clearEventSelectionAnchor } from "../../../../../../core/edit/selection/eventSelectionAnchor.ts";
 
 export type SweepMode = "add" | "remove";
 
@@ -48,5 +49,8 @@ export function lockSweepArea(session: EditorSession, area: TimelineArea): void 
   } else {
     session.selection.clear();
     session.multiLineSelection.clear();
+  }
+  if (area === "events") {
+    clearEventSelectionAnchor(session);
   }
 }

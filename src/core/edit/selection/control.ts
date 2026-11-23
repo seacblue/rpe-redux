@@ -245,8 +245,8 @@ export function clearSelection(session: EditorSession): boolean {
  * Select-all and the movement/stick keys act on the selection this module edits.
  *
  * `nudgeSelection` is the implementation of the arrow keys, and `stickSelectedEvents`
- * is what the G/B pair runs; both are absent whenever nothing is selected — that
- * is where the contexts come from.
+ * is what the G/B pair runs; the hook toggle follows the same selected-event
+ * context. These event actions are absent whenever nothing is selected.
  */
 export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
   {
@@ -331,6 +331,17 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     // B joins the selected events' start values to the previous event's end.
     defaults: [{ key: "B" }],
     enabledFor: (context) => context.hasEventSelection === true,
+  },
+  {
+    id: "selection.event.toggleHooked",
+    shared: true,
+    category: "editor.selection",
+    title: "shortcuts.editor.toggleHooked",
+    scope: "editor",
+    // F is also the sampler's apply key; the sampler owns it while open.
+    defaults: [{ key: "F" }],
+    enabledFor: (context) =>
+      context.area === "events" && context.hasEventSelection === true && !context.samplingActive,
   },
   {
     id: "selection.scale.narrower",

@@ -16,13 +16,22 @@ import {
   type Beat,
 } from "../../global/chart/timing/beat.ts";
 import { easing, bezier } from "../../utils/easing.ts";
-import { DEFAULT_BEZIER_POINTS, EVENT_TYPES, HOOK_TAIL_FIELD } from "../../global/chart/chart.ts";
+import {
+  DEFAULT_BEZIER_POINTS,
+  EVENT_TYPES,
+  HOOK_TAIL_FIELD,
+  isHookedEvent,
+  setEventHooked,
+} from "../../global/chart/chart.ts";
 import type { JudgeLineEvent } from "../../global/chart/chart.ts";
 import { snapTime } from "../../global/chart/editing/editGrid.ts";
 import type { TempoGrid } from "../../global/chart/editing/editGrid.ts";
 import { eventList, eventKey } from "./eventTracks.ts";
 import { selectedEvents, commitEventLists } from "./eventEdits.ts";
 import type { EditorSession } from "../session/session.ts";
+import { commitSelectionEdit, editCapturedSelection } from "../selection/edits.ts";
+import { captureSelection } from "../selection/snapshot.ts";
+import { selectedEventAnchor } from "../selection/eventSelectionAnchor.ts";
 
 const cutTypes = new Set<string>([...EVENT_TYPES, "scaleXEvents", "scaleYEvents", "colorEvents"]);
 
@@ -246,4 +255,42 @@ export function stickSelectedEvents(
     commitEventLists(session, t("editor.commands.eventTools.commitStick"), updates);
   }
   return { changed, skipped };
+}
+
+/**
+ * Toggles the hook state of every selected event as one edit.
+ *
+ * The last event added by the selection gesture is the state authority: an
+ * unhooked last event hooks the whole selection, while a hooked last event
+ * unhooks it.
+ */
+export function toggleSelectedEventsHooked(session: EditorSession): {
+  changed: number;
+  skipped: number;
+} {
+  const snapshot = captureSelection(session);
+  const selected = snapshot.events;
+  const anchor = selectedEventAnchor(session);
+  const last =
+    (anchor &&
+      selected.find(
+        (entry) =>
+          entry.lineIndex === anchor.lineIndex && eventKey(entry.type, entry.index) === anchor.key,
+      )) ??
+    selected.at(-1);
+  if (!last) {
+    return { changed: 0, skipped: 0 };
+  }
+  const hooked = !isHookedEvent(last.event);
+  const changed = selected.reduce(
+    (count, entry) => count + (isHookedEvent(entry.event) === hooked ? 0 : 1),
+    0,
+  );
+  if (changed) {
+    const result = editCapturedSelection(snapshot, {
+      event: (event) => setEventHooked(event, hooked),
+    });
+    commitSelectionEdit(session, result, t("editor.commands.eventTools.commitToggleHooked"));
+  }
+  return { changed, skipped: selected.length - changed };
 }

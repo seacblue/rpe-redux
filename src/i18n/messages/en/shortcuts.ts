@@ -97,6 +97,7 @@ export default {
   "shortcuts.editor.eventEndLater": "Move event ends later",
   "shortcuts.editor.stickNext": "Stick event ends to the next event's start",
   "shortcuts.editor.stickPrevious": "Stick event starts to the previous event's end",
+  "shortcuts.editor.toggleHooked": "Toggle hook state for selected events",
   "shortcuts.editor.toggleMultiLine": "Open multi-line editing",
   "shortcuts.editor.switchMultiLineMode": "Switch multi-line notes / events",
   "shortcuts.editor.samplingApply": "Apply the sampling draft",

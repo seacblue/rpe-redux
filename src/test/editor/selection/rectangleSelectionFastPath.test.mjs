@@ -1,9 +1,12 @@
 /** Guards the replace-marquee path against redundant session notifications. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart, createLine } from "../../../core/global/chart/chart.ts";
+import { createChart, createEvent, createLine } from "../../../core/global/chart/chart.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
-import { selectNotesInRectangle } from "../../../core/edit/timeline/selection.ts";
+import {
+  selectEventsInRectangle,
+  selectNotesInRectangle,
+} from "../../../core/edit/timeline/selection.ts";
 import { beatValue } from "../../../core/global/chart/timing/beat.ts";
 
 function rectangle() {
@@ -108,4 +111,55 @@ test("multi-line replace marquee only queries the visible panel lines", () => {
   );
   assert.deepEqual(queried, [1]);
   assert.deepEqual([...session.multiLineSelection.keys()], [1]);
+});
+
+test("replace event marquee remembers its last hit", () => {
+  const chart = createChart();
+  const line = createLine("line");
+  line.eventLayers[0].moveXEvents = [createEvent(0, 1, 0, 1), createEvent(2, 3, 1, 2)];
+  chart.judgeLineList = [line];
+  const session = new EditorSession(chart);
+  const result = selectEventsInRectangle(
+    session,
+    { left: 0, right: 100, bottom: 0, top: 3 },
+    {
+      rectangles: [],
+      scroll: 0,
+      eventTypes: ["moveXEvents"],
+      columnBounds: () => ({ x: 0, width: 100 }),
+      eventsInRange: () => [
+        { index: 0, item: line.eventLayers[0].moveXEvents[0] },
+        { index: 1, item: line.eventLayers[0].moveXEvents[1] },
+      ],
+    },
+  );
+  assert.equal(result.changed, true);
+  assert.deepEqual(session.eventSelectionAnchor, { lineIndex: 0, key: "moveXEvents:1" });
+});
+
+test("reverse event marquee remembers the leftmost hit", () => {
+  const chart = createChart();
+  const line = createLine("line");
+  line.eventLayers[0].moveXEvents = [createEvent(0, 1, 0, 1)];
+  line.eventLayers[0].moveYEvents = [createEvent(2, 3, 0, 1)];
+  chart.judgeLineList = [line];
+  const session = new EditorSession(chart);
+  selectEventsInRectangle(
+    session,
+    {
+      left: 0,
+      right: 100,
+      bottom: 0,
+      top: 3,
+      selectionDirection: "reverse",
+    },
+    {
+      rectangles: [],
+      scroll: 0,
+      eventTypes: ["moveXEvents", "moveYEvents"],
+      columnBounds: (channel) => ({ x: channel * 20, width: 10 }),
+      eventsInRange: (type) => [{ index: 0, item: line.eventLayers[0][type][0] }],
+    },
+  );
+  assert.deepEqual(session.eventSelectionAnchor, { lineIndex: 0, key: "moveXEvents:0" });
 });

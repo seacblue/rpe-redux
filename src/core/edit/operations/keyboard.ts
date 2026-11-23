@@ -6,7 +6,11 @@
  * keyboard event unhandled so an outer surface can still act on it.
  */
 import { eventKey, eventList } from "../events/eventTracks.ts";
-import { stickSelectedEvents, type EventStickDirection } from "../events/eventTools.ts";
+import {
+  stickSelectedEvents,
+  toggleSelectedEventsHooked,
+  type EventStickDirection,
+} from "../events/eventTools.ts";
 import {
   clearSelection,
   scaleSelection,
@@ -224,6 +228,8 @@ export async function runEditorKeyboardAction(
       nudgeSelection(session, PAGE_KEYS[action], timeline.division, timeline.gridCount);
     } else if (Object.hasOwn(STICK_ACTIONS, action)) {
       stickSelectedEvents(session, STICK_ACTIONS[action]);
+    } else if (action === "selection.event.toggleHooked") {
+      toggleSelectedEventsHooked(session);
     } else if (action === "selection.scale.narrower") {
       scaleSelection(session, 0.95);
     } else if (action === "selection.scale.wider") {

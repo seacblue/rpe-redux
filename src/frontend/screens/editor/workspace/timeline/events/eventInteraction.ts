@@ -36,6 +36,11 @@ import {
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
 import {
+  clearEventSelectionAnchor,
+  reconcileEventSelectionAnchor,
+  rememberEventSelection,
+} from "../../../../../../core/edit/selection/eventSelectionAnchor.ts";
+import {
   clearEventDragPreview,
   commitEventEdgeDrag,
   eventEdgeAt,
@@ -159,7 +164,9 @@ export class EventInteraction implements EventInteractionHandle {
           session.marqueeSelection = null;
           session.selectionMode = "single";
           session.lineIndex = targetLine;
-          session.eventSelection = new Set([eventKey(rectangle.type, rectangle.index)]);
+          const key = eventKey(rectangle.type, rectangle.index);
+          session.eventSelection = new Set([key]);
+          rememberEventSelection(session, targetLine, key);
           session.multiEventSelection.clear();
           session.multiLineEnabled = false;
           session.multiLineIndices = [];
@@ -440,6 +447,7 @@ export class EventInteraction implements EventInteractionHandle {
       }
       if (!rectangle) {
         session.eventSelection.clear();
+        clearEventSelectionAnchor(session);
       }
       session.selectionMode = "none";
     }
@@ -505,8 +513,9 @@ export class EventInteraction implements EventInteractionHandle {
         const selected = new Set<string>(
           session.multiEventSelection.get(rectangle.lineIndex ?? session.lineIndex) ?? [],
         );
+        const wasSelected = selected.has(key);
         if (event.ctrlKey && !ctrlEdge) {
-          if (selected.has(key)) {
+          if (wasSelected) {
             selected.delete(key);
           } else {
             selected.add(key);
@@ -519,6 +528,11 @@ export class EventInteraction implements EventInteractionHandle {
         if (rectangle.lineIndex === session.lineIndex) {
           session.eventSelection = new Set(selected);
         }
+        if (event.ctrlKey && !ctrlEdge && wasSelected) {
+          reconcileEventSelectionAnchor(session);
+        } else {
+          rememberEventSelection(session, rectangle.lineIndex ?? session.lineIndex, key);
+        }
       } else {
         if (event.ctrlKey && !ctrlEdge) {
           if (session.eventSelection.has(key)) {
@@ -530,6 +544,11 @@ export class EventInteraction implements EventInteractionHandle {
           session.eventSelection.add(key);
         } else if (!session.eventSelection.has(key)) {
           session.eventSelection = new Set([key]);
+        }
+        if (event.ctrlKey && !ctrlEdge && !session.eventSelection.has(key)) {
+          reconcileEventSelectionAnchor(session);
+        } else {
+          rememberEventSelection(session, session.lineIndex, key);
         }
       }
       const hasSelection =
@@ -689,6 +708,10 @@ export class EventInteraction implements EventInteractionHandle {
             right,
             bottom,
             top,
+            selectionDirection:
+              (drag.currentWorldX ?? drag.current.x) >= (drag.startWorldX ?? drag.start.x)
+                ? "forward"
+                : "reverse",
             append: drag.append,
             remove: drag.remove,
             baseNotes: drag.baselineNotes,

@@ -8,6 +8,7 @@
 import { eventKey, eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
 import { captureSelection } from "../../../../../../core/edit/selection/snapshot.ts";
 import { shiftSelectedEvents } from "../../../../../../core/edit/timeline/selection.ts";
+import { rememberEventSelection } from "../../../../../../core/edit/selection/eventSelectionAnchor.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import {
@@ -74,6 +75,7 @@ export function selectEventEdgeTarget(session: EditorSession, rectangle: Timelin
     session.multiEventSelection.set(lineIndex, new Set([key]));
   }
   session.eventSelection = new Set([key]);
+  rememberEventSelection(session, lineIndex, key);
   session.selectionMode = "single";
 }
 
