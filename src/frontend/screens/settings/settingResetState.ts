@@ -1,10 +1,8 @@
 /**
  * Decides when a settings row offers its reset affordance.
  *
- * Provenance and value equality are independent: a user can edit a value back
- * to its default and still need the reset action to clear that history, and a
- * programmatic write can move a value away from its default without a user
- * commit. The row shows the action for either case.
+ * The reset action follows the value shown by the control. A value that is
+ * already equal to its default needs no reset, regardless of how it got there.
  */
 import type { SettingDefinition, SettingValue } from "../../../core/settings/types.ts";
 
@@ -36,13 +34,9 @@ export function settingDiffers(field: SettingDefinition, current: SettingValue):
 }
 
 /** Whether one row should render the reset action. */
-export function settingShowsReset(
-  field: SettingDefinition,
-  current: SettingValue,
-  modified: boolean,
-): boolean {
+export function settingShowsReset(field: SettingDefinition, current: SettingValue): boolean {
   if (field.default === undefined || field.control === "action") {
     return false;
   }
-  return modified || settingDiffers(field, current);
+  return settingDiffers(field, current);
 }

@@ -19,6 +19,7 @@ type AppearanceSettings = Pick<
   | "hoverGuidesEnabled"
   | "nearbyGuidesOnly"
   | "clipboardGhostEnabled"
+  | "clipboardGhostOpacity"
   | "barWidth"
   | "barAlpha"
   | "playheadWidth"
@@ -45,6 +46,7 @@ export class TimelineAppearance {
   hoverGuidesEnabled = true;
   nearbyGuidesOnly = false;
   clipboardGhostEnabled = true;
+  clipboardGhostOpacity = 0.2;
   skin: RpeSkin | null = null;
   barWidth?: number;
   barAlpha?: number;
@@ -79,6 +81,7 @@ export class TimelineAppearance {
     this.hoverGuidesEnabled = config.hoverGuidesEnabled;
     this.nearbyGuidesOnly = config.nearbyGuidesOnly;
     this.clipboardGhostEnabled = config.clipboardGhostEnabled;
+    this.clipboardGhostOpacity = config.clipboardGhostOpacity;
     this.barWidth = config.barWidth;
     this.barAlpha = config.barAlpha;
     this.playheadWidth = config.playheadWidth;

@@ -10,6 +10,8 @@ export interface RenderRequest {
   readonly contentRefreshRate: number;
   /** A live preview marquee needs geometry from every workspace frame. */
   readonly previewMarqueeActive?: boolean;
+  /** A timeline selection gesture needs its changing selection in every preview frame. */
+  readonly previewSelectionActive?: boolean;
   /** Revision of the retained timeline selection overlay. */
   readonly selectionOverlayRevision?: number;
   /** Whether the retained selection overlay currently has geometry to paint. */
@@ -246,6 +248,7 @@ export class EditorRenderScheduler {
     const previewInvalidated = request.previewRevision !== this.committed.previewRevision;
     const selectionOverlayRevision = request.selectionOverlayRevision ?? 0;
     const selectionOverlayActive = request.selectionOverlayActive ?? false;
+    const previewSelectionChanged = request.previewSelection !== this.committed.previewSelection;
     // Playback moves the origin every frame, but the note field only changes
     // once that movement crosses a device pixel. Reusing the timeline content
     // for a sub-pixel move is exactly what a scroll would do on its own.
@@ -272,7 +275,7 @@ export class EditorRenderScheduler {
         request.previewContentRevision !== this.committed.previewContentRevision ||
         previewInvalidated ||
         request.previewSession !== this.committed.previewSession ||
-        request.previewSelection !== this.committed.previewSelection ||
+        previewSelectionChanged ||
         request.authoringRegionVisible !== this.committed.authoringRegionVisible ||
         request.previewAnimationActive === true);
     // The playhead canvases are independent layers. They only need a repaint
@@ -287,7 +290,12 @@ export class EditorRenderScheduler {
 
     const cadenceDue =
       !request.playing || this.contentCadence.allow(request.now, request.contentRefreshRate);
-    const contentDue = cadenceDue || previewInvalidated || request.previewMarqueeActive === true;
+    const contentDue =
+      cadenceDue ||
+      previewInvalidated ||
+      previewSelectionChanged ||
+      request.previewMarqueeActive === true ||
+      request.previewSelectionActive === true;
 
     return {
       // Timeline is the editing surface and must stay at RAF rate. Content

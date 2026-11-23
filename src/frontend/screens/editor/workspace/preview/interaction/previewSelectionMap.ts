@@ -66,3 +66,8 @@ export function selectionMapForSession(session: EditorSession): Map<number, Set<
   }
   return value;
 }
+
+/** Returns the stable selection projection used to decide whether preview pixels are stale. */
+export function previewSelectionForFrame(session: EditorSession): Map<number, Set<number>> {
+  return selectionMapForSession(session);
+}

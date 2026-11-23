@@ -14,7 +14,11 @@ import { IconButton } from "../../../design/components/button/IconButton.tsx";
 import { Icon } from "../../../design/components/icon/Icon.tsx";
 import { t } from "../../../i18n/index.ts";
 import type { ToolbarControl } from "../../../core/shell/registries/toolbar.ts";
-import { editorAuditioning, editorPlaying } from "../../../core/edit/state/publishedValues.ts";
+import {
+  editorAuditioning,
+  editorAuditionKind,
+  editorPlaying,
+} from "../../../core/edit/state/publishedValues.ts";
 import { editorChromeCommands } from "../../contracts/editorCommands.ts";
 
 /** The play/pause button, which also hides and restores the editing regions. */
@@ -65,10 +69,10 @@ export function PlaybackButton() {
  * releasing restores the layout and starting position.
  */
 export function AuditionButton() {
-  const auditioning = useSyncExternalStore(
-    editorAuditioning.subscribe,
-    editorAuditioning.get,
-    editorAuditioning.get,
+  const auditionKind = useSyncExternalStore(
+    editorAuditionKind.subscribe,
+    editorAuditionKind.get,
+    editorAuditionKind.get,
   );
   return (
     <IconButton
@@ -76,7 +80,7 @@ export function AuditionButton() {
       icon="headphones"
       label={t("chrome.playback.audition")}
       className="toolbar-audition-button"
-      active={auditioning}
+      active={auditionKind === "restore"}
       data-tip-title={t("chrome.playback.audition")}
       data-tip-desc={t("chrome.playback.auditionHint")}
       data-tip-key="T"

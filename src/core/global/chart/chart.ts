@@ -24,6 +24,7 @@ import { EVENT_TYPES, EVENT_TRACKS } from "./chartVocabulary.ts";
 import { containsCycle } from "./cycles.ts";
 import { assertChartStructure } from "./chartValidation.ts";
 import type { BlockArea } from "./noise/blockArea.ts";
+import { normalizeLineGroupNames } from "./line/lineGroups.ts";
 
 export {
   EVENT_TYPES,
@@ -280,7 +281,7 @@ export interface Chart {
   META: ChartMeta;
   BPMList: BpmEntry[];
   judgeLineGroup?: string[];
-  /** RPE-compatible persisted line expression used by multi-line editing. */
+  /** RPE-compatible persisted line expression used by multi-line editing; `all` selects every line. */
   multiLineString?: string;
   judgeLineList?: JudgeLine[];
   /** Noise areas, stored in RPE coordinates and beats. */
@@ -876,6 +877,7 @@ export function normalizeChartObjectIds(
   if (normalizedCharts.has(chart)) {
     return chart;
   }
+  normalizeLineGroupNames(chart);
   if (
     previous &&
     normalizeChartObjectIdsIncremental(chart, previous, factory, changedLineIndexes)
@@ -902,6 +904,7 @@ export async function normalizeChartObjectIdsAsync(chart: Chart): Promise<Chart>
   if (normalizedCharts.has(chart)) {
     return chart;
   }
+  normalizeLineGroupNames(chart);
   const assign = createChartIdentityAssigner(createChartIdentityFactory());
   let lastYield = performance.now();
   const yieldIfNeeded = async (): Promise<void> => {

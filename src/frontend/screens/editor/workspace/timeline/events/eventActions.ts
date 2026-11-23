@@ -7,6 +7,7 @@
  */
 import { t } from "../../../../../../i18n/index.ts";
 import { eventKey } from "../../../../../../core/edit/events/eventTracks.ts";
+import { rememberEventSelection } from "../../../../../../core/edit/selection/eventSelectionAnchor.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { TimelineGestures } from "../interaction/timelineGestures.ts";
 import type { TimelineCache } from "../drawing/timelineCache.ts";
@@ -53,7 +54,9 @@ export function createTimelineEventAction({
     session.selection.clear();
     activateEventsPane();
     if (index !== null) {
-      session.eventSelection = new Set([eventKey(type, index)]);
+      const key = eventKey(type, index);
+      session.eventSelection = new Set([key]);
+      rememberEventSelection(session, session.lineIndex, key);
       session.notify();
       return;
     }

@@ -14,6 +14,11 @@ import { chartFingerprint } from "../document/chartRevision.ts";
 import type { SelectionClipboardMode } from "../clipboard/selectionClipboard.ts";
 import { extensionRegistry } from "../../extensions/runtime.ts";
 import { createLateBound } from "../../utils/lateBound.ts";
+import {
+  clearEventSelectionAnchor,
+  rememberEventSelection,
+  reconcileEventSelectionAnchor,
+} from "./eventSelectionAnchor.ts";
 
 /** Cached beat bounds for one immutable note-array revision. */
 const noteBeatBoundsCache = new WeakMap<readonly JudgeLineNote[], Float64Array>();
@@ -246,6 +251,7 @@ function clearNotes(session: EditorSession): void {
 function clearEvents(session: EditorSession): void {
   session.eventSelection.clear();
   session.multiEventSelection.clear();
+  clearEventSelectionAnchor(session);
 }
 
 /** Returns the writable note set for a line in the active mode. */
@@ -407,6 +413,15 @@ function selectEvents(session: EditorSession, request: EventSelectionRequest): v
     indices.map((index) => eventKey(request.eventType, index)),
     mode,
   );
+  if (mode === "remove") {
+    reconcileEventSelectionAnchor(session);
+  } else if (indices.length) {
+    rememberEventSelection(
+      session,
+      request.lineIndex,
+      eventKey(request.eventType, indices.at(-1) as number),
+    );
+  }
   syncCurrentLine(session, request.lineIndex);
   syncMultiSelectionIntent(session, "events");
   session.selectionMode = !selectionHasObjects(session)

@@ -54,6 +54,7 @@ test("time nudges keep only the arrow pair and G/B stick events", () => {
   assert.equal(byId.get("selection.nudge.down")?.defaults.length, 1);
   assert.equal(bindingOf("selection.event.stick.next"), "G");
   assert.equal(bindingOf("selection.event.stick.previous"), "B");
+  assert.equal(bindingOf("selection.event.toggleHooked"), "F");
 });
 
 test("event-edge defaults have left-hand chords before the brackets", () => {
@@ -157,6 +158,14 @@ test("sampling opener yields to the open sampler and the left-hand chords resolv
     assert.equal(
       matchEditorShortcut({ key: "G" }, eventContext, shortcutContext),
       "selection.event.stick.next",
+    );
+    assert.equal(
+      matchEditorShortcut({ key: "F" }, eventContext, shortcutContext),
+      "selection.event.toggleHooked",
+    );
+    assert.equal(
+      matchEditorShortcut({ key: "F" }, { ...eventContext, samplingActive: true }, shortcutContext),
+      undefined,
     );
     assert.equal(
       matchEditorShortcut({ key: "B" }, eventContext, shortcutContext),

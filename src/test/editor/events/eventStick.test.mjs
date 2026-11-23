@@ -5,8 +5,16 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createChart, createEvent, createLine } from "../../../core/global/chart/chart.ts";
-import { stickSelectedEvents } from "../../../core/edit/events/eventTools.ts";
+import {
+  createChart,
+  createEvent,
+  createLine,
+  setEventHooked,
+} from "../../../core/global/chart/chart.ts";
+import {
+  stickSelectedEvents,
+  toggleSelectedEventsHooked,
+} from "../../../core/edit/events/eventTools.ts";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 
 /** One line whose moveX track holds values at beats 0-1, 1-2, and 2-3. */
@@ -98,4 +106,63 @@ test("an event already touching its neighbour reports no change", () => {
 
   assert.deepEqual(stickSelectedEvents(session, "next"), { changed: 0, skipped: 0 });
   assert.equal(session.history.undoStack.length, 0);
+});
+
+test("hook toggle uses the last selected event as the target state", () => {
+  const session = stickSession();
+  session.eventSelection = new Set(["moveXEvents:0", "moveXEvents:1"]);
+  const events = session.chart.judgeLineList[0].eventLayers[0].moveXEvents;
+  events[0] = setEventHooked(events[0], true);
+
+  assert.deepEqual(toggleSelectedEventsHooked(session), { changed: 1, skipped: 1 });
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0].inst, 1);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[1].inst, 1);
+  assert.equal(session.history.undoStack.length, 1);
+});
+
+test("hook toggle uses the event explicitly remembered by the selection gesture", () => {
+  const session = stickSession();
+  session.eventSelection = new Set(["moveXEvents:0", "moveXEvents:1"]);
+  session.eventSelectionAnchor = { lineIndex: 0, key: "moveXEvents:0" };
+  const events = session.chart.judgeLineList[0].eventLayers[0].moveXEvents;
+  events[0] = setEventHooked(events[0], true);
+
+  assert.deepEqual(toggleSelectedEventsHooked(session), { changed: 1, skipped: 1 });
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[0].inst, 0);
+  assert.equal(session.chart.judgeLineList[0].eventLayers[0].moveXEvents[1].inst, undefined);
+});
+
+test("hook toggle unhooks every selected event when the last one is hooked", () => {
+  const session = stickSession();
+  const events = session.chart.judgeLineList[0].eventLayers[0].moveXEvents;
+  events[0] = setEventHooked(events[0], true);
+  events[1] = setEventHooked(events[1], true);
+  session.eventSelection = new Set(["moveXEvents:0", "moveXEvents:1"]);
+
+  assert.deepEqual(toggleSelectedEventsHooked(session), { changed: 2, skipped: 0 });
+  assert.deepEqual(values(session).slice(0, 2), [
+    [10, 20],
+    [30, 40],
+  ]);
+});
+
+test("hook toggle covers selected events on every multi-line target", () => {
+  const session = stickSession();
+  const firstEvents = session.chart.judgeLineList[0].eventLayers[0].moveXEvents;
+  firstEvents[0] = setEventHooked(firstEvents[0], true);
+  const secondLine = createLine("Second");
+  secondLine.eventLayers[0].moveXEvents = [createEvent(70, 80, 0, 1)];
+  session.chart.judgeLineList.push(secondLine);
+  session.multiLineEnabled = true;
+  session.multiLineMode = "events";
+  session.multiLineIndices = [0, 1];
+  session.multiEventSelection = new Map([
+    [0, new Set(["moveXEvents:0"])],
+    [1, new Set(["moveXEvents:0"])],
+  ]);
+  session.eventSelection = new Set(["moveXEvents:0"]);
+
+  assert.deepEqual(toggleSelectedEventsHooked(session), { changed: 1, skipped: 1 });
+  assert.equal(firstEvents[0].inst, 1);
+  assert.equal(session.chart.judgeLineList[1].eventLayers[0].moveXEvents[0].inst, 1);
 });

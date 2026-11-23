@@ -12,6 +12,7 @@ import {
   createLayerButtonsState,
   LayerButtons,
 } from "../../../frontend/screens/editor/workspace/timeline/layers/layerButtons.ts";
+import { visibleLayerButtonItems } from "../../../frontend/screens/editor/workspace/timeline/layers/layerButtonVisibility.ts";
 
 /** Minimal event-interaction handle; these tests never arm a placement. */
 const interaction = { pending: null, drag: null };
@@ -85,4 +86,25 @@ test("selecting through a retained snapshot writes the live session", () => {
 
   buttons.dispose();
   assert.equal(state.snapshot.get(), null);
+});
+
+test("display switches hide authored optional layers as well as empty layers", () => {
+  const items = [
+    { index: 0, label: "0", active: false },
+    { index: 1, label: "1", active: true, optional: true },
+    { index: 4, label: "Extended", active: false, extended: true },
+  ];
+
+  assert.deepEqual(
+    visibleLayerButtonItems(items, { eventLayers: false, extendedEvents: false }).map(
+      (item) => item.index,
+    ),
+    [0],
+  );
+  assert.deepEqual(
+    visibleLayerButtonItems(items, { eventLayers: false, extendedEvents: true }).map(
+      (item) => item.index,
+    ),
+    [0, 4],
+  );
 });

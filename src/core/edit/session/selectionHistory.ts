@@ -310,6 +310,9 @@ export function remapSelection(
   const multiLineTokens = (
     state.multiLineTokens ?? tokensFromLines(state.multiLineIndices ?? [])
   ).flatMap((token): LineSelectionToken[] => {
+    if (token.kind === "all") {
+      return [{ ...token }];
+    }
     if (token.kind === "group") {
       return [{ ...token }];
     }

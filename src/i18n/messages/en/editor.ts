@@ -295,6 +295,7 @@ export default {
     "Too many cut pieces; lower the density or cut in batches.",
   "editor.commands.eventTools.commitCut": "Cut selected events",
   "editor.commands.eventTools.commitStick": "Stick selected events",
+  "editor.commands.eventTools.commitToggleHooked": "Toggle selected event hooks",
   "editor.commands.lineCommands.error.invalidIndex": "Invalid judge line index.",
   "editor.commands.lineCommands.error.groupNotEmpty":
     "Delete or move this group's judgement lines first.",

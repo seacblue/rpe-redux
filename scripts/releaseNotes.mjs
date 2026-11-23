@@ -1,6 +1,16 @@
-/** Read, compose, and validate the bilingual release notes that every release path shares. */
+/**
+ * Read, compose, and validate the bilingual release notes that every release
+ * path shares.
+ *
+ * A Changeset may carry a language-neutral `### Contributors` section; the
+ * release then credits those logins on the last bullet of the change and in one
+ * summary category per language. A Changeset without the section is credited by
+ * `resolveContributors` before composition, so this module only renders the
+ * resolved list and never talks to git or the network.
+ */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { mentionsLogin, normalizeLogin } from "./contributors.mjs";
 
 /** Bump weights, ordered so the highest pending bump wins a release. */
 const BUMPS = { patch: 1, minor: 2, major: 3 };
@@ -54,16 +64,59 @@ function collectCategories(categories, content) {
   }
 }
 
+/** Heading that opens the language-neutral contributor block of a Changeset. */
+const CONTRIBUTORS_HEADING = "### Contributors";
+
 /**
- * Parse one Changeset into its `rpe-redux` bump and bilingual sections.
+ * Split the optional `### Contributors` block off a Changeset body.
+ *
+ * The block lists one `- @login` per line and is language neutral: the release
+ * copies the names into both languages. An empty block is a deliberate opt-out
+ * and stays distinct from an absent block, which asks the release to resolve
+ * the credit from the pull request. The block is removed before the language
+ * sections are cut, so it may sit anywhere after the frontmatter.
+ */
+function splitContributors(body, label) {
+  const lines = body.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.trim() === CONTRIBUTORS_HEADING);
+  if (start < 0) {
+    return { body, contributors: undefined };
+  }
+  if (lines.some((line, index) => index > start && line.trim() === CONTRIBUTORS_HEADING)) {
+    throw new Error(`${label} has more than one ${CONTRIBUTORS_HEADING} section.`);
+  }
+  const contributors = [];
+  let end = start + 1;
+  for (; end < lines.length; end += 1) {
+    const line = lines[end].trim();
+    if (line === "") {
+      continue;
+    }
+    if (/^#{2,3}\s/u.test(line)) {
+      break;
+    }
+    const item = /^-\s+(.+)$/u.exec(line);
+    const login = item ? normalizeLogin(item[1]) : null;
+    if (!login) {
+      throw new Error(`${label} Contributors accepts only "- @login" lines; found "${line}".`);
+    }
+    if (!contributors.some((value) => value.toLowerCase() === login.toLowerCase())) {
+      contributors.push(login);
+    }
+  }
+  const kept = [...lines.slice(0, start), ...lines.slice(end)];
+  return { body: kept.join("\n"), contributors };
+}
+
+/**
+ * Parse one Changeset source into its `rpe-redux` bump and bilingual sections.
  *
  * Both language sections are mandatory: the root changelog is published as the
  * GitHub release body and the desktop app renders the section that matches the
  * interface language, so a single-language Changeset would leave one of them
  * without notes. `label` names the file in error messages.
  */
-export function readChangeset(path, label = path) {
-  const source = readFileSync(path, "utf8");
+export function parseChangesetSource(source, label = "Changeset") {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u.exec(source);
   if (!match) {
     throw new Error(`${label} is missing a valid frontmatter block.`);
@@ -72,7 +125,7 @@ export function readChangeset(path, label = path) {
   if (!bump) {
     throw new Error(`${label} must declare a major, minor, or patch bump for rpe-redux.`);
   }
-  const body = match[2] ?? "";
+  const { body, contributors } = splitContributors(match[2] ?? "", label);
   const chinese = languageSection(body, "中文");
   const english = languageSection(body, "English");
   for (const [name, content] of [
@@ -85,18 +138,78 @@ export function readChangeset(path, label = path) {
       );
     }
   }
-  return { path, label, bump, chinese, english };
+  return { label, bump, chinese, english, contributors };
+}
+
+/** Read one Changeset file from disk; `label` is its repository-relative path. */
+export function readChangeset(path, label = path) {
+  return { path, ...parseChangesetSource(readFileSync(path, "utf8"), label) };
+}
+
+/** The inline credit appended to one language section's last bullet. */
+function creditSuffix(logins, language) {
+  const names = logins.map((login) => `@${login}`);
+  if (language === "zh") {
+    return `（由 ${names.join("、")} 贡献）`;
+  }
+  const joined =
+    names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
+  return ` (contributed by ${joined})`;
+}
+
+/** Append the credit to the last bullet of one language section. */
+function creditBullets(content, contributors, language) {
+  if (contributors.length === 0) {
+    return content;
+  }
+  const lines = content.split(/\r?\n/u);
+  const last = lines.findLastIndex((line) => line.trimStart().startsWith("- "));
+  if (last < 0) {
+    return content;
+  }
+  lines[last] = `${lines[last].trimEnd()}${creditSuffix(contributors, language)}`;
+  return lines.join("\n");
+}
+
+/** Add the release-wide credit list as the last category of one language. */
+function appendContributorSummary(categories, heading, logins) {
+  const items = logins.map((login) => `@${login}`);
+  const existing = categories.get(heading);
+  if (existing) {
+    existing.push(...items);
+  } else {
+    categories.set(heading, items);
+  }
 }
 
 /**
  * Collect the release-note categories for both languages, preserving the order
  * in which categories and bullets first appear.
+ *
+ * A credited Changeset marks the end of its own last bullet with the names and
+ * adds every login to one `贡献者` / `Contributors` category at the end of the
+ * section. A login the Changeset text already names is not credited again, so a
+ * hand-written thanks stays the only mention.
  */
 export function collectReleaseNotes(changesets) {
   const releases = { zh: new Map(), en: new Map() };
+  const credited = [];
   for (const changeset of changesets) {
-    collectCategories(releases.zh, changeset.chinese);
-    collectCategories(releases.en, changeset.english);
+    const text = `${changeset.chinese}\n${changeset.english}`;
+    const contributors = (changeset.contributors ?? []).filter(
+      (login) => !mentionsLogin(text, login),
+    );
+    for (const login of contributors) {
+      if (!credited.some((value) => value.toLowerCase() === login.toLowerCase())) {
+        credited.push(login);
+      }
+    }
+    collectCategories(releases.zh, creditBullets(changeset.chinese, contributors, "zh"));
+    collectCategories(releases.en, creditBullets(changeset.english, contributors, "en"));
+  }
+  if (credited.length > 0) {
+    appendContributorSummary(releases.zh, "贡献者", credited);
+    appendContributorSummary(releases.en, "Contributors", credited);
   }
   return releases;
 }

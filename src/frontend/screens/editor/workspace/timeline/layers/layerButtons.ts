@@ -8,10 +8,6 @@
 import { createValue, type ValueCell } from "../../../../../../core/state/values.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { EXTENDED_EVENT_LAYER, MAX_BASE_LAYERS } from "../drawing/tracks.ts";
-import {
-  chartHasExtendedEvents,
-  lineHasEventLayer,
-} from "../../../../../../core/global/chart/optionalFeatures.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { LayerButtonItem, LayerButtonsViewProps } from "./LayerButtonsView.tsx";
 import type { TimelineLayerReceiver } from "../drawing/timelineReceiver.ts";
@@ -68,8 +64,6 @@ export class LayerButtons {
   /** Rebuild the button snapshot from the current chart and gesture state. */
   render(): void {
     const { getSession, timeline } = this;
-    const session = getSession();
-    const present = chartHasExtendedEvents(session.chart);
     const items: LayerButtonItem[] = [];
     for (let index = 0; index <= MAX_BASE_LAYERS; index++) {
       const extended = index === MAX_BASE_LAYERS;
@@ -79,7 +73,6 @@ export class LayerButtons {
         active: index === timeline.gestures.layer,
         extended,
         optional: !extended && index > 0,
-        present: extended ? present : lineHasEventLayer(session.line, index),
       });
     }
     // Selection changes republish the session even when the layer strip did

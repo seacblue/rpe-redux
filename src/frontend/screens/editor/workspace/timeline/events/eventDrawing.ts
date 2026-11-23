@@ -58,7 +58,7 @@ import {
 } from "./eventLabelLayout.ts";
 import { drawTrajectory } from "./eventOverlayDrawing.ts";
 import { drawEventText } from "./eventTextDrawing.ts";
-import { CLIPBOARD_GHOST_ALPHA, projectClipboardGhost } from "../clipboardGhost.ts";
+import { projectClipboardGhost } from "../clipboardGhost.ts";
 type EventBarRectangle = Pick<TimelineEventRect, "x" | "y" | "width" | "height">;
 
 interface EventCurveEntry {
@@ -117,8 +117,11 @@ function drawClipboardGhostEvents(
       width: column.width,
       height: Math.max(2, Math.min(height, bottom) - Math.max(23, top)),
     };
-    context.globalAlpha = eventBarOpacity(this.appearance.eventOpacity, CLIPBOARD_GHOST_ALPHA);
-    drawEventBar(this, context, rectangle, CLIPBOARD_GHOST_ALPHA);
+    context.globalAlpha = eventBarOpacity(
+      this.appearance.eventOpacity,
+      this.appearance.clipboardGhostOpacity,
+    );
+    drawEventBar(this, context, rectangle, this.appearance.clipboardGhostOpacity);
   }
   context.restore();
 }

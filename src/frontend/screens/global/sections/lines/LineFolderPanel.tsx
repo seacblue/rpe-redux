@@ -12,6 +12,7 @@ import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
 import type { Chart, JudgeLine } from "../../../../../core/global/chart/chart.ts";
 import { noiseLineSettings } from "../../../../../core/global/chart/noise/noiseLine.ts";
+import { groupNames } from "../../../../../core/global/chart/line/lineGroups.ts";
 import type { LinePurposeTarget } from "../../../../../core/global/chart/line/linePurposeEdits.ts";
 import { sanitizeLineGroupName } from "../../../../../core/global/chart/line/lineTreeEdits.ts";
 import { t } from "../../../../../i18n/index.ts";
@@ -80,13 +81,15 @@ export function LineFolderPanel({
             id="line-folder-name"
             defaultValue={label}
             onChange={(event) => {
-              const next = sanitizeLineGroupName(event.currentTarget.value);
+              const occupied = groupNames(chart).filter((unused, current) => current !== group);
+              const next = sanitizeLineGroupName(event.currentTarget.value, occupied);
               if (next !== event.currentTarget.value) {
                 event.currentTarget.value = next;
               }
             }}
             onBlur={(event) => {
-              const next = sanitizeLineGroupName(event.currentTarget.value);
+              const occupied = groupNames(chart).filter((unused, current) => current !== group);
+              const next = sanitizeLineGroupName(event.currentTarget.value, occupied);
               event.currentTarget.value = next;
               if (!onRename(next)) {
                 event.currentTarget.value = label;

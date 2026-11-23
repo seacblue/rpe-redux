@@ -48,6 +48,9 @@ jobs:
 
       - name: Prepare the release metadata
         env:
+          # The preparation credits each Changeset from the pull request that
+          # added it, which the script reads through the authenticated gh CLI.
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           INPUT_VERSION: ${{ inputs.version }}
           DRY_RUN: ${{ inputs.dry_run }}
         shell: bash

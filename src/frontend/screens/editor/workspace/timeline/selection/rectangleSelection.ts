@@ -26,6 +26,7 @@ import type {
 import type { TimelineSelectionReceiver } from "../drawing/timelineReceiver.ts";
 import { noteOverlapRotation } from "../notes/noteRotation.ts";
 import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
+import { clearEventSelectionAnchor } from "../../../../../../core/edit/selection/eventSelectionAnchor.ts";
 
 /** Returns whether the requested timeline area still contains a selection. */
 function hasAreaSelection(
@@ -423,6 +424,11 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
         right,
         bottom,
         top,
+        selectionDirection:
+          (selection.drag.currentWorldX ?? selection.drag.current.x) >=
+          (selection.drag.startWorldX ?? selection.drag.start.x)
+            ? "forward"
+            : "reverse",
         lineIndices: visibleSelectionLines(this, selection.area, width),
         append: selection.drag.append,
         remove: selection.drag.remove,
@@ -486,6 +492,7 @@ export function finishRectangle(this: TimelineSelectionReceiver, event: PointerE
       } else {
         session.eventSelection.clear();
         session.multiEventSelection.clear();
+        clearEventSelectionAnchor(session);
       }
       session.selectionMode = "none";
       session.notify();

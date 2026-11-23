@@ -9,7 +9,7 @@
  */
 import { t } from "../../../../i18n/index.ts";
 import type { Chart } from "../chart.ts";
-import { lineGroupIndex } from "./lineGroups.ts";
+import { isReservedLineGroupName, lineGroupIndex, sanitizeLineGroupName } from "./lineGroups.ts";
 
 /** Group names as stored, untrimmed; an absent list reads as one unnamed group. */
 function rawGroupNames(chart: Chart): string[] {
@@ -28,20 +28,10 @@ function requireGroup(chart: Chart, index: number): string[] {
   return names;
 }
 
-/** Characters the line field cannot read inside a folder name. */
-const GROUP_NAME_FORBIDDEN = /[，,()（）]/gu;
-
-/**
- * Remove characters a folder expression cannot carry.
- *
- * A folder name is written in the line field, where commas separate tokens and
- * parentheses mark the active line. Creating or renaming a folder silently
- * drops those characters instead of rejecting the name; the caller still owns
- * the empty-name and duplicate-name rules.
- */
-export function sanitizeLineGroupName(name: string): string {
-  return name.replace(GROUP_NAME_FORBIDDEN, "").trim();
-}
+/** Return whether a sanitized folder name is unavailable to authors. */
+export { isReservedLineGroupName };
+/** Keep the line-tree module's historical sanitizer export. */
+export { sanitizeLineGroupName };
 
 /**
  * Assign lines to a folder without changing their order.
@@ -99,16 +89,20 @@ export function reorderLineGroup(chart: Chart, from: number, to: number): Chart 
 
 /** Append a new, empty folder. The caller owns duplicate and empty-name checks. */
 export function addLineGroup(chart: Chart, name: string): Chart {
+  const names = rawGroupNames(chart);
   return {
     ...chart,
-    judgeLineGroup: [...rawGroupNames(chart), sanitizeLineGroupName(name)],
+    judgeLineGroup: [...names, sanitizeLineGroupName(name, names)],
   };
 }
 
 /** Rename one flat folder without touching the lines it contains. */
 export function renameLineGroup(chart: Chart, index: number, name: string): Chart {
   const names = requireGroup(chart, index);
-  names[index] = sanitizeLineGroupName(name);
+  names[index] = sanitizeLineGroupName(
+    name,
+    names.filter((unused, current) => current !== index),
+  );
   return { ...chart, judgeLineGroup: names };
 }
 

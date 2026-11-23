@@ -13,9 +13,6 @@ import type { EditorSession } from "../../../../../core/edit/session/session.ts"
 import type { TimelineGestures } from "./interaction/timelineGestures.ts";
 import type { TimelineViewport } from "./viewport/timelineViewport.ts";
 
-/** Alpha applied by the note and event skin paths for clipboard ghosts. */
-export const CLIPBOARD_GHOST_ALPHA = 0.45;
-
 /** Timeline state needed to resolve a clipboard ghost projection. */
 export interface ClipboardGhostReceiver {
   readonly appearance: { readonly clipboardGhostEnabled?: boolean };

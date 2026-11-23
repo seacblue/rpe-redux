@@ -1,7 +1,7 @@
 /** Held auditions focus the preview and restore their starting state on release. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { editorAuditioning } from "../../../core/edit/state/publishedValues.ts";
+import { editorAuditioning, editorAuditionKind } from "../../../core/edit/state/publishedValues.ts";
 import { displayValues } from "../../../frontend/screens/settings/editorDisplaySettings.ts";
 import {
   connectTransport,
@@ -27,6 +27,7 @@ function createAuditionRuntime() {
   displayValues.showEvents.set(true);
   displayValues.previewEnabled.set(true);
   editorAuditioning.set(false);
+  editorAuditionKind.set(null);
   const audio = {
     playing: false,
     rate: 1,
@@ -60,7 +61,10 @@ function createAuditionRuntime() {
   return {
     audio,
     transportBindings: {
-      togglePlayback: () => Promise.resolve(),
+      togglePlayback: () => {
+        audio.playing = !audio.playing;
+        return Promise.resolve();
+      },
       seekBeat() {},
       playback,
       getSession: () => session,
@@ -91,6 +95,7 @@ test("a preview audition returns to its starting layout and time", async () => {
     await Promise.resolve();
     assert.equal(runtime.audio.playing, true);
     assert.equal(editorAuditioning.get(), true);
+    assert.equal(editorAuditionKind.get(), "restore");
     assert.equal(getEditorRegionSnapshot().showNotes, false);
     assert.equal(getEditorRegionSnapshot().showEvents, false);
     assert.equal(getEditorRegionSnapshot().showPreview, true);
@@ -101,6 +106,7 @@ test("a preview audition returns to its starting layout and time", async () => {
     assert.equal(runtime.audio.playing, false);
     assert.equal(runtime.audio.time, 10);
     assert.equal(editorAuditioning.get(), false);
+    assert.equal(editorAuditionKind.get(), null);
     assert.equal(getEditorRegionSnapshot().showNotes, true);
     assert.equal(getEditorRegionSnapshot().showEvents, true);
   } finally {
@@ -130,11 +136,13 @@ test("a staying preview audition keeps the release time", async () => {
   try {
     assert.equal(transport.beginAudition({ previewOnly: true, restoreTime: false }), true);
     await Promise.resolve();
+    assert.equal(editorAuditionKind.get(), "stay");
     runtime.audio.time = 15;
     transport.endAudition();
 
     assert.equal(runtime.audio.playing, false);
     assert.equal(runtime.audio.time, 15);
+    assert.equal(editorAuditionKind.get(), null);
     assert.equal(getEditorRegionSnapshot().showNotes, true);
     assert.equal(getEditorRegionSnapshot().showEvents, true);
   } finally {
@@ -144,17 +152,19 @@ test("a staying preview audition keeps the release time", async () => {
   }
 });
 
-test("a hold during playback only hides the authoring surfaces", () => {
+test("a staying hold after Space playback pauses when released", () => {
   const runtime = createAuditionRuntime();
   const disposeView = connectViewControls(runtime.viewRuntime);
   const disposeTransport = connectTransport(runtime.transportBindings);
   try {
-    runtime.audio.playing = true;
+    transport.togglePlayback();
+    assert.equal(runtime.audio.playing, true);
     runtime.audio.time = 12;
-    assert.equal(transport.beginAudition({ previewOnly: true }), true);
+    assert.equal(transport.beginAudition({ previewOnly: true, restoreTime: false }), true);
     assert.equal(runtime.audio.playing, true);
     assert.equal(runtime.audio.time, 12);
     assert.equal(editorAuditioning.get(), false);
+    assert.equal(editorAuditionKind.get(), null);
     assert.equal(getEditorRegionSnapshot().showNotes, false);
     assert.equal(getEditorRegionSnapshot().showEvents, false);
     assert.equal(getEditorRegionSnapshot().showPreview, true);
@@ -162,7 +172,7 @@ test("a hold during playback only hides the authoring surfaces", () => {
     runtime.audio.time = 16;
     transport.endAudition();
 
-    assert.equal(runtime.audio.playing, true);
+    assert.equal(runtime.audio.playing, false);
     assert.equal(runtime.audio.time, 16);
     assert.equal(getEditorRegionSnapshot().showNotes, true);
     assert.equal(getEditorRegionSnapshot().showEvents, true);
@@ -171,6 +181,37 @@ test("a hold during playback only hides the authoring surfaces", () => {
     disposeTransport();
     disposeView();
     editorAuditioning.set(false);
+  }
+});
+
+test("T changes playback into an audition and restores its starting time", () => {
+  const runtime = createAuditionRuntime();
+  const disposeView = connectViewControls(runtime.viewRuntime);
+  const disposeTransport = connectTransport(runtime.transportBindings);
+  try {
+    runtime.audio.playing = true;
+    runtime.audio.time = 12;
+    assert.equal(transport.beginAudition({ previewOnly: true }), true);
+    assert.equal(runtime.audio.playing, true);
+    assert.equal(editorAuditioning.get(), true);
+    assert.equal(editorAuditionKind.get(), "restore");
+    assert.equal(getEditorRegionSnapshot().showNotes, false);
+    assert.equal(getEditorRegionSnapshot().showEvents, false);
+
+    runtime.audio.time = 16;
+    transport.endAudition();
+
+    assert.equal(runtime.audio.playing, false);
+    assert.equal(runtime.audio.time, 12);
+    assert.equal(editorAuditioning.get(), false);
+    assert.equal(editorAuditionKind.get(), null);
+    assert.equal(getEditorRegionSnapshot().showNotes, true);
+    assert.equal(getEditorRegionSnapshot().showEvents, true);
+  } finally {
+    disposeTransport();
+    disposeView();
+    editorAuditioning.set(false);
+    editorAuditionKind.set(null);
   }
 });
 
@@ -184,11 +225,13 @@ test("a second hold or a non-preview audition is refused while playback runs", (
     assert.equal(transport.beginAudition({ previewOnly: true }), true);
     assert.equal(transport.beginAudition({ previewOnly: true }), false);
     transport.endAudition();
-    assert.equal(runtime.audio.playing, true);
+    assert.equal(runtime.audio.playing, false);
+    assert.equal(editorAuditionKind.get(), null);
   } finally {
     disposeTransport();
     disposeView();
     editorAuditioning.set(false);
+    editorAuditionKind.set(null);
   }
 });
 

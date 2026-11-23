@@ -6,7 +6,11 @@
  * keyboard event unhandled so an outer surface can still act on it.
  */
 import { eventKey, eventList } from "../events/eventTracks.ts";
-import { stickSelectedEvents, type EventStickDirection } from "../events/eventTools.ts";
+import {
+  stickSelectedEvents,
+  toggleSelectedEventsHooked,
+  type EventStickDirection,
+} from "../events/eventTools.ts";
 import {
   clearSelection,
   scaleSelection,
@@ -22,6 +26,8 @@ import { isSystemCancelKey } from "../../shortcuts/keyMatching.ts";
 import type { ShortcutEventLike } from "../../shortcuts/types.ts";
 import type { Beat } from "../../global/chart/timing/beat.ts";
 import { recordDiagnosticAction } from "../../diagnostics/interactionLog.ts";
+import { values } from "../../state/values.ts";
+import { EDITING_FEATURE_KEYS } from "../../settings/editingFeatureKeys.ts";
 
 export interface KeyboardActionEvent extends ShortcutEventLike {
   key: string;
@@ -124,6 +130,18 @@ const EVENT_LAYER_ACTIONS: Record<string, number> = {
   "event.layer.4": MAX_BASE_EVENT_LAYERS,
 };
 
+/** Whether a shortcut may enter one of the optional event layers. */
+export function eventLayerShortcutEnabled(layer: number): boolean {
+  if (layer === 0) {
+    return true;
+  }
+  const key =
+    layer === MAX_BASE_EVENT_LAYERS
+      ? EDITING_FEATURE_KEYS.extendedEvents
+      : EDITING_FEATURE_KEYS.eventLayers;
+  return !values.byId.has(key) || values.byId.get<boolean>(key);
+}
+
 export interface EditorKeyboardActionDependencies {
   /**
    * A getter, not the session itself: opening a chart installs a new session, and a
@@ -224,6 +242,8 @@ export async function runEditorKeyboardAction(
       nudgeSelection(session, PAGE_KEYS[action], timeline.division, timeline.gridCount);
     } else if (Object.hasOwn(STICK_ACTIONS, action)) {
       stickSelectedEvents(session, STICK_ACTIONS[action]);
+    } else if (action === "selection.event.toggleHooked") {
+      toggleSelectedEventsHooked(session);
     } else if (action === "selection.scale.narrower") {
       scaleSelection(session, 0.95);
     } else if (action === "selection.scale.wider") {
@@ -280,7 +300,10 @@ export async function runEditorKeyboardAction(
     } else if (action === "edit.copy.allLayers") {
       deps.copySelectionAllLayers();
     } else if (Object.hasOwn(EVENT_LAYER_ACTIONS, action)) {
-      deps.selectEventLayer(EVENT_LAYER_ACTIONS[action]);
+      const layer = EVENT_LAYER_ACTIONS[action];
+      if (eventLayerShortcutEnabled(layer)) {
+        deps.selectEventLayer(layer);
+      }
     } else if (action === "edit.cut") {
       deps.cutSelection();
     } else if (

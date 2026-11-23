@@ -21,6 +21,8 @@ The editor opens and saves charts through a framed chart stream. The on-disk for
 
 Chart math and serialization changes need coverage of exact beat boundaries, defaults, event-layer stacking, parent-line behavior, note counts, resource references, and Next trajectory extensions.
 
+RPE's `multiLineString` field accepts `all` as a selection of every judge line. Redux preserves that keyword while editing; judge-line folder names therefore reserve `all` case-insensitively and sanitize collisions as `all1`, `all2`, and so on, using the first available suffix.
+
 Speed events integrate the eased speed value. Events are sorted by time before integration, and accumulated distance uses RPE's 120 px per speed unit per second.
 
 A hooked event (`inst: 1`) renders its head on both anchors, so its stored `end` always equals `start` and every sampler reads the pinned pair. The tail the hook replaced lives in the editor-only `_reduxHookTailEnd` field, which keeps the authored value for the unhook that restores it. File export strips that field and records its value in `META.ReduxExportDefaults.hookTails`; other tools therefore read the pinned pair, while this editor restores the tail when it reopens the export. A chart exported by another tool has no cache, and unhooking keeps the pinned value it already stores.

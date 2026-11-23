@@ -95,6 +95,7 @@ export default {
   "shortcuts.editor.eventEndLater": "事件终点后移",
   "shortcuts.editor.stickNext": "向后粘合：终点取下一事件起点值",
   "shortcuts.editor.stickPrevious": "向前粘合：起点取上一事件终点值",
+  "shortcuts.editor.toggleHooked": "切换事件钩定状态",
   "shortcuts.editor.toggleMultiLine": "打开多线编辑",
   "shortcuts.editor.switchMultiLineMode": "切换多线音符 / 事件",
   "shortcuts.editor.samplingApply": "应用采样草稿",

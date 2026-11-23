@@ -105,6 +105,8 @@ npm run build
 
 每个 PR 都以 squash 方式合入：一个 PR 在 `main` 上只产生一个提交，PR 标题就是该提交的标题。仓库已关闭 merge commit 与 rebase merge，所以标题请写成祈使句的 conventional commit 形式，例如 `feat(editor): add curve handles`，契约与验证细节写进正文。
 
+每个非发版 PR 都要在 `.changeset/` 下加一份中英双语的 `.md` 文件，格式见 [.changeset/README.md](.changeset/README.md)。下个版本会自动署上 PR 作者；要署别人，就在文件末尾加语言中立的 `### Contributors` 段，每行一个 `- @login`，留空表示不署名。正文里已经写过的 login 不会重复署名，bot 与维护者不会被自动署名。
+
 PR 应说明：
 
 - 改变了什么用户可见行为或公开契约？

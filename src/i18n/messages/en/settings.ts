@@ -455,9 +455,10 @@ export default {
   "settings.field.timeline-overview-strip-width.description":
     "Width of the overview bars on both sides of the timeline.",
   "settings.field.timeline-hover-preview-enabled.label": "Show overview hover preview",
-  "settings.field.note-overlap-threshold.label": "Note overlap warning distance",
-  "settings.field.note-overlap-threshold.description":
-    "Mark same-beat notes closer than this many units as overlapping; 0 disables the warning.",
+  "settings.field.note-nearby-merge-enabled.label": "Merge nearby notes",
+  "settings.field.note-merge-distance.label": "Note merge distance",
+  "settings.field.note-merge-distance.description":
+    "Merge same-beat notes closer than this many units into one visual overlap stack.",
   "settings.field.timeline-grid-color-1.label": "1/1 beat-line color",
   "settings.field.timeline-grid-color-2.label": "1/2 beat-line color",
   "settings.field.timeline-grid-color-3.label": "1/3 beat-line color",
@@ -815,4 +816,5 @@ export default {
   "settings.field.timeline-undo-jump.description":
     "Moves the playhead and view to the edited time when an undo or redo step completes.",
   "settings.field.timeline-clipboard-ghost-enabled.label": "Show clipboard ghost preview",
+  "settings.field.timeline-clipboard-ghost-opacity.label": "Clipboard ghost opacity",
 } as const;

@@ -5,10 +5,14 @@
  *
  * The command is the single release-preparation path for a local checkout and
  * for the Release preparation workflow; it never tags, publishes, or builds.
+ * Each Changeset that does not name its own contributors is credited from the
+ * pull request that added it; `offline` skips that lookup, and `resolveCredits`
+ * replaces it in tests.
  */
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveContributors } from "./contributors.mjs";
 import { readProductVersion } from "./productVersion.mjs";
 import {
   changesetFiles,
@@ -104,12 +108,16 @@ function readReleaseInputs(root) {
  * the Changesets it consumed. `dryRun` reports the same plan without touching
  * the tree. `allowEmpty` releases hand-written notes when no Changeset is
  * pending; the existing changelog section then has to match the version.
+ * `offline` skips the pull request lookup that credits unnamed Changesets, and
+ * `resolveCredits` replaces that lookup with an injected result.
  */
 export function prepareRelease({
   root,
   version,
   dryRun = false,
   allowEmpty = false,
+  offline = false,
+  resolveCredits,
   log = () => {},
 }) {
   const previousVersion = readProductVersion(root);
@@ -123,7 +131,21 @@ export function prepareRelease({
     );
   }
 
-  const bump = releaseBump(pending);
+  const credits = resolveCredits
+    ? resolveCredits(pending)
+    : offline
+      ? new Map()
+      : resolveContributors({
+          root,
+          changesets: pending,
+          warn: (message) => log(`warning: ${message}`),
+        });
+  const changesets = pending.map((changeset) => ({
+    ...changeset,
+    contributors: changeset.contributors ?? credits.get(changeset.path) ?? [],
+  }));
+
+  const bump = releaseBump(changesets);
   const target = version ? normalizeVersion(version) : nextVersion(previousVersion, bump);
   if (compareVersions(target, previousVersion) <= 0) {
     throw new Error(`Release version ${target} must be newer than ${previousVersion}.`);
@@ -133,9 +155,12 @@ export function prepareRelease({
     previousVersion,
     version: target,
     bump,
-    consumed: pending.map((changeset) => changeset.label),
+    consumed: changesets.map((changeset) => changeset.label),
     updated: VERSION_FILES.map((file) => file.path.join("/")),
-    changelog: pending.length > 0,
+    changelog: changesets.length > 0,
+    contributors: changesets
+      .filter((changeset) => changeset.contributors.length > 0)
+      .map((changeset) => ({ changeset: changeset.label, logins: changeset.contributors })),
   };
 
   if (dryRun) {
@@ -146,9 +171,11 @@ export function prepareRelease({
   log(`Preparing ${target} from ${previousVersion} with a ${bump} bump.`);
   applyVersion(root, target);
   if (plan.changelog) {
-    writeChangelogFromChangesets(root, target, pending);
-    log(`Rewrote CHANGELOG.md from ${pending.length} Changeset${pending.length === 1 ? "" : "s"}.`);
-    for (const changeset of pending) {
+    writeChangelogFromChangesets(root, target, changesets);
+    log(
+      `Rewrote CHANGELOG.md from ${changesets.length} Changeset${changesets.length === 1 ? "" : "s"}.`,
+    );
+    for (const changeset of changesets) {
       rmSync(changeset.path, { force: true });
     }
     plan.updated.push("CHANGELOG.md");
@@ -170,13 +197,15 @@ export function prepareRelease({
 
 /** Parse the release-preparation command line. */
 function parseArguments(argv) {
-  const options = { dryRun: false, allowEmpty: false, version: undefined };
+  const options = { dryRun: false, allowEmpty: false, offline: false, version: undefined };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--dry-run") {
       options.dryRun = true;
     } else if (argument === "--allow-empty") {
       options.allowEmpty = true;
+    } else if (argument === "--offline") {
+      options.offline = true;
     } else if (argument === "--version") {
       options.version = argv[(index += 1)];
       if (!options.version) {
@@ -184,7 +213,7 @@ function parseArguments(argv) {
       }
     } else {
       throw new Error(
-        `Unknown argument ${argument}. Usage: npm run release:prepare -- [--version 1.1.0] [--dry-run] [--allow-empty]`,
+        `Unknown argument ${argument}. Usage: npm run release:prepare -- [--version 1.1.0] [--dry-run] [--allow-empty] [--offline]`,
       );
     }
   }
@@ -209,6 +238,12 @@ if (invokedAsScript) {
     );
     for (const changeset of plan.consumed) {
       console.log(`- ${changeset}`);
+    }
+  }
+  if (plan.contributors.length > 0) {
+    console.log(`${options.dryRun ? "Would credit" : "Credited"}:`);
+    for (const entry of plan.contributors) {
+      console.log(`- ${entry.logins.map((login) => `@${login}`).join(", ")} (${entry.changeset})`);
     }
   }
 }

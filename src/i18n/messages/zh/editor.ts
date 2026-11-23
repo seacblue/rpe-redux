@@ -275,6 +275,7 @@ export default {
   "editor.commands.eventTools.error.tooManyParts": "切割结果过多，请降低密度或分批切割",
   "editor.commands.eventTools.commitCut": "切割选中事件",
   "editor.commands.eventTools.commitStick": "粘合选中事件",
+  "editor.commands.eventTools.commitToggleHooked": "切换事件钩定状态",
   "editor.commands.lineCommands.error.invalidIndex": "判定线索引无效",
   "editor.commands.lineCommands.error.groupNotEmpty": "请先删除或移出该分组中的判定线。",
   "editor.commands.lineCommands.error.parentCycle": "父线关系会形成循环",

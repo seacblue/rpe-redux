@@ -42,6 +42,7 @@ import {
 } from "../../global/chart/noise/noiseLine.ts";
 import { lineNoiseConflicts } from "../../global/chart/noise/lineNoiseConflicts.ts";
 import { lineAllowsNotes } from "../../global/chart/line/lineTraits.ts";
+import { MULTI_LINE_ALL_KEYWORD } from "../../global/chart/line/lineGroups.ts";
 import { assertNoNewNegativeBeatRanges } from "../../global/chart/chartValidation.ts";
 import type { NoteChangeHint } from "../../global/chart/runtime/noteChangeHints.ts";
 import { lineSelectionGroups, parseLineSelectionInput } from "../state/lineSelectionInput.ts";
@@ -61,6 +62,12 @@ import {
 export interface PlacementStats {
   notes: number;
   events: number;
+}
+
+/** Identifies the event most recently added by a selection gesture. */
+export interface EventSelectionAnchor {
+  lineIndex: number;
+  key: string;
 }
 
 /** Collect stable note and event ids from one line into the supplied sets. */
@@ -191,8 +198,11 @@ function persistedLineSelection(chart: Chart): PersistedLineSelection {
   return { tokens, lines: resolveLineSelection(tokens, available, groups) };
 }
 
-/** Write one numeric token in the colon-range syntax native RPE charts read. */
+/** Write one persisted token in the syntax native RPE charts read. */
 function persistedTokenText(token: LineSelectionToken): string[] {
+  if (token.kind === "all") {
+    return [MULTI_LINE_ALL_KEYWORD];
+  }
   if (token.kind === "line") {
     return [String(token.line)];
   }
@@ -303,6 +313,8 @@ export class EditorSession extends EventTarget {
   clipboard: JudgeLineNote[];
   clipboardNoteLines: number[];
   eventSelection: Set<string>;
+  /** Event most recently added by a freehand, marquee, or click selection. */
+  eventSelectionAnchor: EventSelectionAnchor | null;
   eventClipboard: ClippedEvent[];
   eventClipboardLines: number[];
   /** Source layer of each clipped event; empty for older clipboard entries. */
@@ -422,6 +434,7 @@ export class EditorSession extends EventTarget {
     this.clipboard = [];
     this.clipboardNoteLines = [];
     this.eventSelection = new Set();
+    this.eventSelectionAnchor = null;
     this.eventClipboard = [];
     this.eventClipboardLines = [];
     this.eventClipboardLayers = [];
