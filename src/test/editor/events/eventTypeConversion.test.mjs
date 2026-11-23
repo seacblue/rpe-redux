@@ -213,7 +213,7 @@ test("a noise line keeps scale X/Y with the extended layer disabled", () => {
   );
 });
 
-test("existing extended events keep scale X/Y reachable while the layer is hidden", () => {
+test("existing extended events do not reintroduce a hidden layer", () => {
   const line = emptyLine();
   line.extended = { scaleXEvents: [createEvent(1, 1, 0, 1)] };
   assert.deepEqual(
@@ -221,7 +221,7 @@ test("existing extended events keep scale X/Y reachable while the layer is hidde
       eventLayers: false,
       extendedEvents: false,
     }),
-    [...BASE_TYPES, "scaleXEvents", "scaleYEvents"],
+    BASE_TYPES,
   );
 });
 
@@ -234,6 +234,17 @@ test("the authored track stays listed when the line's rules hide it", () => {
     "alphaEvents",
   );
   assert.ok(options.some((option) => option.type === "alphaEvents"));
+});
+
+test("a hidden current layer does not reintroduce its current event type", () => {
+  const line = emptyLine();
+  line.extended = { scaleXEvents: [createEvent(1, 1, 0, 1)] };
+  assert.deepEqual(
+    eventTypeOptions(line, 4, { eventLayers: false, extendedEvents: false }, "scaleXEvents").map(
+      (option) => option.type,
+    ),
+    BASE_TYPES,
+  );
 });
 
 test("XY binding keeps both events when X becomes Y", () => {

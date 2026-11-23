@@ -11,10 +11,6 @@ import type { JudgeLine } from "../../../../../core/global/chart/chart.ts";
 import { MAX_BASE_EVENT_LAYERS } from "../../../../../core/global/chart/chartVocabulary.ts";
 import { judgeLineTraits } from "../../../../../core/global/chart/line/lineTraits.ts";
 import {
-  lineHasEventLayer,
-  lineHasExtendedEvents,
-} from "../../../../../core/global/chart/optionalFeatures.ts";
-import {
   CONVERTIBLE_EVENT_TYPES,
   isConvertibleEventType,
   type ConvertibleEventType,
@@ -37,8 +33,9 @@ export interface EventTypeOption {
  * Layer indexes the strip shows for this line.
  *
  * Layer 0 is the minimal editor surface and always exists. A higher base layer
- * or the extended layer stays reachable when its capability is on, when it is
- * active, or when it already carries data.
+ * or the extended layer is included only when its display capability is on.
+ * Existing chart data remains in the model but does not reintroduce a disabled
+ * editor entry point.
  */
 function visibleLayerIndexes(
   line: JudgeLine | undefined,
@@ -48,12 +45,7 @@ function visibleLayerIndexes(
   const indexes: number[] = [];
   for (let index = 0; index <= MAX_BASE_EVENT_LAYERS; index++) {
     const extended = index === MAX_BASE_EVENT_LAYERS;
-    const visible = extended
-      ? visibility.extendedEvents || lineHasExtendedEvents(line) || eventLayer === index
-      : index === 0 ||
-        visibility.eventLayers ||
-        lineHasEventLayer(line, index) ||
-        eventLayer === index;
+    const visible = extended ? visibility.extendedEvents : index === 0 || visibility.eventLayers;
     if (visible) {
       indexes.push(index);
     }
@@ -116,9 +108,9 @@ function eventTypeLabel(type: ConvertibleEventType, noise: boolean): string {
 /**
  * Select options for the event type row.
  *
- * The current type stays present when its layer is hidden, so the select always
- * reports the authored track; a type that is not numeric is dropped by the
- * caller before rendering the row.
+ * The current type stays present when its selected layer is visible, so the
+ * select always reports the authored track; a type on a hidden layer is not
+ * reintroduced by the current selection.
  */
 export function eventTypeOptions(
   line: JudgeLine | undefined,
@@ -127,7 +119,11 @@ export function eventTypeOptions(
   currentType: string,
 ): EventTypeOption[] {
   const types = convertibleEventTypes(line, eventLayer, visibility);
-  if (isConvertibleEventType(currentType) && !types.includes(currentType)) {
+  const currentLayerVisible =
+    eventLayer === MAX_BASE_EVENT_LAYERS
+      ? visibility.extendedEvents
+      : eventLayer === 0 || visibility.eventLayers;
+  if (currentLayerVisible && isConvertibleEventType(currentType) && !types.includes(currentType)) {
     types.push(currentType);
     types.sort(
       (left, right) =>

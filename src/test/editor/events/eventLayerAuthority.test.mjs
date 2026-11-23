@@ -17,6 +17,10 @@ import {
   MAX_BASE_LAYERS,
 } from "../../../frontend/screens/editor/workspace/timeline/drawing/tracks.ts";
 import { bindEditorSelection } from "../../../frontend/screens/editor/workspace/runtime/bindings/selectionBindings.ts";
+import { values } from "../../../core/state/values.ts";
+import { EDITING_FEATURE_KEYS } from "../../../core/settings/editingFeatureKeys.ts";
+import "../../../core/settings/features/index.ts";
+import { eventLayerShortcutEnabled } from "../../../core/edit/operations/keyboard.ts";
 
 /** Minimal event-interaction handle; these tests never arm a placement. */
 const interaction = { pending: null, drag: null };
@@ -39,6 +43,25 @@ test("the session layer is the only source for gesture layer and extended mode",
   gestures.layer = 1;
   assert.equal(session.eventLayer, 1);
   assert.equal(gestures.extended, false);
+});
+
+test("layer shortcuts respect the display switches", () => {
+  const layerKey = EDITING_FEATURE_KEYS.eventLayers;
+  const extendedKey = EDITING_FEATURE_KEYS.extendedEvents;
+  const previousLayer = values.byId.get(layerKey);
+  const previousExtended = values.byId.get(extendedKey);
+  try {
+    values.byId.set(layerKey, false);
+    values.byId.set(extendedKey, false);
+    assert.equal(eventLayerShortcutEnabled(0), true);
+    assert.equal(eventLayerShortcutEnabled(1), false);
+    assert.equal(eventLayerShortcutEnabled(MAX_BASE_LAYERS), false);
+    values.byId.set(layerKey, true);
+    assert.equal(eventLayerShortcutEnabled(1), true);
+  } finally {
+    values.byId.set(layerKey, previousLayer);
+    values.byId.set(extendedKey, previousExtended);
+  }
 });
 
 test("the layer buttons write the session once and a repaint never writes it back", () => {
