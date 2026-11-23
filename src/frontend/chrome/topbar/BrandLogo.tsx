@@ -2,8 +2,8 @@
  * The clickable brand mark in the title bar.
  *
  * The mark is the editor's return-to-library control. It publishes the click
- * through the chrome command seam rather than reaching into the editor, so the
- * editor keeps ownership of the confirmation and of the active room.
+ * through the document-releasing chrome command seam rather than reaching into
+ * the editor, so the editor keeps ownership of the confirmation and active room.
  */
 import { useSyncExternalStore } from "react";
 import { AppIcon } from "../../../design/components/brand/AppIcon.tsx";
@@ -14,13 +14,14 @@ import {
   getEditorVisibility,
   subscribeToEditorVisibility,
 } from "../../../core/edit/state/visibility.ts";
+import { activateBrandLogo } from "./brandLogoNavigation.ts";
 
 /**
  * The compact application mark at the leading edge of the title bar.
  *
- * It stays a plain brand mark at home and becomes a library action in the
- * editor. The shared button primitive supplies focus, keyboard, and press
- * semantics; the mark itself is decorative inside that button.
+ * It stays a plain brand mark at home and becomes the shared document-closing
+ * library action in the editor. The button primitive supplies focus, keyboard,
+ * and press semantics; the mark itself is decorative inside that button.
  */
 export function BrandLogo() {
   const { t } = useTranslation();
@@ -37,11 +38,7 @@ export function BrandLogo() {
       aria-label={label}
       aria-disabled={atHome}
       tabIndex={atHome ? -1 : undefined}
-      onClick={() => {
-        if (!atHome) {
-          editorChromeCommands()?.navigation.openLibrary();
-        }
-      }}
+      onClick={() => activateBrandLogo(atHome, editorChromeCommands()?.navigation ?? null)}
     >
       <AppIcon size={20} alt="" className="redux-titlebar-logo" />
     </Button>
