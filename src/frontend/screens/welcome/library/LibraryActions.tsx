@@ -1,8 +1,8 @@
 /**
  * The two creation actions below the home library.
  *
- * They share the detail card's large action size: create a new document or
- * import one, with the primary/secondary split matching the detail card.
+ * They share the detail card's large action size and neutral treatment: create
+ * a new document or import one without making either action visually primary.
  */
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
@@ -22,7 +22,7 @@ export function LibraryActions() {
     <div className="redux-library-actions">
       <Button
         ref={onboardingAnchorRef("home-new")}
-        variant="solid"
+        variant="outlined"
         size="lg"
         className="redux-library-action"
         data-onboarding="new"

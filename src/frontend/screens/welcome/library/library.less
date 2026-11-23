@@ -1193,15 +1193,6 @@
   opacity: 0.72;
 }
 
-// The primary footer action puts its shortcut on the accent fill, so its ink
-// follows the button's resolved foreground instead of the muted page colour.
-.redux-app-root
-  .redux-home-page
-  .redux-library-action.redux-button-solid
-  :is(.redux-shortcut-labels, .redux-kbd) {
-  color: var(--action-foreground-resting, var(--on-accent));
-}
-
 @keyframes library-cover-in {
   from {
     opacity: 0;
