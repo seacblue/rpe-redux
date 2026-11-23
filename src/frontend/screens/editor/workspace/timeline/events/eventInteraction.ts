@@ -460,10 +460,7 @@ export class EventInteraction implements EventInteractionHandle {
         currentWorldX: worldX,
         startFactor: this.timeline.viewport.factorForLine(panelLineIndex),
         startSeconds:
-          this.timeline.viewport.tempo.seconds(
-            this.timeline.viewport.origin,
-            this.timeline.viewport.factorForLine(panelLineIndex),
-          ) +
+          this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin) +
           (this.timeline.viewport.viewHeight() - this.timeline.viewport.judgementOffset - point.y) /
             this.timeline.viewport.scaleForArea("events"),
         append: true,
@@ -487,10 +484,7 @@ export class EventInteraction implements EventInteractionHandle {
         start: point,
         startFactor: this.timeline.viewport.factorForLine(session.lineIndex),
         startSeconds:
-          this.timeline.viewport.tempo.seconds(
-            this.timeline.viewport.origin,
-            this.timeline.viewport.factorForLine(session.lineIndex),
-          ) +
+          this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin) +
           (this.timeline.viewport.viewHeight() - this.timeline.viewport.judgementOffset - point.y) /
             this.timeline.viewport.scaleForArea("events"),
         current: point,
@@ -579,7 +573,7 @@ export class EventInteraction implements EventInteractionHandle {
         point.x + this.timeline.viewport.multiLineViewportOffset(this.canvas.clientWidth, "events");
       if (drag.startFactor !== undefined) {
         drag.currentSeconds =
-          this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin, drag.startFactor) +
+          this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin) +
           (this.timeline.viewport.viewHeight() -
             (this.timeline.viewport.judgementOffset ?? 42) -
             drag.current.y) /
@@ -663,7 +657,7 @@ export class EventInteraction implements EventInteractionHandle {
       this.timeline.viewport.multiLineViewportOffset(this.canvas.clientWidth, "events");
     if (current.startFactor !== undefined) {
       current.currentSeconds =
-        this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin, current.startFactor) +
+        this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin) +
         (this.timeline.viewport.viewHeight() -
           (this.timeline.viewport.judgementOffset ?? 42) -
           current.current.y) /

@@ -20,7 +20,7 @@ export const PREFERENCE_SECTIONS = Object.freeze({
   shortcuts: "shortcuts",
   /** Active note texture pack id; image bytes remain on disk. */
   noteSkin: "noteSkin",
-  /** Clipboard history entries. */
+  /** The app-private clipboard history and current clipboard snapshot. */
   clipboard: "clipboard",
   /** Active interface skin id. */
   appearance: "appearance",
@@ -307,8 +307,13 @@ export class PreferenceStore {
         baselines.set(section, clonePreference(this.dirtyBaselines.get(section)));
       }
 
-      const response = await this.client.preferences();
-      const stored = isRecord(response?.values) ? response.values : {};
+      let stored: Record<string, unknown> = {};
+      try {
+        const response = await this.client.preferences();
+        stored = isRecord(response?.values) ? response.values : {};
+      } catch {
+        // Keep the existing write path available during a short service restart.
+      }
       const payload: Record<string, unknown> = Object.fromEntries(
         Object.entries(stored).filter(([section]) => SECTION_NAMES.has(section)),
       );
@@ -380,6 +385,49 @@ export class PreferenceStore {
   /** Wait for an in-flight database read before committing a discrete choice. */
   async ready(): Promise<void> {
     await this.attachment;
+  }
+
+  /**
+   * Refresh selected sections from the durable client without overwriting a
+   * local section that still has an unsent write.
+   *
+   * This pull seam lets browser tabs and desktop windows share one local
+   * service without sharing a JavaScript runtime.
+   */
+  async refresh(
+    sections: readonly PreferenceSection[] = Object.values(PREFERENCE_SECTIONS),
+  ): Promise<readonly PreferenceSection[]> {
+    const client = this.client;
+    if (!client || !sections.length) {
+      return [];
+    }
+    try {
+      const payload = await client.preferences();
+      const stored = isRecord(payload?.values) ? payload.values : {};
+      const changed: PreferenceSection[] = [];
+      for (const section of sections) {
+        if (this.dirty.has(section) || stored[section] === undefined) {
+          continue;
+        }
+        if (JSON.stringify(this.values[section]) === JSON.stringify(stored[section])) {
+          continue;
+        }
+        this.values[section] = stored[section];
+        changed.push(section);
+      }
+      if (!changed.length) {
+        return changed;
+      }
+      this.mirrorNow();
+      for (const section of changed) {
+        this.notify(section);
+      }
+      return changed;
+    } catch {
+      // A transiently stopped sidecar is expected during restart. The next
+      // refresh retries without turning a healthy local cache into an error.
+      return [];
+    }
   }
 
   /** Merge the database document with unsaved local sections and upload the rest. */

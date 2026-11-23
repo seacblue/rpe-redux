@@ -96,7 +96,6 @@ export function staticNoiseParent(
   if (
     animatedRotations.length &&
     (ancestors.length !== 1 ||
-      (inheritsRotation && (lines[parent].bpmfactor ?? 1) !== (line.bpmfactor ?? 1)) ||
       (line.eventLayers ?? [])
         .slice(0, 5)
         .some((layer) =>
@@ -117,7 +116,7 @@ export function staticNoiseParent(
   let rotation = state.rotation;
   const rotations = inheritsRotation ? animatedRotations : [];
   for (const events of rotations) {
-    rotation -= Number(new EventTrack(events, tempo, line.bpmfactor ?? 1).value(0));
+    rotation -= Number(new EventTrack(events, tempo).value(0));
   }
   let x = state.x;
   let y = state.y;
@@ -149,7 +148,6 @@ export function staticNoiseParent(
           continue;
         }
         if (
-          (ancestor.bpmfactor ?? 1) !== (line.bpmfactor ?? 1) ||
           events.some(
             (event) =>
               typeof event.start !== "number" ||
@@ -165,7 +163,7 @@ export function staticNoiseParent(
         ) {
           throw new Error("animated noise parent requires transform composition");
         }
-        const initial = Number(new EventTrack(events, tempo, ancestor.bpmfactor ?? 1).value(0));
+        const initial = Number(new EventTrack(events, tempo).value(0));
         x -= initial * xWeight;
         y -= initial * yWeight;
         translations.push({ events, xWeight, yWeight });

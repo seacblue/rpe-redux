@@ -65,7 +65,11 @@ export async function selectRecordingVideoConfig(
       bitrateMode,
       framerate: options.fps,
       hardwareAcceleration: "prefer-hardware",
-      latencyMode: "quality",
+      // The native host muxes the raw Annex B stream with `-c:v copy`, which
+      // assigns timestamps in write order. A quality profile may enable
+      // B-frames and emit chunks in decode order; realtime keeps output in
+      // presentation order so the copied stream plays back correctly.
+      latencyMode: "realtime",
       avc: { format: "annexb" },
     };
     try {

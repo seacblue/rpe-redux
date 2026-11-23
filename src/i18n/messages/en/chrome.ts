@@ -60,6 +60,8 @@ export default {
   "chrome.toolbar.lineSelectionCollapse": "Collapse {name}",
   "chrome.toolbar.lineSelectionGroupSelectAll": "Select every judge line in {name}",
   "chrome.toolbar.lineSelectionGroupClearAll": "Clear every judge line in {name}",
+  "chrome.toolbar.scrollStart": "Scroll toolbar left",
+  "chrome.toolbar.scrollEnd": "Scroll toolbar right",
   "chrome.global.timing.emptyTitle": "No timing points yet",
   "chrome.global.timing.empty": "Add a BPM point at the playhead to start timing this chart.",
   "chrome.developer.devtools": "Toggle DevTools",

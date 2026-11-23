@@ -51,13 +51,12 @@ export class LineActivity {
 
   /** Collects note, layer, and extended-track times for one line. */
   constructor(line: JudgeLine, tempo: TempoSource) {
-    const factor = line.bpmfactor ?? 1;
     this.duration = 0;
     /** Records each event's start time and extends the line duration. */
     const times = (events: readonly BeatSpan[]): number[] =>
       events.map((event) => {
-        const start = tempo.seconds(event.startTime, factor);
-        this.duration = Math.max(this.duration, start, tempo.seconds(event.endTime, factor));
+        const start = tempo.seconds(event.startTime);
+        this.duration = Math.max(this.duration, start, tempo.seconds(event.endTime));
         return start;
       });
     /** Merges several track types in one layer into a time list and index. */
@@ -107,10 +106,9 @@ function activityLine(
   const activity = new LineActivity(line, tempo);
   const effects = shaderEvents(chart, index);
   let duration = activity.duration;
-  const factor = line.bpmfactor ?? 1;
   const shaderTimes = effects.map((event) => {
-    const start = tempo.seconds(event.startTime, factor);
-    duration = Math.max(duration, start, tempo.seconds(event.endTime, factor));
+    const start = tempo.seconds(event.startTime);
+    duration = Math.max(duration, start, tempo.seconds(event.endTime));
     return start;
   });
   return { activity, shaderTimes, shaderIndex: trackIndex(effects), duration };
@@ -185,10 +183,9 @@ export class TimelineActivity {
         }
         const effects = shaderEvents(chart, index);
         let duration = activity.duration;
-        const factor = line.bpmfactor ?? 1;
         const shaderTimes = effects.map((event) => {
-          const start = tempo.seconds(event.startTime, factor);
-          duration = Math.max(duration, start, tempo.seconds(event.endTime, factor));
+          const start = tempo.seconds(event.startTime);
+          duration = Math.max(duration, start, tempo.seconds(event.endTime));
           return start;
         });
         return { activity, shaderTimes, shaderIndex: trackIndex(effects), duration };

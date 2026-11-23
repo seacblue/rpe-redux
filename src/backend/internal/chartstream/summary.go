@@ -145,17 +145,11 @@ func defaultTempo() *TempoMap {
 	return &TempoMap{Points: []TempoPoint{{Beat: 0, SecondsPerBeat: 0.5, Seconds: 0}}}
 }
 
-// CheckFactor treats a non-finite or near-zero line factor as normal speed.
-func (t *TempoMap) CheckFactor(factor float64) float64 {
-	if math.IsNaN(factor) || math.IsInf(factor, 0) || math.Abs(factor) < 0.001 {
-		return 1
-	}
-	return factor
-}
-
-// Seconds returns chart seconds at beat, scaled by factor.
-func (t *TempoMap) Seconds(beat, factor float64) float64 {
-	rate := t.CheckFactor(factor)
+// Seconds returns chart seconds at beat.
+//
+// Every line uses this one grid. A line's bpmfactor is not a time scale and
+// never enters the conversion.
+func (t *TempoMap) Seconds(beat float64) float64 {
 	index := sort.Search(len(t.Points), func(index int) bool {
 		return t.Points[index].Beat > beat
 	}) - 1
@@ -163,7 +157,7 @@ func (t *TempoMap) Seconds(beat, factor float64) float64 {
 		index = 0
 	}
 	point := t.Points[index]
-	return (point.Seconds + (beat-point.Beat)*point.SecondsPerBeat) * rate
+	return point.Seconds + (beat-point.Beat)*point.SecondsPerBeat
 }
 
 // beatValue converts a beat triple or number to its numeric value. It is used
@@ -292,22 +286,22 @@ func parseJSNumber(value string) (float64, error) {
 // secondsOfField converts a present beat field to seconds. A missing field is
 // treated as NaN, matching Number(undefined); an explicit null becomes zero,
 // matching Number(null).
-func secondsOfField(record map[string]any, key string, tempo *TempoMap, factor float64) (float64, bool) {
+func secondsOfField(record map[string]any, key string, tempo *TempoMap) (float64, bool) {
 	value, present := record[key]
 	if !present {
 		return 0, false
 	}
-	return secondsOf(value, tempo, factor)
+	return secondsOf(value, tempo)
 }
 
 // secondsOf converts a beat value to seconds, reporting false when the value is
 // malformed or non-finite.
-func secondsOf(value any, tempo *TempoMap, factor float64) (float64, bool) {
+func secondsOf(value any, tempo *TempoMap) (float64, bool) {
 	beat, ok := beatValue(value)
 	if !ok || math.IsNaN(beat) || math.IsInf(beat, 0) {
 		return 0, false
 	}
-	seconds := tempo.Seconds(beat, factor)
+	seconds := tempo.Seconds(beat)
 	if math.IsNaN(seconds) || math.IsInf(seconds, 0) {
 		return 0, false
 	}
@@ -369,15 +363,6 @@ func mergeIntervals(intervals [][2]float64) [][2]float64 {
 	return merged
 }
 
-// lineFactor reads the line's bpmfactor with the tempo map's fallback rule.
-func lineFactor(line map[string]any) float64 {
-	value, ok := toNumber(line["bpmfactor"])
-	if !ok || math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
-		return 1
-	}
-	return value
-}
-
 // isRecord reports whether value is a JSON object.
 func isRecord(value any) (map[string]any, bool) {
 	record, ok := value.(map[string]any)
@@ -400,7 +385,6 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 		}
 	}
 
-	factor := lineFactor(record)
 	var lineBounds bounds
 	intervals := make([][2]float64, 0)
 	noteCount := 0
@@ -419,8 +403,8 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 		if !ok {
 			continue
 		}
-		start, startOK := secondsOfField(noteRecord, "startTime", tempo, factor)
-		end, endOK := secondsOfField(noteRecord, "endTime", tempo, factor)
+		start, startOK := secondsOfField(noteRecord, "startTime", tempo)
+		end, endOK := secondsOfField(noteRecord, "endTime", tempo)
 		lineBounds.extend(start, startOK)
 		lineBounds.extend(end, endOK)
 		visibleValue, visiblePresent := noteRecord["visibleTime"]
@@ -465,8 +449,8 @@ func SummarizeLine(line any, index int, tempo *TempoMap, byteOffset, byteLength 
 				if !ok {
 					continue
 				}
-				start, startOK := secondsOfField(eventRecord, "startTime", tempo, factor)
-				end, endOK := secondsOfField(eventRecord, "endTime", tempo, factor)
+				start, startOK := secondsOfField(eventRecord, "startTime", tempo)
+				end, endOK := secondsOfField(eventRecord, "endTime", tempo)
 				lineBounds.extend(start, startOK)
 				lineBounds.extend(end, endOK)
 				addInterval(&intervals, start, startOK, end, endOK)

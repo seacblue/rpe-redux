@@ -227,7 +227,7 @@ export function renderProperties(
     ];
     const directionOptions = note.type === 2 ? { 0: below, 1: above } : { 1: above, 2: below };
     const selectedLine = session.chart.judgeLineList?.[selectedLineIndex] ?? session.line;
-    const selectedFactor = selectedLine?.bpmfactor ?? 1;
+    void selectedLine;
     const definitions: [FieldName, string, FieldKind, FieldOptions?][] = [
       ["type", t("editorPanels.inspector.field.type"), "select", noteTypeOptions],
       ["startTime", t("editorPanels.inspector.field.startTime"), "beat"],
@@ -515,19 +515,12 @@ export function renderProperties(
               if (!current) {
                 return null;
               }
-              const factor =
-                session.chart.judgeLineList?.[selectedLineIndex]?.bpmfactor ?? selectedFactor;
               const visible = current.visibleTime;
               const beats =
                 visible !== undefined && visible >= 999999
                   ? 0
-                  : Math.max(
-                      0,
-                      visibleBeats(current, tempo, factor) + direction / session.division,
-                    );
-              const value = String(
-                Number(visibleSeconds(current, beats, tempo, factor).toFixed(8)),
-              );
+                  : Math.max(0, visibleBeats(current, tempo) + direction / session.division);
+              const value = String(Number(visibleSeconds(current, beats, tempo).toFixed(8)));
               const control = { value };
               apply(control);
               return control.value;

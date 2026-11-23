@@ -35,17 +35,13 @@ export default {
   "workspace.document.compatibility.newerDescription":
     "Made with Redux {version}; this app is {current}. Some fields may be ignored.",
   "workspace.document.compatibility.openAnyway": "Open anyway",
-  "workspace.document.occupancy.title": "Chart in use",
+  "workspace.document.occupancy.title": "Unable to open chart",
   "workspace.document.occupancy.description":
-    '"{name}" is already open in another editor window. If that window crashed, its lock may be stale.',
-  "workspace.document.occupancy.detail":
-    "Other window: frontend port {frontend}, backend port {backend}",
-  "workspace.document.occupancy.unknownPort": "unknown",
-  "workspace.document.occupancy.frontend": "Release other window",
-  "workspace.document.occupancy.backend": "Clear backend record",
-  "workspace.document.occupancy.reconcile": "Repair and retry",
-  "workspace.document.occupancy.clearFailed":
-    "The backend did not release the lock. Try clearing this chart's backend record, or cancel opening.",
+    '"{name}" may be unavailable because another RPE Redux instance is using it. Force opening may close the other instance.',
+  "workspace.document.occupancy.forceOpen": "Force open",
+  "workspace.document.occupancy.cancel": "Do not open",
+  "workspace.document.occupancy.forceFailed":
+    "This chart could not be force-opened. Close the editor using it and try again.",
   "workspace.document.error.createCancelled": "Document creation was cancelled by an extension.",
   "workspace.document.error.openCancelled": "Document opening was cancelled by an extension.",
   "workspace.document.error.closeCancelled": "Document closing was cancelled by an extension.",
@@ -168,7 +164,6 @@ export default {
   "workspace.welcome.importDialog.external": "Choose another chart",
   "workspace.welcome.drop.title": "Drop to import",
   "workspace.welcome.drop.imported": "Imported {name}",
-  "workspace.welcome.drop.extensionDetected": "Detected Extension: {name}",
   "workspace.welcome.drop.skinDetected": "Detected note skin: {name}",
   "workspace.welcome.drop.openSettings": "Open settings",
   "workspace.welcome.drop.invalidPackage": "The package {name} could not be validated.",
@@ -727,7 +722,7 @@ export default {
     "The tree lists judge lines and groups. Select a line to open its properties; selecting a group shows group actions instead of pretending the group is one line.",
   "tutorial.lines.edit.title": "Edit line properties",
   "tutorial.lines.edit.body":
-    "Edit the name, anchors, z-order, mask, texture, and BPM factor in the properties face. These are chart values and can affect every note and event attached to the line.",
+    "Edit the name, anchors, z-order, mask, texture, and Hold hit-effect rate in the properties face. These are chart values and can affect every note and event attached to the line.",
   "tutorial.lines.organize.title": "Organise groups and parents",
   "tutorial.lines.organize.body":
     "Use groups for structure and parent relationships for inherited motion. A multi-selection exposes only safe shared fields; mixed values are written only after you choose a replacement.",

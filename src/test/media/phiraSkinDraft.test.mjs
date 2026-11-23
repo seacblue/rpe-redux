@@ -81,6 +81,8 @@ test("a complete draft writes every canonical Phira file", () => {
   assert.deepEqual(parsed.info.holdAtlas, [3, 3]);
   assert.deepEqual(parsed.info.holdAtlasMH, [4, 4]);
   assert.deepEqual(parsed.info.hitFx, [4, 2]);
+  assert.deepEqual(parsed.manifest.notes.tap, { file: "click.png" });
+  assert.deepEqual(parsed.manifest.notes.tap_highlight, { file: "click_mh.png" });
   assert.deepEqual(missingPhiraWorkbenchSlots(completeDraft()), []);
 });
 

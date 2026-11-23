@@ -1,5 +1,6 @@
 /** Orchestrates one offline chart recording within the existing editor window. */
 import { TempoMap } from "../../../../../core/global/chart/timing/tempo.ts";
+import { registeredChartDocument } from "../../../../../core/global/chart/streaming/chartDocumentRegistry.ts";
 import { yieldToRenderer } from "../../../../../core/utils/yieldToRenderer.ts";
 import {
   beginDesktopRecording,
@@ -90,13 +91,20 @@ export function captureRecording(
   ) {
     throw new Error("recording_invalid_options");
   }
-  const chart = structuredClone(runtime.session.chart);
-  const tempo = new TempoMap(chart.BPMList);
+  const source = runtime.session.chart;
+  // A paged document can hold placeholder lines whose notes are not loaded. A
+  // structured clone of that facade would silently record `notes: []`, so the
+  // snapshot materializes every line first, exactly like the save path.
+  const document = registeredChartDocument(source);
+  const chart = document
+    ? document.materializeAll().then((complete) => structuredClone(complete))
+    : Promise.resolve(structuredClone(source));
+  const tempo = new TempoMap(source.BPMList);
   const timeline = new RecordingTimeline({
     start: options.start,
     end: options.end,
     fps: options.fps,
-    chartOffsetMs: Number(chart.META.offset ?? 0),
+    chartOffsetMs: Number(source.META.offset ?? 0),
     speed: options.speed,
   });
   const preview = runtime.preview;
@@ -123,15 +131,17 @@ export function captureRecording(
     audioOnly
       ? Promise.resolve(null)
       : snapshotRecordingImages(runtime.providers.preview.images, signal),
-    captureRecordingAudio(
-      timeline,
-      chart,
-      tempo,
-      music,
-      runtime.providers.preview.hitSounds,
-      signal,
-      options.musicVolume,
-      options.effectsVolume,
+    chart.then((complete) =>
+      captureRecordingAudio(
+        timeline,
+        complete,
+        tempo,
+        music,
+        runtime.providers.preview.hitSounds,
+        signal,
+        options.musicVolume,
+        options.effectsVolume,
+      ),
     ),
   ]).then(([images, audio]) => {
     if (images.status === "rejected") {
@@ -157,7 +167,7 @@ export async function runRecording(
   progress: (stage: RecordingStage, fraction: number | null) => void,
   partialReady: (path: string) => void,
 ): Promise<void> {
-  const { chart, tempo, timeline, reference, music } = snapshot;
+  const { tempo, timeline, reference, music } = snapshot;
   let native: DesktopRecording | null = null;
   let renderer: RecordingRenderer | null = null;
   let encoder: RecordingVideoEncoder | null = null;
@@ -186,6 +196,8 @@ export async function runRecording(
     checkCancelled(signal);
     const captured = await snapshot.pending;
     images = captured[0];
+    checkCancelled(signal);
+    const chart = await snapshot.chart;
     checkCancelled(signal);
     native = await beginDesktopRecording({
       path: options.path,

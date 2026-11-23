@@ -26,15 +26,15 @@ export interface DockBounds {
 export interface DockViewport {
   readonly origin: number;
   readonly judgementOffset: number;
-  readonly tempo: { seconds(beat: number, factor: number): number };
+  readonly tempo: { seconds(beat: number): number };
   scaleForArea(area: TimelineArea): number;
 }
 
 /** Where the dock sits: a chart-time anchor plus its distance from the panel edge. */
 export interface DockAnchor {
-  /** Absolute time under the dock, in seconds on `factor`. */
+  /** Absolute time under the dock, in seconds on the chart's global BPM grid. */
   readonly seconds: number;
-  /** Per-line time factor used by `seconds`. */
+  /** Retained authoring factor; time never scales by it. */
   readonly factor: number;
   /** Horizontal distance from the selection's left panel edge. */
   readonly offsetX: number;
@@ -118,24 +118,22 @@ export function dockBoundsForLines(
 }
 
 /** Absolute time at one canvas row, using the timeline's own projection. */
-export function dockSecondsAtRow(input: DockInput, row: number, factor: number): number {
+export function dockSecondsAtRow(input: DockInput, row: number): number {
   const { viewport } = input;
   const scale = viewport.scaleForArea(input.area);
   if (!(scale > 0) || !Number.isFinite(scale)) {
-    return viewport.tempo.seconds(viewport.origin, factor);
+    return viewport.tempo.seconds(viewport.origin);
   }
   const offset = viewport.judgementOffset ?? DEFAULT_JUDGEMENT_OFFSET;
-  return viewport.tempo.seconds(viewport.origin, factor) + (input.height - offset - row) / scale;
+  return viewport.tempo.seconds(viewport.origin) + (input.height - offset - row) / scale;
 }
 
 /** Canvas row for one absolute time; the inverse of `dockSecondsAtRow`. */
-export function dockRowAtSeconds(input: DockInput, seconds: number, factor: number): number {
+export function dockRowAtSeconds(input: DockInput, seconds: number): number {
   const { viewport } = input;
   const scale = viewport.scaleForArea(input.area);
   const offset = viewport.judgementOffset ?? DEFAULT_JUDGEMENT_OFFSET;
-  return (
-    input.height - offset - (seconds - viewport.tempo.seconds(viewport.origin, factor)) * scale
-  );
+  return input.height - offset - (seconds - viewport.tempo.seconds(viewport.origin)) * scale;
 }
 
 /**
@@ -163,7 +161,7 @@ export function dockPlacement(
     input.height - DOCK_STACK_HEIGHT,
   );
   return {
-    anchor: { seconds: dockSecondsAtRow(input, y, factor), factor, offsetX: x - bounds.left },
+    anchor: { seconds: dockSecondsAtRow(input, y), factor, offsetX: x - bounds.left },
     x,
     y,
   };
@@ -178,7 +176,7 @@ export function dockPosition(
   return {
     x: clamp(bounds.left + anchor.offsetX, 8, input.width - DOCK_RIGHT_CLEARANCE),
     y: clamp(
-      dockRowAtSeconds(input, anchor.seconds, anchor.factor),
+      dockRowAtSeconds(input, anchor.seconds),
       DOCK_TOP_MIN,
       input.height - DOCK_STACK_HEIGHT,
     ),

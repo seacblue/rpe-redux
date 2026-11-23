@@ -27,10 +27,10 @@ import {
 } from "./chartStreamTypes.ts";
 
 /** Seconds for a beat tuple, or null when the tuple is malformed. */
-function secondsOf(value: unknown, tempo: TempoMap, factor: number): number | null {
+function secondsOf(value: unknown, tempo: TempoMap): number | null {
   try {
     const beat = Array.isArray(value) ? beatValue(value) : Number(value);
-    return Number.isFinite(beat) ? tempo.seconds(beat, factor) : null;
+    return Number.isFinite(beat) ? tempo.seconds(beat) : null;
   } catch {
     return null;
   }
@@ -98,13 +98,12 @@ function mergeIntervals(intervals: readonly [number, number][]): [number, number
   return merged;
 }
 
-/** Read the line's `bpmfactor` with the tempo map's own fallback rule. */
-function lineFactor(line: Record<string, unknown>): number {
-  const value = Number(line.bpmfactor ?? 1);
-  return Number.isFinite(value) && value > 0 ? value : 1;
-}
-
-/** Summarize one line without retaining any note or event object. */
+/**
+ * Summarize one line without retaining any note or event object.
+ *
+ * Every authored beat resolves through the chart's global `BPMList`. A line's
+ * `bpmfactor` is not a time scale, so it does not appear in these bounds.
+ */
 export function summarizeChartLine(
   line: unknown,
   index: number,
@@ -135,7 +134,6 @@ export function summarizeChartLine(
     };
   }
 
-  const factor = lineFactor(line);
   const bounds = { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY, timed: false };
   const intervals: [number, number][] = [];
   let eventCount = 0;
@@ -156,8 +154,8 @@ export function summarizeChartLine(
     if (!isChartObjectId(note.id)) {
       allIds = false;
     }
-    const start = secondsOf(note.startTime, tempo, factor);
-    const end = secondsOf(note.endTime, tempo, factor);
+    const start = secondsOf(note.startTime, tempo);
+    const end = secondsOf(note.endTime, tempo);
     extend(bounds, start);
     extend(bounds, end);
     const visibleTime = Number(note.visibleTime ?? 999999);
@@ -192,8 +190,8 @@ export function summarizeChartLine(
         if (!isChartObjectId(event.id)) {
           allIds = false;
         }
-        const start = secondsOf(event.startTime, tempo, factor);
-        const end = secondsOf(event.endTime, tempo, factor);
+        const start = secondsOf(event.startTime, tempo);
+        const end = secondsOf(event.endTime, tempo);
         extend(bounds, start);
         extend(bounds, end);
         addInterval(intervals, start, end);

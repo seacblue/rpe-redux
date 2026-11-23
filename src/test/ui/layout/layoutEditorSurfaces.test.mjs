@@ -20,7 +20,7 @@ const catalog = read("frontend/overlays/layoutEditor/layoutEditCatalog.ts");
 const targets = read("frontend/overlays/layoutEditor/layoutEditTargets.ts");
 const editSurface = read("frontend/app/layout/useLayoutEditSurface.ts");
 const toolbarRow = read("frontend/chrome/toolbar/ToolbarRow.tsx");
-const scrollbar = read("frontend/chrome/toolbar/ToolbarScrollbar.tsx");
+const scrollControls = read("frontend/chrome/toolbar/ToolbarScrollControls.tsx");
 const sidebar = read("frontend/chrome/sidebar/Sidebar.tsx");
 const shell = read("frontend/app/Shell.tsx");
 const styles = read("frontend/overlays/layoutEditor/layoutEditor.less");
@@ -112,12 +112,12 @@ test("nothing is wrapped: the real cell keeps its own geometry", () => {
   assert.match(sidebar, /selector: "\.sidebar-item"/u);
 });
 
-test("a strip that overflows still shows its scrollbar", () => {
-  // A bar that hides itself while the rows fit measures zero wide, so sizing the
-  // track from that measurement leaves the thumb filling the whole track.
-  assert.match(scrollbar, /const range = sharedScrollRange\(linesRef\.current\)/u);
-  assert.match(scrollbar, /const width = bar\.clientWidth \+ range;/u);
-  assert.match(scrollbar, /requestAnimationFrame\(syncTrack\)/u);
+test("a strip that overflows still shows its scroll controls", () => {
+  assert.match(scrollControls, /readToolbarOverflowState/u);
+  assert.match(scrollControls, /canScrollStart/u);
+  assert.match(scrollControls, /canScrollEnd/u);
+  assert.match(scrollControls, /icon="chevronLeft"/u);
+  assert.match(scrollControls, /icon="chevronRight"/u);
 });
 
 test("the overlay draws no copy of the toolbar or the rail", () => {

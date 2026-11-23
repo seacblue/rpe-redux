@@ -474,6 +474,21 @@ export function createDocumentRuntime(options: {
   const documentLeases = createDocumentLeaseManager({
     library: async () => (await localService())?.library ?? null,
   });
+  /** Tries the two force-open cleanup levels in order, returning a new lease when possible. */
+  const forceAcquireDocumentLease = async (
+    result: Extract<Awaited<ReturnType<typeof documentLeases.tryAcquire>>, { status: "occupied" }>,
+    documentKey: string | null,
+    chartName: string,
+  ): Promise<DocumentLeaseHandle | null> => {
+    await documentLeases.clearFrontend(result.owner.id);
+    const afterFrontend = await documentLeases.tryAcquire(documentKey, chartName);
+    if (afterFrontend.status === "acquired") {
+      return afterFrontend.handle;
+    }
+    await documentLeases.clearBackend(result.documentKey);
+    const afterBackend = await documentLeases.tryAcquire(documentKey, chartName);
+    return afterBackend.status === "acquired" ? afterBackend.handle : null;
+  };
   /** Acquires cross-instance occupancy, prompting while the document is occupied. */
   const acquireDocumentLease = async (
     documentKey: string | null,
@@ -484,51 +499,23 @@ export function createDocumentRuntime(options: {
       if (result.status === "acquired") {
         return result.handle;
       }
-      const frontendPort =
-        result.owner.frontendPort && result.owner.frontendPort > 0
-          ? String(result.owner.frontendPort)
-          : t("workspace.document.occupancy.unknownPort");
-      const backendPort =
-        result.backendPort > 0
-          ? String(result.backendPort)
-          : t("workspace.document.occupancy.unknownPort");
-      const choice = await requestChoice<"frontend" | "backend" | "reconcile">({
+      const forceOpen = await requestConfirm({
         title: t("workspace.document.occupancy.title"),
         description: t("workspace.document.occupancy.description", {
           name: result.chartName,
         }),
-        detail: t("workspace.document.occupancy.detail", {
-          frontend: frontendPort,
-          backend: backendPort,
-        }),
-        entries: ["frontend", "backend", "reconcile"],
-        actionsClassName: "modal-actions-inline",
-        label: (entry) =>
-          entry === "frontend"
-            ? t("workspace.document.occupancy.frontend")
-            : entry === "backend"
-              ? t("workspace.document.occupancy.backend")
-              : t("workspace.document.occupancy.reconcile"),
+        label: t("workspace.document.occupancy.forceOpen"),
+        cancelLabel: t("workspace.document.occupancy.cancel"),
       });
-      if (!choice) {
+      if (!forceOpen) {
         return null;
       }
-      if (choice === "frontend") {
-        const cleared = await documentLeases.clearFrontend(result.owner.id);
-        if (!cleared) {
-          showToast(t("workspace.document.occupancy.clearFailed"), "warning");
-          return null;
-        }
-      } else if (choice === "backend") {
-        await documentLeases.clearBackend(result.documentKey);
-      } else {
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          if (await documentLeases.reconcile(result.documentKey)) {
-            break;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 250));
-        }
+      const forcedHandle = await forceAcquireDocumentLease(result, documentKey, chartName);
+      if (forcedHandle) {
+        return forcedHandle;
       }
+      showToast(t("workspace.document.occupancy.forceFailed"), "warning");
+      return null;
     }
   };
   /** Validates a candidate and offers conversion when the chart format needs it. */

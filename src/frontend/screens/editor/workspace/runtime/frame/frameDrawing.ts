@@ -14,7 +14,7 @@ import type { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
 import type { TrajectoryPanel } from "../../../inspector/trajectory/trajectoryPanel.ts";
 import type { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import type { Preview } from "../../preview/scene/preview.ts";
-import { selectionMapForSession } from "../../preview/interaction/previewSelection.ts";
+import { previewSelectionForFrame } from "../../preview/interaction/previewSelectionMap.ts";
 import { EditorRenderScheduler, type RenderTiming } from "./renderScheduler.ts";
 import { freeCameraState } from "../../stage/freeCamera/freeCamera.ts";
 import { isPerformanceHudVisible } from "../../../../../overlays/performance/performanceHud.ts";
@@ -96,7 +96,12 @@ export interface FrameDrawingOptions {
   audioAnalysis: Pick<AudioAnalysis, "draw">;
   realtimePreview: Pick<
     Preview,
-    "duration" | "visible" | "draw" | "invalidationRevision" | "authoringRegionVisible"
+    | "duration"
+    | "visible"
+    | "draw"
+    | "invalidationRevision"
+    | "authoringRegionVisible"
+    | "hasActiveHitEffects"
   > &
     Parameters<TrajectoryPanel["tick"]>[3];
   offsetSeconds(): number;
@@ -145,7 +150,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       if (refreshHud) {
         runtime.batchControls.sync();
       }
-      const beat = tempo.beat(frameSeconds, session.line?.bpmfactor ?? 1);
+      const beat = tempo.beat(frameSeconds);
       session.editSeconds = Math.max(0, frameSeconds);
       if (refreshHud) {
         runtime.updateLineInfo();
@@ -186,10 +191,11 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
       const viewSeconds = trajectoryView?.seconds ?? frameSeconds;
       const previewChartChanged = viewChart !== previousPreviewChart;
       const previewSession = runtime.timeline.getPreviewSession();
-      const previewSelection = viewSession.selection;
+      const previewSelection = previewSelectionForFrame(viewSession);
       const previewSessionChanged = previewSession !== previousPreviewSession;
       const previewSelectionChanged = previewSelection !== previousPreviewSelection;
       const previewSecondsChanged = viewSeconds !== previousPreviewSeconds;
+      const previewAnimationActive = runtime.realtimePreview.hasActiveHitEffects();
       previousPreviewChart = viewChart;
       previousPreviewSession = previewSession;
       previousPreviewSelection = previewSelection;
@@ -211,6 +217,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
             runtime.realtimePreview.visible || Boolean(trajectoryView) || cameraPreview,
           contentRefreshRate,
           previewMarqueeActive: Boolean(runtime.timeline.gestures.previewMarquee),
+          previewSelectionActive: selectionOverlayActive,
           previewChart: viewChart,
           previewRevision: runtime.realtimePreview.invalidationRevision,
           previewContentRevision:
@@ -226,6 +233,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
           beatsPerPixel: runtime.timeline.viewport.beatsPerPixel(),
           previewSession,
           previewSelection,
+          previewAnimationActive,
           authoringRegionVisible: runtime.authoringRegionVisible(),
         },
         {
@@ -280,7 +288,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                 tempo,
                 viewSeconds,
                 viewSession.lineIndex,
-                selectionMapForSession(viewSession),
+                previewSelection,
                 {
                   deferHeavyFrame:
                     !runtime.audio.playing && previewHighDensity && !work.previewInvalidated,
@@ -295,6 +303,7 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
                   // edits, so the preview needs the content revision to repaint.
                   documentRevision:
                     viewChart === viewSession.chart ? viewSession.contentRevision : undefined,
+                  effectTime: request.now / 1000,
                 },
               );
               runtime.realtimePreview.visible = visible;

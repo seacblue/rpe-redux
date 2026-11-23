@@ -13,7 +13,6 @@ import type { TempoMap } from "../timing/tempo.ts";
 export function composeLinearNoiseTracks(
   tracks: readonly JudgeLineEvent[][],
   tempo: TempoMap | undefined,
-  factor: number,
   appear: Beat,
 ): JudgeLineEvent[] | null {
   if (!tempo) {
@@ -54,9 +53,9 @@ export function composeLinearNoiseTracks(
   if (points.length < 2 || points[0][0] < beatValue(appear)) {
     return null;
   }
-  const runtime = tracks.map((events) => new EventTrack(events, tempo, factor));
+  const runtime = tracks.map((events) => new EventTrack(events, tempo));
   const value = (beat: Beat) => {
-    const seconds = tempo.seconds(beat, factor);
+    const seconds = tempo.seconds(beat);
     return runtime.reduce((sum, track) => sum + Number(track.value(seconds)), 0);
   };
   return points.slice(0, -1).map(([, start], index) => ({

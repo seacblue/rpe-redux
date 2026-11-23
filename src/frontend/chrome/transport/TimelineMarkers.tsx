@@ -45,7 +45,7 @@ function chartSecondsAtBeat(
   beat: number,
 ): number {
   try {
-    const seconds = tempo.seconds(beat, 1);
+    const seconds = tempo.seconds(beat);
     return Number.isFinite(seconds) ? seconds : 0;
   } catch {
     return 0;
@@ -270,7 +270,6 @@ export class TimelineMarkers {
     const left = canvas.offsetLeft;
     const top = canvas.offsetTop;
     const lineIndex = session.lineIndex;
-    const factor = session.line?.bpmfactor ?? 1;
     const signature = [
       markers
         .map((marker) => `${marker.id ?? ""}:${marker.beat}:${marker.name}:${marker.color ?? ""}`)
@@ -279,7 +278,6 @@ export class TimelineMarkers {
       top,
       height,
       lineIndex,
-      factor,
       area,
       timeline.viewport.origin,
       timeline.viewport.scale,

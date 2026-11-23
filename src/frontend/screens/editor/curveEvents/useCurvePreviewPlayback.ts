@@ -81,12 +81,11 @@ export function useCurvePreviewPlayback(options: {
         editorLoopRange.set(null);
         return;
       }
-      const factor = runtime.session.line?.bpmfactor ?? 1;
       const offset = Number(runtime.session.chart.META.offset ?? 0) / 1000;
       const tempo = runtime.timeline.viewport.tempo;
       editorLoopRange.set({
-        start: tempo.seconds(start, factor) + offset,
-        end: tempo.seconds(end, factor) + offset,
+        start: tempo.seconds(start) + offset,
+        end: tempo.seconds(end) + offset,
       });
     };
     publish();

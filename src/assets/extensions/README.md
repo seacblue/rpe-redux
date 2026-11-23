@@ -19,6 +19,4 @@ The host validates the manifest and capability names. Catalog keys are bare; `ex
 
 `builtin.official` registers the requested note transforms: `MirrorY`, `MirrorMid`, `SideSwitch`, `SideUp`, `SideDown`, `ToReal`, `ToFake`, `ToTap`, `ToFlick`, `ToDrag`, and `ToHold`. It is intentionally readable: copy the package into a user Extension and change one transform to learn the SDK boundary.
 
-`builtin.pet` is an in-app pet assembled from `context.assets` and `context.ui.registerSurface`. It ships four SVG frames, stays draggable in the window, and opens an anchored bubble when clicked. Enable it from Extension settings; copy the folder as a starting point for a distributable package.
-
-See [Extensions](../../../docs/extensions.md) for the full contract.
+`builtin.official` is the only built-in package. Packages a user installs or drops beside the application live in the host's `extensions/` roots and are not part of this tree; see [Extensions](../../../docs/extensions.md) for the full contract.

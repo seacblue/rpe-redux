@@ -15,6 +15,7 @@ import { parseExternalChartText } from "../../../core/global/chart/formats/exter
 import type { ExternalChartMetadata } from "../../../core/global/chart/formats/common.ts";
 import { parseInfo } from "../../../core/global/document/info.ts";
 import type { AssetMap } from "../../../core/global/document/types.ts";
+import type { NamedBinaryFile } from "../../../core/global/document/import.ts";
 import { readZip } from "../../../core/utils/zip.ts";
 import { isDesktop } from "../../../core/platform/environment.ts";
 import { startLongTask, finishLongTask } from "../../../core/state/longTasks.ts";
@@ -237,9 +238,12 @@ function archiveChartName(
   throw new Error(t("workspace.welcome.external.multipleCharts", { names: candidates.join(", ") }));
 }
 
-/** Load a chart from a ZIP archive in memory. */
-async function loadArchive(path: string): Promise<LoadedExternalChart | null> {
-  const bytes = await readPickedBytes(path);
+/** Load a chart from a ZIP archive using an arbitrary byte source. */
+async function loadArchiveBytes(
+  path: string,
+  readBytes: () => Promise<Uint8Array>,
+): Promise<LoadedExternalChart | null> {
+  const bytes = await readBytes();
   if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
     return null;
   }
@@ -273,6 +277,11 @@ async function loadArchive(path: string): Promise<LoadedExternalChart | null> {
     warnings: [],
     archive: true,
   };
+}
+
+/** Load a chart from a native path through the desktop adapter. */
+async function loadArchive(path: string): Promise<LoadedExternalChart | null> {
+  return loadArchiveBytes(path, () => readPickedBytes(path));
 }
 
 /** Load a chart from a folder or a loose file through the native scanner. */
@@ -312,6 +321,60 @@ async function loadFolder(path: string): Promise<LoadedExternalChart> {
   };
 }
 
+/** Load one browser-picked external chart and its optional sidecar media. */
+async function loadBrowserExternalFiles(
+  files: readonly NamedBinaryFile[],
+): Promise<LoadedExternalChart | null> {
+  if (!files.length) {
+    return null;
+  }
+  if (files.length === 1 && /\.(?:zip|pez)$/i.test(files[0].name)) {
+    const bytes = new Uint8Array(await files[0].arrayBuffer());
+    return loadArchiveBytes(files[0].name, async () => bytes);
+  }
+
+  const entries = await Promise.all(
+    files.map(async (file) => ({
+      file,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    })),
+  );
+  const sidecars = entries
+    .filter(({ file }) => isInfoEntry(file.name))
+    .map(({ file, bytes }) => ({ name: file.name, text: new TextDecoder().decode(bytes) }));
+  const sidecar = sidecarMetadata(sidecars);
+  const chart = entries.find(({ file, bytes }) => {
+    if (!isChartEntry(file.name)) {
+      return false;
+    }
+    return parseExternalChartText(new TextDecoder().decode(bytes), sidecar.metadata) !== null;
+  });
+  if (!chart) {
+    return null;
+  }
+
+  const selected = selectedMediaNames(
+    entries.map(({ file }) => file.name),
+    sidecar.metadata,
+    chart.file.name,
+  );
+  const assets: AssetMap = new Map();
+  for (const { file, bytes } of entries) {
+    if (file !== chart.file && !isInfoEntry(file.name) && selected.has(file.name)) {
+      assets.set(file.name, bytes);
+    }
+  }
+  return {
+    chartPath: `browser:${chart.file.name}`,
+    chartName: chart.file.name,
+    chartText: new TextDecoder().decode(chart.bytes),
+    assets,
+    sidecars,
+    warnings: [],
+    archive: false,
+  };
+}
+
 /** Resolve a metadata media name against the names the asset map actually has. */
 function assetName(assets: AssetMap, name: string | undefined): string | undefined {
   return resolveMediaName([...(assets.names?.() ?? assets.keys())], name);
@@ -332,28 +395,11 @@ function fillMediaReferences(
     "";
 }
 
-/** Read, convert and import one external chart path. */
-export async function importExternalPath(
-  path: string,
+/** Convert and import one already-loaded external chart. */
+async function importLoadedExternalChart(
+  loaded: LoadedExternalChart,
   deps: ExternalImportDeps,
 ): Promise<string | null> {
-  if (!isDesktop()) {
-    return null;
-  }
-  const archive = /\.(?:zip|pez)$/i.test(path);
-  let loaded: LoadedExternalChart | null;
-  try {
-    loaded = archive ? await loadArchive(path) : await loadFolder(path);
-  } catch (error) {
-    // A normal RPE PEZ is not an external chart; let the native opener own it.
-    if (archive) {
-      return null;
-    }
-    throw error;
-  }
-  if (!loaded) {
-    return null;
-  }
   const sidecar = sidecarMetadata(loaded.sidecars);
   const displayName = sidecar.metadata.name ?? chartStem(loaded.chartName);
   const converted = parseExternalChartText(loaded.chartText, {
@@ -461,6 +507,41 @@ export async function importExternalPath(
   // failed, so reaching here means the import completed.
   finishLongTask(taskId, { status: "completed" });
   return projectId;
+}
+
+/** Read, convert and import one external chart path through the desktop host. */
+export async function importExternalPath(
+  path: string,
+  deps: ExternalImportDeps,
+): Promise<string | null> {
+  if (!isDesktop()) {
+    return null;
+  }
+  const archive = /\.(?:zip|pez)$/i.test(path);
+  let loaded: LoadedExternalChart | null;
+  try {
+    loaded = archive ? await loadArchive(path) : await loadFolder(path);
+  } catch (error) {
+    // A normal RPE PEZ is not an external chart; let the native opener own it.
+    if (archive) {
+      return null;
+    }
+    throw error;
+  }
+  return loaded ? importLoadedExternalChart(loaded, deps) : null;
+}
+
+/** Read and import official JSON or PEC files selected by a browser File picker. */
+export async function importExternalFiles(
+  files: readonly NamedBinaryFile[],
+  deps: ExternalImportDeps,
+): Promise<readonly string[] | null> {
+  const loaded = await loadBrowserExternalFiles(files);
+  if (!loaded) {
+    return null;
+  }
+  const projectId = await importLoadedExternalChart(loaded, deps);
+  return projectId ? [projectId] : [];
 }
 
 /** Ask for one external chart and import it; false when cancelled or unsupported. */

@@ -44,7 +44,7 @@ test("square size follows the note width and Phira's size randomness", () => {
     1,
     1,
   );
-  const baseSide = 200 * (1 / 44 / (2 * PHIRA_NOTE_WIDTH_RATIO));
+  const baseSide = 200 * (1 / 44 / PHIRA_NOTE_WIDTH_RATIO);
   for (const particle of particles) {
     assert.ok(particle.radius >= baseSide * 0.69 * 0.5);
     assert.ok(particle.radius <= baseSide * 1.01 * 0.5);

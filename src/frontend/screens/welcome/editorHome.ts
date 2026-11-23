@@ -18,7 +18,7 @@ import {
   confirmExportWarnings,
   showExportDialog,
 } from "../editor/workspace/document/export/exportPrompt.ts";
-import { openSettings } from "../settings/settingsWindowController.ts";
+import { openSettings, requestLocalPackageReview } from "../settings/settingsWindowController.ts";
 import type { AssetMap, EditorCandidate } from "../../../core/global/document/types.ts";
 import type { LibraryProjectRef } from "../../../core/global/library/types.ts";
 import type { Chart } from "../../../core/global/chart/chart.ts";
@@ -92,10 +92,12 @@ function dropName(item: DropClassification): string {
 }
 
 /**
- * Tell the user which package was detected and offer the owning settings page.
+ * Route a dropped Extension package into the ordinary review dialog.
  *
- * The classifier only routes; installation and validation stay on the page so
- * a dropped package cannot bypass the existing consent or package checks.
+ * The classifier only identifies the package; installation still reads the
+ * bytes, shows the capability consent, and writes the managed root through the
+ * same dialog the Install button uses. An invalid package opens nothing and
+ * explains why instead.
  */
 function offerPackageSettings(item: DropClassification, kind: "extension" | "skin"): void {
   const name = dropName(item);
@@ -106,18 +108,17 @@ function offerPackageSettings(item: DropClassification, kind: "extension" | "ski
     });
     return;
   }
+  if (kind === "extension") {
+    requestLocalPackageReview(item.path);
+    return;
+  }
   showToast({
-    message: t(
-      kind === "extension"
-        ? "workspace.welcome.drop.extensionDetected"
-        : "workspace.welcome.drop.skinDetected",
-      { name },
-    ),
+    message: t("workspace.welcome.drop.skinDetected", { name }),
     level: "info",
     actions: [
       {
         label: t("workspace.welcome.drop.openSettings"),
-        onSelect: () => openSettings(kind === "extension" ? "extensions" : "appearance.skin"),
+        onSelect: () => openSettings("appearance.skin"),
       },
     ],
   });

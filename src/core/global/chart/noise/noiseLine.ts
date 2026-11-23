@@ -15,7 +15,7 @@ import {
 } from "../chart.ts";
 import type { BlockArea, BlockAreaInterval } from "./blockArea.ts";
 import { clearLineNoiseConflicts, lineNoiseConflicts } from "./lineNoiseConflicts.ts";
-import { beatValue, fromNumber, isBeat, type Beat } from "../timing/beat.ts";
+import { beatCopy, beatValue, isBeat, type Beat } from "../timing/beat.ts";
 import { TempoMap } from "../timing/tempo.ts";
 import { offsetNoiseTrack, staticNoiseParent } from "./staticNoiseParent.ts";
 import { composeLinearNoiseTracks } from "./linearNoiseTracks.ts";
@@ -156,7 +156,6 @@ function eventSignature(event: JudgeLineEvent): string {
 function composeAlignedTracks(
   tracks: JudgeLineEvent[][],
   tempo: TempoMap | undefined,
-  factor: number,
   appear: Beat,
 ): JudgeLineEvent[] {
   if (tracks.length <= 1) {
@@ -169,7 +168,7 @@ function composeAlignedTracks(
       track.every((event, index) => eventSignature(event) === eventSignature(reference[index])),
   );
   if (!aligned) {
-    const linear = composeLinearNoiseTracks(tracks, tempo, factor, appear);
+    const linear = composeLinearNoiseTracks(tracks, tempo, appear);
     if (linear) {
       return linear;
     }
@@ -312,7 +311,6 @@ export function noiseAreaForLine(
   // The line's anchor only offsets its own hidden texture around the transform
   // origin. A noise area is a world-space rectangle centered on that same
   // origin, so the anchor does not change the area's transform tracks.
-  const factor = Number(line.bpmfactor ?? 1);
   for (const events of [line.extended?.scaleXEvents, line.extended?.scaleYEvents]) {
     if (events?.some((event) => event.trajectory)) {
       throw new Error("noise line requires size trajectory conversion");
@@ -345,7 +343,6 @@ export function noiseAreaForLine(
     composeAlignedTracks(
       layers.flatMap((layer) => (layer?.[type]?.length ? [layer[type]!] : [])),
       tempo,
-      factor,
       settings.area.appearTime,
     );
   let xEvents = eventsFor("moveXEvents");
@@ -415,12 +412,7 @@ export function noiseAreaForLine(
           dynamic.push(offsetNoiseTrack(events, weight, 0, start));
         }
       }
-      return offsetNoiseTrack(
-        composeAlignedTracks(dynamic, tempo, factor, start),
-        1,
-        offset,
-        start,
-      );
+      return offsetNoiseTrack(composeAlignedTracks(dynamic, tempo, start), 1, offset, start);
     };
     xEvents = projectAxis(c, -s, parent.x, "xWeight");
     yEvents = projectAxis(s, c, parent.y, "yWeight");
@@ -449,7 +441,7 @@ export function noiseAreaForLine(
         }
       }
       rotateEvents = offsetNoiseTrack(
-        composeAlignedTracks(dynamic, tempo, factor, start),
+        composeAlignedTracks(dynamic, tempo, start),
         1,
         offset,
         start,
@@ -463,20 +455,18 @@ export function noiseAreaForLine(
       );
     }
   }
-  if (factor !== 1 && !tempo) {
-    throw new Error("noise line requires the chart tempo map");
-  }
-  const time = (beat: Beat): Beat =>
-    factor === 1 ? [...beat] : fromNumber(tempo!.beat(tempo!.seconds(beat, factor)));
+  // Notes, events and shader effects all use the chart's global BPM grid, so a
+  // line's authored beats need no rescaling here. `bpmfactor` only changes the
+  // Hold hit-effect pulse rate and leaves every copied event beat untouched.
   const copy = (events: readonly JudgeLineEvent[] | undefined) =>
     (events ?? []).map((event) => ({
       ...structuredClone(event),
-      startTime: time(event.startTime),
-      endTime: time(event.endTime),
+      startTime: beatCopy(event.startTime as Beat),
+      endTime: beatCopy(event.endTime as Beat),
     }));
   const zeroSize = (start: Beat, end: Beat): JudgeLineEvent => ({
-    startTime: [...start],
-    endTime: [...end],
+    startTime: beatCopy(start),
+    endTime: beatCopy(end),
     start: 0,
     end: 0,
     easingType: 1,
@@ -484,17 +474,17 @@ export function noiseAreaForLine(
   const sizeTrack = (events: readonly JudgeLineEvent[] | undefined): JudgeLineEvent[] => {
     const copied = copy(events);
     if (!copied.length) {
-      return [zeroSize(time(settings.area.appearTime), time(settings.area.disappearTime))];
+      return [zeroSize(beatCopy(settings.area.appearTime), beatCopy(settings.area.disappearTime))];
     }
     const ordered = [...copied].sort(
       (left, right) => beatValue(left.startTime) - beatValue(right.startTime),
     );
     const first = ordered[0];
-    const appear = time(settings.area.appearTime);
+    const appear = beatCopy(settings.area.appearTime);
     // Empty size means hidden. RPE's own fallback is 1x1, so a late first size
     // event needs an explicit zero span before it.
     return beatValue(first.startTime) > beatValue(appear)
-      ? [zeroSize(appear, first.startTime), ...ordered]
+      ? [zeroSize(appear, beatCopy(first.startTime as Beat)), ...ordered]
       : ordered;
   };
   // The unit square makes the editor's size value and the exported RPE scale
@@ -503,13 +493,13 @@ export function noiseAreaForLine(
   const sizeY = sizeTrack(line.extended?.scaleYEvents);
   return {
     ...structuredClone(settings.area),
-    appearTime: time(settings.area.appearTime),
-    disappearTime: time(settings.area.disappearTime),
+    appearTime: beatCopy(settings.area.appearTime),
+    disappearTime: beatCopy(settings.area.disappearTime),
     activeIntervals: mergeActiveIntervals(
       settings.area.activeIntervals.map((interval) => ({
         ...interval,
-        startTime: time(interval.startTime),
-        endTime: time(interval.endTime),
+        startTime: beatCopy(interval.startTime),
+        endTime: beatCopy(interval.endTime),
       })),
     ),
     Name: line.Name ?? "",

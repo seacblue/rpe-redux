@@ -121,7 +121,7 @@ test("tolerates floating-point roundoff without losing a real trailing frame", (
   assert.equal(after.frameCount, 15);
 });
 
-test("formats and parses song times in both range modes", () => {
+test("formats and parses recording range song times", () => {
   assert.equal(formatRecordingTime(0), "0:00.000");
   assert.equal(formatRecordingTime(83.456), "1:23.456");
   assert.equal(formatRecordingTime(3723.5), "1:02:03.500");
@@ -340,7 +340,7 @@ test("captures chart, appearance, and sound settings at the request", async () =
   runtime.preview.hitEffectScale = 2;
   sounds.transport.volume = 0;
   const [images, audio] = await snapshot.pending;
-  assert.equal(snapshot.chart.META.name, oldName);
+  assert.equal((await snapshot.chart).META.name, oldName);
   assert.equal(snapshot.reference.defaultLineColor[0], 255);
   assert.equal(snapshot.reference.hitEffectScale, 1.25);
   assert.equal(audio.musicVolume, 0.4);

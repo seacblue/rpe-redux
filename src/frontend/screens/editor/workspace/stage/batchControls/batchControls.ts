@@ -544,13 +544,9 @@ export class BatchControls {
       unit: Math.max(0.35, canvas.clientHeight / 1080),
       factor: session.chart.judgeLineList?.[activeLineIndex]?.bpmfactor ?? 1,
       startBeat: this.timeline.viewport.tempo.beat(
-        this.timeline.viewport.tempo.seconds(
-          this.timeline.viewport.origin,
-          session.chart.judgeLineList?.[activeLineIndex]?.bpmfactor ?? 1,
-        ) +
+        this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin) +
           (canvas.clientHeight - (this.timeline.viewport.judgementOffset ?? 42) - point.y) /
             this.timeline.viewport.scaleForArea(area),
-        session.chart.judgeLineList?.[activeLineIndex]?.bpmfactor ?? 1,
       ),
       startX:
         typeof this.timeline.viewport.notePositionAt === "function"

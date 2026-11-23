@@ -50,6 +50,8 @@ const CONSENT_RISK_LABEL: Record<ExtensionMethodRisk, MessageKey> = {
 export interface ExtensionInstallDialogProps {
   /** Pre-filled GitHub link, used by a marketplace entry. */
   initialSource?: string;
+  /** A local folder or ZIP to review immediately, used by a package drop. */
+  initialLocalPath?: string;
   /** Catalog author shown when the manifest omits one. */
   fallbackAuthor?: string;
   /** Catalog description shown when the manifest omits one. */
@@ -66,6 +68,7 @@ export interface ExtensionInstallDialogProps {
  */
 export function ExtensionInstallDialog({
   initialSource = "",
+  initialLocalPath,
   fallbackAuthor,
   fallbackDescription,
   onClose,
@@ -79,7 +82,9 @@ export function ExtensionInstallDialog({
   const [busy, setBusy] = useState<"resolve" | "install" | null>(null);
   const [installedId, setInstalledId] = useState<string | null>(null);
   const [installedEnabled, setInstalledEnabled] = useState(true);
-  const [autoResolving, setAutoResolving] = useState(initialSource.trim().length > 0);
+  const [autoResolving, setAutoResolving] = useState(
+    initialSource.trim().length > 0 || Boolean(initialLocalPath?.trim()),
+  );
   const [consentSelection, setConsentSelection] = useState<ReadonlySet<ExtensionCapability>>(
     () => new Set(),
   );
@@ -88,8 +93,39 @@ export function ExtensionInstallDialog({
   const consent = consentDecision(declaredCapabilities, consentSelection);
   const sensitive = new Set(sensitiveCapabilities(declaredCapabilities));
 
-  // Resolve a pre-filled marketplace source once when the dialog opens.
+  // Resolve a pre-filled source once when the dialog opens: a marketplace link
+  // through the GitHub reader, or a dropped package through the local reader.
   useEffect(() => {
+    const localPath = initialLocalPath?.trim();
+    if (localPath) {
+      let active = true;
+      void resolveLocalExtension(localPath).then(
+        (next) => {
+          if (active) {
+            setSource(localPath);
+            setResolved(next);
+            setConsentSelection(defaultConsentSelection(next.manifest.capabilities ?? []));
+            setAutoResolving(false);
+          }
+        },
+        (error: unknown) => {
+          if (active) {
+            setFailure(
+              asExtensionInstallFailure(error, {
+                code: "unknown",
+                phase: "resolve",
+                source: localPath,
+                message: "Unable to read the local Extension package.",
+              }),
+            );
+            setAutoResolving(false);
+          }
+        },
+      );
+      return () => {
+        active = false;
+      };
+    }
     if (!initialSource.trim()) {
       return;
     }
@@ -119,7 +155,7 @@ export function ExtensionInstallDialog({
     return () => {
       active = false;
     };
-  }, [initialSource]);
+  }, [initialLocalPath, initialSource]);
 
   /** Read the repository and show the package for review. */
   const inspect = async () => {

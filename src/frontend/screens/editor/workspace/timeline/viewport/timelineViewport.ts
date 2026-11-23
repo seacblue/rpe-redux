@@ -58,8 +58,8 @@ export function beatsPerPixelAtOrigin(
   if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(origin)) {
     return Number.POSITIVE_INFINITY;
   }
-  const originSeconds = tempo.seconds(origin, factor);
-  const nextBeat = tempo.beat(originSeconds + 1 / scale, factor);
+  const originSeconds = tempo.seconds(origin);
+  const nextBeat = tempo.beat(originSeconds + 1 / scale);
   const delta = nextBeat - origin;
   return Number.isFinite(delta) && delta > 0 ? delta : Number.POSITIVE_INFINITY;
 }
@@ -76,7 +76,7 @@ export function minimumTimelineBeatAtTop(
     ? Math.max(Number.EPSILON, scale)
     : TIMELINE_SCALE_DEFAULT;
   const span = Math.max(0, height - judgementOffset) / safeScale;
-  return tempo.beat(tempo.seconds(0, factor) - span, factor);
+  return tempo.beat(tempo.seconds(0) - span);
 }
 
 /** Identifies the owner that is allowed to update the timeline origin. */
@@ -264,11 +264,17 @@ export class TimelineViewport {
     };
   }
 
-  /** Scale inputs for one line factor. */
+  /**
+   * Scale inputs for one area.
+   *
+   * `factor` is accepted for existing callers but no longer scales time; every
+   * line follows the chart's global BPM grid.
+   */
   scaleConfig(factor = this.factor): TimelineScale {
+    void factor;
     return {
       origin: this.origin,
-      factor,
+      factor: 1,
       scale: this.scale,
       judgementOffset: this.judgementOffset,
     };
@@ -286,24 +292,15 @@ export class TimelineViewport {
     const area = session.multiLineActive ? session.multiLineMode : null;
     const factors: readonly number[] = (() => {
       if (!session.multiLineActive) {
-        return [session.line?.bpmfactor ?? 1];
+        return [1];
       }
       const targets = session.targetLineIndices;
       const mode = session.multiLineMode;
       const canvas = mode === "notes" ? this.notesCanvas : this.eventsCanvas;
       // Split multi-line mode paints only the panels inside the current viewport.
-      // Off-screen BPM factors cannot change the visible timeline's pixel cadence,
-      // so do not scan all 741 targets on every playback frame.
+      // Off-screen lines share the same global grid, so the visible cadence is 1.
       if (this.panelCount(mode) > 1 && canvas.clientWidth > 0) {
-        const [first, last] = this.visiblePanelRange(canvas.clientWidth, mode);
-        const visible: number[] = [];
-        for (let panel = first; panel <= last; panel += 1) {
-          const factor = this.factorForLine(targets[panel] ?? session.lineIndex);
-          if (!visible.includes(factor)) {
-            visible.push(factor);
-          }
-        }
-        return visible.length ? visible : [session.line?.bpmfactor ?? 1];
+        return [1];
       }
       const cached = this.beatsPerPixelFactors;
       if (
@@ -314,11 +311,7 @@ export class TimelineViewport {
       ) {
         return cached.values;
       }
-      const unique = new Set<number>();
-      for (const lineIndex of targets) {
-        unique.add(this.factorForLine(lineIndex));
-      }
-      const values = [...unique];
+      const values = [1];
       this.beatsPerPixelFactors = { chart: session.chart, targets, mode, values };
       return values;
     })();
@@ -344,9 +337,14 @@ export class TimelineViewport {
       : beatsPerPixelAtOrigin(this.tempo, this.origin, this.scale, this.factor);
   }
 
-  /** Beat multiplier of the active line. */
+  /**
+   * Retained time-scale accessor.
+   *
+   * Every line now shares the chart's global BPM grid, so this is always 1.
+   * Kept as a getter so existing scale/geometry callers keep a single seam.
+   */
   get factor(): number {
-    return this.getSession().line?.bpmfactor ?? 1;
+    return 1;
   }
 
   /** Height of the canvas that currently paints the active area. */
@@ -390,7 +388,7 @@ export class TimelineViewport {
           this.judgementOffset,
           factor,
         );
-        minimum = Math.max(minimum, this.tempo.seconds(beat, this.factor));
+        minimum = Math.max(minimum, this.tempo.seconds(beat));
       }
     }
     return minimum === -Infinity ? 0 : minimum;

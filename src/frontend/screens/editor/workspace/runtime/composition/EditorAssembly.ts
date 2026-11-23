@@ -496,7 +496,12 @@ export function createEditorAssembly(
     inspectorRuntime;
   batchControls.onCommit = () => multiEdit.clearPreview();
   scope.add(
-    bindClipboardHistoryPersistence(clipboardHistory, (message) => notify(message, "error")),
+    bindClipboardHistoryPersistence(clipboardHistory, (message) => notify(message, "error"), {
+      session: () => session.current,
+      invalidate,
+      onExternalClipboard: () =>
+        notify(t("editor.app.notice.clipboardHistoryReceived"), "info", 5000),
+    }),
   );
   scope.add(
     bindAnalysisActions({
@@ -574,15 +579,13 @@ export function createEditorAssembly(
     if (beat === null) {
       return false;
     }
-    const current = session.current;
-    const factor =
-      lineIndex === null ? 1 : (current.chart.judgeLineList?.[lineIndex]?.bpmfactor ?? 1);
-    const nextOffsetMs = alignedOffsetMs(audio.time, tempo.get().seconds(beat, factor));
+    const nextOffsetMs = alignedOffsetMs(audio.time, tempo.get().seconds(beat));
     // Disarm first: a refused commit must not leave the pick swallowing presses.
     disarmOffsetAlign(runtimeRef.current);
     if (nextOffsetMs === null) {
       return false;
     }
+    const current = session.current;
     try {
       current.commitChart(
         t("editorPanels.inspector.form.bpm.offsetCommit"),
@@ -636,13 +639,6 @@ export function createEditorAssembly(
     ui,
     densityBarsEnabled: () => values.byId.get<boolean>("timeline-density-bars-enabled"),
     hoverPreviewEnabled: () => values.byId.get<boolean>("timeline-hover-preview-enabled"),
-    clipboardRangesEnabled: () =>
-      values.byId.get<boolean>("timeline-clipboard-range-bars-enabled") === true,
-    rangeBarOpacity: () => {
-      const stored = values.byId.get<unknown>("timeline-range-bar-opacity");
-      const value = typeof stored === "number" ? stored : Number(stored);
-      return Number.isFinite(value) ? Math.max(0.02, Math.min(0.8, value)) : 0.18;
-    },
     visibility: { hasDocument, atHome },
   });
   // Alt+wheel writes the scale continuously; persisting it re-applies every

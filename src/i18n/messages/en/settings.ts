@@ -112,7 +112,7 @@ export default {
   "settings.field.editing-bezier-enabled.label": "Bézier curves",
   "settings.field.editing-line-extended-enabled.label": "Extended line properties",
   "settings.field.editing-parent-lines-enabled.label": "Parent and child lines",
-  "settings.field.editing-line-bpmfactor-enabled.label": "BPM Factor",
+  "settings.field.editing-line-bpmfactor-enabled.label": "Hold hit-effect rate",
   "settings.field.editing-line-anchor-enabled.label": "Anchor",
   "settings.editingAccess.aiUse": "AI access",
   "settings.editingAccess.visible": "Shown",
@@ -405,6 +405,9 @@ export default {
   "settings.field.particle-effects-enabled.label": "Render hit particles",
   "settings.field.particle-effects-enabled.description":
     "Draws the skin hit animation and its square burst at every hit during preview playback.",
+  "settings.field.procedural-particle-effects-enabled.label": "Render procedural hit particles",
+  "settings.field.procedural-particle-effects-enabled.description":
+    "Keeps the skin animation but hides the programmatically generated square burst.",
   "settings.field.note-size.label": "Preview note scale",
   "settings.field.timeline-note-size.label": "Timeline note size",
   "settings.field.hit-effect-size.label": "Hit effect size",
@@ -461,9 +464,10 @@ export default {
   "settings.field.timeline-overview-strip-width.description":
     "Width of the overview bars on both sides of the timeline.",
   "settings.field.timeline-hover-preview-enabled.label": "Show overview hover preview",
-  "settings.field.note-overlap-threshold.label": "Note overlap warning distance",
-  "settings.field.note-overlap-threshold.description":
-    "Mark same-beat notes closer than this many units as overlapping; 0 disables the warning.",
+  "settings.field.note-nearby-merge-enabled.label": "Merge nearby notes",
+  "settings.field.note-merge-distance.label": "Note merge distance",
+  "settings.field.note-merge-distance.description":
+    "Merge same-beat notes closer than this many units into one visual overlap stack.",
   "settings.field.timeline-grid-color-1.label": "1/1 beat-line color",
   "settings.field.timeline-grid-color-2.label": "1/2 beat-line color",
   "settings.field.timeline-grid-color-3.label": "1/3 beat-line color",
@@ -820,11 +824,6 @@ export default {
   "settings.field.timeline-undo-jump.label": "Jump to the changed time after undo or redo",
   "settings.field.timeline-undo-jump.description":
     "Moves the playhead and view to the edited time when an undo or redo step completes.",
-  "settings.field.timeline-clipboard-range-bars-enabled.label":
-    "Show clipboard and paste ranges on overview bars",
-  "settings.field.timeline-clipboard-range-color.label": "Clipboard range colour",
-  "settings.field.timeline-paste-range-color.label": "Paste range colour",
-  "settings.field.timeline-range-bar-opacity.label": "Range area opacity",
-  "settings.field.timeline-range-bar-opacity.description":
-    "Opacity of the clipboard and paste ranges on the timeline overview bars.",
+  "settings.field.timeline-clipboard-ghost-enabled.label": "Show clipboard ghost preview",
+  "settings.field.timeline-clipboard-ghost-opacity.label": "Clipboard ghost opacity",
 } as const;

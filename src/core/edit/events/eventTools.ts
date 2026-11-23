@@ -63,7 +63,7 @@ export function cutEventParts(
   // Both the anchor and every cut are triples, so a 1/3 division cuts at exactly
   // `start + k/3`.
   const snapped: Beat = tempo
-    ? snapTime(tempo.seconds(beat ?? start, factor), division, tempo, factor)
+    ? snapTime(tempo.seconds(beat ?? start), division, tempo)
     : Number.isSafeInteger(division) && division > 0
       ? beatFromFraction(Math.round((beat ?? start) * division), division)
       : fromNumber(beat ?? start);

@@ -15,8 +15,8 @@ import type { TimelineNote } from "./types.ts";
 
 const SAME_BEAT_EPSILON = 1e-8;
 
-/** Default distance, in chart units, that marks two same-beat notes as overlapping. */
-export const DEFAULT_NOTE_OVERLAP_THRESHOLD = 100;
+/** Default distance, in chart units, that groups two same-beat notes together. */
+export const DEFAULT_NOTE_OVERLAP_THRESHOLD = 50;
 
 /** A note's 0-based position inside one same-beat overlap stack. */
 export type NoteOverlapRanks = ReadonlyMap<number, number>;

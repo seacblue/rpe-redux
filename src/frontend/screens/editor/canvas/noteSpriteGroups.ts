@@ -11,10 +11,10 @@
 /** A note's authored multiply tint or its selected-state recoloring. */
 export type NoteColor = { mode: "tint" | "selected"; color: number[] };
 
-/** One decoded skin bitmap and the useful rectangle inside it. */
+/** One decoded skin bitmap and its complete cropped PNG bounds. */
 export interface TextureDescriptor {
   readonly source: HTMLImageElement;
-  readonly useful: {
+  readonly bounds: {
     readonly x: number;
     readonly y: number;
     readonly width: number;

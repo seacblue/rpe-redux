@@ -48,8 +48,8 @@ export function snapPosition(value: number, count: number, enabled = true): numb
 
 /** The `TempoMap` surface the snap helpers need. */
 export interface TempoGrid {
-  beat(seconds: number, factor?: number): number;
-  seconds(beat: number | readonly number[], factor?: number): number;
+  beat(seconds: number): number;
+  seconds(beat: number | readonly number[]): number;
 }
 
 /**
@@ -58,14 +58,13 @@ export interface TempoGrid {
  * The snap lands on an integer count of `division`s, so the result is the
  * rational `index / division`.
  */
-export function snapTime(seconds: number, division: number, tempo: TempoGrid, factor = 1): Beat {
-  const beat = Math.max(0, tempo.beat(seconds, factor));
+export function snapTime(seconds: number, division: number, tempo: TempoGrid): Beat {
+  const beat = Math.max(0, tempo.beat(seconds));
   const index = Math.floor(beat * division);
   const lower = index / division;
   const upper = (index + 1) / division;
   const nearest =
-    Math.abs(tempo.seconds(lower, factor) - seconds) <=
-    Math.abs(tempo.seconds(upper, factor) - seconds)
+    Math.abs(tempo.seconds(lower) - seconds) <= Math.abs(tempo.seconds(upper) - seconds)
       ? index
       : index + 1;
   // Non-integer divisions are approximated because the format stores exact triples only.

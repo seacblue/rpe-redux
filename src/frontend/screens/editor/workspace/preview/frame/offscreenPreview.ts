@@ -65,10 +65,8 @@ export class OffscreenPreviewRenderer {
     width: number;
     height: number;
     duration: number;
-    /** Detached canvases have no layout, so use the requested frame size. */
-    detached?: boolean;
   }) {
-    const { surface, reference, width, height, detached } = options;
+    const { surface, reference, width, height } = options;
     this.surface = surface;
     this.chart = options.chart;
     this.tempo = options.tempo;
@@ -94,6 +92,8 @@ export class OffscreenPreviewRenderer {
     preview.aspectRatio = width / height;
     preview.viewDivisor = 1;
     preview.duration = options.duration;
+    // A render is the game view: every line is fully opaque. The editor's
+    // non-current-line dimming exists only to distinguish the selected line.
     preview.noteOpacity = 1;
     preview.opacity = 1;
     preview.noteSize = reference.noteSize;
@@ -119,10 +119,15 @@ export class OffscreenPreviewRenderer {
     preview.noiseError = () => {
       this.noiseFailed = true;
     };
-    if (detached) {
-      const ratio = canvasPixelRatio();
-      preview.frameMeasurement = { width: width / ratio, height: height / ratio };
-    }
+    // Render each layer at exactly the requested output pixels, independent of
+    // the editor window's device-pixel ratio. The measurement is the CSS-size
+    // counterpart `prepareCanvas` multiplies by the same capped ratio, so the
+    // backing store lands on `width × height` rather than a fraction of it.
+    const ratio = canvasPixelRatio();
+    preview.frameMeasurement = { width: width / ratio, height: height / ratio };
+    // Shader passes allocate their own texture; a stretched shader layer was the
+    // visible softness source at 1440p/4K and on scaled displays.
+    preview.shaderTextureLimit = { width, height };
     surface.output.width = width;
     surface.output.height = height;
     this.compositeDevice = new PreviewCompositeRenderDevice(surface.output);
@@ -176,7 +181,7 @@ export class OffscreenPreviewRenderer {
   /** Render and copy every visible layer synchronously before the WebGL buffer can clear. */
   render(seconds: number): HTMLCanvasElement {
     const { primary, notes, shader, overlay, output } = this.surface;
-    this.preview.draw(this.chart, this.tempo, seconds, -1);
+    this.preview.draw(this.chart, this.tempo, seconds, -1, new Map(), { effectTime: seconds });
     if (this.noiseFailed) {
       throw new Error("preview_frame_noise_unavailable");
     }

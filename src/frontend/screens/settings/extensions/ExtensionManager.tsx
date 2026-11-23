@@ -3,8 +3,10 @@
  *
  * The page owns the safe-mode notice, the installed-extension list, and the
  * install dialog; individual cards only enable, disable, or remove a package.
+ * A package dropped on the window arrives here through `requestLocalPackageReview`
+ * and opens the ordinary review dialog with that path pre-filled.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
 import type { MessageKey } from "../../../../i18n/index.ts";
@@ -17,6 +19,10 @@ import { Button } from "../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../design/components/alert/InlineAlert.tsx";
 import { ExtensionListView } from "./ExtensionListView.tsx";
 import { ExtensionInstallDialog } from "./ExtensionInstallDialog.tsx";
+import {
+  subscribePendingLocalPackage,
+  takePendingLocalPackage,
+} from "../settingsWindowController.ts";
 
 /**
  * The settings page owns the page-level safe-mode notice, the installed
@@ -25,6 +31,22 @@ import { ExtensionInstallDialog } from "./ExtensionInstallDialog.tsx";
 export function ExtensionManager({ active }: SettingsPageContext) {
   const { t } = useTranslation();
   const [installOpen, setInstallOpen] = useState(false);
+  // A package drop publishes a path and opens this page; consuming it here keeps
+  // the dialog mounted for exactly the review the user asked for.
+  const [reviewPath, setReviewPath] = useState<string | null>(null);
+  useEffect(() => {
+    /** Take one pending package and open its review. */
+    const consume = () => {
+      const path = takePendingLocalPackage();
+      if (!path) {
+        return;
+      }
+      setReviewPath(path);
+      setInstallOpen(true);
+    };
+    consume();
+    return subscribePendingLocalPackage(consume);
+  }, []);
   // The page stays mounted while the settings window is open; folder discovery
   // and manifest reloads only run while this section is the active one.
   useSurfacePolling(active, refreshPackagedExtensions);
@@ -54,12 +76,27 @@ export function ExtensionManager({ active }: SettingsPageContext) {
       <ExtensionListView />
       <div className="redux-footer-bar">
         <div className="redux-footer-actions">
-          <Button variant="solid" disabled={startup.safeMode} onClick={() => setInstallOpen(true)}>
+          <Button
+            variant="solid"
+            disabled={startup.safeMode}
+            onClick={() => {
+              setReviewPath(null);
+              setInstallOpen(true);
+            }}
+          >
             {t("settings.extensions.install.open")}
           </Button>
         </div>
       </div>
-      {installOpen && <ExtensionInstallDialog onClose={() => setInstallOpen(false)} />}
+      {installOpen && (
+        <ExtensionInstallDialog
+          {...(reviewPath ? { initialLocalPath: reviewPath } : {})}
+          onClose={() => {
+            setInstallOpen(false);
+            setReviewPath(null);
+          }}
+        />
+      )}
     </section>
   );
 }

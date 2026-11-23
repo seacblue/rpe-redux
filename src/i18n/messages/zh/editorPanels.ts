@@ -318,7 +318,7 @@ export default {
 
   "editorPanels.linePanel.textureChange": "更改判定线贴图",
   "editorPanels.linePanel.invalidGroup": "分组无效",
-  "editorPanels.linePanel.invalidZOrder": "zOrder 或 BPM 倍率无效",
+  "editorPanels.linePanel.invalidZOrder": "zOrder 或 Hold 打击特效速率无效",
   "editorPanels.linePanel.invalidAnchor": "锚点必须是两个有限数字",
   "editorPanels.linePanel.applyLabel": "更新判定线属性",
   "editorPanels.linePanel.title": "判定线",
@@ -344,7 +344,7 @@ export default {
 
   "editorPanels.linePanel.noBinding": "不绑定",
   "editorPanels.linePanel.retained": "保留：{name}",
-  "editorPanels.linePanel.bpmFactor": "BPM 倍率",
+  "editorPanels.linePanel.bpmFactor": "Hold 打击特效速率",
   "editorPanels.linePanel.anchorX": "锚点 X",
   "editorPanels.linePanel.anchorY": "锚点 Y",
   "editorPanels.linePanel.zOrder": "Z 顺序",

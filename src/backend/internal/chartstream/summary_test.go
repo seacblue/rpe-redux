@@ -92,7 +92,7 @@ func TestBuildChartIndexSummarizesLines(t *testing.T) {
 	if second.NoteCount != 1 || second.EventCount != 0 {
 		t.Fatalf("second counts = %d/%d", second.NoteCount, second.EventCount)
 	}
-	if second.StartSeconds == nil || math.Abs(*second.StartSeconds-1) > 1e-9 {
+	if second.StartSeconds == nil || math.Abs(*second.StartSeconds-0) > 1e-9 {
 		t.Fatalf("second start = %v", second.StartSeconds)
 	}
 	if second.EndSeconds != nil {
@@ -137,24 +137,21 @@ func TestLineSummaryMergesActivityIntervals(t *testing.T) {
 	}
 }
 
-func TestBuildChartIndexUsesTempoChangesAndBPMFactor(t *testing.T) {
+func TestBuildChartIndexUsesTempoChangesOnTheGlobalGrid(t *testing.T) {
 	tempo, err := NewTempoMap([]BpmEntry{{BPM: 120, Beat: 0}, {BPM: 240, Beat: 4}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct {
-		beat   float64
-		factor float64
-		want   float64
+		beat float64
+		want float64
 	}{
-		{2, 1, 1},
-		{6, 1, 2.5},
-		{6, 2, 5},
-		{6, 0.0001, 2.5},
+		{2, 1},
+		{6, 2.5},
 	}
 	for _, testCase := range cases {
-		if got := tempo.Seconds(testCase.beat, testCase.factor); math.Abs(got-testCase.want) > 1e-9 {
-			t.Fatalf("seconds(%v, %v) = %v, want %v", testCase.beat, testCase.factor, got, testCase.want)
+		if got := tempo.Seconds(testCase.beat); math.Abs(got-testCase.want) > 1e-9 {
+			t.Fatalf("seconds(%v) = %v, want %v", testCase.beat, got, testCase.want)
 		}
 	}
 }

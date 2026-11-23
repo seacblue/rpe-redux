@@ -35,8 +35,33 @@ test("shader composite device forwards one packet to the persistent pipeline", (
       packet.viewport,
       packet.sourceRevision,
       packet.overlayCanvas,
+      undefined,
+      undefined,
     ],
   ]);
+});
+
+test("shader composite device forwards an explicit shader target size", () => {
+  const calls = [];
+  const device = new ShaderCompositeRenderDevice({
+    render: (...args) => {
+      calls.push(args);
+      return true;
+    },
+    dispose: () => {},
+  });
+  const textureLimit = { width: 1920, height: 1080 };
+
+  device.render({
+    sourceCanvas: {},
+    targetCanvas: {},
+    passes: [{ shader: "demo" }],
+    seconds: 0,
+    sourceFor: () => "shader",
+    textureLimit,
+  });
+
+  assert.deepEqual(calls[0]?.at(-1), textureLimit);
 });
 
 test("shader composite device owns pipeline disposal", () => {
@@ -74,5 +99,5 @@ test("shader composite device forwards a shared GPU input layer", () => {
     inputLayer,
   });
 
-  assert.equal(calls[0]?.at(-1), inputLayer);
+  assert.equal(calls[0]?.[8], inputLayer);
 });

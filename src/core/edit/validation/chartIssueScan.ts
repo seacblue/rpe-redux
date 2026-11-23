@@ -102,7 +102,7 @@ function chartTempo(chart: Chart): TempoMap | null {
 }
 
 /** Convert a beat range to chart seconds for the clock readout. */
-type SecondsOf = (beat: readonly number[], factor: number) => number;
+type SecondsOf = (beat: readonly number[]) => number;
 
 /** Scan one chart snapshot and return every located issue. */
 export function scanChartIssues(input: ChartIssueScanInput): ChartIssueScanResult {
@@ -113,12 +113,12 @@ export function scanChartIssues(input: ChartIssueScanInput): ChartIssueScanResul
   // tempo map converts every reported range, and a chart without a usable BPM
   // list leaves the seconds at the beat value so the readout still exists.
   const tempo = chartTempo(chart);
-  const secondsOf = (beat: readonly number[], factor: number): number => {
+  const secondsOf = (beat: readonly number[]): number => {
     if (!tempo) {
       return beatValue(beat);
     }
     try {
-      return tempo.seconds(beat, factor);
+      return tempo.seconds(beat);
     } catch {
       return beatValue(beat);
     }
@@ -186,9 +186,7 @@ function appendLineIssues(
   options: ChartIssueScanOptions,
   secondsOf: SecondsOf,
 ): void {
-  // Every event and note on this line shares its time-rate multiplier, so it is
-  // resolved once here and threaded into the row builders.
-  const factor = line.bpmfactor ?? 1;
+  // Every event and note on this line shares the chart's global BPM grid.
   const layers = Array.isArray(line.eventLayers) ? line.eventLayers : [];
   for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
     const layer = layers[layerIndex];
@@ -206,7 +204,6 @@ function appendLineIssues(
         layer,
         options,
         secondsOf,
-        factor,
       );
     }
   }
@@ -222,11 +219,10 @@ function appendLineIssues(
         line.extended,
         options,
         secondsOf,
-        factor,
       );
     }
   }
-  appendHoldIssues(issues, line, lineIndex, options, secondsOf, factor);
+  appendHoldIssues(issues, line, lineIndex, options, secondsOf);
 }
 
 /** Append one track's overlap, negative-beat, and invalid-range issues. */
@@ -240,7 +236,6 @@ function appendTrackIssues(
   segment: LineEventLayer,
   options: ChartIssueScanOptions,
   secondsOf: SecondsOf,
-  factor: number,
 ): void {
   const events = segment[track];
   if (!events?.length) {
@@ -267,8 +262,8 @@ function appendTrackIssues(
         secondEventId: entry.id,
         startTime: [...entry.startTime] as Beat,
         endTime: [...entry.endTime] as Beat,
-        startSeconds: secondsOf(entry.startTime, factor),
-        endSeconds: secondsOf(entry.endTime, factor),
+        startSeconds: secondsOf(entry.startTime),
+        endSeconds: secondsOf(entry.endTime),
         beat: entry.beat,
         endBeat: entry.endBeat,
       });
@@ -293,8 +288,8 @@ function appendTrackIssues(
         secondEventId: entry.id,
         startTime: [...entry.startTime] as Beat,
         endTime: [...entry.endTime] as Beat,
-        startSeconds: secondsOf(entry.startTime, factor),
-        endSeconds: secondsOf(entry.endTime, factor),
+        startSeconds: secondsOf(entry.startTime),
+        endSeconds: secondsOf(entry.endTime),
         beat: entry.beat,
         endBeat: entry.endBeat,
       });
@@ -323,8 +318,8 @@ function appendTrackIssues(
       secondEventId,
       startTime: pair.startTime,
       endTime: pair.endTime,
-      startSeconds: secondsOf(pair.startTime, factor),
-      endSeconds: secondsOf(pair.endTime, factor),
+      startSeconds: secondsOf(pair.startTime),
+      endSeconds: secondsOf(pair.endTime),
       beat: beatValue(pair.startTime),
       endBeat: beatValue(pair.endTime),
     });
@@ -338,7 +333,6 @@ function appendHoldIssues(
   lineIndex: number,
   options: ChartIssueScanOptions,
   secondsOf: SecondsOf,
-  factor: number,
 ): void {
   const notes = Array.isArray(line.notes) ? line.notes : [];
   if (!notes.length) {
@@ -365,8 +359,8 @@ function appendHoldIssues(
         secondEventId: entry.id,
         startTime: [...entry.startTime] as Beat,
         endTime: [...entry.endTime] as Beat,
-        startSeconds: secondsOf(entry.startTime, factor),
-        endSeconds: secondsOf(entry.endTime, factor),
+        startSeconds: secondsOf(entry.startTime),
+        endSeconds: secondsOf(entry.endTime),
         beat: entry.beat,
         endBeat: entry.endBeat,
       });
@@ -391,8 +385,8 @@ function appendHoldIssues(
         secondEventId: entry.id,
         startTime: [...entry.startTime] as Beat,
         endTime: [...entry.endTime] as Beat,
-        startSeconds: secondsOf(entry.startTime, factor),
-        endSeconds: secondsOf(entry.endTime, factor),
+        startSeconds: secondsOf(entry.startTime),
+        endSeconds: secondsOf(entry.endTime),
         beat: entry.beat,
         endBeat: entry.endBeat,
       });

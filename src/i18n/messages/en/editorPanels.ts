@@ -360,7 +360,7 @@ export default {
 
   "editorPanels.linePanel.noBinding": "Not bound",
   "editorPanels.linePanel.retained": "Kept: {name}",
-  "editorPanels.linePanel.bpmFactor": "BPM multiplier",
+  "editorPanels.linePanel.bpmFactor": "Hold hit-effect rate",
   "editorPanels.linePanel.anchorX": "Anchor X",
   "editorPanels.linePanel.anchorY": "Anchor Y",
   "editorPanels.linePanel.zOrder": "Z order",

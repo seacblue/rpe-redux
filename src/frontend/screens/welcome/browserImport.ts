@@ -17,6 +17,7 @@ import { parseChartEntriesOffThread } from "../editor/workspace/document/open/ch
 import { openChartDocumentFromBytes } from "../editor/workspace/document/open/chartStreamOffThread.ts";
 import { readZipOffThread } from "../editor/workspace/document/open/zipReadOffThread.ts";
 import { importWriteProgress, throwIfAborted } from "./importProgress.ts";
+import { importExternalFiles } from "./externalImport.ts";
 
 /** Host callbacks a browser import reports through. */
 export interface BrowserImportDeps {
@@ -51,6 +52,13 @@ export async function importBrowserChartFiles(
 ): Promise<readonly string[]> {
   if (!files.length) {
     return [];
+  }
+  // External formats share the .json extension with RPE charts, so let their
+  // content detector claim only official JSON/PEC files before the ordinary
+  // RPE/PEZ importer handles the selection.
+  const external = await importExternalFiles(files, deps);
+  if (external !== null) {
+    return external;
   }
   const found = await localService();
   if (!found) {

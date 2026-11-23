@@ -8,7 +8,7 @@
  * `line.png`. Both extensions use fixed names; neither needs an info.yml entry.
  */
 import { isPackageName, type PackageName } from "../utils/packageName.ts";
-import type { NoteSkinManifest, NoteTexture, UsefulRect } from "./noteSkin.ts";
+import type { NoteSkinManifest, NoteTexture } from "./noteSkin.ts";
 
 const SKIN_MAX_BYTES = 64 * 1024 * 1024;
 const SKIN_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
@@ -209,12 +209,6 @@ function validatePngDimensions(bytes: Uint8Array): { width: number; height: numb
   return { width, height };
 }
 
-/** The full image rectangle used by Phira, which has no useful rectangle. */
-function fullRect(bytes: Uint8Array): UsefulRect {
-  const { width, height } = validatePngDimensions(bytes);
-  return { x: 0, y: 0, width, height };
-}
-
 /** A safe relative package path. */
 function packagePath(value: string): string {
   if (
@@ -298,7 +292,7 @@ function normalizedManifest(
       }
       throw new Error(`Missing Phira image: ${file}`);
     }
-    return { file, useful: fullRect(bytes) };
+    return { file };
   };
   const notes: Record<string, NoteTexture> = {};
   const add = (name: string, file: string) => {

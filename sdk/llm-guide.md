@@ -675,7 +675,7 @@ const chart = unwrap(await redux.chart.snapshot());
 
 <!-- ai-block:lineBpmFactor -->
 
-`bpmfactor` is a line's local time scale.
+`bpmfactor` is a line's Hold hit-effect rate, not a time scale.
 <!-- /ai-block:lineBpmFactor -->
 
 <!-- ai-block:lineExtended -->
@@ -852,7 +852,7 @@ Copy existing triples when possible. For a new position, write the exact fractio
 
 <!-- ai-block:lineBpmFactor -->
 
-A line's `bpmfactor` scales time on that line; keep it at `1` unless the chart intentionally needs a per-line speed.
+A line's `bpmfactor` only scales how often its Holds emit hit-effect pulses. Notes, events and shader effects always use the chart's global `BPMList`, so set it to `1` unless that Hold pulse rate should differ.
 <!-- /ai-block:lineBpmFactor -->
 
 For a constant tempo, `seconds = beat * 60 / bpm`. If you start from a target audio time, convert it to beats that way and then write the reduced triple. Do not put BPM values in `metadata`; use `timing.bpmList`. Changing the tempo re-times every beat-based note and event but does not move its beat position, so set the tempo and offset before authoring the detailed note placement.
@@ -1235,7 +1235,7 @@ Rules:
 - `timing.bpmList` replaces the whole tempo map. It must be non-empty; entries are sorted by `startTime` on apply.
 - `lines.insert` appends a judge line. `line` accepts the same editable fields as `lines.update`; the editor assigns the id and a default event layer. The new line's index is the previous line count plus its position in `insert`, so later notes/events in the same transaction can target it with `lineIndex`. `lines.delete` removes lines by id; line-owned notes/events go with them, child lines are re-parented to the root, shader line references are remapped, and at least one line must remain. Deletion runs before inserts and updates, so later `lineIndex` targets use the post-delete order. Line patches accept `Name`, `Group`, `Texture`, and the `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` point arrays.
   <!-- ai-block:lineBpmFactor -->
-  Add `bpmfactor` to change a line's local time scale.
+  Add `bpmfactor` to change how often a line's Holds emit hit-effect pulses; it does not move notes or events.
   <!-- /ai-block:lineBpmFactor -->
   <!-- ai-block:parentLines -->
   Add `father` / `parentId` and `rotateWithFather` for a parent-child relation. Prefer `parentId` over the format's numeric `father`; do not send both.
@@ -1501,7 +1501,7 @@ try {
 
 <!-- ai-block:lineBpmFactor -->
 
-- A line's `bpmfactor` scales its local time.
+- A line's `bpmfactor` only scales its Hold hit-effect pulse rate; all timing uses the global BPM list.
 
 <!-- /ai-block:lineBpmFactor -->
 

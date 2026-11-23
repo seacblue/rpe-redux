@@ -204,21 +204,14 @@ impl TempoMap {
         }
     }
 
-    /// Chart seconds at `beat`, scaled by a per-line `bpmfactor`.
-    fn seconds(&self, beat: f64, factor: f64) -> f64 {
-        let rate = check_factor(factor);
+    /// Chart seconds at `beat`.
+    ///
+    /// Every line uses this one grid. A line's `bpmfactor` is not a time scale
+    /// and never enters the conversion.
+    fn seconds(&self, beat: f64) -> f64 {
         let upper = self.points.partition_point(|point| point.beat <= beat);
         let point = &self.points[upper.saturating_sub(1)];
-        (point.seconds + (beat - point.beat) * point.seconds_per_beat) * rate
-    }
-}
-
-/// A rate outside the playable range is normal speed, not a multiplier.
-fn check_factor(factor: f64) -> f64 {
-    if !factor.is_finite() || factor.abs() < 0.001 {
-        1.0
-    } else {
-        factor
+        point.seconds + (beat - point.beat) * point.seconds_per_beat
     }
 }
 
@@ -383,7 +376,6 @@ fn summarize_line(
         };
     };
 
-    let factor = line_factor(object);
     let mut bounds = Bounds {
         start: f64::INFINITY,
         end: f64::NEG_INFINITY,
@@ -397,8 +389,8 @@ fn summarize_line(
             let Some(note) = note.as_object() else {
                 continue;
             };
-            let start = seconds_of(note.get("startTime"), tempo, factor);
-            let end = seconds_of(note.get("endTime"), tempo, factor);
+            let start = seconds_of(note.get("startTime"), tempo);
+            let end = seconds_of(note.get("endTime"), tempo);
             extend(&mut bounds, start);
             extend(&mut bounds, end);
             let visible_time = match note.get("visibleTime") {
@@ -449,8 +441,8 @@ fn summarize_line(
                 let Some(event) = event.as_object() else {
                     continue;
                 };
-                let start = seconds_of(event.get("startTime"), tempo, factor);
-                let end = seconds_of(event.get("endTime"), tempo, factor);
+                let start = seconds_of(event.get("startTime"), tempo);
+                let end = seconds_of(event.get("endTime"), tempo);
                 extend(&mut bounds, start);
                 extend(&mut bounds, end);
                 add_interval(&mut intervals, start, end);
@@ -599,7 +591,7 @@ fn merge_intervals(mut intervals: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
 }
 
 /// Seconds for one beat value, or null when it is malformed.
-fn seconds_of(value: Option<&Value>, tempo: &TempoMap, factor: f64) -> Option<f64> {
+fn seconds_of(value: Option<&Value>, tempo: &TempoMap) -> Option<f64> {
     let value = value?;
     let beat = match value {
         Value::Array(_) => beat_tuple(value)?,
@@ -608,22 +600,7 @@ fn seconds_of(value: Option<&Value>, tempo: &TempoMap, factor: f64) -> Option<f6
     if !beat.is_finite() {
         return None;
     }
-    Some(tempo.seconds(beat, factor))
-}
-
-/// Read the line's `bpmfactor` with the tempo map's own fallback rule.
-fn line_factor(line: &Map<String, Value>) -> f64 {
-    match line.get("bpmfactor") {
-        None | Some(Value::Null) => 1.0,
-        Some(value) => {
-            let value = js_number(value);
-            if value.is_finite() && value > 0.0 {
-                value
-            } else {
-                1.0
-            }
-        }
-    }
+    Some(tempo.seconds(beat))
 }
 
 /// Collect asset names from one line without retaining note objects.
@@ -1012,7 +989,7 @@ mod tests {
     }
 
     #[test]
-    fn tempo_map_matches_bpm_changes_and_factors() {
+    fn tempo_map_matches_bpm_changes_on_the_global_grid() {
         let header = header(json!({
             "BPMList": [
                 {"bpm": 120, "startTime": [0, 0, 1]},
@@ -1021,17 +998,15 @@ mod tests {
         }));
         let tempo = tempo(&header);
 
-        assert_eq!(tempo.seconds(0.0, 1.0), 0.0);
-        assert_eq!(tempo.seconds(2.0, 1.0), 1.0);
-        assert_eq!(tempo.seconds(3.0, 1.0), 2.0);
-        assert_eq!(tempo.seconds(3.0, 2.0), 4.0);
-        assert_eq!(tempo.seconds(3.0, 0.0005), 2.0);
+        assert_eq!(tempo.seconds(0.0), 0.0);
+        assert_eq!(tempo.seconds(2.0), 1.0);
+        assert_eq!(tempo.seconds(3.0), 2.0);
     }
 
     #[test]
     fn tempo_map_defaults_to_120_bpm_without_a_list() {
         let tempo = tempo(&header(json!({})));
-        assert_eq!(tempo.seconds(2.0, 1.0), 1.0);
+        assert_eq!(tempo.seconds(2.0), 1.0);
     }
 
     #[test]

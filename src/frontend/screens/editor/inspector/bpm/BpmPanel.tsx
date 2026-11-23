@@ -214,7 +214,7 @@ function Metronome({ chart, enabled }: { chart: Chart; enabled: boolean }) {
       const playing = playback.playback.audio.playing;
       const beat = (() => {
         try {
-          return tempo.beat(playback.chartSeconds(), 1);
+          return tempo.beat(playback.chartSeconds());
         } catch {
           return 0;
         }

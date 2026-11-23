@@ -31,16 +31,13 @@ export default {
   "workspace.document.compatibility.newerDescription":
     "谱面由 Redux {version} 创建，当前应用为 {current}；部分字段可能被忽略。",
   "workspace.document.compatibility.openAnyway": "仍然打开",
-  "workspace.document.occupancy.title": "谱面已被占用",
+  "workspace.document.occupancy.title": "暂时无法打开谱面",
   "workspace.document.occupancy.description":
-    "“{name}”已在另一个编辑器窗口中打开。如果该窗口已崩溃，占用记录可能是残留的。",
-  "workspace.document.occupancy.detail": "另一个窗口：前端端口 {frontend}，后端端口 {backend}",
-  "workspace.document.occupancy.unknownPort": "未知",
-  "workspace.document.occupancy.frontend": "释放其他窗口",
-  "workspace.document.occupancy.backend": "清除后端记录",
-  "workspace.document.occupancy.reconcile": "修复并重试",
-  "workspace.document.occupancy.clearFailed":
-    "后端没有释放占用记录。可以尝试清除本谱面的后端占用记录，或取消打开。",
+    "“{name}”可能由于其他 RPE Redux 实例正在占用而无法打开，强制打开可能会关闭其他实例。",
+  "workspace.document.occupancy.forceOpen": "强制打开",
+  "workspace.document.occupancy.cancel": "不打开",
+  "workspace.document.occupancy.forceFailed":
+    "无法强制打开此谱面。请先关闭正在使用它的编辑器，然后重试。",
   "workspace.document.error.createCancelled": "扩展已取消新建文档。",
   "workspace.document.error.openCancelled": "扩展已取消打开文档。",
   "workspace.document.error.closeCancelled": "扩展已取消关闭文档。",
@@ -155,7 +152,6 @@ export default {
   "workspace.welcome.importDialog.external": "选择其它谱面",
   "workspace.welcome.drop.title": "松开即可导入",
   "workspace.welcome.drop.imported": "已导入 {name}",
-  "workspace.welcome.drop.extensionDetected": "检测到扩展：{name}",
   "workspace.welcome.drop.skinDetected": "检测到皮肤：{name}",
   "workspace.welcome.drop.openSettings": "打开设置",
   "workspace.welcome.drop.invalidPackage": "无法验证包 {name}。",

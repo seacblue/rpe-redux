@@ -48,7 +48,7 @@ export function eventHasLinkGroup(event: JudgeLineEvent | undefined): boolean {
   return Number(event?.linkgroup ?? 0) > 0;
 }
 
-/** True when the chart uses a non-default line BPM factor. */
+/** True when the line's Hold hit-effect rate differs from the default. */
 export function lineHasCustomBpmFactor(line: JudgeLine | undefined): boolean {
   return Number(line?.bpmfactor ?? 1) !== 1;
 }

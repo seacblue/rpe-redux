@@ -211,6 +211,13 @@ export interface JudgeLine {
   Name?: string;
   Group?: number | string;
   Texture?: string;
+  /**
+   * Hold hit-effect pulse-rate multiplier.
+   *
+   * It never scales chart time: notes, events and shader effects use the global
+   * `BPMList`. A value of 2 makes this line's Holds emit hit pulses twice as
+   * often; a missing or non-positive value behaves as 1.
+   */
   bpmfactor?: number;
   father?: number | string | null;
   rotateWithFather?: boolean;

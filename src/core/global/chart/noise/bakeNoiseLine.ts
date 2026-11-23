@@ -51,10 +51,6 @@ export function bakeNoiseLine(
     }
     visited.add(current);
     const line: JudgeLine = lines[current];
-    const factor = line.bpmfactor ?? 1;
-    if (tempo.checkFactor(factor) < 0) {
-      throw new Error("negative noise line BPM factor");
-    }
     for (const layer of (line.eventLayers ?? []).slice(0, 5)) {
       if (!layer) {
         continue;
@@ -62,7 +58,7 @@ export function bakeNoiseLine(
       for (const events of [layer.moveXEvents, layer.moveYEvents, layer.rotateEvents]) {
         for (const event of events ?? []) {
           for (const beat of [event.startTime, event.endTime]) {
-            const seconds = tempo.seconds(beat, factor);
+            const seconds = tempo.seconds(beat);
             if (seconds > startSeconds && seconds < endSeconds) {
               boundaries.add(seconds);
             }
@@ -74,7 +70,7 @@ export function bakeNoiseLine(
       for (const events of [line.extended?.scaleXEvents, line.extended?.scaleYEvents]) {
         for (const event of events ?? []) {
           for (const beat of [event.startTime, event.endTime]) {
-            const seconds = tempo.seconds(beat, factor);
+            const seconds = tempo.seconds(beat);
             if (seconds > startSeconds && seconds < endSeconds) {
               boundaries.add(seconds);
             }

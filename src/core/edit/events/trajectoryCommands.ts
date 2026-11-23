@@ -123,8 +123,8 @@ export function trajectoryChart(
         throw new Error(t("editor.commands.trajectoryCommands.error.existingTrajectory"));
       }
       const track = new EventTrack([original], tempo, factor);
-      const secondsStart = tempo.seconds(original.startTime, factor);
-      const secondsEnd = tempo.seconds(original.endTime, factor);
+      const secondsStart = tempo.seconds(original.startTime);
+      const secondsEnd = tempo.seconds(original.endTime);
       /** Rebuilds the surviving part of a trimmed event with adjusted easing. */
       const clipped = (first: number, last: number): JudgeLineEvent => {
         const startTime = fromNumber(first, 192000000);
@@ -135,15 +135,13 @@ export function trajectoryChart(
           ...original,
           startTime,
           endTime,
-          start: track.value(tempo.seconds(startTime, factor)),
-          end: track.value(tempo.seconds(endTime, factor)),
+          start: track.value(tempo.seconds(startTime)),
+          end: track.value(tempo.seconds(endTime)),
           easingLeft:
             left +
-            (range * (tempo.seconds(startTime, factor) - secondsStart)) /
-              (secondsEnd - secondsStart),
+            (range * (tempo.seconds(startTime) - secondsStart)) / (secondsEnd - secondsStart),
           easingRight:
-            left +
-            (range * (tempo.seconds(endTime, factor) - secondsStart)) / (secondsEnd - secondsStart),
+            left + (range * (tempo.seconds(endTime) - secondsStart)) / (secondsEnd - secondsStart),
         };
       };
       if (original.bezier && (start < begin || end > finish)) {
@@ -203,12 +201,7 @@ export function splitTrajectoryChart(
   if (!layer.moveXEvents?.includes(event) || !event.trajectory) {
     throw new Error(t("editor.commands.trajectoryCommands.error.selectTrajectory"));
   }
-  const fragments = expandTrajectory(
-    event,
-    new TempoMap(chart.BPMList),
-    line.bpmfactor ?? 1,
-    settings,
-  );
+  const fragments = expandTrajectory(event, new TempoMap(chart.BPMList), settings);
   const updates = new Map<string, JudgeLineEvent[]>(
     [...fragments].map(([type, entries]): [string, JudgeLineEvent[]] => [
       type,

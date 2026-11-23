@@ -14,6 +14,7 @@ export interface MarqueePalette {
   readonly selectionNotesStroke: string;
   readonly selectionEventsFill: string;
   readonly selectionEventsStroke: string;
+  readonly previewSelectionFill: string;
 }
 
 export interface MarqueePoint {
@@ -55,18 +56,22 @@ function marqueeRectangleGeometry(
   let y = origin.top - overlay.top + start.y;
   let width = current.x - start.x;
   let height = current.y - start.y;
-  if (preview) {
-    x += Math.min(0, width);
-    y += Math.min(0, height);
-    width = Math.abs(width);
-    height = Math.abs(height);
-  }
+  // Keep the packet backend-neutral: Canvas2D accepts negative rectangles,
+  // while the WebGL batch intentionally skips non-positive dimensions.
+  x += Math.min(0, width);
+  y += Math.min(0, height);
+  width = Math.abs(width);
+  height = Math.abs(height);
   return {
     x,
     y,
     width,
     height,
-    fill: area === "notes" ? palette.selectionNotesFill : palette.selectionEventsFill,
+    fill: preview
+      ? palette.previewSelectionFill
+      : area === "notes"
+        ? palette.selectionNotesFill
+        : palette.selectionEventsFill,
     stroke: area === "notes" ? palette.selectionNotesStroke : palette.selectionEventsStroke,
     offset: preview ? 0.5 : 0,
     strokeWidth: preview ? 1 : 1.5,

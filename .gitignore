@@ -21,6 +21,9 @@ Thumbs.db
 # Local runtime data belongs to the machine, never to the repository.
 redux.db*
 
+# AOCI rewrites AGENTS.md during init and leaves the previous copy beside it.
+AGENTS.md.backup.*
+
 src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/

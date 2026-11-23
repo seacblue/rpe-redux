@@ -2,7 +2,8 @@
  * The tempo map: conversion between beats and seconds across a chart's `BPMList`.
  *
  * Construction validates and sorts tempo points once, so later reads are pure
- * lookups; per-line `bpmfactor` scaling is applied by callers through `factor`.
+ * lookups. Every chart time is measured against this one map; a judge line's
+ * `bpmfactor` is not a time scale and never reaches these conversions.
  */
 import { t } from "../../../../i18n/index.ts";
 import { beatValue } from "./beat.ts";
@@ -56,8 +57,7 @@ export class TempoMap {
   }
 
   /** Chart seconds at `beat`, accepting a number or beat tuple. */
-  seconds(beat: number | readonly number[], factor = 1): number {
-    const rate = this.checkFactor(factor);
+  seconds(beat: number | readonly number[]): number {
     const beatTuple: readonly number[] = Array.isArray(beat) ? beat : [beat];
     const value = Array.isArray(beat) ? beatValue(beatTuple) : Number(beat);
     if (!Number.isFinite(value)) {
@@ -65,23 +65,16 @@ export class TempoMap {
     }
     const point =
       this.points[Math.max(0, upperBound(this.points, value, (entry) => entry.beat) - 1)];
-    return (point.seconds + (value - point.beat) * point.secondsPerBeat) * rate;
+    return point.seconds + (value - point.beat) * point.secondsPerBeat;
   }
 
   /** Beat position at chart time `seconds`. */
-  beat(seconds: number, factor = 1): number {
-    const rate = this.checkFactor(factor);
+  beat(seconds: number): number {
     if (!Number.isFinite(seconds)) {
       throw new Error(t("model.tempo.invalidTime"));
     }
-    const value = seconds / rate;
     const point =
-      this.points[Math.max(0, upperBound(this.points, value, (entry) => entry.seconds) - 1)];
-    return point.beat + (value - point.seconds) / point.secondsPerBeat;
-  }
-
-  /** A rate outside the playable range is treated as normal speed, not as a multiplier. */
-  checkFactor(factor: number): number {
-    return !Number.isFinite(factor) || Math.abs(factor) < 0.001 ? 1 : factor;
+      this.points[Math.max(0, upperBound(this.points, seconds, (entry) => entry.seconds) - 1)];
+    return point.beat + (seconds - point.seconds) / point.secondsPerBeat;
   }
 }

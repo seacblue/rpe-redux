@@ -74,7 +74,7 @@ test("export keeps event_hold and moves a legacy judge line to the package root"
   files.delete(canonical);
   files.set("judgeline/line.png", lineBytes);
   manifest.judgeline = {
-    line: { file: "judgeline/line.png", useful: manifest.judgeline.line.useful },
+    line: { file: "judgeline/line.png" },
   };
 
   const exported = await phiraExportFiles({ id: "test", manifest, files });

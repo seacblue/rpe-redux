@@ -29,7 +29,6 @@ export class TimelineZoomAnimator {
   private fromScale = 0;
   private toScale = 0;
   private anchorSeconds = 0;
-  private anchorFactor = 1;
   private readonly viewport: TimelineViewport;
   private readonly invalidate: () => void;
   private readonly settled: () => void;
@@ -65,8 +64,7 @@ export class TimelineZoomAnimator {
       return false;
     }
     if (!this.active) {
-      this.anchorFactor = this.viewport.factor;
-      this.anchorSeconds = this.viewport.tempo.seconds(this.viewport.origin, this.anchorFactor);
+      this.anchorSeconds = this.viewport.tempo.seconds(this.viewport.origin);
     }
     this.fromScale = current;
     this.toScale = target;
@@ -95,7 +93,7 @@ export class TimelineZoomAnimator {
     const scale = this.fromScale + (this.toScale - this.fromScale) * progress;
     this.viewport.scale = scale;
     if (!this.isPlaying()) {
-      const origin = this.viewport.tempo.beat(this.anchorSeconds, this.anchorFactor);
+      const origin = this.viewport.tempo.beat(this.anchorSeconds);
       this.viewport.setOrigin(origin, "zoom");
     }
     this.invalidate();

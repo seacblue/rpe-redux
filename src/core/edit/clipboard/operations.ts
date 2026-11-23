@@ -40,6 +40,8 @@ export interface ClipboardOptions {
   mirror?: boolean;
   keepTime?: boolean;
   targetLineIndex?: number;
+  /** Keep source identities when projecting a visual-only clipboard preview. */
+  preview?: boolean;
 }
 
 /** A beat interval covered by clipboard content or one paste. */
@@ -354,7 +356,7 @@ export function clipboardBeatRange(session: EditorSession): ClipboardBeatRange |
 export function projectClipboard(
   session: EditorSession,
   beat: number | Beat,
-  { mirror = false, keepTime = false, targetLineIndex }: ClipboardOptions = {},
+  { mirror = false, keepTime = false, targetLineIndex, preview = false }: ClipboardOptions = {},
 ): ClipboardProjection {
   const lineCount = session.chart?.judgeLineList?.length ?? 0;
   const noteLines = session.clipboard.map((unused, index) =>
@@ -440,7 +442,7 @@ export function projectClipboard(
   // edits (an Extension transform, a transaction update) hit the source object.
   const notes = session.clipboard.map((note) => ({
     ...shiftedTime(note, delta),
-    id: createChartObjectId(),
+    ...(preview ? {} : { id: createChartObjectId() }),
     positionX: Number(note.positionX) * (mirror ? -1 : 1),
   }));
   const events = eventEntries.map(({ type, event }) => {
@@ -448,7 +450,9 @@ export function projectClipboard(
     if (type === "paintEvents" && shifted && session.shaderAutoAlign !== false) {
       next = alignShaderParameters(next);
     }
-    next = { ...next, id: createChartObjectId() };
+    if (!preview) {
+      next = { ...next, id: createChartObjectId() };
+    }
     if (
       mirror &&
       MIRROR_EVENT_TYPES.has(type) &&

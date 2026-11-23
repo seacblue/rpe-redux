@@ -1,45 +1,47 @@
 /** Owns the batch-edit vocabulary: the fields and operations the panel offers. */
-import { t } from "../../../i18n/index.ts";
+import type { MessageKey } from "../../../i18n/index.ts";
 import type { Beat } from "../../global/chart/timing/beat.ts";
 import type { LineEventValue } from "../../global/chart/chart.ts";
 import type { BatchParameters, MultiEditKind } from "./parameters.ts";
 import type { SelectionEditResult } from "../selection/edits.ts";
 
-export const NOTE_BATCH_FIELDS = [
-  ["x", t("editor.commands.multiEdit.channel.x")],
-  ["speed", t("editor.commands.multiEdit.channel.speed")],
-  ["size", t("editor.commands.multiEdit.channel.size")],
-  ["yOffset", t("editor.commands.multiEdit.channel.yOffset")],
-  ["visibleTime", t("editor.commands.multiEdit.channel.visibleTime")],
-  ["alpha", t("editor.commands.multiEdit.channel.alpha")],
-  ["t1", t("editor.commands.multiEdit.channel.t1")],
-  ["t2", t("editor.commands.multiEdit.channel.t2")],
-  ["line", t("editor.commands.multiEdit.channel.line")],
-  ["hitSound", t("editor.commands.multiEdit.channel.hitSound")],
-  ["judgeArea", t("editor.commands.multiEdit.channel.judgeArea")],
-  ["red", "Red"],
-  ["green", "Green"],
-  ["blue", "Blue"],
+type BatchVocabularyEntry = readonly [string, MessageKey];
+
+export const NOTE_BATCH_FIELDS: readonly BatchVocabularyEntry[] = [
+  ["x", "editor.commands.multiEdit.channel.x"],
+  ["speed", "editor.commands.multiEdit.channel.speed"],
+  ["size", "editor.commands.multiEdit.channel.size"],
+  ["yOffset", "editor.commands.multiEdit.channel.yOffset"],
+  ["visibleTime", "editor.commands.multiEdit.channel.visibleTime"],
+  ["alpha", "editor.commands.multiEdit.channel.alpha"],
+  ["t1", "editor.commands.multiEdit.channel.t1"],
+  ["t2", "editor.commands.multiEdit.channel.t2"],
+  ["line", "editor.commands.multiEdit.channel.line"],
+  ["hitSound", "editor.commands.multiEdit.channel.hitSound"],
+  ["judgeArea", "editor.commands.multiEdit.channel.judgeArea"],
+  ["red", "editor.commands.multiEdit.channel.red"],
+  ["green", "editor.commands.multiEdit.channel.green"],
+  ["blue", "editor.commands.multiEdit.channel.blue"],
 ];
 
-export const EVENT_BATCH_FIELDS = [
-  ["both", t("editor.commands.multiEdit.eventField.both")],
-  ["start", t("editor.commands.multiEdit.eventField.start")],
-  ["end", t("editor.commands.multiEdit.eventField.end")],
-  ["easing", t("editor.commands.multiEdit.eventField.easing")],
-  ["t1", t("editor.commands.multiEdit.eventField.t1")],
-  ["t2", t("editor.commands.multiEdit.eventField.t2")],
-  ["line", t("editor.commands.multiEdit.eventField.line")],
-  ["linkgroup", t("editor.commands.multiEdit.eventField.linkgroup")],
+export const EVENT_BATCH_FIELDS: readonly BatchVocabularyEntry[] = [
+  ["both", "editor.commands.multiEdit.eventField.both"],
+  ["start", "editor.commands.multiEdit.eventField.start"],
+  ["end", "editor.commands.multiEdit.eventField.end"],
+  ["easing", "editor.commands.multiEdit.eventField.easing"],
+  ["t1", "editor.commands.multiEdit.eventField.t1"],
+  ["t2", "editor.commands.multiEdit.eventField.t2"],
+  ["line", "editor.commands.multiEdit.eventField.line"],
+  ["linkgroup", "editor.commands.multiEdit.eventField.linkgroup"],
 ];
 
-export const BATCH_OPERATIONS = [
-  ["By", t("editor.commands.multiEdit.operation.by")],
-  ["To", t("editor.commands.multiEdit.operation.to")],
-  ["Times", t("editor.commands.multiEdit.operation.times")],
-  ["Max", t("editor.commands.multiEdit.operation.max")],
-  ["Min", t("editor.commands.multiEdit.operation.min")],
-  ["Flip", t("editor.commands.multiEdit.operation.flip")],
+export const BATCH_OPERATIONS: readonly BatchVocabularyEntry[] = [
+  ["By", "editor.commands.multiEdit.operation.by"],
+  ["To", "editor.commands.multiEdit.operation.to"],
+  ["Times", "editor.commands.multiEdit.operation.times"],
+  ["Max", "editor.commands.multiEdit.operation.max"],
+  ["Min", "editor.commands.multiEdit.operation.min"],
+  ["Flip", "editor.commands.multiEdit.operation.flip"],
 ];
 
 /**

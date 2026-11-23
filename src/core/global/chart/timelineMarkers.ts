@@ -214,7 +214,7 @@ export function normalizeTimelineMarkers(
  */
 export function readTimelineMarkers(chart: Chart, tempo?: MarkerTempo): TimelineMarker[] {
   const raw = (chart as { markers?: unknown }).markers;
-  const secondsToBeat = tempo ? (seconds: number) => tempo.beat(seconds, 1) : undefined;
+  const secondsToBeat = tempo ? (seconds: number) => tempo.beat(seconds) : undefined;
   return normalizeTimelineMarkers(Array.isArray(raw) ? raw : [], secondsToBeat);
 }
 

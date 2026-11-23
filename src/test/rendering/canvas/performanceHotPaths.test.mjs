@@ -22,6 +22,7 @@ import {
   completionTimesForEntries,
   mergeCompletionTimes,
 } from "../../../frontend/screens/editor/workspace/preview/scene/completionTimes.ts";
+import { scoreAt } from "../../../core/global/chart/runtime/gameScoring.ts";
 
 test("overview frames are reused only while every painted input matches", () => {
   const key = {
@@ -135,6 +136,22 @@ test("completion times catch up when a paged line runtime appears", () => {
     cache.update([runtime], [source], tempo),
     [2],
     "the same note array gains a runtime after a partial page compile",
+  );
+});
+
+test("Combo scores the merged completion times from every judge line", () => {
+  assert.deepEqual(
+    scoreAt(
+      mergeCompletionTimes([
+        [0.5, 1.5],
+        [1, 2],
+      ]),
+      2,
+    ),
+    {
+      combo: 3,
+      score: 750000,
+    },
   );
 });
 

@@ -4,14 +4,17 @@
  * Panel geometry decides which columns are visible, and every time or position
  * conversion goes through the same scale so drawing, hit testing and editing
  * agree on where a beat or a note sits. Snapping always runs on the chart side
- * of the conversion.
+ * of the conversion. All lines share the chart's global BPM grid; a line's
+ * `bpmfactor` only changes its Hold hit-effect pulses and never this mapping.
  */
 import { beatValue, type Beat } from "../../global/chart/timing/beat.ts";
 import { snapPosition, snapTime, type TempoGrid } from "../../global/chart/editing/editGrid.ts";
 
+/** One line's time scale is the chart's global grid; `factor` is accepted and ignored. */
 export interface TimelineScale {
   origin: number;
-  factor: number;
+  /** Retained for callers that still pass a line factor; it never scales time. */
+  factor?: number;
   scale: number;
   judgementOffset: number;
 }
@@ -42,11 +45,9 @@ export function createVerticalBeatProjection(
   scale: TimelineScale,
   tempo: TempoGrid,
 ): VerticalBeatProjection {
-  const originSeconds = tempo.seconds(scale.origin, scale.factor);
+  const originSeconds = tempo.seconds(scale.origin);
   return (beat) =>
-    height -
-    scale.judgementOffset -
-    (tempo.seconds(beat, scale.factor) - originSeconds) * scale.scale;
+    height - scale.judgementOffset - (tempo.seconds(beat) - originSeconds) * scale.scale;
 }
 
 /**
@@ -281,8 +282,7 @@ export function timeAt(
   tempo: TempoGrid,
 ): number {
   return (
-    tempo.seconds(scale.origin, scale.factor) +
-    (viewHeight - scale.judgementOffset - vertical) / scale.scale
+    tempo.seconds(scale.origin) + (viewHeight - scale.judgementOffset - vertical) / scale.scale
   );
 }
 
@@ -293,7 +293,7 @@ export function beatAt(
   scale: TimelineScale,
   tempo: TempoGrid,
 ): number {
-  return tempo.beat(timeAt(vertical, viewHeight, scale, tempo), scale.factor);
+  return tempo.beat(timeAt(vertical, viewHeight, scale, tempo));
 }
 
 /** Beat at a canvas row after snapping, as the exact reduced triple. */
@@ -304,7 +304,7 @@ export function snappedBeatTriple(
   division: number,
   tempo: TempoGrid,
 ): Beat {
-  return snapTime(timeAt(vertical, viewHeight, scale, tempo), division, tempo, scale.factor);
+  return snapTime(timeAt(vertical, viewHeight, scale, tempo), division, tempo);
 }
 
 /** Beat at a canvas row after snapping to the division grid. */
@@ -328,11 +328,11 @@ export function verticalAtBeat(
   return (
     height -
     scale.judgementOffset -
-    (tempo.seconds(beat, scale.factor) - tempo.seconds(scale.origin, scale.factor)) * scale.scale
+    (tempo.seconds(beat) - tempo.seconds(scale.origin)) * scale.scale
   );
 }
 
-/** Canvas row at a beat using one line's BPM factor. */
+/** Canvas row at a beat for a line; every line shares the global BPM grid. */
 export function verticalAtLineBeat(
   beat: number,
   height: number,
@@ -340,7 +340,9 @@ export function verticalAtLineBeat(
   lineFactor: number,
   tempo: TempoGrid,
 ): number {
-  return verticalAtBeat(beat, height, { ...scale, factor: lineFactor }, tempo);
+  // `lineFactor` stays in the signature for existing callers; time is global.
+  void lineFactor;
+  return verticalAtBeat(beat, height, scale, tempo);
 }
 
 /** Restores the world-space start point of a marquee from its cached values. */
@@ -359,9 +361,7 @@ export function rectangleStartPoint(
     y:
       seconds === undefined
         ? y
-        : height -
-          scale.judgementOffset -
-          (seconds - tempo.seconds(scale.origin, scale.factor)) * scale.scale,
+        : height - scale.judgementOffset - (seconds - tempo.seconds(scale.origin)) * scale.scale,
   };
 }
 
@@ -378,12 +378,8 @@ export function rectangleBeatRange(
   const start = startSeconds ?? timeAt(startY, height, scale, tempo);
   const current =
     currentSeconds ??
-    tempo.seconds(scale.origin, scale.factor) +
-      (height - scale.judgementOffset - currentY) / scale.scale;
-  return [
-    tempo.beat(Math.min(start, current), scale.factor) - 1e-8,
-    tempo.beat(Math.max(start, current), scale.factor) + 1e-8,
-  ];
+    tempo.seconds(scale.origin) + (height - scale.judgementOffset - currentY) / scale.scale;
+  return [tempo.beat(Math.min(start, current)) - 1e-8, tempo.beat(Math.max(start, current)) + 1e-8];
 }
 
 /**

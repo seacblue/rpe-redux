@@ -10,6 +10,7 @@
 
 .sidebar {
   --sidebar-peek-width: var(--theme-sidebar-width, var(--layout-sidebar-width, 56px));
+  --sidebar-scrollbar-width: calc(6px * var(--ui-scale, 1));
   // The collapsed rail clips the content column to its padded inner width: what
   // the peek state actually shows, and therefore the width the icon slot must
   // fill to sit on the rail's centre line.
@@ -71,7 +72,7 @@
   // same with and without a scrollbar.
 
   &::-webkit-scrollbar {
-    width: 6px;
+    width: var(--sidebar-scrollbar-width);
     background: transparent;
   }
 
@@ -88,8 +89,8 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    min-height: 40px;
-    border: 1px solid transparent;
+    min-height: calc(40px * var(--ui-scale, 1));
+    border: calc(1px * var(--ui-scale, 1)) solid transparent;
     border-radius: var(--radius-panel);
     background: color-mix(in srgb, var(--foreground-muted) 46%, transparent);
     background-clip: padding-box;

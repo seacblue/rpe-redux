@@ -10,13 +10,15 @@ import { upperBound } from "../../../../../../core/utils/search.ts";
 import type { IntervalIndex } from "../../../../../../core/utils/intervalIndex.ts";
 import type { NoteEntry } from "../../../../../../core/global/chart/runtime/scene.ts";
 
-/** Seconds between repeated hold-hit pulses. */
+/** Seconds between repeated hold-hit pulses at rate 1. */
 export const HOLD_HIT_INTERVAL = 20 / 120;
 
 /** The slice of `LineRuntime` the hit feed reads. */
 export interface HitRuntime {
   hitTimes: NoteEntry[];
   holdIndex: IntervalIndex<NoteEntry>;
+  /** The line's `bpmfactor`: how much faster or slower its Holds pulse. */
+  holdHitRate: number;
 }
 
 interface HitTimeCursor {
@@ -93,23 +95,28 @@ export function recentHitsInto(
       hits.length = slot + 1;
     }
   }
+  // The authored `bpmfactor` scales only this line's Hold pulse rate; the note
+  // times themselves stay on the chart's global BPM grid.
+  const rate =
+    Number.isFinite(runtime.holdHitRate) && runtime.holdHitRate > 0 ? runtime.holdHitRate : 1;
+  const interval = HOLD_HIT_INTERVAL / rate;
   for (const { item: entry, index } of runtime.holdIndex.query(seconds - lifetime, seconds)) {
     if (entry.note.isFake) {
       continue;
     }
     const firstPulse = Math.max(
       0,
-      Math.floor((Math.max(seconds - lifetime, since) - entry.start) / HOLD_HIT_INTERVAL) + 1,
+      Math.floor((Math.max(seconds - lifetime, since) - entry.start) / interval) + 1,
     );
     const lastPulse = Math.min(
-      Math.floor((seconds - entry.start) / HOLD_HIT_INTERVAL),
-      Math.ceil((entry.end - entry.start) / HOLD_HIT_INTERVAL) - 1,
+      Math.floor((seconds - entry.start) / interval),
+      Math.ceil((entry.end - entry.start) / interval) - 1,
     );
     for (let pulse = firstPulse; pulse <= lastPulse; pulse++) {
       const slot = hits.length;
       const hit = hits[slot] ?? (hits[slot] = { entry, time: 0, seed: 0 });
       hit.entry = entry;
-      hit.time = entry.start + pulse * HOLD_HIT_INTERVAL;
+      hit.time = entry.start + pulse * interval;
       hit.seed = index * 65537 + pulse;
       hits.length = slot + 1;
     }
