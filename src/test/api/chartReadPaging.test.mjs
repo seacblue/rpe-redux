@@ -31,6 +31,30 @@ test("chart line reads detach only the requested page", () => {
   assert.ok(page.nextCursor);
 });
 
+test("chart range reports authored content bounds in beats and seconds", () => {
+  const chart = fixture();
+  const api = createChartApi({ chart: () => chart });
+
+  assert.deepEqual(api.range(), {
+    startBeat: 0,
+    endBeat: 4,
+    startSeconds: 0,
+    endSeconds: 2,
+  });
+});
+
+test("chart lineGroups returns folder names and line indices without a full snapshot", () => {
+  const chart = fixture();
+  chart.judgeLineGroup = ["Default", "Lead"];
+  chart.judgeLineList[0].Group = 1;
+  const api = createChartApi({ chart: () => chart });
+
+  assert.deepEqual(api.lineGroups(), [
+    { index: 0, name: "Default", lineIndices: [1, 2, 3] },
+    { index: 1, name: "Lead", lineIndices: [0] },
+  ]);
+});
+
 test("note and event pages keep stable ownership metadata", () => {
   const chart = fixture();
   const api = createChartApi({ chart: () => chart });

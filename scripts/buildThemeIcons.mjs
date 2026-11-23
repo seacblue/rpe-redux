@@ -33,6 +33,9 @@ const THEMES = [
   { id: "dark", ink: "#ffffff", stroke: 2 },
   { id: "light", ink: "#000000", stroke: 1.75 },
 ];
+// These legacy glyphs are bundled raster assets without a local Lucide source;
+// keep their licensed artwork while regenerating the Lucide-backed entries.
+const EXTERNAL_ICON_PATHS = new Set(["icons/filter.png", "icons/calendar.png"]);
 
 /** Read the name/path pairs from the icon catalog literal. */
 function catalog() {
@@ -110,6 +113,9 @@ function writeManifest(id, entries) {
 const entries = catalog();
 const paths = [...new Set(entries.map(([, path]) => path))];
 for (const path of paths) {
+  if (EXTERNAL_ICON_PATHS.has(path)) {
+    continue;
+  }
   if (!(path in ICON_SOURCES)) {
     throw new Error(`No Lucide source registered for ${path}`);
   }
@@ -119,6 +125,9 @@ for (const theme of THEMES) {
   const iconRoot = join(ROOT, "src", "assets", "themes", theme.id, "icons");
   mkdirSync(iconRoot, { recursive: true });
   for (const path of paths) {
+    if (EXTERNAL_ICON_PATHS.has(path)) {
+      continue;
+    }
     const relativePath = path.replace(/^icons\//, "");
     if (relativePath.includes("/") || relativePath.includes("-")) {
       throw new Error(`Theme icons must be flat snake_case files: ${path}`);

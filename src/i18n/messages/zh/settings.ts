@@ -162,21 +162,12 @@ export default {
   "settings.extensions.error.conflictEnabled": "这个扩展与已启用的扩展冲突：{value}。",
   "settings.extensions.error.dependentEnabled": "已启用的扩展依赖这个扩展：{value}。",
   "settings.extensions.installed.title": "扩展",
-  "settings.extensions.install.open": "安装扩展…",
+  "settings.extensions.install.github": "从 Github 安装",
   "settings.extensions.install.safeModeHint":
     "扩展安全模式已启用；请在不带安全模式参数的情况下重启后再安装扩展包。",
-  "settings.extensions.install.title": "安装扩展",
-  "settings.extensions.install.description":
-    "粘贴 GitHub 仓库链接或 /tree/<ref>/<path> 链接，也可以选择本地扩展文件夹或 .zip 包。检查只会读取 manifest 和声明的包文件；在确认审阅结果前不会安装或执行任何内容。",
-  "settings.extensions.install.localFolder": "选择文件夹",
   "settings.extensions.install.localArchive": "选择 ZIP",
-  "settings.extensions.install.localFolderTitle": "选择扩展文件夹",
   "settings.extensions.install.localArchiveTitle": "选择扩展 ZIP 包",
-  "settings.extensions.install.source": "GitHub 链接",
-  "settings.extensions.install.sourceDescription":
-    "如果仓库根目录只有一个 manifest.json，可以直接使用仓库链接；更大仓库中的包请使用 /tree/<ref>/<path> 链接。",
-  "settings.extensions.install.sourcePlaceholder":
-    "https://github.com/owner/repo/tree/main/extensions/example",
+  "settings.extensions.install.source": "Github 链接",
   "settings.extensions.install.inspect": "检查扩展包",
   "settings.extensions.install.inspecting": "正在检查…",
   "settings.extensions.install.reviewTitle": "安装 {name}？",

@@ -43,6 +43,39 @@ test("planning a recipe does not write the chart or history", () => {
   }
 });
 
+test("a parameterized recipe can create and populate a line folder", () => {
+  const session = new EditorSession(createChart());
+  const disconnect = connectSelectionApi({ session: () => session });
+  try {
+    const planned = recipe.plan({
+      steps: [
+        {
+          op: "transaction",
+          request: {
+            lineGroups: {
+              create: [{ name: { expression: "folder" } }],
+              assign: [{ group: { expression: "folder" }, lineIndices: { expression: "lines" } }],
+            },
+          },
+        },
+      ],
+      params: { folder: "Lead", lines: [0] },
+      label: "Create Lead folder",
+    });
+    assert.equal(planned.ok, true);
+    assert.equal(planned.value.status, "planned");
+    assert.deepEqual(session.chart.judgeLineGroup, ["Default"]);
+
+    const applied = recipe.apply(planned.value.planId);
+    assert.equal(applied.ok, true);
+    assert.equal(applied.value.status, "committed");
+    assert.deepEqual(session.chart.judgeLineGroup, ["Default", "Lead"]);
+    assert.equal(session.chart.judgeLineList[0].Group, 1);
+  } finally {
+    disconnect();
+  }
+});
+
 test("cancelling a plan makes it unavailable", () => {
   const session = new EditorSession(createChart());
   const disconnect = connectSelectionApi({ session: () => session });

@@ -17,6 +17,9 @@ import {
 import type { ChartObjectId } from "../../global/chart/identity.ts";
 import { createLateBound } from "../../utils/lateBound.ts";
 import { chartFingerprint } from "../document/chartRevision.ts";
+import type { ChartContentRange } from "../../global/chart/chartRange.ts";
+import { chartRange } from "./chartRangeRead.ts";
+import { readLineGroups } from "./lineGroupsRead.ts";
 
 export type ReadonlyChart<T> = T extends (...args: never[]) => unknown
   ? T
@@ -32,6 +35,12 @@ export type ChartReadSnapshot = ReadonlyChart<Chart>;
 export type ChartReadMeta = ReadonlyChart<ChartMeta>;
 export type ChartReadTiming = ReadonlyChart<BpmEntry>;
 export type ChartReadLine = ReadonlyChart<JudgeLine>;
+/** Detached folder metadata used to select judge lines without a full snapshot. */
+export interface ChartReadLineGroup {
+  readonly index: number;
+  readonly name: string;
+  readonly lineIndices: readonly number[];
+}
 export type ChartReadNote = ReadonlyChart<JudgeLineNote>;
 export type ChartReadEvent = ReadonlyChart<JudgeLineEvent>;
 
@@ -51,6 +60,8 @@ export interface ChartReadState {
   readonly chartFingerprint: string | null;
   readonly generation: number;
 }
+
+export type ChartReadRange = ChartContentRange;
 
 export interface ChartReadPageOptions {
   readonly chartFingerprint?: string | null;
@@ -149,6 +160,7 @@ export interface ChartApiHost {
 export interface ChartApi {
   readonly version: number;
   state(): ChartReadState;
+  range(): ChartReadRange;
   read<Collection extends ChartReadCollection>(
     collection: Collection,
     options?: ChartReadPageOptions,
@@ -157,6 +169,7 @@ export interface ChartApi {
   metadata(): ChartReadMeta | null;
   resources(): readonly ChartResourceReference[];
   lines(): readonly ChartReadLine[];
+  lineGroups(): readonly ChartReadLineGroup[];
   line(id: ChartObjectId): ChartReadLine | null;
   parentId(id: ChartObjectId): ChartObjectId | null;
   notes(): readonly ChartNoteReadRef[];
@@ -696,6 +709,9 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     state(): ChartReadState {
       return capture().revision;
     },
+    range(): ChartReadRange {
+      return chartRange(capture().source);
+    },
     read,
     snapshot: current,
     metadata(): ChartReadMeta | null {
@@ -708,6 +724,9 @@ export function createChartApi(host: ChartApiHost): ChartApi {
     },
     lines(): readonly ChartReadLine[] {
       return Object.freeze((capture().source?.judgeLineList ?? []).map(detachedLine));
+    },
+    lineGroups(): readonly ChartReadLineGroup[] {
+      return readLineGroups(capture().source);
     },
     line(id: ChartObjectId): ChartReadLine | null {
       const line = capture().source?.judgeLineList?.find((candidate) => candidate.id === id);

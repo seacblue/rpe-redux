@@ -27,8 +27,7 @@ function notifyCollaborativeUndo(
 ): void {
   if (result.status === "committed") {
     notify(
-      t("editor.app.notice.travel", {
-        action: t("common.action.undo"),
+      t("editor.app.notice.undone", {
         label: t("workspace.history.collaborativeUndo"),
       }),
       "success",
@@ -93,8 +92,7 @@ export function createHistoryTravel({
     }
     reveal(session);
     notify(
-      t("editor.app.notice.travel", {
-        action: direction === "undo" ? t("common.action.undo") : t("common.action.redo"),
+      t(direction === "undo" ? "editor.app.notice.undone" : "editor.app.notice.redone", {
         label: tRaw(entry.label),
       }),
       "success",

@@ -322,6 +322,12 @@ type ChartReadItem<C extends ChartReadCollection> = C extends "metadata"
 
 redux.chart.availability(): Promise<ApiAvailability>;
 redux.chart.state(): Promise<ApiResult<{ chartFingerprint: string | null; generation: number }>>;
+redux.chart.range(): Promise<ApiResult<{
+  startBeat: number | null;
+  endBeat: number | null;
+  startSeconds: number | null;
+  endSeconds: number | null;
+}>>;
 redux.chart.read<C extends ChartReadCollection>(
   collection: C,
   options?: {
@@ -727,7 +733,7 @@ A chart cursor pins the fingerprint and generation, so an edit invalidates it. W
 
 The `cursor` is an opaque token. Only pass back a `nextCursor` you received; never parse, construct, or reuse it across fingerprints. If a cursor is malformed, the page status is `invalid_request` with `reason: "invalid_cursor"`.
 
-`chart.snapshot()` materializes the whole chart in one result and can exceed the bridge limit. Prefer `chart.readAll` when a package needs chart data; it assembles pages internally.
+`chart.range()` reports the authored note/event/Shader content boundary. It is not the audio file duration; add an explicit beat padding when placing a terminal object near the end of a chart. `chart.snapshot()` materializes the whole chart in one result and can exceed the bridge limit. Prefer `chart.readAll` when a package needs chart data; it assembles pages internally. `chart.lineGroups()` is the small read helper for judge-line folders. It returns `{ index, name, lineIndices }[]`; prefer its stable `name` when building a later `lineGroups.assign` request.
 
 `redux.chart.resources()` lists resource names referenced by the chart. Use it before replacing a song, background, line texture, or attached UI. `META.illustration` is the illustrator credit text, not an asset name.
 
@@ -1066,6 +1072,14 @@ interface ChartTransactionRequest {
     insert?: readonly { line: Partial<JudgeLine> & { id?: string } }[];
     update?: readonly { id: string; patch: JudgeLinePatch }[];
   };
+  lineGroups?: {
+    create?: readonly { name: string }[];
+    assign?: readonly {
+      group: number | string;
+      lineIds?: readonly string[];
+      lineIndices?: readonly number[];
+    }[];
+  };
   notes?: {
     insert?: readonly {
       lineId?: string;
@@ -1234,6 +1248,7 @@ Rules:
 - `metadata` is a partial `META` patch. It accepts `name`, `composer`, `charter`, `illustration`, `level`, `song`, `background`, `offset`, `RPEVersion`, `ReduxVersion`, and extra format fields. Do not use `BPMList` here; use `timing`.
 - `timing.bpmList` replaces the whole tempo map. It must be non-empty; entries are sorted by `startTime` on apply.
 - `lines.insert` appends a judge line. `line` accepts the same editable fields as `lines.update`; the editor assigns the id and a default event layer. The new line's index is the previous line count plus its position in `insert`, so later notes/events in the same transaction can target it with `lineIndex`. `lines.delete` removes lines by id; line-owned notes/events go with them, child lines are re-parented to the root, shader line references are remapped, and at least one line must remain. Deletion runs before inserts and updates, so later `lineIndex` targets use the post-delete order. Line patches accept `Name`, `Group`, `Texture`, and the `alphaControl`, `posControl`, `sizeControl`, `skewControl`, and `yControl` point arrays.
+- `lineGroups.create` appends named judge-line folders. `lineGroups.assign` switches lines to a folder by name or index, using `lineIndices` and/or `lineIds`. Creation happens before assignment, so a single transaction can create a folder and move lines into it. Names are trimmed and commas/parentheses are removed so the result can be used as a line-selection token; assigning one line twice in the same request is rejected as ambiguous.
   <!-- ai-block:lineBpmFactor -->
   Add `bpmfactor` to change how often a line's Holds emit hit-effect pulses; it does not move notes or events.
   <!-- /ai-block:lineBpmFactor -->

@@ -106,7 +106,6 @@ function execute(
     translations: script.manifest.translations,
     initialValues: rememberedOrDefaultParameterValues(script.owner, scriptId, script.parameters),
     title: t("workspace.scripts.parameters.title", { script: label }),
-    description: t("workspace.scripts.parameters.description"),
   }).then((values) => {
     if (values) {
       void scriptRegistry.run(script.id, values);

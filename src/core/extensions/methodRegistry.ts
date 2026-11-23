@@ -129,10 +129,12 @@ const HANDLE_METHODS = {
   chart: [
     ["availability", "chart.read", "read", false],
     ["state", "chart.read", "read", false],
+    ["range", "chart.read", "read", false],
     ["read", "chart.read", "read", false],
     ["readAll", "chart.read", "read", false],
     ["resources", "chart.read", "read", false],
     ["lines", "chart.read", "read", false],
+    ["lineGroups", "chart.read", "read", false],
     ["line", "chart.read", "read", false],
     ["parentId", "chart.read", "read", false],
     ["notes", "chart.read", "read", false],

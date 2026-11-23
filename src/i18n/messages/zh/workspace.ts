@@ -96,7 +96,6 @@ export default {
   "workspace.scripts.source": "提供者：{source}",
   "workspace.scripts.run": "运行",
   "workspace.scripts.parameters.title": "使用参数运行 {script}",
-  "workspace.scripts.parameters.description": "请输入有效值后运行此脚本。",
   "workspace.scripts.parameters.fields": "字段：{value}",
   "workspace.scripts.parameters.functions": "函数：{value}",
   "workspace.scripts.parameters.judgeLine.option": "判定线 {index}，{name}",
@@ -114,7 +113,8 @@ export default {
     "写出候选判定线，由宿主随机挑选所需数量。",
   "workspace.scripts.parameters.judgeLine.mode.globalHint":
     "忽略写出的判定线，由宿主从谱面所有判定线中随机挑选。",
-  "workspace.scripts.parameters.judgeLine.placeholder": "判定线列表，例如 1,3:5",
+  "workspace.scripts.parameters.judgeLine.placeholder":
+    "判定线列表或 folder 名，例如 1,3:5 或 Chorus",
   "workspace.scripts.parameters.judgeLine.globalHint":
     "脚本运行时从谱面所有判定线中随机挑选 {count} 条。",
   "workspace.scripts.recipe.distributeNotes": "分布音符",
@@ -123,6 +123,43 @@ export default {
   "workspace.scripts.recipe.staggerEventsDescription": "偏移选中的事件值。",
   "workspace.scripts.recipe.fadeNotes": "淡化音符",
   "workspace.scripts.recipe.fadeNotesDescription": "缩放选中音符的透明度。",
+  "workspace.scripts.recipe.sequenceNotes": "给音符排 X 序列",
+  "workspace.scripts.recipe.sequenceNotesDescription":
+    "按时间顺序循环写入一串 X 值；适合阶梯、波形和重复键型。",
+  "workspace.scripts.recipe.randomizeNotes": "给音符加受控扰动",
+  "workspace.scripts.recipe.randomizeNotesDescription":
+    "在选中音符的 X 上加入有界随机偏移，并在应用前预览结果。",
+  "workspace.scripts.recipe.cycleNotesThroughLines": "让音符轮换判定线",
+  "workspace.scripts.recipe.cycleNotesThroughLinesDescription":
+    "按时间顺序循环写入判定线编号，例如 0,1,2；适合快速铺设多线键型。",
+  "workspace.scripts.recipe.speedCurveNotes": "给音符生成速度曲线",
+  "workspace.scripts.recipe.speedCurveNotesDescription":
+    "在起始和结束流速之间生成逐音符曲线；0 速 Hold 可能受播放器实现影响。",
+  "workspace.scripts.recipe.createLineFolder": "创建判定线 folder",
+  "workspace.scripts.recipe.createLineFolderDescription":
+    "创建一个命名 folder，并在一次可撤销的操作里把选中的判定线切过去。",
+  "workspace.scripts.studio.title": "脚本工作台",
+  "workspace.scripts.studio.subtitle": "先选中对象，再预览脚本会改什么；应用后整组操作可撤销。",
+  "workspace.scripts.studio.searchPlaceholder": "搜索脚本",
+  "workspace.scripts.studio.filter.label": "按来源筛选脚本",
+  "workspace.scripts.studio.filter.emptyTitle": "所有来源都被筛掉了",
+  "workspace.scripts.studio.filter.empty": "在上方筛选中重新启用一个来源即可查看对应脚本。",
+  "workspace.scripts.studio.recipes": "常用制谱动作",
+  "workspace.scripts.studio.extensions": "扩展脚本",
+  "workspace.scripts.studio.noMatch": "没有匹配的脚本",
+  "workspace.scripts.studio.preview.title": "应用前检查",
+  "workspace.scripts.studio.preview.description": "这是脱离当前谱面的结构预览，确认后才会写入。",
+  "workspace.scripts.studio.preview.affected": "影响对象",
+  "workspace.scripts.studio.preview.changed": "实际变化",
+  "workspace.scripts.studio.preview.fingerprint": "计划指纹",
+  "workspace.scripts.studio.preview.apply": "应用变更",
+  "workspace.scripts.studio.preview.cancel": "取消预览",
+  "workspace.scripts.studio.preview.emptySelection": "当前没有选中对象，请先选择音符或事件。",
+  "workspace.scripts.studio.preview.error": "无法生成预览：{reason}",
+  "workspace.scripts.studio.preview.stale": "谱面在预览后发生了变化，请重新预览。",
+  "workspace.scripts.studio.preview.applied": "已应用，影响 {count} 个对象",
+  "workspace.scripts.studio.preview.unchanged": "预览结果没有变化",
+  "workspace.scripts.studio.preview.planId": "计划 {value}",
 
   "workspace.history.title": "编辑历史",
   "workspace.history.emptyTitle": "还没有编辑历史",

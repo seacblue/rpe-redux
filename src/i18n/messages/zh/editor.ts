@@ -217,7 +217,8 @@ export default {
   "editor.app.notice.nothingToRedo": "没有可重做的编辑",
   "editor.app.notice.nothingToUndo": "没有可撤销的编辑",
 
-  "editor.app.notice.travel": "{action}：{label}",
+  "editor.app.notice.undone": "已撤销：{label}",
+  "editor.app.notice.redone": "已重做：{label}",
   "editor.app.status.copiedObjects": "已复制 {count} 个物件",
 
   "editor.app.status.exported": "已导出：{name}",

@@ -174,6 +174,41 @@ test("lines.insert appends a line and later operations can target it by index", 
   assert.equal(line.notes.length, 1);
 });
 
+test("lineGroups creates a folder and assigns lines by name in one transaction", () => {
+  const session = new EditorSession(createChart());
+  const result = applyChartTransaction(session, {
+    label: "make lead folder",
+    lineGroups: {
+      create: [{ name: " Lead, " }],
+      assign: [{ group: "Lead", lineIndices: [0] }],
+    },
+  });
+  assert.equal(result.status, "committed");
+  assert.deepEqual(session.chart.judgeLineGroup, ["Default", "Lead"]);
+  assert.equal(session.chart.judgeLineList[0].Group, 1);
+  assert.equal(session.history.undoStack.at(-1).label, "make lead folder");
+});
+
+test("lineGroups rejects an ambiguous double assignment without partial writes", () => {
+  const session = new EditorSession(createChart());
+  const before = session.chart;
+  const result = applyChartTransaction(session, {
+    lineGroups: {
+      create: [{ name: "Lead" }],
+      assign: [
+        { group: "Lead", lineIndices: [0] },
+        { group: 0, lineIndices: [0] },
+      ],
+    },
+  });
+  assert.equal(result.status, "rejected");
+  assert.ok(result.issues.some((entry) => entry.code === "lineGroup.assign.conflict"));
+  assert.equal(session.chart, before);
+  assert.deepEqual(session.chart.judgeLineGroup, ["Default"]);
+  assert.equal(session.chart.judgeLineList[0].Group, 0);
+  assert.equal(session.history.undoStack.length, 0);
+});
+
 test("timing.bpmList replaces the tempo map and sorts points by beat", () => {
   const session = new EditorSession(createChart());
   const result = applyChartTransaction(session, {

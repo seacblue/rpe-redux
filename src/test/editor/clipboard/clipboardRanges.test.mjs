@@ -125,6 +125,6 @@ test("history travel resolves dynamic operation labels before notifying", () => 
 
   travel.travel("undo");
 
-  assert.equal(messages.at(-1), "撤销：By，增减");
+  assert.equal(messages.at(-1), "已撤销：By，增减");
   setLanguage("en");
 });

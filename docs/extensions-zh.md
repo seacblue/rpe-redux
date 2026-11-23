@@ -53,7 +53,7 @@ Extension 在独立的 iframe 沙箱中运行，用于添加快捷键、工具�
 
 扩展设置页接受仓库链接、raw 链接或 `owner/repo` 简写。`/tree/<ref>/<path>` 链接用于选择 monorepo 中的单个包。仓库链接会使用默认分支解析；如果找到多个 manifest，会返回 `manifestMultiple` 并列出候选路径。
 
-**选择文件夹**和**选择 ZIP**会走同一个审阅流程。原生宿主只读取 manifest、声明的 entry/i18n 和声明的资源；ZIP 不会解压到磁盘。本地包同样写入托管安装目录，之后更新仍需重新审阅和指纹确认；直接放入 portable 扩展目录的文件夹仍可被扫描发现。
+**从 Github 安装**用于粘贴仓库链接；**选择 ZIP**位于它左侧，也会走同一个审阅流程。安装弹窗只保留 Github 链接输入框，不再提供选择文件夹按钮。原生宿主只读取 manifest、声明的 entry/i18n 和声明的资源；ZIP 不会解压到磁盘。本地包同样写入托管安装目录，之后更新仍需重新审阅和指纹确认；直接放入 portable 扩展目录的文件夹仍可被扫描发现。
 
 检查包时只读取 `manifest.json`、声明的 `entry` 以及声明或约定的 `i18n.json`。审阅对话框会显示包名、作者、描述、版本、宿主版本范围、能力、来源提交和文件列表。确认后，宿主把完全相同的字节写入 `user-data/extensions/<id>`，并在不重启的情况下启用。安装失败会返回稳定错误码和失败阶段（`input`、`marketplace`、`resolve`、`download`、`validate`、`persist`、 `load` 或 `enable`），同时显示请求 URL、HTTP 状态、技术细节、底层原因和恢复建议。检查和安装只在桌面应用中可用，浏览器预览无法读取仓库或写入托管目录。
 
@@ -176,7 +176,7 @@ const off = context.services.onDataChange("example.summary", (next) => {
 
 脚本可以声明参数 schema 和默认快捷键。共享参数对话框会在带参数的脚本运行前渲染 schema；注册默认快捷键需要 `shortcuts` capability，未声明时脚本仍可运行，但默认绑定会被忽略并写宿主 warning。快捷键以包的命名空间 id 注册，并携带直接的 `run` 回调。脚本面板和快捷键编辑器是列出它们的界面，不需要单独的命令目录。
 
-`judgeLine` 参数向脚本传递判定线整数索引；`count` 大于 1 或声明 `multiple` 时传递有序数组。`count` 固定脚本需要的判定线数量；没有 `count` 的 `multiple` 接受任意长度的精确列表。数量已知时，每个字段都有自己的精确、范围、全局开关：精确保留写出的判定线与顺序，范围从候选线中随机抽取所需数量，全局忽略写出的线并从谱面所有判定线中抽取；不限数量的列表只提供精确模式。列表沿用工具栏的紧凑写法（`1,3:5`）。“分配空闲判定线”操作优先复用没有音符、事件、父子线关系的判定线，只有所有候选都被占用时才追加一条脚本线，并把该线加入列表字段。对话框创建但最终取消的脚本线会被移除；之后的对话框会在它仍为空时继续复用它。
+`judgeLine` 参数向脚本传递判定线整数索引；`count` 大于 1 或声明 `multiple` 时传递有序数组。`count` 固定脚本需要的判定线数量；没有 `count` 的 `multiple` 接受任意长度的精确列表。数量已知时，每个字段都有自己的精确、范围、全局开关：精确保留写出的判定线与顺序，范围从候选线中随机抽取所需数量，全局忽略写出的线并从谱面所有判定线中抽取；不限数量的列表只提供精确模式。脚本也可以用 `modes` 显式限制可用模式，例如只允许 `["exact"]`，避免一个只接受单条线的动作误收范围或全局选择。列表沿用工具栏的紧凑写法（`1,3:5`）。“分配空闲判定线”操作优先复用没有音符、事件、父子线关系的判定线，只有所有候选都被占用时才追加一条脚本线，并把该线加入列表字段。对话框创建但最终取消的脚本线会被移除；之后的对话框会在它仍为空时继续复用它。
 
 ## 声明式步骤
 
@@ -353,6 +353,10 @@ const dispose = context.ui.registerDesignPanel({
 
 谱面写入是一个原子 `transaction` 请求，需要 `chart.write`。先用 `api.chart` 或 `api.selection` 读取，再组装请求并调用 `api.transaction.preview` 或 `api.transaction.apply`。不要直接修改读取快照；用快照里的 id 和值组装事务。
 
+`api.chart.range()` 返回谱面已写入内容的边界：`startBeat`、`endBeat`、`startSeconds` 和 `endSeconds`。它统计音符、普通事件轨和 Shader 事件，不等于引用音频文件的时长；需要在末尾放置对象时，应在 `endBeat` 上明确增加拍数余量。
+
+`api.chart.lineGroups()` 只返回扁平的判定线 folder：`{ index, name, lineIndices }`，不会物化完整谱面快照。脚本应该优先用返回的 folder 名传给 `lineGroups.assign`，这样 folder 索引变化后仍然容易读懂、也更不容易切错。
+
 ```js
 const lines = await api.chart.lines();
 if (lines.ok && lines.value.length > 0) {
@@ -373,7 +377,7 @@ if (lines.ok && lines.value.length > 0) {
 }
 ```
 
-请求可以更新谱面 `metadata`、通过 `timing.bpmList` 替换速度表、插入或更新判定线，以及按 id 插入、更新或删除音符和事件。音符和事件时间是约分后的拍三元组，不是秒。`lines` 没有删除操作。
+请求可以更新谱面 `metadata`、通过 `timing.bpmList` 替换速度表、插入或更新判定线、创建命名的判定线 folder、把判定线切换到 folder，以及按 id 插入、更新或删除音符和事件。音符和事件时间是约分后的拍三元组，不是秒。`lineGroups.create` 会追加 folder，`lineGroups.assign` 接受 folder 名或索引，并可使用 `lineIndices` 或 `lineIds`；两者可以放在同一个事务里。folder 名会自动去首尾空格并去掉逗号、括号，保证它能继续作为选线输入。
 
 `preview(request)` 先做 dry-run 校验，只有状态为 `previewed` 时才返回 preview id；把 id 传给 `apply(previewId)`，或用 `cancel(previewId)` 丢弃。`apply` 的状态是 `committed`、`unchanged`、`rejected`、`conflict` 或 `unavailable`，`value` 里包含 issues、受影响对象 id 和撤销历史。分页 `chart.read` 用旧游标时返回 `stale_read`；请求带有旧 `expectedGeneration` 时也会以 issue code `stale_read` 拒绝；提交前谱面变化时 `apply` 返回 `conflict`。这时应重新读取并重建请求，不要盲目重试。
 

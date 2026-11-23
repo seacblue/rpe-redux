@@ -38,6 +38,8 @@ export interface SchemaControlProps {
   options?: readonly SchemaControlOption[];
   /** A leading disabled option, used by schemas that require an explicit pick. */
   emptyOption?: string;
+  /** Optional native completion values for single-line text fields. */
+  suggestions?: readonly string[];
   /** Optional control placed after the value, such as a line-allocation action. */
   trailing?: ReactNode;
   autoFocus?: boolean;
@@ -68,6 +70,7 @@ export function SchemaControl({
   maxLength,
   options,
   emptyOption,
+  suggestions,
   trailing,
   autoFocus,
   disabled,
@@ -203,19 +206,29 @@ export function SchemaControl({
           {...described}
         />
       ) : (
-        <Input
-          id={id}
-          type="text"
-          value={textValue}
-          placeholder={placeholder}
-          maxLength={maxLength}
-          disabled={disabled}
-          autoFocus={autoFocus}
-          spellCheck={false}
-          autoComplete="off"
-          onChange={commit}
-          {...described}
-        />
+        <>
+          <Input
+            id={id}
+            type="text"
+            value={textValue}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            disabled={disabled}
+            autoFocus={autoFocus}
+            spellCheck={false}
+            autoComplete="off"
+            list={suggestions?.length ? `${id}-suggestions` : undefined}
+            onChange={commit}
+            {...described}
+          />
+          {suggestions?.length ? (
+            <datalist id={`${id}-suggestions`}>
+              {suggestions.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
+              ))}
+            </datalist>
+          ) : null}
+        </>
       );
       break;
   }

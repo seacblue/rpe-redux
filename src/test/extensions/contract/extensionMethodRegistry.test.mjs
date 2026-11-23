@@ -98,6 +98,7 @@ test("the completeness check accepts a facade built from the registry", () => {
   assert.doesNotThrow(() => assertRegistryComplete(facade));
   assert.equal(lookupMethod("chart", "readAll")?.capability, "chart.read");
   assert.equal(lookupMethod("chart", "lines")?.capability, "chart.read");
+  assert.equal(lookupMethod("chart", "lineGroups")?.capability, "chart.read");
   assert.equal(lookupMethod("chart", "notes")?.capability, "chart.read");
   assert.equal(lookupMethod("chart", "events")?.capability, "chart.read");
   assert.equal(lookupMethod("recipe", "plan")?.capability, "chart.write");

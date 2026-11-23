@@ -67,7 +67,8 @@ export interface BatchStep {
 /** Apply one validated chart transaction request. */
 export interface TransactionStep {
   readonly op: "transaction";
-  readonly request: ChartTransactionRequest;
+  /** A declarative request may contain parameter references at any leaf. */
+  readonly request: ChartTransactionRequest | StepRecord;
 }
 
 /** Choose the selection the next mutating step uses. */

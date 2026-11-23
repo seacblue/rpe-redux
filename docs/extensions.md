@@ -60,7 +60,7 @@ A range is checked before registration. An invalid range reports `invalidHostVer
 
 The Extensions settings page accepts a repository URL, a raw link, or `owner/repo` shorthand. A `/tree/<ref>/<path>` link selects one package inside a monorepo. A repository link with one manifest is resolved at its default branch; several manifests produce a `manifestMultiple` failure that lists the candidates.
 
-**Choose folder** and **Choose ZIP** install a local package through the same review. The native host reads only the manifest, its declared entry and i18n files, and declared assets; a ZIP is never extracted to disk. Local packages use the managed install root, so later updates still need the same review and fingerprint. A folder placed directly in the portable extensions root remains discoverable without the install step.
+**Install from GitHub** accepts a repository link, while **Choose ZIP** sits to its left and uses the same review. The install dialog keeps only the GitHub link field and no longer offers a folder picker. The native host reads only the manifest, its declared entry and i18n files, and declared assets; a ZIP is never extracted to disk. Local packages use the managed install root, so later updates still need the same review and fingerprint. A folder placed directly in the portable extensions root remains discoverable without the install step.
 
 Inspecting a link downloads only `manifest.json`, the declared `entry`, and the declared or conventional `i18n.json`. The review dialog shows the package name, author, description, version, engine range, capabilities, source commit, and files. Confirming writes those exact bytes to `user-data/extensions/<id>` and enables the package without a restart. A failed install reports a stable code and the phase that failed (`input`, `marketplace`, `resolve`, `download`, `validate`, `persist`, `load`, or `enable`), plus the request URL, HTTP status, detail, cause, and recovery hint. Inspection and installation are desktop-only; the browser preview cannot read a repository or write the managed root.
 
@@ -226,7 +226,7 @@ Hook names use the provider package id as their namespace. Each hook publishes a
 
 A script may declare an `ExtensionParameterSchema` with these parameter kinds: `number`, `boolean`, `text`, `select`, `color`, `beat`, `judgeLine`, and `expression`. The shared parameter dialog renders the schema before a parameterized script runs.
 
-A `judgeLine` parameter passes an integer line index, or an ordered array when `count` is greater than one or `multiple` is set. `count` fixes the expected number of lines; `multiple` without `count` accepts an exact list of any length. When the count is known, the field offers exact, range, and global modes: exact keeps the written lines and order, range draws the required count from the written candidates, and global draws from every line in the chart. An unbounded list offers exact only. Lists use the toolbar syntax (`1,3:5`). The free-line action reuses a line with no notes, events, child lines, or parent, and appends a scratch line only when every candidate is occupied. A scratch line is removed when the dialog is cancelled and reused by later dialogs while it stays empty.
+A `judgeLine` parameter passes an integer line index, or an ordered array when `count` is greater than one or `multiple` is set. `count` fixes the expected number of lines; `multiple` without `count` accepts an exact list of any length. When the count is known, the field offers exact, range, and global modes: exact keeps the written lines and order, range draws the required count from the written candidates, and global draws from every line in the chart. An unbounded list offers exact only. A script may set `modes` to an explicit subset such as `["exact"]` when a single-line action must not accept range or global input. Lists use the toolbar syntax (`1,3:5`). The free-line action reuses a line with no notes, events, child lines, or parent, and appends a scratch line only when every candidate is occupied. A scratch line is removed when the dialog is cancelled and reused by later dialogs while it stays empty.
 
 Scripts may declare default shortcuts. Registering them requires the `shortcuts` capability; a script that omits it keeps running but its default bindings are ignored with a host warning. A script's default shortcut registers as `extension.<owner>.script.<local>`; explicit `api.shortcuts` registrations and package values use `extension.<owner>.<local>`. Bindings stored under the former `mod.<owner>.script.*` id migrate to the Extension id on first load. `shortcutScope` is `app`, `instrument`, `workspace`, or `editor`, and defaults to `editor`. The scripts pane and the shortcut editor are the listing surfaces.
 
@@ -419,6 +419,10 @@ The complete provider/consumer, hook, and design-slot example is in [`sdk/exampl
 
 Chart writes are one atomic `transaction` request and require `chart.write`. Read with `api.chart` or `api.selection`, build a request, then call `api.transaction.preview` or `api.transaction.apply`. Do not mutate a read snapshot; use the ids and values it returns.
 
+`api.chart.range()` returns the authored content boundary as `startBeat`, `endBeat`, `startSeconds`, and `endSeconds`. It covers notes, ordinary event tracks, and Shader events; it is not the duration of the referenced audio file.
+
+`api.chart.lineGroups()` returns the flat judge-line folders as `{ index, name, lineIndices }` without materializing the complete chart snapshot. Use the returned name with `lineGroups.assign` when a script should keep working after folder indices change.
+
 ```js
 const lines = await api.chart.lines();
 if (lines.ok && lines.value.length > 0) {
@@ -439,7 +443,7 @@ if (lines.ok && lines.value.length > 0) {
 }
 ```
 
-A request may update chart `metadata`, replace the tempo map under `timing.bpmList`, insert or update judge lines, and insert, update, or delete notes and events by id. Notes and events use reduced beat triples, not seconds. `lines` has no delete operation.
+A request may update chart `metadata`, replace the tempo map under `timing.bpmList`, insert or update judge lines, create named line folders, assign lines to a folder, and insert, update, or delete notes and events by id. Notes and events use reduced beat triples, not seconds. `lineGroups.create` appends a folder and `lineGroups.assign` accepts a folder name or index plus `lineIndices` or `lineIds`; the two operations can be combined in one transaction. A folder name is trimmed and stripped of commas and parentheses so it remains usable as a line-selection token.
 
 `preview(request)` validates a dry run and returns a preview id only when the status is `previewed`; pass that id to `apply(previewId)` or discard it with `cancel(previewId)`. `apply` status is `committed`, `unchanged`, `rejected`, `conflict`, or `unavailable`, with issues, affected object ids, and history metadata inside `value`. A read page with an old cursor returns `stale_read`; a request with an old `expectedGeneration` is rejected with issue code `stale_read`; a commit after the chart changed returns `conflict`. Re-read and rebuild instead of retrying blindly.
 

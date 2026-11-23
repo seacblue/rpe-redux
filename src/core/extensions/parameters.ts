@@ -84,6 +84,8 @@ export interface ExtensionJudgeLineParameter extends ExtensionParameterBase {
   readonly kind: "judgeLine";
   readonly count?: number;
   readonly multiple?: boolean;
+  /** Restrict the host picker to an intentional subset of selection modes. */
+  readonly modes?: readonly ExtensionJudgeLineMode[];
   readonly default?: number | readonly number[];
 }
 
@@ -108,6 +110,12 @@ export function judgeLineIsMultiple(parameter: ExtensionJudgeLineParameter): boo
 export function judgeLineModes(
   parameter: ExtensionJudgeLineParameter,
 ): readonly ExtensionJudgeLineMode[] {
+  const requested = parameter.modes?.filter((mode, index, modes) => {
+    return ["exact", "range", "global"].includes(mode) && modes.indexOf(mode) === index;
+  });
+  if (requested?.length) {
+    return requested;
+  }
   if (parameter.multiple === true && judgeLineCount(parameter) === undefined) {
     return ["exact"];
   }
@@ -233,18 +241,32 @@ const JUDGE_LINE_INDEX = /^\d+$/;
 const JUDGE_LINE_RANGE = /^(\d+)\s*[:-]\s*(\d+)$/;
 const MAX_JUDGE_LINE_SPAN = 10_000;
 
+/** One chart folder that can be used as a line-list completion token. */
+export interface ExtensionJudgeLineGroup {
+  readonly name: string;
+  readonly indices: readonly number[];
+}
+
 /**
  * Read the compact line-list syntax (`3`, `1,3:5`, `2-4`) into ordered,
  * duplicate-free indices. Ranges always expand upward; the order of tokens is
  * preserved so an exact multi-line parameter can keep its authored order.
  */
-export function parseJudgeLineList(raw: string): number[] | null {
+export function parseJudgeLineList(
+  raw: string,
+  groups: readonly ExtensionJudgeLineGroup[] = [],
+): number[] | null {
   const text = raw.trim();
   if (!text) {
     return null;
   }
   const result: number[] = [];
   const seen = new Set<number>();
+  const groupByName = new Map(
+    groups
+      .map((group) => [group.name.trim().toLocaleLowerCase(), group] as const)
+      .filter(([name]) => name.length > 0),
+  );
   const add = (index: number): boolean => {
     if (!Number.isInteger(index) || index < 0) {
       return false;
@@ -259,6 +281,15 @@ export function parseJudgeLineList(raw: string): number[] | null {
     const token = part.trim();
     if (!token) {
       return null;
+    }
+    const group = groupByName.get(token.toLocaleLowerCase());
+    if (group) {
+      for (const index of group.indices) {
+        if (!add(index)) {
+          return null;
+        }
+      }
+      continue;
     }
     const range = JUDGE_LINE_RANGE.exec(token);
     if (range) {
@@ -371,12 +402,15 @@ function readJudgeLineIndices(value: unknown): number[] | null {
 }
 
 /** Normalize a number, list, or mode object into a validated judge-line value. */
-function parseJudgeLineValue(raw: unknown): ParsedJudgeLineValue | null {
+function parseJudgeLineValue(
+  raw: unknown,
+  groups: readonly ExtensionJudgeLineGroup[] = [],
+): ParsedJudgeLineValue | null {
   if (typeof raw === "number") {
     return Number.isInteger(raw) && raw >= 0 ? { mode: "exact", lines: [raw] } : null;
   }
   if (typeof raw === "string") {
-    const lines = parseJudgeLineList(raw);
+    const lines = parseJudgeLineList(raw, groups);
     return lines ? { mode: "exact", lines } : null;
   }
   if (Array.isArray(raw)) {
@@ -402,11 +436,12 @@ function validateJudgeLine(
   parameter: ExtensionJudgeLineParameter,
   raw: unknown,
   lineCount: number | undefined,
+  groups: readonly ExtensionJudgeLineGroup[],
 ): { value?: ExtensionParameterInput; issue?: ExtensionParameterIssue } {
   if (raw === "" || raw === undefined || (Array.isArray(raw) && raw.length === 0)) {
     return { issue: issue(key, "extensions.parameters.required") };
   }
-  const parsed = parseJudgeLineValue(raw);
+  const parsed = parseJudgeLineValue(raw, groups);
   if (!parsed) {
     return { issue: issue(key, "extensions.parameters.judgeLine.invalid") };
   }
@@ -486,6 +521,7 @@ function validateParameter(
   parameter: ExtensionParameter,
   raw: unknown,
   lineCount: number | undefined,
+  groups: readonly ExtensionJudgeLineGroup[],
 ): { value?: ExtensionParameterInput; issue?: ExtensionParameterIssue } {
   switch (parameter.kind) {
     case "number":
@@ -515,7 +551,7 @@ function validateParameter(
       }
       return { value: raw };
     case "judgeLine":
-      return validateJudgeLine(key, parameter, raw, lineCount);
+      return validateJudgeLine(key, parameter, raw, lineCount, groups);
     case "color":
       return typeof raw === "string" && /^#[0-9a-f]{6}$/i.test(raw)
         ? { value: raw }
@@ -569,6 +605,8 @@ export function defaultValues(
 export interface ParameterValidationContext {
   /** Current chart line count; lets validation reject indices that no longer exist. */
   readonly lineCount?: number;
+  /** Current folders; their names are accepted anywhere a line-list is accepted. */
+  readonly judgeLineGroups?: readonly ExtensionJudgeLineGroup[];
 }
 
 /** Validate and normalize caller-provided values, filling only declared defaults. */
@@ -589,7 +627,13 @@ export function validateParameterValues(
       issues.push(issue(key, "extensions.parameters.required"));
       continue;
     }
-    const result = validateParameter(key, parameter, candidate, context.lineCount);
+    const result = validateParameter(
+      key,
+      parameter,
+      candidate,
+      context.lineCount,
+      context.judgeLineGroups ?? [],
+    );
     if (result.issue) {
       issues.push(result.issue);
     } else if (result.value !== undefined) {

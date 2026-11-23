@@ -31,6 +31,7 @@ import {
 export function ExtensionManager({ active }: SettingsPageContext) {
   const { t } = useTranslation();
   const [installOpen, setInstallOpen] = useState(false);
+  const [zipPickerBusy, setZipPickerBusy] = useState(false);
   // A package drop publishes a path and opens this page; consuming it here keeps
   // the dialog mounted for exactly the review the user asked for.
   const [reviewPath, setReviewPath] = useState<string | null>(null);
@@ -56,6 +57,27 @@ export function ExtensionManager({ active }: SettingsPageContext) {
       ? t("startup.safeMode.requested")
       : t(`settings.extensions.safeMode.${startup.reason ?? "unknown"}` as MessageKey);
 
+  /** Select a local ZIP, then route it through the ordinary review dialog. */
+  const selectZip = async () => {
+    setZipPickerBusy(true);
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        title: t("settings.extensions.install.localArchiveTitle"),
+        filters: [{ name: "Extension package", extensions: ["zip"] }],
+      });
+      if (typeof selected !== "string") {
+        return;
+      }
+      setReviewPath(selected);
+      setInstallOpen(true);
+    } finally {
+      setZipPickerBusy(false);
+    }
+  };
+
   return (
     <section className="redux-setting-group redux-extension-manager">
       {startup.safeMode && (
@@ -77,6 +99,13 @@ export function ExtensionManager({ active }: SettingsPageContext) {
       <div className="redux-footer-bar">
         <div className="redux-footer-actions">
           <Button
+            variant="outlined"
+            disabled={startup.safeMode || zipPickerBusy}
+            onClick={() => void selectZip()}
+          >
+            {t("settings.extensions.install.localArchive")}
+          </Button>
+          <Button
             variant="solid"
             disabled={startup.safeMode}
             onClick={() => {
@@ -84,7 +113,7 @@ export function ExtensionManager({ active }: SettingsPageContext) {
               setInstallOpen(true);
             }}
           >
-            {t("settings.extensions.install.open")}
+            {t("settings.extensions.install.github")}
           </Button>
         </div>
       </div>

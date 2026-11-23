@@ -108,7 +108,6 @@ export default {
   "workspace.scripts.source": "Provided by {source}",
   "workspace.scripts.run": "Run",
   "workspace.scripts.parameters.title": "Run {script} with parameters",
-  "workspace.scripts.parameters.description": "Enter valid values before running this script.",
   "workspace.scripts.parameters.fields": "Fields: {value}",
   "workspace.scripts.parameters.functions": "Functions: {value}",
   "workspace.scripts.parameters.judgeLine.option": "Line {index}, {name}",
@@ -127,7 +126,8 @@ export default {
     "Write candidate lines; the host randomly picks the required amount.",
   "workspace.scripts.parameters.judgeLine.mode.globalHint":
     "Ignore written lines; the host randomly picks from every line in the chart.",
-  "workspace.scripts.parameters.judgeLine.placeholder": "Line list, e.g. 1,3:5",
+  "workspace.scripts.parameters.judgeLine.placeholder":
+    "Line list or folder name, e.g. 1,3:5 or Chorus",
   "workspace.scripts.parameters.judgeLine.globalHint":
     "Randomly pick {count} line(s) from every judge line in the chart when the script runs.",
   "workspace.scripts.recipe.distributeNotes": "Distribute notes",
@@ -137,6 +137,48 @@ export default {
   "workspace.scripts.recipe.staggerEventsDescription": "Offset the selected event values.",
   "workspace.scripts.recipe.fadeNotes": "Fade notes",
   "workspace.scripts.recipe.fadeNotesDescription": "Scale the alpha of selected notes.",
+  "workspace.scripts.recipe.sequenceNotes": "Sequence note X",
+  "workspace.scripts.recipe.sequenceNotesDescription":
+    "Write a repeating X sequence in time order for stairs, waves, and repeated patterns.",
+  "workspace.scripts.recipe.randomizeNotes": "Add controlled jitter",
+  "workspace.scripts.recipe.randomizeNotesDescription":
+    "Add a bounded random X offset to the selected notes; preview the result before applying.",
+  "workspace.scripts.recipe.cycleNotesThroughLines": "Cycle notes through lines",
+  "workspace.scripts.recipe.cycleNotesThroughLinesDescription":
+    "Write line indices in time order, such as 0,1,2, for quick multi-line patterns.",
+  "workspace.scripts.recipe.speedCurveNotes": "Generate a note-speed curve",
+  "workspace.scripts.recipe.speedCurveNotesDescription":
+    "Generate a per-note speed curve; zero-speed Holds may differ between players.",
+  "workspace.scripts.recipe.createLineFolder": "Create a line folder",
+  "workspace.scripts.recipe.createLineFolderDescription":
+    "Create a named folder and move the chosen judge lines into it in one undoable edit.",
+  "workspace.scripts.studio.title": "Script studio",
+  "workspace.scripts.studio.subtitle":
+    "Select objects, preview the change, then apply one undoable operation.",
+  "workspace.scripts.studio.searchPlaceholder": "Search scripts",
+  "workspace.scripts.studio.filter.label": "Filter scripts by source",
+  "workspace.scripts.studio.filter.emptyTitle": "Every source is filtered out",
+  "workspace.scripts.studio.filter.empty":
+    "Enable a source in the filter above to see its scripts again.",
+  "workspace.scripts.studio.recipes": "Common chart actions",
+  "workspace.scripts.studio.extensions": "Extension scripts",
+  "workspace.scripts.studio.noMatch": "No matching scripts",
+  "workspace.scripts.studio.preview.title": "Review before applying",
+  "workspace.scripts.studio.preview.description":
+    "This is a detached structural preview; nothing is written until you confirm.",
+  "workspace.scripts.studio.preview.affected": "Affected objects",
+  "workspace.scripts.studio.preview.changed": "Actual changes",
+  "workspace.scripts.studio.preview.fingerprint": "Plan fingerprint",
+  "workspace.scripts.studio.preview.apply": "Apply changes",
+  "workspace.scripts.studio.preview.cancel": "Cancel preview",
+  "workspace.scripts.studio.preview.emptySelection":
+    "Nothing is selected. Select notes or events first.",
+  "workspace.scripts.studio.preview.error": "Could not create preview: {reason}",
+  "workspace.scripts.studio.preview.stale":
+    "The chart changed after preview. Create a new preview.",
+  "workspace.scripts.studio.preview.applied": "Applied; {count} objects affected",
+  "workspace.scripts.studio.preview.unchanged": "The preview would not change anything",
+  "workspace.scripts.studio.preview.planId": "Plan {value}",
   "workspace.history.title": "Edit history",
   "workspace.history.emptyTitle": "No edit history yet",
   "workspace.history.empty": "Undo history appears after your first edit.",

@@ -195,21 +195,12 @@ export default {
   "settings.extensions.error.dependentEnabled":
     "An enabled Extension depends on this Extension: {value}.",
   "settings.extensions.installed.title": "Extensions",
-  "settings.extensions.install.open": "Install Extension…",
+  "settings.extensions.install.github": "Install from GitHub",
   "settings.extensions.install.safeModeHint":
     "Extension safe mode is active; restart without the safe-mode flag before installing a package.",
-  "settings.extensions.install.title": "Install Extension",
-  "settings.extensions.install.description":
-    "Paste a GitHub repository or a /tree/<ref>/<path> link, or choose a local package folder or .zip file. Inspecting reads the manifest and declared package files; nothing is installed or executed until you confirm the review.",
-  "settings.extensions.install.localFolder": "Choose folder",
   "settings.extensions.install.localArchive": "Choose ZIP",
-  "settings.extensions.install.localFolderTitle": "Choose an Extension folder",
   "settings.extensions.install.localArchiveTitle": "Choose an Extension ZIP",
   "settings.extensions.install.source": "GitHub link",
-  "settings.extensions.install.sourceDescription":
-    "A repository root works when it contains one manifest.json. Use a /tree/<ref>/<path> link for a package inside a larger repository.",
-  "settings.extensions.install.sourcePlaceholder":
-    "https://github.com/owner/repo/tree/main/extensions/example",
   "settings.extensions.install.inspect": "Inspect package",
   "settings.extensions.install.inspecting": "Inspecting…",
   "settings.extensions.install.reviewTitle": "Install {name}?",

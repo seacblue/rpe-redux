@@ -40,6 +40,7 @@ import type {
   TransactionHistorySummary,
   TransactionJudgeLineUpdate,
   TransactionLineInsert,
+  TransactionLineGroupOperations,
   TransactionLineTarget,
   TransactionNoteInsert,
   TransactionObjectUpdate,
@@ -84,6 +85,7 @@ import { remapShaderLines } from "../../global/chart/shader/shaderEvents.ts";
 const NOTE_PATCH_BLOCKLIST = new Set(["id"]);
 const EVENT_PATCH_BLOCKLIST = new Set(["id", "line", "lineIndex", "eventType", "layer"]);
 const UNSAFE_PATCH_FIELDS = new Set(["__proto__", "prototype", "constructor"]);
+const LINE_GROUP_NAME_FORBIDDEN = /[，,()（）]/gu;
 
 /** Record one note delta, keeping the strongest invalidation kind for a line. */
 function markNoteChange(
@@ -168,6 +170,9 @@ export function transactionChart(source: Chart): Chart {
     // keeps the nested effect list identical for incremental id normalization.
     META: { ...source.META },
     BPMList: source.BPMList,
+    judgeLineGroup: Array.isArray(source.judgeLineGroup)
+      ? [...source.judgeLineGroup]
+      : source.judgeLineGroup,
     judgeLineList: source.judgeLineList ? [...source.judgeLineList] : source.judgeLineList,
     // Transaction operations do not mutate these root event arrays. Reusing
     // them lets incremental id normalization distinguish a line edit from a
@@ -1011,6 +1016,178 @@ function updateLines(
   }
 }
 
+/** Normalize a folder name to the token-safe form used by line selectors. */
+function lineGroupName(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const name = value.replace(LINE_GROUP_NAME_FORBIDDEN, "").trim();
+  return name || null;
+}
+
+/** Read the chart's flat folder list, preserving an omitted default folder. */
+function mutableLineGroupNames(state: MutableTransactionState): string[] {
+  const current = state.chart.judgeLineGroup;
+  if (Array.isArray(current)) {
+    return [...current].map((value) => String(value ?? ""));
+  }
+  return [""];
+}
+
+/** Resolve a folder name or index after all requested folders have been created. */
+function resolveLineGroup(
+  names: readonly string[],
+  value: unknown,
+  path: string,
+  state: MutableTransactionState,
+): number | null {
+  if (typeof value === "string") {
+    const wanted = value.trim().toLocaleLowerCase();
+    const byName = names.findIndex((name) => name.trim().toLocaleLowerCase() === wanted);
+    if (byName >= 0) {
+      return byName;
+    }
+  }
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < names.length) {
+    return value;
+  }
+  state.issues.push(issue("lineGroup.target.notFound", path));
+  return null;
+}
+
+/** Assign lines to folders without allowing an ambiguous double assignment. */
+function assignLineGroups(
+  state: MutableTransactionState,
+  operations: TransactionLineGroupOperations,
+  names: readonly string[],
+): void {
+  const assignments = readArray(operations.assign, "lineGroups.assign", state);
+  const touched = new Set<ChartObjectId>();
+  for (const [index, raw] of assignments.entries()) {
+    if (!isRecord(raw)) {
+      state.issues.push(issue("lineGroup.assign.object.required", `lineGroups.assign[${index}]`));
+      continue;
+    }
+    const group = resolveLineGroup(names, raw.group, `lineGroups.assign[${index}].group`, state);
+    if (group === null) {
+      continue;
+    }
+    const lineIds = readArray(raw.lineIds, `lineGroups.assign[${index}].lineIds`, state);
+    const lineIndices = readArray(
+      raw.lineIndices,
+      `lineGroups.assign[${index}].lineIndices`,
+      state,
+    );
+    if (!lineIds.length && !lineIndices.length) {
+      state.issues.push(issue("lineGroup.assign.targets.required", `lineGroups.assign[${index}]`));
+      continue;
+    }
+    const targets: { line: JudgeLine; index: number }[] = [];
+    for (const [targetIndex, value] of lineIds.entries()) {
+      if (!isChartObjectId(value)) {
+        state.issues.push(
+          issue(
+            "lineGroup.assign.lineId.invalid",
+            `lineGroups.assign[${index}].lineIds[${targetIndex}]`,
+          ),
+        );
+        continue;
+      }
+      const located = locateLine(state.chart, value);
+      if (!located) {
+        state.issues.push(
+          issue(
+            "lineGroup.assign.lineId.notFound",
+            `lineGroups.assign[${index}].lineIds[${targetIndex}]`,
+            value,
+          ),
+        );
+        continue;
+      }
+      targets.push({ line: located.line, index: located.index });
+    }
+    for (const [targetIndex, value] of lineIndices.entries()) {
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+        state.issues.push(
+          issue(
+            "lineGroup.assign.lineIndex.invalid",
+            `lineGroups.assign[${index}].lineIndices[${targetIndex}]`,
+          ),
+        );
+        continue;
+      }
+      const line = state.chart.judgeLineList?.[value];
+      if (!line) {
+        state.issues.push(
+          issue(
+            "lineGroup.assign.lineIndex.notFound",
+            `lineGroups.assign[${index}].lineIndices[${targetIndex}]`,
+          ),
+        );
+        continue;
+      }
+      targets.push({ line, index: value });
+    }
+    for (const target of targets) {
+      const id = target.line.id;
+      if (!isChartObjectId(id)) {
+        state.issues.push(issue("lineGroup.assign.line.id.invalid", `lineGroups.assign[${index}]`));
+        continue;
+      }
+      if (touched.has(id)) {
+        state.issues.push(issue("lineGroup.assign.conflict", `lineGroups.assign[${index}]`, id));
+        continue;
+      }
+      touched.add(id);
+      if (Number(target.line.Group ?? 0) === group) {
+        continue;
+      }
+      const mutable = mutableLine(state, { line: target.line, index: target.index });
+      mutable.Group = group;
+      addAffected(state, id);
+    }
+  }
+}
+
+/** Apply folder creation and assignment after line inserts are available. */
+function updateLineGroups(
+  state: MutableTransactionState,
+  operations: TransactionLineGroupOperations,
+): void {
+  if (!isRecord(operations)) {
+    state.issues.push(issue("lineGroups.object.required", "lineGroups"));
+    return;
+  }
+  const names = mutableLineGroupNames(state);
+  const created = readArray(operations.create, "lineGroups.create", state);
+  for (const [index, raw] of created.entries()) {
+    if (!isRecord(raw)) {
+      state.issues.push(issue("lineGroup.create.object.required", `lineGroups.create[${index}]`));
+      continue;
+    }
+    const name = lineGroupName(raw.name);
+    if (!name) {
+      state.issues.push(
+        issue("lineGroup.create.name.required", `lineGroups.create[${index}].name`),
+      );
+      continue;
+    }
+    if (
+      names.some((existing) => existing.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
+    ) {
+      state.issues.push(
+        issue("lineGroup.create.name.duplicate", `lineGroups.create[${index}].name`),
+      );
+      continue;
+    }
+    names.push(name);
+  }
+  if (created.length && names.length !== (state.chart.judgeLineGroup?.length ?? 1)) {
+    state.chart.judgeLineGroup = names;
+  }
+  assignLineGroups(state, operations, names);
+}
+
 /** Reads an optional operation array, recording an issue for other shapes. */
 function readArray(
   value: unknown,
@@ -1063,6 +1240,9 @@ export function applyRequest(
         ) as readonly TransactionJudgeLineUpdate[],
       );
     }
+  }
+  if (request.lineGroups !== undefined) {
+    updateLineGroups(state, request.lineGroups);
   }
   if (request.notes !== undefined) {
     if (!isRecord(request.notes)) {

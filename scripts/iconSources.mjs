@@ -59,6 +59,7 @@ export const ICON_SOURCES = {
   "icons/panel_right.png": "panel-right",
   "icons/paste.png": "clipboard-paste",
   "icons/pause.png": "pause",
+  "icons/paper_plane.png": "paper-plane",
   "icons/pen.png": "pen-tool",
   "icons/pencil.png": "pencil",
   "icons/pipette.png": "pipette",

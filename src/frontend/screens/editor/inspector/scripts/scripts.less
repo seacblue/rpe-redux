@@ -6,6 +6,24 @@
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
+  gap: var(--space-2);
+}
+
+.redux-script-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.redux-script-studio-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.redux-script-filter {
+  position: relative;
+  display: flex;
+  flex: none;
 }
 
 .redux-scripts-empty {
@@ -17,61 +35,83 @@
 
 .redux-script-list {
   display: grid;
-  gap: var(--space-2);
 }
 
-.redux-script-card {
-  background: var(--surface-raised);
-  border: 1px solid var(--edge-divider);
+.redux-script-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-control);
-  padding: var(--space-2-5);
+  transition: background-color var(--design-dur-tint) ease;
 }
 
-.redux-script-card-heading {
-  align-items: start;
-  display: flex;
-  gap: var(--space-2);
-  justify-content: space-between;
+.redux-script-row:hover {
+  background: var(--surface-hover);
 }
 
-.redux-script-card h3 {
-  font-size: var(--type-body);
-  margin: 0;
+.redux-script-list > .redux-divider {
+  background: var(--edge-divider);
 }
 
-.redux-script-card small {
-  color: var(--foreground-muted);
-  display: block;
-  font-size: var(--type-caption);
-  margin-top: 3px;
+.redux-script-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
-.redux-script-card p {
-  font-size: var(--type-caption);
-  line-height: 1.4;
-  margin: var(--space-2) 0 0;
+.redux-script-title {
+  overflow: hidden;
+  font-size: var(--type-label);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-script-source {
+  .meta-text();
+}
+
+.redux-script-run {
+  flex: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--design-dur-tint) ease,
+    background-color var(--design-dur-tint) ease;
+}
+
+.redux-script-row:hover .redux-script-run,
+.redux-script-row:focus-within .redux-script-run {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .redux-parameter-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-3);
 }
 
 .redux-parameter-fields {
   display: grid;
   gap: 0;
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
-  overflow: hidden;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .redux-parameter-line-control {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1-5);
+  gap: var(--space-1);
   width: 100%;
   min-width: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .redux-parameter-line-row {
@@ -103,21 +143,22 @@
 }
 
 .redux-parameter-legend {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
   margin-top: 0;
 }
 
 .redux-parameter-actions {
   position: sticky;
-  bottom: calc(-1 * var(--space-5));
+  bottom: calc(-1 * var(--space-4));
   z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-3);
-  padding: var(--space-3) 0 var(--space-5);
+  margin-top: var(--space-1);
+  padding: var(--space-2) 0 var(--space-4);
   border-top: 1px solid var(--edge-divider);
   background: var(--surface-raised);
 }

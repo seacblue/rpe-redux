@@ -58,89 +58,6 @@
   flex: none;
 }
 
-.event-issue-filter-popover {
-  position: fixed;
-  z-index: var(--z-menu);
-  display: flex;
-  flex-direction: column;
-  width: min(260px, calc(100vw - var(--space-4)));
-  max-height: min(480px, calc(100vh - var(--space-4)));
-  margin: 0;
-  padding: var(--space-1);
-  overflow: hidden;
-  border: 1px solid var(--edge-emphasis);
-  border-radius: var(--radius-panel);
-  background: var(--surface-raised);
-  color: var(--foreground);
-  box-shadow: var(--shadow-panel);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(calc(-1 * var(--space-1-5))) scale(0.985);
-  transform-origin: var(--popover-origin-x, 100%) var(--popover-origin-y, 0);
-  transition:
-    opacity var(--design-dur-exit) var(--design-ease-exit),
-    transform var(--design-dur-exit) var(--design-ease-exit),
-    visibility 0s linear var(--design-dur-exit);
-
-  &.is-open {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: none;
-    transition:
-      opacity var(--design-dur-enter) var(--design-ease-enter),
-      transform var(--design-dur-enter) var(--design-ease-enter),
-      visibility 0s linear;
-  }
-}
-
-.event-issue-filter-list {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.event-issue-filter-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: var(--control-height-compact);
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-control);
-  color: var(--foreground);
-  font-size: var(--type-caption);
-  cursor: var(--app-cursor-pointer);
-
-  &:hover,
-  &:focus-within {
-    background: var(--surface-hover);
-  }
-}
-
-.event-issue-filter-label {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.event-issue-filter-count {
-  color: var(--foreground-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.event-issue-filter-row .redux-input[type="checkbox"] {
-  flex: none;
-  margin: 0;
-}
-
 .event-issues-list {
   display: grid;
 }
@@ -154,8 +71,15 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  min-height: var(--control-height);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
   cursor: var(--app-cursor-default);
+  transition: background-color var(--design-dur-tint) ease;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
 
   // A broken range or an overlap breaks playback, so it reads as an error. A
   // density estimate is advice about a target renderer and stays a yellow hint.

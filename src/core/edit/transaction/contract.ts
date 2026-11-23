@@ -125,6 +125,18 @@ export interface TransactionLineOperations {
   readonly delete?: readonly ChartObjectId[];
 }
 
+/** Create named line folders and assign existing lines to them atomically. */
+export interface TransactionLineGroupOperations {
+  /** Appended before assignments are resolved, so a new name can be used below. */
+  readonly create?: readonly { readonly name: string }[];
+  /** Group is an index or name; line indices and ids may be mixed across entries. */
+  readonly assign?: readonly {
+    readonly group: number | string;
+    readonly lineIds?: readonly ChartObjectId[];
+    readonly lineIndices?: readonly number[];
+  }[];
+}
+
 /** Replace the complete tempo map; entries are sorted by beat on apply. */
 export interface TransactionTimingOperations {
   readonly bpmList: readonly BpmEntry[];
@@ -137,6 +149,7 @@ export interface ChartTransactionRequest {
   readonly metadata?: Partial<ChartMeta> & ChartPatch;
   readonly timing?: TransactionTimingOperations;
   readonly lines?: TransactionLineOperations;
+  readonly lineGroups?: TransactionLineGroupOperations;
   readonly notes?: TransactionNoteOperations;
   readonly events?: TransactionEventOperations;
 }

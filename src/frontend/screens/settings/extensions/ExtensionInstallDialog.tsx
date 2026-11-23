@@ -50,7 +50,7 @@ const CONSENT_RISK_LABEL: Record<ExtensionMethodRisk, MessageKey> = {
 export interface ExtensionInstallDialogProps {
   /** Pre-filled GitHub link, used by a marketplace entry. */
   initialSource?: string;
-  /** A local folder or ZIP to review immediately, used by a package drop. */
+  /** A local folder or ZIP to review immediately, used by a package drop or ZIP picker. */
   initialLocalPath?: string;
   /** Catalog author shown when the manifest omits one. */
   fallbackAuthor?: string;
@@ -212,44 +212,6 @@ export function ExtensionInstallDialog({
     });
   };
 
-  /** Pick one local folder or ZIP and show the same review as a GitHub package. */
-  const inspectLocal = async (directory: boolean) => {
-    setBusy("resolve");
-    setFailure(null);
-    setResolved(null);
-    setConsentSelection(new Set());
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        directory,
-        multiple: false,
-        title: t(
-          directory
-            ? "settings.extensions.install.localFolderTitle"
-            : "settings.extensions.install.localArchiveTitle",
-        ),
-        ...(directory ? {} : { filters: [{ name: "Extension package", extensions: ["zip"] }] }),
-      });
-      if (typeof selected !== "string") {
-        return;
-      }
-      const next = await resolveLocalExtension(selected);
-      setSource(selected);
-      setResolved(next);
-      setConsentSelection(defaultConsentSelection(next.manifest.capabilities ?? []));
-    } catch (error) {
-      setFailure(
-        asExtensionInstallFailure(error, {
-          code: "unknown",
-          phase: "resolve",
-          message: "Unable to read the local Extension package.",
-        }),
-      );
-    } finally {
-      setBusy(null);
-    }
-  };
-
   /** Install the reviewed package and report the installed id. */
   const install = async () => {
     if (!resolved || !consent.ok) {
@@ -280,7 +242,7 @@ export function ExtensionInstallDialog({
     ? t("settings.extensions.install.successTitle")
     : resolved
       ? t("settings.extensions.install.reviewTitle", { name: resolved.manifest.name })
-      : t("settings.extensions.install.title");
+      : t("settings.extensions.install.github");
 
   const description = installedId
     ? t(
@@ -291,7 +253,7 @@ export function ExtensionInstallDialog({
       )
     : resolved
       ? t("settings.extensions.install.reviewDescription")
-      : t("settings.extensions.install.description");
+      : undefined;
 
   const actions = installedId ? (
     <Button variant="solid" onClick={onClose}>
@@ -371,13 +333,11 @@ export function ExtensionInstallDialog({
             layout="inline"
             htmlFor={inputId}
             label={t("settings.extensions.install.source")}
-            description={t("settings.extensions.install.sourceDescription")}
             control={
               <Input
                 id={inputId}
                 type="text"
                 value={source}
-                placeholder={t("settings.extensions.install.sourcePlaceholder")}
                 autoComplete="off"
                 spellCheck={false}
                 disabled={busy !== null || autoResolving}
@@ -391,22 +351,6 @@ export function ExtensionInstallDialog({
               />
             }
           />
-          <div className="redux-extension-install-local">
-            <Button
-              variant="outlined"
-              disabled={busy !== null || autoResolving}
-              onClick={() => void inspectLocal(true)}
-            >
-              {t("settings.extensions.install.localFolder")}
-            </Button>
-            <Button
-              variant="outlined"
-              disabled={busy !== null || autoResolving}
-              onClick={() => void inspectLocal(false)}
-            >
-              {t("settings.extensions.install.localArchive")}
-            </Button>
-          </div>
           {failure && <ExtensionInstallError failure={failure} />}
         </div>
       )}

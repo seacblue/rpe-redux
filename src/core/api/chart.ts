@@ -7,6 +7,7 @@ import type {
   ChartEventReadRef,
   ChartReadEvent,
   ChartReadLine,
+  ChartReadLineGroup,
   ChartReadMeta,
   ChartReadNote,
   ChartReadTiming,
@@ -17,6 +18,7 @@ import type {
   ChartReadPageIssue,
   ChartReadPageOptions,
   ChartReadState,
+  ChartReadRange,
   ChartReadSnapshot,
   ChartReadItem,
   ChartResourceReference,
@@ -38,6 +40,10 @@ export const chart = Object.freeze({
   /** The current chart fingerprint and revision generation. */
   state(): ApiResult<ChartReadState> {
     return withChart((api) => api.state());
+  },
+  /** Return the authored note/event content bounds, not the media duration. */
+  range(): ApiResult<ChartReadRange> {
+    return withChart((api) => api.range());
   },
   /**
    * Read one collection as a transparent page.
@@ -116,6 +122,10 @@ export const chart = Object.freeze({
   lines(): ApiResult<readonly ChartReadLine[]> {
     return withChart((api) => api.lines());
   },
+  /** Return named judge-line folders and their current line indices. */
+  lineGroups(): ApiResult<readonly ChartReadLineGroup[]> {
+    return withChart((api) => api.lineGroups());
+  },
   /** One judge line by id, or null when the id is unknown. */
   line(id: ChartObjectId): ApiResult<ChartReadLine | null> {
     return withChart((api) => api.line(id));
@@ -164,6 +174,7 @@ export type {
   ChartReadEvent,
   ChartReadItem,
   ChartReadLine,
+  ChartReadLineGroup,
   ChartReadMeta,
   ChartReadNote,
   ChartReadTiming,
@@ -175,6 +186,7 @@ export type {
   ChartReadPageOptions,
   ChartReadSnapshot,
   ChartReadState,
+  ChartReadRange,
   ChartResourceReference,
 };
 export type { ChartObjectId } from "../global/chart/identity.ts";

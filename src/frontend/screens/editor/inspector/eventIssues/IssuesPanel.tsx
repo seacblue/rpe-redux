@@ -303,7 +303,7 @@ function IssuesContent() {
   const filterPanel = (
     <section
       ref={panel}
-      className={`event-issue-filter-popover${open ? " is-open" : ""}`}
+      className={`inspector-filter-popover${open ? " is-open" : ""}`}
       role="dialog"
       aria-label={t("editorPanels.issues.filter.label")}
       aria-hidden={!open}
@@ -311,16 +311,16 @@ function IssuesContent() {
       data-placement={popover.side}
       style={popover.style}
     >
-      <div className="event-issue-filter-list">
+      <div className="inspector-filter-list">
         {enabledKinds.map((definition) => {
           const kind = definition.kind;
           const rowId = `event-issue-filter-${kind}`;
           const label = t(definition.label);
           return (
-            <label className="event-issue-filter-row" htmlFor={rowId} key={kind}>
-              <span className="event-issue-filter-label">
+            <label className="inspector-filter-row" htmlFor={rowId} key={kind}>
+              <span className="inspector-filter-label">
                 {label}
-                <span className="event-issue-filter-count">{counts.get(kind) ?? 0}</span>
+                <span className="inspector-filter-count">{counts.get(kind) ?? 0}</span>
               </span>
               <Input
                 id={rowId}
@@ -362,7 +362,7 @@ function IssuesContent() {
               <IconButton
                 ref={anchor}
                 icon="filter"
-                size="small"
+                size="md"
                 label={t("editorPanels.issues.filter.label")}
                 active={open || filterActive}
                 aria-haspopup="dialog"
@@ -427,8 +427,8 @@ function IssuesContent() {
                   </div>
                   <IconButton
                     className="event-issue-locate"
-                    icon="jump"
-                    size={16}
+                    icon="paperPlane"
+                    size="md"
                     variant="plain"
                     label={t("editorPanels.issues.locate")}
                     data-tip-title={t("editorPanels.issues.locate")}

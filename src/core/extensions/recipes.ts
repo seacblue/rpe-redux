@@ -1,9 +1,4 @@
-/**
- * Built-in and extension-provided recipes on the declarative steps path.
- *
- * The registry merges both sources, tracks the selected recipe, and applies a
- * plan against the live selection session.
- */
+/** Builds the host recipe view from declarative scripts contributed by enabled Extensions. */
 import { getSelectionSession } from "../edit/selection/api.ts";
 import type { StepsApplyResult, StepsPlanResult, StepsPlan } from "./steps.ts";
 import { applySteps, planSteps, type ExtensionScriptStep } from "./steps.ts";
@@ -15,7 +10,7 @@ import type { TrustedExtensionManifest } from "./extensionRuntime.ts";
 import { appendScriptRun, type ScriptRunStatus } from "./scriptRunHistory.ts";
 import { createValue } from "../state/values.ts";
 
-/** One recipe as the UI sees it, with its owner and resolved steps. */
+/** One declarative script as the host recipe API sees it. */
 export interface RecipeSnapshot {
   readonly id: string;
   readonly key: string;
@@ -27,126 +22,6 @@ export interface RecipeSnapshot {
   readonly translations?: ExtensionTranslations;
   readonly manifest?: TrustedExtensionManifest;
 }
-
-const builtinTranslations: ExtensionTranslations = Object.freeze({
-  en: Object.freeze({
-    "parameter.startX": "Start X",
-    "parameter.endX": "End X",
-    "parameter.offset": "Offset",
-    "parameter.alpha": "Alpha",
-  }),
-  zh: Object.freeze({
-    "parameter.startX": "起始 X",
-    "parameter.endX": "结束 X",
-    "parameter.offset": "偏移",
-    "parameter.alpha": "透明度",
-  }),
-});
-
-const builtinRecipes: readonly RecipeSnapshot[] = Object.freeze([
-  Object.freeze({
-    id: "distribute-notes",
-    key: "app:distribute-notes",
-    owner: "app",
-    label: "workspace.scripts.recipe.distributeNotes",
-    description: "workspace.scripts.recipe.distributeNotesDescription",
-    translations: builtinTranslations,
-    parameters: Object.freeze({
-      order: Object.freeze(["startX", "endX"]),
-      parameters: Object.freeze({
-        startX: Object.freeze({
-          kind: "number",
-          label: { key: "parameter.startX" },
-          default: 0,
-          step: 1,
-        }),
-        endX: Object.freeze({
-          kind: "number",
-          label: { key: "parameter.endX" },
-          default: 0,
-          step: 1,
-        }),
-      }),
-    }),
-    steps: Object.freeze([
-      Object.freeze({
-        op: "batch",
-        kind: "notes",
-        parameters: Object.freeze({
-          field: "x",
-          operation: "To",
-          lower: { expression: "startX" },
-          upper: { expression: "endX" },
-          easingType: 1,
-        }),
-      }),
-    ]),
-  }),
-  Object.freeze({
-    id: "stagger-events",
-    key: "app:stagger-events",
-    owner: "app",
-    label: "workspace.scripts.recipe.staggerEvents",
-    description: "workspace.scripts.recipe.staggerEventsDescription",
-    translations: builtinTranslations,
-    parameters: Object.freeze({
-      parameters: Object.freeze({
-        offset: Object.freeze({
-          kind: "number",
-          label: { key: "parameter.offset" },
-          default: 10,
-          step: 1,
-        }),
-      }),
-    }),
-    steps: Object.freeze([
-      Object.freeze({
-        op: "batch",
-        kind: "events",
-        parameters: Object.freeze({
-          field: "both",
-          operation: "By",
-          lower: { expression: "offset" },
-          upper: { expression: "offset" },
-          easingType: 1,
-        }),
-      }),
-    ]),
-  }),
-  Object.freeze({
-    id: "fade-notes",
-    key: "app:fade-notes",
-    owner: "app",
-    label: "workspace.scripts.recipe.fadeNotes",
-    description: "workspace.scripts.recipe.fadeNotesDescription",
-    translations: builtinTranslations,
-    parameters: Object.freeze({
-      parameters: Object.freeze({
-        alpha: Object.freeze({
-          kind: "number",
-          label: { key: "parameter.alpha" },
-          default: 0.5,
-          min: 0,
-          max: 1,
-          step: 0.05,
-        }),
-      }),
-    }),
-    steps: Object.freeze([
-      Object.freeze({
-        op: "batch",
-        kind: "notes",
-        parameters: Object.freeze({
-          field: "alpha",
-          operation: "Times",
-          lower: { expression: "alpha" },
-          upper: { expression: "alpha" },
-          easingType: 1,
-        }),
-      }),
-    ]),
-  }),
-]);
 
 const selectedRecipe = createValue<string>({ initial: "" });
 const listeners = new Set<() => void>();
@@ -177,18 +52,16 @@ function recipeFromScript(script: ExtensionScriptSnapshot): RecipeSnapshot | nul
   });
 }
 
-/** Rebuild the merged recipe list and notify subscribers. */
+/** Rebuild the recipe list from currently enabled Extension scripts. */
 function refreshSnapshot(): void {
-  const contributed = scriptRegistry.list().flatMap((script) => {
-    const recipe = recipeFromScript(script);
-    return recipe ? [recipe] : [];
-  });
   snapshot = Object.freeze(
-    [...builtinRecipes, ...contributed].sort(
-      (left, right) =>
-        (left.owner === "app" ? 0 : 1) - (right.owner === "app" ? 0 : 1) ||
-        left.key.localeCompare(right.key),
-    ),
+    scriptRegistry
+      .list()
+      .flatMap((script) => {
+        const recipe = recipeFromScript(script);
+        return recipe ? [recipe] : [];
+      })
+      .sort((left, right) => left.key.localeCompare(right.key)),
   );
   for (const listener of [...listeners]) {
     listener();
@@ -200,7 +73,7 @@ scriptRegistry.subscribe(refreshSnapshot);
 
 /** Application-wide recipe list and the currently selected recipe key. */
 export const recipeRegistry = {
-  /** All built-in and contributed recipes in display order. */
+  /** All recipes contributed by enabled Extensions. */
   list(): readonly RecipeSnapshot[] {
     return snapshot;
   },

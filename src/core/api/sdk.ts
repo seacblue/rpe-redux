@@ -18,6 +18,7 @@ export type {
   ChartReadEvent,
   ChartReadItem,
   ChartReadLine,
+  ChartReadLineGroup,
   ChartReadMeta,
   ChartReadNote,
   ChartNoteReadRef,
@@ -28,6 +29,7 @@ export type {
   ChartReadPageOptions,
   ChartReadSnapshot,
   ChartReadState,
+  ChartReadRange,
   ChartResourceReference,
 } from "./chart.ts";
 export type {

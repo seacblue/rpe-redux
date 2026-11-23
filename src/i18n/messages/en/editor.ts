@@ -231,7 +231,8 @@ export default {
   "editor.app.notice.nothingToRedo": "Nothing to redo",
   "editor.app.notice.nothingToUndo": "Nothing to undo",
 
-  "editor.app.notice.travel": "{action}: {label}",
+  "editor.app.notice.undone": "Undid: {label}",
+  "editor.app.notice.redone": "Redid: {label}",
   "editor.app.status.copiedObjects": "Copied {count} objects",
 
   "editor.app.status.exported": "Exported: {name}",

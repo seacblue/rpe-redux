@@ -37,6 +37,7 @@ export const ICON_ASSETS = {
   playbackPlay: "icons/play.png",
   playbackPause: "icons/pause.png",
   previewPause: "icons/preview_pause.png",
+  paperPlane: "icons/paper_plane.png",
   rewind: "icons/rewind.png",
   preview: "icons/monitor.png",
   jump: "icons/jump.png",

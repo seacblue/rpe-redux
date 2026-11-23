@@ -32,6 +32,7 @@ import {
   type ExtensionParameterIssue,
   type ExtensionParameterSchema,
 } from "../../../../../core/extensions/parameters.ts";
+import { lineSelectionGroups } from "../../../../../core/edit/state/lineSelectionInput.ts";
 import {
   resolveExtensionText,
   type ExtensionText,
@@ -52,7 +53,6 @@ import {
   presentModal,
   type ModalOptions,
 } from "../../../../overlays/modals/modalQueue.ts";
-
 export interface ParameterFormProps {
   readonly owner: string;
   readonly scriptId: string;
@@ -62,7 +62,6 @@ export interface ParameterFormProps {
   onSubmit(values: Readonly<Record<string, ExtensionParameterInput>>): void;
   onCancel(): void;
 }
-
 export interface ParameterFormRequest {
   readonly owner: string;
   readonly scriptId: string;
@@ -70,7 +69,6 @@ export interface ParameterFormRequest {
   readonly translations?: ExtensionTranslations;
   readonly initialValues?: Readonly<Record<string, unknown>>;
   readonly title: string;
-  readonly description?: string;
 }
 const MEMORY_ID_PREFIX = "extension-parameter-memory:";
 let nextRequestId = 0;
@@ -88,7 +86,6 @@ function isParameterRecord(value: unknown): value is Record<string, ExtensionPar
     Object.values(value).every(isExtensionParameterInput)
   );
 }
-
 /** Defines the persistent value cell on first use and returns its id. */
 function ensureMemoryValue(owner: string, scriptId: string): string {
   const id = memoryValueId(owner, scriptId);
@@ -111,7 +108,6 @@ function ensureMemoryValue(owner: string, scriptId: string): string {
   }
   return id;
 }
-
 function parseMemory(raw: string): Record<string, ExtensionParameterInput> | null {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -120,7 +116,6 @@ function parseMemory(raw: string): Record<string, ExtensionParameterInput> | nul
     return null;
   }
 }
-
 /**
  * A beat parameter's stored text as the field's three parts.
  *
@@ -138,7 +133,6 @@ function beatOf(value: unknown): Beat {
     return [0, 0, 1];
   }
 }
-
 /** Returns remembered values that still satisfy the current schema. */
 export function readRememberedParameterValues(
   owner: string,
@@ -153,7 +147,6 @@ export function readRememberedParameterValues(
   const result = validateParameterValues(schema, parsed);
   return result.ok ? Object.freeze({ ...result.values }) : null;
 }
-
 /** Returns remembered values, falling back to schema defaults. */
 export function rememberedOrDefaultParameterValues(
   owner: string,
@@ -162,7 +155,6 @@ export function rememberedOrDefaultParameterValues(
 ): Readonly<Record<string, ExtensionParameterInput>> {
   return readRememberedParameterValues(owner, scriptId, schema) ?? defaultValues(schema);
 }
-
 function rememberParameterValues(
   owner: string,
   scriptId: string,
@@ -242,6 +234,7 @@ function fieldId(owner: string, scriptId: string, key: string): string {
 interface JudgeLineOption {
   readonly index: number;
   readonly name: string;
+  readonly group: string;
 }
 
 function judgeLineIndex(value: unknown): number | null {
@@ -289,6 +282,7 @@ function draftedValues(
   schema: ExtensionParameterSchema,
   valuesToEdit: Readonly<Record<string, unknown>>,
   drafts: Readonly<Record<string, JudgeLineDraft>>,
+  judgeLineGroups: readonly { name: string; indices: readonly number[] }[],
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...valuesToEdit };
   for (const key of parameterKeys(schema)) {
@@ -301,7 +295,7 @@ function draftedValues(
       result[key] = { mode: "global" };
       continue;
     }
-    const lines = parseJudgeLineList(draft.text) ?? [];
+    const lines = parseJudgeLineList(draft.text, judgeLineGroups) ?? [];
     if (draft.mode === "range") {
       result[key] = { mode: "range", lines };
     } else if (judgeLineIsMultiple(parameter)) {
@@ -320,6 +314,7 @@ function ParameterControl({
   id,
   describedBy,
   lineOptions,
+  judgeLineSuggestions,
   canAllocateLine,
   judgeLineDraft,
   onAllocateLine,
@@ -334,6 +329,7 @@ function ParameterControl({
   id: string;
   describedBy?: string;
   lineOptions: readonly JudgeLineOption[];
+  judgeLineSuggestions: readonly string[];
   canAllocateLine: boolean;
   judgeLineDraft?: JudgeLineDraft;
   onAllocateLine(): void;
@@ -423,6 +419,7 @@ function ParameterControl({
           placeholder={tRaw("workspace.scripts.parameters.judgeLine.placeholder")}
           onChange={(next) => onJudgeLineTextChange(String(next))}
           describedBy={describedBy}
+          suggestions={judgeLineSuggestions}
           trailing={allocate}
         />
       );
@@ -442,7 +439,7 @@ function ParameterControl({
             value: String(option.index),
             label: tRaw("workspace.scripts.parameters.judgeLine.option", {
               index: option.index,
-              name: option.name || tRaw("model.line.untitled"),
+              name: `${option.group ? `${option.group} / ` : ""}${option.name || tRaw("model.line.untitled")}`,
             }),
           }))}
           onChange={(next) => onChange(Number(next))}
@@ -451,7 +448,7 @@ function ParameterControl({
         />
       );
       return (
-        <div className="redux-parameter-line-control">
+        <span className="redux-parameter-line-control">
           {modes.length > 1 && (
             <Segmented
               ariaLabel={tRaw("workspace.scripts.parameters.judgeLine.modeLabel")}
@@ -464,7 +461,7 @@ function ParameterControl({
               onChange={(mode) => onJudgeLineModeChange(mode)}
             />
           )}
-          <div className="redux-parameter-line-row">
+          <span className="redux-parameter-line-row">
             {draft.mode === "global" ? (
               <span className="redux-parameter-line-hint" role="status">
                 {tRaw("workspace.scripts.parameters.judgeLine.globalHint", { count })}
@@ -474,8 +471,8 @@ function ParameterControl({
             ) : (
               exactControl
             )}
-          </div>
-        </div>
+          </span>
+        </span>
       );
     }
     case "color":
@@ -524,7 +521,7 @@ function ExpressionLegend({
   const { t } = useTranslation();
   const legend = expressionLegend(parameter.vocabulary);
   return (
-    <div className="redux-parameter-legend">
+    <span className="redux-parameter-legend">
       <small>{t("workspace.scripts.parameters.fields", { value: legend.fields.join(", ") })}</small>
       <small>
         {t("workspace.scripts.parameters.functions", { value: legend.functions.join(", ") })}
@@ -534,7 +531,7 @@ function ExpressionLegend({
           {resolveExtensionText(owner, translations, hint)}
         </small>
       ))}
-    </div>
+    </span>
   );
 }
 
@@ -558,13 +555,22 @@ export function ParameterForm({
   const createdLines = useRef<ScriptJudgeLineAllocation[]>([]);
   const submitted = useRef(false);
   const session = getSelectionSession();
+  const judgeLineGroups = lineSelectionGroups(session?.chart).map((group) => ({
+    name: group.name,
+    indices: group.indices,
+  }));
+  const judgeLineSuggestions = judgeLineGroups
+    .map((group) => group.name.trim())
+    .filter((name) => name.length > 0);
   const lineOptions = (session?.chart.judgeLineList ?? []).map((line, index) => ({
     index,
     name: line.Name ?? "",
+    group: judgeLineGroups.find((group) => group.indices.includes(index))?.name.trim() ?? "",
   }));
-  const currentValues = draftedValues(schema, valuesToEdit, lineDrafts);
+  const currentValues = draftedValues(schema, valuesToEdit, lineDrafts, judgeLineGroups);
   const validation = validateParameterValues(schema, currentValues, {
     lineCount: lineOptions.length,
+    judgeLineGroups,
   });
   const issues = new Map(validation.ok ? [] : validation.issues.map((entry) => [entry.key, entry]));
   const canSubmit = validation.ok;
@@ -599,7 +605,7 @@ export function ParameterForm({
       text = formatJudgeLineList(judgeLineValueLines(currentValues[key]));
     }
     if (mode === "exact" && !judgeLineIsMultiple(parameter)) {
-      const lines = parseJudgeLineList(text) ?? [];
+      const lines = parseJudgeLineList(text, judgeLineGroups) ?? [];
       update(key, lines[0] ?? "");
     }
     updateLineDraft(key, { mode, text });
@@ -632,7 +638,7 @@ export function ParameterForm({
       draft?.mode !== "global" &&
       (judgeLineIsMultiple(parameter) || draft?.mode === "range")
     ) {
-      const lines = parseJudgeLineList(draft?.text ?? "") ?? [];
+      const lines = parseJudgeLineList(draft?.text ?? "", judgeLineGroups) ?? [];
       if (!lines.includes(allocation.index)) {
         lines.push(allocation.index);
         updateLineDraft(key, {
@@ -657,7 +663,7 @@ export function ParameterForm({
 
   return (
     <form className="redux-parameter-form" onSubmit={submit} autoComplete="off">
-      <div className="redux-parameter-fields">
+      <fieldset className="redux-parameter-fields">
         {parameterKeys(schema).map((key) => {
           const parameter = schema.parameters[key];
           const id = fieldId(owner, scriptId, key);
@@ -668,7 +674,8 @@ export function ParameterForm({
             <FieldRow
               key={key}
               divided
-              striped
+              density="compact"
+              align="start"
               htmlFor={id}
               idPrefix={id}
               label={label}
@@ -696,6 +703,7 @@ export function ParameterForm({
                   id={id}
                   describedBy={describedBy}
                   lineOptions={lineOptions}
+                  judgeLineSuggestions={judgeLineSuggestions}
                   canAllocateLine={canAllocateLine}
                   judgeLineDraft={parameter.kind === "judgeLine" ? lineDrafts[key] : undefined}
                   onAllocateLine={() => allocateLine(key)}
@@ -707,8 +715,8 @@ export function ParameterForm({
             />
           );
         })}
-      </div>
-      <div className="redux-parameter-actions">
+      </fieldset>
+      <footer className="redux-parameter-actions">
         <span className="redux-parameter-actions-spacer" />
         <Button variant="outlined" type="button" onClick={onCancel}>
           {t("common.action.cancel")}
@@ -716,7 +724,7 @@ export function ParameterForm({
         <Button variant="solid" type="submit" disabled={!canSubmit}>
           {t("workspace.scripts.run")}
         </Button>
-      </div>
+      </footer>
     </form>
   );
 }
@@ -759,7 +767,6 @@ export function requestParameterValues(
     });
     const modal: ModalOptions = {
       label: options.title,
-      description: options.description,
       onClose: () => finishRequest(id, null),
       children,
     };
@@ -784,7 +791,6 @@ export function installParameterFormHost(): () => void {
         title: tRaw("workspace.scripts.parameters.title", {
           script: label === undefined ? key : tRaw(label),
         }),
-        description: tRaw("workspace.scripts.parameters.description"),
       });
     },
   });
