@@ -7,8 +7,7 @@
  * buffers are transferred back to the dialog.
  */
 import {
-  detectBeatGridWithDbnFromSamples,
-  detectAutoTimingFromSamples,
+  detectBestFixedTimingFromSamples,
   type BeatDetectionResult,
 } from "../../../../../core/media/beatDetection.ts";
 
@@ -33,11 +32,9 @@ export interface TimingDetectionMessage {
 /** Run one analysis request and describe how to post the reply. */
 export function analyzeTimingRequest(data: TimingDetectionRequest): TimingDetectionMessage {
   try {
-    // DBN is the more accurate fixed-grid decoder. Keep the existing detector
-    // as a deterministic fallback for short or sparse material.
-    const result =
-      detectBeatGridWithDbnFromSamples(data.samples, data.sampleRate, data.duration) ??
-      detectAutoTimingFromSamples(data.samples, data.sampleRate, data.duration);
+    // Run both fixed-grid estimators and let their shared evidence scorer pick
+    // one answer, so the UI never needs to expose a detector choice.
+    const result = detectBestFixedTimingFromSamples(data.samples, data.sampleRate, data.duration);
     if (!result) {
       return { reply: { type: "result", result: null }, transfer: [] };
     }

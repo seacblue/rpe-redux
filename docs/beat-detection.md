@@ -4,16 +4,17 @@
 - Scope: automatic fixed-BPM timing detection (`src/core/media/beatDetection.ts`, `beatDbn.ts`, `beatActivation.ts`)
 - Related: [Architecture](./architecture.md), [Testing](./testing.md)
 
-## 1. Two decoders, one result shape
+## 1. Two decoders, one automatic answer
 
-The editor can detect timing with either of two decoders. Both return the same `BeatDetectionResult`, so a caller previews, edits, or commits the answer the same way. The automatic timing dialog uses the DBN decoder first and falls back to the fixed detector for short or sparse audio.
+The editor runs both fixed-tempo decoders and returns one `BeatDetectionResult`. A shared onset scorer compares their proposals, and when they disagree by an octave it also tests the corresponding half/double-time hypotheses. The dialog never asks the user to choose a detector or a tempo level.
 
 | Decoder | Entry point | How it commits to a tempo |
 | --- | --- | --- |
 | Harmonic autocorrelation | `detectBeatGridFromSamples` | Scores candidate periods against the onset envelope, then fits the winner |
 | DBN (madmom) | `detectBeatGridWithDbnFromSamples` | Keeps tempo hypotheses alive while decoding, then returns one refined BPM and offset |
+| Automatic fusion | `detectBestFixedTimingFromSamples` | Runs both decoders, scores their fixed grids, and emits the strongest single answer |
 
-The autocorrelation detector is the default: it needs one pass over the onset envelope and no state space. The DBN decoder is stronger on syncopated material and near-miss tempi, because a single grid fitted to onset energy can lock onto the wrong metrical level, while a path through the joint tempo/phase state space cannot jump tempo without paying a transition cost.
+The autocorrelation detector is cheap and often strong on recorded previews. The DBN decoder is stronger on clean, syncopated, and high-tempo material. Neither is treated as universally correct: the fusion stage uses their shared onset evidence, a soft common-tempo prior for weak octave hypotheses, and a high-confidence exception for genuinely strong high-tempo grids.
 
 ## 2. What was ported
 
@@ -105,6 +106,8 @@ Four steps then sit between the decoded path and the number the author sees:
 `decodeBeats` itself deliberately does not round its output to a grid: it returns the positions it decoded, and the caller decides what to measure.
 
 ## 5. Measured accuracy
+
+The current integration was checked against two complementary sets. The synthetic set contains 58 deterministic click tracks covering 60–350 BPM, noise, accents, short clips, and sparse backbeats. It detected all 58; 55 were within 1 BPM and the remaining three were the intentionally ambiguous backbeat cases where the audio carries only the stronger half-time pulse. On the 21 fixed-BPM osu! preview clips collected for the repository research, the fused result was within 1 BPM on 17/21, within 2 BPM on 19/21, and within 5 BPM on 21/21. The same preview run gave 8/21 within 1 BPM for DBN alone and 12/19 for autocorrelation alone, so the fusion is materially more stable on this small real-music sample.
 
 Synthetic click tracks with every onset placed at a known sample index, 24–30 s each, deterministic noise. The expected tempo in each case is the pulse the pattern actually carries, not the nominal BPM.
 

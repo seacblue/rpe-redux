@@ -19,7 +19,7 @@ Tempora is useful as a product and data-model reference, but its source is not s
 
 ## Implemented integration
 
-The automatic timing worker now runs `detectBeatGridWithDbnFromSamples` first and falls back to `detectAutoTimingFromSamples` when DBN cannot produce a result. DBN uses its tempo/phase hypotheses internally to improve fixed-grid selection, but the public result is always one BPM and one offset. Applying the result always writes one `BPMList` entry at `[0, 0, 1]` and stores the detected beat-zero time in `META.offset`.
+The automatic timing worker now runs `detectBestFixedTimingFromSamples`, which evaluates both `detectBeatGridWithDbnFromSamples` and `detectBeatGridFromSamples` and ranks their fixed-grid candidates automatically. The public result is always one BPM and one offset; the user never chooses a detector or a tempo level. Applying the result always writes one `BPMList` entry at `[0, 0, 1]` and stores the detected beat-zero time in `META.offset`.
 
 ## osu! preview checks
 

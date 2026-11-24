@@ -1,7 +1,10 @@
 /** Verify fixed BPM/offset output on steady and changing pulse material. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectBeatGridWithDbnFromSamples } from "../../../core/media/beatDetection.ts";
+import {
+  detectBeatGridWithDbnFromSamples,
+  detectBestFixedTimingFromSamples,
+} from "../../../core/media/beatDetection.ts";
 
 const SAMPLE_RATE = 44100;
 
@@ -60,4 +63,14 @@ test("slowing and drifting inputs do not widen the public result", () => {
     const result = detectBeatGridWithDbnFromSamples(renderTempoCurve(bpmAt, 30), SAMPLE_RATE, 30);
     assertFixedResult(result, "changing tempo input");
   }
+});
+
+test("the combined detector keeps a clear high-tempo pulse", () => {
+  const result = detectBestFixedTimingFromSamples(
+    renderTempoCurve(() => 240, 20),
+    SAMPLE_RATE,
+    20,
+  );
+  assertFixedResult(result, "combined high-tempo input");
+  assert.ok(Math.abs(result.bpm - 240) < 1, `combined detector reports ${result.bpm}`);
 });

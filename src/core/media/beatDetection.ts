@@ -76,6 +76,11 @@ const ONSET_POINTS = 2400;
 const MIN_RELIABILITY = 0.42;
 const MIN_PERIODICITY = 0.45;
 const MIN_COVERAGE = 0.2;
+/** Soft metrical prior used only when the two estimators disagree by an octave. */
+const COMMON_TEMPO_MIN = 90;
+const COMMON_TEMPO_MAX = 240;
+/** A very strong grid may legitimately be faster than the soft prior. */
+const HIGH_CONFIDENCE_TEMPO_SCORE = 0.7;
 /** Output precision for BPM and offset, and the near-integer snap threshold. */
 const TIMING_DIGITS = 3;
 const SNAP_THRESHOLD = 0.001;
@@ -137,6 +142,11 @@ interface InternalCandidate {
   periodicity: number;
   /** Circular concentration of low-band peaks around the candidate grid. */
   phaseConcentration: number;
+}
+
+interface FusionCandidate {
+  result: BeatDetectionResult;
+  derived: boolean;
 }
 
 interface Peak {
@@ -411,6 +421,133 @@ export function detectBeatGridWithDbnFromSamples(
     duration: totalDuration,
     beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
   };
+}
+
+/**
+ * Detect one fixed timing answer with both internal estimators.
+ *
+ * The estimators are deliberately allowed to disagree about the metrical level:
+ * one may report a half-time pulse while the other sees the intervening beats.
+ * This function scores both answers and their octave variants against the same
+ * onset envelope, then returns only the highest-scoring fixed grid. Callers do
+ * not need to expose a detector choice or a tempo-map mode to the user.
+ */
+export function detectBestFixedTimingFromSamples(
+  samples: Float32Array,
+  sampleRate: number,
+  duration?: number,
+  options: BeatDetectionOptions = {},
+): BeatDetectionResult | null {
+  if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    return null;
+  }
+  const candidates = [
+    detectBeatGridWithDbnFromSamples(samples, sampleRate, duration, options),
+    detectBeatGridFromSamples(samples, sampleRate, duration, options),
+  ].filter((candidate): candidate is BeatDetectionResult => candidate !== null);
+  if (!candidates.length) {
+    return null;
+  }
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+  const limits = resolveTimingLimits(options, DBN_MIN_BPM, DBN_MAX_BPM);
+  const totalDuration =
+    Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
+  const analysisRate = Math.min(sampleRate, limits.targetRate);
+  const envelope = buildOnsetEnvelope(resample(samples, sampleRate, analysisRate), analysisRate);
+  if (!envelope) {
+    return candidates[0];
+  }
+  const scored = expandFixedCandidates(candidates, limits.minBpm, limits.maxBpm).map(
+    ({ result, derived }) => ({
+      candidate: result,
+      derived,
+      score: scoreFixedCandidate(result, envelope),
+    }),
+  );
+  const reasonable = scored.filter(
+    ({ candidate, score }) =>
+      (candidate.bpm >= COMMON_TEMPO_MIN && candidate.bpm <= COMMON_TEMPO_MAX) ||
+      score >= HIGH_CONFIDENCE_TEMPO_SCORE,
+  );
+  const ranked = reasonable.length ? reasonable : scored;
+  ranked.sort(
+    (left, right) =>
+      right.score - (right.derived ? 0.05 : 0) - (left.score - (left.derived ? 0.05 : 0)),
+  );
+  const best = ranked[0]?.candidate;
+  if (!best) {
+    return candidates[0];
+  }
+  return {
+    ...best,
+    duration: totalDuration,
+    waveform: {
+      peaks: waveformPeaks(samples, WAVEFORM_POINTS),
+      duration: totalDuration,
+    },
+    beatTimes: buildBeatTimes(best.bpm, best.offsetMs / 1000, totalDuration),
+  };
+}
+
+/** Add half-time and double-time hypotheses only when the detectors disagree. */
+function expandFixedCandidates(
+  results: readonly BeatDetectionResult[],
+  minBpm: number,
+  maxBpm: number,
+): FusionCandidate[] {
+  const expanded = results.map((result) => ({ result, derived: false }));
+  const tempos = results.map((result) => result.bpm).filter((bpm) => bpm > 0);
+  const spread = tempos.length ? Math.max(...tempos) / Math.min(...tempos) : 1;
+  // Octave hypotheses are useful only when the two estimators disagree. If
+  // they agree, adding 0.5x/2x candidates would reward a harmonic that neither
+  // detector actually selected and would make clean high-tempo clicks unstable.
+  if (spread < 1.7) {
+    return expanded;
+  }
+  for (const result of results) {
+    for (const factor of [0.5, 2]) {
+      const bpm = result.bpm * factor;
+      if (bpm < minBpm || bpm > maxBpm) {
+        continue;
+      }
+      expanded.push({
+        result: {
+          ...result,
+          bpm: roundMeasuredTiming(bpm),
+        },
+        derived: true,
+      });
+    }
+  }
+  return expanded;
+}
+
+/** Score a fixed grid by beat support, phase concentration, and offbeat leakage. */
+function scoreFixedCandidate(candidate: BeatDetectionResult, envelope: OnsetEnvelope): number {
+  const phase = candidate.offsetMs / 1000;
+  const pulse = pulseScore(envelope.pulse, envelope.fps, candidate.bpm, phase);
+  const low = pulseScore(envelope.low, envelope.fps, candidate.bpm, phase);
+  const lowPeaks = findPeaks(envelope.low, envelope, 0.8);
+  const pulsePeaks = findPeaks(envelope.pulse, envelope, 0.8);
+  const coverage =
+    coverageOf(lowPeaks, candidate.bpm, phase) * 0.6 +
+    coverageOf(pulsePeaks, candidate.bpm, phase) * 0.4;
+  const concentration =
+    concentrationOf(lowPeaks, candidate.bpm, phase) * 0.6 +
+    concentrationOf(pulsePeaks, candidate.bpm, phase) * 0.4;
+  // The offbeat term rejects a half-time grid whose skipped beats are just as
+  // strong as its reported beats. Low-band evidence anchors drums; the pulse
+  // term keeps melodic/percussive tracks usable when the kick is sparse.
+  return (
+    pulse.score * 0.3 +
+    low.score * 0.25 +
+    coverage * 0.3 +
+    concentration * 0.15 -
+    pulse.offbeat * 0.25 -
+    low.offbeat * 0.15
+  );
 }
 
 /**
