@@ -63,29 +63,23 @@ The synthetic threshold was BPM absolute error ≤1 and circular phase error ≤
 | Backbeat pattern | 4 | 4/4 | 2/4 | Two cases selected half-time |
 | **Total** | **58** | **58/58** | **55/58 (94.8%)** | Phase mean 0.824 ms; phase p95 0.832 ms |
 
-The real-music fixed-BPM lane is materially less stable:
+The real-music fixed-BPM lane is materially less stable, but fusion removes most octave errors:
 
-| Threshold                 |        Result |
-| ------------------------- | ------------: |
-| Detection                 |         21/21 |
-| BPM error ≤1              |  8/21 (38.1%) |
-| BPM error ≤2              | 10/21 (47.6%) |
-| BPM error ≤5              | 13/21 (61.9%) |
-| Median BPM error          |     2.073 BPM |
-| 95th-percentile BPM error |   174.087 BPM |
+| Threshold                 |      DBN only |        Fusion |
+| ------------------------- | ------------: | ------------: |
+| Detection                 |         21/21 |         21/21 |
+| BPM error ≤1              |  8/21 (38.1%) | 17/21 (81.0%) |
+| BPM error ≤2              | 10/21 (47.6%) | 19/21 (90.5%) |
+| BPM error ≤5              | 13/21 (61.9%) |  21/21 (100%) |
+| Median BPM error          |     2.073 BPM |     0.211 BPM |
+| 95th-percentile BPM error |   174.087 BPM |     2.623 BPM |
 
-The largest failures were:
+The remaining fusion errors were:
 
-|                Beatmapset | Chart BPM | Detected BPM | Failure shape      |
-| ------------------------: | --------: | -----------: | ------------------ |
-|       2457531 — Star-mine |       197 |       98.913 | half-time          |
-|       2543018 — Moon-gate |       170 |      339.290 | double-time        |
-|         2602282 — Vampira |       125 |       83.387 | low metrical level |
-|            2602401 — EDEN |       174 |      348.087 | double-time        |
-|   2621236 — Abyss to Eden |       190 |      123.823 | competing pulse    |
-|           2644171 — NAOMI |       175 |      349.789 | double-time        |
-|  2651632 — Souzou Odyssey |       146 |      291.564 | double-time        |
-| 2651641 — Muenzuka set 10 |       125 |      250.008 | double-time        |
+|              Beatmapset | Chart BPM | Detected BPM | Failure shape   |
+| ----------------------: | --------: | -----------: | --------------- |
+|    2564707 — Whyte pain |       190 |      192.623 | near-tempo miss |
+| 2621236 — Abyss to Eden |       190 |      192.073 | competing pulse |
 
 The osu! offset was not scored as an absolute error: a public preview is trimmed/encoded independently of the beatmap audio origin, so its first detected attack cannot be compared directly with the `.osu` timing-point offset. Synthetic circular phase was scored and stayed sub-millisecond; the real-music weakness is BPM metrical-level selection.
 
