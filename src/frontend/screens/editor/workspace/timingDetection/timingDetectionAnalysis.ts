@@ -9,7 +9,7 @@
  */
 import { mixToMono, type BeatDetectionResult } from "../../../../../core/media/beatDetection.ts";
 import {
-  analyzeTimingRequest,
+  analyzeTimingRequestAsync,
   type TimingDetectionReply,
 } from "./timingDetectionWorkerProtocol.ts";
 
@@ -26,7 +26,7 @@ export async function analyzeTiming(
     return null;
   }
   if (typeof Worker === "undefined") {
-    const { reply } = analyzeTimingRequest({
+    const { reply } = await analyzeTimingRequestAsync({
       type: "analyze",
       samples,
       sampleRate: buffer.sampleRate,

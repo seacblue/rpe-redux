@@ -501,6 +501,42 @@ export function detectBestFixedTimingFromSamples(
   };
 }
 
+/** Refine a selected fixed grid against raw attacks without changing its beat level. */
+export function refineFixedTimingFromSamples(
+  samples: Float32Array,
+  sampleRate: number,
+  bpm: number,
+  offsetMs: number,
+  duration?: number,
+): { bpm: number; offsetMs: number } | null {
+  if (
+    !samples?.length ||
+    !Number.isFinite(sampleRate) ||
+    sampleRate <= 0 ||
+    !Number.isFinite(bpm) ||
+    bpm <= 0 ||
+    !Number.isFinite(offsetMs)
+  ) {
+    return null;
+  }
+  const totalDuration =
+    Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
+  const refined = refineTimingFromAttacks(
+    samples,
+    sampleRate,
+    Math.max(0, offsetMs) / 1000,
+    bpm,
+    totalDuration,
+  );
+  if (!refined || !(refined.bpm > 0) || !Number.isFinite(refined.offsetSeconds)) {
+    return null;
+  }
+  return {
+    bpm: roundMeasuredTiming(refined.bpm),
+    offsetMs: roundMeasuredTiming(Math.max(0, refined.offsetSeconds) * 1000),
+  };
+}
+
 /** Add half-time and double-time hypotheses only when the detectors disagree. */
 function expandFixedCandidates(
   results: readonly BeatDetectionResult[],

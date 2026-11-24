@@ -1,18 +1,19 @@
-# Beat detection: fixed BPM, offset, and the madmom port
+# Beat detection: fixed BPM, offset, and learned evidence
 
 - Status: current
-- Scope: automatic fixed-BPM timing detection (`src/core/media/beatDetection.ts`, `beatDbn.ts`, `beatActivation.ts`)
+- Scope: automatic fixed-BPM timing detection (`src/core/media/beatDetection.ts`, `beatDbn.ts`, `beatActivation.ts`, and the timing worker's learned refinement)
 - Related: [Architecture](./architecture.md), [Testing](./testing.md)
 
 ## 1. Two decoders, one automatic answer
 
-The editor runs both fixed-tempo decoders and returns one `BeatDetectionResult`. A shared onset scorer compares their proposals, and when they disagree by an octave it also tests the corresponding half/double-time hypotheses. The dialog never asks the user to choose a detector or a tempo level.
+The editor runs two fixed-tempo decoders and then gives their single proposal to a learned beat-evidence refinement in the timing worker. The refinement searches only a fixed BPM grid around that proposal and fits the winning phase back to raw attacks. If the model cannot load, the deterministic fusion remains the fallback. The dialog never asks the user to choose a detector or a tempo level.
 
 | Decoder | Entry point | How it commits to a tempo |
 | --- | --- | --- |
 | Harmonic autocorrelation | `detectBeatGridFromSamples` | Scores candidate periods against the onset envelope, then fits the winner |
 | DBN (madmom) | `detectBeatGridWithDbnFromSamples` | Keeps tempo hypotheses alive while decoding, then returns one refined BPM and offset |
 | Automatic fusion | `detectBestFixedTimingFromSamples` | Runs both decoders, scores their fixed grids, and emits the strongest single answer |
+| Learned refinement | `learnedBeatDetector.ts` | Runs Beat This `small0` logits, searches fixed BPM/phase candidates, then uses raw attack fitting for the final precision |
 
 The autocorrelation detector is cheap and often strong on recorded previews. The DBN decoder is stronger on clean, syncopated, and high-tempo material. Neither is treated as universally correct: the fusion stage uses their shared onset evidence, a soft common-tempo prior for weak octave hypotheses, and a high-confidence exception for genuinely strong high-tempo grids.
 
@@ -36,9 +37,9 @@ The algorithm is kept intact, including the parts that look like implementation 
 
 ## 3. What was not ported
 
-The beat activation function. madmom derives it from an ensemble of trained bidirectional LSTMs; the weights are the part that cannot be shipped and are not needed to port the decoder.
+The original madmom beat activation function. madmom derives it from an ensemble of trained bidirectional LSTMs; that network is not bundled. The timing worker now has a separate ONNX beat-evidence model, Beat This `small0`, whose MIT-released weights are stored under `src/public/assets/redux/models/` with a local notice.
 
-`src/core/media/beatActivation.ts` reproduces madmom's `RNNBeatProcessor` preprocessing instead — the whole chain up to the network's input layer — and replaces the network with a sum over bands. The chain, at madmom's own defaults:
+`src/core/media/beatActivation.ts` reproduces madmom's `RNNBeatProcessor` preprocessing instead — the whole chain up to the network's input layer — and replaces the network with a sum over bands. The learned worker uses Beat This's independent 22050 Hz log-mel frontend (`1024` FFT, `441` hop, `128` Slaney bins) and does not reuse the madmom feature substitute. The chain, at madmom's own defaults:
 
 | Stage | madmom | Implementation |
 | --- | --- | --- |

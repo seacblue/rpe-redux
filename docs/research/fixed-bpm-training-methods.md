@@ -117,7 +117,7 @@ Before integrating the model into the application, the official `small0` checkpo
 | Beat This discrete timestamps | 3/21 | 2.500 | 97.000 | 100.000 |
 | Beat This logits + local continuous search | **21/21** | **0.138** | **0.436** | **0.581** |
 
-This is an offline teacher experiment, not yet the production detector. It is nevertheless a strong result because all three previous >1 BPM cases moved into the accepted range without using chart BPM during inference. The production implementation still needs the ONNX model, matching log-mel preprocessing, worker lifecycle, and a held-out confidence gate before the Draft PR can be marked ready. The current result is also not a final generalisation claim: the search range and score were selected during this investigation, so a larger independent osu! test set is still required.
+The learned path is now wired into the timing worker with the exported ONNX model, a 22050 Hz/441-hop log-mel frontend, continuous BPM/phase search, and raw-attack refinement. Model failure falls back to the deterministic TypeScript fusion, so the UI still receives one fixed result. The benchmark remains an offline teacher measurement rather than a final generalisation claim: the search range and score were selected during this investigation, and a larger independent osu! set plus browser-runtime parity test are still required before the Draft PR can be marked ready.
 
 ## Bibliography
 

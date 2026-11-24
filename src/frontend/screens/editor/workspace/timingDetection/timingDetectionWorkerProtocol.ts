@@ -10,6 +10,7 @@ import {
   detectBestFixedTimingFromSamples,
   type BeatDetectionResult,
 } from "../../../../../core/media/beatDetection.ts";
+import { detectLearnedFixedTimingFromSamples } from "./learnedBeatDetector.ts";
 
 /** A request to analyze one already-mixed mono signal. */
 export interface TimingDetectionRequest {
@@ -48,4 +49,36 @@ export function analyzeTimingRequest(data: TimingDetectionRequest): TimingDetect
       transfer: [],
     };
   }
+}
+
+/** Run the learned refinement and fall back to the synchronous detector safely. */
+export async function analyzeTimingRequestAsync(
+  data: TimingDetectionRequest,
+): Promise<TimingDetectionMessage> {
+  try {
+    const baseline = detectBestFixedTimingFromSamples(data.samples, data.sampleRate, data.duration);
+    if (!baseline) {
+      return { reply: { type: "result", result: null }, transfer: [] };
+    }
+    const learned = await detectLearnedFixedTimingFromSamples(
+      data.samples,
+      data.sampleRate,
+      data.duration,
+      baseline,
+    );
+    return timingDetectionMessage(learned ?? baseline);
+  } catch (error) {
+    return {
+      reply: { type: "error", message: error instanceof Error ? error.message : String(error) },
+      transfer: [],
+    };
+  }
+}
+
+/** Describe a result and the buffers that can be transferred to the dialog. */
+function timingDetectionMessage(result: BeatDetectionResult): TimingDetectionMessage {
+  return {
+    reply: { type: "result", result },
+    transfer: [result.waveform.peaks.buffer, result.onset.buffer, result.beatTimes.buffer],
+  };
 }

@@ -7,7 +7,7 @@
  * `timingDetectionWorkerProtocol.ts` so the synchronous fallback shares it.
  */
 import {
-  analyzeTimingRequest,
+  analyzeTimingRequestAsync,
   type TimingDetectionReply,
   type TimingDetectionRequest,
 } from "./timingDetectionWorkerProtocol.ts";
@@ -19,10 +19,10 @@ interface TimingDetectionScope {
 
 const worker = self as TimingDetectionScope;
 
-worker.onmessage = ({ data }) => {
+worker.onmessage = async ({ data }) => {
   if (data.type !== "analyze") {
     return;
   }
-  const { reply, transfer } = analyzeTimingRequest(data);
+  const { reply, transfer } = await analyzeTimingRequestAsync(data);
   worker.postMessage(reply, transfer);
 };
