@@ -16,6 +16,7 @@ import {
 // bakes the validated desktop version in as a compile-time constant. The host
 // must use the same version because it starts the matching sidecar.
 const packageVersion = readProductVersion();
+const buildTime = new Date().toISOString();
 
 // Static assets use the deployment base; app destinations stay in the hash so
 // the desktop host and GitHub Pages never need an SPA fallback.
@@ -546,6 +547,7 @@ function bootSplash(): Plugin {
 export default defineConfig({
   define: {
     __REDUX_VERSION__: JSON.stringify(packageVersion),
+    __REDUX_BUILD_TIME__: JSON.stringify(buildTime),
   },
   // The app's own runtime resources live under `src/public/`: Vite serves them from the site
   // root in dev and copies them verbatim into `dist/` on build, which is what keeps the
