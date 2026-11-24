@@ -27,6 +27,7 @@ export default {
   "shortcuts.editor.sweepSelect": "划线选中时间轴物件",
   "shortcuts.editor.sweepDeselect": "划线取消选中时间轴物件",
   "shortcuts.editor.delete": "删除选中物件",
+  "shortcuts.editor.curveQuickPick": "快捷曲线生成",
   "shortcuts.editor.curveDelete": "删除选中曲线线段",
   "shortcuts.editor.addTap": "放置 Tap / 钩定事件",
   "shortcuts.editor.addDrag": "放置 Drag",

@@ -28,6 +28,7 @@ export default {
   "shortcuts.editor.sweepSelect": "Sweep-select timeline objects",
   "shortcuts.editor.sweepDeselect": "Sweep-deselect timeline objects",
   "shortcuts.editor.delete": "Delete selected objects",
+  "shortcuts.editor.curveQuickPick": "Quick curve generation",
   "shortcuts.editor.curveDelete": "Delete selected curve segment",
   "shortcuts.editor.addTap": "Place Tap / anchor event",
   "shortcuts.editor.addDrag": "Place Drag",

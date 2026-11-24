@@ -44,9 +44,9 @@ export function isTimelineWheelShortcut(id: string): boolean {
 /**
  * Match one wheel event against the live bindings of the wheel actions.
  *
- * Every modifier is part of the binding, so Shift+wheel is a separate fast-seek
- * action rather than an implicit step-size modifier. A profile that rebinds any
- * of these actions keeps the same direction mapping.
+ * Every modifier is part of the binding, so fast seek and zoom remain separate
+ * wheel actions rather than implicit step-size modifiers. A profile that
+ * rebinds any of these actions keeps the same direction mapping.
  */
 export function matchTimelineWheel(event: ShortcutEventLike): TimelineWheelAction | null {
   if (bound(event, TIMELINE_WHEEL_SHORTCUT_IDS.linePrevious)) {

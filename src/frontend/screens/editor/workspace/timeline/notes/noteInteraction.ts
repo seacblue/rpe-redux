@@ -34,6 +34,7 @@ import type {
 import type { TimelineNoteInteractionReceiver } from "../drawing/timelineReceiver.ts";
 import { captureNoteBaseline, marqueeHistoryKey } from "../selection/rectangleSelection.ts";
 import { holdPart, hits } from "./noteHitTest.ts";
+import { matchesCurveQuickPickShortcut } from "./curveQuickPickShortcut.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
@@ -399,9 +400,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     this.changed();
     return;
   }
-  // A Ctrl+click on a note is the curve-note quick pick; it must win over the
-  // ordinary additive selection and any sweep shortcut bound to the same press.
-  if (event.button === 0 && event.ctrlKey && !event.shiftKey && !event.altKey && hit) {
+  if (event.button === 0 && matchesCurveQuickPickShortcut(event, session) && hit) {
     // The curve is generated on the active line, so a pick on another
     // multi-line panel must make that line active before the anchor is stored.
     if (hit.lineIndex !== session.lineIndex) {

@@ -44,14 +44,32 @@ test("default wheel bindings step lines with Ctrl and seek time otherwise", () =
   }
 });
 
-test("default Alt wheel bindings zoom the timeline", () => {
+test("default Alt wheel bindings fast-seek the timeline", () => {
   const dispose = registerEditorShortcuts();
   try {
     assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true }), {
+      kind: "seek",
+      direction: 1,
+      step: "beat",
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true }), {
+      kind: "seek",
+      direction: -1,
+      step: "beat",
+    });
+  } finally {
+    dispose();
+  }
+});
+
+test("default Alt+Shift wheel bindings zoom the timeline", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: 1,
     });
-    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true }), {
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,
     });
@@ -65,9 +83,9 @@ test("a rebound zoom shortcut keeps its configured direction", () => {
   const zoomOut = TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut;
   const zoomIn = TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn;
   try {
-    assert.equal(shortcutRegistry.replaceAllBindings(zoomOut, ["ALT+WHEELUP"]).ok, true);
+    assert.equal(shortcutRegistry.replaceAllBindings(zoomOut, ["ALT+SHIFT+WHEELUP"]).ok, true);
     assert.equal(shortcutRegistry.replaceAllBindings(zoomIn, []).ok, true);
-    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true }), {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,
     });
@@ -118,19 +136,11 @@ test("a custom Alt wheel seek binding does not also zoom the timeline", () => {
   }
 });
 
-test("Shift wheel is a separate whole-beat seek binding", () => {
+test("Shift wheel is unbound by default so it remains available for selection", () => {
   const dispose = registerEditorShortcuts();
   try {
-    assert.deepEqual(matchTimelineWheel({ deltaY: 100, shiftKey: true }), {
-      kind: "seek",
-      direction: -1,
-      step: "beat",
-    });
-    assert.deepEqual(matchTimelineWheel({ deltaY: -100, shiftKey: true }), {
-      kind: "seek",
-      direction: 1,
-      step: "beat",
-    });
+    assert.equal(matchTimelineWheel({ deltaY: 100, shiftKey: true }), null);
+    assert.equal(matchTimelineWheel({ deltaY: -100, shiftKey: true }), null);
     assert.equal(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), null);
     assert.equal(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), null);
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
@@ -175,10 +185,10 @@ test("a fast seek binding moves by one beat and a grid binding keeps the grid st
       wheelSettings: () => ({ scrollSpeed: 1, scrollAcceleration: false }),
       lineSwitcher: { step() {} },
     });
-    const wheel = (deltaY, shiftKey = false) => ({
+    const wheel = (deltaY, altKey = false) => ({
       deltaY,
       deltaMode: 0,
-      shiftKey,
+      altKey,
       preventDefault() {},
       stopPropagation() {},
     });

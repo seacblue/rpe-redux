@@ -42,7 +42,9 @@ import {
 } from "../../../frontend/screens/editor/curveEvents/store.ts";
 import { curvePreviewLineTargets } from "../../../frontend/screens/editor/curveEvents/previewIsolation.ts";
 import {
+  CURVE_QUICK_PICK_SHORTCUT_ID,
   matchEditorShortcut,
+  matchesEditorModifierShortcut,
   registerEditorShortcuts,
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import { shortcutRegistry } from "../../../core/shortcuts/registry.ts";
@@ -424,6 +426,88 @@ test("curve delete is a registered D shortcut in its own category", () => {
     assert.equal(shortcut.category, "editor.curve");
     assert.equal(shortcut.defaults[0].key, "D");
   } finally {
+    dispose();
+  }
+});
+
+test("quick curve generation uses a configurable passive modifier shortcut", () => {
+  const dispose = registerEditorShortcuts();
+  const shortcutContext = {
+    atHome: false,
+    documentOpen: true,
+    modal: "none",
+    capturing: false,
+    developerMode: false,
+    textEntry: false,
+    surface: null,
+  };
+  const editorContext = { area: "notes", hasSelection: false, surface: "timeline" };
+  const ctrlClick = { button: 0, ctrlKey: true, shiftKey: false, altKey: false };
+  const shiftClick = { button: 0, ctrlKey: false, shiftKey: true, altKey: false };
+  try {
+    const shortcut = shortcutRegistry
+      .shortcuts()
+      .find((entry) => entry.id === CURVE_QUICK_PICK_SHORTCUT_ID);
+    assert.ok(shortcut);
+    assert.deepEqual(shortcut.defaults, []);
+    assert.equal(shortcutRegistry.definition(CURVE_QUICK_PICK_SHORTCUT_ID)?.passive, true);
+    assert.equal(
+      matchesEditorModifierShortcut(
+        CURVE_QUICK_PICK_SHORTCUT_ID,
+        ctrlClick,
+        editorContext,
+        shortcutContext,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesEditorModifierShortcut(
+        CURVE_QUICK_PICK_SHORTCUT_ID,
+        shiftClick,
+        editorContext,
+        shortcutContext,
+      ),
+      false,
+    );
+
+    assert.equal(
+      shortcutRegistry.replaceAllBindings(CURVE_QUICK_PICK_SHORTCUT_ID, ["CTRL"]).ok,
+      true,
+    );
+    assert.equal(
+      matchesEditorModifierShortcut(
+        CURVE_QUICK_PICK_SHORTCUT_ID,
+        ctrlClick,
+        editorContext,
+        shortcutContext,
+      ),
+      true,
+    );
+
+    assert.equal(
+      shortcutRegistry.replaceAllBindings(CURVE_QUICK_PICK_SHORTCUT_ID, ["SHIFT"]).ok,
+      true,
+    );
+    assert.equal(
+      matchesEditorModifierShortcut(
+        CURVE_QUICK_PICK_SHORTCUT_ID,
+        ctrlClick,
+        editorContext,
+        shortcutContext,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesEditorModifierShortcut(
+        CURVE_QUICK_PICK_SHORTCUT_ID,
+        shiftClick,
+        editorContext,
+        shortcutContext,
+      ),
+      true,
+    );
+  } finally {
+    shortcutRegistry.resetShortcut(CURVE_QUICK_PICK_SHORTCUT_ID);
     dispose();
   }
 });

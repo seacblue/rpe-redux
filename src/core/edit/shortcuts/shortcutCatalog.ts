@@ -36,6 +36,9 @@ import { TIMELINE_WHEEL_SHORTCUT_IDS } from "./timelineWheel.ts";
 /** Stable id for the passive judge-line prefix gesture. */
 export const LINE_JUMP_SHORTCUT_ID = "navigation.line.jump";
 
+/** Stable id for the passive modifier used by curve-note quick generation. */
+export const CURVE_QUICK_PICK_SHORTCUT_ID = "editor.curve.quickPick";
+
 /** Ids for the sampling commands owned by the workspace sampler. */
 export const SAMPLING_SHORTCUT_IDS = Object.freeze({
   start: "event.sample.start",
@@ -148,6 +151,16 @@ const samplingShortcuts: readonly EditorShortcutDefinition[] = [
 /** Editor shortcuts owned by the curve trajectory stage. */
 const curveShortcuts: readonly EditorShortcutDefinition[] = [
   {
+    id: CURVE_QUICK_PICK_SHORTCUT_ID,
+    category: SHORTCUT_CATEGORIES.editorCurve.id,
+    title: "shortcuts.editor.curveQuickPick",
+    scope: "editor",
+    // The timeline owns the pointer gesture, so the registry only exposes the
+    // optional binding to the settings page and the passive matcher.
+    defaults: [],
+    passive: true,
+  },
+  {
     id: "editor.curve.delete",
     category: SHORTCUT_CATEGORIES.editorCurve.id,
     title: "shortcuts.editor.curveDelete",
@@ -191,14 +204,14 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineFastForward",
     scope: "editor",
-    defaults: [{ key: "WHEELUP", modifiers: ["SHIFT"] }],
+    defaults: [{ key: "WHEELUP", modifiers: ["ALT"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.fastPrevious,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineFastBackward",
     scope: "editor",
-    defaults: [{ key: "WHEELDOWN", modifiers: ["SHIFT"] }],
+    defaults: [{ key: "WHEELDOWN", modifiers: ["ALT"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.timeNext,
@@ -219,20 +232,14 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineZoomIn",
     scope: "editor",
-    defaults: [
-      { key: "WHEELUP", modifiers: ["ALT"] },
-      { key: "WHEELUP", modifiers: ["ALT", "SHIFT"] },
-    ],
+    defaults: [{ key: "WHEELUP", modifiers: ["ALT", "SHIFT"] }],
   },
   {
     id: TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut,
     category: SHORTCUT_CATEGORIES.editorNavigation.id,
     title: "shortcuts.editor.timelineZoomOut",
     scope: "editor",
-    defaults: [
-      { key: "WHEELDOWN", modifiers: ["ALT"] },
-      { key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] },
-    ],
+    defaults: [{ key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] }],
   },
 ];
 /** Editor shortcuts without default keys but available for custom binding. */
@@ -465,6 +472,28 @@ export function matchesEditorShortcut(
   }
   const held = heldShortcutKeys();
   return shortcuts.bindingsOf(id).some((binding) => matches(event, binding, held));
+}
+
+/**
+ * Match a passive modifier binding while a pointer gesture is in progress.
+ *
+ * A bare modifier normally matches its own keyboard event. Pointer gestures
+ * need the same binding to be evaluated against the click, so this helper
+ * retries the configured bare modifier as the synthetic trigger while keeping
+ * the pointer's modifier state and the editor scope checks intact.
+ */
+export function matchesEditorModifierShortcut(
+  id: string,
+  event: ShortcutEventLike,
+  context: EditorShortcutContext,
+  shortcutContext: ShortcutContext,
+): boolean {
+  if (matchesEditorShortcut(id, event, context, shortcutContext)) {
+    return true;
+  }
+  return ["Control", "Alt", "Shift", "Meta"].some((key) =>
+    matchesEditorShortcut(id, { ...event, key }, context, shortcutContext),
+  );
 }
 
 /**
