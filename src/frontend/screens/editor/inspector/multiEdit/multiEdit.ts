@@ -110,10 +110,10 @@ export class MultiEditPanel {
   };
   /** Source events a clone preview removes; hidden only while its ghost is on. */
   private hiddenSourceEvents?: ReadonlySet<JudgeLineEvent>;
-  /** Keeps selected events addressable while the visible event layer changes. */
+  /** Keeps selected events and their selection identity across a layer switch. */
   private selectionSnapshot?: SelectionSnapshot;
-  /** Selection membership associated with `selectionSnapshot`. */
   private selectionSnapshotSignature?: string;
+  private selectionSnapshotRevision?: number;
   /** These closures are assigned inside `open()` before any caller invokes them. */
   updateHistory?: (event?: Event) => void;
   load?: (
@@ -151,6 +151,12 @@ export class MultiEditPanel {
     );
   }
 
+  /** Drops the cached batch selection and its revision marker. */
+  private clearSelectionSnapshot(): void {
+    this.selectionSnapshot = this.selectionSnapshotSignature = undefined;
+    this.selectionSnapshotRevision = undefined;
+  }
+
   /** Opens the form for notes or events and installs its live bindings. */
   open(kind: MultiEditKind): void {
     if (this.active && this.kind === kind) {
@@ -165,8 +171,7 @@ export class MultiEditPanel {
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
     this.timeline.hiddenEvents = undefined;
-    this.selectionSnapshot = undefined;
-    this.selectionSnapshotSignature = undefined;
+    this.clearSelectionSnapshot();
     this.signature = null;
     const editFallback = (): MultiEditFormValues => ({
       mode: "edit",
@@ -328,8 +333,7 @@ export class MultiEditPanel {
             this.result = null;
             this.ghostChanges = undefined;
             this.ghostRanges = undefined;
-            this.selectionSnapshot = undefined;
-            this.selectionSnapshotSignature = undefined;
+            this.clearSelectionSnapshot();
             this.chart = this.getSession().chart;
             this.signature = this.selectionSignature();
             this.form?.setResult("", false);
@@ -358,8 +362,7 @@ export class MultiEditPanel {
           this.result = null;
           this.ghostChanges = undefined;
           this.ghostRanges = undefined;
-          this.selectionSnapshot = undefined;
-          this.selectionSnapshotSignature = undefined;
+          this.clearSelectionSnapshot();
           this.refresh();
         },
       });
@@ -382,8 +385,7 @@ export class MultiEditPanel {
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
     this.timeline.hiddenEvents = undefined;
-    this.selectionSnapshot = undefined;
-    this.selectionSnapshotSignature = undefined;
+    this.clearSelectionSnapshot();
     this.invalidate();
   }
 
@@ -392,8 +394,7 @@ export class MultiEditPanel {
     this.parameters.clearHistory();
     this.form?.selectHistory("");
     this.result = null;
-    this.selectionSnapshot = undefined;
-    this.selectionSnapshotSignature = undefined;
+    this.clearSelectionSnapshot();
     this.form?.setReady?.(false);
     this.form?.setWarning?.("");
     this.updateHistory?.();
@@ -407,8 +408,7 @@ export class MultiEditPanel {
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
     this.timeline.hiddenEvents = undefined;
-    this.selectionSnapshot = undefined;
-    this.selectionSnapshotSignature = undefined;
+    this.clearSelectionSnapshot();
     this.chart = this.getSession().chart;
     this.signature = this.selectionSignature();
     this.form?.setResult("", false);
@@ -484,20 +484,30 @@ export class MultiEditPanel {
       const selectionSignature = this.selectionSignature();
       const liveSnapshot = captureSelection(session);
       const previousSnapshot = this.selectionSnapshot;
+      const selectionWasClearedByLayerSwitch =
+        this.kind === "events" &&
+        previousSnapshot?.chart === session.chart &&
+        previousSnapshot.lineIndex === session.lineIndex &&
+        previousSnapshot.eventLayer !== session.eventLayer &&
+        previousSnapshot.events.length > 0 &&
+        liveSnapshot.events.length === 0 &&
+        this.selectionSnapshotRevision === session.selectionRevision;
       const snapshot =
         this.kind === "events" &&
         previousSnapshot &&
         previousSnapshot.chart === session.chart &&
-        this.selectionSnapshotSignature === selectionSignature &&
+        this.selectionSnapshotRevision === session.selectionRevision &&
+        (this.selectionSnapshotSignature === selectionSignature ||
+          selectionWasClearedByLayerSwitch) &&
         previousSnapshot.eventLayer !== session.eventLayer
           ? previousSnapshot
           : liveSnapshot;
       if (snapshot.notes.length || snapshot.events.length) {
         this.selectionSnapshot = snapshot;
         this.selectionSnapshotSignature = selectionSignature;
+        this.selectionSnapshotRevision = session.selectionRevision;
       } else {
-        this.selectionSnapshot = undefined;
-        this.selectionSnapshotSignature = undefined;
+        this.clearSelectionSnapshot();
       }
       const options =
         values ??
