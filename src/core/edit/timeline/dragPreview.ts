@@ -16,6 +16,8 @@ import { snapTime, verticalGrid, type TempoGrid } from "../../global/chart/editi
 import { checkedNotes } from "./model.ts";
 import { NOTE_X_MAX, NOTE_X_MIN, NOTE_X_SPAN } from "./timelineCoordinates.ts";
 import type { EditorSession } from "../session/session.ts";
+import { editCapturedSelection } from "../selection/edits.ts";
+import { captureSelection } from "../selection/snapshot.ts";
 import type { TimelineDrag, TimelineEventDrag, TimelineNote } from "./types.ts";
 
 /** Zero as a beat: the identity `subtractBeats`/`addBeats` compare against. */
@@ -117,6 +119,30 @@ export function moveTimelineNote(
     startTime: addBeats(note.startTime, boundedBeat),
     endTime: addBeats(note.endTime, boundedBeat),
   };
+}
+
+/** Build a transient chart for the selected notes while a timeline drag is active. */
+export function previewChartForNoteDrag(
+  session: EditorSession,
+  move: (note: TimelineNote) => TimelineNote,
+): EditorSession["chart"] | null {
+  const snapshot = captureSelection(session);
+  if (!snapshot.notes.length) {
+    return null;
+  }
+  const replacements = new Map<TimelineNote, TimelineNote>();
+  let changed = false;
+  for (const entry of snapshot.notes) {
+    const next = move(entry.note as TimelineNote);
+    replacements.set(entry.note as TimelineNote, next);
+    changed ||= next !== entry.note;
+  }
+  if (!changed) {
+    return null;
+  }
+  return editCapturedSelection(snapshot, {
+    note: (note) => replacements.get(note as TimelineNote) ?? (note as TimelineNote),
+  }).chart;
 }
 
 /** How many beats an event drag has moved, snapped to the division grid. */

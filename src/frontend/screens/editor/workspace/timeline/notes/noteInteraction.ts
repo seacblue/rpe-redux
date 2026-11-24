@@ -11,7 +11,10 @@ import {
   timelineEmptyPanPress,
   timelineSweepEnabled,
 } from "../../../../../../core/edit/timeline/selection.ts";
-import { moveTimelineNote } from "../../../../../../core/edit/timeline/dragPreview.ts";
+import {
+  moveTimelineNote,
+  previewChartForNoteDrag,
+} from "../../../../../../core/edit/timeline/dragPreview.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import {
   dragPrekeyHeld,
@@ -54,6 +57,19 @@ function syncNoteDragPreview(
   });
 }
 
+/** Publish the live chart proposal used by the realtime preview during a note drag. */
+function syncNoteDragPreviewChart(
+  receiver: TimelineNoteInteractionReceiver,
+  session: EditorSession,
+): void {
+  const drag = receiver.gestures.drag;
+  if (!drag || !["move", "startTime", "endTime"].includes(drag.kind)) {
+    receiver.setPreviewChart(null);
+    return;
+  }
+  receiver.setPreviewChart(previewChartForNoteDrag(session, (note) => receiver.movedNote(note)));
+}
+
 /** The note with the active drag applied, for drawing and commit. */
 export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineNote): TimelineNote {
   const panelWidth = this.viewport.panelWidth(this.notesCanvas.clientWidth, "notes");
@@ -82,6 +98,9 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   );
   this.gestures.clipboardPointer = this.gestures.cursor;
   this.gestures.hoverArea = "notes";
+  if (!this.gestures.drag) {
+    this.setPreviewChart(null);
+  }
   // A pan belongs to the pointer that started it; another pointer moving over
   // the canvas must not steal it or corrupt the drag's previous sample.
   if (
@@ -105,8 +124,10 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
           this.gestures.drag.current.y) /
           this.viewport.scaleForArea("notes");
     }
-    if (syncNoteDragPreview(this, this.getSession())) {
-      this.getSession().notify("selection");
+    const session = this.getSession();
+    syncNoteDragPreviewChart(this, session);
+    if (syncNoteDragPreview(this, session)) {
+      session.notify("selection");
     }
     if (this.gestures.drag.kind === "multi-pan") {
       // Pan through the clamped viewport seam so the note and event fields
@@ -199,6 +220,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     return;
   }
   event.preventDefault?.();
+  this.setPreviewChart(null);
   if (this.finishRectangle(event)) {
     return;
   }
@@ -680,6 +702,7 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
         this.viewport.scaleForArea("notes");
   }
   const session = this.getSession();
+  this.setPreviewChart(null);
   if (drag.kind === "rectangle") {
     if (!drag.finished) {
       this.changed();

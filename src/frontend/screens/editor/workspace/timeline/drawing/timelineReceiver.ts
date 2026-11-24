@@ -50,6 +50,8 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   eventOverlayBatch: TimelineOverlayBatch;
   getSession: () => EditorSession;
   getPreviewSession(): EditorSession | null;
+  getPreviewChart(): EditorSession["chart"] | null;
+  setPreviewChart(previewChart: EditorSession["chart"] | null): void;
   /** Events an active editor preview removes; the event layer skips them visually. */
   hiddenEvents?: ReadonlySet<JudgeLineEvent>;
   /** Notes an active editor preview replaces; the note layer skips them visually. */
@@ -200,6 +202,7 @@ export type TimelineNoteInteractionReceiver = Pick<
   | "notesCanvas"
   | "rectangleTimes"
   | "refreshIndex"
+  | "setPreviewChart"
   | "updateSweep"
   | "viewport"
   | "visible"

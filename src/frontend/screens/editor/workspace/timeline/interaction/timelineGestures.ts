@@ -67,6 +67,8 @@ export class TimelineGestures {
    * means "a drag is previewing".
    */
   preview: EditorSession | null = null;
+  /** A chart-only proposal used by a direct single-note drag preview. */
+  previewChart: EditorSession["chart"] | null = null;
   clipboardPointer: TimelinePoint | null = null;
   hoverArea?: TimelineArea;
   cursorLineIndex?: number;
@@ -295,6 +297,7 @@ export class TimelineGestures {
     this.eventInteraction.pending = null;
     this.drag = null;
     this.eventInteraction.drag = null;
+    this.previewChart = null;
     if (setTimelineDragPreview(null)) {
       trackedSession?.notify("selection");
     }
@@ -337,6 +340,7 @@ export class TimelineGestures {
     this.eventRectIndexSource = null;
     this.eventRectIndex.clear();
     this.preview = null;
+    this.previewChart = null;
     this.previewMarquee = null;
     this.previewCancel?.();
     this.previewCancel = undefined;

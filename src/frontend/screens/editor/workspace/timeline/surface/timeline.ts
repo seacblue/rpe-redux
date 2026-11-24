@@ -299,6 +299,7 @@ export class Timeline {
             return;
           }
           this.gestures.drag = null;
+          this.gestures.previewChart = null;
           if (setTimelineDragPreview(null)) {
             this.getSession().notify("selection");
           }
@@ -331,6 +332,7 @@ export class Timeline {
             return;
           }
           this.gestures.eventInteraction.drag = null;
+          this.gestures.previewChart = null;
           if (setTimelineDragPreview(null)) {
             this.getSession().notify("selection");
           }
@@ -394,6 +396,12 @@ export class Timeline {
    */
   setPreview(preview: EditorSession | null): void {
     this.gestures.preview = preview;
+    this.gestures.previewChart = null;
+  }
+
+  /** Publish or clear a chart-only proposal for a direct note drag. */
+  setPreviewChart(previewChart: EditorSession["chart"] | null): void {
+    this.gestures.previewChart = previewChart;
   }
 
   /**
@@ -402,6 +410,11 @@ export class Timeline {
    */
   getPreviewSession(): EditorSession | null {
     return this.gestures.preview;
+  }
+
+  /** Return the chart proposed by a direct note drag, without replacing timeline state. */
+  getPreviewChart(): EditorSession["chart"] | null {
+    return this.gestures.previewChart;
   }
 
   /** Selectable storage tracks for the active line and layer mode. */
