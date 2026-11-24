@@ -219,6 +219,43 @@ test("the shortcut recorder commits wheel directions and mouse buttons", () => {
   assert.deepEqual(releasedPointer.commit, { key: "MOUSE3", modifiers: ["SHIFT"] });
 });
 
+test("wheel capture latches its direction across idle wheel events", () => {
+  const first = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "wheel",
+    event: { deltaY: -100 },
+  });
+  assert.deepEqual(first.commit, { key: "WHEELUP", modifiers: [] });
+  assert.deepEqual(first.state.candidate, { key: "WHEELUP", modifiers: [] });
+
+  const idle = advanceShortcutCapture(first.state, {
+    type: "wheel",
+    event: { deltaY: 0, deltaX: 0 },
+  });
+  assert.equal(idle.commit, null);
+  assert.deepEqual(idle.state.candidate, first.state.candidate);
+  assert.deepEqual(idle.state.preview, first.state.preview);
+});
+
+test("wheel capture keeps a modifier chord until the modifier is released", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "Control", code: "ControlLeft", ctrlKey: true },
+  }).state;
+  const wheel = advanceShortcutCapture(state, {
+    type: "wheel",
+    event: { deltaY: 100, ctrlKey: true },
+  });
+  assert.deepEqual(wheel.commit, { key: "WHEELDOWN", modifiers: ["CTRL"] });
+  assert.deepEqual(wheel.state.candidate, wheel.commit);
+
+  state = advanceShortcutCapture(wheel.state, {
+    type: "keyup",
+    event: { key: "Control", code: "ControlLeft" },
+  });
+  assert.deepEqual(state.commit, { key: "WHEELDOWN", modifiers: ["CTRL"] });
+  assert.deepEqual(state.state, createShortcutCaptureState());
+});
+
 test("a mouse binding commits when the button is released while its modifier is held", () => {
   let state = advanceShortcutCapture(createShortcutCaptureState(), {
     type: "keydown",

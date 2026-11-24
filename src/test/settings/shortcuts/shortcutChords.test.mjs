@@ -16,6 +16,7 @@ import { shortcutScopesOverlap } from "../../../core/shortcuts/scope.ts";
 import {
   advanceShortcutCapture,
   createShortcutCaptureState,
+  isNewNonModifierKeydown,
 } from "../../../frontend/screens/settings/shortcuts/shortcutCapture.ts";
 
 test("a binding reads and writes held-key chords in one canonical order", () => {
@@ -87,6 +88,31 @@ test("the recorder adds held keys and a mouse release commits the chord", () => 
   assert.deepEqual(released.state, createShortcutCaptureState());
 });
 
+test("a repeated keyboard key does not replace a committed keyboard-mouse chord", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "e", code: "KeyE" },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "pointerdown",
+    event: { button: 2 },
+  }).state;
+  const released = advanceShortcutCapture(state, {
+    type: "pointerup",
+    event: { button: 2 },
+  });
+
+  assert.deepEqual(released.commit, { key: "MOUSE2", keys: ["E"], modifiers: [] });
+  assert.equal(
+    isNewNonModifierKeydown(released.state, { key: "e", code: "KeyE", repeat: true }),
+    false,
+  );
+  assert.equal(
+    isNewNonModifierKeydown(released.state, { key: "f", code: "KeyF", repeat: false }),
+    true,
+  );
+});
+
 test("the capture preview includes every pressed modifier and chord key", () => {
   let state = advanceShortcutCapture(createShortcutCaptureState(), {
     type: "keydown",
@@ -117,6 +143,94 @@ test("the capture preview includes every pressed modifier and chord key", () => 
     event: { key: "Control", code: "ControlLeft", shiftKey: true },
   }).state;
   assert.deepEqual(state.preview, { key: "DELETE", modifiers: ["CTRL", "SHIFT"] });
+});
+
+test("a new non-modifier press refreshes the retained non-modifier preview", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "Control", code: "ControlLeft", ctrlKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "a", code: "KeyA", ctrlKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "b", code: "KeyB", ctrlKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "b", code: "KeyB", ctrlKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "B", keys: ["A"], modifiers: ["CTRL"] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "a", code: "KeyA", ctrlKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "B", keys: ["A"], modifiers: ["CTRL"] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "c", code: "KeyC", ctrlKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "C", modifiers: ["CTRL"] });
+});
+
+test("a new modifier press refreshes modifiers and retained non-modifiers", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "Control", code: "ControlLeft", ctrlKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "Shift", code: "ShiftLeft", ctrlKey: true, shiftKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "a", code: "KeyA", ctrlKey: true, shiftKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "b", code: "KeyB", ctrlKey: true, shiftKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "a", code: "KeyA", ctrlKey: true, shiftKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "Control", code: "ControlLeft", shiftKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "B", keys: ["A"], modifiers: ["CTRL", "SHIFT"] });
+
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "Alt", code: "AltLeft", shiftKey: true, altKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "B", modifiers: ["SHIFT", "ALT"] });
+});
+
+test("releasing a modifier keeps the shortcut captured before release", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "Shift", code: "ShiftLeft", shiftKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keydown",
+    event: { key: "q", code: "KeyQ", shiftKey: true },
+  }).state;
+  state = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "q", code: "KeyQ", shiftKey: true },
+  }).state;
+  assert.deepEqual(state.preview, { key: "Q", modifiers: ["SHIFT"] });
+
+  const released = advanceShortcutCapture(state, {
+    type: "keyup",
+    event: { key: "Shift", code: "ShiftLeft" },
+  });
+  assert.deepEqual(released.commit, { key: "Q", modifiers: ["SHIFT"] });
 });
 
 test("chord dispatch prefers the more specific binding", () => {

@@ -31,7 +31,11 @@ import { shortcutRegistry as shortcuts } from "../../../../core/shortcuts/regist
 import { developerMode } from "../../../../core/platform/desktop/developer.ts";
 import { developerReveal, isDeveloperRevealed } from "../../../../core/state/developerReveal.ts";
 import { useShortcuts } from "./useShortcuts.ts";
-import { advanceShortcutCapture, createShortcutCaptureState } from "./shortcutCapture.ts";
+import {
+  advanceShortcutCapture,
+  createShortcutCaptureState,
+  isNewNonModifierKeydown,
+} from "./shortcutCapture.ts";
 import { setShortcutRecording } from "./recordingState.ts";
 import type { Shortcut, ShortcutView } from "../../../../core/shortcuts/types.ts";
 
@@ -173,7 +177,6 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       pendingShortcutRef.current = shortcut;
       setPendingShortcut(shortcut);
       setCandidatePreview(shortcut);
-      captureState.current = createShortcutCaptureState();
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!recordingOpenRef.current) {
@@ -187,6 +190,14 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       // recording without saving.
       event.stopPropagation();
       event.preventDefault();
+      // A new non-modifier starts a fresh candidate. Repeated keydown events
+      // from a held keyboard key are not new input, and releasing a modifier
+      // after a committed pointer/wheel input must not replace the value
+      // already waiting for Save.
+      if (isNewNonModifierKeydown(captureState.current, event)) {
+        pendingShortcutRef.current = null;
+        setPendingShortcut(null);
+      }
       const transition = advanceShortcutCapture(captureState.current, {
         type: "keydown",
         event,
@@ -196,7 +207,9 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         stopRecording();
         return;
       }
-      setCandidatePreview(transition.state.preview);
+      if (pendingShortcutRef.current === null) {
+        setCandidatePreview(transition.state.preview);
+      }
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (!recordingOpenRef.current) {
@@ -212,13 +225,11 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
         event,
       });
       captureState.current = transition.state;
-      if (transition.commit) {
+      if (transition.commit && pendingShortcutRef.current === null) {
         commit(transition.commit);
-      } else if (transition.state.preview) {
+      } else if (pendingShortcutRef.current === null && transition.state.preview) {
         setCandidatePreview(transition.state.preview);
       } else if (pendingShortcutRef.current === null) {
-        // Releasing the modifiers after a pointer or wheel capture must not
-        // blank the shortcut that is already waiting for Save.
         setCandidatePreview(null);
       }
     };
@@ -231,6 +242,8 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
       }
       event.stopPropagation();
       event.preventDefault();
+      pendingShortcutRef.current = null;
+      setPendingShortcut(null);
       const transition = advanceShortcutCapture(captureState.current, {
         type: "pointerdown",
         event,
@@ -365,7 +378,7 @@ export function ShortcutsSettings({ query }: SettingsPageContext) {
                     label={t("shortcuts.addBinding")}
                     onClick={() => startRecording(view.id, null)}
                   />
-                  {(view.modified || view.overridden) && (
+                  {view.overridden && (
                     <IconButton
                       icon="undo"
                       size={16}
