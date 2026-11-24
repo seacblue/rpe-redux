@@ -50,6 +50,7 @@ import { openSettings } from "../settingsWindowController.ts";
 import { requestChangelog, requestUpdateChangelog } from "./changelogLauncher.ts";
 import { requestUpdatePrompt } from "./updatePromptLauncher.ts";
 import { classifyUpdateFailure } from "./updateFailure.ts";
+import { isReleaseDesktopBuild } from "./updateAvailability.ts";
 export { UPDATE_SETTING_KEYS };
 declarePersistedValue(UPDATE_SETTING_KEYS.autoCheck, DEFAULT_UPDATE_AUTO_CHECK);
 declarePersistedValue(UPDATE_SETTING_KEYS.prereleases, false);
@@ -137,7 +138,6 @@ interface UpdateProgress {
   downloaded: number;
   total: number | null;
 }
-
 /** The complete observable update state. */
 export interface UpdateState {
   phase: UpdatePhase;
@@ -160,10 +160,8 @@ export interface UpdateState {
   preparedVersion: string | null;
   downloadPaused: boolean;
 }
-
 /** Subscribers notified after each snapshot replacement. */
 const listeners = new Set<() => void>();
-
 /** The current snapshot; replace it through `set` so listeners run. */
 let state: UpdateState = {
   phase: "idle",
@@ -195,7 +193,6 @@ let progressListening = false;
 let activeDownloadReporter: ((downloaded: number, total: number | null) => void) | null = null;
 /** Prevent concurrent restart-choice prompts for one prepared package. */
 let preparedPromptInFlight: Promise<void> | null = null;
-
 /** Format native byte counts for the long-task detail line. */
 function formatMegabytes(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
@@ -220,7 +217,6 @@ function set(patch: Partial<UpdateState>): void {
 /** Read a boolean setting or its fallback when unset. */
 const settingFlag = (key: string, fallback: boolean): boolean =>
   values.byId.get<boolean | undefined>(key) ?? fallback;
-
 /** Read the persisted package-download policy, rejecting stale values safely. */
 function settingDownloadPolicy(): UpdateDownloadPolicy {
   const value = values.byId.get<string | undefined>(UPDATE_SETTING_KEYS.downloadPolicy);
@@ -228,13 +224,11 @@ function settingDownloadPolicy(): UpdateDownloadPolicy {
     ? value
     : DEFAULT_UPDATE_DOWNLOAD_POLICY;
 }
-
 /** Read the persisted version the user chose to skip, or an empty string. */
 function settingSkippedVersion(): string {
   const value = values.byId.get<string | undefined>(UPDATE_SETTING_KEYS.skippedVersion);
   return value && isVersion(value) ? value : "";
 }
-
 /** Re-read the cached update configuration from the value store. */
 function refreshSettings(): void {
   set({
@@ -286,6 +280,9 @@ export function initializeUpdates(): Promise<void> {
     return initialization;
   }
   initialization = (async () => {
+    if (!(await isReleaseDesktopBuild())) {
+      return;
+    }
     refreshSettings();
     const refreshAndMaybeCheck = () => {
       const before = state;
@@ -386,6 +383,9 @@ export function latestEligibleRelease(
 
 /** Fetch releases and compare the newest eligible tag with the running version. */
 export async function checkForUpdates(): Promise<void> {
+  if (!(await isReleaseDesktopBuild())) {
+    return;
+  }
   refreshSettings();
   if (!state.repo) {
     set({

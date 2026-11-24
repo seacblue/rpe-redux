@@ -104,10 +104,22 @@ function samePreference(left: unknown, right: unknown): boolean {
 
 /** Merge local changes into the latest durable section without losing peer keys. */
 function mergePreferenceSection(base: unknown, local: unknown, remote: unknown): unknown {
-  if (!isRecord(base) || !isRecord(local)) {
+  if (!isRecord(local)) {
     return clonePreference(local);
   }
+  // An empty object is an explicit section replacement. A non-empty object
+  // with no object baseline comes from the first persisted value writes, so
+  // merge those keys into a peer section that appeared concurrently.
+  if (!isRecord(base) && Object.keys(local).length === 0) {
+    return {};
+  }
   const merged = isRecord(remote) ? clonePreference(remote) : {};
+  if (!isRecord(base)) {
+    for (const [key, value] of Object.entries(local)) {
+      merged[key] = clonePreference(value);
+    }
+    return merged;
+  }
   const keys = new Set([...Object.keys(base), ...Object.keys(local)]);
   for (const key of keys) {
     const baseHas = Object.hasOwn(base, key);

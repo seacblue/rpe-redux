@@ -38,6 +38,19 @@ struct LaunchOptions {
 const BROWSER_ARGUMENTS: &str =
     "--autoplay-policy=no-user-gesture-required --force-high-performance-gpu";
 
+/// Whether a main-window event is the point at which its state is persisted.
+fn should_save_window_state(event: &tauri::WindowEvent) -> bool {
+    matches!(event, tauri::WindowEvent::CloseRequested { .. })
+}
+
+/// Whether a main-window event should close the companion diagnostics window.
+fn is_main_window_close_event(event: &tauri::WindowEvent) -> bool {
+    matches!(
+        event,
+        tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+    )
+}
+
 /// Build the WebView2 arguments while keeping the GPU policy on every launch.
 fn browser_arguments(remote_debugging_port: Option<u16>) -> String {
     match remote_debugging_port {
@@ -283,14 +296,12 @@ fn main() {
 
     app.run(|handle, event| match event {
         tauri::RunEvent::WindowEvent { label, event, .. }
-            if label == "main"
-                && matches!(
-                    event,
-                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
-                ) =>
+            if label == "main" && is_main_window_close_event(&event) =>
         {
-            if let Some(window) = handle.get_webview_window("main") {
-                app::window_state::save(handle, &window);
+            if should_save_window_state(&event) {
+                if let Some(window) = handle.get_webview_window("main") {
+                    app::window_state::save(handle, &window);
+                }
             }
             diagnostics::performance_hud::close_companion(handle);
         }
@@ -307,7 +318,12 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::browser_arguments;
+    use super::{browser_arguments, should_save_window_state};
+
+    #[test]
+    fn destroyed_window_event_does_not_save_state_again() {
+        assert!(!should_save_window_state(&tauri::WindowEvent::Destroyed));
+    }
 
     #[test]
     fn browser_arguments_request_the_high_performance_gpu() {

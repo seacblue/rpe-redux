@@ -8,6 +8,30 @@
 export const BUILD_APP_VERSION: string =
   typeof __REDUX_VERSION__ === "string" ? __REDUX_VERSION__ : "0.0.0";
 
+/** The ISO-8601 build timestamp baked into browser bundles by Vite. */
+export const BUILD_APP_BUILD_TIME: string =
+  typeof __REDUX_BUILD_TIME__ === "string" ? __REDUX_BUILD_TIME__ : "";
+
+/** Format a valid build timestamp as local timezone digits for the status bar. */
+export function formatBuildTime(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    return normalized;
+  }
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+    String(date.getHours()).padStart(2, "0"),
+    String(date.getMinutes()).padStart(2, "0"),
+    String(date.getSeconds()).padStart(2, "0"),
+  ].join("");
+}
+
 /**
  * Reads the major component of an application version.
  *

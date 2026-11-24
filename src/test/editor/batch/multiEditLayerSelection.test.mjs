@@ -22,6 +22,20 @@ function sessionWithSelectedEvent() {
   return session;
 }
 
+/** Build one judge line with a selected event on the first event layer. */
+function sessionWithSingleLineSelectedEvent() {
+  const chart = createChart();
+  chart.judgeLineList = [createLine("L0")];
+  chart.judgeLineList[0].eventLayers = [{}, {}];
+  chart.judgeLineList[0].eventLayers[0].moveXEvents = [createEvent(10, 20, 0, 1)];
+  chart.judgeLineList[0].eventLayers[1].moveXEvents = [createEvent(30, 40, 0, 1)];
+  const session = new EditorSession(chart);
+  session.focus = "events";
+  session.selectionMode = "single";
+  session.eventSelection = new Set(["moveXEvents:0"]);
+  return session;
+}
+
 /** Construct the panel with only the timeline contract used by selection signatures. */
 function panelFor(session) {
   const panel = new MultiEditPanel(
@@ -85,6 +99,37 @@ test("multi-line event editing does not report a missing selection on an empty l
   assert.equal(panel.result?.changes.length, 1);
   assert.equal(panel.result?.changes[0].before.start, 10);
   assert.equal(hasVisibleBatchSelection("events", session), false);
+});
+
+test("single-line event editing keeps the saved selection after a layer switch", () => {
+  const session = sessionWithSingleLineSelectedEvent();
+  const panel = panelFor(session);
+
+  panel.refresh();
+  assert.equal(panel.result?.changes.length, 1);
+
+  session.eventLayer = 1;
+  session.eventSelection.clear();
+  panel.refresh();
+
+  assert.equal(panel.result?.changes.length, 1);
+  assert.equal(panel.result?.changes[0].before.start, 10);
+  assert.equal(panel.result?.changes[0].after.start, 11);
+});
+
+test("single-line event editing drops the saved selection after a new selection gesture", () => {
+  const session = sessionWithSingleLineSelectedEvent();
+  const panel = panelFor(session);
+
+  panel.refresh();
+  session.eventLayer = 1;
+  session.eventSelection.clear();
+  panel.refresh();
+
+  session.selectionRevision += 1;
+  panel.refresh();
+
+  assert.equal(panel.result, null);
 });
 
 test("multi-line event controls remain visible for a selection on another panel", () => {

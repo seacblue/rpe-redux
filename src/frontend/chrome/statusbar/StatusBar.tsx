@@ -9,7 +9,12 @@ import { useSyncExternalStore } from "react";
 import { Button } from "../../../design/components/button/Button.tsx";
 import { showToast } from "../../../design/patterns/ToastHost.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
-import { BUILD_APP_VERSION } from "../../../core/platform/buildInfo.ts";
+import {
+  BUILD_APP_BUILD_TIME,
+  BUILD_APP_VERSION,
+  formatBuildTime,
+} from "../../../core/platform/buildInfo.ts";
+import { isWebHost } from "../../../core/platform/environment.ts";
 import { HELP_SURVEY_URL } from "../../../core/platform/desktop/helpLinks.ts";
 import { openExternalUrl } from "../../../core/platform/desktop/openExternal.ts";
 import { ChartInfoView } from "./ChartInfoView.tsx";
@@ -24,13 +29,15 @@ export function StatusBar({ hidden = false }: { hidden?: boolean }) {
     getChartInfoRows,
   );
   const feedbackLabel = t("chrome.statusBar.bugReport");
+  const buildTime = isWebHost() ? formatBuildTime(BUILD_APP_BUILD_TIME) : "";
+  const versionLabel = buildTime ? `${BUILD_APP_VERSION} - ${buildTime}` : BUILD_APP_VERSION;
 
   return (
     <footer hidden={hidden}>
       <div id="chart-info" className="chart-info">
         <ChartInfoView rows={chartInfoRows} />
       </div>
-      <span className="status-bar-version">{BUILD_APP_VERSION}</span>
+      <span className="status-bar-version">{versionLabel}</span>
       <Button
         className="status-bar-bug-report"
         variant="ghost"

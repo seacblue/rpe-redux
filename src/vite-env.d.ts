@@ -3,6 +3,9 @@
 /** Product version baked in from `package.json` at build time (see `vite.config.ts`). */
 declare const __REDUX_VERSION__: string;
 
+/** Build timestamp baked in by Vite for the web version marker. */
+declare const __REDUX_BUILD_TIME__: string;
+
 /** Ports and credentials injected by the browser development server. */
 interface ReduxBrowserDevRuntime {
   readonly ports: {

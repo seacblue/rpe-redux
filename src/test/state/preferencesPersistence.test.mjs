@@ -24,6 +24,11 @@ function settings(store) {
   return store.read(PREFERENCE_SECTIONS.settings, {});
 }
 
+/** Read the values section as an object for one test instance. */
+function persistedValues(store) {
+  return store.read(PREFERENCE_SECTIONS.values, {});
+}
+
 test("concurrent settings instances merge independent setting keys", async () => {
   const durable = backend({
     settings: {
@@ -51,6 +56,31 @@ test("concurrent settings instances merge independent setting keys", async () =>
   assert.deepEqual(durable.read().settings, {
     "note-size": "1.15",
     "timeline-note-size": "240",
+  });
+});
+
+test("concurrent first writes merge persisted value entries into an empty section", async () => {
+  const durable = backend({});
+  const first = new PreferenceStore({ mirror: memoryMirror() });
+  const second = new PreferenceStore({ mirror: memoryMirror() });
+  await first.attach(durable.client);
+  await second.attach(durable.client);
+
+  first.write(PREFERENCE_SECTIONS.values, {
+    ...persistedValues(first),
+    "extension.first.persisted": 1,
+  });
+  second.write(PREFERENCE_SECTIONS.values, {
+    ...persistedValues(second),
+    "extension.second.persisted": 2,
+  });
+
+  await first.flush();
+  await second.flush();
+
+  assert.deepEqual(durable.read().values, {
+    "extension.first.persisted": 1,
+    "extension.second.persisted": 2,
   });
 });
 
