@@ -1,9 +1,9 @@
 # Note skins
 
-Note skins use the Phira respack format. `src/core/media/phiraRespack.ts` owns the `info.yml` parser, geometry validation, and the normalized manifest; `src/core/media/phiraSkinDraft.ts` maps the workbench's canonical slots to the fixed file layout and assembles a package; `src/core/platform/desktop/noteSkinPackages.ts` discovers package folders and installs or removes imported packages; `src/frontend/platform/noteSkinBridge.ts` loads the built-in package, preferring the writable override. The built-in package is `src/assets/skins/built_in_original/`.
+Note skins use the Phira respack format. `src/core/media/phiraRespack.ts` owns the `info.yml` parser, geometry validation, and the normalized manifest; `src/core/media/phiraSkinDraft.ts` maps the workbench's canonical slots to the fixed file layout and assembles a package; `src/core/platform/desktop/noteSkinPackages.ts` discovers package folders and installs or removes imported packages; `src/frontend/platform/noteSkinBridge.ts` loads the built-in packages, preferring writable overrides. The built-in packages are `src/assets/skins/builtin_reducer_cells/` and `src/assets/skins/builtin_phiskin/`.
 
 ```text
-built_in_original/
+builtin_reducer_cells/
   info.yml
   click.png
   click_mh.png
@@ -19,9 +19,21 @@ built_in_original/
   click.ogg            # optional
   drag.ogg             # optional
   flick.ogg            # optional
+
+builtin_phiskin/
+  info.yml
+  click.png
+  click_mh.png
+  drag.png
+  drag_mh.png
+  flick.png
+  flick_mh.png
+  hold.png
+  hold_mh.png
+  hit_fx.png
 ```
 
-Each direct child folder containing `info.yml` is one package. A package id is derived from its display `name` by the shared rule in `src/core/utils/packageName.ts` (`packageSlug`): ASCII letters and digits survive, every other run collapses to `_`, and a name with no ASCII characters falls back to a stable hash. The built-in name "Built-in - Original" therefore lives in `built_in_original/`. Saving a package always writes the id it was opened with, so editing the built-in keeps one package identity instead of adding a picker entry.
+Each direct child folder containing `info.yml` is one package. Set `id` when the package identity must differ from its display `name`; it must contain only ASCII letters, digits, `.`, `_`, or `-`. When `id` is absent, a skin id is made from the trimmed ASCII name stem plus an eight-digit hash of the trimmed display name (or `skin_<hash>` when no ASCII stem remains). The shipped built-ins are `builtin_reducer_cells` (`Reducer Cells`) and `builtin_phiskin` (`Phiskin ~ 圆角简约`), in that order. `Reducer Cells` is the default and first fallback; `Phiskin` is selectable but never becomes the default. The picker keeps built-ins in this fixed order, then lists installed skins by their persisted added time. Saving a package always writes the id it was opened with, so editing a built-in keeps one package identity instead of adding a picker entry.
 
 `mh` means the highlight variant. A simultaneous note renders at the base width multiplied by `click_mh.png` width divided by `click.png` width, exactly as Phira does. `hold.png` and `hold_mh.png` are vertical atlases; `holdAtlas` and `holdAtlasMH` give their tail and head heights in pixels, while the middle strip is the body. A tail or head height may be zero when the pack has no art for that cap. Redux reads two fixed-name extensions: `event_hold.png` at the package root for event bars and `line.png` at the package root as the judge-line texture. Neither needs an `info.yml` entry.
 
@@ -29,7 +41,8 @@ Each direct child folder containing `info.yml` is one package. A package id is d
 
 | Field | Contract |
 | --- | --- |
-| `name` | Required display name; also the source of the package id. |
+| `name` | Required display name. |
+| `id` | Optional stable package id; ASCII letters, digits, `.`, `_`, and `-`, up to 64 characters. If omitted, the host generates one from `name`. |
 | `author` / `description` | Optional package metadata. |
 | `hitFx` | Required `[columns, rows]` grid for `hit_fx.png`. |
 | `holdAtlas` / `holdAtlasMH` | Required `[tailHeight, headHeight]` pixel boundaries for the two Hold atlases. Either cap may be zero; the body must stay non-empty. |
@@ -43,13 +56,13 @@ Each direct child folder containing `info.yml` is one package. A package id is d
 
 Required files are the nine fixed Phira images: `click`, `click_mh`, `drag`, `drag_mh`, `flick`, `flick_mh`, `hold`, `hold_mh`, and `hit_fx`. Audio files are optional. A package is limited to 64 MB and 256 files; each PNG is limited to 8 MB, 4096×4096, and 16 million pixels. Atlas boundaries must leave a non-empty body, and `hitFx` must divide the hit-effect image dimensions exactly. The workbench may save a partial package; the runtime fills missing slots from the built-in package and then from the first installed skin that provides them.
 
-The built-in package uses Phira's default proportions (`click.png` 998×100, `hold.png` 1000×1100 with 50px caps, `hold_mh.png` 1150×1250 with 130px caps, and an 8×7 `hit_fx.png`), but its artwork is Redux's own. Preview note width uses Phira's `note_scale` mapping: a scale of `1` spans 13.175% of the stage, and the setting range is `0.8`–`1.2`.
+The default `Reducer Cells` package uses (`click.png` 989×100, `hold.png` 989×310 with 50px caps, `hold_mh.png` 1089×360 with 50px and 100px caps, and a 6×5 `hit_fx.png`). The optional `Phiskin` package uses (`click.png` 1000×100, `hold.png` 1000×1100 with 50px caps, `hold_mh.png` 1200×1260 with 130px caps, and an 8×7 `hit_fx.png`). Preview note width uses Phira's `note_scale` mapping: a scale of `1` spans 13.175% of the stage, and the setting range is `0.8`–`1.2`.
 
 Limits: manifest 64 KB; package 64 MB and 256 asset files; each PNG at most 8 MB, 4096×4096, and 16 million pixels.
 
 ## Discovery
 
-Skins are discovered from the writable `skins/` folder beside the executable and from the packaged resource directory. The writable root wins an id collision, so a package saved there shadows the shipped copy with the same id: editing the built-in writes `skins/built_in_original/`, and that override is what renders. The host marks the built-in package so the picker lists it once, and it skips the pre-rename shipped folder id `default`, so upgrading never exposes a second built-in entry. Both roots are polled while the app runs, so dropping a Phira package in place updates the picker without a restart.
+Skins are discovered from the writable `skins/` folder beside the executable and from the packaged resource directory. The writable root wins an id collision, so a package saved there shadows the shipped copy with the same id: editing a built-in writes `skins/builtin_reducer_cells/` or `skins/builtin_phiskin/`, and that override is what renders. The host marks both shipped packages as built-in so the picker lists them once, and it skips the legacy shipped folder ids `default` and `built_in_original`. Both roots are polled while the app runs, so dropping a Phira package in place updates the picker without a restart.
 
 Each discovered package carries a content signature derived from its files. Changing a package file refreshes the package list and reloads the active preview when that package is selected.
 

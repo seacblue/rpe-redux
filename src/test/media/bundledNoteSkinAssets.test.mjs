@@ -1,4 +1,4 @@
-/** Verify bundled note PNGs have no transparent canvas padding. */
+/** Verify bundled note PNGs retain the supplied pack geometry. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -6,7 +6,9 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const sharp = require("sharp");
-const assetRoot = fileURLToPath(new URL("../../assets/skins/built_in_original/", import.meta.url));
+const assetRoot = fileURLToPath(
+  new URL("../../assets/skins/builtin_reducer_cells/", import.meta.url),
+);
 
 /** Return the canvas size and non-transparent bounds of one bundled PNG. */
 async function geometry(name) {
@@ -34,16 +36,16 @@ async function geometry(name) {
   };
 }
 
-test("bundled note skins are cropped to their non-transparent bounds", async () => {
+test("bundled note skins retain their supplied geometry", async () => {
   const expected = {
-    "click.png": { size: [993, 100], alpha: [0, 0, 993, 100] },
-    "click_mh.png": { size: [1112, 238], alpha: [0, 0, 1112, 238] },
-    "drag.png": { size: [945, 50], alpha: [0, 0, 945, 50] },
-    "drag_mh.png": { size: [1062, 188], alpha: [0, 0, 1062, 188] },
-    "flick.png": { size: [993, 172], alpha: [0, 0, 993, 172] },
-    "flick_mh.png": { size: [1112, 298], alpha: [0, 0, 1112, 298] },
-    "hold.png": { size: [999, 1100], alpha: [0, 0, 999, 1100] },
-    "hold_mh.png": { size: [1138, 1215], alpha: [0, 0, 1138, 1215] },
+    "click.png": { size: [989, 100], alpha: [0, 0, 989, 100] },
+    "click_mh.png": { size: [1089, 200], alpha: [0, 0, 1089, 200] },
+    "drag.png": { size: [989, 60], alpha: [0, 0, 989, 60] },
+    "drag_mh.png": { size: [1089, 160], alpha: [1, 0, 1088, 160] },
+    "flick.png": { size: [989, 200], alpha: [0, 0, 989, 200] },
+    "flick_mh.png": { size: [1089, 300], alpha: [0, 8, 1089, 292] },
+    "hold.png": { size: [989, 310], alpha: [0, 0, 989, 310] },
+    "hold_mh.png": { size: [1089, 360], alpha: [6, 0, 1083, 360] },
   };
   for (const [name, value] of Object.entries(expected)) {
     assert.deepEqual(await geometry(name), value, name);

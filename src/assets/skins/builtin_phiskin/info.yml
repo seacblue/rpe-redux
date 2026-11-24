@@ -1,0 +1,9 @@
+name: "Phiskin ~ 圆角简约"
+id: builtin_phiskin
+author: "MuYan"
+hitFx: [8, 7]
+holdAtlas: [50, 50]
+holdAtlasMH: [130, 130]
+hitFxScale: 1
+hitFxDuration: 0.45
+hideParticles: true

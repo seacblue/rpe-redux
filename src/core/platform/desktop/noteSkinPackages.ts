@@ -20,8 +20,9 @@ import {
   EXTERNAL_NOTE_SKIN_PREFIX,
   notifyNoteSkinChanged,
 } from "../../media/noteSkins.ts";
-import { isPackageName, packageSlug, type PackageName } from "../../utils/packageName.ts";
+import { isPackageName, packageSlugWithHash, type PackageName } from "../../utils/packageName.ts";
 import { parseNoteSkin } from "../../media/noteSkin.ts";
+import { orderNoteSkins } from "../../media/noteSkinOrder.ts";
 
 /** A note-skin folder found on disk, as the picker lists it. */
 export interface ExternalNoteSkinSummary {
@@ -32,6 +33,8 @@ export interface ExternalNoteSkinSummary {
   readonly builtin: boolean;
   /** Host-computed content signature; changes when files on disk change. */
   readonly fingerprint: string;
+  /** Package creation time used to preserve insertion order. */
+  readonly addedAt: number;
 }
 
 let cached: readonly ExternalNoteSkinSummary[] = Object.freeze([]);
@@ -77,19 +80,17 @@ async function scanExternalNoteSkins(): Promise<void> {
   }
   const previous = new Map(cached.map((entry) => [entry.id, entry.fingerprint]));
   const before = JSON.stringify(cached);
-  cached = Object.freeze(
-    // The host marks the built-in package; the picker already offers it through
-    // `DEFAULT_NOTE_SKIN`, so it must not be listed a second time here.
-    next
-      .filter((entry) => !entry.builtin)
-      .map((entry) => ({
-        id: String(entry.id ?? ""),
-        name: isPackageName(entry.name) ? entry.name : String(entry.name ?? entry.id ?? ""),
-        source: String(entry.source ?? "portable"),
-        builtin: false,
-        fingerprint: String(entry.fingerprint ?? ""),
-      })),
-  );
+  const normalized = next
+    .filter((entry) => !entry.builtin)
+    .map((entry) => ({
+      id: String(entry.id ?? ""),
+      name: isPackageName(entry.name) ? entry.name : String(entry.name ?? entry.id ?? ""),
+      source: String(entry.source ?? "portable"),
+      builtin: false,
+      fingerprint: String(entry.fingerprint ?? ""),
+      addedAt: Number(entry.addedAt ?? 0),
+    }));
+  cached = Object.freeze(orderNoteSkins(normalized));
   if (JSON.stringify(cached) === before) {
     return;
   }
@@ -164,7 +165,8 @@ function base64(bytes: Uint8Array): string {
  * Passing `id` overwrites that folder, which is how the workbench saves an
  * existing package: an edited built-in keeps the built-in package id, so the
  * writable copy shadows the shipped one instead of adding a picker entry. A
- * fresh import derives the id from the display name with the shared slug rule.
+ * fresh import uses an explicit manifest id, or derives one from the display
+ * name with the collision-resistant skin slug rule.
  * Returns the written id and the manifest name so the caller can label it.
  */
 export async function installPhiraNoteSkin(
@@ -173,7 +175,7 @@ export async function installPhiraNoteSkin(
   options: { allowIncomplete?: boolean } = {},
 ): Promise<{ id: string; name: PackageName }> {
   const manifest = parseNoteSkin(files, options);
-  const targetId = id ?? packageSlug(manifest.name);
+  const targetId = id ?? manifest.id ?? packageSlugWithHash(manifest.name);
   if (isDesktop()) {
     const payload = [...files].map(([name, bytes]) => ({ name, data: base64(bytes) }));
     await invoke<string>("install_note_skin", { id: targetId, files: payload });

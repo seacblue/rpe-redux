@@ -151,7 +151,7 @@ func TestPreferencesWriteAcceptsKnownSectionsAndTokenFile(t *testing.T) {
 		t.Fatalf("endpoint file = %#v", endpoint)
 	}
 
-	body := `{"values":{"language":"en","clipboard":[],"settings":{"code-execution-enabled":true,"autosave-limit":"4"}}}`
+	body := `{"values":{"language":"en","clipboard":[],"valueMeta":{"version":0,"modified":{}},"settings":{"code-execution-enabled":true,"autosave-limit":"4"}}}`
 	if response := preferencePut(t, server.URL, token, body); response.StatusCode != http.StatusOK {
 		t.Fatalf("valid write status = %d, want 200", response.StatusCode)
 	}

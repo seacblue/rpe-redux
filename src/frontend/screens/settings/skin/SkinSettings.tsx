@@ -13,7 +13,6 @@ import { FieldRow } from "../../../../design/components/field/FieldRow.tsx";
 import { Button } from "../../../../design/components/button/Button.tsx";
 import { showToast } from "../../../../design/patterns/ToastHost.tsx";
 import {
-  DEFAULT_NOTE_SKIN,
   EXTERNAL_NOTE_SKIN_PREFIX,
   loadNoteSkin,
   loadNoteSkinWithFallback,
@@ -35,8 +34,12 @@ import { useTranslation } from "../../../../i18n/react.ts";
 import { registerSettingsPage, type SettingsPageContext } from "../settingsContributions.ts";
 import { useSurfacePolling } from "../useSurfacePolling.ts";
 import { useActiveNoteSkin } from "./useActiveNoteSkin.ts";
-import { bundledNoteSkinName, NOTE_SKIN_EVENT } from "../../../platform/noteSkinBridge.ts";
-import { packageName, packageSlug, type PackageName } from "../../../../core/utils/packageName.ts";
+import {
+  bundledNoteSkins,
+  type BundledNoteSkinSummary,
+  NOTE_SKIN_EVENT,
+} from "../../../platform/noteSkinBridge.ts";
+import { packageName, packageSlug } from "../../../../core/utils/packageName.ts";
 import { pickFiles } from "../../../platform/filePicker.ts";
 import { isDesktop } from "../../../../core/platform/environment.ts";
 import {
@@ -56,20 +59,20 @@ import { requestConfirm, showNotice } from "../../../overlays/modals/prompts.ts"
 export function SkinSettings({ active: pageActive }: SettingsPageContext) {
   const { t, language } = useTranslation();
   const active = useActiveNoteSkin();
-  const [bundledName, setBundledName] = useState<PackageName>("Redux Default");
-  /** Re-read the bundled name; saving or deleting an override renames it. */
-  const refreshBundledName = useCallback(() => {
-    void bundledNoteSkinName()
-      .then((name) => setBundledName(name))
+  const [bundledSkins, setBundledSkins] = useState<readonly BundledNoteSkinSummary[]>([]);
+  /** Re-read built-in names; saving or deleting an override can rename one. */
+  const refreshBundledSkins = useCallback(() => {
+    void bundledNoteSkins()
+      .then((skins) => setBundledSkins(skins))
       .catch(() => undefined);
   }, []);
-  // The bundled entry's label follows the active override, so re-read it on
-  // every skin change instead of caching one read from mount.
+  // Built-in labels follow their active overrides, so re-read them on every
+  // skin change instead of caching one read from mount.
   useEffect(() => {
-    refreshBundledName();
-    window.addEventListener(NOTE_SKIN_EVENT, refreshBundledName);
-    return () => window.removeEventListener(NOTE_SKIN_EVENT, refreshBundledName);
-  }, [refreshBundledName]);
+    refreshBundledSkins();
+    window.addEventListener(NOTE_SKIN_EVENT, refreshBundledSkins);
+    return () => window.removeEventListener(NOTE_SKIN_EVENT, refreshBundledSkins);
+  }, [refreshBundledSkins]);
   const external = useSyncExternalStore(
     subscribeExternalNoteSkins,
     externalNoteSkins,
@@ -271,7 +274,11 @@ export function SkinSettings({ active: pageActive }: SettingsPageContext) {
               value={active}
               onChange={(event) => handleSkinChange(event.target.value)}
             >
-              <option value={DEFAULT_NOTE_SKIN}>{packageName(bundledName, language)}</option>
+              {bundledSkins.map((skin) => (
+                <option key={skin.id} value={skin.id}>
+                  {packageName(skin.name, language)}
+                </option>
+              ))}
               {external.map((skin) => (
                 <option key={skin.id} value={`${EXTERNAL_NOTE_SKIN_PREFIX}${skin.id}`}>
                   {packageName(skin.name, language)}
@@ -316,7 +323,7 @@ export function SkinSettings({ active: pageActive }: SettingsPageContext) {
           skinId={workbench === "edit" ? active : undefined}
           open
           onClose={() => setWorkbench(null)}
-          onSaved={refreshBundledName}
+          onSaved={refreshBundledSkins}
         />
       )}
 

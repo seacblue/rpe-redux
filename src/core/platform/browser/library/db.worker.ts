@@ -2144,10 +2144,10 @@ function packageFiles(value: unknown): Array<{ name: string; bytes: Uint8Array }
 function packageList(params: Record<string, unknown>): Record<string, unknown> {
   const kind = packageKind(params);
   const rows = requireDb().selectObjects(
-    `SELECT id, name, fingerprint, updated_at
+    `SELECT id, name, fingerprint, created_at, updated_at
        FROM app_packages
       WHERE kind = ?
-      ORDER BY name, id`,
+      ORDER BY created_at, rowid`,
     [kind],
   );
   return {
@@ -2155,6 +2155,7 @@ function packageList(params: Record<string, unknown>): Record<string, unknown> {
       id: String(row.id),
       name: String(row.name ?? ""),
       fingerprint: String(row.fingerprint ?? ""),
+      createdAt: String(row.created_at ?? ""),
       updatedAt: String(row.updated_at ?? ""),
     })),
   };
@@ -2165,7 +2166,7 @@ function packageRead(params: Record<string, unknown>): Record<string, unknown> {
   const kind = packageKind(params);
   const id = packageId(params);
   const row = requireDb().selectObject(
-    `SELECT id, name, fingerprint, updated_at FROM app_packages WHERE kind = ? AND id = ?`,
+    `SELECT id, name, fingerprint, created_at, updated_at FROM app_packages WHERE kind = ? AND id = ?`,
     [kind, id],
   );
   if (!row) {
@@ -2180,6 +2181,7 @@ function packageRead(params: Record<string, unknown>): Record<string, unknown> {
       id: String(row.id),
       name: String(row.name ?? ""),
       fingerprint: String(row.fingerprint ?? ""),
+      createdAt: String(row.created_at ?? ""),
       updatedAt: String(row.updated_at ?? ""),
       files: files.map((file) => ({ name: String(file.name), bytes: file.bytes })),
     },

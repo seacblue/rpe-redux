@@ -5,7 +5,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BUILTIN_NOTE_SKIN_PREFIX,
   DEFAULT_NOTE_SKIN,
+  loadNoteSkin,
   loadNoteSkinWithFallback,
   setBundledNoteSkinLoader,
   setExternalNoteSkinLoader,
@@ -134,5 +136,19 @@ test("unresolved slots survive when no source provides them", async () => {
     setBundledNoteSkinLoader(null);
     setExternalNoteSkinLoader(null);
     setNoteSkinFallbackSources(null);
+  }
+});
+
+test("a built-in selection loads its declared package id", async () => {
+  const packForId = new Map();
+  setBundledNoteSkinLoader(async (packageId) => {
+    packForId.set(packageId, true);
+    return pack(DEFAULT_NOTE_SKIN, "Built-in", completeDraft());
+  });
+  try {
+    await loadNoteSkin(`${BUILTIN_NOTE_SKIN_PREFIX}builtin_phiskin`);
+    assert.deepEqual([...packForId.keys()], ["builtin_phiskin"]);
+  } finally {
+    setBundledNoteSkinLoader(null);
   }
 });

@@ -7,7 +7,7 @@
  * texture `event_hold.png` and the judge-line texture at the package root
  * `line.png`. Both extensions use fixed names; neither needs an info.yml entry.
  */
-import { isPackageName, type PackageName } from "../utils/packageName.ts";
+import { isPackageId, isPackageName, type PackageName } from "../utils/packageName.ts";
 import type { NoteSkinManifest, NoteTexture } from "./noteSkin.ts";
 
 const SKIN_MAX_BYTES = 64 * 1024 * 1024;
@@ -36,6 +36,7 @@ export const PHIRA_REQUIRED_IMAGES = [
 /** The scalar metadata accepted from Phira's info.yml. */
 export interface PhiraInfo {
   name: string;
+  id?: string;
   author?: string;
   description?: string;
   hitFx: [number, number];
@@ -169,6 +170,13 @@ function normalizeInfo(raw: Record<string, unknown>): PhiraInfo {
     holdAtlas: pair(raw.holdAtlas, DEFAULT_INFO.holdAtlas, "holdAtlas", true),
     holdAtlasMH: pair(raw.holdAtlasMH, DEFAULT_INFO.holdAtlasMH, "holdAtlasMH", true),
   };
+  if (raw.id !== undefined) {
+    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    if (!isPackageId(id)) {
+      throw new Error("Invalid Phira info.yml id; expected an ASCII package id");
+    }
+    info.id = id;
+  }
   for (const key of ["author", "description"] as const) {
     if (typeof raw[key] === "string") {
       info[key] = raw[key];
@@ -318,6 +326,7 @@ function normalizedManifest(
   const name: PackageName = isPackageName(info.name) ? info.name : "Phira skin";
   return {
     name,
+    ...(info.id ? { id: info.id } : {}),
     notes,
     events: eventTexture ? { event_hold: eventTexture } : {},
     ...(lineTexture ? { judgeline: { line: lineTexture } } : {}),
@@ -379,6 +388,9 @@ function yamlString(value: string): string {
 /** Serialize the supported Phira metadata fields. */
 export function serializePhiraInfo(info: PhiraInfo): string {
   const lines = [`name: ${yamlString(info.name)}`];
+  if (info.id !== undefined) {
+    lines.push(`id: ${yamlString(info.id)}`);
+  }
   for (const key of ["author", "description"] as const) {
     if (info[key] !== undefined) {
       lines.push(`${key}: ${yamlString(info[key])}`);

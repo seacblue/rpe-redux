@@ -1,0 +1,7 @@
+name: "Reducer Cells"
+id: builtin_reducer_cells
+author: "ziyang_51571"
+hitFx: [6, 5]
+holdAtlas: [50, 50]
+holdAtlasMH: [50, 100]
+hitFxScale: 0.9

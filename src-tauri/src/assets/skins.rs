@@ -30,10 +30,13 @@ const MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Package folder id of the built-in note skin shipped with the build.
 ///
-/// The folder follows the shared display-name slug rule from the package's own
-/// `name`; the frontend never spells this id out, it asks for it through
+/// The package declares this stable id separately from its display `name`; the
+/// frontend never spells it out, it asks for it through
 /// [`builtin_note_skin_id`].
-pub const BUILTIN_SKIN_ID: &str = "built_in_original";
+pub const BUILTIN_SKIN_ID: &str = "builtin_reducer_cells";
+
+/// Package ids shipped as selectable built-in note skins, in fallback order.
+const BUILTIN_SKIN_IDS: &[&str] = &["builtin_reducer_cells", "builtin_phiskin"];
 
 /// Package folder ids used by builds that shipped the built-in package before
 /// it was renamed.
@@ -41,7 +44,7 @@ pub const BUILTIN_SKIN_ID: &str = "built_in_original";
 /// An upgrader can leave one of these behind in the portable install folder.
 /// They hold the pre-rename shipped skin, so the scanner skips them instead of
 /// listing a second built-in entry; only [`BUILTIN_SKIN_ID`] is the built-in.
-const LEGACY_BUILTIN_SKIN_IDS: &[&str] = &["default"];
+const LEGACY_BUILTIN_SKIN_IDS: &[&str] = &["default", "built_in_original"];
 
 /// One note-skin package as the picker sees it.
 #[derive(Clone, Serialize)]
@@ -57,6 +60,8 @@ pub struct NoteSkinSummary {
     pub builtin: bool,
     /// Content signature so the picker and preview react to files changing on disk.
     pub fingerprint: String,
+    /// Directory creation time used to preserve insertion order.
+    pub added_at: u64,
 }
 
 /// A discovered package with its manifest and canonical folder.
@@ -65,6 +70,7 @@ struct SkinPackage {
     folder: PathBuf,
     source: &'static str,
     manifest: Value,
+    added_at: u64,
 }
 
 /// Writable `skins/` folder below the deployment root.
@@ -112,6 +118,12 @@ fn read_skin(root: &Path, folder: &Path, source: &'static str) -> Option<SkinPac
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return None;
     }
+    let added_at = metadata
+        .created()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
     let path = manifest_path(folder)?;
     let metadata = fs::symlink_metadata(&path).ok()?;
     if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > MAX_INFO_BYTES {
@@ -137,6 +149,7 @@ fn read_skin(root: &Path, folder: &Path, source: &'static str) -> Option<SkinPac
         folder: canonical_folder,
         source,
         manifest,
+        added_at,
     })
 }
 
@@ -224,9 +237,10 @@ pub async fn list_note_skins(app: AppHandle) -> Result<Vec<NoteSkinSummary>> {
             .map(|package| NoteSkinSummary {
                 name: skin_name(&package.manifest, &package.id),
                 fingerprint: folder_fingerprint(&package.folder),
-                builtin: package.id == BUILTIN_SKIN_ID,
+                builtin: BUILTIN_SKIN_IDS.contains(&package.id.as_str()),
                 id: package.id,
                 source: package.source.to_owned(),
+                added_at: package.added_at,
             })
             .collect())
     })

@@ -32,8 +32,8 @@ import {
  * imports `@tauri-apps`, a bundler glob, or `document`.
  */
 
-/** Supplies the skin compiled into the build. */
-export type BundledNoteSkinLoader = () => Promise<LoadedNoteSkin>;
+/** Supplies one skin compiled into the build by its package id. */
+export type BundledNoteSkinLoader = (packageId?: string) => Promise<LoadedNoteSkin>;
 
 /** Supplies a skin package discovered beside the executable. */
 export type ExternalNoteSkinLoader = (id: string) => Promise<LoadedNoteSkin>;
@@ -103,22 +103,48 @@ export interface LoadedNoteSkin {
  */
 export type NoteSkinPackageSource = "portable" | "resource" | "compiled";
 
-/** Id of the skin compiled into the build. */
-export const DEFAULT_NOTE_SKIN = "builtin:default";
+/** Prefix used by selections that point at a shipped built-in package. */
+export const BUILTIN_NOTE_SKIN_PREFIX = "builtin:";
+/** Package ids of the shipped skins, ordered by default and fallback priority. */
+export const BUILTIN_NOTE_SKIN_PACKAGE_IDS = ["builtin_reducer_cells", "builtin_phiskin"] as const;
+/** The first shipped skin is the default selection and primary fallback. */
+export const DEFAULT_BUILTIN_NOTE_SKIN_PACKAGE_ID = BUILTIN_NOTE_SKIN_PACKAGE_IDS[0];
+/** Id of the skin selected on a fresh install. */
+export const DEFAULT_NOTE_SKIN = `${BUILTIN_NOTE_SKIN_PREFIX}${DEFAULT_BUILTIN_NOTE_SKIN_PACKAGE_ID}`;
 /** Prefix for skins discovered beside the executable. */
 export const EXTERNAL_NOTE_SKIN_PREFIX = "external:";
+
+/** Build the selectable id for one shipped package. */
+export function builtinNoteSkinSelectionId(packageId: string): string {
+  return `${BUILTIN_NOTE_SKIN_PREFIX}${packageId}`;
+}
 
 /** The selected skin id, normalized to a selectable package. */
 export const activeNoteSkin = () => {
   const selected = readPreference<string>(PREFERENCE_SECTIONS.noteSkin, DEFAULT_NOTE_SKIN);
-  // Compatibility ids `rpe` and `external:default` both name the bundled default.
-  if (selected === "rpe" || selected === "external:default") {
+  // Older builds used generic or legacy folder ids for the one shipped skin.
+  if (
+    selected === "rpe" ||
+    selected === "external:default" ||
+    selected === "builtin:default" ||
+    selected === "builtin:built_in_original"
+  ) {
     return DEFAULT_NOTE_SKIN;
   }
-  // Any other id reads as the default skin.
-  return selected === DEFAULT_NOTE_SKIN || selected.startsWith(EXTERNAL_NOTE_SKIN_PREFIX)
-    ? selected
-    : DEFAULT_NOTE_SKIN;
+  if (selected.startsWith(EXTERNAL_NOTE_SKIN_PREFIX)) {
+    return selected;
+  }
+  if (
+    selected.startsWith(BUILTIN_NOTE_SKIN_PREFIX) &&
+    BUILTIN_NOTE_SKIN_PACKAGE_IDS.includes(
+      selected.slice(
+        BUILTIN_NOTE_SKIN_PREFIX.length,
+      ) as (typeof BUILTIN_NOTE_SKIN_PACKAGE_IDS)[number],
+    )
+  ) {
+    return selected;
+  }
+  return DEFAULT_NOTE_SKIN;
 };
 
 /**
@@ -149,8 +175,8 @@ export async function selectNoteSkin(id: string) {
 /**
  * Load a skin by id.
  *
- * External ids use the installed external loader; every other id loads the
- * bundled package. Throws when the required loader is not installed.
+ * External ids use the installed external loader; built-in ids select a
+ * specific compiled package. Throws when the required loader is not installed.
  */
 export async function loadNoteSkin(id: string): Promise<LoadedNoteSkin> {
   if (id.startsWith(EXTERNAL_NOTE_SKIN_PREFIX)) {
@@ -162,8 +188,14 @@ export async function loadNoteSkin(id: string): Promise<LoadedNoteSkin> {
   if (!bundledLoader) {
     throw new Error(`Unsupported note skin: ${id}`);
   }
-  // The bundled package is the only built-in skin; any non-external id loads it.
-  return bundledLoader();
+  if (id === "rpe" || id === "builtin:default" || id === "builtin:built_in_original") {
+    return bundledLoader(DEFAULT_BUILTIN_NOTE_SKIN_PACKAGE_ID);
+  }
+  return bundledLoader(
+    id.startsWith(BUILTIN_NOTE_SKIN_PREFIX)
+      ? id.slice(BUILTIN_NOTE_SKIN_PREFIX.length)
+      : DEFAULT_BUILTIN_NOTE_SKIN_PACKAGE_ID,
+  );
 }
 
 /** Load one active pack and fill its missing slots from the ordered sources. */
@@ -202,7 +234,9 @@ async function fallbackSourcePacks(
 }> {
   const remaining = new Set(slots);
   const sources: LoadedNoteSkin[] = [];
-  const sourceIds = fallbackSources ? fallbackSources() : [DEFAULT_NOTE_SKIN];
+  const sourceIds = fallbackSources
+    ? fallbackSources()
+    : BUILTIN_NOTE_SKIN_PACKAGE_IDS.map(builtinNoteSkinSelectionId);
   for (const sourceId of sourceIds) {
     if (!remaining.size) {
       break;

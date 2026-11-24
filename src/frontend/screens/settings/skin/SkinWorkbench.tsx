@@ -21,6 +21,7 @@ import { FieldRow } from "../../../../design/components/field/FieldRow.tsx";
 import { Input } from "../../../../design/components/input/Input.tsx";
 import { Modal } from "../../../../design/components/modal/Modal.tsx";
 import {
+  BUILTIN_NOTE_SKIN_PREFIX,
   DEFAULT_NOTE_SKIN,
   EXTERNAL_NOTE_SKIN_PREFIX,
   loadNoteSkin,
@@ -74,14 +75,12 @@ import {
   type WorkbenchSlotDefinition,
 } from "./skinWorkbenchSlots.ts";
 import { useReusableSkins, type ReusableSkinEntry } from "./useReusableSkins.ts";
-
 /** Where the workbench was opened from. */
 export type SkinWorkbenchMode = "create" | "edit";
 
 interface WorkbenchMenuSnapshot extends ContextMenuSnapshot {
   readonly slot: PhiraWorkbenchSlot;
 }
-
 /** The package identity the board edits: its folder id, kind, and writability. */
 interface WorkbenchTarget {
   readonly packageId: string;
@@ -89,7 +88,6 @@ interface WorkbenchTarget {
   /** `true` when the loaded bytes live in the writable user library. */
   readonly writable: boolean;
 }
-
 /**
  * The workbench modal.
  *
@@ -152,7 +150,7 @@ export function SkinWorkbench({
       pack.packageId
         ? {
             packageId: pack.packageId,
-            kind: pack.id === DEFAULT_NOTE_SKIN ? "builtin" : "installed",
+            kind: pack.id.startsWith(BUILTIN_NOTE_SKIN_PREFIX) ? "builtin" : "installed",
             writable: pack.source === "portable",
           }
         : null,
@@ -401,7 +399,9 @@ export function SkinWorkbench({
       // Only an unchanged built-in id keeps the built-in identity.
       const builtin = target?.kind === "builtin" && result.id === target.packageId;
       await selectNoteSkin(
-        builtin ? DEFAULT_NOTE_SKIN : `${EXTERNAL_NOTE_SKIN_PREFIX}${result.id}`,
+        builtin
+          ? `${BUILTIN_NOTE_SKIN_PREFIX}${result.id}`
+          : `${EXTERNAL_NOTE_SKIN_PREFIX}${result.id}`,
       );
       await refreshExternalNoteSkins();
       setTarget({

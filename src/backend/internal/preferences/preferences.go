@@ -116,6 +116,7 @@ var preferenceSections = map[string]preferenceSectionRule{
 	"appearance":     {kind: preferenceString},
 	"icons":          {kind: preferenceString},
 	"settings":       {kind: preferenceObject},
+	"valueMeta":      {kind: preferenceObject, nullable: true},
 	"settingsWindow": {kind: preferenceObject, nullable: true},
 	"values":         {kind: preferenceObject, nullable: true},
 	"layout":         {kind: preferenceObject},

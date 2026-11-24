@@ -57,6 +57,7 @@ export interface AppPackageSummary {
   id: string;
   name: string;
   fingerprint: string;
+  createdAt: string;
   updatedAt: string;
 }
 

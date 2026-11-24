@@ -6,11 +6,7 @@
  * bytes into the draft stays with the workbench.
  */
 import { useEffect, useState, useSyncExternalStore } from "react";
-import {
-  DEFAULT_NOTE_SKIN,
-  EXTERNAL_NOTE_SKIN_PREFIX,
-  loadNoteSkin,
-} from "../../../../core/media/noteSkins.ts";
+import { EXTERNAL_NOTE_SKIN_PREFIX, loadNoteSkin } from "../../../../core/media/noteSkins.ts";
 import {
   phiraWorkbenchAssetFromPack,
   type PhiraWorkbenchAsset,
@@ -20,9 +16,9 @@ import {
   externalNoteSkins,
   subscribeExternalNoteSkins,
 } from "../../../../core/platform/desktop/noteSkinPackages.ts";
-import { packageName, type PackageName } from "../../../../core/utils/packageName.ts";
+import { packageName } from "../../../../core/utils/packageName.ts";
 import { useLanguage } from "../../../../i18n/react.ts";
-import { bundledNoteSkinName } from "../../../platform/noteSkinBridge.ts";
+import { bundledNoteSkins } from "../../../platform/noteSkinBridge.ts";
 
 /** One installed skin that can fill the requested slot. */
 export interface ReusableSkinEntry {
@@ -81,9 +77,12 @@ export function useReusableSkins(
     }
     let cancelled = false;
     void (async () => {
-      const bundledName: PackageName = await bundledNoteSkinName().catch(() => "Redux Default");
+      const bundled = await bundledNoteSkins();
       const sources = [
-        { id: DEFAULT_NOTE_SKIN, label: packageName(bundledName, language) },
+        ...bundled.map((skin) => ({
+          id: skin.id,
+          label: packageName(skin.name, language),
+        })),
         ...external.map((skin) => ({
           id: `${EXTERNAL_NOTE_SKIN_PREFIX}${skin.id}`,
           label: packageName(skin.name, language),

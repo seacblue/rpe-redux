@@ -27,6 +27,8 @@ export interface NoteTexture {
 /** The validated shape of a note skin's manifest. */
 export interface NoteSkinManifest {
   name: PackageName;
+  /** Stable package identity; absent manifests use the generated skin id rule. */
+  id?: string;
   notes: Record<string, NoteTexture>;
   events: Record<string, NoteTexture>;
   /** Phira metadata retained so the browser renderer can split Hold atlases. */

@@ -1,19 +1,18 @@
 /**
- * The shipped built-in package follows the shared package-naming rule: its
- * folder id is the display-name slug, its judge-line texture sits at the
- * package root, and it ships without a per-package README or `judgeline/`
- * folder. These assertions keep the shipped tree and the runtime loader in
- * agreement about the built-in package layout.
+ * The shipped built-in packages declare stable folder ids separately from
+ * their display names, and each package has the files the runtime expects.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { packageSlug } from "../../core/utils/packageName.ts";
+import { packageSlug, packageSlugWithHash } from "../../core/utils/packageName.ts";
 
 const skinsRoot = fileURLToPath(new URL("../../assets/skins/", import.meta.url));
-const packageDir = join(skinsRoot, "built_in_original");
+const packageDirs = ["builtin_reducer_cells", "builtin_phiskin"].map((name) =>
+  join(skinsRoot, name),
+);
 
 /** The display name declared by one package's info.yml. */
 function infoName(folder) {
@@ -25,33 +24,39 @@ function infoName(folder) {
     .replace(/^['"]|['"]$/g, "");
 }
 
-test("the shipped package folder is the slug of its own display name", () => {
-  assert.equal(basename(packageDir), "built_in_original");
-  assert.equal(packageSlug(infoName(packageDir)), "built_in_original");
+test("the shipped packages have explicit ids and display names", () => {
+  assert.equal(infoName(packageDirs[0]), "Reducer Cells");
+  assert.equal(infoName(packageDirs[1]), "Phiskin ~ 圆角简约");
+  assert.match(
+    readFileSync(join(packageDirs[0], "info.yml"), "utf8"),
+    /^id:\s*builtin_reducer_cells\s*$/m,
+  );
+  assert.match(
+    readFileSync(join(packageDirs[1], "info.yml"), "utf8"),
+    /^id:\s*builtin_phiskin\s*$/m,
+  );
   const packages = readdirSync(skinsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(skinsRoot, entry.name, "info.yml")))
     .map((entry) => entry.name);
-  assert.deepEqual(packages, ["built_in_original"]);
+  assert.deepEqual(packages, ["builtin_phiskin", "builtin_reducer_cells"].sort());
 });
 
-test("the pre-rename shipped package folder is gone", () => {
+test("the replaced built-in package folders are gone", () => {
+  assert.equal(existsSync(join(skinsRoot, "built_in_original")), false);
   assert.equal(existsSync(join(skinsRoot, "default")), false);
 });
 
-test("the shipped info.yml keeps no description", () => {
-  const text = readFileSync(join(packageDir, "info.yml"), "utf8");
-  assert.doesNotMatch(text, /^\s*description\s*:/m);
-});
-
-test("the judge-line texture lives at the package root, not under judgeline/", () => {
-  const line = join(packageDir, "line.png");
+test("the Reducer Cells judge-line texture stays at the package root", () => {
+  const line = join(packageDirs[0], "line.png");
   assert.ok(existsSync(line) && statSync(line).isFile(), "root line.png is missing");
-  assert.equal(existsSync(join(packageDir, "judgeline")), false);
+  assert.equal(existsSync(join(packageDirs[0], "judgeline")), false);
 });
 
-test("the shipped package carries no per-package README", () => {
-  assert.equal(existsSync(join(packageDir, "README.md")), false);
-  assert.equal(existsSync(join(packageDir, "readme.md")), false);
+test("the shipped packages carry no per-package README", () => {
+  for (const packageDir of packageDirs) {
+    assert.equal(existsSync(join(packageDir, "README.md")), false);
+    assert.equal(existsSync(join(packageDir, "readme.md")), false);
+  }
 });
 
 test("packageSlug derives one safe id from a display name", () => {
@@ -73,6 +78,12 @@ test("packageSlug falls back to a stable hash when no ASCII characters remain", 
   assert.match(cjk, /^skin_[0-9a-f]{8}$/);
   assert.equal(packageSlug("内置皮肤"), cjk, "the fallback must be deterministic");
   assert.notEqual(packageSlug("内置皮肤"), packageSlug("другое"));
+});
+
+test("packageSlugWithHash keeps an ASCII stem and an eight-digit name hash", () => {
+  assert.match(packageSlugWithHash("Built-in - Original"), /^built_in_original_[0-9a-f]{8}$/);
+  assert.match(packageSlugWithHash("圆角简约"), /^skin_[0-9a-f]{8}$/);
+  assert.equal(packageSlugWithHash("  Café  "), packageSlugWithHash("Café"));
 });
 
 test("packageSlug caps the id and never leaves a trailing separator", () => {

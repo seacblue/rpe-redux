@@ -11,17 +11,22 @@ import type {
   ExternalNoteSkinSummary,
 } from "../desktop/noteSkinPackages.ts";
 import { openBrowserLibrary } from "./library/browserLibrary.ts";
+import {
+  BUILTIN_NOTE_SKIN_PACKAGE_IDS,
+  DEFAULT_BUILTIN_NOTE_SKIN_PACKAGE_ID,
+} from "../../media/noteSkins.ts";
+import { orderNoteSkins } from "../../media/noteSkinOrder.ts";
 
 const PACKAGE_KIND = "skin";
 
 /**
  * The shipped package's writable id.
  *
- * The built-in package's display name is "Built-in - Original"; the shared slug
- * rule makes this the folder id on both hosts. A saved built-in edit lives under
- * the same id so the runtime can shadow the compiled copy.
+ * The built-in package declares this id separately from its display name. A
+ * saved built-in edit lives under the same id so the runtime can shadow the
+ * compiled copy.
  */
-export const BUILTIN_NOTE_SKIN_PACKAGE_ID = "built_in_original";
+export const BUILTIN_NOTE_SKIN_PACKAGE_ID = DEFAULT_BUILTIN_NOTE_SKIN_PACKAGE_ID;
 
 /** Mix one 32-bit value into the package fingerprint. */
 function mix(hash: number, value: number): number {
@@ -61,6 +66,16 @@ function readName(text: string): PackageName {
   return text;
 }
 
+/** Convert the library's persisted timestamp to a sortable number. */
+function readAddedAt(value: string): number {
+  const timestamp = Date.parse(value);
+  if (Number.isFinite(timestamp)) {
+    return timestamp;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 /** Open the shared browser library, translating a storage failure. */
 async function library() {
   try {
@@ -75,13 +90,16 @@ export async function listBrowserNoteSkins(): Promise<ExternalNoteSkinSummary[]>
   try {
     const store = await library();
     const packages = await store.appPackageList(PACKAGE_KIND);
-    return packages.map((entry) => ({
-      id: entry.id,
-      name: readName(entry.name),
-      source: "portable",
-      builtin: entry.id === BUILTIN_NOTE_SKIN_PACKAGE_ID,
-      fingerprint: entry.fingerprint,
-    }));
+    return orderNoteSkins(
+      packages.map((entry) => ({
+        id: entry.id,
+        name: readName(entry.name),
+        source: "portable",
+        builtin: (BUILTIN_NOTE_SKIN_PACKAGE_IDS as readonly string[]).includes(entry.id),
+        fingerprint: entry.fingerprint,
+        addedAt: readAddedAt(entry.createdAt),
+      })),
+    );
   } catch {
     return [];
   }
