@@ -74,7 +74,7 @@ The real-music fixed-BPM lane is materially less stable, but fusion removes most
 | Median BPM error          |     2.073 BPM |     0.211 BPM |
 | 95th-percentile BPM error |   174.087 BPM |     2.623 BPM |
 
-The remaining fusion errors were:
+The remaining fusion errors above 2 BPM were:
 
 |              Beatmapset | Chart BPM | Detected BPM | Failure shape   |
 | ----------------------: | --------: | -----------: | --------------- |
