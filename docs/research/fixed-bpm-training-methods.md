@@ -107,6 +107,18 @@ Beat tracking metrics can disagree with the intended chart metrical level, espec
 
 Implement Phase 0 and Phase 1 first, then train the candidate ranker before attempting a full model rewrite. This gives us a decisive test: if the pretrained beat posterior plus hard-negative ranker cannot separate the three current outliers from their near-tempo alternatives, the audio itself is ambiguous and the correct product behavior is a low-confidence result, not another hand-tuned heuristic.
 
+## First teacher experiment
+
+Before integrating the model into the application, the official `small0` checkpoint was evaluated offline on the existing 21 fixed-BPM osu! previews. Taking the model's discrete beat timestamps directly was not sufficient: the 50 FPS output and occasional missed beats produced only 3/21 results within 1 BPM. Using the frame-level beat logits as an activation signal, searching the current fused candidate within ±4% at 0.1 BPM steps, and optimizing phase on the same activation produced 21/21 results within 1 BPM, with a median error of approximately 0.138 BPM, P95 of approximately 0.436 BPM, and maximum error of approximately 0.581 BPM.
+
+| Variant | ≤1 BPM | Median | P95 | Max |
+| --- | ---: | ---: | ---: | ---: |
+| Current TypeScript fusion | 18/21 | 0.180 | 2.555 | 3.952 |
+| Beat This discrete timestamps | 3/21 | 2.500 | 97.000 | 100.000 |
+| Beat This logits + local continuous search | **21/21** | **0.138** | **0.436** | **0.581** |
+
+This is an offline teacher experiment, not yet the production detector. It is nevertheless a strong result because all three previous >1 BPM cases moved into the accepted range without using chart BPM during inference. The production implementation still needs the ONNX model, matching log-mel preprocessing, worker lifecycle, and a held-out confidence gate before the Draft PR can be marked ready. The current result is also not a final generalisation claim: the search range and score were selected during this investigation, so a larger independent osu! test set is still required.
+
 ## Bibliography
 
 [1] Foscarin, Schlüter & Widmer (2024). “Beat This! Accurate Beat Tracking Without DBN Postprocessing.” [arXiv](https://arxiv.org/abs/2407.21658).
