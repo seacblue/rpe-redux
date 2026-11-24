@@ -4,11 +4,10 @@
  *
  * The cover is the visual anchor: it fills a square frame, carries the title
  * and composer on a dark caption, and holds the group badge and preview
- * control. The body below it keeps the useful library metadata and one primary
- * Open action; exporting and deleting stay available as compact icon actions.
- * Without a selected entry the column shows the welcome panel, whose check-in
- * and fortune live in `LibraryWelcome`. Opening, exporting, and deleting stay
- * with the published card actions.
+ * control. The body below it keeps the useful library metadata. Without a
+ * selected entry the column shows the welcome panel, whose check-in and
+ * fortune live in `LibraryWelcome`; chart actions stay with the page-level
+ * floating controls.
  */
 import {
   useEffect,
@@ -19,9 +18,7 @@ import {
   type PointerEvent,
 } from "react";
 import { AsyncImage } from "../../../../design/components/image/AsyncImage.tsx";
-import { Button } from "../../../../design/components/button/Button.tsx";
 import { IconButton } from "../../../../design/components/button/IconButton.tsx";
-import { Icon } from "../../../../design/components/icon/Icon.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { LibraryPreviewAudio } from "./libraryPreviewAudio.ts";
 import type { LibraryPreviewProgress } from "./libraryPreviewAudio.ts";
@@ -46,64 +43,13 @@ function DetailCover({ url }: { url: string }) {
   );
 }
 
-/** Open, export, and delete actions for the selected entry. */
-function DetailActions({
-  entry,
-  opening,
-  onOpen,
-  onExport,
-  onDelete,
-}: {
-  entry: LibraryEntry;
-  opening: boolean;
-  onOpen(entry: LibraryEntry): void;
-  onExport(entry: LibraryEntry): void;
-  onDelete(entry: LibraryEntry): void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="redux-library-card-actions">
-      <Button
-        variant="solid"
-        size="lg"
-        className="redux-library-card-open"
-        disabled={opening}
-        onClick={() => onOpen(entry)}
-      >
-        <Icon name="open" size={16} />
-        {t("workspace.welcome.library.open")}
-      </Button>
-      <IconButton
-        icon="export"
-        label={t("workspace.welcome.library.export")}
-        variant="outlined"
-        size={16}
-        className="redux-library-card-action"
-        onClick={() => onExport(entry)}
-      />
-      <IconButton
-        icon="trash"
-        label={t("workspace.welcome.library.delete")}
-        variant="danger"
-        size={16}
-        className="redux-library-card-action"
-        onClick={() => onDelete(entry)}
-      />
-    </div>
-  );
-}
-
-/** Selected-chart sleeve with cover, metadata, actions, and armed preview audio. */
+/** Selected-chart sleeve with cover, metadata, and armed preview audio. */
 export function LibraryDetail({
   entry,
   entries,
   loading,
   visible,
   preview,
-  opening,
-  onOpen,
-  onExport,
-  onDelete,
 }: {
   entry: LibraryEntry | null;
   /** Every stored entry, for the welcome panel's library totals. */
@@ -114,11 +60,6 @@ export function LibraryDetail({
   visible: boolean;
   /** Preview audio starts after the user makes an explicit selection. */
   preview: boolean;
-  /** Disable another open request while the selected project is loading. */
-  opening: boolean;
-  onOpen(entry: LibraryEntry): void;
-  onExport(entry: LibraryEntry): void;
-  onDelete(entry: LibraryEntry): void;
 }) {
   const { t, language } = useTranslation();
   const player = useRef<LibraryPreviewAudio | null>(null);
@@ -308,13 +249,6 @@ export function LibraryDetail({
               <dd>{updated}</dd>
             </div>
           </dl>
-          <DetailActions
-            entry={entry}
-            opening={opening}
-            onOpen={onOpen}
-            onExport={onExport}
-            onDelete={onDelete}
-          />
         </div>
       </article>
     </aside>

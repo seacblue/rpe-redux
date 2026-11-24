@@ -25,7 +25,6 @@ import { SearchField } from "../../../../design/components/input/SearchField.tsx
 import { Input } from "../../../../design/components/input/Input.tsx";
 import { Segmented } from "../../../../design/components/segmented/Segmented.tsx";
 import { Select } from "../../../../design/components/select/Select.tsx";
-import { LibraryActions } from "./LibraryActions.tsx";
 import { LibraryCards } from "./LibraryCards.tsx";
 import { getHomeProjectCardsSnapshot, subscribeHomeProjectCards } from "../homeProjectCards.ts";
 import { getLibraryView, setLibraryView, type LibraryView } from "../libraryView.ts";
@@ -115,6 +114,14 @@ export function LibraryPanel({
     return [...values].sort((left, right) => left.localeCompare(right));
   }, [entries]);
   const allGroups = useMemo(() => new Set(groupOptions), [groupOptions]);
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of entries) {
+      const group = entry.source.project.group;
+      counts.set(group, (counts.get(group) ?? 0) + 1);
+    }
+    return counts;
+  }, [entries]);
   const effectiveSelectedGroups = selectedGroups ?? allGroups;
   const groupFilterActive = groupOptions.some((group) => !effectiveSelectedGroups.has(group));
   const groupFilterAnchor = useRef<HTMLButtonElement>(null);
@@ -189,8 +196,8 @@ export function LibraryPanel({
       setLibraryGroupFilter([...selectedGroups]);
     }
   }, [selectedGroups]);
-  // The empty state owns the creation actions, so the footer does not repeat
-  // them underneath. A ready empty library is the only state that moves them.
+  // Edge-mounted actions stay visible independently of whether the list is
+  // empty, filtered, or populated; this state only controls the empty copy.
   const libraryEmpty =
     cards !== null &&
     (cards.phase === "ready" || cards.phase === "degraded") &&
@@ -279,7 +286,12 @@ export function LibraryPanel({
             const id = `library-group-filter-${group}`;
             return (
               <label className="redux-library-group-filter-row" htmlFor={id} key={group}>
-                <span className="redux-library-group-filter-label">{label}</span>
+                <span className="redux-library-group-filter-label">
+                  <span>{label}</span>
+                  <span className="redux-library-group-filter-count">
+                    {groupCounts.get(group) ?? 0}
+                  </span>
+                </span>
                 <Input
                   id={id}
                   type="checkbox"
@@ -414,7 +426,6 @@ export function LibraryPanel({
           className="redux-library-search-empty"
         />
       )}
-      <LibraryActions />
     </section>
   );
 }

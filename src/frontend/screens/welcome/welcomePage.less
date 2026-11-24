@@ -1,6 +1,6 @@
-// Home screen layout: a quiet header, the floating selected-chart card, and the
-// vertical library column. The page fills the shell content height so the card
-// and library share every pixel the window offers; the selected cover is also
+// Home screen layout: a quiet header, the selected-chart sleeve, and the
+// vertical library column. The page fills the shell content height so the
+// columns share every pixel the window offers; the selected cover is also
 // supplied to the window-level welcome backdrop by the owning Shell.
 
 .redux-app-root .redux-home-page {
@@ -8,6 +8,9 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  --welcome-floating-button-height: calc((var(--control-height-lg) + var(--space-2)) * 1.25);
+  --welcome-floating-button-width: calc(var(--welcome-floating-button-height) * 1.8);
+  --welcome-floating-button-bottom: calc(var(--space-5) * 3);
   // The vertical rhythm compresses with the window so short windows keep a
   // usable card and library instead of crowding the header.
   padding-block: clamp(24px, 3.4vh, 48px);
@@ -98,20 +101,20 @@
 // library. They share one explicit row, so they always end on the same line;
 // the row may shrink to zero and each column owns its own overflow and minimum.
 .redux-welcome-columns {
-  // The detail card keeps one fixed width instead of growing with the window,
-  // so its 16:9 cover and three action buttons stay at a readable size. The
-  // viewport guard is inert above the stacking breakpoint: 40vw only drops
+  // The detail card keeps one fixed width on the right instead of growing with
+  // the window, while the library receives the remaining space on the left.
+  // The viewport guard is inert above the stacking breakpoint: 40vw only drops
   // below 380px beneath 950px, where the page already stacks.
   --welcome-detail-width: min(380px, 40vw);
   // The selected sleeve and the no-selection prompt share this floor. A square
-  // cover plus the metadata/action body keeps the left column from collapsing
+  // cover plus the metadata/action body keeps the right column from collapsing
   // when the selection clears.
-  --welcome-detail-min-height: calc(var(--welcome-detail-width) + 180px);
+  --welcome-detail-min-height: calc(var(--welcome-detail-width) + 120px);
 
   display: grid;
   flex: 1;
   // The library owns every pixel the fixed detail column does not need.
-  grid-template-columns: var(--welcome-detail-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--welcome-detail-width);
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: clamp(20px, 3vw, 56px);
@@ -137,6 +140,257 @@
   align-items: center;
   gap: var(--theme-toolbar-gap, var(--space-1));
   min-width: 0;
+}
+
+// Edge-mounted home actions stay outside the library flow so they do not
+// change the list's width. The library reserves bottom clearance for them,
+// which keeps the last card reachable when the viewport is short.
+.redux-app-root .redux-home-page .redux-welcome-library {
+  padding-bottom: calc(
+    var(--space-7) + var(--welcome-floating-button-height) + var(--welcome-floating-button-bottom)
+  );
+}
+
+.redux-welcome-floating-actions {
+  position: fixed;
+  z-index: var(--z-content-overlay);
+  right: 0;
+  bottom: var(--welcome-floating-button-bottom);
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.redux-welcome-floating-create {
+  position: relative;
+  flex: none;
+  width: var(--welcome-floating-button-width);
+  height: var(--welcome-floating-button-height);
+  overflow: hidden;
+  border: 1px solid var(--control-on-border);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: var(--surface-muted);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  transition: width var(--design-dur-overlay) var(--design-ease-enter);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-create:hover,
+.redux-app-root .redux-home-page .redux-welcome-floating-create:focus-within {
+  width: calc(var(--welcome-floating-button-width) * 2);
+}
+
+.redux-welcome-floating-entry {
+  position: relative;
+  flex: none;
+  width: var(--welcome-floating-button-width);
+  height: var(--welcome-floating-button-height);
+  overflow: hidden;
+  border: 1px solid var(--control-on-border);
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+  background: var(--preview-frame);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  transition: width var(--design-dur-overlay) var(--design-ease-enter);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-entry:hover,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry:focus-within {
+  width: calc(var(--welcome-floating-button-width) * 3);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-actions .redux-icon-button,
+.redux-app-root .redux-home-page .redux-welcome-floating-open {
+  flex: none;
+  width: var(--welcome-floating-button-width);
+  height: var(--welcome-floating-button-height);
+  min-width: var(--welcome-floating-button-width);
+  min-height: var(--welcome-floating-button-height);
+  padding: 0;
+  border-radius: 0;
+  transition:
+    background-color var(--design-dur-tint) ease,
+    border-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
+
+  .redux-icon {
+    --icon-color: currentColor;
+  }
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-create .redux-welcome-floating-import,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry .redux-welcome-floating-export,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry .redux-welcome-floating-delete {
+  position: absolute;
+  top: 0;
+  width: var(--welcome-floating-button-width);
+  height: var(--welcome-floating-button-height);
+  min-width: var(--welcome-floating-button-width);
+  min-height: var(--welcome-floating-button-height);
+  border-width: 1px;
+  border-radius: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(8px) scale(0.82);
+  transition:
+    opacity var(--design-dur-overlay) var(--design-ease-enter),
+    transform var(--design-dur-overlay) var(--design-ease-enter),
+    background-color var(--design-dur-tint) ease,
+    border-color var(--design-dur-tint) ease,
+    color var(--design-dur-tint) ease;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-import {
+  left: var(--welcome-floating-button-width);
+  transform-origin: left center;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-create .redux-welcome-floating-new {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-export {
+  right: var(--welcome-floating-button-width);
+  transform-origin: right center;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-delete {
+  right: calc(var(--welcome-floating-button-width) * 2);
+  transform-origin: right center;
+}
+
+.redux-app-root
+  .redux-home-page
+  .redux-welcome-floating-create:hover
+  .redux-welcome-floating-import,
+.redux-app-root
+  .redux-home-page
+  .redux-welcome-floating-create:focus-within
+  .redux-welcome-floating-import,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry:hover .redux-welcome-floating-export,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry:hover .redux-welcome-floating-delete,
+.redux-app-root
+  .redux-home-page
+  .redux-welcome-floating-entry:focus-within
+  .redux-welcome-floating-export,
+.redux-app-root
+  .redux-home-page
+  .redux-welcome-floating-entry:focus-within
+  .redux-welcome-floating-delete {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-open {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border: 1px solid var(--control-on-border);
+  background: var(--preview-frame);
+  color: var(--control-on-surface);
+  box-shadow: var(--shadow-panel);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--control-on-surface) 8%, var(--preview-frame));
+    color: var(--control-on-surface);
+  }
+
+  &:disabled {
+    border-color: var(--edge-divider);
+    background: var(--surface-muted);
+    color: var(--foreground-muted);
+    opacity: 1;
+  }
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-new,
+.redux-app-root .redux-home-page .redux-welcome-floating-import {
+  border: 1px solid var(--control-on-border);
+  background: var(--preview-frame);
+  color: var(--control-on-surface);
+  box-shadow: var(--shadow-panel);
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: color-mix(in srgb, var(--foreground-muted) 12%, var(--surface-muted));
+    color: var(--foreground);
+  }
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-new {
+  border-color: var(--edge-divider);
+  background: var(--surface-muted);
+  color: var(--foreground-muted);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-import,
+.redux-app-root .redux-home-page .redux-welcome-floating-export {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  color: var(--accent);
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface-raised));
+    color: var(--accent);
+  }
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-delete {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 84%, var(--preview-frame));
+    color: var(--on-danger);
+  }
+}
+
+// Each edge-mounted action group keeps its rounded corners on the two outer
+// ends of the expanded switch. Shared seams stay square so adjacent controls
+// read as one continuous control instead of colliding rounded corners.
+.redux-app-root .redux-home-page .redux-welcome-floating-actions .redux-welcome-floating-new {
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-actions .redux-welcome-floating-import {
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-actions .redux-welcome-floating-open {
+  border-radius: 0;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-actions .redux-welcome-floating-export {
+  border-radius: 0;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-actions .redux-welcome-floating-delete {
+  border-radius: 0;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-entry .redux-welcome-floating-open,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry .redux-welcome-floating-export,
+.redux-app-root .redux-home-page .redux-welcome-floating-entry .redux-welcome-floating-delete {
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-create .redux-welcome-floating-new,
+.redux-app-root .redux-home-page .redux-welcome-floating-create .redux-welcome-floating-import {
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 // ------------------------------------------------------------ drop overlay
@@ -197,7 +451,7 @@
 
   .redux-welcome-columns {
     // The tighter gap narrows the page, not the detail column.
-    grid-template-columns: var(--welcome-detail-width) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) var(--welcome-detail-width);
     gap: clamp(18px, 2.4vw, 32px);
   }
 }
@@ -217,6 +471,9 @@
     flex: none;
     width: var(--welcome-detail-width);
     max-width: 100%;
+    padding-bottom: calc(
+      var(--space-7) + var(--welcome-floating-button-height) + var(--welcome-floating-button-bottom)
+    );
   }
 
   .redux-app-root .redux-home-page .redux-welcome-library {

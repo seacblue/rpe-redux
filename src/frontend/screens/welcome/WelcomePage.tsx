@@ -1,12 +1,13 @@
 /**
  * The home screen.
  *
- * It composes the page header, the permanent detail column, and the chart
- * library. The detail column stays mounted through loading, empty, and failed
+ * It composes the page header, the chart library, and the permanent detail
+ * column. The detail column stays mounted through loading, empty, and failed
  * reads, so the two-column grid never collapses or snaps in after the first
  * read; it shows the borderless welcome panel until the user selects a chart.
  * Selection is owned here because the detail pane and the list are siblings,
- * while opening, exporting, and deleting stay with the published card actions.
+ * while opening, exporting, and deleting stay with the page-level floating
+ * actions.
  * Clicking the selected chart again clears it and restores the welcome panel.
  * Files dropped on the window are imported by the desktop lifecycle, which
  * broadcasts its drag state here for the drop overlay.
@@ -28,6 +29,7 @@ import { WelcomeJoin } from "./WelcomeJoin.tsx";
 import { RpeImportReviewDialog } from "./RpeImportReviewDialog.tsx";
 import { LibraryPanel } from "./library/LibraryPanel.tsx";
 import { LibraryDetail } from "./library/LibraryDetail.tsx";
+import { LibraryFloatingActions } from "./library/LibraryActions.tsx";
 import { buildLibraryEntries, type LibraryEntry } from "./library/libraryEntries.ts";
 import {
   libraryDetailState,
@@ -105,7 +107,7 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
     window.addEventListener(FILE_DRAG_EVENT, onDragState);
     return () => window.removeEventListener(FILE_DRAG_EVENT, onDragState);
   }, []);
-  /** Opens the selected entry through the published card actions. */
+  /** Opens the selected entry through the page-level floating action. */
   const openEntry = (entry: LibraryEntry) => {
     cards?.onOpenProject(entry.source.project.id);
   };
@@ -129,6 +131,11 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
           <WelcomeJoin />
         </div>
         <div className="redux-welcome-columns" data-detail={detailState} data-layout="fixed">
+          <LibraryPanel
+            selectedKey={selected?.key ?? null}
+            openingProjectId={cards?.openingProjectId ?? null}
+            onSelect={handleSelect}
+          />
           <div className="redux-welcome-side">
             <LibraryDetail
               entry={selected}
@@ -136,18 +143,16 @@ export function WelcomePage({ onCoverUrlChange }: { onCoverUrlChange: (url: stri
               loading={!cards || cards.phase === "loading"}
               visible={editorVisibility.atHome}
               preview={previewArmed}
-              opening={Boolean(cards?.openingProjectId)}
-              onOpen={openEntry}
-              onExport={exportEntry}
-              onDelete={deleteEntry}
             />
           </div>
-          <LibraryPanel
-            selectedKey={selected?.key ?? null}
-            openingProjectId={cards?.openingProjectId ?? null}
-            onSelect={handleSelect}
-          />
         </div>
+        <LibraryFloatingActions
+          entry={selected}
+          opening={Boolean(cards?.openingProjectId)}
+          onOpen={openEntry}
+          onExport={exportEntry}
+          onDelete={deleteEntry}
+        />
       </div>
       {draggingFiles && editorVisibility.atHome && (
         <div className="redux-welcome-drop" role="status" aria-live="polite">

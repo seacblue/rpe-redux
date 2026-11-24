@@ -1,57 +1,95 @@
 /**
- * The two creation actions below the home library.
+ * Edge-mounted actions for the home library.
  *
- * They share the detail card's large action size and neutral treatment: create
- * a new document or import one without making either action visually primary.
+ * Creation controls stay at the lower-left edge and reveal import on hover.
+ * Actions for the selected chart stay at the lower-right edge, where opening
+ * is the primary control and export/delete expand to its left.
  */
 import { Button } from "../../../../design/components/button/Button.tsx";
+import { IconButton } from "../../../../design/components/button/IconButton.tsx";
 import { Icon } from "../../../../design/components/icon/Icon.tsx";
-import { ShortcutBindings } from "../../../../design/components/keyboardHint/Kbd.tsx";
 import { useTranslation } from "../../../../i18n/react.ts";
 import { IMPORT_CHART_EVENT } from "../../../../core/shell/shellEventNames.ts";
 import { documents } from "../../editor/workspace/document/lifecycle/service.ts";
 import { onboardingAnchorRef } from "../../../onboarding/anchors.ts";
-import { useShortcuts } from "../../settings/shortcuts/useShortcuts.ts";
+import type { LibraryEntry } from "./libraryEntries.ts";
 
-/** Footer buttons that create a document or import a chart. */
-export function LibraryActions() {
+/** Render the edge-mounted creation and selected-chart actions. */
+export function LibraryFloatingActions({
+  entry,
+  opening,
+  onOpen,
+  onExport,
+  onDelete,
+}: {
+  entry: LibraryEntry | null;
+  opening: boolean;
+  onOpen(entry: LibraryEntry): void;
+  onExport(entry: LibraryEntry): void;
+  onDelete(entry: LibraryEntry): void;
+}) {
   const { t } = useTranslation();
-  const bindings = useShortcuts();
-  const shortcut = (id: string) => bindings.find((entry) => entry.id === id)?.bindings ?? [];
+  const newLabel = t("workspace.welcome.library.action.new");
+  const importLabel = t("workspace.welcome.library.action.import");
+  const openLabel = t("workspace.welcome.library.open");
+  const exportLabel = t("workspace.welcome.library.export");
+  const deleteLabel = t("workspace.welcome.library.delete");
   return (
-    <div className="redux-library-actions">
-      <Button
-        ref={onboardingAnchorRef("home-new")}
-        variant="outlined"
-        size="lg"
-        className="redux-library-action"
-        data-onboarding="new"
-        onClick={() => documents.newDocument()}
-      >
-        <span className="redux-library-action-icon">
-          <Icon name="new" size={16} />
-        </span>
-        <span className="redux-library-action-title">
-          {t("workspace.welcome.library.action.new")}
-        </span>
-        <ShortcutBindings bindings={shortcut("file.new")} className="redux-shortcut-labels" />
-      </Button>
-      <Button
-        ref={onboardingAnchorRef("home-import")}
-        variant="outlined"
-        size="lg"
-        className="redux-library-action"
-        data-onboarding="import"
-        onClick={() => window.dispatchEvent(new Event(IMPORT_CHART_EVENT))}
-      >
-        <span className="redux-library-action-icon">
-          <Icon name="open" size={16} />
-        </span>
-        <span className="redux-library-action-title">
-          {t("workspace.welcome.library.action.import")}
-        </span>
-        <ShortcutBindings bindings={shortcut("file.open")} className="redux-shortcut-labels" />
-      </Button>
+    <div className="redux-welcome-floating-actions">
+      <div className="redux-welcome-floating-create">
+        <IconButton
+          ref={onboardingAnchorRef("home-new")}
+          icon="plus"
+          label={newLabel}
+          variant="solid"
+          className="redux-welcome-floating-new"
+          data-onboarding="new"
+          onClick={() => documents.newDocument()}
+        />
+        <IconButton
+          ref={onboardingAnchorRef("home-import")}
+          icon="open"
+          label={importLabel}
+          variant="outlined"
+          className="redux-welcome-floating-import"
+          data-onboarding="import"
+          onClick={() => window.dispatchEvent(new Event(IMPORT_CHART_EVENT))}
+        />
+      </div>
+      <div className="redux-welcome-floating-entry">
+        {entry && (
+          <>
+            <IconButton
+              icon="trash"
+              label={deleteLabel}
+              variant="danger"
+              className="redux-welcome-floating-delete"
+              onClick={() => onDelete(entry)}
+            />
+            <IconButton
+              icon="export"
+              label={exportLabel}
+              variant="outlined"
+              className="redux-welcome-floating-export"
+              onClick={() => onExport(entry)}
+            />
+          </>
+        )}
+        <Button
+          variant="solid"
+          className="redux-welcome-floating-open"
+          aria-label={openLabel}
+          data-tip-title={openLabel}
+          disabled={opening || !entry}
+          onClick={() => {
+            if (entry) {
+              onOpen(entry);
+            }
+          }}
+        >
+          <Icon name="playbackPlay" size={18} />
+        </Button>
+      </div>
     </div>
   );
 }

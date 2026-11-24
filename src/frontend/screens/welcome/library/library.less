@@ -1,5 +1,5 @@
-// Home library styles: the vertical chart list, its search toolbar, the
-// floating selected-chart card, and the compact create/import footer.
+// Home library styles: the vertical chart list, its search toolbar, and the
+// selected-chart sleeve beside it. Edge-mounted actions live with the page.
 
 .redux-library-toolbar {
   display: flex;
@@ -95,10 +95,23 @@
   }
 
   .redux-library-group-filter-label {
+    display: flex;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    align-items: center;
+    gap: var(--space-2);
+
+    > span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .redux-library-group-filter-count {
+    flex: none;
+    color: var(--foreground-muted);
+    font-variant-numeric: tabular-nums;
   }
 
   .redux-input[type="checkbox"] {
@@ -142,9 +155,8 @@
   }
 }
 
-// The library column is a vertical stack: search row, scrolling cards, footer.
-// Only the cards flex, so the footer stays on the column's bottom edge in every
-// data state, including empty and failed ones.
+// The library column is a vertical stack of the search row and scrolling
+// cards. Creation and selected-chart actions are mounted at the page edges.
 .redux-app-root .redux-home-page .redux-welcome-library {
   display: flex;
   flex-direction: column;
@@ -472,29 +484,6 @@
   }
 }
 
-.redux-library-card-actions {
-  display: flex;
-  gap: var(--space-2);
-  margin: var(--space-3) calc(-1 * var(--space-4)) 0;
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  border-top: 1px solid var(--edge-divider);
-  border-radius: 0 0 calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px);
-  background: color-mix(in srgb, var(--surface-sunken) 34%, transparent);
-}
-
-.redux-library-card-open {
-  flex: 1;
-  min-width: 0;
-}
-
-.redux-app-root .redux-home-page .redux-library-card-action {
-  width: var(--control-height-lg);
-  height: var(--control-height-lg);
-  min-width: var(--control-height-lg);
-  min-height: var(--control-height-lg);
-  padding: 0;
-}
-
 // The empty column is a borderless welcome panel: a greeting, library totals,
 // and a daily check-in that reveals a fortune. The panel reserves the same
 // height as the selected sleeve so checking in never resizes the column.
@@ -778,19 +767,6 @@
   text-wrap: pretty;
 }
 
-// At the minimum supported height the cover keeps its square but the body
-// trades breathing room for the action row.
-@media (max-height: 720px) {
-  .redux-library-card-body {
-    padding: var(--space-3) var(--space-3) 0;
-  }
-
-  .redux-library-card-actions {
-    margin-inline: calc(-1 * var(--space-3));
-    padding: var(--space-2) var(--space-3) var(--space-3);
-  }
-}
-
 // ------------------------------------------------------------- list and grid
 
 @keyframes redux-library-skeleton-pulse {
@@ -815,10 +791,10 @@
   align-content: start;
   gap: 2px;
   min-height: clamp(120px, 18vh, 160px);
-  padding-right: var(--space-1);
+  padding-right: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 // Empty states are siblings of the card region. An empty region must not claim
@@ -1107,15 +1083,6 @@
   line-height: 1.55;
 }
 
-// The ready empty library carries its own creation actions instead of repeating
-// them in a footer directly below.
-.redux-home-page .redux-library-empty .redux-library-actions {
-  width: min(100%, 420px);
-  margin-top: var(--space-3);
-  padding-top: 0;
-  border-top: none;
-}
-
 .redux-home-page .redux-library-search-empty {
   display: grid;
   flex: 1 1 auto;
@@ -1137,60 +1104,6 @@
   .redux-icon {
     --icon-color: currentColor;
   }
-}
-
-// ------------------------------------------------------- create/import footer
-
-.redux-library-actions {
-  display: grid;
-  flex: none;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin-top: auto;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--edge-divider);
-}
-
-.redux-app-root .redux-home-page .redux-library-action {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  text-align: left;
-
-  .redux-library-action-icon {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    color: inherit;
-
-    .redux-icon {
-      --icon-color: currentColor;
-    }
-  }
-
-  .redux-library-action-title {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    font-weight: 500;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .redux-shortcut-labels {
-    flex: none;
-    margin-left: auto;
-    color: var(--foreground-muted);
-  }
-}
-
-.redux-app-root .redux-home-page .redux-library-action .redux-kbd {
-  padding: 1px var(--space-1-5);
-  font-size: var(--type-micro);
-  opacity: 0.72;
 }
 
 @keyframes library-cover-in {
