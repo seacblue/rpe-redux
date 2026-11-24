@@ -12,7 +12,7 @@ The editor always returns one fixed BPM and one offset. The worker combines the 
 | --- | --- | --- |
 | Onset and fixed-grid candidates | `src/core/media/beatDetection.ts` | One fixed-tempo candidate |
 | Learned beat evidence | `learnedBeatDetector.ts` | Frame-level beat logits |
-| Alias-resistant grid scoring | `learnedBeatDetector.ts` | Penalises half- and third-beat leakage |
+| Alias-resistant grid scoring | `learnedBeatDetector.ts` | Penalises half- and third-beat leakage and resolves clear low-end submultiples |
 | Attack refit | `src/core/media/beatDetection.ts` | Continuous BPM and offset refinement |
 | Application | timing-detection worker | Writes one `[0, 0, 1]` timing entry |
 

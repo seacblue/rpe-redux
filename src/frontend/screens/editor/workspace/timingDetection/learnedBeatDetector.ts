@@ -24,6 +24,10 @@ const SEARCH_PHASES = 24;
 const REFINEMENT_SPAN = 0.15;
 const REFINEMENT_STEP = 0.01;
 const REFINEMENT_PHASES = 48;
+const METRICAL_MAX_BPM = 240;
+const LOW_QUADRUPLE_BPM_MAX = 60;
+const LOW_DOUBLE_BPM_MIN = 95;
+const LOW_DOUBLE_BPM_MAX = 110;
 
 type OrtModule = typeof import("onnxruntime-web");
 type OrtSession = import("onnxruntime-web").InferenceSession;
@@ -39,6 +43,32 @@ interface TimingCandidate {
 /** Clamp a finite number to an inclusive range. */
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, Number.isFinite(value) ? value : minimum));
+}
+
+/** Move only clear low-end submultiples into the model's fixed-tempo range. */
+function normalizeMetricalCentre(bpm: number): number {
+  let result = clamp(bpm, 40, 360);
+  if (result < LOW_QUADRUPLE_BPM_MAX) {
+    result *= 4;
+  } else if (result >= LOW_DOUBLE_BPM_MIN && result < LOW_DOUBLE_BPM_MAX) {
+    result *= 2;
+  }
+  while (result > METRICAL_MAX_BPM) {
+    result /= 2;
+  }
+  return result;
+}
+
+/** Keep local timing refinement from crossing into a neighbouring octave. */
+function alignMetricalResult(bpm: number, centreBpm: number): number {
+  let result = clamp(bpm, 40, 360);
+  while (result < centreBpm * 0.75) {
+    result *= 2;
+  }
+  while (result > centreBpm * (4 / 3)) {
+    result /= 2;
+  }
+  return result;
 }
 
 /** Return a Hann window matching torch.hann_window's periodic default. */
@@ -340,7 +370,8 @@ export async function detectLearnedFixedTimingFromSamples(
   }
   try {
     const activation = await inferBeatActivation(samples, sampleRate);
-    const candidate = searchLearnedGrid(activation, clamp(baseline.bpm, 40, 360));
+    const centreBpm = normalizeMetricalCentre(baseline.bpm);
+    const candidate = searchLearnedGrid(activation, centreBpm);
     if (!(candidate.score > Number.NEGATIVE_INFINITY)) {
       return null;
     }
@@ -352,7 +383,7 @@ export async function detectLearnedFixedTimingFromSamples(
       initialOffsetMs,
       duration,
     );
-    const bpm = refined?.bpm ?? candidate.bpm;
+    const bpm = alignMetricalResult(refined?.bpm ?? candidate.bpm, centreBpm);
     const offsetMs = refined?.offsetMs ?? initialOffsetMs;
     return {
       ...baseline,

@@ -16,7 +16,7 @@ The model is a compact 1-D convolutional network over time-major log-mel feature
 
 At runtime, candidate BPM and phase grids are scored against the learned activation. The score rewards activation on the candidate beats and penalises activation at half-beat, one-third-beat, and two-thirds-beat positions. The extra subdivision checks are important: a grid that visits every third true beat can otherwise tie a correct grid when only the mean activation is used.
 
-The winning grid is refined against raw attacks. This produces the continuous BPM and beat-zero offset used by the editor. The worker does not expose a model choice, a tempo-level choice, or a variable-tempo result.
+The winning grid is refined against raw attacks. Before the result is returned, only clear low-end half- and quarter-tempo aliases are moved back to the model's trained range, and the raw-attack refit is kept within that same local metrical octave. This produces the continuous BPM and beat-zero offset used by the editor. The worker does not expose a model choice, a tempo-level choice, or a variable-tempo result.
 
 ## Current training result
 
