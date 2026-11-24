@@ -96,3 +96,28 @@ test("a Z Hold head follows the pointer row instead of its travel distance", () 
   assert.equal(beatValue(moved.startTime), 3);
   assert.equal(beatValue(moved.endTime), 4);
 });
+
+test("a Z Hold edge drag also moves the Hold on the X axis", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes = [createNote(2, 2, 0, 4)];
+  const session = new EditorSession(chart);
+  const moved = moveTimelineNote(
+    session.chart.judgeLineList[0].notes[0],
+    {
+      kind: "startTime",
+      prekey: true,
+      anchor: 0,
+      lineIndex: 0,
+      start: { x: 100, y: 100 },
+      current: { x: 200, y: 100 },
+      currentSeconds: 2,
+      startFactor: 1,
+      scrolled: false,
+    },
+    session,
+    context(),
+  );
+
+  assert.notEqual(moved.positionX, 0);
+  assert.equal(beatValue(moved.startTime), 2);
+});

@@ -81,6 +81,16 @@ export function moveTimelineNote(
   // Snap once, then move the triple exactly: the delta is a rational difference
   // of two beats, not a float that gets re-rounded on the way into the chart.
   const deltaBeat = subtractBeats(snapTime(seconds, division, tempo), anchor[key]);
+  const rawDeltaX =
+    ((drag.current.x - drag.start.x) / Math.max(1, context.panelWidth - context.inset * 2)) *
+    NOTE_X_SPAN;
+  const spacing = verticalGrid(context.gridCount).spacing;
+  // X snapping is a relative movement grid. Keeping the original offset means
+  // a dragged note does not jump onto a lane just because snapping is enabled.
+  const deltaX =
+    context.snapX && Number.isFinite(spacing) && spacing > 0
+      ? Math.round(rawDeltaX / spacing) * spacing
+      : rawDeltaX;
   if (drag.kind !== "move") {
     if (note.type !== 2) {
       return note;
@@ -98,18 +108,12 @@ export function moveTimelineNote(
           : compareBeats(moved, note.endTime) > 0
             ? normalizeBeat(note.endTime)
             : moved;
-    return { ...note, [key]: bounded };
+    return {
+      ...note,
+      positionX: Math.max(NOTE_X_MIN, Math.min(NOTE_X_MAX, note.positionX + deltaX)),
+      [key]: bounded,
+    };
   }
-  const rawDeltaX =
-    ((drag.current.x - drag.start.x) / Math.max(1, context.panelWidth - context.inset * 2)) *
-    NOTE_X_SPAN;
-  const spacing = verticalGrid(context.gridCount).spacing;
-  // X snapping is a relative movement grid. Keeping the original offset means
-  // a dragged note does not jump onto a lane just because snapping is enabled.
-  const deltaX =
-    context.snapX && Number.isFinite(spacing) && spacing > 0
-      ? Math.round(rawDeltaX / spacing) * spacing
-      : rawDeltaX;
   // A note may be dragged up to beat zero, and no further.
   const mostNegative = subtractBeats(ZERO_BEAT, note.startTime);
   const boundedBeat = compareBeats(deltaBeat, mostNegative) < 0 ? mostNegative : deltaBeat;

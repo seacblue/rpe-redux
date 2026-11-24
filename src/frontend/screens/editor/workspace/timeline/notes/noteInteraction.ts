@@ -17,6 +17,10 @@ import {
 } from "../../../../../../core/edit/timeline/dragPreview.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import {
+  canOpenOverlapMenu,
+  updateOverlapPress,
+} from "../../../../../../core/edit/timeline/overlapPress.ts";
+import {
   dragPrekeyHeld,
   selectedHoldTarget,
 } from "../../../../../../core/edit/timeline/dragPrekey.ts";
@@ -29,7 +33,7 @@ import type {
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineNoteInteractionReceiver } from "../drawing/timelineReceiver.ts";
 import { captureNoteBaseline, marqueeHistoryKey } from "../selection/rectangleSelection.ts";
-import { hits } from "./noteHitTest.ts";
+import { holdPart, hits } from "./noteHitTest.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
@@ -52,7 +56,7 @@ function syncNoteDragPreview(
     kind: "note",
     lineIndex: entry.lineIndex,
     index: entry.index,
-    // A prekey drag is always an edge drag, which never reads positionX.
+    // A prekey drag previews both the Hold edge time and its horizontal move.
     note: receiver.movedNote(entry.note as TimelineNote),
   });
 }
@@ -100,6 +104,12 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   this.gestures.hoverArea = "notes";
   if (!this.gestures.drag) {
     this.setPreviewChart(null);
+  }
+  if (this.gestures.overlapPress) {
+    this.gestures.overlapPress = updateOverlapPress(
+      this.gestures.overlapPress,
+      this.gestures.cursor,
+    );
   }
   // A pan belongs to the pointer that started it; another pointer moving over
   // the canvas must not steal it or corrupt the drag's previous sample.
@@ -237,6 +247,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   );
   this.gestures.clipboardPointer = position;
   this.gestures.hoverArea = "notes";
+  this.gestures.overlapPress = null;
   // An armed offset pick owns the next left press before any note hit test runs:
   // it targets a grid line, so a note under the pointer must not be selected,
   // dragged, or treated as the pick target.
@@ -246,9 +257,31 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   ) {
     return;
   }
-  const hit = this.hit(position);
   const session = this.getSession();
+  let hit = this.hit(position);
   const dragPrekey = dragPrekeyHeld();
+  const overlapEligible =
+    event.button === 0 &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !dragPrekey &&
+    !this.gestures.tool &&
+    !this.gestures.pendingHold;
+  const overlapping = overlapEligible ? hits.call(this, position) : [];
+  if (overlapping.length > 1) {
+    const selected = overlapping.find((entry) =>
+      session
+        .selectedNoteEntries()
+        .some(
+          (selectedEntry) =>
+            selectedEntry.lineIndex === entry.lineIndex && selectedEntry.index === entry.index,
+        ),
+    );
+    if (selected) {
+      hit = selected;
+    }
+    this.gestures.overlapPress = { start: position, moved: false };
+  }
   const multiMode = session.multiLineActive;
   const panelCount = this.viewport.panelCount("notes");
   const multiPanel = multiMode && panelCount > 1;
@@ -337,38 +370,34 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     event.ctrlKey &&
     !event.shiftKey &&
     !event.altKey &&
-    hit?.item.type === 2
+    hit?.item.type === 2 &&
+    holdPart.call(this, hit, position) === "head"
   ) {
     const lineIndex = hit.lineIndex ?? session.lineIndex;
-    const startY = session.multiLineActive
-      ? this.viewport.noteVerticalForLine(hit.start, lineIndex, this.notesCanvas.clientHeight)
-      : this.viewport.vertical(hit.start);
-    if (Math.abs(position.y - startY) <= 8) {
-      if (lineIndex !== session.lineIndex) {
-        session.selectLine(lineIndex);
-      }
-      session.selection.clear();
-      session.selection.add(hit.index);
-      session.selectionMode = "single";
-      session.focus = "notes";
-      this.gestures.drag = {
-        kind: "startTime",
-        start: position,
-        current: position,
-        anchor: hit.index,
-        lineIndex,
-        startFactor: this.viewport.noteFactorForLine(lineIndex),
-        currentSeconds:
-          this.viewport.tempo.seconds(this.viewport.origin) +
-          (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
-            this.viewport.scaleForArea("notes"),
-        originSeconds: this.viewport.tempo.seconds(this.viewport.origin),
-      };
-      this.notesCanvas.setPointerCapture(event.pointerId);
-      session.notify();
-      this.changed();
-      return;
+    if (lineIndex !== session.lineIndex) {
+      session.selectLine(lineIndex);
     }
+    session.selection.clear();
+    session.selection.add(hit.index);
+    session.selectionMode = "single";
+    session.focus = "notes";
+    this.gestures.drag = {
+      kind: "startTime",
+      start: position,
+      current: position,
+      anchor: hit.index,
+      lineIndex,
+      startFactor: this.viewport.noteFactorForLine(lineIndex),
+      currentSeconds:
+        this.viewport.tempo.seconds(this.viewport.origin) +
+        (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
+          this.viewport.scaleForArea("notes"),
+      originSeconds: this.viewport.tempo.seconds(this.viewport.origin),
+    };
+    this.notesCanvas.setPointerCapture(event.pointerId);
+    session.notify();
+    this.changed();
+    return;
   }
   // A Ctrl+click on a note is the curve-note quick pick; it must win over the
   // ordinary additive selection and any sweep shortcut bound to the same press.
@@ -451,43 +480,39 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   ) {
     return;
   }
-  if (
-    event.button === 0 &&
-    !event.ctrlKey &&
-    !event.shiftKey &&
-    !this.gestures.tool &&
-    !this.gestures.pendingHold
-  ) {
-    const overlapping = hits.call(this, position);
-    if (overlapping.length > 1) {
-      // Open after the click that follows this press. A native popover opened
-      // during pointerdown reads that same click as an outside click and
-      // closes immediately, so let the click finish and defer once more.
-      const canvas = this.notesCanvas;
-      const actions = overlapActions(this, overlapping);
-      canvas.addEventListener(
-        "click",
-        () => {
-          this.gestures.overlapMenuOpen = true;
-          this.gestures.overlapHover = null;
-          this.changed();
-          openOverlapMenu(
-            canvas,
-            event.clientX,
-            event.clientY,
-            t("editor.overlap.title"),
-            actions,
-            () => {
-              this.gestures.overlapMenuOpen = false;
-              this.gestures.overlapHover = null;
-              this.changed();
-            },
-          );
-        },
-        { once: true },
-      );
-      return;
-    }
+  if (overlapping.length > 1) {
+    // Open after an in-place click. A native popover opened during pointerdown
+    // reads that same click as an outside click and closes immediately, so let
+    // the click finish and defer once more. A moved press continues through the
+    // normal note-selection and drag path below.
+    const canvas = this.notesCanvas;
+    const actions = overlapActions(this, overlapping);
+    canvas.addEventListener(
+      "click",
+      () => {
+        const press = this.gestures.overlapPress;
+        this.gestures.overlapPress = null;
+        if (!canOpenOverlapMenu(press)) {
+          return;
+        }
+        this.gestures.overlapMenuOpen = true;
+        this.gestures.overlapHover = null;
+        this.changed();
+        openOverlapMenu(
+          canvas,
+          event.clientX,
+          event.clientY,
+          t("editor.overlap.title"),
+          actions,
+          () => {
+            this.gestures.overlapMenuOpen = false;
+            this.gestures.overlapHover = null;
+            this.changed();
+          },
+        );
+      },
+      { once: true },
+    );
   }
   if (event.button === 0) {
     session.selectionRevision += 1;
@@ -617,16 +642,13 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       this.changed();
       return;
     }
-    const hitVertical = (beat: number) =>
-      session.multiLineActive
-        ? this.viewport.noteVerticalForLine(beat, hit.lineIndex, this.notesCanvas.clientHeight)
-        : this.viewport.vertical(beat);
+    const part = hit.item.type === 2 ? holdPart.call(this, hit, position) : null;
     const kind =
       dragPrekey && hit.item.type === 2
         ? "startTime"
-        : hit.item.type === 2 && Math.abs(position.y - hitVertical(hit.end)) <= 8
+        : part === "tail"
           ? "endTime"
-          : hit.item.type === 2 && Math.abs(position.y - hitVertical(hit.start)) <= 8
+          : part === "head"
             ? "startTime"
             : "move";
     this.gestures.drag = {
@@ -749,9 +771,10 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
     const changed =
       !startsAtPointer ||
       session.selectedNoteEntries().some(({ note }) => {
-        // A prekey drag is always an edge drag, which never reads positionX.
+        // A prekey drag may move the Hold edge and the note horizontally.
         const next = this.movedNote(note as TimelineNote);
         return (
+          next.positionX !== note.positionX ||
           compareBeats(next.startTime, note.startTime) !== 0 ||
           compareBeats(next.endTime, note.endTime) !== 0
         );

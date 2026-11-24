@@ -1,8 +1,10 @@
 /** Answers which notes the field shows and which one the pointer is over. */
 import {
   hitTimelineNote,
+  holdPartAt,
   timelineNoteCandidates,
 } from "../../../../../../core/edit/timeline/hitTest.ts";
+import type { HoldPart } from "../../../../../../core/edit/timeline/hitTest.ts";
 import type {
   TimelineNoteEntry,
   TimelinePoint,
@@ -125,6 +127,33 @@ export function hit(
     vertical: (beat, lineIndex) => this.viewport.noteVerticalForLine(beat, lineIndex),
     rotation: (index, lineIndex) => noteOverlapRotation(rotations.get(lineIndex)?.get(index)),
   });
+}
+
+/** Resolve the visible Hold cap or body under a note-field pointer. */
+export function holdPart(
+  this: TimelineNoteHitTestReceiver,
+  entry: TimelineNoteEntry,
+  position: TimelinePoint,
+): HoldPart | null {
+  if (entry.item.type !== 2) {
+    return null;
+  }
+  const width = this.viewport.noteWidth(entry.item);
+  const skin = this.appearance.skin;
+  const head = skin?.holdHeadTexture(false);
+  const tail = skin?.holdEndTexture(false);
+  const headLength =
+    head && head.bounds.width > 0 ? width * (head.bounds.height / head.bounds.width) : 8;
+  const tailLength =
+    tail && tail.bounds.width > 0 ? width * (tail.bounds.height / tail.bounds.width) : 8;
+  return holdPartAt(
+    entry.item,
+    this.viewport.noteVerticalForLine(entry.start, entry.lineIndex),
+    this.viewport.noteVerticalForLine(entry.end, entry.lineIndex),
+    position.y,
+    headLength,
+    tailLength,
+  );
 }
 
 /** Every note under `position`, used for the overlap picker. */
