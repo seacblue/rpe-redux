@@ -29,6 +29,7 @@ export function LibraryFloatingActions({
   onDelete(entry: LibraryEntry): void;
 }) {
   const { t } = useTranslation();
+  const openDisabled = opening || !entry;
   const newLabel = t("workspace.welcome.library.action.new");
   const importLabel = t("workspace.welcome.library.action.import");
   const openLabel = t("workspace.welcome.library.open");
@@ -56,7 +57,7 @@ export function LibraryFloatingActions({
           onClick={() => window.dispatchEvent(new Event(IMPORT_CHART_EVENT))}
         />
       </div>
-      <div className="redux-welcome-floating-entry">
+      <div className="redux-welcome-floating-entry" data-disabled={openDisabled || undefined}>
         {entry && (
           <>
             <IconButton
@@ -80,7 +81,7 @@ export function LibraryFloatingActions({
           className="redux-welcome-floating-open"
           aria-label={openLabel}
           data-tip-title={openLabel}
-          disabled={opening || !entry}
+          disabled={openDisabled}
           onClick={() => {
             if (entry) {
               onOpen(entry);

@@ -426,7 +426,8 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
   if (!multiNotes) {
     // Resolving the visible notes also refreshes this line's index, which the
     // prepared render data and paint-order query below read.
-    const visibleEntries = this.visible();
+    const hidden = this.getPreviewSession?.() ? undefined : this.hiddenNotes;
+    const visibleEntries = this.visible().filter((entry) => !hidden?.has(entry.item));
     const { factor: noteFactor, project: verticalProjection } = noteProjectionFor(
       this,
       session.lineIndex,
@@ -468,12 +469,15 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
           (left, right) => notePaintLayer(left.item.type) - notePaintLayer(right.item.type),
         )
       : this.cache.paintOrderedNotes(session.lineIndex, bottomBeat, topBeat);
+    const visiblePaintEntries = hidden
+      ? paintEntries.filter((entry) => !hidden.has(entry.item))
+      : paintEntries;
     const hasRemoteSelection = this.remoteSelectedNoteIds.size > 0;
     // One options object per pass: `drawNote` reads every field synchronously,
     // so reusing it keeps a dense line from allocating one object per note.
     let paintOptions: NotePaintOptions | undefined;
     // Holds paint before the note heads so a Hold body never covers one.
-    for (const entry of paintEntries) {
+    for (const entry of visiblePaintEntries) {
       const selected = session.selection.has(entry.index);
       // The hover check only decides the highlight while the overlap picker is open.
       const highlightSelected = overlapSelectionSuppressed
@@ -767,8 +771,11 @@ export function drawMultiLineNotes(
     const draggingLine = this.gestures.drag?.lineIndex === lineIndex && !this.gestures.preview;
     // Paint layer first so Holds stay beneath note heads; author order keeps
     // the original index order inside one layer.
+    const hidden = this.getPreviewSession?.() ? undefined : this.hiddenNotes;
     const entries = this.cache.paintOrderedNotes(lineIndex, bottomBeat, topBeat);
-    for (const { index, item: sourceNote } of entries) {
+    for (const { index, item: sourceNote } of hidden
+      ? entries.filter((entry) => !hidden.has(entry.item))
+      : entries) {
       const selected = selectedSet.has(index);
       const moved = selected && draggingLine;
       const note = moved ? this.movedNote(sourceNote) : sourceNote;

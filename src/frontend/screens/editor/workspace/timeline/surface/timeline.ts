@@ -16,7 +16,7 @@ import { TimelineAppearance } from "../drawing/timelineAppearance.ts";
 import { TimelineCache } from "../drawing/timelineCache.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
-import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
+import type { JudgeLineEvent, JudgeLineNote } from "../../../../../../core/global/chart/chart.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import { EventInteraction } from "../events/eventInteraction.ts";
 import { TimelineEventBatch } from "../events/timelineEventBatch.ts";
@@ -80,6 +80,8 @@ export class Timeline {
    * skips them visually while the preview is on; the chart itself is untouched.
    */
   hiddenEvents?: ReadonlySet<JudgeLineEvent>;
+  /** Notes an active editor preview replaces; the note layer skips them visually. */
+  hiddenNotes?: ReadonlySet<JudgeLineNote>;
 
   /**
    * Note ids selected by other room members, rendered with the collaboration tint.

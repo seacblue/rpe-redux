@@ -6,6 +6,7 @@
  * messages stay local to the form.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
@@ -367,7 +368,10 @@ export function MultiEditForm({
               field="result-ghost"
               label={t("editorPanels.multiEdit.previewToggle")}
               dirty={!previewEnabled}
-              onReset={() => setPreviewEnabled(true)}
+              onReset={() => {
+                flushSync(() => setPreviewEnabled(true));
+                onChange(values);
+              }}
             />
           }
           control={(id) => (
@@ -376,7 +380,10 @@ export function MultiEditForm({
               type="checkbox"
               checked={previewEnabled}
               onChange={(event) => {
-                setPreviewEnabled(event.currentTarget.checked);
+                const checked = event.currentTarget.checked;
+                // Commit the toggle before the panel reads the imperative handle;
+                // the same event must repaint the timeline's hidden sources.
+                flushSync(() => setPreviewEnabled(checked));
                 onChange(values);
               }}
             />

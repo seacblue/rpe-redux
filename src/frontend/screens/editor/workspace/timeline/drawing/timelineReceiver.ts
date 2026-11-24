@@ -3,7 +3,7 @@
  * satellite modules; the runtime supplies these fields to every method.
  */
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
-import type { JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
+import type { JudgeLineEvent, JudgeLineNote } from "../../../../../../core/global/chart/chart.ts";
 import type { TimelineAppearance } from "./timelineAppearance.ts";
 import type { TimelineCache } from "./timelineCache.ts";
 import type { TimelineGestures } from "../interaction/timelineGestures.ts";
@@ -52,6 +52,8 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   getPreviewSession(): EditorSession | null;
   /** Events an active editor preview removes; the event layer skips them visually. */
   hiddenEvents?: ReadonlySet<JudgeLineEvent>;
+  /** Notes an active editor preview replaces; the note layer skips them visually. */
+  hiddenNotes?: ReadonlySet<JudgeLineNote>;
   /** Note ids another room member selected, drawn with the collaboration tint. */
   readonly remoteSelectedNoteIds: ReadonlySet<string>;
   /** Event ids another room member selected, drawn with the collaboration tint. */
@@ -215,6 +217,7 @@ export type TimelineNoteDrawingReceiver = Pick<
   | "drawMultiLineGrid"
   | "drawMultiLineNotes"
   | "eventTypes"
+  | "getPreviewSession"
   | "getSession"
   | "gestures"
   | "grid"
@@ -225,6 +228,7 @@ export type TimelineNoteDrawingReceiver = Pick<
   | "notesGridBatch"
   | "notesCanvas"
   | "notesCue"
+  | "hiddenNotes"
   | "remoteSelectedNoteIds"
   | "rectangleStart"
   | "viewport"

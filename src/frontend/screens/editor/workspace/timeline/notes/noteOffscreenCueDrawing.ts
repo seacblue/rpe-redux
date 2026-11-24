@@ -28,6 +28,7 @@ export function drawNoteTimelineCues(
     return;
   }
   const session = receiver.getSession();
+  const hidden = receiver.getPreviewSession?.() ? undefined : receiver.hiddenNotes;
   const multiplePanels = session.multiLineActive && receiver.viewport.panelCount("notes") > 1;
   const lineIndices = session.multiLineActive
     ? session.targetLineIndices.length > 0
@@ -75,6 +76,9 @@ export function drawNoteTimelineCues(
       );
       for (let index = 0; index < noteIndex.notes.length; index++) {
         const note = noteIndex.notes[index];
+        if (hidden?.has(note)) {
+          continue;
+        }
         const prepared = cachedNoteData[index];
         if (!prepared || Math.max(prepared.start, prepared.end) < bottomBeat) {
           continue;

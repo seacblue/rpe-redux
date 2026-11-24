@@ -196,8 +196,10 @@
   transition: width var(--design-dur-overlay) var(--design-ease-enter);
 }
 
-.redux-app-root .redux-home-page .redux-welcome-floating-entry:hover,
-.redux-app-root .redux-home-page .redux-welcome-floating-entry:focus-within {
+.redux-app-root .redux-home-page .redux-welcome-floating-entry:not([data-disabled="true"]):hover,
+.redux-app-root
+  .redux-home-page
+  .redux-welcome-floating-entry:not([data-disabled="true"]):focus-within {
   width: calc(var(--welcome-floating-button-width) * 3);
 }
 
@@ -302,10 +304,15 @@
 
   &:disabled {
     border-color: var(--edge-divider);
-    background: var(--surface-muted);
+    background: var(--surface-sunken);
     color: var(--foreground-muted);
+    cursor: default;
     opacity: 1;
   }
+}
+
+.redux-app-root .redux-home-page .redux-welcome-floating-entry[data-disabled="true"] {
+  cursor: default;
 }
 
 .redux-app-root .redux-home-page .redux-welcome-floating-new,

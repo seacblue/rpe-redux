@@ -5,6 +5,7 @@
  * Planning and chart mutation stay in `core/edit/multiEdit`; this module owns
  * the form element, the preview lifetime, and the notification text.
  */
+/* eslint-disable max-lines -- the panel owns form, preview, and ghost rendering coordination. */
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
@@ -20,11 +21,19 @@ import type {
   MultiEditResult,
 } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import { beatValue } from "../../../../../core/global/chart/timing/beat.ts";
-import type { Chart, JudgeLineEvent } from "../../../../../core/global/chart/chart.ts";
+import type {
+  Chart,
+  JudgeLineEvent,
+  JudgeLineNote,
+} from "../../../../../core/global/chart/chart.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import { eventColumnBounds } from "../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type { EventChain } from "../../../../../core/edit/timeline/eventChains.ts";
-import { readCanvasPalette } from "../../canvas/palette.ts";
+import {
+  readCanvasPalette,
+  selectionHighlightColor,
+  selectionColor,
+} from "../../canvas/palette.ts";
 import { NOTE_GHOST_FILTER } from "../../canvas/noteGhostVisual.ts";
 import { canvasFont } from "../../canvas/text.ts";
 import { fitNumericText } from "../../canvas/numericText.ts";
@@ -41,6 +50,7 @@ import type { MultiEditState } from "./model.ts";
 import type { EditorFeedback } from "../../workspace/runtime/session/feedback.ts";
 import { eventColumnForTrack } from "../../workspace/timeline/events/eventColumns.ts";
 import { drawEventCurve, eventCurveStroke } from "../../workspace/timeline/events/eventCurve.ts";
+import { drawEventSelectionFilter } from "../../workspace/timeline/events/eventSelectionDrawing.ts";
 import {
   affectedObjectIds,
   batchPaintLayer,
@@ -60,6 +70,7 @@ type MultiEditTimeline = Pick<
   | "cache"
   | "changed"
   | "hiddenEvents"
+  | "hiddenNotes"
 > & {
   viewport: Pick<
     Timeline["viewport"],
@@ -110,6 +121,8 @@ export class MultiEditPanel {
   };
   /** Source events a clone preview removes; hidden only while its ghost is on. */
   private hiddenSourceEvents?: ReadonlySet<JudgeLineEvent>;
+  /** Source notes replaced by an edit preview; hidden only while its ghost is on. */
+  private hiddenSourceNotes?: ReadonlySet<JudgeLineNote>;
   /** Keeps selected events addressable while the visible event layer changes. */
   private selectionSnapshot?: SelectionSnapshot;
   /** Selection membership associated with `selectionSnapshot`. */
@@ -164,7 +177,9 @@ export class MultiEditPanel {
     this.ghostChanges = undefined;
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
+    this.hiddenSourceNotes = undefined;
     this.timeline.hiddenEvents = undefined;
+    this.timeline.hiddenNotes = undefined;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
     this.signature = null;
@@ -381,7 +396,9 @@ export class MultiEditPanel {
     this.ghostChanges = undefined;
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
+    this.hiddenSourceNotes = undefined;
     this.timeline.hiddenEvents = undefined;
+    this.timeline.hiddenNotes = undefined;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
     this.invalidate();
@@ -406,7 +423,9 @@ export class MultiEditPanel {
     this.ghostChanges = undefined;
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
+    this.hiddenSourceNotes = undefined;
     this.timeline.hiddenEvents = undefined;
+    this.timeline.hiddenNotes = undefined;
     this.selectionSnapshot = undefined;
     this.selectionSnapshotSignature = undefined;
     this.chart = this.getSession().chart;
@@ -423,7 +442,9 @@ export class MultiEditPanel {
     this.form = undefined;
     this.previewEnabled = undefined;
     this.hiddenSourceEvents = undefined;
+    this.hiddenSourceNotes = undefined;
     this.timeline.hiddenEvents = undefined;
+    this.timeline.hiddenNotes = undefined;
     flushSync(() => this.state.set(null));
   }
 
@@ -477,6 +498,7 @@ export class MultiEditPanel {
     this.ghostChanges = undefined;
     this.ghostRanges = undefined;
     this.hiddenSourceEvents = undefined;
+    this.hiddenSourceNotes = undefined;
     let message = "";
     let isError = false;
     try {
@@ -525,6 +547,19 @@ export class MultiEditPanel {
         );
       } else {
         this.result = previewMultiEdit(snapshot, this.kind, options as MultiEditFormValues);
+        const changedSources = this.result.changes.filter(
+          (change) =>
+            !change.copy && JSON.stringify(change.before) !== JSON.stringify(change.after),
+        );
+        if (this.kind === "notes") {
+          this.hiddenSourceNotes = new Set(
+            changedSources.map((change) => change.before as JudgeLineNote),
+          );
+        } else {
+          this.hiddenSourceEvents = new Set(
+            changedSources.map((change) => change.before as JudgeLineEvent),
+          );
+        }
         this.form?.setReady?.(false);
         this.form?.setWarning?.("");
       }
@@ -537,6 +572,7 @@ export class MultiEditPanel {
     this.form?.setResult(message, isError);
     const previewOn = this.form?.isPreviewEnabled() ?? this.previewEnabled?.checked ?? false;
     this.syncHiddenEvents(previewOn ? this.hiddenSourceEvents : undefined, false);
+    this.syncHiddenNotes(previewOn ? this.hiddenSourceNotes : undefined, false);
     // Every clone draft change, including the preview and keep-source switches,
     // repaints the timeline with the same proposal the form now shows.
     this.timeline.changed?.();
@@ -547,8 +583,8 @@ export class MultiEditPanel {
    * The edit this panel would commit right now, or null when the preview is off
    * or there is nothing to preview.
    *
-   * The gate feeds only the timeline ghost; the preview stage and playback keep
-   * sampling the live chart, so a proposal never becomes actual execution.
+   * The result is a transient timeline render input; the live chart remains the
+   * only commit, playback, and realtime-preview source.
    */
   previewResult(): MultiEditResult | null {
     if (
@@ -567,6 +603,18 @@ export class MultiEditPanel {
       return;
     }
     this.timeline.hiddenEvents = hidden;
+    this.timeline.changed?.();
+    if (redraw) {
+      this.invalidate();
+    }
+  }
+
+  /** Hand the replaced-note set to the timeline, redrawing only when it changes. */
+  private syncHiddenNotes(hidden: ReadonlySet<JudgeLineNote> | undefined, redraw = true): void {
+    if (this.timeline.hiddenNotes === hidden) {
+      return;
+    }
+    this.timeline.hiddenNotes = hidden;
     this.timeline.changed?.();
     if (redraw) {
       this.invalidate();
@@ -594,6 +642,7 @@ export class MultiEditPanel {
   drawTimeline(): void {
     const result = this.previewResult();
     this.syncHiddenEvents(result ? this.hiddenSourceEvents : undefined);
+    this.syncHiddenNotes(result ? this.hiddenSourceNotes : undefined);
     if (!result) {
       return;
     }
@@ -684,17 +733,30 @@ export class MultiEditPanel {
           context.save();
           context.globalAlpha = 0.5;
           context.filter = NOTE_GHOST_FILTER;
-          const color = Array.isArray(item.tint)
-            ? item.tint
-            : Array.isArray(item.color)
-              ? item.color
-              : undefined;
-          const noteColorStyle = color ? { mode: "tint" as const, color } : undefined;
+          const selectedNoteColor = selectionHighlightColor(palette);
+          const selectedNoteColorStyle = { mode: "selected" as const, color: selectedNoteColor };
           const skin = timeline.appearance.skin;
           if (note.type === 2) {
-            skin?.hold(context, horizontal, bottom, top, noteWidth, false, true, noteColorStyle);
+            skin?.hold(
+              context,
+              horizontal,
+              bottom,
+              top,
+              noteWidth,
+              false,
+              true,
+              selectedNoteColorStyle,
+            );
           } else {
-            skin?.head(context, note.type, horizontal, bottom, noteWidth, false, noteColorStyle);
+            skin?.head(
+              context,
+              note.type,
+              horizontal,
+              bottom,
+              noteWidth,
+              false,
+              selectedNoteColorStyle,
+            );
           }
           context.restore();
         }
@@ -730,6 +792,11 @@ export class MultiEditPanel {
           ghostHeight,
         );
         context.filter = "none";
+        drawEventSelectionFilter(
+          context,
+          { x: bounds.x, y: top, width: bounds.width, height: ghostHeight },
+          selectionColor("selected-event-color", "#00C800"),
+        );
         context.globalAlpha = 1;
         // The skin bar alone does not communicate the eased result; reuse the
         // timeline's own event curve so the ghost keeps the same easing symbol.

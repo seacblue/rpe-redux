@@ -185,8 +185,8 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
         runtime.realtimePreview,
       );
       const cameraPreview = freeCameraState.get().active;
-      // A multi-edit ghost is a timeline overlay only; the preview stage keeps
-      // sampling the live chart so a proposal never becomes its execution.
+      // Multi-edit ghosts belong to the timeline only; realtime preview always
+      // samples the live chart (or another explicitly owned preview session).
       const viewChart = trajectoryView?.chart ?? viewSession.chart;
       const viewSeconds = trajectoryView?.seconds ?? frameSeconds;
       const previewChartChanged = viewChart !== previousPreviewChart;
