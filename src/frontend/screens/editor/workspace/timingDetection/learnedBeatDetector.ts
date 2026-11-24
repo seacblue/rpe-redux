@@ -9,7 +9,7 @@
 import type { BeatDetectionResult } from "../../../../../core/media/beatDetection.ts";
 import { refineFixedTimingFromSamples } from "../../../../../core/media/beatDetection.ts";
 
-const MODEL_PATH = "/assets/redux/models/beat_this_small0.onnx";
+const MODEL_PATH = "/assets/redux/models/rpe_fixed_beat.onnx";
 const SAMPLE_RATE = 22050;
 const FFT_SIZE = 1024;
 const HOP_SIZE = 441;
@@ -62,7 +62,7 @@ function reflectedIndex(index: number, length: number): number {
   return result;
 }
 
-/** Resample mono PCM onto Beat This's 22050 Hz input rate. */
+/** Resample mono PCM onto the model's 22050 Hz input rate. */
 function resample(samples: Float32Array, sourceRate: number): Float32Array {
   if (sourceRate === SAMPLE_RATE) {
     return samples;
@@ -81,7 +81,7 @@ function resample(samples: Float32Array, sourceRate: number): Float32Array {
   return result;
 }
 
-/** Build Beat This's Slaney frequency scale in mels. */
+/** Build the model's Slaney frequency scale in mels. */
 function hzToMel(hz: number): number {
   const linearStep = 200 / 3;
   const linearLimit = 1000;
@@ -90,7 +90,7 @@ function hzToMel(hz: number): number {
   return hz < linearLimit ? hz / linearStep : linearMels + Math.log(hz / linearLimit) / logStep;
 }
 
-/** Convert a Beat This mel coordinate back to Hz. */
+/** Convert a model mel coordinate back to Hz. */
 function melToHz(mel: number): number {
   const linearStep = 200 / 3;
   const linearLimit = 1000;
@@ -164,7 +164,7 @@ function fftMagnitude(real: Float64Array, imaginary: Float64Array): void {
   }
 }
 
-/** Convert PCM to the time-major log-mel tensor expected by Beat This. */
+/** Convert PCM to the time-major log-mel tensor expected by the model. */
 function buildLogMel(
   samples: Float32Array,
   sourceRate: number,
@@ -196,7 +196,7 @@ function buildLogMel(
   return { values, frames };
 }
 
-/** Load the local ONNX teacher session once per worker. */
+/** Load the local ONNX session once per worker. */
 async function loadSession(): Promise<{ ort: OrtModule; session: OrtSession }> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
@@ -205,7 +205,7 @@ async function loadSession(): Promise<{ ort: OrtModule; session: OrtSession }> {
       ort.env.wasm.wasmPaths = { wasm: wasm.toString() };
       const response = await fetch(new URL(MODEL_PATH, globalThis.location.href));
       if (!response.ok) {
-        throw new Error(`Beat model request failed: ${response.status}`);
+        throw new Error(`Fixed-beat model request failed: ${response.status}`);
       }
       const session = await ort.InferenceSession.create(await response.arrayBuffer(), {
         executionProviders: ["wasm"],
@@ -233,10 +233,14 @@ function sampleActivation(values: Float32Array, position: number): number {
 function scoreCandidate(values: Float32Array, bpm: number, phaseFrames: number): number {
   const period = (FRAME_RATE * 60) / bpm;
   const on: number[] = [];
-  const off: number[] = [];
+  const offHalf: number[] = [];
+  const offThirdA: number[] = [];
+  const offThirdB: number[] = [];
   for (let position = phaseFrames; position < values.length; position += period) {
     on.push(sampleActivation(values, position));
-    off.push(sampleActivation(values, position + period / 2));
+    offHalf.push(sampleActivation(values, position + period / 2));
+    offThirdA.push(sampleActivation(values, position + period / 3));
+    offThirdB.push(sampleActivation(values, position + (2 * period) / 3));
   }
   if (on.length < 4) {
     return Number.NEGATIVE_INFINITY;
@@ -244,7 +248,11 @@ function scoreCandidate(values: Float32Array, bpm: number, phaseFrames: number):
   const sorted = [...on].sort((left, right) => left - right);
   const upperQuartile = sorted[Math.floor(sorted.length * 0.75)] ?? 0;
   const onMean = on.reduce((sum, value) => sum + value, 0) / on.length;
-  const offMean = off.reduce((sum, value) => sum + value, 0) / off.length;
+  const offMean =
+    (offHalf.reduce((sum, value) => sum + value, 0) +
+      0.5 * offThirdA.reduce((sum, value) => sum + value, 0) +
+      0.5 * offThirdB.reduce((sum, value) => sum + value, 0)) /
+    (2 * on.length);
   return onMean - 0.35 * offMean + 0.1 * upperQuartile;
 }
 

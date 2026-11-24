@@ -70,7 +70,7 @@ npm run smoke
 
 ## License and provenance
 
-RPE Redux is distributed under the [PolyForm Noncommercial License 1.0.0](LICENSE). It is derived from [`rpe-next`](https://github.com/kclg-YSJ/rpe-next); upstream copyright and asset notices are retained in [NOTICE](NOTICE). Audio/model dataset boundaries are recorded in the [dataset provenance policy](docs/research/dataset-provenance.md); external osu! previews used for research are never bundled.
+RPE Redux is distributed under the [PolyForm Noncommercial License 1.0.0](LICENSE). It is derived from [`rpe-next`](https://github.com/kclg-YSJ/rpe-next); upstream copyright and asset notices are retained in [NOTICE](NOTICE). The fixed-beat model is trained and evaluated by the project training script; only its generated weight artifact is shipped.
 
 ## Documentation
 
