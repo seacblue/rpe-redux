@@ -273,7 +273,6 @@ export function DeveloperSettings({ theme }: SettingsPageContext) {
         data-control="toggle"
         htmlFor="performance-hud-enabled"
         label={t("settings.help.developer.performanceHud")}
-        description={t("settings.help.developer.performanceHudHint")}
         control={
           <Input
             id="performance-hud-enabled"
@@ -288,7 +287,6 @@ export function DeveloperSettings({ theme }: SettingsPageContext) {
         data-control="toggle"
         htmlFor="developer-detector"
         label={t("settings.help.developer.detector")}
-        description={t("settings.help.developer.detectorHint")}
         control={
           <Input
             id="developer-detector"
@@ -303,7 +301,6 @@ export function DeveloperSettings({ theme }: SettingsPageContext) {
         data-control="toggle"
         htmlFor="developer-note-borders"
         label={t("settings.help.developer.noteBorders")}
-        description={t("settings.help.developer.noteBordersHint")}
         control={
           <Input
             id="developer-note-borders"
@@ -317,13 +314,6 @@ export function DeveloperSettings({ theme }: SettingsPageContext) {
         className="redux-setting"
         htmlFor="export-diagnostic-bundle"
         label={t("settings.help.developer.exportBundle")}
-        description={
-          isDesktop()
-            ? t("settings.help.developer.exportBundleHint")
-            : `${t("settings.help.developer.exportBundleHint")} ${t(
-                "settings.help.developer.exportBundleDesktopOnly",
-              )}`
-        }
         control={
           <Button
             id="export-diagnostic-bundle"
