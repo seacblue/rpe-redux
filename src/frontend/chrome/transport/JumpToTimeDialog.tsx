@@ -75,7 +75,7 @@ function prefillValue(runtime: EditorHostRuntime | null, mode: JumpMode): string
 /** The progress card's jump-to-time dialog, mounted only while it is open. */
 export function JumpToTimeDialog() {
   const dialog = useSyncExternalStore(subscribeMarkerDialog, getMarkerDialog, getMarkerDialog);
-  return dialog === "jump" ? <JumpDialog onClose={closeMarkerDialog} /> : null;
+  return dialog?.kind === "jump" ? <JumpDialog onClose={closeMarkerDialog} /> : null;
 }
 
 /** The open dialog's editable state and submit path. */

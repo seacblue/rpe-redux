@@ -26,18 +26,37 @@
 .marker-manager-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 0;
   max-height: min(48vh, 420px);
   overflow: auto;
-  padding: var(--space-1);
-  border: 1px solid var(--edge-divider);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
+  padding: 0;
+  scrollbar-color: transparent transparent;
+}
+
+.marker-manager-list::-webkit-scrollbar,
+.marker-manager-list::-webkit-scrollbar-track,
+.marker-manager-list::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 .marker-manager-row {
   flex: none;
-  padding: var(--space-1) var(--space-2);
+  padding: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--edge-divider);
+}
+
+.marker-manager-row:last-child {
+  border-bottom: 0;
+}
+
+.redux-app-root .marker-manager-row:hover:not(.is-selected):not([aria-selected="true"]) {
+  background: transparent;
+}
+
+.redux-app-root .marker-manager-row:is(.is-selected, [aria-selected="true"], :focus-visible),
+.redux-app-root .marker-manager-row:is(.is-selected, [aria-selected="true"]):hover {
+  background: transparent;
 }
 
 .marker-manager-color {
@@ -52,8 +71,7 @@
   font-size: var(--type-caption);
 }
 
-.marker-manager-empty,
-.marker-manager-hint {
+.marker-manager-empty {
   margin: 0;
   .meta-text();
 }
@@ -61,4 +79,13 @@
 .marker-manager-empty {
   padding: var(--space-5) var(--space-3);
   text-align: center;
+}
+
+.timeline-marker-create-dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+}
+
+.timeline-marker-create-form {
+  display: grid;
+  gap: var(--space-2);
 }

@@ -164,7 +164,7 @@ export function MarkerManagerDialog() {
   const session = runtime?.session ?? null;
   const { t } = useTranslation();
   const dialog = useSyncExternalStore(subscribeMarkerDialog, getMarkerDialog, getMarkerDialog);
-  const open = dialog === "manager";
+  const open = dialog?.kind === "manager";
   // The controller republishes this snapshot after a chart commit, so an undo
   // or a peer's edit reaches the open dialog without a second session store.
   useEditorHostValue((editor) => editor.ui.timelineMarkers.snapshot, null);
@@ -319,11 +319,6 @@ export function MarkerManagerDialog() {
                 />
               ))}
             </div>
-            {selectedIndex === null && (
-              <p className="marker-manager-hint">
-                {t("chrome.transport.markerManager.selectFirst")}
-              </p>
-            )}
           </>
         )}
       </div>

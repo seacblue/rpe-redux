@@ -7,10 +7,16 @@
  */
 import { createValue } from "../../../core/state/values.ts";
 
-/** One dialog the progress card can open. */
-export type MarkerDialogKind = "jump" | "manager";
+/** One dialog the transport and timeline surfaces can open. */
+export type MarkerDialogKind = "jump" | "manager" | "create";
 
-const dialog = createValue<MarkerDialogKind | null>({ initial: null });
+/** Dialog state, including the chart beat requested by the timeline menu. */
+export interface MarkerDialogState {
+  kind: MarkerDialogKind;
+  beat?: number;
+}
+
+const dialog = createValue<MarkerDialogState | null>({ initial: null });
 
 /** Subscribe to the open-dialog changes. */
 export const subscribeMarkerDialog = dialog.subscribe;
@@ -19,8 +25,8 @@ export const subscribeMarkerDialog = dialog.subscribe;
 export const getMarkerDialog = dialog.get;
 
 /** Open one marker dialog, replacing whatever the store held before. */
-export function openMarkerDialog(kind: MarkerDialogKind): void {
-  dialog.set(kind);
+export function openMarkerDialog(kind: MarkerDialogKind, beat?: number): void {
+  dialog.set({ kind, ...(beat === undefined ? {} : { beat }) });
 }
 
 /** Close the open marker dialog. */

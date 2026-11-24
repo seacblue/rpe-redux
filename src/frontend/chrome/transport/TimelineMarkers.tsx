@@ -8,13 +8,10 @@
 import type { CSSProperties } from "react";
 import type { JudgeLineEvent } from "../../../core/global/chart/chart.ts";
 import {
-  addTimelineMarker,
-  createTimelineMarkerId,
   markerAudioRatio,
   markerAudioSeconds,
   normalizeMarkerColor,
   readTimelineMarkers,
-  writeTimelineMarkers,
 } from "../../../core/global/chart/timelineMarkers.ts";
 import { Button } from "../../../design/components/button/Button.tsx";
 import { t } from "../../../i18n/index.ts";
@@ -36,6 +33,8 @@ import type {
 } from "../../contracts/editorHost.ts";
 import type { ContextMenuAction } from "../../overlays/contextMenu/ContextMenuPopup.tsx";
 import { MarkerManagerDialog } from "./MarkerManagerDialog.tsx";
+import { TimelineMarkerCreateDialog } from "./TimelineMarkerCreateDialog.tsx";
+import { openMarkerDialog } from "./markerDialogs.ts";
 import type { TimelineMarkersState } from "./timelineMarkersState.ts";
 import type { TimelineMarker, TimelineMarkersViewProps } from "./timelineMarkersContract.ts";
 
@@ -92,6 +91,7 @@ export function TimelineMarkersView({ markers, width, onSeek }: TimelineMarkersV
         );
       })}
       <MarkerManagerDialog />
+      <TimelineMarkerCreateDialog />
     </>
   );
 }
@@ -406,7 +406,7 @@ export class TimelineMarkers {
         label: t("workspace.dialogs.addMarkerHere"),
         icon: "clock",
         enabled: () => session.editable && Boolean(point),
-        run: () => this.addMarkerAt(markerBeat),
+        run: () => openMarkerDialog("create", markerBeat),
       },
     ];
     if (surface === "events" && selection && selected?.trajectory) {
@@ -426,29 +426,6 @@ export class TimelineMarkers {
       target,
       actions,
     });
-  }
-
-  /** Adds a marker at one chart beat through the session's normal history. */
-  private addMarkerAt(beat: number): void {
-    const session = this.options.getSession();
-    if (!session.editable) {
-      return;
-    }
-    const current = readTimelineMarkers(session.chart, this.options.timeline.viewport.tempo);
-    const position = Math.max(0, Number.isFinite(beat) ? Number(beat.toFixed(3)) : 0);
-    const marker: TimelineMarker = {
-      id: createTimelineMarkerId(),
-      beat: position,
-      name: t("chrome.transport.markerManager.defaultName", { index: current.length + 1 }),
-    };
-    const next = addTimelineMarker(current, marker);
-    session.commitChart(
-      t("workspace.dialogs.addMarker"),
-      writeTimelineMarkers(session.chart, next),
-      session.selectionState(),
-      undefined,
-      { normalized: true },
-    );
   }
 
   /** Takes the timeline menu down. */
