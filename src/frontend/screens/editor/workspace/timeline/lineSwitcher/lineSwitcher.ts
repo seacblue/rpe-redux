@@ -151,9 +151,9 @@ export class LineSwitcher {
    * Indices of the lines the switcher may show, in step order.
    *
    * Multi-line editing limits both the cards and the Ctrl+wheel step to the
-   * lines it displays, ordered by line number so the wheel follows the list
-   * instead of the order the expression was written in. Otherwise every line in
-   * the chart is listed. The result is memoized by range, layer, and line set.
+   * lines it displays, preserving the order in which the line expression was
+   * written. Otherwise every line in the chart is listed. The result is
+   * memoized by range, layer, and line set.
    */
   filteredLines({
     chart,
@@ -178,7 +178,7 @@ export class LineSwitcher {
       this.tempo = tempo;
       this.filterKey = null;
     }
-    const scoped = [...new Set(lineSet)].sort((left, right) => left - right);
+    const scoped = [...new Set(lineSet)];
     const key = `${start}:${end}:${layer}:${extended ? 1 : 0}:${scoped.join(",")}`;
     if (this.filterKey === key) {
       return this.indices as number[];

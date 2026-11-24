@@ -1,6 +1,6 @@
 /**
  * Ctrl+wheel line stepping outside multi-line editing visits every chart line,
- * while multi-line editing keeps the step inside its set in line-number order.
+ * while multi-line editing keeps the step inside its set in authored order.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -45,15 +45,15 @@ test("without multi-line editing the step visits every chart line", () => {
   assert.deepEqual(active.picked, [2, 3, 0]);
 });
 
-test("multi-line editing steps through its set in line-number order", () => {
-  // The written order is 2, 9, 6; the wheel follows the sorted list instead.
+test("multi-line editing steps through its set in authored order", () => {
+  // The written order is 2, 9, 6; the wheel follows that order.
   const { switcher, active } = switcherWithLines(12, 2, { lineSet: [2, 9, 6] });
 
   switcher.step(1);
   switcher.step(1);
   switcher.step(1);
 
-  assert.deepEqual(active.picked, [6, 9, 2]);
+  assert.deepEqual(active.picked, [9, 6, 2]);
 });
 
 test("multi-line stepping never leaves the set, even at its ends", () => {
@@ -70,5 +70,5 @@ test("an active line outside the set enters it from the stepped end", () => {
 
   switcher.step(1);
 
-  assert.deepEqual(active.picked, [3]);
+  assert.deepEqual(active.picked, [8]);
 });
