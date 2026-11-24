@@ -53,17 +53,11 @@ export function chartWithOffsetDraft(chart: Chart, value: string): Chart {
   return next;
 }
 
-/**
- * Replace the timing with a detected constant BPM and offset.
- *
- * `offsetMs` is the audio time of beat zero. Automatic detection always uses
- * this fixed transform; a multi-BPM chart is replaced by the single answer.
- */
+/** Replace the timing with one detected BPM and the beat-zero offset. */
 export function chartWithDetectedTiming(chart: Chart, bpm: number, offsetMs: number): Chart {
-  const entry: BpmEntry = { bpm, startTime: [0, 0, 1] };
   const next = {
     ...chart,
-    BPMList: [entry],
+    BPMList: [{ bpm, startTime: [0, 0, 1] }],
     META: { ...chart.META, offset: offsetMs },
   };
   assertChart(next);

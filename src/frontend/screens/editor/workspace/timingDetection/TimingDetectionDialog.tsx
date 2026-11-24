@@ -1,10 +1,9 @@
 /**
- * The timing detector's body: the editable BPM/offset pair with tempo scaling
- * and whole-beat offset nudges.
+ * The timing detector's body: the editable fixed-BPM/offset pair with tempo
+ * scaling and whole-beat offset nudges.
  *
- * Detection either returns one precise answer or no answer at all, so the
- * dialog never shows a made-up fallback tempo. A missing pulse gets one short
- * "not found" message and a retry action.
+ * Detection returns one precise BPM/offset pair. The dialog keeps the pair
+ * editable before it is committed to a single BPMList entry.
  */
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";

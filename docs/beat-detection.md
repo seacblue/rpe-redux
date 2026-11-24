@@ -1,4 +1,4 @@
-# Beat detection: decoders and the madmom port
+# Beat detection: fixed BPM, offset, and the madmom port
 
 - Status: current
 - Scope: automatic fixed-BPM timing detection (`src/core/media/beatDetection.ts`, `beatDbn.ts`, `beatActivation.ts`)
@@ -6,12 +6,12 @@
 
 ## 1. Two decoders, one result shape
 
-The editor can detect timing with either of two decoders. Both return the same `BeatDetectionResult`, so a caller previews, edits, or commits the answer the same way.
+The editor can detect timing with either of two decoders. Both return the same `BeatDetectionResult`, so a caller previews, edits, or commits the answer the same way. The automatic timing dialog uses the DBN decoder first and falls back to the fixed detector for short or sparse audio.
 
 | Decoder | Entry point | How it commits to a tempo |
 | --- | --- | --- |
 | Harmonic autocorrelation | `detectBeatGridFromSamples` | Scores candidate periods against the onset envelope, then fits the winner |
-| DBN (madmom) | `detectBeatGridWithDbnFromSamples` | Keeps every tempo hypothesis alive and picks the most probable path |
+| DBN (madmom) | `detectBeatGridWithDbnFromSamples` | Keeps tempo hypotheses alive while decoding, then returns one refined BPM and offset |
 
 The autocorrelation detector is the default: it needs one pass over the onset envelope and no state space. The DBN decoder is stronger on syncopated material and near-miss tempi, because a single grid fitted to onset energy can lock onto the wrong metrical level, while a path through the joint tempo/phase state space cannot jump tempo without paying a transition cost.
 
@@ -153,24 +153,11 @@ Limits worth stating plainly:
 - **Some material has no single right answer.** A swing feel, a pattern with hits only every second beat, and a cross-rhythm are all cases where two tempi describe the same audio. The detector reports the pulse it can defend from the onsets; it does not guess a metrical intent that is not audible.
 - **Very short buffers degrade.** The refit needs roughly eight matched attacks to be exact, so a few seconds of audio reports a frame-accurate tempo.
 
-## 6. Variable tempo
+## 6. Fixed-result policy
 
-A track that changes tempo is reported as a tempo map, not a single number. `tempoSegments` holds one entry per stretch of steady tempo in time order, which is the shape a chart's `BPMList` takes; `variableTempo` says whether there was more than one. The single `bpm` and `offsetMs` stay present and describe the overall best fit, so a caller that ignores the map still gets a usable starting point.
+The detector always returns one BPM and one offset. The DBN state space may use tempo hypotheses and transitions internally to avoid locking onto a wrong metrical level, but tempo changes are not exposed as segments and are never written to `BPMList`. Applying the result always replaces the chart timing with one entry at `[0, 0, 1]` and stores the measured beat-zero time in `META.offset`.
 
-The decoder tracks the change without extra work: its state space is joint tempo and phase, and leaving one tempo costs a transition probability, so the Viterbi path follows a tempo change on its own. Only the reporting was fixed-tempo. Measured on click tracks that change tempo:
-
-| Case            | Single answer | Stretches reported                |
-| --------------- | ------------- | --------------------------------- |
-| Steady 100–145  | exact         | one, matching the refined tempo   |
-| Step 100 → 130  | 129.2         | 101.6, then 129.2 from 15.5 s     |
-| Step 120 → 90   | 120.2         | 119.2, then 89.5 from 15.7 s      |
-| Drift 100 → 120 | 110.0         | several, rising across the track  |
-| Drift 140 → 110 | 126.0         | several, falling across the track |
-
-Two limits belong with that table:
-
-- **A drift is described in steps.** The map approximates a continuous tempo change with discrete stretches, which is what a chart can hold. A gradual accelerando therefore lands as several plateaus rather than a curve.
-- **Stretches shorter than three seconds are merged away.** At the start and end of a track the local tempo is built from few intervals and drifts, so short stretches there are analysis artefacts. A genuine change inside the first or last three seconds of a track is not reported separately.
+This is intentional: the current feature is automatic fixed-BPM timing, not tempo-map authoring. A track with a real tempo change receives the best single fixed answer the decoder can defend; the author can still edit timing manually afterward. Time signatures and downbeat intent are also not inferred.
 
 ## 7. Why not bundle madmom
 
