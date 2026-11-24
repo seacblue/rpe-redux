@@ -441,53 +441,63 @@ export function detectBestFixedTimingFromSamples(
   if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
     return null;
   }
-  const candidates = [
-    detectBeatGridWithDbnFromSamples(samples, sampleRate, duration, options),
-    detectBeatGridFromSamples(samples, sampleRate, duration, options),
-  ].filter((candidate): candidate is BeatDetectionResult => candidate !== null);
-  if (!candidates.length) {
-    return null;
-  }
-  if (candidates.length === 1) {
-    return candidates[0];
-  }
   const limits = resolveTimingLimits(options, DBN_MIN_BPM, DBN_MAX_BPM);
   const totalDuration =
     Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
   const analysisRate = Math.min(sampleRate, limits.targetRate);
+  const candidates = [
+    detectBeatGridWithDbnFromSamples(samples, sampleRate, duration, options),
+    detectBeatGridFromSamples(samples, sampleRate, duration, options),
+  ].filter((candidate): candidate is BeatDetectionResult => candidate !== null);
   const envelope = buildOnsetEnvelope(resample(samples, sampleRate, analysisRate), analysisRate);
-  if (!envelope) {
-    return candidates[0];
+  if (!candidates.length) {
+    return null;
   }
-  const scored = expandFixedCandidates(candidates, limits.minBpm, limits.maxBpm).map(
-    ({ result, derived }) => ({
-      candidate: result,
-      derived,
-      score: scoreFixedCandidate(result, envelope),
-    }),
-  );
-  const reasonable = scored.filter(
-    ({ candidate, score }) =>
-      (candidate.bpm >= COMMON_TEMPO_MIN && candidate.bpm <= COMMON_TEMPO_MAX) ||
-      score >= HIGH_CONFIDENCE_TEMPO_SCORE,
-  );
-  const ranked = reasonable.length ? reasonable : scored;
-  ranked.sort(
-    (left, right) =>
-      right.score - (right.derived ? 0.05 : 0) - (left.score - (left.derived ? 0.05 : 0)),
-  );
-  const best = ranked[0]?.candidate;
+  let best = candidates[0];
+  if (candidates.length > 1 && envelope) {
+    const scored = expandFixedCandidates(candidates, limits.minBpm, limits.maxBpm).map(
+      ({ result, derived }) => ({
+        candidate: result,
+        derived,
+        score: scoreFixedCandidate(result, envelope),
+      }),
+    );
+    const reasonable = scored.filter(
+      ({ candidate, score }) =>
+        (candidate.bpm >= COMMON_TEMPO_MIN && candidate.bpm <= COMMON_TEMPO_MAX) ||
+        score >= HIGH_CONFIDENCE_TEMPO_SCORE,
+    );
+    const ranked = reasonable.length ? reasonable : scored;
+    ranked.sort(
+      (left, right) =>
+        right.score - (right.derived ? 0.05 : 0) - (left.score - (left.derived ? 0.05 : 0)),
+    );
+    best = ranked[0]?.candidate ?? best;
+  }
   if (!best) {
     return candidates[0];
   }
+  const refined = refineTimingFromAttacks(
+    samples,
+    sampleRate,
+    best.offsetMs / 1000,
+    best.bpm,
+    totalDuration,
+  );
+  const finalBpm = refined ? roundMeasuredTiming(refined.bpm) : best.bpm;
+  const finalOffsetMs = refined
+    ? roundMeasuredTiming(Math.max(0, refined.offsetSeconds) * 1000)
+    : best.offsetMs;
   return {
     ...best,
+    bpm: finalBpm,
+    offsetMs: finalOffsetMs,
     duration: totalDuration,
     waveform: {
       peaks: waveformPeaks(samples, WAVEFORM_POINTS),
       duration: totalDuration,
     },
-    beatTimes: buildBeatTimes(best.bpm, best.offsetMs / 1000, totalDuration),
+    beatTimes: buildBeatTimes(finalBpm, finalOffsetMs / 1000, totalDuration),
   };
 }
 

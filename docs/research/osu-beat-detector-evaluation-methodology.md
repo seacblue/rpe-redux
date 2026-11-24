@@ -68,19 +68,20 @@ The real-music fixed-BPM lane is materially less stable, but fusion removes most
 | Threshold                 |      DBN only |        Fusion |
 | ------------------------- | ------------: | ------------: |
 | Detection                 |         21/21 |         21/21 |
-| BPM error ≤1              |  8/21 (38.1%) | 17/21 (81.0%) |
+| BPM error ≤1              |  8/21 (38.1%) | 18/21 (85.7%) |
 | BPM error ≤2              | 10/21 (47.6%) | 19/21 (90.5%) |
 | BPM error ≤5              | 13/21 (61.9%) |  21/21 (100%) |
-| Median BPM error          |     2.073 BPM |     0.211 BPM |
-| 95th-percentile BPM error |   174.087 BPM |     2.623 BPM |
+| Median BPM error          |     2.073 BPM |     0.180 BPM |
+| 95th-percentile BPM error |   174.087 BPM |     2.555 BPM |
 
 The remaining fusion errors above 2 BPM were:
 
 |              Beatmapset | Chart BPM | Detected BPM | Failure shape   |
 | ----------------------: | --------: | -----------: | --------------- |
-|    2564707 — Whyte pain |       190 |      192.623 | near-tempo miss |
-| 2621236 — Abyss to Eden |       190 |      192.073 | competing pulse |
+|       2527033 — Veil of Ash |       210 |      211.853 | near-tempo miss |
+|        2564707 — Whyte pain |       190 |      192.555 | near-tempo miss |
+| 2603844 — Submerged City feat. noeric |       192 |      195.952 | competing pulse |
 
 The osu! offset was not scored as an absolute error: a public preview is trimmed/encoded independently of the beatmap audio origin, so its first detected attack cannot be compared directly with the `.osu` timing-point offset. Synthetic circular phase was scored and stayed sub-millisecond; the real-music weakness is BPM metrical-level selection.
 
-For an exploratory comparison on the first 15 fixed previews, the DBN path had 40.0% within 1 BPM, while the autocorrelation path had 53.8% among its 13 non-null results. The implementation now runs both and ranks their fixed-grid candidates automatically. On the expanded 21-map fixed-BPM set, the fused result reached 17/21 within 1 BPM, 19/21 within 2 BPM, and 21/21 within 5 BPM. It also keeps the user-facing contract simple: one BPM and one offset, with no detector or tempo-level choice in the UI. The remaining errors are concentrated in ambiguous recorded-music metrical levels, not variable-tempo inference.
+For an exploratory comparison on the first 15 fixed previews, the DBN path had 40.0% within 1 BPM, while the autocorrelation path had 53.8% among its 13 non-null results. The implementation now runs both and ranks their fixed-grid candidates automatically, then refits the selected grid against raw attacks. On the expanded 21-map fixed-BPM set, the fused result reached 18/21 within 1 BPM, 19/21 within 2 BPM, and 21/21 within 5 BPM. It also keeps the user-facing contract simple: one BPM and one offset, with no detector or tempo-level choice in the UI. The remaining errors are concentrated in ambiguous recorded-music metrical levels, not variable-tempo inference.

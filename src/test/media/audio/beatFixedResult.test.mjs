@@ -74,3 +74,22 @@ test("the combined detector keeps a clear high-tempo pulse", () => {
   assertFixedResult(result, "combined high-tempo input");
   assert.ok(Math.abs(result.bpm - 240) < 1, `combined detector reports ${result.bpm}`);
 });
+
+test("the combined detector keeps fractional fixed BPM precision", () => {
+  const expectedBpm = 137.3;
+  const expectedOffsetMs = 123;
+  const samples = new Float32Array(Math.ceil(18 * SAMPLE_RATE));
+  const clickLength = Math.round(0.02 * SAMPLE_RATE);
+  for (let time = expectedOffsetMs / 1000; time < 18; time += 60 / expectedBpm) {
+    const start = Math.round(time * SAMPLE_RATE);
+    for (let offset = 0; offset < clickLength && start + offset < samples.length; offset += 1) {
+      samples[start + offset] +=
+        Math.sin((2 * Math.PI * 65 * offset) / SAMPLE_RATE) *
+        Math.exp((-offset / SAMPLE_RATE) * 80);
+    }
+  }
+  const result = detectBestFixedTimingFromSamples(samples, SAMPLE_RATE, 18);
+  assertFixedResult(result, "fractional fixed input");
+  assert.ok(Math.abs(result.bpm - expectedBpm) <= 0.1, `reports ${result.bpm} BPM`);
+  assert.ok(Math.abs(result.offsetMs - expectedOffsetMs) <= 2, `reports ${result.offsetMs} ms`);
+});

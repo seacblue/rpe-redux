@@ -107,7 +107,7 @@ Four steps then sit between the decoded path and the number the author sees:
 
 ## 5. Measured accuracy
 
-The current integration was checked against two complementary sets. The synthetic set contains 58 deterministic click tracks covering 60–350 BPM, noise, accents, short clips, and sparse backbeats. It detected all 58; 55 were within 1 BPM and the remaining three were the intentionally ambiguous backbeat cases where the audio carries only the stronger half-time pulse. On the 21 fixed-BPM osu! preview clips collected for the repository research, the fused result was within 1 BPM on 17/21, within 2 BPM on 19/21, and within 5 BPM on 21/21. The same preview run gave 8/21 within 1 BPM for DBN alone and 12/19 for autocorrelation alone, so the fusion is materially more stable on this small real-music sample.
+The current integration was checked against two complementary sets. The synthetic set contains 58 deterministic click tracks covering 60–350 BPM, noise, accents, short clips, and sparse backbeats. It detected all 58; 55 were within 1 BPM and the remaining three were the intentionally ambiguous backbeat cases where the audio carries only the stronger half-time pulse. On the 21 fixed-BPM osu! preview clips collected for the repository research, the fused result was within 1 BPM on 18/21, within 2 BPM on 19/21, and within 5 BPM on 21/21. The same preview run gave 8/21 within 1 BPM for DBN alone and 12/19 for autocorrelation alone, so the fusion is materially more stable on this small real-music sample.
 
 Synthetic click tracks with every onset placed at a known sample index, 24–30 s each, deterministic noise. The expected tempo in each case is the pulse the pattern actually carries, not the nominal BPM.
 
