@@ -1,7 +1,34 @@
 /** A converted candidate is saved once after its replacement leaves the queue. */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createChart, CURRENT_RPE_VERSION } from "../../../core/global/chart/chart.ts";
+import { prepareEditorCandidate } from "../../../frontend/screens/editor/workspace/document/lifecycle/candidatePreparation.ts";
 import { createQueuedCandidateLoader } from "../../../frontend/screens/editor/workspace/document/lifecycle/queuedCandidateLoader.ts";
+
+test("a converted streamed candidate does not keep the old paged document", async () => {
+  const chart = createChart();
+  chart.META.RPEVersion = CURRENT_RPE_VERSION - 10;
+  let disposed = false;
+  const candidate = {
+    chart,
+    chartDocument: {
+      chart,
+      async materializeAll() {
+        return chart;
+      },
+    },
+    disposeDocument: () => {
+      disposed = true;
+    },
+    name: "old.json",
+  };
+
+  const prepared = await prepareEditorCandidate(candidate, async () => true);
+  assert.equal(prepared?.chart.META.RPEVersion, CURRENT_RPE_VERSION);
+  assert.equal(prepared?.chartDocument, undefined);
+  assert.equal(prepared?.disposeDocument, undefined);
+  assert.equal(disposed, true);
+});
 
 function harness(converted) {
   const events = [];

@@ -6,17 +6,8 @@ import { assetPath, resourceReferences } from "../../../../../../core/global/doc
 import type { LoadTask } from "../../../../../../core/global/document/loading.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import type { ChartDiagnostic } from "../../../../../../core/global/chart/diagnostics.ts";
-import {
-  createChart,
-  CURRENT_RPE_VERSION,
-  type Chart,
-} from "../../../../../../core/global/chart/chart.ts";
+import { createChart, type Chart } from "../../../../../../core/global/chart/chart.ts";
 import { createStarterChart } from "../../../../../../core/global/chart/starterChart.ts";
-import {
-  convertChartToCurrentVersion,
-  detectChartCompatibility,
-} from "../../../../../../core/global/chart/compatibility.ts";
-import { BUILD_APP_VERSION } from "../../../../../../core/platform/buildInfo.ts";
 import {
   bumpCollaborationAssetRevision,
   collaborationPendingAssets,
@@ -46,10 +37,8 @@ import { createDocumentRelease } from "../../document/lifecycle/release.ts";
 import { createSessionInstaller } from "../../document/lifecycle/sessionInstaller.ts";
 import { createDocumentPresentation } from "../../document/lifecycle/presentation.ts";
 import { createDocumentReplacer } from "../../document/lifecycle/replacer.ts";
-import {
-  createQueuedCandidateLoader,
-  type PreparedEditorCandidate,
-} from "../../document/lifecycle/queuedCandidateLoader.ts";
+import { createQueuedCandidateLoader } from "../../document/lifecycle/queuedCandidateLoader.ts";
+import { prepareEditorCandidate } from "../../document/lifecycle/candidatePreparation.ts";
 import { createDocumentSaver } from "../../document/save/saver.ts";
 import { editorProjectId } from "../../../../../../core/edit/state/publishedValues.ts";
 import { showToast } from "../../../../../../design/patterns/ToastHost.tsx";
@@ -519,56 +508,8 @@ export function createDocumentRuntime(options: {
     }
   };
   /** Validates a candidate and offers conversion when the chart format needs it. */
-  const prepareCandidate = async (
-    candidate: EditorCandidate,
-    task?: LoadTask,
-  ): Promise<PreparedEditorCandidate | null> => {
-    const report = detectChartCompatibility(candidate.chart);
-    if (!report.requiresConversion) {
-      if (report.reduxVersionStatus !== "newer") {
-        return candidate;
-      }
-      const confirmed = await requestConfirm({
-        title: t("workspace.document.compatibility.newerTitle"),
-        description: t("workspace.document.compatibility.newerDescription", {
-          version: report.reduxVersion ?? "",
-          current: BUILD_APP_VERSION,
-        }),
-        label: t("workspace.document.compatibility.openAnyway"),
-        cancelLabel: t("workspace.document.compatibility.cancel"),
-      });
-      return confirmed ? candidate : null;
-    }
-    const confirmed = await requestConfirm({
-      title: t("workspace.document.compatibility.title"),
-      description:
-        report.rpeVersion === null
-          ? t("workspace.document.compatibility.descriptionUnknown")
-          : t("workspace.document.compatibility.description", { version: report.rpeVersion }),
-      detail: report.missingLineFields
-        ? t("workspace.document.compatibility.detail", {
-            version: CURRENT_RPE_VERSION,
-            count: report.missingLineFields,
-          })
-        : undefined,
-      label: t("workspace.document.compatibility.convert"),
-      cancelLabel: t("workspace.document.compatibility.cancel"),
-    });
-    if (!confirmed) {
-      return null;
-    }
-    const conversion = convertChartToCurrentVersion(candidate.chart, report, (completed, total) =>
-      task?.update("parse", completed, total),
-    );
-    return conversion
-      ? {
-          ...candidate,
-          chart: conversion.chart,
-          revisionSeed: undefined,
-          converted: conversion.converted,
-        }
-      : null;
-  };
+  const prepareCandidate = (candidate: EditorCandidate, task?: LoadTask) =>
+    prepareEditorCandidate(candidate, requestConfirm, task);
   // The saver is created after the loader because its helpers read the same
   // document state, and conversion saves only after replacement leaves the queue.
   const conversionSaver: { current: (() => Promise<unknown>) | null } = { current: null };
