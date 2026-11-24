@@ -7,7 +7,7 @@ Status: research note
 Use a two-lane corpus:
 
 1. **Chart truth:** obtain dated, chart-only `.osu` files from the official [ppy data index](https://data.ppy.sh/), which publishes `*_osu_files.tar.bz2` archives. Do not treat the archive as production-licensed data: its [licence](https://data.ppy.sh/LICENCE.txt) permits statistical analysis and testing, but says public exposure or production use requires contacting ppy.
-2. **Audio:** use audio snippets supplied by the evaluator or otherwise licensed. osu!’s API exposes a `preview_url` in the beatmapset object, and the website provides short previews, but a preview is not enough to validate a full-map tempo map. Keep the preview/full-audio distinction in the manifest.
+2. **Audio:** use audio snippets supplied by the evaluator or otherwise licensed. osu!’s API exposes a `preview_url` in the beatmapset object, and the website provides short previews, but a preview is not enough to validate a full-map tempo map. Keep the preview/full-audio distinction in the manifest, and do not commit public previews to the repository.
 
 The official osu! API is useful for inventory and metadata, not as the primary timing-point source: `GET /api/v2/beatmaps/{beatmap}` returns beatmap metadata such as BPM, while `GET /api/v2/beatmapsets/{beatmapset}` exposes beatmapset metadata including `preview_url`; the documented API does not expose the complete `[TimingPoints]` section. API routes require OAuth, support batching up to 50 beatmap IDs, and osu! asks clients to cache data, stay near 60 requests/minute, and use `data.ppy.sh` for mass sample data. See the [official API documentation](https://osu.ppy.sh/docs/index.html).
 
@@ -47,7 +47,7 @@ Use a fixed, documented preprocessing pipeline and a manifest containing beatmap
 
 ## Batch results for the current fixed-result detector
 
-The current worker path was exercised locally on two lanes:
+The current worker path was exercised locally on two lanes. The osu! lane is an external, local-only exploration and is not an approved project dataset:
 
 1. 58 deterministic synthetic PCM cases: 30 clean fixed pulses, 12 noisy pulses, 8 short clips, 4 accented patterns, and 4 backbeat patterns. The click phase was known, so both BPM and circular phase error could be measured.
 2. 35 unique recent ranked osu! beatmapset previews: 21 sets had one fixed uninherited BPM section and were scored; 14 had multiple uninherited BPM values and were kept as out-of-scope policy checks. All 35 previews produced a fixed BPM/offset result. The chart timing truth came from the downloaded `.osu` file, while the audio was only the public ten-second preview clip.
@@ -76,10 +76,10 @@ The real-music fixed-BPM lane is materially less stable, but fusion removes most
 
 The remaining fusion errors above 2 BPM were:
 
-|              Beatmapset | Chart BPM | Detected BPM | Failure shape   |
-| ----------------------: | --------: | -----------: | --------------- |
-|       2527033 — Veil of Ash |       210 |      211.853 | near-tempo miss |
-|        2564707 — Whyte pain |       190 |      192.555 | near-tempo miss |
+|                            Beatmapset | Chart BPM | Detected BPM | Failure shape   |
+| ------------------------------------: | --------: | -----------: | --------------- |
+|                 2527033 — Veil of Ash |       210 |      211.853 | near-tempo miss |
+|                  2564707 — Whyte pain |       190 |      192.555 | near-tempo miss |
 | 2603844 — Submerged City feat. noeric |       192 |      195.952 | competing pulse |
 
 The osu! offset was not scored as an absolute error: a public preview is trimmed/encoded independently of the beatmap audio origin, so its first detected attack cannot be compared directly with the `.osu` timing-point offset. Synthetic circular phase was scored and stayed sub-millisecond; the real-music weakness is BPM metrical-level selection.
