@@ -302,6 +302,11 @@ export class EventInteraction implements EventInteractionHandle {
       session.selectionRevision += 1;
     }
     const point = this.timeline.viewport.point(event, this.canvas);
+    this.timeline.gestures.cursorLineIndex = this.timeline.viewport.lineIndexAt(
+      point.x,
+      this.canvas.clientWidth,
+      "events",
+    );
     const rectangle = this.hit(point);
     const dragPrekey = dragPrekeyHeld();
     const multiMode = session.multiLineActive;
@@ -581,6 +586,11 @@ export class EventInteraction implements EventInteractionHandle {
   /** Track the hover cursor and advance the active event drag. */
   move(event: PointerEvent): void {
     const point = this.timeline.viewport.point(event, this.canvas);
+    this.timeline.gestures.cursorLineIndex = this.timeline.viewport.lineIndexAt(
+      point.x,
+      this.canvas.clientWidth,
+      "events",
+    );
     this.timeline.gestures.eventCursor = point;
     this.timeline.gestures.clipboardPointer = point;
     this.timeline.gestures.hoverArea = "events";

@@ -80,7 +80,7 @@ function drawClipboardGhostEvents(
   height: number,
 ): void {
   const session = this.getSession();
-  const targetLine = session.lineIndex;
+  const targetLine = this.gestures.cursorLineIndex ?? session.lineIndex;
   const projection = projectClipboardGhost(this, targetLine);
   if (!projection) {
     return;

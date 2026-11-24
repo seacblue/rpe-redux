@@ -142,6 +142,7 @@ export type TimelineEventInteractionReceiver = Pick<
     | "eventRects"
     | "eventRectsForLine"
     | "eventCursor"
+    | "cursorLineIndex"
     | "layer"
     | "notify"
     | "hoverArea"

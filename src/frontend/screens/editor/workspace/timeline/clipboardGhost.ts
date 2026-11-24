@@ -16,7 +16,10 @@ import type { TimelineViewport } from "./viewport/timelineViewport.ts";
 /** Timeline state needed to resolve a clipboard ghost projection. */
 export interface ClipboardGhostReceiver {
   readonly appearance: { readonly clipboardGhostEnabled?: boolean };
-  readonly gestures: Pick<TimelineGestures, "clipboardPointer" | "clipboardMode">;
+  readonly gestures: Pick<
+    TimelineGestures,
+    "clipboardPointer" | "clipboardMode" | "cursorLineIndex"
+  >;
   readonly viewport: Pick<TimelineViewport, "snappedBeatTriple">;
   getSession(): EditorSession;
 }
@@ -24,16 +27,17 @@ export interface ClipboardGhostReceiver {
 /** Projects clipboard contents at the current pointer target, or returns null. */
 export function projectClipboardGhost(
   receiver: ClipboardGhostReceiver,
-  targetLineIndex = receiver.getSession().lineIndex,
+  targetLineIndex?: number,
 ): ClipboardProjection | null {
   if (receiver.appearance.clipboardGhostEnabled === false || !receiver.gestures.clipboardPointer) {
     return null;
   }
   const session = receiver.getSession();
+  const target = targetLineIndex ?? receiver.gestures.cursorLineIndex ?? session.lineIndex;
   const pointerBeat = receiver.viewport.snappedBeatTriple(receiver.gestures.clipboardPointer.y);
   const projection = projectClipboard(session, pointerBeat, {
     ...receiver.gestures.clipboardMode,
-    targetLineIndex,
+    targetLineIndex: target,
     preview: true,
   });
   return projection.notes.length || projection.events.length ? projection : null;
