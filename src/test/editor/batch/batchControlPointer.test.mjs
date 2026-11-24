@@ -6,6 +6,7 @@ import {
   forwardBallPointer,
   routePendingPlacement,
 } from "../../../frontend/screens/editor/workspace/stage/batchControls/batchControlTimeline.ts";
+import { BatchControls } from "../../../frontend/screens/editor/workspace/stage/batchControls/batchControls.ts";
 
 /** Build the timeline surface the routing helpers read. */
 function timelineForRouting() {
@@ -100,6 +101,23 @@ test("a ball press with no placement pending starts a batch drag", () => {
   assert.equal(calls.down, 0);
   assert.equal(calls.eventDown, 0);
   assert.equal(event.defaultPrevented, false);
+});
+
+test("the batch controller routes a ball press to the pending placement", () => {
+  const { timeline, calls } = timelineForRouting();
+  timeline.gestures.pendingHold = { beat: [0, 0, 1], positionX: 0, lineIndex: 0 };
+  const controller = Object.create(BatchControls.prototype);
+  controller.active = null;
+  controller.enabled = () => true;
+  controller.timeline = timeline;
+  const event = press();
+  const button = { getAnimations: () => [] };
+
+  controller.down(event, "notes", "note-move", button);
+
+  assert.equal(calls.down, 1);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(event.propagationStopped, true);
 });
 
 test("pointer movement over a ball keeps the note cursor current", () => {

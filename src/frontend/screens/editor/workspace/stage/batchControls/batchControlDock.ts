@@ -250,24 +250,31 @@ export function dockSelectionCounts(
   for (const values of map?.values() ?? []) {
     multiSelection += values.size;
   }
+  const multiMode =
+    session.multiLineActive &&
+    ((area === "notes" && session.multiLineMode === "notes") ||
+      (area === "events" && session.multiLineMode === "events"));
   return {
-    selection:
-      multiSelection + (area === "notes" ? session.selection.size : session.eventSelection.size),
+    // The capture path uses either the multi-line map or the active-line set,
+    // never both. Matching that choice prevents a retained map from making one
+    // ordinary selection look like a batch.
+    selection: multiMode
+      ? multiSelection
+      : area === "notes"
+        ? session.selection.size
+        : session.eventSelection.size,
     multiSelection,
-    multiMode:
-      session.multiLineActive &&
-      ((area === "notes" && session.multiLineMode === "notes") ||
-        (area === "events" && session.multiLineMode === "events")),
+    multiMode,
     multiIntent: session.multiSelectionIntent === area,
   };
 }
 
 /**
- * Whether one area's group has a selection to show its balls for.
+ * Whether one area's group has a batch selection to show its balls for.
  *
- * Events need only one selected event because their bars are not draggable, but
- * their balls stay hidden on a note-side multi-line pass. Notes keep the batch
- * threshold unless the user is explicitly gathering a multi-line selection.
+ * A control ball is a batch-edit affordance, so one selected object never opens
+ * the dock. Multi-line selection maps are counted separately because the active
+ * line's ordinary selection can otherwise make one object look like two.
  */
 export function dockVisible(
   area: TimelineArea,
@@ -279,9 +286,7 @@ export function dockVisible(
     notesMultiLine: boolean;
   },
 ): boolean {
-  const { selection, multiSelection, multiMode, multiIntent, notesMultiLine } = counts;
-  if (area === "events") {
-    return selection > 0 && !notesMultiLine;
-  }
-  return multiMode ? multiSelection > 0 && multiIntent : selection >= 2 || multiIntent;
+  const { selection, multiSelection, multiMode, notesMultiLine } = counts;
+  const batchSelection = multiMode ? multiSelection : selection;
+  return batchSelection >= 2 && (area !== "events" || !notesMultiLine);
 }
