@@ -34,7 +34,7 @@ export interface SpriteGroup {
 /** One texture group map; a source may appear once per wrap mode. */
 type SpriteGroupMap = Map<string, SpriteGroup>;
 
-/** Floats per instance: transform, rotation, shear, UV rect, alpha, tint, and colorize mode. */
+/** Floats per instance: transform, rotation, shear, UV rect, alpha, tint, and colour mode/strength. */
 export const INSTANCE_STRIDE = 15;
 
 /** A paint layer inside one frame; lower layers are painted first. */

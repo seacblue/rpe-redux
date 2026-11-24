@@ -8,6 +8,7 @@ import { DEFAULT_LINE_HEIGHT, DEFAULT_LINE_WIDTH, previewNoteWidth } from "../sc
 import { noteSkewShear } from "../../../canvas/noteGeometry.ts";
 import { textureInViewport } from "./textureVisibility.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
+import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import {
   noteColor,
   readCanvasPalette,
@@ -345,6 +346,7 @@ function previewNoteTintInto(
   target.color[0] = tint[0] ?? 255;
   target.color[1] = tint[1] ?? 255;
   target.color[2] = tint[2] ?? 255;
+  target.color[3] = tint[3] ?? 1;
   return target;
 }
 
@@ -513,9 +515,9 @@ function paintPreviewNoteFallback(
   context.globalAlpha = alpha;
   const tint = noteColorStyle?.color;
   context.fillStyle = selected
-    ? palette.selectionHighlightStroke
+    ? sourceOverColor(noteColor(palette, noteType), palette.selectionHighlightStroke)
     : Array.isArray(tint)
-      ? `rgb(${tint.join(",")})`
+      ? `rgb(${tint.slice(0, 3).join(",")})`
       : noteColor(palette, noteType);
   let drawnHold = false;
   if (noteType === 2) {
@@ -718,7 +720,7 @@ export function drawLinePasses(
   };
   // One tint holder for the whole pass: a dense frame would otherwise allocate a style
   // object and a colour array per visible note.
-  const noteTint: TintTarget = { mode: "tint", color: [255, 255, 255] };
+  const noteTint: TintTarget = { mode: "tint", color: [255, 255, 255, 1] };
   const selectionTint = selectionHighlightColor(palette);
   surface.noteHitAreas.length = 0;
   surface.lineFrames.length = 0;

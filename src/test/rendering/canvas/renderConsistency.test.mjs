@@ -640,8 +640,28 @@ test("selected note instances render after ordinary instances", () => {
   batch.finish();
 
   assert.equal(calls.uploads.length, 1);
-  assert.equal(calls.uploads[0][14], 0);
+  assert.equal(calls.uploads[0][14], -1);
   assert.equal(calls.uploads[0][15 + 14], 1);
+});
+
+test("selected note alpha becomes recolouring strength", () => {
+  const { canvas, calls } = fakeWebGLCanvas();
+  const batch = new NoteBatch(canvas);
+  const skin = {
+    noteTexture: () => descriptor,
+    holdBodyTexture: () => descriptor,
+    holdHeadTexture: () => descriptor,
+    holdEndTexture: () => descriptor,
+  };
+
+  batch.begin(100, 100, skin);
+  batch.addHead(skin, 1, false, 50, 50, 8, 0, 0, 1, {
+    mode: "selected",
+    color: [213, 255, 213, 0x33 / 0xff],
+  });
+  batch.finish();
+
+  assert.ok(Math.abs(calls.uploads[0][14] - 0x33 / 0xff) < 1e-6);
 });
 
 test("adaptive note density keeps logical size while lowering only the GPU backing store", () => {
@@ -893,7 +913,7 @@ test("authored green tint stays in multiply mode while selected green uses recol
   batch.addHead(skin, 1, false, 40, 40, 8, 0, 0, 1, { mode: "selected", color: [0, 200, 0] });
   batch.finish();
   assert.equal(calls.uploads.length, 1);
-  assert.equal(calls.uploads[0][14], 0);
+  assert.equal(calls.uploads[0][14], -1);
   assert.equal(calls.uploads[0][15 + 14], 1);
   assert.equal(calls.uploads[0][12], calls.uploads[0][15 + 12]);
 });

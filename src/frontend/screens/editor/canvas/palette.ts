@@ -9,6 +9,7 @@
  */
 import { values } from "../../../../core/state/values.ts";
 import { settingsRegistry } from "../../../../core/settings/settings.ts";
+import { parseHexColor } from "../../../../core/utils/colors.ts";
 
 export interface CanvasPalette {
   background: string;
@@ -68,7 +69,7 @@ let cachedSelectionColors = "";
 /** User-configured selection colors, with defaults available before settings register. */
 export function selectionColor(key: string, fallback: string): string {
   const value = values.byId.has(key) ? values.byId.get<unknown>(key) : undefined;
-  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
+  return typeof value === "string" && parseHexColor(value) ? value : fallback;
 }
 
 /** The setting that overrides the theme's hooked-event colour. */
@@ -182,31 +183,31 @@ export function readCanvasPalette(): CanvasPalette {
 /** An opaque RGB triple in the 0-255 form canvas tints consume. */
 export type CanvasRgb = [number, number, number];
 
+/** RGB channels plus the alpha strength used by selected-note recolouring. */
+export type CanvasRgba = [number, number, number, number];
+
 /** Convert a theme hex colour to the channels a canvas tint multiplies with. */
 export function rgbChannels(value: string): CanvasRgb | null {
-  const match = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(value.trim());
-  if (!match) {
+  const parsed = parseHexColor(value);
+  if (!parsed) {
     return null;
   }
-  const hex =
-    match[1].length === 3 ? [...match[1]].map((channel) => channel + channel).join("") : match[1];
-  return [
-    Number.parseInt(hex.slice(0, 2), 16),
-    Number.parseInt(hex.slice(2, 4), 16),
-    Number.parseInt(hex.slice(4, 6), 16),
-  ];
+  return [parsed.red, parsed.green, parsed.blue];
 }
 
-/** Opaque fallback for a selected note when the theme colour is unparsable. */
+/** Fallback selected-note colour with full recolouring strength. */
+const DEFAULT_SELECTION_RGBA: CanvasRgba = [0, 200, 0, 1];
+/** Fallback collaboration colour with full recolouring strength. */
+const DEFAULT_REMOTE_SELECTION_RGBA: CanvasRgba = [255, 204, 102, 1];
 const DEFAULT_SELECTION_RGB: CanvasRgb = [0, 200, 0];
-/** Opaque fallback for another member's selection. */
 const DEFAULT_REMOTE_SELECTION_RGB: CanvasRgb = [255, 204, 102];
 
-/** Resolve the opaque RGB colour used to render a selected note. */
+/** Resolve the selected-note colour and alpha-based recolouring strength. */
 export function selectionHighlightColor(
   palette: Pick<CanvasPalette, "selectionHighlightStroke">,
-): CanvasRgb {
-  return rgbChannels(palette.selectionHighlightStroke) ?? DEFAULT_SELECTION_RGB;
+): CanvasRgba {
+  const parsed = parseHexColor(palette.selectionHighlightStroke);
+  return parsed ? [parsed.red, parsed.green, parsed.blue, parsed.alpha] : DEFAULT_SELECTION_RGBA;
 }
 
 /**
@@ -247,31 +248,36 @@ export function cachedRgb(
 export function cachedSelectionHighlightColor(
   palette: Pick<CanvasPalette, "selectionHighlightStroke">,
 ): number[] {
-  return cachedRgb(
+  const channels = cachedRgb(
     palette,
     "selectionHighlightStroke",
     palette.selectionHighlightStroke,
     DEFAULT_SELECTION_RGB,
   );
+  return [...channels, parseHexColor(palette.selectionHighlightStroke)?.alpha ?? 1];
 }
 
 /** Cached colour used to render another member's selected note. */
 export function cachedRemoteSelectionHighlightColor(
   palette: Pick<CanvasPalette, "remoteSelectionHighlight">,
 ): number[] {
-  return cachedRgb(
+  const channels = cachedRgb(
     palette,
     "remoteSelectionHighlight",
     palette.remoteSelectionHighlight,
     DEFAULT_REMOTE_SELECTION_RGB,
   );
+  return [...channels, parseHexColor(palette.remoteSelectionHighlight)?.alpha ?? 1];
 }
 
-/** Resolve the configured colour used to render another member's note selection. */
+/** Resolve the configured collaboration colour and recolouring strength. */
 export function remoteSelectionHighlightColor(
   palette: Pick<CanvasPalette, "remoteSelectionHighlight">,
-): CanvasRgb {
-  return rgbChannels(palette.remoteSelectionHighlight) ?? DEFAULT_REMOTE_SELECTION_RGB;
+): CanvasRgba {
+  const parsed = parseHexColor(palette.remoteSelectionHighlight);
+  return parsed
+    ? [parsed.red, parsed.green, parsed.blue, parsed.alpha]
+    : DEFAULT_REMOTE_SELECTION_RGBA;
 }
 
 /** The theme colour for a note type; unknown types use the fallback. */

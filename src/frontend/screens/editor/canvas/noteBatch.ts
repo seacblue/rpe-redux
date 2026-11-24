@@ -304,7 +304,12 @@ export class NoteBatch {
         vec4 texel = texture(u_texture, v_uv);
         float luminance = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
         vec3 selected = v_tint * (0.65 + 0.35 * luminance);
-        vec3 color = mix(texel.rgb * v_tint, selected, v_colorize);
+        // A negative value denotes the ordinary multiply-tint path; a
+        // non-negative value is the selected-note recolouring strength.
+        vec3 color =
+          v_colorize >= 0.0
+            ? mix(texel.rgb, selected, clamp(v_colorize, 0.0, 1.0))
+            : texel.rgb * v_tint;
         outColor = vec4(color, texel.a * v_alpha);
       }
     `,
@@ -1258,7 +1263,11 @@ export class NoteBatch {
     group.instances[offset + 11] = tint ? Math.max(0, Math.min(255, tint[0] ?? 255)) / 255 : 1;
     group.instances[offset + 12] = tint ? Math.max(0, Math.min(255, tint[1] ?? 255)) / 255 : 1;
     group.instances[offset + 13] = tint ? Math.max(0, Math.min(255, tint[2] ?? 255)) / 255 : 1;
-    group.instances[offset + 14] = colorize ? 1 : 0;
+    // Keep selected instances in their foreground group even when alpha is 0;
+    // the shader uses this channel as recolouring strength, not note opacity.
+    group.instances[offset + 14] = colorize
+      ? Math.max(0, Math.min(1, tint && Number.isFinite(tint[3]) ? tint[3] : 1))
+      : -1;
     group.count += 1;
     return true;
   }

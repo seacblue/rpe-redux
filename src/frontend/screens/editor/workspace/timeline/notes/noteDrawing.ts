@@ -2,6 +2,7 @@
 /* eslint-disable max-lines -- note layers and skin-backed clipboard ghosts share one draw order. */
 import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
+import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import {
   fallbackCanvasPixelRatio,
   measureCanvas,
@@ -152,9 +153,9 @@ export function drawNote(
       ? remoteSelectionHighlightColor(palette)
       : null;
   const solidColor = selected
-    ? palette.selectionHighlightStroke
+    ? sourceOverColor(noteColor(palette, note.type), palette.selectionHighlightStroke)
     : remoteSelected
-      ? palette.remoteSelectionHighlight
+      ? sourceOverColor(noteColor(palette, note.type), palette.remoteSelectionHighlight)
       : noteColor(palette, note.type);
   context.fillStyle = solidColor;
   const tint = selectionTint ?? note.tint ?? note.color;
