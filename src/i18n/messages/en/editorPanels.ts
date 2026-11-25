@@ -240,7 +240,7 @@ export default {
   "editorPanels.inspector.field.hitSound": "Hit sound",
   "editorPanels.inspector.field.color": "Colour",
   "editorPanels.inspector.hitSoundPlaceholder": "Default hit sound",
-  "editorPanels.inspector.hitSoundDefault": "Default hit sound",
+  "editorPanels.inspector.hitSoundDefault": "(Default hit sound)",
   "editorPanels.inspector.hitSoundAdd": "Add hit sound…",
   "editorPanels.inspector.colorHexInvalid": "Enter a colour as #RRGGBB, or leave it empty",
   "editorPanels.inspector.finiteNumber": "Enter a finite number",

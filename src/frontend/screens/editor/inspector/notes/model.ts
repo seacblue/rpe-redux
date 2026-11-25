@@ -24,6 +24,8 @@ export interface NotePropertyField {
   kind: "select" | "beat" | "number" | "duration" | "text" | "color" | "boolean" | "slider";
   /** Text value of a select, number, duration or text control; empty for a beat control. */
   value: string;
+  /** Optional tone for a select's current option, such as a muted default entry. */
+  selectTone?: "muted";
   /** Whether a focused control owns a local draft that a session refresh must preserve. */
   preservesDraft: boolean;
   /** True when the chart already authors this optional value, so hiding can keep it editable. */

@@ -269,8 +269,8 @@ test("timeline lifts authored alpha for selectable notes", () => {
   };
 
   assert.equal(drawAlpha(255), 1);
-  assert.equal(drawAlpha(128), (51 + 128 * 0.8) / 255);
-  assert.equal(drawAlpha(0), 51 / 255);
+  assert.equal(drawAlpha(128), (80 + (128 / 255) * 175) / 255);
+  assert.equal(drawAlpha(0), 80 / 255);
 });
 
 test("timeline render layers repaint only when their key changes", () => {

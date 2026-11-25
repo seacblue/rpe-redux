@@ -480,6 +480,7 @@ export function renderProperties(
           preservesDraft: false,
           value: key === "color" ? colorHex(tinted.color ?? tinted.tint) : selectedHitSound,
           options: hitSoundChoices,
+          selectTone: key === "hitSound" && selectedHitSound === defaultValue ? "muted" : undefined,
           present,
           placeholder: key === "color" ? "#RRGGBB" : undefined,
           dirty: present,

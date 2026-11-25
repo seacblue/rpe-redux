@@ -247,13 +247,18 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             ref={input as Ref<HTMLSelectElement>}
             id={`note-field-${field.key}`}
             data-inspector-field={field.key}
+            data-select-tone={field.selectTone}
             defaultValue={field.value}
             onChange={(event) => field.apply?.(event.currentTarget)}
             onFocus={preservesDraft ? field.focus : undefined}
             onBlur={preservesDraft ? field.blur : undefined}
           >
             {field.options?.map(([value, label]) => (
-              <option value={value} key={value}>
+              <option
+                value={value}
+                key={value}
+                data-select-tone={value === field.value ? field.selectTone : undefined}
+              >
                 {label}
               </option>
             ))}
