@@ -41,7 +41,7 @@ fn main() {
         );
     }
     println!("cargo:rerun-if-changed={}", source.display());
-    // The two pinned helper downloads are optional. A build made without them
+    // The two release-resolved helper downloads are optional. A build made without them
     // keeps a self-describing resource folder so the bundle globs still resolve.
     mark_tool_missing(&manifest, "ffmpeg", "FFmpeg", "prepareFfmpeg.mjs");
     mark_tool_missing(

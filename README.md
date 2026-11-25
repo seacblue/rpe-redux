@@ -46,7 +46,7 @@ npm run dev:desktop   # native Tauri window
 npm run build         # NSIS installer on Windows; deb, rpm, and AppImage on Linux
 ```
 
-`npm run dev` starts the Go service and Vite, then opens the editor in your browser. It needs Node.js and Go, not Rust or the platform webview, and keeps its profile under `.scratch/dev/`. Use `npm run dev:desktop` when a change needs native file dialogs, window behaviour, or the packaged runtime. `npm run build -- --portable` skips the installer. The first desktop build downloads the pinned FFmpeg and Cloudflared builds once and stages the Go sidecar; later builds reuse the verified cached copies without network access. Pass `--without-bundled-tools` to `npm run build` or `npm run dev:desktop` to skip both downloads; export then reports that the build has no encoder, and hosted rooms use the LAN bridge instead of a Cloudflare tunnel.
+`npm run dev` starts the Go service and Vite, then opens the editor in your browser. It needs Node.js and Go, not Rust or the platform webview, and keeps its profile under `.scratch/dev/`. Use `npm run dev:desktop` when a change needs native file dialogs, window behaviour, or the packaged runtime. `npm run build -- --portable` skips the installer. Local desktop builds reuse any staged FFmpeg and Cloudflared binaries but never require a latest-release lookup; missing tools simply disable export or tunnel hosting. Release CI resolves the latest stable vendor assets. Pass `--without-bundled-tools` to explicitly omit both optional tools.
 
 > Windows ships x64, x86, and ARM64 NSIS installers. Linux ships x64 deb, rpm, and AppImage packages. Only the AppImage replaces itself through the in-app updater; deb and rpm users upgrade through their package manager.
 

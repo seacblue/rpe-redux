@@ -1,5 +1,5 @@
 /**
- * The skipped-tool contract: the build drops both pinned downloads, still stages
+ * The skipped-tool contract: the build drops both optional downloads, still stages
  * the Go sidecar, and leaves a self-describing resource folder so the bundle
  * globs resolve without the binaries.
  */

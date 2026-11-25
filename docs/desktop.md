@@ -65,20 +65,20 @@ Disk snapshots stream files through SHA-256 instead of reading them whole, and p
 
 ### Bundled third-party binaries
 
-Every desktop build stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cloudflare Tunnel client through `scripts/prepareCloudflared.mjs`. Both read exact versions from `scripts/dependencyPins.json`; a build never resolves an upstream `latest` release. The manifest holds the versions the project currently ships: gyan.dev's versioned Windows x64 package, exact BtbN and defisym autobuild snapshots for Linux x64 and Windows x86, and the published Cloudflare Tunnel release. Each entry carries the HTTPS download URL, the byte size, and the SHA-256 digest, so a download is staged only after it matches the pin.
+Release CI stages FFmpeg through `scripts/prepareFfmpeg.mjs` and the Cloudflare Tunnel client through `scripts/prepareCloudflared.mjs` with `REDUX_RELEASE_BUILD=1`. The checked-in `scripts/dependencySources.json` stores only vendor repositories, target selectors, and license paths: it never stores a version, moving-release URL, or digest. Each release job asks the GitHub Releases API for the latest stable release, selects the compatible asset, and verifies GitHub's SHA-256 digest (or computes the digest when the API does not provide one).
 
-A verified archive is cached under `.local-tools/`, and a staged copy under `src-tauri/resources/` is reused while its recorded digest still matches. Later builds therefore need no network. `npm run deps:check` prints the pinned and staged versions without contacting a vendor, and a build that cannot download a pin keeps a verified staged copy with a warning. `REDUX_FFMPEG_ARCHIVE` supplies a local FFmpeg archive instead of the download; it must match the pinned digest.
+A verified archive is cached under `.local-tools/`, and a staged copy under `src-tauri/resources/` is reused only when it matches the release asset resolved for that build. `npm run deps:check` reports source rules and any staged tool without contacting a vendor. Local builds skip the latest lookup entirely: they reuse an existing staged tool or continue without it, while the host reports the affected feature as unavailable. A release build fails when it cannot resolve or stage the latest asset.
 
 `npm run build -- --without-bundled-tools` and `npm run dev:desktop -- --without-bundled-tools` skip both downloads, so work unrelated to export or public rooms does not wait for them. The build compiles and the application starts; the two features then degrade with a warning notice instead of failing. Chart export reports that this build carries no encoder, and hosting a room uses the LAN bridge instead of a Cloudflare tunnel. Release packaging always stages both tools; publish only from a build without the flag.
 
-To upgrade a bundled helper, update its `version`, `label`, `archiveName`, `archiveUrl`, `size`, and `sha256` together in `scripts/dependencyPins.json`, run `npm run deps:check`, and stage the new build once. Keep the URL pointing at an exact release rather than a moving `latest` alias. The staging scripts verify every byte again after download; do not bypass the digest to accept a build whose publisher no longer provides one.
+To change a vendor or asset policy, update only the corresponding source rule in `scripts/dependencySources.json`. Do not add a version or fixed download URL: the release workflow must continue to follow the vendor's latest stable release. The staging scripts verify every downloaded byte against the release metadata before packaging.
 
 ### Architectures
 
 - **Windows x64** is the default NSIS target.
 - **Windows ARM64** is built natively on GitHub's `windows-11-arm` runner. The app and Go sidecar target ARM64; the bundled FFmpeg and Cloudflared helpers are x64 and run under Windows ARM64 emulation.
-- **32-bit x86** ships a full NSIS target. The app, Go sidecar, Cloudflared, and FFmpeg target 32-bit Windows; FFmpeg uses the pinned defisym GPL snapshot.
-- **Linux x64** ships deb, rpm, and AppImage packages from GitHub's `ubuntu-22.04` runner. The app, Go sidecar, Cloudflared, and FFmpeg target `x86_64-unknown-linux-gnu`; FFmpeg uses the pinned BtbN GPL snapshot. Linux ARM64 is not built yet.
+- **32-bit x86** ships a full NSIS target. The app, Go sidecar, Cloudflared, and FFmpeg target 32-bit Windows; release CI selects the latest compatible defisym GPL asset.
+- **Linux x64** ships deb, rpm, and AppImage packages from GitHub's `ubuntu-22.04` runner. The app, Go sidecar, Cloudflared, and FFmpeg target `x86_64-unknown-linux-gnu`; release CI selects the latest BtbN GPL asset. Linux ARM64 is not built yet.
 
 Release CI uses `src-tauri/updater.conf.json` to enable updater artifacts and requires the signing secret. For a local Authenticode signature, run `src-tauri/signWindowsArtifact.ps1 -Path <installer or executable>`; the helper creates a development certificate when none exists and can reuse a thumbprint or `SignCode.exe` from the parameters.
 

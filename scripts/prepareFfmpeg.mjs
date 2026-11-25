@@ -1,4 +1,4 @@
-/** Stages the pinned FFmpeg build for the target desktop platform. */
+/** Stages the latest FFmpeg release only for publishing; local builds never need its network lookup. */
 import {
   chmodSync,
   copyFileSync,
@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,16 +17,16 @@ import { downloadVerifiedFile, hashFile } from "./fetchVerified.mjs";
 import { SKIPPED_TOOL_NOTE } from "./bundledTools.mjs";
 import {
   findArchiveRoot,
-  formatBytes,
-  loadDependencyPins,
-  selectFfmpegPin,
+  loadDependencySources,
+  resolveLatestFfmpeg,
+  selectFfmpegSource,
 } from "./dependencyArtifacts.mjs";
 
-// `--check` compares the pinned release with the staged build without
-// contacting the network, so a slow link can still be inspected.
+// `--check` is intentionally offline. Release CI opts into the latest lookup.
 const checkOnly = process.argv.includes("--check");
+const releaseBuild = process.env.REDUX_RELEASE_BUILD === "1";
 
-/** Stage the release that matches the current target. */
+/** Stage the latest release that matches the current target. */
 async function main() {
   const root = resolve(import.meta.dirname, "..");
   const targetTriple = process.env.CARGO_BUILD_TARGET ?? process.platform;
@@ -46,7 +47,8 @@ async function main() {
       : platform === "linux" && targetTriple.includes("aarch64")
         ? "arm64"
         : "x64";
-  const distribution = selectFfmpegPin(loadDependencyPins(root), platform, arch);
+  const sources = loadDependencySources(root);
+  const source = selectFfmpegSource(sources, platform, arch);
 
   const targetDirectory = join(root, "src-tauri", "resources", "ffmpeg");
   const binaryName = platform === "windows" ? "ffmpeg.exe" : "ffmpeg";
@@ -67,7 +69,7 @@ async function main() {
     }
   }
 
-  /** Read the version marker the staging step wrote, when one is present. */
+  /** Read the release marker the staging step wrote, when one is present. */
   function readVersionMarker() {
     try {
       return readFileSync(join(targetDirectory, "VERSION.txt"), "utf8").trim() || null;
@@ -76,78 +78,64 @@ async function main() {
     }
   }
 
-  /**
-   * Return the stage record only while the staged files still match it.
-   *
-   * The stamp carries the archive digest that produced the binary and the digest
-   * of the binary itself, so a hand-edited or partially replaced staging folder
-   * fails the check instead of being reported as current.
-   */
+  /** Return the stage record only while the staged binary still matches it. */
   async function verifiedStamp() {
     const stamp = readStamp();
-    if (!stamp || typeof stamp.archiveHash !== "string" || typeof stamp.binaryHash !== "string") {
-      return null;
-    }
-    const required = [
-      binaryPath,
-      join(targetDirectory, "LICENSE"),
-      join(targetDirectory, "README.txt"),
-    ];
-    if (required.some((file) => !existsSync(file))) {
+    if (!stamp || typeof stamp.binaryHash !== "string" || !existsSync(binaryPath)) {
       return null;
     }
     return (await hashFile(binaryPath)) === stamp.binaryHash ? stamp : null;
   }
 
   const stamp = await verifiedStamp();
-  const upToDate = stamp?.archiveHash === distribution.sha256;
   if (checkOnly) {
-    const staged = stamp?.label ?? readVersionMarker() ?? "none";
     console.log(
       [
         `FFmpeg ${platform}/${arch}`,
-        `  pinned  ${distribution.label} (${distribution.provider}, ${formatBytes(distribution.size)})`,
-        `  staged  ${staged}${upToDate ? " (up to date)" : " (update available)"}`,
-        `  sha256  ${distribution.sha256}`,
-        `  source  ${distribution.archiveUrl}`,
+        `  source  ${source.repository} (${source.assetPattern})`,
+        `  staged  ${stamp?.label ?? readVersionMarker() ?? "none"}`,
+        "  network latest lookup: skipped",
       ].join("\n"),
     );
     return;
   }
+  if (!releaseBuild) {
+    console.log(
+      existsSync(binaryPath)
+        ? `Local build keeps the staged FFmpeg for ${platform}/${arch}; latest lookup skipped.`
+        : `Local build leaves FFmpeg unstaged for ${platform}/${arch}; latest lookup skipped.`,
+    );
+    return;
+  }
+
+  const distribution = await resolveLatestFfmpeg(sources, platform, arch);
+  const artifactKey = `${distribution.releaseUrl}#${distribution.archiveName}:${distribution.sha256 ?? distribution.size}`;
+  const upToDate = stamp?.artifactKey === artifactKey;
   if (upToDate) {
+    console.log(`FFmpeg ${distribution.releaseTag} is already staged for ${platform}/${arch}.`);
     return;
   }
 
   mkdirSync(cacheDirectory, { recursive: true });
-  // An offline archive is accepted only if it matches the pinned checksum.
-  const suppliedArchive = process.env.REDUX_FFMPEG_ARCHIVE?.trim();
-  const archivePath = suppliedArchive
-    ? resolve(suppliedArchive)
-    : join(cacheDirectory, distribution.archiveName);
-  if (suppliedArchive) {
-    if (!existsSync(archivePath) || (await hashFile(archivePath)) !== distribution.sha256) {
-      throw new Error(
-        "The supplied FFmpeg archive is missing or does not match the pinned checksum.",
-      );
-    }
-  } else if (!existsSync(archivePath) || (await hashFile(archivePath)) !== distribution.sha256) {
-    try {
-      await downloadVerifiedFile({
-        url: distribution.archiveUrl,
-        destination: archivePath,
-        expectedHash: distribution.sha256,
-        label: "FFmpeg",
-      });
-    } catch (error) {
-      if (stamp) {
-        console.log(
-          `Could not download the pinned FFmpeg build (${error.message}); ` +
-            `keeping the staged ${stamp.label}.`,
-        );
-        return;
-      }
-      throw error;
-    }
+  const archivePath = join(cacheDirectory, distribution.archiveName);
+  let archiveHash;
+  if (
+    existsSync(archivePath) &&
+    distribution.sha256 !== null &&
+    (await hashFile(archivePath)) === distribution.sha256 &&
+    statSync(archivePath).size === distribution.size
+  ) {
+    archiveHash = await hashFile(archivePath);
+    console.log(`Using cached FFmpeg ${distribution.releaseTag} archive.`);
+  } else {
+    const result = await downloadVerifiedFile({
+      url: distribution.archiveUrl,
+      destination: archivePath,
+      expectedHash: distribution.sha256,
+      expectedSize: distribution.size,
+      label: "FFmpeg",
+    });
+    archiveHash = result.sha256;
   }
 
   const tempRoot = resolve(tmpdir());
@@ -180,7 +168,6 @@ async function main() {
       throw new Error("FFmpeg archive extraction failed.");
     }
     mkdirSync(targetDirectory, { recursive: true });
-    // A build that skipped the download left a note here; the real build replaces it.
     rmSync(join(targetDirectory, SKIPPED_TOOL_NOTE), { force: true });
     copyFileSync(join(staging, binaryEntry), binaryPath);
     if (platform !== "windows") {
@@ -194,7 +181,7 @@ async function main() {
         [
           "FFmpeg is licensed under the GNU General Public License.",
           "",
-          `Distribution: ${distribution.label}`,
+          `Distribution: ${distribution.archiveName}`,
           `Source: ${distribution.archiveUrl}`,
           "",
         ].join("\n"),
@@ -206,30 +193,34 @@ async function main() {
       writeFileSync(
         join(targetDirectory, "README.txt"),
         [
-          `FFmpeg ${distribution.label} static build for ${platform}/${arch}.`,
+          `FFmpeg ${distribution.releaseTag} static build for ${platform}/${arch}.`,
           "",
-          `Version: ${distribution.label}`,
+          `Archive: ${distribution.archiveName}`,
           "License: GPL v3",
           `Source: ${distribution.archiveUrl}`,
           "",
         ].join("\n"),
       );
     }
-    writeFileSync(join(targetDirectory, "VERSION.txt"), `${distribution.label}\n`);
+    writeFileSync(
+      join(targetDirectory, "VERSION.txt"),
+      `${distribution.releaseTag} (${distribution.archiveName})\n`,
+    );
     writeFileSync(
       stampPath,
       `${JSON.stringify(
         {
-          label: distribution.label,
+          label: `${distribution.releaseTag} ${distribution.archiveName}`,
+          artifactKey,
           archiveUrl: distribution.archiveUrl,
-          archiveHash: distribution.sha256,
+          archiveHash,
           binaryHash: await hashFile(binaryPath),
         },
         null,
         2,
       )}\n`,
     );
-    console.log(`Staged FFmpeg ${distribution.label} in ${targetDirectory}`);
+    console.log(`Staged latest FFmpeg ${distribution.releaseTag} in ${targetDirectory}`);
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

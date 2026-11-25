@@ -1,19 +1,14 @@
-/**
- * Reads the pinned manifest for the bundled desktop dependencies and holds the
- * helpers their staging scripts share.
- *
- * FFmpeg and the Cloudflare Tunnel client are pinned in `dependencyPins.json`
- * by exact version, immutable download URL, size, and SHA-256 digest. A build
- * reads that manifest instead of resolving a vendor's latest release, so a
- * verified pair is reused until a maintainer changes the pin.
- */
+/** Resolve release-only third-party desktop artifacts without storing versions in the repository. */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Manifest location below the repository root. */
-const MANIFEST_PATH = join("scripts", "dependencyPins.json");
+const MANIFEST_PATH = join("scripts", "dependencySources.json");
 
-/** Platforms the manifest must describe for the supported desktop targets. */
+/** GitHub's public API endpoint used only by release staging. */
+const GITHUB_API = "https://api.github.com";
+
+/** Platforms the source manifest must describe for the supported desktop targets. */
 const FFMPEG_TARGETS = ["windows-x64", "windows-x86", "linux-x64"];
 
 /** Cloudflare Tunnel assets the supported desktop targets download. */
@@ -24,7 +19,7 @@ export function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-/** Read one required non-empty string from a pin entry. */
+/** Read one required non-empty string from a source entry. */
 function requireText(entry, field, label) {
   const value = entry?.[field];
   if (typeof value !== "string" || value.trim() === "") {
@@ -33,55 +28,28 @@ function requireText(entry, field, label) {
   return value;
 }
 
-/** Read one positive integer byte count from a pin entry. */
-function requireSize(entry, label) {
-  const size = entry?.size;
-  if (!Number.isSafeInteger(size) || size <= 0) {
-    throw new Error(`${label} needs a positive size.`);
-  }
-  return size;
-}
-
-/** Read one lowercase SHA-256 digest from a pin entry. */
-function requireDigest(entry, label) {
-  const digest = requireText(entry, "sha256", label);
-  if (!/^[0-9a-f]{64}$/u.test(digest)) {
-    throw new Error(`${label} needs a lowercase SHA-256 digest.`);
-  }
-  return digest;
-}
-
-/** Read one HTTPS URL whose file name matches the pinned artifact. */
-function requireArtifactUrl(entry, urlField, nameField, label) {
-  const url = requireText(entry, urlField, label);
-  const name = requireText(entry, nameField, label);
-  let parsed;
+/** Validate a regular expression stored in the source manifest. */
+function requirePattern(entry, field, label) {
+  const value = requireText(entry, field, label);
   try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error(`${label} has an invalid ${urlField}.`);
+    new RegExp(value, "u");
+  } catch (error) {
+    throw new Error(`${label} has an invalid ${field}.`, { cause: error });
   }
-  if (parsed.protocol !== "https:") {
-    throw new Error(`${label} must download over HTTPS.`);
-  }
-  if (parsed.pathname.split("/").pop() !== name) {
-    throw new Error(`${label} URL does not name ${name}.`);
-  }
-  return { url, name };
+  return value;
 }
 
-/**
- * Validate one dependency pin manifest.
- *
- * Validation keeps a hand-edited manifest from silently pointing a build at a
- * different artifact: every target must carry a version, an HTTPS URL naming
- * the pinned file, a positive size, and a SHA-256 digest.
- *
- * @param {unknown} manifest Parsed `dependencyPins.json` document.
- * @param {string} [label] Manifest name used in error messages.
- * @returns {Record<string, any>} The same manifest, after validation.
- */
-export function validateDependencyPins(manifest, label = MANIFEST_PATH) {
+/** Validate one GitHub repository name. */
+function requireRepository(entry, label) {
+  const repository = requireText(entry, "repository", label);
+  if (!/^[\w.-]+\/[\w.-]+$/u.test(repository)) {
+    throw new Error(`${label} needs a GitHub repository in owner/name form.`);
+  }
+  return repository;
+}
+
+/** Validate the unversioned release source manifest. */
+export function validateDependencySources(manifest, label = MANIFEST_PATH) {
   if (manifest?.schemaVersion !== 1) {
     throw new Error(`${label} must declare schemaVersion 1.`);
   }
@@ -89,43 +57,34 @@ export function validateDependencyPins(manifest, label = MANIFEST_PATH) {
     const entry = manifest.ffmpeg?.[target];
     const entryLabel = `${label} FFmpeg ${target}`;
     if (!entry) {
-      throw new Error(`${label} has no FFmpeg pin for ${target}.`);
+      throw new Error(`${label} has no FFmpeg source for ${target}.`);
     }
-    requireText(entry, "version", entryLabel);
-    requireText(entry, "label", entryLabel);
-    requireText(entry, "provider", entryLabel);
-    requireArtifactUrl(entry, "archiveUrl", "archiveName", entryLabel);
-    requireDigest(entry, entryLabel);
-    requireSize(entry, entryLabel);
+    requireRepository(entry, entryLabel);
+    requirePattern(entry, "assetPattern", entryLabel);
     requireText(entry, "licenseFile", entryLabel);
     if (entry.readmeFile !== null && typeof entry.readmeFile !== "string") {
       throw new Error(`${entryLabel} needs readmeFile as a string or null.`);
     }
+    if (entry.selection !== "first" && entry.selection !== "highest-version") {
+      throw new Error(`${entryLabel} needs selection first or highest-version.`);
+    }
   }
 
   const cloudflaredLabel = `${label} cloudflared`;
-  requireText(manifest.cloudflared, "version", cloudflaredLabel);
-  requireText(manifest.cloudflared, "provider", cloudflaredLabel);
+  requireRepository(manifest.cloudflared, cloudflaredLabel);
   for (const target of CLOUDFLARED_TARGETS) {
     const entry = manifest.cloudflared?.assets?.[target];
     const entryLabel = `${cloudflaredLabel} ${target}`;
     if (!entry) {
-      throw new Error(`${cloudflaredLabel} has no asset for ${target}.`);
+      throw new Error(`${cloudflaredLabel} has no source for ${target}.`);
     }
-    requireArtifactUrl(entry, "url", "name", entryLabel);
-    requireDigest(entry, entryLabel);
-    requireSize(entry, entryLabel);
+    requireText(entry, "name", entryLabel);
   }
   return manifest;
 }
 
-/**
- * Read and validate the checked-in dependency pins.
- *
- * @param {string} root Repository root.
- * @returns {Record<string, any>} Validated manifest.
- */
-export function loadDependencyPins(root) {
+/** Read and validate the checked-in release source manifest. */
+export function loadDependencySources(root) {
   const path = join(root, MANIFEST_PATH);
   let parsed;
   try {
@@ -133,54 +92,152 @@ export function loadDependencyPins(root) {
   } catch (error) {
     throw new Error(`Could not read ${path}: ${error.message}`, { cause: error });
   }
-  return validateDependencyPins(parsed, path);
+  return validateDependencySources(parsed, path);
 }
 
-/**
- * Select the pinned FFmpeg distribution for one desktop target.
- *
- * @param {Record<string, any>} pins Validated manifest.
- * @param {string} platform `windows` or `linux`.
- * @param {string} arch `x64`, `x86`, or `arm64`.
- * @returns {Record<string, any>} Pinned distribution entry.
- */
-export function selectFfmpegPin(pins, platform, arch) {
-  const entry = pins?.ffmpeg?.[`${platform}-${arch}`];
+/** Select the source entry for one FFmpeg target. */
+export function selectFfmpegSource(sources, platform, arch) {
+  const entry = sources?.ffmpeg?.[`${platform}-${arch}`];
   if (!entry) {
-    throw new Error(`The dependency pins have no FFmpeg build for ${platform}/${arch}.`);
+    throw new Error(`The dependency sources have no FFmpeg build for ${platform}/${arch}.`);
   }
   return entry;
 }
 
-/**
- * Select the pinned Cloudflare Tunnel client for one desktop target.
- *
- * @param {Record<string, any>} pins Validated manifest.
- * @param {string} platform `windows` or `linux`.
- * @param {string} architecture `amd64`, `386`, or `arm64`.
- * @returns {Record<string, any>} Pinned asset entry.
- */
-export function selectCloudflaredPin(pins, platform, architecture) {
-  const entry = pins?.cloudflared?.assets?.[`${platform}-${architecture}`];
+/** Select the source entry for one Cloudflare Tunnel target. */
+export function selectCloudflaredSource(sources, platform, architecture) {
+  const entry = sources?.cloudflared?.assets?.[`${platform}-${architecture}`];
   if (!entry) {
     throw new Error(
-      `The dependency pins have no Cloudflare Tunnel client for ${platform}/${architecture}.`,
+      `The dependency sources have no Cloudflare Tunnel client for ${platform}/${architecture}.`,
     );
   }
   return entry;
 }
 
-/**
- * Locate the archive root that holds `bin/<binary>`.
- *
- * Vendors wrap the executable in a versioned top-level folder whose name
- * changes with every release, so the folder is read from the archive listing
- * rather than rebuilt from the version string.
- *
- * @param {string[]} entries Archive listing entries.
- * @param {string} binary Executable file name inside `bin/`.
- * @returns {{root: string, binaryEntry: string}} Distribution folder and entry.
- */
+/** Compare the first dotted numeric version embedded in an asset name. */
+function compareEmbeddedVersions(left, right) {
+  const read = (name) => name.match(/(?:^|[^\d])v?(\d+(?:\.\d+)+)(?:[^\d]|$)/u)?.[1] ?? "0";
+  const leftParts = read(left).split(".").map(Number);
+  const rightParts = read(right).split(".").map(Number);
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return left.localeCompare(right);
+}
+
+/** Select a release asset from a source rule without knowing its future name. */
+export function selectReleaseAsset(release, source, label) {
+  if (!Array.isArray(release?.assets)) {
+    throw new Error(`${label} latest release has no assets.`);
+  }
+  const pattern = new RegExp(source.assetPattern, "u");
+  const candidates = release.assets.filter(
+    (asset) => typeof asset?.name === "string" && pattern.test(asset.name),
+  );
+  if (candidates.length === 0) {
+    throw new Error(`${label} latest release has no asset matching ${source.assetPattern}.`);
+  }
+  if (source.selection === "highest-version") {
+    candidates.sort((left, right) => compareEmbeddedVersions(right.name, left.name));
+  }
+  const asset = candidates[0];
+  if (asset.name.includes("/") || asset.name.includes("\\")) {
+    throw new Error(`${label} latest asset ${asset.name} is not a plain file name.`);
+  }
+  if (
+    typeof asset.browser_download_url !== "string" ||
+    !asset.browser_download_url.startsWith("https://")
+  ) {
+    throw new Error(`${label} latest asset ${asset.name} has no HTTPS download URL.`);
+  }
+  if (!Number.isSafeInteger(asset.size) || asset.size <= 0) {
+    throw new Error(`${label} latest asset ${asset.name} has no positive size.`);
+  }
+  return asset;
+}
+
+/** Select a named release asset for a Cloudflare Tunnel target. */
+export function selectNamedReleaseAsset(release, name, label) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return selectReleaseAsset(release, { assetPattern: `^${escaped}$`, selection: "first" }, label);
+}
+
+/** Parse GitHub's optional asset digest into the format the downloader expects. */
+function assetDigest(asset) {
+  const digest = asset?.digest;
+  if (typeof digest !== "string") {
+    return null;
+  }
+  const match = /^sha256:([0-9a-f]{64})$/u.exec(digest);
+  if (!match) {
+    throw new Error(`GitHub returned an unsupported digest for ${asset.name}.`);
+  }
+  return match[1];
+}
+
+/** Fetch the latest stable GitHub release for a repository. */
+export async function fetchLatestRelease(repository, fetchImpl = fetch) {
+  const response = await fetchImpl(`${GITHUB_API}/repos/${repository}/releases/latest`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "RPE-Redux-release-resolver",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub latest release lookup failed for ${repository}: ${response.status}.`);
+  }
+  const release = await response.json();
+  if (!release?.tag_name || !release.html_url) {
+    throw new Error(`GitHub returned an invalid latest release for ${repository}.`);
+  }
+  return release;
+}
+
+/** Build the resolved metadata shared by the two staging scripts. */
+function resolvedArtifact(release, asset, source) {
+  return {
+    releaseTag: release.tag_name,
+    releaseName: release.name ?? release.tag_name,
+    releaseUrl: release.html_url,
+    publishedAt: release.published_at ?? null,
+    provider: source.repository,
+    archiveName: asset.name,
+    archiveUrl: asset.browser_download_url,
+    size: asset.size,
+    sha256: assetDigest(asset),
+    licenseFile: source.licenseFile ?? null,
+    readmeFile: source.readmeFile ?? null,
+  };
+}
+
+/** Resolve the latest FFmpeg archive for a target. */
+export async function resolveLatestFfmpeg(sources, platform, arch, fetchImpl = fetch) {
+  const source = selectFfmpegSource(sources, platform, arch);
+  const release = await fetchLatestRelease(source.repository, fetchImpl);
+  const asset = selectReleaseAsset(release, source, `FFmpeg ${platform}/${arch}`);
+  return resolvedArtifact(release, asset, source);
+}
+
+/** Resolve the latest Cloudflare Tunnel executable for a target. */
+export async function resolveLatestCloudflared(sources, platform, architecture, fetchImpl = fetch) {
+  const source = sources.cloudflared;
+  const target = selectCloudflaredSource(sources, platform, architecture);
+  const release = await fetchLatestRelease(source.repository, fetchImpl);
+  const asset = selectNamedReleaseAsset(
+    release,
+    target.name,
+    `Cloudflare Tunnel ${platform}/${architecture}`,
+  );
+  return resolvedArtifact(release, asset, source);
+}
+
+/** Locate the archive root that holds `bin/<binary>`. */
 export function findArchiveRoot(entries, binary) {
   const suffix = `/bin/${binary}`;
   const binaryEntry = entries.find((entry) => entry.endsWith(suffix));

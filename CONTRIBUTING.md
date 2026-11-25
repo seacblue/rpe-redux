@@ -95,7 +95,7 @@ Run `npm run check:native` when a change touches Rust. Run `npm run test:server`
 
 - Preserve `LICENSE`, `NOTICE`, resource manifests, and compatibility-sensitive chart serialization.
 - Third-party dependencies use the committed lockfiles: `package-lock.json`, `src-tauri/Cargo.lock`, and `src/backend/go.sum`. Update the manifest and its lockfile in the same change; grouped Dependabot pull requests cover routine upgrades.
-- Bundled desktop helpers are pinned by exact version, URL, size, and SHA-256 in `scripts/dependencyPins.json`. Builds read that manifest instead of resolving an upstream `latest` release, and a verified cache or staged copy is reused until the pin changes. Bump a pin deliberately and stage it once; [Desktop runtime](docs/desktop.md#bundled-third-party-binaries) has the procedure.
+- Bundled desktop helpers follow vendor latest stable releases only in release CI. `scripts/dependencySources.json` stores repositories and asset selectors, never versions or fixed URLs. Local builds reuse a staged copy or continue without the optional tools; [Desktop runtime](docs/desktop.md#bundled-third-party-binaries) documents the contract.
 - Keep the bundled FFmpeg license text and its `NOTICE` entry in sync with the pinned build.
 - New third-party assets need a compatible license and a notice entry.
 - Chart and PEZ round trips must preserve unknown fields, array order, untouched beat strings, and resource references.

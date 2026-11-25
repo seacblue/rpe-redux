@@ -278,7 +278,7 @@ fn check_active(session: &Session) -> Result<()> {
 
 /// Locate only the FFmpeg binary shipped with the application.
 ///
-/// A build made without the pinned download has no encoder; the surface reports
+/// A build made without the release-resolved download has no encoder; the surface reports
 /// that as an unavailable feature instead of failing at an unrelated step.
 fn bundled_encoder(app: &AppHandle) -> Result<PathBuf> {
     let encoder = encoder_path(app).ok_or("recording_encoder_missing")?;
@@ -947,7 +947,7 @@ mod streaming_tests {
 
     /// The staged encoder, or `None` when this build was made without the tool.
     ///
-    /// A build that skips the pinned download has no encoder to exercise, so the
+    /// A build that skips the release-resolved download has no encoder to exercise, so the
     /// encoder-backed tests report a skip instead of failing on a missing file.
     fn staged_encoder() -> Option<PathBuf> {
         let encoder = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
