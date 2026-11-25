@@ -30,7 +30,7 @@ Stages the Go sidecar and media helpers, then opens the Tauri window.
   --ai-port <port>              Pin the Code Cell bridge port for this run.
   --collab-port <port>          Pin the collaboration room port for this run.
   --new-ports                   Choose a new fixed port set for this worktree.
-  --without-bundled-tools       Skip the FFmpeg and Cloudflare Tunnel downloads.
+  --without-bundled-tools       Leave the optional FFmpeg and Cloudflare Tunnel tools out.
 
 The selected ports are stored in .scratch/dev/ports.json and reused by
 npm run dev and npm run dev:desktop.`);

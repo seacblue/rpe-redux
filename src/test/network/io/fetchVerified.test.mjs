@@ -1,4 +1,4 @@
-/** Pinned artifact downloads verify their checksum and survive transient HTTP failures. */
+/** Artifact downloads verify their checksum and survive transient HTTP failures. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -8,7 +8,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { downloadVerifiedFile, hashFile } from "../../../../scripts/fetchVerified.mjs";
 
-const payload = Buffer.from("pinned artifact payload");
+const payload = Buffer.from("release artifact payload");
 const payloadHash = createHash("sha256").update(payload).digest("hex");
 
 /** Serve scripted responses in order; a missing script repeats the last response. */

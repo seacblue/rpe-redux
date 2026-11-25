@@ -1,110 +1,139 @@
-/**
- * Verifies the pinned dependency manifest: every supported desktop target names
- * an exact artifact with an HTTPS URL, a size, and a SHA-256 digest, so the
- * staging scripts never resolve a floating latest release.
- */
+/** Verifies release-only dependency sources resolve future vendor assets without version pins. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolve } from "node:path";
 import {
   findArchiveRoot,
-  loadDependencyPins,
-  selectCloudflaredPin,
-  selectFfmpegPin,
-  validateDependencyPins,
+  loadDependencySources,
+  resolveLatestCloudflared,
+  resolveLatestFfmpeg,
+  selectCloudflaredSource,
+  selectFfmpegSource,
+  selectReleaseAsset,
+  validateDependencySources,
 } from "../../../../scripts/dependencyArtifacts.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
-const pins = loadDependencyPins(ROOT);
+const sources = loadDependencySources(ROOT);
 
-test("the pin manifest covers every supported desktop target", () => {
-  assert.equal(pins.schemaVersion, 1);
+function fakeFetch(release) {
+  return async () =>
+    new Response(JSON.stringify(release), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+}
 
-  for (const [target, entry] of Object.entries(pins.ffmpeg)) {
-    assert.equal(typeof entry.version, "string", target);
-    assert.ok(entry.version.length > 0, target);
-    assert.equal(typeof entry.label, "string", target);
-    assert.equal(typeof entry.provider, "string", target);
-    assert.ok(entry.archiveUrl.startsWith("https://"), target);
-    assert.match(entry.sha256, /^[0-9a-f]{64}$/u, target);
-    assert.ok(entry.size > 0, target);
+function asset(name, size = 100, digest = "sha256:" + "a".repeat(64)) {
+  return {
+    name,
+    size,
+    digest,
+    browser_download_url: `https://github.com/example/release/download/latest/${name}`,
+  };
+}
+
+test("the source manifest covers every supported desktop target without versions", () => {
+  assert.equal(sources.schemaVersion, 1);
+  for (const entry of Object.values(sources.ffmpeg)) {
+    assert.equal(typeof entry.repository, "string");
+    assert.equal(typeof entry.assetPattern, "string");
+    assert.equal("version" in entry, false);
+    assert.equal("archiveUrl" in entry, false);
+    assert.equal("sha256" in entry, false);
   }
-
-  assert.equal(typeof pins.cloudflared.version, "string");
-  for (const [target, entry] of Object.entries(pins.cloudflared.assets)) {
-    assert.equal(typeof entry.name, "string", target);
-    assert.ok(entry.url.startsWith("https://"), target);
-    assert.match(entry.sha256, /^[0-9a-f]{64}$/u, target);
-    assert.ok(entry.size > 0, target);
+  assert.equal(typeof sources.cloudflared.repository, "string");
+  for (const entry of Object.values(sources.cloudflared.assets)) {
+    assert.equal(typeof entry.name, "string");
+    assert.equal("version" in entry, false);
+    assert.equal("url" in entry, false);
+    assert.equal("sha256" in entry, false);
   }
 });
 
-test("pins select the exact artifact for each supported target", () => {
-  assert.equal(selectFfmpegPin(pins, "windows", "x64").version, "8.1.2");
-  assert.equal(selectFfmpegPin(pins, "windows", "x86").version, "8.1.3");
-  assert.equal(selectFfmpegPin(pins, "linux", "x64").version, "8.1.3");
+test("source selection reports unsupported targets", () => {
+  assert.equal(selectFfmpegSource(sources, "windows", "x64").repository, "GyanD/codexffmpeg");
   assert.equal(
-    selectCloudflaredPin(pins, "windows", "amd64").name,
+    selectCloudflaredSource(sources, "windows", "amd64").name,
     "cloudflared-windows-amd64.exe",
   );
-  assert.equal(selectCloudflaredPin(pins, "windows", "386").name, "cloudflared-windows-386.exe");
-  assert.equal(selectCloudflaredPin(pins, "linux", "amd64").name, "cloudflared-linux-amd64");
-
-  assert.throws(() => selectFfmpegPin(pins, "linux", "arm64"), /no FFmpeg build for linux\/arm64/u);
+  assert.throws(() => selectFfmpegSource(sources, "linux", "arm64"), /no FFmpeg build/u);
   assert.throws(
-    () => selectCloudflaredPin(pins, "linux", "arm64"),
-    /no Cloudflare Tunnel client for linux\/arm64/u,
+    () => selectCloudflaredSource(sources, "linux", "arm64"),
+    /no Cloudflare Tunnel client/u,
   );
 });
 
-test("pinned URLs name the exact versioned artifact instead of a latest alias", () => {
-  for (const entry of Object.values(pins.ffmpeg)) {
-    assert.doesNotMatch(entry.archiveUrl, /\/releases\/download\/latest\//u);
-    assert.ok(entry.archiveUrl.endsWith(`/${entry.archiveName}`));
-    assert.ok(entry.archiveUrl.includes(entry.version));
-  }
-  for (const entry of Object.values(pins.cloudflared.assets)) {
-    assert.ok(entry.url.endsWith(`/${entry.name}`));
-    assert.ok(entry.url.includes(pins.cloudflared.version));
-    assert.doesNotMatch(entry.url, /\/latest\//u);
-  }
+test("latest asset selection chooses the highest compatible version in one release", () => {
+  const release = {
+    assets: [
+      asset("ffmpeg-n7.1-latest-win32-gpl-7.1.zip"),
+      asset("ffmpeg-n9.0-latest-win32-gpl-9.0.zip"),
+      asset("ffmpeg-n8.1-latest-win32-gpl-8.1.zip"),
+    ],
+  };
+  const selected = selectReleaseAsset(release, sources.ffmpeg["windows-x86"], "FFmpeg");
+  assert.equal(selected.name, "ffmpeg-n9.0-latest-win32-gpl-9.0.zip");
 });
 
-test("validation rejects a missing target and a malformed pin", () => {
-  const missingTarget = structuredClone(pins);
+test("latest resolvers use release metadata and the optional GitHub digest", async () => {
+  const release = {
+    tag_name: "future-release",
+    name: "Future release",
+    html_url: "https://github.com/example/release",
+    assets: [asset("ffmpeg-10.0-essentials_build.zip", 123)],
+  };
+  const resolved = await resolveLatestFfmpeg(sources, "windows", "x64", fakeFetch(release));
+  assert.equal(resolved.releaseTag, "future-release");
+  assert.equal(resolved.archiveName, "ffmpeg-10.0-essentials_build.zip");
+  assert.equal(resolved.sha256, "a".repeat(64));
+  assert.equal(resolved.size, 123);
+
+  const tunnelRelease = {
+    tag_name: "future-tunnel",
+    html_url: "https://github.com/example/tunnel",
+    assets: [asset("cloudflared-windows-amd64.exe", 456)],
+  };
+  const tunnel = await resolveLatestCloudflared(
+    sources,
+    "windows",
+    "amd64",
+    fakeFetch(tunnelRelease),
+  );
+  assert.equal(tunnel.releaseTag, "future-tunnel");
+  assert.equal(tunnel.archiveName, "cloudflared-windows-amd64.exe");
+});
+
+test("validation rejects a missing target and malformed source", () => {
+  const missingTarget = structuredClone(sources);
   delete missingTarget.ffmpeg["linux-x64"];
   assert.throws(
-    () => validateDependencyPins(missingTarget, "test pins"),
-    /no FFmpeg pin for linux-x64/u,
+    () => validateDependencySources(missingTarget, "test sources"),
+    /no FFmpeg source for linux-x64/u,
   );
 
-  const badDigest = structuredClone(pins);
-  badDigest.cloudflared.assets["windows-amd64"].sha256 = "not-a-digest";
-  assert.throws(() => validateDependencyPins(badDigest, "test pins"), /SHA-256 digest/u);
-
-  const wrongName = structuredClone(pins);
-  wrongName.ffmpeg["windows-x64"].archiveName = "other.zip";
+  const insecureRepository = structuredClone(sources);
+  insecureRepository.ffmpeg["windows-x64"].repository = "https://example.test";
   assert.throws(
-    () => validateDependencyPins(wrongName, "test pins"),
-    /URL does not name other\.zip/u,
+    () => validateDependencySources(insecureRepository, "test sources"),
+    /owner\/name/u,
   );
 
-  const insecure = structuredClone(pins);
-  insecure.ffmpeg["windows-x64"].archiveUrl =
-    "http://example.test/ffmpeg-9.0.2-essentials_build.zip";
-  assert.throws(() => validateDependencyPins(insecure, "test pins"), /HTTPS/u);
+  const badSelection = structuredClone(sources);
+  badSelection.ffmpeg["windows-x64"].selection = "pinned";
+  assert.throws(() => validateDependencySources(badSelection, "test sources"), /selection/u);
 });
 
-test("the archive root is read from the listing instead of the version string", () => {
+test("the archive root is read from the listing instead of a version string", () => {
   const entries = [
-    "ffmpeg-9.0.2-essentials_build/",
-    "ffmpeg-9.0.2-essentials_build/LICENSE",
-    "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe",
+    "ffmpeg-future-essentials/",
+    "ffmpeg-future-essentials/LICENSE",
+    "ffmpeg-future-essentials/bin/ffmpeg.exe",
   ];
 
   assert.deepEqual(findArchiveRoot(entries, "ffmpeg.exe"), {
-    root: "ffmpeg-9.0.2-essentials_build",
-    binaryEntry: "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe",
+    root: "ffmpeg-future-essentials",
+    binaryEntry: "ffmpeg-future-essentials/bin/ffmpeg.exe",
   });
   assert.throws(() => findArchiveRoot(entries, "ffmpeg"), /does not contain bin\/ffmpeg\./u);
 });

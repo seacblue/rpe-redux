@@ -168,7 +168,7 @@ function localRoomServerUrl(): string {
  * Prefer the requested host transport, falling back to the LAN bridge when this
  * build carries no Cloudflare Tunnel client.
  *
- * Hosting keeps working without the pinned download; the warning notice explains
+ * Hosting keeps working without the release-resolved download; the warning notice explains
  * why the invitation carries a local address instead of a public one.
  */
 async function resolveHostMode(mode: CollaborationHostMode): Promise<CollaborationHostMode> {

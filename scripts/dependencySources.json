@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "ffmpeg": {
+    "windows-x64": {
+      "repository": "GyanD/codexffmpeg",
+      "assetPattern": "^ffmpeg-\\d+(?:\\.\\d+)*-essentials_build\\.zip$",
+      "selection": "first",
+      "licenseFile": "LICENSE",
+      "readmeFile": "README.txt"
+    },
+    "windows-x86": {
+      "repository": "defisym/FFmpeg-Builds-Win32",
+      "assetPattern": "^ffmpeg-n\\d+(?:\\.\\d+)*-latest-win32-gpl-\\d+(?:\\.\\d+)*\\.zip$",
+      "selection": "highest-version",
+      "licenseFile": "LICENSE.txt",
+      "readmeFile": null
+    },
+    "linux-x64": {
+      "repository": "BtbN/FFmpeg-Builds",
+      "assetPattern": "^ffmpeg-master-latest-linux64-gpl\\.tar\\.xz$",
+      "selection": "first",
+      "licenseFile": "LICENSE.txt",
+      "readmeFile": null
+    }
+  },
+  "cloudflared": {
+    "repository": "cloudflare/cloudflared",
+    "assets": {
+      "windows-amd64": { "name": "cloudflared-windows-amd64.exe" },
+      "windows-386": { "name": "cloudflared-windows-386.exe" },
+      "linux-amd64": { "name": "cloudflared-linux-amd64" }
+    }
+  }
+}

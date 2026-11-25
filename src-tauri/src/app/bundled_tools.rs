@@ -1,7 +1,7 @@
 //! Availability of the optional third-party tools a desktop build may omit.
 //!
 //! FFmpeg and the Cloudflare Tunnel client are downloaded at build time from the
-//! pinned manifest. A local build can skip both downloads, so the host answers
+//! latest stable releases. A local build can skip both downloads, so the host answers
 //! which ones it carries and the interface falls back with a warning instead of
 //! failing a task halfway through.
 
