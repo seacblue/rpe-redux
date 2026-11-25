@@ -155,10 +155,10 @@ const curveShortcuts: readonly EditorShortcutDefinition[] = [
     category: SHORTCUT_CATEGORIES.editorCurve.id,
     title: "shortcuts.editor.curveQuickPick",
     scope: "editor",
-    // The timeline owns the pointer gesture, so the registry only exposes the
-    // optional binding to the settings page and the passive matcher.
+    // The timeline owns the cursor hit test, while the keyboard dispatcher owns
+    // the trigger. A key press therefore does not need a second mouse chord.
     defaults: [],
-    passive: true,
+    surface: "timeline",
   },
   {
     id: "editor.curve.delete",

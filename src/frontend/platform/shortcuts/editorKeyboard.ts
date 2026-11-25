@@ -53,7 +53,7 @@ export interface EditorKeyboardBindingDependencies extends Omit<
 > {
   timeline: Pick<
     Timeline,
-    "viewport" | "gestures" | "eventTypes" | "addAtCursor" | "cancelPlacement"
+    "viewport" | "gestures" | "eventTypes" | "addAtCursor" | "cancelPlacement" | "quickPickAtCursor"
   >;
   scope: ResourceScope;
   batchControlsActive: () => boolean;
@@ -128,6 +128,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       get eventTypes() {
         return deps.timeline.eventTypes;
       },
+      quickPickAtCursor: () => deps.timeline.quickPickAtCursor(),
       get eventInteraction() {
         return deps.timeline.gestures.eventInteraction;
       },

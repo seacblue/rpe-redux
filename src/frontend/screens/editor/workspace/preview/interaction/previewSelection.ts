@@ -25,6 +25,8 @@ import {
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { applySelection, cloneSelection } from "./previewNoteSelection.ts";
 import { previewPointerMoved } from "./previewSelectionPolicy.ts";
+import { SELECTION_SHORTCUT_IDS } from "../../../../../../core/edit/selection/control.ts";
+import { matchesSelectionShortcut } from "../../timeline/selection/selectionShortcuts.ts";
 export { selectionMapForSession } from "./previewSelectionMap.ts";
 
 /** A CSS-pixel point in the preview canvas. */
@@ -63,6 +65,7 @@ interface PreviewSelectionGesture {
   baseline: Map<number, Set<number>>;
   baselineState: SelectionState;
   append: boolean;
+  toggle: boolean;
   remove: boolean;
   moved: boolean;
   /** Cheap key for the last applied rectangle/history state. */
@@ -337,13 +340,20 @@ function selectionAtPoint(
   point: Point,
   gesture: PreviewSelectionGesture,
 ): Map<number, Set<number>> {
-  const next = gesture.append || gesture.remove ? cloneMap(gesture.baseline) : new Map();
+  const next =
+    gesture.append || gesture.remove || gesture.toggle ? cloneMap(gesture.baseline) : new Map();
   const hit = noteAtPoint(preview, point);
   if (!hit || hit.noteIndex === undefined) {
-    return gesture.append || gesture.remove ? next : new Map();
+    return gesture.append || gesture.remove || gesture.toggle ? next : new Map();
   }
   const selected = next.get(hit.lineIndex) ?? new Set<number>();
-  if (gesture.remove) {
+  if (gesture.toggle && !gesture.remove) {
+    if (selected.has(hit.noteIndex)) {
+      selected.delete(hit.noteIndex);
+    } else {
+      selected.add(hit.noteIndex);
+    }
+  } else if (gesture.remove) {
     selected.delete(hit.noteIndex);
   } else {
     selected.add(hit.noteIndex);
@@ -609,10 +619,22 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
     }
     const active = gesture;
     gesture = null;
+    const session = options.getSession();
     if (options.stage.hasPointerCapture(active.pointerId)) {
       options.stage.releasePointerCapture(active.pointerId);
     }
     if (active.moved) {
+      if (active.toggle) {
+        const point = active.start;
+        applySelection(session, selectionAtPoint(options.preview, point, active), false);
+        session.recordSelection(undefined, active.baselineState);
+        options.timeline.gestures.previewMarquee = null;
+        stopGeometryObserver();
+        options.timeline.changed();
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       commit(active);
       event.preventDefault();
       event.stopPropagation();
@@ -631,10 +653,12 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
     options.timeline.gestures.previewMarquee = null;
     stopGeometryObserver();
     const point = active.start;
-    const session = options.getSession();
     const notes = noteCandidates(options.preview, point);
     const exactNotes = notes.filter((note) => previewNoteContains(note, point));
-    if (exactNotes.length > 1) {
+    if (
+      exactNotes.length > 1 &&
+      matchesSelectionShortcut(SELECTION_SHORTCUT_IDS.note, event, "notes", "preview", event.target)
+    ) {
       options.preview.setOverlapMenuOpen(true);
       openOverlapMenu(
         options.stage,
@@ -653,7 +677,11 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
     }
     const lines = lineCandidates(options.preview, point);
     const exactLines = lineCandidates(options.preview, point, true);
-    if (!notes.length && exactLines.length > 1) {
+    if (
+      !notes.length &&
+      exactLines.length > 1 &&
+      matchesSelectionShortcut(SELECTION_SHORTCUT_IDS.line, event, "notes", "preview", event.target)
+    ) {
       options.preview.setOverlapMenuOpen(true);
       openOverlapMenu(
         options.stage,
@@ -670,7 +698,11 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
       event.stopPropagation();
       return;
     }
-    if (!notes.length && lines.length) {
+    if (
+      !notes.length &&
+      lines.length &&
+      matchesSelectionShortcut(SELECTION_SHORTCUT_IDS.line, event, "notes", "preview", event.target)
+    ) {
       pick(event, active.baselineState);
       return;
     }
@@ -724,14 +756,46 @@ export function bindPreviewSelection(options: PreviewSelectionBindingOptions): (
       return;
     }
     const session = options.getSession();
+    const toggleSelection = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.toggle,
+      pointer,
+      "notes",
+      "preview",
+      pointer.target,
+    );
+    const marqueeSelection = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.marquee,
+      pointer,
+      "notes",
+      "preview",
+      pointer.target,
+    );
+    const marqueeRemove = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.marqueeRemove,
+      pointer,
+      "notes",
+      "preview",
+      pointer.target,
+    );
+    const selectNote = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.note,
+      pointer,
+      "notes",
+      "preview",
+      pointer.target,
+    );
+    if (!selectNote && !toggleSelection && !marqueeSelection && !marqueeRemove) {
+      return;
+    }
     gesture = {
       pointerId: pointer.pointerId,
       start: point,
       current: point,
       baseline: cloneSelection(session),
       baselineState: session.selectionState(),
-      append: pointer.shiftKey || pointer.ctrlKey,
-      remove: pointer.altKey,
+      append: marqueeSelection || marqueeRemove,
+      toggle: toggleSelection,
+      remove: marqueeRemove,
       moved: false,
       historyKey: historyKey(session),
       swept: new Map(),

@@ -16,7 +16,7 @@ import {
   finishRectangle,
 } from "../selection/rectangleSelection.ts";
 import { cancelPlacement, autoScroll } from "../interaction/timelineInteraction.ts";
-import { movedNote, move, down, up } from "../notes/noteInteraction.ts";
+import { movedNote, move, down, up, quickPickAtCursor } from "../notes/noteInteraction.ts";
 import { refreshIndex, visible, hit } from "../notes/noteHitTest.ts";
 import { addAtCursor } from "../notes/noteInsertion.ts";
 import {
@@ -50,6 +50,7 @@ export const timelineMethods = {
   move,
   down,
   up,
+  quickPickAtCursor,
   addAtCursor,
   grid,
   gridForLine,
