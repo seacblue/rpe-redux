@@ -12,6 +12,12 @@ export interface PropertyControl {
   value: string;
 }
 
+/** Supplies project audio choices and imports one new hit-sound asset. */
+export interface NoteHitSoundOptions {
+  names(): readonly string[];
+  add(): Promise<string | null>;
+}
+
 export interface NotePropertyField {
   key: string;
   label: string;

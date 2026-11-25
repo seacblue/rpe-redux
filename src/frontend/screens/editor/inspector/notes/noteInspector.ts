@@ -40,13 +40,14 @@ import {
   editCapturedSelection,
 } from "../../../../../core/edit/selection/edits.ts";
 import { timelineDragPreview } from "../../../../../core/edit/timeline/dragPreviewState.ts";
-import {
-  defaultHitSound,
-  isBuiltInHitSound,
-  noteHitSound,
-} from "../../../../../core/media/hitTimeline.ts";
+import { isBuiltInHitSound, noteHitSound } from "../../../../../core/media/hitTimeline.ts";
 import { getLanguage, t } from "../../../../../i18n/index.ts";
-import { type NotesInspectorState, type NotePropertyField, type PropertyControl } from "./model.ts";
+import {
+  type NoteHitSoundOptions,
+  type NotesInspectorState,
+  type NotePropertyField,
+  type PropertyControl,
+} from "./model.ts";
 
 type FieldName =
   | "type"
@@ -107,6 +108,7 @@ interface PropertiesRenderContext {
   multiLineMode: string;
   language: string;
   entries: NoteCaptureEntry[];
+  hitSoundNames: string[];
 }
 
 /**
@@ -158,6 +160,11 @@ function sameEntries(left: NoteCaptureEntry[], right: NoteCaptureEntry[]): boole
         entry.note === right[index]?.note,
     )
   );
+}
+
+/** Compares project hit-sound names without making asset-map order observable. */
+function sameNames(left: string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((name, index) => name === right[index]);
 }
 
 /** Clears the cached render context and the published property snapshot. */
@@ -219,6 +226,10 @@ export function renderProperties(
   nudgeBeatInput: (value: Beat, direction: number) => Beat | null = () => null,
   // Structural changes may need to publish while a control still owns focus.
   forceRefresh = false,
+  hitSoundOptions: NoteHitSoundOptions = {
+    names: () => [],
+    add: async () => null,
+  },
 ): void {
   if (session.noteDraftActive && !forceRefresh) {
     return;
@@ -226,6 +237,7 @@ export function renderProperties(
   const entries = selectedNoteEntries(session);
   const language = getLanguage();
   const previous = renderContexts.get(state);
+  const hitSoundNames = [...hitSoundOptions.names()];
   if (
     previous &&
     previous.chart === session.chart &&
@@ -235,7 +247,8 @@ export function renderProperties(
     previous.multiLineActive === session.multiLineActive &&
     previous.multiLineMode === session.multiLineMode &&
     previous.language === language &&
-    sameEntries(previous.entries, entries)
+    sameEntries(previous.entries, entries) &&
+    sameNames(previous.hitSoundNames, hitSoundNames)
   ) {
     return;
   }
@@ -248,6 +261,7 @@ export function renderProperties(
     multiLineMode: session.multiLineMode,
     language,
     entries,
+    hitSoundNames,
   });
   state.selectedCount.set(entries.length);
   const selectedEntry = entries[0];
@@ -370,10 +384,43 @@ export function renderProperties(
       if (key === "color" || key === "hitSound") {
         const tinted = note as JudgeLineNote & { color?: unknown; tint?: unknown };
         const present = key === "color" ? noteHasColor(note) : noteHasHitSound(note);
-        // The field shows the effective sound: an authored custom sound, or the
-        // one the note type selects. A type change therefore updates it at once.
-        const hitSound =
-          key === "hitSound" ? (noteHitSound(note) ?? defaultHitSound(note.type)) : "";
+        const authoredHitSound = key === "hitSound" ? noteHitSound(note) : undefined;
+        const defaultValue = "__redux_default_hit_sound__";
+        const addValue = "__redux_add_hit_sound__";
+        const selectedHitSound =
+          authoredHitSound && !isBuiltInHitSound(authoredHitSound)
+            ? authoredHitSound
+            : defaultValue;
+        const hitSoundChoices =
+          key === "hitSound"
+            ? [
+                [defaultValue, t("editorPanels.inspector.hitSoundDefault")] as [string, string],
+                ...[
+                  ...new Set([
+                    ...hitSoundNames,
+                    ...(authoredHitSound && !isBuiltInHitSound(authoredHitSound)
+                      ? [authoredHitSound]
+                      : []),
+                  ]),
+                ].map((name) => [name, name] as [string, string]),
+                [addValue, t("editorPanels.inspector.hitSoundAdd")] as [string, string],
+              ]
+            : undefined;
+        const applySound = (value: string, control?: PropertyControl) => {
+          const customSound = value === defaultValue ? "" : value.trim();
+          applyNoteTransform(
+            session,
+            t("editorPanels.inspector.modify", { field: label }),
+            (current) => {
+              const next = { ...current, hitSound: customSound || undefined };
+              delete (next as Record<string, unknown>).hitsound;
+              return next;
+            },
+          );
+          if (control) {
+            control.value = value;
+          }
+        };
         const apply = (control: PropertyControl) => {
           try {
             if (key === "color") {
@@ -394,32 +441,49 @@ export function renderProperties(
               );
               return;
             }
-            const customSound = control.value.trim();
-            applyNoteTransform(
-              session,
-              t("editorPanels.inspector.modify", { field: label }),
-              (current) => {
-                const next = { ...current, hitSound: customSound || undefined };
-                delete (next as Record<string, unknown>).hitsound;
-                return next;
-              },
-            );
+            if (control.value === addValue) {
+              void hitSoundOptions
+                .add()
+                .then((name) => {
+                  if (name) {
+                    applySound(name, control);
+                    renderProperties(
+                      session,
+                      state,
+                      tempo,
+                      reportError,
+                      nudgeBeatInput,
+                      true,
+                      hitSoundOptions,
+                    );
+                  } else {
+                    control.value = selectedHitSound;
+                  }
+                })
+                .catch((error) => {
+                  control.value = selectedHitSound;
+                  reportError(error);
+                });
+              return;
+            }
+            applySound(control.value, control);
           } catch (error) {
             reportError(error);
-            control.value = key === "color" ? colorHex(tinted.color ?? tinted.tint) : hitSound;
+            control.value =
+              key === "color" ? colorHex(tinted.color ?? tinted.tint) : selectedHitSound;
           }
         };
         fields.push({
           key,
           label,
-          kind: key === "color" ? "color" : "text",
-          preservesDraft: key === "hitSound",
-          value: key === "color" ? colorHex(tinted.color ?? tinted.tint) : hitSound,
+          kind: key === "color" ? "color" : "select",
+          preservesDraft: false,
+          value: key === "color" ? colorHex(tinted.color ?? tinted.tint) : selectedHitSound,
+          options: hitSoundChoices,
           present,
-          placeholder:
-            key === "color" ? "#RRGGBB" : t("editorPanels.inspector.hitSoundPlaceholder"),
+          placeholder: key === "color" ? "#RRGGBB" : undefined,
           dirty: present,
-          reset: () => apply({ value: "" }),
+          reset: () => apply({ value: key === "color" ? "" : defaultValue }),
           apply,
           focus,
           blur,

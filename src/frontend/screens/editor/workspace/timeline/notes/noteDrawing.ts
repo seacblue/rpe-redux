@@ -1,6 +1,5 @@
 /** Draws note timelines, their multi-line panels, and the moving playhead. */
 /* eslint-disable max-lines -- note layers and skin-backed clipboard ghosts share one draw order. */
-import { noteAlpha } from "../../../../../../core/global/chart/optionalFeatures.ts";
 import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
 import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import {
@@ -91,6 +90,11 @@ interface NotePaintOptions {
   rotation?: number;
 }
 
+/** Convert authored alpha to the timeline opacity that keeps zero-alpha notes selectable. */
+function timelineNoteAlpha(note: TimelineNote): number {
+  return (51 + Number(note.alpha ?? 255) * 0.8) / 255;
+}
+
 /** Create a note projection that reuses the frame's origin lookup. */
 interface NoteProjection {
   /** Frame factor for the line; also keys the prepared render data. */
@@ -141,7 +145,7 @@ export function drawNote(
   const { note, horizontal, vertical, endVertical, noteWidth, height } = options;
   const { palette } = options;
   const alpha =
-    noteAlpha(note) * (this.appearance.noteOpacity ?? 1) * (options.opacityMultiplier ?? 1);
+    timelineNoteAlpha(note) * (this.appearance.noteOpacity ?? 1) * (options.opacityMultiplier ?? 1);
   const shear = note.type === 2 ? 0 : (options.shear ?? 0);
   const rotation = note.type === 2 ? 0 : (options.rotation ?? 0);
   context.globalAlpha = alpha;

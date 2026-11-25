@@ -9,7 +9,7 @@ import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import type { ResourceScope } from "../../../../../../core/utils/resourceScope.ts";
 import { getLanguage, onLanguageChange } from "../../../../../../i18n/index.ts";
 import { renderProperties } from "../../../inspector/notes/noteInspector.ts";
-import type { NotesInspectorState } from "../../../inspector/notes/model.ts";
+import type { NoteHitSoundOptions, NotesInspectorState } from "../../../inspector/notes/model.ts";
 
 /** Editor state the language-change repaint reads. */
 export interface EditorLanguageRefreshDependencies {
@@ -20,6 +20,7 @@ export interface EditorLanguageRefreshDependencies {
   getTempo(): TempoGrid;
   reportError(error: unknown): void;
   onNudge(value: Beat, direction: number): Beat | null;
+  hitSoundOptions: NoteHitSoundOptions;
 }
 
 /** Repaint open inspector properties when the catalog changes. */
@@ -38,6 +39,8 @@ export function bindEditorLanguageRefresh(deps: EditorLanguageRefreshDependencie
           deps.getTempo(),
           deps.reportError,
           deps.onNudge,
+          false,
+          deps.hitSoundOptions,
         );
       }
     }),
