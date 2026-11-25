@@ -13,7 +13,6 @@ import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx"
 import { ColorField } from "../../../../../design/components/input/ColorField.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
-import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { useEditorRuntimeValue } from "../../workspace/runtime/composition/EditorRuntime.tsx";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { useSetting } from "../../../settings/useSetting.ts";
@@ -134,49 +133,6 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             disabled={field.disabled}
             data-inspector-field={field.key}
             onChange={(event) => field.apply?.({ value: event.currentTarget.checked ? "1" : "0" })}
-          />
-        }
-      />
-    );
-  }
-
-  if (field.kind === "slider") {
-    const sliderValue = focused ? draft : field.value;
-    return (
-      <FieldRow
-        layout="inline"
-        density="compact"
-        htmlFor={`note-field-${field.key}`}
-        idPrefix={`note-field-${field.key}`}
-        label={field.label}
-        description={field.tipDescription}
-        control={
-          <SliderField
-            id={`note-field-${field.key}`}
-            min={Number(field.min ?? 0)}
-            max={Number(field.max ?? 255)}
-            step={field.step ?? 1}
-            value={sliderValue}
-            data-inspector-field={field.key}
-            disabled={field.disabled}
-            aria-describedby={
-              field.tipDescription ? `note-field-${field.key}-description` : undefined
-            }
-            aria-label={field.label}
-            onChange={(event) => setDraft(event.currentTarget.value)}
-            onCommit={(value) => {
-              const next = String(value);
-              setDraft(next);
-              field.apply?.({ value: next });
-            }}
-            onFocus={() => {
-              setFocused(true);
-              field.focus?.();
-            }}
-            onBlur={() => {
-              setFocused(false);
-              field.blur?.();
-            }}
           />
         }
       />

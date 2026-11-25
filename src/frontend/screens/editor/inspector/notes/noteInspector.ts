@@ -291,7 +291,7 @@ export function renderProperties(
       ["isFake", t("editorPanels.inspector.field.isFake"), "boolean"],
       ["speed", t("editorPanels.inspector.field.speed"), "number", 1],
       ["size", t("editorPanels.inspector.field.size"), "number", 1],
-      ["alpha", t("editorPanels.inspector.field.alpha"), "slider", 255],
+      ["alpha", t("editorPanels.inspector.field.alpha"), "number", 255],
       ["yOffset", t("editorPanels.inspector.field.yOffset"), "number", 0],
       ["visibleTime", t("editorPanels.inspector.field.visibleTime"), "duration", 999999],
       ["hitSound", t("editorPanels.inspector.field.hitSound"), "text"],
@@ -607,7 +607,7 @@ export function renderProperties(
               ? (options as [string, string][])
               : Object.entries((options ?? {}) as Record<string, string>)
             : undefined,
-        step: kind === "number" || kind === "slider" ? step : undefined,
+        step: kind === "number" ? step : undefined,
         min: key === "size" ? String(0.01) : key === "alpha" || duration ? String(0) : undefined,
         max: key === "alpha" ? String(255) : undefined,
         present,
