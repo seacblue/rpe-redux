@@ -242,9 +242,7 @@ jobs:
       - name: Check out released revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # A manually dispatched repair build must use the selected branch's
-          # fixes; tag-triggered releases remain pinned to the release tag.
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || needs.prepare_release.outputs.tag_name }}
+          ref: ${{ needs.prepare_release.outputs.tag_name }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -301,9 +299,6 @@ jobs:
       # Bundling several downloads in one step would mask the first failure:
       # PowerShell returns the exit code of the last command only.
       - name: Stage bundled FFmpeg
-        # Temporary repair path for the v1.0.17 x86 asset. Remove the branch
-        # clause after the release has been backfilled.
-        if: matrix.target != 'i686-pc-windows-msvc' || github.event_name != 'workflow_dispatch' || github.ref_name != 'feat/remove-aoci-index'
         run: node scripts/prepareFfmpeg.mjs
 
       - name: Stage bundled Cloudflared
