@@ -1,38 +1,26 @@
-/** Session prompt timing keeps the one-hour/two-hour order and one-per-pause rule. */
+/** Session prompt launch milestones keep the recurring Star reminder predictable. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  dueSessionPrompt,
-  SESSION_PROMPT_DELAYS,
+  nextLaunchCount,
+  SESSION_PROMPT_LAUNCH_INTERVAL,
+  shouldPromptForLaunch,
 } from "../../../frontend/overlays/sessionPromptState.ts";
 
-const noneSuppressed = () => false;
-const shown = (overrides = {}) => ({ star: false, feedback: false, ...overrides });
-
-test("the star prompt becomes due after one hour", () => {
-  assert.equal(dueSessionPrompt(SESSION_PROMPT_DELAYS.star, shown(), noneSuppressed), "star");
-  assert.equal(dueSessionPrompt(SESSION_PROMPT_DELAYS.star - 1, shown(), noneSuppressed), null);
+test("the Star prompt becomes due on every tenth launch", () => {
+  assert.equal(SESSION_PROMPT_LAUNCH_INTERVAL, 10);
+  assert.equal(shouldPromptForLaunch(10, false), true);
+  assert.equal(shouldPromptForLaunch(20, false), true);
+  assert.equal(shouldPromptForLaunch(9, false), false);
+  assert.equal(shouldPromptForLaunch(11, false), false);
 });
 
-test("the feedback prompt follows the star prompt after two hours", () => {
-  assert.equal(
-    dueSessionPrompt(SESSION_PROMPT_DELAYS.feedback, shown({ star: true }), noneSuppressed),
-    "feedback",
-  );
+test("launch count increments malformed or missing persisted values from zero", () => {
+  assert.equal(nextLaunchCount(undefined), 1);
+  assert.equal(nextLaunchCount("9"), 1);
+  assert.equal(nextLaunchCount(9), 10);
 });
 
-test("one pause presents only one prompt and permanent opt-outs are skipped", () => {
-  assert.equal(dueSessionPrompt(SESSION_PROMPT_DELAYS.feedback, shown(), noneSuppressed), "star");
-  assert.equal(
-    dueSessionPrompt(SESSION_PROMPT_DELAYS.feedback, shown({ star: true }), () => true),
-    null,
-  );
-  assert.equal(
-    dueSessionPrompt(
-      SESSION_PROMPT_DELAYS.feedback,
-      shown({ star: true }),
-      (kind) => kind === "feedback",
-    ),
-    null,
-  );
+test("the permanent opt-out skips a due launch", () => {
+  assert.equal(shouldPromptForLaunch(10, true), false);
 });

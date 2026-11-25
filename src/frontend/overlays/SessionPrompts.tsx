@@ -1,20 +1,15 @@
-/** App-session prompts that invite a GitHub star and collect product feedback. */
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { editorPlaying } from "../../core/edit/state/publishedValues.ts";
+/** App-launch prompt that invites a GitHub star after recurring milestones. */
+import { useEffect, useRef } from "react";
 import { PREFERENCE_SECTIONS, preferences } from "../../core/state/preferences.ts";
 import { isRecord } from "../../core/utils/guards.ts";
 import { openExternalUrl } from "../../core/platform/desktop/openExternal.ts";
-import { HELP_SURVEY_URL } from "../../core/platform/desktop/helpLinks.ts";
 import { t } from "../../i18n/index.ts";
 import { requestChoice, showNotice } from "./modals/prompts.ts";
-import { dueSessionPrompt, type SessionPromptKind } from "./sessionPromptState.ts";
+import { nextLaunchCount, shouldPromptForLaunch } from "./sessionPromptState.ts";
 
 const GITHUB_URL = "https://github.com/seacblue/rpe-redux";
-
-const NEVER_REMIND_KEYS = Object.freeze({
-  star: "session-prompt.github-star.never",
-  feedback: "session-prompt.feedback.never",
-});
+const LAUNCH_COUNT_KEY = "session-prompt.app-launches";
+const NEVER_REMIND_KEY = "session-prompt.github-star.never";
 
 type PromptChoice = "go" | "later" | "never";
 
@@ -26,45 +21,37 @@ function storedValues(): Record<string, unknown> {
   return isRecord(values) ? values : {};
 }
 
-/** Whether the user permanently dismissed one session prompt. */
-function neverRemind(kind: SessionPromptKind): boolean {
-  return storedValues()[NEVER_REMIND_KEYS[kind]] === true;
+/** Whether the user permanently dismissed the Star prompt. */
+function neverRemind(): boolean {
+  return storedValues()[NEVER_REMIND_KEY] === true;
 }
 
 /** Persists the user's lifetime opt-out without disturbing other value entries. */
-function rememberNeverRemind(kind: SessionPromptKind): void {
+function rememberNeverRemind(): void {
   preferences.write(PREFERENCE_SECTIONS.values, {
     ...storedValues(),
-    [NEVER_REMIND_KEYS[kind]]: true,
+    [NEVER_REMIND_KEY]: true,
   });
 }
 
-/** Describes one session prompt without coupling the scheduler to its copy. */
-function promptDefinition(kind: SessionPromptKind): {
+/** Describes the Star prompt without coupling the scheduler to its copy. */
+function promptDefinition(): {
   title: string;
   description: string;
   openLabel: string;
   url: string;
 } {
-  if (kind === "star") {
-    return {
-      title: t("chrome.sessionPrompt.star.title"),
-      description: t("chrome.sessionPrompt.star.description"),
-      openLabel: t("chrome.sessionPrompt.action.openGithub"),
-      url: GITHUB_URL,
-    };
-  }
   return {
-    title: t("chrome.sessionPrompt.feedback.title"),
-    description: t("chrome.sessionPrompt.feedback.description"),
-    openLabel: t("chrome.sessionPrompt.action.openSurvey"),
-    url: HELP_SURVEY_URL,
+    title: t("chrome.sessionPrompt.star.title"),
+    description: t("chrome.sessionPrompt.star.description"),
+    openLabel: t("chrome.sessionPrompt.action.openGithub"),
+    url: GITHUB_URL,
   };
 }
 
 /** Opens one trusted destination and reports opener failures in the shared prompt surface. */
-function openPromptDestination(kind: SessionPromptKind): void {
-  const definition = promptDefinition(kind);
+function openPromptDestination(): void {
+  const definition = promptDefinition();
   void openExternalUrl(definition.url).catch(() => {
     showNotice({
       title: t("chrome.sessionPrompt.openFailed.title"),
@@ -73,9 +60,9 @@ function openPromptDestination(kind: SessionPromptKind): void {
   });
 }
 
-/** Presents one session prompt and records only the lifetime opt-out choice. */
-async function presentSessionPrompt(kind: SessionPromptKind): Promise<void> {
-  const definition = promptDefinition(kind);
+/** Presents the Star prompt and records only the lifetime opt-out choice. */
+async function presentSessionPrompt(): Promise<void> {
+  const definition = promptDefinition();
   const choice = await requestChoice({
     title: definition.title,
     description: definition.description,
@@ -92,37 +79,31 @@ async function presentSessionPrompt(kind: SessionPromptKind): Promise<void> {
     },
   });
   if (choice === "never") {
-    rememberNeverRemind(kind);
+    rememberNeverRemind();
   } else if (choice === "go") {
-    openPromptDestination(kind);
+    openPromptDestination();
   }
 }
 
-/** Coordinates one prompt per pause and one presentation per prompt per app session. */
+/** Records one launch and presents the Star prompt at each tenth launch. */
 export function SessionPrompts() {
-  const playing = useSyncExternalStore(
-    editorPlaying.subscribe,
-    editorPlaying.get,
-    editorPlaying.get,
-  );
-  const [startedAt] = useState(() => Date.now());
-  const previousPlaying = useRef(playing);
-  const shown = useRef<Record<SessionPromptKind, boolean>>({ star: false, feedback: false });
-  const presenting = useRef(false);
+  const recorded = useRef(false);
 
   useEffect(() => {
-    if (previousPlaying.current && !playing && !presenting.current) {
-      const kind = dueSessionPrompt(Date.now() - startedAt, shown.current, neverRemind);
-      if (kind) {
-        shown.current[kind] = true;
-        presenting.current = true;
-        void presentSessionPrompt(kind).finally(() => {
-          presenting.current = false;
-        });
-      }
+    if (recorded.current) {
+      return;
     }
-    previousPlaying.current = playing;
-  }, [playing, startedAt]);
+    recorded.current = true;
+    const values = storedValues();
+    const launchCount = nextLaunchCount(values[LAUNCH_COUNT_KEY]);
+    preferences.write(PREFERENCE_SECTIONS.values, {
+      ...values,
+      [LAUNCH_COUNT_KEY]: launchCount,
+    });
+    if (shouldPromptForLaunch(launchCount, neverRemind())) {
+      void presentSessionPrompt();
+    }
+  }, []);
 
   // This component owns no visible DOM; the shared modal queue renders the prompt.
   return null;
