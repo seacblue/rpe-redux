@@ -1,23 +1,25 @@
-/** Pure timing and ordering rules for the app-session prompts. */
+/** Pure launch-count rules for the recurring GitHub Star prompt. */
 
-export const SESSION_PROMPT_DELAYS = Object.freeze({
-  star: 60 * 60 * 1000,
-  feedback: 2 * 60 * 60 * 1000,
-});
+/** Show the Star prompt on every tenth application launch. */
+export const SESSION_PROMPT_LAUNCH_INTERVAL = 10;
 
-export type SessionPromptKind = keyof typeof SESSION_PROMPT_DELAYS;
+/** Convert persisted launch data into a safe non-negative integer. */
+function normalizeLaunchCount(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
 
-/** Selects the first due prompt, showing at most one prompt for each pause. */
-export function dueSessionPrompt(
-  elapsedMs: number,
-  shown: Readonly<Record<SessionPromptKind, boolean>>,
-  neverRemind: (kind: SessionPromptKind) => boolean,
-): SessionPromptKind | null {
-  if (elapsedMs >= SESSION_PROMPT_DELAYS.star && !shown.star && !neverRemind("star")) {
-    return "star";
-  }
-  if (elapsedMs >= SESSION_PROMPT_DELAYS.feedback && !shown.feedback && !neverRemind("feedback")) {
-    return "feedback";
-  }
-  return null;
+/** Return the launch count after recording one application launch. */
+export function nextLaunchCount(value: unknown): number {
+  const current = normalizeLaunchCount(value);
+  return current === Number.MAX_SAFE_INTEGER ? 0 : current + 1;
+}
+
+/** Whether a launch count should open the Star prompt. */
+export function shouldPromptForLaunch(launchCount: number, neverRemind: boolean): boolean {
+  return (
+    !neverRemind &&
+    launchCount > 0 &&
+    Number.isSafeInteger(launchCount) &&
+    launchCount % SESSION_PROMPT_LAUNCH_INTERVAL === 0
+  );
 }
