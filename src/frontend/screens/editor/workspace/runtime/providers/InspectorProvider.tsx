@@ -29,6 +29,9 @@ import {
   closeInspector,
   bindInspectorLifecycle,
 } from "../../../inspector/controller.ts";
+import { flushBeatFieldScope } from "../../../inspector/beat/BeatField.tsx";
+import { clearNoteDraftSelection } from "../../../inspector/notes/noteInspector.ts";
+import { clearEventDraftSelection } from "../../../inspector/events/EventField.tsx";
 import {
   LinePanel,
   type LinePanelAsset,
@@ -373,6 +376,28 @@ export function createInspectorRuntime(options: {
   options.timeline.gestures.curvePickPoint = curveEditor.pickPoint;
   options.timeline.gestures.curveQuickPick = curveEditor.quickPick;
   options.timeline.gestures.curveGhost = curveEditor.ghost;
+  options.scope.add(
+    bindInspectorLifecycle("notes", {
+      onClose: () => {
+        const session = getSession();
+        flushBeatFieldScope("notes", () => {
+          session.noteDraftActive = false;
+        });
+        clearNoteDraftSelection(session);
+      },
+    }),
+  );
+  options.scope.add(
+    bindInspectorLifecycle("events", {
+      onClose: () => {
+        const session = getSession();
+        flushBeatFieldScope("events", () => {
+          session.liveEventEdit = false;
+        });
+        clearEventDraftSelection(session);
+      },
+    }),
+  );
   options.scope.add(() => closeInspector(options.ui.activeInspector));
   options.scope.add(bindInspectorLifecycle("multi", { onClose: () => multiEdit.hide() }));
   // Panes stay mounted while hidden, so leaving the curve pane must end its

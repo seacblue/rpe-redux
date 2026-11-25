@@ -145,6 +145,7 @@ function Field({
           <BeatField
             id={id}
             value={beat}
+            preservePartsOnBlur
             onCommit={(next) => {
               onChange(formatBeat(next));
               return true;

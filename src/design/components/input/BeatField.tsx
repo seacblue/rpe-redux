@@ -13,14 +13,20 @@
  * beat typed into one box.
  *
  * Leaving the whole control commits, so moving between boxes only edits a draft.
- * Escape restores the stored beat. A part that is not a number, a denominator
- * that is not positive, or a beat the owner refuses leaves the value untouched:
- * the boxes keep what was typed and turn invalid, with no clamping.
+ * A caller may preserve the entered parts for that boundary commit and reduce
+ * them later through its scoped close lifecycle. Escape restores the stored beat.
+ * A part that is not a number, a denominator that is not positive, or a beat the
+ * owner refuses leaves the value untouched: the boxes keep what was typed and
+ * turn invalid, with no clamping.
  */
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { Input } from "./Input.tsx";
+import { registerBeatFieldScopeCommit, remainsWithinBeatField } from "./beatFieldFocus.ts";
 import { useTranslation } from "../../../i18n/react.ts";
 import type { BeatParts, BeatRules } from "./beatFieldRules.ts";
+
+export { commitBeatFieldScope } from "./beatFieldFocus.ts";
+export { flushBeatFieldScope } from "./beatFieldFocus.ts";
 
 export interface BeatFieldProps {
   /** Optional id for the first input, so a FieldRow label can target the control. */
@@ -41,6 +47,14 @@ export interface BeatFieldProps {
   onEnter?(): void;
   /** Compare two committed values; the default compares their parts position by position. */
   same?(left: readonly number[], right: readonly number[]): boolean;
+  /** Commit when the whole composed control loses focus. */
+  commitOnBlur?: boolean;
+  /** Commit on Enter; deferred inspector fields turn this off to keep a local draft. */
+  commitOnEnter?: boolean;
+  /** Keep valid integer parts unreduced for the boundary commit. */
+  preservePartsOnBlur?: boolean;
+  /** Inspector scope whose close lifecycle flushes this field, when set. */
+  commitScope?: string;
   disabled?: boolean;
   className?: string;
   /** The owning field's name, for the DOM contract. */
@@ -87,6 +101,10 @@ export function BeatField({
   onFocusChange,
   onEnter,
   same = sameParts,
+  commitOnBlur = true,
+  commitOnEnter = true,
+  preservePartsOnBlur = false,
+  commitScope,
   disabled = false,
   className = "",
   dataField,
@@ -96,8 +114,12 @@ export function BeatField({
   const root = useRef<HTMLSpanElement>(null);
   const [draft, setDraft] = useState<BeatParts>(() => rules.partsOf(value));
   const draftRef = useRef<BeatParts>(draft);
+  const valueRef = useRef(value);
   const [invalid, setInvalid] = useState(false);
   const lastValue = useRef(value);
+  const pendingBlur = useRef<number | null>(null);
+  const scopedCommit = useRef<() => void>(() => {});
+  const scopeClosed = useRef(false);
 
   /** Writes the draft through both the ref and React state. */
   const setDraftParts = (next: BeatParts): void => {
@@ -109,6 +131,10 @@ export function BeatField({
   // buttons, an undo, another line's note) the boxes follow it. A rejected draft
   // that never reached the owner changes no beat, so it stays as typed. The rules
   // and the comparison come from the caller and are stable for one field.
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
   useEffect(() => {
     if (same(value, lastValue.current)) {
       return;
@@ -132,12 +158,12 @@ export function BeatField({
   };
 
   /** The one place a beat is written: complete, acceptable, and never clamped. */
-  const commit = (raw: BeatParts): boolean => {
+  const commit = (raw: BeatParts, reduce = true): boolean => {
     // A complete beat typed into one box replaces all three parts here, so the
     // boxes show the stored parts once the control is left or Enter runs.
     const shorthand = shorthandIn(raw, rules);
-    const parts = shorthand ? reducedParts(shorthand, rules) : raw;
-    const beat = rules.reduce(parts);
+    const parts = shorthand ? shorthand : raw;
+    const beat = reduce ? rules.reduce(parts) : (rules.preserve?.(parts) ?? rules.reduce(parts));
     if (!beat) {
       if (parts !== raw) {
         setDraftParts(parts);
@@ -145,21 +171,48 @@ export function BeatField({
       setInvalid(true);
       return false;
     }
-    // Show the reduced triple the owner stores (or would store), so a decimal
-    // turns into the exact parts the moment the box is left.
-    setDraftParts(rules.partsOf(beat));
+    // A boundary commit may preserve an unreduced integer triple until the
+    // inspector closes; otherwise show the canonical parts immediately.
+    setDraftParts(reduce ? rules.partsOf(beat) : parts);
     if (accepts && !accepts(beat)) {
       setInvalid(true);
       return false;
     }
     setInvalid(false);
-    if (same(beat, value)) {
+    if (same(beat, valueRef.current)) {
       return true;
     }
     const accepted = offer(beat);
+    if (accepted) {
+      valueRef.current = beat;
+    }
     setInvalid(!accepted);
     return accepted;
   };
+
+  useEffect(() => {
+    scopedCommit.current = () => {
+      scopeClosed.current = true;
+      // A pane can close before the deferred root blur runs. The close flush has
+      // already reduced and stored the draft, so the old blur must not write its
+      // preserved parts back over that canonical value.
+      if (pendingBlur.current !== null) {
+        window.clearTimeout(pendingBlur.current);
+        pendingBlur.current = null;
+      }
+      commit(draftRef.current, true);
+    };
+    if (disabled) {
+      scopedCommit.current = () => undefined;
+    }
+  });
+
+  useEffect(() => {
+    if (!commitScope) {
+      return undefined;
+    }
+    return registerBeatFieldScopeCommit(commitScope, () => scopedCommit.current());
+  }, [commitScope]);
 
   const nudge = (direction: number) => {
     if (!onNudge || disabled) {
@@ -196,19 +249,28 @@ export function BeatField({
    * boxes; a partial edit stays exactly as typed until the control commits.
    */
   const syncPart = (index: 0 | 1 | 2, event: FocusEvent<HTMLInputElement>) => {
+    if (scopeClosed.current) {
+      return;
+    }
     const next = [...draftRef.current] as BeatParts;
     next[index] = event.currentTarget.value;
+    if (preservePartsOnBlur) {
+      setDraftParts(next);
+      return;
+    }
     const shorthand = shorthandIn(next, rules);
     setDraftParts(shorthand ? reducedParts(shorthand, rules) : next);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
-      // Enter commits the tuple in place; the field keeps focus so a value can
-      // be corrected without clicking back into it.
       event.preventDefault();
-      commit(draftRef.current);
-      onEnter?.();
+      if (commitOnEnter) {
+        // Enter commits the tuple in place; the field keeps focus so a value can
+        // be corrected without clicking back into it.
+        commit(draftRef.current);
+        onEnter?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
       setDraftParts(rules.partsOf(value));
@@ -217,15 +279,44 @@ export function BeatField({
   };
 
   // Focus is one control made of three boxes: moving between them is not leaving
-  // it, so only a blur that lands outside signals the owner.
+  // it, so only a blur that lands outside signals the owner. Defer the decision
+  // until the browser has moved focus: some WebViews omit `relatedTarget` even
+  // when the next part input is the one receiving focus.
   const onBlur = (event: FocusEvent<HTMLSpanElement>) => {
+    if (scopeClosed.current) {
+      return;
+    }
+    if (!commitOnBlur) {
+      return;
+    }
     const next = event.relatedTarget;
     if (next instanceof Node && root.current?.contains(next)) {
       return;
     }
-    commit(draftRef.current);
-    onFocusChange?.(false);
+    const previous = event.target;
+    if (pendingBlur.current !== null) {
+      window.clearTimeout(pendingBlur.current);
+    }
+    pendingBlur.current = window.setTimeout(() => {
+      pendingBlur.current = null;
+      if (remainsWithinBeatField(root.current, next, previous, document.activeElement)) {
+        return;
+      }
+      commit(draftRef.current, !preservePartsOnBlur);
+      onFocusChange?.(false);
+    }, 0);
   };
+
+  /** Drops a deferred boundary check when the field leaves the tree. */
+  useEffect(
+    () => () => {
+      if (pendingBlur.current !== null) {
+        window.clearTimeout(pendingBlur.current);
+        pendingBlur.current = null;
+      }
+    },
+    [],
+  );
 
   // The whole composed control is a wheel target: the boxes, their padding, the
   // separators, and the grid gaps between them. A native non-passive listener
@@ -281,6 +372,11 @@ export function BeatField({
       data-beat="true"
       data-inspector-field={dataField}
       onFocus={() => {
+        scopeClosed.current = false;
+        if (pendingBlur.current !== null) {
+          window.clearTimeout(pendingBlur.current);
+          pendingBlur.current = null;
+        }
         onFocusChange?.(true);
       }}
       onBlur={onBlur}
