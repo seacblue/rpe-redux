@@ -25,20 +25,6 @@ export interface BeatDetectionWaveform {
   duration: number;
 }
 
-/**
- * One stretch of steady tempo, as a `BPMList` entry.
- *
- * A fixed-tempo track yields one of these. A track that speeds up, slows down,
- * or changes tempo outright yields several in time order, which is exactly the
- * shape a chart's tempo map takes.
- */
-export interface TempoSegment {
-  /** Audio time where this stretch starts, in milliseconds. */
-  startMs: number;
-  /** Tempo of this stretch, in BPM. */
-  bpm: number;
-}
-
 /** The timing proposal plus the preview data the dialog draws. */
 export interface BeatDetectionResult {
   /** Measured BPM, rounded to three decimals with near-integers snapped. */
@@ -52,17 +38,6 @@ export interface BeatDetectionResult {
   duration: number;
   /** Beat-zero-relative render times for the primary grid. */
   beatTimes: Float32Array;
-  /**
-   * Tempo map covering the whole track.
-   *
-   * `bpm` and `offsetMs` describe a single steady grid; this describes what the
-   * music actually does. They agree when the track holds one tempo, and this is
-   * the field to read when it does not. Present only from the decoder that can
-   * follow a tempo change.
-   */
-  tempoSegments?: TempoSegment[];
-  /** Whether the track needed more than one tempo stretch. */
-  variableTempo?: boolean;
 }
 
 /** Limits and display sizes for one detection run. */
@@ -101,6 +76,11 @@ const ONSET_POINTS = 2400;
 const MIN_RELIABILITY = 0.42;
 const MIN_PERIODICITY = 0.45;
 const MIN_COVERAGE = 0.2;
+/** Soft metrical prior used only when the two estimators disagree by an octave. */
+const COMMON_TEMPO_MIN = 90;
+const COMMON_TEMPO_MAX = 240;
+/** A very strong grid may legitimately be faster than the soft prior. */
+const HIGH_CONFIDENCE_TEMPO_SCORE = 0.7;
 /** Output precision for BPM and offset, and the near-integer snap threshold. */
 const TIMING_DIGITS = 3;
 const SNAP_THRESHOLD = 0.001;
@@ -162,6 +142,11 @@ interface InternalCandidate {
   periodicity: number;
   /** Circular concentration of low-band peaks around the candidate grid. */
   phaseConcentration: number;
+}
+
+interface FusionCandidate {
+  result: BeatDetectionResult;
+  derived: boolean;
 }
 
 interface Peak {
@@ -231,8 +216,7 @@ export function detectBeatGrid(
  * Detect the automatic timing answer.
  *
  * Automatic detection reports one fixed BPM, or `null` when the track has no
- * clear pulse; callers no longer choose between a fixed grid and a
- * variable-tempo map.
+ * clear pulse; callers always receive one fixed-grid proposal.
  */
 export function detectAutoTiming(
   buffer: BeatDetectionBuffer,
@@ -425,14 +409,6 @@ export function detectBeatGridWithDbnFromSamples(
   if (!(measuredBpm > 0) || !Number.isFinite(measuredOffset)) {
     return null;
   }
-  // The decoded path already follows tempo changes — its state space pays a cost
-  // to leave one tempo — so the stretch boundaries come from the beats it
-  // produced, not from a second pass over the audio.
-  const segments = alignSingleSegment(
-    extractTempoSegments(beats, minBpm, maxBpm),
-    measuredBpm,
-    measuredOffset,
-  );
   return {
     bpm: measuredBpm,
     offsetMs: measuredOffset,
@@ -444,115 +420,180 @@ export function detectBeatGridWithDbnFromSamples(
     onsetRate: activation.fps,
     duration: totalDuration,
     beatTimes: buildBeatTimes(measuredBpm, measuredOffset / 1000, totalDuration),
-    tempoSegments: segments.length ? segments : undefined,
-    variableTempo: segments.length > 1,
   };
 }
 
 /**
- * Split a decoded beat sequence into stretches of steady tempo.
+ * Detect one fixed timing answer with both internal estimators.
  *
- * Each beat contributes its local interval; the intervals are smoothed over a
- * short window so a single misplaced beat does not start a stretch. A new
- * stretch begins only where the tempo has moved far enough that it cannot be
- * measurement noise — five percent, which is well beyond the frame quantisation
- * of a steady track and well inside a musically meaningful tempo change.
- *
- * A tempo change is also required to persist: a stretch shorter than a few
- * seconds is a wobble at a track boundary, not a section, and reporting it would
- * fill the tempo map with entries the author has to delete.
+ * The estimators are deliberately allowed to disagree about the metrical level:
+ * one may report a half-time pulse while the other sees the intervening beats.
+ * This function scores both answers and their octave variants against the same
+ * onset envelope, then returns only the highest-scoring fixed grid. Callers do
+ * not need to expose a detector choice or a tempo-map mode to the user.
  */
-function extractTempoSegments(beats: Float32Array, minBpm: number, maxBpm: number): TempoSegment[] {
-  if (beats.length < 8) {
-    return [];
+export function detectBestFixedTimingFromSamples(
+  samples: Float32Array,
+  sampleRate: number,
+  duration?: number,
+  options: BeatDetectionOptions = {},
+): BeatDetectionResult | null {
+  if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    return null;
   }
-  const local: { time: number; bpm: number }[] = [];
-  for (let index = 1; index < beats.length; index += 1) {
-    const interval = beats[index] - beats[index - 1];
-    if (!(interval > 0)) {
-      continue;
-    }
-    local.push({ time: beats[index], bpm: 60 / interval });
+  const limits = resolveTimingLimits(options, DBN_MIN_BPM, DBN_MAX_BPM);
+  const totalDuration =
+    Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
+  const analysisRate = Math.min(sampleRate, limits.targetRate);
+  const candidates = [
+    detectBeatGridWithDbnFromSamples(samples, sampleRate, duration, options),
+    detectBeatGridFromSamples(samples, sampleRate, duration, options),
+  ].filter((candidate): candidate is BeatDetectionResult => candidate !== null);
+  const envelope = buildOnsetEnvelope(resample(samples, sampleRate, analysisRate), analysisRate);
+  if (!candidates.length) {
+    return null;
   }
-  if (local.length < 4) {
-    return [];
+  let best = candidates[0];
+  if (candidates.length > 1 && envelope) {
+    const scored = expandFixedCandidates(candidates, limits.minBpm, limits.maxBpm).map(
+      ({ result, derived }) => ({
+        candidate: result,
+        derived,
+        score: scoreFixedCandidate(result, envelope),
+      }),
+    );
+    const reasonable = scored.filter(
+      ({ candidate, score }) =>
+        (candidate.bpm >= COMMON_TEMPO_MIN && candidate.bpm <= COMMON_TEMPO_MAX) ||
+        score >= HIGH_CONFIDENCE_TEMPO_SCORE,
+    );
+    const ranked = reasonable.length ? reasonable : scored;
+    ranked.sort(
+      (left, right) =>
+        right.score - (right.derived ? 0.05 : 0) - (left.score - (left.derived ? 0.05 : 0)),
+    );
+    best = ranked[0]?.candidate ?? best;
   }
-  // Median of a window wide enough to span a bar or two: a steady track's
-  // frame quantisation averages out, while a real tempo change still shows.
-  const radius = Math.max(2, Math.round(local.length * 0.05));
-  const smoothed = local.map((point, index) => {
-    const window: number[] = [];
-    for (
-      let cursor = Math.max(0, index - radius);
-      cursor <= Math.min(local.length - 1, index + radius);
-      cursor += 1
-    ) {
-      window.push(local[cursor].bpm);
-    }
-    window.sort((left, right) => left - right);
-    return { time: point.time, bpm: window[Math.floor(window.length / 2)] };
-  });
-
-  const raw: TempoSegment[] = [];
-  let segmentStart = beats[0];
-  let sum = 0;
-  let count = 0;
-  for (let index = 0; index < smoothed.length; index += 1) {
-    const point = smoothed[index];
-    sum += point.bpm;
-    count += 1;
-    const average = sum / count;
-    if (Math.abs(point.bpm - average) / average > 0.05) {
-      raw.push({
-        startMs: Math.round(segmentStart * 1000),
-        bpm: roundMeasuredTiming(clampBpm(average, minBpm, maxBpm)),
-      });
-      segmentStart = point.time;
-      sum = point.bpm;
-      count = 1;
-    }
+  if (!best) {
+    return candidates[0];
   }
-  raw.push({
-    startMs: Math.round(segmentStart * 1000),
-    bpm: roundMeasuredTiming(clampBpm(count ? sum / count : smoothed[0].bpm, minBpm, maxBpm)),
-  });
-
-  // Merge stretches too short to be a section into the one before them. At the
-  // ends of a track the smoothed tempo is built from few intervals and drifts,
-  // so a short leading or trailing stretch is an artefact of the analysis
-  // boundary, not a tempo change the author would enter.
-  const merged: TempoSegment[] = [];
-  for (const segment of raw) {
-    if (merged.length && segment.startMs - merged[merged.length - 1].startMs < 3000) {
-      continue;
-    }
-    merged.push(segment);
-  }
-  const endMs = Math.round((beats[beats.length - 1] ?? 0) * 1000);
-  while (merged.length > 1 && endMs - merged[merged.length - 1].startMs < 3000) {
-    merged.pop();
-  }
-  return merged;
+  const refined = refineTimingFromAttacks(
+    samples,
+    sampleRate,
+    best.offsetMs / 1000,
+    best.bpm,
+    totalDuration,
+  );
+  const finalBpm = refined ? roundMeasuredTiming(refined.bpm) : best.bpm;
+  const finalOffsetMs = refined
+    ? roundMeasuredTiming(Math.max(0, refined.offsetSeconds) * 1000)
+    : best.offsetMs;
+  return {
+    ...best,
+    bpm: finalBpm,
+    offsetMs: finalOffsetMs,
+    duration: totalDuration,
+    waveform: {
+      peaks: waveformPeaks(samples, WAVEFORM_POINTS),
+      duration: totalDuration,
+    },
+    beatTimes: buildBeatTimes(finalBpm, finalOffsetMs / 1000, totalDuration),
+  };
 }
 
-/**
- * Replace a single-stretch map's tempo with the refined one.
- *
- * The stretch tempo comes from decoded beat intervals, which carry the
- * analysis-frame quantisation; the main answer comes from the attack refit,
- * which resolves it below a sample. When the track turned out to hold one
- * tempo, both describe the same thing and the refined value is the accurate
- * one — measured 143.6 against a refined 145 on a steady click track.
- */
-function alignSingleSegment(
-  segments: TempoSegment[],
+/** Refine a selected fixed grid against raw attacks without changing its beat level. */
+export function refineFixedTimingFromSamples(
+  samples: Float32Array,
+  sampleRate: number,
   bpm: number,
   offsetMs: number,
-): TempoSegment[] {
-  if (segments.length !== 1) {
-    return segments;
+  duration?: number,
+): { bpm: number; offsetMs: number } | null {
+  if (
+    !samples?.length ||
+    !Number.isFinite(sampleRate) ||
+    sampleRate <= 0 ||
+    !Number.isFinite(bpm) ||
+    bpm <= 0 ||
+    !Number.isFinite(offsetMs)
+  ) {
+    return null;
   }
-  return [{ startMs: Math.round(offsetMs), bpm }];
+  const totalDuration =
+    Number.isFinite(duration) && duration! > 0 ? duration! : samples.length / sampleRate;
+  const refined = refineTimingFromAttacks(
+    samples,
+    sampleRate,
+    Math.max(0, offsetMs) / 1000,
+    bpm,
+    totalDuration,
+  );
+  if (!refined || !(refined.bpm > 0) || !Number.isFinite(refined.offsetSeconds)) {
+    return null;
+  }
+  return {
+    bpm: roundMeasuredTiming(refined.bpm),
+    offsetMs: roundMeasuredTiming(Math.max(0, refined.offsetSeconds) * 1000),
+  };
+}
+
+/** Add half-time and double-time hypotheses only when the detectors disagree. */
+function expandFixedCandidates(
+  results: readonly BeatDetectionResult[],
+  minBpm: number,
+  maxBpm: number,
+): FusionCandidate[] {
+  const expanded = results.map((result) => ({ result, derived: false }));
+  const tempos = results.map((result) => result.bpm).filter((bpm) => bpm > 0);
+  const spread = tempos.length ? Math.max(...tempos) / Math.min(...tempos) : 1;
+  // Octave hypotheses are useful only when the two estimators disagree. If
+  // they agree, adding 0.5x/2x candidates would reward a harmonic that neither
+  // detector actually selected and would make clean high-tempo clicks unstable.
+  if (spread < 1.7) {
+    return expanded;
+  }
+  for (const result of results) {
+    for (const factor of [0.5, 2]) {
+      const bpm = result.bpm * factor;
+      if (bpm < minBpm || bpm > maxBpm) {
+        continue;
+      }
+      expanded.push({
+        result: {
+          ...result,
+          bpm: roundMeasuredTiming(bpm),
+        },
+        derived: true,
+      });
+    }
+  }
+  return expanded;
+}
+
+/** Score a fixed grid by beat support, phase concentration, and offbeat leakage. */
+function scoreFixedCandidate(candidate: BeatDetectionResult, envelope: OnsetEnvelope): number {
+  const phase = candidate.offsetMs / 1000;
+  const pulse = pulseScore(envelope.pulse, envelope.fps, candidate.bpm, phase);
+  const low = pulseScore(envelope.low, envelope.fps, candidate.bpm, phase);
+  const lowPeaks = findPeaks(envelope.low, envelope, 0.8);
+  const pulsePeaks = findPeaks(envelope.pulse, envelope, 0.8);
+  const coverage =
+    coverageOf(lowPeaks, candidate.bpm, phase) * 0.6 +
+    coverageOf(pulsePeaks, candidate.bpm, phase) * 0.4;
+  const concentration =
+    concentrationOf(lowPeaks, candidate.bpm, phase) * 0.6 +
+    concentrationOf(pulsePeaks, candidate.bpm, phase) * 0.4;
+  // The offbeat term rejects a half-time grid whose skipped beats are just as
+  // strong as its reported beats. Low-band evidence anchors drums; the pulse
+  // term keeps melodic/percussive tracks usable when the kick is sparse.
+  return (
+    pulse.score * 0.3 +
+    low.score * 0.25 +
+    coverage * 0.3 +
+    concentration * 0.15 -
+    pulse.offbeat * 0.25 -
+    low.offbeat * 0.15
+  );
 }
 
 /**

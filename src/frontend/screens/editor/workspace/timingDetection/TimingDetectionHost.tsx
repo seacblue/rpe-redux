@@ -3,8 +3,8 @@
  *
  * The timing drawer, a new chart waiting for audio, and a fresh music load all
  * ask for the same surface through `timingDetectionState`. This host resolves
- * the current song, runs the worker analysis, and commits the measured fixed
- * BPM, or shows the detector's "not found" answer when no pulse is clear.
+ * the current song, runs the worker analysis, and commits one measured BPM,
+ * or shows the detector's "not found" answer when no pulse is clear.
  */
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Modal } from "../../../../../design/components/modal/Modal.tsx";

@@ -7,9 +7,10 @@
  * buffers are transferred back to the dialog.
  */
 import {
-  detectAutoTimingFromSamples,
+  detectBestFixedTimingFromSamples,
   type BeatDetectionResult,
 } from "../../../../../core/media/beatDetection.ts";
+import { detectLearnedFixedTimingFromSamples } from "./learnedBeatDetector.ts";
 
 /** A request to analyze one already-mixed mono signal. */
 export interface TimingDetectionRequest {
@@ -32,7 +33,9 @@ export interface TimingDetectionMessage {
 /** Run one analysis request and describe how to post the reply. */
 export function analyzeTimingRequest(data: TimingDetectionRequest): TimingDetectionMessage {
   try {
-    const result = detectAutoTimingFromSamples(data.samples, data.sampleRate, data.duration);
+    // Run both fixed-grid estimators and let their shared evidence scorer pick
+    // one answer, so the UI never needs to expose a detector choice.
+    const result = detectBestFixedTimingFromSamples(data.samples, data.sampleRate, data.duration);
     if (!result) {
       return { reply: { type: "result", result: null }, transfer: [] };
     }
@@ -46,4 +49,36 @@ export function analyzeTimingRequest(data: TimingDetectionRequest): TimingDetect
       transfer: [],
     };
   }
+}
+
+/** Run the learned refinement and fall back to the synchronous detector safely. */
+export async function analyzeTimingRequestAsync(
+  data: TimingDetectionRequest,
+): Promise<TimingDetectionMessage> {
+  try {
+    const baseline = detectBestFixedTimingFromSamples(data.samples, data.sampleRate, data.duration);
+    if (!baseline) {
+      return { reply: { type: "result", result: null }, transfer: [] };
+    }
+    const learned = await detectLearnedFixedTimingFromSamples(
+      data.samples,
+      data.sampleRate,
+      data.duration,
+      baseline,
+    );
+    return timingDetectionMessage(learned ?? baseline);
+  } catch (error) {
+    return {
+      reply: { type: "error", message: error instanceof Error ? error.message : String(error) },
+      transfer: [],
+    };
+  }
+}
+
+/** Describe a result and the buffers that can be transferred to the dialog. */
+function timingDetectionMessage(result: BeatDetectionResult): TimingDetectionMessage {
+  return {
+    reply: { type: "result", result },
+    transfer: [result.waveform.peaks.buffer, result.onset.buffer, result.beatTimes.buffer],
+  };
 }
