@@ -122,7 +122,7 @@ export function createLocalChartingStatsTracker(options: { currentEditSeconds: (
     session = next;
     previousPlacement = { ...next.localPlacementStats };
     unsavedPlacement = { notes: 0, events: 0 };
-    savedEditSeconds = 0;
+    savedEditSeconds = count(options.currentEditSeconds());
     next.addEventListener("change", sync);
   };
 
@@ -139,6 +139,15 @@ export function createLocalChartingStatsTracker(options: { currentEditSeconds: (
     updateLocalChartingStats({ seconds: currentSeconds - savedEditSeconds });
     savedEditSeconds = currentSeconds;
     unsavedPlacement = { notes: 0, events: 0 };
+  };
+
+  /** Return foreground seconds since the last successful library save. */
+  const pendingEditSeconds = (): number => {
+    const currentSeconds = count(options.currentEditSeconds());
+    if (currentSeconds < savedEditSeconds) {
+      savedEditSeconds = 0;
+    }
+    return currentSeconds - savedEditSeconds;
   };
 
   /** Roll back local placement changes that have not reached a successful save. */
@@ -160,5 +169,5 @@ export function createLocalChartingStatsTracker(options: { currentEditSeconds: (
     savedEditSeconds = 0;
   };
 
-  return { attach, markSaved, discard, sync };
+  return { attach, markSaved, pendingEditSeconds, discard, sync };
 }

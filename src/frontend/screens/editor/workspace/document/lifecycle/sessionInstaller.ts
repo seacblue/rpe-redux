@@ -13,6 +13,7 @@ import type { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import type { ProjectImages } from "../../../../../../core/media/images.ts";
 import type { DocumentReplacement } from "./replacer.ts";
 import { installChartRevisionSeed } from "../../../../../../core/edit/document/chartRevision.ts";
+import { chartEditSeconds } from "../../../../../../core/global/chart/editTime.ts";
 
 /** Session transfer and setup operations for one installed document. */
 export interface DocumentInstallOptions {
@@ -27,7 +28,7 @@ export interface DocumentInstallOptions {
   installRecord(
     document: Pick<DocumentReplacement, "assets" | "folders" | "name" | "diagnostics" | "readOnly">,
   ): void;
-  resetEditClock(): void;
+  resetEditClock(initialSeconds?: number): void;
   /** Attach the new document to the installation-local charting ledger. */
   attachLocalStats?(session: EditorSession): void;
   hitSounds: Pick<HitSounds, "setProject">;
@@ -62,7 +63,9 @@ export function createSessionInstaller(options: DocumentInstallOptions) {
     options.recovery.autoSave.reset(performance.now());
     options.resetCurveDraft();
     options.installRecord(replacement);
-    options.resetEditClock();
+    const initialEditSeconds = chartEditSeconds(replacement.chart);
+    options.resetEditClock(initialEditSeconds);
+    session.editSeconds = initialEditSeconds;
     options.hitSounds.setProject(replacement.chart, replacement.assets, replacement.name);
     if (replacement.loadImages) {
       options.images.load(replacement.chart, replacement.assets, replacement.name);

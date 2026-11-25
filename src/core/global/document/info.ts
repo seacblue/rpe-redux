@@ -1,5 +1,6 @@
 /** Read and write colon-separated fields from an RPE package Info.txt. */
 import type { Chart } from "../chart/chart.ts";
+import { chartEditSeconds, parseChartEditSeconds } from "../chart/editTime.ts";
 
 /** Lower-case keys mapped to the casing RPE writes into Info.txt. */
 const CANONICAL_INFO_KEYS: Readonly<Record<string, string>> = {
@@ -12,6 +13,7 @@ const CANONICAL_INFO_KEYS: Readonly<Record<string, string>> = {
   level: "Level",
   composer: "Composer",
   charter: "Charter",
+  edittime: "EditTime",
 };
 
 /** Sidecar key order used when writing Info.txt, matching native RPE exports. */
@@ -24,6 +26,7 @@ const INFO_ORDER = [
   "Level",
   "Composer",
   "Charter",
+  "EditTime",
   "Illustration",
 ] as const;
 
@@ -41,6 +44,12 @@ export function mergeInfoIntoMeta(chart: Chart, info: Record<string, string>): v
   for (const [key, infoKey] of fields) {
     if (!String(chart.META[key] ?? "").trim() && info[infoKey]) {
       (chart.META as Record<string, unknown>)[key] = info[infoKey];
+    }
+  }
+  if (parseChartEditSeconds(chart.chartTime) === null) {
+    const seconds = parseChartEditSeconds(info.EditTime);
+    if (seconds !== null) {
+      chart.chartTime = seconds;
     }
   }
 }
@@ -85,6 +94,10 @@ export function buildInfoText(chart: Chart, chartName: string, existing = ""): s
     Picture: String(chart.META.background ?? "").trim(),
     Path: String(chart.META.id ?? "").trim(),
   };
+  const editSeconds = chartEditSeconds(chart);
+  if (parseChartEditSeconds(chart.chartTime) !== null) {
+    authored.EditTime = editSeconds.toFixed(3);
+  }
   const values: Record<string, string> = { ...previous, ...authored };
   for (const key of INFO_ORDER) {
     if (!values[key] && previous[key]) {

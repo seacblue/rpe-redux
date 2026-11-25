@@ -13,6 +13,8 @@ export interface RegisteredChartDocument {
   materializeAll(): Promise<Chart>;
   /** Write the chart as JSON chunks when the source supports it. */
   serialize?(sink: (chunk: string) => Promise<void> | void): Promise<void>;
+  /** Refresh persisted header fields after a save-time metadata update. */
+  updateHeaderFromChart?(chart: Chart): void;
   /** Monotonic paged content revision; absent on an eager chart snapshot. */
   readonly contentRevision?: number;
   /** Line summaries for a paged source; absent when the source has no index. */

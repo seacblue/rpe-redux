@@ -47,6 +47,10 @@ export interface DocumentSaverDependencies {
   currentLibraryProject?: () => LibraryProjectRef | null;
   currentSourcePath?: () => string | null;
   currentAssetFolders?: () => string[];
+  /** Current inherited-plus-foreground edit total written into chartTime. */
+  currentEditSeconds?: () => number;
+  /** New foreground seconds to add to the library project total on success. */
+  editSecondsDelta?: () => number;
   /** Test seam; production resolves the shared sidecar connection. */
   openLibrary?: () => Promise<LocalLibrary | null>;
   setAssetDirty: (dirty: boolean) => void;
@@ -92,6 +96,11 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
   ): Promise<SaveResult | null> => {
     const current = deps.currentSession();
     const generation = deps.currentGeneration?.() ?? 0;
+    const currentEditSeconds = deps.currentEditSeconds?.();
+    const editSecondsDelta = deps.editSecondsDelta?.();
+    if (currentEditSeconds !== undefined) {
+      current.chart.chartTime = currentEditSeconds;
+    }
     const snapshot = current.chart;
     const captured = snapshotAssets(deps.currentAssets());
     const project = deps.currentLibraryProject?.() ?? null;
@@ -114,6 +123,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
 
     return (async () => {
       const chartDocument = registeredChartDocument(snapshot as object);
+      chartDocument?.updateHeaderFromChart?.(snapshot);
       // A file export projects and serializes the complete chart. A paged
       // document must materialize its placeholders first; library saves keep
       // the streamed path below.
@@ -180,6 +190,7 @@ export function createDocumentSaver(deps: DocumentSaverDependencies) {
         name: projectName,
         assets: captured,
         ...(target?.viewState ? { viewState: target.viewState } : {}),
+        ...(editSecondsDelta !== undefined ? { editSeconds: editSecondsDelta } : {}),
         ...(deps.currentAssetFolders
           ? { assetFolders: deps.currentAssetFolders() }
           : target?.assetFolders

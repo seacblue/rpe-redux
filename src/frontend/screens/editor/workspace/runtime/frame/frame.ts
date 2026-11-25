@@ -75,6 +75,7 @@ export interface FrameVisibility {
   atHome(): boolean;
   hasDocument(): boolean;
   documentHidden(): boolean;
+  windowFocused(): boolean;
 }
 /** Work supplied by the composition root for one editor frame. */
 export interface FrameRunnerOptions {

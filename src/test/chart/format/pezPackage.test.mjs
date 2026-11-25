@@ -7,7 +7,7 @@ import {
   projectChartForExport,
   stripReduxExportVersion,
 } from "../../../core/global/chart/exportProjection.ts";
-import { buildInfoText } from "../../../core/global/document/info.ts";
+import { buildInfoText, mergeInfoIntoMeta, parseInfo } from "../../../core/global/document/info.ts";
 import { createChartExport } from "../../../core/global/document/export.ts";
 import {
   flattenPezAssetName,
@@ -225,6 +225,18 @@ test("Info.txt keeps caller fields while the package identity wins", () => {
   assert.match(info, /^Path: 1234567890123456$/m);
   assert.match(info, /^Chart: 1234567890123456\.json$/m);
   assert.match(info, /^Custom: keep$/m);
+});
+
+test("chartTime round-trips through the Info.txt EditTime sidecar", () => {
+  const chart = createChart();
+  chart.chartTime = 1159.0699582;
+  const info = buildInfoText(chart, "chart.json");
+  assert.match(info, /^EditTime: 1159\.070$/m);
+
+  const reopened = createChart();
+  delete reopened.chartTime;
+  mergeInfoIntoMeta(reopened, parseInfo(info));
+  assert.equal(reopened.chartTime, 1159.07);
 });
 
 test("opening a Redux package removes only the defaults it generated", () => {
