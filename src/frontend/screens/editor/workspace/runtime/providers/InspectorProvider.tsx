@@ -43,6 +43,8 @@ import { viewControls } from "../commands/viewControls.ts";
 import type { EditorTimelineMode } from "../commands/viewControls.ts";
 import { pickFiles } from "../../../../../platform/filePicker.ts";
 import type { ChartIssue } from "../../../../../../core/edit/validation/chartIssueTypes.ts";
+import type { NoteHitSoundOptions } from "../../../inspector/notes/model.ts";
+import { AUDIO_EXTENSIONS } from "../../../../global/sections/assets/assetLibraryModel.ts";
 
 /** The document fields the inspector panes read and mutate. */
 export interface InspectorDocumentState {
@@ -60,6 +62,7 @@ export interface InspectorRuntime {
   readonly eventIssues: EventIssueMonitor;
   readonly linePanel: LinePanel;
   readonly assetLibrary: ReturnType<typeof createAssetLibraryRuntime>;
+  readonly hitSoundOptions: NoteHitSoundOptions;
   readonly curveEditor: ReturnType<typeof createCurveEditor>;
   readonly activatePane: (name: string) => void;
   readonly closePane: () => void;
@@ -342,6 +345,25 @@ export function createInspectorRuntime(options: {
     notify: options.notify,
     renderSession: options.renderSession,
   });
+  const hitSoundOptions: NoteHitSoundOptions = {
+    names: () =>
+      [...assetNames(options.document.assets)]
+        .filter((name) => AUDIO_EXTENSIONS.test(name))
+        .sort((left, right) => left.localeCompare(right)),
+    add: async () => {
+      const files = await pickFiles({ accept: "audio/*" });
+      if (!files?.length) {
+        return null;
+      }
+      const before = new Set(options.document.assets.keys());
+      await assetLibrary.addFiles(files);
+      return (
+        [...options.document.assets.keys()].find(
+          (name) => !before.has(name) && AUDIO_EXTENSIONS.test(name),
+        ) ?? null
+      );
+    },
+  };
   addTexture = async () => {
     const files = await pickFiles({ accept: "image/*", multiple: true });
     if (!files?.length) {
@@ -393,6 +415,7 @@ export function createInspectorRuntime(options: {
     eventIssues,
     linePanel,
     assetLibrary,
+    hitSoundOptions,
     curveEditor,
     activatePane,
     closePane,

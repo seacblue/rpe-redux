@@ -10,14 +10,10 @@
  *   data-slider="range"  a thin rail with a thumb
  *
  * Without the attribute the filled readout bar is used. Bounds affect value
- * formatting, never the visual design. The pointer mapping below measures
- * against the painted track — the padding box, because a range's border is not
- * part of its rail — and clamps points outside it to an end, so a drag can reach
- * either end even when the pointer leaves the control.
+ * formatting, never the visual design.
  */
 
 import { clamp01 } from "../../core/utils/numbers.ts";
-import { writeInputValue } from "./nativeValue.ts";
 
 export type SliderReadout = "percent" | "number";
 
@@ -29,133 +25,6 @@ export function rangeBounds(element: HTMLInputElement): { min: number; max: numb
     min: Number.isFinite(min) ? min : 0,
     max: Number.isFinite(max) ? max : 100,
   };
-}
-
-/** The grid a pointer value snaps to; `any` and a missing step mean hundredths. */
-const POINTER_STEP = 0.01;
-
-/** The step a pointer snaps to, falling back to hundredths for `any` or an unusable value. */
-function pointerStep(step: string): number {
-  const value = Number(step);
-  return Number.isFinite(value) && value > 0 ? value : POINTER_STEP;
-}
-
-/** Step-grid arithmetic accumulates 0.30000000000000004 without this. */
-function roundToStep(value: number, step: number): number {
-  const decimals = (String(step).split(".")[1] ?? "").length;
-  return Number(value.toFixed(Math.min(decimals + 6, 12)));
-}
-
-/** The edges a range input's painted track is inset by, in CSS pixels. */
-export interface TrackInsets {
-  readonly borderLeft: number;
-  readonly borderRight: number;
-  readonly paddingLeft: number;
-  readonly paddingRight: number;
-}
-
-/**
- * The painted track inside a range input's border box.
- *
- * A range's rail spans its content box: the border and the padding are painted
- * around it rather than as part of it. Measuring the pointer against the whole
- * border box would make the rail's first pixel worth `(max - min) / width`, so
- * the leftmost point anyone can see would report a value above the start, and
- * that error would grow with the range. A non-positive width reports zero so the
- * caller's endpoint rule takes over.
- */
-export function trackBounds(
-  box: { left: number; width: number },
-  insets: TrackInsets,
-): { left: number; width: number } {
-  const width =
-    box.width - insets.borderLeft - insets.borderRight - insets.paddingLeft - insets.paddingRight;
-  return {
-    left: box.left + insets.borderLeft + insets.paddingLeft,
-    width: Number.isFinite(width) && width > 0 ? width : 0,
-  };
-}
-
-/** Read a range input's track insets from its computed style. */
-function trackInsets(element: HTMLInputElement): TrackInsets {
-  const style = getComputedStyle(element);
-  const pixels = (value: string): number => {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  };
-  return {
-    borderLeft: pixels(style.borderLeftWidth),
-    borderRight: pixels(style.borderRightWidth),
-    paddingLeft: pixels(style.paddingLeft),
-    paddingRight: pixels(style.paddingRight),
-  };
-}
-
-/**
- * The value a range input takes for a pointer at `clientX`.
- *
- * `bounds` is the input's painted track: the outermost track pixel maps to an
- * end, so the position a user can see is the position they get. Points outside
- * the track clamp to the matching end, which is what lets a drag finish after
- * the pointer has left the control.
- *
- * The result snaps to the nearest step counted from `min`; a missing step or
- * `step="any"` uses hundredths. A non-positive width or NaN coordinate falls
- * back to `min`, and a value that would cross either bound is clamped.
- */
-export function valueAtPointer(
-  bounds: { left: number; width: number },
-  min: number,
-  max: number,
-  step: string,
-  clientX: number,
-): number {
-  const lower = Number.isFinite(min) ? min : 0;
-  const upper = Number.isFinite(max) ? max : lower;
-  if (
-    !Number.isFinite(bounds.left) ||
-    !Number.isFinite(bounds.width) ||
-    bounds.width <= 0 ||
-    upper <= lower
-  ) {
-    return lower;
-  }
-  if (clientX <= bounds.left) {
-    return lower;
-  }
-  if (clientX >= bounds.left + bounds.width) {
-    return upper;
-  }
-  if (!Number.isFinite(clientX)) {
-    return lower;
-  }
-  const ratio = clamp01((clientX - bounds.left) / bounds.width);
-  const raw = lower + ratio * (upper - lower);
-  const stepSize = pointerStep(step);
-  const snapped = roundToStep(lower + Math.round((raw - lower) / stepSize) * stepSize, stepSize);
-  return Math.min(upper, Math.max(lower, snapped));
-}
-
-/**
- * Writes the value under the pointer onto a range input and announces it with
- * a bubbling `input` event. Returns whether the DOM value actually changed,
- * so a drag can emit one `change` at its end instead of one per move.
- */
-export function writeRangeValueAtPointer(input: HTMLInputElement, clientX: number): boolean {
-  const { min, max } = rangeBounds(input);
-  const box = input.getBoundingClientRect();
-  // The rail is painted inside the border and padding, so the pointer is mapped
-  // against that track. The box itself would make the track's first pixel worth
-  // a full step of the range, and on a timeline that is seconds.
-  const bounds = trackBounds({ left: box.left, width: box.width }, trackInsets(input));
-  const next = valueAtPointer(bounds, min, max, input.step, clientX);
-  const current = input.value === "" ? Number.NaN : Number(input.value);
-  if (Number.isFinite(current) && current === next) {
-    return false;
-  }
-  writeInputValue(input, String(next));
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  return true;
 }
 
 /**

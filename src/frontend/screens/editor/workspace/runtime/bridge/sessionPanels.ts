@@ -16,6 +16,7 @@ import type { MultiEditPanel } from "../../../inspector/multiEdit/multiEdit.ts";
 import type { MultiLinePanel } from "../../../inspector/multiLine/MultiLinePanel.tsx";
 
 import { EditorSession } from "../../../../../../core/edit/session/session.ts";
+import type { NoteHitSoundOptions } from "../../../inspector/notes/model.ts";
 
 /** Feature handles the session publication refreshes. */
 export interface SessionPanelOptions {
@@ -30,6 +31,7 @@ export interface SessionPanelOptions {
   reportError(error: unknown): void;
   notify(message: string, level?: string, duration?: number): void;
   nudgeBeatInput(value: Beat, direction: number): Beat | null;
+  hitSoundOptions: NoteHitSoundOptions;
 }
 /** Refresh only the relevant panel contents, leaving routing to its own module. */
 export function createSessionPanels(runtime: SessionPanelOptions) {
@@ -48,6 +50,8 @@ export function createSessionPanels(runtime: SessionPanelOptions) {
       currentTempo,
       runtime.reportError,
       runtime.nudgeBeatInput,
+      false,
+      runtime.hitSoundOptions,
     );
     renderEventInspector(
       session,
@@ -80,6 +84,8 @@ export function createSessionPanels(runtime: SessionPanelOptions) {
         currentTempo,
         runtime.reportError,
         runtime.nudgeBeatInput,
+        false,
+        runtime.hitSoundOptions,
       );
       renderEventInspector(
         session,

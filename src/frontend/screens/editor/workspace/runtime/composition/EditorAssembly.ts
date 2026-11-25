@@ -998,6 +998,7 @@ export function createEditorAssembly(
       reportError,
       notify,
       nudgeBeatInput,
+      hitSoundOptions: inspectorRuntime.hitSoundOptions,
     },
     selection: {
       layer: () => timeline.gestures.layer,
@@ -1318,6 +1319,7 @@ export function createEditorAssembly(
     getTempo: tempo.get,
     reportError,
     onNudge: nudgeBeatInput,
+    hitSoundOptions: inspectorRuntime.hitSoundOptions,
   });
 
   timeline.gestures.eventPlacementType = timeline.eventTypes[0];

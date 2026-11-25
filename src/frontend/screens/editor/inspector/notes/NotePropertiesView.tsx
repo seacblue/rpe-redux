@@ -138,6 +138,7 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
   }
 
   if (field.kind === "slider") {
+    const sliderValue = focused ? draft : field.value;
     return (
       <FieldRow
         layout="inline"
@@ -152,14 +153,27 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             min={Number(field.min ?? 0)}
             max={Number(field.max ?? 255)}
             step={field.step ?? 1}
-            value={field.value}
+            value={sliderValue}
             data-inspector-field={field.key}
             disabled={field.disabled}
             aria-describedby={
               field.tipDescription ? `note-field-${field.key}-description` : undefined
             }
             aria-label={field.label}
-            onChange={(event) => field.apply?.(event.currentTarget)}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onCommit={(value) => {
+              const next = String(value);
+              setDraft(next);
+              field.apply?.({ value: next });
+            }}
+            onFocus={() => {
+              setFocused(true);
+              field.focus?.();
+            }}
+            onBlur={() => {
+              setFocused(false);
+              field.blur?.();
+            }}
           />
         }
       />
