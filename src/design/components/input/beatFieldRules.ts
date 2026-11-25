@@ -18,6 +18,8 @@ export interface BeatRules {
   partsOf(beat: readonly number[]): BeatParts;
   /** The stored beat the boxes describe, or `null` when they are not a beat. */
   reduce(parts: BeatParts): readonly number[] | null;
+  /** Read the boxes without canonicalizing them, or `null` when they are invalid. */
+  preserve?(parts: BeatParts): readonly number[] | null;
   /** The three parts a whole beat typed into one box describes, or `null`. */
   parseShorthand?(text: string): BeatParts | null;
 }

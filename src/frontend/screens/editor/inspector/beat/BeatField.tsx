@@ -13,6 +13,8 @@ import {
   BeatField as BeatFieldPrimitive,
   type BeatFieldProps as BeatFieldPrimitiveProps,
 } from "../../../../../design/components/input/BeatField.tsx";
+export { commitBeatFieldScope } from "../../../../../design/components/input/BeatField.tsx";
+export { flushBeatFieldScope } from "../../../../../design/components/input/BeatField.tsx";
 
 export interface BeatFieldProps extends Omit<
   BeatFieldPrimitiveProps,

@@ -33,6 +33,7 @@ import type { EditorSession } from "../../../../../core/edit/session/session.ts"
 import {
   captureSelection,
   type NoteCaptureEntry,
+  type SelectionSnapshot,
 } from "../../../../../core/edit/selection/snapshot.ts";
 import {
   commitSelectionEdit,
@@ -116,6 +117,35 @@ interface PropertiesRenderContext {
  * only wakes React for another identical render.
  */
 const renderContexts = new WeakMap<NotesInspectorState, PropertiesRenderContext>();
+const draftSelections = new WeakMap<EditorSession, SelectionSnapshot>();
+
+/** Remember the chart objects targeted by a note Inspector draft. */
+export function captureNoteDraftSelection(session: EditorSession): void {
+  const snapshot = captureSelection(session);
+  if (snapshot.notes.length) {
+    draftSelections.set(session, snapshot);
+  }
+}
+
+/** Drop the note draft target after its final scoped commit has run. */
+export function clearNoteDraftSelection(session: EditorSession): void {
+  draftSelections.delete(session);
+}
+
+/** Rebase a saved draft target onto the session's latest chart. */
+function currentDraftSelection(session: EditorSession): SelectionSnapshot | null {
+  const saved = draftSelections.get(session);
+  if (!saved) {
+    return null;
+  }
+  const notes = saved.notes
+    .map((entry) => {
+      const note = session.chart.judgeLineList?.[entry.lineIndex]?.notes?.[entry.index];
+      return note ? { ...entry, note } : null;
+    })
+    .filter((entry): entry is NoteCaptureEntry => Boolean(entry));
+  return notes.length ? { ...saved, chart: session.chart, notes } : null;
+}
 
 /** Compares two note selections by line, index, and note identity. */
 function sameEntries(left: NoteCaptureEntry[], right: NoteCaptureEntry[]): boolean {
@@ -160,7 +190,17 @@ function applyNoteTransform(
   session: EditorSession,
   label: string,
   transform: (note: JudgeLineNote, entry?: NoteCaptureEntry) => JudgeLineNote,
+  draftSelection?: SelectionSnapshot | null,
 ): void {
+  if (draftSelection) {
+    const result = editCapturedSelection(draftSelection, { note: transform });
+    if (result.chart !== session.chart) {
+      // Keep the user's current selection state. The timeline may have cleared
+      // it before the Inspector close lifecycle gets a chance to flush.
+      session.commitChart(label, result.chart, session.selectionState(), {}, { normalized: true });
+    }
+    return;
+  }
   if (session.multiLineActive && session.multiLineMode === "notes") {
     const result = editCapturedSelection(captureSelection(session), { note: transform });
     commitSelectionEdit(session, result, label, {}, { normalized: true });
@@ -256,6 +296,7 @@ export function renderProperties(
               : 1;
       const focus = () => {
         session.noteDraftActive = true;
+        captureNoteDraftSelection(session);
       };
       const blur = () => {
         session.noteDraftActive = false;
@@ -295,6 +336,7 @@ export function renderProperties(
                       : beatCopy(next),
                 };
               },
+              currentDraftSelection(session),
             );
           } catch (error) {
             reportError(error);

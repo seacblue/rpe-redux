@@ -1,7 +1,12 @@
 /** A three-number shorthand typed into one beat box expands to the stored triple. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { draftBeat, partsFromText, partsOf } from "../../../core/global/chart/timing/beatParts.ts";
+import {
+  draftBeat,
+  partsFromText,
+  partsOf,
+  preserveBeatParts,
+} from "../../../core/global/chart/timing/beatParts.ts";
 
 test("colon, comma, and space shorthand all split into three parts", () => {
   assert.deepEqual(partsFromText("3:1/2"), ["3", "1", "2"]);
@@ -37,6 +42,10 @@ test("a decimal shorthand reduces to the exact stored triple", () => {
 
 test("an integer shorthand carries the chart's own reduction", () => {
   assert.deepEqual(partsOf(draftBeat(partsFromText("3:5/4"))), ["4", "1", "4"]);
+});
+
+test("an integer triple can stay unreduced while the field is left", () => {
+  assert.deepEqual(partsOf(preserveBeatParts(["3", "5", "4"])), ["3", "5", "4"]);
 });
 
 test("a zero denominator still expands but is not a beat", () => {

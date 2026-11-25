@@ -81,6 +81,9 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             onCommit={(beat) => field.applyBeat?.(beat)}
             onNudge={field.nudge}
             accepts={field.accepts}
+            preservePartsOnBlur
+            commitOnEnter={false}
+            commitScope="notes"
             disabled={field.disabled}
             dataField={field.key}
             onFocusChange={

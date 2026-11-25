@@ -82,6 +82,17 @@ export interface InspectorLifecycle {
 /** Every registered pane, in registration order. */
 export const inspectorPanels = createValue<readonly InspectorPanelDefinition[]>({ initial: [] });
 const lifecycles = new Map<string, Set<InspectorLifecycle>>();
+let boundInspectorState: ValueCell<string> | null = null;
+
+/** Binds the mounted Inspector state so shell routes can switch synchronously. */
+export function bindInspectorState(state: ValueCell<string>): () => void {
+  boundInspectorState = state;
+  return () => {
+    if (boundInspectorState === state) {
+      boundInspectorState = null;
+    }
+  };
+}
 
 /** Registers the panel capability; shell surfaces may open it by its stable id. */
 export function registerInspectorPanel(definition: InspectorPanelDefinition): () => void {
@@ -148,7 +159,7 @@ export function openPane(id: string, state?: ValueCell<string>): boolean {
     panel.open();
     return true;
   }
-  return openInspector(id, state);
+  return openInspector(id, state ?? boundInspectorState ?? undefined);
 }
 
 /**
@@ -177,8 +188,8 @@ export function openInspector(id: string, state?: ValueCell<string>): boolean {
 /** Clears the active pane and runs the closing lifecycle of the previous one. */
 export function closeInspector(state: ValueCell<string>): void {
   const previous = state.get();
-  state.set("");
   for (const lifecycle of [...(lifecycles.get(previous) ?? [])]) {
     lifecycle.onClose?.();
   }
+  state.set("");
 }

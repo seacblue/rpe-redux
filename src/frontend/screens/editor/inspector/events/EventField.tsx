@@ -21,7 +21,12 @@ import {
   transformEvents,
   assertMultiEventSelectionStructure,
 } from "../../../../../core/edit/events/eventEdits.ts";
-import { captureSelection } from "../../../../../core/edit/selection/snapshot.ts";
+import {
+  captureSelection,
+  type EventCaptureEntry,
+  type SelectionSnapshot,
+} from "../../../../../core/edit/selection/snapshot.ts";
+import { eventListAt } from "../../../../../core/edit/events/eventTracks.ts";
 import {
   commitSelectionEdit,
   editCapturedSelection,
@@ -39,6 +44,36 @@ import {
   eventOuterStepSettingKey,
   eventStepSettingKey,
 } from "../../../../../core/settings/stepperSettings.ts";
+
+const draftSelections = new WeakMap<EditorSession, SelectionSnapshot>();
+
+/** Remember the event objects targeted by an event Inspector draft. */
+function captureEventDraftSelection(session: EditorSession): void {
+  const snapshot = captureSelection(session);
+  if (snapshot.events.length) {
+    draftSelections.set(session, snapshot);
+  }
+}
+
+/** Drop the event draft target after its final scoped commit has run. */
+export function clearEventDraftSelection(session: EditorSession): void {
+  draftSelections.delete(session);
+}
+
+/** Rebase a saved event draft target onto the session's latest chart. */
+function currentDraftSelection(session: EditorSession): SelectionSnapshot | null {
+  const saved = draftSelections.get(session);
+  if (!saved) {
+    return null;
+  }
+  const events = saved.events
+    .map((entry) => {
+      const event = eventListAt(session, entry.lineIndex, entry.type)[entry.index];
+      return event ? { ...entry, event } : null;
+    })
+    .filter((entry): entry is EventCaptureEntry => Boolean(entry));
+  return events.length ? { ...saved, chart: session.chart, events } : null;
+}
 
 interface EventFieldProps {
   session: EditorSession;
@@ -72,7 +107,17 @@ export function applyEventTransform(
   session: EditorSession,
   label: string,
   transform: (event: JudgeLineEvent, type: string) => JudgeLineEvent,
+  draftSelection?: SelectionSnapshot | null,
 ): void {
+  if (draftSelection) {
+    const result = editCapturedSelection(draftSelection, { event: transform });
+    if (result.chart !== session.chart) {
+      // Keep the user's current selection state. The timeline may have cleared
+      // it before the Inspector close lifecycle gets a chance to flush.
+      session.commitChart(label, result.chart, session.selectionState(), {}, { normalized: true });
+    }
+    return;
+  }
   if (session.multiLineActive && session.multiLineMode === "events") {
     const result = editCapturedSelection(captureSelection(session), { event: transform });
     assertMultiEventSelectionStructure(result.chart, result.eventLayer, result.multiEventSelection);
@@ -205,6 +250,7 @@ export function EventField({
         session,
         t("editorPanels.inspector.event.modify", { field: title }),
         (current) => ({ ...current, [field]: beat }),
+        currentDraftSelection(session),
       );
       return true;
     } catch (error) {
@@ -219,6 +265,7 @@ export function EventField({
   const onBeatFocusChange = (focused: boolean) => {
     if (focused) {
       setLiveEventEdit(true);
+      captureEventDraftSelection(session);
       return;
     }
     setLiveEventEdit(false);
@@ -351,6 +398,9 @@ export function EventField({
             value={beatValue}
             onCommit={commitBeat}
             onNudge={nudgeBeat}
+            preservePartsOnBlur
+            commitOnEnter={false}
+            commitScope="events"
             onFocusChange={onBeatFocusChange}
             disabled={disabled}
             dataField={field}
