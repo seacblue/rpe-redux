@@ -241,6 +241,18 @@ export function clearSelection(session: EditorSession): boolean {
   return true;
 }
 
+/** Stable ids for the pointer selection gestures shared by the editor surfaces. */
+export const SELECTION_SHORTCUT_IDS = Object.freeze({
+  note: "selection.note",
+  event: "selection.event",
+  line: "selection.line",
+  sweepAdd: "selection.sweep.add",
+  sweepRemove: "selection.sweep.remove",
+  toggle: "selection.toggle",
+  marquee: "selection.marquee",
+  marqueeRemove: "selection.marquee.remove",
+});
+
 /**
  * Select-all and the movement/stick keys act on the selection this module edits.
  *
@@ -257,21 +269,80 @@ export const selectionShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "A", modifiers: ["CTRL"] }],
   },
   {
-    id: "selection.sweep.add",
+    id: SELECTION_SHORTCUT_IDS.note,
+    category: "editor.selection",
+    title: "shortcuts.editor.selectNote",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0" }],
+    shared: true,
+    passive: true,
+    enabledFor: (context) => context.area === "notes",
+  },
+  {
+    id: SELECTION_SHORTCUT_IDS.event,
+    category: "editor.selection",
+    title: "shortcuts.editor.selectEvent",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0" }],
+    shared: true,
+    passive: true,
+    enabledFor: (context) => context.area === "events",
+  },
+  {
+    id: SELECTION_SHORTCUT_IDS.line,
+    category: "editor.selection",
+    title: "shortcuts.editor.selectLine",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0" }],
+    shared: true,
+    passive: true,
+    enabledFor: (context) => context.surface === "preview",
+  },
+  {
+    id: SELECTION_SHORTCUT_IDS.sweepAdd,
     category: "editor.selection",
     title: "shortcuts.editor.sweepSelect",
     scope: "editor",
     defaults: [{ key: "MOUSE0" }],
+    shared: true,
     surface: "timeline",
     passive: true,
   },
   {
-    id: "selection.sweep.remove",
+    id: SELECTION_SHORTCUT_IDS.sweepRemove,
     category: "editor.selection",
     title: "shortcuts.editor.sweepDeselect",
     scope: "editor",
     defaults: [{ key: "MOUSE2" }],
+    shared: true,
     surface: "timeline",
+    passive: true,
+  },
+  {
+    id: SELECTION_SHORTCUT_IDS.toggle,
+    category: "editor.selection",
+    title: "shortcuts.editor.toggleSelectionItem",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0", modifiers: ["CTRL"] }],
+    shared: true,
+    passive: true,
+  },
+  {
+    id: SELECTION_SHORTCUT_IDS.marquee,
+    category: "editor.selection",
+    title: "shortcuts.editor.marqueeSelect",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0", modifiers: ["SHIFT"] }],
+    shared: true,
+    passive: true,
+  },
+  {
+    id: SELECTION_SHORTCUT_IDS.marqueeRemove,
+    category: "editor.selection",
+    title: "shortcuts.editor.marqueeDeselect",
+    scope: "editor",
+    defaults: [{ key: "MOUSE0", modifiers: ["ALT", "SHIFT"] }],
+    shared: true,
     passive: true,
   },
   {

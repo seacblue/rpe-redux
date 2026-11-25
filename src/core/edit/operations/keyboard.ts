@@ -51,6 +51,8 @@ interface KeyboardTimeline {
   gridCount: number;
   eventTypes: string[];
   eventInteraction: Pick<EventKeyboardTarget, "pending">;
+  /** Picks the note under the live timeline cursor for quick curve generation. */
+  quickPickAtCursor(): boolean;
   addAtCursor(type: number): boolean;
   cancelPlacement(): void;
 }
@@ -226,6 +228,7 @@ export async function runEditorKeyboardAction(
         "note.place.tap",
         "workspace.multiLine.toggle",
         "workspace.multiLine.switchMode",
+        "editor.curve.quickPick",
       ].includes(action)
     ) {
       recordDiagnosticAction(action, "shortcut", "ignored", surface);
@@ -396,6 +399,8 @@ export async function runEditorKeyboardAction(
       handled = timeline.addAtCursor(NOTE_TYPE_BY_ACTION[action]);
     } else if (action === "editor.curve.delete") {
       deps.deleteCurveSelection();
+    } else if (action === "editor.curve.quickPick") {
+      handled = timeline.quickPickAtCursor();
     } else if (action === "edit.delete") {
       deps.deleteSelection();
     } else if (action === "navigation.line.previous" || action === "navigation.line.next") {

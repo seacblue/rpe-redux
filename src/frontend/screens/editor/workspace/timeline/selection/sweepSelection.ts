@@ -4,6 +4,7 @@ import { matchesEditorShortcut } from "../../../../../../core/edit/shortcuts/sho
 import type { TimelineArea } from "../../../../../../core/edit/timeline/types.ts";
 import { readShortcutContext } from "../../../../../platform/shortcuts/shortcutContext.ts";
 import { clearEventSelectionAnchor } from "../../../../../../core/edit/selection/eventSelectionAnchor.ts";
+import { SELECTION_SHORTCUT_IDS } from "../../../../../../core/edit/selection/control.ts";
 
 export type SweepMode = "add" | "remove";
 
@@ -28,10 +29,10 @@ export function timelineSweepMode(
     ),
     surface: "timeline" as const,
   };
-  if (matchesEditorShortcut("selection.sweep.remove", event, shortcutContext, context)) {
+  if (matchesEditorShortcut(SELECTION_SHORTCUT_IDS.sweepRemove, event, shortcutContext, context)) {
     return "remove";
   }
-  if (matchesEditorShortcut("selection.sweep.add", event, shortcutContext, context)) {
+  if (matchesEditorShortcut(SELECTION_SHORTCUT_IDS.sweepAdd, event, shortcutContext, context)) {
     return "add";
   }
   return null;
