@@ -370,6 +370,9 @@ export function createEditorAssembly(
     activatePane("");
   }
   const editClock = new EditorEditClock();
+  scope.listen(window, "blur", () => editClock.pause());
+  scope.listen(window, "focus", () => editClock.pause());
+  scope.listen(document, "visibilitychange", () => editClock.pause());
   const offsetSeconds = () => Number(session.current.chart.META.offset ?? 0) / 1000;
   /**
    * How far ahead of the audible position the picture is drawn.
@@ -1107,7 +1110,7 @@ export function createEditorAssembly(
         closePane();
       }
     },
-    resetEditClock: () => editClock.reset(),
+    resetEditClock: (initialSeconds = 0) => editClock.setBaseline(initialSeconds),
     currentEditSeconds: () => editClock.seconds,
     setHasDocument,
     hasDocument,
@@ -1252,6 +1255,7 @@ export function createEditorAssembly(
       atHome,
       hasDocument,
       documentHidden: () => document.hidden,
+      windowFocused: () => document.hasFocus(),
     },
     clock: {
       audio,

@@ -8,6 +8,7 @@
 /* eslint-disable max-lines -- the desktop store owns the complete native document lifecycle. */
 import { t } from "../../../i18n/index.ts";
 import { normalizeChartObjectIdsAsync, type Chart } from "../../global/chart/chart.ts";
+import { mergeInfoIntoMeta, parseInfo } from "../../global/document/info.ts";
 import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -56,6 +57,19 @@ const DEFAULT_RECOVERY_LIMIT = 10;
 const MAX_RECOVERY_LIMIT = 100;
 /** Keeps a host without localStorage stable for the lifetime of this module. */
 const fallbackRecoveryIds = new Map<string, string>();
+
+/** Apply the materialized RPE Info.txt sidecar to a chart opened from disk. */
+function readChartInfo(chart: Chart, assets: AssetMap): Record<string, string> | undefined {
+  const entry = [...assets.entries()].find(
+    ([name]) => name.replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() === "info.txt",
+  );
+  if (!entry) {
+    return undefined;
+  }
+  const info = parseInfo(new TextDecoder().decode(entry[1]));
+  mergeInfoIntoMeta(chart, info);
+  return info;
+}
 
 /**
  * Read a persisted pathless recovery id.
@@ -427,12 +441,15 @@ export class TauriDocumentStore {
           await invoke("close_document", { id: previous.id });
         }
         await this.assets.materialize(/(?:info\.txt|extra\.json|\.(?:glsl|vsh))$/i);
+        const info = readChartInfo(streamed.document.chart, this.assets.assets);
+        streamed.document.updateHeaderFromChart(streamed.document.chart);
         throwIfAborted(options.signal);
         return {
           candidate: {
             chart: streamed.document.chart,
             chartDocument: streamed.document,
             name: opened.chart_name,
+            ...(info ? { info } : {}),
             desktop: opened,
           },
           assets: this.assets.assets,
@@ -501,9 +518,18 @@ export class TauriDocumentStore {
         await invoke("close_document", { id: previous.id });
       }
       await this.assets.materialize(/(?:info\.txt|extra\.json|\.(?:glsl|vsh))$/i);
+      const info =
+        chart && typeof chart === "object"
+          ? readChartInfo(chart as Chart, this.assets.assets)
+          : undefined;
       throwIfAborted(options.signal);
       return {
-        candidate: { chart, name: opened.chart_name, desktop: opened },
+        candidate: {
+          chart,
+          name: opened.chart_name,
+          ...(info ? { info } : {}),
+          desktop: opened,
+        },
         assets: this.assets.assets,
         task,
       };

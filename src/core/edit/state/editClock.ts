@@ -1,4 +1,4 @@
-/** Tracks active editing time, excluding time spent at home or in a hidden window. */
+/** Tracks active foreground editing time, excluding home, hidden, and unfocused time. */
 export class EditorEditClock {
   private elapsedSeconds = 0;
   private previousTick: number;
@@ -16,6 +16,17 @@ export class EditorEditClock {
   /** Discards accumulated time and restarts measurement at `now()`. */
   reset(now: () => number = () => performance.now()): void {
     this.elapsedSeconds = 0;
+    this.previousTick = now();
+  }
+
+  /** Seeds the clock from a chart's persisted total without counting the gap before open. */
+  setBaseline(seconds: number, now: () => number = () => performance.now()): void {
+    this.elapsedSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    this.previousTick = now();
+  }
+
+  /** Stop the current interval without discarding the accumulated total. */
+  pause(now: () => number = () => performance.now()): void {
     this.previousTick = now();
   }
 

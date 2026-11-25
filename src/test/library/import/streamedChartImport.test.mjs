@@ -30,7 +30,7 @@ function sampleChart() {
 }
 
 /** A library stub recording the committed chart text. */
-function recordingLibrary(commits) {
+function recordingLibrary(commits, inputs) {
   return {
     async createRaw() {
       return { project: { id: "project-1", revision: 1 } };
@@ -39,6 +39,7 @@ function recordingLibrary(commits) {
       throw new Error("no asset uploads expected");
     },
     async commit(id, input) {
+      inputs.push(input);
       commits.push(input.chartJson);
       return { project: { id, revision: 2 } };
     },
@@ -47,6 +48,7 @@ function recordingLibrary(commits) {
 
 test("a streamed chart import stores its lines instead of facade placeholders", async () => {
   const chart = sampleChart();
+  chart.chartTime = 1159.0699582;
   const text = serializeChart(chart);
   const scan = scanChartJson(text);
   const header = chartHeaderFromScan(scan);
@@ -63,8 +65,9 @@ test("a streamed chart import stores its lines instead of facade placeholders", 
     },
   });
   const commits = [];
+  const inputs = [];
   const result = await importChartToLibrary({
-    library: recordingLibrary(commits),
+    library: recordingLibrary(commits, inputs),
     chart: document.chart,
     name: "Streamed import",
     assets: new Map(),
@@ -75,6 +78,7 @@ test("a streamed chart import stores its lines instead of facade placeholders", 
   assert.equal(imported.judgeLineList.length, 1);
   assert.equal(imported.judgeLineList[0].notes.length, 1);
   assert.equal(imported.judgeLineList[0].notes[0].type, 1);
+  assert.equal(inputs[0].editSeconds, 1159);
   // The facade keeps placeholder lines; only the document serializer can see
   // the real notes, which is why serializing the facade directly lost them.
   assert.equal(document.chart.judgeLineList[0].notes.length, 0);

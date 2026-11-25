@@ -8,6 +8,7 @@
  * line serializer instead of the placeholder lines on the facade object.
  */
 import { serializeChart } from "../chart/chart.ts";
+import { chartEditSeconds } from "../chart/editTime.ts";
 import { registeredChartDocument } from "../chart/streaming/chartDocumentRegistry.ts";
 import type { AssetMap } from "../document/types.ts";
 import { materializeAssets } from "./document.ts";
@@ -41,6 +42,8 @@ export interface LibraryImportInput {
   assetFolders?: readonly string[];
   /** Reuse text the caller already produced. */
   chartJson?: string;
+  /** Initial active editing total for a newly imported project, in seconds. */
+  editSeconds?: number;
   onProgress?: (value: number) => void;
   /** Cooperatively cancel between chart serialization and library writes. */
   signal?: AbortSignal;
@@ -214,6 +217,13 @@ export async function importChartToLibrary(input: LibraryImportInput): Promise<L
     ...(input.group ? { group: input.group } : {}),
     ...(input.viewState ? { viewState: input.viewState } : {}),
     ...(input.assetFolders ? { assetFolders: input.assetFolders } : {}),
+    ...(!input.projectId
+      ? {
+          editSeconds: input.editSeconds ?? chartEditSeconds(input.chart as { chartTime?: number }),
+        }
+      : input.editSeconds !== undefined
+        ? { editSeconds: input.editSeconds }
+        : {}),
     ...(input.onProgress ? { onProgress: input.onProgress } : {}),
     ...(input.signal ? { signal: input.signal } : {}),
   };

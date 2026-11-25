@@ -48,3 +48,16 @@ test("unsaved placements disappear while a successful save keeps them", () => {
   tracker.discard();
   assert.deepEqual(readLocalChartingStats(), { notes: 1, events: 0, seconds: 12 });
 });
+
+test("an imported chart time is a baseline, not a duplicate local delta", () => {
+  const session = new EditorSession(createChart());
+  let seconds = 1159.0699582;
+  const tracker = createLocalChartingStatsTracker({ currentEditSeconds: () => seconds });
+  tracker.attach(session);
+
+  assert.equal(tracker.pendingEditSeconds(), 0);
+  seconds += 2.1;
+  assert.equal(tracker.pendingEditSeconds(), 2);
+  tracker.markSaved();
+  assert.deepEqual(readLocalChartingStats(), { notes: 0, events: 0, seconds: 2 });
+});

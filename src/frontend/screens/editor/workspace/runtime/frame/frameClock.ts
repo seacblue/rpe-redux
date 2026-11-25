@@ -21,7 +21,7 @@ export interface FrameClockOptions {
   >;
   timeline: Pick<Timeline, "autoScroll">;
   lineSwitcher: { draw(timestamp: number): void };
-  editClock: Pick<EditorEditClock, "advance">;
+  editClock: Pick<EditorEditClock, "advance" | "seconds">;
   hitSounds: Pick<HitSounds, "tick">;
   session(): EditorSession;
   tempo(): TempoMap;
@@ -190,10 +190,13 @@ export function createFrameClock(options: FrameClockOptions, visibility: FrameVi
         runtime.timeline.autoScroll(elapsed);
       }
       updateMeasuredFrameRates(state, timestamp);
-      runtime.editClock.advance(
-        timestamp,
-        visibility.hasDocument() && !visibility.atHome() && !visibility.documentHidden(),
-      );
+      const editingForeground =
+        visibility.hasDocument() &&
+        !visibility.atHome() &&
+        !visibility.documentHidden() &&
+        visibility.windowFocused();
+      runtime.editClock.advance(timestamp, editingForeground);
+      runtime.session().editSeconds = runtime.editClock.seconds;
     },
     /** Stops playback at the media end and returns the session and its tempo map. */
     sample() {

@@ -48,6 +48,8 @@ export interface LibrarySaveInput {
   assets: AssetMap;
   viewState?: LibraryViewState;
   assetFolders?: readonly string[];
+  /** Active editing seconds represented by this commit; added to the project total. */
+  editSeconds?: number;
   /** Create a new project for this save and leave the source project unchanged. */
   duplicate?: boolean;
   /** Project name for the copy; defaults to `name`. */
@@ -191,6 +193,9 @@ export async function saveLibraryDocument(input: LibrarySaveInput): Promise<Libr
       assets: manifest,
       ...(input.viewState ? { viewState: input.viewState } : {}),
       ...(input.assetFolders ? { assetFolders: input.assetFolders } : {}),
+      ...(input.editSeconds !== undefined
+        ? { editSeconds: Math.max(0, Math.floor(input.editSeconds)) }
+        : {}),
     };
     const result = input.chartChunks
       ? await input.library.commitStream(
