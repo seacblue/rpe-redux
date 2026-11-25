@@ -270,9 +270,7 @@ export function assemble(
   selectCopies = false,
 ): MultiEditResult {
   let chart = snapshot.chart;
-  const selection = new Set<number>(
-    kind === "notes" ? snapshot.notes.map((entry) => entry.index) : [],
-  );
+  const selection = new Set<number>();
   const eventSelection = new Set<string>(
     kind === "events" && !removeSource
       ? snapshot.events
@@ -281,6 +279,7 @@ export function assemble(
       : [],
   );
   const multiEventSelection = new Map<number, Set<string>>();
+  const multiLineSelection = new Map<number, Set<number>>();
   // A plan that keeps its sources leaves them selected on every source line;
   // copies add their own entries below. A removal starts from an empty map.
   if (kind === "events" && !removeSource) {
@@ -299,37 +298,82 @@ export function assemble(
       Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex,
     ),
   );
+  const sourceNoteLines = new Set<number>(
+    snapshot.notes.map((entry) =>
+      Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex,
+    ),
+  );
   const affected = new Set<number>(
     changes.flatMap((change) => [
       snapshot.lineIndex,
       change.lineIndex,
+      ...(kind === "notes" ? sourceNoteLines : []),
       ...(kind === "events" ? sourceEventLines : []),
     ]),
   );
   const notesByLine = new Map<number, JudgeLineNote[]>();
   const eventsByLine = new Map<number, Map<string, JudgeLineEvent[]>>();
-  const selectedNotes = new Set<number>(snapshot.notes.map((entry) => entry.index));
-  const noteUpdates = new Map<number, BatchChange>(
-    changes
-      .filter((change) => !change.copy)
-      .map((change): [number, BatchChange] => [change.index, change]),
-  );
+  const selectedNotesByLine = new Map<number, Set<number>>();
+  const noteChangesBySource = new Map<number, Map<number, BatchChange>>();
+  // Note ids are the identity contract; the object map only supports an
+  // unnormalized in-memory snapshot that has not received ids yet.
+  const noteSourcesById = new Map<string, { lineIndex: number; index: number }>();
+  const noteSourcesByObject = new Map<object, { lineIndex: number; index: number }>();
+  for (const entry of snapshot.notes) {
+    const lineIndex = Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex;
+    let selected = selectedNotesByLine.get(lineIndex);
+    if (!selected) {
+      selected = new Set();
+      selectedNotesByLine.set(lineIndex, selected);
+    }
+    selected.add(entry.index);
+    const source = { lineIndex, index: entry.index };
+    if (typeof entry.note.id === "string" && entry.note.id.length > 0) {
+      noteSourcesById.set(entry.note.id, source);
+    }
+    noteSourcesByObject.set(entry.note, source);
+  }
+  if (kind === "notes") {
+    for (const change of changes) {
+      const source =
+        (typeof change.before.id === "string"
+          ? noteSourcesById.get(change.before.id)
+          : undefined) ?? noteSourcesByObject.get(change.before);
+      const sourceLine = source?.lineIndex ?? snapshot.lineIndex;
+      const sourceIndex = source?.index ?? change.index;
+      let lineChanges = noteChangesBySource.get(sourceLine);
+      if (!lineChanges) {
+        lineChanges = new Map();
+        noteChangesBySource.set(sourceLine, lineChanges);
+      }
+      lineChanges.set(sourceIndex, change);
+    }
+  }
   for (const lineIndex of affected) {
     const line = (chart.judgeLineList ?? [])[lineIndex];
     if (kind === "notes") {
       const notes: JudgeLineNote[] = [];
-      if (lineIndex === snapshot.lineIndex) {
-        selection.clear();
-      }
+      const selected = selectedNotesByLine.get(lineIndex) ?? new Set<number>();
+      const lineChanges = noteChangesBySource.get(lineIndex);
       (line?.notes ?? []).forEach((note, index) => {
-        const change = lineIndex === snapshot.lineIndex ? noteUpdates.get(index) : null;
-        if (change && change.lineIndex !== lineIndex) {
+        const change = lineChanges?.get(index);
+        if (selected.has(index)) {
+          if (change && change.lineIndex !== lineIndex && !change.copy) {
+            return;
+          }
+          if (lineIndex === snapshot.lineIndex) {
+            selection.add(notes.length);
+          }
+          let lineSelection = multiLineSelection.get(lineIndex);
+          if (!lineSelection) {
+            lineSelection = new Set();
+            multiLineSelection.set(lineIndex, lineSelection);
+          }
+          lineSelection.add(notes.length);
+          notes.push((change?.lineIndex === lineIndex ? change.after : note) as JudgeLineNote);
           return;
         }
-        if (lineIndex === snapshot.lineIndex && selectedNotes.has(index)) {
-          selection.add(notes.length);
-        }
-        notes.push((change?.after ?? note) as JudgeLineNote);
+        notes.push(note);
       });
       notesByLine.set(lineIndex, notes);
     } else {
@@ -357,12 +401,24 @@ export function assemble(
   }
   for (const change of changes) {
     if (kind === "notes") {
-      if (change.lineIndex !== snapshot.lineIndex || change.copy) {
+      const source =
+        (typeof change.before.id === "string"
+          ? noteSourcesById.get(change.before.id)
+          : undefined) ?? noteSourcesByObject.get(change.before);
+      const sourceLine = source?.lineIndex ?? snapshot.lineIndex;
+      if (change.lineIndex !== sourceLine || change.copy) {
         const notes = notesByLine.get(change.lineIndex) ?? [];
-        if (change.lineIndex === snapshot.lineIndex) {
-          selection.add(notes.length);
-        }
+        const position = notes.length;
         notes.push(change.after as JudgeLineNote);
+        if (change.lineIndex === snapshot.lineIndex) {
+          selection.add(position);
+        }
+        let lineSelection = multiLineSelection.get(change.lineIndex);
+        if (!lineSelection) {
+          lineSelection = new Set();
+          multiLineSelection.set(change.lineIndex, lineSelection);
+        }
+        lineSelection.add(position);
       }
     } else {
       const updates = eventsByLine.get(change.lineIndex);
@@ -441,6 +497,7 @@ export function assemble(
     focus: kind,
     selection,
     eventSelection,
+    multiLineSelection: kind === "notes" ? multiLineSelection : undefined,
     multiEventSelection,
     changes,
   };
