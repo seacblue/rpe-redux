@@ -21,7 +21,7 @@ export interface NoteHitSoundOptions {
 export interface NotePropertyField {
   key: string;
   label: string;
-  kind: "select" | "beat" | "number" | "duration" | "text" | "color" | "boolean" | "slider";
+  kind: "select" | "beat" | "number" | "duration" | "text" | "color" | "boolean";
   /** Text value of a select, number, duration or text control; empty for a beat control. */
   value: string;
   /** Optional tone for a select's current option, such as a muted default entry. */
