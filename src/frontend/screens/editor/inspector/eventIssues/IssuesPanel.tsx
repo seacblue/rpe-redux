@@ -39,6 +39,8 @@ import {
   useEditorRuntime,
   useEditorRuntimeValue,
 } from "../../workspace/runtime/composition/EditorRuntime.tsx";
+import { getEditorRegionSnapshot } from "../../workspace/runtime/commands/viewControls.ts";
+import { issueJumpTimelineMode, issueTitleLine } from "./issuePresentation.ts";
 
 /** Localized labels for event tracks the timeline already names elsewhere. */
 const TRACK_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -269,7 +271,13 @@ function IssuesContent() {
     session.normalizeMultiLine();
     session.selectionRevision += 1;
     session.recordSelection(undefined, before, true);
-    runtime.providers.inspector.showSingleTimeline(noteTarget ? "notes" : "events");
+    const timelineMode = issueJumpTimelineMode(
+      noteTarget ? "notes" : "events",
+      getEditorRegionSnapshot(),
+    );
+    if (timelineMode) {
+      runtime.providers.inspector.showSingleTimeline(timelineMode);
+    }
     runtime.providers.playback.seekBeat(beatValue(issue.startTime), true);
     runtime.timeline.changed();
     // Selecting the pair routes the inspector to the event or multi-edit pane.
@@ -422,15 +430,18 @@ function IssuesContent() {
                 : issue.extended
                   ? t("editorPanels.issues.extendedLayer")
                   : "";
+            const titleLine = issueTitleLine(issue, line);
             const title =
               issue.target === "resource"
                 ? t("editorPanels.issues.missingResourceTitle", {
                     kind: t(definition.label),
                   })
-                : t("editorPanels.issues.title", {
-                    kind: t(definition.label),
-                    line,
-                  });
+                : titleLine === null
+                  ? t(definition.label)
+                  : t("editorPanels.issues.title", {
+                      kind: t(definition.label),
+                      line: titleLine,
+                    });
             return (
               <Fragment key={issue.id}>
                 {index > 0 && <Divider axis="x" />}
