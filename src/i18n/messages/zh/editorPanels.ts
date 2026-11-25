@@ -227,7 +227,7 @@ export default {
   "editorPanels.inspector.field.hitSound": "打击音效",
   "editorPanels.inspector.field.color": "颜色",
   "editorPanels.inspector.hitSoundPlaceholder": "默认打击音效",
-  "editorPanels.inspector.hitSoundDefault": "默认打击音效",
+  "editorPanels.inspector.hitSoundDefault": "(默认音效)",
   "editorPanels.inspector.hitSoundAdd": "新增打击音效…",
   "editorPanels.inspector.colorHexInvalid": "请输入 #RRGGBB 格式的颜色，或留空",
 

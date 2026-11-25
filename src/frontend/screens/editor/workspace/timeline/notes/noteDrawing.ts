@@ -92,7 +92,7 @@ interface NotePaintOptions {
 
 /** Convert authored alpha to the timeline opacity that keeps zero-alpha notes selectable. */
 function timelineNoteAlpha(note: TimelineNote): number {
-  return (51 + Number(note.alpha ?? 255) * 0.8) / 255;
+  return (80 + (Number(note.alpha ?? 255) / 255) * 175) / 255;
 }
 
 /** Create a note projection that reuses the frame's origin lookup. */
