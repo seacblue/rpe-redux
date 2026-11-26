@@ -1,6 +1,6 @@
 /**
  * Replaces the document's track and applies the media side effects in their
- * established order: pause, asset update, duration, markers, transport restore,
+ * established order: pause, asset update, duration, markers, transport reset,
  * then waveform and spectrum analysis. Audio and analysis owners are injected;
  * this module owns only the order and keeps analysis off the playhead.
  */
@@ -21,7 +21,6 @@ export interface MusicLoaderDependencies {
   ): Promise<boolean>;
   pause(): void;
   seek(seconds: number): void;
-  chartSeconds(): number;
   offsetSeconds(): number;
   getSession(): MusicSession;
   setAnalysisSource(source: Uint8Array | string): void;
@@ -35,14 +34,13 @@ export interface MusicLoaderDependencies {
   queueSpectrum(source: Uint8Array | string, immediate?: boolean): void;
   renderTimelineMarkers(): void;
   commitLabel(): string;
-  /** Announce a fully installed track after metadata and the transport restore. */
+  /** Announce a fully installed track after metadata and the transport reset. */
   onLoaded?(name: string): void;
 }
 
-/** Loads a track, restores the playhead, and starts analysis beside the open. */
+/** Loads a track, resets the playhead to chart time zero, and starts analysis beside the open. */
 export function createMusicLoader(deps: MusicLoaderDependencies) {
   return async (bytes: Uint8Array | string, name: string, updateMetadata = true) => {
-    const chartPosition = deps.chartSeconds();
     deps.pause();
     const loadingSession = deps.getSession();
     let analysisStarted = false;
@@ -87,9 +85,11 @@ export function createMusicLoader(deps: MusicLoaderDependencies) {
         { normalized: true },
       );
     }
-    // Restore the transport before the waveform owns any paint work. Analysis
-    // may already be running from `onDecoded`; this call is a no-op then.
-    deps.seek(chartPosition + deps.offsetSeconds());
+    // Reset the transport to chart time zero before the waveform owns any paint
+    // work. Audio time includes the chart offset, so this is the same origin as
+    // the editor's rewind command. Analysis may already be running from
+    // `onDecoded`; this call is a no-op then.
+    deps.seek(deps.offsetSeconds());
     deps.onLoaded?.(name);
     startAnalysis();
   };

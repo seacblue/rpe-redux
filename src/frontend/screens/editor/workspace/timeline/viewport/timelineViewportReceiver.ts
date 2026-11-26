@@ -14,6 +14,7 @@ import type {
   MultiLineScroll,
   MultiLineZoom,
   TimelineArea,
+  TimelineDragGeometry,
   TimelineNote,
   TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
@@ -69,7 +70,11 @@ export interface TimelineViewportReceiver extends TimelineViewportMethodSurface 
     canvasWidth?: number,
     lineIndex?: number,
   ): number | null;
-  point(event: PointerEvent, canvas?: HTMLCanvasElement): TimelinePoint;
+  point(
+    event: PointerEvent,
+    canvas?: HTMLCanvasElement,
+    geometry?: Pick<TimelineDragGeometry, "left" | "top">,
+  ): TimelinePoint;
   syncMultiLineChrome(area: TimelineArea, width: number): void;
   setMultiLineZoom(area: TimelineArea, zoom: number): void;
   getMultiLineZoom(area: TimelineArea): number;

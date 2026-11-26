@@ -386,7 +386,6 @@ export function createDocumentRuntime(options: {
     loadAudio: (bytes, name, onDecoded) => preview.audio.load(bytes, name, { onDecoded }),
     pause: () => playback.playback.pause(),
     seek: (seconds) => playback.playback.seek(seconds),
-    chartSeconds: options.chartSeconds,
     offsetSeconds: options.offsetSeconds,
     getSession,
     setAnalysisSource: (source) => timeline.audioAnalysis.setSource(source),

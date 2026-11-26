@@ -68,9 +68,9 @@ export function moveTimelineNote(
   if (!anchor || !Number.isFinite(anchor.positionX)) {
     return note;
   }
-  const { tempo, origin, division, scale } = context;
+  const { tempo, division, scale } = context;
   const key = drag.kind === "endTime" ? "endTime" : "startTime";
-  const scroll = tempo.seconds(origin) - (drag.originSeconds ?? tempo.seconds(origin));
+  const scroll = drag.scrollSeconds ?? 0;
   // The Z prekey can start a Hold edge drag anywhere inside the bar. For an
   // edge drag the pointer row, not the pointer's travel distance, is the time
   // the moved edge must land on.
@@ -158,8 +158,8 @@ export function eventDragDelta(
   if (!drag || !("anchor" in drag) || !drag.anchor) {
     return ZERO_BEAT;
   }
-  const { tempo, origin, scale, division } = context;
-  const scroll = tempo.seconds(origin) - (drag.originSeconds ?? tempo.seconds(origin));
+  const { tempo, scale, division } = context;
+  const scroll = drag.scrollSeconds ?? 0;
   const seconds = tempo.seconds(drag.anchor) + (drag.start.y - drag.current.y) / scale + scroll;
   return subtractBeats(snapTime(seconds, division, tempo), drag.anchor);
 }
