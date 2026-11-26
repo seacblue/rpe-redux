@@ -4,7 +4,12 @@
  * The primitive owns hover, selected, current, dragging, and focus feedback; the
  * caller keeps the row's grid/flex layout and its own leading/trailing controls.
  */
-import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
+import {
+  forwardRef,
+  type HTMLAttributes,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 export interface ListRowProps extends HTMLAttributes<HTMLElement> {
   as?: "div" | "li" | "button";
@@ -26,6 +31,7 @@ export const ListRow = forwardRef<HTMLElement, ListRowProps>(function ListRow(
     dragging = false,
     className = "",
     children,
+    onPointerDown,
     ...rest
   },
   ref,
@@ -39,11 +45,22 @@ export const ListRow = forwardRef<HTMLElement, ListRowProps>(function ListRow(
   ]
     .filter(Boolean)
     .join(" ");
+  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.shiftKey) {
+      event.preventDefault();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest(".redux-list-row")) {
+        active.blur();
+      }
+    }
+    onPointerDown?.(event);
+  };
   return (
     <Tag
       {...rest}
       ref={ref as never}
       className={classes}
+      onPointerDown={handlePointerDown}
       data-selected={selected ? "true" : undefined}
       data-current={current ? "true" : undefined}
       data-dragging={dragging ? "true" : undefined}

@@ -1,12 +1,6 @@
 ﻿/**
  * The judge-line folder tree: one flat folder level, multi-select rows, hover
- * delete actions, and inline folder/line creation. The list is a static
- * selector; structural edits happen through the property controls and footer.
- *
- * Selection keys are line ids rather than indices because deleting a line
- * changes every later index; the mounted panel above this view owns that stable
- * selection. Shift-drag marquees rows in the list layout, but rows and folders
- * never start a move operation.
+ * delete actions, inline creation, and stable-id multi-select.
  */
 import {
   useCallback,
@@ -34,9 +28,15 @@ import {
   sanitizeLineGroupName,
 } from "../../../../../core/global/chart/line/lineTreeEdits.ts";
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
+import {
+  createListSelectionState,
+  listSelectionStateAfterClick,
+  type ListSelectionModifiers,
+  type ListSelectionState,
+} from "../../../../../design/patterns/list/listSelection.ts";
 import { t } from "../../../../../i18n/index.ts";
 import { lineGroupLabels } from "../../../editor/workspace/lineLabels.ts";
-import { lineFocusAfterRemoval, lineTreeKey } from "./lineTreeModel.ts";
+import { lineTreeKey } from "./lineTreeModel.ts";
 import { lineTreePropsEqual } from "./lineTreeMemo.ts";
 import {
   LineTreeCreatePrompt,
@@ -48,7 +48,6 @@ import { useLineTreeMarquee } from "./useLineTreeMarquee.ts";
 import { useLineTreeReveal, type LineTreeReveal } from "./useLineTreeReveal.ts";
 import { FolderDropSection, LineCard, LineFolderSection, LineRow } from "./LineTreeRows.tsx";
 import type { GlobalView } from "../../globalView.ts";
-
 /** Props supplied by the mounted line panel; selection ids stay stable across edits. */
 interface LineTreeProps {
   session: EditorSession;
@@ -69,20 +68,16 @@ interface LineTreeProps {
   onCommit(label: string, chart: Chart, index?: number): void;
   onNotify(message: string, kind?: string): void;
 }
-
 interface GroupRenameDraft {
   index: number;
   value: string;
 }
-
 const LONG_PRESS_MS = 480;
 const CLICK_SUPPRESS_MS = 250;
-
 /** Case-insensitive, trimmed comparison used to reject duplicate group names. */
 function sameGroupName(a: string, b: string): boolean {
   return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
 }
-
 export const LineTree = memo(function LineTree({
   session,
   chart,
@@ -110,9 +105,8 @@ export const LineTree = memo(function LineTree({
   const suppressAddClick = useRef(false);
   const suppressTimer = useRef<number | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
-
-  // A paged chart reuses its facade and may mutate line arrays in place, so the
-  // revision must create a fresh dependency object for every tree collection.
+  const selectionStateRef = useRef<ListSelectionState<string> | null>(null);
+  // Revision invalidates a paged facade that mutates line arrays in place.
   const treeData = useMemo(
     () => ({
       lines: chart.judgeLineList ?? [],
@@ -124,29 +118,29 @@ export const LineTree = memo(function LineTree({
   );
   const { lines, rawNames, labels } = treeData;
   const folderSelected = folderGroup !== null;
-  // Folder mode highlights the chosen folder. Line mode still derives the
-  // footer's target folder from the active line, but folder rows stay unselected
-  // because a line is the one selected row.
+  // Folder mode highlights the folder; line mode highlights the active line.
   const activeGroup = Math.min(
     Math.max(folderSelected ? folderGroup : lineGroupIndex(lines[session.lineIndex]), 0),
     Math.max(0, labels.length - 1),
   );
   const buckets = useMemo(() => {
     const next: number[][] = treeData.labels.map(() => []);
-    // Flat order is the line number, so pushing in order keeps every folder
-    // ascending even after lines move between folders.
+    // Pushing in line order keeps every folder ascending after moves.
     treeData.lines.forEach((line, index) => {
       const group = Math.min(Math.max(lineGroupIndex(line), 0), treeData.labels.length - 1);
       next[group]?.push(index);
     });
     return next;
   }, [treeData]);
+  const lineOrder = useMemo(
+    () => buckets.flatMap((indices) => indices.map((index) => lineTreeKey(treeData.lines, index))),
+    [buckets, treeData.lines],
+  );
   const lineIndices = useMemo(
     () => new Map(treeData.lines.map((line, index) => [lineTreeKey(treeData.lines, index), index])),
     [treeData],
   );
-  // A paged chart can hold far more rows than a DOM list can mount. Show a
-  // window around the active line and leave navigation to line jump.
+  // Large charts mount a window around the active line.
   const LARGE_TREE_LIMIT = 400;
   const largeTree = lines.length > 10_000;
   const windowed = (indices: readonly number[]): readonly number[] => {
@@ -161,7 +155,6 @@ export const LineTree = memo(function LineTree({
     );
     return indices.slice(start, start + LARGE_TREE_LIMIT);
   };
-
   const selected = useMemo(() => {
     const next = new Set<string>(folderSelected ? [] : selectedLineIds);
     if (!folderSelected && !next.size) {
@@ -179,6 +172,7 @@ export const LineTree = memo(function LineTree({
     lines: readonly JudgeLine[];
     selected: ReadonlySet<string>;
     lineIndices: ReadonlyMap<string, number>;
+    order: readonly string[];
     lineIndex: number;
     onSelectionChange(ids: ReadonlySet<string>): void;
     onSelectLine(index: number, scrollTop: number): void;
@@ -186,6 +180,7 @@ export const LineTree = memo(function LineTree({
     lines,
     selected,
     lineIndices,
+    order: lineOrder,
     lineIndex: session.lineIndex,
     onSelectionChange,
     onSelectLine,
@@ -195,18 +190,32 @@ export const LineTree = memo(function LineTree({
       lines,
       selected,
       lineIndices,
+      order: lineOrder,
       lineIndex: session.lineIndex,
       onSelectionChange,
       onSelectLine,
     };
-  }, [treeData, lines, selected, lineIndices, session.lineIndex, onSelectionChange, onSelectLine]);
+    const focusKey = lineTreeKey(lines, session.lineIndex);
+    const state = selectionStateRef.current;
+    selectionStateRef.current = state
+      ? { ...state, selection: [...selected] }
+      : createListSelectionState(lineOrder, [...selected], focusKey);
+  }, [
+    treeData,
+    lines,
+    selected,
+    lineIndices,
+    lineOrder,
+    session.lineIndex,
+    onSelectionChange,
+    onSelectLine,
+  ]);
   useLayoutEffect(() => {
     if (listRef.current && scrollTopRef.current !== null) {
       listRef.current.scrollTop = Math.max(0, scrollTopRef.current);
     }
   }, [scrollTopRef]);
   useLineTreeReveal(listRef, rowRefs, pendingReveal, contentRevision, folderGroup);
-
   useEffect(() => {
     return () => {
       if (longPressTimer.current !== null) {
@@ -217,7 +226,6 @@ export const LineTree = memo(function LineTree({
       }
     };
   }, []);
-
   const createPromptOpen = createPrompt !== null;
   useEffect(() => {
     if (!createPromptOpen) {
@@ -232,66 +240,61 @@ export const LineTree = memo(function LineTree({
     }, 40);
     return () => window.clearTimeout(timer);
   }, [createPromptOpen]);
-
   const currentScroll = () => listRef.current?.scrollTop ?? 0;
-
-  /** Toggles Shift multi-selection for a row and focuses the remaining selection. */
-  const selectRow = useCallback((index: number, event?: ReactMouseEvent<HTMLElement>) => {
+  /** Applies the shared Windows-style click rule to one line row. */
+  const selectRow = useCallback((index: number, modifiers: ListSelectionModifiers = {}) => {
     const current = selectionRef.current;
     const key = lineTreeKey(current.lines, index);
-    const next = new Set(current.selected);
-    if (event?.shiftKey) {
-      if (next.has(key)) {
-        if (next.size > 1) {
-          next.delete(key);
-        }
-      } else {
-        next.add(key);
-      }
-    } else {
-      next.clear();
-      next.add(key);
-    }
-    if (!next.size) {
-      next.add(key);
-    }
-    let focusIndex = index;
-    if (!next.has(key)) {
-      let bestDistance = Infinity;
-      for (const id of next) {
-        const candidate = current.lineIndices.get(id);
-        if (candidate === undefined) {
-          continue;
-        }
-        const distance = Math.abs(candidate - index);
-        if (distance < bestDistance) {
-          focusIndex = candidate;
-          bestDistance = distance;
-        }
-      }
-    }
+    const focusKey = lineTreeKey(current.lines, current.lineIndex);
+    const state =
+      selectionStateRef.current ??
+      createListSelectionState(current.order, [...current.selected], focusKey);
+    const result = listSelectionStateAfterClick(current.order, state, key, modifiers, true);
+    const next = new Set(result.selection);
+    selectionStateRef.current = result;
     current.onSelectionChange(next);
-    current.onSelectLine(focusIndex, listRef.current?.scrollTop ?? 0);
+    if (!modifiers.shiftKey) {
+      const focusIndex = result.focus ? (current.lineIndices.get(result.focus) ?? index) : index;
+      current.onSelectLine(focusIndex, listRef.current?.scrollTop ?? 0);
+    }
   }, []);
-
   /** Selects a folder instead of its first line; line focus stays unchanged. */
   const selectGroup = (group: number) => {
     onSelectFolder(group);
   };
-
   const { marquee, beginMarquee } = useLineTreeMarquee({
     listRef,
     rowRefs,
     lines,
     selectedIds: selected,
     lineIndices,
-    focusAfterRemoval: (removed, next) =>
-      lineFocusAfterRemoval(removed, next, lines, lineIndices, session.lineIndex),
+    order: lineOrder,
     currentScroll,
-    onSelectionChange,
+    onSelectionChange: (ids) => {
+      const current = selectionRef.current;
+      const focusKey = lineTreeKey(current.lines, current.lineIndex);
+      const state =
+        selectionStateRef.current ??
+        createListSelectionState(current.order, [...current.selected], focusKey);
+      selectionStateRef.current = { ...state, selection: [...ids] };
+      onSelectionChange(ids);
+    },
+    onSelectionFirstLineChange: (index) => {
+      const current = selectionRef.current;
+      if (index >= 0 && index < current.lines.length) {
+        const focusKey = lineTreeKey(current.lines, current.lineIndex);
+        const state =
+          selectionStateRef.current ??
+          createListSelectionState(current.order, [...current.selected], focusKey);
+        selectionStateRef.current = {
+          ...state,
+          firstLine: lineTreeKey(current.lines, index),
+        };
+      }
+    },
     onSelectLine,
+    onClick: selectRow,
   });
-
   /** Appends a batch of lines with the supplied name or the shared Untitled default. */
   const addLines = (group: number, amount: number, name?: string) => {
     const count = Math.max(1, Math.min(MAX_BATCH_LINES, Math.trunc(amount)));
@@ -324,7 +327,6 @@ export const LineTree = memo(function LineTree({
       start + count - 1,
     );
   };
-
   /** Inserts groups after the active folder. */
   const addGroups = (amount: number, name?: string) => {
     const count = Math.max(1, Math.min(MAX_BATCH_LINES, Math.trunc(amount)));
@@ -405,7 +407,6 @@ export const LineTree = memo(function LineTree({
     }
     setCreatePrompt(null);
   };
-
   /** Starts the long-press timer that opens the batch-count prompt. */
   const beginCreatePress = (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -432,7 +433,6 @@ export const LineTree = memo(function LineTree({
       });
     }, LONG_PRESS_MS);
   };
-
   /** Cancels the long-press timer and suppresses the click it would also fire. */
   const endCreatePress = () => {
     if (longPressTimer.current !== null) {
@@ -452,7 +452,6 @@ export const LineTree = memo(function LineTree({
       }, CLICK_SUPPRESS_MS);
     }
   };
-
   /** Opens the single-name prompt unless a long press just handled this click. */
   const clickCreate = (kind: "line" | "group", event: ReactMouseEvent<HTMLButtonElement>) => {
     if (suppressAddClick.current) {
@@ -467,7 +466,6 @@ export const LineTree = memo(function LineTree({
       value: kind === "line" ? t("model.line.untitled") : "",
     });
   };
-
   /** Deletes one line and focuses the nearest remaining line. */
   const deleteRow = (index: number) => {
     const next = deleteLine(chart, index);
@@ -506,12 +504,10 @@ export const LineTree = memo(function LineTree({
       : bucket[bucket.length - 1];
     deleteRow(index);
   };
-
   /** Opens inline rename for a folder. */
   const startGroupRename = (index: number) => {
     setRenameGroup({ index, value: sanitizeLineGroupName(rawNames[index] ?? "") });
   };
-
   /** Validates, commits, or rejects the inline rename. */
   const commitGroupRename = () => {
     if (!renameGroup) {
@@ -545,7 +541,6 @@ export const LineTree = memo(function LineTree({
       session.lineIndex,
     );
   };
-
   /** Renders one line row with its stable id and current selection state. */
   const renderRow = (index: number, line: JudgeLine, group: number) => {
     const key = lineTreeKey(lines, index);
@@ -581,6 +576,12 @@ export const LineTree = memo(function LineTree({
         role="tree"
         aria-label={t("editorPanels.linePanel.title")}
         aria-multiselectable="true"
+        onPointerDown={(event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement) || !target.closest("[data-line-index]")) {
+            beginMarquee(event);
+          }
+        }}
         onScroll={(event) => {
           scrollTopRef.current = event.currentTarget.scrollTop;
         }}
@@ -776,7 +777,6 @@ export const LineTree = memo(function LineTree({
         onCreate={clickCreate}
         onDelete={deleteSelected}
       />
-
       <LineTreeMarqueeBox box={marquee} />
       <LineTreeCreatePrompt
         prompt={createPrompt}

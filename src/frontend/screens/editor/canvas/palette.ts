@@ -72,6 +72,21 @@ export function selectionColor(key: string, fallback: string): string {
   return typeof value === "string" && parseHexColor(value) ? value : fallback;
 }
 
+/** Colours shared by timeline note marquees and editor list marquees. */
+export interface TimelineNoteMarqueeColors {
+  fill: string;
+  stroke: string;
+}
+
+/** Reads the timeline note marquee palette for DOM and canvas selection surfaces. */
+export function readTimelineNoteMarqueeColors(): TimelineNoteMarqueeColors {
+  const palette = readCanvasPalette();
+  return {
+    fill: palette.previewSelectionFill,
+    stroke: selectionColor("timeline-note-marquee-color", palette.selectionNotesStroke),
+  };
+}
+
 /** The setting that overrides the theme's hooked-event colour. */
 export const EVENT_HOOKED_COLOR_KEY = "event-hooked-color";
 

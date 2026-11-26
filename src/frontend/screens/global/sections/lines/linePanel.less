@@ -430,7 +430,7 @@
 // ------------------------------------------------------- folder tree
 // The tree is one flat level of static folder groups. Selection and disclosure
 // are list gestures; structural changes are made through the property controls
-// and footer. Shift-drag still paints a selection marquee.
+// and footer. Every left drag paints a selection marquee.
 .line-tree {
   display: flex;
   flex: none;
@@ -503,9 +503,8 @@
 .line-tree-marquee {
   position: fixed;
   z-index: calc(var(--z-content-overlay) + 1);
-  border: 1px solid var(--focus-ring);
-  border-radius: var(--design-radius-micro);
-  background: color-mix(in srgb, var(--focus-ring) 12%, transparent);
+  border: 1px solid var(--line-selection-marquee-stroke);
+  background: var(--line-selection-marquee-fill);
   pointer-events: none;
 }
 
