@@ -43,16 +43,18 @@ export interface MarqueePreview {
   lines: readonly number[];
 }
 
-/** Resolve the first line from the ordered marquee result. */
-export function resolveMarqueeFirstLine(
+/** Resolve the focus line from the topmost row touched by the current marquee. */
+export function resolveMarqueeFocusLine(
   pressedIndex: number,
   touched: readonly number[],
   fallback: number,
 ): number {
-  return (
-    touched.find((index) => Number.isInteger(index) && index >= 0) ??
-    (Number.isInteger(pressedIndex) && pressedIndex >= 0 ? pressedIndex : fallback)
-  );
+  const valid = touched.filter((index) => Number.isInteger(index) && index >= 0);
+  return valid.length
+    ? Math.min(...valid)
+    : Number.isInteger(pressedIndex) && pressedIndex >= 0
+      ? pressedIndex
+      : fallback;
 }
 
 /** Receives the final preview exactly once, on release. */

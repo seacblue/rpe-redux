@@ -6,7 +6,7 @@ import {
   listContentX,
   listContentY,
   marqueeBox,
-  resolveMarqueeFirstLine,
+  resolveMarqueeFocusLine,
 } from "../../../frontend/screens/editor/toolbar/lineSelectionMarquee.ts";
 
 /** Ascending array so set assertions stay readable. */
@@ -124,9 +124,10 @@ test("the marquee follows the pointer on both axes without snapping", () => {
   });
 });
 
-test("a marquee records its first line separately from its pressed anchor", () => {
-  assert.equal(resolveMarqueeFirstLine(-1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 6), 1);
-  assert.equal(resolveMarqueeFirstLine(6, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 6), 1);
-  assert.equal(resolveMarqueeFirstLine(4, [4, 5], 6), 4);
-  assert.equal(resolveMarqueeFirstLine(-1, [], 6), 6);
+test("a marquee focuses its topmost touched line instead of its pressed anchor", () => {
+  assert.equal(resolveMarqueeFocusLine(-1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 6), 1);
+  assert.equal(resolveMarqueeFocusLine(6, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 6), 1);
+  assert.equal(resolveMarqueeFocusLine(6, [6, 4, 5], 6), 4);
+  assert.equal(resolveMarqueeFocusLine(4, [4, 5], 6), 4);
+  assert.equal(resolveMarqueeFocusLine(-1, [], 6), 6);
 });

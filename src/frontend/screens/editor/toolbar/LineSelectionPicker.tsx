@@ -2,7 +2,7 @@
  * Toolbar judge-line selector with folder groups.
  *
  * A plain click replaces the selection, Ctrl/Cmd-click toggles one line, and
- * Shift-click extends a range from firstLine. Any left drag previews a
+ * Shift-click extends a range from firstLine and moves focus to the click. Any left drag previews a
  * marquee that commits on release. A folder row batch toggles its lines; its
  * disclosure only folds. Folder disclosure persists; selection is document
  * state and never becomes empty.
@@ -50,7 +50,7 @@ import {
   listContentX,
   listContentY,
   marqueeBox,
-  resolveMarqueeFirstLine,
+  resolveMarqueeFocusLine,
   type MarqueeBox,
   type MarqueeDrag,
   type MarqueePoint,
@@ -483,13 +483,13 @@ export function LineSelectionPicker({
             firstLine: currentNow,
             focus: currentNow,
           } satisfies ListSelectionState<number>);
-        const firstLine = resolveMarqueeFirstLine(index, safe, currentNow);
-        const focused = modifiers.shiftKey
-          ? (state.focus ?? currentNow)
-          : (state.focus ?? currentNow);
+        const firstLine = modifiers.shiftKey
+          ? resolveMarqueeFocusLine(currentNow, preview.lines, currentNow)
+          : (safe[0] ?? state.firstLine ?? state.focus ?? currentNow);
+        const focused = modifiers.shiftKey ? firstLine : (state.focus ?? currentNow);
         selectionStateRef.current = {
           selection: safe,
-          firstLine: modifiers.shiftKey ? state.firstLine : firstLine,
+          firstLine,
           focus: focused,
         };
         applySelection(new Set(safe), focused, safeTokens);

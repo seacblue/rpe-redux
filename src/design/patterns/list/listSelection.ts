@@ -3,14 +3,14 @@
  *
  * Surfaces keep the selected values in their own domain model, while this
  * module owns the shared click semantics: plain replacement, Ctrl/Cmd toggles,
- * and Shift range replacement from the previous focus item.
+ * and Shift range replacement from the fixed firstLine item.
  */
 
 /** Pointer modifiers that affect an ordered-list selection. */
 export interface ListSelectionModifiers {
   /** Ctrl on Windows/Linux or Cmd on macOS toggles membership. */
   ctrlKey?: boolean;
-  /** Shift replaces the selection with a range from the previous focus item. */
+  /** Shift replaces the selection with a range from the fixed firstLine item. */
   shiftKey?: boolean;
   /** Cmd is accepted as the platform equivalent of Ctrl. */
   metaKey?: boolean;
@@ -28,9 +28,9 @@ export interface ListSelectionResult<T> {
 export interface ListSelectionState<T> {
   /** Ordered values currently selected. */
   selection: T[];
-  /** First value from the latest marquee result; Shift uses this value. */
+  /** Fixed origin for the current Shift range. */
   firstLine: T | null;
-  /** Current focused value and the only click range origin. */
+  /** Current endpoint of the active Shift range. */
   focus: T | null;
 }
 
@@ -50,7 +50,7 @@ export function createListSelectionState<T>(
   return { selection: ordered, firstLine: safeFirstLine, focus: safeFocus };
 }
 
-/** Apply one click while keeping firstLine independent from focus. */
+/** Apply one click while keeping the Shift range origin and moving focus to the click. */
 export function listSelectionStateAfterClick<T>(
   items: readonly T[],
   state: ListSelectionState<T>,
@@ -67,21 +67,14 @@ export function listSelectionStateAfterClick<T>(
     modifiers,
     preserveNonEmpty,
   );
-  if (modifiers.shiftKey) {
-    return {
-      selection: result.selection,
-      firstLine: state.firstLine ?? rangeStart,
-      focus: state.focus ?? result.focus,
-    };
-  }
   return {
     selection: result.selection,
-    firstLine: clicked,
+    firstLine: modifiers.shiftKey ? (state.firstLine ?? rangeStart) : clicked,
     focus: result.focus,
   };
 }
 
-/** Apply one marquee while preserving focus and publishing its first line. */
+/** Apply one marquee while publishing its Shift range origin and current focus. */
 export function listSelectionStateAfterMarquee<T>(
   items: readonly T[],
   state: ListSelectionState<T>,
@@ -96,11 +89,13 @@ export function listSelectionStateAfterMarquee<T>(
     modifiers,
     preserveNonEmpty,
   );
+  const touchedSet = new Set(touched);
+  const firstTouched = items.find((value) => touchedSet.has(value));
   const firstLine = result.selection[0] ?? state.firstLine ?? state.focus;
   return {
     selection: result.selection,
-    firstLine: modifiers.shiftKey ? (state.firstLine ?? firstLine) : firstLine,
-    focus: state.focus ?? firstLine,
+    firstLine: modifiers.shiftKey ? (firstTouched ?? state.firstLine ?? firstLine) : firstLine,
+    focus: modifiers.shiftKey ? (firstTouched ?? result.focus) : (state.focus ?? firstLine),
   };
 }
 
@@ -119,7 +114,7 @@ export function listSelectionRange<T>(items: readonly T[], from: T, to: T): T[] 
 /**
  * Apply one Windows-style click to an ordered list.
  *
- * Shift replaces the selection with the focus-to-click range. Ctrl/Cmd toggles
+ * Shift replaces the selection with the firstLine-to-click range. Ctrl/Cmd toggles
  * only the clicked item. `preserveNonEmpty` keeps editor lists non-empty.
  */
 export function listSelectionAfterClick<T>(
