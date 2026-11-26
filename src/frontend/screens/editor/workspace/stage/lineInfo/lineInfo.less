@@ -5,16 +5,42 @@
   position: absolute;
   z-index: 4;
   top: var(--space-2);
-  left: 40px;
-  padding: var(--space-2) var(--space-3);
-  max-width: min(680px, 78%);
-  background: color-mix(in srgb, var(--surface-raised) 90%, transparent);
-  border: 1px solid var(--warning);
-  color: var(--warning);
-  font-size: var(--type-body);
+  left: 50%;
+  color: var(--media-ink);
+  font-size: var(--type-title);
   line-height: var(--line-body);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
-  white-space: pre-line;
-  box-shadow: 0 2px var(--space-2) var(--shadow-color);
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.line-info-row {
+  white-space: pre;
+}
+
+.line-info-token-coordinate,
+.line-info-token-angle,
+.line-info-token-speed,
+.line-info-token-velocity,
+.line-info-token-alpha {
+  display: inline-block;
+  text-align: right;
+}
+
+.line-info-token-coordinate {
+  width: 6ch;
+}
+
+.line-info-token-angle {
+  width: 5ch;
+}
+
+.line-info-token-speed,
+.line-info-token-velocity {
+  width: 3.5ch;
+}
+
+.line-info-token-alpha {
+  width: 3ch;
 }

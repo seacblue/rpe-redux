@@ -1,69 +1,68 @@
-/**
- * Builds the line-info text from the chart, tempo, scene, and selected event.
- * It formats values only; the controller owns visibility and update timing.
- */
-import type { Chart, JudgeLineEvent } from "../../../../../../core/global/chart/chart.ts";
-import { beatValue } from "../../../../../../core/global/chart/timing/beat.ts";
-import type { EventTrack } from "../../../../../../core/global/chart/timing/events.ts";
+/** Builds the line-info readout from sampled chart state for the stage overlay. */
+import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import { SceneRuntime } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
-import {
-  shaderEvents,
-  shaderIdentity,
-} from "../../../../../../core/global/chart/shader/shaderEvents.ts";
 import { t } from "../../../../../../i18n/index.ts";
 
-/** Formats a number with `digits` decimals, falling back to zero for non-finite values. */
-const format = (value: unknown, digits = 2): string =>
-  Number.isFinite(value) ? Number(value).toFixed(digits) : "0.00";
+/** Formats one numeric readout, falling back to zero for non-finite values. */
+const format = (value: unknown, digits = 2, maxWidth = Number.POSITIVE_INFINITY): string => {
+  if (!Number.isFinite(value)) {
+    return "0.00";
+  }
+  const numeric = Number(value);
+  let precision = digits;
+  let text = numeric.toFixed(precision);
+  while (precision > 0 && readoutWidth(text) > maxWidth) {
+    precision -= 1;
+    text = numeric.toFixed(precision);
+  }
+  return text;
+};
 
-/** Per-second rate of one selected event track, or null when it is not a move track. */
-function selectedEventSpeed(
-  type: string,
-  event: JudgeLineEvent | undefined,
-  tempo: TempoMap,
-  lineFactor: number,
-): string | null {
-  if (!event) {
-    return null;
-  }
-  const duration = tempo.seconds(event.endTime) - tempo.seconds(event.startTime);
-  if (
-    !Number.isFinite(duration) ||
-    Math.abs(duration) < 0.000001 ||
-    !Number.isFinite(event.start) ||
-    !Number.isFinite(event.end)
-  ) {
-    return null;
-  }
-  const rate = (Number(event.end) - Number(event.start)) / duration;
-  if (type === "moveXEvents") {
-    return `X ${format(rate / 120)}`;
-  }
-  if (type === "moveYEvents") {
-    return `Y ${format(rate / 120)}`;
-  }
-  if (type === "rotateEvents") {
-    return `R ${format(rate)}`;
-  }
-  if (type === "speedEvents") {
-    return t("editorPanels.lineInfo.speedEvent", { value: format(rate / 120) });
-  }
-  return null;
+/** Estimates proportional-font width in `ch` units for a numeric readout. */
+function readoutWidth(text: string): number {
+  return [...text].reduce(
+    (width, character) => width + (character === "." ? 0.35 : character === "-" ? 0.55 : 1),
+    0,
+  );
 }
 
-/** Builds the line-info text for the selected line at `seconds`. */
-export function buildLineInfoText(
+/** Classifies a rendered token so CSS can reserve a real width for numbers. */
+export type LineInfoTokenKind = "text" | "coordinate" | "angle" | "speed" | "velocity" | "alpha";
+
+/** A piece of the readout with semantic styling information. */
+export interface LineInfoToken {
+  readonly text: string;
+  readonly kind: LineInfoTokenKind;
+}
+
+/** The two rows rendered by the line-info overlay. */
+export interface LineInfoLayout {
+  readonly rows: readonly (readonly LineInfoToken[])[];
+}
+
+/** Text plus structured rows for stable numeric layout. */
+export interface LineInfoPresentation {
+  readonly text: string;
+  readonly layout: LineInfoLayout;
+}
+
+/**
+ * Builds the line-info text for the selected line at chart time `seconds`.
+ *
+ * `previousSeconds` is the chart time from the previous rendered frame. The
+ * velocity row intentionally reports the authored value delta between those
+ * two frames, not a per-second derivative.
+ */
+export function buildLineInfoPresentation(
   scene: SceneRuntime,
   chart: Chart,
   lineIndex: number,
   seconds: number,
   tempo: TempoMap,
-  selectedEvents: ReadonlySet<string>,
-  getEventList: (type: string) => JudgeLineEvent[],
-): string {
+  previousSeconds?: number,
+): LineInfoPresentation {
   scene.compile(chart, tempo);
-  const lineFactor = chart.judgeLineList?.[lineIndex]?.bpmfactor ?? 1;
   const state = scene.sampler(seconds)(lineIndex) ?? {
     x: 0,
     y: 0,
@@ -71,73 +70,61 @@ export function buildLineInfoText(
     alpha: 255,
   };
   const runtime = scene.lines[lineIndex];
-  const scrollSpeed =
-    runtime?.speeds?.reduce((sum, track) => sum + (track.value(seconds) || 0), 0) ?? 0;
-  const lineText = [
-    t("editorPanels.lineInfo.position", { x: format(state.x), y: format(state.y) }),
-    t("editorPanels.lineInfo.direction", { value: format(state.rotation) }),
-    t("editorPanels.lineInfo.alpha", { value: format(state.alpha, 0) }),
-    t("editorPanels.lineInfo.speed", { value: format(scrollSpeed) }),
-  ].join("  ");
-  const dt = 1 / 120;
-  const before = scene.sampler(seconds - dt)(lineIndex) ?? state;
-  const after = scene.sampler(seconds + dt)(lineIndex) ?? state;
-  const xSpeed = (after.x - before.x) / (2 * dt) / 120;
-  const ySpeed = (after.y - before.y) / (2 * dt) / 120;
-  const rotateSpeed = (after.rotation - before.rotation) / (2 * dt);
-  const tracks: Record<string, EventTrack<JudgeLineEvent>[] | undefined> = { ...runtime?.tracks };
-  const activeSpeeds: string[] = [];
-  for (const type of ["moveXEvents", "moveYEvents", "rotateEvents", "speedEvents"]) {
-    for (const track of tracks[type] ?? []) {
-      for (const entry of track.entries(seconds)) {
-        if (seconds < entry.start || seconds > entry.end) {
-          continue;
-        }
-        const rate = selectedEventSpeed(type, entry.event, tempo, lineFactor);
-        if (rate) {
-          activeSpeeds.push(rate);
-        } else if (type === "speedEvents") {
-          activeSpeeds.push(
-            t("editorPanels.lineInfo.speedEvent", { value: format(track.value(seconds)) }),
-          );
-        }
-      }
-    }
-  }
-  const selectedSpeeds: string[] = [];
-  for (const key of selectedEvents) {
-    const separator = key.lastIndexOf(":");
-    const type = separator < 0 ? key : key.slice(0, separator);
-    const index = Number(key.slice(separator + 1));
-    const rate = selectedEventSpeed(type, getEventList(type)[index], tempo, lineFactor);
-    if (rate) {
-      selectedSpeeds.push(rate);
-    }
-  }
-  const eventSpeed = selectedSpeeds.length ? selectedSpeeds : activeSpeeds;
-  const eventText = `${t("editorPanels.lineInfo.velocity", {
-    values: `${format(xSpeed)}, ${format(ySpeed)}, ${format(rotateSpeed)}`,
-  })}${
-    eventSpeed.length
-      ? `\n${t("editorPanels.lineInfo.eventSpeed", { values: eventSpeed.slice(0, 6).join(", ") })}`
-      : ""
-  }`;
-  const globalShaders: string[] = [];
-  for (const index of chart.judgeLineList?.keys?.() ?? []) {
-    const eventBeat = tempo.beat(seconds);
-    for (const event of shaderEvents(chart, index)) {
-      if (!event.global) {
-        continue;
-      }
-      const start = beatValue(event.startTime);
-      const end = beatValue(event.endTime ?? event.startTime);
-      if (eventBeat >= start && eventBeat < end) {
-        globalShaders.push(shaderIdentity(event));
-      }
-    }
-  }
-  const shaderText = globalShaders.length
-    ? `\n${t("editorPanels.lineInfo.shader", { values: globalShaders.join(", ") })}`
-    : "";
-  return `${lineText}\n${eventText}${shaderText}`;
+  const speed = runtime?.speeds?.reduce((sum, track) => sum + (track.value(seconds) || 0), 0) ?? 0;
+  const previous =
+    Number.isFinite(previousSeconds) && previousSeconds !== undefined
+      ? (scene.sampler(previousSeconds)(lineIndex) ?? state)
+      : state;
+  // The sampler is evaluated in chart seconds and returns the line's authored
+  // world state. These are frame deltas, so no preview camera scale, playback
+  // rate, or per-second conversion belongs here.
+  const xRate = state.x - previous.x;
+  const yRate = state.y - previous.y;
+  const rotationRate = state.rotation - previous.rotation;
+  const rows: readonly (readonly LineInfoToken[])[] = [
+    [
+      { text: t("editorPanels.lineInfo.positionLabel"), kind: "text" },
+      { text: " (", kind: "text" },
+      { text: format(state.x, 2, 6), kind: "coordinate" },
+      { text: ", ", kind: "text" },
+      { text: format(state.y, 2, 6), kind: "coordinate" },
+      { text: ") ", kind: "text" },
+      { text: t("editorPanels.lineInfo.directionLabel"), kind: "text" },
+      { text: " ", kind: "text" },
+      { text: format(state.rotation, 2, 5), kind: "angle" },
+      { text: " ", kind: "text" },
+      { text: t("editorPanels.lineInfo.alphaLabel"), kind: "text" },
+      { text: " ", kind: "text" },
+      { text: format(state.alpha, 0), kind: "alpha" },
+      { text: " ", kind: "text" },
+      { text: t("editorPanels.lineInfo.speedLabel"), kind: "text" },
+      { text: " ", kind: "text" },
+      { text: format(speed, 2, 3), kind: "speed" },
+    ],
+    [
+      { text: t("editorPanels.lineInfo.velocityLabel"), kind: "text" },
+      { text: " ", kind: "text" },
+      { text: format(xRate, 2, 3.5), kind: "velocity" },
+      { text: ", ", kind: "text" },
+      { text: format(yRate, 2, 3.5), kind: "velocity" },
+      { text: ", ", kind: "text" },
+      { text: format(rotationRate, 2, 3.5), kind: "velocity" },
+    ],
+  ];
+  return {
+    text: rows.map((row) => row.map((token) => token.text).join("")).join("\n"),
+    layout: { rows },
+  };
+}
+
+/** Builds the legacy plain-text form used by non-visual callers and tests. */
+export function buildLineInfoText(
+  scene: SceneRuntime,
+  chart: Chart,
+  lineIndex: number,
+  seconds: number,
+  tempo: TempoMap,
+  previousSeconds?: number,
+): string {
+  return buildLineInfoPresentation(scene, chart, lineIndex, seconds, tempo, previousSeconds).text;
 }
